@@ -9,3 +9,11 @@ export const REGIONS = {
 } as const
 
 export type RegionCode = keyof (typeof REGIONS)
+
+export const OPERATORS = {
+  KCI: { code: 'KCI', name: 'Kereta Commuter Indonesia' },
+  MRTJ: { code: 'MRTJ', name: 'MRT Jakarta' },
+  NUL: { code: 'NUL', name: 'Unknown' },
+} as const
+
+export type Operator = keyof (typeof OPERATORS)
