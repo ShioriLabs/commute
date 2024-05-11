@@ -1,0 +1,20 @@
+{
+  "name": "@commute/api",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "dev": "tsx src/app.ts",
+    "lint": "eslint --fix"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@hono/node-server": "^1.11.1",
+    "hono": "^4.3.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.11",
+    "tsx": "^4.10.0"
+  }
+}
