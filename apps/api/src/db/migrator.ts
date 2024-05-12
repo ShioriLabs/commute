@@ -10,12 +10,12 @@ import {
 import { Database } from './schemas'
 
 const dialect = new SqliteDialect({
-  database: new SQLite("commute.db")
+  database: new SQLite('commute.db'),
 })
 
 async function migrateToLatest() {
   const db = new Kysely<Database>({
-    dialect
+    dialect,
   })
 
   const migrator = new Migrator({
@@ -33,7 +33,8 @@ async function migrateToLatest() {
   results?.forEach((it) => {
     if (it.status === 'Success') {
       console.log(`migration "${it.migrationName}" was executed successfully`)
-    } else if (it.status === 'Error') {
+    }
+    else if (it.status === 'Error') {
       console.error(`failed to execute migration "${it.migrationName}"`)
     }
   })
