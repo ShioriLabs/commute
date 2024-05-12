@@ -77,7 +77,7 @@ export async function sync() {
             id: `${OPERATORS.MRTJ.code}-${station.nid}-${departureTime}-SOUTHBOUND`,
             boundFor: 'Lebak Bulus Grab',
             estimatedDeparture: `${departureTime}:00`,
-            estimatedArrival: `${arrivalHour}:${arrivalMinute}:00`,
+            estimatedArrival: `${arrivalHour.toString().padStart(2, '0')}:${arrivalMinute.toString().padStart(2, '0')}:00`,
             stationId: stationId,
             tripNumber: `${station.nid}-${departureTime}-SOUTHBOUND`
           }
@@ -86,7 +86,6 @@ export async function sync() {
         }
       }
     }
-
 
     stations.push(transformedStation)
     timetables[stationId] = stationTimetables
