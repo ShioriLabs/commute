@@ -1,3 +1,4 @@
+import { Operator } from 'constant'
 import { db } from 'db'
 import { NewSchedule } from 'db/schemas/schedules'
 import { NewStation, UpdatingStation } from 'db/schemas/stations'
@@ -7,6 +8,16 @@ import { Repository } from 'models/repository'
 export class StationRepository extends Repository {
   static async getAll(page?: number, limit?: number) {
     let query = db.selectFrom('stations').selectAll()
+    if (page && limit) {
+      query = query.limit(limit).offset((page - 1) * limit)
+    }
+
+    const stations = await query.execute()
+    return stations
+  }
+
+  static async getAllByOperator(operator: Operator, page?: number, limit?: number) {
+    let query = db.selectFrom('stations').selectAll().where('operator', '==', operator)
     if (page && limit) {
       query = query.limit(limit).offset((page - 1) * limit)
     }
