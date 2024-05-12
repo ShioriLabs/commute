@@ -1,6 +1,7 @@
 import { OPERATORS, REGIONS } from 'constant'
 import { StationRepository } from 'db/repositories/stations'
 import { NewStation } from 'db/schemas/stations'
+import { tryGetFormattedName } from './stationNameFormatter'
 
 const STATION_REGION_LOOKUP: Record<number, typeof REGIONS[keyof typeof REGIONS]> = {
   0: REGIONS.CGK,
@@ -29,6 +30,7 @@ export async function syncStations() {
       id: `${OPERATORS.KCI.code}-${station.sta_id}`,
       code: station.sta_id,
       name: station.sta_name,
+      formattedName: tryGetFormattedName(station.sta_id, station.sta_name),
       region: region.name,
       regionCode: region.code,
       operator: OPERATORS.KCI.code,
