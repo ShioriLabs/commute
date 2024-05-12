@@ -1,4 +1,6 @@
 import { REGIONS } from 'constant'
+import { StationRepository } from 'db/repositories/stations'
+import { NewStationRaw } from 'db/schemas/stations'
 import Station from 'models/station'
 
 const STATION_REGION_LOOKUP: Record<number, typeof REGIONS[keyof typeof REGIONS]> = {
@@ -12,14 +14,26 @@ export async function syncStations() {
   const json = await response.json()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return json.data.filter((station: any) => station.fg_enable === 1).map((station: any): Station => {
+  const stations: Station[] = [];
+  const forInsert: NewStationRaw[] = [];
+
+  for (const station of json.data) {
+    if (station.fg_enable === 0) continue;
     const region = STATION_REGION_LOOKUP[station.group_wil as number] ?? REGIONS.NUL
-    return {
+    const transformedStation = {
       code: station.sta_id,
       name: station.sta_name,
       originalName: station.sta_name,
       region: region.name,
       regionCode: region.code,
     }
-  }) as Station[]
+
+    stations.push(transformedStation)
+    forInsert.push(StationRepository.prepareInsertFromStation("KCI", transformedStation))
+
+  }
+
+  // Save to database
+  await StationRepository.insertMany(forInsert)
+  return stations
 }

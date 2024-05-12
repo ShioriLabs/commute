@@ -4,16 +4,20 @@
   "description": "",
   "scripts": {
     "dev": "tsx src/app.ts",
-    "lint": "eslint --fix"
+    "lint": "eslint --fix",
+    "migration:up": "tsx src/db/migrator.ts"
   },
   "keywords": [],
   "author": "",
   "license": "MIT",
   "dependencies": {
     "@hono/node-server": "^1.11.1",
-    "hono": "^4.3.4"
+    "better-sqlite3": "^9.6.0",
+    "hono": "^4.3.4",
+    "kysely": "^0.27.3"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.10",
     "@types/node": "^20.12.11",
     "tsx": "^4.10.0"
   }
