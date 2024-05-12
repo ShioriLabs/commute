@@ -2,6 +2,7 @@ import { OPERATORS, REGIONS } from 'constant'
 import { StationRepository } from 'db/repositories/stations'
 import { NewStation } from 'db/schemas/stations'
 import { tryGetFormattedName } from './stationNameFormatter'
+import { NewSchedule } from 'db/schemas/schedules'
 
 const STATION_REGION_LOOKUP: Record<number, typeof REGIONS[keyof typeof REGIONS]> = {
   0: REGIONS.CGK,
@@ -42,4 +43,35 @@ export async function syncStations() {
   // Save to database
   await StationRepository.insertMany(stations)
   return stations
+}
+
+export async function syncTimetable(stationCode: string) {
+  const response = await fetch(`https://api-partner.krl.co.id/krlweb/v1/schedule?stationid=${stationCode}&timefrom=00:00&timeto=23:59`)
+  if (!response.ok) {
+    return []
+  }
+
+  const json = await response.json()
+
+  if (json.status !== 200) {
+    return []
+  }
+
+  const timetable: NewSchedule[] = []
+
+  for (const schedule of json.data) {
+    const transformedSchedule: NewSchedule = {
+      id: `${OPERATORS.KCI.code}-${schedule.train_id}`,
+      stationId: `${OPERATORS.KCI.code}-${stationCode}`,
+      tripNumber: schedule.train_id,
+      boundFor: tryGetFormattedName("NUL", schedule.dest),
+      estimatedDeparture: schedule.time_est,
+      estimatedArrival: schedule.dest_time,
+    }
+
+    timetable.push(transformedSchedule)
+  }
+
+  // Save to database
+  return await StationRepository.insertTimetable(`${OPERATORS.KCI.code}-${stationCode}`, timetable)
 }

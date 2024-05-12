@@ -1,5 +1,7 @@
+import { ScheduleSchema } from './schedules'
 import { StationSchema } from './stations'
 
 export interface Database {
-  station: StationSchema
+  stations: StationSchema,
+  schedules: ScheduleSchema
 }

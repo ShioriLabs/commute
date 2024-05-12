@@ -11,6 +11,7 @@ export interface StationSchema {
   operator: ColumnType<Operator, string | Operator, string | Operator>
   createdAt: ColumnType<Date, string | undefined, never>
   updatedAt: ColumnType<Date, string | undefined, string | undefined>
+  timetableSynced: ColumnType<number, number | undefined, number | undefined>
 }
 
 export type Station = Selectable<StationSchema>
