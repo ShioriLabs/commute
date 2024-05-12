@@ -1,16 +1,18 @@
+import { Operator, RegionCode } from "constant";
 import { ColumnType, Insertable, Selectable } from "kysely";
 
 export interface StationSchema {
   id: string
   name: string
-  originalName: string | null
+  formattedName: string | null
   code: string
   region: string
-  operator: string
+  regionCode: ColumnType<RegionCode, string | RegionCode, string | RegionCode>,
+  operator: ColumnType<Operator, string | Operator, string | Operator>,
   createdAt: ColumnType<Date, string | undefined, never>
   updatedAt: ColumnType<Date, string | undefined, string | undefined>
 }
 
-export type StationRaw = Selectable<StationSchema>
-export type NewStationRaw = Insertable<StationSchema>
-export type StationRawUpdate = Insertable<StationSchema>
+export type Station = Selectable<StationSchema>
+export type NewStation = Insertable<StationSchema>
+export type UpdatingStation = Insertable<StationSchema>
