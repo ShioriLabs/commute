@@ -41,10 +41,10 @@ export class StationRepository extends Repository {
       .insertInto('station').values(data)
       .onConflict((oc) => {
         return oc.column('id').doUpdateSet(eb => ({
-          name: eb.ref('name'),
-          formattedName: eb.ref('formattedName'),
-          region: eb.ref('region'),
-          operator: eb.ref('operator'),
+          name: eb.ref('excluded.name'),
+          formattedName: eb.ref('excluded.formattedName'),
+          region: eb.ref('excluded.region'),
+          operator: eb.ref('excluded.operator'),
           updatedAt: sql`CURRENT_TIMESTAMP`,
         }))
       })
