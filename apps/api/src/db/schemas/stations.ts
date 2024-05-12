@@ -1,5 +1,5 @@
-import { Operator, RegionCode } from "constant";
-import { ColumnType, Insertable, Selectable } from "kysely";
+import { Operator, RegionCode } from 'constant'
+import { ColumnType, Insertable, Selectable } from 'kysely'
 
 export interface StationSchema {
   id: string
@@ -7,8 +7,8 @@ export interface StationSchema {
   formattedName: string | null
   code: string
   region: string
-  regionCode: ColumnType<RegionCode, string | RegionCode, string | RegionCode>,
-  operator: ColumnType<Operator, string | Operator, string | Operator>,
+  regionCode: ColumnType<RegionCode, string | RegionCode, string | RegionCode>
+  operator: ColumnType<Operator, string | Operator, string | Operator>
   createdAt: ColumnType<Date, string | undefined, never>
   updatedAt: ColumnType<Date, string | undefined, string | undefined>
 }

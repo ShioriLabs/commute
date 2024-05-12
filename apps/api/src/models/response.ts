@@ -1,4 +1,4 @@
-import { StatusCode } from "hono/utils/http-status"
+import { StatusCode } from 'hono/utils/http-status'
 
 export interface StandardResponse<T = unknown> {
   status: StatusCode

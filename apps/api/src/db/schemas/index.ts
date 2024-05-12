@@ -1,4 +1,4 @@
-import { StationSchema } from "./stations"
+import { StationSchema } from './stations'
 
 export interface Database {
   station: StationSchema

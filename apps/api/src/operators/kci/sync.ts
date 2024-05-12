@@ -20,11 +20,10 @@ export async function syncStations() {
     return []
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const stations: NewStation[] = [];
+  const stations: NewStation[] = []
 
   for (const station of json.data) {
-    if (station.fg_enable === 0) continue;
+    if (station.fg_enable === 0) continue
     const region = STATION_REGION_LOOKUP[station.group_wil as number] ?? REGIONS.NUL
     const transformedStation: NewStation = {
       id: `${OPERATORS.KCI.code}-${station.sta_id}`,
@@ -32,15 +31,13 @@ export async function syncStations() {
       name: station.sta_name,
       region: region.name,
       regionCode: region.code,
-      operator: OPERATORS.KCI.code
+      operator: OPERATORS.KCI.code,
     }
 
     stations.push(transformedStation)
-
   }
 
   // Save to database
   await StationRepository.insertMany(stations)
   return stations
-
 }
