@@ -1,9 +1,7 @@
-import { Operator, REGIONS, RegionCode } from "constant";
 import { db } from "db";
-import { NewStationRaw, StationRaw, StationRawUpdate } from "db/schemas/stations";
+import { NewStation, UpdatingStation } from "db/schemas/stations";
 import { sql } from "kysely";
 import { Repository } from "models/repository";
-import Station from "models/station";
 
 export class StationRepository extends Repository {
   static async getAll(page?: number, limit?: number) {
@@ -17,17 +15,17 @@ export class StationRepository extends Repository {
   }
 
   static async getById(id: string) {
-    const station = await db.selectFrom("station").where("id", "=", id).selectAll().executeTakeFirst()
+    const station = await db.selectFrom("station").where("id", "=", id).selectAll().clearSelect().executeTakeFirst()
     return station
   }
 
-  static async insert(data: NewStationRaw) {
+  static async insert(data: NewStation) {
     await db
       .insertInto("station").values(data)
       .onConflict((oc) => {
         return oc.column("id").doUpdateSet({
           name: data.name,
-          originalName: data.originalName,
+          formattedName: data.formattedName,
           region: data.region,
           operator: data.operator,
           updatedAt: sql`CURRENT_TIMESTAMP`
@@ -38,13 +36,13 @@ export class StationRepository extends Repository {
       return data
   }
 
-  static async insertMany(data: NewStationRaw[]) {
+  static async insertMany(data: NewStation[]) {
     await db
       .insertInto("station").values(data)
       .onConflict((oc) => {
         return oc.column("id").doUpdateSet((eb) => ({
           name: eb.ref('name'),
-          originalName: eb.ref('originalName'),
+          formattedName: eb.ref('formattedName'),
           region: eb.ref('region'),
           operator: eb.ref('operator'),
           updatedAt: sql`CURRENT_TIMESTAMP`
@@ -55,7 +53,7 @@ export class StationRepository extends Repository {
       return data
   }
 
-  static async update(data: StationRawUpdate) {
+  static async update(data: UpdatingStation) {
     await db
       .updateTable("station")
       .set(data)
@@ -70,26 +68,5 @@ export class StationRepository extends Repository {
       .deleteFrom("station")
       .where("id", "=", id)
       .executeTakeFirst()
-  }
-
-  static prepareInsertFromStation(operator: Operator, station: Station): NewStationRaw {
-    return {
-      id: `${operator}-${station.code}`,
-      name: station.name,
-      originalName: station.originalName,
-      code: station.code,
-      region: station.regionCode,
-      operator
-    }
-  }
-
-  static toStation(stationRaw: StationRaw): Station {
-    return {
-      name: stationRaw.name,
-      originalName: stationRaw.originalName ?? undefined,
-      code: stationRaw.code,
-      regionCode: stationRaw.region as RegionCode,
-      region: REGIONS[stationRaw.region as RegionCode].name
-    }
   }
 }
