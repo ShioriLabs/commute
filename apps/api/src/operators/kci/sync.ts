@@ -10,7 +10,15 @@ const STATION_REGION_LOOKUP: Record<number, typeof REGIONS[keyof typeof REGIONS]
 
 export async function syncStations() {
   const response = await fetch('https://api-partner.krl.co.id/krlweb/v1/krl-station')
+  if (!response.ok) {
+    return []
+  }
+
   const json = await response.json()
+
+  if (json.status !== 200) {
+    return []
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const stations: NewStation[] = [];
@@ -34,4 +42,5 @@ export async function syncStations() {
   // Save to database
   await StationRepository.insertMany(stations)
   return stations
+
 }
