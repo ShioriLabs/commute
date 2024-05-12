@@ -9,7 +9,7 @@ import { Schedule } from 'db/schemas/schedules'
 const app = new Hono()
 
 app.get('/stations', async (c) => {
-  let stations: Station[] | NewStation[] = await StationRepository.getAll()
+  let stations: Station[] | NewStation[] = await StationRepository.getAllByOperator("KCI")
   if (stations.length === 0) {
     stations = await syncStations()
   }
