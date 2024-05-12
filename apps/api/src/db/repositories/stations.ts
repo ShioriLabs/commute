@@ -1,13 +1,18 @@
-import { Operator } from "constant";
+import { Operator, REGIONS, RegionCode } from "constant";
 import { db } from "db";
-import { NewStationRaw, StationRawUpdate } from "db/schemas/stations";
+import { NewStationRaw, StationRaw, StationRawUpdate } from "db/schemas/stations";
 import { sql } from "kysely";
 import { Repository } from "models/repository";
 import Station from "models/station";
 
 export class StationRepository extends Repository {
-  static async getAll(page: number, limit: number) {
-    const stations = await db.selectFrom("station").limit(limit).offset((page - 1) * limit).selectAll().execute()
+  static async getAll(page?: number, limit?: number) {
+    let query = db.selectFrom("station").selectAll()
+    if (page && limit) {
+      query = query.limit(limit).offset((page - 1) * limit)
+    }
+
+    const stations = await query.execute()
     return stations
   }
 
@@ -75,6 +80,16 @@ export class StationRepository extends Repository {
       code: station.code,
       region: station.regionCode,
       operator
+    }
+  }
+
+  static toStation(stationRaw: StationRaw): Station {
+    return {
+      name: stationRaw.name,
+      originalName: stationRaw.originalName ?? undefined,
+      code: stationRaw.code,
+      regionCode: stationRaw.region as RegionCode,
+      region: REGIONS[stationRaw.region as RegionCode].name
     }
   }
 }
