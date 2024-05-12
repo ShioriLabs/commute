@@ -9,7 +9,7 @@ export function Ok<T = unknown>(data: T): StandardResponse<T> {
 
 export function NotFound(errorCode: string = 'NOT_FOUND', message: string = 'Not found'): StandardResponse {
   return {
-    status: 200,
+    status: 404,
     error: {
       code: errorCode,
       message,

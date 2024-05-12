@@ -15,7 +15,7 @@ export class StationRepository extends Repository {
   }
 
   static async getById(id: string) {
-    const station = await db.selectFrom('station').where('id', '=', id).selectAll().clearSelect().executeTakeFirst()
+    const station = await db.selectFrom('station').where('id', '=', id).selectAll().executeTakeFirst()
     return station
   }
 
