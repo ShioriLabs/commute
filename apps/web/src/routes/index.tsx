@@ -1,16 +1,28 @@
-import { component$ } from "@builder.io/qwik";
+import { component$, useSignal, useVisibleTask$ } from "@builder.io/qwik";
 import type { DocumentHead } from "@builder.io/qwik-city";
 
 export default component$(() => {
+  const stations = useSignal<string[]>([])
+
+  useVisibleTask$(async () => {
+    const savedStations = localStorage.getItem('savedStations')
+    if (savedStations) {
+      stations.value = savedStations.split(/, /g)
+    }
+  })
+
   return (
-    <>
-      <h1>Hi 👋</h1>
-      <div>
-        Can't wait to see what you build with qwik!
-        <br />
-        Happy coding.
-      </div>
-    </>
+    <div class="p-4">
+      <h2 class="font-bold text-2xl">Stasiun Tersimpan</h2>
+      {stations.value.length === 0 && (
+        <>
+          <p class="mt-4">Belum ada stasiun yang disimpan nih</p>
+          <a href="/add-station" class="inline-block rounded py-2 px-4 mt-2 bg-blue-400 text-white">
+            Tambah Stasiun
+          </a>
+        </>
+      )}
+    </div>
   );
 });
 
