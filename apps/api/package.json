@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "tsx src/app.ts",
     "lint": "eslint --fix",
-    "migration:up": "tsx src/db/migrator.ts"
+    "migration:up": "tsx src/db/migrator.ts",
+    "build": "tsc && tsc-alias",
+    "start": "node dist/app.js"
   },
   "keywords": [],
   "author": "",
@@ -19,6 +21,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.10",
     "@types/node": "^20.12.11",
+    "tsc-alias": "^1.8.9",
     "tsx": "^4.10.0"
   }
 }
