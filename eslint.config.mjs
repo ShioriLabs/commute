@@ -6,7 +6,7 @@ import stylistic from '@stylistic/eslint-plugin'
 export default [
   {
     languageOptions: { globals: globals.browser },
-    files: ['apps/**/*.ts'],
+    files: ['apps/**/*.ts', 'apps/**/*.tsx'],
   },
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,
@@ -14,5 +14,6 @@ export default [
     quotes: 'single',
     semi: false,
     indent: 2,
+    commaDangle: false
   }),
 ]
