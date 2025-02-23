@@ -10,8 +10,16 @@ const STATION_REGION_LOOKUP: Record<number, typeof REGIONS[keyof typeof REGIONS]
   6: REGIONS.YIA,
 } as const
 
-export async function syncStations() {
-  const response = await fetch('https://api-partner.krl.co.id/krl-webs/v1/krl-station')
+export async function syncStations(token?: string) {
+  const response = await fetch(
+    'https://api-partner.krl.co.id/krl-webs/v1/krl-station',
+    {
+      headers: {
+        'Authorization': `Bearer ${token || process.env.KCI_API_TOKEN}`
+      }
+    }
+  )
+
   if (!response.ok) {
     return []
   }
@@ -45,8 +53,15 @@ export async function syncStations() {
   return stations
 }
 
-export async function syncTimetable(stationCode: string) {
-  const response = await fetch(`https://api-partner.krl.co.id/krl-webs/v1/schedule?stationid=${stationCode}&timefrom=00:00&timeto=23:59`)
+export async function syncTimetable(stationCode: string, token?: string) {
+  const response = await fetch(
+    `https://api-partner.krl.co.id/krl-webs/v1/schedule?stationid=${stationCode}&timefrom=00:00&timeto=23:59`,
+    {
+      headers: {
+        'Authorization': `Bearer ${token || process.env.KCI_API_TOKEN}`
+      }
+    }
+  )
   if (!response.ok) {
     return []
   }
