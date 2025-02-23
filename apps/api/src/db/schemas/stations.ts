@@ -1,5 +1,5 @@
-import { Operator, RegionCode } from 'constant'
-import { ColumnType, Insertable, Selectable } from 'kysely'
+import type { Operator, RegionCode } from 'constant'
+import type { ColumnType, Insertable, Selectable } from 'kysely'
 
 export interface StationSchema {
   id: string
