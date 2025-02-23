@@ -11,8 +11,8 @@ const PORT = process.env.PORT ? Number.parseInt(process.env.PORT) : 3000
 const app = new Hono()
 
 app.use('*', cors())
-app.route('kci', kciRoutes)
-app.route('mrtj', mrtjRoutes)
+app.route('KCI', kciRoutes)
+app.route('MRTJ', mrtjRoutes)
 app.get('/stations', async (c) => {
   const stations = await StationRepository.getAll()
   return c.json(Ok(stations), 200)
