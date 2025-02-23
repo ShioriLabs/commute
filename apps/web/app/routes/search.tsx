@@ -2,7 +2,6 @@ import type { Station } from '@schema/stations'
 import type { StandardResponse } from '@schema/response'
 import type { Route } from './+types/search'
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router'
 
 export async function clientLoader(): Promise<StandardResponse<Station[]>> {
   const stations = await fetch(new URL('/stations', import.meta.env.VITE_API_BASE_URL))
@@ -32,9 +31,9 @@ export default function Search({ loaderData }: Route.ComponentProps) {
       <div className="p-8 pb-4 sticky top-0 bg-white">
         <div className="flex gap-4 items-center justify-between">
           <h1 className="font-bold text-2xl">Cari Stasiun</h1>
-          <Link to="/" className="rounded-full leading-0 flex items-center justify-center text-2xl font-bold w-10 h-10">
+          <button onClick={() => history.back()} aria-label="Close search page" className="rounded-full leading-0 flex items-center justify-center text-2xl font-bold w-10 h-10">
             &#x2715;
-          </Link>
+          </button>
         </div>
         <input
           className="mt-4 w-full px-4 py-2 rounded bg-stone-200 border-2 border-stone-300"
