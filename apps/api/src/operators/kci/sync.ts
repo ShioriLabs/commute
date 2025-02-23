@@ -11,7 +11,7 @@ const STATION_REGION_LOOKUP: Record<number, typeof REGIONS[keyof typeof REGIONS]
 } as const
 
 export async function syncStations() {
-  const response = await fetch('https://api-partner.krl.co.id/krlweb/v1/krl-station')
+  const response = await fetch('https://api-partner.krl.co.id/krl-webs/v1/krl-station')
   if (!response.ok) {
     return []
   }
@@ -46,7 +46,7 @@ export async function syncStations() {
 }
 
 export async function syncTimetable(stationCode: string) {
-  const response = await fetch(`https://api-partner.krl.co.id/krlweb/v1/schedule?stationid=${stationCode}&timefrom=00:00&timeto=23:59`)
+  const response = await fetch(`https://api-partner.krl.co.id/krl-webs/v1/schedule?stationid=${stationCode}&timefrom=00:00&timeto=23:59`)
   if (!response.ok) {
     return []
   }
