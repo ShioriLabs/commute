@@ -1,4 +1,4 @@
-import type { Operator, RegionCode } from 'constant'
+import type { Operator, RegionCode } from '@commute/constants'
 import type { ColumnType, Insertable, Selectable } from 'kysely'
 
 export interface StationSchema {
