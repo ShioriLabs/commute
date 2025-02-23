@@ -1,7 +1,8 @@
 import type { Station } from '@schema/stations'
 import type { StandardResponse } from '@schema/response'
-import type { Route } from './+types/add-station'
+import type { Route } from './+types/search'
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router'
 
 export async function clientLoader(): Promise<StandardResponse<Station[]>> {
   const stations = await fetch(new URL('/stations', import.meta.env.VITE_API_BASE_URL))
@@ -12,7 +13,7 @@ export async function clientLoader(): Promise<StandardResponse<Station[]>> {
   }
 }
 
-export default function AddStation({ loaderData }: Route.ComponentProps) {
+export default function Search({ loaderData }: Route.ComponentProps) {
   const stations = loaderData
   const [searchQuery, setSearchQuery] = useState<string>("")
 
@@ -28,10 +29,15 @@ export default function AddStation({ loaderData }: Route.ComponentProps) {
 
   return (
     <div>
-      <div className="p-8 pb-0">
-        <h1 className="font-bold text-2xl">Cari Stasiun</h1>
+      <div className="p-8 pb-4 sticky top-0 bg-white">
+        <div className="flex gap-4 items-center justify-between">
+          <h1 className="font-bold text-2xl">Cari Stasiun</h1>
+          <Link to="/" className="rounded-full leading-0 flex items-center justify-center text-2xl font-bold w-10 h-10">
+            &#x2715;
+          </Link>
+        </div>
         <input
-          className="mt-4 w-full px-4 py-2 rounded bg-stone-200"
+          className="mt-4 w-full px-4 py-2 rounded bg-stone-200 border-2 border-stone-300"
           type="text"
           placeholder="Masukkan nama stasiun atau kode stasiun"
           value={searchQuery}
@@ -39,9 +45,9 @@ export default function AddStation({ loaderData }: Route.ComponentProps) {
         />
       </div>
       {filteredStations.length > 0 ? (
-        <ul className="mt-8">
+        <ul className="mt-4">
           {filteredStations.map(station => (
-              <li className="px-8 py-4 flex flex-col gap-1">
+              <li className="px-8 py-4 flex flex-col gap-1" key={station.code}>
                 <b>{ station.formattedName }</b>
                 <span className="font-semibold">{ station.operator }</span>
               </li>
