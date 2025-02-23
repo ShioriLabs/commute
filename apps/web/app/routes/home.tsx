@@ -1,5 +1,7 @@
 import { useState } from "react";
 import type { Route } from "./+types/home";
+import type { Station } from '@schema/stations'
+import { Link } from "react-router";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -8,19 +10,17 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export default function Home() {
-  const [stations, setStations] = useState<any>([]);
+  const [stations, setStations] = useState<Station[]>([]);
 
   return (
-    <div className="p-4">
-      <h2 className="font-bold text-2xl">Stasiun Tersimpan</h2>
-      {stations.length === 0 && (
-        <>
-          <p className="mt-4">Belum ada stasiun yang disimpan nih</p>
-          <a href="/add-station" className="inline-block rounded py-2 px-4 mt-2 bg-blue-400 text-white">
-            Tambah Stasiun
-          </a>
-        </>
-      )}
-    </div>
+    <main className="bg-gray-100 w-screen min-h-screen">
+      <nav className="fixed bottom-0 py-4 flex gap-4">
+        <Link to="/add-station" className="ml-4 bg-white block p-4 rounded-md shadow w-screen h-screen max-w-40 max-h-28 border-2 border-gray-200">
+          <b>Cari</b>
+        </Link>
+      </nav>
+      <div className="p-4">
+      </div>
+    </main>
   );
 }
