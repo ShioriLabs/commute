@@ -30,4 +30,10 @@ export const TANJUNG_PRIOK_LINE: Line = {
   lineCode: 'TP'
 } as const
 
-export const LINES = [CIKARANG_LINE, BOGOR_LINE, RANGKASBITUNG_LINE, TANGERANG_LINE, TANJUNG_PRIOK_LINE] as const
+export const APT_CGK_LINE: Line = {
+  name: 'Lin Soekarno-Hatta',
+  colorCode: '#262262',
+  lineCode: 'A'
+} as const
+
+export const LINES = [CIKARANG_LINE, BOGOR_LINE, RANGKASBITUNG_LINE, TANGERANG_LINE, TANJUNG_PRIOK_LINE, APT_CGK_LINE] as const

@@ -50,7 +50,8 @@ export async function sync() {
             estimatedDeparture: `${departureTime}:00`,
             estimatedArrival: `${arrivalHour}:${arrivalMinute}:00`,
             stationId: stationId,
-            tripNumber: `${station.nid}-${departureTime}-NORTHBOUND`
+            tripNumber: `${station.nid}-${departureTime}-NORTHBOUND`,
+            lineCode: 'M'
           }
 
           stationTimetables.push(schedule)
@@ -79,7 +80,8 @@ export async function sync() {
             estimatedDeparture: `${departureTime}:00`,
             estimatedArrival: `${arrivalHour.toString().padStart(2, '0')}:${arrivalMinute.toString().padStart(2, '0')}:00`,
             stationId: stationId,
-            tripNumber: `${station.nid}-${departureTime}-SOUTHBOUND`
+            tripNumber: `${station.nid}-${departureTime}-SOUTHBOUND`,
+            lineCode: 'M'
           }
 
           stationTimetables.push(schedule)
