@@ -25,6 +25,7 @@ export async function up(db: Kysely<any>): Promise<void> {
     .addColumn('estimatedDeparture', 'time', col => col.notNull())
     .addColumn('estimatedArrival', 'time', col => col.notNull())
     .addColumn('boundFor', 'varchar(64)', col => col.notNull())
+    .addColumn('lineCode', 'varchar(8)', col => col.notNull())
     .addColumn('createdAt', 'timestamp', col => col.defaultTo(sql`CURRENT_TIMESTAMP`).notNull())
     .addColumn('updatedAt', 'timestamp', col => col.defaultTo(sql`CURRENT_TIMESTAMP`).notNull())
     .ifNotExists()

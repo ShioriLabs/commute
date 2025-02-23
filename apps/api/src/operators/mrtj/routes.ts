@@ -4,7 +4,7 @@ import { StationRepository } from 'db/repositories/stations'
 import { NewStation, Station } from 'db/schemas/stations'
 import { NotFound, Ok } from 'utils/response'
 import { OPERATORS } from 'constant'
-import { Schedule } from 'db/schemas/schedules'
+import { Schedule, ScheduleWithLineInfo } from 'db/schemas/schedules'
 
 const app = new Hono()
 
@@ -30,12 +30,20 @@ app.get('/stations/:code/timetable', async (c) => {
   const station = await StationRepository.getById(`${OPERATORS.MRTJ.code}-${stationCode}`)
   if (!station) return c.json(NotFound(), 404)
 
-  let timetable: Schedule[] = []
+  let timetable: (Schedule | ScheduleWithLineInfo)[] = []
   if (station.timetableSynced === 0) {
     await sync()
   }
 
   timetable = await StationRepository.getTimetableFromStationId(station.id)
+  timetable = timetable.map(schedule => ({
+    ...schedule,
+    line: {
+      lineCode: schedule.lineCode,
+      name: 'Lin Utara Selatan',
+      colorCode: '#ca2a51'
+    }
+  }))
 
   return c.json(Ok(timetable), 200)
 })

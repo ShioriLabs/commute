@@ -1,7 +1,7 @@
 import { OPERATORS, REGIONS } from 'constant'
 import { StationRepository } from 'db/repositories/stations'
 import { NewStation } from 'db/schemas/stations'
-import { tryGetFormattedName } from './stationNameFormatter'
+import { getLineInfoFromAPIName, tryGetFormattedName } from './formatters'
 import { NewSchedule } from 'db/schemas/schedules'
 
 const STATION_REGION_LOOKUP: Record<number, typeof REGIONS[keyof typeof REGIONS]> = {
@@ -82,6 +82,7 @@ export async function syncTimetable(stationCode: string, token?: string) {
       boundFor: tryGetFormattedName("NUL", schedule.dest),
       estimatedDeparture: schedule.time_est,
       estimatedArrival: schedule.dest_time,
+      lineCode: getLineInfoFromAPIName(schedule.ka_name ?? "")?.lineCode ?? "NUL"
     }
 
     timetable.push(transformedSchedule)
