@@ -16,7 +16,8 @@
     "baseUrl": ".",
     "paths": {
       "~/*": ["./app/*"],
-      "@schema/*": ["../api/src/db/schemas/*"]
+      "@schema/*": ["../api/src/db/schemas/*"],
+      "@schema/response": ["../api/src/models/response.ts"]
     },
     "esModuleInterop": true,
     "verbatimModuleSyntax": true,
