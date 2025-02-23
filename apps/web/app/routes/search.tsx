@@ -2,6 +2,7 @@ import type { Station } from '@schema/stations'
 import type { StandardResponse } from '@schema/response'
 import type { Route } from './+types/search'
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router'
 
 export async function clientLoader(): Promise<StandardResponse<Station[]>> {
   const stations = await fetch(new URL('/stations', import.meta.env.VITE_API_BASE_URL))
@@ -46,9 +47,11 @@ export default function Search({ loaderData }: Route.ComponentProps) {
       {filteredStations.length > 0 ? (
         <ul className="mt-4">
           {filteredStations.map(station => (
-              <li className="px-8 py-4 flex flex-col gap-1" key={station.code}>
-                <b>{ station.formattedName }</b>
-                <span className="font-semibold">{ station.operator }</span>
+              <li key={station.code}>
+                <Link to={`/station/${station.operator}/${station.code}`} className="px-8 py-4 flex flex-col gap-1">
+                  <b>{ station.formattedName }</b>
+                  <span className="font-semibold">{ station.operator }</span>
+                </Link>
               </li>
             ))}
         </ul>
