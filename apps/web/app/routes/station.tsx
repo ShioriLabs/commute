@@ -1,5 +1,5 @@
 import type { Station } from '@schema/stations'
-import type { Schedule } from '@schema/schedules'
+import type { ScheduleWithLineInfo } from '@schema/schedules'
 import type { StandardResponse } from '@schema/response'
 import type { Route } from './+types/station'
 import { useMemo, useState } from 'react'
@@ -12,13 +12,58 @@ export async function clientLoader({ params }: Route.ClientLoaderArgs) {
 
   if (station.ok && timetable.ok) {
     const stationJson: StandardResponse<Station> = await station.json()
-    const timetableJson: StandardResponse<Schedule[]> = await timetable.json()
+    const timetableJson: StandardResponse<ScheduleWithLineInfo[]> = await timetable.json()
+
+    const lines: Record<
+      string,
+      { name: string
+        lineCode: string
+        colorCode: `#${string}`,
+        timetable: ScheduleWithLineInfo[]
+      }
+    > = { }
+
+    const now = new Date()
+    if (timetableJson.data) {
+      for (const schedule of timetableJson.data) {
+        const estimatedDeparture = new Date(`${now.toDateString()} ${schedule.estimatedDeparture}`)
+        if (estimatedDeparture < now) continue
+        if (schedule.lineCode === 'NUL') continue
+
+        if (lines[schedule.lineCode]) {
+          lines[schedule.lineCode].timetable.push({...schedule, estimatedDeparture} )
+          continue
+        }
+
+        lines[schedule.lineCode] = {
+          ...schedule.line,
+          timetable: [{...schedule, estimatedDeparture}]
+        }
+      }
+    }
+
+    const linesWithGroupedTimetable = Object.values(lines).map(line => {
+      const groupedTimetable: Record<string, ScheduleWithLineInfo[]> = {}
+      for (const schedule of line.timetable) {
+        if (groupedTimetable[schedule.boundFor]) {
+          groupedTimetable[schedule.boundFor].push(schedule)
+          continue
+        }
+
+        groupedTimetable[schedule.boundFor] = [schedule]
+      }
+
+      return {
+        ...line,
+        timetable: Object.values(groupedTimetable)
+      }
+    })
 
     return {
       status: station.status,
       data: {
         ...stationJson.data,
-        timetable: timetableJson.data ?? []
+        lines: linesWithGroupedTimetable
       }
     }
   }
@@ -42,11 +87,27 @@ export default function Search({ loaderData }: Route.ComponentProps) {
           </button>
         </div>
       </div>
-      <ul className="mt-4">
-        {loaderData.data?.timetable.map(item => (
-          <li key={item.id} className="px-8 py-4 flex flex-col">
-            <span className="font-bold text-lg">Arah menuju {item.boundFor}</span>
-            <span className="font-semibold">{item.estimatedDeparture.toString()}</span>
+      <ul className="mt-4 px-4 pb-8 flex flex-col gap-2">
+        {loaderData.data?.lines.map(line => (
+          <li key={line.lineCode} className="rounded-lg w-full min-h-8 shadow-lg border-t-[16px] border-gray-100" style={{ borderTopColor: line.colorCode }}>
+            <article className="p-4">
+              <h1 className="font-bold text-xl">{line.name}</h1>
+            </article>
+            <ul className="border-t border-t-gray-300">
+              {line.timetable.map(schedule => (
+                <li key={schedule[0].id} className="p-4 flex items-start justify-between gap-2">
+                  <div>
+                    <span className="font-bold">{schedule[0].boundFor}</span>
+                  </div>
+                  <div className="text-right flex flex-col">
+                    <span className="font-bold">{schedule[0].estimatedDeparture.toLocaleTimeString('id-ID', { timeStyle: 'short' })}</span>
+                    {schedule.length > 1 ? (
+                      <span className="font-bold text-sm text-gray-500">brkt {schedule.slice(1, 3).map(sched => sched.estimatedDeparture.toLocaleTimeString('id-ID', { timeStyle: 'short' })).join(', ')}</span>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
           </li>
         ))}
       </ul>
