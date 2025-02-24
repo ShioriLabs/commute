@@ -2,7 +2,6 @@ import type { Station } from '@schema/stations'
 import type { ScheduleWithLineInfo } from '@schema/schedules'
 import type { StandardResponse } from '@schema/response'
 import type { Route } from './+types/station'
-import { useMemo, useState } from 'react'
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   const [station, timetable] = await Promise.all([
