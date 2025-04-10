@@ -11,7 +11,7 @@ const app = new Hono()
 
 app.get('/stations', async (c) => {
   let stations: Station[] | NewStation[] = await StationRepository.getAllByOperator("KCI")
-  if (stations.length === 0) {
+  if (stations.length === 0 || c.req.query("sync") === "true") {
     stations = await syncStations()
   }
 
@@ -32,7 +32,7 @@ app.get('/stations/:code/timetable', async (c) => {
   if (!station) return c.json(NotFound(), 404)
 
   let timetable: (Schedule | ScheduleWithLineInfo)[] = []
-  if (station.timetableSynced === 0) {
+  if (station.timetableSynced === 0 || c.req.query("sync") === "true") {
     await syncTimetable(stationCode)
   }
 
