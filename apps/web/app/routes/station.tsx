@@ -2,8 +2,9 @@ import type { Station } from '@schema/stations'
 import type { ScheduleWithLineInfo } from '@schema/schedules'
 import type { StandardResponse } from '@schema/response'
 import type { Route } from './+types/station'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useNavigationType } from 'react-router'
+import { BookmarkIcon, BookmarkSlashIcon, XMarkIcon } from '@heroicons/react/24/outline'
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   const [station, timetable] = await Promise.all([
@@ -77,6 +78,18 @@ export async function clientLoader({ params }: Route.ClientLoaderArgs) {
 export default function Search({ loaderData }: Route.ComponentProps) {
   const navigationType = useNavigationType()
   const navigate = useNavigate()
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    const savedStationsRaw = localStorage.getItem('saved-stations')
+    if (!savedStationsRaw || !loaderData?.data?.id) {
+      setSaved(false)
+      return
+    }
+
+    const savedStations = JSON.parse(savedStationsRaw) as string[]
+    setSaved(savedStations.includes(loaderData.data.id))
+  }, [])
 
   const handleBackButton = useCallback(() => {
     if (navigationType === 'POP') {
@@ -86,6 +99,27 @@ export default function Search({ loaderData }: Route.ComponentProps) {
     }
   }, [navigationType])
 
+  const handleSaveStationButton = useCallback(() => {
+    if (!loaderData.data?.id) return
+    const savedStations = JSON.parse(localStorage.getItem('saved-stations') ?? "[]") as string[]
+
+    if (!savedStations) {
+      localStorage.setItem('saved-stations', JSON.stringify([loaderData.data.id]))
+      setSaved(true)
+      return
+    }
+
+    if (savedStations.includes(loaderData.data.id)) {
+      const newSavedStations = savedStations.filter(item => item !== loaderData.data.id)
+      localStorage.setItem('saved-stations', JSON.stringify(newSavedStations))
+      setSaved(false)
+    } else {
+      localStorage.setItem('saved-stations', JSON.stringify([...savedStations, loaderData.data.id]))
+      setSaved(true)
+    }
+
+  }, [])
+
   return (
     <div>
       <div className="p-8 pb-4 sticky top-0 bg-white">
@@ -94,9 +128,18 @@ export default function Search({ loaderData }: Route.ComponentProps) {
             <h1 className="font-bold text-2xl">{ loaderData.data?.formattedName }</h1>
             <span className="font-semibold">{ loaderData.data?.operator }</span>
           </div>
-          <button onClick={handleBackButton} aria-label="Close search page" className="rounded-full leading-0 flex items-center justify-center text-2xl font-bold w-10 h-10">
-            &#x2715;
-          </button>
+          <div className="flex gap-4">
+            <button onClick={handleSaveStationButton} aria-label="Save this station" className="rounded-full leading-0 flex items-center justify-cente font-bold w-8 h-8">
+              {saved ? (
+                <BookmarkSlashIcon />
+              ) : (
+                <BookmarkIcon />
+              )}
+            </button>
+            <button onClick={handleBackButton} aria-label="Close search page" className="rounded-full leading-0 flex items-center justify-cente font-bold w-8 h-8">
+              <XMarkIcon />
+            </button>
+          </div>
         </div>
       </div>
       <ul className="mt-4 px-4 pb-8 flex flex-col gap-2">
