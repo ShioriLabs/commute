@@ -1,5 +1,5 @@
 import { ColumnType, Insertable, Selectable, Updateable } from "kysely"
-import { Line } from "models/line"
+import type { Line } from "models/line"
 
 export interface ScheduleSchema {
   id: string
@@ -19,3 +19,15 @@ export type UpdatingSchedule = Updateable<ScheduleSchema>
 export interface ScheduleWithLineInfo extends Schedule {
   line: Line | null
 }
+
+export interface LineTimetable {
+  name: string
+  lineCode: string
+  colorCode: `#${string}`
+  timetable: {
+    boundFor: string
+    schedules: Schedule[]
+  }[]
+}
+
+export type LineGroupedTimetable = LineTimetable[]
