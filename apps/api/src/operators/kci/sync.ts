@@ -76,7 +76,7 @@ export async function syncTimetable(stationCode: string, token?: string) {
 
   for (const schedule of json.data) {
     const transformedSchedule: NewSchedule = {
-      id: `${OPERATORS.KCI.code}-${schedule.train_id}`,
+      id: `${OPERATORS.KCI.code}-${stationCode}-${schedule.train_id}`,
       stationId: `${OPERATORS.KCI.code}-${stationCode}`,
       tripNumber: schedule.train_id,
       boundFor: tryGetFormattedName("NUL", schedule.dest),

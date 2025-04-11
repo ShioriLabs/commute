@@ -96,23 +96,30 @@ export class StationRepository extends Repository {
     const station = await this.getById(id)
     if (!station) return undefined
 
+    // Chunk timetable by 100
+    const chunkedTimetable: NewSchedule[][] = []
+    for (let i = 0; i < timetable.length; i += 100) {
+      chunkedTimetable.push(timetable.slice(i, i + 100))
+    }
+
     await db.transaction().execute(async (tx) => {
-      const insertTimetable = await tx
-        .insertInto('schedules')
-        .values(timetable)
-        .onConflict((oc) => {
-          return oc.column('id').doUpdateSet((eb) => ({
-            boundFor: eb.ref('excluded.boundFor'),
-            estimatedArrival: eb.ref('excluded.estimatedArrival'),
-            estimatedDeparture: eb.ref('excluded.estimatedDeparture'),
-            stationId: eb.ref('stationId'),
-            tripNumber: eb.ref(`excluded.tripNumber`),
-            updatedAt: sql`CURRENT_TIMESTAMP`,
-          }))
-        })
-        .execute()
-      await tx.updateTable('stations').set('timetableSynced', 1).where("id", "==", id).executeTakeFirstOrThrow()
-      return insertTimetable
+      for (const chunk of chunkedTimetable) {
+        await tx
+          .insertInto('schedules')
+          .values(chunk)
+          .onConflict((oc) => {
+            return oc.column('id').doUpdateSet((eb) => ({
+              boundFor: eb.ref('excluded.boundFor'),
+              estimatedArrival: eb.ref('excluded.estimatedArrival'),
+              estimatedDeparture: eb.ref('excluded.estimatedDeparture'),
+              stationId: eb.ref('stationId'),
+              tripNumber: eb.ref(`excluded.tripNumber`),
+              updatedAt: sql`CURRENT_TIMESTAMP`,
+            }))
+          })
+          .executeTakeFirstOrThrow()
+      }
+      return await tx.updateTable('stations').set('timetableSynced', 1).where("id", "==", id).executeTakeFirstOrThrow()
     })
 
     return timetable
