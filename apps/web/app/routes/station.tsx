@@ -2,7 +2,8 @@ import type { Station } from '@schema/stations'
 import type { ScheduleWithLineInfo } from '@schema/schedules'
 import type { StandardResponse } from '@schema/response'
 import type { Route } from './+types/station'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
+import { useNavigate, useNavigationType } from 'react-router'
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   const [station, timetable] = await Promise.all([
@@ -74,6 +75,17 @@ export async function clientLoader({ params }: Route.ClientLoaderArgs) {
 }
 
 export default function Search({ loaderData }: Route.ComponentProps) {
+  const navigationType = useNavigationType()
+  const navigate = useNavigate()
+
+  const handleBackButton = useCallback(() => {
+    if (navigationType === 'POP') {
+      navigate("/")
+    } else {
+      history.back()
+    }
+  }, [navigationType])
+
   return (
     <div>
       <div className="p-8 pb-4 sticky top-0 bg-white">
@@ -82,7 +94,7 @@ export default function Search({ loaderData }: Route.ComponentProps) {
             <h1 className="font-bold text-2xl">{ loaderData.data?.formattedName }</h1>
             <span className="font-semibold">{ loaderData.data?.operator }</span>
           </div>
-          <button onClick={() => history.back()} aria-label="Close search page" className="rounded-full leading-0 flex items-center justify-center text-2xl font-bold w-10 h-10">
+          <button onClick={handleBackButton} aria-label="Close search page" className="rounded-full leading-0 flex items-center justify-center text-2xl font-bold w-10 h-10">
             &#x2715;
           </button>
         </div>
