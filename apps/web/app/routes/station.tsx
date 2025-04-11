@@ -4,7 +4,8 @@ import type { Route } from './+types/station'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useNavigationType } from 'react-router'
 import { BookmarkIcon, BookmarkSlashIcon, XMarkIcon } from '@heroicons/react/24/outline'
-import type { LineGroupedTimetable, Schedule } from 'models/schedules'
+import type { LineGroupedTimetable } from 'models/schedules'
+import StationCard from 'components/station-card'
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   const [station, timetable] = await Promise.all([
@@ -28,23 +29,6 @@ export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   return {
     status: 500
   }
-}
-
-function getNextSchedules(schedules: Schedule[], limit = 3) {
-  const now = new Date()
-  const returning: Schedule[] = []
-  for (const schedule of schedules) {
-    if (returning.length === limit) break
-    const parsedDeparture = new Date(schedule.estimatedDeparture)
-    if (parsedDeparture < now) continue
-    returning.push(schedule)
-  }
-
-  return returning
-}
-
-function parseTime(timeString: string) {
-  return new Date(`${new Date().toDateString()} ${timeString}`)
 }
 
 export default function Search({ loaderData }: Route.ComponentProps) {
@@ -116,30 +100,7 @@ export default function Search({ loaderData }: Route.ComponentProps) {
       </div>
       <ul className="mt-4 px-4 pb-8 flex flex-col gap-2">
         {loaderData.data?.lines.map(line => (
-          <li key={line.lineCode} className="rounded-lg w-full min-h-8 shadow-lg border-t-[16px] border-gray-100" style={{ borderTopColor: line.colorCode }}>
-            <article className="p-4">
-              <h1 className="font-bold text-xl">{line.name}</h1>
-            </article>
-            <ul className="border-t border-t-gray-300">
-              {line.timetable.map(direction => {
-                const nextSchedules = getNextSchedules(direction.schedules)
-
-                return (
-                  <li key={direction.boundFor} className="p-4 flex items-start justify-between gap-2">
-                    <div>
-                      <span className="font-bold">{direction.boundFor}</span>
-                    </div>
-                    <div className="text-right flex flex-col">
-                      <span className="font-bold">{parseTime(nextSchedules[0].estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })}</span>
-                      {nextSchedules.length > 1 ? (
-                        <span className="font-bold text-sm text-gray-500">lalu {nextSchedules.slice(1, 3).map(sched => parseTime(sched.estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })).join(', ')}</span>
-                      ) : null}
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-          </li>
+          <StationCard key={line.lineCode} line={line} />
         ))}
       </ul>
     </div>
