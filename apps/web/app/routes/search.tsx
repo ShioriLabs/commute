@@ -3,6 +3,7 @@ import type { StandardResponse } from '@schema/response'
 import type { Route } from './+types/search'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
+import { XMarkIcon } from '@heroicons/react/24/outline'
 
 export async function clientLoader(): Promise<StandardResponse<Station[]>> {
   const stations = await fetch(new URL('/stations', import.meta.env.VITE_API_BASE_URL))
@@ -32,8 +33,8 @@ export default function Search({ loaderData }: Route.ComponentProps) {
       <div className="p-8 pb-4 sticky top-0 bg-white">
         <div className="flex gap-4 items-center justify-between">
           <h1 className="font-bold text-2xl">Cari Stasiun</h1>
-          <button onClick={() => history.back()} aria-label="Close search page" className="rounded-full leading-0 flex items-center justify-center text-2xl font-bold w-10 h-10">
-            &#x2715;
+          <button onClick={() => history.back()} aria-label="Close search page" className="rounded-full leading-0 flex items-center justify-center w-8 h-8">
+            <XMarkIcon />
           </button>
         </div>
         <input

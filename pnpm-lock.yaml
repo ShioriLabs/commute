@@ -59,6 +59,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@heroicons/react':
+        specifier: ^2.2.0
+        version: 2.2.0(react@19.1.0)
       '@react-router/node':
         specifier: ^7.1.5
         version: 7.5.0(react-router@7.5.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3)
@@ -650,6 +653,11 @@ packages:
 
   '@floating-ui/utils@0.2.9':
     resolution: {integrity: sha512-MDWhGtE+eHw5JW7lq4qhc5yRLS11ERl1c7Z6Xd0a58DozHES6EnNNwUWbMiG4J9Cgj053Bhk8zvlhFYKVhULwg==}
+
+  '@heroicons/react@2.2.0':
+    resolution: {integrity: sha512-LMcepvRaS9LYHJGsF0zzmgKCUim/X3N/DQKc4jepAXJ7l8QxJ1PmxJzqplF2Z3FE4PqBAIGyJAQ/w4B5dsqbtQ==}
+    peerDependencies:
+      react: '>= 16 || ^19.0.0-rc'
 
   '@hono/node-server@1.14.0':
     resolution: {integrity: sha512-YUCxJwgHRKSqjrdTk9e4VMGKN27MK5r4+MGPyZTgKH+IYbK+KtYbHeOcPGJ91KGGD6RIQiz2dAHxvjauNhOS8g==}
@@ -3613,6 +3621,10 @@ snapshots:
       react-dom: 19.1.0(react@19.1.0)
 
   '@floating-ui/utils@0.2.9': {}
+
+  '@heroicons/react@2.2.0(react@19.1.0)':
+    dependencies:
+      react: 19.1.0
 
   '@hono/node-server@1.14.0(hono@4.7.6)':
     dependencies:
