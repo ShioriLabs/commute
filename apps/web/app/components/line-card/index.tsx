@@ -21,7 +21,7 @@ interface Props {
   line: LineTimetable
 }
 
-export default function StationCard({ line }: Props) {
+export default function LineCard({ line }: Props) {
   return (
     <li className="rounded-lg w-full min-h-8 shadow-lg border-t-[16px] border-gray-100" style={{ borderTopColor: line.colorCode }}>
       <article className="p-4">

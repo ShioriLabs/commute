@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useNavigationType } from 'react-router'
 import { BookmarkIcon, BookmarkSlashIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import type { LineGroupedTimetable } from 'models/schedules'
-import StationCard from 'components/station-card'
+import LineCard from '~/components/line-card'
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   const [station, timetable] = await Promise.all([
@@ -100,7 +100,7 @@ export default function Search({ loaderData }: Route.ComponentProps) {
       </div>
       <ul className="mt-4 px-4 pb-8 flex flex-col gap-2">
         {loaderData.data?.lines.map(line => (
-          <StationCard key={line.lineCode} line={line} />
+          <LineCard key={line.lineCode} line={line} />
         ))}
       </ul>
     </div>
