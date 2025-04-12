@@ -78,7 +78,7 @@ export default function Home() {
 
   return (
     <main className="w-screen min-h-screen">
-      <ul className="px-4 pt-8 flex flex-col gap-8 pb-28">
+      <ul className="px-4 pt-8 flex flex-col gap-8 pb-36">
         {stations.map(station => (
           <StationCard key={station} stationId={station} />
         ))}
@@ -88,8 +88,6 @@ export default function Home() {
           <b>Cari</b>
         </Link>
       </nav>
-      <div className="p-4">
-      </div>
     </main>
   );
 }
