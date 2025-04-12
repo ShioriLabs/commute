@@ -77,8 +77,8 @@ export default function Home() {
   }, [])
 
   return (
-    <main className="bg-gray-100 w-screen min-h-screen">
-      <ul className="mt-8 p-4 flex flex-col gap-8 pb-28">
+    <main className="w-screen min-h-screen">
+      <ul className="px-4 pt-8 flex flex-col gap-8 pb-28">
         {stations.map(station => (
           <StationCard key={station} stationId={station} />
         ))}
