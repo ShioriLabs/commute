@@ -83,7 +83,7 @@ export default function Home() {
           <StationCard key={station} stationId={station} />
         ))}
       </ul>
-      <nav className="fixed bottom-0 py-4 flex gap-4">
+      <nav className="fixed bottom-0 py-4 flex gap-4 bg-gradient-to-t from-10% from-black/20 w-screen">
         <Link to="/search" className="ml-4 bg-white block p-4 rounded-xl shadow w-screen h-screen max-w-40 max-h-28 border-2 border-gray-200">
           <b>Cari</b>
         </Link>
