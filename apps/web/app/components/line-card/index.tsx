@@ -5,7 +5,7 @@ function getNextSchedules(schedules: Schedule[], limit = 3) {
   const returning: Schedule[] = []
   for (const schedule of schedules) {
     if (returning.length === limit) break
-    const parsedDeparture = new Date(schedule.estimatedDeparture)
+    const parsedDeparture = new Date(`${now.toDateString()} ${schedule.estimatedDeparture}`)
     if (parsedDeparture < now) continue
     returning.push(schedule)
   }
@@ -30,6 +30,7 @@ export default function LineCard({ line }: Props) {
       <ul className="border-t border-t-gray-300">
         {line.timetable.map(direction => {
           const nextSchedules = getNextSchedules(direction.schedules)
+          if (nextSchedules.length === 0) return null
 
           return (
             <li key={direction.boundFor} className="p-4 flex items-start justify-between gap-2">
