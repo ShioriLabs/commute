@@ -8,7 +8,14 @@ const WELL_KNOWN_STATION_NAMES: Record<string, string> = {
   DRN: 'Duren Kalibata',
   LNA: 'Lenteng Agung',
   PSM: 'Pasar Minggu',
-  PSMB: 'Pasar Minggu Baru'
+  PSMB: 'Pasar Minggu Baru',
+  BST: 'Bandara Soekarno-Hatta',
+  KPB: 'Kampung Bandan',
+  PRP: 'Parung Panjang',
+  // For schedules station, since they don't have codes
+  BANDARASOEKARNOHATTA: 'Bandara Soekarno-Hatta',
+  KAMPUNGBANDAN: 'Kampung Bandan',
+  PARUNGPANJANG: 'Parung Panjang'
 }
 
 // For mapping API line names to our line codes
