@@ -79,7 +79,7 @@ export async function syncTimetable(stationCode: string, token?: string) {
       id: `${OPERATORS.KCI.code}-${stationCode}-${schedule.train_id}`,
       stationId: `${OPERATORS.KCI.code}-${stationCode}`,
       tripNumber: schedule.train_id,
-      boundFor: tryGetFormattedName("NUL", schedule.dest),
+      boundFor: tryGetFormattedName(schedule.dest, schedule.dest),
       estimatedDeparture: schedule.time_est,
       estimatedArrival: schedule.dest_time,
       lineCode: getLineInfoFromAPIName(schedule.ka_name ?? "")?.lineCode ?? "NUL"
