@@ -27,13 +27,13 @@ export default function LineCard({ line }: Props) {
       <article className="p-4">
         <h1 className="font-bold text-xl">{line.name}</h1>
       </article>
-      <ul className="border-t border-t-gray-300">
+      <ul>
         {line.timetable.map(direction => {
           const nextSchedules = getNextSchedules(direction.schedules)
           if (nextSchedules.length === 0) return null
 
           return (
-            <li key={direction.boundFor} className="p-4 flex items-start justify-between gap-2">
+            <li key={direction.boundFor} className="p-4 flex items-start justify-between border-t border-t-gray-300">
               <div>
                 <span className="font-bold">{direction.boundFor}</span>
               </div>
