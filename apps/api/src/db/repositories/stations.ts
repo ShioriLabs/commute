@@ -83,7 +83,7 @@ export class StationRepository extends Repository {
   }
 
   static async getTimetableFromStationId(id: string, page?: number, limit?: number) {
-    let query = db.selectFrom('schedules').selectAll().where('stationId', '=', id)
+    let query = db.selectFrom('schedules').selectAll().where('stationId', '=', id).orderBy('estimatedDeparture asc')
     if (page && limit) {
       query = query.limit(limit).offset((page - 1) * limit)
     }
