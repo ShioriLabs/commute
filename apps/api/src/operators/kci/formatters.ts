@@ -12,10 +12,12 @@ const WELL_KNOWN_STATION_NAMES: Record<string, string> = {
   BST: 'Bandara Soekarno-Hatta',
   KPB: 'Kampung Bandan',
   PRP: 'Parung Panjang',
+  SUDB: 'BNI City',
   // For schedules station, since they don't have codes
   BANDARASOEKARNOHATTA: 'Bandara Soekarno-Hatta',
   KAMPUNGBANDAN: 'Kampung Bandan',
-  PARUNGPANJANG: 'Parung Panjang'
+  PARUNGPANJANG: 'Parung Panjang',
+  'SUDIRMAN BARU': 'BNI City'
 }
 
 // For mapping API line names to our line codes
@@ -33,9 +35,9 @@ export function tryGetFormattedName(code: string, stationName: string) {
   if (wellKnownName) return wellKnownName
 
   // Return station name with capitalized each word name
-  return stationName.split(/[ .]/g)
+  return stationName.split(/[ ]/g)
     .map((word) => {
-      if (word === 'UNIV') return 'Universitas'
+      if (word === 'UNIV.') return 'Universitas'
       return `${word[0]}${word.toLowerCase().substring(1)}`}
     )
     .join(" ")
