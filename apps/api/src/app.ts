@@ -1,4 +1,3 @@
-import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 
@@ -7,20 +6,23 @@ import mrtjRoutes from './operators/mrtj/routes'
 import { StationRepository } from 'db/repositories/stations'
 import { Ok } from 'utils/response'
 
-const PORT = process.env.PORT ? Number.parseInt(process.env.PORT) : 3000
-const app = new Hono()
+export interface Bindings {
+  DB: D1Database
+  KCI_API_TOKEN: string
+}
+
+export interface Variables {
+
+}
+
+const app = new Hono<{ Bindings: Bindings, Variables: Variables }>()
 
 app.use('*', cors())
 app.route('KCI', kciRoutes)
 app.route('MRTJ', mrtjRoutes)
 app.get('/stations', async (c) => {
-  const stations = await StationRepository.getAll()
+  const stations = await new StationRepository(c.env.DB).getAll()
   return c.json(Ok(stations), 200)
 })
 
-serve({
-  fetch: app.fetch,
-  port: PORT,
-})
-
-console.log(`Server running at ${PORT}`)
+export default app

@@ -1,12 +1,8 @@
-import SQLite from 'better-sqlite3'
-import { Kysely, SqliteDialect } from 'kysely'
+import { Kysely } from 'kysely'
 
 import { Database } from './schemas'
+import { D1Dialect } from 'kysely-d1'
 
-const dialect = new SqliteDialect({
-  database: new SQLite('commute.db'),
-})
-
-export const db = new Kysely<Database>({
-  dialect,
+export const db = (d1: D1Database) => new Kysely<Database>({
+  dialect: new D1Dialect({ database: d1 }),
 })

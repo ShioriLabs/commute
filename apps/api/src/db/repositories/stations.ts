@@ -6,8 +6,15 @@ import { sql } from 'kysely'
 import { Repository } from 'models/repository'
 
 export class StationRepository extends Repository {
-  static async getAll(page?: number, limit?: number) {
-    let query = db.selectFrom('stations').selectAll()
+  private d1: D1Database
+
+  constructor(d1: D1Database) {
+    super()
+    this.d1 = d1
+  }
+
+  async getAll(page?: number, limit?: number) {
+    let query = db(this.d1).selectFrom('stations').selectAll()
     if (page && limit) {
       query = query.limit(limit).offset((page - 1) * limit)
     }
@@ -16,8 +23,8 @@ export class StationRepository extends Repository {
     return stations
   }
 
-  static async getAllByOperator(operator: Operator, page?: number, limit?: number) {
-    let query = db.selectFrom('stations').selectAll().where('operator', '==', operator)
+  async getAllByOperator(operator: Operator, page?: number, limit?: number) {
+    let query = db(this.d1).selectFrom('stations').selectAll().where('operator', '==', operator)
     if (page && limit) {
       query = query.limit(limit).offset((page - 1) * limit)
     }
@@ -26,13 +33,13 @@ export class StationRepository extends Repository {
     return stations
   }
 
-  static async getById(id: string) {
-    const station = await db.selectFrom('stations').where('id', '=', id).selectAll().executeTakeFirst()
+  async getById(id: string) {
+    const station = await db(this.d1).selectFrom('stations').where('id', '=', id).selectAll().executeTakeFirst()
     return station
   }
 
-  static async insert(data: NewStation) {
-    await db
+  async insert(data: NewStation) {
+    await db(this.d1)
       .insertInto('stations').values(data)
       .onConflict((oc) => {
         return oc.column('id').doUpdateSet({
@@ -48,8 +55,8 @@ export class StationRepository extends Repository {
     return data
   }
 
-  static async insertMany(data: NewStation[]) {
-    await db
+  async insertMany(data: NewStation[]) {
+    await db(this.d1)
       .insertInto('stations').values(data)
       .onConflict((oc) => {
         return oc.column('id').doUpdateSet(eb => ({
@@ -65,8 +72,8 @@ export class StationRepository extends Repository {
     return data
   }
 
-  static async update(data: UpdatingStation) {
-    await db
+  async update(data: UpdatingStation) {
+    await db(this.d1)
       .updateTable('stations')
       .set(data)
       .where('id', '=', data.id)
@@ -75,15 +82,15 @@ export class StationRepository extends Repository {
     return data
   }
 
-  static async del(id: string) {
-    return await db
+  async del(id: string) {
+    return await db(this.d1)
       .deleteFrom('stations')
       .where('id', '=', id)
       .executeTakeFirst()
   }
 
-  static async getTimetableFromStationId(id: string, page?: number, limit?: number) {
-    let query = db.selectFrom('schedules').selectAll().where('stationId', '=', id).orderBy('estimatedDeparture asc')
+  async getTimetableFromStationId(id: string, page?: number, limit?: number) {
+    let query = db(this.d1).selectFrom('schedules').selectAll().where('stationId', '=', id).orderBy('estimatedDeparture asc')
     if (page && limit) {
       query = query.limit(limit).offset((page - 1) * limit)
     }
@@ -92,35 +99,35 @@ export class StationRepository extends Repository {
     return timetable
   }
 
-  static async insertTimetable(id: string, timetable: NewSchedule[]) {
+  async insertTimetable(id: string, timetable: NewSchedule[]) {
     const station = await this.getById(id)
     if (!station) return undefined
 
     // Chunk timetable by 100
     const chunkedTimetable: NewSchedule[][] = []
-    for (let i = 0; i < timetable.length; i += 100) {
-      chunkedTimetable.push(timetable.slice(i, i + 100))
+    for (let i = 0; i < timetable.length; i += 10) {
+      chunkedTimetable.push(timetable.slice(i, i + 10))
     }
 
-    await db.transaction().execute(async (tx) => {
-      for (const chunk of chunkedTimetable) {
-        await tx
-          .insertInto('schedules')
-          .values(chunk)
-          .onConflict((oc) => {
-            return oc.column('id').doUpdateSet((eb) => ({
-              boundFor: eb.ref('excluded.boundFor'),
-              estimatedArrival: eb.ref('excluded.estimatedArrival'),
-              estimatedDeparture: eb.ref('excluded.estimatedDeparture'),
-              stationId: eb.ref('stationId'),
-              tripNumber: eb.ref(`excluded.tripNumber`),
-              updatedAt: sql`CURRENT_TIMESTAMP`,
-            }))
-          })
-          .executeTakeFirstOrThrow()
-      }
-      return await tx.updateTable('stations').set('timetableSynced', 1).where("id", "==", id).executeTakeFirstOrThrow()
-    })
+    const databaseInstance = db(this.d1)
+
+    for (const chunk of chunkedTimetable) {
+      await databaseInstance
+        .insertInto('schedules')
+        .values(chunk)
+        .onConflict((oc) => {
+          return oc.column('id').doUpdateSet((eb) => ({
+            boundFor: eb.ref('excluded.boundFor'),
+            estimatedArrival: eb.ref('excluded.estimatedArrival'),
+            estimatedDeparture: eb.ref('excluded.estimatedDeparture'),
+            stationId: eb.ref('stationId'),
+            tripNumber: eb.ref(`excluded.tripNumber`),
+            updatedAt: sql`CURRENT_TIMESTAMP`,
+          }))
+        })
+        .executeTakeFirstOrThrow()
+    }
+    await databaseInstance.updateTable('stations').set('timetableSynced', 1).where("id", "==", id).executeTakeFirstOrThrow()
 
     return timetable
   }
