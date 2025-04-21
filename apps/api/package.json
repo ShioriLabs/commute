@@ -1,0 +1,31 @@
+{
+  "name": "@commute/api",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "dev": "wrangler dev src/app.ts",
+    "lint": "eslint --fix",
+    "migration:up": "tsx src/db/migrator.ts",
+    "build": "tsc && tsc-alias",
+    "start": "node dist/app.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@commute/constants": "workspace:../constants",
+    "@hono/node-server": "^1.11.1",
+    "better-sqlite3": "^9.6.0",
+    "hono": "^4.3.4",
+    "kysely": "^0.27.3",
+    "kysely-d1": "^0.4.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250421.0",
+    "@types/better-sqlite3": "^7.6.10",
+    "@types/node": "^20.12.11",
+    "tsc-alias": "^1.8.9",
+    "tsx": "^4.10.0",
+    "wrangler": "^4.12.0"
+  }
+}
