@@ -4,13 +4,13 @@ import { NewSchedule } from 'db/schemas/schedules'
 import { NewStation } from 'db/schemas/stations'
 
 // All MRTJ data were contained in the same API
-export async function sync() {
+export async function sync(d1: D1Database) {
   const response = await fetch('https://jakartamrt.co.id/val/stasiuns')
   if (!response.ok || response.status !== 200) {
     return []
   }
 
-  const json = await response.json()
+  const json = await response.json<any>()
 
   const stations: NewStation[] = []
   const timetables: Record<string, NewSchedule[]> = {}
@@ -94,9 +94,9 @@ export async function sync() {
   }
 
   // Save to database
-  await StationRepository.insertMany(stations)
+  await new StationRepository(d1).insertMany(stations)
   for (const [stationId, timetable] of Object.entries(timetables)) {
-    await StationRepository.insertTimetable(stationId, timetable)
+    await new StationRepository(d1).insertTimetable(stationId, timetable)
   }
 
   return stations

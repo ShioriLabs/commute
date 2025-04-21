@@ -7,13 +7,14 @@ import { OPERATORS } from 'constant'
 import { LineGroupedTimetable, Schedule, ScheduleWithLineInfo } from 'db/schemas/schedules'
 import { getLineInfoByLineCode } from './formatters'
 import { Line } from 'models/line'
+import { Bindings } from 'app'
 
-const app = new Hono()
+const app = new Hono<{ Bindings: Bindings }>()
 
 app.get('/stations', async (c) => {
-  let stations: Station[] | NewStation[] = await StationRepository.getAllByOperator("KCI")
+  let stations: Station[] | NewStation[] = await new StationRepository(c.env.DB).getAllByOperator("KCI")
   if (stations.length === 0 || c.req.query("sync") === "true") {
-    stations = await syncStations()
+    stations = await syncStations(c.env.DB, c.env.KCI_API_TOKEN)
   }
 
   return c.json(Ok(stations), 200)
@@ -21,7 +22,7 @@ app.get('/stations', async (c) => {
 
 app.get('/stations/:code', async (c) => {
   const stationCode = c.req.param('code')
-  const station = await StationRepository.getById(`${OPERATORS.KCI.code}-${stationCode}`)
+  const station = await new StationRepository(c.env.DB).getById(`${OPERATORS.KCI.code}-${stationCode}`)
   if (!station) return c.json(NotFound(), 404)
 
   return c.json(Ok(station), 200)
@@ -29,15 +30,15 @@ app.get('/stations/:code', async (c) => {
 
 app.get('/stations/:code/timetable', async (c) => {
   const stationCode = c.req.param('code')
-  const station = await StationRepository.getById(`${OPERATORS.KCI.code}-${stationCode}`)
+  const station = await new StationRepository(c.env.DB).getById(`${OPERATORS.KCI.code}-${stationCode}`)
   if (!station) return c.json(NotFound(), 404)
 
   let timetable: (Schedule | ScheduleWithLineInfo)[] = []
   if (station.timetableSynced === 0 || c.req.query("sync") === "true") {
-    await syncTimetable(stationCode)
+    await syncTimetable(c.env.DB, stationCode, c.env.KCI_API_TOKEN)
   }
 
-  timetable = await StationRepository.getTimetableFromStationId(station.id)
+  timetable = await new StationRepository(c.env.DB).getTimetableFromStationId(station.id)
   timetable = timetable.map(schedule => ({
     ...schedule,
     line: getLineInfoByLineCode(schedule.lineCode)
@@ -47,15 +48,15 @@ app.get('/stations/:code/timetable', async (c) => {
 
 app.get('/stations/:code/timetable/grouped', async (c) => {
   const stationCode = c.req.param('code')
-  const station = await StationRepository.getById(`${OPERATORS.KCI.code}-${stationCode}`)
+  const station = await new StationRepository(c.env.DB).getById(`${OPERATORS.KCI.code}-${stationCode}`)
   if (!station) return c.json(NotFound(), 404)
 
   let timetable: LineGroupedTimetable = []
   if (station.timetableSynced === 0 || c.req.query("sync") === "true") {
-    await syncTimetable(stationCode)
+    await syncTimetable(c.env.DB, stationCode, c.env.KCI_API_TOKEN)
   }
 
-  const schedules = await StationRepository.getTimetableFromStationId(station.id)
+  const schedules = await new StationRepository(c.env.DB).getTimetableFromStationId(station.id)
   const groupedByLineSchedules: Record<string, Line & { schedules: Schedule[] }> = { }
 
   for (const schedule of schedules) {

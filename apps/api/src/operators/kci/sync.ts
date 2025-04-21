@@ -10,12 +10,12 @@ const STATION_REGION_LOOKUP: Record<number, typeof REGIONS[keyof typeof REGIONS]
   6: REGIONS.YIA,
 } as const
 
-export async function syncStations(token?: string) {
+export async function syncStations(d1: D1Database, token?: string) {
   const response = await fetch(
     'https://api-partner.krl.co.id/krl-webs/v1/krl-station',
     {
       headers: {
-        'Authorization': `Bearer ${token || process.env.KCI_API_TOKEN}`
+        'Authorization': `Bearer ${token}`
       }
     }
   )
@@ -24,13 +24,16 @@ export async function syncStations(token?: string) {
     return []
   }
 
-  const json = await response.json()
+  const json = await response.json<any>()
 
   if (json.status !== 200) {
     return []
   }
 
   const stations: NewStation[] = []
+  const stationChunks: NewStation[][] = []
+  let currentChunk = []
+  const chunkSize = 5
 
   for (const station of json.data) {
     if (station.fg_enable === 0) continue
@@ -46,19 +49,29 @@ export async function syncStations(token?: string) {
     }
 
     stations.push(transformedStation)
+    currentChunk.push(transformedStation)
+    if (currentChunk.length > chunkSize) {
+      stationChunks.push(currentChunk)
+      currentChunk = []
+    }
   }
 
+  if (currentChunk.length > 0) stationChunks.push(currentChunk)
+
   // Save to database
-  await StationRepository.insertMany(stations)
+  for (const chunk of stationChunks) {
+    await new StationRepository(d1).insertMany(chunk)
+  }
+
   return stations
 }
 
-export async function syncTimetable(stationCode: string, token?: string) {
+export async function syncTimetable(d1: D1Database, stationCode: string, token?: string) {
   const response = await fetch(
     `https://api-partner.krl.co.id/krl-webs/v1/schedule?stationid=${stationCode}&timefrom=00:00&timeto=23:59`,
     {
       headers: {
-        'Authorization': `Bearer ${token || process.env.KCI_API_TOKEN}`
+        'Authorization': `Bearer ${token}`
       }
     }
   )
@@ -66,7 +79,7 @@ export async function syncTimetable(stationCode: string, token?: string) {
     return []
   }
 
-  const json = await response.json()
+  const json = await response.json<any>()
 
   if (json.status !== 200) {
     return []
@@ -89,5 +102,5 @@ export async function syncTimetable(stationCode: string, token?: string) {
   }
 
   // Save to database
-  return await StationRepository.insertTimetable(`${OPERATORS.KCI.code}-${stationCode}`, timetable)
+  return await new StationRepository(d1).insertTimetable(`${OPERATORS.KCI.code}-${stationCode}`, timetable)
 }
