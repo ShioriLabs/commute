@@ -2,6 +2,7 @@ import { OPERATORS, REGIONS } from 'constant'
 import { StationRepository } from 'db/repositories/stations'
 import { NewSchedule } from 'db/schemas/schedules'
 import { NewStation } from 'db/schemas/stations'
+import { chunkArray } from 'utils/chunk'
 
 // All MRTJ data were contained in the same API
 export async function sync(d1: D1Database) {
@@ -94,9 +95,14 @@ export async function sync(d1: D1Database) {
   }
 
   // Save to database
-  await new StationRepository(d1).insertMany(stations)
+  for (const chunk of chunkArray(stations, 20)) {
+    await new StationRepository(d1).insertMany(chunk)
+  }
+
   for (const [stationId, timetable] of Object.entries(timetables)) {
-    await new StationRepository(d1).insertTimetable(stationId, timetable)
+    for (const chunk of chunkArray(timetable, 20)) {
+      await new StationRepository(d1).insertTimetable(stationId, chunk)
+    }
   }
 
   return stations
