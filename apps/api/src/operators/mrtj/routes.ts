@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { sync } from './sync'
+import { syncStations, syncTimetable } from './sync'
 import { StationRepository } from 'db/repositories/stations'
 import { NewStation, Station } from 'db/schemas/stations'
 import { NotFound, Ok } from 'utils/response'
@@ -12,7 +12,7 @@ const app = new Hono<{ Bindings: Bindings }>()
 app.get('/stations', async (c) => {
   let stations: Station[] | NewStation[] = await new StationRepository(c.env.DB).getAllByOperator("MRTJ")
   if (stations.length === 0 || c.req.query("sync") === "true") {
-    stations = await sync(c.env.DB)
+    stations = await syncStations(c.env.DB)
   }
 
   return c.json(Ok(stations), 200)
@@ -33,7 +33,7 @@ app.get('/stations/:code/timetable', async (c) => {
 
   let timetable: (Schedule | ScheduleWithLineInfo)[] = []
   if (station.timetableSynced === 0 || c.req.query("sync") === "true") {
-    await sync(c.env.DB)
+    await syncTimetable(c.env.DB, station.code)
   }
 
   timetable = await new StationRepository(c.env.DB).getTimetableFromStationId(station.id)
@@ -56,7 +56,7 @@ app.get('/stations/:code/timetable/grouped', async (c) => {
 
   let timetable: LineGroupedTimetable = []
   if (station.timetableSynced === 0 || c.req.query("sync") === "true") {
-    await sync(c.env.DB)
+    await syncTimetable(c.env.DB, station.code)
   }
 
   const schedules = await new StationRepository(c.env.DB).getTimetableFromStationId(station.id)

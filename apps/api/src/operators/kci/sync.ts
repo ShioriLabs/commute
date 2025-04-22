@@ -50,7 +50,7 @@ export async function syncStations(d1: D1Database, token?: string) {
   }
 
   // Save to database
-  for (const chunk of chunkArray(stations, 20)) {
+  for (const chunk of chunkArray(stations, 15)) {
     await new StationRepository(d1).insertMany(chunk)
   }
 
