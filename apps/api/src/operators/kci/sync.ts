@@ -3,6 +3,7 @@ import { StationRepository } from 'db/repositories/stations'
 import { NewStation } from 'db/schemas/stations'
 import { getLineInfoFromAPIName, tryGetFormattedName } from './formatters'
 import { NewSchedule } from 'db/schemas/schedules'
+import { chunkArray } from 'utils/chunk'
 
 const STATION_REGION_LOOKUP: Record<number, typeof REGIONS[keyof typeof REGIONS]> = {
   0: REGIONS.CGK,
@@ -31,9 +32,6 @@ export async function syncStations(d1: D1Database, token?: string) {
   }
 
   const stations: NewStation[] = []
-  const stationChunks: NewStation[][] = []
-  let currentChunk = []
-  const chunkSize = 5
 
   for (const station of json.data) {
     if (station.fg_enable === 0) continue
@@ -49,17 +47,10 @@ export async function syncStations(d1: D1Database, token?: string) {
     }
 
     stations.push(transformedStation)
-    currentChunk.push(transformedStation)
-    if (currentChunk.length > chunkSize) {
-      stationChunks.push(currentChunk)
-      currentChunk = []
-    }
   }
 
-  if (currentChunk.length > 0) stationChunks.push(currentChunk)
-
   // Save to database
-  for (const chunk of stationChunks) {
+  for (const chunk of chunkArray(stations, 15)) {
     await new StationRepository(d1).insertMany(chunk)
   }
 
