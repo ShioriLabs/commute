@@ -9,6 +9,7 @@ import {
 
 import type { Route } from "./+types/root";
 import "./app.css";
+import { SWRConfig } from "swr";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -41,8 +42,28 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+function localStorageProvider() {
+  // When initializing, we restore the data from `localStorage` into a map.
+  const map = new Map<string, any>(JSON.parse(localStorage.getItem('app-cache') || '[]'))
+
+  // Before unloading the app, we write back all the data into `localStorage`.
+  window.addEventListener('beforeunload', () => {
+    const appCache = JSON.stringify(Array.from(map.entries()))
+    localStorage.setItem('app-cache', appCache)
+  })
+
+  // We still use the map for write & read for performance.
+  return map
+}
+
 export default function App() {
-  return <Outlet />;
+  return (
+    <SWRConfig value={{
+      provider: localStorageProvider
+    }}>
+      <Outlet />;
+    </SWRConfig>
+  )
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
