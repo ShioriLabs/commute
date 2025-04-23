@@ -50,7 +50,7 @@ export default function LineCard({ line }: Props) {
   if (nextSchedulesFilteredTimetable.length === 0) return null;
 
   return (
-    <li className="rounded-lg w-full min-h-8 shadow-lg border-t-[16px] border-gray-100" style={{ borderTopColor: line.colorCode, backgroundColor: tintHex(line.colorCode, 0.065) }}>
+    <li className="rounded-xl w-full min-h-8 shadow-lg border-t-[16px] border-gray-100" style={{ borderTopColor: line.colorCode, backgroundColor: tintHex(line.colorCode, 0.065) }}>
       <article className="p-4 border-b-2" style={{ borderBottomColor: tintHex(line.colorCode, 0.3) }}>
         <h1 className="font-bold text-xl">{line.name}</h1>
       </article>
