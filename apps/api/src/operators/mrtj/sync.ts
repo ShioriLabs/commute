@@ -58,7 +58,7 @@ export async function syncTimetable(d1: D1Database, stationCode: string) {
   if (station.jadwal_hi_biasa) {
     const departureTimes: string[] = station.jadwal_hi_biasa.split(/, /g)
     for (const departureTime of departureTimes) {
-      const [departHour, departMinute] = departureTime.split(':').map((unit: string) => Number.parseInt(unit))
+      const [departHour, departMinute] = departureTime.trim().split(':').map((unit: string) => Number.parseInt(unit))
       const departureTimeMinute = ((departHour ?? 0) * 60) + (departMinute ?? 0)
       for (const estimation of northboundEstimations) {
         const arrivalTimeMinute = departureTimeMinute + Number.parseInt(estimation.waktu)
@@ -66,9 +66,9 @@ export async function syncTimetable(d1: D1Database, stationCode: string) {
         const arrivalMinute = arrivalTimeMinute % 60
 
         const schedule: NewSchedule = {
-          id: `${OPERATORS.MRTJ.code}-${station.nid}-${departureTime}-NORTHBOUND`,
+          id: `${OPERATORS.MRTJ.code}-${station.nid}-${departureTime.trim()}-NORTHBOUND`,
           boundFor: 'Bundaran HI',
-          estimatedDeparture: `${departureTime}:00`,
+          estimatedDeparture: `${departureTime.trim()}:00`,
           estimatedArrival: `${arrivalHour}:${arrivalMinute}:00`,
           stationId: stationId,
           tripNumber: `${station.nid}-${departureTime}-NORTHBOUND`,
@@ -88,7 +88,7 @@ export async function syncTimetable(d1: D1Database, stationCode: string) {
   if (station.jadwal_lb_biasa) {
     const departureTimes: string[] = station.jadwal_lb_biasa.split(/, /g)
     for (const departureTime of departureTimes) {
-      const [departHour, departMinute] = departureTime.split(':').map((unit: string) => Number.parseInt(unit))
+      const [departHour, departMinute] = departureTime.trim().split(':').map((unit: string) => Number.parseInt(unit))
       const departureTimeMinute = ((departHour ?? 0) * 60) + (departMinute ?? 0)
       for (const estimation of southboundEstimations) {
         const arrivalTimeMinute = departureTimeMinute + Number.parseInt(estimation.waktu)
@@ -96,9 +96,9 @@ export async function syncTimetable(d1: D1Database, stationCode: string) {
         const arrivalMinute = arrivalTimeMinute % 60
 
         const schedule: NewSchedule = {
-          id: `${OPERATORS.MRTJ.code}-${station.nid}-${departureTime}-SOUTHBOUND`,
+          id: `${OPERATORS.MRTJ.code}-${station.nid}-${departureTime.trim()}-SOUTHBOUND`,
           boundFor: 'Lebak Bulus Grab',
-          estimatedDeparture: `${departureTime}:00`,
+          estimatedDeparture: `${departureTime.trim()}:00`,
           estimatedArrival: `${arrivalHour.toString().padStart(2, '0')}:${arrivalMinute.toString().padStart(2, '0')}:00`,
           stationId: stationId,
           tripNumber: `${station.nid}-${departureTime}-SOUTHBOUND`,
