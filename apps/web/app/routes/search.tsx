@@ -4,22 +4,15 @@ import type { Route } from './+types/search'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { XMarkIcon } from '@heroicons/react/24/outline'
-
-export async function clientLoader(): Promise<StandardResponse<Station[]>> {
-  const stations = await fetch(new URL('/stations', import.meta.env.VITE_API_BASE_URL))
-  if (stations.ok) return await stations.json()
-  return {
-    status: 200,
-    data: []
-  }
-}
+import useSWR from 'swr'
+import { fetcher } from 'utils/fetcher'
 
 export default function Search({ loaderData }: Route.ComponentProps) {
-  const stations = loaderData
+  const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher)
   const [searchQuery, setSearchQuery] = useState<string>("")
 
   const filteredStations = useMemo(() => {
-    if (stations.data === undefined || searchQuery.length < 2) return []
+    if (stations?.data === undefined || searchQuery.length < 2) return []
     return stations.data.filter(
       station =>
         station.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -45,6 +38,22 @@ export default function Search({ loaderData }: Route.ComponentProps) {
           onChange={(e) => setSearchQuery(e.target.value)}
         />
       </div>
+      {isLoading && searchQuery.length >= 2 ? (
+        <ul className="mt-4">
+          <li className="px-8 py-4">
+            <div className="h-4 w-24 bg-slate" />
+            <div className="mt-1 h-4 w-12" />
+          </li>
+          <li className="px-8 py-4">
+            <div className="h-4 w-48 bg-slate" />
+            <div className="mt-1 h-4 w-12" />
+          </li>
+          <li className="px-8 py-4">
+            <div className="h-4 w-32 bg-slate" />
+            <div className="mt-1 h-4 w-12" />
+          </li>
+        </ul>
+      ) : null}
       {filteredStations.length > 0 ? (
         <ul className="mt-4">
           {filteredStations.map(station => (
