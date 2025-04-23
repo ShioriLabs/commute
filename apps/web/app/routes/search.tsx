@@ -29,8 +29,8 @@ export default function Search({ loaderData }: Route.ComponentProps) {
   }, [searchQuery])
 
   return (
-    <div>
-      <div className="p-8 pb-4 sticky top-0 bg-white">
+    <main className="bg-white w-screen min-h-screen">
+      <div className="p-8 pb-4 sticky top-0">
         <div className="flex gap-4 items-center justify-between">
           <h1 className="font-bold text-2xl">Cari Stasiun</h1>
           <button onClick={() => history.back()} aria-label="Close search page" className="rounded-full leading-0 flex items-center justify-center w-8 h-8">
@@ -38,7 +38,7 @@ export default function Search({ loaderData }: Route.ComponentProps) {
           </button>
         </div>
         <input
-          className="mt-4 w-full px-4 py-2 rounded bg-stone-200 border-2 border-stone-300"
+          className="mt-4 w-full px-4 py-2 rounded bg-stone-100 border-2 border-stone-200"
           type="text"
           placeholder="Masukkan nama stasiun atau kode stasiun"
           value={searchQuery}
@@ -57,6 +57,6 @@ export default function Search({ loaderData }: Route.ComponentProps) {
             ))}
         </ul>
       ) : null}
-    </div>
+    </main>
   )
 }
