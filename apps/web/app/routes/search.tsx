@@ -4,22 +4,15 @@ import type { Route } from './+types/search'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { XMarkIcon } from '@heroicons/react/24/outline'
-
-export async function clientLoader(): Promise<StandardResponse<Station[]>> {
-  const stations = await fetch(new URL('/stations', import.meta.env.VITE_API_BASE_URL))
-  if (stations.ok) return await stations.json()
-  return {
-    status: 200,
-    data: []
-  }
-}
+import useSWR from 'swr'
+import { fetcher } from 'utils/fetcher'
 
 export default function Search({ loaderData }: Route.ComponentProps) {
-  const stations = loaderData
+  const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher)
   const [searchQuery, setSearchQuery] = useState<string>("")
 
   const filteredStations = useMemo(() => {
-    if (stations.data === undefined || searchQuery.length < 2) return []
+    if (stations?.data === undefined || searchQuery.length < 2) return []
     return stations.data.filter(
       station =>
         station.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -29,8 +22,8 @@ export default function Search({ loaderData }: Route.ComponentProps) {
   }, [searchQuery])
 
   return (
-    <div>
-      <div className="p-8 pb-4 sticky top-0 bg-white">
+    <main className="bg-white w-screen min-h-screen">
+      <div className="p-8 pb-4 sticky top-0">
         <div className="flex gap-4 items-center justify-between">
           <h1 className="font-bold text-2xl">Cari Stasiun</h1>
           <button onClick={() => history.back()} aria-label="Close search page" className="rounded-full leading-0 flex items-center justify-center w-8 h-8">
@@ -38,13 +31,29 @@ export default function Search({ loaderData }: Route.ComponentProps) {
           </button>
         </div>
         <input
-          className="mt-4 w-full px-4 py-2 rounded bg-stone-200 border-2 border-stone-300"
+          className="mt-4 w-full px-4 py-2 rounded bg-stone-100 border-2 border-stone-200"
           type="text"
           placeholder="Masukkan nama stasiun atau kode stasiun"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
       </div>
+      {isLoading && searchQuery.length >= 2 ? (
+        <ul className="mt-4">
+          <li className="px-8 py-4">
+            <div className="h-4 w-24 bg-slate" />
+            <div className="mt-1 h-4 w-12" />
+          </li>
+          <li className="px-8 py-4">
+            <div className="h-4 w-48 bg-slate" />
+            <div className="mt-1 h-4 w-12" />
+          </li>
+          <li className="px-8 py-4">
+            <div className="h-4 w-32 bg-slate" />
+            <div className="mt-1 h-4 w-12" />
+          </li>
+        </ul>
+      ) : null}
       {filteredStations.length > 0 ? (
         <ul className="mt-4">
           {filteredStations.map(station => (
@@ -57,6 +66,6 @@ export default function Search({ loaderData }: Route.ComponentProps) {
             ))}
         </ul>
       ) : null}
-    </div>
+    </main>
   )
 }

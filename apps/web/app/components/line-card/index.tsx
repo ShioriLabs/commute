@@ -40,25 +40,31 @@ interface Props {
 }
 
 export default function LineCard({ line }: Props) {
+  const nextSchedulesFilteredTimetable = line.timetable.map(direction => {
+    return {
+      boundFor: direction.boundFor,
+      schedules: getNextSchedules(direction.schedules)
+    }
+  }).filter(direction => direction.schedules.length > 0)
+
+  if (nextSchedulesFilteredTimetable.length === 0) return null;
+
   return (
-    <li className="rounded-lg w-full min-h-8 shadow-lg border-t-[16px] border-gray-100" style={{ borderTopColor: line.colorCode, backgroundColor: tintHex(line.colorCode, 0.065) }}>
+    <li className="rounded-xl w-full min-h-8 shadow-lg border-t-[16px] border-gray-100" style={{ borderTopColor: line.colorCode, backgroundColor: tintHex(line.colorCode, 0.065) }}>
       <article className="p-4 border-b-2" style={{ borderBottomColor: tintHex(line.colorCode, 0.3) }}>
         <h1 className="font-bold text-xl">{line.name}</h1>
       </article>
       <ul>
-        {line.timetable.map(direction => {
-          const nextSchedules = getNextSchedules(direction.schedules)
-          if (nextSchedules.length === 0) return null
-
+        {nextSchedulesFilteredTimetable.map(direction => {
           return (
             <li key={direction.boundFor} className="p-4 flex items-start justify-between border-t first:border-t-0" style={{ borderTopColor: tintHex(line.colorCode, 0.3) }}>
               <div>
                 <span className="font-semibold">{direction.boundFor}</span>
               </div>
               <div className="text-right flex flex-col">
-                <span className="font-bold">{parseTime(nextSchedules[0].estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })}</span>
-                {nextSchedules.length > 1 ? (
-                  <span className="font-semibold text-sm text-gray-600">lalu {nextSchedules.slice(1, 3).map(sched => parseTime(sched.estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })).join(', ')}</span>
+                <span className="font-bold">{parseTime(direction.schedules[0].estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })}</span>
+                {direction.schedules.length > 1 ? (
+                  <span className="font-semibold text-sm text-gray-600">lalu {direction.schedules.slice(1, 3).map(sched => parseTime(sched.estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })).join(', ')}</span>
                 ) : null}
               </div>
             </li>
