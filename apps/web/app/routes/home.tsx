@@ -81,7 +81,7 @@ export default function Home() {
   }, [])
 
   return (
-    <main className="w-screen min-h-screen">
+    <main className="w-full min-h-screen">
       {isReady ? (
         <>
           {stations.length > 0 ? (
