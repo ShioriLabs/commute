@@ -22,7 +22,7 @@ export default function Search({ loaderData }: Route.ComponentProps) {
   }, [searchQuery])
 
   return (
-    <main className="bg-white w-screen min-h-screen">
+    <main className="bg-white w-full min-h-screen">
       <div className="p-8 pb-4 sticky top-0">
         <div className="flex gap-4 items-center justify-between">
           <h1 className="font-bold text-2xl">Cari Stasiun</h1>
