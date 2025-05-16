@@ -85,7 +85,7 @@ export default function Home() {
       {isReady ? (
         <>
           {stations.length > 0 ? (
-            <ul className="px-4 pt-8 flex flex-col gap-8 pb-36">
+            <ul className="px-4 pt-8 flex flex-col gap-8 pb-36 max-w-3xl mx-auto">
               {stations.map(station => (
                 <StationCard key={station} stationId={station} />
               ))}
@@ -102,14 +102,16 @@ export default function Home() {
           <div className="rounded-full border-4 border-slate-600 border-t-transparent w-12 h-12 m-auto animate-spin" aria-label="Loading data..." />
         </div>
       )}
-      <nav className="fixed bottom-0 py-4 flex gap-4 bg-gradient-to-t from-10% from-black/20 w-screen">
-        <Link to="/search" className="ml-4 bg-white p-4 rounded-xl shadow w-screen h-screen max-w-40 max-h-28 border-2 border-gray-200 flex flex-col relative overflow-clip">
-          <div className="absolute -bottom-4 -right-4 rounded-full bg-slate-100 p-4 z-[1]">
-            <MagnifyingGlassIcon className="w-12 h-12" />
-          </div>
-          <b className="z-[2]">Cari</b>
-          <span className="text-xl z-[2]">Stasiun</span>
-        </Link>
+      <nav className="fixed bottom-0 py-4 bg-gradient-to-t from-10% from-black/20 w-screen">
+        <div className="w-full max-w-3xl mx-auto flex gap-4">
+          <Link to="/search" className="ml-4 bg-white p-4 rounded-xl shadow w-screen h-screen max-w-40 max-h-28 border-2 border-gray-200 flex flex-col relative overflow-clip">
+            <div className="absolute -bottom-4 -right-4 rounded-full bg-slate-100 p-4 z-[1]">
+              <MagnifyingGlassIcon className="w-12 h-12" />
+            </div>
+            <b className="z-[2]">Cari</b>
+            <span className="text-xl z-[2]">Stasiun</span>
+          </Link>
+        </div>
       </nav>
     </main>
   );
