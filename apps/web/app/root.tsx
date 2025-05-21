@@ -33,7 +33,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Meta />
         <Links />
       </head>
-      <body className="bg-stone-100">
+      <body className="bg-rose-50/50">
         {children}
         <ScrollRestoration />
         <Scripts />
