@@ -35,7 +35,7 @@ function HighlightedStationList({ title, stationIDs, className }: { title: strin
       >
         {filteredStations.map(station => (
           <li key={station.id} className="shrink-0">
-            <Link to={`/station/${station.operator.code}/${station.code}`} className="flex flex-col gap-2 w-[54vw] lg:w-48 aspect-[3/4] bg-lime-100 p-4 rounded-lg text-lime-900 shadow-sm shadow-lime-900/15">
+            <Link to={`/station/${station.operator.code}/${station.code}`} className="flex flex-col gap-2 w-[54vw] lg:w-48 aspect-[3/4] bg-rose-100 p-4 rounded-lg text-pink-800 shadow-sm shadow-pink-900/15">
               <span className="font-semibold mt-auto">{ station.formattedName }</span>
               <span>{ station.operator.name }</span>
             </Link>
@@ -95,7 +95,7 @@ export default function SearchPage({ loaderData }: Route.ComponentProps) {
       <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto bg-white">
         <div className="flex gap-4 items-center justify-between">
           <h1 className="font-bold text-2xl">Cari Stasiun</h1>
-          <button onClick={() => history.back()} aria-label="Close search page" className="rounded-full leading-0 flex items-center justify-center w-8 h-8">
+          <button onClick={() => history.back()} aria-label="Close search page" className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer">
             <XMarkIcon />
           </button>
         </div>
