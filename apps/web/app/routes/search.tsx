@@ -92,7 +92,7 @@ export default function SearchPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <main className="bg-white w-full min-h-screen">
-      <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto">
+      <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto bg-white">
         <div className="flex gap-4 items-center justify-between">
           <h1 className="font-bold text-2xl">Cari Stasiun</h1>
           <button onClick={() => history.back()} aria-label="Close search page" className="rounded-full leading-0 flex items-center justify-center w-8 h-8">

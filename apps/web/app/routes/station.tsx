@@ -78,23 +78,24 @@ export default function StationPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="bg-white w-full min-h-screen">
-      <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto">
-        <div className="flex gap-4 items-center justify-between">
-          <div className="flex flex-col">
-            <h1 className="font-bold text-2xl">{ loaderData.data?.formattedName }</h1>
-            <span className="font-semibold">{ loaderData.data?.operator?.name }</span>
-          </div>
-          <div className="flex gap-4">
-            <button onClick={handleSaveStationButton} aria-label="Save this station" className="rounded-full leading-0 flex items-center justify-cente font-bold w-8 h-8">
-              {saved ? (
-                <BookmarkSlashIcon />
-              ) : (
-                <BookmarkIcon />
-              )}
-            </button>
-            <button onClick={handleBackButton} aria-label="Close search page" className="rounded-full leading-0 flex items-center justify-cente font-bold w-8 h-8">
-              <XMarkIcon />
-            </button>
+      <div className="w-full bg-white/30 backdrop-blur-lg sticky top-0">
+        <div className="p-8 max-w-3xl mx-auto">
+          <div className="flex gap-4 items-center justify-between">
+            <div className="flex flex-col">
+              <h1 className="font-bold text-2xl">{ loaderData.data?.formattedName }</h1>
+            </div>
+            <div className="flex gap-4">
+              <button onClick={handleSaveStationButton} aria-label="Save this station" className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8">
+                {saved ? (
+                  <BookmarkSlashIcon />
+                ) : (
+                  <BookmarkIcon />
+                )}
+              </button>
+              <button onClick={handleBackButton} aria-label="Close search page" className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8">
+                <XMarkIcon />
+              </button>
+            </div>
           </div>
         </div>
       </div>
