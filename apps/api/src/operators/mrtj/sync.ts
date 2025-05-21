@@ -56,7 +56,7 @@ export async function syncTimetable(d1: D1Database, stationCode: string) {
   // Get northbound only estimations, denoted by larger station id
   const northboundEstimations = station.estimasi.filter((estimation: { stasiun_nid: string }) => Number.parseInt(estimation.stasiun_nid) > Number.parseInt(station.nid))
   if (station.jadwal_hi_biasa) {
-    const departureTimes: string[] = station.jadwal_hi_biasa.split(/, /g)
+    const departureTimes: string[] = station.jadwal_hi_biasa.split(/[,\.\s]+/g)
     for (const departureTime of departureTimes) {
       const [departHour, departMinute] = departureTime.trim().split(':').map((unit: string) => Number.parseInt(unit))
       const departureTimeMinute = ((departHour ?? 0) * 60) + (departMinute ?? 0)
@@ -86,7 +86,7 @@ export async function syncTimetable(d1: D1Database, stationCode: string) {
   // Get southbound only estimations, denoted by lower station id
   const southboundEstimations = station.estimasi.filter((estimation: { stasiun_nid: string }) => Number.parseInt(estimation.stasiun_nid) < Number.parseInt(station.nid))
   if (station.jadwal_lb_biasa) {
-    const departureTimes: string[] = station.jadwal_lb_biasa.split(/, /g)
+    const departureTimes: string[] = station.jadwal_lb_biasa.split(/[,\.\s]+/g)
     for (const departureTime of departureTimes) {
       const [departHour, departMinute] = departureTime.trim().split(':').map((unit: string) => Number.parseInt(unit))
       const departureTimeMinute = ((departHour ?? 0) * 60) + (departMinute ?? 0)
