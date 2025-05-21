@@ -49,7 +49,7 @@ function StationCard({ stationId }: { stationId: string }) {
   )
 }
 
-export default function Home() {
+export default function HomePage() {
   const [stations, setStations] = useState<string[]>([]);
   const [isReady, setIsReady] = useState(false);
 

@@ -31,7 +31,7 @@ export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   }
 }
 
-export default function Search({ loaderData }: Route.ComponentProps) {
+export default function StationPage({ loaderData }: Route.ComponentProps) {
   const navigationType = useNavigationType()
   const navigate = useNavigate()
   const [saved, setSaved] = useState(false)
