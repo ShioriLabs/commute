@@ -61,7 +61,7 @@ export default function App() {
     <SWRConfig value={{
       provider: localStorageProvider
     }}>
-      <Outlet />;
+      <Outlet />
     </SWRConfig>
   )
 }

@@ -1,4 +1,4 @@
-import type { Station } from '@schema/stations'
+import type { Station } from 'models/stations'
 import type { StandardResponse } from '@schema/response'
 import type { Route } from './+types/station'
 import { useCallback, useEffect, useState } from 'react'
@@ -31,7 +31,7 @@ export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   }
 }
 
-export default function Search({ loaderData }: Route.ComponentProps) {
+export default function StationPage({ loaderData }: Route.ComponentProps) {
   const navigationType = useNavigationType()
   const navigate = useNavigate()
   const [saved, setSaved] = useState(false)
@@ -77,12 +77,12 @@ export default function Search({ loaderData }: Route.ComponentProps) {
   }, [])
 
   return (
-    <div>
-      <div className="p-8 pb-4 sticky top-0 bg-white">
+    <div className="bg-white w-full min-h-screen">
+      <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto">
         <div className="flex gap-4 items-center justify-between">
           <div className="flex flex-col">
             <h1 className="font-bold text-2xl">{ loaderData.data?.formattedName }</h1>
-            <span className="font-semibold">{ loaderData.data?.operator }</span>
+            <span className="font-semibold">{ loaderData.data?.operator?.name }</span>
           </div>
           <div className="flex gap-4">
             <button onClick={handleSaveStationButton} aria-label="Save this station" className="rounded-full leading-0 flex items-center justify-cente font-bold w-8 h-8">
@@ -98,7 +98,7 @@ export default function Search({ loaderData }: Route.ComponentProps) {
           </div>
         </div>
       </div>
-      <ul className="mt-4 px-4 pb-8 flex flex-col gap-2">
+      <ul className="mt-4 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
         {loaderData.data?.lines.map(line => (
           <LineCard key={line.lineCode} line={line} />
         ))}

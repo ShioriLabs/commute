@@ -3,7 +3,7 @@ import { syncStations, syncTimetable } from './sync'
 import { StationRepository } from 'db/repositories/stations'
 import { NewStation, Station } from 'db/schemas/stations'
 import { NotFound, Ok } from 'utils/response'
-import { OPERATORS } from 'constant'
+import { OPERATORS } from '@commute/constants'
 import { LineGroupedTimetable, Schedule, ScheduleWithLineInfo } from 'db/schemas/schedules'
 import { getLineInfoByLineCode } from './formatters'
 import { Line } from 'models/line'
@@ -17,7 +17,12 @@ app.get('/stations', async (c) => {
     stations = await syncStations(c.env.DB, c.env.KCI_API_TOKEN)
   }
 
-  return c.json(Ok(stations), 200)
+  return c.json(
+    Ok(
+      stations.map(station => ({ ...station, operator: OPERATORS.KCI }))
+    ),
+    200
+  )
 })
 
 app.get('/stations/:code', async (c) => {
@@ -25,7 +30,12 @@ app.get('/stations/:code', async (c) => {
   const station = await new StationRepository(c.env.DB).getById(`${OPERATORS.KCI.code}-${stationCode}`)
   if (!station) return c.json(NotFound(), 404)
 
-  return c.json(Ok(station), 200)
+  return c.json(
+    Ok(
+      { ...station, operator: OPERATORS.KCI }
+    ),
+    200
+  )
 })
 
 app.get('/stations/:code/timetable', async (c) => {
