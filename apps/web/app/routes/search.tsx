@@ -23,7 +23,7 @@ export default function Search({ loaderData }: Route.ComponentProps) {
 
   return (
     <main className="bg-white w-full min-h-screen">
-      <div className="p-8 pb-4 sticky top-0">
+      <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto">
         <div className="flex gap-4 items-center justify-between">
           <h1 className="font-bold text-2xl">Cari Stasiun</h1>
           <button onClick={() => history.back()} aria-label="Close search page" className="rounded-full leading-0 flex items-center justify-center w-8 h-8">
@@ -39,7 +39,7 @@ export default function Search({ loaderData }: Route.ComponentProps) {
         />
       </div>
       {isLoading && searchQuery.length >= 2 ? (
-        <ul className="mt-4">
+        <ul className="mt-4 max-w-3xl mx-auto">
           <li className="px-8 py-4">
             <div className="h-4 w-24 bg-slate" />
             <div className="mt-1 h-4 w-12" />
@@ -55,7 +55,7 @@ export default function Search({ loaderData }: Route.ComponentProps) {
         </ul>
       ) : null}
       {filteredStations.length > 0 ? (
-        <ul className="mt-4">
+        <ul className="mt-4 max-w-3xl mx-auto">
           {filteredStations.map(station => (
               <li key={station.code}>
                 <Link to={`/station/${station.operator}/${station.code}`} className="px-8 py-4 flex flex-col gap-1">
