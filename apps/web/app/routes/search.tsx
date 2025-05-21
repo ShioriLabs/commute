@@ -109,8 +109,8 @@ export default function SearchPage({ loaderData }: Route.ComponentProps) {
       </div>
       {searchQuery.length < 2 ? (
         <>
-          <HighlightedStationList title="Stasiun Transit" stationIDs={["KCI-MRI", "KCI-SUD", "MRTJ-38", "KCI-DU", "KCI-THB"]} className="mt-4" />
-          <HighlightedStationList title="Jakselcore" stationIDs={["KCI-TEB", "MRTJ-32", "MRTJ-35", "KCI-SUD", "MRTJ-38"]} className="mt-2" />
+          <HighlightedStationList title="Stasiun Transit" stationIDs={["KCI-MRI", "KCI-SUD", "MRTJ-DKA", "KCI-DU", "KCI-THB"]} className="mt-4" />
+          <HighlightedStationList title="Jakselcore" stationIDs={["KCI-TEB", "MRTJ-BLM", "MRTJ-IST", "KCI-SUD", "MRTJ-DKA"]} className="mt-2" />
         </>
       ) : null}
       {isLoading && searchQuery.length >= 2 ? (

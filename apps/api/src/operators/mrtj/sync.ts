@@ -1,4 +1,4 @@
-import { OPERATORS, REGIONS } from '@commute/constants'
+import { MRTJ_STATION_CODES, OPERATORS, REGIONS } from '@commute/constants'
 import { StationRepository } from 'db/repositories/stations'
 import { NewSchedule } from 'db/schemas/schedules'
 import { NewStation } from 'db/schemas/stations'
@@ -15,10 +15,11 @@ export async function syncStations(d1: D1Database) {
   const stations: NewStation[] = []
 
   for (const station of json) {
-    const stationId = `${OPERATORS.MRTJ.code}-${station.nid}`
+    const stationCode = MRTJ_STATION_CODES[Number.parseInt(station.nid ?? "0")] ?? station.nid
+    const stationId = `${OPERATORS.MRTJ.code}-${stationCode}`
     const transformedStation: NewStation = {
       id: stationId,
-      code: station.nid,
+      code: stationCode,
       name: station.title,
       formattedName: station.title.replace(/Stasiun/g, "").trim(),
       region: REGIONS.CGK.name,
@@ -45,11 +46,15 @@ export async function syncTimetable(d1: D1Database, stationCode: string) {
   }
 
   const json = await response.json<any[]>()
-  const station = json.find((station: { nid: string | number }) => station.nid.toString() === stationCode.toString())
+  const nidCode = Object.entries(MRTJ_STATION_CODES).find(([_, value]) => value === stationCode)
+  if (!nidCode) return []
+  const nid = nidCode[0]
+  const station = json.find((station: { nid: string | number }) => station.nid.toString() === nid.toString())
   if (!station) return []
 
   const timetable: NewSchedule[] = []
-  const stationId = `${OPERATORS.MRTJ.code}-${station.nid}`
+
+  const stationId = `${OPERATORS.MRTJ.code}-${stationCode}`
 
   // Process northbound timetable
   // TODO: Handle day-off schedules
@@ -66,12 +71,12 @@ export async function syncTimetable(d1: D1Database, stationCode: string) {
         const arrivalMinute = arrivalTimeMinute % 60
 
         const schedule: NewSchedule = {
-          id: `${OPERATORS.MRTJ.code}-${station.nid}-${departureTime.trim()}-NORTHBOUND`,
+          id: `${stationCode}-${departureTime.trim()}-NORTHBOUND`,
           boundFor: 'Bundaran HI',
           estimatedDeparture: `${departureTime.trim()}:00`,
           estimatedArrival: `${arrivalHour}:${arrivalMinute}:00`,
           stationId: stationId,
-          tripNumber: `${station.nid}-${departureTime}-NORTHBOUND`,
+          tripNumber: `${stationCode}-${departureTime}-NORTHBOUND`,
           lineCode: 'M'
         }
 
@@ -96,12 +101,12 @@ export async function syncTimetable(d1: D1Database, stationCode: string) {
         const arrivalMinute = arrivalTimeMinute % 60
 
         const schedule: NewSchedule = {
-          id: `${OPERATORS.MRTJ.code}-${station.nid}-${departureTime.trim()}-SOUTHBOUND`,
+          id: `${stationCode}-${departureTime.trim()}-SOUTHBOUND`,
           boundFor: 'Lebak Bulus Grab',
           estimatedDeparture: `${departureTime.trim()}:00`,
           estimatedArrival: `${arrivalHour.toString().padStart(2, '0')}:${arrivalMinute.toString().padStart(2, '0')}:00`,
           stationId: stationId,
-          tripNumber: `${station.nid}-${departureTime}-SOUTHBOUND`,
+          tripNumber: `${stationCode}-${departureTime}-SOUTHBOUND`,
           lineCode: 'M'
         }
 
