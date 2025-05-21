@@ -7,7 +7,7 @@ import { XMarkIcon } from '@heroicons/react/24/outline'
 import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
 
-export default function Search({ loaderData }: Route.ComponentProps) {
+export default function SearchPage({ loaderData }: Route.ComponentProps) {
   const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher)
   const [searchQuery, setSearchQuery] = useState<string>("")
 
