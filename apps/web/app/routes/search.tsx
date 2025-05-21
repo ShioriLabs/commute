@@ -7,6 +7,44 @@ import { XMarkIcon } from '@heroicons/react/24/outline'
 import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
 
+function HighlightedStationList({ title, stationIDs, className }: { title: string, stationIDs: string[], className?: string }) {
+  const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher)
+
+  if (isLoading || stations === undefined || stations.data === undefined) {
+    return null
+  }
+
+  const filteredStations = stations.data
+    .filter(station => stationIDs.includes(station.id))
+    .sort((a, b) => {
+      const aIndex = stationIDs.indexOf(a.id)
+      const bIndex = stationIDs.indexOf(b.id)
+      return aIndex - bIndex
+    })
+
+  if (filteredStations.length === 0) {
+    return null
+  }
+
+  return (
+    <article className={`max-w-3xl mx-auto ${className}`}>
+      <h1 className="text-xl font-bold mx-8">{ title }</h1>
+      <ul
+        className="mt-4 flex flex-row gap-4 overflow-auto pb-2 rounded-lg ps-8 pe-8 scroll-smooth"
+      >
+        {filteredStations.map(station => (
+          <li key={station.id} className="shrink-0">
+            <Link to={`/station/${station.operator.code}/${station.code}`} className="flex flex-col gap-2 w-48 bg-lime-100 p-4 rounded-lg text-lime-900 min-h-64 shadow-2xs">
+              <span className="mt-auto">{ station.formattedName }</span>
+              <span>{ station.operator.name }</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </article>
+  )
+}
+
 export default function SearchPage({ loaderData }: Route.ComponentProps) {
   const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher)
   const [searchQuery, setSearchQuery] = useState<string>("")
@@ -38,6 +76,12 @@ export default function SearchPage({ loaderData }: Route.ComponentProps) {
           onChange={(e) => setSearchQuery(e.target.value)}
         />
       </div>
+      {searchQuery.length < 2 ? (
+        <>
+          <HighlightedStationList title="Stasiun Transit" stationIDs={["KCI-MRI", "KCI-SUD", "MRTJ-38", "KCI-DU", "KCI-THB"]} className="mt-4" />
+          <HighlightedStationList title="Jakselcore" stationIDs={["KCI-TEB", "MRTJ-32", "MRTJ-35", "KCI-SUD", "MRTJ-38"]} className="mt-2" />
+        </>
+      ) : null}
       {isLoading && searchQuery.length >= 2 ? (
         <ul className="mt-4 max-w-3xl mx-auto">
           <li className="px-8 py-4">
