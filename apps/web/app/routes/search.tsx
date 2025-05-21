@@ -1,4 +1,4 @@
-import type { Station } from '@schema/stations'
+import type { Station } from 'models/stations'
 import type { StandardResponse } from '@schema/response'
 import type { Route } from './+types/search'
 import { useMemo, useState } from 'react'
@@ -58,9 +58,9 @@ export default function Search({ loaderData }: Route.ComponentProps) {
         <ul className="mt-4 max-w-3xl mx-auto">
           {filteredStations.map(station => (
               <li key={station.code}>
-                <Link to={`/station/${station.operator}/${station.code}`} className="px-8 py-4 flex flex-col gap-1">
+                <Link to={`/station/${station.operator.code}/${station.code}`} className="px-8 py-4 flex flex-col gap-1">
                   <b>{ station.formattedName }</b>
-                  <span className="font-semibold">{ station.operator }</span>
+                  <span className="font-semibold">{ station.operator.name }</span>
                 </Link>
               </li>
             ))}

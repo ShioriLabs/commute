@@ -5,6 +5,7 @@ import kciRoutes from './operators/kci/routes'
 import mrtjRoutes from './operators/mrtj/routes'
 import { StationRepository } from 'db/repositories/stations'
 import { Ok } from 'utils/response'
+import { OPERATORS } from '@commute/constants'
 
 export interface Bindings {
   DB: D1Database
@@ -22,7 +23,12 @@ app.route('KCI', kciRoutes)
 app.route('MRTJ', mrtjRoutes)
 app.get('/stations', async (c) => {
   const stations = await new StationRepository(c.env.DB).getAll()
-  return c.json(Ok(stations), 200)
+  return c.json(
+    Ok(
+      stations.map(station => ({ ...station, operator: OPERATORS[station.operator] }))
+    ),
+    200
+  )
 })
 
 export default app
