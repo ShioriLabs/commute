@@ -1,4 +1,4 @@
-import { OPERATORS, REGIONS } from 'constant'
+import { OPERATORS, REGIONS } from '@commute/constants'
 import { StationRepository } from 'db/repositories/stations'
 import { NewSchedule } from 'db/schemas/schedules'
 import { NewStation } from 'db/schemas/stations'

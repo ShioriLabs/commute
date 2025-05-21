@@ -1,4 +1,4 @@
-import type { Station } from '@schema/stations'
+import type { Station } from 'models/stations'
 import type { StandardResponse } from '@schema/response'
 import type { Route } from './+types/station'
 import { useCallback, useEffect, useState } from 'react'
@@ -82,7 +82,7 @@ export default function Search({ loaderData }: Route.ComponentProps) {
         <div className="flex gap-4 items-center justify-between">
           <div className="flex flex-col">
             <h1 className="font-bold text-2xl">{ loaderData.data?.formattedName }</h1>
-            <span className="font-semibold">{ loaderData.data?.operator }</span>
+            <span className="font-semibold">{ loaderData.data?.operator?.name }</span>
           </div>
           <div className="flex gap-4">
             <button onClick={handleSaveStationButton} aria-label="Save this station" className="rounded-full leading-0 flex items-center justify-cente font-bold w-8 h-8">

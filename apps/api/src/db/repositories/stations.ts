@@ -1,4 +1,4 @@
-import { Operator } from 'constant'
+import { Operator } from '@commute/constants'
 import { db } from 'db'
 import { NewSchedule } from 'db/schemas/schedules'
 import { NewStation, UpdatingStation } from 'db/schemas/stations'
