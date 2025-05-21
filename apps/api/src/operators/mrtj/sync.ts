@@ -71,12 +71,12 @@ export async function syncTimetable(d1: D1Database, stationCode: string) {
         const arrivalMinute = arrivalTimeMinute % 60
 
         const schedule: NewSchedule = {
-          id: `${stationCode}-${departureTime.trim()}-NORTHBOUND`,
+          id: `${stationId}-${departureTime.trim()}-NORTHBOUND`,
           boundFor: 'Bundaran HI',
           estimatedDeparture: `${departureTime.trim()}:00`,
           estimatedArrival: `${arrivalHour}:${arrivalMinute}:00`,
           stationId: stationId,
-          tripNumber: `${stationCode}-${departureTime}-NORTHBOUND`,
+          tripNumber: `${stationId}-${departureTime}-NORTHBOUND`,
           lineCode: 'M'
         }
 
@@ -101,12 +101,12 @@ export async function syncTimetable(d1: D1Database, stationCode: string) {
         const arrivalMinute = arrivalTimeMinute % 60
 
         const schedule: NewSchedule = {
-          id: `${stationCode}-${departureTime.trim()}-SOUTHBOUND`,
+          id: `${stationId}-${departureTime.trim()}-SOUTHBOUND`,
           boundFor: 'Lebak Bulus Grab',
           estimatedDeparture: `${departureTime.trim()}:00`,
           estimatedArrival: `${arrivalHour.toString().padStart(2, '0')}:${arrivalMinute.toString().padStart(2, '0')}:00`,
           stationId: stationId,
-          tripNumber: `${stationCode}-${departureTime}-SOUTHBOUND`,
+          tripNumber: `${stationId}-${departureTime}-SOUTHBOUND`,
           lineCode: 'M'
         }
 
