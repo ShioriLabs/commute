@@ -17,3 +17,19 @@ export const OPERATORS = {
 } as const
 
 export type Operator = keyof (typeof OPERATORS)
+
+export const MRTJ_STATION_CODES: Record<number, string> = {
+  20: 'LBB',
+  21: 'FTM',
+  29: 'CPR',
+  30: 'HJN',
+  31: 'BLA',
+  32: 'BLM',
+  33: 'SSM',
+  34: 'SNY',
+  35: 'IST',
+  36: 'BNH',
+  37: 'STB',
+  38: 'DKA',
+  39: 'BHI'
+}
