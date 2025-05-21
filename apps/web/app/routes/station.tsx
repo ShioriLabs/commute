@@ -6,46 +6,27 @@ import { useNavigate, useNavigationType } from 'react-router'
 import { BookmarkIcon, BookmarkSlashIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import type { LineGroupedTimetable } from 'models/schedules'
 import LineCard from '~/components/line-card'
+import { fetcher } from 'utils/fetcher'
+import useSWR from 'swr'
 
-export async function clientLoader({ params }: Route.ClientLoaderArgs) {
-  const [station, timetable] = await Promise.all([
-    fetch(new URL(`/${params.operator}/stations/${params.code}`, import.meta.env.VITE_API_BASE_URL)),
-    fetch(new URL(`/${params.operator}/stations/${params.code}/timetable/grouped`, import.meta.env.VITE_API_BASE_URL))
-  ])
-
-  if (station.ok && timetable.ok) {
-    const stationJson: StandardResponse<Station> = await station.json()
-    const timetableJson: StandardResponse<LineGroupedTimetable> = await timetable.json()
-
-    return {
-      status: station.status,
-      data: {
-        ...stationJson.data,
-        lines: timetableJson.data ?? []
-      }
-    }
-  }
-
-  return {
-    status: 500
-  }
-}
-
-export default function StationPage({ loaderData }: Route.ComponentProps) {
+export default function StationPage({ params }: Route.ComponentProps) {
+  const station = useSWR<StandardResponse<Station>>(new URL(`/${params.operator}/stations/${params.code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher)
+  const timetable = useSWR<StandardResponse<LineGroupedTimetable>>(new URL(`/${params.operator}/stations/${params.code}/timetable/grouped`, import.meta.env.VITE_API_BASE_URL).href, fetcher)
   const navigationType = useNavigationType()
   const navigate = useNavigate()
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
+    if (station.isLoading) return
     const savedStationsRaw = localStorage.getItem('saved-stations')
-    if (!savedStationsRaw || !loaderData?.data?.id) {
+    if (!savedStationsRaw || !station.data?.data?.id) {
       setSaved(false)
       return
     }
 
     const savedStations = JSON.parse(savedStationsRaw) as string[]
-    setSaved(savedStations.includes(loaderData.data.id))
-  }, [])
+    setSaved(savedStations.includes(station.data.data.id))
+  }, [station.data, station.isLoading])
 
   const handleBackButton = useCallback(() => {
     if (navigationType === 'POP') {
@@ -56,21 +37,21 @@ export default function StationPage({ loaderData }: Route.ComponentProps) {
   }, [navigationType])
 
   const handleSaveStationButton = useCallback(() => {
-    if (!loaderData.data?.id) return
+    if (!station.data?.data?.id) return
     const savedStations = JSON.parse(localStorage.getItem('saved-stations') ?? "[]") as string[]
 
     if (!savedStations) {
-      localStorage.setItem('saved-stations', JSON.stringify([loaderData.data.id]))
+      localStorage.setItem('saved-stations', JSON.stringify([station.data.data.id]))
       setSaved(true)
       return
     }
 
-    if (savedStations.includes(loaderData.data.id)) {
-      const newSavedStations = savedStations.filter(item => item !== loaderData.data.id)
+    if (savedStations.includes(station.data.data.id)) {
+      const newSavedStations = savedStations.filter(item => item !== (station.data?.data?.id ?? ""))
       localStorage.setItem('saved-stations', JSON.stringify(newSavedStations))
       setSaved(false)
     } else {
-      localStorage.setItem('saved-stations', JSON.stringify([...savedStations, loaderData.data.id]))
+      localStorage.setItem('saved-stations', JSON.stringify([...savedStations, station.data.data.id]))
       setSaved(true)
     }
 
@@ -82,28 +63,44 @@ export default function StationPage({ loaderData }: Route.ComponentProps) {
         <div className="p-8 max-w-3xl mx-auto">
           <div className="flex gap-4 items-center justify-between">
             <div className="flex flex-col">
-              <h1 className="font-bold text-2xl">{ loaderData.data?.formattedName }</h1>
+              {station.isLoading ? (
+                <div className="animate-pulse w-64 h-6 bg-slate-200 rounded-lg" />
+              ) : (
+                <h1 className="font-bold text-2xl">{ station.data?.data?.formattedName }</h1>
+              )}
             </div>
             <div className="flex gap-4">
-              <button onClick={handleSaveStationButton} aria-label="Save this station" className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8">
-                {saved ? (
-                  <BookmarkSlashIcon />
-                ) : (
-                  <BookmarkIcon />
-                )}
-              </button>
-              <button onClick={handleBackButton} aria-label="Close search page" className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8">
+              {station.isLoading ? (
+                <div className="animate-pulse w-8 h-8 bg-slate-200 rounded-full" />
+              ) : (
+                <button onClick={handleSaveStationButton} aria-label="Save this station" className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8 cursor-pointer">
+                  {saved ? (
+                    <BookmarkSlashIcon />
+                  ) : (
+                    <BookmarkIcon />
+                  )}
+                  </button>
+              )}
+              <button onClick={handleBackButton} aria-label="Close search page" className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8 cursor-pointer">
                 <XMarkIcon />
               </button>
             </div>
           </div>
         </div>
       </div>
-      <ul className="mt-4 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
-        {loaderData.data?.lines.map(line => (
-          <LineCard key={line.lineCode} line={line} />
-        ))}
-      </ul>
+      {timetable.isLoading ? (
+        <div className="mt-4 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
+          <div className="animate-pulse w-full h-72 bg-slate-200 rounded-lg" />
+          <div className="animate-pulse w-full h-64 bg-slate-200 rounded-lg" />
+          <div className="animate-pulse w-full h-96 bg-slate-200 rounded-lg" />
+        </div>
+      ) : (
+        <ul className="mt-4 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
+          {timetable.data?.data?.map(line => (
+            <LineCard key={line.lineCode} line={line} />
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

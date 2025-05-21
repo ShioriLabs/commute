@@ -1,7 +1,7 @@
 import type { Station } from 'models/stations'
 import type { StandardResponse } from '@schema/response'
 import type { Route } from './+types/search'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import useSWR from 'swr'
@@ -35,7 +35,7 @@ function HighlightedStationList({ title, stationIDs, className }: { title: strin
       >
         {filteredStations.map(station => (
           <li key={station.id} className="shrink-0">
-            <Link to={`/station/${station.operator.code}/${station.code}`} className="flex flex-col gap-2 w-[54vw] lg:w-48 aspect-[3/4] bg-lime-100 p-4 rounded-lg text-lime-900 shadow-sm shadow-lime-900/15">
+            <Link to={`/station/${station.operator.code}/${station.code}`} className="flex flex-col gap-2 w-[54vw] lg:w-48 aspect-[3/4] bg-rose-100 p-4 rounded-lg text-pink-800 shadow-sm shadow-pink-900/15">
               <span className="font-semibold mt-auto">{ station.formattedName }</span>
               <span>{ station.operator.name }</span>
             </Link>
@@ -49,6 +49,7 @@ function HighlightedStationList({ title, stationIDs, className }: { title: strin
 export default function SearchPage({ loaderData }: Route.ComponentProps) {
   const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher)
   const [searchQuery, setSearchQuery] = useState<string>("")
+  const [recentlySearched, setRecentlySearched] = useState<string[]>([])
 
   const filteredStations = useMemo(() => {
     if (stations?.data === undefined || searchQuery.length < 2) return []
@@ -90,12 +91,35 @@ export default function SearchPage({ loaderData }: Route.ComponentProps) {
     return scoredStations
   }, [searchQuery])
 
+  useEffect(() => {
+    const recentlySearchedString = localStorage.getItem('recently-searched') ?? "[]"
+    const recent = JSON.parse(recentlySearchedString) as string[]
+    setRecentlySearched(recent)
+  }
+  , [])
+
+  const handleSearchClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    const stationId = e.currentTarget.dataset.stationId
+    if (!stationId) return
+
+    const recentlySearchedString = localStorage.getItem('recently-searched') ?? "[]"
+    const recent = JSON.parse(recentlySearchedString) as string[]
+
+    // insert into first item, and remove > 3
+    const newRecentlySearched = [stationId, ...recent.filter(item => item !== stationId)]
+    if (newRecentlySearched.length > 3) {
+      newRecentlySearched.pop()
+    }
+
+    localStorage.setItem('recently-searched', JSON.stringify(newRecentlySearched))
+  }
+
   return (
     <main className="bg-white w-full min-h-screen">
       <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto bg-white">
         <div className="flex gap-4 items-center justify-between">
           <h1 className="font-bold text-2xl">Cari Stasiun</h1>
-          <button onClick={() => history.back()} aria-label="Close search page" className="rounded-full leading-0 flex items-center justify-center w-8 h-8">
+          <button onClick={() => history.back()} aria-label="Close search page" className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer">
             <XMarkIcon />
           </button>
         </div>
@@ -109,7 +133,12 @@ export default function SearchPage({ loaderData }: Route.ComponentProps) {
       </div>
       {searchQuery.length < 2 ? (
         <>
-          <HighlightedStationList title="Stasiun Transit" stationIDs={["KCI-MRI", "KCI-SUD", "MRTJ-DKA", "KCI-DU", "KCI-THB"]} className="mt-4" />
+          {recentlySearched.length > 0 ? (
+            <>
+              <HighlightedStationList title="Stasiun Terakhir Dicari" stationIDs={recentlySearched} className="mt-4" />
+            </>
+          ) : null}
+          <HighlightedStationList title="Stasiun Transit" stationIDs={["KCI-MRI", "KCI-SUD", "MRTJ-DKA", "KCI-DU", "KCI-THB"]} className="mt-2" />
           <HighlightedStationList title="Jakselcore" stationIDs={["KCI-TEB", "MRTJ-BLM", "MRTJ-IST", "KCI-SUD", "MRTJ-DKA"]} className="mt-2" />
         </>
       ) : null}
@@ -133,7 +162,7 @@ export default function SearchPage({ loaderData }: Route.ComponentProps) {
         <ul className="mt-4 max-w-3xl mx-auto">
           {filteredStations.map(station => (
               <li key={station.code}>
-                <Link to={`/station/${station.operator.code}/${station.code}`} className="px-8 py-4 flex flex-col gap-1">
+                <Link to={`/station/${station.operator.code}/${station.code}`} className="px-8 py-4 flex flex-col gap-1" data-station-id={station.id} onClick={handleSearchClick}>
                   <b>{ station.formattedName }</b>
                   <span className="font-semibold">{ station.operator.name }</span>
                 </Link>
