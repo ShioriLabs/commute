@@ -6,6 +6,7 @@ import { Link } from 'react-router'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
+import { levenshteinDistance } from 'utils/levenshtein'
 
 function HighlightedStationList({ title, stationIDs, className }: { title: string, stationIDs: string[], className?: string }) {
   const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher)
@@ -30,12 +31,12 @@ function HighlightedStationList({ title, stationIDs, className }: { title: strin
     <article className={`max-w-3xl mx-auto ${className}`}>
       <h1 className="text-xl font-bold mx-8">{ title }</h1>
       <ul
-        className="mt-4 flex flex-row gap-4 overflow-auto pb-2 rounded-lg ps-8 pe-8 scroll-smooth"
+        className="mt-2 flex flex-row gap-4 overflow-auto pb-2 rounded-lg ps-8 pe-8 scroll-smooth no-scrollbar"
       >
         {filteredStations.map(station => (
           <li key={station.id} className="shrink-0">
-            <Link to={`/station/${station.operator.code}/${station.code}`} className="flex flex-col gap-2 w-48 bg-lime-100 p-4 rounded-lg text-lime-900 min-h-64 shadow-2xs">
-              <span className="mt-auto">{ station.formattedName }</span>
+            <Link to={`/station/${station.operator.code}/${station.code}`} className="flex flex-col gap-2 w-[54vw] lg:w-48 aspect-[3/4] bg-lime-100 p-4 rounded-lg text-lime-900 shadow-sm shadow-lime-900/15">
+              <span className="font-semibold mt-auto">{ station.formattedName }</span>
               <span>{ station.operator.name }</span>
             </Link>
           </li>
@@ -51,12 +52,42 @@ export default function SearchPage({ loaderData }: Route.ComponentProps) {
 
   const filteredStations = useMemo(() => {
     if (stations?.data === undefined || searchQuery.length < 2) return []
-    return stations.data.filter(
-      station =>
-        station.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        station.formattedName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        station.code.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    const levThreshold = 3
+    const query = searchQuery.toLowerCase()
+
+    const scoredStations = stations.data.map(station => {
+      const name = station.name.toLowerCase()
+      const formattedName = station.formattedName?.toLowerCase() ?? ""
+      const code = station.code.toLowerCase()
+
+      let score = Infinity
+
+      if (name.includes(query) || formattedName.includes(query) || code.includes(query)) {
+        score = 0
+      } else {
+        score = Math.min(
+          levenshteinDistance(name, query),
+          levenshteinDistance(formattedName, query),
+          levenshteinDistance(code, query)
+        )
+      }
+      return {
+        ...station,
+        score
+      }
+    }).filter(station => {
+      const score = station.score
+      return score < levThreshold
+    }).sort((a, b) => {
+      const aScore = a.score
+      const bScore = b.score
+      if (aScore === bScore) {
+        return a.name.localeCompare(b.name)
+      }
+      return aScore - bScore
+    })
+
+    return scoredStations
   }, [searchQuery])
 
   return (
