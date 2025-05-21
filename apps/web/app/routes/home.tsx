@@ -39,7 +39,7 @@ function StationCard({ stationId }: { stationId: string }) {
     <li>
       <article>
         <h1 className="font-bold text-2xl">Stasiun { station.data.data.formattedName }</h1>
-        <ul className="mt-4 flex flex-col gap-4">
+        <ul className="mt-4 flex flex-col lg:grid lg:grid-cols-2 gap-4">
           {timetable?.data?.data?.map(line => (
             <LineCard key={line.lineCode} line={line} />
           ))}
