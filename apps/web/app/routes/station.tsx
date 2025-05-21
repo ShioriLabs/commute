@@ -77,8 +77,8 @@ export default function StationPage({ loaderData }: Route.ComponentProps) {
   }, [])
 
   return (
-    <div>
-      <div className="p-8 pb-4 sticky top-0 bg-white">
+    <div className="bg-white w-full min-h-screen">
+      <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto">
         <div className="flex gap-4 items-center justify-between">
           <div className="flex flex-col">
             <h1 className="font-bold text-2xl">{ loaderData.data?.formattedName }</h1>
@@ -98,7 +98,7 @@ export default function StationPage({ loaderData }: Route.ComponentProps) {
           </div>
         </div>
       </div>
-      <ul className="mt-4 px-4 pb-8 flex flex-col gap-2">
+      <ul className="mt-4 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
         {loaderData.data?.lines.map(line => (
           <LineCard key={line.lineCode} line={line} />
         ))}
