@@ -31,11 +31,11 @@ function HighlightedStationList({ title, stationIDs, className }: { title: strin
     <article className={`max-w-3xl mx-auto ${className}`}>
       <h1 className="text-xl font-bold mx-8">{ title }</h1>
       <ul
-        className="mt-2 flex flex-row gap-4 overflow-auto pb-2 rounded-lg ps-8 pe-8 scroll-smooth no-scrollbar"
+        className="mt-2 flex flex-row gap-4 overflow-auto pb-2 rounded-xl ps-8 pe-8 scroll-smooth no-scrollbar"
       >
         {filteredStations.map(station => (
           <li key={station.id} className="shrink-0">
-            <Link to={`/station/${station.operator.code}/${station.code}`} className="flex flex-col gap-2 w-[54vw] lg:w-48 aspect-[3/4] bg-rose-100 p-4 rounded-lg text-pink-800 shadow-sm shadow-pink-900/15">
+            <Link to={`/station/${station.operator.code}/${station.code}`} className="flex flex-col gap-2 w-[54vw] lg:w-48 aspect-[3/4] bg-rose-100 p-4 rounded-xl text-pink-800 shadow-sm shadow-pink-900/15">
               <span className="font-semibold mt-auto">{ station.formattedName }</span>
               <span>{ station.operator.name }</span>
             </Link>
@@ -131,7 +131,7 @@ export default function SearchPage({ loaderData }: Route.ComponentProps) {
         </div>
         <input
           id="search-input"
-          className="mt-4 w-full px-4 py-2 rounded bg-stone-100/80 border-2 border-stone-200/40 focus:outline-stone-300"
+          className="mt-4 w-full px-4 py-2 rounded-xl bg-stone-100/80 border-2 border-stone-200/40 focus:outline-stone-300"
           type="text"
           placeholder="Masukkan nama stasiun atau kode stasiun"
           value={searchQuery}
