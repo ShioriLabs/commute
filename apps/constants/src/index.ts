@@ -11,7 +11,7 @@ export const REGIONS = {
 export type RegionCode = keyof (typeof REGIONS)
 
 export const OPERATORS = {
-  KCI: { code: 'KCI', name: 'Kereta Commuter Indonesia' },
+  KCI: { code: 'KCI', name: 'Commuter Line' },
   MRTJ: { code: 'MRTJ', name: 'MRT Jakarta' },
   LRTJ: { code: 'LRTJ', name: 'LRT Jakarta' },
   NUL: { code: 'NUL', name: 'Unknown' },
