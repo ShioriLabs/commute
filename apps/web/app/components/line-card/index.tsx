@@ -47,7 +47,7 @@ export default function LineCard({ line }: Props) {
     }
   }).filter(direction => direction.schedules.length > 0)
 
-  if (nextSchedulesFilteredTimetable.length === 0) return null;
+  if (nextSchedulesFilteredTimetable.length === 0) return null
 
   return (
     <li
