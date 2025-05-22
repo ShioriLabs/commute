@@ -17,7 +17,7 @@ app.get('/stations', async (c) => {
 
     return c.json(
       Ok(
-        stations.map(station => ({ ...station, operator: OPERATORS.MRTJ }))
+        stations.map(station => ({ ...station, operator: OPERATORS.LRTJ }))
       ),
       200
     )
