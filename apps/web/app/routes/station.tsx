@@ -73,15 +73,23 @@ export default function StationPage({ params }: Route.ComponentProps) {
               {station.isLoading ? (
                 <div className="animate-pulse w-8 h-8 bg-slate-200 rounded-full" />
               ) : (
-                <button onClick={handleSaveStationButton} aria-label="Save this station" className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8 cursor-pointer">
+                <button
+                  onClick={handleSaveStationButton}
+                  aria-label={saved ? "Hapus stasiun ini dari favorit" : "Simpan stasiun ini ke favorit"}
+                  className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8 cursor-pointer"
+                >
                   {saved ? (
                     <BookmarkSlashIcon />
                   ) : (
                     <BookmarkIcon />
                   )}
-                  </button>
+                </button>
               )}
-              <button onClick={handleBackButton} aria-label="Close search page" className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8 cursor-pointer">
+              <button
+                onClick={handleBackButton}
+                aria-label="Tutup halaman stasiun"
+                className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8 cursor-pointer"
+              >
                 <XMarkIcon />
               </button>
             </div>
