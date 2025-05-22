@@ -119,16 +119,24 @@ export default function SearchPage({ loaderData }: Route.ComponentProps) {
       <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto bg-white">
         <div className="flex gap-4 items-center justify-between">
           <h1 className="font-bold text-2xl">Cari Stasiun</h1>
-          <button onClick={() => history.back()} aria-label="Close search page" className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer">
+          <button
+            onClick={() => history.back()}
+            aria-label="Tutup halaman pencarian"
+            className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
+            aria-expanded="false"
+            aria-controls="search-input"
+          >
             <XMarkIcon />
           </button>
         </div>
         <input
+          id="search-input"
           className="mt-4 w-full px-4 py-2 rounded bg-stone-100/80 border-2 border-stone-200/40 focus:outline-stone-300"
           type="text"
           placeholder="Masukkan nama stasiun atau kode stasiun"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
+          aria-label="Cari stasiun berdasarkan nama atau kode"
         />
       </div>
       {searchQuery.length < 2 ? (
