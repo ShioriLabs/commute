@@ -1,13 +1,14 @@
 {
   "name": "Commute",
   "short_name": "Commute",
+  "id": "id.shiorilabs.id",
   "start_url": "https://commute.shiorilabs.id",
   "display": "standalone",
-  "description": "Aplikasi jadwal kereta buat Anak Jakarta",
+  "description": "Aplikasi Jadwal Kereta Buat Anak Jakarta",
   "lang": "id-ID",
   "dir": "auto",
   "background_color": "#FFE3E8",
-  "theme_color": "#F55875",
+  "theme_color": "#FFF8F8",
   "orientation": "natural",
   "icons": [
     {

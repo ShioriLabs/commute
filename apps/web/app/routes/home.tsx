@@ -11,7 +11,8 @@ import { fetcher } from 'utils/fetcher';
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: 'Commute' }
+    { title: 'Commute' },
+    { name: 'theme-color', content: '#FFF8F8' }
   ];
 }
 
@@ -104,7 +105,7 @@ export default function HomePage() {
       )}
       <nav className="fixed bottom-0 py-4 bg-gradient-to-t from-10% from-black/20 w-screen" aria-label="Navigasi utama">
         <div className="w-full max-w-3xl mx-auto flex gap-4">
-          <Link to="/search" className="ml-4 bg-white p-4 rounded-xl shadow-2xs w-screen h-screen max-w-40 max-h-28 border-2 border-gray-200 flex flex-col relative overflow-clip" aria-label="Cari stasiun">
+          <Link to="/search" className="ml-4 bg-white p-4 rounded-xl shadow-2xs w-screen h-screen max-w-40 max-h-28 border-2 border-gray-200 flex flex-col relative overflow-clip select-none" aria-label="Cari stasiun">
             <div className="absolute -bottom-4 -right-4 rounded-full bg-slate-100 p-4 z-[1]">
               <MagnifyingGlassIcon className="w-12 h-12" />
             </div>
