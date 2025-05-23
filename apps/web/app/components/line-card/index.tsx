@@ -18,7 +18,7 @@ function parseTime(timeString: string) {
 }
 
 function tintHex(hex: string, tintFactor = 0.2, towards: 'light' | 'dark' = 'light') {
-  hex = hex.replace(/^#/, "")
+  hex = hex.replace(/^#/, '')
 
   let r = parseInt(hex.substring(0, 2), 16)
   let g = parseInt(hex.substring(2, 4), 16)
@@ -30,9 +30,9 @@ function tintHex(hex: string, tintFactor = 0.2, towards: 'light' | 'dark' = 'lig
   g = Math.round(g * tintFactor + target * (1 - tintFactor))
   b = Math.round(b * tintFactor + target * (1 - tintFactor))
 
-  return "#" + [r, g, b].map(x =>
-    x.toString(16).padStart(2, "0")
-  ).join("")
+  return '#' + [r, g, b].map(x =>
+    x.toString(16).padStart(2, '0')
+  ).join('')
 }
 
 interface Props {
@@ -40,7 +40,7 @@ interface Props {
 }
 
 export default function LineCard({ line }: Props) {
-  const nextSchedulesFilteredTimetable = line.timetable.map(direction => {
+  const nextSchedulesFilteredTimetable = line.timetable.map((direction) => {
     return {
       boundFor: direction.boundFor,
       schedules: getNextSchedules(direction.schedules)
@@ -63,7 +63,7 @@ export default function LineCard({ line }: Props) {
         <h1 id={`line-name-${line.name}`} className="font-bold text-xl">{line.name}</h1>
       </article>
       <ul>
-        {nextSchedulesFilteredTimetable.map(direction => {
+        {nextSchedulesFilteredTimetable.map((direction) => {
           return (
             <li
               key={direction.boundFor}
@@ -78,14 +78,18 @@ export default function LineCard({ line }: Props) {
                 <span className="font-bold" aria-label={`Keberangkatan berikutnya pada ${parseTime(direction.schedules[0].estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })}`}>
                   {parseTime(direction.schedules[0].estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })}
                 </span>
-                {direction.schedules.length > 1 ? (
-                  <span
-                    className="font-semibold text-sm text-gray-600"
-                    aria-label={`Keberangkatan selanjutnya: ${direction.schedules.slice(1, 3).map(sched => parseTime(sched.estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })).join(', ')}`}
-                  >
-                    lalu {direction.schedules.slice(1, 3).map(sched => parseTime(sched.estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })).join(', ')}
-                  </span>
-                ) : null}
+                {direction.schedules.length > 1
+                  ? (
+                      <span
+                        className="font-semibold text-sm text-gray-600"
+                        aria-label={`Keberangkatan selanjutnya: ${direction.schedules.slice(1, 3).map(sched => parseTime(sched.estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })).join(', ')}`}
+                      >
+                        lalu
+                        {' '}
+                        {direction.schedules.slice(1, 3).map(sched => parseTime(sched.estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })).join(', ')}
+                      </span>
+                    )
+                  : null}
               </div>
             </li>
           )

@@ -5,7 +5,7 @@ export const REGIONS = {
   CGK: { code: 'CGK', name: 'Jabodetabek' },
   BDO: { code: 'BDO', name: 'Bandung Raya' },
   YIA: { code: 'YIA', name: 'Jogja-Solo' },
-  NUL: { code: 'NUL', name: 'Unknown' },
+  NUL: { code: 'NUL', name: 'Unknown' }
 } as const
 
 export type RegionCode = keyof (typeof REGIONS)
@@ -14,7 +14,7 @@ export const OPERATORS = {
   KCI: { code: 'KCI', name: 'Commuter Line' },
   MRTJ: { code: 'MRTJ', name: 'MRT Jakarta' },
   LRTJ: { code: 'LRTJ', name: 'LRT Jakarta' },
-  NUL: { code: 'NUL', name: 'Unknown' },
+  NUL: { code: 'NUL', name: 'Unknown' }
 } as const
 
 export type Operator = keyof (typeof OPERATORS)

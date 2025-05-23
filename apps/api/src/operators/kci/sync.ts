@@ -8,7 +8,7 @@ import { chunkArray } from 'utils/chunk'
 const STATION_REGION_LOOKUP: Record<number, typeof REGIONS[keyof typeof REGIONS]> = {
   0: REGIONS.CGK,
   2: REGIONS.BDO,
-  6: REGIONS.YIA,
+  6: REGIONS.YIA
 } as const
 
 export async function syncStations(d1: D1Database, token?: string) {
@@ -16,7 +16,7 @@ export async function syncStations(d1: D1Database, token?: string) {
     'https://api-partner.krl.co.id/krl-webs/v1/krl-station',
     {
       headers: {
-        'Authorization': `Bearer ${token}`
+        Authorization: `Bearer ${token}`
       }
     }
   )
@@ -25,6 +25,7 @@ export async function syncStations(d1: D1Database, token?: string) {
     return []
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const json = await response.json<any>()
 
   if (json.status !== 200) {
@@ -43,7 +44,7 @@ export async function syncStations(d1: D1Database, token?: string) {
       formattedName: tryGetFormattedName(station.sta_id, station.sta_name),
       region: region.name,
       regionCode: region.code,
-      operator: OPERATORS.KCI.code,
+      operator: OPERATORS.KCI.code
     }
 
     stations.push(transformedStation)
@@ -62,7 +63,7 @@ export async function syncTimetable(d1: D1Database, stationCode: string, token?:
     `https://api-partner.krl.co.id/krl-webs/v1/schedule?stationid=${stationCode}&timefrom=00:00&timeto=23:59`,
     {
       headers: {
-        'Authorization': `Bearer ${token}`
+        Authorization: `Bearer ${token}`
       }
     }
   )
@@ -70,6 +71,7 @@ export async function syncTimetable(d1: D1Database, stationCode: string, token?:
     return []
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const json = await response.json<any>()
 
   if (json.status !== 200) {
@@ -86,7 +88,7 @@ export async function syncTimetable(d1: D1Database, stationCode: string, token?:
       boundFor: tryGetFormattedName(schedule.dest, schedule.dest),
       estimatedDeparture: schedule.time_est,
       estimatedArrival: schedule.dest_time,
-      lineCode: getLineInfoFromAPIName(schedule.ka_name ?? "")?.lineCode ?? "NUL"
+      lineCode: getLineInfoFromAPIName(schedule.ka_name ?? '')?.lineCode ?? 'NUL'
     }
 
     timetable.push(transformedSchedule)

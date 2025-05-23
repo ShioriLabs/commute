@@ -10,11 +10,12 @@ export function levenshteinDistance(a: string, b: string): number {
     for (let j = 1; j <= b.length; j++) {
       if (a[i - 1] === b[j - 1]) {
         dp[i][j] = dp[i - 1][j - 1]
-      } else {
+      }
+      else {
         dp[i][j] = 1 + Math.min(
-          dp[i - 1][j],     // delete
-          dp[i][j - 1],     // insert
-          dp[i - 1][j - 1]  // substitute
+          dp[i - 1][j], // delete
+          dp[i][j - 1], // insert
+          dp[i - 1][j - 1] // substitute
         )
       }
     }

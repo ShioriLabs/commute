@@ -11,16 +11,16 @@ const app = new Hono<{ Bindings: Bindings }>()
 
 app.get('/stations', async (c) => {
   let stations: Station[] | NewStation[] = await new StationRepository(c.env.DB).getAllByOperator('LRTJ')
-    if (stations.length === 0 || c.req.query('sync') === 'true') {
-      stations = await syncStations(c.env.DB)
-    }
+  if (stations.length === 0 || c.req.query('sync') === 'true') {
+    stations = await syncStations(c.env.DB)
+  }
 
-    return c.json(
-      Ok(
-        stations.map(station => ({ ...station, operator: OPERATORS.LRTJ }))
-      ),
-      200
-    )
+  return c.json(
+    Ok(
+      stations.map(station => ({ ...station, operator: OPERATORS.LRTJ }))
+    ),
+    200
+  )
 })
 
 app.get('/stations/:code', async (c) => {
@@ -42,7 +42,7 @@ app.get('/stations/:code/timetable', async (c) => {
   if (!station) return c.json(NotFound(), 404)
 
   let timetable: (Schedule | ScheduleWithLineInfo)[] = []
-  if (station.timetableSynced === 0 || c.req.query("sync") === "true") {
+  if (station.timetableSynced === 0 || c.req.query('sync') === 'true') {
     await syncTimetable(c.env.DB, station.code)
   }
 
@@ -64,8 +64,8 @@ app.get('/stations/:code/timetable/grouped', async (c) => {
   const station = await new StationRepository(c.env.DB).getById(`${OPERATORS.LRTJ.code}-${stationCode}`)
   if (!station) return c.json(NotFound(), 404)
 
-  let timetable: LineGroupedTimetable = []
-  if (station.timetableSynced === 0 || c.req.query("sync") === "true") {
+  const timetable: LineGroupedTimetable = []
+  if (station.timetableSynced === 0 || c.req.query('sync') === 'true') {
     await syncTimetable(c.env.DB, station.code)
   }
 
@@ -75,7 +75,8 @@ app.get('/stations/:code/timetable/grouped', async (c) => {
   for (const schedule of schedules) {
     if (groupedByBoundFor[schedule.boundFor]) {
       groupedByBoundFor[schedule.boundFor]!.push(schedule)
-    } else {
+    }
+    else {
       groupedByBoundFor[schedule.boundFor] = [schedule]
     }
   }
