@@ -56,7 +56,7 @@ export default function StationPage({ params }: Route.ComponentProps) {
       localStorage.setItem('saved-stations', JSON.stringify([...savedStations, station.data.data.id]))
       setSaved(true)
     }
-  }, [])
+  }, [station.data])
 
   return (
     <div className="bg-white w-full min-h-screen">
