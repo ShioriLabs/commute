@@ -1,6 +1,5 @@
 import type { Station } from 'models/stations'
 import type { StandardResponse } from '@schema/response'
-import type { Route } from './+types/search'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { XMarkIcon } from '@heroicons/react/24/outline'
@@ -46,9 +45,9 @@ function HighlightedStationList({ title, stationIDs, className }: { title: strin
   )
 }
 
-export default function SearchPage({ loaderData }: Route.ComponentProps) {
+export default function SearchPage() {
   const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher)
-  const [searchQuery, setSearchQuery] = useState<string>("")
+  const [searchQuery, setSearchQuery] = useState<string>('')
   const [recentlySearched, setRecentlySearched] = useState<string[]>([])
 
   const filteredStations = useMemo(() => {
@@ -56,16 +55,17 @@ export default function SearchPage({ loaderData }: Route.ComponentProps) {
     const levThreshold = 3
     const query = searchQuery.toLowerCase()
 
-    const scoredStations = stations.data.map(station => {
+    const scoredStations = stations.data.map((station) => {
       const name = station.name.toLowerCase()
-      const formattedName = station.formattedName?.toLowerCase() ?? ""
+      const formattedName = station.formattedName?.toLowerCase() ?? ''
       const code = station.code.toLowerCase()
 
       let score = Infinity
 
       if (name.includes(query) || formattedName.includes(query) || code.includes(query)) {
         score = 0
-      } else {
+      }
+      else {
         score = Math.min(
           levenshteinDistance(name, query),
           levenshteinDistance(formattedName, query),
@@ -76,7 +76,7 @@ export default function SearchPage({ loaderData }: Route.ComponentProps) {
         ...station,
         score
       }
-    }).filter(station => {
+    }).filter((station) => {
       const score = station.score
       return score < levThreshold
     }).sort((a, b) => {
@@ -92,7 +92,7 @@ export default function SearchPage({ loaderData }: Route.ComponentProps) {
   }, [searchQuery])
 
   useEffect(() => {
-    const recentlySearchedString = localStorage.getItem('recently-searched') ?? "[]"
+    const recentlySearchedString = localStorage.getItem('recently-searched') ?? '[]'
     const recent = JSON.parse(recentlySearchedString) as string[]
     setRecentlySearched(recent)
   }
@@ -102,7 +102,7 @@ export default function SearchPage({ loaderData }: Route.ComponentProps) {
     const stationId = e.currentTarget.dataset.stationId
     if (!stationId) return
 
-    const recentlySearchedString = localStorage.getItem('recently-searched') ?? "[]"
+    const recentlySearchedString = localStorage.getItem('recently-searched') ?? '[]'
     const recent = JSON.parse(recentlySearchedString) as string[]
 
     // insert into first item, and remove > 3
@@ -135,49 +135,57 @@ export default function SearchPage({ loaderData }: Route.ComponentProps) {
           type="text"
           placeholder="Masukkan nama stasiun atau kode stasiun"
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={e => setSearchQuery(e.target.value)}
           aria-label="Cari stasiun berdasarkan nama atau kode"
         />
       </div>
-      {searchQuery.length < 2 ? (
-        <>
-          {recentlySearched.length > 0 ? (
+      {searchQuery.length < 2
+        ? (
             <>
-              <HighlightedStationList title="Stasiun Terakhir Dicari" stationIDs={recentlySearched} className="mt-4" />
+              {recentlySearched.length > 0
+                ? (
+                    <>
+                      <HighlightedStationList title="Stasiun Terakhir Dicari" stationIDs={recentlySearched} className="mt-4" />
+                    </>
+                  )
+                : null}
+              <HighlightedStationList title="Stasiun Transit" stationIDs={['KCI-MRI', 'KCI-SUD', 'MRTJ-DKA', 'KCI-DU', 'KCI-THB']} className="mt-2" />
+              <HighlightedStationList title="Jakselcore" stationIDs={['KCI-TEB', 'MRTJ-BLM', 'MRTJ-IST', 'KCI-SUD', 'MRTJ-DKA']} className="mt-2" />
             </>
-          ) : null}
-          <HighlightedStationList title="Stasiun Transit" stationIDs={["KCI-MRI", "KCI-SUD", "MRTJ-DKA", "KCI-DU", "KCI-THB"]} className="mt-2" />
-          <HighlightedStationList title="Jakselcore" stationIDs={["KCI-TEB", "MRTJ-BLM", "MRTJ-IST", "KCI-SUD", "MRTJ-DKA"]} className="mt-2" />
-        </>
-      ) : null}
-      {isLoading && searchQuery.length >= 2 ? (
-        <ul className="mt-4 max-w-3xl mx-auto">
-          <li className="px-8 py-4">
-            <div className="h-4 w-24 bg-slate" />
-            <div className="mt-1 h-4 w-12" />
-          </li>
-          <li className="px-8 py-4">
-            <div className="h-4 w-48 bg-slate" />
-            <div className="mt-1 h-4 w-12" />
-          </li>
-          <li className="px-8 py-4">
-            <div className="h-4 w-32 bg-slate" />
-            <div className="mt-1 h-4 w-12" />
-          </li>
-        </ul>
-      ) : null}
-      {filteredStations.length > 0 ? (
-        <ul className="mt-4 max-w-3xl mx-auto">
-          {filteredStations.map(station => (
-              <li key={station.code}>
-                <Link to={`/station/${station.operator.code}/${station.code}`} className="px-8 py-4 flex flex-col gap-1" data-station-id={station.id} onClick={handleSearchClick}>
-                  <b>{ station.formattedName }</b>
-                  <span className="font-semibold">{ station.operator.name }</span>
-                </Link>
+          )
+        : null}
+      {isLoading && searchQuery.length >= 2
+        ? (
+            <ul className="mt-4 max-w-3xl mx-auto">
+              <li className="px-8 py-4">
+                <div className="h-4 w-24 bg-slate" />
+                <div className="mt-1 h-4 w-12" />
               </li>
-            ))}
-        </ul>
-      ) : null}
+              <li className="px-8 py-4">
+                <div className="h-4 w-48 bg-slate" />
+                <div className="mt-1 h-4 w-12" />
+              </li>
+              <li className="px-8 py-4">
+                <div className="h-4 w-32 bg-slate" />
+                <div className="mt-1 h-4 w-12" />
+              </li>
+            </ul>
+          )
+        : null}
+      {filteredStations.length > 0
+        ? (
+            <ul className="mt-4 max-w-3xl mx-auto">
+              {filteredStations.map(station => (
+                <li key={station.code}>
+                  <Link to={`/station/${station.operator.code}/${station.code}`} className="px-8 py-4 flex flex-col gap-1" data-station-id={station.id} onClick={handleSearchClick}>
+                    <b>{ station.formattedName }</b>
+                    <span className="font-semibold">{ station.operator.name }</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )
+        : null}
     </main>
   )
 }

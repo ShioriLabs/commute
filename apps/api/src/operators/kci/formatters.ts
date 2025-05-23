@@ -3,25 +3,25 @@ import { APT_CGK_LINE, BOGOR_LINE, CIKARANG_LINE, LINES, RANGKASBITUNG_LINE, TAN
 
 // List of stations that has no-space names, i.e Klender Baru is written as KLENDERBARU on the API
 const WELL_KNOWN_STATION_NAMES: Record<string, string> = {
-  KLDB: 'Klender Baru',
-  GST: 'Gang Sentiong',
-  DRN: 'Duren Kalibata',
-  LNA: 'Lenteng Agung',
-  PSM: 'Pasar Minggu',
-  PSMB: 'Pasar Minggu Baru',
-  BST: 'Bandara Soekarno-Hatta',
-  KPB: 'Kampung Bandan',
-  PRP: 'Parung Panjang',
-  SUDB: 'BNI City',
+  'KLDB': 'Klender Baru',
+  'GST': 'Gang Sentiong',
+  'DRN': 'Duren Kalibata',
+  'LNA': 'Lenteng Agung',
+  'PSM': 'Pasar Minggu',
+  'PSMB': 'Pasar Minggu Baru',
+  'BST': 'Bandara Soekarno-Hatta',
+  'KPB': 'Kampung Bandan',
+  'PRP': 'Parung Panjang',
+  'SUDB': 'BNI City',
   // For schedules station, since they don't have codes
-  BANDARASOEKARNOHATTA: 'Bandara Soekarno-Hatta',
-  KAMPUNGBANDAN: 'Kampung Bandan',
-  PARUNGPANJANG: 'Parung Panjang',
+  'BANDARASOEKARNOHATTA': 'Bandara Soekarno-Hatta',
+  'KAMPUNGBANDAN': 'Kampung Bandan',
+  'PARUNGPANJANG': 'Parung Panjang',
   'SUDIRMAN BARU': 'BNI City'
 }
 
 // For mapping API line names to our line codes
-const WELL_KNOWN_LINE_KEY: Record<string, Line> =  {
+const WELL_KNOWN_LINE_KEY: Record<string, Line> = {
   'COMMUTER LINE CIKARANG': CIKARANG_LINE,
   'COMMUTER LINE BOGOR': BOGOR_LINE,
   'COMMUTER LINE BST': APT_CGK_LINE,
@@ -38,9 +38,10 @@ export function tryGetFormattedName(code: string, stationName: string) {
   return stationName.split(/[ ]/g)
     .map((word) => {
       if (word === 'UNIV.') return 'Universitas'
-      return `${word[0]}${word.toLowerCase().substring(1)}`}
+      return `${word[0]}${word.toLowerCase().substring(1)}`
+    }
     )
-    .join(" ")
+    .join(' ')
     .trim()
 }
 

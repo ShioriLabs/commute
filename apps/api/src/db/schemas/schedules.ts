@@ -1,5 +1,5 @@
-import { ColumnType, Insertable, Selectable, Updateable } from "kysely"
-import type { Line } from "models/line"
+import { ColumnType, Insertable, Selectable, Updateable } from 'kysely'
+import type { Line } from 'models/line'
 
 export interface ScheduleSchema {
   id: string

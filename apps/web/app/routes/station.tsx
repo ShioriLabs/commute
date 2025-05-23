@@ -30,15 +30,16 @@ export default function StationPage({ params }: Route.ComponentProps) {
 
   const handleBackButton = useCallback(() => {
     if (navigationType === 'POP') {
-      navigate("/")
-    } else {
+      navigate('/')
+    }
+    else {
       history.back()
     }
   }, [navigationType])
 
   const handleSaveStationButton = useCallback(() => {
     if (!station.data?.data?.id) return
-    const savedStations = JSON.parse(localStorage.getItem('saved-stations') ?? "[]") as string[]
+    const savedStations = JSON.parse(localStorage.getItem('saved-stations') ?? '[]') as string[]
 
     if (!savedStations) {
       localStorage.setItem('saved-stations', JSON.stringify([station.data.data.id]))
@@ -47,14 +48,14 @@ export default function StationPage({ params }: Route.ComponentProps) {
     }
 
     if (savedStations.includes(station.data.data.id)) {
-      const newSavedStations = savedStations.filter(item => item !== (station.data?.data?.id ?? ""))
+      const newSavedStations = savedStations.filter(item => item !== (station.data?.data?.id ?? ''))
       localStorage.setItem('saved-stations', JSON.stringify(newSavedStations))
       setSaved(false)
-    } else {
+    }
+    else {
       localStorage.setItem('saved-stations', JSON.stringify([...savedStations, station.data.data.id]))
       setSaved(true)
     }
-
   }, [])
 
   return (
@@ -63,28 +64,34 @@ export default function StationPage({ params }: Route.ComponentProps) {
         <div className="p-8 max-w-3xl mx-auto">
           <div className="flex gap-4 items-center justify-between">
             <div className="flex flex-col">
-              {station.isLoading ? (
-                <div className="animate-pulse w-64 h-6 bg-slate-200 rounded-lg" />
-              ) : (
-                <h1 className="font-bold text-2xl">{ station.data?.data?.formattedName }</h1>
-              )}
+              {station.isLoading
+                ? (
+                    <div className="animate-pulse w-64 h-6 bg-slate-200 rounded-lg" />
+                  )
+                : (
+                    <h1 className="font-bold text-2xl">{ station.data?.data?.formattedName }</h1>
+                  )}
             </div>
             <div className="flex gap-4">
-              {station.isLoading ? (
-                <div className="animate-pulse w-8 h-8 bg-slate-200 rounded-full" />
-              ) : (
-                <button
-                  onClick={handleSaveStationButton}
-                  aria-label={saved ? "Hapus stasiun ini dari favorit" : "Simpan stasiun ini ke favorit"}
-                  className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8 cursor-pointer"
-                >
-                  {saved ? (
-                    <BookmarkSlashIcon />
-                  ) : (
-                    <BookmarkIcon />
+              {station.isLoading
+                ? (
+                    <div className="animate-pulse w-8 h-8 bg-slate-200 rounded-full" />
+                  )
+                : (
+                    <button
+                      onClick={handleSaveStationButton}
+                      aria-label={saved ? 'Hapus stasiun ini dari favorit' : 'Simpan stasiun ini ke favorit'}
+                      className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8 cursor-pointer"
+                    >
+                      {saved
+                        ? (
+                            <BookmarkSlashIcon />
+                          )
+                        : (
+                            <BookmarkIcon />
+                          )}
+                    </button>
                   )}
-                </button>
-              )}
               <button
                 onClick={handleBackButton}
                 aria-label="Tutup halaman stasiun"
@@ -96,19 +103,21 @@ export default function StationPage({ params }: Route.ComponentProps) {
           </div>
         </div>
       </div>
-      {timetable.isLoading ? (
-        <div className="mt-4 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
-          <div className="animate-pulse w-full h-72 bg-slate-200 rounded-lg" />
-          <div className="animate-pulse w-full h-64 bg-slate-200 rounded-lg" />
-          <div className="animate-pulse w-full h-96 bg-slate-200 rounded-lg" />
-        </div>
-      ) : (
-        <ul className="mt-4 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
-          {timetable.data?.data?.map(line => (
-            <LineCard key={line.lineCode} line={line} />
-          ))}
-        </ul>
-      )}
+      {timetable.isLoading
+        ? (
+            <div className="mt-4 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
+              <div className="animate-pulse w-full h-72 bg-slate-200 rounded-lg" />
+              <div className="animate-pulse w-full h-64 bg-slate-200 rounded-lg" />
+              <div className="animate-pulse w-full h-96 bg-slate-200 rounded-lg" />
+            </div>
+          )
+        : (
+            <ul className="mt-4 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
+              {timetable.data?.data?.map(line => (
+                <LineCard key={line.lineCode} line={line} />
+              ))}
+            </ul>
+          )}
     </div>
   )
 }

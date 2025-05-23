@@ -16,10 +16,9 @@ export async function syncStations(d1: D1Database) {
 
   const stations: NewStation[] = []
 
-
-  document.querySelectorAll<HTMLOptionElement>('.select-stasiun[name="stasiun_awal"] option').forEach((option => {
+  document.querySelectorAll<HTMLOptionElement>('.select-stasiun[name="stasiun_awal"] option').forEach((option) => {
     const value = option.value
-    if (!value || value === "0") return
+    if (!value || value === '0') return
 
     const stationCode = LRTJ_STATION_CODES[Number.parseInt(value)]
     if (!stationCode) return
@@ -34,7 +33,7 @@ export async function syncStations(d1: D1Database) {
       regionCode: REGIONS.CGK.code,
       timetableSynced: 0
     })
-  }))
+  })
 
   // Save to database
   for (const chunk of chunkArray(stations, 10)) {
@@ -76,6 +75,7 @@ async function fetchTimetable(originStationId: number, direction: 'PGDBOUND' | '
 }
 
 export async function syncTimetable(d1: D1Database, stationCode: string) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const stationCodeObject = Object.entries(LRTJ_STATION_CODES).find(([_, value]) => value === stationCode)
   if (!stationCodeObject) return []
 
@@ -94,7 +94,7 @@ export async function syncTimetable(d1: D1Database, stationCode: string) {
         estimatedArrival: '00:00:00', // currently unused, TODO calculate by predefined timing
         lineCode: 'S',
         stationId: stationId,
-        tripNumber: `${stationId}-${time}-PGD-BOUND`,
+        tripNumber: `${stationId}-${time}-PGD-BOUND`
       })
     }
   }
@@ -108,7 +108,7 @@ export async function syncTimetable(d1: D1Database, stationCode: string) {
         estimatedArrival: '00:00:00', // currently unused, TODO calculate by predefined timing
         lineCode: 'S',
         stationId: stationId,
-        tripNumber: `${stationId}-${time}-PGD-BOUND`,
+        tripNumber: `${stationId}-${time}-PGD-BOUND`
       })
     }
   }

@@ -1,4 +1,4 @@
-import { Line } from "models/line";
+import { Line } from 'models/line'
 
 export const CIKARANG_LINE: Line = {
   name: 'Lin Cikarang',
