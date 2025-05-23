@@ -4,33 +4,33 @@ import {
   Meta,
   Outlet,
   Scripts,
-  ScrollRestoration,
-} from "react-router";
+  ScrollRestoration
+} from 'react-router'
 
-import type { Route } from "./+types/root";
-import "./app.css";
-import { SWRConfig } from "swr";
+import type { Route } from './+types/root'
+import './app.css'
+import { SWRConfig } from 'swr'
 
 export const links: Route.LinksFunction = () => [
-  { rel: "preconnect", href: 'https://fonts.googleapis.com' },
+  { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
   {
-    rel: "preconnect",
-    href: "https://fonts.gstatic.com",
-    crossOrigin: "anonymous",
+    rel: 'preconnect',
+    href: 'https://fonts.gstatic.com',
+    crossOrigin: 'anonymous'
   },
   {
-    rel: "stylesheet",
-    href: "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400..800&display=swap",
+    rel: 'stylesheet',
+    href: 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400..800&display=swap'
   },
   {
-    rel: "manifest",
-    href: "/manifest.json"
+    rel: 'manifest',
+    href: '/manifest.json'
   },
   {
-    rel: "icon",
-    href: "/favicon.png"
+    rel: 'icon',
+    href: '/favicon.png'
   }
-];
+]
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -47,47 +47,47 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Scripts />
       </body>
     </html>
-  );
+  )
 }
 
-function localStorageProvider() {
-  // When initializing, we restore the data from `localStorage` into a map.
-  const map = new Map<string, any>(JSON.parse(localStorage.getItem('app-cache') || '[]'))
+// Reimplement later
+// function localStorageProvider() {
+//   // When initializing, we restore the data from `localStorage` into a map.
+//   const map = new Map<string, string>(JSON.parse(localStorage.getItem('app-cache') || '[]'))
 
-  // Before unloading the app, we write back all the data into `localStorage`.
-  window.addEventListener('beforeunload', () => {
-    const appCache = JSON.stringify(Array.from(map.entries()))
-    localStorage.setItem('app-cache', appCache)
-  })
+//   // Before unloading the app, we write back all the data into `localStorage`.
+//   window.addEventListener('beforeunload', () => {
+//     const appCache = JSON.stringify(Array.from(map.entries()))
+//     localStorage.setItem('app-cache', appCache)
+//   })
 
-  // We still use the map for write & read for performance.
-  return map
-}
+//   // We still use the map for write & read for performance.
+//   return map
+// }
 
 export default function App() {
   return (
-    <SWRConfig value={{
-      provider: localStorageProvider
-    }}>
+    <SWRConfig value={{}}>
       <Outlet />
     </SWRConfig>
   )
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  let message = "Oops!";
-  let details = "An unexpected error occurred.";
-  let stack: string | undefined;
+  let message = 'Oops!'
+  let details = 'An unexpected error occurred.'
+  let stack: string | undefined
 
   if (isRouteErrorResponse(error)) {
-    message = error.status === 404 ? "404" : "Error";
-    details =
-      error.status === 404
-        ? "The requested page could not be found."
-        : error.statusText || details;
-  } else if (import.meta.env.DEV && error && error instanceof Error) {
-    details = error.message;
-    stack = error.stack;
+    message = error.status === 404 ? '404' : 'Error'
+    details
+      = error.status === 404
+        ? 'The requested page could not be found.'
+        : error.statusText || details
+  }
+  else if (import.meta.env.DEV && error && error instanceof Error) {
+    details = error.message
+    stack = error.stack
   }
 
   return (
@@ -100,5 +100,5 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
         </pre>
       )}
     </main>
-  );
+  )
 }

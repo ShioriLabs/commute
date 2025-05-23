@@ -12,8 +12,8 @@ import { Bindings } from 'app'
 const app = new Hono<{ Bindings: Bindings }>()
 
 app.get('/stations', async (c) => {
-  let stations: Station[] | NewStation[] = await new StationRepository(c.env.DB).getAllByOperator("KCI")
-  if (stations.length === 0 || c.req.query("sync") === "true") {
+  let stations: Station[] | NewStation[] = await new StationRepository(c.env.DB).getAllByOperator('KCI')
+  if (stations.length === 0 || c.req.query('sync') === 'true') {
     stations = await syncStations(c.env.DB, c.env.KCI_API_TOKEN)
   }
 
@@ -44,7 +44,7 @@ app.get('/stations/:code/timetable', async (c) => {
   if (!station) return c.json(NotFound(), 404)
 
   let timetable: (Schedule | ScheduleWithLineInfo)[] = []
-  if (station.timetableSynced === 0 || c.req.query("sync") === "true") {
+  if (station.timetableSynced === 0 || c.req.query('sync') === 'true') {
     await syncTimetable(c.env.DB, stationCode, c.env.KCI_API_TOKEN)
   }
 
@@ -61,8 +61,8 @@ app.get('/stations/:code/timetable/grouped', async (c) => {
   const station = await new StationRepository(c.env.DB).getById(`${OPERATORS.KCI.code}-${stationCode}`)
   if (!station) return c.json(NotFound(), 404)
 
-  let timetable: LineGroupedTimetable = []
-  if (station.timetableSynced === 0 || c.req.query("sync") === "true") {
+  const timetable: LineGroupedTimetable = []
+  if (station.timetableSynced === 0 || c.req.query('sync') === 'true') {
     await syncTimetable(c.env.DB, stationCode, c.env.KCI_API_TOKEN)
   }
 
@@ -75,7 +75,8 @@ app.get('/stations/:code/timetable/grouped', async (c) => {
 
     if (groupedByLineSchedules[line.lineCode]) {
       groupedByLineSchedules[line.lineCode]!.schedules.push(schedule)
-    } else {
+    }
+    else {
       groupedByLineSchedules[line.lineCode] = {
         ...line,
         schedules: [schedule]
@@ -88,7 +89,8 @@ app.get('/stations/:code/timetable/grouped', async (c) => {
     for (const schedule of line.schedules) {
       if (groupedByBoundFor[schedule.boundFor]) {
         groupedByBoundFor[schedule.boundFor]!.push(schedule)
-      } else {
+      }
+      else {
         groupedByBoundFor[schedule.boundFor] = [schedule]
       }
     }

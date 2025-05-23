@@ -3,7 +3,7 @@ import { StandardResponse } from 'models/response'
 export function Ok<T = unknown>(data: T): StandardResponse<T> {
   return {
     status: 200,
-    data,
+    data
   }
 }
 
@@ -12,7 +12,7 @@ export function NotFound(errorCode: string = 'NOT_FOUND', message: string = 'Not
     status: 404,
     error: {
       code: errorCode,
-      message,
-    },
+      message
+    }
   }
 }

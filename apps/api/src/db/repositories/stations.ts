@@ -47,7 +47,7 @@ export class StationRepository extends Repository {
           formattedName: data.formattedName,
           region: data.region,
           operator: data.operator,
-          updatedAt: sql`CURRENT_TIMESTAMP`,
+          updatedAt: sql`CURRENT_TIMESTAMP`
         })
       })
       .executeTakeFirstOrThrow()
@@ -64,7 +64,7 @@ export class StationRepository extends Repository {
           formattedName: eb.ref('excluded.formattedName'),
           region: eb.ref('excluded.region'),
           operator: eb.ref('excluded.operator'),
-          updatedAt: sql`CURRENT_TIMESTAMP`,
+          updatedAt: sql`CURRENT_TIMESTAMP`
         }))
       })
       .executeTakeFirstOrThrow()
@@ -116,18 +116,18 @@ export class StationRepository extends Repository {
         .insertInto('schedules')
         .values(chunk)
         .onConflict((oc) => {
-          return oc.column('id').doUpdateSet((eb) => ({
+          return oc.column('id').doUpdateSet(eb => ({
             boundFor: eb.ref('excluded.boundFor'),
             estimatedArrival: eb.ref('excluded.estimatedArrival'),
             estimatedDeparture: eb.ref('excluded.estimatedDeparture'),
             stationId: eb.ref('stationId'),
             tripNumber: eb.ref(`excluded.tripNumber`),
-            updatedAt: sql`CURRENT_TIMESTAMP`,
+            updatedAt: sql`CURRENT_TIMESTAMP`
           }))
         })
         .executeTakeFirstOrThrow()
     }
-    await databaseInstance.updateTable('stations').set('timetableSynced', 1).where("id", "==", id).executeTakeFirstOrThrow()
+    await databaseInstance.updateTable('stations').set('timetableSynced', 1).where('id', '==', id).executeTakeFirstOrThrow()
 
     return timetable
   }
