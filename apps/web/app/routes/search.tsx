@@ -7,6 +7,13 @@ import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
 import { levenshteinDistance } from 'utils/levenshtein'
 
+export function meta() {
+  return [
+    { title: 'Cari Stasiun - Commute' },
+    { name: 'theme-color', content: '#FFFFFF' }
+  ]
+}
+
 function HighlightedStationList({ title, stationIDs, className }: { title: string, stationIDs: string[], className?: string }) {
   const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher)
 
