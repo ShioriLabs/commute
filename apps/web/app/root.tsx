@@ -12,7 +12,7 @@ import "./app.css";
 import { SWRConfig } from "swr";
 
 export const links: Route.LinksFunction = () => [
-  { rel: "preconnect", href: "https://fonts.googleapis.com" },
+  { rel: "preconnect", href: 'https://fonts.googleapis.com' },
   {
     rel: "preconnect",
     href: "https://fonts.gstatic.com",
@@ -22,6 +22,14 @@ export const links: Route.LinksFunction = () => [
     rel: "stylesheet",
     href: "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400..800&display=swap",
   },
+  {
+    rel: "manifest",
+    href: "/manifest.json"
+  },
+  {
+    rel: "icon",
+    href: "/favicon.png"
+  }
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -33,7 +41,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Meta />
         <Links />
       </head>
-      <body className="bg-rose-50/50">
+      <body className="bg-[#FFE3E8]">
         {children}
         <ScrollRestoration />
         <Scripts />
