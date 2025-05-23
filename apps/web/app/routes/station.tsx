@@ -9,6 +9,13 @@ import LineCard from '~/components/line-card'
 import { fetcher } from 'utils/fetcher'
 import useSWR from 'swr'
 
+export function meta() {
+  return [
+    { title: 'Memuat... - Commute' },
+    { name: 'theme-color', content: '#FFFFFF' }
+  ]
+}
+
 export default function StationPage({ params }: Route.ComponentProps) {
   const station = useSWR<StandardResponse<Station>>(new URL(`/${params.operator}/stations/${params.code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher)
   const timetable = useSWR<StandardResponse<LineGroupedTimetable>>(new URL(`/${params.operator}/stations/${params.code}/timetable/grouped`, import.meta.env.VITE_API_BASE_URL).href, fetcher)
@@ -26,6 +33,9 @@ export default function StationPage({ params }: Route.ComponentProps) {
 
     const savedStations = JSON.parse(savedStationsRaw) as string[]
     setSaved(savedStations.includes(station.data.data.id))
+
+    // Set page title
+    document.title = `${station.data.data.formattedName} - Commute`
   }, [station.data, station.isLoading])
 
   const handleBackButton = useCallback(() => {
