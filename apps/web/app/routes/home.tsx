@@ -39,14 +39,20 @@ function StationCard({ stationId }: { stationId: string }) {
     <li>
       <article>
         <h1 className="font-bold text-2xl">
-          Stasiun
+          Stasiun &nbsp;
           { station.data.data.formattedName }
         </h1>
-        <ul className="mt-4 flex flex-col lg:grid lg:grid-cols-2 gap-4">
-          {timetable?.data?.data?.map(line => (
-            <LineCard key={line.lineCode} line={line} />
-          ))}
-        </ul>
+        { timetable.isLoading
+          ? (
+              <div className="mt-4 w-full h-[320px] bg-slate-200 rounded-xl" />
+            )
+          : (
+              <ul className="mt-4 flex flex-col lg:grid lg:grid-cols-2 gap-4">
+                {timetable?.data?.data?.map(line => (
+                  <LineCard key={line.lineCode} line={line} />
+                ))}
+              </ul>
+            )}
       </article>
     </li>
   )
