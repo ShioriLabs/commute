@@ -39,7 +39,7 @@ function StationCard({ stationId }: { stationId: string }) {
     <li>
       <article>
         <h1 className="font-bold text-2xl">
-          Stasiun &nbsp;
+          Stasiun&nbsp;
           { station.data.data.formattedName }
         </h1>
         { timetable.isLoading
