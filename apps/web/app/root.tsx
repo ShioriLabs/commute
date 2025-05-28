@@ -6,7 +6,7 @@ import {
   Scripts,
   ScrollRestoration
 } from 'react-router'
-
+import { useEffect } from 'react'
 import type { Route } from './+types/root'
 import './app.css'
 import { SWRConfig } from 'swr'
@@ -33,6 +33,19 @@ export const links: Route.LinksFunction = () => [
 ]
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+      navigator.serviceWorker
+        .register('/service-worker.js')
+        .then((registration) => {
+          console.log('Service Worker registered with scope:', registration.scope)
+        })
+        .catch((error) => {
+          console.error('Service Worker registration failed:', error)
+        })
+    }
+  }, [])
+
   return (
     <html lang="en">
       <head>
