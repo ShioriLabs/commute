@@ -18,6 +18,7 @@
 
 const HOSTNAME_WHITELIST = [
   self.location.hostname,
+  `api.${self.location.hostname}`,
   'fonts.gstatic.com',
   'fonts.googleapis.com',
   'cdn.jsdelivr.net'
