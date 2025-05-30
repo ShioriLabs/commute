@@ -34,7 +34,7 @@ export const links: Route.LinksFunction = () => [
 
 export function Layout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
-    if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+    if (window !== undefined && import.meta.env.PROD && 'serviceWorker' in navigator) {
       navigator.serviceWorker
         .register('/service-worker.js')
         .then((registration) => {
