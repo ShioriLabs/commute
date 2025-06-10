@@ -75,8 +75,7 @@ app.get('/stations/:code/timetable/grouped', async (c) => {
 
     if (groupedByLineSchedules[line.lineCode]) {
       groupedByLineSchedules[line.lineCode]!.schedules.push(schedule)
-    }
-    else {
+    } else {
       groupedByLineSchedules[line.lineCode] = {
         ...line,
         schedules: [schedule]
@@ -89,8 +88,7 @@ app.get('/stations/:code/timetable/grouped', async (c) => {
     for (const schedule of line.schedules) {
       if (groupedByBoundFor[schedule.boundFor]) {
         groupedByBoundFor[schedule.boundFor]!.push(schedule)
-      }
-      else {
+      } else {
         groupedByBoundFor[schedule.boundFor] = [schedule]
       }
     }
