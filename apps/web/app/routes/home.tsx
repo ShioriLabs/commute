@@ -79,8 +79,7 @@ export default function HomePage() {
 
       setStations(parsedSavedStations as string[])
       setIsReady(true)
-    }
-    catch (e) {
+    } catch (e) {
       if (e instanceof SyntaxError) {
         localStorage.setItem('saved-stations', '[]')
       }
