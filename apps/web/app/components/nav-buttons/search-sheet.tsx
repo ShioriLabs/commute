@@ -1,6 +1,6 @@
 import type { Station } from 'models/stations'
 import type { StandardResponse } from '@schema/response'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import useSWR from 'swr'
@@ -50,6 +50,7 @@ export default function SearchSheet() {
   const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher)
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [recentlySearched, setRecentlySearched] = useState<string[]>([])
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   const filteredStations = useMemo(() => {
     if (stations?.data === undefined || searchQuery.length < 2) return []
@@ -95,8 +96,13 @@ export default function SearchSheet() {
     const recentlySearchedString = localStorage.getItem('recently-searched') ?? '[]'
     const recent = JSON.parse(recentlySearchedString) as string[]
     setRecentlySearched(recent)
-  }
-  , [])
+  }, [])
+
+  useEffect(() => {
+    if (searchInputRef.current) {
+      searchInputRef.current.focus()
+    }
+  }, [searchInputRef])
 
   const handleSearchClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     const stationId = e.currentTarget.dataset.stationId
@@ -136,6 +142,7 @@ export default function SearchSheet() {
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
           aria-label="Cari stasiun berdasarkan nama atau kode"
+          ref={searchInputRef}
         />
       </div>
       {searchQuery.length < 2
