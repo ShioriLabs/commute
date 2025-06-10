@@ -1,18 +1,12 @@
 import type { Station } from 'models/stations'
 import type { StandardResponse } from '@schema/response'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
 import { levenshteinDistance } from 'utils/levenshtein'
-
-export function meta() {
-  return [
-    { title: 'Cari Stasiun - Commute' },
-    { name: 'theme-color', content: '#FFFFFF' }
-  ]
-}
+import { CloseButton, DialogTitle } from '@headlessui/react'
 
 function HighlightedStationList({ title, stationIDs, className }: { title: string, stationIDs: string[], className?: string }) {
   const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher)
@@ -52,14 +46,11 @@ function HighlightedStationList({ title, stationIDs, className }: { title: strin
   )
 }
 
-interface Props {
-  onClose?: () => void
-}
-
-export default function SearchPage({ onClose }: Props) {
+export default function SearchSheet() {
   const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher)
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [recentlySearched, setRecentlySearched] = useState<string[]>([])
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   const filteredStations = useMemo(() => {
     if (stations?.data === undefined || searchQuery.length < 2) return []
@@ -105,8 +96,13 @@ export default function SearchPage({ onClose }: Props) {
     const recentlySearchedString = localStorage.getItem('recently-searched') ?? '[]'
     const recent = JSON.parse(recentlySearchedString) as string[]
     setRecentlySearched(recent)
-  }
-  , [])
+  }, [])
+
+  useEffect(() => {
+    if (searchInputRef.current) {
+      searchInputRef.current.focus()
+    }
+  }, [searchInputRef])
 
   const handleSearchClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     const stationId = e.currentTarget.dataset.stationId
@@ -124,28 +120,19 @@ export default function SearchPage({ onClose }: Props) {
     localStorage.setItem('recently-searched', JSON.stringify(newRecentlySearched))
   }
 
-  const handleCloseButton = () => {
-    if (onClose) {
-      onClose()
-    } else {
-      history.back()
-    }
-  }
-
   return (
-    <main className="bg-white w-screen min-h-screen">
+    <section className="bg-white w-screen h-full overflow-y-auto pb-4">
       <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto bg-white">
         <div className="flex gap-4 items-center justify-between">
-          <h1 className="font-bold text-2xl">Cari Stasiun</h1>
-          <button
-            onClick={handleCloseButton}
+          <DialogTitle className="font-bold text-2xl">Cari Stasiun</DialogTitle>
+          <CloseButton
             aria-label="Tutup halaman pencarian"
             className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
             aria-expanded="false"
             aria-controls="search-input"
           >
             <XMarkIcon />
-          </button>
+          </CloseButton>
         </div>
         <input
           id="search-input"
@@ -155,6 +142,7 @@ export default function SearchPage({ onClose }: Props) {
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
           aria-label="Cari stasiun berdasarkan nama atau kode"
+          ref={searchInputRef}
         />
       </div>
       {searchQuery.length < 2
@@ -204,6 +192,6 @@ export default function SearchPage({ onClose }: Props) {
             </ul>
           )
         : null}
-    </main>
+    </section>
   )
 }
