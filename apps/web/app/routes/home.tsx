@@ -110,6 +110,7 @@ export default function HomePage() {
                       <span className="text-2xl text-center font-bold">Belum Ada Stasiun Disimpan</span>
                       <p className="text-center mt-2">
                         Klik tombol
+                        {' '}
                         <b>Cari Stasiun</b>
                         {' '}
                         di bawah untuk mulai cari jadwal & simpan stasiun!
