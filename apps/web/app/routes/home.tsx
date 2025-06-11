@@ -107,9 +107,11 @@ export default function HomePage() {
                   )
                 : (
                     <div className="w-screen h-screen flex items-center justify-center flex-col p-2" aria-live="polite">
-                      <span className="text-2xl text-center font-bold">Belum Ada Stasiun Disimpan</span>
+                      <img src="/img/station.png" alt="Gambar peron stasiun dengan jembatan di atasnya" className="w-48 h-48 aspect-square object-contain" />
+                      <span className="text-2xl text-center font-bold mt-0">Belum Ada Stasiun Disimpan</span>
                       <p className="text-center mt-2">
                         Klik tombol
+                        {' '}
                         <b>Cari Stasiun</b>
                         {' '}
                         di bawah untuk mulai cari jadwal & simpan stasiun!
