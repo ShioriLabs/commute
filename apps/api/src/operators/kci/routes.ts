@@ -1,7 +1,6 @@
 import { Hono } from 'hono'
 import { syncStations, syncTimetable } from './sync'
 import { StationRepository } from 'db/repositories/stations'
-import { NewStation, Station } from 'db/schemas/stations'
 import { NotFound, Ok } from 'utils/response'
 import { OPERATORS } from '@commute/constants'
 import { LineGroupedTimetable, Schedule, ScheduleWithLineInfo } from 'db/schemas/schedules'
@@ -12,14 +11,15 @@ import { Bindings } from 'app'
 const app = new Hono<{ Bindings: Bindings }>()
 
 app.get('/stations', async (c) => {
-  let stations: Station[] | NewStation[] = await new StationRepository(c.env.DB).getAllByOperator('KCI')
+  let stations = await new StationRepository(c.env.DB).getAllByOperator('KCI')
   if (stations.length === 0 || c.req.query('sync') === 'true') {
-    stations = await syncStations(c.env.DB, c.env.KCI_API_TOKEN)
+    await syncStations(c.env.DB, c.env.KCI_API_TOKEN)
+    stations = await new StationRepository(c.env.DB).getAllByOperator('KCI')
   }
 
   return c.json(
     Ok(
-      stations.map(station => ({ ...station, operator: OPERATORS.KCI }))
+      stations
     ),
     200
   )
@@ -32,7 +32,7 @@ app.get('/stations/:code', async (c) => {
 
   return c.json(
     Ok(
-      { ...station, operator: OPERATORS.KCI }
+      station
     ),
     200
   )
@@ -75,8 +75,7 @@ app.get('/stations/:code/timetable/grouped', async (c) => {
 
     if (groupedByLineSchedules[line.lineCode]) {
       groupedByLineSchedules[line.lineCode]!.schedules.push(schedule)
-    }
-    else {
+    } else {
       groupedByLineSchedules[line.lineCode] = {
         ...line,
         schedules: [schedule]
@@ -89,8 +88,7 @@ app.get('/stations/:code/timetable/grouped', async (c) => {
     for (const schedule of line.schedules) {
       if (groupedByBoundFor[schedule.boundFor]) {
         groupedByBoundFor[schedule.boundFor]!.push(schedule)
-      }
-      else {
+      } else {
         groupedByBoundFor[schedule.boundFor] = [schedule]
       }
     }
