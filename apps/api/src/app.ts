@@ -5,6 +5,7 @@ import kciRoutes from './operators/kci/routes'
 import mrtjRoutes from './operators/mrtj/routes'
 import lrtjRoutes from './operators/lrtj/routes'
 import stations from './routes/stations'
+import syncRoutes from './routes/sync'
 
 export interface Bindings {
   DB: D1Database
@@ -20,5 +21,6 @@ app.route('KCI', kciRoutes)
 app.route('MRTJ', mrtjRoutes)
 app.route('LRTJ', lrtjRoutes)
 app.route('stations', stations)
+app.route('sync/stations', syncRoutes)
 
 export default app

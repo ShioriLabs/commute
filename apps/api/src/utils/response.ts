@@ -16,3 +16,13 @@ export function NotFound(errorCode: string = 'NOT_FOUND', message: string = 'Not
     }
   }
 }
+
+export function Internal(errorCode: string = 'INTERNAL', message: string = 'Internal server error'): StandardResponse {
+  return {
+    status: 500,
+    error: {
+      code: errorCode,
+      message
+    }
+  }
+}
