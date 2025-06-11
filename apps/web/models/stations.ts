@@ -9,6 +9,11 @@ export interface Station {
     code: 'KCI' | 'MRTJ' | 'NUL'
     name: string
   }
+  lines: {
+    name: string
+    lineCode: string
+    colorCode: string
+  }[]
   createdAt: Date
   updatedAt: Date
   timetableSynced: number
