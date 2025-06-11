@@ -2,21 +2,24 @@ import type { LineTimetable, Schedule } from 'models/schedules'
 import { useState, useEffect, useMemo } from 'react'
 import { getTintFromColor } from 'utils/colors'
 
+function parseTime(timeString: string) {
+  return new Date(`${new Date().toDateString()} ${timeString}`)
+}
+
 function getNextSchedules(schedules: Schedule[], limit = 3) {
   const now = new Date()
   const returning: Schedule[] = []
   for (const schedule of schedules) {
     if (returning.length === limit) break
-    const parsedDeparture = new Date(`${now.toDateString()} ${schedule.estimatedDeparture}`)
-    if (parsedDeparture < now) continue
+    const parsedDeparture = parseTime(schedule.estimatedDeparture)
+    const diff = parsedDeparture.getTime() - now.getTime()
+
+    // Allow departure that happened within the last 30 seconds
+    if (diff < -30000) continue
     returning.push(schedule)
   }
 
   return returning
-}
-
-function parseTime(timeString: string) {
-  return new Date(`${new Date().toDateString()} ${timeString}`)
 }
 
 function isImmediateDeparture(now: Date, scheduledDeparture: Date) {
