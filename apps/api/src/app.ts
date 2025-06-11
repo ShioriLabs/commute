@@ -27,7 +27,7 @@ app.get('/stations', async (c) => {
   const stations = await new StationRepository(c.env.DB).getAll()
   return c.json(
     Ok(
-      stations.map(station => ({ ...station, operator: OPERATORS[station.operator] }))
+      stations
     ),
     200
   )

@@ -1,38 +1,30 @@
 import type { LineTimetable, Schedule } from 'models/schedules'
+import { useState, useEffect, useMemo } from 'react'
+import { getTintFromColor } from 'utils/colors'
+
+function parseTime(timeString: string) {
+  return new Date(`${new Date().toDateString()} ${timeString}`)
+}
 
 function getNextSchedules(schedules: Schedule[], limit = 3) {
   const now = new Date()
   const returning: Schedule[] = []
   for (const schedule of schedules) {
     if (returning.length === limit) break
-    const parsedDeparture = new Date(`${now.toDateString()} ${schedule.estimatedDeparture}`)
-    if (parsedDeparture < now) continue
+    const parsedDeparture = parseTime(schedule.estimatedDeparture)
+    const diff = parsedDeparture.getTime() - now.getTime()
+
+    // Allow departure that happened within the last 30 seconds
+    if (diff < -30000) continue
     returning.push(schedule)
   }
 
   return returning
 }
 
-function parseTime(timeString: string) {
-  return new Date(`${new Date().toDateString()} ${timeString}`)
-}
-
-function tintHex(hex: string, tintFactor = 0.2, towards: 'light' | 'dark' = 'light') {
-  hex = hex.replace(/^#/, '')
-
-  let r = parseInt(hex.substring(0, 2), 16)
-  let g = parseInt(hex.substring(2, 4), 16)
-  let b = parseInt(hex.substring(4, 6), 16)
-
-  const target = towards === 'light' ? 255 : 128
-
-  r = Math.round(r * tintFactor + target * (1 - tintFactor))
-  g = Math.round(g * tintFactor + target * (1 - tintFactor))
-  b = Math.round(b * tintFactor + target * (1 - tintFactor))
-
-  return '#' + [r, g, b].map(x =>
-    x.toString(16).padStart(2, '0')
-  ).join('')
+function isImmediateDeparture(now: Date, scheduledDeparture: Date) {
+  const diff = scheduledDeparture.getTime() - now.getTime()
+  return diff >= -30000 && diff <= 30000
 }
 
 interface Props {
@@ -40,24 +32,36 @@ interface Props {
 }
 
 export default function LineCard({ line }: Props) {
-  const nextSchedulesFilteredTimetable = line.timetable.map((direction) => {
-    return {
-      boundFor: direction.boundFor,
-      schedules: getNextSchedules(direction.schedules)
-    }
-  }).filter(direction => direction.schedules.length > 0)
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
+
+  useEffect(() => {
+    setLastUpdated(new Date())
+    const interval = setInterval(() => {
+      setLastUpdated(new Date())
+    }, 10000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const nextSchedulesFilteredTimetable = useMemo(() => {
+    return line.timetable.map((direction) => {
+      return {
+        boundFor: direction.boundFor,
+        schedules: getNextSchedules(direction.schedules)
+      }
+    }).filter(direction => direction.schedules.length > 0)
+  }, [line.timetable, lastUpdated])
 
   if (nextSchedulesFilteredTimetable.length === 0) return null
 
   return (
     <li
       className="rounded-xl w-full min-h-8 shadow-lg border-t-[16px] border-gray-100"
-      style={{ borderTopColor: line.colorCode, backgroundColor: tintHex(line.colorCode, 0.065) }}
+      style={{ borderTopColor: line.colorCode, backgroundColor: getTintFromColor(line.colorCode, 0.065) }}
       aria-label={`Jadwal untuk jalur ${line.name}`}
     >
       <article
         className="p-4 border-b-2"
-        style={{ borderBottomColor: tintHex(line.colorCode, 0.3) }}
+        style={{ borderBottomColor: getTintFromColor(line.colorCode, 0.3) }}
         aria-labelledby={`line-name-${line.name}`}
       >
         <h1 id={`line-name-${line.name}`} className="font-bold text-xl">{line.name}</h1>
@@ -68,16 +72,24 @@ export default function LineCard({ line }: Props) {
             <li
               key={direction.boundFor}
               className="p-4 flex items-start justify-between border-t first:border-t-0"
-              style={{ borderTopColor: tintHex(line.colorCode, 0.3) }}
+              style={{ borderTopColor: getTintFromColor(line.colorCode, 0.3) }}
               aria-label={`Jadwal menuju ${direction.boundFor}`}
             >
               <div>
                 <span className="font-semibold">{direction.boundFor}</span>
               </div>
               <div className="text-right flex flex-col">
-                <span className="font-bold" aria-label={`Keberangkatan berikutnya pada ${parseTime(direction.schedules[0].estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })}`}>
-                  {parseTime(direction.schedules[0].estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })}
-                </span>
+                {isImmediateDeparture(lastUpdated, parseTime(direction.schedules[0].estimatedDeparture))
+                  ? (
+                      <span className="font-bold animate-pulse" style={{ color: line.colorCode }} aria-label="Keberangkatan berikutnya akan tiba sebentar lagi">
+                        {parseTime(direction.schedules[0].estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })}
+                      </span>
+                    )
+                  : (
+                      <span className="font-bold" aria-label={`Keberangkatan berikutnya pada ${parseTime(direction.schedules[0].estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })}`}>
+                        {parseTime(direction.schedules[0].estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })}
+                      </span>
+                    )}
                 {direction.schedules.length > 1
                   ? (
                       <span

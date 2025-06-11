@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
-import type { Station } from '@schema/stations'
+import type { Station } from 'models/stations'
 import type { LineGroupedTimetable } from 'models/schedules'
 import type { StandardResponse } from '@schema/response'
 import LineCard from '~/components/line-card'
 import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
 import SearchStationsButton from '~/components/nav-buttons/search-stations'
+import { ChevronRightIcon } from '@heroicons/react/20/solid'
+import { Link } from 'react-router'
 
 export function meta() {
   return [
@@ -37,9 +39,12 @@ function StationCard({ stationId }: { stationId: string }) {
   return (
     <li>
       <article>
-        <h1 className="font-bold text-2xl">
-          Stasiun&nbsp;
-          { station.data.data.formattedName }
+        <h1 className="font-bold text-2xl flex">
+          <Link to={`/station/${station.data.data.operator.code}/${station.data.data.code}`} className="group flex-grow">
+            Stasiun&nbsp;
+            { station.data.data.formattedName }
+            <ChevronRightIcon className="inline w-6 h-6 group-hover:ml-1 ml-0 transition-[margin] duration-200" />
+          </Link>
         </h1>
         { timetable.isLoading
           ? (
@@ -79,8 +84,7 @@ export default function HomePage() {
 
       setStations(parsedSavedStations as string[])
       setIsReady(true)
-    }
-    catch (e) {
+    } catch (e) {
       if (e instanceof SyntaxError) {
         localStorage.setItem('saved-stations', '[]')
       }

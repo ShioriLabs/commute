@@ -1,9 +1,10 @@
-import { Operator } from '@commute/constants'
+import { Operator, OPERATORS } from '@commute/constants'
 import { db } from 'db'
 import { NewSchedule } from 'db/schemas/schedules'
 import { NewStation, UpdatingStation } from 'db/schemas/stations'
 import { sql } from 'kysely'
 import { Repository } from 'models/repository'
+import { getLineByOperator } from 'utils/line'
 
 export class StationRepository extends Repository {
   private d1: D1Database
@@ -14,28 +15,102 @@ export class StationRepository extends Repository {
   }
 
   async getAll(page?: number, limit?: number) {
-    let query = db(this.d1).selectFrom('stations').selectAll()
+    const linesSubquery = db(this.d1)
+      .selectFrom('schedules')
+      .select(({ fn }) => [
+        'lineCode',
+        fn('group_concat', [sql`DISTINCT schedules.lineCode`]).as('lines'),
+        'schedules.stationId'
+      ])
+      .where('schedules.lineCode', 'is not', 'NUL')
+      .groupBy('schedules.stationId')
+
+    let query = db(this.d1)
+      .selectFrom('stations')
+      .leftJoin(linesSubquery.as('linesSubquery'), 'linesSubquery.stationId', 'stations.id')
+      .selectAll('stations')
+      .select(['linesSubquery.lines'])
+
     if (page && limit) {
       query = query.limit(limit).offset((page - 1) * limit)
     }
 
     const stations = await query.execute()
-    return stations
+    return stations.map(station => ({
+      ...station,
+      operator: OPERATORS[station.operator],
+      lines: station.lines
+        ? (station.lines as string).split(',')
+            .map(lineCode => getLineByOperator(station.operator, lineCode))
+            .filter(line => line !== null)
+        : []
+    }))
   }
 
   async getAllByOperator(operator: Operator, page?: number, limit?: number) {
-    let query = db(this.d1).selectFrom('stations').selectAll().where('operator', '==', operator)
+    const linesSubquery = db(this.d1)
+      .selectFrom('schedules')
+      .select(({ fn }) => [
+        'lineCode',
+        fn('group_concat', [sql`DISTINCT schedules.lineCode`]).as('lines'),
+        'schedules.stationId'
+      ])
+      .where('schedules.lineCode', 'is not', 'NUL')
+      .groupBy('schedules.stationId')
+
+    let query = db(this.d1)
+      .selectFrom('stations')
+      .leftJoin(linesSubquery.as('linesSubquery'), 'linesSubquery.stationId', 'stations.id')
+      .selectAll('stations')
+      .select(['linesSubquery.lines'])
+      .where('operator', '==', operator)
+
     if (page && limit) {
       query = query.limit(limit).offset((page - 1) * limit)
     }
 
     const stations = await query.execute()
-    return stations
+    return stations.map(station => ({
+      ...station,
+      operator: OPERATORS[operator],
+      lines: station.lines
+        ? (station.lines as string).split(',')
+            .map(lineCode => getLineByOperator(operator, lineCode))
+            .filter(line => line !== null)
+        : []
+    }))
   }
 
   async getById(id: string) {
-    const station = await db(this.d1).selectFrom('stations').where('id', '=', id).selectAll().executeTakeFirst()
-    return station
+    const linesSubquery = db(this.d1)
+      .selectFrom('schedules')
+      .select(({ fn }) => [
+        'lineCode',
+        fn('group_concat', [sql`DISTINCT schedules.lineCode`]).as('lines'),
+        'schedules.stationId'
+      ])
+      .where('schedules.lineCode', 'is not', 'NUL')
+      .groupBy('schedules.stationId')
+
+    const station = await db(this.d1)
+      .selectFrom('stations')
+      .leftJoin(linesSubquery.as('linesSubquery'), 'linesSubquery.stationId', 'stations.id')
+      .selectAll('stations')
+      .select(['linesSubquery.lines'])
+      .where('id', '=', id)
+      .executeTakeFirst()
+
+    if (!station) return null
+
+    return {
+      ...station,
+      operator: OPERATORS[station.operator],
+      lines: station.lines
+        ? (station.lines as string).split(',')
+            .map(lineCode => getLineByOperator(station.operator, lineCode))
+            .filter(line => line !== null)
+        : []
+    }
   }
 
   async insert(data: NewStation) {

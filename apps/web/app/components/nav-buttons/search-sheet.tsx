@@ -7,6 +7,7 @@ import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
 import { levenshteinDistance } from 'utils/levenshtein'
 import { CloseButton, DialogTitle } from '@headlessui/react'
+import { getForegroundColor } from 'utils/colors'
 
 function HighlightedStationList({ title, stationIDs, className }: { title: string, stationIDs: string[], className?: string }) {
   const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher)
@@ -99,9 +100,11 @@ export default function SearchSheet() {
   }, [])
 
   useEffect(() => {
-    if (searchInputRef.current) {
-      searchInputRef.current.focus()
-    }
+    setTimeout(() => {
+      if (searchInputRef.current) {
+        searchInputRef.current.focus()
+      }
+    }, 550)
   }, [searchInputRef])
 
   const handleSearchClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
@@ -183,9 +186,23 @@ export default function SearchSheet() {
             <ul className="mt-4 max-w-3xl mx-auto">
               {filteredStations.map(station => (
                 <li key={station.code}>
-                  <Link to={`/station/${station.operator.code}/${station.code}`} className="px-8 py-4 flex flex-col gap-1" data-station-id={station.id} onClick={handleSearchClick}>
-                    <b>{ station.formattedName }</b>
-                    <span className="font-semibold">{ station.operator.name }</span>
+                  <Link to={`/station/${station.operator.code}/${station.code}`} className="px-8 py-4 flex flex-col gap-1 min-h-24 text-lg" data-station-id={station.id} onClick={handleSearchClick}>
+                    <b>
+                      { station.formattedName }
+                      &nbsp;&nbsp;
+                      <span className="text-sm font-semibold text-gray-600">{station.operator.name}</span>
+                    </b>
+                    { station.lines.length > 0
+                      ? (
+                          <ul className="flex flex-row gap-1 flex-wrap">
+                            {station.lines.map(line => (
+                              <li key={line.lineCode} className={`text-sm font-semibold px-2.5 py-1 rounded-full text-stone-800 ${getForegroundColor(line.colorCode) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`} style={{ backgroundColor: line.colorCode }}>
+                                {line.name.replace(/Lin /g, '')}
+                              </li>
+                            ))}
+                          </ul>
+                        )
+                      : null}
                   </Link>
                 </li>
               ))}

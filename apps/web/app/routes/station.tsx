@@ -41,8 +41,7 @@ export default function StationPage({ params }: Route.ComponentProps) {
   const handleBackButton = useCallback(() => {
     if (navigationType === 'POP') {
       navigate('/')
-    }
-    else {
+    } else {
       history.back()
     }
   }, [navigationType])
@@ -61,8 +60,7 @@ export default function StationPage({ params }: Route.ComponentProps) {
       const newSavedStations = savedStations.filter(item => item !== (station.data?.data?.id ?? ''))
       localStorage.setItem('saved-stations', JSON.stringify(newSavedStations))
       setSaved(false)
-    }
-    else {
+    } else {
       localStorage.setItem('saved-stations', JSON.stringify([...savedStations, station.data.data.id]))
       setSaved(true)
     }
@@ -70,7 +68,7 @@ export default function StationPage({ params }: Route.ComponentProps) {
 
   return (
     <div className="bg-white w-full min-h-screen">
-      <div className="w-full bg-white/30 backdrop-blur-lg sticky top-0">
+      <div className="w-full bg-white/40 backdrop-blur sticky top-0 h-48 mask-b-to-100% frosted-glass-mask">
         <div className="p-8 max-w-3xl mx-auto">
           <div className="flex gap-4 items-center justify-between">
             <div className="flex flex-col">
@@ -115,14 +113,14 @@ export default function StationPage({ params }: Route.ComponentProps) {
       </div>
       {timetable.isLoading
         ? (
-            <div className="mt-4 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
+            <div className="-mt-20 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
               <div className="animate-pulse w-full h-72 bg-slate-200 rounded-lg" />
               <div className="animate-pulse w-full h-64 bg-slate-200 rounded-lg" />
               <div className="animate-pulse w-full h-96 bg-slate-200 rounded-lg" />
             </div>
           )
         : (
-            <ul className="mt-4 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
+            <ul className="-mt-20 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
               {timetable.data?.data?.map(line => (
                 <LineCard key={line.lineCode} line={line} />
               ))}
