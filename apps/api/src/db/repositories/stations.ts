@@ -110,6 +110,23 @@ export class StationRepository extends Repository {
     }
   }
 
+  async checkIfExists(id: string, operator?: Operator) {
+    let query = db(this.d1)
+      .selectFrom('stations')
+      .select(['id', 'timetableSynced'])
+      .where('id', '=', id)
+
+    if (operator) {
+      query = query.where('operator', '=', operator)
+    }
+
+    const station = await query.executeTakeFirst()
+    return {
+      exists: !!station,
+      station: station ? station : null
+    }
+  }
+
   async insert(data: NewStation) {
     await db(this.d1)
       .insertInto('stations').values(data)
