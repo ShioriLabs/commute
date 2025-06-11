@@ -18,7 +18,6 @@ export class StationRepository extends Repository {
     const linesSubquery = db(this.d1)
       .selectFrom('schedules')
       .select(({ fn }) => [
-        'lineCode',
         fn('group_concat', [sql`DISTINCT schedules.lineCode`]).as('lines'),
         'schedules.stationId'
       ])
@@ -51,7 +50,6 @@ export class StationRepository extends Repository {
     const linesSubquery = db(this.d1)
       .selectFrom('schedules')
       .select(({ fn }) => [
-        'lineCode',
         fn('group_concat', [sql`DISTINCT schedules.lineCode`]).as('lines'),
         'schedules.stationId'
       ])
@@ -85,7 +83,6 @@ export class StationRepository extends Repository {
     const linesSubquery = db(this.d1)
       .selectFrom('schedules')
       .select(({ fn }) => [
-        'lineCode',
         fn('group_concat', [sql`DISTINCT schedules.lineCode`]).as('lines'),
         'schedules.stationId'
       ])
