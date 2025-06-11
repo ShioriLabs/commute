@@ -100,9 +100,11 @@ export default function SearchSheet() {
   }, [])
 
   useEffect(() => {
-    if (searchInputRef.current) {
-      searchInputRef.current.focus()
-    }
+    setTimeout(() => {
+      if (searchInputRef.current) {
+        searchInputRef.current.focus()
+      }
+    }, 550)
   }, [searchInputRef])
 
   const handleSearchClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
