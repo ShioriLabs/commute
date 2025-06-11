@@ -97,7 +97,7 @@ app.get('/stations/:code/timetable/grouped', async (c) => {
       name: line.name,
       colorCode: line.colorCode,
       lineCode: line.lineCode,
-      timetable: Object.entries(groupedByBoundFor).map(([boundFor, schedules]) => ({ boundFor, schedules }))
+      timetable: Object.entries(groupedByBoundFor).map(([boundFor, schedules]) => ({ boundFor, schedules })).sort((a, b) => a.boundFor.localeCompare(b.boundFor))
     })
   }
 
