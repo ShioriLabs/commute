@@ -6,6 +6,7 @@ import mrtjRoutes from './operators/mrtj/routes'
 import lrtjRoutes from './operators/lrtj/routes'
 import stations from './routes/stations'
 import syncRoutes from './routes/sync'
+import cacheRoutes from './routes/cache'
 
 export interface Bindings {
   DB: D1Database
@@ -22,5 +23,6 @@ app.route('MRTJ', mrtjRoutes)
 app.route('LRTJ', lrtjRoutes)
 app.route('stations', stations)
 app.route('sync/stations', syncRoutes)
+app.route('cache', cacheRoutes)
 
 export default app
