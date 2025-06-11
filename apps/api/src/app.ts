@@ -6,18 +6,13 @@ import mrtjRoutes from './operators/mrtj/routes'
 import lrtjRoutes from './operators/lrtj/routes'
 import { StationRepository } from 'db/repositories/stations'
 import { Ok } from 'utils/response'
-import { OPERATORS } from '@commute/constants'
 
 export interface Bindings {
   DB: D1Database
   KCI_API_TOKEN: string
 }
 
-export interface Variables {
-
-}
-
-const app = new Hono<{ Bindings: Bindings, Variables: Variables }>()
+const app = new Hono<{ Bindings: Bindings }>()
 
 app.use('*', cors())
 app.route('KCI', kciRoutes)
