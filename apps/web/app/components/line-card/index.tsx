@@ -1,4 +1,5 @@
 import type { LineTimetable, Schedule } from 'models/schedules'
+import { getTintFromColor } from 'utils/colors'
 
 function getNextSchedules(schedules: Schedule[], limit = 3) {
   const now = new Date()
@@ -15,24 +16,6 @@ function getNextSchedules(schedules: Schedule[], limit = 3) {
 
 function parseTime(timeString: string) {
   return new Date(`${new Date().toDateString()} ${timeString}`)
-}
-
-function tintHex(hex: string, tintFactor = 0.2, towards: 'light' | 'dark' = 'light') {
-  hex = hex.replace(/^#/, '')
-
-  let r = parseInt(hex.substring(0, 2), 16)
-  let g = parseInt(hex.substring(2, 4), 16)
-  let b = parseInt(hex.substring(4, 6), 16)
-
-  const target = towards === 'light' ? 255 : 128
-
-  r = Math.round(r * tintFactor + target * (1 - tintFactor))
-  g = Math.round(g * tintFactor + target * (1 - tintFactor))
-  b = Math.round(b * tintFactor + target * (1 - tintFactor))
-
-  return '#' + [r, g, b].map(x =>
-    x.toString(16).padStart(2, '0')
-  ).join('')
 }
 
 interface Props {
@@ -52,12 +35,12 @@ export default function LineCard({ line }: Props) {
   return (
     <li
       className="rounded-xl w-full min-h-8 shadow-lg border-t-[16px] border-gray-100"
-      style={{ borderTopColor: line.colorCode, backgroundColor: tintHex(line.colorCode, 0.065) }}
+      style={{ borderTopColor: line.colorCode, backgroundColor: getTintFromColor(line.colorCode, 0.065) }}
       aria-label={`Jadwal untuk jalur ${line.name}`}
     >
       <article
         className="p-4 border-b-2"
-        style={{ borderBottomColor: tintHex(line.colorCode, 0.3) }}
+        style={{ borderBottomColor: getTintFromColor(line.colorCode, 0.3) }}
         aria-labelledby={`line-name-${line.name}`}
       >
         <h1 id={`line-name-${line.name}`} className="font-bold text-xl">{line.name}</h1>
@@ -68,7 +51,7 @@ export default function LineCard({ line }: Props) {
             <li
               key={direction.boundFor}
               className="p-4 flex items-start justify-between border-t first:border-t-0"
-              style={{ borderTopColor: tintHex(line.colorCode, 0.3) }}
+              style={{ borderTopColor: getTintFromColor(line.colorCode, 0.3) }}
               aria-label={`Jadwal menuju ${direction.boundFor}`}
             >
               <div>
