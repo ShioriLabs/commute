@@ -1,4 +1,5 @@
 import type { LineTimetable, Schedule } from 'models/schedules'
+import { useState, useEffect, useMemo } from 'react'
 import { getTintFromColor } from 'utils/colors'
 
 function getNextSchedules(schedules: Schedule[], limit = 3) {
@@ -23,12 +24,24 @@ interface Props {
 }
 
 export default function LineCard({ line }: Props) {
-  const nextSchedulesFilteredTimetable = line.timetable.map((direction) => {
-    return {
-      boundFor: direction.boundFor,
-      schedules: getNextSchedules(direction.schedules)
-    }
-  }).filter(direction => direction.schedules.length > 0)
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
+
+  useEffect(() => {
+    setLastUpdated(new Date())
+    const interval = setInterval(() => {
+      setLastUpdated(new Date())
+    }, 60000) // Update every minute
+    return () => clearInterval(interval)
+  }, [])
+
+  const nextSchedulesFilteredTimetable = useMemo(() => {
+    return line.timetable.map((direction) => {
+      return {
+        boundFor: direction.boundFor,
+        schedules: getNextSchedules(direction.schedules)
+      }
+    }).filter(direction => direction.schedules.length > 0)
+  }, [line.timetable, lastUpdated])
 
   if (nextSchedulesFilteredTimetable.length === 0) return null
 
