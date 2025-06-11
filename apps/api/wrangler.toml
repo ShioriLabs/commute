@@ -1,7 +1,7 @@
 name = "commute-api"
 main = "src/app.ts"
 dev.port = 3000
-compatibility_date = "2025-05-15"
+compatibility_date = "2025-06-11"
 
 [[d1_databases]]
 binding = "DB" # available in your Worker on env.DB
