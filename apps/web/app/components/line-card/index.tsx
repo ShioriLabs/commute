@@ -19,6 +19,11 @@ function parseTime(timeString: string) {
   return new Date(`${new Date().toDateString()} ${timeString}`)
 }
 
+function isImmediateDeparture(now: Date, scheduledDeparture: Date) {
+  const diff = scheduledDeparture.getTime() - now.getTime()
+  return diff >= -30000 && diff <= 30000
+}
+
 interface Props {
   line: LineTimetable
 }
@@ -30,7 +35,7 @@ export default function LineCard({ line }: Props) {
     setLastUpdated(new Date())
     const interval = setInterval(() => {
       setLastUpdated(new Date())
-    }, 60000) // Update every minute
+    }, 10000)
     return () => clearInterval(interval)
   }, [])
 
@@ -71,9 +76,17 @@ export default function LineCard({ line }: Props) {
                 <span className="font-semibold">{direction.boundFor}</span>
               </div>
               <div className="text-right flex flex-col">
-                <span className="font-bold" aria-label={`Keberangkatan berikutnya pada ${parseTime(direction.schedules[0].estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })}`}>
-                  {parseTime(direction.schedules[0].estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })}
-                </span>
+                {isImmediateDeparture(lastUpdated, parseTime(direction.schedules[0].estimatedDeparture))
+                  ? (
+                      <span className="font-bold animate-pulse" style={{ color: line.colorCode }} aria-label="Keberangkatan berikutnya akan tiba sebentar lagi">
+                        {parseTime(direction.schedules[0].estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })}
+                      </span>
+                    )
+                  : (
+                      <span className="font-bold" aria-label={`Keberangkatan berikutnya pada ${parseTime(direction.schedules[0].estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })}`}>
+                        {parseTime(direction.schedules[0].estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })}
+                      </span>
+                    )}
                 {direction.schedules.length > 1
                   ? (
                       <span
