@@ -54,7 +54,7 @@ app.post('/:operator', async (c) => {
   }
 })
 
-app.get('/:operator/:stationCode/timetable', async (c) => {
+app.post('/:operator/:stationCode/timetable', async (c) => {
   const operatorCode = c.req.param('operator')
   const stationCode = c.req.param('stationCode')
   const operator = getOperatorByCode(operatorCode)
@@ -66,7 +66,9 @@ app.get('/:operator/:stationCode/timetable', async (c) => {
     const kvRepository = new KVRepository(c.env.KV)
     const stationRepository = new StationRepository(c.env.DB)
 
-    const kvKey = `stations_${operator.code}_${stationCode}_timetable_${c.env.API_VERSION}`
+    const stationKVKey = `stations_${operator.code}_${stationCode}_${c.env.API_VERSION}`
+    const timetableKVKey = `stations_${operator.code}_${stationCode}_timetable_${c.env.API_VERSION}`
+    const groupedTimetableKVKey = `stations_${operator.code}_${stationCode}_timetable_grouped_${c.env.API_VERSION}`
 
     const checkStationResult = await stationRepository.checkIfExists(`${operator.code}-${stationCode}`)
     if (!checkStationResult.exists || checkStationResult.station === null) return c.json(NotFound(`Unknown Station Code ${stationCode} in Operator ${operator.code}`), 404)
@@ -83,7 +85,9 @@ app.get('/:operator/:stationCode/timetable', async (c) => {
         break
     }
 
-    await kvRepository.del(kvKey)
+    await kvRepository.del(stationKVKey)
+    await kvRepository.del(timetableKVKey)
+    await kvRepository.del(groupedTimetableKVKey)
 
     return c.json(
       Ok(
