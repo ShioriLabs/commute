@@ -17,8 +17,8 @@ export function meta() {
 }
 
 export default function StationPage({ params }: Route.ComponentProps) {
-  const station = useSWR<StandardResponse<Station>>(new URL(`/${params.operator}/stations/${params.code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher)
-  const timetable = useSWR<StandardResponse<LineGroupedTimetable>>(new URL(`/${params.operator}/stations/${params.code}/timetable/grouped`, import.meta.env.VITE_API_BASE_URL).href, fetcher)
+  const station = useSWR<StandardResponse<Station>>(new URL(`/stations/${params.operator}/${params.code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher)
+  const timetable = useSWR<StandardResponse<LineGroupedTimetable>>(new URL(`/stations/${params.operator}/${params.code}/timetable/grouped`, import.meta.env.VITE_API_BASE_URL).href, fetcher)
   const navigationType = useNavigationType()
   const navigate = useNavigate()
   const [saved, setSaved] = useState(false)

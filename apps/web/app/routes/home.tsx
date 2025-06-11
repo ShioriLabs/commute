@@ -18,8 +18,8 @@ export function meta() {
 
 function StationCard({ stationId }: { stationId: string }) {
   const [operator, code] = stationId.split(/-/g)
-  const station = useSWR<StandardResponse<Station>>(new URL(`/${operator}/stations/${code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher)
-  const timetable = useSWR<StandardResponse<LineGroupedTimetable>>(new URL(`/${operator}/stations/${code}/timetable/grouped`, import.meta.env.VITE_API_BASE_URL).href, fetcher)
+  const station = useSWR<StandardResponse<Station>>(new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher)
+  const timetable = useSWR<StandardResponse<LineGroupedTimetable>>(new URL(`/stations/${operator}/${code}/timetable/grouped`, import.meta.env.VITE_API_BASE_URL).href, fetcher)
 
   if (station.isLoading) {
     return (
