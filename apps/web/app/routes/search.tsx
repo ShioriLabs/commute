@@ -194,7 +194,7 @@ export default function SearchPage({ onClose }: Props) {
         ? (
             <ul className="mt-4 max-w-3xl mx-auto">
               {filteredStations.map(station => (
-                <li key={station.code}>
+                <li key={station.id}>
                   <Link to={`/station/${station.operator.code}/${station.code}`} className="px-8 py-4 flex flex-col gap-1" data-station-id={station.id} onClick={handleSearchClick}>
                     <b>{ station.formattedName }</b>
                     <span className="font-semibold">{ station.operator.name }</span>
