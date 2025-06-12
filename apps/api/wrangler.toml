@@ -1,0 +1,17 @@
+name = "commute-api"
+main = "src/app.ts"
+dev.port = 3000
+compatibility_date = "2025-06-11"
+
+[[d1_databases]]
+binding = "DB" # available in your Worker on env.DB
+database_name = "commute"
+database_id = "1d187383-95a3-4e34-aee8-7c99b45aeaa0"
+migrations_dir = "src/db/migrations"
+
+[vars]
+API_VERSION = "20250612"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "000e0f51c09844f1b9f85ad26e068129"
