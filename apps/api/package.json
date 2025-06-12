@@ -7,7 +7,8 @@
     "lint": "eslint --fix",
     "migration:up": "wrangler d1 migrations apply commute",
     "build": "wrangler build",
-    "start": "wrangler dev"
+    "start": "wrangler dev",
+    "generate:lrtjbdbtimetable": "tsx ./src/operators/lrtjbdb/generateTimetableSQL.ts"
   },
   "keywords": [],
   "author": "",
@@ -21,7 +22,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250610.0",
-    "@types/node": "^20.12.11",
+    "@types/node": "^20.17.30",
     "tsc-alias": "^1.8.9",
     "tsx": "^4.10.0",
     "wrangler": "^4.19.1"
