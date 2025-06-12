@@ -8,6 +8,7 @@ export const ALL_LINES: Record<Operator, readonly Line[]> = {
   [OPERATORS.KCI.code]: KCI_LINES,
   [OPERATORS.MRTJ.code]: MRTJ_LINES,
   [OPERATORS.LRTJ.code]: LRTJ_LINES,
+  [OPERATORS.LRTJBDB.code]: [],
   [OPERATORS.NUL.code]: []
 } as const
 
