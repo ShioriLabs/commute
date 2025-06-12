@@ -5,7 +5,7 @@ import * as readline from 'node:readline'
 const currentPath = __dirname
 const INPUT_CSV_PATH = `${currentPath}/input.csv`
 const OUTPUT_SQL_PATH = `${currentPath}/output.sql`
-const STATION_ID = 'LRTJBDB-SET'
+const STATION_ID = 'LRTJBDB-RAS'
 const BOUND_FOR = 'Dukuh Atas BNI'
 const LINE_CODE = 'BK'
 const ID_SUFFIX = 'DKA'
@@ -39,7 +39,8 @@ async function convertCSV() {
   }
 
   const insertStatement = `INSERT INTO schedules (id, stationId, tripNumber, estimatedDeparture, estimatedArrival, boundFor, lineCode, createdAt, updatedAt) VALUES\n`
-  const sqlContent = insertStatement + outputLines.join(',\n') + ';\n'
+  const switchTimetableSynced = `UPDATE stations SET timetableSynced = 1 WHERE id = '${STATION_ID}';\n`
+  const sqlContent = insertStatement + outputLines.join(',\n') + ';\n' + switchTimetableSynced
 
   fs.writeFileSync(OUTPUT_SQL_PATH, sqlContent)
   console.log(`SQL script successfully written to "${OUTPUT_SQL_PATH}".`)
