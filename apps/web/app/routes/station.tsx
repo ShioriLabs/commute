@@ -127,7 +127,10 @@ export default function StationPage({ params }: Route.ComponentProps) {
                 ))
                 : (
                     <div className="w-full h-auto flex items-center justify-center mt-8 flex-col max-w-3xl mx-auto">
-                      <img src="/img/search_empty.png" alt="Gambar peron stasiun dengan jembatan di atasnya, dengan kaca pembesar bergambar tanda tanya di depannya" className="w-48 h-48 aspect-square object-contain" />
+                      <picture>
+                        <source src="/img/search_empty.webp" type="image/webp" />
+                        <img src="/img/search_empty.png" alt="Gambar peron stasiun dengan jembatan di atasnya, dengan kaca pembesar bergambar tanda tanya di depannya" className="w-48 h-48 aspect-square object-contain" />
+                      </picture>
                       <span className="text-2xl text-center font-bold mt-0">Jadwal Tidak Tersedia</span>
                       <p className="text-center mt-2">
                         Silakan coba lagi beberapa saat lagi
