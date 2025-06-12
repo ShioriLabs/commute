@@ -46,7 +46,7 @@ importers:
         specifier: ^4.20250610.0
         version: 4.20250610.0
       '@types/node':
-        specifier: ^20.12.11
+        specifier: ^20.17.30
         version: 20.17.30
       tsc-alias:
         specifier: ^1.8.9
