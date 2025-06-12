@@ -134,3 +134,4 @@ commute.db
 
 apps/api/src/operators/lrtjbdb/input.csv
 apps/api/src/operators/lrtjbdb/output.sql
+.dev.vars
