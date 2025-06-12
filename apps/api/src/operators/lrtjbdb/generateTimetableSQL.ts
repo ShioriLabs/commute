@@ -6,9 +6,9 @@ const currentPath = __dirname
 const INPUT_CSV_PATH = `${currentPath}/input.csv`
 const OUTPUT_SQL_PATH = `${currentPath}/output.sql`
 const STATION_ID = 'LRTJBDB-SET'
-const BOUND_FOR = 'Jatimulya'
+const BOUND_FOR = 'Dukuh Atas BNI'
 const LINE_CODE = 'BK'
-const ID_SUFFIX = 'JTM'
+const ID_SUFFIX = 'DKA'
 
 async function convertCSV() {
   const fileStream = fs.createReadStream(INPUT_CSV_PATH)
