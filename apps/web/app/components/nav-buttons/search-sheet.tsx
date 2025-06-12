@@ -185,7 +185,7 @@ export default function SearchSheet() {
         ? (
             <ul className="mt-4 max-w-3xl mx-auto">
               {filteredStations.map(station => (
-                <li key={station.code}>
+                <li key={station.id}>
                   <Link to={`/station/${station.operator.code}/${station.code}`} className="px-8 py-4 flex flex-col gap-1 min-h-24 text-lg" data-station-id={station.id} onClick={handleSearchClick}>
                     <b>
                       { station.formattedName }
