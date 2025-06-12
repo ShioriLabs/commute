@@ -2,13 +2,14 @@ import { Operator, OPERATORS } from '@commute/constants'
 import { LINES as KCI_LINES } from 'operators/kci/lines'
 import { LINES as MRTJ_LINES } from 'operators/mrtj/lines'
 import { LINES as LRTJ_LINES } from 'operators/lrtj/lines'
+import { LINES as LRTJBDB_LINES } from 'operators/lrtjbdb/lines'
 import { Line } from 'models/line'
 
 export const ALL_LINES: Record<Operator, readonly Line[]> = {
   [OPERATORS.KCI.code]: KCI_LINES,
   [OPERATORS.MRTJ.code]: MRTJ_LINES,
   [OPERATORS.LRTJ.code]: LRTJ_LINES,
-  [OPERATORS.LRTJBDB.code]: [],
+  [OPERATORS.LRTJBDB.code]: LRTJBDB_LINES,
   [OPERATORS.NUL.code]: []
 } as const
 
