@@ -16,13 +16,13 @@ export class StationRepository extends Repository {
 
   async getAll(page?: number, limit?: number) {
     const linesSubquery = db(this.d1)
-      .selectFrom('schedules')
+      .selectFrom('stationLines')
       .select(({ fn }) => [
-        fn('group_concat', [sql`DISTINCT schedules.lineCode`]).as('lines'),
-        'schedules.stationId'
+        fn('group_concat', [sql`DISTINCT stationLines.lineCode`]).as('lines'),
+        'stationLines.stationId'
       ])
-      .where('schedules.lineCode', 'is not', 'NUL')
-      .groupBy('schedules.stationId')
+      .where('stationLines.lineCode', 'is not', 'NUL')
+      .groupBy('stationLines.stationId')
 
     let query = db(this.d1)
       .selectFrom('stations')
@@ -48,20 +48,20 @@ export class StationRepository extends Repository {
 
   async getAllByOperator(operator: Operator, page?: number, limit?: number) {
     const linesSubquery = db(this.d1)
-      .selectFrom('schedules')
+      .selectFrom('stationLines')
       .select(({ fn }) => [
-        fn('group_concat', [sql`DISTINCT schedules.lineCode`]).as('lines'),
-        'schedules.stationId'
+        fn('group_concat', [sql`DISTINCT stationLines.lineCode`]).as('lines'),
+        'stationLines.stationId'
       ])
-      .where('schedules.lineCode', 'is not', 'NUL')
-      .groupBy('schedules.stationId')
+      .where('stationLines.lineCode', 'is not', 'NUL')
+      .groupBy('stationLines.stationId')
 
     let query = db(this.d1)
       .selectFrom('stations')
       .leftJoin(linesSubquery.as('linesSubquery'), 'linesSubquery.stationId', 'stations.id')
       .selectAll('stations')
       .select(['linesSubquery.lines'])
-      .where('operator', '==', operator)
+      .where('operator', '=', operator)
 
     if (page && limit) {
       query = query.limit(limit).offset((page - 1) * limit)
@@ -81,13 +81,14 @@ export class StationRepository extends Repository {
 
   async getById(id: string) {
     const linesSubquery = db(this.d1)
-      .selectFrom('schedules')
+      .selectFrom('stationLines')
       .select(({ fn }) => [
-        fn('group_concat', [sql`DISTINCT schedules.lineCode`]).as('lines'),
-        'schedules.stationId'
+        fn('group_concat', [sql`DISTINCT stationLines.lineCode`]).as('lines'),
+        'stationLines.stationId'
       ])
-      .where('schedules.lineCode', 'is not', 'NUL')
-      .groupBy('schedules.stationId')
+      .where('stationLines.lineCode', 'is not', 'NUL')
+      .where('stationLines.stationId', '=', id)
+      .groupBy('stationLines.stationId')
 
     const station = await db(this.d1)
       .selectFrom('stations')
