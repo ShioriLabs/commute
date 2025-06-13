@@ -104,7 +104,7 @@ export default function SearchSheet() {
       if (searchInputRef.current) {
         searchInputRef.current.focus()
       }
-    }, 350)
+    }, 250)
   }, [searchInputRef])
 
   const handleSearchClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
