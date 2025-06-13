@@ -40,7 +40,7 @@ export default function SearchStationsButton({ className }: Props) {
         <div className="fixed inset-0 flex w-screen">
           <DialogPanel
             transition
-            className="overflow-hidden relative w-screen h-screen mt-auto transition-all duration-250 mb-0 ml-0 max-w-screen max-h-screen rounded-none left-0 data-closed:ml-4 data-closed:mb-4 data-closed:max-w-40 data-closed:max-h-28 data-closed:rounded-xl data-closed:left-[var(--panel-left)]"
+            className="overflow-hidden relative w-screen h-screen mt-auto transition-all duration-250 mb-0 ml-0 max-w-screen max-h-screen rounded-none left-0 data-closed:ml-4 data-closed:mb-4 data-closed:max-w-40 data-closed:max-h-28 data-closed:rounded-xl data-closed:left-[var(--panel-left)] transform-gpu"
           >
             <SearchSheet />
             <Transition show={isSearchSheetOpen} appear>
