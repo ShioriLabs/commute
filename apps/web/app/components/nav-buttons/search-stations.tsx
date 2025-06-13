@@ -31,17 +31,17 @@ export default function SearchStationsButton({ className }: Props) {
       >
         <Transition show={!isSearchSheetOpen}>
           <TransitionChild>
-            <div className="absolute -bottom-4 -right-4 rounded-full bg-slate-100 p-4 z-[1] ease-in-out translate-y-0 data-closed:translate-y-full transition-transform data-enter:delay-200 transform-gpu">
+            <div className="absolute -bottom-4 -right-4 rounded-full bg-slate-100 p-4 z-[1] ease-in-out translate-y-0 data-closed:translate-y-full transition-transform data-enter:delay-200 transform-gpu duration-200">
               <TransitionChild>
                 <MagnifyingGlassIcon className="w-12 h-12 translate-y-0 data-closed:translate-y-4 ease-in-out data-enter:delay-200 transform-gpu" />
               </TransitionChild>
             </div>
           </TransitionChild>
           <TransitionChild>
-            <b className="z-[2] translate-y-0 data-closed:-translate-y-[200%] ease-in-out transition-transform data-enter:delay-150 transform-gpu">Cari</b>
+            <b className="z-[2] translate-y-0 data-closed:-translate-y-[200%] ease-in-out transition-transform data-enter:delay-150 transform-gpu duration-200">Cari</b>
           </TransitionChild>
           <TransitionChild>
-            <span className="text-xl z-[2] translate-y-0 data-closed:-translate-y-[250%] ease-in-out transition-transform data-enter:delay-150 transform-gpu">Stasiun</span>
+            <span className="text-xl z-[2] translate-y-0 data-closed:-translate-y-[250%] ease-in-out transition-transform data-enter:delay-150 transform-gpu duration-200">Stasiun</span>
           </TransitionChild>
         </Transition>
       </button>
