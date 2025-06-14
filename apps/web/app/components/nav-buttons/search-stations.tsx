@@ -1,6 +1,6 @@
 import { Dialog, DialogBackdrop, DialogPanel, Transition, TransitionChild } from '@headlessui/react'
 import { MagnifyingGlassIcon } from '@heroicons/react/20/solid'
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import SearchSheet from './search-sheet'
 
 interface Props {
@@ -9,6 +9,7 @@ interface Props {
 
 export default function SearchStationsButton({ className }: Props) {
   const [isSearchSheetOpen, setIsSearchSheetOpen] = useState(false)
+  const [originalUrl, setOriginalUrl] = useState('')
   const buttonRef = useRef<HTMLButtonElement>(null)
 
   const handleOpen = () => {
@@ -17,8 +18,53 @@ export default function SearchStationsButton({ className }: Props) {
       document.documentElement.style.setProperty('--panel-left', `${left}px`)
     }
 
+    // Store the current URL before changing it
+    setOriginalUrl(window.location.pathname + window.location.search)
+
+    // Use pushState to create a history entry for the back button
+    window.history.pushState(
+      { modalOpen: true, originalUrl: window.location.pathname + window.location.search },
+      '',
+      '/search'
+    )
+
     setIsSearchSheetOpen(true)
   }
+
+  const handleClose = () => {
+    // Go back in history instead of manually changing URL
+    if (window.history.state?.modalOpen) {
+      window.history.back()
+    } else {
+      // Fallback if state is lost
+      window.history.replaceState(
+        { ...window.history.state, modalOpen: false },
+        '',
+        originalUrl
+      )
+    }
+
+    setIsSearchSheetOpen(false)
+  }
+
+  // Handle browser navigation
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      // If we're popping back from the search modal state
+      if (event.state?.modalOpen && isSearchSheetOpen) {
+        // This is moving forward to search, ignore
+        return
+      }
+
+      // If modal is open and we're going back, close it
+      if (isSearchSheetOpen) {
+        setIsSearchSheetOpen(false)
+      }
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [isSearchSheetOpen])
 
   return (
     <div>
@@ -45,8 +91,8 @@ export default function SearchStationsButton({ className }: Props) {
           </TransitionChild>
         </Transition>
       </button>
-      <Dialog open={isSearchSheetOpen} onClose={() => setIsSearchSheetOpen(false)} className="relative z-50">
-        <DialogBackdrop transition className="fixed inset-0 bg-white/30 duration-200 ease-out data-closed:opacity-0 hidden" />
+      <Dialog open={isSearchSheetOpen} onClose={handleClose} className="relative z-50">
+        <DialogBackdrop transition className="fixed inset-0 bg-white/90 duration-200 ease-out data-closed:opacity-0" />
         <div className="fixed inset-0 flex w-screen">
           <DialogPanel
             transition
