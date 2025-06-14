@@ -16,6 +16,7 @@ export interface ScheduleSchema {
 export type Schedule = Selectable<ScheduleSchema>
 export type NewSchedule = Insertable<ScheduleSchema>
 export type UpdatingSchedule = Updateable<ScheduleSchema>
+
 export interface ScheduleWithLineInfo extends Schedule {
   line: Line | null
 }

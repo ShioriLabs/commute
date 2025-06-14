@@ -1,4 +1,4 @@
-import type { ColumnType, Insertable, Selectable } from 'kysely'
+import type { ColumnType, Insertable, Selectable, Updateable } from 'kysely'
 
 export interface StationLineSchema {
   id: string
@@ -11,4 +11,4 @@ export interface StationLineSchema {
 
 export type StationLine = Selectable<StationLineSchema>
 export type NewStationLine = Insertable<StationLineSchema>
-export type UpdatingStationLine = Insertable<StationLineSchema>
+export type UpdatingStationLine = Updateable<StationLineSchema>
