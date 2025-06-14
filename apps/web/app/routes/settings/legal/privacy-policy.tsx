@@ -55,7 +55,7 @@ export default function PrivacyPolicySettingsPage() {
             <li>Mengatur prioritas jalan berkembangnya Aplikasi</li>
             <li>Melindungi Aplikasi dari serangan siber</li>
           </ul><br />
-          <p>Kami tidak akan menggunakan data tersebut untuk iklan, pelacakan, dan dijual kepada pihak ketiga</p>
+          <p>Kami tidak akan menggunakan data tersebut untuk tujuan iklan, pelacakan, maupun menjualnya kepada pihak ketiga.</p>
           <br />
           <h2 className="font-bold text-base">3. Penyimpanan dan Keamanan</h2>
           <p>

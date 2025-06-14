@@ -29,7 +29,7 @@ export default function LegalSettingsPage() {
           <SettingsItem to="/settings/legal/privacy-policy">
             Kebijakan Privasi
           </SettingsItem>
-          <SettingsItem to="#">
+          <SettingsItem to="/settings/legal/terms-conditions">
             Syarat dan Ketentuan
           </SettingsItem>
         </ul>
