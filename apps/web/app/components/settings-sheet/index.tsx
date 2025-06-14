@@ -29,17 +29,16 @@ export default function SettingsSheet() {
         <div className="flex gap-4 items-center justify-between">
           <DialogTitle className="font-bold text-2xl">Pengaturan</DialogTitle>
           <CloseButton
-            aria-label="Tutup halaman pencarian"
+            aria-label="Tutup halaman pengaturan"
             className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
             aria-expanded="false"
-            aria-controls="search-input"
           >
             <XMarkIcon />
           </CloseButton>
         </div>
       </div>
       <ul className="flex flex-col mt-4 max-w-3xl mx-auto bg-white">
-        <SettingsItem to="#">
+        <SettingsItem to="/settings/saved-stations">
           <BookmarkIcon className="w-6 h-6" />
           Stasiun Disimpan
         </SettingsItem>

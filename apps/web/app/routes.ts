@@ -5,6 +5,7 @@ export default [
     index('routes/home.tsx'),
     route('search', 'routes/search.tsx'),
     route('station/:operator/:code', 'routes/station.tsx'),
-    route('settings', 'routes/settings/index.tsx')
+    route('settings', 'routes/settings/index.tsx'),
+    route('settings/saved-stations', 'routes/settings/saved-stations.tsx')
   ])
 ] satisfies RouteConfig
