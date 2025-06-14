@@ -145,7 +145,7 @@ export default function SettingsPage() {
   return (
     <main className="bg-white w-screen h-full overflow-y-auto pb-4">
       <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto bg-white">
-        <div className="flex gap-3 items-center">
+        <div className="flex gap-3 items-center -ml-2">
           <button
             aria-label="Kembali"
             className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
