@@ -23,7 +23,7 @@ export default function LegalSettingsPage() {
           <h1 className="font-bold text-2xl">Legal & Atribusi</h1>
         </div>
       </div>
-      <article className="mt-8 border-b-2 border-b-slate-200">
+      <article className="mt-8 border-b-2 border-b-slate-200 max-w-3xl mx-auto">
         <h1 className="px-8 text-slate-700">Hal-Hal Legal</h1>
         <ul>
           <SettingsItem to="/settings/legal/privacy-policy">
@@ -34,7 +34,7 @@ export default function LegalSettingsPage() {
           </SettingsItem>
         </ul>
       </article>
-      <article className="mt-8">
+      <article className="mt-8 max-w-3xl mx-auto">
         <h1 className="px-8 text-slate-700">Atribusi</h1>
         <ul>
           <SettingsItem to="#">

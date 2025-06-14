@@ -20,29 +20,31 @@ export default function SettingsSheet() {
           </CloseButton>
         </div>
       </div>
-      <ul className="flex flex-col mt-4 max-w-3xl mx-auto bg-white">
-        <SettingsItem to="/settings/saved-stations">
-          <BookmarkIcon className="w-6 h-6" />
-          Stasiun Disimpan
-        </SettingsItem>
-        <SettingsItem to="/settings/manage-data">
-          <ArchiveBoxIcon className="w-6 h-6" />
-          Atur Data
-        </SettingsItem>
-        <SettingsItem to="/settings/legal">
-          <DocumentIcon className="w-6 h-6" />
-          Legal & Atribusi
-        </SettingsItem>
-        <SettingsItem to="#">
-          <InformationCircleIcon className="w-6 h-6" />
-          Tentang Commute
-        </SettingsItem>
-      </ul>
-      <span className="block mt-8 px-8 font-mono text-slate-500">
-        @commute/web
-        {' '}
-        {__APP_VERSION__}
-      </span>
+      <div className="mt-4 max-w-3xl mx-auto bg-white">
+        <ul className="flex flex-col">
+          <SettingsItem to="/settings/saved-stations">
+            <BookmarkIcon className="w-6 h-6" />
+            Stasiun Disimpan
+          </SettingsItem>
+          <SettingsItem to="/settings/manage-data">
+            <ArchiveBoxIcon className="w-6 h-6" />
+            Atur Data
+          </SettingsItem>
+          <SettingsItem to="/settings/legal">
+            <DocumentIcon className="w-6 h-6" />
+            Legal & Atribusi
+          </SettingsItem>
+          <SettingsItem to="#">
+            <InformationCircleIcon className="w-6 h-6" />
+            Tentang Commute
+          </SettingsItem>
+        </ul>
+        <span className="block mt-8 px-8 font-mono text-slate-500">
+          @commute/web
+          {' '}
+          {__APP_VERSION__}
+        </span>
+      </div>
     </section>
   )
 }

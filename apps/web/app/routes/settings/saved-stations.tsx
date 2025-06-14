@@ -139,12 +139,12 @@ export default function SavedStationsSettingsPage() {
       </div>
       {!isReady
         ? (
-            <div className="flex items-center justify-center mt-4 p-8">
+            <div className="flex items-center justify-center mt-4 p-8 max-w-3xl mx-auto">
               <div className="rounded-full border-4 border-slate-600 border-t-transparent w-12 h-12 m-auto animate-spin" aria-label="Memuat data..." />
             </div>
           )
         : (
-            <ul>
+            <ul className="max-w-3xl mx-auto">
               {stations.length > 0
                 ? (
                     stations.map(station => (

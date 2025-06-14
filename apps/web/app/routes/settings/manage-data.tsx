@@ -146,7 +146,7 @@ export default function ManageDataSettingsPage() {
           <h1 className="font-bold text-2xl">Atur Data</h1>
         </div>
       </div>
-      <ul>
+      <ul className="max-w-3xl mx-auto">
         <DataEntryItem
           title="Riwayat Pencarian"
           subtitle={recentlySearchedCount > 0 ? `${recentlySearchedCount} item` : 'Riwayat pencarian kosong'}
