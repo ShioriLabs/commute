@@ -1,7 +1,7 @@
 import { Dialog, DialogBackdrop, DialogPanel, Transition, TransitionChild } from '@headlessui/react'
 import { MagnifyingGlassIcon } from '@heroicons/react/20/solid'
 import { useRef, useState, useEffect } from 'react'
-import SearchSheet from './search-sheet'
+import SearchSheet from '../search-sheet'
 
 interface Props {
   className?: string
