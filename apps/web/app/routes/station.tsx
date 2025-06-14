@@ -115,8 +115,6 @@ export default function StationPage({ params }: Route.ComponentProps) {
         ? (
             <div className="-mt-20 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
               <div className="animate-pulse w-full h-72 bg-slate-200 rounded-lg" />
-              <div className="animate-pulse w-full h-64 bg-slate-200 rounded-lg" />
-              <div className="animate-pulse w-full h-96 bg-slate-200 rounded-lg" />
             </div>
           )
         : (
