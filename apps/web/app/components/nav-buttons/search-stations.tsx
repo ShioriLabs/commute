@@ -84,10 +84,20 @@ export default function SearchStationsButton({ className }: Props) {
             </div>
           </TransitionChild>
           <TransitionChild>
-            <b className="z-[2] translate-y-0 data-closed:-translate-y-[200%] ease-in-out transition-transform data-enter:delay-150 transform-gpu duration-200">Cari</b>
+            <b
+              className="z-[2] translate-y-0 data-closed:-translate-y-[200%] ease-in-out transition-transform data-enter:delay-150 transform-gpu duration-200"
+            >
+              Temukan
+            </b>
           </TransitionChild>
           <TransitionChild>
-            <span className="text-xl z-[2] translate-y-0 data-closed:-translate-y-[250%] ease-in-out transition-transform data-enter:delay-150 transform-gpu duration-200">Stasiun</span>
+            <span
+              className="text-lg leading-tight z-[2] translate-y-0 data-closed:-translate-y-[250%] ease-in-out transition-transform data-enter:delay-150 transform-gpu duration-200"
+            >
+              Stasiun
+              <br />
+              & Lainnya
+            </span>
           </TransitionChild>
         </Transition>
       </button>
