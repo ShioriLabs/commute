@@ -7,7 +7,8 @@ import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
 import { levenshteinDistance } from 'utils/levenshtein'
 import { CloseButton, DialogTitle } from '@headlessui/react'
-import { getForegroundColor } from 'utils/colors'
+import type { Searchable } from 'models/searchable'
+import SearchableItem from './searchable-item'
 
 function HighlightedStationList({ title, stationIDs, className }: { title: string, stationIDs: string[], className?: string }) {
   const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher)
@@ -57,29 +58,52 @@ export default function SearchSheet() {
   const [recentlySearched, setRecentlySearched] = useState<string[]>([])
   const searchInputRef = useRef<HTMLInputElement>(null)
 
-  const filteredStations = useMemo(() => {
-    if (stations?.data === undefined || searchQuery.length < 2) return []
+  const searchables = useMemo(() => {
+    const _searchables: Searchable[] = []
+    if (stations && stations.data) {
+      for (const station of stations.data) {
+        _searchables.push({
+          type: 'STATION',
+          title: station.formattedName || station.name,
+          subtitle: station.operator.name,
+          to: `/station/${station.operator.code}/${station.code}`,
+          keywords: [
+            station.name.toLowerCase(),
+            station.code.toLowerCase(),
+            ...(station.formattedName ? [station.formattedName.toLowerCase()] : [])
+          ],
+          body: station.lines,
+          data: {
+            'station-id': station.id
+          }
+        })
+      }
+    }
+
+    return _searchables
+  }, [stations])
+
+  const filteredSearchables = useMemo(() => {
+    if (searchables.length === 0 || searchQuery.length < 2) return []
     const levThreshold = 3
     const query = searchQuery.toLowerCase()
 
-    const scoredStations = stations.data.map((station) => {
-      const name = station.name.toLowerCase()
-      const formattedName = station.formattedName?.toLowerCase() ?? ''
-      const code = station.code.toLowerCase()
-
+    const scoredStations = searchables.map((searchable) => {
       let score = Infinity
+      const keywords = searchable.keywords
+      for (const keyword of keywords) {
+        if (score === 0) break
 
-      if (name.includes(query) || formattedName.includes(query) || code.includes(query)) {
-        score = 0
-      } else {
-        score = Math.min(
-          levenshteinDistance(name, query),
-          levenshteinDistance(formattedName, query),
-          levenshteinDistance(code, query)
-        )
+        if (keyword.includes(query)) {
+          score = 0
+        }
+
+        const levScore = levenshteinDistance(keyword, query)
+        if (levScore < score) score = levScore
       }
+
       return {
-        ...station,
+        ...searchable,
         score
       }
     }).filter((station) => {
@@ -89,7 +113,7 @@ export default function SearchSheet() {
       const aScore = a.score
       const bScore = b.score
       if (aScore === bScore) {
-        return a.name.localeCompare(b.name)
+        return a.title.localeCompare(b.title)
       }
       return aScore - bScore
     })
@@ -185,41 +209,20 @@ export default function SearchSheet() {
             </ul>
           )
         : null}
-      {filteredStations.length > 0
+      {filteredSearchables.length > 0
         ? (
             <ul className="mt-4 max-w-3xl mx-auto">
-              {filteredStations.map(station => (
-                <li key={station.id}>
-                  <Link
-                    to={`/station/${station.operator.code}/${station.code}`}
-                    className="px-8 py-4 flex flex-col gap-1 min-h-24 text-lg"
-                    data-station-id={station.id}
-                    onClick={handleSearchClick}
-                    replace
-                  >
-                    <b>
-                      { station.formattedName }
-                      &nbsp;&nbsp;
-                      <span className="text-sm font-semibold text-gray-600">{station.operator.name}</span>
-                    </b>
-                    { station.lines.length > 0
-                      ? (
-                          <ul className="flex flex-row gap-1 flex-wrap">
-                            {station.lines.map(line => (
-                              <li key={line.lineCode} className={`text-sm font-semibold px-2.5 py-1 rounded-full text-stone-800 ${getForegroundColor(line.colorCode) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`} style={{ backgroundColor: line.colorCode }}>
-                                {line.name.replace(/Lin /g, '')}
-                              </li>
-                            ))}
-                          </ul>
-                        )
-                      : null}
-                  </Link>
-                </li>
+              {filteredSearchables.map(searchable => (
+                <SearchableItem
+                  key={`${searchable.type}:${searchable.to}`}
+                  searchable={searchable}
+                  onClick={handleSearchClick}
+                />
               ))}
             </ul>
           )
         : null}
-      {searchQuery.length >= 2 && filteredStations.length === 0
+      {searchQuery.length >= 2 && filteredSearchables.length === 0
         ? (
             <div className="w-full h-auto flex items-center justify-center mt-8 flex-col max-w-3xl mx-auto">
               <picture>

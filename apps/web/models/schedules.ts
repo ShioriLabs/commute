@@ -1,3 +1,5 @@
+import type { Line } from './line'
+
 export interface Schedule {
   id: string
   stationId: string
@@ -10,10 +12,7 @@ export interface Schedule {
   updatedAt: string
 }
 
-export interface LineTimetable {
-  name: string
-  lineCode: string
-  colorCode: `#${string}`
+export interface LineTimetable extends Line {
   timetable: {
     boundFor: string
     schedules: Schedule[]
