@@ -36,7 +36,11 @@ function HighlightedStationList({ title, stationIDs, className }: { title: strin
       >
         {filteredStations.map(station => (
           <li key={station.id} className="shrink-0">
-            <Link to={`/station/${station.operator.code}/${station.code}`} className="flex flex-col gap-2 w-[54vw] lg:w-48 aspect-[3/4] bg-rose-100 p-4 rounded-xl text-pink-800 shadow-sm shadow-pink-900/15">
+            <Link
+              to={`/station/${station.operator.code}/${station.code}`}
+              className="flex flex-col gap-2 w-[54vw] lg:w-48 aspect-[3/4] bg-rose-100 p-4 rounded-xl text-pink-800 shadow-sm shadow-pink-900/15"
+              replace
+            >
               <span className="font-semibold mt-auto">{ station.formattedName }</span>
               <span>{ station.operator.name }</span>
             </Link>
@@ -186,7 +190,13 @@ export default function SearchSheet() {
             <ul className="mt-4 max-w-3xl mx-auto">
               {filteredStations.map(station => (
                 <li key={station.id}>
-                  <Link to={`/station/${station.operator.code}/${station.code}`} className="px-8 py-4 flex flex-col gap-1 min-h-24 text-lg" data-station-id={station.id} onClick={handleSearchClick}>
+                  <Link
+                    to={`/station/${station.operator.code}/${station.code}`}
+                    className="px-8 py-4 flex flex-col gap-1 min-h-24 text-lg"
+                    data-station-id={station.id}
+                    onClick={handleSearchClick}
+                    replace
+                  >
                     <b>
                       { station.formattedName }
                       &nbsp;&nbsp;
