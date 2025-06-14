@@ -41,26 +41,6 @@ function SavedStationItem({ stationId, isSaved, onSaveButtonClick }: SavedStatio
     return null
   }
 
-  // const handleSaveStationButton = useCallback(() => {
-  //   if (!station.data?.data?.id) return
-  //   const savedStations = JSON.parse(localStorage.getItem('saved-stations') ?? '[]') as string[]
-
-  //   if (!savedStations) {
-  //     localStorage.setItem('saved-stations', JSON.stringify([station.data.data.id]))
-  //     setIsSaved(true)
-  //     return
-  //   }
-
-  //   if (savedStations.includes(station.data.data.id)) {
-  //     const newSavedStations = savedStations.filter(item => item !== (station.data?.data?.id ?? ''))
-  //     localStorage.setItem('saved-stations', JSON.stringify(newSavedStations))
-  //     setIsSaved(false)
-  //   } else {
-  //     localStorage.setItem('saved-stations', JSON.stringify([...savedStations, station.data.data.id]))
-  //     setIsSaved(true)
-  //   }
-  // }, [station.data])
-
   const handleSaveStationButton = useCallback(() => {
     onSaveButtonClick(stationId)
   }, [stationId])
@@ -90,7 +70,7 @@ function SavedStationItem({ stationId, isSaved, onSaveButtonClick }: SavedStatio
   )
 }
 
-export default function SettingsPage() {
+export default function SavedStationsSettingsPage() {
   const [stations, setStations] = useState<SavedStationObject[]>([])
   const [isReady, setIsReady] = useState(false)
   const [isDirty, setIsDirty] = useState(false)

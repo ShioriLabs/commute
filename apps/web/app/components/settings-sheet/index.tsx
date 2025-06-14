@@ -42,9 +42,9 @@ export default function SettingsSheet() {
           <BookmarkIcon className="w-6 h-6" />
           Stasiun Disimpan
         </SettingsItem>
-        <SettingsItem to="#">
+        <SettingsItem to="/settings/manage-data">
           <ArchiveBoxIcon className="w-6 h-6" />
-          Atur Data Tersimpan
+          Atur Data
         </SettingsItem>
         <SettingsItem to="#">
           <DocumentIcon className="w-6 h-6" />
