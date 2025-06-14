@@ -38,13 +38,13 @@ export default function LegalSettingsPage() {
         <h1 className="px-8 text-slate-700">Atribusi</h1>
         <ul>
           <SettingsItem to="#">
+            Atribusi Data
+          </SettingsItem>
+          <SettingsItem to="/settings/legal/oss-attributions">
             Atribusi Kode Sumber Terbuka
           </SettingsItem>
           <SettingsItem to="#">
             Atribusi Aset Kreatif
-          </SettingsItem>
-          <SettingsItem to="#">
-            Atribusi Data
           </SettingsItem>
         </ul>
       </article>
