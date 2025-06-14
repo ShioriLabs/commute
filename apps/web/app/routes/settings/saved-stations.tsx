@@ -12,10 +12,20 @@ export function meta() {
   ]
 }
 
-function SavedStationItem({ stationId }: { stationId: string }) {
+interface SavedStationItemProps {
+  stationId: string
+  isSaved: boolean
+  onSaveButtonClick: (id: string) => void
+}
+
+interface SavedStationObject {
+  id: string
+  isSaved: boolean
+}
+
+function SavedStationItem({ stationId, isSaved, onSaveButtonClick }: SavedStationItemProps) {
   const [operator, code] = stationId.split(/-/g)
   const station = useSWR<StandardResponse<Station>>(new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher)
-  const [isSaved, setIsSaved] = useState(true)
 
   if (station.isLoading) {
     return (
@@ -31,25 +41,29 @@ function SavedStationItem({ stationId }: { stationId: string }) {
     return null
   }
 
+  // const handleSaveStationButton = useCallback(() => {
+  //   if (!station.data?.data?.id) return
+  //   const savedStations = JSON.parse(localStorage.getItem('saved-stations') ?? '[]') as string[]
+
+  //   if (!savedStations) {
+  //     localStorage.setItem('saved-stations', JSON.stringify([station.data.data.id]))
+  //     setIsSaved(true)
+  //     return
+  //   }
+
+  //   if (savedStations.includes(station.data.data.id)) {
+  //     const newSavedStations = savedStations.filter(item => item !== (station.data?.data?.id ?? ''))
+  //     localStorage.setItem('saved-stations', JSON.stringify(newSavedStations))
+  //     setIsSaved(false)
+  //   } else {
+  //     localStorage.setItem('saved-stations', JSON.stringify([...savedStations, station.data.data.id]))
+  //     setIsSaved(true)
+  //   }
+  // }, [station.data])
+
   const handleSaveStationButton = useCallback(() => {
-    if (!station.data?.data?.id) return
-    const savedStations = JSON.parse(localStorage.getItem('saved-stations') ?? '[]') as string[]
-
-    if (!savedStations) {
-      localStorage.setItem('saved-stations', JSON.stringify([station.data.data.id]))
-      setIsSaved(true)
-      return
-    }
-
-    if (savedStations.includes(station.data.data.id)) {
-      const newSavedStations = savedStations.filter(item => item !== (station.data?.data?.id ?? ''))
-      localStorage.setItem('saved-stations', JSON.stringify(newSavedStations))
-      setIsSaved(false)
-    } else {
-      localStorage.setItem('saved-stations', JSON.stringify([...savedStations, station.data.data.id]))
-      setIsSaved(true)
-    }
-  }, [station.data])
+    onSaveButtonClick(stationId)
+  }, [stationId])
 
   return (
     <li>
@@ -77,8 +91,9 @@ function SavedStationItem({ stationId }: { stationId: string }) {
 }
 
 export default function SettingsPage() {
-  const [stations, setStations] = useState<string[]>([])
+  const [stations, setStations] = useState<SavedStationObject[]>([])
   const [isReady, setIsReady] = useState(false)
+  const [isDirty, setIsDirty] = useState(false)
 
   useEffect(() => {
     const savedStationsRaw = localStorage.getItem('saved-stations')
@@ -96,7 +111,7 @@ export default function SettingsPage() {
         return
       }
 
-      setStations(parsedSavedStations as string[])
+      setStations((parsedSavedStations as string[]).map(stat => ({ id: stat, isSaved: true })))
       setIsReady(true)
     } catch (e) {
       if (e instanceof SyntaxError) {
@@ -105,6 +120,27 @@ export default function SettingsPage() {
       setIsReady(true)
     }
   }, [])
+
+  useEffect(() => {
+    return () => {
+      if (isDirty) {
+        const committed = stations.filter(station => station.isSaved).map(station => station.id)
+        localStorage.setItem('saved-stations', JSON.stringify(committed))
+      }
+    }
+  }, [isDirty, stations])
+
+  const handleSaveStationButton = (id: string) => {
+    setStations(prevStations =>
+      prevStations.map(station =>
+        station.id === id
+          ? { ...station, isSaved: !station.isSaved }
+          : station
+      )
+    )
+
+    setIsDirty(true)
+  }
 
   return (
     <main className="bg-white w-screen h-full overflow-y-auto pb-4">
@@ -119,10 +155,11 @@ export default function SettingsPage() {
           </button>
           <h1 className="font-bold text-2xl">Stasiun Disimpan</h1>
         </div>
+        <h2 className="mt-4 text-sm">Perubahan pada stasiun di bawah ini akan disimpan pada saat meninggalkan halaman ini</h2>
       </div>
       {!isReady
         ? (
-            <div className="flex items-center justify-center mt-8 p-8">
+            <div className="flex items-center justify-center mt-4 p-8">
               <div className="rounded-full border-4 border-slate-600 border-t-transparent w-12 h-12 m-auto animate-spin" aria-label="Memuat data..." />
             </div>
           )
@@ -131,11 +168,16 @@ export default function SettingsPage() {
               {stations.length > 0
                 ? (
                     stations.map(station => (
-                      <SavedStationItem stationId={station} key={station} />
+                      <SavedStationItem
+                        stationId={station.id}
+                        key={station.id}
+                        onSaveButtonClick={handleSaveStationButton}
+                        isSaved={station.isSaved}
+                      />
                     ))
                   )
                 : (
-                    <li>Tidak ada stasiun disimpan</li>
+                    <li className="px-8 py-4 font-bold">Tidak ada stasiun disimpan</li>
                   )}
             </ul>
           )}
