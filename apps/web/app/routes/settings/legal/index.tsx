@@ -43,7 +43,7 @@ export default function LegalSettingsPage() {
           <SettingsItem to="/settings/legal/oss-attributions">
             Atribusi Kode Sumber Terbuka
           </SettingsItem>
-          <SettingsItem to="#">
+          <SettingsItem to="/settings/legal/creative-assets-attributions">
             Atribusi Aset Kreatif
           </SettingsItem>
         </ul>
