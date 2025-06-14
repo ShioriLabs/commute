@@ -12,6 +12,7 @@ export default [
     route('settings/legal/privacy-policy', 'routes/settings/legal/privacy-policy.tsx'),
     route('settings/legal/terms-conditions', 'routes/settings/legal/terms-conditions.tsx'),
     route('settings/legal/oss-attributions', 'routes/settings/legal/oss-attributions.tsx'),
-    route('settings/legal/creative-assets-attributions', 'routes/settings/legal/creative-assets-attributions.tsx')
+    route('settings/legal/creative-assets-attributions', 'routes/settings/legal/creative-assets-attributions.tsx'),
+    route('settings/legal/data-attributions', 'routes/settings/legal/data-attributions.tsx')
   ])
 ] satisfies RouteConfig

@@ -37,7 +37,7 @@ export default function LegalSettingsPage() {
       <article className="mt-8 max-w-3xl mx-auto">
         <h1 className="px-8 text-slate-700">Atribusi</h1>
         <ul>
-          <SettingsItem to="#">
+          <SettingsItem to="/settings/legal/data-attributions">
             Atribusi Data
           </SettingsItem>
           <SettingsItem to="/settings/legal/oss-attributions">

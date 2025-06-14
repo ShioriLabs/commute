@@ -56,7 +56,7 @@ export default function TermsConditionsSettingsPage() {
           <p>
             <b>PERINGATAN:</b> Lisensi hanya berlaku pada kode sumber Aplikasi ini.
             Untuk ketentuan penggunaan Data, silakan cek <Link to="/settings/legal/data-attributions" className="font-semibold text-blue-500">Atribusi Data</Link>.
-            Untuk ketentuan penggunaan Aset Kreatif (termasuk, tapi tidak terbatas pada, gambar <i>clipart</i>), silakan cek <Link to="/settings/legal/asset-attributions" className="font-semibold text-blue-500">Atribusi Aset Kreatif</Link>
+            Untuk ketentuan penggunaan Aset Kreatif (termasuk, tapi tidak terbatas pada, gambar <i>clipart</i>), silakan cek <Link to="/settings/legal/creative-assets-attributions" className="font-semibold text-blue-500">Atribusi Aset Kreatif</Link>
           </p><br />
           <h2 className="font-bold text-base">3. Data dan Privasi</h2>
           <p>

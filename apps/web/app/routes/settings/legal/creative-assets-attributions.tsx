@@ -33,7 +33,7 @@ export default function CreativeAssetsAttributionsSettingsPage() {
               <article>
                 <h1 className="font-semibold">Irasutoya</h1>
                 <a href="https://www.irasutoya.com/" target="_blank" className="text-blue-500">https://www.irasutoya.com</a>
-                <p>Kami menggunakan beberapa gambar <i>clipart</i> dari Irasutoya</p>
+                <p>Kami menggunakan beberapa gambar <i>clipart</i> dari Irasutoya sesuai dengan ketentuan penggunaan yang berlaku</p>
                 <p>
                   © Takashi Mifune<br />
                   Lisensi lengkap bisa dilihat di <a href="https://www.irasutoya.com/p/terms.html" target="_blank" className="text-blue-500">https://www.irasutoya.com/p/terms.html</a>
