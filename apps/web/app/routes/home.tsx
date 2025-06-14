@@ -99,7 +99,7 @@ export default function HomePage() {
             <>
               {stations.length > 0
                 ? (
-                    <ul className="px-4 pt-8 flex flex-col gap-8 pb-36 max-w-3xl mx-auto" aria-label="Daftar stasiun tersimpan">
+                    <ul className="px-4 pt-8 flex flex-col gap-8 pb-42 max-w-3xl mx-auto" aria-label="Daftar stasiun tersimpan">
                       {stations.map(station => (
                         <StationCard key={station} stationId={station} />
                       ))}
