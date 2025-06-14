@@ -5,7 +5,7 @@ import { useMemo } from 'react'
 
 export function meta() {
   return [
-    { title: 'Stasiun Tersimpan - Commute' },
+    { title: 'Atur Data - Commute' },
     { name: 'theme-color', content: '#FFFFFF' }
   ]
 }

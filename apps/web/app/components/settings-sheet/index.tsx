@@ -1,26 +1,9 @@
 import { CloseButton, DialogTitle } from '@headlessui/react'
-import { ArchiveBoxIcon, BookmarkIcon, ChevronRightIcon, DocumentIcon, InformationCircleIcon } from '@heroicons/react/20/solid'
+import { ArchiveBoxIcon, BookmarkIcon, DocumentIcon, InformationCircleIcon } from '@heroicons/react/20/solid'
 import { XMarkIcon } from '@heroicons/react/24/outline'
-import type { ReactNode } from 'react'
-import { Link, type To } from 'react-router'
+import SettingsItem from './settings-item'
 
 declare const __APP_VERSION__: string
-
-interface SettingsItemProps {
-  children: ReactNode
-  to: To
-}
-
-function SettingsItem({ children, to }: SettingsItemProps) {
-  return (
-    <li>
-      <Link to={to} className="px-8 py-6 text-lg font-semibold w-full flex items-center gap-3">
-        {children}
-        <ChevronRightIcon className="ml-auto w-8 h-8" />
-      </Link>
-    </li>
-  )
-}
 
 export default function SettingsSheet() {
   return (
@@ -46,7 +29,7 @@ export default function SettingsSheet() {
           <ArchiveBoxIcon className="w-6 h-6" />
           Atur Data
         </SettingsItem>
-        <SettingsItem to="#">
+        <SettingsItem to="/settings/legals-attributions">
           <DocumentIcon className="w-6 h-6" />
           Legal & Atribusi
         </SettingsItem>

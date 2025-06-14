@@ -7,6 +7,7 @@ export default [
     route('station/:operator/:code', 'routes/station.tsx'),
     route('settings', 'routes/settings/index.tsx'),
     route('settings/saved-stations', 'routes/settings/saved-stations.tsx'),
-    route('settings/manage-data', 'routes/settings/manage-data.tsx')
+    route('settings/manage-data', 'routes/settings/manage-data.tsx'),
+    route('settings/legals-attributions', 'routes/settings/legals-attributions.tsx')
   ])
 ] satisfies RouteConfig
