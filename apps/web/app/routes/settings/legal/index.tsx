@@ -8,7 +8,7 @@ export function meta() {
   ]
 }
 
-export default function ManageDataSettingsPage() {
+export default function LegalSettingsPage() {
   return (
     <main className="bg-white w-screen h-full overflow-y-auto pb-4">
       <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto bg-white">
@@ -26,7 +26,7 @@ export default function ManageDataSettingsPage() {
       <article className="mt-8 border-b-2 border-b-slate-200">
         <h1 className="px-8 text-slate-700">Hal-Hal Legal</h1>
         <ul>
-          <SettingsItem to="#">
+          <SettingsItem to="/settings/legal/privacy-policy">
             Kebijakan Privasi
           </SettingsItem>
           <SettingsItem to="#">

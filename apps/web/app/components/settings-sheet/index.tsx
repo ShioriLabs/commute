@@ -29,7 +29,7 @@ export default function SettingsSheet() {
           <ArchiveBoxIcon className="w-6 h-6" />
           Atur Data
         </SettingsItem>
-        <SettingsItem to="/settings/legals-attributions">
+        <SettingsItem to="/settings/legal">
           <DocumentIcon className="w-6 h-6" />
           Legal & Atribusi
         </SettingsItem>

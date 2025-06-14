@@ -8,6 +8,7 @@ export default [
     route('settings', 'routes/settings/index.tsx'),
     route('settings/saved-stations', 'routes/settings/saved-stations.tsx'),
     route('settings/manage-data', 'routes/settings/manage-data.tsx'),
-    route('settings/legals-attributions', 'routes/settings/legals-attributions.tsx')
+    route('settings/legal', 'routes/settings/legal/index.tsx'),
+    route('settings/legal/privacy-policy', 'routes/settings/legal/privacy-policy.tsx')
   ])
 ] satisfies RouteConfig
