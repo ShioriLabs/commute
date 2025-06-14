@@ -1,13 +1,13 @@
 import { Dialog, DialogBackdrop, DialogPanel, Transition, TransitionChild } from '@headlessui/react'
-import { MagnifyingGlassIcon } from '@heroicons/react/20/solid'
+import { Cog6ToothIcon } from '@heroicons/react/20/solid'
 import { useRef, useState, useEffect } from 'react'
-import SearchSheet from '../search-sheet'
+import SettingsSheet from '../settings-sheet'
 
 interface Props {
   className?: string
 }
 
-export default function SearchStationsButton({ className }: Props) {
+export default function SettingsButton({ className }: Props) {
   const [isSearchSheetOpen, setIsSearchSheetOpen] = useState(false)
   const [originalUrl, setOriginalUrl] = useState('')
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -25,7 +25,7 @@ export default function SearchStationsButton({ className }: Props) {
     window.history.pushState(
       { modalOpen: true, originalUrl: window.location.pathname + window.location.search },
       '',
-      '/search'
+      '/settings'
     )
 
     setIsSearchSheetOpen(true)
@@ -79,7 +79,7 @@ export default function SearchStationsButton({ className }: Props) {
           <TransitionChild>
             <div className="absolute -bottom-4 -right-4 rounded-full bg-slate-100 p-4 z-[1] ease-in-out translate-y-0 data-closed:translate-y-full transition-transform data-enter:delay-200 transform-gpu duration-200">
               <TransitionChild>
-                <MagnifyingGlassIcon className="w-12 h-12 translate-y-0 data-closed:translate-y-4 ease-in-out data-enter:delay-200 transform-gpu text-slate-700" />
+                <Cog6ToothIcon className="w-12 h-12 translate-y-0 data-closed:translate-y-4 ease-in-out data-enter:delay-200 transform-gpu text-slate-700" />
               </TransitionChild>
             </div>
           </TransitionChild>
@@ -87,16 +87,14 @@ export default function SearchStationsButton({ className }: Props) {
             <b
               className="z-[2] translate-y-0 data-closed:-translate-y-[200%] ease-in-out transition-transform data-enter:delay-150 transform-gpu duration-200"
             >
-              Temukan
+              Pengaturan
             </b>
           </TransitionChild>
           <TransitionChild>
             <span
               className="text-lg leading-tight z-[2] translate-y-0 data-closed:-translate-y-[250%] ease-in-out transition-transform data-enter:delay-150 transform-gpu duration-200"
             >
-              Stasiun
-              <br />
-              & Lainnya
+              Aplikasi
             </span>
           </TransitionChild>
         </Transition>
@@ -108,7 +106,7 @@ export default function SearchStationsButton({ className }: Props) {
             transition
             className="overflow-hidden relative w-screen h-screen mt-auto transition-all duration-250 ease-in-out mb-0 ml-0 max-w-screen max-h-screen rounded-none left-0 data-closed:ml-4 data-closed:mb-4 data-closed:max-w-40 data-closed:max-h-28 data-closed:rounded-xl data-closed:left-[var(--panel-left)] transform-gpu"
           >
-            <SearchSheet />
+            <SettingsSheet />
             <Transition show={isSearchSheetOpen} appear>
               <div className="block w-screen h-screen absolute top-0 bg-white opacity-0 pointer-events-none data-closed:opacity-100 transition-all duration-250" />
             </Transition>
