@@ -4,7 +4,7 @@ export interface StationLineSchema {
   id: string
   stationId: string
   lineCode: string
-  stationNumber: number
+  stationNumber: ColumnType<string, string | undefined, string | undefined>
   createdAt: ColumnType<Date, string | undefined, never>
   updatedAt: ColumnType<Date, string | undefined, string | undefined>
 }

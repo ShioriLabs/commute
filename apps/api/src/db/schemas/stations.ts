@@ -12,6 +12,7 @@ export interface StationSchema {
   createdAt: ColumnType<Date, string | undefined, never>
   updatedAt: ColumnType<Date, string | undefined, string | undefined>
   timetableSynced: ColumnType<number, number | undefined, number | undefined>
+  score: ColumnType<number, number | undefined, number | undefined>
 }
 
 export type Station = Selectable<StationSchema>
