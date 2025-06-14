@@ -1,3 +1,6 @@
+import type { Line } from './line'
+import type { Operator } from './operator'
+
 export interface Station {
   id: string
   name: string
@@ -5,15 +8,8 @@ export interface Station {
   code: string
   region: string
   regionCode: 'CGK' | 'BDO' | 'YIA' | 'NUL'
-  operator: {
-    code: 'KCI' | 'MRTJ' | 'NUL'
-    name: string
-  }
-  lines: {
-    name: string
-    lineCode: string
-    colorCode: string
-  }[]
+  operator: Operator
+  lines: Line[]
   createdAt: Date
   updatedAt: Date
   timetableSynced: number

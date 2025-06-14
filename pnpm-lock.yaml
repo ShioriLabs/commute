@@ -62,6 +62,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@commute/constants':
+        specifier: workspace:../constants
+        version: link:../constants
       '@headlessui/react':
         specifier: ^2.2.4
         version: 2.2.4(react-dom@19.1.0(react@19.1.0))(react@19.1.0)

@@ -1,5 +1,5 @@
 {
-  "name": "vite-project",
+  "name": "@commute/web",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,6 +9,7 @@
     "typecheck": "react-router typegen && tsc"
   },
   "dependencies": {
+    "@commute/constants": "workspace:../constants",
     "@headlessui/react": "^2.2.4",
     "@heroicons/react": "^2.2.0",
     "@react-router/node": "^7.1.5",
