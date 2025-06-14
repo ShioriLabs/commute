@@ -34,7 +34,7 @@ export default function SettingsSheet() {
             <DocumentIcon className="w-6 h-6" />
             Legal & Atribusi
           </SettingsItem>
-          <SettingsItem to="#">
+          <SettingsItem to="/settings/about">
             <InformationCircleIcon className="w-6 h-6" />
             Tentang Commute
           </SettingsItem>
