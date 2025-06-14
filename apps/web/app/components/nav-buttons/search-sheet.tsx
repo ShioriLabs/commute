@@ -131,7 +131,7 @@ export default function SearchSheet() {
     <section className="bg-white w-screen h-full overflow-y-auto pb-4">
       <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto bg-white">
         <div className="flex gap-4 items-center justify-between">
-          <DialogTitle className="font-bold text-2xl">Cari Stasiun</DialogTitle>
+          <DialogTitle className="font-bold text-2xl">Temukan</DialogTitle>
           <CloseButton
             aria-label="Tutup halaman pencarian"
             className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
@@ -143,12 +143,12 @@ export default function SearchSheet() {
         </div>
         <input
           id="search-input"
-          className="mt-4 w-full px-4 py-2 rounded-xl bg-stone-100/80 border-2 border-stone-200/40 focus:outline-stone-300"
+          className="mt-4 w-full px-4 py-2 rounded-xl bg-stone-100/80 border-2 border-stone-200/40 focus:outline-stone-300/60"
           type="text"
-          placeholder="Masukkan nama stasiun atau kode stasiun"
+          placeholder="Mau cari apa?"
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
-          aria-label="Cari stasiun berdasarkan nama atau kode"
+          aria-label="Cari sesuatu berdasarkan kata kunci"
           ref={searchInputRef}
         />
       </div>
