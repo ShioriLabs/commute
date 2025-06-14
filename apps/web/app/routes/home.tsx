@@ -8,6 +8,7 @@ import { fetcher } from 'utils/fetcher'
 import SearchStationsButton from '~/components/nav-buttons/search-stations'
 import { ChevronRightIcon } from '@heroicons/react/20/solid'
 import { Link } from 'react-router'
+import SettingsButton from '~/components/nav-buttons/settings'
 
 export function meta() {
   return [
@@ -131,6 +132,7 @@ export default function HomePage() {
       <nav className="fixed bottom-0 py-4 bg-gradient-to-t from-10% from-black/20 w-screen" aria-label="Navigasi utama">
         <div className="w-full max-w-3xl mx-auto flex gap-4">
           <SearchStationsButton className="ml-4" />
+          <SettingsButton className="mr-4 hidden" />
         </div>
       </nav>
     </main>
