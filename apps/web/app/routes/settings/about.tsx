@@ -13,7 +13,7 @@ declare const __APP_VERSION__: string
 
 export default function AboutSettingsPage() {
   return (
-    <main className="bg-white w-screen h-full overflow-y-auto pb-4">
+    <main className="bg-white w-screen h-full overflow-y-auto pb-4 min-h-screen">
       <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto bg-white">
         <div className="flex gap-3 items-center -ml-2">
           <button

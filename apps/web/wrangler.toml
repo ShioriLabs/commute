@@ -2,5 +2,4 @@ name = "commute-web"
 compatibility_date = "2025-06-11"
 
 [assets]
-directory = "build/client"
 not_found_handling = "single-page-application"
