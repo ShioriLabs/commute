@@ -13,7 +13,7 @@ export default function SettingsPage() {
   const navigate = useNavigate()
 
   return (
-    <main>
+    <main className="bg-white min-h-screen">
       <Dialog open onClose={() => { navigate('/') }}>
         <SettingsSheet />
       </Dialog>

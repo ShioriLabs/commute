@@ -27,6 +27,10 @@ function SavedStationItem({ stationId, isSaved, onSaveButtonClick }: SavedStatio
   const [operator, code] = stationId.split(/-/g)
   const station = useSWR<StandardResponse<Station>>(new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher)
 
+  const handleSaveStationButton = useCallback(() => {
+    onSaveButtonClick(stationId)
+  }, [stationId, onSaveButtonClick])
+
   if (station.isLoading) {
     return (
       <li className="animate-pulse">
@@ -40,10 +44,6 @@ function SavedStationItem({ stationId, isSaved, onSaveButtonClick }: SavedStatio
   if (station.error || station.data === undefined || station.data.data === undefined) {
     return null
   }
-
-  const handleSaveStationButton = useCallback(() => {
-    onSaveButtonClick(stationId)
-  }, [stationId])
 
   return (
     <li>
@@ -123,7 +123,7 @@ export default function SavedStationsSettingsPage() {
   }
 
   return (
-    <main className="bg-white w-screen h-full overflow-y-auto pb-4">
+    <main className="bg-white w-screen h-full min-h-screen overflow-y-auto pb-4">
       <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto bg-white">
         <div className="flex gap-3 items-center -ml-2">
           <button
