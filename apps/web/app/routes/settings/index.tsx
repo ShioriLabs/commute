@@ -1,5 +1,5 @@
 import SettingsSheet from '~/components/settings-sheet'
-import { Dialog } from '@headlessui/react'
+import { Dialog, DialogPanel } from '@headlessui/react'
 import { useNavigate } from 'react-router'
 
 export function meta() {
@@ -13,9 +13,14 @@ export default function SettingsPage() {
   const navigate = useNavigate()
 
   return (
-    <main className="bg-white min-h-screen">
+    <main>
       <Dialog open onClose={() => { navigate('/') }}>
-        <SettingsSheet />
+        <DialogPanel
+          transition
+          className="overflow-hidden relative w-screen h-screen mt-auto"
+        >
+          <SettingsSheet />
+        </DialogPanel>
       </Dialog>
     </main>
   )
