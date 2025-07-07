@@ -13,11 +13,6 @@ export default function SettingsButton({ className }: Props) {
   const buttonRef = useRef<HTMLButtonElement>(null)
 
   const handleOpen = () => {
-    if (buttonRef.current) {
-      const left = buttonRef.current.getBoundingClientRect().left
-      document.documentElement.style.setProperty('--panel-left', `${left}px`)
-    }
-
     // Store the current URL before changing it
     setOriginalUrl(window.location.pathname + window.location.search)
 
@@ -29,6 +24,25 @@ export default function SettingsButton({ className }: Props) {
     )
 
     setIsSearchSheetOpen(true)
+
+    if (buttonRef.current) {
+      const startRect = buttonRef.current.getBoundingClientRect()
+      const sw = startRect.width
+      const sh = startRect.height
+      const sx = startRect.left
+      const sy = startRect.top
+
+      const ew = window.innerWidth
+      const eh = window.innerHeight
+      const ex = 0
+      const ey = 0
+
+      const dx = sx - ex
+      const dy = sy - ey
+      const dw = sw / ew
+      const dh = sh / eh
+      document.documentElement.style.setProperty('--panel-transform', `translate(${dx}px, ${dy}px) scale(${dw}, ${dh})`)
+    }
   }
 
   const handleClose = () => {
@@ -104,11 +118,11 @@ export default function SettingsButton({ className }: Props) {
         <div className="fixed inset-0 flex w-screen">
           <DialogPanel
             transition
-            className="overflow-hidden relative w-screen h-screen mt-auto transition-all duration-250 ease-in-out mb-0 ml-0 max-w-screen max-h-screen rounded-none left-0 data-closed:ml-4 data-closed:mb-4 data-closed:max-w-40 data-closed:max-h-28 data-closed:rounded-xl data-closed:left-[var(--panel-left)] transform-gpu"
+            className="overflow-hidden relative w-screen h-screen mt-auto transition-all duration-250 transform-gpu ease-out rounded-none data-closed:transform-[var(--panel-transform)] data-closed:rounded-xl origin-top-left"
           >
             <SettingsSheet />
             <Transition show={isSearchSheetOpen} appear>
-              <div className="block w-screen h-screen absolute top-0 bg-white opacity-0 pointer-events-none data-closed:opacity-100 transition-all duration-250" />
+              <div className="block w-screen h-screen absolute top-0 bg-white opacity-0 pointer-events-none data-closed:opacity-100 transition-all duration-300" />
             </Transition>
           </DialogPanel>
         </div>
