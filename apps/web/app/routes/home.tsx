@@ -24,9 +24,9 @@ function StationCard({ stationId }: { stationId: string }) {
 
   if (station.isLoading) {
     return (
-      <li className="animate-pulse">
+      <li className="animate-pulse px-4">
         <article>
-          <div className="h-6 w-64 bg-slate-200 rounded" />
+          <div className="h-6 w-64 mt-4 mx-4 bg-slate-200 rounded" />
           <div className="mt-4 w-full h-[320px] bg-slate-200 rounded-xl" />
         </article>
       </li>
@@ -40,7 +40,7 @@ function StationCard({ stationId }: { stationId: string }) {
   return (
     <li>
       <article>
-        <h1 className="font-bold text-2xl flex">
+        <h1 className="font-bold text-2xl flex px-8 py-6 sticky top-0 bg-rose-50/20 backdrop-blur-2xl z-10">
           <Link to={`/station/${station.data.data.operator.code}/${station.data.data.code}`} className="group flex-grow">
             Stasiun&nbsp;
             { station.data.data.formattedName }
@@ -49,10 +49,10 @@ function StationCard({ stationId }: { stationId: string }) {
         </h1>
         { timetable.isLoading
           ? (
-              <div className="mt-4 w-full h-[320px] bg-slate-200 rounded-xl" />
+              <div className="flex h-[320px] bg-slate-200 rounded-xl mx-4" />
             )
           : (
-              <ul className="mt-4 flex flex-col lg:grid lg:grid-cols-2 gap-4">
+              <ul className="flex flex-col lg:grid lg:grid-cols-2 gap-4 mx-4">
                 {timetable?.data?.data?.map(line => (
                   <LineCard key={line.lineCode} line={line} />
                 ))}
@@ -100,7 +100,7 @@ export default function HomePage() {
             <>
               {stations.length > 0
                 ? (
-                    <ul className="px-4 pt-8 flex flex-col gap-8 pb-42 max-w-3xl mx-auto" aria-label="Daftar stasiun tersimpan">
+                    <ul className="flex flex-col gap-8 pb-42 max-w-3xl mx-auto" aria-label="Daftar stasiun tersimpan">
                       {stations.map(station => (
                         <StationCard key={station} stationId={station} />
                       ))}
@@ -129,7 +129,7 @@ export default function HomePage() {
               <div className="rounded-full border-4 border-slate-600 border-t-transparent w-12 h-12 m-auto animate-spin" aria-label="Memuat data..." />
             </div>
           )}
-      <nav className="fixed bottom-0 py-4 bg-gradient-to-t from-10% from-black/20 w-screen" aria-label="Navigasi utama">
+      <nav className="fixed bottom-0 py-4 bg-gradient-to-t from-10% from-black/20 w-screen z-20" aria-label="Navigasi utama">
         <div className="w-full max-w-3xl mx-auto flex gap-4">
           <SearchStationsButton className="ml-4" />
           <SettingsButton className="mr-4" />
