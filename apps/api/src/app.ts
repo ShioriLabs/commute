@@ -15,7 +15,20 @@ export interface Bindings {
 
 const app = new Hono<{ Bindings: Bindings }>()
 
-app.use('*', cors())
+app.use('*', cors({
+  origin(origin) {
+    if (
+      origin === 'http://localhost:3000'
+      || origin === 'http://localhost:5173'
+      || origin === 'https://commute.shiorilabs.id') {
+      return origin
+    }
+
+    return null
+  },
+  allowMethods: ['GET', 'POST', 'OPTIONS']
+}))
+
 app.route('stations', stations)
 app.route('sync/stations', syncRoutes)
 app.route('cache', cacheRoutes)
