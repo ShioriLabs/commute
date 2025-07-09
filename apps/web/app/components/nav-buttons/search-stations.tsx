@@ -84,7 +84,7 @@ export default function SearchStationsButton({ className }: Props) {
     <div>
       <button
         type="button"
-        className={`bg-white p-4 rounded-xl shadow-2xs w-screen h-screen max-w-44 max-h-32 border-2 border-gray-200 flex flex-col relative overflow-clip select-none text-left ${className ? className : ''}`}
+        className={`bg-white p-4 rounded-xl shadow-2xs w-screen h-screen max-w-44 max-h-32 border-2 border-rose-50 flex flex-col relative overflow-clip select-none text-left cursor-pointer scale-100 lg:hover:scale-105 transition-transform transform-gpu ease-in-out ${className ? className : ''}`}
         aria-label="Cari stasiun"
         onClick={handleOpen}
         ref={buttonRef}
