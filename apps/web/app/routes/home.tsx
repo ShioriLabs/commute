@@ -129,7 +129,7 @@ export default function HomePage() {
               <div className="rounded-full border-4 border-slate-600 border-t-transparent w-12 h-12 m-auto animate-spin" aria-label="Memuat data..." />
             </div>
           )}
-      <nav className="fixed bottom-0 py-4 bg-gradient-to-t from-10% from-black/20 w-screen z-20" aria-label="Navigasi utama">
+      <nav className="fixed bottom-0 py-4 bg-gradient-to-t from-30% from-rose-50/40 w-screen z-20" aria-label="Navigasi utama">
         <div className="w-full max-w-3xl mx-auto flex gap-4">
           <SearchStationsButton className="ml-4 lg:ml-2" />
           <SettingsButton className="mr-4 lg:ml-2" />
