@@ -14,8 +14,8 @@ function getNextSchedules(schedules: Schedule[], limit = 3) {
     const parsedDeparture = parseTime(schedule.estimatedDeparture)
     const diff = parsedDeparture.getTime() - now.getTime()
 
-    // Allow departure that happened within the last 30 seconds
-    if (diff < -30000) continue
+    // Allow departure that happened within the last 1 minute
+    if (diff < -60000) continue
     returning.push(schedule)
   }
 
@@ -24,7 +24,7 @@ function getNextSchedules(schedules: Schedule[], limit = 3) {
 
 function isImmediateDeparture(now: Date, scheduledDeparture: Date) {
   const diff = scheduledDeparture.getTime() - now.getTime()
-  return diff >= -30000 && diff <= 30000
+  return diff >= -60000 && diff <= 30000
 }
 
 interface Props {
