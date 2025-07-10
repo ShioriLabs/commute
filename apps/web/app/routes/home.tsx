@@ -19,10 +19,10 @@ export function meta() {
 
 function StationCard({ stationId }: { stationId: string }) {
   const [operator, code] = stationId.split(/-/g)
-  const station = useSWR<StandardResponse<Station>>(new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher)
-  const timetable = useSWR<StandardResponse<LineGroupedTimetable>>(new URL(`/stations/${operator}/${code}/timetable/grouped`, import.meta.env.VITE_API_BASE_URL).href, fetcher)
+  const station = useSWR<StandardResponse<Station>>(new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher, { shouldRetryOnError: true })
+  const timetable = useSWR<StandardResponse<LineGroupedTimetable>>(new URL(`/stations/${operator}/${code}/timetable/grouped`, import.meta.env.VITE_API_BASE_URL).href, fetcher, { shouldRetryOnError: true })
 
-  if (station.isLoading) {
+  if (station.isLoading && !station.error) {
     return (
       <li className="animate-pulse px-4">
         <article>
