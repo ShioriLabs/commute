@@ -81,7 +81,7 @@ export default function SettingsButton({ className }: Props) {
   }, [isSearchSheetOpen])
 
   return (
-    <div>
+    <>
       <button
         type="button"
         className={`bg-white p-4 rounded-xl shadow-2xs w-screen h-screen max-w-44 max-h-32 border-2 border-rose-50 flex flex-col relative overflow-clip select-none text-left cursor-pointer scale-100 lg:hover:scale-105 transition-transform transform-gpu ease-in-out ${className ? className : ''}`}
@@ -127,6 +127,6 @@ export default function SettingsButton({ className }: Props) {
           </DialogPanel>
         </div>
       </Dialog>
-    </div>
+    </>
   )
 }

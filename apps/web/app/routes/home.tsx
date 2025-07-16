@@ -110,7 +110,7 @@ export default function HomePage() {
                     <div className="w-screen h-screen flex items-center justify-center flex-col p-2" aria-live="polite">
                       <picture>
                         <source srcSet="/img/station.webp" type="image/webp" />
-                        <img src="/img/station.png" alt="Gambar peron stasiun dengan jembatan di atasnya" className="w-48 h-48 aspect-square object-contain" />
+                        <img src="/img/station.png" alt="Gambar peron stasiun dengan jembatan di atasnya" className="w-48 h-48 aspect-square object-contain" fetchPriority="high" />
                       </picture>
                       <span className="text-2xl text-center font-bold mt-0">Belum Ada Stasiun Disimpan</span>
                       <p className="text-center mt-2">
