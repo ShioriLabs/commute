@@ -68,8 +68,8 @@ export default function StationPage({ params }: Route.ComponentProps) {
 
   return (
     <div className="bg-white w-full min-h-screen">
-      <div className="w-full bg-white/40 backdrop-blur sticky top-0 h-48 mask-b-to-100% frosted-glass-mask">
-        <div className="p-8 max-w-3xl mx-auto">
+      <div className="w-full bg-white/40 backdrop-blur sticky top-0 h-48 mask-b-to-100% frosted-glass-mask pointer-events-none z-10">
+        <div className="p-8 max-w-3xl mx-auto pointer-events-auto">
           <div className="flex gap-4 items-center justify-between">
             <div className="flex flex-col">
               {station.isLoading

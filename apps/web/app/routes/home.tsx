@@ -19,10 +19,10 @@ export function meta() {
 
 function StationCard({ stationId }: { stationId: string }) {
   const [operator, code] = stationId.split(/-/g)
-  const station = useSWR<StandardResponse<Station>>(new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher)
-  const timetable = useSWR<StandardResponse<LineGroupedTimetable>>(new URL(`/stations/${operator}/${code}/timetable/grouped`, import.meta.env.VITE_API_BASE_URL).href, fetcher)
+  const station = useSWR<StandardResponse<Station>>(new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher, { shouldRetryOnError: true })
+  const timetable = useSWR<StandardResponse<LineGroupedTimetable>>(new URL(`/stations/${operator}/${code}/timetable/grouped`, import.meta.env.VITE_API_BASE_URL).href, fetcher, { shouldRetryOnError: true })
 
-  if (station.isLoading) {
+  if (station.isLoading && !station.error) {
     return (
       <li className="animate-pulse px-4">
         <article>
@@ -110,7 +110,7 @@ export default function HomePage() {
                     <div className="w-screen h-screen flex items-center justify-center flex-col p-2" aria-live="polite">
                       <picture>
                         <source srcSet="/img/station.webp" type="image/webp" />
-                        <img src="/img/station.png" alt="Gambar peron stasiun dengan jembatan di atasnya" className="w-48 h-48 aspect-square object-contain" />
+                        <img src="/img/station.png" alt="Gambar peron stasiun dengan jembatan di atasnya" className="w-48 h-48 aspect-square object-contain" fetchPriority="high" />
                       </picture>
                       <span className="text-2xl text-center font-bold mt-0">Belum Ada Stasiun Disimpan</span>
                       <p className="text-center mt-2">
@@ -132,7 +132,7 @@ export default function HomePage() {
       <nav className="fixed bottom-0 py-4 bg-gradient-to-t from-30% from-rose-50/40 w-screen z-20" aria-label="Navigasi utama">
         <div className="w-full max-w-3xl mx-auto flex gap-4">
           <SearchStationsButton className="ml-4 lg:ml-2" />
-          <SettingsButton className="mr-4 lg:ml-2" />
+          <SettingsButton className="mr-4 lg:mr-2" />
         </div>
       </nav>
     </main>
