@@ -5,8 +5,10 @@ import { Bindings } from 'app'
 import { KVRepository } from 'db/repositories/kv'
 import { getOperatorByCode } from 'utils/operator'
 import { Line } from 'models/line'
-import { LineGroupedTimetable, Schedule } from 'db/schemas/schedules'
+import { CompactLineGroupedTimetable, LineGroupedTimetable, Schedule } from 'db/schemas/schedules'
 import { getLineByOperator } from 'utils/line'
+import { OPERATORS } from '@commute/constants'
+import { mapSchedule } from 'utils/schedules'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -156,9 +158,25 @@ app.get('/:operator/:stationCode/timetable', async (c) => {
   )
 })
 
+const CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES = new Set([
+  'CKR',
+  'TLM',
+  'CIT',
+  'TB',
+  'BKST',
+  'BKS',
+  'KRI',
+  'CUK',
+  'KLDB',
+  'BUA',
+  'KLD',
+  'JNG'
+])
+
 app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
   const operatorCode = c.req.param('operator')
   const stationCode = c.req.param('stationCode')
+  const compactMode = c.req.query('compact') === '1'
   const operator = getOperatorByCode(operatorCode)
   if (!operator) {
     return c.json(NotFound(`Unknown Operator Code: ${operatorCode}`), 404)
@@ -167,7 +185,7 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
   const stationRepository = new StationRepository(c.env.DB)
 
-  const kvKey = `stations_${operator.code}_${stationCode}_timetable_grouped_${c.env.API_VERSION}`
+  const kvKey = `stations_${operator.code}_${stationCode}_timetable_grouped_${compactMode ? 'compact' : 'full'}_${c.env.API_VERSION}`
 
   const cachedTimetable = await kvRepository.get(kvKey)
   if (cachedTimetable) {
@@ -187,7 +205,7 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
     )
   }
 
-  const timetable: LineGroupedTimetable = []
+  const timetable = compactMode ? ([] as CompactLineGroupedTimetable) : ([] as LineGroupedTimetable)
   const schedules = await stationRepository.getTimetableFromStationId(checkStationResult.station!.id)
   if (schedules.length === 0) {
     return c.json(
@@ -197,6 +215,7 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
   }
 
   const groupedByLineSchedules: Record<string, Line & { schedules: Schedule[] }> = { }
+  const isBekasiInterliningStation = operator.code === OPERATORS.KCI.code && CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES.has(stationCode)
 
   for (const schedule of schedules) {
     const line = getLineByOperator(operator.code, schedule.lineCode)
@@ -215,10 +234,20 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
   for (const line of Object.values(groupedByLineSchedules)) {
     const groupedByBoundFor: Record<string, Schedule[]> = { }
     for (const schedule of line.schedules) {
-      if (groupedByBoundFor[schedule.boundFor]) {
-        groupedByBoundFor[schedule.boundFor]!.push(schedule)
+      const boundFor = schedule.boundFor
+      let via: string | null = null
+      if (isBekasiInterliningStation && boundFor === 'Kampung Bandan') {
+        const trainNo = schedule.tripNumber ?? ''
+        if (trainNo !== '') {
+          if (trainNo.startsWith('6')) via = 'Pasar Senen'
+          else via = 'Manggarai'
+        }
+      }
+      const boundForKey = via ? `${boundFor}:${via}` : boundFor
+      if (groupedByBoundFor[boundForKey]) {
+        groupedByBoundFor[boundForKey]!.push(schedule)
       } else {
-        groupedByBoundFor[schedule.boundFor] = [schedule]
+        groupedByBoundFor[boundForKey] = [schedule]
       }
     }
 
@@ -226,7 +255,13 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
       name: line.name,
       colorCode: line.colorCode,
       lineCode: line.lineCode,
-      timetable: Object.entries(groupedByBoundFor).map(([boundFor, schedules]) => ({ boundFor, schedules })).sort((a, b) => a.boundFor.localeCompare(b.boundFor))
+      timetable: Object
+        .entries(groupedByBoundFor)
+        .map(([key, schedules]) => {
+          const [boundFor, via] = key.split(':')
+          return { boundFor: boundFor!, via: via ?? null, schedules: mapSchedule(schedules, compactMode) }
+        })
+        .sort((a, b) => a.boundFor!.localeCompare(b.boundFor!))
     })
   }
 

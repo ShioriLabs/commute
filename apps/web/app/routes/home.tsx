@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Station } from 'models/stations'
-import type { LineGroupedTimetable } from 'models/schedules'
+import type { CompactLineGroupedTimetable } from 'models/schedules'
 import type { StandardResponse } from '@schema/response'
 import LineCard from '~/components/line-card'
 import useSWR from 'swr'
@@ -9,6 +9,13 @@ import SearchStationsButton from '~/components/nav-buttons/search-stations'
 import { ChevronRightIcon } from '@heroicons/react/20/solid'
 import { Link } from 'react-router'
 import SettingsButton from '~/components/nav-buttons/settings'
+
+const swrConfig = {
+  dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
+  focusThrottleInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
+  revalidateOnFocus: true,
+  shouldRetryOnError: false
+}
 
 export function meta() {
   return [
@@ -19,8 +26,8 @@ export function meta() {
 
 function StationCard({ stationId }: { stationId: string }) {
   const [operator, code] = stationId.split(/-/g)
-  const station = useSWR<StandardResponse<Station>>(new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher, { shouldRetryOnError: true })
-  const timetable = useSWR<StandardResponse<LineGroupedTimetable>>(new URL(`/stations/${operator}/${code}/timetable/grouped`, import.meta.env.VITE_API_BASE_URL).href, fetcher, { shouldRetryOnError: true })
+  const station = useSWR<StandardResponse<Station>>(new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
+  const timetable = useSWR<StandardResponse<CompactLineGroupedTimetable>>(new URL(`/stations/${operator}/${code}/timetable/grouped?compact=1`, import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
 
   if (station.isLoading && !station.error) {
     return (

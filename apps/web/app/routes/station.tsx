@@ -1,13 +1,20 @@
 import type { Station } from 'models/stations'
 import type { StandardResponse } from '@schema/response'
 import type { Route } from './+types/station'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useNavigationType } from 'react-router'
 import { BookmarkIcon, BookmarkSlashIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import type { LineGroupedTimetable } from 'models/schedules'
 import LineCard from '~/components/line-card'
 import { fetcher } from 'utils/fetcher'
 import useSWR from 'swr'
+
+const swrConfig = {
+  dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
+  focusThrottleInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
+  revalidateOnFocus: true,
+  shouldRetryOnError: false
+}
 
 export function meta() {
   return [
@@ -16,12 +23,60 @@ export function meta() {
   ]
 }
 
+function EmptyState({ mode = 'NO_DATA' }: { mode: 'OFFLINE' | 'NO_DATA' }) {
+  const title = mode === 'OFFLINE' ? 'Jaringan Tidak Tersedia' : 'Jadwal Tidak Tersedia'
+  const message = mode === 'OFFLINE'
+    ? 'Silakan coba lagi beberapa saat lagi saat jaringan Anda tersambung'
+    : 'Silakan coba lagi beberapa saat lagi'
+
+  return (
+    <div className="w-full h-auto flex items-center justify-center mt-8 flex-col max-w-3xl mx-auto">
+      <picture>
+        <source src="/img/search_empty.webp" type="image/webp" />
+        <img src="/img/search_empty.png" alt="Gambar peron stasiun dengan jembatan di atasnya, dengan kaca pembesar bergambar tanda tanya di depannya" className="w-48 h-48 aspect-square object-contain" />
+      </picture>
+      <span className="text-2xl text-center font-bold mt-0">{title}</span>
+      <p className="text-center mt-2">
+        {message}
+      </p>
+    </div>
+  )
+}
+
 export default function StationPage({ params }: Route.ComponentProps) {
-  const station = useSWR<StandardResponse<Station>>(new URL(`/stations/${params.operator}/${params.code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher)
-  const timetable = useSWR<StandardResponse<LineGroupedTimetable>>(new URL(`/stations/${params.operator}/${params.code}/timetable/grouped`, import.meta.env.VITE_API_BASE_URL).href, fetcher)
+  const stationUrl = useMemo(() =>
+    new URL(`/stations/${params.operator}/${params.code}`, import.meta.env.VITE_API_BASE_URL).href,
+  [params.operator, params.code]
+  )
+  const timetableUrl = useMemo(() =>
+    new URL(`/stations/${params.operator}/${params.code}/timetable/grouped?compact=1`, import.meta.env.VITE_API_BASE_URL).href,
+  [params.operator, params.code]
+  )
+
+  const station = useSWR<StandardResponse<Station>>(stationUrl, fetcher, swrConfig)
+  const timetable = useSWR<StandardResponse<LineGroupedTimetable>>(timetableUrl, fetcher, swrConfig)
   const navigationType = useNavigationType()
   const navigate = useNavigate()
   const [saved, setSaved] = useState(false)
+  const [isOnline, setIsOnline] = useState(navigator.onLine)
+
+  useEffect(() => {
+    function handleOnline() {
+      setIsOnline(true)
+    }
+
+    function handleOffline() {
+      setIsOnline(false)
+    }
+
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
 
   useEffect(() => {
     if (station.isLoading) return
@@ -111,32 +166,24 @@ export default function StationPage({ params }: Route.ComponentProps) {
           </div>
         </div>
       </div>
-      {timetable.isLoading
-        ? (
-            <div className="-mt-20 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
-              <div className="animate-pulse w-full h-72 bg-slate-200 rounded-lg" />
-            </div>
-          )
-        : (
-            <ul className="-mt-20 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
-              {timetable.data?.data
-                ? timetable.data?.data?.map(line => (
-                  <LineCard key={line.lineCode} line={line} />
-                ))
-                : (
-                    <div className="w-full h-auto flex items-center justify-center mt-8 flex-col max-w-3xl mx-auto">
-                      <picture>
-                        <source src="/img/search_empty.webp" type="image/webp" />
-                        <img src="/img/search_empty.png" alt="Gambar peron stasiun dengan jembatan di atasnya, dengan kaca pembesar bergambar tanda tanya di depannya" className="w-48 h-48 aspect-square object-contain" />
-                      </picture>
-                      <span className="text-2xl text-center font-bold mt-0">Jadwal Tidak Tersedia</span>
-                      <p className="text-center mt-2">
-                        Silakan coba lagi beberapa saat lagi
-                      </p>
-                    </div>
-                  )}
-            </ul>
-          )}
+      {timetable.isLoading && (
+        <div className="-mt-20 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
+          <div className="animate-pulse w-full h-72 bg-slate-200 rounded-lg" />
+        </div>
+      )}
+
+      {!timetable.isLoading && (() => {
+        if (!isOnline) return <EmptyState mode="OFFLINE" />
+        if (timetable.error || !timetable.data?.data?.length) return <EmptyState mode="NO_DATA" />
+
+        return (
+          <ul className="-mt-20 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
+            {timetable.data.data.map(line => (
+              <LineCard key={line.lineCode} line={line} />
+            ))}
+          </ul>
+        )
+      })()}
     </div>
   )
 }

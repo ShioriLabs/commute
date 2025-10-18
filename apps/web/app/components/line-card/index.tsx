@@ -1,4 +1,4 @@
-import type { LineTimetable, Schedule } from 'models/schedules'
+import type { CompactLineTimetable, CompactSchedule, LineTimetable } from 'models/schedules'
 import { useState, useEffect, useMemo } from 'react'
 import { getTintFromColor } from 'utils/colors'
 
@@ -6,9 +6,9 @@ function parseTime(timeString: string) {
   return new Date(`${new Date().toDateString()} ${timeString}`)
 }
 
-function getNextSchedules(schedules: Schedule[], limit = 3) {
+function getNextSchedules(schedules: CompactSchedule[], limit = 3) {
   const now = new Date()
-  const returning: Schedule[] = []
+  const returning: CompactSchedule[] = []
   for (const schedule of schedules) {
     if (returning.length === limit) break
     const parsedDeparture = parseTime(schedule.estimatedDeparture)
@@ -28,7 +28,7 @@ function isImmediateDeparture(now: Date, scheduledDeparture: Date) {
 }
 
 interface Props {
-  line: LineTimetable
+  line: LineTimetable | CompactLineTimetable
 }
 
 export default function LineCard({ line }: Props) {
@@ -46,6 +46,7 @@ export default function LineCard({ line }: Props) {
     return line.timetable.map((direction) => {
       return {
         boundFor: direction.boundFor,
+        via: direction.via,
         schedules: getNextSchedules(direction.schedules)
       }
     }).filter(direction => direction.schedules.length > 0)
@@ -70,13 +71,15 @@ export default function LineCard({ line }: Props) {
         {nextSchedulesFilteredTimetable.map((direction) => {
           return (
             <li
-              key={direction.boundFor}
+              key={`${direction.boundFor}${direction.via ? `:${direction.via}` : ''}`}
               className="p-4 flex items-start justify-between border-t first:border-t-0"
               style={{ borderTopColor: getTintFromColor(line.colorCode, 0.3) }}
               aria-label={`Jadwal menuju ${direction.boundFor}`}
             >
-              <div>
+              <div className="flex flex-col">
                 <span className="font-semibold">{direction.boundFor}</span>
+                { /* eslint-disable-next-line @stylistic/jsx-one-expression-per-line */ }
+                {direction.via && <span className="text-sm text-gray-600">via {direction.via}</span>}
               </div>
               <div className="text-right flex flex-col">
                 {isImmediateDeparture(lastUpdated, parseTime(direction.schedules[0].estimatedDeparture))
