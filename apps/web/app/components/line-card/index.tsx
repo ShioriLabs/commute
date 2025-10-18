@@ -1,4 +1,4 @@
-import type { LineTimetable, Schedule } from 'models/schedules'
+import type { CompactLineTimetable, CompactSchedule, LineTimetable } from 'models/schedules'
 import { useState, useEffect, useMemo } from 'react'
 import { getTintFromColor } from 'utils/colors'
 
@@ -6,9 +6,9 @@ function parseTime(timeString: string) {
   return new Date(`${new Date().toDateString()} ${timeString}`)
 }
 
-function getNextSchedules(schedules: Schedule[], limit = 3) {
+function getNextSchedules(schedules: CompactSchedule[], limit = 3) {
   const now = new Date()
-  const returning: Schedule[] = []
+  const returning: CompactSchedule[] = []
   for (const schedule of schedules) {
     if (returning.length === limit) break
     const parsedDeparture = parseTime(schedule.estimatedDeparture)
@@ -28,7 +28,7 @@ function isImmediateDeparture(now: Date, scheduledDeparture: Date) {
 }
 
 interface Props {
-  line: LineTimetable
+  line: LineTimetable | CompactLineTimetable
 }
 
 export default function LineCard({ line }: Props) {

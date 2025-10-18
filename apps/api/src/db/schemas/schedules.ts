@@ -33,3 +33,18 @@ export interface LineTimetable {
 }
 
 export type LineGroupedTimetable = LineTimetable[]
+
+export interface CompactSchedule {
+  id: string
+  estimatedDeparture: Date
+}
+
+export type CompactLineTimetable = Omit<LineTimetable, 'timetable'> & {
+  timetable: {
+    boundFor: string
+    via: string | null
+    schedules: CompactSchedule[]
+  }[]
+}
+
+export type CompactLineGroupedTimetable = CompactLineTimetable[]

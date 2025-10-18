@@ -5,9 +5,10 @@ import { Bindings } from 'app'
 import { KVRepository } from 'db/repositories/kv'
 import { getOperatorByCode } from 'utils/operator'
 import { Line } from 'models/line'
-import { LineGroupedTimetable, Schedule } from 'db/schemas/schedules'
+import { CompactLineGroupedTimetable, LineGroupedTimetable, Schedule } from 'db/schemas/schedules'
 import { getLineByOperator } from 'utils/line'
 import { OPERATORS } from '@commute/constants'
+import { mapSchedule } from 'utils/schedules'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -175,6 +176,7 @@ const CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES = new Set([
 app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
   const operatorCode = c.req.param('operator')
   const stationCode = c.req.param('stationCode')
+  const compactMode = c.req.query('compact') === '1'
   const operator = getOperatorByCode(operatorCode)
   if (!operator) {
     return c.json(NotFound(`Unknown Operator Code: ${operatorCode}`), 404)
@@ -183,7 +185,7 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
   const stationRepository = new StationRepository(c.env.DB)
 
-  const kvKey = `stations_${operator.code}_${stationCode}_timetable_grouped_${c.env.API_VERSION}`
+  const kvKey = `stations_${operator.code}_${stationCode}_timetable_grouped_${compactMode ? 'compact' : 'full'}_${c.env.API_VERSION}`
 
   const cachedTimetable = await kvRepository.get(kvKey)
   if (cachedTimetable) {
@@ -203,7 +205,7 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
     )
   }
 
-  const timetable: LineGroupedTimetable = []
+  const timetable = compactMode ? ([] as CompactLineGroupedTimetable) : ([] as LineGroupedTimetable)
   const schedules = await stationRepository.getTimetableFromStationId(checkStationResult.station!.id)
   if (schedules.length === 0) {
     return c.json(
@@ -257,7 +259,7 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
         .entries(groupedByBoundFor)
         .map(([key, schedules]) => {
           const [boundFor, via] = key.split(':')
-          return { boundFor: boundFor!, via: via ?? null, schedules }
+          return { boundFor: boundFor!, via: via ?? null, schedules: mapSchedule(schedules, compactMode) }
         })
         .sort((a, b) => a.boundFor!.localeCompare(b.boundFor!))
     })
