@@ -7,6 +7,7 @@ import { getOperatorByCode } from 'utils/operator'
 import { Line } from 'models/line'
 import { LineGroupedTimetable, Schedule } from 'db/schemas/schedules'
 import { getLineByOperator } from 'utils/line'
+import { OPERATORS } from '@commute/constants'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -156,7 +157,7 @@ app.get('/:operator/:stationCode/timetable', async (c) => {
   )
 })
 
-const CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES = [
+const CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES = new Set([
   'CKR',
   'TLM',
   'CIT',
@@ -169,7 +170,7 @@ const CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES = [
   'BUA',
   'KLD',
   'JNG'
-]
+])
 
 app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
   const operatorCode = c.req.param('operator')
@@ -212,6 +213,7 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
   }
 
   const groupedByLineSchedules: Record<string, Line & { schedules: Schedule[] }> = { }
+  const isBekasiInterliningStation = operator.code === OPERATORS.KCI.code && CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES.has(stationCode)
 
   for (const schedule of schedules) {
     const line = getLineByOperator(operator.code, schedule.lineCode)
@@ -232,7 +234,7 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
     for (const schedule of line.schedules) {
       const boundFor = schedule.boundFor
       let via: string | null = null
-      if (operator.code === 'KCI' && boundFor === 'Kampung Bandan' && CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES.includes(stationCode)) {
+      if (isBekasiInterliningStation && boundFor === 'Kampung Bandan') {
         const trainNo = schedule.tripNumber ?? ''
         if (trainNo !== '') {
           if (trainNo.startsWith('6')) via = 'Pasar Senen'
