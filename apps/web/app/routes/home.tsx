@@ -20,7 +20,15 @@ const swrConfig = {
 export function meta() {
   return [
     { title: 'Commute' },
-    { name: 'theme-color', content: '#FFF8F8' }
+    { name: 'theme-color', content: '#FFF8F8' },
+    { name: 'description', content: 'Aplikasi Jadwal Kereta Buat Anak Jakarta' },
+    { name: 'keywords', content: 'commute, jadwal kereta, kereta api, krl, jakarta, indonesia, lrt, mrt, commuter line, lrt jabodebek, mrt jakarta, lrt jakarta' },
+    { property: 'og:title', content: 'Commute' },
+    { property: 'og:description', content: 'Aplikasi Jadwal Kereta Buat Anak Jakarta' },
+    { property: 'og:image', content: 'https://commute.shiorilabs.id/img/og-image.png' },
+    { name: 'twitter:title', content: 'Commute' },
+    { name: 'twitter:description', content: 'Aplikasi Jadwal Kereta Buat Anak Jakarta' },
+    { name: 'twitter:image', content: 'https://commute.shiorilabs.id/img/og-image.png' }
   ]
 }
 
