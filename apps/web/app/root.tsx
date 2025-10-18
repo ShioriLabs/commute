@@ -51,6 +51,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Commute</title>
+        <meta name="description" content="Aplikasi Jadwal Kereta Buat Anak Jakarta" />
+        <meta name="keywords" content="commute, jadwal kereta, kereta api, krl, jakarta, indonesia, lrt, mrt, commuter line, lrt jabodebek, mrt jakarta, lrt jakarta" />
+        <meta property="og:title" content="Commute" />
+        <meta property="og:description" content="Aplikasi Jadwal Kereta Buat Anak Jakarta" />
+        <meta property="og:image" content="https://commute.shiorilabs.id/img/og-image.png" />
+        <meta name="twitter:title" content="Commute" />
+        <meta name="twitter:description" content="Aplikasi Jadwal Kereta Buat Anak Jakarta" />
+        <meta name="twitter:image" content="https://commute.shiorilabs.id/img/og-image.png" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://commute.shiorilabs.id" />
+        <meta name="twitter:card" content="summary_large_image" />
         <Meta />
         <Links />
       </head>
