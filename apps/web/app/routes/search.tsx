@@ -21,6 +21,25 @@ export function meta() {
   ]
 }
 
+const SCORE_THRESHOLD = 3
+
+function getLevenshteinScore(station: Station, query: string) {
+  const name = station.name.toLowerCase()
+  const formattedName = station.formattedName?.toLowerCase() ?? ''
+  const code = station.code.toLowerCase()
+  const q = query.toLowerCase()
+
+  if (name.includes(query) || formattedName.includes(query) || code.includes(query)) {
+    return 0
+  }
+
+  return Math.min(
+    levenshteinDistance(name, q),
+    levenshteinDistance(formattedName, q),
+    levenshteinDistance(code, q)
+  )
+}
+
 function HighlightedStationList({ title, stationIDs, className }: { title: string, stationIDs: string[], className?: string }) {
   const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
 
@@ -70,40 +89,21 @@ export default function SearchPage({ onClose }: Props) {
 
   const filteredStations = useMemo(() => {
     if (stations?.data === undefined || searchQuery.length < 2) return []
-    const levThreshold = 3
     const query = searchQuery.toLowerCase()
 
     const scoredStations = stations.data.map((station) => {
-      const name = station.name.toLowerCase()
-      const formattedName = station.formattedName?.toLowerCase() ?? ''
-      const code = station.code.toLowerCase()
+      const levScore = getLevenshteinScore(station, query)
+      const popularityFactor = (station.score ?? 0) / 100
+      const finalScore = levScore + (1 - popularityFactor)
 
-      let score = Infinity
-
-      if (name.includes(query) || formattedName.includes(query) || code.includes(query)) {
-        score = 0
-      } else {
-        score = Math.min(
-          levenshteinDistance(name, query),
-          levenshteinDistance(formattedName, query),
-          levenshteinDistance(code, query)
-        )
-      }
       return {
         ...station,
-        score
+        levScore,
+        finalScore
       }
     }).filter((station) => {
-      const score = station.score
-      return score < levThreshold
-    }).sort((a, b) => {
-      const aScore = a.score
-      const bScore = b.score
-      if (aScore === bScore) {
-        return a.name.localeCompare(b.name)
-      }
-      return aScore - bScore
-    })
+      return station.finalScore < SCORE_THRESHOLD
+    }).sort((a, b) => a.finalScore - b.finalScore || a.name.localeCompare(b.name))
 
     return scoredStations
   }, [searchQuery])

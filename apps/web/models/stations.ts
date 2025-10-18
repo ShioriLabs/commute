@@ -13,4 +13,5 @@ export interface Station {
   createdAt: Date
   updatedAt: Date
   timetableSynced: number
+  score: number
 }
