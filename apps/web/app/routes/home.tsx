@@ -10,6 +10,13 @@ import { ChevronRightIcon } from '@heroicons/react/20/solid'
 import { Link } from 'react-router'
 import SettingsButton from '~/components/nav-buttons/settings'
 
+const swrConfig = {
+  dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
+  focusThrottleInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
+  revalidateOnFocus: true,
+  shouldRetryOnError: false
+}
+
 export function meta() {
   return [
     { title: 'Commute' },
@@ -19,8 +26,8 @@ export function meta() {
 
 function StationCard({ stationId }: { stationId: string }) {
   const [operator, code] = stationId.split(/-/g)
-  const station = useSWR<StandardResponse<Station>>(new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher, { shouldRetryOnError: true })
-  const timetable = useSWR<StandardResponse<LineGroupedTimetable>>(new URL(`/stations/${operator}/${code}/timetable/grouped`, import.meta.env.VITE_API_BASE_URL).href, fetcher, { shouldRetryOnError: true })
+  const station = useSWR<StandardResponse<Station>>(new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
+  const timetable = useSWR<StandardResponse<LineGroupedTimetable>>(new URL(`/stations/${operator}/${code}/timetable/grouped`, import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
 
   if (station.isLoading && !station.error) {
     return (

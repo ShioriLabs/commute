@@ -9,6 +9,13 @@ import LineCard from '~/components/line-card'
 import { fetcher } from 'utils/fetcher'
 import useSWR from 'swr'
 
+const swrConfig = {
+  dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
+  focusThrottleInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
+  revalidateOnFocus: true,
+  shouldRetryOnError: false
+}
+
 export function meta() {
   return [
     { title: 'Memuat... - Commute' },
@@ -17,8 +24,8 @@ export function meta() {
 }
 
 export default function StationPage({ params }: Route.ComponentProps) {
-  const station = useSWR<StandardResponse<Station>>(new URL(`/stations/${params.operator}/${params.code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher)
-  const timetable = useSWR<StandardResponse<LineGroupedTimetable>>(new URL(`/stations/${params.operator}/${params.code}/timetable/grouped`, import.meta.env.VITE_API_BASE_URL).href, fetcher)
+  const station = useSWR<StandardResponse<Station>>(new URL(`/stations/${params.operator}/${params.code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
+  const timetable = useSWR<StandardResponse<LineGroupedTimetable>>(new URL(`/stations/${params.operator}/${params.code}/timetable/grouped`, import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
   const navigationType = useNavigationType()
   const navigate = useNavigate()
   const [saved, setSaved] = useState(false)
