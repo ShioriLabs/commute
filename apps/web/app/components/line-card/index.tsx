@@ -30,7 +30,12 @@ function getNextSchedules(
   }
 
   const returning = upcoming.slice(0, limit)
-  return returning.length > 0 ? returning : [schedules[0]]
+
+  if (returning.length === 0 && schedules.length > 0) {
+    returning.push(schedules[0])
+  }
+
+  return returning
 }
 
 function isImmediateDeparture(now: Date, scheduledDeparture: Date) {
