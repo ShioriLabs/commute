@@ -44,3 +44,21 @@ export const LRTJ_STATION_CODES: Record<number, string> = {
   2: 'EQS',
   1: 'VEL'
 }
+
+export const AMENITY_TYPES = [
+  'TOILET',
+  'TOILET_ACCESSIBLE',
+  'PARKING',
+  'BIKE_PARKING',
+  'WIFI',
+  'CHARGING_STATION',
+  'PRAYING_ROOM',
+  'ESCALATOR_UNPAID',
+  'ESCALATOR_PAID',
+  'ELEVATOR_UNPAID',
+  'ELEVATOR_PAID',
+  'LOCKERS',
+  'NURSING_ROOM'
+] as const
+
+export type AmenityType = typeof AMENITY_TYPES[number]
