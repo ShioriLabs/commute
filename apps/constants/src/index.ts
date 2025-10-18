@@ -45,20 +45,20 @@ export const LRTJ_STATION_CODES: Record<number, string> = {
   1: 'VEL'
 }
 
-export const AMENITY_TYPES = [
-  'TOILET',
-  'TOILET_ACCESSIBLE',
-  'PARKING',
-  'BIKE_PARKING',
-  'WIFI',
-  'CHARGING_STATION',
-  'PRAYING_ROOM',
-  'ESCALATOR_UNPAID',
-  'ESCALATOR_PAID',
-  'ELEVATOR_UNPAID',
-  'ELEVATOR_PAID',
-  'LOCKERS',
-  'NURSING_ROOM'
-] as const
+export const AMENITY_TYPES = {
+  TOILET: 'Toilet',
+  TOILET_ACCESSIBLE: 'Toilet Difabel',
+  PARKING: 'Parkir',
+  BIKE_PARKING: 'Parkir Sepeda',
+  WIFI: 'WiFi',
+  CHARGING_STATION: 'Charging Station',
+  PRAYING_ROOM: 'Mushola',
+  ESCALATOR_UNPAID: 'Eskalator (Area Umum)',
+  ESCALATOR_PAID: 'Eskalator (Area Berbayar)',
+  ELEVATOR_UNPAID: 'Lift (Area Umum)',
+  ELEVATOR_PAID: 'Lift (Area Berbayar)',
+  LOCKERS: 'Loker',
+  NURSING_ROOM: 'Ruang Menyusui'
+} as const
 
-export type AmenityType = typeof AMENITY_TYPES[number]
+export type AmenityType = keyof typeof AMENITY_TYPES

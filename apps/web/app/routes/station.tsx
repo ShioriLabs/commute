@@ -8,6 +8,7 @@ import type { LineGroupedTimetable } from 'models/schedules'
 import LineCard from '~/components/line-card'
 import { fetcher } from 'utils/fetcher'
 import useSWR from 'swr'
+import { AMENITY_TYPES } from '@commute/constants'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -177,11 +178,32 @@ export default function StationPage({ params }: Route.ComponentProps) {
         if (timetable.error || !timetable.data?.data?.length) return <EmptyState mode="NO_DATA" />
 
         return (
-          <ul className="-mt-20 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
-            {timetable.data.data.map(line => (
-              <LineCard key={line.lineCode} line={line} />
-            ))}
-          </ul>
+          <>
+            <ul className="-mt-20 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
+              {timetable.data.data.map(line => (
+                <LineCard key={line.lineCode} line={line} />
+              ))}
+            </ul>
+            <section className="px-4 pb-8 max-w-3xl mx-auto">
+              <h2 className="font-semibold text-xl px-4">Fasilitas</h2>
+              {station.data?.data?.amenities.length
+                ? (
+                    <ul className="flex flex-col gap-2 mt-4">
+                      {station.data.data.amenities.map(amenity => (
+                        <li key={amenity.type} className="flex items-center px-4 py-2 gap-2">
+                          <span className="font-bold gap-2">
+                            {AMENITY_TYPES[amenity.type]}
+                          </span>
+                          <span className="ml-auto text-gray-600">{amenity.text || 'Tersedia'}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                : (
+                    <p className="mt-4 px-4 text-gray-600">Tidak ada data fasilitas untuk stasiun ini</p>
+                  )}
+            </section>
+          </>
         )
       })()}
     </div>

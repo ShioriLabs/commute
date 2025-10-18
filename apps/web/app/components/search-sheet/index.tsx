@@ -70,6 +70,7 @@ export default function SearchSheet() {
     const _searchables: Searchable[] = []
     if (stations && stations.data) {
       for (const station of stations.data) {
+        if (station.regionCode !== 'CGK') continue // only jakarta area for now
         _searchables.push({
           type: 'STATION',
           title: station.formattedName || station.name,
