@@ -6,25 +6,36 @@ function parseTime(timeString: string) {
   return new Date(`${new Date().toDateString()} ${timeString}`)
 }
 
-function getNextSchedules(schedules: CompactSchedule[], limit = 3) {
+function getNextSchedules(
+  schedules: CompactSchedule[],
+  limit = 3
+) {
   const now = new Date()
-  const returning: CompactSchedule[] = []
-  for (const schedule of schedules) {
-    if (returning.length === limit) break
-    const parsedDeparture = parseTime(schedule.estimatedDeparture)
-    const diff = parsedDeparture.getTime() - now.getTime()
+  const upcoming: CompactSchedule[] = []
 
-    // Allow departure that happened within the last 1 minute
-    if (diff < -60000) continue
-    returning.push(schedule)
+  for (const schedule of schedules) {
+    let parsedDeparture = parseTime(schedule.estimatedDeparture)
+
+    if (
+      parsedDeparture.getTime() < now.getTime()
+      && parsedDeparture.getHours() < 4
+      && now.getHours() >= 22
+    ) {
+      parsedDeparture = new Date(parsedDeparture.getTime() + 24 * 60 * 60 * 1000)
+    }
+
+    if (parsedDeparture.getTime() >= now.getTime() - 60000 /* keep just departed trains */) {
+      upcoming.push(schedule)
+    }
   }
 
-  return returning
+  const returning = upcoming.slice(0, limit)
+  return returning.length > 0 ? returning : [schedules[0]]
 }
 
 function isImmediateDeparture(now: Date, scheduledDeparture: Date) {
   const diff = scheduledDeparture.getTime() - now.getTime()
-  return diff >= -60000 && diff <= 30000
+  return diff >= -60000 && diff <= 60000
 }
 
 interface Props {
@@ -43,13 +54,17 @@ export default function LineCard({ line }: Props) {
   }, [])
 
   const nextSchedulesFilteredTimetable = useMemo(() => {
-    return line.timetable.map((direction) => {
-      return {
-        boundFor: direction.boundFor,
-        via: direction.via,
-        schedules: getNextSchedules(direction.schedules)
-      }
-    }).filter(direction => direction.schedules.length > 0)
+    return line.timetable
+      .map((direction) => {
+        const schedules = getNextSchedules(direction.schedules)
+
+        return {
+          boundFor: direction.boundFor,
+          via: direction.via,
+          schedules
+        }
+      })
+      .filter(direction => direction.schedules.length > 0)
   }, [line.timetable, lastUpdated])
 
   if (nextSchedulesFilteredTimetable.length === 0) return null
