@@ -98,7 +98,6 @@ export default function SearchPage({ onClose }: Props) {
 
       return {
         ...station,
-        levScore,
         finalScore
       }
     }).filter((station) => {
@@ -112,8 +111,7 @@ export default function SearchPage({ onClose }: Props) {
     const recentlySearchedString = localStorage.getItem('recently-searched') ?? '[]'
     const recent = JSON.parse(recentlySearchedString) as string[]
     setRecentlySearched(recent)
-  }
-  , [])
+  }, [])
 
   const handleSearchClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     const stationId = e.currentTarget.dataset.stationId

@@ -10,6 +10,8 @@ import { CloseButton, DialogTitle } from '@headlessui/react'
 import type { Searchable } from 'models/searchable'
 import SearchableItem from './searchable-item'
 
+const SCORE_THRESHOLD = 3
+
 function HighlightedStationList({ title, stationIDs, className }: { title: string, stationIDs: string[], className?: string }) {
   const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher)
 
@@ -75,7 +77,8 @@ export default function SearchSheet() {
           body: station.lines,
           data: {
             'station-id': station.id
-          }
+          },
+          score: station.score ?? 0
         })
       }
     }
@@ -85,7 +88,6 @@ export default function SearchSheet() {
 
   const filteredSearchables = useMemo(() => {
     if (searchables.length === 0 || searchQuery.length < 2) return []
-    const levThreshold = 3
     const query = searchQuery.toLowerCase()
 
     const scoredStations = searchables.map((searchable) => {
@@ -102,21 +104,16 @@ export default function SearchSheet() {
         if (levScore < score) score = levScore
       }
 
+      const popularityFactor = (searchable.score ?? 0) / 100
+      const finalScore = score + (1 - popularityFactor)
+
       return {
         ...searchable,
-        score
+        score: finalScore
       }
     }).filter((station) => {
-      const score = station.score
-      return score < levThreshold
-    }).sort((a, b) => {
-      const aScore = a.score
-      const bScore = b.score
-      if (aScore === bScore) {
-        return a.title.localeCompare(b.title)
-      }
-      return aScore - bScore
-    })
+      return station.score < SCORE_THRESHOLD
+    }).sort((a, b) => a.score - b.score || a.title.localeCompare(b.title))
 
     return scoredStations
   }, [searchQuery])
