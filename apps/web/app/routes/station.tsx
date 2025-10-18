@@ -186,7 +186,7 @@ export default function StationPage({ params }: Route.ComponentProps) {
             </ul>
             <section className="px-4 pb-8 max-w-3xl mx-auto">
               <h2 className="font-semibold text-xl px-4">Fasilitas</h2>
-              {station.data?.data?.amenities.length
+              {station.data?.data?.amenities?.length
                 ? (
                     <ul className="flex flex-col gap-2 mt-4">
                       {station.data.data.amenities.map(amenity => (
