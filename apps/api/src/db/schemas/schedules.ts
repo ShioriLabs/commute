@@ -27,6 +27,7 @@ export interface LineTimetable {
   colorCode: `#${string}`
   timetable: {
     boundFor: string
+    via: string | null
     schedules: Schedule[]
   }[]
 }

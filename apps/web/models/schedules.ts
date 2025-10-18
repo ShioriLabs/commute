@@ -15,6 +15,7 @@ export interface Schedule {
 export interface LineTimetable extends Line {
   timetable: {
     boundFor: string
+    via: string | null
     schedules: Schedule[]
   }[]
 }

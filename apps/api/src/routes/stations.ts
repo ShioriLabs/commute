@@ -156,6 +156,21 @@ app.get('/:operator/:stationCode/timetable', async (c) => {
   )
 })
 
+const CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES = [
+  'CKR',
+  'TLM',
+  'CIT',
+  'TB',
+  'BKST',
+  'BKS',
+  'KRI',
+  'CUK',
+  'KLDB',
+  'BUA',
+  'KLD',
+  'JNG'
+]
+
 app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
   const operatorCode = c.req.param('operator')
   const stationCode = c.req.param('stationCode')
@@ -215,10 +230,20 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
   for (const line of Object.values(groupedByLineSchedules)) {
     const groupedByBoundFor: Record<string, Schedule[]> = { }
     for (const schedule of line.schedules) {
-      if (groupedByBoundFor[schedule.boundFor]) {
-        groupedByBoundFor[schedule.boundFor]!.push(schedule)
+      const boundFor = schedule.boundFor
+      let via: string | null = null
+      if (operator.code === 'KCI' && boundFor === 'Kampung Bandan' && CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES.includes(stationCode)) {
+        const trainNo = schedule.tripNumber ?? ''
+        if (trainNo !== '') {
+          if (trainNo.startsWith('6')) via = 'Pasar Senen'
+          else via = 'Manggarai'
+        }
+      }
+      const boundForKey = via ? `${boundFor}:${via}` : boundFor
+      if (groupedByBoundFor[boundForKey]) {
+        groupedByBoundFor[boundForKey]!.push(schedule)
       } else {
-        groupedByBoundFor[schedule.boundFor] = [schedule]
+        groupedByBoundFor[boundForKey] = [schedule]
       }
     }
 
@@ -226,7 +251,13 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
       name: line.name,
       colorCode: line.colorCode,
       lineCode: line.lineCode,
-      timetable: Object.entries(groupedByBoundFor).map(([boundFor, schedules]) => ({ boundFor, schedules })).sort((a, b) => a.boundFor.localeCompare(b.boundFor))
+      timetable: Object
+        .entries(groupedByBoundFor)
+        .map(([key, schedules]) => {
+          const [boundFor, via] = key.split(':')
+          return { boundFor: boundFor!, via: via ?? null, schedules }
+        })
+        .sort((a, b) => a.boundFor!.localeCompare(b.boundFor!))
     })
   }
 
