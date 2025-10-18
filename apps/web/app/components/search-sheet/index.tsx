@@ -11,9 +11,15 @@ import type { Searchable } from 'models/searchable'
 import SearchableItem from './searchable-item'
 
 const SCORE_THRESHOLD = 3
+const swrConfig = {
+  dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
+  focusThrottleInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
+  revalidateOnFocus: true,
+  shouldRetryOnError: false
+}
 
 function HighlightedStationList({ title, stationIDs, className }: { title: string, stationIDs: string[], className?: string }) {
-  const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher)
+  const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
 
   if (isLoading || stations === undefined || stations.data === undefined) {
     return null
@@ -55,7 +61,7 @@ function HighlightedStationList({ title, stationIDs, className }: { title: strin
 }
 
 export default function SearchSheet() {
-  const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher)
+  const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [recentlySearched, setRecentlySearched] = useState<string[]>([])
   const searchInputRef = useRef<HTMLInputElement>(null)
