@@ -1,6 +1,5 @@
 import { CloseButton, DialogTitle } from '@headlessui/react'
-import { ArchiveBoxIcon, BookmarkIcon, DocumentIcon, InformationCircleIcon } from '@heroicons/react/20/solid'
-import { XMarkIcon } from '@heroicons/react/24/outline'
+import { PushPinSimpleIcon, ArchiveIcon, FilesIcon, InfoIcon, XIcon } from '@phosphor-icons/react'
 import SettingsItem from './settings-item'
 
 declare const __APP_VERSION__: string
@@ -16,26 +15,26 @@ export default function SettingsSheet() {
             className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
             aria-expanded="false"
           >
-            <XMarkIcon />
+            <XIcon weight="bold" className="w-6 h-6" />
           </CloseButton>
         </div>
       </div>
       <div className="mt-4 max-w-3xl mx-auto bg-white">
         <ul className="flex flex-col">
           <SettingsItem to="/settings/saved-stations">
-            <BookmarkIcon className="w-6 h-6" />
+            <PushPinSimpleIcon weight="fill" className="w-6 h-6" />
             Stasiun Disimpan
           </SettingsItem>
           <SettingsItem to="/settings/manage-data">
-            <ArchiveBoxIcon className="w-6 h-6" />
+            <ArchiveIcon weight="fill" className="w-6 h-6" />
             Atur Data
           </SettingsItem>
           <SettingsItem to="/settings/legal">
-            <DocumentIcon className="w-6 h-6" />
+            <FilesIcon weight="fill" className="w-6 h-6" />
             Legal & Atribusi
           </SettingsItem>
           <SettingsItem to="/settings/about">
-            <InformationCircleIcon className="w-6 h-6" />
+            <InfoIcon weight="fill" className="w-6 h-6" />
             Tentang Commute
           </SettingsItem>
         </ul>

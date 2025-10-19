@@ -1,4 +1,4 @@
-import { ChevronLeftIcon } from '@heroicons/react/20/solid'
+import { CaretLeftIcon } from '@phosphor-icons/react'
 import SettingsItem from '~/components/settings-sheet/settings-item'
 
 export function meta() {
@@ -18,7 +18,7 @@ export default function LegalSettingsPage() {
             className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
             onClick={() => history.back()}
           >
-            <ChevronLeftIcon />
+            <CaretLeftIcon weight="bold" className="w-6 h-6" />
           </button>
           <h1 className="font-bold text-2xl">Legal & Atribusi</h1>
         </div>

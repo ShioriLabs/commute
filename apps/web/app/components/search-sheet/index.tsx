@@ -2,7 +2,7 @@ import type { Station } from 'models/stations'
 import type { StandardResponse } from '@schema/response'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
-import { XMarkIcon } from '@heroicons/react/24/outline'
+import { XIcon } from '@phosphor-icons/react'
 import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
 import { levenshteinDistance } from 'utils/levenshtein'
@@ -10,8 +10,16 @@ import { CloseButton, DialogTitle } from '@headlessui/react'
 import type { Searchable } from 'models/searchable'
 import SearchableItem from './searchable-item'
 
+const SCORE_THRESHOLD = 3
+const swrConfig = {
+  dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
+  focusThrottleInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
+  revalidateOnFocus: true,
+  shouldRetryOnError: false
+}
+
 function HighlightedStationList({ title, stationIDs, className }: { title: string, stationIDs: string[], className?: string }) {
-  const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher)
+  const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
 
   if (isLoading || stations === undefined || stations.data === undefined) {
     return null
@@ -53,7 +61,7 @@ function HighlightedStationList({ title, stationIDs, className }: { title: strin
 }
 
 export default function SearchSheet() {
-  const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher)
+  const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [recentlySearched, setRecentlySearched] = useState<string[]>([])
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -62,6 +70,7 @@ export default function SearchSheet() {
     const _searchables: Searchable[] = []
     if (stations && stations.data) {
       for (const station of stations.data) {
+        if (station.regionCode !== 'CGK') continue // only jakarta area for now
         _searchables.push({
           type: 'STATION',
           title: station.formattedName || station.name,
@@ -75,7 +84,8 @@ export default function SearchSheet() {
           body: station.lines,
           data: {
             'station-id': station.id
-          }
+          },
+          score: station.score ?? 0
         })
       }
     }
@@ -85,7 +95,6 @@ export default function SearchSheet() {
 
   const filteredSearchables = useMemo(() => {
     if (searchables.length === 0 || searchQuery.length < 2) return []
-    const levThreshold = 3
     const query = searchQuery.toLowerCase()
 
     const scoredStations = searchables.map((searchable) => {
@@ -102,21 +111,16 @@ export default function SearchSheet() {
         if (levScore < score) score = levScore
       }
 
+      const popularityFactor = (searchable.score ?? 0) / 100
+      const finalScore = score + (1 - popularityFactor)
+
       return {
         ...searchable,
-        score
+        score: finalScore
       }
     }).filter((station) => {
-      const score = station.score
-      return score < levThreshold
-    }).sort((a, b) => {
-      const aScore = a.score
-      const bScore = b.score
-      if (aScore === bScore) {
-        return a.title.localeCompare(b.title)
-      }
-      return aScore - bScore
-    })
+      return station.score < SCORE_THRESHOLD
+    }).sort((a, b) => a.score - b.score || a.title.localeCompare(b.title))
 
     return scoredStations
   }, [searchQuery])
@@ -162,7 +166,7 @@ export default function SearchSheet() {
             aria-expanded="false"
             aria-controls="search-input"
           >
-            <XMarkIcon />
+            <XIcon weight="bold" className="w-6 h-6" />
           </CloseButton>
         </div>
         <input

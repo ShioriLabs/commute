@@ -1,7 +1,7 @@
 import { Operator, OPERATORS } from '@commute/constants'
 import { db } from 'db'
 import { NewSchedule } from 'db/schemas/schedules'
-import { NewStation, UpdatingStation } from 'db/schemas/stations'
+import { Amenity, NewStation, UpdatingStation } from 'db/schemas/stations'
 import { sql } from 'kysely'
 import { Repository } from 'models/repository'
 import { getLineByOperator } from 'utils/line'
@@ -37,6 +37,7 @@ export class StationRepository extends Repository {
     const stations = await query.execute()
     return stations.map(station => ({
       ...station,
+      amenities: station.amenities ? JSON.parse(station.amenities as unknown as string) as Amenity[] : [],
       operator: OPERATORS[station.operator],
       lines: station.lines
         ? (station.lines as string).split(',')
@@ -70,6 +71,7 @@ export class StationRepository extends Repository {
     const stations = await query.execute()
     return stations.map(station => ({
       ...station,
+      amenities: station.amenities ? JSON.parse(station.amenities as unknown as string) as Amenity[] : [],
       operator: OPERATORS[operator],
       lines: station.lines
         ? (station.lines as string).split(',')
@@ -102,6 +104,7 @@ export class StationRepository extends Repository {
 
     return {
       ...station,
+      amenities: station.amenities ? JSON.parse(station.amenities as unknown as string) as Amenity[] : [],
       operator: OPERATORS[station.operator],
       lines: station.lines
         ? (station.lines as string).split(',')
@@ -162,11 +165,11 @@ export class StationRepository extends Repository {
     return data
   }
 
-  async update(data: UpdatingStation) {
+  async update(id: string, data: UpdatingStation) {
     await db(this.d1)
       .updateTable('stations')
       .set(data)
-      .where('id', '=', data.id)
+      .where('id', '=', id)
       .execute()
 
     return data

@@ -1,3 +1,4 @@
+import type { AmenityType } from '@commute/constants'
 import type { Line } from './line'
 import type { Operator } from './operator'
 
@@ -14,4 +15,12 @@ export interface Station {
   updatedAt: Date
   timetableSynced: number
   score: number
+  amenities: Amenity[]
+  latitude: number | null
+  longitude: number | null
+}
+
+export interface Amenity {
+  type: AmenityType
+  text?: string
 }

@@ -6,4 +6,5 @@ export interface Searchable<BodyType = unknown> {
   subtitle?: string
   body?: BodyType
   data?: Record<string, string>
+  score: number
 }

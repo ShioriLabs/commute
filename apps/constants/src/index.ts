@@ -44,3 +44,21 @@ export const LRTJ_STATION_CODES: Record<number, string> = {
   2: 'EQS',
   1: 'VEL'
 }
+
+export const AMENITY_TYPES = {
+  TOILET: 'Toilet',
+  TOILET_ACCESSIBLE: 'Toilet Difabel',
+  PARKING: 'Parkir',
+  BIKE_PARKING: 'Parkir Sepeda',
+  WIFI: 'WiFi',
+  CHARGING_STATION: 'Charging Station',
+  PRAYING_ROOM: 'Mushola',
+  ESCALATOR_UNPAID: 'Eskalator (Area Umum)',
+  ESCALATOR_PAID: 'Eskalator (Area Berbayar)',
+  ELEVATOR_UNPAID: 'Lift (Area Umum)',
+  ELEVATOR_PAID: 'Lift (Area Berbayar)',
+  LOCKERS: 'Loker',
+  NURSING_ROOM: 'Ruang Menyusui'
+} as const
+
+export type AmenityType = keyof typeof AMENITY_TYPES

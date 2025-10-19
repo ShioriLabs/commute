@@ -1,19 +1,41 @@
 import type { Station } from 'models/stations'
 import type { StandardResponse } from '@schema/response'
 import type { Route } from './+types/station'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type JSX } from 'react'
 import { useNavigate, useNavigationType } from 'react-router'
-import { BookmarkIcon, BookmarkSlashIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { XIcon, PushPinIcon, PushPinSlashIcon, ToiletIcon, WheelchairIcon, PlugIcon, EscalatorUpIcon, EscalatorDownIcon, ElevatorIcon, StarAndCrescentIcon, LetterCirclePIcon, BroadcastIcon, BicycleIcon, LockersIcon, BabyIcon } from '@phosphor-icons/react'
 import type { LineGroupedTimetable } from 'models/schedules'
 import LineCard from '~/components/line-card'
 import { fetcher } from 'utils/fetcher'
 import useSWR from 'swr'
+import { AMENITY_TYPES, type AmenityType } from '@commute/constants'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
   focusThrottleInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
   revalidateOnFocus: true,
   shouldRetryOnError: false
+}
+
+const AMENITY_ICONS: Record<AmenityType, JSX.Element> = {
+  TOILET: <ToiletIcon weight="duotone" className="w-6 h-6" />,
+  TOILET_ACCESSIBLE: (
+    <div className="w-6 h-6 relative">
+      <ToiletIcon weight="duotone" className="w-6 h-6" />
+      <WheelchairIcon weight="bold" className="w-4 h-4 absolute -bottom-0.5 -right-0.5 bg-blue-500 text-white p-[1px] rounded-full" />
+    </div>
+  ),
+  CHARGING_STATION: <PlugIcon weight="duotone" className="w-6 h-6" />,
+  ESCALATOR_UNPAID: <EscalatorUpIcon weight="duotone" className="w-6 h-6" />,
+  ESCALATOR_PAID: <EscalatorDownIcon weight="duotone" className="w-6 h-6" />,
+  ELEVATOR_UNPAID: <ElevatorIcon weight="duotone" className="w-6 h-6" />,
+  ELEVATOR_PAID: <ElevatorIcon weight="duotone" className="w-6 h-6" />,
+  PRAYING_ROOM: <StarAndCrescentIcon weight="duotone" className="w-6 h-6 text-green-700" />,
+  PARKING: <LetterCirclePIcon weight="duotone" className="w-6 h-6 text-blue-500" />,
+  WIFI: <BroadcastIcon weight="duotone" className="w-6 h-6" />,
+  BIKE_PARKING: <BicycleIcon weight="duotone" className="w-6 h-6" />,
+  LOCKERS: <LockersIcon weight="duotone" className="w-6 h-6" />,
+  NURSING_ROOM: <BabyIcon weight="duotone" className="w-6 h-6" />
 }
 
 export function meta() {
@@ -148,10 +170,10 @@ export default function StationPage({ params }: Route.ComponentProps) {
                     >
                       {saved
                         ? (
-                            <BookmarkSlashIcon />
+                            <PushPinSlashIcon weight="bold" className="w-6 h-6" />
                           )
                         : (
-                            <BookmarkIcon />
+                            <PushPinIcon weight="bold" className="w-6 h-6" />
                           )}
                     </button>
                   )}
@@ -160,7 +182,7 @@ export default function StationPage({ params }: Route.ComponentProps) {
                 aria-label="Tutup halaman stasiun"
                 className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8 cursor-pointer"
               >
-                <XMarkIcon />
+                <XIcon weight="bold" className="w-6 h-6" />
               </button>
             </div>
           </div>
@@ -177,11 +199,33 @@ export default function StationPage({ params }: Route.ComponentProps) {
         if (timetable.error || !timetable.data?.data?.length) return <EmptyState mode="NO_DATA" />
 
         return (
-          <ul className="-mt-20 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
-            {timetable.data.data.map(line => (
-              <LineCard key={line.lineCode} line={line} />
-            ))}
-          </ul>
+          <>
+            <ul className="-mt-20 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
+              {timetable.data.data.map(line => (
+                <LineCard key={line.lineCode} line={line} />
+              ))}
+            </ul>
+            <section className="px-4 pb-8 max-w-3xl mx-auto">
+              <h2 className="font-semibold text-xl px-4">Fasilitas</h2>
+              {station.data?.data?.amenities?.length
+                ? (
+                    <ul className="flex flex-col gap-2 mt-4">
+                      {station.data.data.amenities.map(amenity => (
+                        <li key={amenity.type} className="flex items-center px-4 py-2 gap-2">
+                          <span className="font-bold gap-2 flex flex-row items-center">
+                            {AMENITY_ICONS[amenity.type]}
+                            {AMENITY_TYPES[amenity.type]}
+                          </span>
+                          <span className="ml-auto text-gray-600">{amenity.text || 'Tersedia'}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                : (
+                    <p className="mt-4 px-4 text-gray-600">Tidak ada data fasilitas untuk stasiun ini</p>
+                  )}
+            </section>
+          </>
         )
       })()}
     </div>

@@ -1,7 +1,7 @@
-import { ChevronLeftIcon, TrashIcon } from '@heroicons/react/20/solid'
 import { useState, useEffect, useCallback } from 'react'
 import { createStore, get, keys as getAllKeys, clear } from 'idb-keyval'
 import { useMemo } from 'react'
+import { CaretLeftIcon, TrashIcon } from '@phosphor-icons/react'
 
 export function meta() {
   return [
@@ -34,7 +34,7 @@ function DataEntryItem({ title, subtitle, onClearButtonClick, showClearButton = 
           </h2>
         </div>
         <button onClick={handleClearButtonClick} className={!showClearButton ? 'hidden' : ''}>
-          <TrashIcon className="w-6 h-6 text-red-400" />
+          <TrashIcon weight="fill" className="w-6 h-6 text-red-400" />
         </button>
       </article>
     </li>
@@ -141,7 +141,7 @@ export default function ManageDataSettingsPage() {
             className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
             onClick={() => history.back()}
           >
-            <ChevronLeftIcon />
+            <CaretLeftIcon weight="bold" className="w-6 h-6" />
           </button>
           <h1 className="font-bold text-2xl">Atur Data</h1>
         </div>

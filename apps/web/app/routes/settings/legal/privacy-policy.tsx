@@ -1,5 +1,5 @@
 /* eslint-disable @stylistic/jsx-one-expression-per-line */
-import { ChevronLeftIcon } from '@heroicons/react/20/solid'
+import { CaretLeftIcon } from '@phosphor-icons/react'
 
 export function meta() {
   return [
@@ -19,7 +19,7 @@ export default function PrivacyPolicySettingsPage() {
               className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
               onClick={() => history.back()}
             >
-              <ChevronLeftIcon />
+              <CaretLeftIcon weight="bold" className="w-6 h-6" />
             </button>
             <h1 className="font-bold text-2xl">Kebijakan Privasi</h1>
           </div>

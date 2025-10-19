@@ -2,7 +2,7 @@ import type { Station } from 'models/stations'
 import type { StandardResponse } from '@schema/response'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router'
-import { XMarkIcon } from '@heroicons/react/24/outline'
+import { XIcon } from '@phosphor-icons/react'
 import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
 import { levenshteinDistance } from 'utils/levenshtein'
@@ -98,7 +98,6 @@ export default function SearchPage({ onClose }: Props) {
 
       return {
         ...station,
-        levScore,
         finalScore
       }
     }).filter((station) => {
@@ -112,8 +111,7 @@ export default function SearchPage({ onClose }: Props) {
     const recentlySearchedString = localStorage.getItem('recently-searched') ?? '[]'
     const recent = JSON.parse(recentlySearchedString) as string[]
     setRecentlySearched(recent)
-  }
-  , [])
+  }, [])
 
   const handleSearchClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     const stationId = e.currentTarget.dataset.stationId
@@ -151,7 +149,7 @@ export default function SearchPage({ onClose }: Props) {
             aria-expanded="false"
             aria-controls="search-input"
           >
-            <XMarkIcon />
+            <XIcon weight="bold" className="w-6 h-6" />
           </button>
         </div>
         <input
