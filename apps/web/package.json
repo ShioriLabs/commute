@@ -13,7 +13,7 @@
     "@cloudflare/vite-plugin": "^1.6.0",
     "@commute/constants": "workspace:../constants",
     "@headlessui/react": "^2.2.4",
-    "@heroicons/react": "^2.2.0",
+    "@phosphor-icons/react": "^2.1.10",
     "@react-router/node": "^7.6.2",
     "@react-router/serve": "^7.6.2",
     "idb-keyval": "^6.2.2",

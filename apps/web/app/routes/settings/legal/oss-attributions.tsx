@@ -1,5 +1,6 @@
 /* eslint-disable @stylistic/jsx-one-expression-per-line */
-import { ChevronLeftIcon } from '@heroicons/react/20/solid'
+
+import { CaretLeftIcon } from '@phosphor-icons/react'
 
 export function meta() {
   return [
@@ -10,7 +11,7 @@ export function meta() {
 
 const webDependencies = [
   { name: '@headlessui/react', license: 'MIT', url: 'https://github.com/tailwindlabs/headlessui' },
-  { name: '@heroicons/react', license: 'MIT', url: 'https://github.com/tailwindlabs/heroicons' },
+  { name: '@phosphor-icons/react', license: 'MIT', url: 'https://github.com/phosphor-icons/react' },
   { name: '@react-router/node', license: 'MIT', url: 'https://github.com/remix-run/react-router' },
   { name: '@react-router/serve', license: 'MIT', url: 'https://github.com/remix-run/react-router' },
   { name: 'idb-keyval', license: 'Apache-2.0', url: 'https://github.com/jakearchibald/idb-keyval' },
@@ -68,7 +69,7 @@ export default function OSSAttributionsSettingsPage() {
               className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
               onClick={() => history.back()}
             >
-              <ChevronLeftIcon />
+              <CaretLeftIcon weight="bold" className="w-6 h-6" />
             </button>
             <h1 className="font-bold text-2xl">Atribusi Kode Sumber Terbuka</h1>
           </div>

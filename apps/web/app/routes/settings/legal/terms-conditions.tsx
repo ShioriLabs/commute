@@ -1,5 +1,5 @@
 /* eslint-disable @stylistic/jsx-one-expression-per-line */
-import { ChevronLeftIcon } from '@heroicons/react/20/solid'
+import { CaretLeftIcon } from '@phosphor-icons/react'
 import { Link } from 'react-router'
 
 export function meta() {
@@ -20,7 +20,7 @@ export default function TermsConditionsSettingsPage() {
               className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
               onClick={() => history.back()}
             >
-              <ChevronLeftIcon />
+              <CaretLeftIcon weight="bold" className="w-6 h-6" />
             </button>
             <h1 className="font-bold text-2xl">Syarat & Ketentuan</h1>
           </div>

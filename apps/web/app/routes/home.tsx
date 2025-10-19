@@ -6,7 +6,7 @@ import LineCard from '~/components/line-card'
 import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
 import SearchStationsButton from '~/components/nav-buttons/search-stations'
-import { ChevronRightIcon } from '@heroicons/react/20/solid'
+import { CaretRightIcon } from '@phosphor-icons/react'
 import { Link } from 'react-router'
 import SettingsButton from '~/components/nav-buttons/settings'
 
@@ -51,7 +51,7 @@ function StationCard({ stationId }: { stationId: string }) {
           <Link to={`/station/${station.data.data.operator.code}/${station.data.data.code}`} className="group flex-grow">
             Stasiun&nbsp;
             { station.data.data.formattedName }
-            <ChevronRightIcon className="inline w-6 h-6 group-hover:ml-1 ml-0 transition-[margin] duration-200" />
+            <CaretRightIcon weight="bold" className="inline w-4 h-4 group-hover:ml-3 ml-2 transition-[margin] duration-200" />
           </Link>
         </h1>
         { timetable.isLoading

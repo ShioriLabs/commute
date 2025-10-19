@@ -1,5 +1,5 @@
 import { Dialog, DialogBackdrop, DialogPanel, Transition, TransitionChild } from '@headlessui/react'
-import { Cog6ToothIcon } from '@heroicons/react/20/solid'
+import { GearSixIcon } from '@phosphor-icons/react'
 import { useRef, useState, useEffect } from 'react'
 import SettingsSheet from '../settings-sheet'
 
@@ -93,7 +93,7 @@ export default function SettingsButton({ className }: Props) {
           <TransitionChild>
             <div className="absolute -bottom-4 -right-4 rounded-full bg-slate-100 p-4 z-[1] ease-in-out translate-y-0 data-closed:translate-y-full transition-transform data-enter:delay-200 transform-gpu duration-200">
               <TransitionChild>
-                <Cog6ToothIcon className="w-12 h-12 translate-y-0 data-closed:translate-y-4 ease-in-out data-enter:delay-200 transform-gpu text-slate-700" />
+                <GearSixIcon weight="fill" className="w-12 h-12 translate-y-0 data-closed:translate-y-4 ease-in-out data-enter:delay-200 transform-gpu text-slate-700" />
               </TransitionChild>
             </div>
           </TransitionChild>

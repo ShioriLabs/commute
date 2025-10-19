@@ -1,5 +1,5 @@
 /* eslint-disable @stylistic/jsx-one-expression-per-line */
-import { ChevronLeftIcon } from '@heroicons/react/20/solid'
+import { CaretLeftIcon } from '@phosphor-icons/react'
 
 export function meta() {
   return [
@@ -19,7 +19,7 @@ export default function CreativeAssetsAttributionsSettingsPage() {
               className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
               onClick={() => history.back()}
             >
-              <ChevronLeftIcon />
+              <CaretLeftIcon weight="bold" className="w-6 h-6" />
             </button>
             <h1 className="font-bold text-2xl">Atribusi Aset Kreatif</h1>
           </div>
@@ -42,12 +42,12 @@ export default function CreativeAssetsAttributionsSettingsPage() {
             </li>
             <li>
               <article>
-                <h1 className="font-semibold">Heroicons</h1>
-                <a href="https://heroicons.com/" target="_blank" className="text-blue-500">https://heroicons.com/</a>
-                <p>Ikon pada Aplikasi Kami menggunakan ikon dari koleksi Heroicons</p>
+                <h1 className="font-semibold">Phosphor Icons</h1>
+                <a href="https://phosphoricons.com/" target="_blank" className="text-blue-500">https://phosphoricons.com/</a>
+                <p>Ikon pada Aplikasi Kami menggunakan ikon dari koleksi Phosphor Icons</p>
                 <p>
-                  © Tailwind Labs<br />
-                  Lisensi lengkap bisa dilihat di <a href="https://github.com/tailwindlabs/heroicons/blob/master/LICENSE" target="_blank" className="text-blue-500">https://github.com/tailwindlabs/heroicons/blob/master/LICENSE</a>
+                  © Helena Zhang, Tobias Fried<br />
+                  Lisensi lengkap bisa dilihat di <a href="https://github.com/phosphor-icons/core/blob/main/LICENSE" target="_blank" className="text-blue-500">https://github.com/phosphor-icons/core/blob/main/LICENSE</a>
                 </p>
               </article>
             </li>

@@ -3,7 +3,7 @@ import type { StandardResponse } from '@schema/response'
 import type { Route } from './+types/station'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useNavigationType } from 'react-router'
-import { BookmarkIcon, BookmarkSlashIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { XIcon, PushPinIcon, PushPinSlashIcon } from '@phosphor-icons/react'
 import type { LineGroupedTimetable } from 'models/schedules'
 import LineCard from '~/components/line-card'
 import { fetcher } from 'utils/fetcher'
@@ -149,10 +149,10 @@ export default function StationPage({ params }: Route.ComponentProps) {
                     >
                       {saved
                         ? (
-                            <BookmarkSlashIcon />
+                            <PushPinSlashIcon weight="bold" className="w-6 h-6" />
                           )
                         : (
-                            <BookmarkIcon />
+                            <PushPinIcon weight="bold" className="w-6 h-6" />
                           )}
                     </button>
                   )}
@@ -161,7 +161,7 @@ export default function StationPage({ params }: Route.ComponentProps) {
                 aria-label="Tutup halaman stasiun"
                 className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8 cursor-pointer"
               >
-                <XMarkIcon />
+                <XIcon weight="bold" className="w-6 h-6" />
               </button>
             </div>
           </div>

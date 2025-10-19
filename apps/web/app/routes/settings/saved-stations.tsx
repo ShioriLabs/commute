@@ -1,4 +1,4 @@
-import { BookmarkIcon, BookmarkSlashIcon, ChevronLeftIcon } from '@heroicons/react/20/solid'
+import { CaretLeftIcon, PushPinIcon, PushPinSlashIcon } from '@phosphor-icons/react'
 import type { StandardResponse } from '@schema/response'
 import type { Station } from 'models/stations'
 import { useState, useEffect, useCallback } from 'react'
@@ -34,8 +34,12 @@ function SavedStationItem({ stationId, isSaved, onSaveButtonClick }: SavedStatio
   if (station.isLoading) {
     return (
       <li className="animate-pulse">
-        <article>
-          <div className="h-6 w-64 bg-slate-200 rounded" />
+        <article className="px-8 py-4 flex items-center gap-4 justify-between">
+          <div>
+            <div className="h-4 w-64 bg-slate-200 rounded" />
+            <div className="h-3 w-32 mt-1 bg-slate-200 rounded" />
+          </div>
+          <div className="w-6 h-6 bg-slate-200 rounded" />
         </article>
       </li>
     )
@@ -56,13 +60,13 @@ function SavedStationItem({ stationId, isSaved, onSaveButtonClick }: SavedStatio
             {station.data.data.operator.name}
           </h2>
         </div>
-        <button onClick={handleSaveStationButton}>
+        <button onClick={handleSaveStationButton} className="cursor-pointer">
           {isSaved
             ? (
-                <BookmarkSlashIcon className="w-6 h-6 text-red-400" />
+                <PushPinSlashIcon weight="fill" className="w-6 h-6 text-red-400" />
               )
             : (
-                <BookmarkIcon className="w-6 h-6" />
+                <PushPinIcon weight="fill" className="w-6 h-6" />
               )}
         </button>
       </article>
@@ -131,7 +135,7 @@ export default function SavedStationsSettingsPage() {
             className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
             onClick={() => history.back()}
           >
-            <ChevronLeftIcon />
+            <CaretLeftIcon weight="bold" className="w-6 h-6" />
           </button>
           <h1 className="font-bold text-2xl">Stasiun Disimpan</h1>
         </div>
