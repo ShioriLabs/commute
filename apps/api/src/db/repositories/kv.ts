@@ -10,13 +10,14 @@ export class KVRepository {
       return null
     }
 
-    const value = await this.kv.get(id)
+    const value = await this.kv.get<T>(id, 'json')
     if (value === null) {
       return null
     }
 
     try {
-      return JSON.parse(value) as T
+      return value
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (error) {
       return null
     }
