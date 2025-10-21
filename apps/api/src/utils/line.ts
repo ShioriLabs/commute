@@ -13,10 +13,14 @@ export const ALL_LINES: Record<Operator, readonly Line[]> = {
   [OPERATORS.NUL.code]: []
 } as const
 
-export function getLineByOperator(operator: Operator, lineCode: string) {
-  const operatorLines = ALL_LINES[operator]
-  if (!operatorLines) return null
+export const LINE_LOOKUP_TABLE: Map<string, Line> = new Map()
 
-  const line = operatorLines.find(ln => ln.lineCode === lineCode)
-  return line || null
+for (const [operator, lines] of Object.entries(ALL_LINES)) {
+  for (const line of lines) {
+    LINE_LOOKUP_TABLE.set(`${operator}:${line.lineCode}`, line)
+  }
+}
+
+export function getLineByOperator(operator: Operator, lineCode: string) {
+  return LINE_LOOKUP_TABLE.get(`${operator}:${lineCode}`) || null
 }

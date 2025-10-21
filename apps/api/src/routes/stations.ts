@@ -204,8 +204,6 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
       404
     )
   }
-
-  const timetable = compactMode ? ([] as CompactLineGroupedTimetable) : ([] as LineGroupedTimetable)
   const schedules = await stationRepository.getTimetableFromStationId(checkStationResult.station!.id)
   if (schedules.length === 0) {
     return c.json(
@@ -214,54 +212,58 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
     )
   }
 
-  const groupedByLineSchedules: Record<string, Line & { schedules: Schedule[] }> = { }
   const isBekasiInterliningStation = operator.code === OPERATORS.KCI.code && CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES.has(stationCode)
+  const lineGroups: Map<string, { line: Line, boundForGroups: Map<string, Schedule[]> }> = new Map()
 
   for (const schedule of schedules) {
     const line = getLineByOperator(operator.code, schedule.lineCode)
     if (!line) continue
 
-    if (groupedByLineSchedules[line.lineCode]) {
-      groupedByLineSchedules[line.lineCode]!.schedules.push(schedule)
-    } else {
-      groupedByLineSchedules[line.lineCode] = {
-        ...line,
-        schedules: [schedule]
+    let lineGroup = lineGroups.get(line.lineCode)
+    if (!lineGroup) {
+      lineGroup = {
+        line,
+        boundForGroups: new Map()
       }
+      lineGroups.set(line.lineCode, lineGroup)
+    }
+
+    let via: string | null = null
+
+    if (isBekasiInterliningStation && schedule.boundFor === 'Kampung Bandan') {
+      const trainNo = schedule.tripNumber ?? ''
+      if (trainNo !== '') {
+        if (trainNo.startsWith('6')) via = 'Pasar Senen'
+        else via = 'Manggarai'
+      }
+    }
+
+    const boundForKey = via ? `${schedule.boundFor}:${via}` : schedule.boundFor
+    const boundForSchedules = lineGroup.boundForGroups.get(boundForKey)
+    if (boundForSchedules) {
+      boundForSchedules.push(schedule)
+    } else {
+      lineGroup.boundForGroups.set(boundForKey, [schedule])
     }
   }
 
-  for (const line of Object.values(groupedByLineSchedules)) {
-    const groupedByBoundFor: Record<string, Schedule[]> = { }
-    for (const schedule of line.schedules) {
-      const boundFor = schedule.boundFor
-      let via: string | null = null
-      if (isBekasiInterliningStation && boundFor === 'Kampung Bandan') {
-        const trainNo = schedule.tripNumber ?? ''
-        if (trainNo !== '') {
-          if (trainNo.startsWith('6')) via = 'Pasar Senen'
-          else via = 'Manggarai'
-        }
+  const timetable = compactMode ? ([] as CompactLineGroupedTimetable) : ([] as LineGroupedTimetable)
+  for (const { line, boundForGroups } of lineGroups.values()) {
+    const timetableEntries = Array.from(boundForGroups.entries()).map(([key, schedules]) => {
+      const [boundFor, via] = key.split(':')
+
+      return {
+        boundFor: boundFor!,
+        via: via || null,
+        schedules: mapSchedule(schedules, compactMode)
       }
-      const boundForKey = via ? `${boundFor}:${via}` : boundFor
-      if (groupedByBoundFor[boundForKey]) {
-        groupedByBoundFor[boundForKey]!.push(schedule)
-      } else {
-        groupedByBoundFor[boundForKey] = [schedule]
-      }
-    }
+    }).sort((a, b) => a.boundFor.localeCompare(b.boundFor))
 
     timetable.push({
       name: line.name,
       colorCode: line.colorCode,
       lineCode: line.lineCode,
-      timetable: Object
-        .entries(groupedByBoundFor)
-        .map(([key, schedules]) => {
-          const [boundFor, via] = key.split(':')
-          return { boundFor: boundFor!, via: via ?? null, schedules: mapSchedule(schedules, compactMode) }
-        })
-        .sort((a, b) => a.boundFor!.localeCompare(b.boundFor!))
+      timetable: timetableEntries
     })
   }
 
