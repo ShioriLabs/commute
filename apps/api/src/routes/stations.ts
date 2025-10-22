@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { StationRepository } from 'db/repositories/stations'
-import { NotFound, Ok } from 'utils/response'
+import { Internal, NotFound, Ok } from 'utils/response'
 import { Bindings } from 'app'
 import { KVRepository } from 'db/repositories/kv'
 import { getOperatorByCode } from 'utils/operator'
@@ -195,17 +195,28 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
     )
   }
 
-  const checkStationResult = await stationRepository.checkIfExists(`${operator.code}-${stationCode}`)
-  if (!checkStationResult.exists || checkStationResult.station === null) return c.json(NotFound(`Unknown Station Code ${stationCode} in Operator ${operator.code}`), 404)
+  // optimistic check, fails slower but faster happy path
+  const stationID = `${operator.code}-${stationCode}`
+  const [
+    checkStationResult,
+    schedules
+  ] = await Promise.allSettled([
+    stationRepository.checkIfExists(stationID),
+    stationRepository.getTimetableFromStationId(stationID)
+  ])
 
-  if (checkStationResult.station!.timetableSynced === 0) {
+  if (checkStationResult.status === 'rejected' || schedules.status === 'rejected') return c.json(Internal('DATABASE_ERROR', 'Can\'t connect to database, please try again later.'))
+
+  if (!checkStationResult.value.exists || checkStationResult.value.station === null) return c.json(NotFound(`Unknown Station Code ${stationCode} in Operator ${operator.code}`), 404)
+
+  if (checkStationResult.value.station.timetableSynced === 0) {
     return c.json(
       NotFound(`Timetable for Station ${stationCode} in Operator ${operator.code} is not available yet. Please try again later.`),
       404
     )
   }
-  const schedules = await stationRepository.getTimetableFromStationId(checkStationResult.station!.id)
-  if (schedules.length === 0) {
+
+  if (schedules.value.length === 0) {
     return c.json(
       Ok([]),
       200
@@ -215,7 +226,7 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
   const isBekasiInterliningStation = operator.code === OPERATORS.KCI.code && CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES.has(stationCode)
   const lineGroups: Map<string, { line: Line, boundForGroups: Map<string, Schedule[]> }> = new Map()
 
-  for (const schedule of schedules) {
+  for (const schedule of schedules.value) {
     const line = getLineByOperator(operator.code, schedule.lineCode)
     if (!line) continue
 

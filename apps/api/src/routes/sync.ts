@@ -48,7 +48,7 @@ app.post('/:operator', async (c) => {
     )
   } catch {
     return c.json(
-      Internal('Failed to sync stations. Please try again later.'),
+      Internal('SYNC_FAILED', 'Failed to sync stations. Please try again later.'),
       500
     )
   }
@@ -100,7 +100,7 @@ app.post('/:operator/:stationCode/timetable', async (c) => {
     )
   } catch {
     return c.json(
-      Internal('Failed to sync timetable. Please try again later.'),
+      Internal('SYNC_FAILED', 'Failed to sync timetable. Please try again later.'),
       500
     )
   }
