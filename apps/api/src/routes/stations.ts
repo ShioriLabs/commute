@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { StationRepository } from 'db/repositories/stations'
-import { NotFound, Ok } from 'utils/response'
+import { Internal, NotFound, Ok } from 'utils/response'
 import { Bindings } from 'app'
 import { KVRepository } from 'db/repositories/kv'
 import { getOperatorByCode } from 'utils/operator'
@@ -182,12 +182,17 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
     return c.json(NotFound(`Unknown Operator Code: ${operatorCode}`), 404)
   }
 
+  const timings: Map<string, number> = new Map()
+  const start = Date.now()
+
   const kvRepository = new KVRepository(c.env.KV)
   const stationRepository = new StationRepository(c.env.DB)
 
   const kvKey = `stations_${operator.code}_${stationCode}_timetable_grouped_${compactMode ? 'compact' : 'full'}_${c.env.API_VERSION}`
 
+  timings.set('kv-get-start', Date.now() - start)
   const cachedTimetable = await kvRepository.get(kvKey)
+  timings.set('kv-get-end', Date.now() - start)
   if (cachedTimetable) {
     return c.json(
       Ok(cachedTimetable),
@@ -195,17 +200,30 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
     )
   }
 
-  const checkStationResult = await stationRepository.checkIfExists(`${operator.code}-${stationCode}`)
-  if (!checkStationResult.exists || checkStationResult.station === null) return c.json(NotFound(`Unknown Station Code ${stationCode} in Operator ${operator.code}`), 404)
+  // optimistic check, fails slower but faster happy path
+  const stationID = `${operator.code}-${stationCode}`
+  timings.set('d1-query-start', Date.now() - start)
+  const [
+    checkStationResult,
+    schedules
+  ] = await Promise.allSettled([
+    stationRepository.checkIfExists(stationID),
+    stationRepository.getTimetableFromStationId(stationID)
+  ])
+  timings.set('d1-query-end', Date.now() - start)
 
-  if (checkStationResult.station!.timetableSynced === 0) {
+  if (checkStationResult.status === 'rejected' || schedules.status === 'rejected') return c.json(Internal('DATABASE_ERROR', 'Can\'t connect to database, please try again later.'))
+
+  if (!checkStationResult.value.exists || checkStationResult.value.station === null) return c.json(NotFound(`Unknown Station Code ${stationCode} in Operator ${operator.code}`), 404)
+
+  if (checkStationResult.value.station.timetableSynced === 0) {
     return c.json(
       NotFound(`Timetable for Station ${stationCode} in Operator ${operator.code} is not available yet. Please try again later.`),
       404
     )
   }
-  const schedules = await stationRepository.getTimetableFromStationId(checkStationResult.station!.id)
-  if (schedules.length === 0) {
+
+  if (schedules.value.length === 0) {
     return c.json(
       Ok([]),
       200
@@ -215,7 +233,8 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
   const isBekasiInterliningStation = operator.code === OPERATORS.KCI.code && CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES.has(stationCode)
   const lineGroups: Map<string, { line: Line, boundForGroups: Map<string, Schedule[]> }> = new Map()
 
-  for (const schedule of schedules) {
+  timings.set('transform-start', Date.now() - start)
+  for (const schedule of schedules.value) {
     const line = getLineByOperator(operator.code, schedule.lineCode)
     if (!line) continue
 
@@ -266,11 +285,17 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
       timetable: timetableEntries
     })
   }
+  timings.set('transform-end', Date.now() - start)
 
+  timings.set('kv-set-start', Date.now() - start)
   await kvRepository.set(kvKey, timetable)
+  timings.set('kv-set-end', Date.now() - start)
 
   return c.json(
-    Ok(timetable),
+    {
+      ...Ok(timetable),
+      _debug: Object.fromEntries(timings.entries())
+    },
     200
   )
 })
