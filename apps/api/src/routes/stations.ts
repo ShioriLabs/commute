@@ -182,17 +182,12 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
     return c.json(NotFound(`Unknown Operator Code: ${operatorCode}`), 404)
   }
 
-  const timings: Map<string, number> = new Map()
-  const start = Date.now()
-
   const kvRepository = new KVRepository(c.env.KV)
   const stationRepository = new StationRepository(c.env.DB)
 
   const kvKey = `stations_${operator.code}_${stationCode}_timetable_grouped_${compactMode ? 'compact' : 'full'}_${c.env.API_VERSION}`
 
-  timings.set('kv-get-start', Date.now() - start)
   const cachedTimetable = await kvRepository.get(kvKey)
-  timings.set('kv-get-end', Date.now() - start)
   if (cachedTimetable) {
     return c.json(
       Ok(cachedTimetable),
@@ -202,7 +197,6 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
 
   // optimistic check, fails slower but faster happy path
   const stationID = `${operator.code}-${stationCode}`
-  timings.set('d1-query-start', Date.now() - start)
   const [
     checkStationResult,
     schedules
@@ -210,7 +204,6 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
     stationRepository.checkIfExists(stationID),
     stationRepository.getTimetableFromStationId(stationID)
   ])
-  timings.set('d1-query-end', Date.now() - start)
 
   if (checkStationResult.status === 'rejected' || schedules.status === 'rejected') return c.json(Internal('DATABASE_ERROR', 'Can\'t connect to database, please try again later.'))
 
@@ -233,7 +226,6 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
   const isBekasiInterliningStation = operator.code === OPERATORS.KCI.code && CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES.has(stationCode)
   const lineGroups: Map<string, { line: Line, boundForGroups: Map<string, Schedule[]> }> = new Map()
 
-  timings.set('transform-start', Date.now() - start)
   for (const schedule of schedules.value) {
     const line = getLineByOperator(operator.code, schedule.lineCode)
     if (!line) continue
@@ -285,17 +277,13 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
       timetable: timetableEntries
     })
   }
-  timings.set('transform-end', Date.now() - start)
 
-  timings.set('kv-set-start', Date.now() - start)
-  await kvRepository.set(kvKey, timetable)
-  timings.set('kv-set-end', Date.now() - start)
+  c.executionCtx.waitUntil(
+    kvRepository.set(kvKey, timetable)
+  )
 
   return c.json(
-    {
-      ...Ok(timetable),
-      _debug: Object.fromEntries(timings.entries())
-    },
+    Ok(timetable),
     200
   )
 })
