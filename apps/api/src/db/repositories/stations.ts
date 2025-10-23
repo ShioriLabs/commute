@@ -1,10 +1,12 @@
-import { Operator, OPERATORS } from '@commute/constants'
+import { Operator } from '@commute/constants'
 import { db } from 'db'
 import { NewSchedule } from 'db/schemas/schedules'
 import { Amenity, NewStation, UpdatingStation } from 'db/schemas/stations'
 import { sql } from 'kysely'
+import { Line } from 'models/line'
 import { Repository } from 'models/repository'
 import { getLineByOperator } from 'utils/line'
+import { getOperatorByCode } from 'utils/operator'
 
 export class StationRepository extends Repository {
   private d1: D1Database
@@ -35,16 +37,32 @@ export class StationRepository extends Repository {
     }
 
     const stations = await query.execute()
-    return stations.map(station => ({
-      ...station,
-      amenities: station.amenities ? JSON.parse(station.amenities as unknown as string) as Amenity[] : [],
-      operator: OPERATORS[station.operator],
-      lines: station.lines
-        ? (station.lines as string).split(',')
-            .map(lineCode => getLineByOperator(station.operator, lineCode))
-            .filter(line => line !== null)
-        : []
-    }))
+    const mappedStations = []
+
+    for (const station of stations) {
+      const operator = getOperatorByCode(station.operator)
+      if (operator === null) continue
+
+      const lines: Set<Line> = new Set()
+      if (station.lines !== null) {
+        for (const lineCode of (station.lines as string).split(',')) {
+          if (lineCode === 'NUL') continue
+          const line = getLineByOperator(station.operator, lineCode)
+          if (line === null) continue
+          lines.add(line)
+        }
+      }
+
+      const amenities = station.amenities ? JSON.parse(station.amenities as unknown as string) as Amenity[] : []
+      mappedStations.push({
+        ...station,
+        amenities,
+        operator,
+        lines: Array.from(lines)
+      })
+    }
+
+    return mappedStations
   }
 
   async getAllByOperator(operator: Operator, page?: number, limit?: number) {
@@ -69,16 +87,32 @@ export class StationRepository extends Repository {
     }
 
     const stations = await query.execute()
-    return stations.map(station => ({
-      ...station,
-      amenities: station.amenities ? JSON.parse(station.amenities as unknown as string) as Amenity[] : [],
-      operator: OPERATORS[operator],
-      lines: station.lines
-        ? (station.lines as string).split(',')
-            .map(lineCode => getLineByOperator(operator, lineCode))
-            .filter(line => line !== null)
-        : []
-    }))
+    const mappedStations = []
+
+    for (const station of stations) {
+      const operator = getOperatorByCode(station.operator)
+      if (operator === null) continue
+
+      const lines: Set<Line> = new Set()
+      if (station.lines !== null) {
+        for (const lineCode of (station.lines as string).split(',')) {
+          if (lineCode === 'NUL') continue
+          const line = getLineByOperator(station.operator, lineCode)
+          if (line === null) continue
+          lines.add(line)
+        }
+      }
+
+      const amenities = station.amenities ? JSON.parse(station.amenities as unknown as string) as Amenity[] : []
+      mappedStations.push({
+        ...station,
+        amenities,
+        operator,
+        lines: Array.from(lines)
+      })
+    }
+
+    return mappedStations
   }
 
   async getById(id: string) {
@@ -101,16 +135,26 @@ export class StationRepository extends Repository {
       .executeTakeFirst()
 
     if (!station) return null
+    const operator = getOperatorByCode(station.operator)
+    if (operator === null) return null
+
+    const lines: Set<Line> = new Set()
+    if (station.lines !== null) {
+      for (const lineCode of (station.lines as string).split(',')) {
+        if (lineCode === 'NUL') continue
+        const line = getLineByOperator(station.operator, lineCode)
+        if (line === null) continue
+        lines.add(line)
+      }
+    }
+
+    const amenities = station.amenities ? JSON.parse(station.amenities as unknown as string) as Amenity[] : []
 
     return {
       ...station,
-      amenities: station.amenities ? JSON.parse(station.amenities as unknown as string) as Amenity[] : [],
-      operator: OPERATORS[station.operator],
-      lines: station.lines
-        ? (station.lines as string).split(',')
-            .map(lineCode => getLineByOperator(station.operator, lineCode))
-            .filter(line => line !== null)
-        : []
+      amenities,
+      operator,
+      lines: Array.from(lines)
     }
   }
 

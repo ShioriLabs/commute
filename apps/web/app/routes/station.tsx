@@ -3,12 +3,13 @@ import type { StandardResponse } from '@schema/response'
 import type { Route } from './+types/station'
 import { useCallback, useEffect, useMemo, useState, type JSX } from 'react'
 import { useNavigate, useNavigationType } from 'react-router'
-import { XIcon, PushPinIcon, PushPinSlashIcon, ToiletIcon, WheelchairIcon, PlugIcon, EscalatorUpIcon, EscalatorDownIcon, ElevatorIcon, StarAndCrescentIcon, LetterCirclePIcon, BroadcastIcon, BicycleIcon, LockersIcon, BabyIcon } from '@phosphor-icons/react'
+import { XIcon, PushPinIcon, PushPinSlashIcon, ToiletIcon, WheelchairIcon, PlugIcon, EscalatorUpIcon, EscalatorDownIcon, ElevatorIcon, StarAndCrescentIcon, LetterCirclePIcon, BroadcastIcon, BicycleIcon, LockersIcon, BabyIcon, WarningIcon, ArrowSquareOutIcon } from '@phosphor-icons/react'
 import type { LineGroupedTimetable } from 'models/schedules'
 import LineCard from '~/components/line-card'
 import { fetcher } from 'utils/fetcher'
 import useSWR from 'swr'
 import { AMENITY_TYPES, type AmenityType } from '@commute/constants'
+import { useNetworkStatus } from '~/hooks/network'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -80,25 +81,7 @@ export default function StationPage({ params }: Route.ComponentProps) {
   const navigationType = useNavigationType()
   const navigate = useNavigate()
   const [saved, setSaved] = useState(false)
-  const [isOnline, setIsOnline] = useState(navigator.onLine)
-
-  useEffect(() => {
-    function handleOnline() {
-      setIsOnline(true)
-    }
-
-    function handleOffline() {
-      setIsOnline(false)
-    }
-
-    window.addEventListener('online', handleOnline)
-    window.addEventListener('offline', handleOffline)
-
-    return () => {
-      window.removeEventListener('online', handleOnline)
-      window.removeEventListener('offline', handleOffline)
-    }
-  }, [])
+  const networkStatus = useNetworkStatus()
 
   useEffect(() => {
     if (station.isLoading) return
@@ -194,40 +177,66 @@ export default function StationPage({ params }: Route.ComponentProps) {
         </div>
       )}
 
-      {!timetable.isLoading && (() => {
-        if (!isOnline) return <EmptyState mode="OFFLINE" />
-        if (timetable.error || !timetable.data?.data?.length) return <EmptyState mode="NO_DATA" />
-
-        return (
-          <>
-            <ul className="-mt-20 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
-              {timetable.data.data.map(line => (
-                <LineCard key={line.lineCode} line={line} />
-              ))}
-            </ul>
-            <section className="px-4 pb-8 max-w-3xl mx-auto">
-              <h2 className="font-semibold text-xl px-4">Fasilitas</h2>
-              {station.data?.data?.amenities?.length
-                ? (
-                    <ul className="flex flex-col gap-2 mt-4">
-                      {station.data.data.amenities.map(amenity => (
-                        <li key={amenity.type} className="flex items-center px-4 py-2 gap-2">
-                          <span className="font-bold gap-2 flex flex-row items-center">
-                            {AMENITY_ICONS[amenity.type]}
-                            {AMENITY_TYPES[amenity.type]}
-                          </span>
-                          <span className="ml-auto text-gray-600">{amenity.text || 'Tersedia'}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )
-                : (
-                    <p className="mt-4 px-4 text-gray-600">Tidak ada data fasilitas untuk stasiun ini</p>
+      {!timetable.isLoading && (
+        <div className="flex flex-col -mt-20 max-w-3xl mx-auto pb-8 px-4">
+          {(() => {
+            if (timetable.data?.data?.length) {
+              return (
+                <>
+                  {networkStatus === 'OFFLINE' && (
+                    <div className="text-amber-950 bg-amber-100 flex flex-row gap-2 rounded-xl p-4 font-semibold mb-4">
+                      <WarningIcon weight="duotone" className="w-6 h-6" />
+                      Kamu sedang offline, data mungkin tidak up-to-date
+                    </div>
                   )}
-            </section>
-          </>
-        )
-      })()}
+                  {station.data?.data?.latitude && station.data.data.longitude
+                    ? (
+                        <a
+                          href={`https://maps.google.com/maps?q=${station.data.data.latitude},${station.data.data.longitude}(${encodeURIComponent(station.data.data.formattedName || station.data.data.name)})`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex flex-row gap-2 justify-center bg-[#F55875] text-white font-bold p-4 rounded-xl mb-4 text-center"
+                        >
+                          Petunjuk Arah
+                          <ArrowSquareOutIcon className="w-6 h-6" weight="bold" aria-label="Link eksternal, akan membuka Google Maps" />
+                        </a>
+                      )
+                    : null}
+                  <ul className="flex flex-col gap-2">
+                    {timetable.data.data.map(line => (
+                      <LineCard key={line.lineCode} line={line} />
+                    ))}
+                  </ul>
+                </>
+              )
+            }
+
+            if (networkStatus === 'OFFLINE') return <EmptyState mode="OFFLINE" />
+            if (timetable.error) return <EmptyState mode="NO_DATA" />
+            return <EmptyState mode="NO_DATA" />
+          })()}
+          <section className="mt-8">
+            <h2 className="font-semibold text-xl px-4">Fasilitas</h2>
+            {station.data?.data?.amenities?.length
+              ? (
+                  <ul className="flex flex-col gap-2 mt-4">
+                    {station.data.data.amenities.map(amenity => (
+                      <li key={amenity.type} className="flex items-center px-4 py-2 gap-2">
+                        <span className="font-bold gap-2 flex flex-row items-center">
+                          {AMENITY_ICONS[amenity.type]}
+                          {AMENITY_TYPES[amenity.type]}
+                        </span>
+                        <span className="ml-auto text-gray-600">{amenity.text || 'Tersedia'}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )
+              : (
+                  <p className="mt-4 px-4 text-gray-600">Tidak ada data fasilitas untuk stasiun ini</p>
+                )}
+          </section>
+        </div>
+      )}
     </div>
   )
 }
