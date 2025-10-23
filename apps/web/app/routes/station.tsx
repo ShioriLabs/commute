@@ -3,7 +3,7 @@ import type { StandardResponse } from '@schema/response'
 import type { Route } from './+types/station'
 import { useCallback, useEffect, useMemo, useState, type JSX } from 'react'
 import { useNavigate, useNavigationType } from 'react-router'
-import { XIcon, PushPinIcon, PushPinSlashIcon, ToiletIcon, WheelchairIcon, PlugIcon, EscalatorUpIcon, EscalatorDownIcon, ElevatorIcon, StarAndCrescentIcon, LetterCirclePIcon, BroadcastIcon, BicycleIcon, LockersIcon, BabyIcon, WarningIcon } from '@phosphor-icons/react'
+import { XIcon, PushPinIcon, PushPinSlashIcon, ToiletIcon, WheelchairIcon, PlugIcon, EscalatorUpIcon, EscalatorDownIcon, ElevatorIcon, StarAndCrescentIcon, LetterCirclePIcon, BroadcastIcon, BicycleIcon, LockersIcon, BabyIcon, WarningIcon, ArrowSquareOutIcon } from '@phosphor-icons/react'
 import type { LineGroupedTimetable } from 'models/schedules'
 import LineCard from '~/components/line-card'
 import { fetcher } from 'utils/fetcher'
@@ -178,20 +178,31 @@ export default function StationPage({ params }: Route.ComponentProps) {
       )}
 
       {!timetable.isLoading && (
-        <div className="flex flex-col -mt-20 max-w-3xl mx-auto pb-8">
+        <div className="flex flex-col -mt-20 max-w-3xl mx-auto pb-8 px-4">
           {(() => {
             if (timetable.data?.data?.length) {
               return (
                 <>
                   {networkStatus === 'OFFLINE' && (
-                    <div className="px-4 mb-4">
-                      <div className="text-amber-950 bg-amber-100 flex flex-row gap-2 rounded-xl p-4 font-semibold">
-                        <WarningIcon weight="duotone" className="w-6 h-6" />
-                        Kamu sedang offline, data mungkin tidak up-to-date
-                      </div>
+                    <div className="text-amber-950 bg-amber-100 flex flex-row gap-2 rounded-xl p-4 font-semibold mb-4">
+                      <WarningIcon weight="duotone" className="w-6 h-6" />
+                      Kamu sedang offline, data mungkin tidak up-to-date
                     </div>
                   )}
-                  <ul className="px-4 flex flex-col gap-2">
+                  {station.data?.data?.latitude && station.data.data.longitude
+                    ? (
+                        <a
+                          href={`https://maps.google.com/maps?q=${station.data.data.latitude},${station.data.data.longitude}(${encodeURIComponent(station.data.data.formattedName || station.data.data.name)})`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex flex-row gap-2 justify-center bg-[#F55875] text-white font-bold p-4 rounded-xl mb-4 text-center"
+                        >
+                          Petunjuk Arah
+                          <ArrowSquareOutIcon className="w-6 h-6" weight="bold" aria-label="Link eksternal, akan membuka Google Maps" />
+                        </a>
+                      )
+                    : null}
+                  <ul className="flex flex-col gap-2">
                     {timetable.data.data.map(line => (
                       <LineCard key={line.lineCode} line={line} />
                     ))}
@@ -204,7 +215,7 @@ export default function StationPage({ params }: Route.ComponentProps) {
             if (timetable.error) return <EmptyState mode="NO_DATA" />
             return <EmptyState mode="NO_DATA" />
           })()}
-          <section className="px-4 mt-8">
+          <section className="mt-8">
             <h2 className="font-semibold text-xl px-4">Fasilitas</h2>
             {station.data?.data?.amenities?.length
               ? (
