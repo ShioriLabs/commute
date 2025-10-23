@@ -3,7 +3,7 @@ import type { StandardResponse } from '@schema/response'
 import type { Route } from './+types/station'
 import { useCallback, useEffect, useMemo, useState, type JSX } from 'react'
 import { useNavigate, useNavigationType } from 'react-router'
-import { XIcon, PushPinIcon, PushPinSlashIcon, ToiletIcon, WheelchairIcon, PlugIcon, EscalatorUpIcon, EscalatorDownIcon, ElevatorIcon, StarAndCrescentIcon, LetterCirclePIcon, BroadcastIcon, BicycleIcon, LockersIcon, BabyIcon } from '@phosphor-icons/react'
+import { XIcon, PushPinIcon, PushPinSlashIcon, ToiletIcon, WheelchairIcon, PlugIcon, EscalatorUpIcon, EscalatorDownIcon, ElevatorIcon, StarAndCrescentIcon, LetterCirclePIcon, BroadcastIcon, BicycleIcon, LockersIcon, BabyIcon, WarningIcon } from '@phosphor-icons/react'
 import type { LineGroupedTimetable } from 'models/schedules'
 import LineCard from '~/components/line-card'
 import { fetcher } from 'utils/fetcher'
@@ -194,40 +194,55 @@ export default function StationPage({ params }: Route.ComponentProps) {
         </div>
       )}
 
-      {!timetable.isLoading && (() => {
-        if (!isOnline) return <EmptyState mode="OFFLINE" />
-        if (timetable.error || !timetable.data?.data?.length) return <EmptyState mode="NO_DATA" />
-
-        return (
-          <>
-            <ul className="-mt-20 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
-              {timetable.data.data.map(line => (
-                <LineCard key={line.lineCode} line={line} />
-              ))}
-            </ul>
-            <section className="px-4 pb-8 max-w-3xl mx-auto">
-              <h2 className="font-semibold text-xl px-4">Fasilitas</h2>
-              {station.data?.data?.amenities?.length
-                ? (
-                    <ul className="flex flex-col gap-2 mt-4">
-                      {station.data.data.amenities.map(amenity => (
-                        <li key={amenity.type} className="flex items-center px-4 py-2 gap-2">
-                          <span className="font-bold gap-2 flex flex-row items-center">
-                            {AMENITY_ICONS[amenity.type]}
-                            {AMENITY_TYPES[amenity.type]}
-                          </span>
-                          <span className="ml-auto text-gray-600">{amenity.text || 'Tersedia'}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )
-                : (
-                    <p className="mt-4 px-4 text-gray-600">Tidak ada data fasilitas untuk stasiun ini</p>
+      {!timetable.isLoading && (
+        <div className="flex flex-col -mt-20 max-w-3xl mx-auto pb-8">
+          {(() => {
+            if (timetable.data?.data?.length) {
+              return (
+                <>
+                  {!isOnline && (
+                    <div className="px-4">
+                      <div className="text-amber-950 mb-4 bg-amber-100 flex flex-row gap-2 rounded-xl p-4 font-semibold">
+                        <WarningIcon weight="duotone" className="w-6 h-6" />
+                        Kamu sedang offline, data mungkin tidak up-to-date
+                      </div>
+                    </div>
                   )}
-            </section>
-          </>
-        )
-      })()}
+                  <ul className="px-4 flex flex-col gap-2">
+                    {timetable.data.data.map(line => (
+                      <LineCard key={line.lineCode} line={line} />
+                    ))}
+                  </ul>
+                </>
+              )
+            }
+
+            if (!isOnline) return <EmptyState mode="OFFLINE" />
+            if (timetable.error) return <EmptyState mode="NO_DATA" />
+            return <EmptyState mode="NO_DATA" />
+          })()}
+          <section className="px-4 mt-8">
+            <h2 className="font-semibold text-xl px-4">Fasilitas</h2>
+            {station.data?.data?.amenities?.length
+              ? (
+                  <ul className="flex flex-col gap-2 mt-4">
+                    {station.data.data.amenities.map(amenity => (
+                      <li key={amenity.type} className="flex items-center px-4 py-2 gap-2">
+                        <span className="font-bold gap-2 flex flex-row items-center">
+                          {AMENITY_ICONS[amenity.type]}
+                          {AMENITY_TYPES[amenity.type]}
+                        </span>
+                        <span className="ml-auto text-gray-600">{amenity.text || 'Tersedia'}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )
+              : (
+                  <p className="mt-4 px-4 text-gray-600">Tidak ada data fasilitas untuk stasiun ini</p>
+                )}
+          </section>
+        </div>
+      )}
     </div>
   )
 }
