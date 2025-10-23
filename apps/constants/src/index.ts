@@ -62,3 +62,5 @@ export const AMENITY_TYPES = {
 } as const
 
 export type AmenityType = keyof typeof AMENITY_TYPES
+
+export type TransferDataType = 'INTERNAL' | 'EXTERNAL'
