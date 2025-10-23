@@ -24,10 +24,61 @@ export function meta() {
   ]
 }
 
+function EmptyState({ mode = 'NO_SAVED' }: { mode: 'NO_SAVED' | 'OFFLINE' }) {
+  return (
+    <div className="w-screen h-screen flex items-center justify-center flex-col p-2" aria-live="polite">
+      <picture>
+        <source srcSet="/img/station.webp" type="image/webp" />
+        <img src="/img/station.png" alt="Gambar peron stasiun dengan jembatan di atasnya" className="w-48 h-48 aspect-square object-contain" fetchPriority="high" />
+      </picture>
+      {mode === 'NO_SAVED' && (
+        <>
+          <span className="text-2xl text-center font-bold mt-0">Belum Ada Stasiun Disimpan</span>
+          <p className="text-center mt-2">
+            Klik tombol
+            {' '}
+            <b>Cari Stasiun</b>
+            {' '}
+            di bawah untuk mulai cari jadwal & simpan stasiun!
+          </p>
+        </>
+      )}
+
+      {mode === 'OFFLINE' && (
+        <>
+          <span className="text-2xl text-center font-bold mt-0">Jaringan Tidak Tersedia</span>
+          <p className="text-center mt-2">
+            Silakan coba lagi beberapa saat lagi saat jaringan Anda tersambung
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
+
 function StationCard({ stationId }: { stationId: string }) {
   const [operator, code] = stationId.split(/-/g)
   const station = useSWR<StandardResponse<Station>>(new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
   const timetable = useSWR<StandardResponse<CompactLineGroupedTimetable>>(new URL(`/stations/${operator}/${code}/timetable/grouped?compact=1`, import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
+  const [isOnline, setIsOnline] = useState(navigator.onLine)
+
+  useEffect(() => {
+    function handleOnline() {
+      setIsOnline(true)
+    }
+
+    function handleOffline() {
+      setIsOnline(false)
+    }
+
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
 
   if (station.isLoading && !station.error) {
     return (
@@ -40,34 +91,38 @@ function StationCard({ stationId }: { stationId: string }) {
     )
   }
 
-  if (station.error || station.data === undefined || station.data.data === undefined) {
-    return null
+  if (station.data?.data) {
+    return (
+      <li>
+        <article>
+          <h1 className="font-bold text-2xl flex px-8 py-6 sticky top-0 bg-rose-50/20 backdrop-blur-2xl z-10 lg:relative lg:backdrop-blur-none lg:bg-transparent">
+            <Link to={`/station/${station.data.data.operator.code}/${station.data.data.code}`} className="group flex-grow">
+              Stasiun&nbsp;
+              { station.data.data.formattedName }
+              <CaretRightIcon weight="bold" className="inline w-4 h-4 group-hover:ml-3 ml-2 transition-[margin] duration-200" />
+            </Link>
+          </h1>
+          { timetable.isLoading
+            ? (
+                <div className="flex h-[320px] bg-slate-200 rounded-xl mx-4" />
+              )
+            : (
+                <ul className="flex flex-col lg:grid lg:grid-cols-2 gap-4 mx-4">
+                  {timetable?.data?.data?.map(line => (
+                    <LineCard key={line.lineCode} line={line} />
+                  ))}
+                </ul>
+              )}
+        </article>
+      </li>
+    )
   }
 
-  return (
-    <li>
-      <article>
-        <h1 className="font-bold text-2xl flex px-8 py-6 sticky top-0 bg-rose-50/20 backdrop-blur-2xl z-10 lg:relative lg:backdrop-blur-none lg:bg-transparent">
-          <Link to={`/station/${station.data.data.operator.code}/${station.data.data.code}`} className="group flex-grow">
-            Stasiun&nbsp;
-            { station.data.data.formattedName }
-            <CaretRightIcon weight="bold" className="inline w-4 h-4 group-hover:ml-3 ml-2 transition-[margin] duration-200" />
-          </Link>
-        </h1>
-        { timetable.isLoading
-          ? (
-              <div className="flex h-[320px] bg-slate-200 rounded-xl mx-4" />
-            )
-          : (
-              <ul className="flex flex-col lg:grid lg:grid-cols-2 gap-4 mx-4">
-                {timetable?.data?.data?.map(line => (
-                  <LineCard key={line.lineCode} line={line} />
-                ))}
-              </ul>
-            )}
-      </article>
-    </li>
-  )
+  if (!isOnline) {
+    return <EmptyState mode="OFFLINE" />
+  }
+
+  return <EmptyState mode="NO_SAVED" />
 }
 
 export default function HomePage() {
@@ -114,20 +169,7 @@ export default function HomePage() {
                     </ul>
                   )
                 : (
-                    <div className="w-screen h-screen flex items-center justify-center flex-col p-2" aria-live="polite">
-                      <picture>
-                        <source srcSet="/img/station.webp" type="image/webp" />
-                        <img src="/img/station.png" alt="Gambar peron stasiun dengan jembatan di atasnya" className="w-48 h-48 aspect-square object-contain" fetchPriority="high" />
-                      </picture>
-                      <span className="text-2xl text-center font-bold mt-0">Belum Ada Stasiun Disimpan</span>
-                      <p className="text-center mt-2">
-                        Klik tombol
-                        {' '}
-                        <b>Cari Stasiun</b>
-                        {' '}
-                        di bawah untuk mulai cari jadwal & simpan stasiun!
-                      </p>
-                    </div>
+                    <EmptyState mode="NO_SAVED" />
                   )}
             </>
           )
