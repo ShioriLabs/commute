@@ -6,9 +6,10 @@ import LineCard from '~/components/line-card'
 import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
 import SearchStationsButton from '~/components/nav-buttons/search-stations'
-import { CaretRightIcon } from '@phosphor-icons/react'
+import { CaretRightIcon, WarningIcon } from '@phosphor-icons/react'
 import { Link } from 'react-router'
 import SettingsButton from '~/components/nav-buttons/settings'
+import { useNetworkStatus } from '~/hooks/network'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -60,25 +61,7 @@ function StationCard({ stationId }: { stationId: string }) {
   const [operator, code] = stationId.split(/-/g)
   const station = useSWR<StandardResponse<Station>>(new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
   const timetable = useSWR<StandardResponse<CompactLineGroupedTimetable>>(new URL(`/stations/${operator}/${code}/timetable/grouped?compact=1`, import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
-  const [isOnline, setIsOnline] = useState(navigator.onLine)
-
-  useEffect(() => {
-    function handleOnline() {
-      setIsOnline(true)
-    }
-
-    function handleOffline() {
-      setIsOnline(false)
-    }
-
-    window.addEventListener('online', handleOnline)
-    window.addEventListener('offline', handleOffline)
-
-    return () => {
-      window.removeEventListener('online', handleOnline)
-      window.removeEventListener('offline', handleOffline)
-    }
-  }, [])
+  const networkStatus = useNetworkStatus()
 
   if (station.isLoading && !station.error) {
     return (
@@ -118,7 +101,7 @@ function StationCard({ stationId }: { stationId: string }) {
     )
   }
 
-  if (!isOnline) {
+  if (networkStatus === 'OFFLINE') {
     return <EmptyState mode="OFFLINE" />
   }
 
@@ -128,6 +111,7 @@ function StationCard({ stationId }: { stationId: string }) {
 export default function HomePage() {
   const [stations, setStations] = useState<string[]>([])
   const [isReady, setIsReady] = useState(false)
+  const networkStatus = useNetworkStatus()
 
   useEffect(() => {
     const savedStationsRaw = localStorage.getItem('saved-stations')
@@ -160,6 +144,15 @@ export default function HomePage() {
       {isReady
         ? (
             <>
+              {networkStatus === 'OFFLINE' && (
+                <div className="px-4 max-w-3xl mx-auto mt-8">
+                  <div className="text-amber-950 bg-amber-100 flex flex-row gap-2 rounded-xl p-4 font-semibold">
+                    <WarningIcon weight="duotone" className="w-6 h-6" />
+                    Kamu sedang offline, data mungkin tidak up-to-date
+                  </div>
+                </div>
+              )}
+
               {stations.length > 0
                 ? (
                     <ul className="flex flex-col gap-8 pb-42 max-w-3xl mx-auto" aria-label="Daftar stasiun tersimpan">

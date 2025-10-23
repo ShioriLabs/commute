@@ -9,6 +9,7 @@ import LineCard from '~/components/line-card'
 import { fetcher } from 'utils/fetcher'
 import useSWR from 'swr'
 import { AMENITY_TYPES, type AmenityType } from '@commute/constants'
+import { useNetworkStatus } from '~/hooks/network'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -80,25 +81,7 @@ export default function StationPage({ params }: Route.ComponentProps) {
   const navigationType = useNavigationType()
   const navigate = useNavigate()
   const [saved, setSaved] = useState(false)
-  const [isOnline, setIsOnline] = useState(navigator.onLine)
-
-  useEffect(() => {
-    function handleOnline() {
-      setIsOnline(true)
-    }
-
-    function handleOffline() {
-      setIsOnline(false)
-    }
-
-    window.addEventListener('online', handleOnline)
-    window.addEventListener('offline', handleOffline)
-
-    return () => {
-      window.removeEventListener('online', handleOnline)
-      window.removeEventListener('offline', handleOffline)
-    }
-  }, [])
+  const networkStatus = useNetworkStatus()
 
   useEffect(() => {
     if (station.isLoading) return
@@ -200,9 +183,9 @@ export default function StationPage({ params }: Route.ComponentProps) {
             if (timetable.data?.data?.length) {
               return (
                 <>
-                  {!isOnline && (
-                    <div className="px-4">
-                      <div className="text-amber-950 mb-4 bg-amber-100 flex flex-row gap-2 rounded-xl p-4 font-semibold">
+                  {networkStatus === 'OFFLINE' && (
+                    <div className="px-4 mb-4">
+                      <div className="text-amber-950 bg-amber-100 flex flex-row gap-2 rounded-xl p-4 font-semibold">
                         <WarningIcon weight="duotone" className="w-6 h-6" />
                         Kamu sedang offline, data mungkin tidak up-to-date
                       </div>
@@ -217,7 +200,7 @@ export default function StationPage({ params }: Route.ComponentProps) {
               )
             }
 
-            if (!isOnline) return <EmptyState mode="OFFLINE" />
+            if (networkStatus === 'OFFLINE') return <EmptyState mode="OFFLINE" />
             if (timetable.error) return <EmptyState mode="NO_DATA" />
             return <EmptyState mode="NO_DATA" />
           })()}
