@@ -29,7 +29,9 @@ app.get('/', async (c) => {
   const stations = await stationRepository.getAll()
 
   if (stations.length > 0) {
-    await kvRepository.set(kvKey, stations)
+    c.executionCtx.waitUntil(
+      kvRepository.set(kvKey, stations)
+    )
   }
 
   return c.json(
@@ -63,7 +65,9 @@ app.get('/:operator', async (c) => {
   const stations = await stationRepository.getAllByOperator(operator.code)
 
   if (stations.length > 0) {
-    await kvRepository.set(kvKey, stations)
+    c.executionCtx.waitUntil(
+      kvRepository.set(kvKey, stations)
+    )
   }
 
   return c.json(
@@ -99,7 +103,9 @@ app.get('/:operator/:stationCode', async (c) => {
 
   if (!station) return c.json(NotFound(`Unknown Station Code ${stationCode} in Operator ${operator.code}`), 404)
 
-  await kvRepository.set(kvKey, station)
+  c.executionCtx.waitUntil(
+    kvRepository.set(kvKey, station)
+  )
 
   return c.json(
     Ok(
@@ -148,7 +154,9 @@ app.get('/:operator/:stationCode/timetable', async (c) => {
     )
   }
 
-  await kvRepository.set(kvKey, timetable)
+  c.executionCtx.waitUntil(
+    kvRepository.set(kvKey, timetable)
+  )
 
   return c.json(
     Ok(
