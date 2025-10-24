@@ -7,7 +7,7 @@ import { getOperatorByCode } from 'utils/operator'
 import { Line } from 'models/line'
 import { CompactLineGroupedTimetable, LineGroupedTimetable, Schedule } from 'db/schemas/schedules'
 import { getLineByOperator } from 'utils/line'
-import { OPERATORS } from '@commute/constants'
+import { CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES, OPERATORS } from '@commute/constants'
 import { mapSchedule } from 'utils/schedules'
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -165,21 +165,6 @@ app.get('/:operator/:stationCode/timetable', async (c) => {
     200
   )
 })
-
-const CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES = new Set([
-  'CKR',
-  'TLM',
-  'CIT',
-  'TB',
-  'BKST',
-  'BKS',
-  'KRI',
-  'CUK',
-  'KLDB',
-  'BUA',
-  'KLD',
-  'JNG'
-])
 
 app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
   const operatorCode = c.req.param('operator')
