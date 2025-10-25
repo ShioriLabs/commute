@@ -281,4 +281,56 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
   )
 })
 
+app.get('/:operator/:stationCode/transfers', async (c) => {
+  const operatorCode = c.req.param('operator')
+  const stationCode = c.req.param('stationCode')
+  const operator = getOperatorByCode(operatorCode)
+  if (!operator) {
+    return c.json(NotFound('UNKNOWN_OPERATOR', `Unknown Operator Code: ${operatorCode}`), 404)
+  }
+
+  const kvRepository = new KVRepository(c.env.KV)
+  const stationRepository = new StationRepository(c.env.DB)
+
+  const kvKey = `stations_${operator.code}_${stationCode}_transfers_${c.env.API_VERSION}`
+
+  const cachedTimetable = await kvRepository.get(kvKey)
+  if (cachedTimetable) {
+    return c.json(
+      Ok(cachedTimetable),
+      200
+    )
+  }
+
+  // optimistic check, fails slower but faster happy path
+  const stationID = `${operator.code}-${stationCode}`
+  const [
+    checkStationResult,
+    transfers
+  ] = await Promise.allSettled([
+    stationRepository.checkIfExists(stationID),
+    stationRepository.getTransfersFromStationId(stationID)
+  ])
+
+  if (checkStationResult.status === 'rejected' || transfers.status === 'rejected') return c.json(Internal('DATABASE_ERROR', 'Can\'t connect to database, please try again later.'))
+
+  if (!checkStationResult.value.exists || checkStationResult.value.station === null) return c.json(NotFound('UNKNOWN_STATION', `Unknown Station Code ${stationCode} in Operator ${operator.code}`), 404)
+
+  if (transfers.value.length === 0) {
+    return c.json(
+      Ok([]),
+      200
+    )
+  }
+
+  c.executionCtx.waitUntil(
+    kvRepository.set(kvKey, transfers.value)
+  )
+
+  return c.json(
+    Ok(transfers.value),
+    200
+  )
+})
+
 export default app

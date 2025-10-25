@@ -6,6 +6,7 @@ import { sql } from 'kysely'
 import { Line } from 'models/line'
 import { Repository } from 'models/repository'
 import { getLineByOperator } from 'utils/line'
+import { mapify } from 'utils/mapify'
 import { getOperatorByCode } from 'utils/operator'
 
 export class StationRepository extends Repository {
@@ -158,6 +159,53 @@ export class StationRepository extends Repository {
     }
   }
 
+  async getByIds(ids: string[]) {
+    const linesSubquery = db(this.d1)
+      .selectFrom('stationLines')
+      .select(({ fn }) => [
+        fn('group_concat', [sql`DISTINCT stationLines.lineCode`]).as('lines'),
+        'stationLines.stationId'
+      ])
+      .where('stationLines.lineCode', 'is not', 'NUL')
+      .where('stationLines.stationId', 'in', ids)
+      .groupBy('stationLines.stationId')
+
+    const query = db(this.d1)
+      .selectFrom('stations')
+      .leftJoin(linesSubquery.as('linesSubquery'), 'linesSubquery.stationId', 'stations.id')
+      .selectAll('stations')
+      .select(['linesSubquery.lines'])
+      .where('id', 'in', ids)
+
+    const stations = await query.execute()
+    const mappedStations = []
+
+    for (const station of stations) {
+      const operator = getOperatorByCode(station.operator)
+      if (operator === null) continue
+
+      const lines: Set<Line> = new Set()
+      if (station.lines !== null) {
+        for (const lineCode of (station.lines as string).split(',')) {
+          if (lineCode === 'NUL') continue
+          const line = getLineByOperator(station.operator, lineCode)
+          if (line === null) continue
+          lines.add(line)
+        }
+      }
+
+      const amenities = station.amenities ? JSON.parse(station.amenities as unknown as string) as Amenity[] : []
+      mappedStations.push({
+        ...station,
+        amenities,
+        operator,
+        lines: Array.from(lines)
+      })
+    }
+
+    return mappedStations
+  }
+
   async checkIfExists(id: string, operator?: Operator) {
     let query = db(this.d1)
       .selectFrom('stations')
@@ -234,6 +282,51 @@ export class StationRepository extends Repository {
 
     const timetable = await query.execute()
     return timetable
+  }
+
+  async getTransfersFromStationId(id: string) {
+    const query = db(this.d1)
+      .selectFrom('transfers')
+      .selectAll()
+      .where('fromStationId', '=', id)
+
+    const transfers = await query.execute()
+
+    // fetch INTERNAL stations
+    const internalToStationIDs = transfers.filter(transfer => transfer.dataType === 'INTERNAL').map(transfer => transfer.toStationId!)
+    const internalToStations = mapify((await this.getByIds(internalToStationIDs)), item => item.id)
+
+    const returningTransfers = []
+    for (const transfer of transfers) {
+      let toStation
+      if (transfer.dataType === 'INTERNAL') {
+        if (!transfer.toStationId) continue
+        const toStationData = internalToStations.get(transfer.toStationId)
+        if (!toStationData) continue
+
+        toStation = {
+          stationId: toStationData.id,
+          name: toStationData.formattedName || toStationData.name,
+          operatorName: toStationData.operator.name,
+          lines: toStationData.lines
+        }
+      } else if (transfer.dataType === 'EXTERNAL') {
+        if (!transfer.toStationData) continue
+        toStation = JSON.parse(transfer.toStationData as unknown as string)
+      } else {
+        continue
+      }
+
+      returningTransfers.push({
+        id: transfer.id,
+        dataType: transfer.dataType,
+        toStation,
+        distance: transfer.distance,
+        notes: transfer.notes
+      })
+    }
+
+    return returningTransfers
   }
 
   async insertTimetable(id: string, timetable: NewSchedule[]) {
