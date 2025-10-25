@@ -3,13 +3,15 @@ import type { StandardResponse } from '@schema/response'
 import type { Route } from './+types/station'
 import { useCallback, useEffect, useMemo, useState, type JSX } from 'react'
 import { useNavigate, useNavigationType } from 'react-router'
-import { XIcon, PushPinIcon, PushPinSlashIcon, ToiletIcon, WheelchairIcon, PlugIcon, EscalatorUpIcon, EscalatorDownIcon, ElevatorIcon, StarAndCrescentIcon, LetterCirclePIcon, BroadcastIcon, BicycleIcon, LockersIcon, BabyIcon, WarningIcon, ArrowSquareOutIcon } from '@phosphor-icons/react'
+import { XIcon, PushPinIcon, PushPinSlashIcon, ToiletIcon, WheelchairIcon, PlugIcon, EscalatorUpIcon, EscalatorDownIcon, ElevatorIcon, StarAndCrescentIcon, LetterCirclePIcon, BroadcastIcon, BicycleIcon, LockersIcon, BabyIcon, WarningIcon, ArrowSquareOutIcon, PersonSimpleWalkIcon } from '@phosphor-icons/react'
 import type { LineGroupedTimetable } from 'models/schedules'
 import LineCard from '~/components/line-card'
 import { fetcher } from 'utils/fetcher'
 import useSWR from 'swr'
 import { AMENITY_TYPES, type AmenityType } from '@commute/constants'
 import { useNetworkStatus } from '~/hooks/network'
+import type { Transfer } from 'models/transfers'
+import { getForegroundColor } from 'utils/colors'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -75,9 +77,15 @@ export default function StationPage({ params }: Route.ComponentProps) {
     new URL(`/stations/${params.operator}/${params.code}/timetable/grouped?compact=1`, import.meta.env.VITE_API_BASE_URL).href,
   [params.operator, params.code]
   )
+  const transfersUrl = useMemo(() =>
+    new URL(`/stations/${params.operator}/${params.code}/transfers`, import.meta.env.VITE_API_BASE_URL).href,
+  [params.operator, params.code]
+  )
 
   const station = useSWR<StandardResponse<Station>>(stationUrl, fetcher, swrConfig)
   const timetable = useSWR<StandardResponse<LineGroupedTimetable>>(timetableUrl, fetcher, swrConfig)
+  const transfers = useSWR<StandardResponse<Transfer[]>>(transfersUrl, fetcher, swrConfig)
+
   const navigationType = useNavigationType()
   const navigate = useNavigate()
   const [saved, setSaved] = useState(false)
@@ -235,6 +243,51 @@ export default function StationPage({ params }: Route.ComponentProps) {
                   <p className="mt-4 px-4 text-gray-600">Tidak ada data fasilitas untuk stasiun ini</p>
                 )}
           </section>
+          {transfers.data?.data?.length
+            ? (
+                <section className="mt-8">
+                  <h2 className="font-semibold text-xl px-4">Integrasi</h2>
+                  <ul className="flex flex-col gap-2 mt-4">
+                    {transfers.data.data.map(transfer => (
+                      <li key={transfer.id} className="flex flex-col px-4">
+                        <div className="flex flex-col">
+                          <span className="font-semibold flex items-center">
+                            {transfer.toStation.name}
+                            <span className="text-gray-600 flex flex-row items-center ml-2">
+                              <PersonSimpleWalkIcon weight="bold" className="w-4 h-4" aria-label="Jarak transit" />
+                              &nbsp;
+                              {transfer.distance}
+                              m
+                            </span>
+                          </span>
+                          <span className="font-semibold text-gray-600 flex items-center">
+                            {transfer.toStation.operatorName}
+                          </span>
+                          {transfer.dataType === 'INTERNAL' && (
+                            <ul className="flex gap-2 items-center">
+                              {transfer.toStation.lines.map(line => (
+                                <li
+                                  key={line.lineCode}
+                                  className={`text-sm font-semibold px-2.5 py-0.5 rounded-full text-stone-800 ${getForegroundColor(line.colorCode) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`}
+                                  style={{ backgroundColor: line.colorCode }}
+                                >
+                                  {line.name.replace(/Lin /g, '')}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                        {transfer.notes
+                          ? (
+                              <p className="text-gray-600 mt-1">{transfer.notes}</p>
+                            )
+                          : null}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )
+            : null}
         </div>
       )}
     </div>
