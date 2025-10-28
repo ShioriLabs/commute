@@ -5,10 +5,10 @@ import * as readline from 'node:readline'
 const currentPath = __dirname
 const INPUT_CSV_PATH = `${currentPath}/input.csv`
 const OUTPUT_SQL_PATH = `${currentPath}/output.sql`
-const STATION_ID = 'LRTJBDB-CRC'
-const BOUND_FOR = 'Harjamukti'
-const LINE_CODE = 'CB'
-const ID_SUFFIX = 'HAR'
+const STATION_ID = 'LRTJBDB-BEK'
+const BOUND_FOR = 'Jatimulya'
+const LINE_CODE = 'BK'
+const ID_SUFFIX = 'JTM'
 
 async function convertCSV() {
   const fileStream = fs.createReadStream(INPUT_CSV_PATH)
