@@ -20,7 +20,9 @@ app.use('*', cors({
     if (
       origin === 'http://localhost:3000'
       || origin === 'http://localhost:5173'
-      || origin === 'https://commute.shiorilabs.id') {
+      || origin === 'https://commute.shiorilabs.id'
+      || origin === 'https://dev.commute.shiorilabs.id'
+    ) {
       return origin
     }
 
