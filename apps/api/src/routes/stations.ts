@@ -16,7 +16,7 @@ app.get('/', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
   const stationRepository = new StationRepository(c.env.DB)
 
-  const kvKey = `stations_${c.env.API_VERSION}`
+  const kvKey = `stations:${c.env.API_VERSION}`
 
   const cachedStations = await kvRepository.get(kvKey)
   if (cachedStations) {
@@ -52,7 +52,7 @@ app.get('/:operator', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
   const stationRepository = new StationRepository(c.env.DB)
 
-  const kvKey = `stations_${operator.code}_${c.env.API_VERSION}`
+  const kvKey = `stations:${operator.code}:${c.env.API_VERSION}`
 
   const cachedStations = await kvRepository.get(kvKey)
   if (cachedStations) {
@@ -89,7 +89,7 @@ app.get('/:operator/:stationCode', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
   const stationRepository = new StationRepository(c.env.DB)
 
-  const kvKey = `stations_${operator.code}_${stationCode}_${c.env.API_VERSION}`
+  const kvKey = `stations:${operator.code}-${stationCode}:${c.env.API_VERSION}`
 
   const cachedStations = await kvRepository.get(kvKey)
   if (cachedStations) {
@@ -126,7 +126,7 @@ app.get('/:operator/:stationCode/timetable', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
   const stationRepository = new StationRepository(c.env.DB)
 
-  const kvKey = `stations_${operator.code}_${stationCode}_timetable_${c.env.API_VERSION}`
+  const kvKey = `timetable:${operator.code}-${stationCode}:${c.env.API_VERSION}`
 
   const cachedTimetable = await kvRepository.get(kvKey)
   if (cachedTimetable) {
@@ -178,7 +178,7 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
   const stationRepository = new StationRepository(c.env.DB)
 
-  const kvKey = `stations_${operator.code}_${stationCode}_timetable_grouped_${compactMode ? 'compact' : 'full'}_${c.env.API_VERSION}`
+  const kvKey = `timetable:${operator.code}-${stationCode}:grouped:${compactMode ? 'compact' : 'full'}:${c.env.API_VERSION}`
 
   const cachedTimetable = await kvRepository.get(kvKey)
   if (cachedTimetable) {
@@ -292,7 +292,7 @@ app.get('/:operator/:stationCode/transfers', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
   const stationRepository = new StationRepository(c.env.DB)
 
-  const kvKey = `stations_${operator.code}_${stationCode}_transfers_${c.env.API_VERSION}`
+  const kvKey = `transfers:${operator.code}-${stationCode}:${c.env.API_VERSION}`
 
   const cachedTimetable = await kvRepository.get(kvKey)
   if (cachedTimetable) {
