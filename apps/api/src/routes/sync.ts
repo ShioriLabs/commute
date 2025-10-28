@@ -17,8 +17,8 @@ app.post('/:operator', async (c) => {
     return c.json(NotFound(`Unknown Operator Code: ${operatorCode}`), 404)
   }
 
-  const allKVKey = `stations__${c.env.API_VERSION}`
-  const kvKey = `stations_${operator.code}_${c.env.API_VERSION}`
+  const allKVKey = `stations:${c.env.API_VERSION}`
+  const kvKey = `stations:${operator.code}:${c.env.API_VERSION}`
   try {
     const kvRepository = new KVRepository(c.env.KV)
 
@@ -66,9 +66,9 @@ app.post('/:operator/:stationCode/timetable', async (c) => {
     const kvRepository = new KVRepository(c.env.KV)
     const stationRepository = new StationRepository(c.env.DB)
 
-    const stationKVKey = `stations_${operator.code}_${stationCode}_${c.env.API_VERSION}`
-    const timetableKVKey = `stations_${operator.code}_${stationCode}_timetable_${c.env.API_VERSION}`
-    const groupedTimetableKVKey = `stations_${operator.code}_${stationCode}_timetable_grouped_${c.env.API_VERSION}`
+    const stationKVKey = `stations:${operator.code}-${stationCode}:${c.env.API_VERSION}`
+    const timetableKVKey = `timetable:${operator.code}-${stationCode}:${c.env.API_VERSION}`
+    const groupedTimetableKVKey = `timetable:${operator.code}-${stationCode}:grouped:${c.env.API_VERSION}`
 
     const checkStationResult = await stationRepository.checkIfExists(`${operator.code}-${stationCode}`)
     if (!checkStationResult.exists || checkStationResult.station === null) return c.json(NotFound(`Unknown Station Code ${stationCode} in Operator ${operator.code}`), 404)
