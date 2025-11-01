@@ -2,7 +2,7 @@
   "name": "Commute",
   "short_name": "Commute",
   "id": "id.shiorilabs.commute",
-  "start_url": "https://commute.shiorilabs.id",
+  "start_url": "/",
   "display": "standalone",
   "description": "Aplikasi Jadwal Kereta Buat Anak Jakarta",
   "lang": "id-ID",

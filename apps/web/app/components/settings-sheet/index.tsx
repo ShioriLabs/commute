@@ -1,10 +1,13 @@
 import { CloseButton, DialogTitle } from '@headlessui/react'
-import { PushPinSimpleIcon, ArchiveIcon, FilesIcon, InfoIcon, XIcon } from '@phosphor-icons/react'
+import { PushPinSimpleIcon, ArchiveIcon, FilesIcon, InfoIcon, XIcon, DownloadSimpleIcon, GearIcon } from '@phosphor-icons/react'
 import SettingsItem from './settings-item'
+import { useInstall } from '~/contexts/installable'
 
 declare const __APP_VERSION__: string
 
 export default function SettingsSheet() {
+  const { isInstallable, showIOSInstructions } = useInstall()
+
   return (
     <section className="bg-white w-screen h-full overflow-y-auto pb-4">
       <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto bg-white">
@@ -32,6 +35,24 @@ export default function SettingsSheet() {
           <SettingsItem to="/settings/legal">
             <FilesIcon weight="fill" className="w-6 h-6" />
             Legal & Atribusi
+          </SettingsItem>
+          <SettingsItem to="/settings/installation">
+            {
+              isInstallable || showIOSInstructions
+                ? (
+                    <>
+                      <DownloadSimpleIcon weight="fill" className="w-6 h-6" />
+                      Instal Commute
+                    </>
+                  )
+                : (
+                    <>
+                      <GearIcon weight="fill" className="w-6 h-6" />
+                      Status Instalasi
+                    </>
+                  )
+
+            }
           </SettingsItem>
           <SettingsItem to="/settings/about">
             <InfoIcon weight="fill" className="w-6 h-6" />
