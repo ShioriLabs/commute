@@ -474,5 +474,21 @@
   "display_override": [
     "standalone",
     "window-controls-overlay"
-  ]
+  ],
+  "screenshots": [
+    {
+     "src": "richer-install-ui/home.png",
+      "sizes": "1080x2340",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Home screen"
+    },
+    {
+     "src": "richer-install-ui/detail.png",
+      "sizes": "1080x2340",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Station Detail screen"
+    }
+]
 }
