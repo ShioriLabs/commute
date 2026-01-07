@@ -136,57 +136,55 @@ export default function StationPage({ params }: Route.ComponentProps) {
 
   return (
     <div className="bg-white w-full min-h-screen">
-      <div className="w-full bg-white/40 backdrop-blur sticky top-0 h-48 mask-b-to-100% frosted-glass-mask pointer-events-none z-10">
-        <div className="p-8 max-w-3xl mx-auto pointer-events-auto">
-          <div className="flex gap-4 items-center justify-between">
-            <div className="flex flex-col">
-              {station.isLoading
-                ? (
-                    <div className="animate-pulse w-64 h-6 bg-slate-200 rounded-lg" />
-                  )
-                : (
-                    <h1 className="font-bold text-2xl">{ station.data?.data?.formattedName }</h1>
-                  )}
-            </div>
-            <div className="flex gap-4">
-              {station.isLoading
-                ? (
-                    <div className="animate-pulse w-8 h-8 bg-slate-200 rounded-full" />
-                  )
-                : (
-                    <button
-                      onClick={handleSaveStationButton}
-                      aria-label={saved ? 'Hapus stasiun ini dari favorit' : 'Simpan stasiun ini ke favorit'}
-                      className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8 cursor-pointer"
-                    >
-                      {saved
-                        ? (
-                            <PushPinSlashIcon weight="bold" className="w-6 h-6" />
-                          )
-                        : (
-                            <PushPinIcon weight="bold" className="w-6 h-6" />
-                          )}
-                    </button>
-                  )}
-              <button
-                onClick={handleBackButton}
-                aria-label="Tutup halaman stasiun"
-                className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8 cursor-pointer"
-              >
-                <XIcon weight="bold" className="w-6 h-6" />
-              </button>
-            </div>
+      <div className="w-full bg-white/50 backdrop-blur sticky top-0 z-10 border-b-2 border-b-gray-50/20">
+        <div className="p-8 pb-4 max-w-3xl mx-auto pointer-events-auto flex gap-4 justify-between">
+          <div className="flex flex-col">
+            {station.isLoading
+              ? (
+                  <div className="animate-pulse w-64 h-6 bg-slate-200 rounded-lg" />
+                )
+              : (
+                  <h1 className="font-bold text-2xl">{ station.data?.data?.formattedName }</h1>
+                )}
+          </div>
+          <div className="flex gap-4">
+            {station.isLoading
+              ? (
+                  <div className="animate-pulse w-8 h-8 bg-slate-200 rounded-full" />
+                )
+              : (
+                  <button
+                    onClick={handleSaveStationButton}
+                    aria-label={saved ? 'Hapus stasiun ini dari favorit' : 'Simpan stasiun ini ke favorit'}
+                    className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8 cursor-pointer"
+                  >
+                    {saved
+                      ? (
+                          <PushPinSlashIcon weight="bold" className="w-6 h-6" />
+                        )
+                      : (
+                          <PushPinIcon weight="bold" className="w-6 h-6" />
+                        )}
+                  </button>
+                )}
+            <button
+              onClick={handleBackButton}
+              aria-label="Tutup halaman stasiun"
+              className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8 cursor-pointer"
+            >
+              <XIcon weight="bold" className="w-6 h-6" />
+            </button>
           </div>
         </div>
       </div>
       {timetable.isLoading && (
-        <div className="-mt-20 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
+        <div className="px-4 pb-8 mt-2 flex flex-col gap-2 max-w-3xl mx-auto">
           <div className="animate-pulse w-full h-72 bg-slate-200 rounded-lg" />
         </div>
       )}
 
       {!timetable.isLoading && (
-        <div className="flex flex-col -mt-20 max-w-3xl mx-auto pb-8 px-4">
+        <div className="flex flex-col max-w-3xl mx-auto pb-8 px-4 mt-4">
           {(() => {
             if (timetable.data?.data?.length) {
               return (
