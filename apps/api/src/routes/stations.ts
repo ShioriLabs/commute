@@ -166,6 +166,51 @@ app.get('/:operator/:stationCode/timetable', async (c) => {
   )
 })
 
+app.get('/:operator/:stationCode/timetable/:line', async (c) => {
+  const operatorCode = c.req.param('operator')
+  const stationCode = c.req.param('stationCode')
+  const lineCode = c.req.param('line')
+  const operator = getOperatorByCode(operatorCode)
+  if (!operator) {
+    return c.json(NotFound(`Unknown Operator Code: ${operatorCode}`), 404)
+  }
+
+  const kvRepository = new KVRepository(c.env.KV)
+  const stationRepository = new StationRepository(c.env.DB)
+
+  const kvKey = `timetable:${operator.code}-${stationCode}:${lineCode}:${c.env.API_VERSION}`
+
+  const cachedTimetable = await kvRepository.get(kvKey)
+  if (cachedTimetable) {
+    return c.json(
+      Ok(cachedTimetable),
+      200
+    )
+  }
+
+  const checkIfLineExists = await stationRepository.checkIfLineExists(`${operator.code}-${stationCode}`, lineCode)
+  if (!checkIfLineExists.exists || checkIfLineExists.line === null) return c.json(NotFound(`Unknown Line Code ${lineCode} in Station ID ${operator.code}-${stationCode}`), 404)
+
+  const timetable = await stationRepository.getTimetableFromStationId(checkIfLineExists.line!.stationId, checkIfLineExists.line!.lineCode)
+  if (timetable.length === 0) {
+    return c.json(
+      Ok([]),
+      200
+    )
+  }
+
+  c.executionCtx.waitUntil(
+    kvRepository.set(kvKey, timetable)
+  )
+
+  return c.json(
+    Ok(
+      timetable
+    ),
+    200
+  )
+})
+
 app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
   const operatorCode = c.req.param('operator')
   const stationCode = c.req.param('stationCode')
