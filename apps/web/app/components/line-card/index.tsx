@@ -88,7 +88,7 @@ export default function LineCard({ line }: Props) {
         style={{ borderBottomColor: getTintFromColor(line.colorCode, 0.3) }}
         aria-labelledby={`line-name-${line.name}`}
       >
-        <h1 id={`line-name-${line.name}`} className="font-bold text-xl">{line.name}</h1>
+        <h1 id={`line-name-${line.name}`} className="font-bold text-lg">{line.name}</h1>
       </article>
       <ul>
         {nextSchedulesFilteredTimetable.map((direction) => {

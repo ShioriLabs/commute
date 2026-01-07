@@ -144,7 +144,7 @@ export default function StationPage({ params }: Route.ComponentProps) {
                   <div className="animate-pulse w-64 h-6 bg-slate-200 rounded-lg" />
                 )
               : (
-                  <h1 className="font-bold text-2xl">{ station.data?.data?.formattedName }</h1>
+                  <h1 className="font-bold text-xl">{ station.data?.data?.formattedName }</h1>
                 )}
           </div>
           <div className="flex gap-4">
@@ -195,20 +195,22 @@ export default function StationPage({ params }: Route.ComponentProps) {
                       Kamu sedang offline, data mungkin tidak up-to-date
                     </div>
                   )}
-                  {station.data?.data?.latitude && station.data.data.longitude
-                    ? (
-                        <a
-                          href={`https://maps.google.com/maps?q=${station.data.data.latitude},${station.data.data.longitude}(${encodeURIComponent(station.data.data.formattedName || station.data.data.name)})`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex flex-row gap-2 justify-center bg-[#F55875] text-white font-bold p-4 rounded-xl mb-4 text-center"
-                        >
-                          Petunjuk Arah
-                          <ArrowSquareOutIcon className="w-6 h-6" weight="bold" aria-label="Link eksternal, akan membuka Google Maps" />
-                        </a>
-                      )
-                    : null}
-                  <ul className="flex flex-col gap-2">
+                  <div className="flex flex-row gap-2">
+                    {station.data?.data?.latitude && station.data.data.longitude
+                      ? (
+                          <a
+                            href={`https://maps.google.com/maps?q=${station.data.data.latitude},${station.data.data.longitude}(${encodeURIComponent(station.data.data.formattedName || station.data.data.name)})`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex flex-row gap-2 justify-center bg-[#F55875] text-white font-bold p-4 rounded-xl text-center w-full text-sm"
+                          >
+                            Petunjuk Arah
+                            <ArrowSquareOutIcon className="w-5 h-5" weight="bold" aria-label="Link eksternal, akan membuka Google Maps" />
+                          </a>
+                        )
+                      : null}
+                  </div>
+                  <ul className="flex flex-col gap-2 mt-4">
                     {timetable.data.data.map(line => (
                       <LineCard key={line.lineCode} line={line} />
                     ))}
@@ -222,7 +224,7 @@ export default function StationPage({ params }: Route.ComponentProps) {
             return <EmptyState mode="NO_DATA" />
           })()}
           <section className="mt-8">
-            <h2 className="font-semibold text-xl px-4">Fasilitas</h2>
+            <h2 className="font-semibold text-lg px-4">Fasilitas</h2>
             {station.data?.data?.amenities?.length
               ? (
                   <ul className="flex flex-col gap-2 mt-4">
@@ -244,7 +246,7 @@ export default function StationPage({ params }: Route.ComponentProps) {
           {transfers.data?.data?.length
             ? (
                 <section className="mt-8">
-                  <h2 className="font-semibold text-xl px-4">Integrasi</h2>
+                  <h2 className="font-semibold text-lg px-4">Integrasi</h2>
                   <ul className="flex flex-col gap-4 mt-4">
                     {transfers.data.data.map(transfer => (
                       <li key={transfer.id} className="flex flex-col px-4">

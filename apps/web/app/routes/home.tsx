@@ -79,11 +79,11 @@ function StationCard({ stationId }: { stationId: string }) {
     return (
       <li>
         <article>
-          <h1 className="font-bold text-2xl flex px-8 py-6 sticky top-0 bg-rose-50/20 backdrop-blur-2xl z-10 lg:relative lg:backdrop-blur-none lg:bg-transparent">
+          <h1 className="font-bold text-xl flex px-8 py-6 sticky top-0 bg-rose-50/20 backdrop-blur-2xl z-10 lg:relative lg:backdrop-blur-none lg:bg-transparent">
             <Link to={`/station/${station.data.data.operator.code}/${station.data.data.code}`} className="group flex-grow">
               Stasiun&nbsp;
               { station.data.data.formattedName }
-              <CaretRightIcon weight="bold" className="inline w-4 h-4 group-hover:ml-3 ml-2 transition-[margin] duration-200" />
+              <CaretRightIcon weight="bold" className="inline w-4 h-4 group-hover:ml-3 ml-2 transition-[margin] duration-200 mb-1" />
             </Link>
           </h1>
           { timetable.isLoading
