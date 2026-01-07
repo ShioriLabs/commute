@@ -2,7 +2,7 @@ import type { Station } from 'models/stations'
 import type { StandardResponse } from '@schema/response'
 import type { Route } from './+types/station'
 import { useCallback, useEffect, useMemo, useState, type JSX } from 'react'
-import { useNavigate, useNavigationType } from 'react-router'
+import { Link, useNavigate, useNavigationType } from 'react-router'
 import { XIcon, PushPinIcon, PushPinSlashIcon, ToiletIcon, WheelchairIcon, PlugIcon, EscalatorUpIcon, EscalatorDownIcon, ElevatorIcon, StarAndCrescentIcon, LetterCirclePIcon, BroadcastIcon, BicycleIcon, LockersIcon, BabyIcon, WarningIcon, ArrowSquareOutIcon, PersonSimpleWalkIcon } from '@phosphor-icons/react'
 import type { LineGroupedTimetable } from 'models/schedules'
 import LineCard from '~/components/line-card'
@@ -209,6 +209,12 @@ export default function StationPage({ params }: Route.ComponentProps) {
                           </a>
                         )
                       : null}
+                    <Link
+                      to={`/stations/${params.operator}/${params.code}/timetable`}
+                      className="flex flex-row gap-2 justify-center bg-slate-200 text-[#F55875] font-bold p-4 rounded-xl text-center w-full text-sm"
+                    >
+                      Jadwal Lengkap
+                    </Link>
                   </div>
                   <ul className="flex flex-col gap-2 mt-4">
                     {timetable.data.data.map(line => (
