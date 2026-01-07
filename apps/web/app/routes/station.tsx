@@ -247,7 +247,7 @@ export default function StationPage({ params }: Route.ComponentProps) {
             ? (
                 <section className="mt-8">
                   <h2 className="font-semibold text-xl px-4">Integrasi</h2>
-                  <ul className="flex flex-col gap-2 mt-4">
+                  <ul className="flex flex-col gap-4 mt-4">
                     {transfers.data.data.map(transfer => (
                       <li key={transfer.id} className="flex flex-col px-4">
                         <div className="flex flex-col">
