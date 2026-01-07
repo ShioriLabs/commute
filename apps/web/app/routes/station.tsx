@@ -3,13 +3,15 @@ import type { StandardResponse } from '@schema/response'
 import type { Route } from './+types/station'
 import { useCallback, useEffect, useMemo, useState, type JSX } from 'react'
 import { useNavigate, useNavigationType } from 'react-router'
-import { XIcon, PushPinIcon, PushPinSlashIcon, ToiletIcon, WheelchairIcon, PlugIcon, EscalatorUpIcon, EscalatorDownIcon, ElevatorIcon, StarAndCrescentIcon, LetterCirclePIcon, BroadcastIcon, BicycleIcon, LockersIcon, BabyIcon, WarningIcon, ArrowSquareOutIcon } from '@phosphor-icons/react'
+import { XIcon, PushPinIcon, PushPinSlashIcon, ToiletIcon, WheelchairIcon, PlugIcon, EscalatorUpIcon, EscalatorDownIcon, ElevatorIcon, StarAndCrescentIcon, LetterCirclePIcon, BroadcastIcon, BicycleIcon, LockersIcon, BabyIcon, WarningIcon, ArrowSquareOutIcon, PersonSimpleWalkIcon } from '@phosphor-icons/react'
 import type { LineGroupedTimetable } from 'models/schedules'
 import LineCard from '~/components/line-card'
 import { fetcher } from 'utils/fetcher'
 import useSWR from 'swr'
 import { AMENITY_TYPES, type AmenityType } from '@commute/constants'
 import { useNetworkStatus } from '~/hooks/network'
+import type { Transfer } from 'models/transfers'
+import { getForegroundColor } from 'utils/colors'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -75,9 +77,15 @@ export default function StationPage({ params }: Route.ComponentProps) {
     new URL(`/stations/${params.operator}/${params.code}/timetable/grouped?compact=1`, import.meta.env.VITE_API_BASE_URL).href,
   [params.operator, params.code]
   )
+  const transfersUrl = useMemo(() =>
+    new URL(`/stations/${params.operator}/${params.code}/transfers`, import.meta.env.VITE_API_BASE_URL).href,
+  [params.operator, params.code]
+  )
 
   const station = useSWR<StandardResponse<Station>>(stationUrl, fetcher, swrConfig)
   const timetable = useSWR<StandardResponse<LineGroupedTimetable>>(timetableUrl, fetcher, swrConfig)
+  const transfers = useSWR<StandardResponse<Transfer[]>>(transfersUrl, fetcher, swrConfig)
+
   const navigationType = useNavigationType()
   const navigate = useNavigate()
   const [saved, setSaved] = useState(false)
@@ -128,57 +136,55 @@ export default function StationPage({ params }: Route.ComponentProps) {
 
   return (
     <div className="bg-white w-full min-h-screen">
-      <div className="w-full bg-white/40 backdrop-blur sticky top-0 h-48 mask-b-to-100% frosted-glass-mask pointer-events-none z-10">
-        <div className="p-8 max-w-3xl mx-auto pointer-events-auto">
-          <div className="flex gap-4 items-center justify-between">
-            <div className="flex flex-col">
-              {station.isLoading
-                ? (
-                    <div className="animate-pulse w-64 h-6 bg-slate-200 rounded-lg" />
-                  )
-                : (
-                    <h1 className="font-bold text-2xl">{ station.data?.data?.formattedName }</h1>
-                  )}
-            </div>
-            <div className="flex gap-4">
-              {station.isLoading
-                ? (
-                    <div className="animate-pulse w-8 h-8 bg-slate-200 rounded-full" />
-                  )
-                : (
-                    <button
-                      onClick={handleSaveStationButton}
-                      aria-label={saved ? 'Hapus stasiun ini dari favorit' : 'Simpan stasiun ini ke favorit'}
-                      className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8 cursor-pointer"
-                    >
-                      {saved
-                        ? (
-                            <PushPinSlashIcon weight="bold" className="w-6 h-6" />
-                          )
-                        : (
-                            <PushPinIcon weight="bold" className="w-6 h-6" />
-                          )}
-                    </button>
-                  )}
-              <button
-                onClick={handleBackButton}
-                aria-label="Tutup halaman stasiun"
-                className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8 cursor-pointer"
-              >
-                <XIcon weight="bold" className="w-6 h-6" />
-              </button>
-            </div>
+      <div className="w-full bg-white/50 backdrop-blur sticky top-0 z-10 border-b-2 border-b-gray-50/20">
+        <div className="p-8 pb-4 max-w-3xl mx-auto pointer-events-auto flex gap-4 justify-between">
+          <div className="flex flex-col">
+            {station.isLoading
+              ? (
+                  <div className="animate-pulse w-64 h-6 bg-slate-200 rounded-lg" />
+                )
+              : (
+                  <h1 className="font-bold text-2xl">{ station.data?.data?.formattedName }</h1>
+                )}
+          </div>
+          <div className="flex gap-4">
+            {station.isLoading
+              ? (
+                  <div className="animate-pulse w-8 h-8 bg-slate-200 rounded-full" />
+                )
+              : (
+                  <button
+                    onClick={handleSaveStationButton}
+                    aria-label={saved ? 'Hapus stasiun ini dari favorit' : 'Simpan stasiun ini ke favorit'}
+                    className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8 cursor-pointer"
+                  >
+                    {saved
+                      ? (
+                          <PushPinSlashIcon weight="bold" className="w-6 h-6" />
+                        )
+                      : (
+                          <PushPinIcon weight="bold" className="w-6 h-6" />
+                        )}
+                  </button>
+                )}
+            <button
+              onClick={handleBackButton}
+              aria-label="Tutup halaman stasiun"
+              className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8 cursor-pointer"
+            >
+              <XIcon weight="bold" className="w-6 h-6" />
+            </button>
           </div>
         </div>
       </div>
       {timetable.isLoading && (
-        <div className="-mt-20 px-4 pb-8 flex flex-col gap-2 max-w-3xl mx-auto">
+        <div className="px-4 pb-8 mt-2 flex flex-col gap-2 max-w-3xl mx-auto">
           <div className="animate-pulse w-full h-72 bg-slate-200 rounded-lg" />
         </div>
       )}
 
       {!timetable.isLoading && (
-        <div className="flex flex-col -mt-20 max-w-3xl mx-auto pb-8 px-4">
+        <div className="flex flex-col max-w-3xl mx-auto pb-8 px-4 mt-4">
           {(() => {
             if (timetable.data?.data?.length) {
               return (
@@ -235,6 +241,51 @@ export default function StationPage({ params }: Route.ComponentProps) {
                   <p className="mt-4 px-4 text-gray-600">Tidak ada data fasilitas untuk stasiun ini</p>
                 )}
           </section>
+          {transfers.data?.data?.length
+            ? (
+                <section className="mt-8">
+                  <h2 className="font-semibold text-xl px-4">Integrasi</h2>
+                  <ul className="flex flex-col gap-4 mt-4">
+                    {transfers.data.data.map(transfer => (
+                      <li key={transfer.id} className="flex flex-col px-4">
+                        <div className="flex flex-col">
+                          <span className="font-semibold flex items-center">
+                            {transfer.toStation.name}
+                            <span className="text-gray-600 flex flex-row items-center ml-2">
+                              <PersonSimpleWalkIcon weight="bold" className="w-4 h-4" aria-label="Jarak transit" />
+                              &nbsp;
+                              {transfer.distance}
+                              m
+                            </span>
+                          </span>
+                          <span className="font-semibold text-gray-600 flex items-center">
+                            {transfer.toStation.operatorName}
+                          </span>
+                          {transfer.dataType === 'INTERNAL' && (
+                            <ul className="flex gap-2 items-center">
+                              {transfer.toStation.lines.map(line => (
+                                <li
+                                  key={line.lineCode}
+                                  className={`text-sm font-semibold px-2.5 py-0.5 rounded-full text-stone-800 ${getForegroundColor(line.colorCode) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`}
+                                  style={{ backgroundColor: line.colorCode }}
+                                >
+                                  {line.name.replace(/Lin /g, '')}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                        {transfer.notes
+                          ? (
+                              <p className="text-gray-600 mt-1">{transfer.notes}</p>
+                            )
+                          : null}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )
+            : null}
         </div>
       )}
     </div>

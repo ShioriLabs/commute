@@ -7,7 +7,7 @@ import { getOperatorByCode } from 'utils/operator'
 import { Line } from 'models/line'
 import { CompactLineGroupedTimetable, LineGroupedTimetable, Schedule } from 'db/schemas/schedules'
 import { getLineByOperator } from 'utils/line'
-import { OPERATORS } from '@commute/constants'
+import { CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES, OPERATORS } from '@commute/constants'
 import { mapSchedule } from 'utils/schedules'
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -16,7 +16,7 @@ app.get('/', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
   const stationRepository = new StationRepository(c.env.DB)
 
-  const kvKey = `stations_${c.env.API_VERSION}`
+  const kvKey = `stations:${c.env.API_VERSION}`
 
   const cachedStations = await kvRepository.get(kvKey)
   if (cachedStations) {
@@ -52,7 +52,7 @@ app.get('/:operator', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
   const stationRepository = new StationRepository(c.env.DB)
 
-  const kvKey = `stations_${operator.code}_${c.env.API_VERSION}`
+  const kvKey = `stations:${operator.code}:${c.env.API_VERSION}`
 
   const cachedStations = await kvRepository.get(kvKey)
   if (cachedStations) {
@@ -89,7 +89,7 @@ app.get('/:operator/:stationCode', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
   const stationRepository = new StationRepository(c.env.DB)
 
-  const kvKey = `stations_${operator.code}_${stationCode}_${c.env.API_VERSION}`
+  const kvKey = `stations:${operator.code}-${stationCode}:${c.env.API_VERSION}`
 
   const cachedStations = await kvRepository.get(kvKey)
   if (cachedStations) {
@@ -126,7 +126,7 @@ app.get('/:operator/:stationCode/timetable', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
   const stationRepository = new StationRepository(c.env.DB)
 
-  const kvKey = `stations_${operator.code}_${stationCode}_timetable_${c.env.API_VERSION}`
+  const kvKey = `timetable:${operator.code}-${stationCode}:${c.env.API_VERSION}`
 
   const cachedTimetable = await kvRepository.get(kvKey)
   if (cachedTimetable) {
@@ -166,21 +166,6 @@ app.get('/:operator/:stationCode/timetable', async (c) => {
   )
 })
 
-const CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES = new Set([
-  'CKR',
-  'TLM',
-  'CIT',
-  'TB',
-  'BKST',
-  'BKS',
-  'KRI',
-  'CUK',
-  'KLDB',
-  'BUA',
-  'KLD',
-  'JNG'
-])
-
 app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
   const operatorCode = c.req.param('operator')
   const stationCode = c.req.param('stationCode')
@@ -193,7 +178,7 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
   const stationRepository = new StationRepository(c.env.DB)
 
-  const kvKey = `stations_${operator.code}_${stationCode}_timetable_grouped_${compactMode ? 'compact' : 'full'}_${c.env.API_VERSION}`
+  const kvKey = `timetable:${operator.code}-${stationCode}:grouped:${compactMode ? 'compact' : 'full'}:${c.env.API_VERSION}`
 
   const cachedTimetable = await kvRepository.get(kvKey)
   if (cachedTimetable) {
@@ -292,6 +277,58 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
 
   return c.json(
     Ok(timetable),
+    200
+  )
+})
+
+app.get('/:operator/:stationCode/transfers', async (c) => {
+  const operatorCode = c.req.param('operator')
+  const stationCode = c.req.param('stationCode')
+  const operator = getOperatorByCode(operatorCode)
+  if (!operator) {
+    return c.json(NotFound('UNKNOWN_OPERATOR', `Unknown Operator Code: ${operatorCode}`), 404)
+  }
+
+  const kvRepository = new KVRepository(c.env.KV)
+  const stationRepository = new StationRepository(c.env.DB)
+
+  const kvKey = `transfers:${operator.code}-${stationCode}:${c.env.API_VERSION}`
+
+  const cachedTimetable = await kvRepository.get(kvKey)
+  if (cachedTimetable) {
+    return c.json(
+      Ok(cachedTimetable),
+      200
+    )
+  }
+
+  // optimistic check, fails slower but faster happy path
+  const stationID = `${operator.code}-${stationCode}`
+  const [
+    checkStationResult,
+    transfers
+  ] = await Promise.allSettled([
+    stationRepository.checkIfExists(stationID),
+    stationRepository.getTransfersFromStationId(stationID)
+  ])
+
+  if (checkStationResult.status === 'rejected' || transfers.status === 'rejected') return c.json(Internal('DATABASE_ERROR', 'Can\'t connect to database, please try again later.'))
+
+  if (!checkStationResult.value.exists || checkStationResult.value.station === null) return c.json(NotFound('UNKNOWN_STATION', `Unknown Station Code ${stationCode} in Operator ${operator.code}`), 404)
+
+  if (transfers.value.length === 0) {
+    return c.json(
+      Ok([]),
+      200
+    )
+  }
+
+  c.executionCtx.waitUntil(
+    kvRepository.set(kvKey, transfers.value)
+  )
+
+  return c.json(
+    Ok(transfers.value),
     200
   )
 })

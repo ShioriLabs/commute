@@ -9,7 +9,7 @@ const app = new Hono<{ Bindings: Bindings }>()
 app.delete('/stations/bust', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
 
-  const kvKey = `stations_${c.env.API_VERSION}`
+  const kvKey = `stations:${c.env.API_VERSION}`
   await kvRepository.del(kvKey)
 
   return c.json(
@@ -29,7 +29,7 @@ app.delete('/stations/:operator/bust', async (c) => {
 
   const kvRepository = new KVRepository(c.env.KV)
 
-  const kvKey = `stations_${operator.code}_${c.env.API_VERSION}`
+  const kvKey = `stations:${operator.code}:${c.env.API_VERSION}`
   await kvRepository.del(kvKey)
 
   return c.json(
@@ -50,7 +50,7 @@ app.delete('/stations/:operator/:stationCode/bust', async (c) => {
 
   const kvRepository = new KVRepository(c.env.KV)
 
-  const kvKey = `stations_${operator.code}_${stationCode}_${c.env.API_VERSION}`
+  const kvKey = `stations:${operator.code}-${stationCode}:${c.env.API_VERSION}`
 
   await kvRepository.del(kvKey)
 
@@ -72,7 +72,7 @@ app.delete('/stations/:operator/:stationCode/timetable/bust', async (c) => {
 
   const kvRepository = new KVRepository(c.env.KV)
 
-  const kvKey = `stations_${operator.code}_${stationCode}_timetable_${c.env.API_VERSION}`
+  const kvKey = `timetable:${operator.code}-${stationCode}:${c.env.API_VERSION}`
 
   await kvRepository.del(kvKey)
 
@@ -94,7 +94,7 @@ app.delete('/:operator/:stationCode/timetable/grouped', async (c) => {
 
   const kvRepository = new KVRepository(c.env.KV)
 
-  const kvKey = `stations_${operator.code}_${stationCode}_timetable_grouped_${c.env.API_VERSION}`
+  const kvKey = `timetable:${operator.code}-${stationCode}:grouped:${c.env.API_VERSION}`
 
   await kvRepository.del(kvKey)
 

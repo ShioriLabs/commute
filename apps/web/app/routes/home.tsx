@@ -6,10 +6,11 @@ import LineCard from '~/components/line-card'
 import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
 import SearchStationsButton from '~/components/nav-buttons/search-stations'
-import { CaretRightIcon, WarningIcon } from '@phosphor-icons/react'
+import { CaretRightIcon, DownloadSimpleIcon, InfoIcon, WarningIcon } from '@phosphor-icons/react'
 import { Link } from 'react-router'
 import SettingsButton from '~/components/nav-buttons/settings'
 import { useNetworkStatus } from '~/hooks/network'
+import { useInstall } from '~/contexts/installable'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -112,8 +113,15 @@ export default function HomePage() {
   const [stations, setStations] = useState<string[]>([])
   const [isReady, setIsReady] = useState(false)
   const networkStatus = useNetworkStatus()
+  const { isInstallable, showIOSInstructions, isStandalone, promptInstall } = useInstall()
+  const [showInstallBanner, setShowInstallBanner] = useState(false)
+
+  const canInstall = (isInstallable || showIOSInstructions) && !isStandalone
 
   useEffect(() => {
+    const isInstallBannerDismissed = localStorage.getItem('is-install-banner-dismissed') === 'true'
+    setShowInstallBanner(!isInstallBannerDismissed)
+
     const savedStationsRaw = localStorage.getItem('saved-stations')
     if (!savedStationsRaw) {
       localStorage.setItem('saved-stations', '[]')
@@ -139,6 +147,19 @@ export default function HomePage() {
     }
   }, [])
 
+  const handleDismissInstallBannerButton = () => {
+    localStorage.setItem('is-install-banner-dismissed', 'true')
+    setShowInstallBanner(false)
+  }
+
+  const handleInstallBannerButton = async () => {
+    const result = await promptInstall()
+    if (result) {
+      localStorage.setItem('is-install-banner-dismissed', 'true')
+      setShowInstallBanner(false)
+    }
+  }
+
   return (
     <main className="w-full min-h-screen">
       {isReady
@@ -149,6 +170,36 @@ export default function HomePage() {
                   <div className="text-amber-950 bg-amber-100 flex flex-row gap-2 rounded-xl p-4 font-semibold">
                     <WarningIcon weight="duotone" className="w-6 h-6" />
                     Kamu sedang offline, data mungkin tidak up-to-date
+                  </div>
+                </div>
+              )}
+
+              {showInstallBanner && canInstall && (
+                <div className="px-4 max-w-3xl mx-auto mt-8">
+                  <div className="text-amber-950 bg-rose-100 flex flex-col gap-3 rounded-xl p-4 font-semibold">
+                    { isInstallable && (
+                      <>
+                        Instal Commute ke perangkatmu biar tinggal tap kalo mau cek jadwal!
+                        <button onClick={handleInstallBannerButton} className="flex flex-row text-center bg-[#F55875] text-white items-center justify-center rounded-lg px-4 py-2 gap-2 cursor-pointer">
+                          <DownloadSimpleIcon weight="bold" className="w-6 h-6" />
+                          {' '}
+                          Instal Sekarang
+                        </button>
+                      </>
+                    )}
+                    { showIOSInstructions && (
+                      <>
+                        Tambahkan Commute ke Home Screen iPhone-mu biar tinggal tap kalo mau cek jadwal!
+                        <Link to="/settings/installation" className="flex flex-row text-center bg-[#F55875] text-white items-center justify-center rounded-lg px-4 py-2 gap-2 cursor-pointer">
+                          <InfoIcon weight="bold" className="w-6 h-6" />
+                          {' '}
+                          Lihat Caranya
+                        </Link>
+                      </>
+                    )}
+                    <button onClick={handleDismissInstallBannerButton} className="flex flex-row text-center bg-rose-50 text-[#F55875] items-center justify-center rounded-lg px-4 py-2 gap-2 font-bold cursor-pointer">
+                      Nanti Saja
+                    </button>
                   </div>
                 </div>
               )}
@@ -174,7 +225,7 @@ export default function HomePage() {
       <nav className="fixed bottom-0 py-4 bg-gradient-to-t from-30% from-rose-50/40 w-screen z-20" aria-label="Navigasi utama">
         <div className="w-full max-w-3xl mx-auto flex gap-4">
           <SearchStationsButton className="ml-4 lg:ml-2" />
-          <SettingsButton className="mr-4 lg:mr-2" />
+          <SettingsButton className={canInstall ? '' : 'mr-4 lg:mr-2'} />
         </div>
       </nav>
     </main>

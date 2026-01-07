@@ -62,3 +62,20 @@ export const AMENITY_TYPES = {
 } as const
 
 export type AmenityType = keyof typeof AMENITY_TYPES
+
+export type TransferDataType = 'INTERNAL' | 'EXTERNAL'
+
+export const CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES = new Set([
+  'CKR',
+  'TLM',
+  'CIT',
+  'TB',
+  'BKST',
+  'BKS',
+  'KRI',
+  'CUK',
+  'KLDB',
+  'BUA',
+  'KLD',
+  'JNG'
+])

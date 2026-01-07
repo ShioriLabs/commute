@@ -9,6 +9,7 @@ import {
 import { useEffect } from 'react'
 import type { Route } from './+types/root'
 import './app.css'
+import { InstallableProvider } from './contexts/installable'
 
 export const links: Route.LinksFunction = () => [
   { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
@@ -66,9 +67,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body className="bg-rose-50/50 text-slate-900">
-        {children}
-        <ScrollRestoration />
-        <Scripts />
+        <InstallableProvider>
+          {children}
+          <ScrollRestoration />
+          <Scripts />
+        </InstallableProvider>
       </body>
     </html>
   )

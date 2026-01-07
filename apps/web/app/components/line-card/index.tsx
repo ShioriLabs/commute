@@ -11,25 +11,28 @@ function getNextSchedules(
   limit = 3
 ) {
   const now = new Date()
-  const upcoming: CompactSchedule[] = []
+  const today: CompactSchedule[] = []
+  const tomorrow: CompactSchedule[] = []
 
   for (const schedule of schedules) {
-    let parsedDeparture = parseTime(schedule.estimatedDeparture)
+    if (today.length + tomorrow.length === limit) break
+    const parsedDeparture = parseTime(schedule.estimatedDeparture)
 
     if (
       parsedDeparture.getTime() < now.getTime()
       && parsedDeparture.getHours() < 4
-      && now.getHours() >= 22
+      && now.getHours() >= 21
     ) {
-      parsedDeparture = new Date(parsedDeparture.getTime() + 24 * 60 * 60 * 1000)
+      tomorrow.push(schedule)
+      continue
     }
 
     if (parsedDeparture.getTime() >= now.getTime() - 60000 /* keep just departed trains */) {
-      upcoming.push(schedule)
+      today.push(schedule)
     }
   }
 
-  const returning = upcoming.slice(0, limit)
+  const returning = [...today, ...tomorrow]
 
   if (returning.length === 0 && schedules.length > 0) {
     returning.push(schedules[0])
@@ -81,7 +84,7 @@ export default function LineCard({ line }: Props) {
       aria-label={`Jadwal untuk jalur ${line.name}`}
     >
       <article
-        className="p-4 border-b-2"
+        className="px-4 py-3 border-b-2"
         style={{ borderBottomColor: getTintFromColor(line.colorCode, 0.3) }}
         aria-labelledby={`line-name-${line.name}`}
       >
@@ -92,7 +95,7 @@ export default function LineCard({ line }: Props) {
           return (
             <li
               key={`${direction.boundFor}${direction.via ? `:${direction.via}` : ''}`}
-              className="p-4 flex items-start justify-between border-t first:border-t-0"
+              className="py-3 px-4 flex items-start justify-between border-t first:border-t-0"
               style={{ borderTopColor: getTintFromColor(line.colorCode, 0.3) }}
               aria-label={`Jadwal menuju ${direction.boundFor}`}
             >
