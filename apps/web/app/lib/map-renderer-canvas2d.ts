@@ -1,4 +1,4 @@
-import type { Manifest, Renderer, Tier, Transform } from './map-renderer'
+import type { Manifest, Point, Renderer, Tier, Transform } from './map-renderer'
 import { tileKey } from './map-renderer'
 
 interface TileEntry {
@@ -53,6 +53,8 @@ export function createCanvas2DRenderer(
   const sourceImages = new Map<string, HTMLImageElement>()
   const tiles = new Map<string, TileEntry>()
   let disposed = false
+  let points: Point[] = []
+  let debugHitboxes = false
 
   function ensureTile(r: number, c: number): TileEntry {
     const key = tileKey(r, c)
@@ -134,6 +136,24 @@ export function createCanvas2DRenderer(
         }
       }
     }
+
+    if (debugHitboxes && points.length > 0) {
+      ctx.fillStyle = 'rgba(255, 0, 153, 0.3)'
+      for (const p of points) {
+        drawCapsule(ctx, p.ax, p.ay, p.bx, p.by, p.r)
+        ctx.fill()
+      }
+    }
+  }
+
+  function setPoints(next: Point[]) {
+    points = next
+    onDirty()
+  }
+
+  function setDebugHitboxes(enabled: boolean) {
+    debugHitboxes = enabled
+    onDirty()
   }
 
   function dispose() {
@@ -154,6 +174,28 @@ export function createCanvas2DRenderer(
     draw,
     resize,
     requestTier: (r, c, tier) => { void requestTier(r, c, tier) },
+    setPoints,
+    setDebugHitboxes,
     dispose
   }
+}
+
+function drawCapsule(ctx: CanvasRenderingContext2D, ax: number, ay: number, bx: number, by: number, r: number) {
+  const dx = bx - ax
+  const dy = by - ay
+  const len = Math.hypot(dx, dy)
+  ctx.beginPath()
+  if (len < 1e-6) {
+    ctx.arc(ax, ay, r, 0, Math.PI * 2)
+    return
+  }
+  const nx = -dy / len
+  const ny = dx / len
+  const ang = Math.atan2(dy, dx)
+  ctx.moveTo(ax + nx * r, ay + ny * r)
+  ctx.lineTo(bx + nx * r, by + ny * r)
+  ctx.arc(bx, by, r, ang + Math.PI / 2, ang - Math.PI / 2)
+  ctx.lineTo(ax - nx * r, ay - ny * r)
+  ctx.arc(ax, ay, r, ang - Math.PI / 2, ang + Math.PI / 2)
+  ctx.closePath()
 }

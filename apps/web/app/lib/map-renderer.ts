@@ -16,12 +16,69 @@ export type Tier = 1 | 2 | 4
 export const TIERS: Tier[] = [1, 2, 4]
 export const MAX_TIER: Tier = 4
 
+export interface Point {
+  id: string
+  ax: number
+  ay: number
+  bx: number
+  by: number
+  r: number
+}
+
+export interface PointsManifest {
+  version: string
+  points: Point[]
+}
+
 export interface Renderer {
   kind: 'webgl2' | 'canvas2d'
   draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier): void
   resize(cssW: number, cssH: number, dpr: number): void
   requestTier(r: number, c: number, tier: Tier): void
+  setPoints(points: Point[]): void
+  setDebugHitboxes(enabled: boolean): void
   dispose(): void
+}
+
+export function pointToCapsuleDistance(
+  px: number,
+  py: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number
+): number {
+  const abx = bx - ax
+  const aby = by - ay
+  const apx = px - ax
+  const apy = py - ay
+  const lenSq = abx * abx + aby * aby
+  let t = lenSq > 0 ? (apx * abx + apy * aby) / lenSq : 0
+  t = Math.max(0, Math.min(1, t))
+  const cx = ax + abx * t
+  const cy = ay + aby * t
+  const dx = px - cx
+  const dy = py - cy
+  return Math.sqrt(dx * dx + dy * dy)
+}
+
+export function hitTestPoints(
+  worldX: number,
+  worldY: number,
+  points: Point[],
+  slopWorld: number
+): Point | null {
+  let best: Point | null = null
+  let bestDist = Infinity
+  for (const p of points) {
+    const d = pointToCapsuleDistance(worldX, worldY, p.ax, p.ay, p.bx, p.by)
+    const effective = d - (p.r + slopWorld)
+    if (effective <= 0 && effective < bestDist) {
+      bestDist = effective
+      best = p
+    }
+  }
+  return best
 }
 
 export function createRenderer(

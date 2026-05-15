@@ -1,5 +1,5 @@
 import * as twgl from 'twgl.js'
-import type { Manifest, Renderer, Tier, Transform } from './map-renderer'
+import type { Manifest, Point, Renderer, Tier, Transform } from './map-renderer'
 import { tileKey } from './map-renderer'
 
 const VS = `#version 300 es
@@ -24,6 +24,59 @@ uniform sampler2D u_texture;
 out vec4 outColor;
 void main() {
   outColor = texture(u_texture, v_texcoord);
+}
+`
+
+// Capsule shader: each pill is a 4-vertex quad whose local-space is the
+// capsule's bounding box. Vertex shader maps local quad coords to world
+// coords; fragment shader computes signed distance to the capsule centerline.
+const PILL_VS = `#version 300 es
+in vec2 a_quad; // -1..1 unit quad
+in vec2 a_axisA; // world-space endpoint A
+in vec2 a_axisB; // world-space endpoint B
+in float a_radius;
+uniform mat3 u_transform;
+out vec2 v_local;
+out vec2 v_axisA;
+out vec2 v_axisB;
+out float v_radius;
+void main() {
+  vec2 axis = a_axisB - a_axisA;
+  float len = length(axis);
+  vec2 dir = len > 0.0 ? axis / len : vec2(1.0, 0.0);
+  vec2 perp = vec2(-dir.y, dir.x);
+  vec2 center = (a_axisA + a_axisB) * 0.5;
+  float halfLen = len * 0.5 + a_radius;
+  vec2 world = center + dir * (a_quad.x * halfLen) + perp * (a_quad.y * a_radius);
+  vec3 clip = u_transform * vec3(world, 1.0);
+  gl_Position = vec4(clip.xy, 0.0, 1.0);
+  v_local = world;
+  v_axisA = a_axisA;
+  v_axisB = a_axisB;
+  v_radius = a_radius;
+}
+`
+
+const PILL_FS = `#version 300 es
+precision highp float;
+in vec2 v_local;
+in vec2 v_axisA;
+in vec2 v_axisB;
+in float v_radius;
+uniform vec4 u_color;
+uniform float u_edgeSoftnessWorld;
+out vec4 outColor;
+void main() {
+  vec2 ab = v_axisB - v_axisA;
+  vec2 ap = v_local - v_axisA;
+  float lenSq = max(dot(ab, ab), 1e-6);
+  float t = clamp(dot(ap, ab) / lenSq, 0.0, 1.0);
+  vec2 c = v_axisA + ab * t;
+  float d = distance(v_local, c);
+  float edge = u_edgeSoftnessWorld;
+  float alpha = 1.0 - smoothstep(v_radius - edge, v_radius + edge, d);
+  if (alpha <= 0.0) discard;
+  outColor = vec4(u_color.rgb * u_color.a * alpha, u_color.a * alpha);
 }
 `
 
@@ -84,6 +137,8 @@ export function createWebGLRenderer(
     a_texcoord: { numComponents: 2, data: [0, 0, 1, 0, 0, 1, 1, 1] }
   })
 
+  const pillProgramInfo = twgl.createProgramInfo(twglGl, [PILL_VS, PILL_FS])
+
   const anisoExt = gl.getExtension('EXT_texture_filter_anisotropic')
     ?? gl.getExtension('MOZ_EXT_texture_filter_anisotropic')
     ?? gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic')
@@ -96,6 +151,56 @@ export function createWebGLRenderer(
   const sourceImages = new Map<string, HTMLImageElement>()
   const tiles = new Map<string, TileEntry>()
   let disposed = false
+
+  let points: Point[] = []
+  let pillBufferInfo: twgl.BufferInfo | null = null
+  let debugHitboxes = false
+
+  function rebuildPillBuffers() {
+    if (pillBufferInfo) {
+      // twgl doesn't expose a delete helper for BufferInfo; recreate buffers fresh.
+      for (const k in pillBufferInfo.attribs) {
+        const buf = pillBufferInfo.attribs[k].buffer
+        if (buf) gl.deleteBuffer(buf)
+      }
+      if (pillBufferInfo.indices) gl.deleteBuffer(pillBufferInfo.indices)
+      pillBufferInfo = null
+    }
+    if (points.length === 0) return
+    const n = points.length
+    const quadData = new Float32Array(n * 4 * 2)
+    const axisAData = new Float32Array(n * 4 * 2)
+    const axisBData = new Float32Array(n * 4 * 2)
+    const radiusData = new Float32Array(n * 4)
+    const indices = new Uint16Array(n * 6)
+    const quadCorners = [-1, -1, 1, -1, -1, 1, 1, 1]
+    for (let i = 0; i < n; i++) {
+      const p = points[i]
+      for (let v = 0; v < 4; v++) {
+        quadData[i * 8 + v * 2 + 0] = quadCorners[v * 2 + 0]
+        quadData[i * 8 + v * 2 + 1] = quadCorners[v * 2 + 1]
+        axisAData[i * 8 + v * 2 + 0] = p.ax
+        axisAData[i * 8 + v * 2 + 1] = p.ay
+        axisBData[i * 8 + v * 2 + 0] = p.bx
+        axisBData[i * 8 + v * 2 + 1] = p.by
+        radiusData[i * 4 + v] = p.r
+      }
+      const base = i * 4
+      indices[i * 6 + 0] = base + 0
+      indices[i * 6 + 1] = base + 1
+      indices[i * 6 + 2] = base + 2
+      indices[i * 6 + 3] = base + 2
+      indices[i * 6 + 4] = base + 1
+      indices[i * 6 + 5] = base + 3
+    }
+    pillBufferInfo = twgl.createBufferInfoFromArrays(twglGl, {
+      a_quad: { numComponents: 2, data: quadData },
+      a_axisA: { numComponents: 2, data: axisAData },
+      a_axisB: { numComponents: 2, data: axisBData },
+      a_radius: { numComponents: 1, data: radiusData },
+      indices: { numComponents: 3, data: indices }
+    })
+  }
 
   const placeholder = createPlaceholderTexture(gl)
 
@@ -206,6 +311,28 @@ export function createWebGLRenderer(
         }
       }
     }
+
+    if (debugHitboxes && pillBufferInfo && points.length > 0) {
+      gl.useProgram(pillProgramInfo.program)
+      twgl.setBuffersAndAttributes(twglGl, pillProgramInfo, pillBufferInfo)
+      twgl.setUniforms(pillProgramInfo, {
+        u_transform: mat,
+        u_color: [1.0, 0.0, 0.6, 0.3],
+        u_edgeSoftnessWorld: 1.0 / transform.scale
+      })
+      twgl.drawBufferInfo(twglGl, pillBufferInfo, gl.TRIANGLES)
+    }
+  }
+
+  function setPoints(next: Point[]) {
+    points = next
+    rebuildPillBuffers()
+    onDirty()
+  }
+
+  function setDebugHitboxes(enabled: boolean) {
+    debugHitboxes = enabled
+    onDirty()
   }
 
   function dispose() {
@@ -215,6 +342,14 @@ export function createWebGLRenderer(
     gl.deleteTexture(placeholder)
     tiles.clear()
     sourceImages.clear()
+    if (pillBufferInfo) {
+      for (const k in pillBufferInfo.attribs) {
+        const buf = pillBufferInfo.attribs[k].buffer
+        if (buf) gl.deleteBuffer(buf)
+      }
+      if (pillBufferInfo.indices) gl.deleteBuffer(pillBufferInfo.indices)
+      pillBufferInfo = null
+    }
   }
 
   for (let r = 0; r < grid.rows; r++) {
@@ -228,6 +363,8 @@ export function createWebGLRenderer(
     draw,
     resize,
     requestTier: (r, c, tier) => { void requestTier(r, c, tier) },
+    setPoints,
+    setDebugHitboxes,
     dispose
   }
 }

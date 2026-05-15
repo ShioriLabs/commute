@@ -1,8 +1,20 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import { ArrowLeftIcon } from '@phosphor-icons/react'
 import useSWR from 'swr'
-import { createRenderer, pickTier, type Manifest, type Renderer, type Tier, type Transform } from '../lib/map-renderer'
+import {
+  createRenderer,
+  hitTestPoints,
+  pickTier,
+  type Manifest,
+  type PointsManifest,
+  type Renderer,
+  type Tier,
+  type Transform
+} from '../lib/map-renderer'
+
+const TAP_MOVEMENT_THRESHOLD_CSS_PX = 8
+const TOUCH_HIT_SLOP_CSS_PX = 12
 
 export function meta() {
   return [
@@ -41,6 +53,13 @@ export default function MapPage() {
     '/maps/fdtj/manifest.json',
     (url: string) => fetch(url).then(r => r.json())
   )
+  const { data: pointsManifest } = useSWR<PointsManifest>(
+    '/maps/fdtj/points.json',
+    (url: string) => fetch(url).then(r => r.json())
+  )
+
+  const [searchParams] = useSearchParams()
+  const debugHitboxes = searchParams.get('debug') === 'hitboxes'
 
   const viewportRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -57,6 +76,15 @@ export default function MapPage() {
   // Track pointer state without re-rendering.
   const pointersRef = useRef<Map<number, { x: number, y: number }>>(new Map())
   const pinchStartRef = useRef<{ dist: number, scale: number, centerX: number, centerY: number } | null>(null)
+  // Per-pointer tap-tracking: captures pointerdown position and the maximum
+  // distance the pointer has moved during the gesture, so pointerup can
+  // distinguish a tap from a drag.
+  const tapTrackRef = useRef<Map<number, {
+    startX: number
+    startY: number
+    maxDist: number
+    pointerType: string
+  }>>(new Map())
 
   useLayoutEffect(() => {
     if (!viewportRef.current) return
@@ -111,6 +139,15 @@ export default function MapPage() {
       rendererRef.current = null
     }
   }, [manifest])
+
+  // Push points + debug flag to the renderer. Depends on manifest so it re-fires
+  // when the renderer is (re-)created after manifest load — covers the case
+  // where points load before the renderer exists.
+  useEffect(() => {
+    if (!rendererRef.current) return
+    rendererRef.current.setPoints(pointsManifest?.points ?? [])
+    rendererRef.current.setDebugHitboxes(debugHitboxes)
+  }, [pointsManifest, debugHitboxes, manifest])
 
   // Resize the renderer's backing store when the viewport changes.
   useEffect(() => {
@@ -188,6 +225,12 @@ export default function MapPage() {
   const onPointerDown = (e: React.PointerEvent) => {
     (e.target as Element).setPointerCapture(e.pointerId)
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    tapTrackRef.current.set(e.pointerId, {
+      startX: e.clientX,
+      startY: e.clientY,
+      maxDist: 0,
+      pointerType: e.pointerType
+    })
     if (pointersRef.current.size === 2) {
       const [a, b] = Array.from(pointersRef.current.values())
       const dist = Math.hypot(b.x - a.x, b.y - a.y)
@@ -204,6 +247,12 @@ export default function MapPage() {
     const prev = pointersRef.current.get(e.pointerId)
     if (!prev) return
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+
+    const tap = tapTrackRef.current.get(e.pointerId)
+    if (tap) {
+      const d = Math.hypot(e.clientX - tap.startX, e.clientY - tap.startY)
+      if (d > tap.maxDist) tap.maxDist = d
+    }
 
     if (pointersRef.current.size === 1) {
       const t = transformRef.current
@@ -223,8 +272,34 @@ export default function MapPage() {
     }
   }
 
+  const tryHitTest = (clientX: number, clientY: number, pointerType: string) => {
+    const points = pointsManifest?.points
+    if (!points || points.length === 0) return
+    const rect = viewportRef.current!.getBoundingClientRect()
+    const px = clientX - rect.left
+    const py = clientY - rect.top
+    const t = transformRef.current
+    const worldX = (px - t.tx) / t.scale
+    const worldY = (py - t.ty) / t.scale
+    const slopCss = pointerType === 'touch' ? TOUCH_HIT_SLOP_CSS_PX : 0
+    const slopWorld = slopCss / t.scale
+    const hit = hitTestPoints(worldX, worldY, points, slopWorld)
+    if (hit) console.log('[map] hit', hit.id)
+  }
+
   const endPointer = (e: React.PointerEvent) => {
+    const tap = tapTrackRef.current.get(e.pointerId)
+    tapTrackRef.current.delete(e.pointerId)
     pointersRef.current.delete(e.pointerId)
+    // Only run hit-test when this is a clean single-pointer tap (no pinch).
+    if (
+      e.type === 'pointerup'
+      && tap
+      && tap.maxDist <= TAP_MOVEMENT_THRESHOLD_CSS_PX
+      && pinchStartRef.current === null
+    ) {
+      tryHitTest(e.clientX, e.clientY, tap.pointerType)
+    }
     if (pointersRef.current.size < 2) {
       pinchStartRef.current = null
     }
