@@ -207,20 +207,33 @@ export default function MapPage() {
     ? Math.max(viewportSize.w / mapW, viewportSize.h / mapH)
     : 0.01
 
-  // On first measurement, center the map at fit-scale.
+  // On first measurement, center the map at 50% zoom on the KCI-MRI station.
+  // Falls back to fit-to-viewport center if the anchor pill isn't loaded yet
+  // (in which case the next time this effect runs it will re-center properly).
   const didCenterRef = useRef(false)
   useEffect(() => {
     if (didCenterRef.current) return
     if (!viewportSize.w || !viewportSize.h || !mapW || !mapH) return
+
     const fitScale = Math.max(viewportSize.w / mapW, viewportSize.h / mapH)
-    const tx = (viewportSize.w - mapW * fitScale) / 2
-    const ty = (viewportSize.h - mapH * fitScale) / 2
-    const initial = { tx, ty, scale: fitScale }
+    const initialScale = Math.max(fitScale, 0.5)
+
+    const anchor = pointsManifest?.points.find(p => p.id === 'KCI-MRI')
+    const anchorX = anchor ? (anchor.ax + anchor.bx) / 2 : mapW / 2
+    const anchorY = anchor ? (anchor.ay + anchor.by) / 2 : mapH / 2
+
+    // Place (anchorX, anchorY) under the viewport center.
+    const tx = viewportSize.w / 2 - anchorX * initialScale
+    const ty = viewportSize.h / 2 - anchorY * initialScale
+    const initial = clampTransform(
+      { tx, ty, scale: initialScale },
+      viewportSize.w, viewportSize.h, mapW, mapH, fitScale
+    )
     targetRef.current = initial
     renderedRef.current = initial
     dirtyRef.current = true
     didCenterRef.current = true
-  }, [viewportSize.w, viewportSize.h, mapW, mapH])
+  }, [viewportSize.w, viewportSize.h, mapW, mapH, pointsManifest])
 
   // Initialize renderer once the manifest is loaded.
   useEffect(() => {
