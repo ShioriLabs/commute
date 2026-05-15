@@ -84,6 +84,11 @@ export function createWebGLRenderer(
     a_texcoord: { numComponents: 2, data: [0, 0, 1, 0, 0, 1, 1, 1] }
   })
 
+  const anisoExt = gl.getExtension('EXT_texture_filter_anisotropic')
+    ?? gl.getExtension('MOZ_EXT_texture_filter_anisotropic')
+    ?? gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic')
+  const maxAniso = anisoExt ? gl.getParameter(anisoExt.MAX_TEXTURE_MAX_ANISOTROPY_EXT) as number : 1
+
   const { grid, tileSize } = manifest
   const tileW = tileSize.w
   const tileH = tileSize.h
@@ -139,6 +144,9 @@ export function createWebGLRenderer(
       gl.generateMipmap(gl.TEXTURE_2D)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+      if (anisoExt) {
+        gl.texParameterf(gl.TEXTURE_2D, anisoExt.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(16, maxAniso))
+      }
       entry.tier = tier
       entry.pendingTier = null
       onDirty()
