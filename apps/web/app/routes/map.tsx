@@ -14,6 +14,7 @@ import {
   type Transform
 } from '../lib/map-renderer'
 import { AuthorOverlay, handleAuthorTap } from '../components/map-author'
+import StationSheet from '../components/station-sheet'
 
 const TAP_MOVEMENT_THRESHOLD_CSS_PX = 8
 const TOUCH_HIT_SLOP_CSS_PX = 12
@@ -148,6 +149,9 @@ export default function MapPage() {
   // user taps empty space. Author mode toolbar / edit panel are unaffected.
   const [chromeVisible, setChromeVisible] = useState(true)
   const [attributionOpen, setAttributionOpen] = useState(false)
+  // Currently selected station for the bottom sheet. Pill IDs are formatted
+  // `OPERATOR-CODE` (e.g. KCI-MRI); split on first hyphen.
+  const [selectedStation, setSelectedStation] = useState<{ operator: string, code: string } | null>(null)
 
   // Two transforms: `target` is where we want to be; `rendered` is what we
   // currently draw. The rAF loop lerps rendered toward target each frame so
@@ -474,9 +478,13 @@ export default function MapPage() {
     const points = workingPointsRef.current
     const hit = points.length > 0 ? hitTestPoints(worldX, worldY, points, slopWorld) : null
     if (hit && hit.id !== 'KCI-GMR') {
-      const [OPERATOR, CODE] = hit.id.split(/-/g)
-      if (OPERATOR && CODE) {
-        navigate(`/station/${OPERATOR}/${CODE}`)
+      // Pill IDs look like "KCI-MRI". Split on first hyphen so codes
+      // containing further hyphens still parse correctly.
+      const dash = hit.id.indexOf('-')
+      if (dash > 0) {
+        const operator = hit.id.slice(0, dash)
+        const code = hit.id.slice(dash + 1)
+        setSelectedStation({ operator, code })
       } else {
         console.warn('Unrecognized point id format:', hit.id)
       }
@@ -651,6 +659,12 @@ export default function MapPage() {
           }}
         />
       )}
+
+      <StationSheet
+        operator={selectedStation?.operator ?? null}
+        code={selectedStation?.code ?? null}
+        onClose={() => setSelectedStation(null)}
+      />
     </main>
   )
 }
