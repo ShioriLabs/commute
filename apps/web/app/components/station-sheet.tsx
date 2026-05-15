@@ -3,9 +3,10 @@ import { XIcon, ArrowSquareOutIcon } from '@phosphor-icons/react'
 import { Link } from 'react-router'
 import StationContent, { useStationHeader } from './station-content'
 
-// Sheet height as a fraction of viewport height.
-const PEEK_FRACTION = 0.4
-const FULL_FRACTION = 0.85
+// Sheet height as a fraction of viewport height. Peek is tall enough that
+// the timetable head + a few rows are visible without dragging.
+const PEEK_FRACTION = 0.3
+const FULL_FRACTION = 0.9
 // Below this fraction at gesture-end, dismiss.
 const DISMISS_FRACTION = 0.18
 // Pointer-velocity (CSS px/ms) threshold for snap-on-flick.
@@ -23,7 +24,13 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
   // Snap state controlled by parent open/close; persists open height across renders.
   const [snap, setSnap] = useState<SnapState>('closed')
   const [viewportH, setViewportH] = useState(0)
+  // Defer mounting the heavy StationContent until the open animation finishes.
+  // Otherwise the first render of dozens of timetable/amenity nodes happens
+  // during the 0→peek slide and drops frames.
+  const [contentReady, setContentReady] = useState(false)
   const sheetRef = useRef<HTMLDivElement>(null)
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const backdropRef = useRef<HTMLDivElement>(null)
   const dragStartRef = useRef<{
     y: number
     sheetTopAtStart: number
@@ -40,6 +47,7 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
   // Open the sheet to peek whenever a new station code arrives; close otherwise.
   useEffect(() => {
     if (operator && code) {
+      setContentReady(false)
       setSnap('peek')
     } else {
       setSnap('closed')
@@ -57,6 +65,21 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
   const peekPx = Math.round(viewportH * PEEK_FRACTION)
   const fullPx = Math.round(viewportH * FULL_FRACTION)
   const targetPx = snap === 'full' ? fullPx : snap === 'peek' ? peekPx : 0
+
+  // Imperative DOM write: position the sheet and dim the backdrop. Used by
+  // both the rAF lerp and the drag move handler so we never round-trip
+  // through React state during animation (which would re-render the heavy
+  // StationContent subtree on every frame).
+  const applyHeight = (h: number) => {
+    heightRef.current = h
+    if (sheetRef.current) {
+      sheetRef.current.style.transform = `translateY(${fullPx - h}px)`
+    }
+    if (backdropRef.current) {
+      const progress = Math.max(0, Math.min(1, (h - peekPx) / Math.max(1, fullPx - peekPx)))
+      backdropRef.current.style.opacity = String(progress * 0.35)
+    }
+  }
 
   // Animate height toward targetPx using rAF + exponential lerp. The loop is
   // paused while the user is actively dragging so it doesn't fight the finger.
@@ -76,14 +99,19 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
       const current = heightRef.current
       const delta = targetPx - current
       if (Math.abs(delta) < 0.5) {
-        if (current !== targetPx) setHeightPx(targetPx)
+        if (current !== targetPx) {
+          applyHeight(targetPx)
+          setHeightPx(targetPx)
+        }
+        // Animation landed — safe to mount the heavy content now.
+        if (snap !== 'closed') setContentReady(true)
         if (snap === 'closed' && current <= 0.5) return
         raf = requestAnimationFrame(tick)
         return
       }
       const alpha = 1 - Math.exp(-dt / TAU)
       const next = current + delta * alpha
-      setHeightPx(next)
+      applyHeight(next)
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
@@ -110,42 +138,99 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
     }
   }, [snap, heightPx, operator, code, onClose])
 
+  // Track whether the current pointer interaction has committed to dragging
+  // the sheet (vs. letting the body scroll natively). We delay committing
+  // until the user moves a few pixels so we can choose the right behavior
+  // based on direction + sheet state + body scroll position.
+  const dragCandidateRef = useRef<{
+    y: number
+    sheetTopAtStart: number
+    pointerId: number
+    fromHandle: boolean
+  } | null>(null)
+  const DRAG_COMMIT_THRESHOLD = 6 // CSS px
+
   const handlePointerDown = (e: React.PointerEvent) => {
-    // Only react to drags on the handle/header — not on the scrollable body
-    // or on interactive elements (buttons, links) inside the header.
+    // Ignore taps on interactive controls inside the header.
     const target = e.target as HTMLElement
-    if (!target.closest('[data-sheet-handle]')) return
     if (target.closest('button, a, input, [role="button"]')) return
-    ;(e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId)
-    dragStartRef.current = {
+    const fromHandle = !!target.closest('[data-sheet-handle]')
+    // Body pointerdowns are candidates too (for swipe-up to expand).
+    dragCandidateRef.current = {
       y: e.clientY,
       sheetTopAtStart: heightRef.current,
-      time: e.timeStamp
+      pointerId: e.pointerId,
+      fromHandle
     }
     velocityRef.current = [{ t: e.timeStamp, y: e.clientY }]
   }
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    const start = dragStartRef.current
-    if (!start) return
-    const dy = e.clientY - start.y
-    // Sheet grows when dragged up (negative dy), shrinks when dragged down.
-    const next = Math.max(0, Math.min(fullPx, start.sheetTopAtStart - dy))
-    // Write directly to the DOM to bypass React render cost during drag.
-    // The `heightRef` stays in sync so the rAF loop and close-effect see the
-    // current value; React state is reconciled on pointerup.
-    heightRef.current = next
-    if (sheetRef.current) {
-      sheetRef.current.style.transform = `translateY(${fullPx - next}px)`
+    // Already committed to dragging — update sheet position.
+    if (dragStartRef.current) {
+      const start = dragStartRef.current
+      const dy = e.clientY - start.y
+      const next = Math.max(0, Math.min(fullPx, start.sheetTopAtStart - dy))
+      applyHeight(next)
+      velocityRef.current.push({ t: e.timeStamp, y: e.clientY })
+      const cutoff = e.timeStamp - 100
+      while (velocityRef.current.length > 2 && velocityRef.current[0].t < cutoff) {
+        velocityRef.current.shift()
+      }
+      return
     }
-    velocityRef.current.push({ t: e.timeStamp, y: e.clientY })
-    const cutoff = e.timeStamp - 100
-    while (velocityRef.current.length > 2 && velocityRef.current[0].t < cutoff) {
-      velocityRef.current.shift()
+
+    // Not yet committed — decide whether to start dragging.
+    const cand = dragCandidateRef.current
+    if (!cand || cand.pointerId !== e.pointerId) return
+    const dy = e.clientY - cand.y
+    if (Math.abs(dy) < DRAG_COMMIT_THRESHOLD) return
+
+    // From handle: always commit. The header isn't scrollable.
+    // From body: commit only when the gesture should resize the sheet
+    // rather than scroll the body content.
+    const draggingUp = dy < 0
+    const draggingDown = dy > 0
+    const body = bodyRef.current
+    const atTop = !body || body.scrollTop <= 0
+    const isFullSnap = snap === 'full'
+
+    let shouldDrag = false
+    if (cand.fromHandle) {
+      shouldDrag = true
+    } else if (!isFullSnap && draggingUp) {
+      // At peek and swiping up → expand the sheet.
+      shouldDrag = true
+    } else if (!isFullSnap && draggingDown) {
+      // At peek and swiping down → close.
+      shouldDrag = true
+    } else if (isFullSnap && draggingDown && atTop) {
+      // At full, scrolled to top, swiping down → shrink.
+      shouldDrag = true
     }
+
+    if (!shouldDrag) {
+      // Body scroll wins; clear candidate so we don't keep checking.
+      dragCandidateRef.current = null
+      return
+    }
+
+    ;(e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId)
+    dragStartRef.current = {
+      y: cand.y,
+      sheetTopAtStart: cand.sheetTopAtStart,
+      time: e.timeStamp
+    }
+    dragCandidateRef.current = null
+
+    // Apply the move we just observed so the sheet jumps to where the finger
+    // already is (rather than lagging by DRAG_COMMIT_THRESHOLD pixels).
+    const next = Math.max(0, Math.min(fullPx, cand.sheetTopAtStart - dy))
+    applyHeight(next)
   }
 
   const handlePointerUp = () => {
+    dragCandidateRef.current = null
     const start = dragStartRef.current
     if (!start) return
     dragStartRef.current = null
@@ -195,9 +280,12 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
   return (
     <>
       {/* Backdrop: pointer-events only when at or past peek-to-full progress.
-          At peek the map remains interactive (pointer-events: none). */}
+          At peek the map remains interactive (pointer-events: none).
+          Opacity is set imperatively by the rAF tick (via `applyHeight`) so
+          we don't re-render this on every frame. */}
       <div
-        className="fixed inset-0 z-30 bg-black transition-colors"
+        ref={backdropRef}
+        className="fixed inset-0 z-30 bg-black"
         style={{
           opacity: backdropOpacity,
           pointerEvents: isFull ? 'auto' : 'none'
@@ -208,7 +296,7 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
 
       <div
         ref={sheetRef}
-        className="fixed inset-x-0 bottom-0 z-30 bg-white rounded-t-2xl shadow-2xl flex flex-col touch-none"
+        className="fixed inset-x-0 bottom-0 z-30 bg-white rounded-t-2xl shadow-2xl flex flex-col"
         style={{
           // Sheet is always sized to its `full` height; we translate it down
           // off-screen and only show the requested portion. This avoids
@@ -225,8 +313,17 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
         aria-label="Detail stasiun"
       >
         <SheetHeader operator={operator} code={code} onClose={handleClose} />
-        <div className="flex-1 overflow-y-auto overscroll-contain">
-          <StationContent operator={operator} code={code} />
+        <div
+          ref={bodyRef}
+          className="flex-1 overflow-y-auto overscroll-contain touch-pan-y"
+        >
+          {contentReady
+            ? <StationContent operator={operator} code={code} />
+            : (
+                <div className="px-4 pt-4 flex flex-col gap-2 max-w-3xl mx-auto">
+                  <div className="animate-pulse w-full h-32 bg-slate-200 rounded-lg" />
+                </div>
+              )}
         </div>
       </div>
     </>
