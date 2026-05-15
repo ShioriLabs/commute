@@ -22,7 +22,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router": "^7.6.2",
-    "swr": "^2.3.3"
+    "swr": "^2.3.3",
+    "twgl.js": "^7.0.0"
   },
   "devDependencies": {
     "@react-router/dev": "^7.6.2",

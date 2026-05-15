@@ -2,14 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { ArrowLeftIcon } from '@phosphor-icons/react'
 import useSWR from 'swr'
-
-interface Manifest {
-  version: string
-  source: string
-  viewBox: [number, number, number, number]
-  grid: { rows: number, cols: number }
-  tileSize: { w: number, h: number }
-}
+import { createRenderer, pickTier, type Manifest, type Renderer, type Tier, type Transform } from '../lib/map-renderer'
 
 export function meta() {
   return [
@@ -21,8 +14,6 @@ export function meta() {
 const MIN_SCALE_BLEED = 0.1
 const MAX_SCALE = 6
 const WHEEL_ZOOM_INTENSITY = 0.0015
-
-type Transform = { tx: number, ty: number, scale: number }
 
 function clampTransform(
   t: Transform,
@@ -54,6 +45,12 @@ export default function MapPage() {
   )
 
   const viewportRef = useRef<HTMLDivElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const rendererRef = useRef<Renderer | null>(null)
+  const dirtyRef = useRef(true)
+  const rafRef = useRef<number>(0)
+  const currentTierRef = useRef<Tier>(1)
+
   const [viewportSize, setViewportSize] = useState({ w: 0, h: 0 })
   const [transform, setTransform] = useState<Transform>({ tx: 0, ty: 0, scale: 1 })
   const transformRef = useRef(transform)
@@ -74,7 +71,7 @@ export default function MapPage() {
     const ro = new ResizeObserver(update)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+  }, [manifest])
 
   // Compute the minimum scale that fits the whole map into the viewport (with a small bleed).
   const mapW = manifest?.viewBox[2] ?? 0
@@ -95,6 +92,82 @@ export default function MapPage() {
     didCenterRef.current = true
   }, [viewportSize.w, viewportSize.h, mapW, mapH])
 
+  // Initialize renderer once the manifest is loaded.
+  useEffect(() => {
+    if (!manifest || !canvasRef.current) return
+    const renderer = createRenderer(
+      canvasRef.current,
+      manifest,
+      '/maps/fdtj/',
+      () => { dirtyRef.current = true }
+    )
+    rendererRef.current = renderer
+    const dpr = window.devicePixelRatio || 1
+    const rect = canvasRef.current.getBoundingClientRect()
+    if (rect.width && rect.height) {
+      renderer.resize(rect.width, rect.height, dpr)
+    }
+    dirtyRef.current = true
+    return () => {
+      renderer.dispose()
+      rendererRef.current = null
+    }
+  }, [manifest])
+
+  // Resize the renderer's backing store when the viewport changes.
+  useEffect(() => {
+    if (!rendererRef.current) return
+    if (!viewportSize.w || !viewportSize.h) return
+    rendererRef.current.resize(viewportSize.w, viewportSize.h, window.devicePixelRatio || 1)
+    dirtyRef.current = true
+  }, [viewportSize.w, viewportSize.h])
+
+  // Watch for DPR changes (browser zoom).
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return
+    let mql = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
+    const handler = () => {
+      const dpr = window.devicePixelRatio || 1
+      if (rendererRef.current && viewportSize.w && viewportSize.h) {
+        rendererRef.current.resize(viewportSize.w, viewportSize.h, dpr)
+        dirtyRef.current = true
+      }
+      mql.removeEventListener('change', handler)
+      mql = window.matchMedia(`(resolution: ${dpr}dppx)`)
+      mql.addEventListener('change', handler)
+    }
+    mql.addEventListener('change', handler)
+    return () => mql.removeEventListener('change', handler)
+  }, [viewportSize.w, viewportSize.h])
+
+  // Mark dirty whenever the transform changes.
+  useEffect(() => {
+    dirtyRef.current = true
+  }, [transform])
+
+  // requestAnimationFrame loop: only redraws when dirty.
+  useEffect(() => {
+    let stopped = false
+    const tick = () => {
+      if (stopped) return
+      const renderer = rendererRef.current
+      if (renderer && dirtyRef.current && viewportSize.w && viewportSize.h) {
+        const dpr = window.devicePixelRatio || 1
+        const t = transformRef.current
+        const targetTier = pickTier(t.scale, dpr, currentTierRef.current)
+        currentTierRef.current = targetTier
+        renderer.draw(t, viewportSize.w, viewportSize.h, dpr, targetTier)
+        dirtyRef.current = false
+      }
+      rafRef.current = requestAnimationFrame(tick)
+    }
+    rafRef.current = requestAnimationFrame(tick)
+    return () => {
+      stopped = true
+      cancelAnimationFrame(rafRef.current)
+    }
+  }, [viewportSize.w, viewportSize.h])
+
   const updateTransform = (next: Transform) => {
     setTransform(clampTransform(next, viewportSize.w, viewportSize.h, mapW, mapH, minScale))
   }
@@ -111,12 +184,6 @@ export default function MapPage() {
     const tx = px - worldX * newScale
     const ty = py - worldY * newScale
     updateTransform({ tx, ty, scale: newScale })
-  }
-
-  const onWheel = (e: React.WheelEvent) => {
-    e.preventDefault()
-    const factor = Math.exp(-e.deltaY * WHEEL_ZOOM_INTENSITY)
-    zoomAt(e.clientX, e.clientY, factor)
   }
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -177,7 +244,7 @@ export default function MapPage() {
     }
     el.addEventListener('wheel', handler, { passive: false })
     return () => el.removeEventListener('wheel', handler)
-  }, [])
+  }, [manifest])
 
   if (error) {
     return (
@@ -198,14 +265,11 @@ export default function MapPage() {
     )
   }
 
-  const { grid, tileSize } = manifest
-
   return (
     <main className="fixed inset-0 bg-rose-50/40 overflow-hidden">
       <div
         ref={viewportRef}
         className="absolute inset-0 touch-none select-none"
-        onWheel={onWheel}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endPointer}
@@ -214,35 +278,7 @@ export default function MapPage() {
         role="img"
         aria-label="Peta integrasi transportasi umum Jakarta"
       >
-        <div
-          className="absolute top-0 left-0 origin-top-left"
-          style={{
-            width: mapW,
-            height: mapH,
-            transform: `translate(${transform.tx}px, ${transform.ty}px) scale(${transform.scale})`,
-            transformOrigin: '0 0',
-            willChange: 'transform'
-          }}
-        >
-          {Array.from({ length: grid.rows }).flatMap((_, r) =>
-            Array.from({ length: grid.cols }).map((_, c) => (
-              <img
-                key={`${r}-${c}`}
-                src={`/maps/fdtj/tile-${r}-${c}.svg`}
-                alt=""
-                draggable={false}
-                loading="lazy"
-                className="absolute pointer-events-none"
-                style={{
-                  left: c * tileSize.w,
-                  top: r * tileSize.h,
-                  width: tileSize.w,
-                  height: tileSize.h
-                }}
-              />
-            ))
-          )}
-        </div>
+        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
       </div>
 
       <Link
