@@ -106,7 +106,7 @@ export function createCanvas2DRenderer(
   function draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier) {
     if (disposed) return
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    ctx.fillStyle = 'rgba(255, 241, 242, 0.4)'
+    ctx.fillStyle = '#ffffff'
     ctx.fillRect(0, 0, cssW, cssH)
     ctx.translate(transform.tx, transform.ty)
     ctx.scale(transform.scale, transform.scale)

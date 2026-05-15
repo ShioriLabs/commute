@@ -11,8 +11,7 @@ export function meta() {
   ]
 }
 
-const MIN_SCALE_BLEED = 0.1
-const MAX_SCALE = 6
+const MAX_SCALE = 1.5
 const WHEEL_ZOOM_INTENSITY = 0.0015
 
 function clampTransform(
@@ -26,16 +25,15 @@ function clampTransform(
   const scale = Math.max(minScale, Math.min(MAX_SCALE, t.scale))
   const scaledW = mapW * scale
   const scaledH = mapH * scale
-  // Allow panning up to the edge of the map; never allow the entire map to leave the viewport.
-  const minTx = Math.min(0, viewportW - scaledW)
-  const maxTx = Math.max(0, viewportW - scaledW)
-  const minTy = Math.min(0, viewportH - scaledH)
-  const maxTy = Math.max(0, viewportH - scaledH)
-  return {
-    tx: Math.min(maxTx, Math.max(minTx, t.tx)),
-    ty: Math.min(maxTy, Math.max(minTy, t.ty)),
-    scale
-  }
+  // If the map is smaller than the viewport on an axis, center it; otherwise
+  // clamp so the map edge can't be dragged inside the viewport.
+  const tx = scaledW <= viewportW
+    ? (viewportW - scaledW) / 2
+    : Math.min(0, Math.max(viewportW - scaledW, t.tx))
+  const ty = scaledH <= viewportH
+    ? (viewportH - scaledH) / 2
+    : Math.min(0, Math.max(viewportH - scaledH, t.ty))
+  return { tx, ty, scale }
 }
 
 export default function MapPage() {
@@ -77,7 +75,7 @@ export default function MapPage() {
   const mapW = manifest?.viewBox[2] ?? 0
   const mapH = manifest?.viewBox[3] ?? 0
   const minScale = (viewportSize.w && viewportSize.h && mapW && mapH)
-    ? Math.min(viewportSize.w / mapW, viewportSize.h / mapH) - MIN_SCALE_BLEED
+    ? Math.min(viewportSize.w / mapW, viewportSize.h / mapH)
     : 0.01
 
   // On first measurement, center the map at fit-scale.
@@ -177,7 +175,8 @@ export default function MapPage() {
     const rect = viewportRef.current!.getBoundingClientRect()
     const px = clientX - rect.left
     const py = clientY - rect.top
-    const newScale = t.scale * factor
+    // Clamp scale first so the anchor math matches the actual rendered scale.
+    const newScale = Math.max(minScale, Math.min(MAX_SCALE, t.scale * factor))
     // Keep (px, py) anchored: world point under cursor stays put.
     const worldX = (px - t.tx) / t.scale
     const worldY = (py - t.ty) / t.scale
@@ -244,7 +243,7 @@ export default function MapPage() {
     }
     el.addEventListener('wheel', handler, { passive: false })
     return () => el.removeEventListener('wheel', handler)
-  }, [manifest])
+  }, [manifest, minScale, viewportSize.w, viewportSize.h, mapW, mapH])
 
   if (error) {
     return (
@@ -266,7 +265,7 @@ export default function MapPage() {
   }
 
   return (
-    <main className="fixed inset-0 bg-rose-50/40 overflow-hidden">
+    <main className="fixed inset-0 bg-white overflow-hidden">
       <div
         ref={viewportRef}
         className="absolute inset-0 touch-none select-none"

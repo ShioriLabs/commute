@@ -158,7 +158,7 @@ export function createWebGLRenderer(
   function draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier) {
     if (disposed) return
     gl.viewport(0, 0, Math.round(cssW * dpr), Math.round(cssH * dpr))
-    gl.clearColor(255 / 255, 241 / 255, 242 / 255, 0.4)
+    gl.clearColor(1, 1, 1, 1)
     gl.clear(gl.COLOR_BUFFER_BIT)
 
     gl.enable(gl.BLEND)
