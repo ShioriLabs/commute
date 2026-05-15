@@ -1,6 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router'
-import { ArrowLeftIcon } from '@phosphor-icons/react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Link, useNavigate, useNavigationType, useSearchParams } from 'react-router'
+import { XIcon, InfoIcon } from '@phosphor-icons/react'
 import useSWR from 'swr'
 import {
   createRenderer,
@@ -75,6 +75,16 @@ export default function MapPage() {
   const debugHitboxes = import.meta.env.DEV && searchParams.get('debug') === 'hitboxes'
   const authorMode = import.meta.env.DEV && searchParams.get('author') === '1'
 
+  const navigate = useNavigate()
+  const navigationType = useNavigationType()
+  const handleBackButton = useCallback(() => {
+    if (navigationType === 'POP') {
+      navigate('/')
+    } else {
+      history.back()
+    }
+  }, [navigationType, navigate])
+
   // Working set of points. In normal mode this mirrors the SWR-fetched
   // points.json; in author mode it's an editable copy persisted to
   // localStorage. The renderer always reads from this.
@@ -133,6 +143,11 @@ export default function MapPage() {
   const currentTierRef = useRef<Tier>(1)
 
   const [viewportSize, setViewportSize] = useState({ w: 0, h: 0 })
+
+  // Chrome (top bar) auto-hides during map interaction and reappears when the
+  // user taps empty space. Author mode toolbar / edit panel are unaffected.
+  const [chromeVisible, setChromeVisible] = useState(true)
+  const [attributionOpen, setAttributionOpen] = useState(false)
 
   // Two transforms: `target` is where we want to be; `rendered` is what we
   // currently draw. The rAF loop lerps rendered toward target each frame so
@@ -397,6 +412,8 @@ export default function MapPage() {
     if (tap) {
       const d = Math.hypot(e.clientX - tap.startX, e.clientY - tap.startY)
       if (d > tap.maxDist) tap.maxDist = d
+      // First moment this gesture becomes a real drag/pinch: hide the chrome.
+      if (d > TAP_MOVEMENT_THRESHOLD_CSS_PX) setChromeVisible(false)
     }
 
     const samples = velocitySamplesRef.current.get(e.pointerId)
@@ -433,6 +450,7 @@ export default function MapPage() {
   }
 
   const tryHitTest = (clientX: number, clientY: number, pointerType: string, shift: boolean) => {
+    setAttributionOpen(false)
     const { x: worldX, y: worldY } = clientToWorld(clientX, clientY)
     const t = transformRef.current
     const slopCss = pointerType === 'touch' ? TOUCH_HIT_SLOP_CSS_PX : 0
@@ -454,9 +472,18 @@ export default function MapPage() {
     }
 
     const points = workingPointsRef.current
-    if (!points || points.length === 0) return
-    const hit = hitTestPoints(worldX, worldY, points, slopWorld)
-    if (hit) console.log('[map] hit', hit.id)
+    const hit = points.length > 0 ? hitTestPoints(worldX, worldY, points, slopWorld) : null
+    if (hit) {
+      const [OPERATOR, CODE] = hit.id.split(/-/g)
+      if (OPERATOR && CODE) {
+        navigate(`/station/${OPERATOR}/${CODE}`)
+      } else {
+        console.warn('Unrecognized point id format:', hit.id)
+      }
+    } else {
+      // Empty-space tap: toggle the chrome (show if hidden, hide if visible).
+      setChromeVisible(v => !v)
+    }
   }
 
   const endPointer = (e: React.PointerEvent) => {
@@ -511,6 +538,7 @@ export default function MapPage() {
       ev.preventDefault()
       const factor = Math.exp(-ev.deltaY * WHEEL_ZOOM_INTENSITY)
       zoomAt(ev.clientX, ev.clientY, factor)
+      setChromeVisible(false)
     }
     el.addEventListener('wheel', handler, { passive: false })
     return () => el.removeEventListener('wheel', handler)
@@ -551,19 +579,51 @@ export default function MapPage() {
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
       </div>
 
-      <Link
-        to="/"
-        className="absolute top-4 left-4 z-10 bg-white rounded-full shadow-lg p-3 flex items-center justify-center"
-        aria-label="Kembali ke beranda"
+      <div
+        className={`absolute inset-x-0 top-0 z-10 bg-white/50 backdrop-blur border-b-2 border-b-gray-50/20 transition-opacity duration-200 ${chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
       >
-        <ArrowLeftIcon weight="bold" className="w-6 h-6 text-slate-700" />
-      </Link>
-
-      <div className="absolute bottom-4 right-4 z-10 bg-white/90 backdrop-blur px-3 py-1 rounded-md text-xs text-slate-600 shadow">
-        © FDTJ •
-        {' '}
-        {manifest.version}
+        <div className="p-8 pb-4 pr-20 max-w-3xl mx-auto pointer-events-auto flex flex-col">
+          <h1 className="font-bold text-xl">Peta Integrasi</h1>
+        </div>
       </div>
+
+      <button
+        type="button"
+        onClick={handleBackButton}
+        aria-label="Tutup halaman peta"
+        className="absolute top-4 right-4 z-20 rounded-full bg-white/90 backdrop-blur shadow-lg w-11 h-11 flex items-center justify-center cursor-pointer"
+      >
+        <XIcon weight="bold" className="w-6 h-6 text-slate-700" />
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setAttributionOpen(o => !o)}
+        aria-label="Lihat atribusi peta"
+        aria-expanded={attributionOpen}
+        className="absolute bottom-4 right-4 z-20 rounded-full bg-white/90 backdrop-blur shadow-lg w-10 h-10 flex items-center justify-center cursor-pointer"
+      >
+        <InfoIcon weight="bold" className="w-5 h-5 text-slate-700" />
+      </button>
+
+      {attributionOpen && (
+        <div
+          role="dialog"
+          aria-label="Atribusi peta"
+          className="absolute bottom-16 right-4 z-20 bg-white rounded-lg shadow-xl border border-slate-200 p-4 max-w-xs text-sm text-slate-700"
+          onPointerDown={e => e.stopPropagation()}
+        >
+          <div className="font-semibold mb-1">Peta Integrasi Jakarta</div>
+          <div className="text-xs text-slate-600">
+            © Forum Diskusi Transportasi Jakarta (FDTJ)
+          </div>
+          <div className="text-xs text-slate-500 mt-1">
+            Versi
+            {' '}
+            {manifest.version}
+          </div>
+        </div>
+      )}
 
       {authorMode && (
         <AuthorOverlay
