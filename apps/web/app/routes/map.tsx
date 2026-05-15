@@ -16,6 +16,16 @@ import {
 const TAP_MOVEMENT_THRESHOLD_CSS_PX = 8
 const TOUCH_HIT_SLOP_CSS_PX = 12
 
+// Lerp time constants (milliseconds). Lower = snappier, higher = floatier.
+// Wheel zoom and end-of-gesture eased; active drag/pinch snap 1:1.
+const LERP_TAU_MS = 80
+// Inertia: pixels/ms of velocity at release decays exponentially with this tau.
+const INERTIA_TAU_MS = 180
+// Below this velocity (CSS px/ms) we stop the inertia loop.
+const INERTIA_MIN_VELOCITY = 0.04
+// Use the most recent N ms of pointer-move samples to estimate release velocity.
+const VELOCITY_SAMPLE_WINDOW_MS = 80
+
 export function meta() {
   return [
     { title: 'Peta Integrasi - Commute' },
@@ -69,9 +79,18 @@ export default function MapPage() {
   const currentTierRef = useRef<Tier>(1)
 
   const [viewportSize, setViewportSize] = useState({ w: 0, h: 0 })
-  const [transform, setTransform] = useState<Transform>({ tx: 0, ty: 0, scale: 1 })
-  const transformRef = useRef(transform)
-  transformRef.current = transform
+
+  // Two transforms: `target` is where we want to be; `rendered` is what we
+  // currently draw. The rAF loop lerps rendered toward target each frame so
+  // wheel zoom and end-of-gesture motion ease. During active drag/pinch we
+  // snap rendered to target so the map tracks the finger 1:1.
+  const targetRef = useRef<Transform>({ tx: 0, ty: 0, scale: 1 })
+  const renderedRef = useRef<Transform>({ tx: 0, ty: 0, scale: 1 })
+  // `transformRef` retains the existing name so non-render code (hit-test,
+  // zoomAt anchor math) reads the *target* — the user's intent, not the
+  // currently-rendered frame.
+  const transformRef = targetRef
+  const gestureActiveRef = useRef(false)
 
   // Track pointer state without re-rendering.
   const pointersRef = useRef<Map<number, { x: number, y: number }>>(new Map())
@@ -85,6 +104,12 @@ export default function MapPage() {
     maxDist: number
     pointerType: string
   }>>(new Map())
+  // Per-pointer velocity sample log for flick inertia.
+  const velocitySamplesRef = useRef<Map<number, Array<{ t: number, x: number, y: number }>>>(new Map())
+  // Active inertia (decaying pan velocity in CSS px/ms).
+  const inertiaRef = useRef<{ vx: number, vy: number } | null>(null)
+  // Timestamp of last animation tick; used for frame-rate-independent lerp.
+  const lastFrameTimeRef = useRef<number>(0)
 
   useLayoutEffect(() => {
     if (!viewportRef.current) return
@@ -102,8 +127,11 @@ export default function MapPage() {
   // Compute the minimum scale that fits the whole map into the viewport (with a small bleed).
   const mapW = manifest?.viewBox[2] ?? 0
   const mapH = manifest?.viewBox[3] ?? 0
+  // Use max(viewport/map) so the map's shorter dimension fills the viewport
+  // at minimum zoom. The longer dimension overflows and is pannable, but no
+  // letterbox bars appear.
   const minScale = (viewportSize.w && viewportSize.h && mapW && mapH)
-    ? Math.min(viewportSize.w / mapW, viewportSize.h / mapH)
+    ? Math.max(viewportSize.w / mapW, viewportSize.h / mapH)
     : 0.01
 
   // On first measurement, center the map at fit-scale.
@@ -111,10 +139,13 @@ export default function MapPage() {
   useEffect(() => {
     if (didCenterRef.current) return
     if (!viewportSize.w || !viewportSize.h || !mapW || !mapH) return
-    const fitScale = Math.min(viewportSize.w / mapW, viewportSize.h / mapH)
+    const fitScale = Math.max(viewportSize.w / mapW, viewportSize.h / mapH)
     const tx = (viewportSize.w - mapW * fitScale) / 2
     const ty = (viewportSize.h - mapH * fitScale) / 2
-    setTransform({ tx, ty, scale: fitScale })
+    const initial = { tx, ty, scale: fitScale }
+    targetRef.current = initial
+    renderedRef.current = initial
+    dirtyRef.current = true
     didCenterRef.current = true
   }, [viewportSize.w, viewportSize.h, mapW, mapH])
 
@@ -175,25 +206,75 @@ export default function MapPage() {
     return () => mql.removeEventListener('change', handler)
   }, [viewportSize.w, viewportSize.h])
 
-  // Mark dirty whenever the transform changes.
-  useEffect(() => {
-    dirtyRef.current = true
-  }, [transform])
+  // No-op placeholder: transforms now live in refs and are marked dirty
+  // wherever they're written.
 
-  // requestAnimationFrame loop: only redraws when dirty.
+  // requestAnimationFrame loop: integrates inertia, lerps rendered toward
+  // target, and draws when anything moved (or dirty was set externally).
   useEffect(() => {
     let stopped = false
-    const tick = () => {
+    const tick = (now: number) => {
       if (stopped) return
       const renderer = rendererRef.current
-      if (renderer && dirtyRef.current && viewportSize.w && viewportSize.h) {
+      if (!renderer || !viewportSize.w || !viewportSize.h) {
+        rafRef.current = requestAnimationFrame(tick)
+        return
+      }
+      const last = lastFrameTimeRef.current || now
+      const dt = Math.min(64, now - last) // clamp to 64ms to avoid huge jumps after a stall
+      lastFrameTimeRef.current = now
+
+      // Inertia: decay velocity, add to target.
+      const inertia = inertiaRef.current
+      if (inertia && !gestureActiveRef.current) {
+        const decay = Math.exp(-dt / INERTIA_TAU_MS)
+        const target = targetRef.current
+        // Add average velocity over this frame (trapezoidal).
+        const avgVx = inertia.vx * (1 + decay) / 2
+        const avgVy = inertia.vy * (1 + decay) / 2
+        targetRef.current = clampTransform(
+          { tx: target.tx + avgVx * dt, ty: target.ty + avgVy * dt, scale: target.scale },
+          viewportSize.w, viewportSize.h, mapW, mapH, minScale
+        )
+        inertia.vx *= decay
+        inertia.vy *= decay
+        if (Math.hypot(inertia.vx, inertia.vy) < INERTIA_MIN_VELOCITY) {
+          inertiaRef.current = null
+        }
+        dirtyRef.current = true
+      }
+
+      // Lerp rendered toward target. During an active drag/pinch, snap so the
+      // map tracks the finger 1:1; otherwise ease frame-rate-independently.
+      const target = targetRef.current
+      const rendered = renderedRef.current
+      const dtx = target.tx - rendered.tx
+      const dty = target.ty - rendered.ty
+      const dscale = target.scale - rendered.scale
+      const moved = Math.abs(dtx) + Math.abs(dty) > 0.05 || Math.abs(dscale) > 1e-5
+      if (moved) {
+        if (gestureActiveRef.current) {
+          renderedRef.current = target
+        } else {
+          const alpha = 1 - Math.exp(-dt / LERP_TAU_MS)
+          renderedRef.current = {
+            tx: rendered.tx + dtx * alpha,
+            ty: rendered.ty + dty * alpha,
+            scale: rendered.scale + dscale * alpha
+          }
+        }
+        dirtyRef.current = true
+      }
+
+      if (dirtyRef.current) {
         const dpr = window.devicePixelRatio || 1
-        const t = transformRef.current
-        const targetTier = pickTier(t.scale, dpr, currentTierRef.current)
+        const r = renderedRef.current
+        const targetTier = pickTier(r.scale, dpr, currentTierRef.current)
         currentTierRef.current = targetTier
-        renderer.draw(t, viewportSize.w, viewportSize.h, dpr, targetTier)
+        renderer.draw(r, viewportSize.w, viewportSize.h, dpr, targetTier)
         dirtyRef.current = false
       }
+
       rafRef.current = requestAnimationFrame(tick)
     }
     rafRef.current = requestAnimationFrame(tick)
@@ -201,10 +282,11 @@ export default function MapPage() {
       stopped = true
       cancelAnimationFrame(rafRef.current)
     }
-  }, [viewportSize.w, viewportSize.h])
+  }, [viewportSize.w, viewportSize.h, mapW, mapH, minScale])
 
   const updateTransform = (next: Transform) => {
-    setTransform(clampTransform(next, viewportSize.w, viewportSize.h, mapW, mapH, minScale))
+    targetRef.current = clampTransform(next, viewportSize.w, viewportSize.h, mapW, mapH, minScale)
+    dirtyRef.current = true
   }
 
   const zoomAt = (clientX: number, clientY: number, factor: number) => {
@@ -231,6 +313,13 @@ export default function MapPage() {
       maxDist: 0,
       pointerType: e.pointerType
     })
+    velocitySamplesRef.current.set(e.pointerId, [{ t: e.timeStamp, x: e.clientX, y: e.clientY }])
+    // A new touch cancels in-flight inertia. Adopt the *rendered* transform
+    // as the new target so the finger picks up exactly where the eye sees
+    // the map — no teleport, no jarring stop.
+    inertiaRef.current = null
+    targetRef.current = renderedRef.current
+    gestureActiveRef.current = true
     if (pointersRef.current.size === 2) {
       const [a, b] = Array.from(pointersRef.current.values())
       const dist = Math.hypot(b.x - a.x, b.y - a.y)
@@ -252,6 +341,13 @@ export default function MapPage() {
     if (tap) {
       const d = Math.hypot(e.clientX - tap.startX, e.clientY - tap.startY)
       if (d > tap.maxDist) tap.maxDist = d
+    }
+
+    const samples = velocitySamplesRef.current.get(e.pointerId)
+    if (samples) {
+      samples.push({ t: e.timeStamp, x: e.clientX, y: e.clientY })
+      const cutoff = e.timeStamp - VELOCITY_SAMPLE_WINDOW_MS
+      while (samples.length > 2 && samples[0].t < cutoff) samples.shift()
     }
 
     if (pointersRef.current.size === 1) {
@@ -290,18 +386,42 @@ export default function MapPage() {
   const endPointer = (e: React.PointerEvent) => {
     const tap = tapTrackRef.current.get(e.pointerId)
     tapTrackRef.current.delete(e.pointerId)
+    const samples = velocitySamplesRef.current.get(e.pointerId)
+    velocitySamplesRef.current.delete(e.pointerId)
+    const wasDrag = !!(tap && tap.maxDist > TAP_MOVEMENT_THRESHOLD_CSS_PX)
+    const wasPinching = pinchStartRef.current !== null
     pointersRef.current.delete(e.pointerId)
+
     // Only run hit-test when this is a clean single-pointer tap (no pinch).
     if (
       e.type === 'pointerup'
       && tap
       && tap.maxDist <= TAP_MOVEMENT_THRESHOLD_CSS_PX
-      && pinchStartRef.current === null
+      && !wasPinching
     ) {
       tryHitTest(e.clientX, e.clientY, tap.pointerType)
     }
+
     if (pointersRef.current.size < 2) {
       pinchStartRef.current = null
+    }
+
+    // When the last pointer lifts after a drag (no pinch), launch inertia
+    // from the recent velocity samples.
+    if (pointersRef.current.size === 0) {
+      gestureActiveRef.current = false
+      if (wasDrag && !wasPinching && samples && samples.length >= 2 && e.type === 'pointerup') {
+        const last = samples[samples.length - 1]
+        const first = samples[0]
+        const dt = last.t - first.t
+        if (dt > 0) {
+          inertiaRef.current = {
+            vx: (last.x - first.x) / dt,
+            vy: (last.y - first.y) / dt
+          }
+          dirtyRef.current = true
+        }
+      }
     }
   }
 
