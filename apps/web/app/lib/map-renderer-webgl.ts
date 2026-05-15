@@ -136,6 +136,10 @@ export function createWebGLRenderer(
     a_position: { numComponents: 2, data: [0, 0, 1, 0, 0, 1, 1, 1] },
     a_texcoord: { numComponents: 2, data: [0, 0, 1, 0, 0, 1, 1, 1] }
   })
+  // Each program gets its own VAO so enabled-attribute state doesn't bleed
+  // between draw passes (otherwise pill-only attribs stay enabled when the
+  // tile program draws, causing INVALID_OPERATION).
+  const quadVao = twgl.createVertexArrayInfo(twglGl, programInfo, quadBufferInfo)
 
   const pillProgramInfo = twgl.createProgramInfo(twglGl, [PILL_VS, PILL_FS])
 
@@ -154,6 +158,7 @@ export function createWebGLRenderer(
 
   let points: Point[] = []
   let pillBufferInfo: twgl.BufferInfo | null = null
+  let pillVao: twgl.VertexArrayInfo | null = null
   let debugHitboxes = false
 
   function rebuildPillBuffers() {
@@ -165,6 +170,10 @@ export function createWebGLRenderer(
       }
       if (pillBufferInfo.indices) gl.deleteBuffer(pillBufferInfo.indices)
       pillBufferInfo = null
+    }
+    if (pillVao && pillVao.vertexArrayObject) {
+      gl.deleteVertexArray(pillVao.vertexArrayObject)
+      pillVao = null
     }
     if (points.length === 0) return
     const n = points.length
@@ -200,6 +209,7 @@ export function createWebGLRenderer(
       a_radius: { numComponents: 1, data: radiusData },
       indices: { numComponents: 3, data: indices }
     })
+    pillVao = twgl.createVertexArrayInfo(twglGl, pillProgramInfo, pillBufferInfo)
   }
 
   const placeholder = createPlaceholderTexture(gl)
@@ -280,7 +290,7 @@ export function createWebGLRenderer(
     const mat = buildTransformMat3(transform, cssW, cssH)
 
     gl.useProgram(programInfo.program)
-    twgl.setBuffersAndAttributes(twglGl, programInfo, quadBufferInfo)
+    twgl.setBuffersAndAttributes(twglGl, programInfo, quadVao)
 
     const invScale = 1 / transform.scale
     const worldMinX = -transform.tx * invScale
@@ -304,7 +314,7 @@ export function createWebGLRenderer(
           u_transform: mat,
           u_texture: texture
         })
-        twgl.drawBufferInfo(twglGl, quadBufferInfo, gl.TRIANGLE_STRIP)
+        twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
 
         if (entry.tier < currentTier && entry.pendingTier !== currentTier) {
           requestTier(r, c, currentTier)
@@ -312,15 +322,15 @@ export function createWebGLRenderer(
       }
     }
 
-    if (debugHitboxes && pillBufferInfo && points.length > 0) {
+    if (debugHitboxes && pillVao && points.length > 0) {
       gl.useProgram(pillProgramInfo.program)
-      twgl.setBuffersAndAttributes(twglGl, pillProgramInfo, pillBufferInfo)
+      twgl.setBuffersAndAttributes(twglGl, pillProgramInfo, pillVao)
       twgl.setUniforms(pillProgramInfo, {
         u_transform: mat,
         u_color: [1.0, 0.0, 0.6, 0.3],
         u_edgeSoftnessWorld: 1.0 / transform.scale
       })
-      twgl.drawBufferInfo(twglGl, pillBufferInfo, gl.TRIANGLES)
+      twgl.drawBufferInfo(twglGl, pillVao, gl.TRIANGLES)
     }
   }
 
@@ -349,6 +359,13 @@ export function createWebGLRenderer(
       }
       if (pillBufferInfo.indices) gl.deleteBuffer(pillBufferInfo.indices)
       pillBufferInfo = null
+    }
+    if (pillVao && pillVao.vertexArrayObject) {
+      gl.deleteVertexArray(pillVao.vertexArrayObject)
+      pillVao = null
+    }
+    if (quadVao.vertexArrayObject) {
+      gl.deleteVertexArray(quadVao.vertexArrayObject)
     }
   }
 
