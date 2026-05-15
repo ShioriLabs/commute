@@ -473,7 +473,7 @@ export default function MapPage() {
 
     const points = workingPointsRef.current
     const hit = points.length > 0 ? hitTestPoints(worldX, worldY, points, slopWorld) : null
-    if (hit) {
+    if (hit && hit.id !== 'KCI-GMR') {
       const [OPERATOR, CODE] = hit.id.split(/-/g)
       if (OPERATOR && CODE) {
         navigate(`/station/${OPERATOR}/${CODE}`)
