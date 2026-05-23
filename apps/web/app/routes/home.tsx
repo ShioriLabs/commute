@@ -8,7 +8,6 @@ import { fetcher } from 'utils/fetcher'
 import SearchStationsButton from '~/components/nav-buttons/search-stations'
 import { CaretRightIcon, DownloadSimpleIcon, InfoIcon, WarningIcon } from '@phosphor-icons/react'
 import { Link } from 'react-router'
-import MapButton from '~/components/nav-buttons/map'
 import SettingsButton from '~/components/nav-buttons/settings'
 import { useNetworkStatus } from '~/hooks/network'
 import { useInstall } from '~/contexts/installable'
@@ -226,7 +225,6 @@ export default function HomePage() {
       <nav className="fixed bottom-0 py-4 bg-gradient-to-t from-30% from-rose-50/40 w-screen z-20" aria-label="Navigasi utama">
         <div className="w-full max-w-3xl mx-auto flex gap-4 overflow-x-auto no-scrollbar">
           <SearchStationsButton className="ml-4 lg:ml-2" />
-          <MapButton />
           <SettingsButton className={canInstall ? '' : 'mr-4 lg:mr-2'} />
         </div>
       </nav>
