@@ -38,11 +38,13 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
   } | null>(null)
   // Velocity samples (clientY, timestamp) over the last ~100ms for flick detection.
   const velocityRef = useRef<Array<{ t: number, y: number }>>([])
-  // Current sheet height in CSS px. Stored as a ref + state so we re-render on
-  // change but can also write to it imperatively during drag without React lag.
-  const [heightPx, setHeightPx] = useState(0)
+  // Current sheet height in CSS px. The ref is the *only* source of truth —
+  // drag handlers and the rAF lerp write it imperatively without going
+  // through React state. There deliberately is no state mirror: every prior
+  // attempt to keep a state copy in sync produced a stale-value flash on
+  // release (the parent map route re-renders constantly, and any render
+  // mid-drag would paint with the state value while the ref had moved on).
   const heightRef = useRef(0)
-  heightRef.current = heightPx
 
   // Open the sheet to peek whenever a new station code arrives; close otherwise.
   useEffect(() => {
@@ -81,6 +83,30 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
     }
   }
 
+  // Re-apply the imperative transform/opacity before paint on every render.
+  // The rAF loop writes these directly to the DOM during animation/drag while
+  // React state stays stale on purpose (re-rendering on each frame would
+  // thrash the heavy StationContent subtree). Without this, the render that
+  // setSnap triggers on pointer-up would paint with the *pre-drag* state-
+  // derived inline styles for one frame before the next rAF tick corrects
+  // them — visible as a flash/jitter on release.
+  useLayoutEffect(() => {
+    applyHeight(heightRef.current)
+  })
+
+  // Tracks whether the sheet has ever been opened. Used so the initial-mount
+  // close (before we open) doesn't immediately call onClose.
+  const wasOpenRef = useRef(false)
+  useEffect(() => {
+    if (snap !== 'closed') wasOpenRef.current = true
+  }, [snap])
+  // Ref-mirror onClose so the rAF effect can call the latest callback without
+  // re-creating the effect (which would interrupt the lerp) on parent renders.
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+
   // Animate height toward targetPx using rAF + exponential lerp. The loop is
   // paused while the user is actively dragging so it doesn't fight the finger.
   useEffect(() => {
@@ -101,11 +127,18 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
       if (Math.abs(delta) < 0.5) {
         if (current !== targetPx) {
           applyHeight(targetPx)
-          setHeightPx(targetPx)
         }
         // Animation landed — safe to mount the heavy content now.
         if (snap !== 'closed') setContentReady(true)
-        if (snap === 'closed' && current <= 0.5) return
+        if (snap === 'closed' && current <= 0.5) {
+          // Closed and settled — notify parent if this was a user-initiated
+          // close (not the initial-mount close before we ever opened).
+          if (wasOpenRef.current) {
+            wasOpenRef.current = false
+            onCloseRef.current()
+          }
+          return
+        }
         raf = requestAnimationFrame(tick)
         return
       }
@@ -118,36 +151,19 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
     return () => cancelAnimationFrame(raf)
   }, [targetPx, snap, viewportH])
 
-  // After a user-initiated "closed" animation lands, notify the parent so it
-  // can clear its selection state. Distinguish initial-mount close (which
-  // would otherwise immediately dismiss the just-opened sheet) by requiring
-  // that we've actually been open at least once.
-  const wasOpenRef = useRef(false)
-  useEffect(() => {
-    if (snap !== 'closed') wasOpenRef.current = true
-  }, [snap])
-  useEffect(() => {
-    if (
-      snap === 'closed'
-      && heightPx < 1
-      && operator && code
-      && wasOpenRef.current
-    ) {
-      wasOpenRef.current = false
-      onClose()
-    }
-  }, [snap, heightPx, operator, code, onClose])
-
   // Track whether the current pointer interaction has committed to dragging
-  // the sheet (vs. letting the body scroll natively). We delay committing
-  // until the user moves a few pixels so we can choose the right behavior
-  // based on direction + sheet state + body scroll position.
+  // the sheet (vs. forwarding the gesture to body scroll). We delay
+  // committing until the user moves a few pixels so we can choose the right
+  // behavior based on direction + sheet state + body scroll position.
   const dragCandidateRef = useRef<{
     y: number
     sheetTopAtStart: number
     pointerId: number
     fromHandle: boolean
   } | null>(null)
+  // Active "passthrough scroll": the sheet root captured the pointer but the
+  // gesture should drive body scrolling rather than resize the sheet.
+  const scrollDragRef = useRef<{ pointerId: number, lastY: number } | null>(null)
   const DRAG_COMMIT_THRESHOLD = 6 // CSS px
 
   const handlePointerDown = (e: React.PointerEvent) => {
@@ -155,14 +171,24 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
     const target = e.target as HTMLElement
     if (target.closest('button, a, input, [role="button"]')) return
     const fromHandle = !!target.closest('[data-sheet-handle]')
-    // Body pointerdowns are candidates too (for swipe-up to expand).
+    // Capture immediately so touch UAs can't reclaim the gesture for native
+    // scrolling once it crosses a few pixels.
+    ;(e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId)
     dragCandidateRef.current = {
       y: e.clientY,
       sheetTopAtStart: heightRef.current,
       pointerId: e.pointerId,
       fromHandle
     }
-    velocityRef.current = [{ t: e.timeStamp, y: e.clientY }]
+    velocityRef.current = []
+  }
+
+  const pushVelocity = (t: number, y: number) => {
+    velocityRef.current.push({ t, y })
+    const cutoff = t - 100
+    while (velocityRef.current.length > 1 && velocityRef.current[0].t < cutoff) {
+      velocityRef.current.shift()
+    }
   }
 
   const handlePointerMove = (e: React.PointerEvent) => {
@@ -172,11 +198,18 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
       const dy = e.clientY - start.y
       const next = Math.max(0, Math.min(fullPx, start.sheetTopAtStart - dy))
       applyHeight(next)
-      velocityRef.current.push({ t: e.timeStamp, y: e.clientY })
-      const cutoff = e.timeStamp - 100
-      while (velocityRef.current.length > 2 && velocityRef.current[0].t < cutoff) {
-        velocityRef.current.shift()
+      pushVelocity(e.timeStamp, e.clientY)
+      return
+    }
+
+    // Already committed to passthrough scroll — drive bodyRef.scrollTop.
+    if (scrollDragRef.current && scrollDragRef.current.pointerId === e.pointerId) {
+      const body = bodyRef.current
+      if (body) {
+        const dy = e.clientY - scrollDragRef.current.lastY
+        body.scrollTop -= dy
       }
+      scrollDragRef.current.lastY = e.clientY
       return
     }
 
@@ -210,12 +243,13 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
     }
 
     if (!shouldDrag) {
-      // Body scroll wins; clear candidate so we don't keep checking.
+      // Body scroll wins. We've captured the pointer, so the browser won't
+      // scroll for us — translate subsequent moves into bodyRef.scrollTop.
       dragCandidateRef.current = null
+      scrollDragRef.current = { pointerId: e.pointerId, lastY: e.clientY }
       return
     }
 
-    ;(e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId)
     dragStartRef.current = {
       y: cand.y,
       sheetTopAtStart: cand.sheetTopAtStart,
@@ -227,43 +261,43 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
     // already is (rather than lagging by DRAG_COMMIT_THRESHOLD pixels).
     const next = Math.max(0, Math.min(fullPx, cand.sheetTopAtStart - dy))
     applyHeight(next)
+    pushVelocity(e.timeStamp, e.clientY)
   }
 
   const handlePointerUp = () => {
     dragCandidateRef.current = null
+    scrollDragRef.current = null
     const start = dragStartRef.current
     if (!start) return
     dragStartRef.current = null
-    // Reconcile React state with the imperatively-updated DOM height so the
-    // rAF loop's first post-drag tick sees the correct starting height and
-    // the backdrop opacity calc renders accurately.
-    setHeightPx(heightRef.current)
 
     // Compute velocity over the last samples; positive = dragging down.
+    // Require >1 frame of movement so sub-pixel jitter on the final sample
+    // can't masquerade as a flick.
     const samples = velocityRef.current
     let vy = 0
     if (samples.length >= 2) {
       const first = samples[0]
       const last = samples[samples.length - 1]
       const dt = last.t - first.t
-      if (dt > 0) vy = (last.y - first.y) / dt
+      if (dt >= 16) vy = (last.y - first.y) / dt
     }
 
     const current = heightRef.current
     const fraction = viewportH > 0 ? current / viewportH : 0
 
     // Flick decides direction over position when above threshold.
+    let nextSnap: SnapState
     if (vy > FLICK_THRESHOLD) {
-      if (fraction < PEEK_FRACTION * 0.9) setSnap('closed')
-      else setSnap('peek')
+      nextSnap = fraction < PEEK_FRACTION * 0.9 ? 'closed' : 'peek'
     } else if (vy < -FLICK_THRESHOLD) {
-      setSnap('full')
+      nextSnap = 'full'
     } else {
-      // No flick — snap to nearest position. Below dismiss threshold = closed.
-      if (fraction < DISMISS_FRACTION) setSnap('closed')
-      else if (fraction < (PEEK_FRACTION + FULL_FRACTION) / 2) setSnap('peek')
-      else setSnap('full')
+      if (fraction < DISMISS_FRACTION) nextSnap = 'closed'
+      else if (fraction < (PEEK_FRACTION + FULL_FRACTION) / 2) nextSnap = 'peek'
+      else nextSnap = 'full'
     }
+    setSnap(nextSnap)
   }
 
   const handleClose = useCallback(() => setSnap('closed'), [])
@@ -273,23 +307,17 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
   if (viewportH === 0) return null
 
   const isFull = snap === 'full'
-  // Backdrop fades in as the sheet approaches full; at peek there's no dim.
-  const fullProgress = Math.max(0, Math.min(1, (heightPx - peekPx) / Math.max(1, fullPx - peekPx)))
-  const backdropOpacity = fullProgress * 0.35
 
   return (
     <>
       {/* Backdrop: pointer-events only when at or past peek-to-full progress.
           At peek the map remains interactive (pointer-events: none).
-          Opacity is set imperatively by the rAF tick (via `applyHeight`) so
-          we don't re-render this on every frame. */}
+          Opacity is owned by `applyHeight` (imperative); not rendered from
+          React state. */}
       <div
         ref={backdropRef}
         className="fixed inset-0 z-30 bg-black"
-        style={{
-          opacity: backdropOpacity,
-          pointerEvents: isFull ? 'auto' : 'none'
-        }}
+        style={{ pointerEvents: isFull ? 'auto' : 'none' }}
         onClick={handleClose}
         aria-hidden
       />
@@ -301,9 +329,14 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
           // Sheet is always sized to its `full` height; we translate it down
           // off-screen and only show the requested portion. This avoids
           // relaying out the (heavy) StationContent on every drag frame.
+          // `transform` is owned by `applyHeight` (imperative) — not rendered
+          // from React state.
           height: fullPx,
-          transform: `translateY(${fullPx - heightPx}px)`,
-          willChange: 'transform'
+          willChange: 'transform',
+          // Own all touch gestures ourselves. Native pan-y would otherwise
+          // claim vertical touches on the body and cancel our pointer stream
+          // mid-drag.
+          touchAction: 'none'
         }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -315,7 +348,7 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
         <SheetHeader operator={operator} code={code} onClose={handleClose} />
         <div
           ref={bodyRef}
-          className="flex-1 overflow-y-auto overscroll-contain touch-pan-y"
+          className="flex-1 overflow-y-auto overscroll-contain"
         >
           {contentReady
             ? <StationContent operator={operator} code={code} />

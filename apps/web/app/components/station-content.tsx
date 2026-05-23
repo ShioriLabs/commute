@@ -1,4 +1,4 @@
-import { useMemo, type JSX } from 'react'
+import { memo, useMemo, type JSX } from 'react'
 import { Link } from 'react-router'
 import useSWR from 'swr'
 import {
@@ -106,7 +106,7 @@ export function useStationHeader(operator: string, code: string): UseStationData
   }
 }
 
-export default function StationContent({ operator, code }: StationContentProps) {
+const StationContent = memo(function StationContent({ operator, code }: StationContentProps) {
   const stationUrl = useMemo(() =>
     new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href,
   [operator, code]
@@ -246,4 +246,11 @@ export default function StationContent({ operator, code }: StationContentProps) 
         : null}
     </div>
   )
-}
+})
+
+// Memoized: the parent (StationSheet) re-renders on every snap change, but
+// this subtree only depends on operator + code. Without memo, each re-render
+// reconciles the whole timetable/amenity tree (~67ms) and freezes the sheet
+// at the release position for several frames before the snap animation can
+// start.
+export default StationContent
