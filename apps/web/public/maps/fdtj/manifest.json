@@ -14,5 +14,17 @@
   "tileSize": {
     "w": 2378.3925,
     "h": 1681.72
+  },
+  "raster": {
+    "format": "webp",
+    "tiers": [
+      1,
+      2
+    ]
+  },
+  "preview": {
+    "url": "preview.webp",
+    "w": 768,
+    "h": 543
   }
 }

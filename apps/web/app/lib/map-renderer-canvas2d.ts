@@ -1,39 +1,11 @@
 import type { Manifest, Point, Renderer, Tier, Transform } from './map-renderer'
 import { tileKey } from './map-renderer'
+import { createTileSource } from './map-renderer-tile-source'
 
 interface TileEntry {
-  bitmap: HTMLCanvasElement | OffscreenCanvas | ImageBitmap | null
+  bitmap: ImageBitmap | null
   tier: Tier | 0
   pendingTier: Tier | null
-}
-
-function loadSourceImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => {
-      const decoded = img.decode ? img.decode() : Promise.resolve()
-      decoded.then(() => resolve(img)).catch(() => resolve(img))
-    }
-    img.onerror = () => reject(new Error(`Failed to load ${url}`))
-    img.src = url
-  })
-}
-
-function rasterize(srcImg: HTMLImageElement, tileW: number, tileH: number, tier: Tier): HTMLCanvasElement | OffscreenCanvas {
-  const w = Math.round(tileW * tier)
-  const h = Math.round(tileH * tier)
-  const offscreen: HTMLCanvasElement | OffscreenCanvas
-    = typeof OffscreenCanvas !== 'undefined'
-      ? new OffscreenCanvas(w, h)
-      : Object.assign(document.createElement('canvas'), { width: w, height: h })
-  if (offscreen instanceof HTMLCanvasElement) {
-    offscreen.width = w
-    offscreen.height = h
-  }
-  const ctx = offscreen.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null
-  if (!ctx) throw new Error('2D context unavailable for rasterization')
-  ctx.drawImage(srcImg, 0, 0, w, h)
-  return offscreen
 }
 
 export function createCanvas2DRenderer(
@@ -49,12 +21,20 @@ export function createCanvas2DRenderer(
   const { grid, tileSize } = manifest
   const tileW = tileSize.w
   const tileH = tileSize.h
+  const mapW = grid.cols * tileW
+  const mapH = grid.rows * tileH
 
-  const sourceImages = new Map<string, HTMLImageElement>()
+  const tileSource = createTileSource({ manifest, baseUrl })
   const tiles = new Map<string, TileEntry>()
   let disposed = false
   let points: Point[] = []
   let debugHitboxes = false
+
+  // Preview bitmap painted under the tile grid until all visible tiles have
+  // loaded. Released (set to null) once it's no longer needed so the GC can
+  // reclaim the memory.
+  let preview: ImageBitmap | null = null
+  let previewLoading = false
 
   function ensureTile(r: number, c: number): TileEntry {
     const key = tileKey(r, c)
@@ -66,15 +46,6 @@ export function createCanvas2DRenderer(
     return entry
   }
 
-  async function loadSource(r: number, c: number): Promise<HTMLImageElement> {
-    const key = tileKey(r, c)
-    const cached = sourceImages.get(key)
-    if (cached) return cached
-    const img = await loadSourceImage(`${baseUrl}tile-${r}-${c}.svg`)
-    sourceImages.set(key, img)
-    return img
-  }
-
   async function requestTier(r: number, c: number, tier: Tier): Promise<void> {
     if (disposed) return
     const entry = ensureTile(r, c)
@@ -82,20 +53,43 @@ export function createCanvas2DRenderer(
     if (entry.pendingTier !== null && entry.pendingTier >= tier) return
     entry.pendingTier = tier
     try {
-      const src = await loadSource(r, c)
-      if (disposed) return
-      if (entry.pendingTier !== tier) return
-      const raster = rasterize(src, tileW, tileH, tier)
-      if (disposed) return
-      if (entry.pendingTier !== tier) return
-      entry.bitmap = raster
+      const bitmap = await tileSource.loadTile(r, c, tier)
+      if (disposed) {
+        bitmap.close?.()
+        return
+      }
+      if (entry.pendingTier !== tier) {
+        // A higher-tier request superseded this one; drop our bitmap.
+        bitmap.close?.()
+        return
+      }
+      const old = entry.bitmap
+      entry.bitmap = bitmap
       entry.tier = tier
       entry.pendingTier = null
+      old?.close?.()
       onDirty()
     } catch (err) {
       entry.pendingTier = null
-      console.warn(`Tile ${r},${c} tier ${tier} rasterization failed`, err)
+      console.warn(`Tile ${r},${c} tier ${tier} load failed`, err)
     }
+  }
+
+  function ensurePreview() {
+    if (preview || previewLoading || !manifest.preview) return
+    previewLoading = true
+    tileSource.loadPreview().then((bitmap) => {
+      previewLoading = false
+      if (disposed) {
+        bitmap?.close?.()
+        return
+      }
+      if (!bitmap) return
+      preview = bitmap
+      onDirty()
+    }).catch(() => {
+      previewLoading = false
+    })
   }
 
   function resize(cssW: number, cssH: number, dpr: number) {
@@ -121,6 +115,30 @@ export function createCanvas2DRenderer(
     const worldMaxX = (cssW - transform.tx) * invScale
     const worldMaxY = (cssH - transform.ty) * invScale
 
+    // Underlay preview if any visible tile is missing. Cheap full-map draw
+    // covers blank areas while real tiles load in.
+    let anyVisibleMissing = false
+    for (let r = 0; r < grid.rows && !anyVisibleMissing; r++) {
+      const tileY = r * tileH
+      if (tileY + tileH < worldMinY || tileY > worldMaxY) continue
+      for (let c = 0; c < grid.cols; c++) {
+        const tileX = c * tileW
+        if (tileX + tileW < worldMinX || tileX > worldMaxX) continue
+        const entry = ensureTile(r, c)
+        if (entry.tier === 0) {
+          anyVisibleMissing = true
+          break
+        }
+      }
+    }
+    if (anyVisibleMissing && preview) {
+      ctx.drawImage(preview, 0, 0, mapW, mapH)
+    } else if (preview && !anyVisibleMissing) {
+      // All visible tiles loaded; release the preview.
+      preview.close?.()
+      preview = null
+    }
+
     for (let r = 0; r < grid.rows; r++) {
       const tileY = r * tileH
       if (tileY + tileH < worldMinY || tileY > worldMaxY) continue
@@ -129,10 +147,10 @@ export function createCanvas2DRenderer(
         if (tileX + tileW < worldMinX || tileX > worldMaxX) continue
         const entry = ensureTile(r, c)
         if (entry.bitmap) {
-          ctx.drawImage(entry.bitmap as CanvasImageSource, tileX, tileY, tileW, tileH)
+          ctx.drawImage(entry.bitmap, tileX, tileY, tileW, tileH)
         }
         if (entry.tier < currentTier && entry.pendingTier !== currentTier) {
-          requestTier(r, c, currentTier)
+          void requestTier(r, c, currentTier)
         }
       }
     }
@@ -159,15 +177,16 @@ export function createCanvas2DRenderer(
   function dispose() {
     if (disposed) return
     disposed = true
+    for (const entry of tiles.values()) {
+      entry.bitmap?.close?.()
+    }
     tiles.clear()
-    sourceImages.clear()
+    preview?.close?.()
+    preview = null
+    tileSource.dispose()
   }
 
-  for (let r = 0; r < grid.rows; r++) {
-    for (let c = 0; c < grid.cols; c++) {
-      requestTier(r, c, 1)
-    }
-  }
+  ensurePreview()
 
   return {
     kind: 'canvas2d',

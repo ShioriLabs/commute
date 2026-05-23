@@ -7,6 +7,15 @@ export interface Manifest {
   viewBox: [number, number, number, number]
   grid: { rows: number, cols: number }
   tileSize: { w: number, h: number }
+  raster?: {
+    format: 'webp'
+    tiers: Tier[]
+  }
+  preview?: {
+    url: string
+    w: number
+    h: number
+  }
 }
 
 export type Transform = { tx: number, ty: number, scale: number }
@@ -95,9 +104,10 @@ export function createRenderer(
   }
 }
 
-export function pickTier(scale: number, dpr: number, currentTier: Tier): Tier {
+export function pickTier(scale: number, dpr: number, currentTier: Tier, maxTier: Tier = MAX_TIER): Tier {
   const target = scale * dpr
-  const raw = Math.min(MAX_TIER, Math.max(1, 2 ** Math.ceil(Math.log2(Math.max(target, 1)))))
+  const cap = Math.min(MAX_TIER, maxTier)
+  const raw = Math.min(cap, Math.max(1, 2 ** Math.ceil(Math.log2(Math.max(target, 1)))))
   if (raw > currentTier && target <= currentTier * 1.1) return currentTier
   return raw as Tier
 }

@@ -1,6 +1,7 @@
 import * as twgl from 'twgl.js'
 import type { Manifest, Point, Renderer, Tier, Transform } from './map-renderer'
 import { tileKey } from './map-renderer'
+import { createTileSource } from './map-renderer-tile-source'
 
 const VS = `#version 300 es
 in vec2 a_position;
@@ -82,37 +83,9 @@ void main() {
 
 interface TileEntry {
   texture: WebGLTexture
-  tier: Tier
+  tier: Tier | 0
   pendingTier: Tier | null
-}
-
-function loadSourceImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => {
-      const decoded = img.decode ? img.decode() : Promise.resolve()
-      decoded.then(() => resolve(img)).catch(() => resolve(img))
-    }
-    img.onerror = () => reject(new Error(`Failed to load ${url}`))
-    img.src = url
-  })
-}
-
-function rasterize(srcImg: HTMLImageElement, tileW: number, tileH: number, tier: Tier): HTMLCanvasElement | OffscreenCanvas {
-  const w = Math.round(tileW * tier)
-  const h = Math.round(tileH * tier)
-  const canvas: HTMLCanvasElement | OffscreenCanvas
-    = typeof OffscreenCanvas !== 'undefined'
-      ? new OffscreenCanvas(w, h)
-      : Object.assign(document.createElement('canvas'), { width: w, height: h })
-  if (canvas instanceof HTMLCanvasElement) {
-    canvas.width = w
-    canvas.height = h
-  }
-  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null
-  if (!ctx) throw new Error('2D context unavailable for rasterization')
-  ctx.drawImage(srcImg, 0, 0, w, h)
-  return canvas
+  mipmapped: boolean
 }
 
 export function createWebGLRenderer(
@@ -151,10 +124,16 @@ export function createWebGLRenderer(
   const { grid, tileSize } = manifest
   const tileW = tileSize.w
   const tileH = tileSize.h
+  const mapW = grid.cols * tileW
+  const mapH = grid.rows * tileH
 
-  const sourceImages = new Map<string, HTMLImageElement>()
+  const tileSource = createTileSource({ manifest, baseUrl })
   const tiles = new Map<string, TileEntry>()
   let disposed = false
+
+  // Preview texture rendered under the tile grid until visible tiles are ready.
+  let previewTexture: WebGLTexture | null = null
+  let previewLoading = false
 
   let points: Point[] = []
   let pillBufferInfo: twgl.BufferInfo | null = null
@@ -225,19 +204,10 @@ export function createWebGLRenderer(
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-      entry = { texture, tier: 0 as Tier, pendingTier: null }
+      entry = { texture, tier: 0, pendingTier: null, mipmapped: false }
       tiles.set(key, entry)
     }
     return entry
-  }
-
-  async function loadSource(r: number, c: number): Promise<HTMLImageElement> {
-    const key = tileKey(r, c)
-    const cached = sourceImages.get(key)
-    if (cached) return cached
-    const img = await loadSourceImage(`${baseUrl}tile-${r}-${c}.svg`)
-    sourceImages.set(key, img)
-    return img
   }
 
   async function requestTier(r: number, c: number, tier: Tier): Promise<void> {
@@ -247,27 +217,74 @@ export function createWebGLRenderer(
     if (entry.pendingTier !== null && entry.pendingTier >= tier) return
     entry.pendingTier = tier
     try {
-      const src = await loadSource(r, c)
-      if (disposed) return
-      if (entry.pendingTier !== tier) return
-      const raster = rasterize(src, tileW, tileH, tier)
-      if (disposed) return
-      if (entry.pendingTier !== tier) return
+      const bitmap = await tileSource.loadTile(r, c, tier)
+      if (disposed) {
+        bitmap.close?.()
+        return
+      }
+      if (entry.pendingTier !== tier) {
+        bitmap.close?.()
+        return
+      }
       gl.bindTexture(gl.TEXTURE_2D, entry.texture)
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true)
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, raster as TexImageSource)
-      gl.generateMipmap(gl.TEXTURE_2D)
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap)
+      // Mipmaps are only useful when the tile is rendered smaller than its
+      // texture; tier 1 textures are sized for ~1:1 rendering, so skip the
+      // generateMipmap stall there. Higher tiers still get full mips so they
+      // filter cleanly when the user is zoomed below the tier-1 threshold.
+      if (tier > 1) {
+        gl.generateMipmap(gl.TEXTURE_2D)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
+        entry.mipmapped = true
+      } else {
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+        entry.mipmapped = false
+      }
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-      if (anisoExt) {
+      if (anisoExt && entry.mipmapped) {
         gl.texParameterf(gl.TEXTURE_2D, anisoExt.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(16, maxAniso))
       }
       entry.tier = tier
       entry.pendingTier = null
+      bitmap.close?.()
       onDirty()
     } catch (err) {
       entry.pendingTier = null
-      console.warn(`Tile ${r},${c} tier ${tier} rasterization failed`, err)
+      console.warn(`Tile ${r},${c} tier ${tier} load failed`, err)
+    }
+  }
+
+  function ensurePreview() {
+    if (previewTexture || previewLoading || !manifest.preview) return
+    previewLoading = true
+    tileSource.loadPreview().then((bitmap) => {
+      previewLoading = false
+      if (disposed) {
+        bitmap?.close?.()
+        return
+      }
+      if (!bitmap) return
+      const tex = gl.createTexture()!
+      gl.bindTexture(gl.TEXTURE_2D, tex)
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+      bitmap.close?.()
+      previewTexture = tex
+      onDirty()
+    }).catch(() => {
+      previewLoading = false
+    })
+  }
+
+  function releasePreview() {
+    if (previewTexture) {
+      gl.deleteTexture(previewTexture)
+      previewTexture = null
     }
   }
 
@@ -298,6 +315,35 @@ export function createWebGLRenderer(
     const worldMaxX = (cssW - transform.tx) * invScale
     const worldMaxY = (cssH - transform.ty) * invScale
 
+    // Check whether any visible tile is still missing — if so, the preview
+    // underlay (if loaded) gets drawn first to cover blank gaps.
+    let anyVisibleMissing = false
+    for (let r = 0; r < grid.rows && !anyVisibleMissing; r++) {
+      const tileY = r * tileH
+      if (tileY + tileH < worldMinY || tileY > worldMaxY) continue
+      for (let c = 0; c < grid.cols; c++) {
+        const tileX = c * tileW
+        if (tileX + tileW < worldMinX || tileX > worldMaxX) continue
+        const entry = ensureTile(r, c)
+        if (entry.tier === 0) {
+          anyVisibleMissing = true
+          break
+        }
+      }
+    }
+
+    if (anyVisibleMissing && previewTexture) {
+      twgl.setUniforms(programInfo, {
+        u_tileOffset: [0, 0],
+        u_tileSize: [mapW, mapH],
+        u_transform: mat,
+        u_texture: previewTexture
+      })
+      twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
+    } else if (previewTexture && !anyVisibleMissing) {
+      releasePreview()
+    }
+
     for (let r = 0; r < grid.rows; r++) {
       const tileY = r * tileH
       if (tileY + tileH < worldMinY || tileY > worldMaxY) continue
@@ -317,7 +363,7 @@ export function createWebGLRenderer(
         twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
 
         if (entry.tier < currentTier && entry.pendingTier !== currentTier) {
-          requestTier(r, c, currentTier)
+          void requestTier(r, c, currentTier)
         }
       }
     }
@@ -350,8 +396,8 @@ export function createWebGLRenderer(
     disposed = true
     for (const entry of tiles.values()) gl.deleteTexture(entry.texture)
     gl.deleteTexture(placeholder)
+    releasePreview()
     tiles.clear()
-    sourceImages.clear()
     if (pillBufferInfo) {
       for (const k in pillBufferInfo.attribs) {
         const buf = pillBufferInfo.attribs[k].buffer
@@ -367,13 +413,10 @@ export function createWebGLRenderer(
     if (quadVao.vertexArrayObject) {
       gl.deleteVertexArray(quadVao.vertexArrayObject)
     }
+    tileSource.dispose()
   }
 
-  for (let r = 0; r < grid.rows; r++) {
-    for (let c = 0; c < grid.cols; c++) {
-      requestTier(r, c, 1)
-    }
-  }
+  ensurePreview()
 
   return {
     kind: 'webgl2',

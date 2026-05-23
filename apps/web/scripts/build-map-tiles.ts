@@ -32,6 +32,15 @@ const GRID_ROWS = 4
 const GRID_COLS = 4
 // Padding around each tile's bbox (in master SVG units) to avoid hairline gaps at seams.
 const TILE_PAD = 0.5
+// Raster output tiers (pixel ratio relative to the SVG's intrinsic tile size).
+// Tier 1 ~= 1:1 with the SVG viewBox; tier 2 covers 2x DPR phones up to
+// moderate zoom. Tier 4 is intentionally absent — see app/lib/map-renderer.ts
+// pickTier maxTier cap.
+const RASTER_TIERS = [1, 2] as const
+const RASTER_QUALITY = 80
+// Width of the low-res preview rendered as a first-paint placeholder. Keep
+// small so the file lands at ~30-80 KB.
+const PREVIEW_WIDTH = 768
 
 type BBox = { x: number, y: number, w: number, h: number }
 type LeafInfo = { selector: string, bbox: BBox }
@@ -267,6 +276,92 @@ function writeTile(row: number, col: number, viewBox: BBox, defsBlock: string, b
   writeFileSync(filename, svg)
 }
 
+/**
+ * Render a single SVG file (already on disk) to WebP at the given pixel size,
+ * via Playwright. Reuses the passed page; the SVG is loaded via file://.
+ *
+ * Playwright's screenshot API only supports JPEG/PNG. To produce WebP we draw
+ * the SVG to a canvas inside the page context and use canvas.toBlob('image/webp').
+ */
+async function rasterizeSvgToWebP(
+  page: Page,
+  svgPath: string,
+  outPath: string,
+  pxW: number,
+  pxH: number,
+  quality: number
+): Promise<void> {
+  // Read the SVG on the Node side and pass its text into the page. Avoids
+  // Chromium's file:// subresource restriction: a page on about:blank (opaque
+  // origin) can't <img src="file://..."> regardless of the parent navigation.
+  const svgText = readFileSync(svgPath, 'utf8')
+  const html = `<!DOCTYPE html><html><head><style>html,body{margin:0;padding:0;background:#fff}canvas{display:block}</style></head><body><canvas id="c" width="${pxW}" height="${pxH}"></canvas></body></html>`
+  await page.setViewportSize({ width: pxW, height: pxH })
+  // Ensure the current document is HTML before setContent. The earlier
+  // page.goto('file://master.svg') leaves us on an SVG document, where
+  // Document.open() (which setContent uses) throws InvalidStateError.
+  await page.goto('about:blank')
+  await page.setContent(html, { waitUntil: 'load' })
+
+  const base64 = await page.evaluate(async ({ svg, w, h, q }: { svg: string, w: number, h: number, q: number }) => {
+    const canvas = document.getElementById('c') as HTMLCanvasElement
+    const ctx = canvas.getContext('2d')!
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, w, h)
+    const svgBlob = new Blob([svg], { type: 'image/svg+xml' })
+    const objectUrl = URL.createObjectURL(svgBlob)
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const img = new Image()
+        img.onload = () => {
+          ctx.drawImage(img, 0, 0, w, h)
+          resolve()
+        }
+        img.onerror = () => reject(new Error('SVG <img> load failed'))
+        img.src = objectUrl
+      })
+    } finally {
+      URL.revokeObjectURL(objectUrl)
+    }
+    const blob: Blob = await new Promise((resolve, reject) => {
+      canvas.toBlob(
+        b => b ? resolve(b) : reject(new Error('canvas.toBlob returned null')),
+        'image/webp',
+        q / 100
+      )
+    })
+    const buffer = await blob.arrayBuffer()
+    let binary = ''
+    const bytes = new Uint8Array(buffer)
+    const chunk = 0x8000
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+    }
+    return btoa(binary)
+  }, { svg: svgText, w: pxW, h: pxH, q: quality })
+
+  writeFileSync(outPath, Buffer.from(base64, 'base64'))
+}
+
+/**
+ * Render the master SVG to a small WebP preview, painted under the tile grid
+ * for instant first paint while real tiles load.
+ */
+async function rasterizePreview(
+  page: Page,
+  masterSvgPath: string,
+  outPath: string,
+  viewBox: BBox,
+  targetWidth: number,
+  quality: number
+): Promise<{ w: number, h: number }> {
+  const aspect = viewBox.h / viewBox.w
+  const w = targetWidth
+  const h = Math.round(targetWidth * aspect)
+  await rasterizeSvgToWebP(page, masterSvgPath, outPath, w, h, quality)
+  return { w, h }
+}
+
 async function main(): Promise<void> {
   log(`source PDF: ${PDF_PATH}`)
   mkdirSync(OUT_DIR, { recursive: true })
@@ -347,6 +442,35 @@ async function main(): Promise<void> {
       }
     }
 
+    // Rasterize each tile SVG to WebP at every configured tier. Done in a
+    // second pass (rather than inline above) so the SVGs are fully written
+    // before the rasterizer reads them back through file://.
+    log(`rasterizing tiles to WebP at tiers ${RASTER_TIERS.join(', ')}...`)
+    for (let r = 0; r < GRID_ROWS; r++) {
+      for (let c = 0; c < GRID_COLS; c++) {
+        const tileSvgPath = path.join(OUT_DIR, `tile-${r}-${c}.svg`)
+        for (const tier of RASTER_TIERS) {
+          const pxW = Math.round(tileW * tier)
+          const pxH = Math.round(tileH * tier)
+          const outPath = path.join(OUT_DIR, `tile-${r}-${c}@${tier}x.webp`)
+          await rasterizeSvgToWebP(page, tileSvgPath, outPath, pxW, pxH, RASTER_QUALITY)
+        }
+        log(`  rasterized tile ${r}-${c} @ ${RASTER_TIERS.map(t => `${t}x`).join('/')}`)
+      }
+    }
+
+    // Low-res preview of the whole map for instant first paint.
+    log(`rendering preview.webp at width ${PREVIEW_WIDTH}px...`)
+    const previewSize = await rasterizePreview(
+      page,
+      masterSvgPath,
+      path.join(OUT_DIR, 'preview.webp'),
+      viewBox,
+      PREVIEW_WIDTH,
+      RASTER_QUALITY
+    )
+    log(`  preview.webp: ${previewSize.w}x${previewSize.h}`)
+
     await browser.close()
 
     const manifest = {
@@ -354,10 +478,19 @@ async function main(): Promise<void> {
       source: path.basename(PDF_PATH),
       viewBox: [viewBox.x, viewBox.y, viewBox.w, viewBox.h],
       grid: { rows: GRID_ROWS, cols: GRID_COLS },
-      tileSize: { w: tileW, h: tileH }
+      tileSize: { w: tileW, h: tileH },
+      raster: {
+        format: 'webp',
+        tiers: [...RASTER_TIERS]
+      },
+      preview: {
+        url: 'preview.webp',
+        w: previewSize.w,
+        h: previewSize.h
+      }
     }
     writeFileSync(path.join(OUT_DIR, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n')
-    log(`wrote manifest.json + ${GRID_ROWS * GRID_COLS} tiles to ${OUT_DIR}`)
+    log(`wrote manifest.json + ${GRID_ROWS * GRID_COLS} SVG tiles + ${GRID_ROWS * GRID_COLS * RASTER_TIERS.length} WebP rasters + preview to ${OUT_DIR}`)
   } finally {
     rmSync(tmp, { recursive: true, force: true })
   }

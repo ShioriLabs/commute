@@ -356,7 +356,13 @@ export default function MapPage() {
       if (dirtyRef.current) {
         const dpr = window.devicePixelRatio || 1
         const r = renderedRef.current
-        const targetTier = pickTier(r.scale, dpr, currentTierRef.current)
+        // Cap max tier on small viewports and low-core devices so mobile
+        // never asks for the 1024x1024-per-tile tier 4 (4 MB raster each).
+        // Tier 2 is plenty sharp at phone pixel densities.
+        const isSmall = viewportSize.w < 768
+        const lowCore = (navigator.hardwareConcurrency ?? 8) <= 4
+        const maxTier: Tier = (isSmall || lowCore) ? 2 : 4
+        const targetTier = pickTier(r.scale, dpr, currentTierRef.current, maxTier)
         currentTierRef.current = targetTier
         renderer.draw(r, viewportSize.w, viewportSize.h, dpr, targetTier)
         dirtyRef.current = false
