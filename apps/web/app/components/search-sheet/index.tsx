@@ -46,7 +46,7 @@ function HighlightedStationList({ title, stationIDs, className }: { title: strin
         {filteredStations.map(station => (
           <li key={station.id} className="shrink-0">
             <Link
-              to={`/station/${station.operator.code}/${station.code}`}
+              to={`/stations/${station.operator.code}/${station.code}`}
               className="flex flex-col gap-2 w-[54vw] lg:w-48 aspect-[3/4] bg-rose-100 p-4 rounded-xl text-pink-800 shadow-sm shadow-pink-900/15"
               replace
             >
@@ -75,7 +75,7 @@ export default function SearchSheet() {
           type: 'STATION',
           title: station.formattedName || station.name,
           subtitle: station.operator.name,
-          to: `/station/${station.operator.code}/${station.code}`,
+          to: `/stations/${station.operator.code}/${station.code}`,
           keywords: [
             station.name.toLowerCase(),
             station.code.toLowerCase(),

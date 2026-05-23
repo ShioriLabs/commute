@@ -446,7 +446,7 @@ function SheetHeader({ operator, code, onClose }: { operator: string, code: stri
               )}
         </div>
         <Link
-          to={`/station/${operator}/${code}`}
+          to={`/stations/${operator}/${code}`}
           aria-label="Buka halaman stasiun lengkap"
           className="rounded-full flex items-center justify-center w-9 h-9 text-slate-700 hover:bg-slate-100"
         >

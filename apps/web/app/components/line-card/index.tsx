@@ -1,10 +1,7 @@
 import type { CompactLineTimetable, CompactSchedule, LineTimetable } from 'models/schedules'
 import { useState, useEffect, useMemo } from 'react'
 import { getTintFromColor } from 'utils/colors'
-
-function parseTime(timeString: string) {
-  return new Date(`${new Date().toDateString()} ${timeString}`)
-}
+import { isImmediateDeparture, parseTime } from 'utils/schedules'
 
 function getNextSchedules(
   schedules: CompactSchedule[],
@@ -39,11 +36,6 @@ function getNextSchedules(
   }
 
   return returning
-}
-
-function isImmediateDeparture(now: Date, scheduledDeparture: Date) {
-  const diff = scheduledDeparture.getTime() - now.getTime()
-  return diff >= -60000 && diff <= 60000
 }
 
 interface Props {
