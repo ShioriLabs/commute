@@ -73,6 +73,18 @@ export default function DataAttributionsSettingsPage() {
                 </p>
               </article>
             </li>
+            <li>
+              <article>
+                <h1 className="font-semibold">Peta Integrasi Transportasi Jakarta</h1>
+                <a href="https://transportforjakarta.or.id" target="_blank" className="text-blue-500">https://transportforjakarta.or.id</a>
+                <p>
+                  Peta integrasi transportasi umum Jakarta dibuat dan dipublikasikan oleh Forum Diskusi Transportasi Jakarta (FDTJ). Kami menampilkan peta tersebut dalam bentuk yang sama dengan publikasi resmi sebagai referensi visual bagi pengguna.
+                </p>
+                <p>
+                  © FDTJ
+                </p>
+              </article>
+            </li>
           </ul><br />
           <p>
             Meskipun Kami mengumpulkan data melalui sumber resmi tersebut, Jadwal perjalanan transportasi tersebut dapat berubah sewaktu-waktu. Silakan cek laman dan sosial media para operator tersebut untuk memastikan jadwal terkini. <br /><br />

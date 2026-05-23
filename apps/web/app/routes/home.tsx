@@ -223,7 +223,7 @@ export default function HomePage() {
             </div>
           )}
       <nav className="fixed bottom-0 py-4 bg-gradient-to-t from-30% from-rose-50/40 w-screen z-20" aria-label="Navigasi utama">
-        <div className="w-full max-w-3xl mx-auto flex gap-4">
+        <div className="w-full max-w-3xl mx-auto flex gap-4 overflow-x-auto no-scrollbar">
           <SearchStationsButton className="ml-4 lg:ml-2" />
           <SettingsButton className={canInstall ? '' : 'mr-4 lg:mr-2'} />
         </div>
