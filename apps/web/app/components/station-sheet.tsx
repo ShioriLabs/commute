@@ -117,8 +117,12 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
     const tick = (now: number) => {
       const dt = Math.min(64, now - last)
       last = now
-      if (dragStartRef.current) {
-        // Drag in progress; finger owns the height. Idle until release.
+      if (dragStartRef.current || scrollDragRef.current) {
+        // Pointer gesture in progress (dragging the sheet OR passthrough-
+        // scrolling the body). The finger owns the height/scroll. Idle until
+        // release — and also after a sheet→scroll handoff, so the rAF closure
+        // (captured with the *old* targetPx) doesn't lerp the just-handed-off
+        // sheet back toward the pre-handoff snap before the effect re-runs.
         raf = requestAnimationFrame(tick)
         return
       }
@@ -192,24 +196,49 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
   }
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    // Already committed to dragging — update sheet position.
+    // Already committed to dragging the sheet.
     if (dragStartRef.current) {
       const start = dragStartRef.current
       const dy = e.clientY - start.y
-      const next = Math.max(0, Math.min(fullPx, start.sheetTopAtStart - dy))
+      const wanted = start.sheetTopAtStart - dy
+      const next = Math.max(0, Math.min(fullPx, wanted))
       applyHeight(next)
       pushVelocity(e.timeStamp, e.clientY)
+      // Android-style handoff: if the sheet hit fullPx and the finger wants
+      // to keep going up, switch to scrolling the body. We re-baseline the
+      // scroll-drag using the *current* pointer Y so there's no jump.
+      // Also commit snap to 'full' so the rAF lerp doesn't pull the sheet
+      // back to whatever the pre-drag snap was when the gesture ends.
+      if (wanted > fullPx && bodyRef.current) {
+        dragStartRef.current = null
+        scrollDragRef.current = { pointerId: e.pointerId, lastY: e.clientY }
+        if (snap !== 'full') setSnap('full')
+      }
       return
     }
 
     // Already committed to passthrough scroll — drive bodyRef.scrollTop.
     if (scrollDragRef.current && scrollDragRef.current.pointerId === e.pointerId) {
       const body = bodyRef.current
-      if (body) {
-        const dy = e.clientY - scrollDragRef.current.lastY
-        body.scrollTop -= dy
-      }
+      const dy = e.clientY - scrollDragRef.current.lastY
       scrollDragRef.current.lastY = e.clientY
+      if (!body) return
+      // Android-style handoff: if the user is dragging down and the body is
+      // already at the top, switch from scrolling to shrinking the sheet.
+      // Re-baseline the sheet drag from fullPx so the next move continues
+      // smoothly from the current finger position.
+      if (dy > 0 && body.scrollTop <= 0) {
+        scrollDragRef.current = null
+        dragStartRef.current = {
+          y: e.clientY,
+          sheetTopAtStart: fullPx,
+          time: e.timeStamp
+        }
+        velocityRef.current = []
+        pushVelocity(e.timeStamp, e.clientY)
+        return
+      }
+      body.scrollTop -= dy
       return
     }
 
@@ -219,32 +248,23 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
     const dy = e.clientY - cand.y
     if (Math.abs(dy) < DRAG_COMMIT_THRESHOLD) return
 
-    // From handle: always commit. The header isn't scrollable.
-    // From body: commit only when the gesture should resize the sheet
-    // rather than scroll the body content.
-    const draggingUp = dy < 0
+    // From handle: always drag. From body: drag when the gesture should
+    // resize the sheet; scroll otherwise. The mid-gesture handoff logic
+    // above bridges the two modes when the sheet or scroll hits its bound.
     const draggingDown = dy > 0
     const body = bodyRef.current
     const atTop = !body || body.scrollTop <= 0
     const isFullSnap = snap === 'full'
 
-    let shouldDrag = false
-    if (cand.fromHandle) {
-      shouldDrag = true
-    } else if (!isFullSnap && draggingUp) {
-      // At peek and swiping up → expand the sheet.
-      shouldDrag = true
-    } else if (!isFullSnap && draggingDown) {
-      // At peek and swiping down → close.
-      shouldDrag = true
-    } else if (isFullSnap && draggingDown && atTop) {
-      // At full, scrolled to top, swiping down → shrink.
-      shouldDrag = true
-    }
+    // Start in scroll mode when the user is at full snap and the body has
+    // scroll room in the direction they're going. Otherwise start in sheet-
+    // drag mode — the handoff in the committed branches will swap modes if
+    // we reach a bound.
+    const startScroll = !cand.fromHandle
+      && isFullSnap
+      && (!draggingDown || !atTop)
 
-    if (!shouldDrag) {
-      // Body scroll wins. We've captured the pointer, so the browser won't
-      // scroll for us — translate subsequent moves into bodyRef.scrollTop.
+    if (startScroll) {
       dragCandidateRef.current = null
       scrollDragRef.current = { pointerId: e.pointerId, lastY: e.clientY }
       return
@@ -302,6 +322,44 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
 
   const handleClose = useCallback(() => setSnap('closed'), [])
 
+  // Wheel/trackpad: same Android-style handoff as touch. Wheel deltaY > 0
+  // (scrolling "down" in content terms) maps to swiping up — expand the sheet
+  // first, then scroll the body. Wheel deltaY < 0 maps to swiping down —
+  // scroll the body up until top, then shrink the sheet.
+  //
+  // Attached via native addEventListener with passive: false so preventDefault
+  // actually suppresses the native scroll. React's synthetic onWheel is
+  // passive by default in modern versions.
+  useEffect(() => {
+    const body = bodyRef.current
+    if (!body) return
+    const onWheel = (e: WheelEvent) => {
+      const dy = e.deltaY
+      if (dy > 0) {
+        const headroom = fullPx - heightRef.current
+        if (headroom > 0.5) {
+          e.preventDefault()
+          const grow = Math.min(dy, headroom)
+          applyHeight(heightRef.current + grow)
+          if (heightRef.current >= fullPx - 0.5) setSnap('full')
+          const remainder = dy - grow
+          if (remainder > 0) body.scrollTop += remainder
+        }
+      } else if (dy < 0) {
+        if (body.scrollTop > 0) return
+        const shrinkable = heightRef.current - peekPx
+        if (shrinkable > 0.5) {
+          e.preventDefault()
+          const shrink = Math.min(-dy, shrinkable)
+          applyHeight(heightRef.current - shrink)
+          if (heightRef.current <= peekPx + 0.5) setSnap('peek')
+        }
+      }
+    }
+    body.addEventListener('wheel', onWheel, { passive: false })
+    return () => body.removeEventListener('wheel', onWheel)
+  }, [fullPx, peekPx])
+
   // When the sheet is fully closed AND no station is selected, don't render.
   if (!operator || !code) return null
   if (viewportH === 0) return null
@@ -349,6 +407,10 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
         <div
           ref={bodyRef}
           className="flex-1 overflow-y-auto overscroll-contain"
+          // touch-action: none on the body too — overflow-y-auto would
+          // otherwise let the browser do its own native pan-y scrolling
+          // alongside our pointer-driven scroll, double-counting the gesture.
+          style={{ touchAction: 'none' }}
         >
           {contentReady
             ? <StationContent operator={operator} code={code} />
