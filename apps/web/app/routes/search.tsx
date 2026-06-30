@@ -105,7 +105,7 @@ export default function SearchPage({ onClose }: Props) {
     }).sort((a, b) => a.finalScore - b.finalScore || a.name.localeCompare(b.name))
 
     return scoredStations
-  }, [searchQuery])
+  }, [searchQuery, stations?.data])
 
   useEffect(() => {
     const recentlySearchedString = localStorage.getItem('recently-searched') ?? '[]'
@@ -179,18 +179,18 @@ export default function SearchPage({ onClose }: Props) {
         : null}
       {isLoading && searchQuery.length >= 2
         ? (
-            <ul className="mt-4 max-w-3xl mx-auto">
+            <ul className="mt-4 max-w-3xl mx-auto animate-pulse">
               <li className="px-8 py-4">
-                <div className="h-4 w-24 bg-slate" />
-                <div className="mt-1 h-4 w-12" />
+                <div className="h-4 w-24 bg-slate-200 rounded" />
+                <div className="mt-2 h-3 w-12 bg-slate-200 rounded" />
               </li>
               <li className="px-8 py-4">
-                <div className="h-4 w-48 bg-slate" />
-                <div className="mt-1 h-4 w-12" />
+                <div className="h-4 w-48 bg-slate-200 rounded" />
+                <div className="mt-2 h-3 w-12 bg-slate-200 rounded" />
               </li>
               <li className="px-8 py-4">
-                <div className="h-4 w-32 bg-slate" />
-                <div className="mt-1 h-4 w-12" />
+                <div className="h-4 w-32 bg-slate-200 rounded" />
+                <div className="mt-2 h-3 w-12 bg-slate-200 rounded" />
               </li>
             </ul>
           )

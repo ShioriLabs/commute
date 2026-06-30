@@ -154,7 +154,8 @@ const TimetableContent = memo(function TimetableContent({ operator, code }: Prop
   }
 
   if (!timetable.data?.data?.length) {
-    if (networkStatus === 'OFFLINE') return <EmptyState mode="OFFLINE" />
+    if (networkStatus === 'OFFLINE') return <EmptyState mode="OFFLINE" onRetry={() => timetable.mutate()} />
+    if (timetable.error) return <EmptyState mode="ERROR" onRetry={() => timetable.mutate()} />
     return <EmptyState mode="NO_DATA" />
   }
 

@@ -106,7 +106,7 @@ const StationContent = memo(function StationContent({ operator, code }: StationC
   const transfers = useSWR<StandardResponse<Transfer[]>>(transfersUrl, fetcher, swrConfig)
   const networkStatus = useNetworkStatus()
 
-  if (timetable.isLoading) {
+  if (timetable.isLoading || station.isLoading) {
     return (
       <div className="px-4 pb-8 mt-2 flex flex-col gap-2 max-w-3xl mx-auto">
         <div className="animate-pulse w-full h-72 bg-slate-200 rounded-lg" />
@@ -156,8 +156,8 @@ const StationContent = memo(function StationContent({ operator, code }: StationC
           )
         }
 
-        if (networkStatus === 'OFFLINE') return <EmptyState mode="OFFLINE" />
-        if (timetable.error) return <EmptyState mode="NO_DATA" />
+        if (networkStatus === 'OFFLINE') return <EmptyState mode="OFFLINE" onRetry={() => timetable.mutate()} />
+        if (timetable.error) return <EmptyState mode="ERROR" onRetry={() => timetable.mutate()} />
         return <EmptyState mode="NO_DATA" />
       })()}
       <section className="mt-8">
