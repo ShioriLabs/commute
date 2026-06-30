@@ -9,7 +9,9 @@
     "build": "wrangler build",
     "start": "wrangler dev",
     "generate:lrtjbdbtimetable": "tsx ./src/operators/lrtjbdb/generateTimetableSQL.ts",
-    "generate:stationcoords": "tsx ./src/db/scripts/generateLatLngSQL.ts"
+    "generate:stationcoords": "tsx ./src/db/scripts/generateLatLngSQL.ts",
+    "generate:stationcodes": "tsx ./src/db/scripts/generateStationCodesSQL.ts",
+    "generate:edges": "tsx ./src/db/scripts/generateEdgesSQL.ts"
   },
   "keywords": [],
   "author": "",

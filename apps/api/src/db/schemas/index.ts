@@ -1,3 +1,4 @@
+import { EdgeSchema } from './edges'
 import { ScheduleSchema } from './schedules'
 import { StationLineSchema } from './station-lines'
 import { StationSchema } from './stations'
@@ -8,4 +9,5 @@ export interface Database {
   schedules: ScheduleSchema
   stationLines: StationLineSchema
   transfers: TransferSchema
+  edges: EdgeSchema
 }

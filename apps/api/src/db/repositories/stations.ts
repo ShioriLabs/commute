@@ -294,7 +294,17 @@ export class StationRepository extends Repository {
   }
 
   async getTimetableFromStationId(id: string, line?: string, page?: number, limit?: number) {
-    let query = db(this.d1).selectFrom('schedules').selectAll().where('stationId', '=', id).orderBy('estimatedDeparture asc')
+    let query = db(this.d1)
+      .selectFrom('schedules')
+      .selectAll()
+      .where('stationId', '=', id)
+      // Only the lines this station actually serves (per stationLines). KAI's
+      // feed lists passage times for trains that pass through without stopping
+      // (e.g. Soekarno-Hatta trains at Kalideres); those lines aren't in
+      // stationLines, so this keeps them out of the timetable across resyncs.
+      .where('lineCode', 'in', eb =>
+        eb.selectFrom('stationLines').select('stationLines.lineCode').where('stationLines.stationId', '=', id))
+      .orderBy('estimatedDeparture asc')
     if (line) {
       query = query.where('lineCode', '=', line)
     }
