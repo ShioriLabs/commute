@@ -121,7 +121,34 @@ by direction**, sourced in GTFS from either:
 1. For a group `(stationId, lineCode, boundFor)`, walk `edges` from the station in
    the `boundFor` direction (station codes encode the Cikarang lollipop, Bogor/Nambo
    fork, etc.).
-2. Emit the next *N* stops as `downstreamStations: string[]` on the departure group.
+2. Emit up to *N* downstream stops as `downstreamStations: string[]` — but only
+   **prominent** ones (see below), not every stop.
+
+### Prominent stations only (don't list Rajawali)
+
+Full stop-by-stop is noise; the hint should be landmark waypoints. "Prominent" is
+derivable structurally from existing data — **no new curation**:
+
+- **Interchange** — more than one `stationLines` row (multi-line, e.g. Manggarai,
+  Tanah Abang, Jatinegara, Duri, Kampung Bandan), **or** has `transfers` rows
+  (cross-operator node, e.g. Sudirman ↔ Dukuh Atas).
+- **Terminus** — always prominent (it's the end of the line / the `boundFor`).
+
+`prominent = lineCount > 1 || hasTransfers || isTerminus`. Validates against the
+Google example: every station in "Manggarai, Sudirman, Tanah Abang, Duri, Kampung
+Bandan, Jatinegara" is an interchange, while **Rajawali (single-line, no transfers)
+drops out automatically** — Google appears to filter the same way.
+
+The existing search `score` is an optional booster for busy non-interchanges, but
+start with interchange-OR-terminus; reach for `score` only if something's missing.
+
+The walker still traverses **every** edge (to follow the path) — it only *emits*
+prominent stops, capped at *N* (3–4 keeps it glanceable). Graceful fallback: if a
+short hop has no prominent stop before the terminus, emit the terminus alone so the
+hint is never empty.
+
+Reuse note: this prominent-station set is exactly what the future **trip planner**
+treats as transfer candidates — not throwaway, same as the next-hop resolver.
 
 Why this likely beats `PLATFORM_CODES`:
 
