@@ -134,8 +134,57 @@ Cost: a graph walk per group (cache in KV like the rest, or precompute), heavier
 than a static string lookup. Edge cases to handle: loops (don't walk past the
 origin), branches (pick the fork matching `boundFor`), and where to truncate *N*.
 
-**Open:** decide between (a) derived `downstreamStations` (recommended, no
-curation), (b) curated `platformCode` (only where we genuinely know platforms,
-e.g. a few major interchanges), or (c) both — `platformCode` as an optional overlay
-on top of the derived direction list. Lean (a), with (c) later if real platform
-data ever surfaces.
+## Chosen direction: progressive enhancement (derived base + sparse overlay)
+
+Two layers, so the feature is useful immediately and improves as platforms get
+backfilled by hand "when the mood strikes":
+
+- **Base layer — derived direction (automatic, network-wide):** the
+  `downstreamStations` walk above. Always present, zero curation.
+- **Overlay layer — curated `platformCode` (sparse, incremental):** added by hand
+  for directions we actually know. Missing → no badge, direction still renders.
+  Never an empty state, never blocks shipping.
+
+### Key the overlay on the NEXT HOP, not `boundFor`
+
+Platform is a property of *which way the train physically leaves the station* (the
+edge taken out), **not** the final terminus. Example: "all trains leaving Cakung
+*away from Bekasi* use 3/4" is **one** physical direction (westbound → Klender Baru)
+but **many** `boundFor`s (Kampung Bandan, Jakarta Kota, Angke, …).
+
+So the overlay map is keyed `(stationId, lineCode, nextHopStationId)`:
+
+```ts
+// apps/constants/src/index.ts  — supersedes the boundFor-keyed shape above.
+// GTFS convention: bare identifier only.
+export const PLATFORM_CODES: Record<string, string> = {
+  'KCI-CUK:C:KLB': '3/4', // Cakung, Cikarang line, departing toward Klender Baru
+}
+```
+
+One entry covers **every** train going that direction, regardless of terminus —
+maximum coverage per keystroke, which is what makes armchair curation viable (no
+field trips). `boundFor`-keying was rejected: it forces a near-duplicate row per
+terminus sharing a direction — exactly the friction that kills the mood.
+
+### Shared machinery
+
+Resolving a group's `nextHopStationId` = walk `edges` from the station toward
+`boundFor`, take the first edge. That's the *same* computation `downstreamStations`
+needs (it just keeps walking N stops). Build "which way does this group go?" once →
+get both the direction list (base) and the overlay lookup key. Existing `via`
+disambiguation handles the Bekasi interlining fork, so junctions resolve correctly.
+
+### Output on the departure group
+
+```ts
+{
+  boundFor, via, schedules,
+  downstreamStations: string[],     // base, always
+  platformCode: string | null,      // overlay, when curated
+}
+```
+
+UI: always show the direction; if `platformCode` present, add a "Peron {code}"
+badge. Still bump `API_VERSION` on overlay edits (values are baked into the KV
+cache).
