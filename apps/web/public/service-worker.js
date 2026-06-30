@@ -16,6 +16,31 @@
         - Badges: https://microsoft.github.io/win-student-devs/#/30DaysOfPWA/advanced-capabilities/07?id=application-badges
     */
 
+const CACHE_NAME = 'pwa-cache-v2'
+const TILE_PATH_PREFIX = '/maps/fdtj/'
+
+// Pre-cached map assets. Derived deterministically from the 4x4 grid in
+// build-map-tiles.ts — keep this list in sync if grid dimensions change.
+const MAP_ROWS = 4
+const MAP_COLS = 4
+const RASTER_TIERS = [1, 2]
+const buildMapAssetList = () => {
+  const urls = [
+    `${TILE_PATH_PREFIX}manifest.json`,
+    `${TILE_PATH_PREFIX}points.json`,
+    `${TILE_PATH_PREFIX}preview.webp`
+  ]
+  for (let r = 0; r < MAP_ROWS; r++) {
+    for (let c = 0; c < MAP_COLS; c++) {
+      urls.push(`${TILE_PATH_PREFIX}tile-${r}-${c}.svg`)
+      for (const t of RASTER_TIERS) {
+        urls.push(`${TILE_PATH_PREFIX}tile-${r}-${c}@${t}x.webp`)
+      }
+    }
+  }
+  return urls
+}
+
 const HOSTNAME_WHITELIST = [
   self.location.hostname,
   `api.${self.location.hostname}`,
@@ -47,14 +72,59 @@ const getFixedUrl = (req) => {
 }
 
 /**
+ *  @Lifecycle Install
+ *  Pre-cache the full set of map tile assets so the map works offline after the
+ *  first visit. cache.addAll is atomic — a single failure rolls back the batch,
+ *  so a partial-cache state is impossible.
+ */
+self.addEventListener('install', (event) => {
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME)
+    try {
+      await cache.addAll(buildMapAssetList())
+    } catch (err) {
+      // Don't block install if a tile asset isn't available yet (e.g. dev
+      // server before the build script has run). The runtime cache-first
+      // handler will fill in entries on first fetch.
+      console.warn('[sw] map pre-cache failed (continuing):', err)
+    }
+    await self.skipWaiting()
+  })())
+})
+
+/**
      *  @Lifecycle Activate
      *  New one activated when old isnt being used.
      *
      *  waitUntil(): activating ====> activated
      */
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim())
+  event.waitUntil((async () => {
+    const keys = await caches.keys()
+    await Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+    await self.clients.claim()
+  })())
 })
+
+/**
+ * Cache-first handler for immutable tile assets. These have long-lived
+ * Cache-Control headers and identical content for the lifetime of CACHE_NAME,
+ * so we skip the network entirely once cached.
+ */
+const cacheFirst = async (request) => {
+  const cache = await caches.open(CACHE_NAME)
+  const cached = await cache.match(request)
+  if (cached) return cached
+  try {
+    const response = await fetch(request)
+    if (response.ok) cache.put(request, response.clone()).catch(() => {})
+    return response
+  } catch (err) {
+    // Offline + uncached — return a synthetic 504 so the renderer's onerror
+    // path runs instead of stalling on a hung fetch.
+    return new Response('', { status: 504, statusText: 'tile unavailable offline' })
+  }
+}
 
 /**
      *  @Functional Fetch
@@ -73,6 +143,16 @@ self.addEventListener('fetch', (event) => {
   // Exclude React Router virtual requests from caching
   if (requestUrl.pathname.startsWith('/@id/__x00__virtual:react-router')) {
     return;
+  }
+
+  // Tile assets: cache-first. They're immutable for the lifetime of this SW
+  // version, so network revalidation is wasted bytes.
+  if (
+    requestUrl.hostname === self.location.hostname
+    && requestUrl.pathname.startsWith(TILE_PATH_PREFIX)
+  ) {
+    event.respondWith(cacheFirst(event.request))
+    return
   }
 
   // Skip some of cross-origin requests, like those for Google Analytics.
@@ -97,7 +177,7 @@ self.addEventListener('fetch', (event) => {
 
     // Update the cache with the version we fetched (only for ok status)
     event.waitUntil(
-      Promise.all([fetchedCopy, caches.open('pwa-cache')])
+      Promise.all([fetchedCopy, caches.open(CACHE_NAME)])
         .then(([response, cache]) => response.ok && cache.put(event.request, response))
         .catch((_) => { /* eat any errors */ })
     )

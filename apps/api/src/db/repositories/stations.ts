@@ -223,6 +223,25 @@ export class StationRepository extends Repository {
     }
   }
 
+  async checkIfLineExists(id: string, lineCode: string, operator?: Operator) {
+    let query = db(this.d1)
+      .selectFrom('stationLines')
+      .leftJoin('stations', 'stations.id', 'stationLines.stationId')
+      .select(['stationLines.id', 'lineCode', 'stationId', 'stations.operator'])
+      .where('lineCode', '=', lineCode)
+      .where('stationId', '=', id)
+
+    if (operator) {
+      query = query.where('stations.operator', '=', operator)
+    }
+
+    const line = await query.executeTakeFirst()
+    return {
+      exists: !!line,
+      line: line ? line : null
+    }
+  }
+
   async insert(data: NewStation) {
     await db(this.d1)
       .insertInto('stations').values(data)
@@ -274,8 +293,22 @@ export class StationRepository extends Repository {
       .executeTakeFirst()
   }
 
-  async getTimetableFromStationId(id: string, page?: number, limit?: number) {
-    let query = db(this.d1).selectFrom('schedules').selectAll().where('stationId', '=', id).orderBy('estimatedDeparture asc')
+  async getTimetableFromStationId(id: string, line?: string, page?: number, limit?: number) {
+    let query = db(this.d1)
+      .selectFrom('schedules')
+      .selectAll()
+      .where('stationId', '=', id)
+      // Only the lines this station actually serves (per stationLines). KAI's
+      // feed lists passage times for trains that pass through without stopping
+      // (e.g. Soekarno-Hatta trains at Kalideres); those lines aren't in
+      // stationLines, so this keeps them out of the timetable across resyncs.
+      .where('lineCode', 'in', eb =>
+        eb.selectFrom('stationLines').select('stationLines.lineCode').where('stationLines.stationId', '=', id))
+      .orderBy('estimatedDeparture asc')
+    if (line) {
+      query = query.where('lineCode', '=', line)
+    }
+
     if (page && limit) {
       query = query.limit(limit).offset((page - 1) * limit)
     }

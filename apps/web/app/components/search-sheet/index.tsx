@@ -46,7 +46,7 @@ function HighlightedStationList({ title, stationIDs, className }: { title: strin
         {filteredStations.map(station => (
           <li key={station.id} className="shrink-0">
             <Link
-              to={`/station/${station.operator.code}/${station.code}`}
+              to={`/stations/${station.operator.code}/${station.code}`}
               className="flex flex-col gap-2 w-[54vw] lg:w-48 aspect-[3/4] bg-rose-100 p-4 rounded-xl text-pink-800 shadow-sm shadow-pink-900/15"
               replace
             >
@@ -75,7 +75,7 @@ export default function SearchSheet() {
           type: 'STATION',
           title: station.formattedName || station.name,
           subtitle: station.operator.name,
-          to: `/station/${station.operator.code}/${station.code}`,
+          to: `/stations/${station.operator.code}/${station.code}`,
           keywords: [
             station.name.toLowerCase(),
             station.code.toLowerCase(),
@@ -123,7 +123,7 @@ export default function SearchSheet() {
     }).sort((a, b) => a.score - b.score || a.title.localeCompare(b.title))
 
     return scoredStations
-  }, [searchQuery])
+  }, [searchQuery, searchables])
 
   useEffect(() => {
     const recentlySearchedString = localStorage.getItem('recently-searched') ?? '[]'
@@ -197,18 +197,18 @@ export default function SearchSheet() {
         : null}
       {isLoading && searchQuery.length >= 2
         ? (
-            <ul className="mt-4 max-w-3xl mx-auto">
+            <ul className="mt-4 max-w-3xl mx-auto animate-pulse">
               <li className="px-8 py-4">
-                <div className="h-4 w-24 bg-slate" />
-                <div className="mt-1 h-4 w-12" />
+                <div className="h-4 w-24 bg-slate-200 rounded" />
+                <div className="mt-2 h-3 w-12 bg-slate-200 rounded" />
               </li>
               <li className="px-8 py-4">
-                <div className="h-4 w-48 bg-slate" />
-                <div className="mt-1 h-4 w-12" />
+                <div className="h-4 w-48 bg-slate-200 rounded" />
+                <div className="mt-2 h-3 w-12 bg-slate-200 rounded" />
               </li>
               <li className="px-8 py-4">
-                <div className="h-4 w-32 bg-slate" />
-                <div className="mt-1 h-4 w-12" />
+                <div className="h-4 w-32 bg-slate-200 rounded" />
+                <div className="mt-2 h-3 w-12 bg-slate-200 rounded" />
               </li>
             </ul>
           )

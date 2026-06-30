@@ -1,10 +1,7 @@
 import type { CompactLineTimetable, CompactSchedule, LineTimetable } from 'models/schedules'
 import { useState, useEffect, useMemo } from 'react'
 import { getTintFromColor } from 'utils/colors'
-
-function parseTime(timeString: string) {
-  return new Date(`${new Date().toDateString()} ${timeString}`)
-}
+import { isImmediateDeparture, parseTime } from 'utils/schedules'
 
 function getNextSchedules(
   schedules: CompactSchedule[],
@@ -39,11 +36,6 @@ function getNextSchedules(
   }
 
   return returning
-}
-
-function isImmediateDeparture(now: Date, scheduledDeparture: Date) {
-  const diff = scheduledDeparture.getTime() - now.getTime()
-  return diff >= -60000 && diff <= 60000
 }
 
 interface Props {
@@ -88,7 +80,7 @@ export default function LineCard({ line }: Props) {
         style={{ borderBottomColor: getTintFromColor(line.colorCode, 0.3) }}
         aria-labelledby={`line-name-${line.name}`}
       >
-        <h1 id={`line-name-${line.name}`} className="font-bold text-xl">{line.name}</h1>
+        <h1 id={`line-name-${line.name}`} className="font-bold text-lg">{line.name}</h1>
       </article>
       <ul>
         {nextSchedulesFilteredTimetable.map((direction) => {

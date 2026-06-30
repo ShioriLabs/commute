@@ -64,7 +64,7 @@ function StationCard({ stationId }: { stationId: string }) {
   const timetable = useSWR<StandardResponse<CompactLineGroupedTimetable>>(new URL(`/stations/${operator}/${code}/timetable/grouped?compact=1`, import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
   const networkStatus = useNetworkStatus()
 
-  if (station.isLoading && !station.error) {
+  if (station.isLoading) {
     return (
       <li className="animate-pulse px-4">
         <article>
@@ -79,34 +79,66 @@ function StationCard({ stationId }: { stationId: string }) {
     return (
       <li>
         <article>
-          <h1 className="font-bold text-2xl flex px-8 py-6 sticky top-0 bg-rose-50/20 backdrop-blur-2xl z-10 lg:relative lg:backdrop-blur-none lg:bg-transparent">
-            <Link to={`/station/${station.data.data.operator.code}/${station.data.data.code}`} className="group flex-grow">
+          <h1 className="font-bold text-xl flex px-8 py-6 sticky top-0 bg-rose-50/20 backdrop-blur-2xl z-10 lg:relative lg:backdrop-blur-none lg:bg-transparent">
+            <Link to={`/stations/${station.data.data.operator.code}/${station.data.data.code}`} className="group flex-grow">
               Stasiun&nbsp;
               { station.data.data.formattedName }
-              <CaretRightIcon weight="bold" className="inline w-4 h-4 group-hover:ml-3 ml-2 transition-[margin] duration-200" />
+              <CaretRightIcon weight="bold" className="inline w-4 h-4 group-hover:ml-3 ml-2 transition-[margin] duration-200 mb-1" />
             </Link>
           </h1>
           { timetable.isLoading
             ? (
-                <div className="flex h-[320px] bg-slate-200 rounded-xl mx-4" />
+                <div className="flex h-[320px] bg-slate-200 rounded-xl mx-4 animate-pulse" />
               )
-            : (
-                <ul className="flex flex-col lg:grid lg:grid-cols-2 gap-4 mx-4">
-                  {timetable?.data?.data?.map(line => (
-                    <LineCard key={line.lineCode} line={line} />
-                  ))}
-                </ul>
-              )}
+            : timetable.data?.data?.length
+              ? (
+                  <ul className="flex flex-col lg:grid lg:grid-cols-2 gap-4 mx-4">
+                    {timetable.data.data.map(line => (
+                      <LineCard key={line.lineCode} line={line} />
+                    ))}
+                  </ul>
+                )
+              : (
+                  <div className="mx-4 p-4 bg-rose-50 rounded-xl flex flex-col gap-2 items-start">
+                    <span className="text-slate-700 font-semibold">
+                      {timetable.error ? 'Gagal memuat jadwal' : 'Jadwal tidak tersedia'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => { void timetable.mutate() }}
+                      className="bg-[#F55875] text-white font-bold px-4 py-2 rounded-lg cursor-pointer text-sm"
+                    >
+                      Coba Lagi
+                    </button>
+                  </div>
+                )}
         </article>
       </li>
     )
   }
 
-  if (networkStatus === 'OFFLINE') {
-    return <EmptyState mode="OFFLINE" />
-  }
-
-  return <EmptyState mode="NO_SAVED" />
+  // The station itself failed to load (offline or fetch error). Render a
+  // compact, retry-able card — NOT the full-screen "no saved stations" empty
+  // state, which is the wrong message here (this IS a saved station) and would
+  // break the list layout.
+  return (
+    <li className="px-4">
+      <article className="mx-4 mt-4 p-4 bg-rose-50 rounded-xl flex flex-col gap-3 items-start">
+        <span className="font-semibold text-slate-700">
+          {networkStatus === 'OFFLINE'
+            ? 'Tidak dapat memuat stasiun ini saat offline'
+            : 'Gagal memuat stasiun ini'}
+        </span>
+        <button
+          type="button"
+          onClick={() => { void Promise.all([station.mutate(), timetable.mutate()]) }}
+          className="bg-[#F55875] text-white font-bold px-4 py-2 rounded-lg cursor-pointer"
+        >
+          Coba Lagi
+        </button>
+      </article>
+    </li>
+  )
 }
 
 export default function HomePage() {
@@ -223,7 +255,7 @@ export default function HomePage() {
             </div>
           )}
       <nav className="fixed bottom-0 py-4 bg-gradient-to-t from-30% from-rose-50/40 w-screen z-20" aria-label="Navigasi utama">
-        <div className="w-full max-w-3xl mx-auto flex gap-4">
+        <div className="w-full max-w-3xl mx-auto flex gap-4 overflow-x-auto no-scrollbar">
           <SearchStationsButton className="ml-4 lg:ml-2" />
           <SettingsButton className={canInstall ? '' : 'mr-4 lg:mr-2'} />
         </div>

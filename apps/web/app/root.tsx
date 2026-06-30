@@ -85,6 +85,26 @@ export default function App() {
   )
 }
 
+// SPA mode (ssr: false) prerenders only this root route into index.html. Without
+// a HydrateFallback the shell is blank until the JS bundle downloads and
+// hydrates — a visible gap on first load. This markup is baked into the static
+// HTML, so it paints immediately and carries the user through to hydration,
+// then flows straight into each route's own loading state.
+export function HydrateFallback() {
+  return (
+    <div
+      className="fixed inset-0 flex items-center justify-center bg-rose-50/50"
+      aria-live="assertive"
+      aria-busy="true"
+    >
+      <div
+        className="rounded-full border-4 border-slate-600 border-t-transparent w-12 h-12 animate-spin"
+        aria-label="Memuat..."
+      />
+    </div>
+  )
+}
+
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   let message = 'Oops!'
   let details = 'An unexpected error occurred.'
