@@ -11,6 +11,11 @@ const FULL_FRACTION = 0.9
 const DISMISS_FRACTION = 0.18
 // Pointer-velocity (CSS px/ms) threshold for snap-on-flick.
 const FLICK_THRESHOLD = 0.5
+// Body-scroll fling: native momentum is unavailable here (we drive scrollTop
+// manually under touch-action:none), so we replay the release velocity with
+// exponential decay. TAU = glide length (ms); MIN = velocity floor (px/ms).
+const SCROLL_MOMENTUM_TAU = 325
+const SCROLL_MIN_VELOCITY = 0.02
 
 interface StationSheetProps {
   operator: string | null
@@ -168,9 +173,20 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
   // Active "passthrough scroll": the sheet root captured the pointer but the
   // gesture should drive body scrolling rather than resize the sheet.
   const scrollDragRef = useRef<{ pointerId: number, lastY: number } | null>(null)
+  // rAF id for the post-release inertial body scroll (0 = none).
+  const momentumRef = useRef(0)
+  // Cancel any in-flight inertial scroll if the sheet unmounts mid-glide.
+  useEffect(() => () => {
+    if (momentumRef.current) cancelAnimationFrame(momentumRef.current)
+  }, [])
   const DRAG_COMMIT_THRESHOLD = 6 // CSS px
 
   const handlePointerDown = (e: React.PointerEvent) => {
+    // A new touch cancels any in-flight inertial scroll glide.
+    if (momentumRef.current) {
+      cancelAnimationFrame(momentumRef.current)
+      momentumRef.current = 0
+    }
     // Ignore taps on interactive controls inside the header.
     const target = e.target as HTMLElement
     if (target.closest('button, a, input, [role="button"]')) return
@@ -239,6 +255,7 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
         return
       }
       body.scrollTop -= dy
+      pushVelocity(e.timeStamp, e.clientY)
       return
     }
 
@@ -284,16 +301,47 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
     pushVelocity(e.timeStamp, e.clientY)
   }
 
+  // Inertial body scroll after a flick: native momentum doesn't exist here
+  // (touch-action:none + manual scrollTop), so glide the release velocity with
+  // exponential decay until it drops below the floor or hits a scroll bound.
+  const startScrollMomentum = (releaseVy: number) => {
+    const body = bodyRef.current
+    if (!body) return
+    // scrollTop moves opposite to the finger; releaseVy is finger velocity.
+    let v = -releaseVy
+    if (Math.abs(v) < SCROLL_MIN_VELOCITY) return
+    let last = performance.now()
+    const step = (now: number) => {
+      const dt = Math.min(64, now - last)
+      last = now
+      const max = body.scrollHeight - body.clientHeight
+      const next = body.scrollTop + v * dt
+      if (next <= 0 || next >= max) {
+        body.scrollTop = next <= 0 ? 0 : max
+        momentumRef.current = 0
+        return
+      }
+      body.scrollTop = next
+      v *= Math.exp(-dt / SCROLL_MOMENTUM_TAU)
+      if (Math.abs(v) < SCROLL_MIN_VELOCITY) {
+        momentumRef.current = 0
+        return
+      }
+      momentumRef.current = requestAnimationFrame(step)
+    }
+    momentumRef.current = requestAnimationFrame(step)
+  }
+
   const handlePointerUp = () => {
     dragCandidateRef.current = null
+    const wasScrolling = scrollDragRef.current !== null
     scrollDragRef.current = null
     const start = dragStartRef.current
-    if (!start) return
-    dragStartRef.current = null
 
-    // Compute velocity over the last samples; positive = dragging down.
-    // Require >1 frame of movement so sub-pixel jitter on the final sample
-    // can't masquerade as a flick.
+    // Release velocity (CSS px/ms); positive = finger moving down. Require >1
+    // frame of movement so sub-pixel jitter on the final sample can't
+    // masquerade as a flick. Shared by the sheet-snap decision and the
+    // body-scroll momentum below.
     const samples = velocityRef.current
     let vy = 0
     if (samples.length >= 2) {
@@ -302,6 +350,13 @@ export default function StationSheet({ operator, code, onClose }: StationSheetPr
       const dt = last.t - first.t
       if (dt >= 16) vy = (last.y - first.y) / dt
     }
+
+    if (!start) {
+      // Gesture was a body scroll, not a sheet drag — fling the body.
+      if (wasScrolling) startScrollMomentum(vy)
+      return
+    }
+    dragStartRef.current = null
 
     const current = heightRef.current
     const fraction = viewportH > 0 ? current / viewportH : 0
