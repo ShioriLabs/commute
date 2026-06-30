@@ -13,7 +13,7 @@ const STATION_REGION_LOOKUP: Record<number, typeof REGIONS[keyof typeof REGIONS]
 
 export async function syncStations(d1: D1Database, token?: string) {
   const response = await fetch(
-    'https://api-partner.krl.co.id/krl-webs/v1/krl-station',
+    'https://kci.id/api/krl/stations',
     {
       headers: {
         Authorization: `Bearer ${token}`
@@ -60,7 +60,7 @@ export async function syncStations(d1: D1Database, token?: string) {
 
 export async function syncTimetable(d1: D1Database, stationCode: string, token?: string) {
   const response = await fetch(
-    `https://api-partner.krl.co.id/krl-webs/v1/schedules?stationid=${stationCode}&timefrom=00:00&timeto=23:59`,
+    `https://kci.id/api/krl/schedules?stationid=${stationCode}&timefrom=00:00&timeto=23:59`,
     {
       headers: {
         Authorization: `Bearer ${token}`

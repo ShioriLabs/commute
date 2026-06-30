@@ -229,19 +229,15 @@ export function createWebGLRenderer(
       gl.bindTexture(gl.TEXTURE_2D, entry.texture)
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true)
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap)
-      // Mipmaps are only useful when the tile is rendered smaller than its
-      // texture; tier 1 textures are sized for ~1:1 rendering, so skip the
-      // generateMipmap stall there. Higher tiers still get full mips so they
-      // filter cleanly when the user is zoomed below the tier-1 threshold.
-      if (tier > 1) {
-        gl.generateMipmap(gl.TEXTURE_2D)
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
-        entry.mipmapped = true
-      } else {
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-        entry.mipmapped = false
-      }
+      // pickTier promotes to tier 2 as soon as scale*dpr exceeds 1, so tier 1 is
+      // only ever drawn at <=1:1 — i.e. minified, heavily so at max zoom-out.
+      // Generate mipmaps for every tier so minification filters cleanly with
+      // LINEAR_MIPMAP_LINEAR (+ anisotropy below) instead of aliasing into jagged
+      // lines under plain LINEAR. (WebGL2 allows mipmaps on NPOT textures.)
+      gl.generateMipmap(gl.TEXTURE_2D)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+      entry.mipmapped = true
       if (anisoExt && entry.mipmapped) {
         gl.texParameterf(gl.TEXTURE_2D, anisoExt.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(16, maxAniso))
       }
