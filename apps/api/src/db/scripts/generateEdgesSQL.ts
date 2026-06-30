@@ -24,6 +24,7 @@ async function loadCoords(): Promise<Map<string, Coord>> {
 
 const out: string[] = []
 const missingCoords = new Set<string>()
+const srcCounts: Record<string, number> = {}
 
 function distance(line: LineTopology, a: Stop, b: Stop, coords: Map<string, Coord>): { m: number, src: string } {
   if (a.cumM != null && b.cumM != null) {
@@ -41,10 +42,11 @@ function emit(line: LineTopology, a: Stop, b: Stop, coords: Map<string, Coord>):
   if (!coords.has(aId)) missingCoords.add(aId)
   if (!coords.has(bId)) missingCoords.add(bId)
   const { m, src } = distance(line, a, b, coords)
+  srcCounts[src] = (srcCounts[src] ?? 0) + 1
   for (const [from, to] of [[aId, bId], [bId, aId]] as const) {
     out.push(
       `INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt)`
-      + ` VALUES ('${line.lineCode}:${from}->${to}', '${line.lineCode}', '${from}', '${to}', ${m}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP); -- ${src}`
+      + ` VALUES ('${line.lineCode}:${from}->${to}', '${line.lineCode}', '${from}', '${to}', ${m}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`
     )
   }
 }
@@ -80,7 +82,8 @@ async function main(): Promise<void> {
   }
 
   fs.writeFileSync(OUTPUT_SQL_PATH, out.join('\n') + '\n')
-  console.log(`Wrote ${out.length} edge rows to "${OUTPUT_SQL_PATH}".`)
+  const srcSummary = Object.entries(srcCounts).map(([k, v]) => `${v} ${k}`).join(', ')
+  console.log(`Wrote ${out.length} edge rows (${srcSummary} segments) to "${OUTPUT_SQL_PATH}".`)
   if (missingCoords.size > 0) {
     console.warn(`No coordinates for ${missingCoords.size} station(s): ${[...missingCoords].join(', ')}`)
   }
