@@ -243,7 +243,9 @@ const TimetableContent = memo(function TimetableContent({ operator, code }: Prop
                   >
                     <LineBadge code={row.lineCode} color={row.lineColor} />
                     <div className="flex flex-col flex-grow min-w-0">
-                      <span className="text-sm font-semibold text-slate-900 truncate">{row.boundFor}</span>
+                      <span className="text-sm font-semibold text-slate-900 truncate">
+                        {row.boundFor}
+                      </span>
                       {row.via && (
                         <span className="text-xs text-slate-500 truncate">
                           via
@@ -274,7 +276,7 @@ function LineBadge({ code, color, dimmed = false }: LineBadgeProps) {
   const textColor = getForegroundColor(color) === 'LIGHT' ? 'text-white' : 'text-slate-900'
   return (
     <span
-      className={`inline-flex items-center justify-center w-9 h-9 rounded-lg text-xs font-bold shrink-0 ${textColor} ${dimmed ? 'opacity-30' : ''}`}
+      className={`inline-flex items-center justify-center w-9 h-9 rounded-full text-xs font-bold shrink-0 ${textColor} ${dimmed ? 'opacity-30' : ''}`}
       style={{ backgroundColor: color }}
       aria-hidden="true"
     >
