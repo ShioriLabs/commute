@@ -74,6 +74,15 @@ function isCrawler(ua: string | null): boolean {
 }
 
 async function resolveOg(pathname: string, env: Env): Promise<OgData | null> {
+  // Static pages need no API lookup — resolve before the API_BASE_URL guard.
+  if (pathname === '/map') {
+    return {
+      title: 'Peta Integrasi - Commute',
+      description: 'Peta integrasi antarmoda KRL, MRT, LRT, dan Transjakarta di Jabodetabek',
+      image: 'https://commute.shiorilabs.id/img/og-map.png'
+    }
+  }
+
   const base = env.API_BASE_URL
   if (!base) return null
 
