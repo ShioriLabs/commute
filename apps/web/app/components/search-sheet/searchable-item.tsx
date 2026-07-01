@@ -37,7 +37,7 @@ export default function SearchableItem({ searchable, onClick }: Props) {
               )
             : null}
         </b>
-        { searchable.type === 'STATION' && (searchable as Searchable<Line[]>).body?.length
+        { (searchable.type === 'STATION' || searchable.type === 'HUB') && (searchable as Searchable<Line[]>).body?.length
           ? (
               <ul className="flex flex-row gap-1 flex-wrap">
                 {(searchable as Searchable<Line[]>).body!.map(line => (

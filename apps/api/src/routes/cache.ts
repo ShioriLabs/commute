@@ -84,6 +84,36 @@ app.delete('/stations/:operator/:stationCode/timetable/bust', async (c) => {
   )
 })
 
+app.delete('/hubs/bust', async (c) => {
+  const kvRepository = new KVRepository(c.env.KV)
+
+  const kvKey = `hubs:${c.env.API_VERSION}`
+  await kvRepository.del(kvKey)
+
+  return c.json(
+    Ok(
+      { message: `Cache ${kvKey} has been cleared.` }
+    ),
+    200
+  )
+})
+
+app.delete('/hubs/:slug/bust', async (c) => {
+  const slug = c.req.param('slug')
+
+  const kvRepository = new KVRepository(c.env.KV)
+
+  const kvKey = `hubs:${slug}:${c.env.API_VERSION}`
+  await kvRepository.del(kvKey)
+
+  return c.json(
+    Ok(
+      { message: `Cache ${kvKey} has been cleared.` }
+    ),
+    200
+  )
+})
+
 app.delete('/:operator/:stationCode/timetable/grouped', async (c) => {
   const operatorCode = c.req.param('operator')
   const stationCode = c.req.param('stationCode')

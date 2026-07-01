@@ -71,6 +71,9 @@ export function pointToCapsuleDistance(
   return Math.sqrt(dx * dx + dy * dy)
 }
 
+// Kind-agnostic nearest-capsule hit-test: returns the closest hit point
+// regardless of whether it's a station or a hub. Used by author mode, where
+// every point (including hub regions) must be selectable for editing.
 export function hitTestPoints(
   worldX: number,
   worldY: number,
@@ -88,6 +91,49 @@ export function hitTestPoints(
     }
   }
   return best
+}
+
+// Hub tap targets are authored as points whose id starts with `HUB-` (mirroring
+// hubs.id, e.g. `HUB-DKA`). Station points use `OPERATOR-CODE`.
+export function isHubPoint(p: Point): boolean {
+  return p.id.startsWith('HUB-')
+}
+
+export type HitResult =
+  | { kind: 'station', point: Point }
+  | { kind: 'hub', point: Point }
+
+// Runtime tap hit-test. A hub region and its member pills overlap; a tap on a
+// member pill must open that station, while a tap in the gap between members
+// (inside the authored hub region, outside every pill) opens the hub. So a
+// station hit ALWAYS beats a hub hit, even a geometrically closer one.
+export function hitTest(
+  worldX: number,
+  worldY: number,
+  points: Point[],
+  slopWorld: number
+): HitResult | null {
+  let bestStation: Point | null = null
+  let bestStationDist = Infinity
+  let bestHub: Point | null = null
+  let bestHubDist = Infinity
+  for (const p of points) {
+    const d = pointToCapsuleDistance(worldX, worldY, p.ax, p.ay, p.bx, p.by)
+    const effective = d - (p.r + slopWorld)
+    if (effective > 0) continue
+    if (isHubPoint(p)) {
+      if (effective < bestHubDist) {
+        bestHubDist = effective
+        bestHub = p
+      }
+    } else if (effective < bestStationDist) {
+      bestStationDist = effective
+      bestStation = p
+    }
+  }
+  if (bestStation) return { kind: 'station', point: bestStation }
+  if (bestHub) return { kind: 'hub', point: bestHub }
+  return null
 }
 
 export function createRenderer(

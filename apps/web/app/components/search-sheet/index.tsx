@@ -1,4 +1,5 @@
 import type { Station } from 'models/stations'
+import type { Hub } from 'models/hub'
 import type { StandardResponse } from '@schema/response'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
@@ -8,6 +9,7 @@ import { fetcher } from 'utils/fetcher'
 import { levenshteinDistance } from 'utils/levenshtein'
 import { CloseButton, DialogTitle } from '@headlessui/react'
 import type { Searchable } from 'models/searchable'
+import { hubToSearchable } from 'models/hub'
 import SearchableItem from './searchable-item'
 
 const SCORE_THRESHOLD = 3
@@ -62,6 +64,7 @@ function HighlightedStationList({ title, stationIDs, className }: { title: strin
 
 export default function SearchSheet() {
   const { data: stations, isLoading } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
+  const { data: hubs } = useSWR<StandardResponse<Hub[]>>(new URL('/hubs', import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [recentlySearched, setRecentlySearched] = useState<string[]>([])
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -90,8 +93,14 @@ export default function SearchSheet() {
       }
     }
 
+    if (hubs && hubs.data) {
+      for (const hub of hubs.data) {
+        _searchables.push(hubToSearchable(hub))
+      }
+    }
+
     return _searchables
-  }, [stations])
+  }, [stations, hubs])
 
   const filteredSearchables = useMemo(() => {
     if (searchables.length === 0 || searchQuery.length < 2) return []
@@ -140,6 +149,8 @@ export default function SearchSheet() {
   }, [searchInputRef])
 
   const handleSearchClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    // Only stations feed the "recently searched" rail — it resolves station IDs
+    // against /stations. Hub clicks carry data-hub-id but aren't stored here yet.
     const stationId = e.currentTarget.dataset.stationId
     if (!stationId) return
 

@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useNavigationType, useSearchParams } from 'react-router'
 import { XIcon, InfoIcon } from '@phosphor-icons/react'
 import useSWR from 'swr'
+import type { StandardResponse } from '@schema/response'
+import type { Hub } from 'models/hub'
+import { fetcher } from 'utils/fetcher'
 import {
   createRenderer,
-  hitTestPoints,
+  hitTest,
   pickTier,
   type Manifest,
   type Point,
@@ -15,6 +18,7 @@ import {
 } from '../lib/map-renderer'
 import { AuthorOverlay, handleAuthorTap } from '../components/map-author'
 import StationSheet from '../components/station-sheet'
+import HubSheet from '../components/hub-sheet'
 
 const TAP_MOVEMENT_THRESHOLD_CSS_PX = 8
 const TOUCH_HIT_SLOP_CSS_PX = 12
@@ -71,6 +75,18 @@ export default function MapPage() {
     '/maps/fdtj/points.json',
     (url: string) => fetch(url).then(r => r.json())
   )
+  // Hubs power the map's hub tap targets: a `HUB-…` point id resolves to a hub
+  // slug to open the HubSheet. Fetched once here (shared with search via SWR's
+  // cache keyed by URL).
+  const { data: hubs } = useSWR<StandardResponse<Hub[]>>(
+    new URL('/hubs', import.meta.env.VITE_API_BASE_URL).href,
+    fetcher
+  )
+  const hubSlugById = useMemo(() => {
+    const index = new Map<string, string>()
+    for (const hub of hubs?.data ?? []) index.set(hub.id, hub.slug)
+    return index
+  }, [hubs])
 
   const [searchParams] = useSearchParams()
   const debugHitboxes = import.meta.env.DEV && searchParams.get('debug') === 'hitboxes'
@@ -152,6 +168,7 @@ export default function MapPage() {
   // Currently selected station for the bottom sheet. Pill IDs are formatted
   // `OPERATOR-CODE` (e.g. KCI-MRI); split on first hyphen.
   const [selectedStation, setSelectedStation] = useState<{ operator: string, code: string } | null>(null)
+  const [selectedHubSlug, setSelectedHubSlug] = useState<string | null>(null)
 
   // Two transforms: `target` is where we want to be; `rendered` is what we
   // currently draw. The rAF loop lerps rendered toward target each frame so
@@ -495,17 +512,29 @@ export default function MapPage() {
     }
 
     const points = workingPointsRef.current
-    const hit = points.length > 0 ? hitTestPoints(worldX, worldY, points, slopWorld) : null
-    if (hit && hit.id !== 'KCI-GMR') {
-      // Pill IDs look like "KCI-MRI". Split on first hyphen so codes
-      // containing further hyphens still parse correctly.
-      const dash = hit.id.indexOf('-')
-      if (dash > 0) {
-        const operator = hit.id.slice(0, dash)
-        const code = hit.id.slice(dash + 1)
-        setSelectedStation({ operator, code })
+    const hit = points.length > 0 ? hitTest(worldX, worldY, points, slopWorld) : null
+    if (hit && hit.point.id !== 'KCI-GMR') {
+      if (hit.kind === 'hub') {
+        // Hub region tapped (no member pill won). Resolve `HUB-…` id → slug.
+        const slug = hubSlugById.get(hit.point.id)
+        if (slug) {
+          setSelectedStation(null)
+          setSelectedHubSlug(slug)
+        } else {
+          console.warn('Unknown hub point id:', hit.point.id)
+        }
       } else {
-        console.warn('Unrecognized point id format:', hit.id)
+        // Pill IDs look like "KCI-MRI". Split on first hyphen so codes
+        // containing further hyphens still parse correctly.
+        const dash = hit.point.id.indexOf('-')
+        if (dash > 0) {
+          const operator = hit.point.id.slice(0, dash)
+          const code = hit.point.id.slice(dash + 1)
+          setSelectedHubSlug(null)
+          setSelectedStation({ operator, code })
+        } else {
+          console.warn('Unrecognized point id format:', hit.point.id)
+        }
       }
     } else {
       // Empty-space tap: toggle the chrome (show if hidden, hide if visible).
@@ -683,6 +712,11 @@ export default function MapPage() {
         operator={selectedStation?.operator ?? null}
         code={selectedStation?.code ?? null}
         onClose={() => setSelectedStation(null)}
+      />
+
+      <HubSheet
+        slug={selectedHubSlug}
+        onClose={() => setSelectedHubSlug(null)}
       />
     </main>
   )
