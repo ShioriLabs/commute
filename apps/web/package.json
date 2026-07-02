@@ -8,7 +8,8 @@
     "dev": "react-router dev",
     "start": "react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc",
-    "build:map-tiles": "tsx scripts/build-map-tiles.ts"
+    "build:map-tiles": "tsx scripts/build-map-tiles.ts",
+    "build:og": "tsx scripts/build-og-images.ts"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.6.0",
@@ -26,8 +27,9 @@
     "twgl.js": "^7.0.0"
   },
   "devDependencies": {
-    "@react-router/dev": "^7.6.2",
     "@cloudflare/workers-types": "^4.20251011.0",
+    "@react-router/dev": "^7.6.2",
+    "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/vite": "^4.0.0",
     "@types/node": "^20",
     "@types/react": "^19.0.1",

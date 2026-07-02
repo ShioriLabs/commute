@@ -35,9 +35,19 @@ const INERTIA_MIN_VELOCITY = 0.04
 const VELOCITY_SAMPLE_WINDOW_MS = 80
 
 export function meta() {
+  const title = 'Peta Integrasi - Commute'
+  const description = 'Peta integrasi antarmoda KRL, MRT, LRT, dan Transjakarta di Jabodetabek'
+  const image = 'https://commute.shiorilabs.id/img/og-map.png'
   return [
-    { title: 'Peta Integrasi - Commute' },
-    { name: 'theme-color', content: '#FFFFFF' }
+    { title },
+    { name: 'theme-color', content: '#FFFFFF' },
+    { name: 'description', content: description },
+    { property: 'og:title', content: title },
+    { property: 'og:description', content: description },
+    { property: 'og:image', content: image },
+    { name: 'twitter:title', content: title },
+    { name: 'twitter:description', content: description },
+    { name: 'twitter:image', content: image }
   ]
 }
 
