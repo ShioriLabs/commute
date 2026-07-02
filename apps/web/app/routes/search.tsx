@@ -1,10 +1,12 @@
 import type { Station } from 'models/stations'
+import type { OperatorWithLines } from 'models/operator'
 import type { StandardResponse } from '@schema/response'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { XIcon } from '@phosphor-icons/react'
 import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
+import { getForegroundColor } from 'utils/colors'
 import { levenshteinDistance } from 'utils/levenshtein'
 
 const swrConfig = {
@@ -73,6 +75,37 @@ function HighlightedStationList({ title, stationIDs, className }: { title: strin
             </Link>
           </li>
         ))}
+      </ul>
+    </article>
+  )
+}
+
+// All rail lines as colored chips linking to their line pages, grouped in a
+// single wrap. Fed by /operators (which embeds each operator's lines).
+function LineChipList({ className }: { className?: string }) {
+  const { data: operators } = useSWR<StandardResponse<OperatorWithLines[]>>(
+    new URL('/operators', import.meta.env.VITE_API_BASE_URL).href,
+    fetcher,
+    swrConfig
+  )
+
+  if (!operators?.data?.length) return null
+
+  return (
+    <article className={`max-w-3xl mx-auto ${className}`}>
+      <h1 className="text-xl font-bold mx-8">Lin</h1>
+      <ul className="mt-2 flex flex-row flex-wrap gap-2 px-8">
+        {operators.data.flatMap(op => op.lines.map(line => (
+          <li key={`${op.code}-${line.lineCode}`}>
+            <Link
+              to={`/lines/${op.code}/${line.lineCode}`}
+              className={`block text-sm font-semibold px-3 py-1 rounded-full ${getForegroundColor(line.colorCode) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`}
+              style={{ backgroundColor: line.colorCode }}
+            >
+              {line.name.replace(/Lin /g, '')}
+            </Link>
+          </li>
+        )))}
       </ul>
     </article>
   )
@@ -174,6 +207,7 @@ export default function SearchPage({ onClose }: Props) {
                 : null}
               <HighlightedStationList title="Stasiun Transit" stationIDs={['KCI-MRI', 'KCI-SUD', 'MRTJ-DKA', 'KCI-DU', 'KCI-THB']} className="mt-2" />
               <HighlightedStationList title="Jakselcore" stationIDs={['KCI-TEB', 'MRTJ-BLM', 'MRTJ-IST', 'KCI-SUD', 'MRTJ-DKA']} className="mt-2" />
+              <LineChipList className="mt-6 pb-8" />
             </>
           )
         : null}
