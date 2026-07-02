@@ -17,7 +17,11 @@ interface Env {
   API_BASE_URL: string
 }
 
-const DEFAULT_OG_IMAGE = 'https://commute.shiorilabs.id/img/og-image.png'
+const SITE_ORIGIN = 'https://commute.shiorilabs.id'
+// Prerendered per-item cards (see scripts/build-og-images.ts). Station files are
+// keyed by station id (OPERATOR-CODE); hubs by slug.
+const stationOgImage = (id: string) => `${SITE_ORIGIN}/img/og/stations/${id}.png`
+const hubOgImage = (slug: string) => `${SITE_ORIGIN}/img/og/hubs/${slug}.png`
 
 // Lowercased substrings matched against the User-Agent of known link-preview
 // crawlers. Humans never match, so they skip the API subrequest entirely.
@@ -50,6 +54,7 @@ interface ApiLine {
 }
 
 interface ApiStation {
+  id: string
   name: string
   formattedName: string | null
   lines: ApiLine[]
@@ -100,7 +105,7 @@ async function resolveOg(pathname: string, env: Env): Promise<OgData | null> {
       description: memberNames
         ? `Stasiun terintegrasi: ${memberNames}`
         : 'Stasiun terintegrasi',
-      image: hub.heroImage || DEFAULT_OG_IMAGE
+      image: hub.heroImage || hubOgImage(slug)
     }
   }
 
@@ -116,7 +121,7 @@ async function resolveOg(pathname: string, env: Env): Promise<OgData | null> {
     return {
       title: `${name} - Commute`,
       description: `Lihat jadwal kereta di Stasiun ${name}`,
-      image: DEFAULT_OG_IMAGE
+      image: stationOgImage(station.id)
     }
   }
 
