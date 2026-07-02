@@ -1,24 +1,30 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useNavigationType, useSearchParams } from 'react-router'
-import { XIcon, InfoIcon } from '@phosphor-icons/react'
+import { XIcon, InfoIcon, CornersInIcon } from '@phosphor-icons/react'
 import useSWR from 'swr'
 import type { StandardResponse } from '@schema/response'
 import type { Hub } from 'models/hub'
+import type { Station } from 'models/stations'
 import { fetcher } from 'utils/fetcher'
+import { hexToRgb01 } from 'utils/colors'
+import { haptic } from 'utils/haptics'
 import {
   createRenderer,
   hitTest,
   pickTier,
+  SCRIM_MAX_ALPHA,
   type Manifest,
   type Point,
   type PointsManifest,
   type Renderer,
+  type SelectionOverlay,
   type Tier,
   type Transform
 } from '../lib/map-renderer'
 import { AuthorOverlay, handleAuthorTap } from '../components/map-author'
 import StationSheet from '../components/station-sheet'
 import HubSheet from '../components/hub-sheet'
+import { PEEK_FRACTION } from '../components/bottom-sheet'
 
 const TAP_MOVEMENT_THRESHOLD_CSS_PX = 8
 const TOUCH_HIT_SLOP_CSS_PX = 12
@@ -33,6 +39,15 @@ const INERTIA_TAU_MS = 180
 const INERTIA_MIN_VELOCITY = 0.04
 // Use the most recent N ms of pointer-move samples to estimate release velocity.
 const VELOCITY_SAMPLE_WINDOW_MS = 80
+
+// Selection spotlight animation durations.
+const SPOTLIGHT_IN_MS = 350
+const SPOTLIGHT_OUT_MS = 220
+// Halo color before the selection's line color resolves (slate-500).
+const SPOTLIGHT_NEUTRAL_COLOR: [number, number, number] = [0.39, 0.45, 0.55]
+// Two taps within this window and radius count as a double-tap.
+const DOUBLE_TAP_MS = 300
+const DOUBLE_TAP_RADIUS_CSS_PX = 30
 
 export function meta() {
   const title = 'Peta Integrasi - Commute'
@@ -95,6 +110,16 @@ export default function MapPage() {
   const hubSlugById = useMemo(() => {
     const index = new Map<string, string>()
     for (const hub of hubs?.data ?? []) index.set(hub.id, hub.slug)
+    return index
+  }, [hubs])
+  // Spotlight halo color per hub, resolvable synchronously at tap time (the
+  // hubs list is already loaded; stations need a fetch — see the effect below).
+  const hubColorById = useMemo(() => {
+    const index = new Map<string, [number, number, number]>()
+    for (const hub of hubs?.data ?? []) {
+      const color = hub.lines[0]?.colorCode
+      if (color) index.set(hub.id, hexToRgb01(color))
+    }
     return index
   }, [hubs])
 
@@ -210,6 +235,72 @@ export default function MapPage() {
   const inertiaRef = useRef<{ vx: number, vy: number } | null>(null)
   // Timestamp of last animation tick; used for frame-rate-independent lerp.
   const lastFrameTimeRef = useRef<number>(0)
+
+  // Selection spotlight: scrim + halo around the selected pill, animated in
+  // the rAF tick. `lastScrim`/`lastRing` mirror the values drawn on the most
+  // recent frame so phase changes (switch, exit) can start from the current
+  // visual state instead of jumping.
+  const spotlightRef = useRef<{
+    point: Point
+    color: [number, number, number]
+    phase: 'in' | 'hold' | 'out'
+    phaseStart: number
+    scrimFrom: number
+    ringFrom: number
+    lastScrim: number
+    lastRing: number
+  } | null>(null)
+  // Eased camera flight (selection centering, double-tap zoom, recenter).
+  // While active it writes both target and rendered so the plain lerp is inert.
+  const flyToRef = useRef<{ from: Transform, to: Transform, start: number, duration: number } | null>(null)
+  // Previous clean tap, for double-tap detection.
+  const lastTapRef = useRef<{ t: number, x: number, y: number, wasEmpty: boolean } | null>(null)
+  // Recenter button visibility; ref mirrors state so the tick only calls
+  // setState when the value actually flips.
+  const [isZoomedIn, setIsZoomedIn] = useState(false)
+  const isZoomedInRef = useRef(false)
+  // Tap ripples (screen-space DOM overlay).
+  const [ripples, setRipples] = useState<Array<{ id: number, x: number, y: number }>>([])
+  const rippleIdRef = useRef(0)
+
+  // Resolve the selected station's line color for the spotlight halo. Same
+  // URL key as StationSheet's content, so SWR dedupes — no extra request. The
+  // halo starts neutral and re-tints when this resolves.
+  const { data: spotlightStation } = useSWR<StandardResponse<Station>>(
+    selectedStation
+      ? new URL(`/stations/${selectedStation.operator}/${selectedStation.code}`, import.meta.env.VITE_API_BASE_URL).href
+      : null,
+    fetcher
+  )
+  useEffect(() => {
+    const spot = spotlightRef.current
+    if (!spot || !selectedStation) return
+    const color = spotlightStation?.data?.lines?.[0]?.colorCode
+    if (!color) return
+    if (spot.point.id !== `${selectedStation.operator}-${selectedStation.code}`) return
+    spot.color = hexToRgb01(color)
+    dirtyRef.current = true
+  }, [spotlightStation, selectedStation])
+
+  // Fade the spotlight out from whatever it currently shows. No-ops when
+  // there's no spotlight or it's already exiting.
+  const beginSpotlightExit = useCallback(() => {
+    const spot = spotlightRef.current
+    if (!spot || spot.phase === 'out') return
+    spot.phase = 'out'
+    spot.phaseStart = performance.now()
+    spot.scrimFrom = spot.lastScrim
+    spot.ringFrom = spot.lastRing
+    dirtyRef.current = true
+  }, [])
+
+  // Backstop: if the selection is cleared through any path that didn't go
+  // through a sheet dismiss (the sheets' onDismissStart handles the common
+  // case as soon as the close starts), fade the spotlight out.
+  useEffect(() => {
+    if (selectedStation || selectedHubSlug) return
+    beginSpotlightExit()
+  }, [selectedStation, selectedHubSlug, beginSpotlightExit])
 
   useLayoutEffect(() => {
     if (!viewportRef.current) return
@@ -338,6 +429,24 @@ export default function MapPage() {
       const dt = Math.min(64, now - last) // clamp to 64ms to avoid huge jumps after a stall
       lastFrameTimeRef.current = now
 
+      // Eased camera flight: drives both target and rendered so the plain
+      // lerp below stays inert for its duration. Canceled by pointerdown and
+      // wheel (like inertia), so it never fights a gesture.
+      const fly = flyToRef.current
+      if (fly && !gestureActiveRef.current) {
+        const p = Math.min(1, (now - fly.start) / fly.duration)
+        const e = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2 // easeInOutCubic
+        const mixed = {
+          tx: fly.from.tx + (fly.to.tx - fly.from.tx) * e,
+          ty: fly.from.ty + (fly.to.ty - fly.from.ty) * e,
+          scale: fly.from.scale + (fly.to.scale - fly.from.scale) * e
+        }
+        targetRef.current = mixed
+        renderedRef.current = mixed
+        if (p >= 1) flyToRef.current = null
+        dirtyRef.current = true
+      }
+
       // Inertia: decay velocity, add to target.
       const inertia = inertiaRef.current
       if (inertia && !gestureActiveRef.current) {
@@ -380,6 +489,43 @@ export default function MapPage() {
         dirtyRef.current = true
       }
 
+      // Selection spotlight: animate in/out phases here (forcing redraw while
+      // they run); in the steady `hold` phase the overlay is drawn on any
+      // dirty frame — tracking pan/zoom — without forcing continuous redraws.
+      const spot = spotlightRef.current
+      let overlay: SelectionOverlay | null = null
+      if (spot) {
+        const elapsed = now - spot.phaseStart
+        const pt = spot.point
+        let scrimAlpha: number
+        let ringProgress: number
+        if (spot.phase === 'in') {
+          const p = Math.min(1, elapsed / SPOTLIGHT_IN_MS)
+          const e = 1 - Math.pow(1 - p, 3) // easeOutCubic
+          scrimAlpha = spot.scrimFrom + (SCRIM_MAX_ALPHA - spot.scrimFrom) * e
+          ringProgress = spot.ringFrom + (1 - spot.ringFrom) * e
+          if (p >= 1) spot.phase = 'hold'
+          else dirtyRef.current = true
+        } else if (spot.phase === 'hold') {
+          scrimAlpha = SCRIM_MAX_ALPHA
+          ringProgress = 1
+        } else {
+          const p = Math.min(1, elapsed / SPOTLIGHT_OUT_MS)
+          scrimAlpha = spot.scrimFrom * (1 - p)
+          ringProgress = spot.ringFrom * (1 - p)
+          if (p >= 1) spotlightRef.current = null
+          dirtyRef.current = true
+        }
+        spot.lastScrim = scrimAlpha
+        spot.lastRing = ringProgress
+        overlay = {
+          ax: pt.ax, ay: pt.ay, bx: pt.bx, by: pt.by, r: pt.r,
+          color: spot.color,
+          scrimAlpha,
+          ringProgress
+        }
+      }
+
       if (dirtyRef.current) {
         const dpr = window.devicePixelRatio || 1
         const r = renderedRef.current
@@ -391,9 +537,16 @@ export default function MapPage() {
         const maxTier: Tier = (isSmall || lowCore) ? 2 : 4
         const targetTier = pickTier(r.scale, dpr, currentTierRef.current, maxTier)
         currentTierRef.current = targetTier
-        renderer.draw(r, viewportSize.w, viewportSize.h, dpr, targetTier)
+        renderer.draw(r, viewportSize.w, viewportSize.h, dpr, targetTier, overlay)
         dirtyRef.current = false
         if (import.meta.env.DEV && authorMode) setRenderTick(n => n + 1)
+      }
+
+      // Recenter button visibility: only flip state when it changes.
+      const zoomedIn = renderedRef.current.scale > minScale * 1.02
+      if (zoomedIn !== isZoomedInRef.current) {
+        isZoomedInRef.current = zoomedIn
+        setIsZoomedIn(zoomedIn)
       }
 
       rafRef.current = requestAnimationFrame(tick)
@@ -425,6 +578,76 @@ export default function MapPage() {
     updateTransform({ tx, ty, scale: newScale })
   }
 
+  // Launch an eased camera flight from the currently rendered transform.
+  const flyTo = (to: Transform, duration: number) => {
+    inertiaRef.current = null
+    flyToRef.current = {
+      from: { ...renderedRef.current },
+      to,
+      start: performance.now(),
+      duration
+    }
+    dirtyRef.current = true
+  }
+
+  // Center a selected pill in the area left visible above the peeked sheet.
+  const flyToPoint = (p: Point) => {
+    const cx = (p.ax + p.bx) / 2
+    const cy = (p.ay + p.by) / 2
+    const s = targetRef.current.scale
+    const peekPx = Math.round(window.innerHeight * PEEK_FRACTION)
+    const to = clampTransform(
+      {
+        tx: viewportSize.w / 2 - cx * s,
+        ty: (viewportSize.h - peekPx) / 2 - cy * s,
+        scale: s
+      },
+      viewportSize.w, viewportSize.h, mapW, mapH, minScale
+    )
+    flyTo(to, 450)
+  }
+
+  // Begin (or move) the spotlight. On a selection switch the scrim is already
+  // up — seed it from the last drawn value so it doesn't dip; the ring always
+  // re-animates its settle-in on the new pill.
+  const beginSpotlight = (point: Point, color: [number, number, number]) => {
+    const prevScrim = spotlightRef.current?.lastScrim ?? 0
+    spotlightRef.current = {
+      point,
+      color,
+      phase: 'in',
+      phaseStart: performance.now(),
+      scrimFrom: prevScrim,
+      ringFrom: 0,
+      lastScrim: prevScrim,
+      lastRing: 0
+    }
+    dirtyRef.current = true
+  }
+
+  const doubleTapZoom = (clientX: number, clientY: number) => {
+    const t = targetRef.current
+    let to: Transform
+    if (t.scale >= MAX_SCALE * 0.98) {
+      // At max zoom: toggle back to fit (clampTransform centers it).
+      to = clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale)
+    } else {
+      // Zoom a 2x step toward the tap point (world point under it stays put).
+      const rect = viewportRef.current!.getBoundingClientRect()
+      const px = clientX - rect.left
+      const py = clientY - rect.top
+      const nextScale = Math.min(MAX_SCALE, t.scale * 2)
+      const worldX = (px - t.tx) / t.scale
+      const worldY = (py - t.ty) / t.scale
+      to = clampTransform(
+        { tx: px - worldX * nextScale, ty: py - worldY * nextScale, scale: nextScale },
+        viewportSize.w, viewportSize.h, mapW, mapH, minScale
+      )
+    }
+    haptic()
+    flyTo(to, 350)
+  }
+
   const onPointerDown = (e: React.PointerEvent) => {
     (e.target as Element).setPointerCapture(e.pointerId)
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
@@ -435,10 +658,11 @@ export default function MapPage() {
       pointerType: e.pointerType
     })
     velocitySamplesRef.current.set(e.pointerId, [{ t: e.timeStamp, x: e.clientX, y: e.clientY }])
-    // A new touch cancels in-flight inertia. Adopt the *rendered* transform
-    // as the new target so the finger picks up exactly where the eye sees
-    // the map — no teleport, no jarring stop.
+    // A new touch cancels in-flight inertia and camera flights. Adopt the
+    // *rendered* transform as the new target so the finger picks up exactly
+    // where the eye sees the map — no teleport, no jarring stop.
     inertiaRef.current = null
+    flyToRef.current = null
     targetRef.current = renderedRef.current
     gestureActiveRef.current = true
     if (pointersRef.current.size === 2) {
@@ -499,7 +723,9 @@ export default function MapPage() {
     return { x: (px - t.tx) / t.scale, y: (py - t.ty) / t.scale }
   }
 
-  const tryHitTest = (clientX: number, clientY: number, pointerType: string, shift: boolean) => {
+  // Returns true when the tap landed on empty space (used by the double-tap
+  // disambiguation in endPointer).
+  const tryHitTest = (clientX: number, clientY: number, pointerType: string, shift: boolean): boolean => {
     setAttributionOpen(false)
     const { x: worldX, y: worldY } = clientToWorld(clientX, clientY)
     const t = transformRef.current
@@ -518,7 +744,7 @@ export default function MapPage() {
         setEditingId,
         defaultR: 22
       })
-      return
+      return false
     }
 
     const points = workingPointsRef.current
@@ -530,6 +756,9 @@ export default function MapPage() {
         if (slug) {
           setSelectedStation(null)
           setSelectedHubSlug(slug)
+          haptic()
+          beginSpotlight(hit.point, hubColorById.get(hit.point.id) ?? SPOTLIGHT_NEUTRAL_COLOR)
+          flyToPoint(hit.point)
         } else {
           console.warn('Unknown hub point id:', hit.point.id)
         }
@@ -542,14 +771,19 @@ export default function MapPage() {
           const code = hit.point.id.slice(dash + 1)
           setSelectedHubSlug(null)
           setSelectedStation({ operator, code })
+          haptic()
+          // Halo starts neutral; re-tints when the station fetch resolves.
+          beginSpotlight(hit.point, SPOTLIGHT_NEUTRAL_COLOR)
+          flyToPoint(hit.point)
         } else {
           console.warn('Unrecognized point id format:', hit.point.id)
         }
       }
-    } else {
-      // Empty-space tap: toggle the chrome (show if hidden, hide if visible).
-      setChromeVisible(v => !v)
+      return false
     }
+    // Empty-space tap: toggle the chrome (show if hidden, hide if visible).
+    setChromeVisible(v => !v)
+    return true
   }
 
   const endPointer = (e: React.PointerEvent) => {
@@ -568,7 +802,35 @@ export default function MapPage() {
       && tap.maxDist <= TAP_MOVEMENT_THRESHOLD_CSS_PX
       && !wasPinching
     ) {
-      tryHitTest(e.clientX, e.clientY, tap.pointerType, e.shiftKey)
+      // Tap ripple (screen-space DOM overlay; capped to 4 concurrent).
+      const rect = viewportRef.current?.getBoundingClientRect()
+      if (rect) {
+        const id = rippleIdRef.current++
+        const x = e.clientX - rect.left
+        const y = e.clientY - rect.top
+        setRipples(rs => [...rs.slice(-3), { id, x, y }])
+      }
+
+      // Double-tap detection without delaying single taps: the first tap
+      // hit-tests immediately; a quick second tap near it becomes a zoom
+      // (only for empty-space taps — a pill tap already has its selection
+      // fly-to in motion).
+      const prevTap = lastTapRef.current
+      const isDoubleTap = !authorMode
+        && prevTap !== null
+        && e.timeStamp - prevTap.t < DOUBLE_TAP_MS
+        && Math.hypot(e.clientX - prevTap.x, e.clientY - prevTap.y) < DOUBLE_TAP_RADIUS_CSS_PX
+      if (isDoubleTap) {
+        lastTapRef.current = null
+        if (prevTap.wasEmpty) {
+          // Revert the first tap's chrome toggle, then zoom.
+          setChromeVisible(v => !v)
+          doubleTapZoom(e.clientX, e.clientY)
+        }
+      } else {
+        const wasEmpty = tryHitTest(e.clientX, e.clientY, tap.pointerType, e.shiftKey)
+        lastTapRef.current = { t: e.timeStamp, x: e.clientX, y: e.clientY, wasEmpty }
+      }
     }
 
     if (pointersRef.current.size < 2) {
@@ -602,6 +864,8 @@ export default function MapPage() {
     if (!el) return
     const handler = (ev: WheelEvent) => {
       ev.preventDefault()
+      // Manual zoom takes over from any in-flight camera animation.
+      flyToRef.current = null
       const factor = Math.exp(-ev.deltaY * WHEEL_ZOOM_INTENSITY)
       zoomAt(ev.clientX, ev.clientY, factor)
       setChromeVisible(false)
@@ -643,6 +907,15 @@ export default function MapPage() {
         aria-label="Peta integrasi transportasi umum Jakarta"
       >
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+        {ripples.map(r => (
+          <span
+            key={r.id}
+            className="map-ripple"
+            style={{ left: r.x, top: r.y }}
+            onAnimationEnd={() => setRipples(rs => rs.filter(x => x.id !== r.id))}
+            aria-hidden
+          />
+        ))}
       </div>
 
       <div
@@ -660,6 +933,22 @@ export default function MapPage() {
         className="absolute top-4 right-4 z-20 rounded-full bg-white/90 backdrop-blur shadow-lg w-11 h-11 flex items-center justify-center cursor-pointer"
       >
         <XIcon weight="bold" className="w-6 h-6 text-slate-700" />
+      </button>
+
+      <button
+        type="button"
+        onClick={() => {
+          haptic()
+          flyTo(
+            clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale),
+            450
+          )
+        }}
+        aria-label="Kembali ke tampilan penuh"
+        tabIndex={isZoomedIn ? 0 : -1}
+        className={`absolute bottom-4 right-16 z-20 rounded-full bg-white/90 backdrop-blur shadow-lg w-10 h-10 flex items-center justify-center cursor-pointer transition-opacity duration-200 ${isZoomedIn ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+      >
+        <CornersInIcon weight="bold" className="w-5 h-5 text-slate-700" />
       </button>
 
       <button
@@ -722,11 +1011,16 @@ export default function MapPage() {
         operator={selectedStation?.operator ?? null}
         code={selectedStation?.code ?? null}
         onClose={() => setSelectedStation(null)}
+        // Start the spotlight exit as soon as the dismiss begins — unless the
+        // sheet is closing because the user switched to a hub, whose
+        // spotlight is already animating in.
+        onDismissStart={() => { if (!selectedHubSlug) beginSpotlightExit() }}
       />
 
       <HubSheet
         slug={selectedHubSlug}
         onClose={() => setSelectedHubSlug(null)}
+        onDismissStart={() => { if (!selectedStation) beginSpotlightExit() }}
       />
     </main>
   )

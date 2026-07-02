@@ -29,3 +29,29 @@ body {
     );
   }
 }
+
+/* Tap ripple on the map canvas: an expanding, fading ring at the tap point.
+   Rendered as a DOM overlay (screen-space) so it works identically for the
+   WebGL and Canvas2D renderers. */
+.map-ripple {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  margin-left: -20px;
+  margin-top: -20px;
+  border-radius: 9999px;
+  border: 2px solid rgb(148 163 184 / 0.6);
+  pointer-events: none;
+  animation: map-ripple 350ms ease-out forwards;
+}
+
+@keyframes map-ripple {
+  from {
+    transform: scale(0.3);
+    opacity: 0.7;
+  }
+  to {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}

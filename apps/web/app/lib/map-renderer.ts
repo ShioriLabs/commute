@@ -39,9 +39,36 @@ export interface PointsManifest {
   points: Point[]
 }
 
+// Spotlight overlay for the currently selected station/hub: a dimming scrim
+// with a feathered punch-out around the capsule, plus a glowing halo ring in
+// the selection's line color. The renderers are stateless with respect to
+// time — map.tsx animates scrimAlpha/ringProgress and passes current values.
+export interface SelectionOverlay {
+  ax: number
+  ay: number
+  bx: number
+  by: number
+  r: number
+  color: [number, number, number] // 0..1 rgb
+  scrimAlpha: number // 0..SCRIM_MAX_ALPHA, current animated value
+  ringProgress: number // 0..1: drives ring offset (settle-in) and alpha
+}
+
+export const SCRIM_MAX_ALPHA = 0.32
+// World units so the spotlight stays "attached to the map" across zoom.
+export const SPOTLIGHT_FEATHER_WORLD = 26
+export const RING_WIDTH_WORLD = 5
+// Ring animates from MAX offset (outside) down to REST as ringProgress → 1.
+export const RING_MAX_OFFSET_WORLD = 30
+export const RING_REST_OFFSET_WORLD = 8
+
+export function ringOffsetWorld(ringProgress: number): number {
+  return RING_MAX_OFFSET_WORLD + (RING_REST_OFFSET_WORLD - RING_MAX_OFFSET_WORLD) * ringProgress
+}
+
 export interface Renderer {
   kind: 'webgl2' | 'canvas2d'
-  draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier): void
+  draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null): void
   resize(cssW: number, cssH: number, dpr: number): void
   requestTier(r: number, c: number, tier: Tier): void
   setPoints(points: Point[]): void

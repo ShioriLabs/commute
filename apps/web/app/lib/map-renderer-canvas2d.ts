@@ -1,5 +1,5 @@
-import type { Manifest, Point, Renderer, Tier, Transform } from './map-renderer'
-import { tileKey } from './map-renderer'
+import type { Manifest, Point, Renderer, SelectionOverlay, Tier, Transform } from './map-renderer'
+import { RING_WIDTH_WORLD, SPOTLIGHT_FEATHER_WORLD, ringOffsetWorld, tileKey } from './map-renderer'
 import { createTileSource } from './map-renderer-tile-source'
 
 interface TileEntry {
@@ -35,6 +35,12 @@ export function createCanvas2DRenderer(
   // reclaim the memory.
   let preview: ImageBitmap | null = null
   let previewLoading = false
+
+  // Offscreen canvas for the selection scrim. The punch-out uses
+  // destination-out compositing, which would erase the map if done on the
+  // main canvas — so the scrim is composed here and drawn over in one blit.
+  const scrimCanvas = document.createElement('canvas')
+  const scrimCtx = scrimCanvas.getContext('2d')
 
   function ensureTile(r: number, c: number): TileEntry {
     const key = tileKey(r, c)
@@ -97,9 +103,60 @@ export function createCanvas2DRenderer(
     const h = Math.max(1, Math.round(cssH * dpr))
     if (canvas.width !== w) canvas.width = w
     if (canvas.height !== h) canvas.height = h
+    if (scrimCanvas.width !== w) scrimCanvas.width = w
+    if (scrimCanvas.height !== h) scrimCanvas.height = h
   }
 
-  function draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier) {
+  function drawSelection(sel: SelectionOverlay, transform: Transform, cssW: number, cssH: number, dpr: number) {
+    if (sel.scrimAlpha > 0 && scrimCtx) {
+      if (scrimCanvas.width !== canvas.width) scrimCanvas.width = canvas.width
+      if (scrimCanvas.height !== canvas.height) scrimCanvas.height = canvas.height
+      scrimCtx.setTransform(1, 0, 0, 1, 0, 0)
+      scrimCtx.clearRect(0, 0, scrimCanvas.width, scrimCanvas.height)
+      scrimCtx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      scrimCtx.fillStyle = `rgba(15, 23, 42, ${sel.scrimAlpha})`
+      scrimCtx.fillRect(0, 0, cssW, cssH)
+      scrimCtx.translate(transform.tx, transform.ty)
+      scrimCtx.scale(transform.scale, transform.scale)
+      // Feathered punch-out: accumulate partial erases over shrinking radii,
+      // then hard-clear the capsule interior.
+      scrimCtx.globalCompositeOperation = 'destination-out'
+      const steps = 5
+      for (let i = steps; i >= 1; i--) {
+        const rr = sel.r + SPOTLIGHT_FEATHER_WORLD * (i / steps)
+        scrimCtx.fillStyle = `rgba(0, 0, 0, ${Math.min(1, (1 / steps) * 1.2)})`
+        drawCapsule(scrimCtx, sel.ax, sel.ay, sel.bx, sel.by, rr)
+        scrimCtx.fill()
+      }
+      scrimCtx.fillStyle = 'rgba(0, 0, 0, 1)'
+      drawCapsule(scrimCtx, sel.ax, sel.ay, sel.bx, sel.by, sel.r)
+      scrimCtx.fill()
+      scrimCtx.globalCompositeOperation = 'source-over'
+
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.drawImage(scrimCanvas, 0, 0)
+      // Restore world transform for the halo below.
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      ctx.translate(transform.tx, transform.ty)
+      ctx.scale(transform.scale, transform.scale)
+    }
+
+    if (sel.ringProgress > 0) {
+      const r = Math.round(sel.color[0] * 255)
+      const g = Math.round(sel.color[1] * 255)
+      const b = Math.round(sel.color[2] * 255)
+      ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${sel.ringProgress})`
+      ctx.lineWidth = RING_WIDTH_WORLD
+      ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${sel.ringProgress})`
+      ctx.shadowBlur = 12 * transform.scale
+      drawCapsule(ctx, sel.ax, sel.ay, sel.bx, sel.by, sel.r + ringOffsetWorld(sel.ringProgress))
+      ctx.stroke()
+      ctx.shadowColor = 'transparent'
+      ctx.shadowBlur = 0
+    }
+  }
+
+  function draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null) {
     if (disposed) return
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.fillStyle = '#ffffff'
@@ -161,6 +218,10 @@ export function createCanvas2DRenderer(
         drawCapsule(ctx, p.ax, p.ay, p.bx, p.by, p.r)
         ctx.fill()
       }
+    }
+
+    if (selection && (selection.scrimAlpha > 0 || selection.ringProgress > 0)) {
+      drawSelection(selection, transform, cssW, cssH, dpr)
     }
   }
 

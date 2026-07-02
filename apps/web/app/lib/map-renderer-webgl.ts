@@ -1,6 +1,6 @@
 import * as twgl from 'twgl.js'
-import type { Manifest, Point, Renderer, Tier, Transform } from './map-renderer'
-import { tileKey } from './map-renderer'
+import type { Manifest, Point, Renderer, SelectionOverlay, Tier, Transform } from './map-renderer'
+import { RING_WIDTH_WORLD, SPOTLIGHT_FEATHER_WORLD, ringOffsetWorld, tileKey } from './map-renderer'
 import { createTileSource } from './map-renderer-tile-source'
 
 const VS = `#version 300 es
@@ -81,6 +81,50 @@ void main() {
 }
 `
 
+// Selection spotlight: one fullscreen pass drawn last, combining a dimming
+// scrim (feathered punch-out around the selected capsule) and a glowing halo
+// ring. The capsule arrives via uniforms — no per-selection buffers.
+const SPOT_VS = `#version 300 es
+in vec2 a_position; // 0..1 fullscreen quad
+uniform vec2 u_viewport; // css px
+uniform vec3 u_view; // tx, ty, scale
+out vec2 v_world;
+void main() {
+  vec2 css = a_position * u_viewport;
+  gl_Position = vec4(a_position.x * 2.0 - 1.0, 1.0 - a_position.y * 2.0, 0.0, 1.0);
+  v_world = (css - u_view.xy) / u_view.z;
+}
+`
+
+const SPOT_FS = `#version 300 es
+precision highp float;
+in vec2 v_world;
+uniform vec2 u_selA;
+uniform vec2 u_selB;
+uniform float u_selR;
+uniform float u_scrimAlpha;
+uniform float u_feather; // world units
+uniform vec3 u_ringColor;
+uniform float u_ringOffset;
+uniform float u_ringWidth;
+uniform float u_ringAlpha;
+out vec4 outColor;
+void main() {
+  vec2 ab = u_selB - u_selA;
+  float t = clamp(dot(v_world - u_selA, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
+  float d = distance(v_world, u_selA + ab * t) - u_selR; // signed dist to capsule edge
+  // Scrim with a feathered punch-out: 0 inside the capsule, full past feather.
+  float scrim = u_scrimAlpha * smoothstep(0.0, u_feather, d);
+  // Glowing ring centered u_ringOffset outside the capsule edge.
+  float ring = (1.0 - smoothstep(0.0, u_ringWidth, abs(d - u_ringOffset))) * u_ringAlpha;
+  // Soft outer glow hugging the ring.
+  float glow = exp(-max(d - u_ringOffset, 0.0) / (u_ringWidth * 2.5)) * 0.35 * u_ringAlpha;
+  vec3 scrimRgb = vec3(0.06, 0.09, 0.16) * scrim;
+  float a = scrim + (ring + glow) * (1.0 - scrim);
+  outColor = vec4(scrimRgb + u_ringColor * (ring + glow), a); // premultiplied
+}
+`
+
 interface TileEntry {
   texture: WebGLTexture
   tier: Tier | 0
@@ -115,6 +159,12 @@ export function createWebGLRenderer(
   const quadVao = twgl.createVertexArrayInfo(twglGl, programInfo, quadBufferInfo)
 
   const pillProgramInfo = twgl.createProgramInfo(twglGl, [PILL_VS, PILL_FS])
+
+  const spotProgramInfo = twgl.createProgramInfo(twglGl, [SPOT_VS, SPOT_FS])
+  const spotBufferInfo = twgl.createBufferInfoFromArrays(twglGl, {
+    a_position: { numComponents: 2, data: [0, 0, 1, 0, 0, 1, 1, 1] }
+  })
+  const spotVao = twgl.createVertexArrayInfo(twglGl, spotProgramInfo, spotBufferInfo)
 
   const anisoExt = gl.getExtension('EXT_texture_filter_anisotropic')
     ?? gl.getExtension('MOZ_EXT_texture_filter_anisotropic')
@@ -291,7 +341,7 @@ export function createWebGLRenderer(
     if (canvas.height !== h) canvas.height = h
   }
 
-  function draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier) {
+  function draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null) {
     if (disposed) return
     gl.viewport(0, 0, Math.round(cssW * dpr), Math.round(cssH * dpr))
     gl.clearColor(1, 1, 1, 1)
@@ -374,6 +424,25 @@ export function createWebGLRenderer(
       })
       twgl.drawBufferInfo(twglGl, pillVao, gl.TRIANGLES)
     }
+
+    if (selection && (selection.scrimAlpha > 0 || selection.ringProgress > 0)) {
+      gl.useProgram(spotProgramInfo.program)
+      twgl.setBuffersAndAttributes(twglGl, spotProgramInfo, spotVao)
+      twgl.setUniforms(spotProgramInfo, {
+        u_viewport: [cssW, cssH],
+        u_view: [transform.tx, transform.ty, transform.scale],
+        u_selA: [selection.ax, selection.ay],
+        u_selB: [selection.bx, selection.by],
+        u_selR: selection.r,
+        u_scrimAlpha: selection.scrimAlpha,
+        u_feather: SPOTLIGHT_FEATHER_WORLD,
+        u_ringColor: selection.color,
+        u_ringOffset: ringOffsetWorld(selection.ringProgress),
+        u_ringWidth: RING_WIDTH_WORLD,
+        u_ringAlpha: selection.ringProgress
+      })
+      twgl.drawBufferInfo(twglGl, spotVao, gl.TRIANGLE_STRIP)
+    }
   }
 
   function setPoints(next: Point[]) {
@@ -408,6 +477,13 @@ export function createWebGLRenderer(
     }
     if (quadVao.vertexArrayObject) {
       gl.deleteVertexArray(quadVao.vertexArrayObject)
+    }
+    if (spotVao.vertexArrayObject) {
+      gl.deleteVertexArray(spotVao.vertexArrayObject)
+    }
+    for (const k in spotBufferInfo.attribs) {
+      const buf = spotBufferInfo.attribs[k].buffer
+      if (buf) gl.deleteBuffer(buf)
     }
     tileSource.dispose()
   }
