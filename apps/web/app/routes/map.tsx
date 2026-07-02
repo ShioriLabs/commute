@@ -326,12 +326,26 @@ export default function MapPage() {
     : 0.01
 
   // On first measurement, center the map at 50% zoom on the KCI-MRI station.
-  // Falls back to fit-to-viewport center if the anchor pill isn't loaded yet
-  // (in which case the next time this effect runs it will re-center properly).
+  // If points.json hasn't loaded yet, a *provisional* fit-to-viewport center
+  // is applied and the effect re-runs when points arrive to center properly —
+  // unless the user has already moved the map, in which case their position
+  // wins and we latch where they are.
   const didCenterRef = useRef(false)
+  const provisionalCenterRef = useRef<Transform | null>(null)
   useEffect(() => {
     if (didCenterRef.current) return
     if (!viewportSize.w || !viewportSize.h || !mapW || !mapH) return
+
+    const provisional = provisionalCenterRef.current
+    const current = targetRef.current
+    if (provisional && (
+      current.tx !== provisional.tx
+      || current.ty !== provisional.ty
+      || current.scale !== provisional.scale
+    )) {
+      didCenterRef.current = true
+      return
+    }
 
     const fitScale = Math.max(viewportSize.w / mapW, viewportSize.h / mapH)
     const initialScale = Math.max(fitScale, 0.5)
@@ -350,7 +364,10 @@ export default function MapPage() {
     targetRef.current = initial
     renderedRef.current = initial
     dirtyRef.current = true
-    didCenterRef.current = true
+    provisionalCenterRef.current = initial
+    // Latch once the anchor was used — or points have loaded and it doesn't
+    // exist, in which case the fallback is as good as it gets.
+    if (anchor || pointsManifest) didCenterRef.current = true
   }, [viewportSize.w, viewportSize.h, mapW, mapH, pointsManifest])
 
   // Initialize renderer once the manifest is loaded.
