@@ -25,6 +25,12 @@ export type Tier = 1 | 2 | 4
 export const TIERS: Tier[] = [1, 2, 4]
 export const MAX_TIER: Tier = 4
 
+// Tap-target shape: an oriented rounded rectangle. `ax,ay → bx,by` is the
+// centerline, `r` the half-width, and the bounding box extends `r` past both
+// endpoints (identical footprint to the old capsules). `cr` is the corner
+// radius in world units; omitted (or >= r) it degenerates to a capsule, so
+// every pre-`cr` points.json entry keeps its exact old shape. Hubs on the
+// FDTJ map are drawn as rounded rects — author those with a small `cr`.
 export interface Point {
   id: string
   ax: number
@@ -32,6 +38,12 @@ export interface Point {
   bx: number
   by: number
   r: number
+  cr?: number
+}
+
+// Effective corner radius: clamped to [0, r]; missing means fully rounded.
+export function pointCornerRadius(p: Point): number {
+  return Math.max(0, Math.min(p.cr ?? p.r, p.r))
 }
 
 export interface PointsManifest {
@@ -49,6 +61,7 @@ export interface SelectionOverlay {
   bx: number
   by: number
   r: number
+  cr: number // effective corner radius (see pointCornerRadius)
   color: [number, number, number] // 0..1 rgb
   scrimAlpha: number // 0..SCRIM_MAX_ALPHA, current animated value
   ringProgress: number // 0..1: drives ring offset (settle-in) and alpha
@@ -76,29 +89,25 @@ export interface Renderer {
   dispose(): void
 }
 
-export function pointToCapsuleDistance(
-  px: number,
-  py: number,
-  ax: number,
-  ay: number,
-  bx: number,
-  by: number
-): number {
-  const abx = bx - ax
-  const aby = by - ay
-  const apx = px - ax
-  const apy = py - ay
-  const lenSq = abx * abx + aby * aby
-  let t = lenSq > 0 ? (apx * abx + apy * aby) / lenSq : 0
-  t = Math.max(0, Math.min(1, t))
-  const cx = ax + abx * t
-  const cy = ay + aby * t
-  const dx = px - cx
-  const dy = py - cy
-  return Math.sqrt(dx * dx + dy * dy)
+// Signed distance from (px, py) to the boundary of a point's rounded-rect
+// shape — negative inside. Standard rounded-box SDF evaluated in the shape's
+// local frame (x along the a→b axis, y across it).
+export function pointToShapeDistance(px: number, py: number, p: Point): number {
+  const abx = p.bx - p.ax
+  const aby = p.by - p.ay
+  const len = Math.hypot(abx, aby)
+  const dirX = len > 0 ? abx / len : 1
+  const dirY = len > 0 ? aby / len : 0
+  const relX = px - (p.ax + p.bx) / 2
+  const relY = py - (p.ay + p.by) / 2
+  const cr = pointCornerRadius(p)
+  // Local coords, folded into the first quadrant; box shrunk by cr.
+  const qx = Math.abs(relX * dirX + relY * dirY) - (len / 2 + p.r - cr)
+  const qy = Math.abs(relX * -dirY + relY * dirX) - (p.r - cr)
+  return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - cr
 }
 
-// Kind-agnostic nearest-capsule hit-test: returns the closest hit point
+// Kind-agnostic nearest-shape hit-test: returns the closest hit point
 // regardless of whether it's a station or a hub. Used by author mode, where
 // every point (including hub regions) must be selectable for editing.
 export function hitTestPoints(
@@ -110,8 +119,7 @@ export function hitTestPoints(
   let best: Point | null = null
   let bestDist = Infinity
   for (const p of points) {
-    const d = pointToCapsuleDistance(worldX, worldY, p.ax, p.ay, p.bx, p.by)
-    const effective = d - (p.r + slopWorld)
+    const effective = pointToShapeDistance(worldX, worldY, p) - slopWorld
     if (effective <= 0 && effective < bestDist) {
       bestDist = effective
       best = p
@@ -145,8 +153,7 @@ export function hitTest(
   let bestHub: Point | null = null
   let bestHubDist = Infinity
   for (const p of points) {
-    const d = pointToCapsuleDistance(worldX, worldY, p.ax, p.ay, p.bx, p.by)
-    const effective = d - (p.r + slopWorld)
+    const effective = pointToShapeDistance(worldX, worldY, p) - slopWorld
     if (effective > 0) continue
     if (isHubPoint(p)) {
       if (effective < bestHubDist) {

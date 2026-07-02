@@ -1,5 +1,5 @@
 import type { Manifest, Point, Renderer, SelectionOverlay, Tier, Transform } from './map-renderer'
-import { RING_WIDTH_WORLD, SPOTLIGHT_FEATHER_WORLD, ringOffsetWorld, tileKey } from './map-renderer'
+import { RING_WIDTH_WORLD, SPOTLIGHT_FEATHER_WORLD, pointCornerRadius, ringOffsetWorld, tileKey } from './map-renderer'
 import { createTileSource } from './map-renderer-tile-source'
 
 interface TileEntry {
@@ -123,13 +123,12 @@ export function createCanvas2DRenderer(
       scrimCtx.globalCompositeOperation = 'destination-out'
       const steps = 5
       for (let i = steps; i >= 1; i--) {
-        const rr = sel.r + SPOTLIGHT_FEATHER_WORLD * (i / steps)
         scrimCtx.fillStyle = `rgba(0, 0, 0, ${Math.min(1, (1 / steps) * 1.2)})`
-        drawCapsule(scrimCtx, sel.ax, sel.ay, sel.bx, sel.by, rr)
+        drawShape(scrimCtx, sel.ax, sel.ay, sel.bx, sel.by, sel.r, sel.cr, SPOTLIGHT_FEATHER_WORLD * (i / steps))
         scrimCtx.fill()
       }
       scrimCtx.fillStyle = 'rgba(0, 0, 0, 1)'
-      drawCapsule(scrimCtx, sel.ax, sel.ay, sel.bx, sel.by, sel.r)
+      drawShape(scrimCtx, sel.ax, sel.ay, sel.bx, sel.by, sel.r, sel.cr)
       scrimCtx.fill()
       scrimCtx.globalCompositeOperation = 'source-over'
 
@@ -149,7 +148,7 @@ export function createCanvas2DRenderer(
       ctx.lineWidth = RING_WIDTH_WORLD
       ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${sel.ringProgress})`
       ctx.shadowBlur = 12 * transform.scale
-      drawCapsule(ctx, sel.ax, sel.ay, sel.bx, sel.by, sel.r + ringOffsetWorld(sel.ringProgress))
+      drawShape(ctx, sel.ax, sel.ay, sel.bx, sel.by, sel.r, sel.cr, ringOffsetWorld(sel.ringProgress))
       ctx.stroke()
       ctx.shadowColor = 'transparent'
       ctx.shadowBlur = 0
@@ -215,7 +214,7 @@ export function createCanvas2DRenderer(
     if (debugHitboxes && points.length > 0) {
       ctx.fillStyle = 'rgba(255, 0, 153, 0.3)'
       for (const p of points) {
-        drawCapsule(ctx, p.ax, p.ay, p.bx, p.by, p.r)
+        drawShape(ctx, p.ax, p.ay, p.bx, p.by, p.r, pointCornerRadius(p))
         ctx.fill()
       }
     }
@@ -260,22 +259,42 @@ export function createCanvas2DRenderer(
   }
 }
 
-function drawCapsule(ctx: CanvasRenderingContext2D, ax: number, ay: number, bx: number, by: number, r: number) {
+// Path for a point's shape: an oriented rounded rect along the a→b axis with
+// half-width r and corner radius cr (cr = r degenerates to a capsule).
+// `pad` grows the shape outward uniformly (Minkowski sum: extents and corner
+// radius both grow by pad) — used for the spotlight's feather and halo ring.
+// Path coordinates are baked under a temporary translate/rotate, so the
+// canvas transform is unchanged when this returns.
+function drawShape(
+  ctx: CanvasRenderingContext2D,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  r: number,
+  cr: number,
+  pad = 0
+) {
   const dx = bx - ax
   const dy = by - ay
   const len = Math.hypot(dx, dy)
+  const angle = len > 1e-6 ? Math.atan2(dy, dx) : 0
+  const hw = len / 2 + r + pad
+  const hh = r + pad
+  const rad = Math.max(0, Math.min(cr + pad, hh))
+  ctx.save()
+  ctx.translate((ax + bx) / 2, (ay + by) / 2)
+  ctx.rotate(angle)
   ctx.beginPath()
-  if (len < 1e-6) {
-    ctx.arc(ax, ay, r, 0, Math.PI * 2)
-    return
-  }
-  const nx = -dy / len
-  const ny = dx / len
-  const ang = Math.atan2(dy, dx)
-  ctx.moveTo(ax + nx * r, ay + ny * r)
-  ctx.lineTo(bx + nx * r, by + ny * r)
-  ctx.arc(bx, by, r, ang + Math.PI / 2, ang - Math.PI / 2)
-  ctx.lineTo(ax - nx * r, ay - ny * r)
-  ctx.arc(ax, ay, r, ang - Math.PI / 2, ang + Math.PI / 2)
+  ctx.moveTo(-hw + rad, -hh)
+  ctx.lineTo(hw - rad, -hh)
+  ctx.arcTo(hw, -hh, hw, -hh + rad, rad)
+  ctx.lineTo(hw, hh - rad)
+  ctx.arcTo(hw, hh, hw - rad, hh, rad)
+  ctx.lineTo(-hw + rad, hh)
+  ctx.arcTo(-hw, hh, -hw, hh - rad, rad)
+  ctx.lineTo(-hw, -hh + rad)
+  ctx.arcTo(-hw, -hh, -hw + rad, -hh, rad)
   ctx.closePath()
+  ctx.restore()
 }

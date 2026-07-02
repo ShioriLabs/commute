@@ -12,6 +12,7 @@ import {
   createRenderer,
   hitTest,
   pickTier,
+  pointCornerRadius,
   SCRIM_MAX_ALPHA,
   type Manifest,
   type Point,
@@ -537,6 +538,7 @@ export default function MapPage() {
         spot.lastRing = ringProgress
         overlay = {
           ax: pt.ax, ay: pt.ay, bx: pt.bx, by: pt.by, r: pt.r,
+          cr: pointCornerRadius(pt),
           color: spot.color,
           scrimAlpha,
           ringProgress

@@ -199,6 +199,22 @@ export function AuthorOverlay({
               className="px-2 py-1 border border-slate-300 rounded font-mono text-sm"
             />
           </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-semibold text-slate-600">Corner radius (empty = capsule)</span>
+            <input
+              type="number"
+              value={editing.cr ?? ''}
+              step="1"
+              min="0"
+              max={editing.r}
+              placeholder={String(editing.r)}
+              onChange={(e) => {
+                const raw = e.target.value
+                updateEditingField({ cr: raw === '' ? undefined : Number(raw) })
+              }}
+              className="px-2 py-1 border border-slate-300 rounded font-mono text-sm"
+            />
+          </label>
           <div className="flex flex-col gap-1">
             <span className="text-xs font-semibold text-slate-600">Nudge (1u · shift = 5u)</span>
             <div className="grid grid-cols-3 gap-1 w-fit">
