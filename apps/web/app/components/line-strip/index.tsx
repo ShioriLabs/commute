@@ -43,7 +43,11 @@ export default function LineStrip({ detail }: LineStripProps) {
               : i === stick.length - 1
                 ? 'JUNCTION'
                 : station.isInterchange ? 'INTERCHANGE' : 'REGULAR'}
-            railCap={i === 0 ? 'START' : undefined}
+            // END-cap the junction row: the loop's svg stroke takes over at
+            // the node's center, and the handoff hides behind the opaque
+            // junction node (div rails and svg strokes pixel-snap
+            // differently, so they must never both be visible).
+            railCap={i === 0 ? 'START' : i === stick.length - 1 ? 'END' : undefined}
           />
         ))}
         <LoopSection segment={loop} operator={operator} color={color} />
