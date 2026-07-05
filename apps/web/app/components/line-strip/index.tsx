@@ -1,7 +1,6 @@
 import { Fragment, useState } from 'react'
 import type { LineDetail } from 'models/line'
 import StationRow, { type NodeKind } from './station-row'
-import DirectionChip from './direction-chip'
 import BranchRamp from './branch-ramp'
 import LoopSection from './loop-section'
 
@@ -25,17 +24,14 @@ export default function LineStrip({ detail }: LineStripProps) {
   if (!trunk || trunk.stations.length === 0) return null
 
   // Lollipop (Cikarang): the trunk is the stick, whose last station is the
-  // junction the loop hangs off. No bottom direction chip — a loop has no
-  // second terminus.
+  // junction the loop hangs off.
   if (loop) {
     const stick = trunk.stations
-    const first = stick[0]
     return (
       // `isolate`: the strip's internal z-indexes (nodes, badges over the
       // stretched row links) stay contained so they never paint above the
       // page's sticky header.
       <div className="max-w-md mx-auto w-full isolate">
-        <DirectionChip name={first.name} color={color} pointing="UP" className="ml-11 pb-1" />
         {stick.map((station, i) => (
           <StationRow
             key={station.id}
@@ -66,8 +62,6 @@ export default function LineStrip({ detail }: LineStripProps) {
   const activeTail = tails.length > 0 ? tails[Math.min(activeTailIndex, tails.length - 1)] : null
   const main = activeTail ? [...trunk.stations, ...activeTail.stations] : trunk.stations
   const junctionCode = tails.length > 1 ? trunkEndCode : null
-  const first = main[0]
-  const last = main[main.length - 1]
 
   const nodeKindFor = (index: number): NodeKind => {
     const station = main[index]
@@ -79,7 +73,6 @@ export default function LineStrip({ detail }: LineStripProps) {
   return (
     // `isolate`: see the loop branch above.
     <div className="max-w-md mx-auto w-full isolate">
-      <DirectionChip name={first.name} color={color} pointing="UP" className="ml-11 pb-1" />
       {main.map((station, i) => (
         <Fragment key={station.id}>
           <StationRow
@@ -101,7 +94,6 @@ export default function LineStrip({ detail }: LineStripProps) {
           ))}
         </Fragment>
       ))}
-      <DirectionChip name={last.name} color={color} pointing="DOWN" className="ml-11 pt-1" />
     </div>
   )
 }
