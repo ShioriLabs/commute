@@ -1,6 +1,7 @@
 import { XIcon, ArrowSquareOutIcon } from '@phosphor-icons/react'
 import { Link } from 'react-router'
 import BottomSheet from './bottom-sheet'
+import LineRoundel from './line-roundel'
 import StationContent, { useStationHeader } from './station-content'
 
 interface StationSheetProps {
@@ -38,13 +39,25 @@ function SheetHeader({ operator, code, onClose }: { operator: string, code: stri
   const { header } = useStationHeader(operator, code)
   return (
     <div className="flex items-center justify-between gap-3">
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 flex flex-col gap-1">
         {header.isLoading
           ? (
               <div className="animate-pulse w-48 h-6 bg-slate-200 rounded-lg" />
             )
           : (
-              <h2 className="font-bold text-xl truncate">{header.formattedName}</h2>
+              <>
+                {header.lines.length > 0 && (
+                  <ul className="flex flex-row gap-1 flex-wrap">
+                    {header.lines.map(line => (
+                      <li key={line.lineCode}>
+                        <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} />
+                        <span className="sr-only">{line.name}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <h2 className="font-bold text-xl truncate">{header.formattedName}</h2>
+              </>
             )}
       </div>
       <Link

@@ -2,7 +2,7 @@ import type { Line } from 'models/line'
 import type { Searchable } from 'models/searchable'
 import { useMemo, type MouseEvent } from 'react'
 import { Link } from 'react-router'
-import { getForegroundColor } from 'utils/colors'
+import LineRoundel from '~/components/line-roundel'
 
 interface Props {
   searchable: Searchable
@@ -41,12 +41,9 @@ export default function SearchableItem({ searchable, onClick }: Props) {
           ? (
               <ul className="flex flex-row gap-1 flex-wrap">
                 {(searchable as Searchable<Line[]>).body!.map(line => (
-                  <li
-                    key={line.lineCode}
-                    className={`text-sm font-semibold px-2.5 py-1 rounded-full text-stone-800 ${getForegroundColor(line.colorCode) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`}
-                    style={{ backgroundColor: line.colorCode }}
-                  >
-                    {line.name.replace(/Lin /g, '')}
+                  <li key={line.lineCode}>
+                    <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} />
+                    <span className="sr-only">{line.name}</span>
                   </li>
                 ))}
               </ul>

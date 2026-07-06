@@ -5,7 +5,7 @@ import useSWR from 'swr'
 import type { StandardResponse } from '@schema/response'
 import type { Hub } from 'models/hub'
 import { fetcher } from 'utils/fetcher'
-import { getForegroundColor } from 'utils/colors'
+import LineRoundel from '~/components/line-roundel'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -87,12 +87,9 @@ const HubContent = memo(function HubContent({ slug }: HubContentProps) {
                 ? (
                     <ul className="flex flex-row gap-1 flex-wrap">
                       {member.lines.map(line => (
-                        <li
-                          key={line.lineCode}
-                          className={`text-sm font-semibold px-2.5 py-1 rounded-full ${getForegroundColor(line.colorCode) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`}
-                          style={{ backgroundColor: line.colorCode }}
-                        >
-                          {line.name.replace(/Lin /g, '')}
+                        <li key={line.lineCode}>
+                          <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} />
+                          <span className="sr-only">{line.name}</span>
                         </li>
                       ))}
                     </ul>

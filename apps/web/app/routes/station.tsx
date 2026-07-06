@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useNavigationType } from 'react-router'
 import { XIcon, PushPinIcon, PushPinSlashIcon } from '@phosphor-icons/react'
 import StationContent, { useStationHeader } from '~/components/station-content'
+import LineRoundel from '~/components/line-roundel'
 
 export function meta() {
   return [
@@ -65,13 +66,25 @@ export default function StationPage({ params }: Route.ComponentProps) {
     <div className="bg-white w-full min-h-screen">
       <div className="w-full bg-white/50 backdrop-blur sticky top-0 z-10 border-b-2 border-b-gray-50/20">
         <div className="p-8 pb-4 max-w-3xl mx-auto pointer-events-auto flex gap-4 justify-between">
-          <div className="flex flex-col">
+          <div className="flex flex-col gap-1">
             {header.isLoading
               ? (
                   <div className="animate-pulse w-64 h-6 bg-slate-200 rounded-lg" />
                 )
               : (
-                  <h1 className="font-bold text-xl">{header.formattedName}</h1>
+                  <>
+                    {header.lines.length > 0 && (
+                      <ul className="flex flex-row gap-1 flex-wrap">
+                        {header.lines.map(line => (
+                          <li key={line.lineCode}>
+                            <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} />
+                            <span className="sr-only">{line.name}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <h1 className="font-bold text-xl">{header.formattedName}</h1>
+                  </>
                 )}
           </div>
           <div className="flex gap-4">
