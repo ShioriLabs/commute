@@ -6,8 +6,9 @@
  * crawlers don't run JS, so the client `meta()` never reaches them and every
  * shared link previews as generic "Commute".
  *
- * This middleware runs only for crawler UAs on /stations/:op/:code and
- * /hubs/:slug: it serves the normal shell via ctx.next() and rewrites just the
+ * This middleware runs only for crawler UAs on /stations/:op/:code,
+ * /hubs/:slug and /lines/:op/:lineCode: it serves the normal shell via
+ * ctx.next() and rewrites just the
  * <head> OG/Twitter tags using HTMLRewriter, pulling live data from the API
  * (which already does KV-read-through with D1 fallback). Humans and every other
  * path pass straight through untouched.
@@ -22,6 +23,8 @@ const SITE_ORIGIN = 'https://commute.shiorilabs.id'
 // keyed by station id (OPERATOR-CODE); hubs by slug.
 const stationOgImage = (id: string) => `${SITE_ORIGIN}/img/og/stations/${id}.png`
 const hubOgImage = (slug: string) => `${SITE_ORIGIN}/img/og/hubs/${slug}.png`
+// Line files are keyed OPERATOR-LINECODE (e.g. KCI-C).
+const lineOgImage = (operator: string, lineCode: string) => `${SITE_ORIGIN}/img/og/lines/${operator}-${lineCode}.png`
 
 // Lowercased substrings matched against the User-Agent of known link-preview
 // crawlers. Humans never match, so they skip the API subrequest entirely.
@@ -66,6 +69,12 @@ interface ApiHub {
   members: ApiStation[]
 }
 
+interface ApiLineDetail {
+  operator: { code: string, name: string }
+  line: ApiLine
+  segments: { stations: unknown[] }[]
+}
+
 interface ApiResponse<T> {
   status: number
   data?: T
@@ -106,6 +115,22 @@ async function resolveOg(pathname: string, env: Env): Promise<OgData | null> {
         ? `Stasiun terintegrasi: ${memberNames}`
         : 'Stasiun terintegrasi',
       image: hub.heroImage || hubOgImage(slug)
+    }
+  }
+
+  const lineMatch = pathname.match(/^\/lines\/([^/]+)\/([^/]+)$/)
+  if (lineMatch) {
+    const operator = decodeURIComponent(lineMatch[1])
+    const lineCode = decodeURIComponent(lineMatch[2])
+    const detail = await fetchJson<ApiLineDetail>(
+      `${base}/lines/${encodeURIComponent(operator)}/${encodeURIComponent(lineCode)}`
+    )
+    if (!detail) return null
+    const stationCount = detail.segments.reduce((n, s) => n + s.stations.length, 0)
+    return {
+      title: `${detail.line.name} - Commute`,
+      description: `Lihat rute dan ${stationCount} stasiun di ${detail.line.name} (${detail.operator.name})`,
+      image: lineOgImage(detail.operator.code, detail.line.lineCode)
     }
   }
 

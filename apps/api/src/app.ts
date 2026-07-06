@@ -3,6 +3,7 @@ import { cors } from 'hono/cors'
 
 import stations from './routes/stations'
 import hubs from './routes/hubs'
+import lines from './routes/lines'
 import syncRoutes from './routes/sync'
 import cacheRoutes from './routes/cache'
 import operatorRoutes from './routes/operators'
@@ -34,6 +35,7 @@ app.use('*', cors({
 
 app.route('stations', stations)
 app.route('hubs', hubs)
+app.route('lines', lines)
 app.route('sync/stations', syncRoutes)
 app.route('cache', cacheRoutes)
 app.route('operators', operatorRoutes)

@@ -7,15 +7,17 @@ interface StationSheetProps {
   operator: string | null
   code: string | null
   onClose: () => void
+  onDismissStart?: () => void
 }
 
-export default function StationSheet({ operator, code, onClose }: StationSheetProps) {
+export default function StationSheet({ operator, code, onClose, onDismissStart }: StationSheetProps) {
   const open = !!(operator && code)
 
   return (
     <BottomSheet
       open={open}
       onClose={onClose}
+      onDismissStart={onDismissStart}
       ariaLabel="Detail stasiun"
       header={close => (operator && code
         ? <SheetHeader operator={operator} code={code} onClose={close} />

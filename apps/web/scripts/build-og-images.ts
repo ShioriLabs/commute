@@ -22,9 +22,15 @@ import { Resvg } from '@resvg/resvg-js'
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const WEB_ROOT = path.resolve(SCRIPT_DIR, '..')
 const TEMPLATE_PATH = path.join(SCRIPT_DIR, 'assets', 'og-station-template.svg')
+const LINE_TEMPLATE_PATH = path.join(SCRIPT_DIR, 'assets', 'og-line-template.svg')
 const FONT_PATH = path.join(SCRIPT_DIR, 'assets', 'PlusJakartaSans-Bold.ttf')
 const OUT_STATIONS = path.join(WEB_ROOT, 'public', 'img', 'og', 'stations')
 const OUT_HUBS = path.join(WEB_ROOT, 'public', 'img', 'og', 'hubs')
+const OUT_LINES = path.join(WEB_ROOT, 'public', 'img', 'og', 'lines')
+
+// The line template's color-band rect carries this sentinel fill; it gets
+// replaced with each line's colorCode at render time.
+const LINE_COLOR_SENTINEL = '#00FF00'
 
 const API_BASE_URL = process.env.API_BASE_URL
   ?? process.env.VITE_API_BASE_URL
@@ -51,6 +57,7 @@ const STATION_NAME_OVERRIDES: Record<string, string> = {
 interface Line { name: string, lineCode: string, colorCode: string }
 interface Station { id: string, name: string, formattedName: string | null, code: string, regionCode: string, operator: { code: string, name: string }, lines: Line[] }
 interface Hub { slug: string, name: string, members: Station[] }
+interface OperatorWithLines { code: string, name: string, lines: Line[] }
 interface ApiResponse<T> { status: number, data?: T, error?: { message: string, code: string } }
 
 function xmlEscape(s: string): string {
@@ -68,9 +75,12 @@ function fontSizeFor(name: string): number {
   return Math.max(MIN_FONT_SIZE, scaled)
 }
 
-function renderCard(template: string, name: string): Buffer {
+function renderCard(template: string, name: string, color?: string): Buffer {
   const fontSize = fontSizeFor(name)
   let svg = template.replace(PLACEHOLDER_MARKUP, `>${xmlEscape(name)}<`)
+  if (color) {
+    svg = svg.replace(LINE_COLOR_SENTINEL, color)
+  }
   // Only shrink when needed; keep the template's 64px otherwise.
   if (fontSize !== TEMPLATE_FONT_SIZE) {
     svg = svg.replace(`font-size="${TEMPLATE_FONT_SIZE}"`, `font-size="${fontSize}"`)
@@ -99,11 +109,14 @@ async function fetchData<T>(url: string): Promise<T | null> {
 async function main() {
   console.log(`Building OG images from ${API_BASE_URL}`)
   const template = readFileSync(TEMPLATE_PATH, 'utf8')
+  const lineTemplate = readFileSync(LINE_TEMPLATE_PATH, 'utf8')
   mkdirSync(OUT_STATIONS, { recursive: true })
   mkdirSync(OUT_HUBS, { recursive: true })
+  mkdirSync(OUT_LINES, { recursive: true })
 
   const stations = await fetchData<Station[]>(`${API_BASE_URL}/stations`)
   const hubs = await fetchData<Hub[]>(`${API_BASE_URL}/hubs`)
+  const operators = await fetchData<OperatorWithLines[]>(`${API_BASE_URL}/operators`)
 
   let stationCount = 0
   for (const station of stations ?? []) {
@@ -121,7 +134,16 @@ async function main() {
     hubCount++
   }
 
-  console.log(`Done: ${stationCount} stations, ${hubCount} hubs`)
+  let lineCount = 0
+  for (const op of operators ?? []) {
+    for (const line of op.lines) {
+      const png = renderCard(lineTemplate, line.name, line.colorCode)
+      writeFileSync(path.join(OUT_LINES, `${op.code}-${line.lineCode}.png`), png)
+      lineCount++
+    }
+  }
+
+  console.log(`Done: ${stationCount} stations, ${hubCount} hubs, ${lineCount} lines`)
   if (stationCount === 0) console.warn('WARNING: no stations rendered — check API_BASE_URL / data.')
 }
 

@@ -1,5 +1,7 @@
 import type { CompactLineTimetable, CompactSchedule, LineTimetable } from 'models/schedules'
 import { useState, useEffect, useMemo } from 'react'
+import { Link } from 'react-router'
+import { CaretRightIcon } from '@phosphor-icons/react'
 import { getTintFromColor } from 'utils/colors'
 import { isImmediateDeparture, parseTime } from 'utils/schedules'
 
@@ -40,9 +42,11 @@ function getNextSchedules(
 
 interface Props {
   line: LineTimetable | CompactLineTimetable
+  // When set, the card header links to the line's page (/lines/{operator}/{lineCode}).
+  operator?: string
 }
 
-export default function LineCard({ line }: Props) {
+export default function LineCard({ line, operator }: Props) {
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
 
   useEffect(() => {
@@ -80,7 +84,20 @@ export default function LineCard({ line }: Props) {
         style={{ borderBottomColor: getTintFromColor(line.colorCode, 0.3) }}
         aria-labelledby={`line-name-${line.name}`}
       >
-        <h1 id={`line-name-${line.name}`} className="font-bold text-lg">{line.name}</h1>
+        {operator
+          ? (
+              <Link
+                to={`/lines/${operator}/${line.lineCode}`}
+                className="flex items-center justify-between gap-2"
+                aria-label={`Lihat rute ${line.name}`}
+              >
+                <h1 id={`line-name-${line.name}`} className="font-bold text-lg">{line.name}</h1>
+                <CaretRightIcon weight="bold" className="w-4 h-4 text-slate-600" />
+              </Link>
+            )
+          : (
+              <h1 id={`line-name-${line.name}`} className="font-bold text-lg">{line.name}</h1>
+            )}
       </article>
       <ul>
         {nextSchedulesFilteredTimetable.map((direction) => {

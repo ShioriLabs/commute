@@ -84,6 +84,27 @@ app.delete('/stations/:operator/:stationCode/timetable/bust', async (c) => {
   )
 })
 
+app.delete('/lines/:operator/:lineCode/bust', async (c) => {
+  const operatorCode = c.req.param('operator')
+  const lineCode = c.req.param('lineCode')
+  const operator = getOperatorByCode(operatorCode)
+  if (!operator) {
+    return c.json(NotFound(`Unknown Operator Code: ${operatorCode}`), 404)
+  }
+
+  const kvRepository = new KVRepository(c.env.KV)
+
+  const kvKey = `lines:${operator.code}-${lineCode}:${c.env.API_VERSION}`
+  await kvRepository.del(kvKey)
+
+  return c.json(
+    Ok(
+      { message: `Cache ${kvKey} has been cleared.` }
+    ),
+    200
+  )
+})
+
 app.delete('/hubs/bust', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
 

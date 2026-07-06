@@ -1,6 +1,6 @@
 import * as twgl from 'twgl.js'
-import type { Manifest, Point, Renderer, Tier, Transform } from './map-renderer'
-import { tileKey } from './map-renderer'
+import type { Manifest, Point, Renderer, SelectionOverlay, Tier, Transform } from './map-renderer'
+import { RING_WIDTH_WORLD, SPOTLIGHT_FEATHER_WORLD, pointCornerRadius, ringOffsetWorld, tileKey } from './map-renderer'
 import { createTileSource } from './map-renderer-tile-source'
 
 const VS = `#version 300 es
@@ -28,19 +28,23 @@ void main() {
 }
 `
 
-// Capsule shader: each pill is a 4-vertex quad whose local-space is the
-// capsule's bounding box. Vertex shader maps local quad coords to world
-// coords; fragment shader computes signed distance to the capsule centerline.
+// Pill shader: each tap target is a 4-vertex quad whose local-space is the
+// shape's bounding box. Vertex shader maps local quad coords to world coords;
+// fragment shader computes the signed distance to an oriented rounded-rect
+// boundary (corner radius = a_cornerRadius; equal to a_radius it degenerates
+// to the old capsule).
 const PILL_VS = `#version 300 es
 in vec2 a_quad; // -1..1 unit quad
 in vec2 a_axisA; // world-space endpoint A
 in vec2 a_axisB; // world-space endpoint B
 in float a_radius;
+in float a_cornerRadius;
 uniform mat3 u_transform;
 out vec2 v_local;
 out vec2 v_axisA;
 out vec2 v_axisB;
 out float v_radius;
+out float v_cornerRadius;
 void main() {
   vec2 axis = a_axisB - a_axisA;
   float len = length(axis);
@@ -55,6 +59,22 @@ void main() {
   v_axisA = a_axisA;
   v_axisB = a_axisB;
   v_radius = a_radius;
+  v_cornerRadius = a_cornerRadius;
+}
+`
+
+// Shared rounded-rect SDF (world units, negative inside). Injected into both
+// fragment shaders so pill fills, hitbox debug, and the spotlight all agree
+// on the exact same boundary.
+const SHAPE_SDF_GLSL = `
+float shapeDistance(vec2 p, vec2 a, vec2 b, float r, float cr) {
+  vec2 ab = b - a;
+  float len = length(ab);
+  vec2 dir = len > 0.0 ? ab / len : vec2(1.0, 0.0);
+  vec2 rel = p - (a + b) * 0.5;
+  vec2 lp = abs(vec2(dot(rel, dir), dot(rel, vec2(-dir.y, dir.x))));
+  vec2 q = lp - vec2(len * 0.5 + r - cr, r - cr);
+  return length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - cr;
 }
 `
 
@@ -64,20 +84,61 @@ in vec2 v_local;
 in vec2 v_axisA;
 in vec2 v_axisB;
 in float v_radius;
+in float v_cornerRadius;
 uniform vec4 u_color;
 uniform float u_edgeSoftnessWorld;
 out vec4 outColor;
+${SHAPE_SDF_GLSL}
 void main() {
-  vec2 ab = v_axisB - v_axisA;
-  vec2 ap = v_local - v_axisA;
-  float lenSq = max(dot(ab, ab), 1e-6);
-  float t = clamp(dot(ap, ab) / lenSq, 0.0, 1.0);
-  vec2 c = v_axisA + ab * t;
-  float d = distance(v_local, c);
+  float d = shapeDistance(v_local, v_axisA, v_axisB, v_radius, v_cornerRadius);
   float edge = u_edgeSoftnessWorld;
-  float alpha = 1.0 - smoothstep(v_radius - edge, v_radius + edge, d);
+  float alpha = 1.0 - smoothstep(-edge, edge, d);
   if (alpha <= 0.0) discard;
   outColor = vec4(u_color.rgb * u_color.a * alpha, u_color.a * alpha);
+}
+`
+
+// Selection spotlight: one fullscreen pass drawn last, combining a dimming
+// scrim (feathered punch-out around the selected capsule) and a glowing halo
+// ring. The capsule arrives via uniforms — no per-selection buffers.
+const SPOT_VS = `#version 300 es
+in vec2 a_position; // 0..1 fullscreen quad
+uniform vec2 u_viewport; // css px
+uniform vec3 u_view; // tx, ty, scale
+out vec2 v_world;
+void main() {
+  vec2 css = a_position * u_viewport;
+  gl_Position = vec4(a_position.x * 2.0 - 1.0, 1.0 - a_position.y * 2.0, 0.0, 1.0);
+  v_world = (css - u_view.xy) / u_view.z;
+}
+`
+
+const SPOT_FS = `#version 300 es
+precision highp float;
+in vec2 v_world;
+uniform vec2 u_selA;
+uniform vec2 u_selB;
+uniform float u_selR;
+uniform float u_scrimAlpha;
+uniform float u_feather; // world units
+uniform vec3 u_ringColor;
+uniform float u_ringOffset;
+uniform float u_ringWidth;
+uniform float u_ringAlpha;
+uniform float u_selCr;
+out vec4 outColor;
+${SHAPE_SDF_GLSL}
+void main() {
+  float d = shapeDistance(v_world, u_selA, u_selB, u_selR, u_selCr); // signed dist to shape edge
+  // Scrim with a feathered punch-out: 0 inside the capsule, full past feather.
+  float scrim = u_scrimAlpha * smoothstep(0.0, u_feather, d);
+  // Glowing ring centered u_ringOffset outside the capsule edge.
+  float ring = (1.0 - smoothstep(0.0, u_ringWidth, abs(d - u_ringOffset))) * u_ringAlpha;
+  // Soft outer glow hugging the ring.
+  float glow = exp(-max(d - u_ringOffset, 0.0) / (u_ringWidth * 2.5)) * 0.35 * u_ringAlpha;
+  vec3 scrimRgb = vec3(0.06, 0.09, 0.16) * scrim;
+  float a = scrim + (ring + glow) * (1.0 - scrim);
+  outColor = vec4(scrimRgb + u_ringColor * (ring + glow), a); // premultiplied
 }
 `
 
@@ -115,6 +176,12 @@ export function createWebGLRenderer(
   const quadVao = twgl.createVertexArrayInfo(twglGl, programInfo, quadBufferInfo)
 
   const pillProgramInfo = twgl.createProgramInfo(twglGl, [PILL_VS, PILL_FS])
+
+  const spotProgramInfo = twgl.createProgramInfo(twglGl, [SPOT_VS, SPOT_FS])
+  const spotBufferInfo = twgl.createBufferInfoFromArrays(twglGl, {
+    a_position: { numComponents: 2, data: [0, 0, 1, 0, 0, 1, 1, 1] }
+  })
+  const spotVao = twgl.createVertexArrayInfo(twglGl, spotProgramInfo, spotBufferInfo)
 
   const anisoExt = gl.getExtension('EXT_texture_filter_anisotropic')
     ?? gl.getExtension('MOZ_EXT_texture_filter_anisotropic')
@@ -160,10 +227,12 @@ export function createWebGLRenderer(
     const axisAData = new Float32Array(n * 4 * 2)
     const axisBData = new Float32Array(n * 4 * 2)
     const radiusData = new Float32Array(n * 4)
+    const cornerRadiusData = new Float32Array(n * 4)
     const indices = new Uint16Array(n * 6)
     const quadCorners = [-1, -1, 1, -1, -1, 1, 1, 1]
     for (let i = 0; i < n; i++) {
       const p = points[i]
+      const cr = pointCornerRadius(p)
       for (let v = 0; v < 4; v++) {
         quadData[i * 8 + v * 2 + 0] = quadCorners[v * 2 + 0]
         quadData[i * 8 + v * 2 + 1] = quadCorners[v * 2 + 1]
@@ -172,6 +241,7 @@ export function createWebGLRenderer(
         axisBData[i * 8 + v * 2 + 0] = p.bx
         axisBData[i * 8 + v * 2 + 1] = p.by
         radiusData[i * 4 + v] = p.r
+        cornerRadiusData[i * 4 + v] = cr
       }
       const base = i * 4
       indices[i * 6 + 0] = base + 0
@@ -186,6 +256,7 @@ export function createWebGLRenderer(
       a_axisA: { numComponents: 2, data: axisAData },
       a_axisB: { numComponents: 2, data: axisBData },
       a_radius: { numComponents: 1, data: radiusData },
+      a_cornerRadius: { numComponents: 1, data: cornerRadiusData },
       indices: { numComponents: 3, data: indices }
     })
     pillVao = twgl.createVertexArrayInfo(twglGl, pillProgramInfo, pillBufferInfo)
@@ -291,7 +362,7 @@ export function createWebGLRenderer(
     if (canvas.height !== h) canvas.height = h
   }
 
-  function draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier) {
+  function draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null) {
     if (disposed) return
     gl.viewport(0, 0, Math.round(cssW * dpr), Math.round(cssH * dpr))
     gl.clearColor(1, 1, 1, 1)
@@ -374,6 +445,26 @@ export function createWebGLRenderer(
       })
       twgl.drawBufferInfo(twglGl, pillVao, gl.TRIANGLES)
     }
+
+    if (selection && (selection.scrimAlpha > 0 || selection.ringProgress > 0)) {
+      gl.useProgram(spotProgramInfo.program)
+      twgl.setBuffersAndAttributes(twglGl, spotProgramInfo, spotVao)
+      twgl.setUniforms(spotProgramInfo, {
+        u_viewport: [cssW, cssH],
+        u_view: [transform.tx, transform.ty, transform.scale],
+        u_selA: [selection.ax, selection.ay],
+        u_selB: [selection.bx, selection.by],
+        u_selR: selection.r,
+        u_selCr: selection.cr,
+        u_scrimAlpha: selection.scrimAlpha,
+        u_feather: SPOTLIGHT_FEATHER_WORLD,
+        u_ringColor: selection.color,
+        u_ringOffset: ringOffsetWorld(selection.ringProgress),
+        u_ringWidth: RING_WIDTH_WORLD,
+        u_ringAlpha: selection.ringProgress
+      })
+      twgl.drawBufferInfo(twglGl, spotVao, gl.TRIANGLE_STRIP)
+    }
   }
 
   function setPoints(next: Point[]) {
@@ -408,6 +499,13 @@ export function createWebGLRenderer(
     }
     if (quadVao.vertexArrayObject) {
       gl.deleteVertexArray(quadVao.vertexArrayObject)
+    }
+    if (spotVao.vertexArrayObject) {
+      gl.deleteVertexArray(spotVao.vertexArrayObject)
+    }
+    for (const k in spotBufferInfo.attribs) {
+      const buf = spotBufferInfo.attribs[k].buffer
+      if (buf) gl.deleteBuffer(buf)
     }
     tileSource.dispose()
   }

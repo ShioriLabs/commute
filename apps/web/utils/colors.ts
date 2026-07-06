@@ -16,6 +16,18 @@ export function getForegroundColor(backgroundColor: string): 'LIGHT' | 'DARK' {
   return luminance > 186 ? 'DARK' : 'LIGHT'
 }
 
+export function hexToRgb01(color: string): [number, number, number] {
+  let hex = color.replace(/^#/, '')
+  if (hex.length === 3) {
+    hex = hex.split('').map(c => c + c).join('')
+  }
+  return [
+    parseInt(hex.substring(0, 2), 16) / 255,
+    parseInt(hex.substring(2, 4), 16) / 255,
+    parseInt(hex.substring(4, 6), 16) / 255
+  ]
+}
+
 export function getTintFromColor(color: string, tintFactor = 0.2, towards: 'light' | 'dark' = 'light') {
   color = color.replace(/^#/, '')
 
