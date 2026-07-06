@@ -7,6 +7,7 @@ import type { StandardResponse } from '@schema/response'
 import type { LineDetail } from 'models/line'
 import { fetcher } from 'utils/fetcher'
 import LineStrip from '~/components/line-strip'
+import LineRoundel from '~/components/line-roundel'
 import EmptyState from '~/components/empty-state'
 import { useNetworkStatus } from '~/hooks/network'
 
@@ -56,15 +57,13 @@ export default function LinePage({ params }: Route.ComponentProps) {
             {detail
               ? (
                   <>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span
-                        className="shrink-0 w-4 h-4 rounded-full"
-                        style={{ backgroundColor: detail.line.colorCode }}
-                        aria-hidden
-                      />
-                      <h1 className="font-bold text-xl truncate">{detail.line.name}</h1>
+                    <div className="flex items-start gap-2 min-w-0">
+                      <LineRoundel code={detail.line.lineCode} color={detail.line.colorCode} />
+                      <div className="flex flex-col items-start">
+                        <h1 className="font-bold text-xl truncate">{detail.line.name}</h1>
+                        <span className="text-sm font-semibold text-gray-600">{detail.operator.name}</span>
+                      </div>
                     </div>
-                    <span className="text-sm font-semibold text-gray-600">{detail.operator.name}</span>
                   </>
                 )
               : (

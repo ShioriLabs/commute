@@ -5,9 +5,9 @@ import { CaretDownIcon, WarningIcon } from '@phosphor-icons/react'
 import type { StandardResponse } from '@schema/response'
 import type { CompactLineGroupedTimetable } from 'models/schedules'
 import EmptyState from '~/components/empty-state'
+import LineRoundel from '~/components/line-roundel'
 import { fetcher } from 'utils/fetcher'
 import { useNetworkStatus } from '~/hooks/network'
-import { getForegroundColor } from 'utils/colors'
 import { isImmediateDeparture, parseTime } from 'utils/schedules'
 
 const swrConfig = {
@@ -197,7 +197,7 @@ const TimetableContent = memo(function TimetableContent({ operator, code }: Prop
                   className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-slate-50 cursor-pointer text-left"
                   aria-pressed={isActive}
                 >
-                  <LineBadge code={line.lineCode} color={line.colorCode} dimmed={!isActive} />
+                  <LineRoundel code={line.lineCode} color={line.colorCode} dimmed={!isActive} />
                   <span className={`text-sm font-semibold ${isActive ? 'text-slate-900' : 'text-slate-400 line-through'}`}>
                     {line.name}
                   </span>
@@ -241,7 +241,7 @@ const TimetableContent = memo(function TimetableContent({ operator, code }: Prop
                     className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 last:border-b-0"
                     aria-label={ariaLabel}
                   >
-                    <LineBadge code={row.lineCode} color={row.lineColor} />
+                    <LineRoundel code={row.lineCode} color={row.lineColor} />
                     <div className="flex flex-col flex-grow min-w-0">
                       <span className="text-sm font-semibold text-slate-900 truncate">
                         {row.boundFor}
@@ -265,24 +265,5 @@ const TimetableContent = memo(function TimetableContent({ operator, code }: Prop
     </div>
   )
 })
-
-interface LineBadgeProps {
-  code: string
-  color: `#${string}`
-  dimmed?: boolean
-}
-
-function LineBadge({ code, color, dimmed = false }: LineBadgeProps) {
-  const textColor = getForegroundColor(color) === 'LIGHT' ? 'text-white' : 'text-slate-900'
-  return (
-    <span
-      className={`inline-flex items-center justify-center w-9 h-9 rounded-full text-xs font-bold shrink-0 ${textColor} ${dimmed ? 'opacity-30' : ''}`}
-      style={{ backgroundColor: color }}
-      aria-hidden="true"
-    >
-      {code}
-    </span>
-  )
-}
 
 export default TimetableContent
