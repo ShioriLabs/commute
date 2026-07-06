@@ -149,7 +149,7 @@ const StationContent = memo(function StationContent({ operator, code }: StationC
               </div>
               <ul className="flex flex-col gap-2 mt-4">
                 {timetable.data.data.map(line => (
-                  <LineCard key={line.lineCode} line={line} />
+                  <LineCard key={line.lineCode} line={line} operator={operator} />
                 ))}
               </ul>
             </>
@@ -203,12 +203,15 @@ const StationContent = memo(function StationContent({ operator, code }: StationC
                       {transfer.dataType === 'INTERNAL' && (
                         <ul className="flex gap-2 items-center">
                           {transfer.toStation.lines.map(line => (
-                            <li
-                              key={line.lineCode}
-                              className={`text-sm font-semibold px-2.5 py-0.5 rounded-full text-stone-800 ${getForegroundColor(line.colorCode) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`}
-                              style={{ backgroundColor: line.colorCode }}
-                            >
-                              {line.name.replace(/Lin /g, '')}
+                            <li key={line.lineCode}>
+                              <Link
+                                to={`/lines/${transfer.toStation.stationId.split('-')[0]}/${line.lineCode}`}
+                                className={`block text-sm font-semibold px-2.5 py-0.5 rounded-full ${getForegroundColor(line.colorCode) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`}
+                                style={{ backgroundColor: line.colorCode }}
+                                aria-label={`Lihat rute ${line.name}`}
+                              >
+                                {line.name.replace(/Lin /g, '')}
+                              </Link>
                             </li>
                           ))}
                         </ul>

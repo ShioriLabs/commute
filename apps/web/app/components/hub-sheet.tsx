@@ -6,15 +6,17 @@ import HubContent, { useHubHeader } from './hub-content'
 interface HubSheetProps {
   slug: string | null
   onClose: () => void
+  onDismissStart?: () => void
 }
 
-export default function HubSheet({ slug, onClose }: HubSheetProps) {
+export default function HubSheet({ slug, onClose, onDismissStart }: HubSheetProps) {
   const open = !!slug
 
   return (
     <BottomSheet
       open={open}
       onClose={onClose}
+      onDismissStart={onDismissStart}
       ariaLabel="Detail stasiun terintegrasi"
       header={close => (slug
         ? <SheetHeader slug={slug} onClose={close} />

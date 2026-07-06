@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { haptic } from 'utils/haptics'
 
 // Sheet height as a fraction of viewport height. Peek is tall enough that
-// the content head + a few rows are visible without dragging.
-const PEEK_FRACTION = 0.3
+// the content head + a few rows are visible without dragging. Exported so the
+// map's fly-to can center a selection in the area left visible above the sheet.
+export const PEEK_FRACTION = 0.3
 const FULL_FRACTION = 0.9
 // Below this fraction at gesture-end, dismiss.
 const DISMISS_FRACTION = 0.18
@@ -22,6 +24,12 @@ interface BottomSheetProps {
   // dismisses it.
   open: boolean
   onClose: () => void
+  // Fires the moment a close *begins* (dismiss flick, close button, backdrop
+  // tap, or parent flipping `open` off) — before the close animation runs.
+  // Use for effects that should exit alongside the sheet rather than after it
+  // settles (onClose). May fire without a subsequent user action reversing it;
+  // it is never followed by a re-open without `open` cycling.
+  onDismissStart?: () => void
   ariaLabel: string
   // Drag handle / header. Rendered inside the grabbable handle region. Receives
   // a `close` callback to animate the sheet shut (e.g. a header close button).
@@ -33,7 +41,7 @@ interface BottomSheetProps {
   children: (ready: boolean) => ReactNode
 }
 
-export default function BottomSheet({ open, onClose, ariaLabel, header, children }: BottomSheetProps) {
+export default function BottomSheet({ open, onClose, onDismissStart, ariaLabel, header, children }: BottomSheetProps) {
   // Snap state controlled by parent open/close; persists open height across renders.
   const [snap, setSnap] = useState<SnapState>('closed')
   const [viewportH, setViewportH] = useState(0)
@@ -112,6 +120,16 @@ export default function BottomSheet({ open, onClose, ariaLabel, header, children
   const wasOpenRef = useRef(false)
   useEffect(() => {
     if (snap !== 'closed') wasOpenRef.current = true
+  }, [snap])
+  // Notify the parent as soon as a close starts (any path that sets snap to
+  // 'closed'), guarded against the initial-mount close. Runs after the
+  // wasOpenRef effect above, so open→closed transitions see it still true.
+  const onDismissStartRef = useRef(onDismissStart)
+  useEffect(() => {
+    onDismissStartRef.current = onDismissStart
+  }, [onDismissStart])
+  useEffect(() => {
+    if (snap === 'closed' && wasOpenRef.current) onDismissStartRef.current?.()
   }, [snap])
   // Ref-mirror onClose so the rAF effect can call the latest callback without
   // re-creating the effect (which would interrupt the lerp) on parent renders.
@@ -380,6 +398,7 @@ export default function BottomSheet({ open, onClose, ariaLabel, header, children
       else if (fraction < (PEEK_FRACTION + FULL_FRACTION) / 2) nextSnap = 'peek'
       else nextSnap = 'full'
     }
+    if (nextSnap !== snap) haptic()
     setSnap(nextSnap)
   }
 
