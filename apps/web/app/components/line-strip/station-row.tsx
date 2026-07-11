@@ -1,6 +1,7 @@
 import { Link } from 'react-router'
 import type { LineDetailStation } from 'models/line'
 import { getForegroundColor } from 'utils/colors'
+import { splitStationNumber } from '~/components/line-roundel'
 
 export type NodeKind = 'TERMINUS' | 'REGULAR' | 'INTERCHANGE' | 'JUNCTION'
 export type RowSide = 'SINGLE' | 'LEFT' | 'RIGHT'
@@ -23,13 +24,6 @@ interface StationRowProps {
 export const RAIL_CENTER_PX = 22
 export const RAIL_WIDTH_PX = 6
 export const GUTTER_CLASS = 'grid-cols-[2.75rem_1fr]' // 44px gutter
-
-// 'C13' -> { prefix: 'C', num: '13' }; 'b23' -> { prefix: 'b', num: '23' }.
-function splitStationNumber(stationNumber: string): { prefix: string, num: string } {
-  const match = stationNumber.match(/^([A-Za-z]+)(.*)$/)
-  if (!match || !match[2]) return { prefix: '', num: stationNumber }
-  return { prefix: match[1], num: match[2] }
-}
 
 // The node is a true circle riding the rail, FDTJ-map style: the line letter
 // stacked over the station number. Outlined (white core, colored ring) for

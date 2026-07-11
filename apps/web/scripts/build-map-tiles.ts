@@ -25,8 +25,8 @@ import { chromium, type Page } from 'playwright'
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const WEB_ROOT = path.resolve(SCRIPT_DIR, '..')
 const REPO_ROOT = path.resolve(WEB_ROOT, '..', '..')
-const PDF_PATH = path.join(REPO_ROOT, '2026-02-Peta-Integrasi-Jakarta-FDTJ-Web.pdf')
-const VERSION = '2026-02'
+const PDF_PATH = path.join(REPO_ROOT, '2026-06a-Peta-Integrasi-Jakarta-FDTJ-Web.pdf')
+const VERSION = '2026-06a'
 const OUT_DIR = path.join(WEB_ROOT, 'public', 'maps', 'fdtj')
 const GRID_ROWS = 4
 const GRID_COLS = 4

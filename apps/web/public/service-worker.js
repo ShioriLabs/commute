@@ -16,7 +16,7 @@
         - Badges: https://microsoft.github.io/win-student-devs/#/30DaysOfPWA/advanced-capabilities/07?id=application-badges
     */
 
-const CACHE_NAME = 'pwa-cache-v2'
+const CACHE_NAME = 'pwa-cache-v3'
 const TILE_PATH_PREFIX = '/maps/fdtj/'
 
 // Pre-cached map assets. Derived deterministically from the 4x4 grid in
