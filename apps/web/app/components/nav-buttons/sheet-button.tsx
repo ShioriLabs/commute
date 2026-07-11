@@ -21,22 +21,36 @@ interface Props {
 // --panel-transform), so opening animates the card expanding to fill the
 // screen. The real URL is swapped with pushState so the back button (and the
 // sheet's CloseButton) restores the previous page without a navigation.
+// How long the panel's leave transition needs before we may touch history
+// (250ms panel transform + margin; the white overlay runs 300ms).
+const LEAVE_DURATION_MS = 350
+
 export default function SheetButton({ url, ariaLabel, title, subtitle, icon, className, children }: Props) {
   const [isOpen, setIsOpen] = useState(false)
   const [originalUrl, setOriginalUrl] = useState('')
   const [panelTransform, setPanelTransform] = useState('')
   const buttonRef = useRef<HTMLButtonElement>(null)
+  // Deferred history.back() scheduled by handleClose (see below).
+  const pendingBackRef = useRef<number | null>(null)
 
   const handleOpen = () => {
-    // Store the current URL before changing it
-    setOriginalUrl(window.location.pathname + window.location.search)
+    if (pendingBackRef.current !== null) {
+      // Reopened while the previous close's deferred back() is still pending:
+      // history is still on the sheet's entry, so reuse it instead of pushing
+      // a duplicate.
+      clearTimeout(pendingBackRef.current)
+      pendingBackRef.current = null
+    } else {
+      // Store the current URL before changing it
+      setOriginalUrl(window.location.pathname + window.location.search)
 
-    // Use pushState to create a history entry for the back button
-    window.history.pushState(
-      { modalOpen: true, originalUrl: window.location.pathname + window.location.search },
-      '',
-      url
-    )
+      // Use pushState to create a history entry for the back button
+      window.history.pushState(
+        { modalOpen: true, originalUrl: window.location.pathname + window.location.search },
+        '',
+        url
+      )
+    }
 
     setIsOpen(true)
 
@@ -61,9 +75,17 @@ export default function SheetButton({ url, ariaLabel, title, subtitle, icon, cla
   }
 
   const handleClose = () => {
-    // Go back in history instead of manually changing URL
+    setIsOpen(false)
+
+    // history.back() in the same tick makes react-router process its POP
+    // navigation while headlessui is starting the leave transition, which
+    // stomps it (the dialog unmounts instantly instead of morphing back).
+    // Close first, pop the history entry once the animation is done.
     if (window.history.state?.modalOpen) {
-      window.history.back()
+      pendingBackRef.current = window.setTimeout(() => {
+        pendingBackRef.current = null
+        window.history.back()
+      }, LEAVE_DURATION_MS)
     } else {
       // Fallback if state is lost
       window.history.replaceState(
@@ -72,28 +94,42 @@ export default function SheetButton({ url, ariaLabel, title, subtitle, icon, cla
         originalUrl
       )
     }
-
-    setIsOpen(false)
   }
 
   // Handle browser navigation
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
+      if (pendingBackRef.current !== null) {
+        // The user pressed back before our deferred back() fired — this pop
+        // already consumed the sheet's entry, so firing ours too would pop
+        // one entry too far.
+        clearTimeout(pendingBackRef.current)
+        pendingBackRef.current = null
+      }
+
       // If we're popping back from the sheet state
       if (event.state?.modalOpen && isOpen) {
         // This is moving forward to the sheet, ignore
         return
       }
 
-      // If the sheet is open and we're going back, close it
+      // If the sheet is open and we're going back, close it — deferred so
+      // react-router's POP re-render (same popstate tick) commits before the
+      // leave transition starts, instead of stomping it.
       if (isOpen) {
-        setIsOpen(false)
+        setTimeout(() => setIsOpen(false), 0)
       }
     }
 
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [isOpen])
+
+  // Don't fire a stale deferred back() after unmount (e.g. a real navigation
+  // away while the close animation is still running).
+  useEffect(() => () => {
+    if (pendingBackRef.current !== null) clearTimeout(pendingBackRef.current)
+  }, [])
 
   return (
     <>
