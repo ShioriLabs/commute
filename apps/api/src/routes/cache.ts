@@ -105,6 +105,20 @@ app.delete('/lines/:operator/:lineCode/bust', async (c) => {
   )
 })
 
+app.delete('/fares/:from/:to/bust', async (c) => {
+  const kvRepository = new KVRepository(c.env.KV)
+
+  const kvKey = `fares:${c.req.param('from')}:${c.req.param('to')}:${c.env.API_VERSION}`
+  await kvRepository.del(kvKey)
+
+  return c.json(
+    Ok(
+      { message: `Cache ${kvKey} has been cleared.` }
+    ),
+    200
+  )
+})
+
 app.delete('/hubs/bust', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
 
