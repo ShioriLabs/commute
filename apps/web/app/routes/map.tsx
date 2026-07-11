@@ -22,6 +22,7 @@ import {
   type Tier,
   type Transform
 } from '../lib/map-renderer'
+import { getUnservedStation } from '../lib/unserved-stations'
 import { AuthorOverlay, handleAuthorTap } from '../components/map-author'
 import StationSheet from '../components/station-sheet'
 import HubSheet from '../components/hub-sheet'
@@ -268,7 +269,7 @@ export default function MapPage() {
   // URL key as StationSheet's content, so SWR dedupes — no extra request. The
   // halo starts neutral and re-tints when this resolves.
   const { data: spotlightStation } = useSWR<StandardResponse<Station>>(
-    selectedStation
+    selectedStation && !getUnservedStation(selectedStation.operator, selectedStation.code)
       ? new URL(`/stations/${selectedStation.operator}/${selectedStation.code}`, import.meta.env.VITE_API_BASE_URL).href
       : null,
     fetcher
@@ -768,7 +769,7 @@ export default function MapPage() {
 
     const points = workingPointsRef.current
     const hit = points.length > 0 ? hitTest(worldX, worldY, points, slopWorld) : null
-    if (hit && hit.point.id !== 'KCI-GMR') {
+    if (hit) {
       if (hit.kind === 'hub') {
         // Hub region tapped (no member pill won). Resolve `HUB-…` id → slug.
         const slug = hubSlugById.get(hit.point.id)

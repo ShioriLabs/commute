@@ -1,6 +1,9 @@
 interface Props {
   mode: 'OFFLINE' | 'NO_DATA' | 'ERROR'
   onRetry?: () => void
+  // Override the mode's default copy (e.g. station-specific messages).
+  title?: string
+  message?: string
 }
 
 const COPY = {
@@ -18,8 +21,9 @@ const COPY = {
   }
 } as const
 
-export default function EmptyState({ mode, onRetry }: Props) {
-  const { title, message } = COPY[mode]
+export default function EmptyState({ mode, onRetry, title: titleOverride, message: messageOverride }: Props) {
+  const title = titleOverride ?? COPY[mode].title
+  const message = messageOverride ?? COPY[mode].message
 
   return (
     <div className="w-full h-auto flex items-center justify-center mt-8 flex-col max-w-3xl mx-auto" aria-live="polite">

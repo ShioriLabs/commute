@@ -29,6 +29,7 @@ import LineRoundel from '~/components/line-roundel'
 import EmptyState from '~/components/empty-state'
 import { fetcher } from 'utils/fetcher'
 import { useNetworkStatus } from '~/hooks/network'
+import { getUnservedStation } from '~/lib/unserved-stations'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -68,6 +69,9 @@ export interface StationHeader {
   formattedName: string | null
   stationId: string | null
   lines: Line[]
+  // The station exists (e.g. on the map) but no operator we cover serves it
+  // yet, so there is no API record to fetch.
+  unserved: boolean
 }
 
 interface UseStationDataResult {
@@ -75,22 +79,38 @@ interface UseStationDataResult {
 }
 
 export function useStationHeader(operator: string, code: string): UseStationDataResult {
+  const unserved = getUnservedStation(operator, code)
   const stationUrl = useMemo(() =>
     new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href,
   [operator, code]
   )
-  const station = useSWR<StandardResponse<Station>>(stationUrl, fetcher, swrConfig)
+  const station = useSWR<StandardResponse<Station>>(unserved ? null : stationUrl, fetcher, swrConfig)
+
+  if (unserved) {
+    return {
+      header: {
+        isLoading: false,
+        formattedName: unserved.formattedName,
+        stationId: null,
+        lines: [],
+        unserved: true
+      }
+    }
+  }
+
   return {
     header: {
       isLoading: station.isLoading,
       formattedName: station.data?.data?.formattedName ?? null,
       stationId: station.data?.data?.id ?? null,
-      lines: station.data?.data?.lines ?? []
+      lines: station.data?.data?.lines ?? [],
+      unserved: false
     }
   }
 }
 
 const StationContent = memo(function StationContent({ operator, code }: StationContentProps) {
+  const unserved = getUnservedStation(operator, code)
   const stationUrl = useMemo(() =>
     new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href,
   [operator, code]
@@ -104,10 +124,18 @@ const StationContent = memo(function StationContent({ operator, code }: StationC
   [operator, code]
   )
 
-  const station = useSWR<StandardResponse<Station>>(stationUrl, fetcher, swrConfig)
-  const timetable = useSWR<StandardResponse<LineGroupedTimetable>>(timetableUrl, fetcher, swrConfig)
-  const transfers = useSWR<StandardResponse<Transfer[]>>(transfersUrl, fetcher, swrConfig)
+  const station = useSWR<StandardResponse<Station>>(unserved ? null : stationUrl, fetcher, swrConfig)
+  const timetable = useSWR<StandardResponse<LineGroupedTimetable>>(unserved ? null : timetableUrl, fetcher, swrConfig)
+  const transfers = useSWR<StandardResponse<Transfer[]>>(unserved ? null : transfersUrl, fetcher, swrConfig)
   const networkStatus = useNetworkStatus()
+
+  if (unserved) {
+    return (
+      <div className="flex flex-col max-w-3xl mx-auto pb-8 px-4 mt-4">
+        <EmptyState mode="NO_DATA" title={unserved.title} message={unserved.message} />
+      </div>
+    )
+  }
 
   if (timetable.isLoading || station.isLoading) {
     return (

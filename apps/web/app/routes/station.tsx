@@ -92,21 +92,23 @@ export default function StationPage({ params }: Route.ComponentProps) {
               ? (
                   <div className="animate-pulse w-8 h-8 bg-slate-200 rounded-full" />
                 )
-              : (
-                  <button
-                    onClick={handleSaveStationButton}
-                    aria-label={saved ? 'Hapus stasiun ini dari favorit' : 'Simpan stasiun ini ke favorit'}
-                    className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8 cursor-pointer"
-                  >
-                    {saved
-                      ? (
-                          <PushPinSlashIcon weight="bold" className="w-6 h-6" />
-                        )
-                      : (
-                          <PushPinIcon weight="bold" className="w-6 h-6" />
-                        )}
-                  </button>
-                )}
+              : header.unserved
+                ? null
+                : (
+                    <button
+                      onClick={handleSaveStationButton}
+                      aria-label={saved ? 'Hapus stasiun ini dari favorit' : 'Simpan stasiun ini ke favorit'}
+                      className="rounded-full leading-0 flex items-center justify-center font-bold w-8 h-8 cursor-pointer"
+                    >
+                      {saved
+                        ? (
+                            <PushPinSlashIcon weight="bold" className="w-6 h-6" />
+                          )
+                        : (
+                            <PushPinIcon weight="bold" className="w-6 h-6" />
+                          )}
+                    </button>
+                  )}
             <button
               onClick={handleBackButton}
               aria-label="Tutup halaman stasiun"
