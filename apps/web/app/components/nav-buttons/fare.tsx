@@ -1,5 +1,6 @@
-import { Link } from 'react-router'
 import { TicketIcon } from '@phosphor-icons/react'
+import SheetButton from './sheet-button'
+import FareSheet from '../fare-sheet'
 
 interface Props {
   className?: string
@@ -7,20 +8,21 @@ interface Props {
 
 export default function FareButton({ className }: Props) {
   return (
-    <Link
-      to="/fare"
-      className={`bg-white p-4 rounded-xl shadow-2xs w-screen h-screen max-w-44 max-h-32 border-2 border-rose-50 flex flex-col relative overflow-clip select-none text-left cursor-pointer scale-100 lg:hover:scale-105 transition-transform transform-gpu ease-in-out shrink-0 ${className ? className : ''}`}
-      aria-label="Cek tarif perjalanan"
+    <SheetButton
+      url="/fare"
+      ariaLabel="Cek tarif perjalanan"
+      title="Cek"
+      subtitle={(
+        <>
+          Tarif
+          <br />
+          Perjalanan
+        </>
+      )}
+      icon={<TicketIcon weight="fill" className="w-12 h-12 text-slate-700" />}
+      className={className}
     >
-      <div className="absolute -bottom-4 -right-4 rounded-full bg-slate-100 p-4 z-[1]">
-        <TicketIcon weight="fill" className="w-12 h-12 text-slate-700" />
-      </div>
-      <b className="z-[2]">Cek</b>
-      <span className="text-lg leading-tight z-[2]">
-        Tarif
-        <br />
-        Perjalanan
-      </span>
-    </Link>
+      <FareSheet />
+    </SheetButton>
   )
 }
