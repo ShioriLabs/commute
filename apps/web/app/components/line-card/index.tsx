@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router'
 import { CaretRightIcon } from '@phosphor-icons/react'
 import { getTintFromColor } from 'utils/colors'
-import { isImmediateDeparture, parseTime } from 'utils/schedules'
+import { getRelativeDepartureLabel, parseTime } from 'utils/schedules'
 
 function getNextSchedules(
   schedules: CompactSchedule[],
@@ -101,6 +101,10 @@ export default function LineCard({ line, operator }: Props) {
       </article>
       <ul>
         {nextSchedulesFilteredTimetable.map((direction) => {
+          const departure = parseTime(direction.schedules[0].estimatedDeparture)
+          const relativeLabel = getRelativeDepartureLabel(lastUpdated, departure)
+          const absoluteTime = departure.toLocaleTimeString('id-ID', { timeStyle: 'short' })
+
           return (
             <li
               key={`${direction.boundFor}${direction.via ? `:${direction.via}` : ''}`}
@@ -114,15 +118,15 @@ export default function LineCard({ line, operator }: Props) {
                 {direction.via && <span className="text-sm text-gray-600">via {direction.via}</span>}
               </div>
               <div className="text-right flex flex-col">
-                {isImmediateDeparture(lastUpdated, parseTime(direction.schedules[0].estimatedDeparture))
+                {relativeLabel
                   ? (
-                      <span className="font-bold animate-pulse" style={{ color: line.colorCode }} aria-label="Keberangkatan berikutnya akan tiba sebentar lagi">
-                        {parseTime(direction.schedules[0].estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })}
+                      <span className="font-bold" aria-label={relativeLabel === 'Sekarang' ? 'Keberangkatan berikutnya dalam beberapa menit' : `Keberangkatan berikutnya dalam ${relativeLabel.replace('mnt', 'menit')}`}>
+                        {relativeLabel}
                       </span>
                     )
                   : (
-                      <span className="font-bold" aria-label={`Keberangkatan berikutnya pada ${parseTime(direction.schedules[0].estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })}`}>
-                        {parseTime(direction.schedules[0].estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })}
+                      <span className="font-bold" aria-label={`Keberangkatan berikutnya pada ${absoluteTime}`}>
+                        {absoluteTime}
                       </span>
                     )}
                 {direction.schedules.length > 1
