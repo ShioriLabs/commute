@@ -13,6 +13,10 @@ export interface StationSchema {
   updatedAt: ColumnType<Date, string | undefined, string | undefined>
   timetableSynced: ColumnType<number, number | undefined, number | undefined>
   score: ColumnType<number, number | undefined, number | undefined>
+  // Whether the station appears in search. 1 = searchable (default), 0 =
+  // topology-only (exists for edges/transfers/routing but hidden from search).
+  // D1 stores 0/1; the repository coerces to a boolean on the mapped output.
+  searchable: ColumnType<number, number | undefined, number | undefined>
   amenities: ColumnType<Amenity[] | null, string | Amenity[] | null, string | Amenity[] | null>
   latitude: ColumnType<number | null, number | null, number | null>
   longitude: ColumnType<number | null, number | null, number | null>

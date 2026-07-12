@@ -15,6 +15,8 @@ export interface Station {
   updatedAt: Date
   timetableSynced: number
   score: number
+  // true = searchable (default), false = topology-only (hidden from search).
+  searchable: boolean
   amenities: Amenity[]
   latitude: number | null
   longitude: number | null

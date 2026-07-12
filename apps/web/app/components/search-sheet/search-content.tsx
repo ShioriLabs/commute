@@ -140,6 +140,7 @@ export default function SearchContent({ title, closeButton }: Props) {
     if (stations && stations.data) {
       for (const station of stations.data) {
         if (station.regionCode !== 'CGK') continue // only jakarta area for now
+        if (!station.searchable) continue // topology-only stations never enter the index
         _searchables.push({
           type: 'STATION',
           title: station.formattedName || station.name,
@@ -231,8 +232,7 @@ export default function SearchContent({ title, closeButton }: Props) {
     const { stationId, hubId } = e.currentTarget.dataset
     if (stationId) {
       recordRecent({ type: 'STATION', id: stationId })
-    }
-    else if (hubId) {
+    } else if (hubId) {
       recordRecent({ type: 'HUB', id: hubId })
     }
   }
