@@ -17,7 +17,10 @@ const WELL_KNOWN_STATION_NAMES: Record<string, string> = {
   'BANDARASOEKARNOHATTA': 'Bandara Soekarno-Hatta',
   'KAMPUNGBANDAN': 'Kampung Bandan',
   'PARUNGPANJANG': 'Parung Panjang',
-  'SUDIRMAN BARU': 'BNI City'
+  'SUDIRMAN BARU': 'BNI City',
+  'JAKARTAKOTA': 'Jakarta Kota',
+  'TANAHABANG': 'Tanah Abang',
+  'TANJUNGPRIUK': 'Tanjung Priok'
 }
 
 // For mapping API line names to our line codes

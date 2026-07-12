@@ -21,15 +21,28 @@ export interface ScheduleWithLineInfo extends Schedule {
   line: Line | null
 }
 
+// One boundFor bucket — a terminus row inside a direction group.
+export interface TimetableDestination {
+  boundFor: string
+  via: string | null
+  schedules: Schedule[]
+}
+
+// One physical departure direction out of the station: derived label
+// (station display names, UI joins with ' / '), curated platform overlay,
+// and the boundFor buckets that leave that way, farthest terminus first.
+export interface TimetableDirectionGroup {
+  key: string
+  label: string[]
+  platformCode: string | null
+  destinations: TimetableDestination[]
+}
+
 export interface LineTimetable {
   name: string
   lineCode: string
   colorCode: `#${string}`
-  timetable: {
-    boundFor: string
-    via: string | null
-    schedules: Schedule[]
-  }[]
+  timetable: TimetableDirectionGroup[]
 }
 
 export type LineGroupedTimetable = LineTimetable[]
@@ -39,12 +52,16 @@ export interface CompactSchedule {
   estimatedDeparture: Date
 }
 
+export type CompactTimetableDestination = Omit<TimetableDestination, 'schedules'> & {
+  schedules: CompactSchedule[]
+}
+
+export type CompactTimetableDirectionGroup = Omit<TimetableDirectionGroup, 'destinations'> & {
+  destinations: CompactTimetableDestination[]
+}
+
 export type CompactLineTimetable = Omit<LineTimetable, 'timetable'> & {
-  timetable: {
-    boundFor: string
-    via: string | null
-    schedules: CompactSchedule[]
-  }[]
+  timetable: CompactTimetableDirectionGroup[]
 }
 
 export type CompactLineGroupedTimetable = CompactLineTimetable[]

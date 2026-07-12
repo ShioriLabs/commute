@@ -81,11 +81,14 @@ export async function syncTimetable(d1: D1Database, stationCode: string, token?:
   const timetable: NewSchedule[] = []
 
   for (const schedule of json.data) {
+    // The feed occasionally prefixes dest with a literal "undefined "
+    // (seen on R-line Parung Panjang workings).
+    const dest = String(schedule.dest ?? '').replace(/^undefined\s+/i, '')
     const transformedSchedule: NewSchedule = {
       id: `${OPERATORS.KCI.code}-${stationCode}-${schedule.train_id}`,
       stationId: `${OPERATORS.KCI.code}-${stationCode}`,
       tripNumber: schedule.train_id,
-      boundFor: tryGetFormattedName(schedule.dest, schedule.dest),
+      boundFor: tryGetFormattedName(dest, dest),
       estimatedDeparture: schedule.time_est,
       estimatedArrival: schedule.dest_time,
       lineCode: getLineInfoFromAPIName(schedule.ka_name ?? '')?.lineCode ?? 'NUL'
