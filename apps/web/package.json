@@ -8,6 +8,8 @@
     "dev": "react-router dev",
     "start": "react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc",
+    "lint": "eslint",
+    "lint:fix": "eslint --fix",
     "build:map-tiles": "tsx scripts/build-map-tiles.ts",
     "build:og": "tsx scripts/build-og-images.ts"
   },

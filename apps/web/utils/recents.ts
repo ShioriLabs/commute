@@ -15,8 +15,7 @@ export function readRecents(): RecentEntry[] {
     return parsed
       .map(entry => typeof entry === 'string' ? { type: 'STATION' as const, id: entry } : entry)
       .filter(entry => entry && typeof entry.id === 'string')
-  }
-  catch {
+  } catch {
     return []
   }
 }

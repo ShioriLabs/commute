@@ -4,7 +4,8 @@
   "description": "",
   "scripts": {
     "dev": "wrangler dev",
-    "lint": "eslint --fix",
+    "lint": "eslint",
+    "lint:fix": "eslint --fix",
     "migration:up": "wrangler d1 migrations apply commute",
     "build": "wrangler build",
     "start": "wrangler dev",

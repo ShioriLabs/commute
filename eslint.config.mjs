@@ -18,5 +18,10 @@ export default defineConfig([
     commaDangle: 'never',
     braceStyle: '1tbs'
   }),
-  globalIgnores(['apps/api/.wrangler/**/*'])
+  globalIgnores([
+    'apps/api/.wrangler/**/*',
+    'apps/api/dist/**/*',
+    'apps/web/build/**/*',
+    'apps/web/.react-router/**/*'
+  ])
 ])
