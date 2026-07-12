@@ -1,7 +1,13 @@
 # Platform codes on departure groups
 
-**Status:** design note — decision made, *not yet implemented*. Held because the
-station/direction count to curate is large; revisit before building.
+**Status:** *implemented* (July 2026) as part of direction grouping. The derived
+base layer + curated overlay described in "Chosen direction" below ships in
+`apps/api/src/utils/directions.ts` (walk/grouping) and `PLATFORM_CODES` in
+`@commute/constants` (overlay, keyed `${stationId}:${lineCode}:${nextHopCode}`,
+empty until curated — backfill anytime, then bump `API_VERSION`). Validation
+and the final label rules live in `direction-grouping-simulation.md` (repo
+root). Earlier line references below (stations.ts L220–272) describe the
+pre-implementation code and are kept for history.
 
 ## Goal
 

@@ -7,10 +7,43 @@ import { getOperatorByCode } from 'utils/operator'
 import { Line } from 'models/line'
 import { CompactLineGroupedTimetable, LineGroupedTimetable, Schedule } from 'db/schemas/schedules'
 import { getLineByOperator } from 'utils/line'
-import { CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES, OPERATORS } from '@commute/constants'
+import { CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES, OPERATORS, Operator, PLATFORM_CODES } from '@commute/constants'
 import { mapSchedule } from 'utils/schedules'
+import { findTopology } from 'utils/topology'
+import {
+  BoundForEntry,
+  buildLineMembershipCount,
+  buildStationNameIndex,
+  groupDirections,
+  syntheticGroup,
+  StationNameIndex
+} from 'utils/directions'
 
 const app = new Hono<{ Bindings: Bindings }>()
+
+// Direction derivation inputs are stable per isolate (fares.ts cachedGraph
+// pattern): membership counts are pure TOPOLOGY, the name index needs one D1
+// query per operator per isolate.
+const membershipCountCache = new Map<Operator, Map<string, number>>()
+const nameIndexCache = new Map<Operator, StationNameIndex>()
+
+function getMembershipCount(operator: Operator) {
+  let counts = membershipCountCache.get(operator)
+  if (!counts) {
+    counts = buildLineMembershipCount(operator)
+    membershipCountCache.set(operator, counts)
+  }
+  return counts
+}
+
+async function getNameIndex(operator: Operator, stationRepository: StationRepository) {
+  let index = nameIndexCache.get(operator)
+  if (!index) {
+    index = buildStationNameIndex(await stationRepository.getNameIndexRowsByOperator(operator))
+    nameIndexCache.set(operator, index)
+  }
+  return index
+}
 
 app.get('/', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
@@ -251,23 +284,47 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
     }
   }
 
+  // Direction derivation is KCI-only (per-line topology walks). Other
+  // operators keep one group per boundFor — same shape, unchanged rendering.
+  const isKCI = operator.code === OPERATORS.KCI.code
+  const nameIndex = isKCI ? await getNameIndex(operator.code, stationRepository) : null
+  const membershipCount = isKCI ? getMembershipCount(operator.code) : new Map<string, number>()
+
   const timetable = compactMode ? ([] as CompactLineGroupedTimetable) : ([] as LineGroupedTimetable)
   for (const { line, boundForGroups } of lineGroups.values()) {
-    const timetableEntries = Array.from(boundForGroups.entries()).map(([key, schedules]) => {
+    const entries: BoundForEntry[] = Array.from(boundForGroups.entries()).map(([key, schedules]) => {
       const [boundFor, via] = key.split(':')
+      return { boundFor: boundFor!, via: via || null, schedules }
+    })
 
-      return {
-        boundFor: boundFor!,
-        via: via || null,
-        schedules: mapSchedule(schedules, compactMode)
-      }
-    }).sort((a, b) => a.boundFor.localeCompare(b.boundFor))
+    const groups = isKCI
+      ? groupDirections({
+          operator: operator.code,
+          lineCode: line.lineCode,
+          stationCode,
+          topology: findTopology(operator.code, line.lineCode),
+          entries,
+          nameIndex,
+          lineMembershipCount: membershipCount
+        })
+      : entries.map(syntheticGroup)
 
     timetable.push({
       name: line.name,
       colorCode: line.colorCode,
       lineCode: line.lineCode,
-      timetable: timetableEntries
+      timetable: groups.map(group => ({
+        key: group.key,
+        label: group.label,
+        platformCode: group.nextHopCode
+          ? PLATFORM_CODES[`${stationID}:${line.lineCode}:${group.nextHopCode}`] ?? null
+          : null,
+        destinations: group.destinations.map(destination => ({
+          boundFor: destination.boundFor,
+          via: destination.via,
+          schedules: mapSchedule(destination.schedules, compactMode)
+        }))
+      }))
     })
   }
 
