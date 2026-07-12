@@ -293,6 +293,15 @@ export class StationRepository extends Repository {
       .executeTakeFirst()
   }
 
+  // Lean rows for resolving schedule boundFor display names to station codes.
+  async getNameIndexRowsByOperator(operator: Operator) {
+    return await db(this.d1)
+      .selectFrom('stations')
+      .select(['code', 'name', 'formattedName'])
+      .where('operator', '=', operator)
+      .execute()
+  }
+
   async getTimetableFromStationId(id: string, line?: string, page?: number, limit?: number) {
     let query = db(this.d1)
       .selectFrom('schedules')

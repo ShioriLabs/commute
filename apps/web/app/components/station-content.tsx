@@ -28,6 +28,7 @@ import LineCard from '~/components/line-card'
 import LineRoundel from '~/components/line-roundel'
 import EmptyState from '~/components/empty-state'
 import { fetcher } from 'utils/fetcher'
+import { normalizeGroupedTimetable } from 'utils/timetable-shim'
 import { useNetworkStatus } from '~/hooks/network'
 import { getUnservedStation } from '~/lib/unserved-stations'
 
@@ -126,6 +127,7 @@ const StationContent = memo(function StationContent({ operator, code }: StationC
 
   const station = useSWR<StandardResponse<Station>>(unserved ? null : stationUrl, fetcher, swrConfig)
   const timetable = useSWR<StandardResponse<LineGroupedTimetable>>(unserved ? null : timetableUrl, fetcher, swrConfig)
+  const timetableData = useMemo(() => normalizeGroupedTimetable(timetable.data?.data), [timetable.data])
   const transfers = useSWR<StandardResponse<Transfer[]>>(unserved ? null : transfersUrl, fetcher, swrConfig)
   const networkStatus = useNetworkStatus()
 
@@ -148,7 +150,7 @@ const StationContent = memo(function StationContent({ operator, code }: StationC
   return (
     <div className="flex flex-col max-w-3xl mx-auto pb-8 px-4 mt-4">
       {(() => {
-        if (timetable.data?.data?.length) {
+        if (timetableData?.length) {
           return (
             <>
               {networkStatus === 'OFFLINE' && (
@@ -179,7 +181,7 @@ const StationContent = memo(function StationContent({ operator, code }: StationC
                 </Link>
               </div>
               <ul className="flex flex-col gap-2 mt-4">
-                {timetable.data.data.map(line => (
+                {timetableData.map(line => (
                   <LineCard key={line.lineCode} line={line} operator={operator} />
                 ))}
               </ul>

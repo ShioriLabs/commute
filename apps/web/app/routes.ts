@@ -4,6 +4,7 @@ export default [
   layout('layouts/default.tsx', [
     index('routes/home.tsx'),
     route('search', 'routes/search.tsx'),
+    route('fare', 'routes/fare.tsx'),
     route('map', 'routes/map.tsx'),
     route('stations/:operator/:code', 'routes/station.tsx'),
     route('stations/:operator/:code/timetable', 'routes/timetable.tsx'),

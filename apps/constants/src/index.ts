@@ -79,3 +79,57 @@ export const CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES = new Set([
   'KLD',
   'JNG'
 ])
+
+/**
+ * Curated platform overlay for departure direction groups.
+ * Key: `${stationId}:${lineCode}:${nextHopStationCode}` (e.g. 'KCI-CUK:C:KLD').
+ * Value: bare platform identifier per GTFS convention ("3/4", not "Peron 3/4");
+ * the UI adds the "Peron" prefix. Missing key -> no badge, direction still renders.
+ */
+export const PLATFORM_CODES: Record<string, string> = {}
+
+/**
+ * Stations promoted into direction labels despite not being interchanges or
+ * junctions. Stands in for the search score (unset network-wide today).
+ * Key: `${operator}:${stationCode}`.
+ * KMT: Kramat becomes a transfer point when the LRTJ extension opens.
+ */
+export const DIRECTION_LABEL_BOOST_STATIONS = new Set([
+  'KCI:PSE',
+  'KCI:KMT'
+])
+
+/**
+ * Termini that schedules reference but the routable topology cannot reach.
+ * Key: `${operator}:${lineCode}:${destinationStationCode}`.
+ * `walkToward` is the in-topology station to path toward instead.
+ * `viaFromTripPrefix` splits the trains by trip-number prefix into loop sides,
+ * applied only at stations whose timetable is already via-split.
+ */
+export interface OffTopologyProxy {
+  walkToward: string
+  viaFromTripPrefix?: { prefix: string, via: string, elseVia: string }
+}
+
+export const OFF_TOPOLOGY_TERMINUS_PROXIES: Record<string, OffTopologyProxy> = {
+  // Late-night Cikarang-line workings divert beyond Kampung Bandan to Jakarta
+  // Kota; Jakarta Kota is deliberately outside the routable C topology.
+  'KCI:C:JAKK': { walkToward: 'KPB', viaFromTripPrefix: { prefix: '6', via: 'PSE', elseVia: 'MRI' } },
+  // The airport station is absent from the stations DB; Batu Ceper is the
+  // last in-topology stop of the Basoetta line.
+  'KCI:A:BST': { walkToward: 'BPR' }
+}
+
+/**
+ * boundFor display names that don't resolve against station names.
+ * Key: normalized boundFor (lowercase, alphanumerics only) -> station code.
+ * Covers KCI feed quirks still present in synced data (no-space names, the
+ * literal "undefined " prefix bug) and the DB-less airport station.
+ */
+export const BOUND_FOR_STATION_ALIASES: Record<string, string> = {
+  jakartakota: 'JAKK',
+  tanahabang: 'THB',
+  tanjungpriuk: 'TPK',
+  bandarasoekarnohatta: 'BST',
+  undefinedparungpanjang: 'PRP'
+}

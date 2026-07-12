@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Station } from 'models/stations'
 import type { CompactLineGroupedTimetable } from 'models/schedules'
 import type { StandardResponse } from '@schema/response'
 import LineCard from '~/components/line-card'
 import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
+import { normalizeGroupedTimetable } from 'utils/timetable-shim'
 import SearchStationsButton from '~/components/nav-buttons/search-stations'
 import { CaretRightIcon, DownloadSimpleIcon, InfoIcon, WarningIcon } from '@phosphor-icons/react'
 import { Link } from 'react-router'
 import SettingsButton from '~/components/nav-buttons/settings'
+import FareButton from '~/components/nav-buttons/fare'
 import { useNetworkStatus } from '~/hooks/network'
 import { useInstall } from '~/contexts/installable'
 
@@ -62,6 +64,7 @@ function StationCard({ stationId }: { stationId: string }) {
   const [operator, code] = stationId.split(/-/g)
   const station = useSWR<StandardResponse<Station>>(new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
   const timetable = useSWR<StandardResponse<CompactLineGroupedTimetable>>(new URL(`/stations/${operator}/${code}/timetable/grouped?compact=1`, import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
+  const timetableData = useMemo(() => normalizeGroupedTimetable(timetable.data?.data), [timetable.data])
   const networkStatus = useNetworkStatus()
 
   if (station.isLoading) {
@@ -90,10 +93,10 @@ function StationCard({ stationId }: { stationId: string }) {
             ? (
                 <div className="flex h-[320px] bg-slate-200 rounded-xl mx-4 animate-pulse" />
               )
-            : timetable.data?.data?.length
+            : timetableData?.length
               ? (
                   <ul className="flex flex-col lg:grid lg:grid-cols-2 gap-4 mx-4">
-                    {timetable.data.data.map(line => (
+                    {timetableData.map(line => (
                       <LineCard key={line.lineCode} line={line} />
                     ))}
                   </ul>
@@ -254,9 +257,10 @@ export default function HomePage() {
               <div className="rounded-full border-4 border-slate-600 border-t-transparent w-12 h-12 m-auto animate-spin" aria-label="Memuat data..." />
             </div>
           )}
-      <nav className="fixed bottom-0 py-4 bg-gradient-to-t from-30% from-rose-50/40 w-screen z-20" aria-label="Navigasi utama">
+      <nav className="fixed bottom-0 py-4 bg-gradient-to-t from-50% from-[#FFF8F8] to-transparent w-screen z-20" aria-label="Navigasi utama">
         <div className="w-full max-w-3xl mx-auto flex gap-4 overflow-x-auto no-scrollbar">
           <SearchStationsButton className="ml-4 lg:ml-2" />
+          <FareButton />
           <SettingsButton className={canInstall ? '' : 'mr-4 lg:mr-2'} />
         </div>
       </nav>

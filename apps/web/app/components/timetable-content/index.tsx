@@ -7,6 +7,7 @@ import type { CompactLineGroupedTimetable } from 'models/schedules'
 import EmptyState from '~/components/empty-state'
 import LineRoundel from '~/components/line-roundel'
 import { fetcher } from 'utils/fetcher'
+import { normalizeGroupedTimetable } from 'utils/timetable-shim'
 import { useNetworkStatus } from '~/hooks/network'
 import { isImmediateDeparture, parseTime } from 'utils/schedules'
 
@@ -19,43 +20,59 @@ const swrConfig = {
 
 interface DepartureRow {
   scheduleId: string
-  lineCode: string
-  lineName: string
-  lineColor: `#${string}`
   boundFor: string
   via: string | null
   estimatedDeparture: string
   sortKey: number
 }
 
-function buildRows(timetable: CompactLineGroupedTimetable, now: Date): DepartureRow[] {
-  const rows: DepartureRow[] = []
+interface DirectionSection {
+  key: string
+  lineCode: string
+  lineName: string
+  lineColor: `#${string}`
+  label: string[]
+  platformCode: string | null
+  rows: DepartureRow[]
+}
+
+function buildSections(timetable: CompactLineGroupedTimetable, now: Date): DirectionSection[] {
+  const sections: DirectionSection[] = []
   const lateNight = now.getHours() >= 21
 
   for (const line of timetable) {
-    for (const direction of line.timetable) {
-      for (const schedule of direction.schedules) {
-        const parsed = parseTime(schedule.estimatedDeparture)
-        let sortKey = parsed.getTime()
-        if (lateNight && parsed.getHours() < 4) {
-          sortKey += 24 * 60 * 60 * 1000
+    for (const group of line.timetable) {
+      const rows: DepartureRow[] = []
+      for (const destination of group.destinations) {
+        for (const schedule of destination.schedules) {
+          const parsed = parseTime(schedule.estimatedDeparture)
+          let sortKey = parsed.getTime()
+          if (lateNight && parsed.getHours() < 4) {
+            sortKey += 24 * 60 * 60 * 1000
+          }
+          rows.push({
+            scheduleId: schedule.id,
+            boundFor: destination.boundFor,
+            via: destination.via,
+            estimatedDeparture: schedule.estimatedDeparture,
+            sortKey
+          })
         }
-        rows.push({
-          scheduleId: schedule.id,
-          lineCode: line.lineCode,
-          lineName: line.name,
-          lineColor: line.colorCode,
-          boundFor: direction.boundFor,
-          via: direction.via,
-          estimatedDeparture: schedule.estimatedDeparture,
-          sortKey
-        })
       }
+      rows.sort((a, b) => a.sortKey - b.sortKey)
+      sections.push({
+        key: `${line.lineCode}:${group.key}`,
+        lineCode: line.lineCode,
+        lineName: line.name,
+        lineColor: line.colorCode,
+        label: group.label,
+        platformCode: group.platformCode,
+        rows
+      })
     }
   }
 
-  rows.sort((a, b) => a.sortKey - b.sortKey)
-  return rows
+  return sections
 }
 
 function findNearestIndex(rows: DepartureRow[], now: Date) {
@@ -84,6 +101,7 @@ const TimetableContent = memo(function TimetableContent({ operator, code }: Prop
   )
 
   const timetable = useSWR<StandardResponse<CompactLineGroupedTimetable>>(timetableUrl, fetcher, swrConfig)
+  const timetableData = useMemo(() => normalizeGroupedTimetable(timetable.data?.data), [timetable.data])
   const networkStatus = useNetworkStatus()
 
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
@@ -97,13 +115,13 @@ const TimetableContent = memo(function TimetableContent({ operator, code }: Prop
   }, [])
 
   const lines: LineMeta[] = useMemo(() => {
-    if (!timetable.data?.data) return []
-    return timetable.data.data.map(line => ({
+    if (!timetableData) return []
+    return timetableData.map(line => ({
       lineCode: line.lineCode,
       name: line.name,
       colorCode: line.colorCode
     }))
-  }, [timetable.data])
+  }, [timetableData])
 
   const [excludedLines, setExcludedLines] = useState<Set<string>>(new Set())
 
@@ -119,31 +137,49 @@ const TimetableContent = memo(function TimetableContent({ operator, code }: Prop
     })
   }, [])
 
-  const allRows = useMemo(() => {
-    if (!timetable.data?.data) return []
-    return buildRows(timetable.data.data, lastUpdated)
-  }, [timetable.data, lastUpdated])
+  const allSections = useMemo(() => {
+    if (!timetableData) return []
+    return buildSections(timetableData, lastUpdated)
+  }, [timetableData, lastUpdated])
 
-  const visibleRows = useMemo(() => {
-    if (excludedLines.size === 0) return allRows
-    return allRows.filter(row => !excludedLines.has(row.lineCode))
-  }, [allRows, excludedLines])
+  const visibleSections = useMemo(() => {
+    if (excludedLines.size === 0) return allSections
+    return allSections.filter(section => !excludedLines.has(section.lineCode))
+  }, [allSections, excludedLines])
 
-  const nearestIndex = useMemo(() =>
-    findNearestIndex(visibleRows, lastUpdated),
-  [visibleRows, lastUpdated]
-  )
+  // Each section highlights its own next departure; the initial scroll lands
+  // on the globally soonest upcoming one across visible sections.
+  const nearestBySection = useMemo(() => {
+    const nearest = new Map<string, number>()
+    for (const section of visibleSections) {
+      nearest.set(section.key, findNearestIndex(section.rows, lastUpdated))
+    }
+    return nearest
+  }, [visibleSections, lastUpdated])
+
+  const globalNearest = useMemo(() => {
+    let best: { sectionKey: string, sortKey: number } | null = null
+    for (const section of visibleSections) {
+      const index = nearestBySection.get(section.key) ?? -1
+      if (index === -1) continue
+      const row = section.rows[index]
+      if (!best || row.sortKey < best.sortKey) {
+        best = { sectionKey: section.key, sortKey: row.sortKey }
+      }
+    }
+    return best
+  }, [visibleSections, nearestBySection])
 
   const nearestRowRef = useRef<HTMLLIElement | null>(null)
   const hasScrolledRef = useRef(false)
 
   useEffect(() => {
     if (hasScrolledRef.current) return
-    if (!timetable.data?.data?.length) return
+    if (!timetableData?.length) return
     if (!nearestRowRef.current) return
     nearestRowRef.current.scrollIntoView({ block: 'center', behavior: 'auto' })
     hasScrolledRef.current = true
-  }, [timetable.data])
+  }, [timetableData])
 
   if (timetable.isLoading) {
     return (
@@ -153,7 +189,7 @@ const TimetableContent = memo(function TimetableContent({ operator, code }: Prop
     )
   }
 
-  if (!timetable.data?.data?.length) {
+  if (!timetableData?.length) {
     if (networkStatus === 'OFFLINE') return <EmptyState mode="OFFLINE" onRetry={() => timetable.mutate()} />
     if (timetable.error) return <EmptyState mode="ERROR" onRetry={() => timetable.mutate()} />
     return <EmptyState mode="NO_DATA" />
@@ -208,59 +244,85 @@ const TimetableContent = memo(function TimetableContent({ operator, code }: Prop
         </Popover>
       </div>
 
-      {visibleRows.length === 0
+      {visibleSections.length === 0
         ? (
             <p className="text-center text-gray-600 mt-8 px-4">Tidak ada jadwal untuk jalur yang dipilih</p>
           )
         : (
-            <ul className="flex flex-col">
-              {visibleRows.map((row, index) => {
-                const parsed = parseTime(row.estimatedDeparture)
-                const isNearest = index === nearestIndex
-                const isImminent = isNearest && isImmediateDeparture(lastUpdated, parsed)
-                const timeText = parsed.toLocaleTimeString('id-ID', { timeStyle: 'short' })
+            visibleSections.map((section) => {
+              const nearestIndex = nearestBySection.get(section.key) ?? -1
+              const isGlobalNearestSection = globalNearest?.sectionKey === section.key
 
-                let timeClass = 'tabular-nums text-sm font-semibold text-slate-700'
-                let timeStyle: React.CSSProperties | undefined
-                let ariaLabel = `${row.lineName} menuju ${row.boundFor}${row.via ? ` via ${row.via}` : ''} pada ${timeText}`
-
-                if (isImminent) {
-                  timeClass = 'tabular-nums text-sm font-bold animate-pulse'
-                  timeStyle = { color: row.lineColor }
-                  ariaLabel = `Keberangkatan berikutnya: ${ariaLabel}, akan tiba sebentar lagi`
-                } else if (isNearest) {
-                  timeClass = 'tabular-nums text-sm font-bold'
-                  timeStyle = { color: row.lineColor }
-                  ariaLabel = `Keberangkatan berikutnya: ${ariaLabel}`
-                }
-
-                return (
-                  <li
-                    key={row.scheduleId}
-                    ref={isNearest ? nearestRowRef : undefined}
-                    className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 last:border-b-0"
-                    aria-label={ariaLabel}
-                  >
-                    <LineRoundel code={row.lineCode} color={row.lineColor} />
-                    <div className="flex flex-col flex-grow min-w-0">
-                      <span className="text-sm font-semibold text-slate-900 truncate">
-                        {row.boundFor}
-                      </span>
-                      {row.via && (
-                        <span className="text-xs text-slate-500 truncate">
-                          via
-                          {' '}
-                          {row.via}
-                        </span>
-                      )}
-                    </div>
-                    <span className={timeClass} style={timeStyle}>
-                      {timeText}
+              return (
+                <section key={section.key} aria-label={`Keberangkatan ${section.lineName} menuju ${section.label.join(', ')}`}>
+                  {/* Sticks below the page header (p-8/pb-4 + two text lines = 6rem). */}
+                  <header className="sticky top-24 z-[9] flex items-center gap-3 px-4 py-2.5 bg-white/90 backdrop-blur border-b border-slate-100">
+                    <LineRoundel code={section.lineCode} color={section.lineColor} />
+                    <span className="flex-grow min-w-0 text-sm font-bold text-slate-900 truncate">
+                      {'menuju '}
+                      {section.label.join(' / ')}
                     </span>
-                  </li>
-                )
-              })}
-            </ul>
+                    {section.platformCode && (
+                      <span
+                        className="text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap text-slate-900"
+                        style={{ backgroundColor: `${section.lineColor}33` }}
+                        aria-label={`Berangkat dari peron ${section.platformCode}`}
+                      >
+                        {'Peron '}
+                        {section.platformCode}
+                      </span>
+                    )}
+                  </header>
+                  <ul className="flex flex-col mb-4">
+                    {section.rows.map((row, index) => {
+                      const parsed = parseTime(row.estimatedDeparture)
+                      const isNearest = index === nearestIndex
+                      const isImminent = isNearest && isImmediateDeparture(lastUpdated, parsed)
+                      const timeText = parsed.toLocaleTimeString('id-ID', { timeStyle: 'short' })
+
+                      let timeClass = 'tabular-nums text-sm font-semibold text-slate-700'
+                      let timeStyle: React.CSSProperties | undefined
+                      let ariaLabel = `${section.lineName} menuju ${row.boundFor}${row.via ? ` via ${row.via}` : ''} pada ${timeText}`
+
+                      if (isImminent) {
+                        timeClass = 'tabular-nums text-sm font-bold animate-pulse'
+                        timeStyle = { color: section.lineColor }
+                        ariaLabel = `Keberangkatan berikutnya: ${ariaLabel}, akan tiba sebentar lagi`
+                      } else if (isNearest) {
+                        timeClass = 'tabular-nums text-sm font-bold'
+                        timeStyle = { color: section.lineColor }
+                        ariaLabel = `Keberangkatan berikutnya: ${ariaLabel}`
+                      }
+
+                      return (
+                        <li
+                          key={row.scheduleId}
+                          ref={isNearest && isGlobalNearestSection ? nearestRowRef : undefined}
+                          className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 last:border-b-0"
+                          aria-label={ariaLabel}
+                        >
+                          <div className="flex flex-col flex-grow min-w-0">
+                            <span className={`text-sm ${isNearest ? 'font-bold' : 'font-semibold'} text-slate-900 truncate`}>
+                              {row.boundFor}
+                            </span>
+                            {row.via && (
+                              <span className="text-xs text-slate-500 truncate">
+                                via
+                                {' '}
+                                {row.via}
+                              </span>
+                            )}
+                          </div>
+                          <span className={timeClass} style={timeStyle}>
+                            {timeText}
+                          </span>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </section>
+              )
+            })
           )}
     </div>
   )
