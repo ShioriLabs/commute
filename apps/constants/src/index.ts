@@ -15,6 +15,7 @@ export const OPERATORS = {
   MRTJ: { code: 'MRTJ', name: 'MRT Jakarta' },
   LRTJ: { code: 'LRTJ', name: 'LRT Jakarta' },
   LRTJBDB: { code: 'LRTJBDB', name: 'LRT Jabodebek' },
+  TJ: { code: 'TJ', name: 'TransJakarta' },
   NUL: { code: 'NUL', name: 'Unknown' }
 } as const
 

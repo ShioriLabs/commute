@@ -59,6 +59,7 @@ export class StationRepository extends Repository {
         ...station,
         amenities,
         operator,
+        searchable: !!station.searchable,
         lines: Array.from(lines)
       })
     }
@@ -109,6 +110,7 @@ export class StationRepository extends Repository {
         ...station,
         amenities,
         operator,
+        searchable: !!station.searchable,
         lines: Array.from(lines)
       })
     }
@@ -155,6 +157,7 @@ export class StationRepository extends Repository {
       ...station,
       amenities,
       operator,
+      searchable: !!station.searchable,
       lines: Array.from(lines)
     }
   }
@@ -199,6 +202,7 @@ export class StationRepository extends Repository {
         ...station,
         amenities,
         operator,
+        searchable: !!station.searchable,
         lines: Array.from(lines)
       })
     }

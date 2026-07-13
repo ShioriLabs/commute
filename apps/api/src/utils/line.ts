@@ -3,6 +3,7 @@ import { LINES as KCI_LINES } from 'operators/kci/lines'
 import { LINES as MRTJ_LINES } from 'operators/mrtj/lines'
 import { LINES as LRTJ_LINES } from 'operators/lrtj/lines'
 import { LINES as LRTJBDB_LINES } from 'operators/lrtjbdb/lines'
+import { LINES as TJ_LINES } from 'operators/tj/lines'
 import { Line } from 'models/line'
 
 export const ALL_LINES: Record<Operator, readonly Line[]> = {
@@ -10,6 +11,7 @@ export const ALL_LINES: Record<Operator, readonly Line[]> = {
   [OPERATORS.MRTJ.code]: MRTJ_LINES,
   [OPERATORS.LRTJ.code]: LRTJ_LINES,
   [OPERATORS.LRTJBDB.code]: LRTJBDB_LINES,
+  [OPERATORS.TJ.code]: TJ_LINES,
   [OPERATORS.NUL.code]: []
 } as const
 
