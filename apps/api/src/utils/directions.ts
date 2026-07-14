@@ -5,7 +5,7 @@ import {
   Operator
 } from '@commute/constants'
 import { TOPOLOGY, LineTopology } from 'db/data/topology'
-import { Schedule } from 'db/schemas/schedules'
+import { GroupingSchedule } from 'db/schemas/schedules'
 
 // A terminus needs this much daily service to define a group's spine (and thus
 // its label). Rare diversions (3 late-night Jakarta Kota trains) must not own
@@ -60,6 +60,21 @@ export function buildLineGraph(topology: LineTopology): LineGraph {
     degree.set(station, neighbors.length)
   }
   return { adjacency, degree }
+}
+
+// Topology is static per isolate, so the derived graph is too. Memoize it
+// keyed by (operator, lineCode) — the grouped-timetable path builds this on
+// every cache miss otherwise (mirrors fares.ts cachedGraph).
+const lineGraphCache = new Map<string, LineGraph>()
+
+export function getLineGraph(operator: Operator, lineCode: string, topology: LineTopology): LineGraph {
+  const key = `${operator}:${lineCode}`
+  let graph = lineGraphCache.get(key)
+  if (!graph) {
+    graph = buildLineGraph(topology)
+    lineGraphCache.set(key, graph)
+  }
+  return graph
 }
 
 export function bfsPath(
@@ -164,7 +179,9 @@ export function buildLineMembershipCount(operator: Operator): Map<string, number
 export interface BoundForEntry {
   boundFor: string
   via: string | null
-  schedules: Schedule[]
+  // Only the grouping-relevant fields are read here (tripNumber); full Schedule
+  // rows also satisfy this, so both compact and full callers pass through.
+  schedules: GroupingSchedule[]
 }
 
 export interface DirectionGroupCore {
@@ -199,7 +216,7 @@ export function groupDirections(params: {
 }): DirectionGroupCore[] {
   const { operator, lineCode, stationCode, topology, entries, nameIndex, lineMembershipCount } = params
 
-  const graph = topology ? buildLineGraph(topology) : null
+  const graph = topology ? getLineGraph(operator, lineCode, topology) : null
   const hasViaSplitEntries = entries.some(entry => entry.via !== null)
   const discriminators = LOOP_DISCRIMINATORS[`${operator}:${lineCode}`]
 

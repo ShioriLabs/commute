@@ -5,7 +5,7 @@ import { Bindings } from 'app'
 import { KVRepository } from 'db/repositories/kv'
 import { getOperatorByCode } from 'utils/operator'
 import { Line } from 'models/line'
-import { CompactLineGroupedTimetable, LineGroupedTimetable, Schedule } from 'db/schemas/schedules'
+import { CompactLineGroupedTimetable, GroupingSchedule, LineGroupedTimetable, Schedule } from 'db/schemas/schedules'
 import { getLineByOperator } from 'utils/line'
 import { CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES, OPERATORS, Operator, PLATFORM_CODES } from '@commute/constants'
 import { mapSchedule } from 'utils/schedules'
@@ -228,7 +228,11 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
     schedules
   ] = await Promise.allSettled([
     stationRepository.checkIfExists(stationID),
-    stationRepository.getTimetableFromStationId(stationID)
+    // Compact mode only needs the grouping/compact columns; full mode embeds
+    // whole Schedule rows in the response, so keep selectAll there.
+    compactMode
+      ? stationRepository.getGroupingTimetableFromStationId(stationID)
+      : stationRepository.getTimetableFromStationId(stationID)
   ])
 
   if (checkStationResult.status === 'rejected' || schedules.status === 'rejected') return c.json(Internal('DATABASE_ERROR', 'Can\'t connect to database, please try again later.'))
@@ -250,7 +254,7 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
   }
 
   const isBekasiInterliningStation = operator.code === OPERATORS.KCI.code && CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES.has(stationCode)
-  const lineGroups: Map<string, { line: Line, boundForGroups: Map<string, Schedule[]> }> = new Map()
+  const lineGroups: Map<string, { line: Line, boundForGroups: Map<string, GroupingSchedule[]> }> = new Map()
 
   for (const schedule of schedules.value) {
     const line = getLineByOperator(operator.code, schedule.lineCode)
@@ -322,7 +326,9 @@ app.get('/:operator/:stationCode/timetable/grouped', async (c) => {
         destinations: group.destinations.map(destination => ({
           boundFor: destination.boundFor,
           via: destination.via,
-          schedules: mapSchedule(destination.schedules, compactMode)
+          schedules: compactMode
+            ? mapSchedule(destination.schedules, true)
+            : mapSchedule(destination.schedules as Schedule[], false)
         }))
       }))
     })
