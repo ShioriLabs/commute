@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /settings/saved-stations
+Disallow: /settings/manage-data
+Disallow: /settings/installation
+
+Sitemap: https://commute.shiorilabs.id/sitemap.xml

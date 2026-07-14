@@ -2,6 +2,17 @@ export function parseTime(timeString: string) {
   return new Date(`${new Date().toDateString()} ${timeString}`)
 }
 
+// parseTime pins every "HH:MM" to today, so post-midnight service (00:xx–03:xx)
+// sorts ahead of tonight's late-evening departures. During late night, roll
+// those after-midnight times forward a day so chronological ordering holds.
+export function departureSortKey(parsed: Date, now: Date): number {
+  const key = parsed.getTime()
+  if (now.getHours() >= 21 && parsed.getHours() < 4) {
+    return key + 24 * 60 * 60 * 1000
+  }
+  return key
+}
+
 export function isImmediateDeparture(now: Date, scheduledDeparture: Date) {
   const diff = scheduledDeparture.getTime() - now.getTime()
   return diff >= -60000 && diff <= 60000
