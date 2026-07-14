@@ -9,7 +9,7 @@ import LineRoundel from '~/components/line-roundel'
 import { fetcher } from 'utils/fetcher'
 import { normalizeGroupedTimetable } from 'utils/timetable-shim'
 import { useNetworkStatus } from '~/hooks/network'
-import { isImmediateDeparture, parseTime } from 'utils/schedules'
+import { departureSortKey, isImmediateDeparture, parseTime } from 'utils/schedules'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -38,7 +38,6 @@ interface DirectionSection {
 
 function buildSections(timetable: CompactLineGroupedTimetable, now: Date): DirectionSection[] {
   const sections: DirectionSection[] = []
-  const lateNight = now.getHours() >= 21
 
   for (const line of timetable) {
     for (const group of line.timetable) {
@@ -46,10 +45,7 @@ function buildSections(timetable: CompactLineGroupedTimetable, now: Date): Direc
       for (const destination of group.destinations) {
         for (const schedule of destination.schedules) {
           const parsed = parseTime(schedule.estimatedDeparture)
-          let sortKey = parsed.getTime()
-          if (lateNight && parsed.getHours() < 4) {
-            sortKey += 24 * 60 * 60 * 1000
-          }
+          const sortKey = departureSortKey(parsed, now)
           rows.push({
             scheduleId: schedule.id,
             boundFor: destination.boundFor,

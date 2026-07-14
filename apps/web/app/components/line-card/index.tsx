@@ -3,41 +3,30 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router'
 import { CaretRightIcon, NavigationArrowIcon } from '@phosphor-icons/react'
 import { getForegroundColor, getTintFromColor } from 'utils/colors'
-import { getRelativeDepartureLabel, parseTime } from 'utils/schedules'
+import { departureSortKey, getRelativeDepartureLabel, parseTime } from 'utils/schedules'
 
 function getNextSchedules(
   schedules: CompactSchedule[],
   limit = 3
 ) {
   const now = new Date()
-  const today: CompactSchedule[] = []
-  const tomorrow: CompactSchedule[] = []
+  const cutoff = now.getTime() - 60000 /* keep just departed trains */
 
-  for (const schedule of schedules) {
-    if (today.length + tomorrow.length === limit) break
-    const parsedDeparture = parseTime(schedule.estimatedDeparture)
+  const upcoming = schedules
+    .map(schedule => ({
+      schedule,
+      sortKey: departureSortKey(parseTime(schedule.estimatedDeparture), now)
+    }))
+    .filter(entry => entry.sortKey >= cutoff)
+    .sort((a, b) => a.sortKey - b.sortKey)
+    .slice(0, limit)
+    .map(entry => entry.schedule)
 
-    if (
-      parsedDeparture.getTime() < now.getTime()
-      && parsedDeparture.getHours() < 4
-      && now.getHours() >= 21
-    ) {
-      tomorrow.push(schedule)
-      continue
-    }
-
-    if (parsedDeparture.getTime() >= now.getTime() - 60000 /* keep just departed trains */) {
-      today.push(schedule)
-    }
+  if (upcoming.length === 0 && schedules.length > 0) {
+    return [schedules[0]]
   }
 
-  const returning = [...today, ...tomorrow]
-
-  if (returning.length === 0 && schedules.length > 0) {
-    returning.push(schedules[0])
-  }
-
-  return returning
+  return upcoming
 }
 
 interface Props {
