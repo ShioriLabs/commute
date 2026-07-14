@@ -330,6 +330,22 @@ export class StationRepository extends Repository {
     return timetable
   }
 
+  // Projected variant for the grouped-timetable compact path: selects only the
+  // columns the grouping + compact response consume, so cache-miss requests
+  // marshal fewer bytes from D1. Same filtering/ordering as
+  // getTimetableFromStationId. See GroupingSchedule.
+  async getGroupingTimetableFromStationId(id: string) {
+    const timetable = await db(this.d1)
+      .selectFrom('schedules')
+      .select(['id', 'lineCode', 'boundFor', 'estimatedDeparture', 'tripNumber'])
+      .where('stationId', '=', id)
+      .where('lineCode', 'in', eb =>
+        eb.selectFrom('stationLines').select('stationLines.lineCode').where('stationLines.stationId', '=', id))
+      .orderBy('estimatedDeparture asc')
+      .execute()
+    return timetable
+  }
+
   async getTransfersFromStationId(id: string) {
     const query = db(this.d1)
       .selectFrom('transfers')

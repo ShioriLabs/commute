@@ -17,6 +17,15 @@ export type Schedule = Selectable<ScheduleSchema>
 export type NewSchedule = Insertable<ScheduleSchema>
 export type UpdatingSchedule = Updateable<ScheduleSchema>
 
+// The only schedule fields the grouped-timetable path reads: lineCode/boundFor
+// for bucketing, tripNumber for interlining/proxy splits, and id +
+// estimatedDeparture for the compact response. Lets the grouped query project
+// just these columns while still satisfying the grouping helpers.
+export type GroupingSchedule = Pick<
+  Schedule,
+  'id' | 'lineCode' | 'boundFor' | 'estimatedDeparture' | 'tripNumber'
+>
+
 export interface ScheduleWithLineInfo extends Schedule {
   line: Line | null
 }
