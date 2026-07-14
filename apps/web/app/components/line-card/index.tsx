@@ -1,33 +1,9 @@
-import type { CompactLineTimetable, CompactSchedule, LineTimetable } from 'models/schedules'
+import type { CompactLineTimetable, LineTimetable } from 'models/schedules'
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router'
 import { CaretRightIcon, NavigationArrowIcon } from '@phosphor-icons/react'
 import { getForegroundColor, getTintFromColor } from 'utils/colors'
-import { departureSortKey, getRelativeDepartureLabel, parseTime } from 'utils/schedules'
-
-function getNextSchedules(
-  schedules: CompactSchedule[],
-  limit = 3
-) {
-  const now = new Date()
-  const cutoff = now.getTime() - 60000 /* keep just departed trains */
-
-  const upcoming = schedules
-    .map(schedule => ({
-      schedule,
-      sortKey: departureSortKey(parseTime(schedule.estimatedDeparture), now)
-    }))
-    .filter(entry => entry.sortKey >= cutoff)
-    .sort((a, b) => a.sortKey - b.sortKey)
-    .slice(0, limit)
-    .map(entry => entry.schedule)
-
-  if (upcoming.length === 0 && schedules.length > 0) {
-    return [schedules[0]]
-  }
-
-  return upcoming
-}
+import { getNextSchedules, getRelativeDepartureLabel, parseTime } from 'utils/schedules'
 
 interface Props {
   line: LineTimetable | CompactLineTimetable
@@ -53,7 +29,7 @@ export default function LineCard({ line, operator }: Props) {
           .map(destination => ({
             boundFor: destination.boundFor,
             via: destination.via,
-            schedules: getNextSchedules(destination.schedules)
+            schedules: getNextSchedules(destination.schedules, lastUpdated)
           }))
           .filter(destination => destination.schedules.length > 0)
 

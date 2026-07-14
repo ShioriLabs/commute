@@ -1,3 +1,5 @@
+import type { CompactSchedule } from 'models/schedules'
+
 export function parseTime(timeString: string) {
   return new Date(`${new Date().toDateString()} ${timeString}`)
 }
@@ -29,4 +31,33 @@ export function getRelativeDepartureLabel(now: Date, departure: Date): string | 
   const minutes = Math.round((departure.getTime() - now.getTime()) / 60000)
   if (minutes < -1 || minutes >= RELATIVE_DEPARTURE_WINDOW_MINUTES) return null
   return minutes <= 1 ? 'Sekarang' : `${minutes} mnt`
+}
+
+// Pick the next `limit` departures from a destination's schedule list, sorted
+// chronologically (with the late-night cross-midnight roll from
+// departureSortKey). `now` is passed in so callers control the clock. When
+// nothing upcoming remains (past the last train of the day), fall back to the
+// first train of the day so the UI still shows something.
+export function getNextSchedules(
+  schedules: CompactSchedule[],
+  now: Date,
+  limit = 3
+): CompactSchedule[] {
+  const cutoff = now.getTime() - 60000 /* keep just departed trains */
+
+  const upcoming = schedules
+    .map(schedule => ({
+      schedule,
+      sortKey: departureSortKey(parseTime(schedule.estimatedDeparture), now)
+    }))
+    .filter(entry => entry.sortKey >= cutoff)
+    .sort((a, b) => a.sortKey - b.sortKey)
+    .slice(0, limit)
+    .map(entry => entry.schedule)
+
+  if (upcoming.length === 0 && schedules.length > 0) {
+    return [schedules[0]]
+  }
+
+  return upcoming
 }
