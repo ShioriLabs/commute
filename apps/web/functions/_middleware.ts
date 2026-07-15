@@ -290,7 +290,7 @@ function buildHubBody(hub: ApiHub, slug: string, memberNames: string): string {
   )
 }
 
-async function resolveOg(pathname: string, env: Env): Promise<OgData | null> {
+async function resolveOg(pathname: string, searchParams: URLSearchParams, env: Env): Promise<OgData | null> {
   // NOTE: the homepage "/" is intentionally not handled here. Under the current
   // deploy the static index.html shadows this middleware for "/", so a "/" case
   // would never run. Station/line/hub/fare paths have no shadowing asset and are
@@ -305,16 +305,39 @@ async function resolveOg(pathname: string, env: Env): Promise<OgData | null> {
     }
   }
 
+  const base = env.API_BASE_URL
+  if (!base) return null
+
   if (pathname === '/fare') {
+    const fromId = searchParams.get('from')
+    const toId = searchParams.get('to')
+
+    if (fromId && toId) {
+      const [fromOp, fromCode] = fromId.split('-')
+      const [toOp, toCode] = toId.split('-')
+
+      const [fromStation, toStation] = await Promise.all([
+        fetchJson<ApiStation>(`${base}/stations/${encodeURIComponent(fromOp)}/${encodeURIComponent(fromCode)}`),
+        fetchJson<ApiStation>(`${base}/stations/${encodeURIComponent(toOp)}/${encodeURIComponent(toCode)}`)
+      ])
+
+      if (fromStation && toStation) {
+        const fromName = fromStation.formattedName || fromStation.name
+        const toName = toStation.formattedName || toStation.name
+        return {
+          title: `Cek Tarif ${fromName} ke ${toName} - Commute`,
+          description: `Hitung tarif perjalanan dari ${fromName} ke ${toName} di Jabodetabek.`,
+          image: DEFAULT_OG_IMAGE
+        }
+      }
+    }
+
     return {
       title: 'Kalkulator Tarif KRL, MRT, dan LRT - Commute',
       description: 'Hitung tarif perjalanan KRL, MRT, dan LRT antar stasiun di Jabodetabek.',
       image: DEFAULT_OG_IMAGE
     }
   }
-
-  const base = env.API_BASE_URL
-  if (!base) return null
 
   const hubMatch = pathname.match(/^\/hubs\/([^/]+)$/)
   if (hubMatch) {
@@ -477,7 +500,7 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
     return next()
   }
 
-  const og = await resolveOg(url.pathname, env)
+  const og = await resolveOg(url.pathname, url.searchParams, env)
 
   // Not a handled path, or the lookup failed - serve defaults, no rewrite.
   const res = await next()

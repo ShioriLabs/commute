@@ -4,7 +4,8 @@ import type { StandardResponse } from '@schema/response'
 import { OPERATORS, type Operator } from '@commute/constants'
 import { useEffect, useMemo, useState } from 'react'
 import { CloseButton, Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react'
-import { ArrowsDownUpIcon, CaretRightIcon, MagnifyingGlassIcon, MapPinIcon, PersonSimpleWalkIcon, XIcon } from '@phosphor-icons/react'
+import { ArrowsDownUpIcon, CaretRightIcon, MagnifyingGlassIcon, MapPinIcon, PersonSimpleWalkIcon, XIcon, ShareNetworkIcon } from '@phosphor-icons/react'
+import { useSearchParams } from 'react-router'
 import useSWR from 'swr'
 import { fetcher, FetchError } from 'utils/fetcher'
 import { getForegroundColor } from 'utils/colors'
@@ -342,10 +343,35 @@ function FareResultCard({ result }: { result: FareResult }) {
 // SheetButton morph and the standalone /fare route (which wraps it in an
 // always-open Dialog, same as the /settings route) — so CloseButton works.
 export default function FareSheet() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const { data: stations } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
   const [origin, setOrigin] = useState<Station | null>(null)
   const [destination, setDestination] = useState<Station | null>(null)
   const [openPicker, setOpenPicker] = useState<'origin' | 'destination' | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    const fromId = searchParams.get('from')
+    const toId = searchParams.get('to')
+    if (!fromId || !toId || !stations?.data) return
+
+    const fromStation = stations.data.find(s => s.id === fromId)
+    const toStation = stations.data.find(s => s.id === toId)
+    if (fromStation && toStation) {
+      setOrigin(fromStation)
+      setDestination(toStation)
+    }
+  }, [stations?.data, searchParams])
+
+  useEffect(() => {
+    if (origin && destination) {
+      const fromName = origin.formattedName ?? origin.name
+      const toName = destination.formattedName ?? destination.name
+      document.title = `Cek Tarif ${fromName} ke ${toName} - Commute`
+    } else {
+      document.title = 'Cek Tarif - Commute'
+    }
+  }, [origin, destination])
 
   const pickableStations = useMemo(
     () => (stations?.data ?? []).filter(station => station.regionCode === 'CGK'),
@@ -360,16 +386,49 @@ export default function FareSheet() {
   const handleSwap = () => {
     setOrigin(destination)
     setDestination(origin)
+
+    if (origin && destination) {
+      setSearchParams({ from: destination?.id, to: origin?.id })
+    }
+  }
+
+  const handleShare = async () => {
+    const url = window.location.href
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Cek Tarif Commute',
+          url
+        })
+        return
+      } catch {
+        // User cancelled or share failed, fall back to clipboard.
+      }
+    }
+
+    await navigator.clipboard.writeText(url)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   const handleSelect = (station: Station) => {
+    let newOrigin = origin
+    let newDestination = destination
+
     if (openPicker === 'origin') {
       // Picking the other end's station swaps instead of dead-ending on SAME_STATION.
-      if (station.id === destination?.id) setDestination(origin)
-      setOrigin(station)
+      if (station.id === destination?.id) newDestination = origin
+      newOrigin = station
     } else if (openPicker === 'destination') {
-      if (station.id === origin?.id) setOrigin(destination)
-      setDestination(station)
+      if (station.id === origin?.id) newOrigin = destination
+      newDestination = station
+    }
+
+    setOrigin(newOrigin)
+    setDestination(newDestination)
+
+    if (newOrigin && newDestination) {
+      setSearchParams({ from: newOrigin.id, to: newDestination.id })
     }
   }
 
@@ -378,12 +437,24 @@ export default function FareSheet() {
       <div className="p-8 pb-4 max-w-3xl mx-auto">
         <div className="flex gap-4 items-center justify-between">
           <DialogTitle className="font-bold text-2xl">Cek Tarif</DialogTitle>
-          <CloseButton
-            aria-label="Tutup halaman cek tarif"
-            className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
-          >
-            <XIcon weight="bold" className="w-6 h-6" />
-          </CloseButton>
+          <div className="flex gap-4">
+            {origin && destination && (
+              <button
+                type="button"
+                onClick={handleShare}
+                aria-label="Bagikan rute ini"
+                className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
+              >
+                {copied ? <span className="text-[10px] font-bold text-green-600">✓</span> : <ShareNetworkIcon weight="bold" className="w-6 h-6" />}
+              </button>
+            )}
+            <CloseButton
+              aria-label="Tutup halaman cek tarif"
+              className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
+            >
+              <XIcon weight="bold" className="w-6 h-6" />
+            </CloseButton>
+          </div>
         </div>
 
         <div className="mt-4 relative flex flex-col gap-2">
