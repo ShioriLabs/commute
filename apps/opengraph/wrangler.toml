@@ -1,0 +1,11 @@
+name = "commute-og"
+main = "src/app.ts"
+dev.port = 3001
+compatibility_date = "2025-10-18"
+
+[vars]
+API_URL="https://api.commute.shiorilabs.id"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "000e0f51c09844f1b9f85ad26e068129"
