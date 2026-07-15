@@ -235,7 +235,10 @@ function JourneyTimeline({ result }: { result: FareResult }) {
                         <span className="w-4 flex justify-center shrink-0">
                           <span className="w-1.5 rounded-full bg-slate-300" />
                         </span>
-                        <span className="text-sm text-slate-500 py-1.5">Pindah kereta</span>
+                        <div className="flex items-center gap-1.5 text-sm text-slate-500 py-1.5">
+                          <ArrowsDownUpIcon weight="bold" className="w-3.5 h-3.5" />
+                          <span>Pindah kereta</span>
+                        </div>
                       </div>
                     )
                   : null}
@@ -270,16 +273,19 @@ function JourneyTimeline({ result }: { result: FareResult }) {
               </li>
             )
           : (
-              <li key={index} className="my-2 flex flex-row gap-2 items-center bg-stone-100/80 rounded-xl p-3 text-slate-500">
-                <PersonSimpleWalkIcon weight="bold" className="w-4 h-4 shrink-0" />
-                <span className="text-sm">
-                  Jalan kaki ±
-                  { leg.distanceM }
-                  {' '}
-                  m ke
-                  {' '}
-                  { leg.to.name }
+              <li key={index} className="flex items-stretch gap-3 my-2">
+                <span className="w-4 flex justify-center shrink-0">
+                  <span className="w-1.5 rounded-full bg-slate-300" />
                 </span>
+                <div className="flex items-center gap-1.5 text-sm text-slate-500 py-1.5">
+                  <PersonSimpleWalkIcon weight="bold" className="w-3.5 h-3.5" />
+                  <span>
+                    Transit ke
+                    {' '}
+                    {leg.to.name}
+                    {leg.distanceM > 0 && ` (Jalan kaki ±${leg.distanceM}m)`}
+                  </span>
+                </div>
               </li>
             )
       })}
