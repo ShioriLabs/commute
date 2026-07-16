@@ -167,7 +167,7 @@ function FareResultCard({ result }: { result: FareResult }) {
 // SheetButton morph and the standalone /fare route (which wraps it in an
 // always-open Dialog, same as the /settings route) — so CloseButton works.
 export default function FareSheet() {
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
   const { data: stations } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
   const [origin, setOrigin] = useState<Station | null>(null)
   const [destination, setDestination] = useState<Station | null>(null)
@@ -210,6 +210,16 @@ export default function FareSheet() {
     [stations?.data]
   )
 
+  // On the homepage the sheet lives behind a faked URL (SheetButton pushStates
+  // '/fare' while the router still thinks it's on '/'), so setSearchParams
+  // would resolve against '/' and stomp the pathname. Write the query string
+  // directly instead; window.location.pathname is '/fare' in both contexts,
+  // and keeping history.state intact preserves SheetButton's modalOpen flag.
+  const updateUrlParams = (fromId: string, toId: string) => {
+    const params = new URLSearchParams({ from: fromId, to: toId })
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}?${params.toString()}`)
+  }
+
   const fareUrl = origin && destination && origin.id !== destination.id
     ? new URL(`/fares/${origin.id}/${destination.id}`, import.meta.env.VITE_API_BASE_URL).href
     : null
@@ -220,7 +230,7 @@ export default function FareSheet() {
     setDestination(origin)
 
     if (origin && destination) {
-      setSearchParams({ from: destination?.id, to: origin?.id })
+      updateUrlParams(destination.id, origin.id)
     }
   }
 
@@ -260,7 +270,7 @@ export default function FareSheet() {
     setDestination(newDestination)
 
     if (newOrigin && newDestination) {
-      setSearchParams({ from: newOrigin.id, to: newDestination.id })
+      updateUrlParams(newOrigin.id, newDestination.id)
     }
   }
 
