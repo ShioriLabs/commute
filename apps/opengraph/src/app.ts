@@ -1,15 +1,14 @@
-import { Operator, OPERATORS } from '@commute/constants'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { renderFareCard } from './render'
 
 export interface Bindings {
   API_URL: string
+  KV: KVNamespace
 }
 
-import type { StatusCode } from 'hono/utils/http-status'
-
 interface StandardResponse<T = unknown> {
-  status: StatusCode
+  status: number
   data?: T
   error?: {
     message: string
@@ -17,15 +16,24 @@ interface StandardResponse<T = unknown> {
   }
 }
 
-interface Station {
+interface FareStation {
   id: string
   name: string
-  formattedName: string | null
 }
 
-export function getOperatorByCode(code: string): typeof OPERATORS[Operator] | null {
-  return OPERATORS[code as Operator] ?? null
+interface FareResult {
+  from: FareStation
+  to: FareStation
+  totalFare: number | null
 }
+
+// Generic branded fallback served whenever we can't render a real fare card.
+// Crawlers must always get a valid image, never a 4xx/5xx.
+const DEFAULT_OG_IMAGE = 'https://commute.shiorilabs.id/img/og-image.png'
+
+// Full station IDs look like OPERATOR-CODE (e.g. KCI-BOO, MRTJ-BLA). Cheap
+// shape guard before hitting the API; real existence is checked by the fares call.
+const STATION_ID = /^[A-Z0-9]+-[A-Z0-9-]+$/
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -45,38 +53,57 @@ app.use('*', cors({
   allowMethods: ['GET', 'POST', 'OPTIONS']
 }))
 
-app.get('/fare/:station-pair', async (ctx) => {
-  const [fromStationOperator, fromStationCode, toStationOperator, toStationCode] = (ctx.req.param('station-pair') ?? '').split(/-/g)
-
-  if (
-    !fromStationOperator || getOperatorByCode(fromStationOperator) === null
-    || !fromStationCode
-    || !toStationOperator || getOperatorByCode(toStationOperator) === null
-    || !toStationCode
-  ) {
-    return ctx.text('Invalid station codes', 400)
-  }
-
-  const [fromStationResponse, toStationResponse] = await Promise.allSettled([
-    fetch(new URL(`/stations/${fromStationOperator}/${fromStationCode}`, ctx.env.API_URL).href),
-    fetch(new URL(`/stations/${toStationOperator}/${toStationCode}`, ctx.env.API_URL).href)
-  ])
-
-  if (fromStationResponse.status === 'rejected' || toStationResponse.status === 'rejected' || !fromStationResponse.value.ok || !toStationResponse.value.ok) {
-    return ctx.text('Internal server error', 500)
-  }
-
-  const fromStationJSON = await fromStationResponse.value.json<StandardResponse<Station>>()
-  const toStationJSON = await toStationResponse.value.json<StandardResponse<Station>>()
-
-  if (fromStationJSON.error || toStationJSON.error) {
-    return ctx.text('Internal server error', 500)
-  }
-
-  return ctx.json({
-    from: fromStationJSON.data,
-    to: toStationJSON.data
+// Short-cache redirect to the generic image. Kept brief so a transient API/render
+// outage doesn't get cached for a week.
+function fallback(): Response {
+  return new Response(null, {
+    status: 302,
+    headers: {
+      'location': DEFAULT_OG_IMAGE,
+      'cache-control': 'public, max-age=300'
+    }
   })
+}
+
+app.get('/fare/:from/:to', async (ctx) => {
+  const from = ctx.req.param('from')
+  const to = ctx.req.param('to')
+
+  if (!STATION_ID.test(from) || !STATION_ID.test(to) || from === to) {
+    return fallback()
+  }
+
+  // Edge-cache read-through: repeat crawler hits for the same pair skip the
+  // wasm rasterization entirely. Same pattern as the sitemap in the web middleware.
+  const cache = caches.default
+  const cacheKey = new Request(ctx.req.url)
+  const hit = await cache.match(cacheKey)
+  if (hit) return hit
+
+  try {
+    const url = new URL(`/fares/${encodeURIComponent(from)}/${encodeURIComponent(to)}`, ctx.env.API_URL)
+    const res = await fetch(url.href)
+    if (!res.ok) return fallback()
+
+    const body = await res.json<StandardResponse<FareResult>>()
+    const fromName = body.data?.from?.name
+    const toName = body.data?.to?.name
+    if (body.error || !fromName || !toName) return fallback()
+
+    const png = await renderFareCard(fromName, toName)
+
+    const image = new Response(png, {
+      headers: {
+        'content-type': 'image/png',
+        'cache-control': 'public, max-age=86400, s-maxage=604800'
+      }
+    })
+    ctx.executionCtx.waitUntil(cache.put(cacheKey, image.clone()))
+    return image
+  } catch (error) {
+    console.error(error)
+    return fallback()
+  }
 })
 
 export default app

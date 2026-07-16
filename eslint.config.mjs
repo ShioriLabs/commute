@@ -21,6 +21,11 @@ export default defineConfig([
   globalIgnores([
     'apps/api/.wrangler/**/*',
     'apps/api/dist/**/*',
+    'apps/opengraph/.wrangler/**/*',
+    'apps/opengraph/dist/**/*',
+    // Generated data: a vendored base64 font and the SVG card template string.
+    'apps/opengraph/src/assets/font.ts',
+    'apps/opengraph/src/assets/og-fare-template.ts',
     'apps/web/build/**/*',
     'apps/web/.react-router/**/*'
   ])

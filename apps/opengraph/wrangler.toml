@@ -2,6 +2,13 @@ name = "commute-og"
 main = "src/app.ts"
 dev.port = 3001
 compatibility_date = "2025-10-18"
+compatibility_flags = ["nodejs_compat"]
+
+# Bundle .wasm imports (the resvg-wasm module) as WebAssembly.Module.
+[[rules]]
+type = "CompiledWasm"
+globs = ["**/*.wasm"]
+fallthrough = true
 
 [vars]
 API_URL="https://api.commute.shiorilabs.id"

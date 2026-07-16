@@ -29,6 +29,10 @@ const hubOgImage = (slug: string) => `${SITE_ORIGIN}/img/og/hubs/${slug}.png`
 // Line files are keyed OPERATOR-LINECODE (e.g. KCI-C).
 const lineOgImage = (operator: string, lineCode: string) => `${SITE_ORIGIN}/img/og/lines/${operator}-${lineCode}.png`
 const DEFAULT_OG_IMAGE = `${SITE_ORIGIN}/img/og-image.png`
+// Fare cards can't be prerendered (arbitrary station pairs); the commute-og
+// worker generates them on demand from the two full station ids.
+const OG_WORKER_ORIGIN = 'https://og.commute.shiorilabs.id'
+const fareOgImage = (from: string, to: string) => `${OG_WORKER_ORIGIN}/fare/${encodeURIComponent(from)}/${encodeURIComponent(to)}`
 
 // Lowercased substrings matched against the User-Agent of known crawlers (link
 // previews + search engines). Humans never match, so they skip the API
@@ -327,7 +331,7 @@ async function resolveOg(pathname: string, searchParams: URLSearchParams, env: E
         return {
           title: `Cek Tarif ${fromName} ke ${toName} - Commute`,
           description: `Hitung tarif perjalanan dari ${fromName} ke ${toName} di Jabodetabek.`,
-          image: DEFAULT_OG_IMAGE
+          image: fareOgImage(fromId, toId)
         }
       }
     }
