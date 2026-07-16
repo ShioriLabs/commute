@@ -1,15 +1,15 @@
 import type { Station } from 'models/stations'
-import type { FareResult } from 'models/fare'
+import type { FareResult, FareResultRideLeg } from 'models/fare'
 import type { StandardResponse } from '@schema/response'
 import { OPERATORS, type Operator } from '@commute/constants'
 import { useEffect, useMemo, useState } from 'react'
-import { CloseButton, Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react'
-import { ArrowsDownUpIcon, CaretRightIcon, MagnifyingGlassIcon, MapPinIcon, PersonSimpleWalkIcon, XIcon } from '@phosphor-icons/react'
+import { CloseButton, DialogTitle } from '@headlessui/react'
+import { ArrowsDownUpIcon, CaretDownIcon, CaretRightIcon, MapPinIcon, PersonSimpleWalkIcon, XIcon, ShareNetworkIcon } from '@phosphor-icons/react'
+import { useSearchParams } from 'react-router'
 import useSWR from 'swr'
 import { fetcher, FetchError } from 'utils/fetcher'
 import { getForegroundColor } from 'utils/colors'
-import { levenshteinDistance } from 'utils/levenshtein'
-import LineRoundel from '~/components/line-roundel'
+import StationPickerDialog from './station-picker'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -18,184 +18,9 @@ const swrConfig = {
   shouldRetryOnError: false
 }
 
-const SCORE_THRESHOLD = 3
-
-function getLevenshteinScore(station: Station, query: string) {
-  const name = station.name.toLowerCase()
-  const formattedName = station.formattedName?.toLowerCase() ?? ''
-  const code = station.code.toLowerCase()
-  const q = query.toLowerCase()
-
-  if (name.includes(q) || formattedName.includes(q) || code.includes(q)) {
-    return 0
-  }
-
-  return Math.min(
-    levenshteinDistance(name, q),
-    levenshteinDistance(formattedName, q),
-    levenshteinDistance(code, q)
-  )
-}
-
 const rupiah = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })
 const formatKm = (distanceM: number) => `${(distanceM / 1000).toLocaleString('id-ID', { maximumFractionDigits: 1 })} km`
 const operatorName = (code: string) => (OPERATORS as Record<string, { name: string }>)[code as Operator]?.name ?? code
-
-// Recently picked fare stations feed the quick-pick chips (same pattern as
-// the search sheet's 'recently-searched').
-const RECENT_PICKS_KEY = 'fare-recent-stations'
-const RECENT_PICKS_MAX = 4
-
-function StationPickerDialog({ open, title, stations, onClose, onSelect }: {
-  open: boolean
-  title: string
-  stations: Station[]
-  onClose: () => void
-  onSelect: (station: Station) => void
-}) {
-  const [query, setQuery] = useState('')
-  const [recentIds, setRecentIds] = useState<string[]>([])
-
-  useEffect(() => {
-    if (!open) return
-    try {
-      const parsed = JSON.parse(localStorage.getItem(RECENT_PICKS_KEY) ?? '[]') as unknown
-      if (parsed instanceof Array) setRecentIds(parsed as string[])
-    } catch {
-      // Corrupt entry: fall back to popularity-only chips.
-    }
-  }, [open])
-
-  const shownStations = useMemo(() => {
-    if (query.length < 2) {
-      // No query: full list, most popular first, so common picks are one tap away.
-      return [...stations].sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.name.localeCompare(b.name))
-    }
-    return stations
-      .map(station => ({ station, finalScore: getLevenshteinScore(station, query) + (1 - (station.score ?? 0) / 100) }))
-      .filter(({ finalScore }) => finalScore < SCORE_THRESHOLD)
-      .sort((a, b) => a.finalScore - b.finalScore || a.station.name.localeCompare(b.station.name))
-      .map(({ station }) => station)
-  }, [query, stations])
-
-  // Recent picks first, padded with the most popular stations for first-time
-  // users (and when recents fall outside the pickable set).
-  const quickPicks = useMemo(() => {
-    const byId = new Map(stations.map(station => [station.id, station]))
-    const picks: Station[] = []
-    for (const id of recentIds) {
-      const station = byId.get(id)
-      if (station && !picks.some(pick => pick.id === station.id)) picks.push(station)
-      if (picks.length === RECENT_PICKS_MAX) return picks
-    }
-    const popular = [...stations].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-    for (const station of popular) {
-      if (picks.some(pick => pick.id === station.id)) continue
-      picks.push(station)
-      if (picks.length === RECENT_PICKS_MAX) break
-    }
-    return picks
-  }, [recentIds, stations])
-
-  const handleSelect = (station: Station) => {
-    const newRecents = [station.id, ...recentIds.filter(id => id !== station.id)].slice(0, RECENT_PICKS_MAX)
-    setRecentIds(newRecents)
-    localStorage.setItem(RECENT_PICKS_KEY, JSON.stringify(newRecents))
-    onSelect(station)
-    setQuery('')
-    onClose()
-  }
-
-  return (
-    <Dialog open={open} onClose={onClose} className="relative z-50">
-      <DialogBackdrop transition className="fixed inset-0 bg-white/90 duration-200 ease-out data-closed:opacity-0" />
-      <div className="fixed inset-0 flex w-screen">
-        <DialogPanel className="bg-white w-screen h-screen overflow-y-auto">
-          <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto bg-white">
-            <div className="flex gap-4 items-center justify-between">
-              <h1 className="font-bold text-2xl">{ title }</h1>
-              <button
-                onClick={onClose}
-                aria-label="Tutup pemilihan stasiun"
-                className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
-              >
-                <XIcon weight="bold" className="w-6 h-6" />
-              </button>
-            </div>
-            <div className="relative mt-4">
-              <MagnifyingGlassIcon weight="bold" className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              <input
-                className="w-full pl-11 pr-4 py-2.5 rounded-xl bg-stone-100/80 border-2 border-stone-200/40 focus:outline-2 focus:outline-[#F55875]/60"
-                type="text"
-                placeholder="Masukkan nama stasiun atau kode stasiun"
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                aria-label="Cari stasiun berdasarkan nama atau kode"
-              />
-            </div>
-          </div>
-          {query.length < 2 && quickPicks.length > 0
-            ? (
-                <div className="max-w-3xl mx-auto">
-                  <span className="block px-8 pt-1 text-xs font-bold uppercase tracking-wide text-slate-400">Sering dipilih</span>
-                  <div className="px-8 pt-2 pb-1 flex gap-2 overflow-x-auto no-scrollbar">
-                    {quickPicks.map(station => (
-                      <button
-                        key={station.id}
-                        type="button"
-                        onClick={() => handleSelect(station)}
-                        className="shrink-0 rounded-full bg-rose-100 text-pink-800 pl-2 pr-3.5 py-1.5 flex items-center gap-2 text-sm font-semibold cursor-pointer"
-                      >
-                        {station.lines?.length
-                          ? (
-                              <span className="flex -space-x-1.5">
-                                {station.lines.map(line => (
-                                  <LineRoundel key={line.lineCode} size="SM" code={line.lineCode} color={line.colorCode} />
-                                ))}
-                              </span>
-                            )
-                          : null}
-                        { station.formattedName ?? station.name }
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )
-            : null}
-          <ul className="mt-2 max-w-3xl mx-auto pb-8">
-            {shownStations.map(station => (
-              <li key={station.id}>
-                <button
-                  type="button"
-                  onClick={() => handleSelect(station)}
-                  className="px-8 py-3 flex flex-col gap-1 w-full text-left cursor-pointer hover:bg-rose-50/60"
-                >
-                  <b className="text-lg">
-                    { station.formattedName ?? station.name }
-                    {'  '}
-                    <span className="text-sm font-semibold text-gray-600">{ station.operator.name }</span>
-                  </b>
-                  {station.lines?.length
-                    ? (
-                        <ul className="flex flex-row gap-1 flex-wrap">
-                          {station.lines.map(line => (
-                            <li key={line.lineCode}>
-                              <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} />
-                              <span className="sr-only">{line.name}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      )
-                    : null}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </DialogPanel>
-      </div>
-    </Dialog>
-  )
-}
 
 function StationField({ label, station, onClick }: { label: string, station: Station | null, onClick: () => void }) {
   return (
@@ -209,6 +34,88 @@ function StationField({ label, station, onClick }: { label: string, station: Sta
         ? <b className="truncate w-full">{ station.formattedName ?? station.name }</b>
         : <span className="text-slate-400">Pilih stasiun</span>}
     </button>
+  )
+}
+
+// One ride leg: board node, line-colored connector carrying the service card
+// (line pill, headsign, expandable intermediate stops), alight node.
+function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSameStationTransfer: boolean }) {
+  const [expanded, setExpanded] = useState(false)
+  // Optional-chained against a stale API during deploy skew.
+  const intermediate = leg.stops?.slice(1, -1) ?? []
+  const summary = `${leg.stationCount - 1} stasiun • ${formatKm(leg.distanceM)}`
+
+  return (
+    <li className="flex flex-col">
+      {isSameStationTransfer
+        ? (
+            <div className="flex items-stretch gap-3">
+              <span className="w-4 flex justify-center shrink-0">
+                <span className="w-1.5 rounded-full bg-slate-300" />
+              </span>
+              <div className="flex items-center gap-1.5 text-sm text-slate-500 py-1.5">
+                <ArrowsDownUpIcon weight="bold" className="w-3.5 h-3.5" />
+                <span>Pindah kereta</span>
+              </div>
+            </div>
+          )
+        : null}
+      <div className="flex items-center gap-3">
+        <span className="w-4 h-4 rounded-full border-[5px] bg-white shrink-0" style={{ borderColor: leg.lineColor }} />
+        <b className="text-lg">{leg.from.name}</b>
+      </div>
+      <div className="flex items-stretch gap-3">
+        <span className="w-4 flex justify-center shrink-0">
+          <span className="w-1.5 rounded-full" style={{ backgroundColor: leg.lineColor }} />
+        </span>
+        <div className="flex-1 my-2 bg-stone-100/80 rounded-xl p-3 flex flex-col gap-1 items-start">
+          <span
+            className={`text-sm font-semibold px-3 py-1 rounded-full w-fit ${getForegroundColor(leg.lineColor) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`}
+            style={{ backgroundColor: leg.lineColor }}
+          >
+            { leg.lineName }
+          </span>
+          {leg.headsign
+            ? (
+                <span className="text-sm font-medium text-slate-600">
+                  arah
+                  {' '}
+                  { leg.headsign }
+                </span>
+              )
+            : null}
+          {intermediate.length === 0
+            ? <span className="text-sm text-slate-500">{ summary }</span>
+            : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setExpanded(value => !value)}
+                    aria-expanded={expanded}
+                    className="flex items-center gap-1 text-sm text-slate-500 cursor-pointer"
+                  >
+                    { summary }
+                    <CaretDownIcon weight="bold" className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                  </button>
+                  <div className={`grid transition-[grid-template-rows] duration-300 ${expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'} w-full`}>
+                    <ul className="overflow-hidden min-h-0 flex flex-col">
+                      {intermediate.map(stop => (
+                        <li key={stop.id} className="flex items-center gap-2 py-1 text-sm text-slate-600">
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: leg.lineColor }} />
+                          { stop.name }
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </>
+              )}
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        <span className="w-4 h-4 rounded-full border-[5px] bg-white shrink-0" style={{ borderColor: leg.lineColor }} />
+        <b className="text-lg">{leg.to.name}</b>
+      </div>
+    </li>
   )
 }
 
@@ -227,51 +134,7 @@ function JourneyTimeline({ result }: { result: FareResult }) {
           && previous.to.id === leg.from.id
 
         return leg.type === 'RIDE'
-          ? (
-              <li key={index} className="flex flex-col">
-                {isSameStationTransfer
-                  ? (
-                      <div className="flex items-stretch gap-3">
-                        <span className="w-4 flex justify-center shrink-0">
-                          <span className="w-1.5 rounded-full bg-slate-300" />
-                        </span>
-                        <div className="flex items-center gap-1.5 text-sm text-slate-500 py-1.5">
-                          <ArrowsDownUpIcon weight="bold" className="w-3.5 h-3.5" />
-                          <span>Pindah kereta</span>
-                        </div>
-                      </div>
-                    )
-                  : null}
-                <div className="flex items-center gap-3">
-                  <span className="w-4 h-4 rounded-full border-[5px] bg-white shrink-0" style={{ borderColor: leg.lineColor }} />
-                  <b className="text-lg">{leg.from.name}</b>
-                </div>
-                <div className="flex items-stretch gap-3">
-                  <span className="w-4 flex justify-center shrink-0">
-                    <span className="w-1.5 rounded-full" style={{ backgroundColor: leg.lineColor }} />
-                  </span>
-                  <div className="flex-1 my-2 bg-stone-100/80 rounded-xl p-3 flex flex-col gap-1 items-start">
-                    <span
-                      className={`text-sm font-semibold px-3 py-1 rounded-full w-fit ${getForegroundColor(leg.lineColor) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`}
-                      style={{ backgroundColor: leg.lineColor }}
-                    >
-                      { leg.lineName }
-                    </span>
-                    <span className="text-sm text-slate-500">
-                      { leg.stationCount - 1 }
-                      {' '}
-                      stasiun •
-                      {' '}
-                      { formatKm(leg.distanceM) }
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="w-4 h-4 rounded-full border-[5px] bg-white shrink-0" style={{ borderColor: leg.lineColor }} />
-                  <b className="text-lg">{leg.to.name}</b>
-                </div>
-              </li>
-            )
+          ? <RideLeg key={index} leg={leg} isSameStationTransfer={isSameStationTransfer} />
           : (
               <li key={index} className="flex items-stretch gap-3 my-2">
                 <span className="w-4 flex justify-center shrink-0">
@@ -301,6 +164,12 @@ function FareResultCard({ result }: { result: FareResult }) {
         <span className="text-3xl font-bold">
           {result.totalFare !== null ? rupiah.format(result.totalFare) : 'Tarif tidak tersedia'}
         </span>
+        {/* Journey at a glance: ride legs proportional to distance, walks as dots. */}
+        <div className="my-1 flex h-2 gap-0.5" aria-hidden="true">
+          {result.legs.map((leg, index) => leg.type === 'RIDE'
+            ? <span key={index} className="rounded-full min-w-2" style={{ flexGrow: leg.distanceM, backgroundColor: leg.lineColor }} />
+            : <span key={index} className="w-1.5 shrink-0 rounded-full bg-slate-300" />)}
+        </div>
         <span className="text-sm text-slate-500">
           {formatKm(result.totalDistanceM)}
           {result.transferCount > 0 ? ` • ${result.transferCount}x transit` : ''}
@@ -342,15 +211,58 @@ function FareResultCard({ result }: { result: FareResult }) {
 // SheetButton morph and the standalone /fare route (which wraps it in an
 // always-open Dialog, same as the /settings route) — so CloseButton works.
 export default function FareSheet() {
+  const [searchParams] = useSearchParams()
   const { data: stations } = useSWR<StandardResponse<Station[]>>(new URL('/stations', import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
   const [origin, setOrigin] = useState<Station | null>(null)
   const [destination, setDestination] = useState<Station | null>(null)
-  const [openPicker, setOpenPicker] = useState<'origin' | 'destination' | null>(null)
+  // Which field is being picked never resets on close, so the picker title
+  // stays correct while the dialog animates out.
+  const [pickerTarget, setPickerTarget] = useState<'origin' | 'destination'>('origin')
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const openPickerFor = (target: 'origin' | 'destination') => {
+    setPickerTarget(target)
+    setPickerOpen(true)
+  }
+
+  useEffect(() => {
+    const fromId = searchParams.get('from')
+    const toId = searchParams.get('to')
+    if (!fromId || !toId || !stations?.data) return
+
+    const fromStation = stations.data.find(s => s.id === fromId)
+    const toStation = stations.data.find(s => s.id === toId)
+    if (fromStation && toStation) {
+      setOrigin(fromStation)
+      setDestination(toStation)
+    }
+  }, [stations?.data, searchParams])
+
+  useEffect(() => {
+    if (origin && destination) {
+      const fromName = origin.formattedName ?? origin.name
+      const toName = destination.formattedName ?? destination.name
+      document.title = `Cek Tarif ${fromName} ke ${toName} - Commute`
+    } else {
+      document.title = 'Cek Tarif - Commute'
+    }
+  }, [origin, destination])
 
   const pickableStations = useMemo(
     () => (stations?.data ?? []).filter(station => station.regionCode === 'CGK'),
     [stations?.data]
   )
+
+  // On the homepage the sheet lives behind a faked URL (SheetButton pushStates
+  // '/fare' while the router still thinks it's on '/'), so setSearchParams
+  // would resolve against '/' and stomp the pathname. Write the query string
+  // directly instead; window.location.pathname is '/fare' in both contexts,
+  // and keeping history.state intact preserves SheetButton's modalOpen flag.
+  const updateUrlParams = (fromId: string, toId: string) => {
+    const params = new URLSearchParams({ from: fromId, to: toId })
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}?${params.toString()}`)
+  }
 
   const fareUrl = origin && destination && origin.id !== destination.id
     ? new URL(`/fares/${origin.id}/${destination.id}`, import.meta.env.VITE_API_BASE_URL).href
@@ -360,16 +272,49 @@ export default function FareSheet() {
   const handleSwap = () => {
     setOrigin(destination)
     setDestination(origin)
+
+    if (origin && destination) {
+      updateUrlParams(destination.id, origin.id)
+    }
+  }
+
+  const handleShare = async () => {
+    const url = window.location.href
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Cek Tarif Commute',
+          url
+        })
+        return
+      } catch {
+        // User cancelled or share failed, fall back to clipboard.
+      }
+    }
+
+    await navigator.clipboard.writeText(url)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   const handleSelect = (station: Station) => {
-    if (openPicker === 'origin') {
+    let newOrigin = origin
+    let newDestination = destination
+
+    if (pickerTarget === 'origin') {
       // Picking the other end's station swaps instead of dead-ending on SAME_STATION.
-      if (station.id === destination?.id) setDestination(origin)
-      setOrigin(station)
-    } else if (openPicker === 'destination') {
-      if (station.id === origin?.id) setOrigin(destination)
-      setDestination(station)
+      if (station.id === destination?.id) newDestination = origin
+      newOrigin = station
+    } else {
+      if (station.id === origin?.id) newOrigin = destination
+      newDestination = station
+    }
+
+    setOrigin(newOrigin)
+    setDestination(newDestination)
+
+    if (newOrigin && newDestination) {
+      updateUrlParams(newOrigin.id, newDestination.id)
     }
   }
 
@@ -378,17 +323,29 @@ export default function FareSheet() {
       <div className="p-8 pb-4 max-w-3xl mx-auto">
         <div className="flex gap-4 items-center justify-between">
           <DialogTitle className="font-bold text-2xl">Cek Tarif</DialogTitle>
-          <CloseButton
-            aria-label="Tutup halaman cek tarif"
-            className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
-          >
-            <XIcon weight="bold" className="w-6 h-6" />
-          </CloseButton>
+          <div className="flex gap-4">
+            {origin && destination && (
+              <button
+                type="button"
+                onClick={handleShare}
+                aria-label="Bagikan rute ini"
+                className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
+              >
+                {copied ? <span className="text-[10px] font-bold text-green-600">✓</span> : <ShareNetworkIcon weight="bold" className="w-6 h-6" />}
+              </button>
+            )}
+            <CloseButton
+              aria-label="Tutup halaman cek tarif"
+              className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
+            >
+              <XIcon weight="bold" className="w-6 h-6" />
+            </CloseButton>
+          </div>
         </div>
 
         <div className="mt-4 relative flex flex-col gap-2">
-          <StationField label="Dari" station={origin} onClick={() => setOpenPicker('origin')} />
-          <StationField label="Ke" station={destination} onClick={() => setOpenPicker('destination')} />
+          <StationField label="Dari" station={origin} onClick={() => openPickerFor('origin')} />
+          <StationField label="Ke" station={destination} onClick={() => openPickerFor('destination')} />
           <button
             type="button"
             onClick={handleSwap}
@@ -432,10 +389,11 @@ export default function FareSheet() {
       </div>
 
       <StationPickerDialog
-        open={openPicker !== null}
-        title={openPicker === 'origin' ? 'Dari Stasiun' : 'Ke Stasiun'}
+        open={pickerOpen}
+        title={pickerTarget === 'origin' ? 'Dari Stasiun' : 'Ke Stasiun'}
         stations={pickableStations}
-        onClose={() => setOpenPicker(null)}
+        selectedId={(pickerTarget === 'origin' ? origin : destination)?.id ?? null}
+        onClose={() => setPickerOpen(false)}
         onSelect={handleSelect}
       />
     </section>
