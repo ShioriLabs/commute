@@ -6,6 +6,7 @@ import { KVRepository } from 'db/repositories/kv'
 import { StationRepository } from 'db/repositories/stations'
 import { FareResult, FareResultLeg } from 'models/fare'
 import { summarizeFares } from 'utils/fare-summary'
+import { computeHeadsignCode } from 'utils/headsign'
 import { getLineByOperator } from 'utils/line'
 import { Internal, NotFound, Ok } from 'utils/response'
 import { buildGraph, findRoute, RouteGraph } from 'utils/router'
@@ -52,7 +53,23 @@ app.get('/:from/:to', async (c) => {
 
     const summary = summarizeFares(legs)
 
-    const stationIds = [...new Set(legs.flatMap(leg => [leg.fromStationId, leg.toStationId]))]
+    // Station ids are `${operator}-${topologyCode}`; the headsign walk works
+    // in topology codes, so strip/re-add the operator prefix around it.
+    const headsigns = legs.map((leg) => {
+      if (leg.type !== 'RIDE') return null
+      const codes = leg.stationIds.map(id => id.slice(leg.operator.length + 1))
+      const headsign = computeHeadsignCode(leg.operator as Operator, leg.lineCode, codes)
+      if (!headsign) return null
+      return {
+        terminusId: `${leg.operator}-${headsign.code}`,
+        viaId: headsign.viaCode ? `${leg.operator}-${headsign.viaCode}` : null
+      }
+    })
+
+    const stationIds = [...new Set([
+      ...legs.flatMap(leg => leg.type === 'RIDE' ? leg.stationIds : [leg.fromStationId, leg.toStationId]),
+      ...headsigns.flatMap(h => h ? [h.terminusId, ...(h.viaId ? [h.viaId] : [])] : [])
+    ])]
     const stations = await stationRepository.getByIds(stationIds)
     const name = (id: string) => {
       const station = stations.find(s => s.id === id)
@@ -60,11 +77,17 @@ app.get('/:from/:to', async (c) => {
     }
     const stationRef = (id: string) => ({ id, name: name(id) })
 
-    const resultLegs: FareResultLeg[] = legs.map((leg) => {
+    const resultLegs: FareResultLeg[] = legs.map((leg, index) => {
       if (leg.type === 'TRANSFER') {
         return { type: 'TRANSFER', from: stationRef(leg.fromStationId), to: stationRef(leg.toStationId), distanceM: leg.distanceM }
       }
       const line = getLineByOperator(leg.operator as Operator, leg.lineCode)
+      const known = (id: string | null): id is string => id !== null && stations.some(s => s.id === id)
+      const h = headsigns[index]
+      // A terminus missing from the DB would echo its raw id; omit instead.
+      const headsign = h && known(h.terminusId)
+        ? (known(h.viaId) ? `${name(h.terminusId)} via ${name(h.viaId)}` : name(h.terminusId))
+        : null
       return {
         type: 'RIDE',
         lineCode: leg.lineCode,
@@ -74,6 +97,8 @@ app.get('/:from/:to', async (c) => {
         from: stationRef(leg.fromStationId),
         to: stationRef(leg.toStationId),
         stationCount: leg.stationIds.length,
+        stops: leg.stationIds.map(stationRef),
+        headsign,
         distanceM: leg.distanceM
       }
     })

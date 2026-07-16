@@ -14,6 +14,11 @@ export interface FareResultRideLeg {
   from: FareResultStation
   to: FareResultStation
   stationCount: number
+  // Full ordered station list, boarding → alighting (endpoints included).
+  stops: FareResultStation[]
+  // Terminus the train heads toward; null when not determinable (off-topology
+  // lines, loop-ambiguous directions).
+  headsign: string | null
   distanceM: number
 }
 
