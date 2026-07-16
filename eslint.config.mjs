@@ -27,6 +27,7 @@ export default defineConfig([
     'apps/opengraph/src/assets/font.ts',
     'apps/opengraph/src/assets/og-fare-template.ts',
     'apps/web/build/**/*',
-    'apps/web/.react-router/**/*'
+    'apps/web/.react-router/**/*',
+    'apps/web/.wrangler/**/*'
   ])
 ])

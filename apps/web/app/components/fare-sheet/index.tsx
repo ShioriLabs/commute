@@ -1,10 +1,10 @@
 import type { Station } from 'models/stations'
-import type { FareResult } from 'models/fare'
+import type { FareResult, FareResultRideLeg } from 'models/fare'
 import type { StandardResponse } from '@schema/response'
 import { OPERATORS, type Operator } from '@commute/constants'
 import { useEffect, useMemo, useState } from 'react'
 import { CloseButton, DialogTitle } from '@headlessui/react'
-import { ArrowsDownUpIcon, CaretRightIcon, MapPinIcon, PersonSimpleWalkIcon, XIcon, ShareNetworkIcon } from '@phosphor-icons/react'
+import { ArrowsDownUpIcon, CaretDownIcon, CaretRightIcon, MapPinIcon, PersonSimpleWalkIcon, XIcon, ShareNetworkIcon } from '@phosphor-icons/react'
 import { useSearchParams } from 'react-router'
 import useSWR from 'swr'
 import { fetcher, FetchError } from 'utils/fetcher'
@@ -37,6 +37,88 @@ function StationField({ label, station, onClick }: { label: string, station: Sta
   )
 }
 
+// One ride leg: board node, line-colored connector carrying the service card
+// (line pill, headsign, expandable intermediate stops), alight node.
+function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSameStationTransfer: boolean }) {
+  const [expanded, setExpanded] = useState(false)
+  // Optional-chained against a stale API during deploy skew.
+  const intermediate = leg.stops?.slice(1, -1) ?? []
+  const summary = `${leg.stationCount - 1} stasiun • ${formatKm(leg.distanceM)}`
+
+  return (
+    <li className="flex flex-col">
+      {isSameStationTransfer
+        ? (
+            <div className="flex items-stretch gap-3">
+              <span className="w-4 flex justify-center shrink-0">
+                <span className="w-1.5 rounded-full bg-slate-300" />
+              </span>
+              <div className="flex items-center gap-1.5 text-sm text-slate-500 py-1.5">
+                <ArrowsDownUpIcon weight="bold" className="w-3.5 h-3.5" />
+                <span>Pindah kereta</span>
+              </div>
+            </div>
+          )
+        : null}
+      <div className="flex items-center gap-3">
+        <span className="w-4 h-4 rounded-full border-[5px] bg-white shrink-0" style={{ borderColor: leg.lineColor }} />
+        <b className="text-lg">{leg.from.name}</b>
+      </div>
+      <div className="flex items-stretch gap-3">
+        <span className="w-4 flex justify-center shrink-0">
+          <span className="w-1.5 rounded-full" style={{ backgroundColor: leg.lineColor }} />
+        </span>
+        <div className="flex-1 my-2 bg-stone-100/80 rounded-xl p-3 flex flex-col gap-1 items-start">
+          <span
+            className={`text-sm font-semibold px-3 py-1 rounded-full w-fit ${getForegroundColor(leg.lineColor) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`}
+            style={{ backgroundColor: leg.lineColor }}
+          >
+            { leg.lineName }
+          </span>
+          {leg.headsign
+            ? (
+                <span className="text-sm font-medium text-slate-600">
+                  arah
+                  {' '}
+                  { leg.headsign }
+                </span>
+              )
+            : null}
+          {intermediate.length === 0
+            ? <span className="text-sm text-slate-500">{ summary }</span>
+            : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setExpanded(value => !value)}
+                    aria-expanded={expanded}
+                    className="flex items-center gap-1 text-sm text-slate-500 cursor-pointer"
+                  >
+                    { summary }
+                    <CaretDownIcon weight="bold" className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                  </button>
+                  <div className={`grid transition-[grid-template-rows] duration-300 ${expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'} w-full`}>
+                    <ul className="overflow-hidden min-h-0 flex flex-col">
+                      {intermediate.map(stop => (
+                        <li key={stop.id} className="flex items-center gap-2 py-1 text-sm text-slate-600">
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: leg.lineColor }} />
+                          { stop.name }
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </>
+              )}
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        <span className="w-4 h-4 rounded-full border-[5px] bg-white shrink-0" style={{ borderColor: leg.lineColor }} />
+        <b className="text-lg">{leg.to.name}</b>
+      </div>
+    </li>
+  )
+}
+
 // Itinerary timeline: ringed nodes at board/alight stations, line-colored
 // connectors carrying the service card, walks as full-width cards that break
 // the rail (TfL Go-style).
@@ -52,51 +134,7 @@ function JourneyTimeline({ result }: { result: FareResult }) {
           && previous.to.id === leg.from.id
 
         return leg.type === 'RIDE'
-          ? (
-              <li key={index} className="flex flex-col">
-                {isSameStationTransfer
-                  ? (
-                      <div className="flex items-stretch gap-3">
-                        <span className="w-4 flex justify-center shrink-0">
-                          <span className="w-1.5 rounded-full bg-slate-300" />
-                        </span>
-                        <div className="flex items-center gap-1.5 text-sm text-slate-500 py-1.5">
-                          <ArrowsDownUpIcon weight="bold" className="w-3.5 h-3.5" />
-                          <span>Pindah kereta</span>
-                        </div>
-                      </div>
-                    )
-                  : null}
-                <div className="flex items-center gap-3">
-                  <span className="w-4 h-4 rounded-full border-[5px] bg-white shrink-0" style={{ borderColor: leg.lineColor }} />
-                  <b className="text-lg">{leg.from.name}</b>
-                </div>
-                <div className="flex items-stretch gap-3">
-                  <span className="w-4 flex justify-center shrink-0">
-                    <span className="w-1.5 rounded-full" style={{ backgroundColor: leg.lineColor }} />
-                  </span>
-                  <div className="flex-1 my-2 bg-stone-100/80 rounded-xl p-3 flex flex-col gap-1 items-start">
-                    <span
-                      className={`text-sm font-semibold px-3 py-1 rounded-full w-fit ${getForegroundColor(leg.lineColor) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`}
-                      style={{ backgroundColor: leg.lineColor }}
-                    >
-                      { leg.lineName }
-                    </span>
-                    <span className="text-sm text-slate-500">
-                      { leg.stationCount - 1 }
-                      {' '}
-                      stasiun •
-                      {' '}
-                      { formatKm(leg.distanceM) }
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="w-4 h-4 rounded-full border-[5px] bg-white shrink-0" style={{ borderColor: leg.lineColor }} />
-                  <b className="text-lg">{leg.to.name}</b>
-                </div>
-              </li>
-            )
+          ? <RideLeg key={index} leg={leg} isSameStationTransfer={isSameStationTransfer} />
           : (
               <li key={index} className="flex items-stretch gap-3 my-2">
                 <span className="w-4 flex justify-center shrink-0">
@@ -126,6 +164,12 @@ function FareResultCard({ result }: { result: FareResult }) {
         <span className="text-3xl font-bold">
           {result.totalFare !== null ? rupiah.format(result.totalFare) : 'Tarif tidak tersedia'}
         </span>
+        {/* Journey at a glance: ride legs proportional to distance, walks as dots. */}
+        <div className="my-1 flex h-2 gap-0.5" aria-hidden="true">
+          {result.legs.map((leg, index) => leg.type === 'RIDE'
+            ? <span key={index} className="rounded-full min-w-2" style={{ flexGrow: leg.distanceM, backgroundColor: leg.lineColor }} />
+            : <span key={index} className="w-1.5 shrink-0 rounded-full bg-slate-300" />)}
+        </div>
         <span className="text-sm text-slate-500">
           {formatKm(result.totalDistanceM)}
           {result.transferCount > 0 ? ` • ${result.transferCount}x transit` : ''}
