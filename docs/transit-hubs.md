@@ -1,6 +1,8 @@
 # Transit hub modelling
 
-**Status:** design note — not yet implemented. Companion to `platform-codes.md`.
+**Status:** *implemented* (July 2026) — hubs tables (`0010_add_hubs_tables.sql`),
+`/hubs` API routes, and the hub page (`apps/web/app/routes/hub.tsx`) are live.
+Companion to `platform-codes.md`.
 
 ## Goal
 
