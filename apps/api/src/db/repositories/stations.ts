@@ -5,6 +5,7 @@ import { Amenity, NewStation, UpdatingStation } from 'db/schemas/stations'
 import { sql } from 'kysely'
 import { Line } from 'models/line'
 import { Repository } from 'models/repository'
+import { chunkArray } from 'utils/chunk'
 import { getLineByOperator } from 'utils/line'
 import { mapify } from 'utils/mapify'
 import { getOperatorByCode } from 'utils/operator'
@@ -391,36 +392,42 @@ export class StationRepository extends Repository {
     return returningTransfers
   }
 
+  // Atomically replaces a station's entire board with exactly what the feed
+  // returned. The feed's train IDs are volatile (KAI has changed their format,
+  // e.g. `1676` -> `1676C`), so an upsert keyed on id would pile new rows on top
+  // of stale ones instead of updating them. Replacing wholesale keeps the board
+  // in sync and drops orphaned/removed departures.
   async insertTimetable(id: string, timetable: NewSchedule[]) {
     const station = await this.getById(id)
     if (!station) return undefined
 
-    // Chunk timetable by 100
-    const chunkedTimetable: NewSchedule[][] = []
-    for (let i = 0; i < timetable.length; i += 10) {
-      chunkedTimetable.push(timetable.slice(i, i + 10))
-    }
+    // Success-but-empty upstream response: leave the existing board intact
+    // rather than wiping the station.
+    if (timetable.length === 0) return timetable
+
+    // One row per id; dedupe (last wins) so a single batched INSERT can't roll
+    // back on an intra-feed duplicate primary key.
+    const deduped = Array.from(new Map(timetable.map(schedule => [schedule.id, schedule])).values())
 
     const databaseInstance = db(this.d1)
 
-    for (const chunk of chunkedTimetable) {
-      await databaseInstance
-        .insertInto('schedules')
-        .values(chunk)
-        .onConflict((oc) => {
-          return oc.column('id').doUpdateSet(eb => ({
-            boundFor: eb.ref('excluded.boundFor'),
-            estimatedArrival: eb.ref('excluded.estimatedArrival'),
-            estimatedDeparture: eb.ref('excluded.estimatedDeparture'),
-            stationId: eb.ref('stationId'),
-            tripNumber: eb.ref(`excluded.tripNumber`),
-            updatedAt: sql`CURRENT_TIMESTAMP`
-          }))
-        })
-        .executeTakeFirstOrThrow()
-    }
-    await databaseInstance.updateTable('stations').set('timetableSynced', 1).where('id', '==', id).executeTakeFirstOrThrow()
+    // Clear the station's schedules, insert the fresh set (chunked to stay under
+    // D1's bound-parameter limit), then flag it synced. D1 batch runs as a single
+    // non-interactive transaction and rolls back on any failure — no partial-write
+    // window and no moment where the station has no board.
+    const queries = [
+      databaseInstance.deleteFrom('schedules').where('stationId', '=', id),
+      ...chunkArray(deduped, 10).map(chunk => databaseInstance.insertInto('schedules').values(chunk)),
+      databaseInstance.updateTable('stations').set('timetableSynced', 1).where('id', '=', id)
+    ]
 
-    return timetable
+    const statements = queries.map((query) => {
+      const compiled = query.compile()
+      return this.d1.prepare(compiled.sql).bind(...compiled.parameters)
+    })
+
+    await this.d1.batch(statements)
+
+    return deduped
   }
 }
