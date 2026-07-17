@@ -53,7 +53,7 @@ const DOUBLE_TAP_RADIUS_CSS_PX = 30
 
 export function meta() {
   const title = 'Peta Integrasi - Commute'
-  const description = 'Peta integrasi antarmoda KRL, MRT, LRT, dan Transjakarta di Jabodetabek'
+  const description = 'Cek peta integrasi KRL, MRT, LRT, dan Transjakarta se-Jabodetabek, kagak pake ribet.'
   const image = 'https://commute.shiorilabs.id/img/og-map.png'
   return [
     { title },
