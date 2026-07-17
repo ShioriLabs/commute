@@ -1,8 +1,10 @@
 # TransJakarta GTFS import
 
-**Status:** recon notes — feed verified, import not yet designed. Companion to
-`transit-hubs.md` (TJ haltes will join hubs) and the fare work on
-`dhika/fare-calc`.
+**Status:** groundwork landed (July 2026) — the `TJ` operator, empty
+`apps/api/src/operators/tj/` stubs, and the `searchable` station flag
+(`0011_add_station_searchable.sql`) are in; the importer itself is not yet
+built. Companion to `transit-hubs.md` (TJ haltes will join hubs) and the
+fare feature (shipped).
 
 ## Goal
 

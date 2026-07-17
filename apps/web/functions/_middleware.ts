@@ -304,7 +304,7 @@ async function resolveOg(pathname: string, searchParams: URLSearchParams, env: E
   if (pathname === '/map') {
     return {
       title: 'Peta Integrasi KRL, MRT & LRT Jabodetabek - Commute',
-      description: 'Peta integrasi antarmoda KRL, MRT, LRT, dan TransJakarta di Jabodetabek',
+      description: 'Cek peta integrasi KRL, MRT, LRT, dan Transjakarta se-Jabodetabek, kagak pake ribet.',
       image: `${SITE_ORIGIN}/img/og-map.png`
     }
   }
@@ -330,7 +330,7 @@ async function resolveOg(pathname: string, searchParams: URLSearchParams, env: E
         const toName = toStation.formattedName || toStation.name
         return {
           title: `Cek Tarif ${fromName} ke ${toName} - Commute`,
-          description: `Hitung tarif perjalanan dari ${fromName} ke ${toName} di Jabodetabek.`,
+          description: `Cek tarif dari ${fromName} ke ${toName} kagak pake ribet, biar pas tap out gak ada drama saldo kurang.`,
           image: fareOgImage(fromId, toId)
         }
       }
@@ -338,7 +338,7 @@ async function resolveOg(pathname: string, searchParams: URLSearchParams, env: E
 
     return {
       title: 'Kalkulator Tarif KRL, MRT, dan LRT - Commute',
-      description: 'Hitung tarif perjalanan KRL, MRT, dan LRT antar stasiun di Jabodetabek.',
+      description: 'Cek tarif KRL, MRT, dan LRT se-Jabodetabek kagak pake ribet, biar pas tap out gak ada drama saldo kurang.',
       image: DEFAULT_OG_IMAGE
     }
   }
@@ -355,8 +355,8 @@ async function resolveOg(pathname: string, searchParams: URLSearchParams, env: E
     return {
       title: `Jadwal Kereta ${hub.name} - Stasiun Terintegrasi - Commute`,
       description: memberNames
-        ? `Jadwal kereta di ${hub.name}. Stasiun terintegrasi: ${memberNames}.`
-        : `Jadwal kereta di ${hub.name}. Stasiun terintegrasi.`,
+        ? `Cek jadwal kereta di ${hub.name} kagak pake ribet. Stasiun terintegrasi: ${memberNames}.`
+        : `Cek jadwal kereta di stasiun terintegrasi ${hub.name} kagak pake ribet.`,
       image: hub.heroImage || hubOgImage(slug),
       bodyHtml: buildHubBody(hub, slug, memberNames)
     }
@@ -373,7 +373,7 @@ async function resolveOg(pathname: string, searchParams: URLSearchParams, env: E
     const stationCount = detail.segments.reduce((n, s) => n + s.stations.length, 0)
     return {
       title: `Jadwal ${detail.line.name} - Rute & Jam Keberangkatan - Commute`,
-      description: `Lihat rute, ${stationCount} stasiun, dan jam keberangkatan ${detail.line.name} (${detail.operator.name}).`,
+      description: `Cek rute, ${stationCount} stasiun, dan jam keberangkatan ${detail.line.name} (${detail.operator.name}) kagak pake ribet.`,
       image: lineOgImage(detail.operator.code, detail.line.lineCode),
       bodyHtml: buildLineBody(detail, stationCount)
     }
@@ -392,7 +392,7 @@ async function resolveOg(pathname: string, searchParams: URLSearchParams, env: E
     const vocab = vocabFor(operator)
     return {
       title: `Jadwal ${vocab.mode} ${vocab.stop} ${name} (${code}) - Commute`,
-      description: `Jadwal & jam keberangkatan ${vocab.mode} di ${vocab.stop} ${name}, lengkap per jalur. Gratis di Commute.`,
+      description: `Cek jadwal & jam keberangkatan ${vocab.mode} di ${vocab.stop} ${name} kagak pake ribet, lengkap per jalur. Gratis di Commute.`,
       image: stationOgImage(station.id),
       bodyHtml: buildStationBody(station, operator, code, timetable)
     }
