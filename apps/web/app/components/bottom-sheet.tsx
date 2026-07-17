@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { haptic } from 'utils/haptics'
 
 // Sheet height as a fraction of viewport height. Peek is tall enough that
@@ -16,7 +16,13 @@ const FLICK_THRESHOLD = 0.5
 const SCROLL_MOMENTUM_TAU = 325
 const SCROLL_MIN_VELOCITY = 0.02
 
-type SnapState = 'closed' | 'peek' | 'full'
+export type SnapState = 'closed' | 'peek' | 'full'
+
+// Imperative handle: lets the gamepad layer snap the sheet with the D-pad.
+export interface BottomSheetHandle {
+  snapTo: (snap: SnapState) => void
+  getSnap: () => SnapState
+}
 
 interface BottomSheetProps {
   // Parent-controlled open state. The sheet opens to peek when this flips true
@@ -41,9 +47,27 @@ interface BottomSheetProps {
   children: (ready: boolean) => ReactNode
 }
 
-export default function BottomSheet({ open, onClose, onDismissStart, ariaLabel, header, children }: BottomSheetProps) {
+const BottomSheet = forwardRef<BottomSheetHandle, BottomSheetProps>(function BottomSheet(
+  { open, onClose, onDismissStart, ariaLabel, header, children },
+  ref
+) {
   // Snap state controlled by parent open/close; persists open height across renders.
   const [snap, setSnap] = useState<SnapState>('closed')
+
+  // Expose imperative snapping for the gamepad D-pad. Guard against snapping a
+  // closed (unopened) sheet open — only reposition an already-open sheet.
+  const snapRef = useRef<SnapState>(snap)
+  useEffect(() => {
+    snapRef.current = snap
+  }, [snap])
+  useImperativeHandle(ref, () => ({
+    snapTo: (next: SnapState) => {
+      if (snapRef.current === 'closed') return
+      if (next !== snapRef.current) haptic()
+      setSnap(next)
+    },
+    getSnap: () => snapRef.current
+  }), [])
   const [viewportH, setViewportH] = useState(0)
   // Defer mounting the heavy body until the open animation finishes. Otherwise
   // the first render of dozens of nodes happens during the 0→peek slide and
@@ -507,4 +531,6 @@ export default function BottomSheet({ open, onClose, onDismissStart, ariaLabel, 
       </div>
     </>
   )
-}
+})
+
+export default BottomSheet

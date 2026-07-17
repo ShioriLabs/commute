@@ -1,7 +1,9 @@
 import { XIcon, ArrowSquareOutIcon } from '@phosphor-icons/react'
+import { useEffect, useRef } from 'react'
 import { Link } from 'react-router'
-import BottomSheet from './bottom-sheet'
+import BottomSheet, { type BottomSheetHandle } from './bottom-sheet'
 import HubContent, { useHubHeader } from './hub-content'
+import { useGamepad } from '~/contexts/gamepad'
 
 interface HubSheetProps {
   slug: string | null
@@ -11,9 +13,19 @@ interface HubSheetProps {
 
 export default function HubSheet({ slug, onClose, onDismissStart }: HubSheetProps) {
   const open = !!slug
+  const sheetRef = useRef<BottomSheetHandle>(null)
+  const { registerSheet } = useGamepad()
+
+  // Register this sheet as the gamepad D-pad's snap target while it's open.
+  useEffect(() => {
+    if (!open) return
+    registerSheet(sheetRef.current)
+    return () => registerSheet(null)
+  }, [open, registerSheet])
 
   return (
     <BottomSheet
+      ref={sheetRef}
       open={open}
       onClose={onClose}
       onDismissStart={onDismissStart}

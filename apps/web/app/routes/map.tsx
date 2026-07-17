@@ -27,6 +27,7 @@ import { AuthorOverlay, handleAuthorTap } from '../components/map-author'
 import StationSheet from '../components/station-sheet'
 import HubSheet from '../components/hub-sheet'
 import { PEEK_FRACTION } from '../components/bottom-sheet'
+import { useGamepad } from '~/contexts/gamepad'
 
 const TAP_MOVEMENT_THRESHOLD_CSS_PX = 8
 const TOUCH_HIT_SLOP_CSS_PX = 12
@@ -197,6 +198,9 @@ export default function MapPage() {
   const currentTierRef = useRef<Tier>(1)
 
   const [viewportSize, setViewportSize] = useState({ w: 0, h: 0 })
+
+  // Gamepad: left stick pans, triggers zoom (consumed by an rAF loop below).
+  const { pan: gamepadPan, zoom: gamepadZoom, connected: gamepadConnected } = useGamepad()
 
   // Chrome (top bar) auto-hides during map interaction and reappears when the
   // user taps empty space. Author mode toolbar / edit panel are unaffected.
@@ -597,6 +601,47 @@ export default function MapPage() {
     const ty = py - worldY * newScale
     updateTransform({ tx, ty, scale: newScale })
   }
+
+  // Gamepad drive: while a controller is connected, the left stick pans the map
+  // and the triggers (RT in / LT out) zoom toward the viewport center. Runs its
+  // own rAF loop, applying the deadzoned analog channels from the gamepad
+  // context each frame; the map's main rAF loop lerps toward the target we set.
+  // Panning and zooming here are a separate channel from the D-pad, which still
+  // moves focus among the on-screen map buttons.
+  useEffect(() => {
+    if (!gamepadConnected || !viewportSize.w || !viewportSize.h) return
+    // Screen px/sec of pan at full stick deflection, and zoom factor/sec at full
+    // trigger pull. Scaled by dt so movement is frame-rate independent.
+    const PAN_SPEED = 900
+    const ZOOM_SPEED = 1.8
+    let raf = 0
+    let last = performance.now()
+    const tick = (now: number) => {
+      const dt = Math.min(64, now - last) / 1000
+      last = now
+      const { x, y } = gamepadPan.current
+      if (x !== 0 || y !== 0) {
+        const t = transformRef.current
+        // Stick right/down moves the camera right/down → content shifts opposite.
+        updateTransform({
+          tx: t.tx - x * PAN_SPEED * dt,
+          ty: t.ty - y * PAN_SPEED * dt,
+          scale: t.scale
+        })
+      }
+      const z = gamepadZoom.current
+      if (z !== 0 && viewportRef.current) {
+        const factor = 1 + z * ZOOM_SPEED * dt
+        // zoomAt expects client coords; anchor on the viewport's center.
+        const rect = viewportRef.current.getBoundingClientRect()
+        zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, factor)
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+    // updateTransform/zoomAt close over these; re-create the loop when they change.
+  }, [gamepadConnected, viewportSize.w, viewportSize.h, mapW, mapH, minScale])
 
   // Launch an eased camera flight from the currently rendered transform.
   const flyTo = (to: Transform, duration: number) => {

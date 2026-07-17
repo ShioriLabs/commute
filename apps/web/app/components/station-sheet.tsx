@@ -1,8 +1,10 @@
 import { XIcon, ArrowSquareOutIcon } from '@phosphor-icons/react'
+import { useEffect, useRef } from 'react'
 import { Link } from 'react-router'
-import BottomSheet from './bottom-sheet'
+import BottomSheet, { type BottomSheetHandle } from './bottom-sheet'
 import LineRoundel from './line-roundel'
 import StationContent, { useStationHeader } from './station-content'
+import { useGamepad } from '~/contexts/gamepad'
 
 interface StationSheetProps {
   operator: string | null
@@ -13,9 +15,19 @@ interface StationSheetProps {
 
 export default function StationSheet({ operator, code, onClose, onDismissStart }: StationSheetProps) {
   const open = !!(operator && code)
+  const sheetRef = useRef<BottomSheetHandle>(null)
+  const { registerSheet } = useGamepad()
+
+  // Register this sheet as the gamepad D-pad's snap target while it's open.
+  useEffect(() => {
+    if (!open) return
+    registerSheet(sheetRef.current)
+    return () => registerSheet(null)
+  }, [open, registerSheet])
 
   return (
     <BottomSheet
+      ref={sheetRef}
       open={open}
       onClose={onClose}
       onDismissStart={onDismissStart}

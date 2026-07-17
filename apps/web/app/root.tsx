@@ -10,6 +10,9 @@ import { useEffect } from 'react'
 import type { Route } from './+types/root'
 import './app.css'
 import { InstallableProvider } from './contexts/installable'
+import { GamepadProvider } from './contexts/gamepad'
+import GamepadCursor from './components/gamepad-cursor'
+import { useGamepadFocus } from './hooks/use-gamepad-focus'
 
 export const links: Route.LinksFunction = () => [
   { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
@@ -68,13 +71,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body className="bg-rose-50/50 text-slate-900">
         <InstallableProvider>
-          {children}
-          <ScrollRestoration />
-          <Scripts />
+          <GamepadProvider>
+            {children}
+            <GamepadLayer />
+            <ScrollRestoration />
+            <Scripts />
+          </GamepadProvider>
         </InstallableProvider>
       </body>
     </html>
   )
+}
+
+// Runs the gamepad focus-navigation loop and renders the focus cursor. Kept
+// inside GamepadProvider (see Layout) so both can use the context.
+function GamepadLayer() {
+  useGamepadFocus()
+  return <GamepadCursor />
 }
 
 export default function App() {

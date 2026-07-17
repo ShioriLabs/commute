@@ -56,6 +56,40 @@ body {
   }
 }
 
+/* Gamepad focus cursor: a glowing brand-pink ring that tracks the focused
+   element's bounding rect (positioned inline in gamepad-cursor.tsx). Sits above
+   all content, ignores pointer events, and glides between targets. */
+.gamepad-cursor {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  border-radius: 12px;
+  border: 2px solid #f55875;
+  box-shadow:
+    0 0 0 2px rgb(245 88 117 / 0.25),
+    0 0 12px 2px rgb(245 88 117 / 0.55);
+  transition:
+    left 120ms ease-out,
+    top 120ms ease-out,
+    width 120ms ease-out,
+    height 120ms ease-out;
+  animation: gamepad-cursor-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes gamepad-cursor-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px rgb(245 88 117 / 0.25),
+      0 0 12px 2px rgb(245 88 117 / 0.55);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px rgb(245 88 117 / 0.4),
+      0 0 18px 4px rgb(245 88 117 / 0.75);
+  }
+}
+
 /* Search results: rows fade/slide in with a per-row stagger (delay set inline). */
 .search-result-enter {
   opacity: 0;
