@@ -56,10 +56,10 @@ export interface LineTimetable {
 
 export type LineGroupedTimetable = LineTimetable[]
 
-export interface CompactSchedule {
-  id: string
-  estimatedDeparture: Date
-}
+// Wire-optimized departure: [tripNumber, minuteSinceMidnight]. tripNumber is
+// null for operators without trip numbers (non-KCI); minute is integer minutes
+// since local (Asia/Jakarta) midnight, 0–1439.
+export type CompactSchedule = [tripNumber: string | null, minute: number]
 
 export type CompactTimetableDestination = Omit<TimetableDestination, 'schedules'> & {
   schedules: CompactSchedule[]

@@ -22,7 +22,7 @@ import { AMENITY_TYPES, type AmenityType } from '@commute/constants'
 import type { StandardResponse } from '@schema/response'
 import type { Line } from 'models/line'
 import type { Station } from 'models/stations'
-import type { LineGroupedTimetable } from 'models/schedules'
+import type { CompactLineGroupedTimetable } from 'models/schedules'
 import type { Transfer } from 'models/transfers'
 import LineCard from '~/components/line-card'
 import LineRoundel from '~/components/line-roundel'
@@ -126,7 +126,7 @@ const StationContent = memo(function StationContent({ operator, code }: StationC
   )
 
   const station = useSWR<StandardResponse<Station>>(unserved ? null : stationUrl, fetcher, swrConfig)
-  const timetable = useSWR<StandardResponse<LineGroupedTimetable>>(unserved ? null : timetableUrl, fetcher, swrConfig)
+  const timetable = useSWR<StandardResponse<CompactLineGroupedTimetable>>(unserved ? null : timetableUrl, fetcher, swrConfig)
   const timetableData = useMemo(() => normalizeGroupedTimetable(timetable.data?.data), [timetable.data])
   const transfers = useSWR<StandardResponse<Transfer[]>>(unserved ? null : transfersUrl, fetcher, swrConfig)
   const networkStatus = useNetworkStatus()

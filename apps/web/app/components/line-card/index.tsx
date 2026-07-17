@@ -1,9 +1,9 @@
-import type { CompactLineTimetable, CompactSchedule, LineTimetable } from 'models/schedules'
+import type { CompactLineTimetable, CompactSchedule } from 'models/schedules'
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router'
 import { CaretRightIcon, NavigationArrowIcon } from '@phosphor-icons/react'
 import { getForegroundColor, getTintFromColor } from 'utils/colors'
-import { departureSortKey, getRelativeDepartureLabel, parseTime } from 'utils/schedules'
+import { departureSortKey, getRelativeDepartureLabel, parseMinute } from 'utils/schedules'
 
 function getNextSchedules(
   schedules: CompactSchedule[],
@@ -15,7 +15,7 @@ function getNextSchedules(
   const upcoming = schedules
     .map(schedule => ({
       schedule,
-      sortKey: departureSortKey(parseTime(schedule.estimatedDeparture), now)
+      sortKey: departureSortKey(parseMinute(schedule[1]), now)
     }))
     .filter(entry => entry.sortKey >= cutoff)
     .sort((a, b) => a.sortKey - b.sortKey)
@@ -30,7 +30,7 @@ function getNextSchedules(
 }
 
 interface Props {
-  line: LineTimetable | CompactLineTimetable
+  line: CompactLineTimetable
   // When set, the card header links to the line's page (/lines/{operator}/{lineCode}).
   operator?: string
 }
@@ -135,7 +135,7 @@ export default function LineCard({ line, operator }: Props) {
               )}
               <ul>
                 {group.destinations.map((destination) => {
-                  const departure = parseTime(destination.schedules[0].estimatedDeparture)
+                  const departure = parseMinute(destination.schedules[0][1])
                   const relativeLabel = getRelativeDepartureLabel(lastUpdated, departure)
                   const absoluteTime = departure.toLocaleTimeString('id-ID', { timeStyle: 'short' })
 
@@ -166,11 +166,11 @@ export default function LineCard({ line, operator }: Props) {
                           ? (
                               <span
                                 className="font-semibold text-sm text-gray-600"
-                                aria-label={`Keberangkatan selanjutnya: ${destination.schedules.slice(1, 3).map(sched => parseTime(sched.estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })).join(', ')}`}
+                                aria-label={`Keberangkatan selanjutnya: ${destination.schedules.slice(1, 3).map(sched => parseMinute(sched[1]).toLocaleTimeString('id-ID', { timeStyle: 'short' })).join(', ')}`}
                               >
                                 lalu
                                 {' '}
-                                {destination.schedules.slice(1, 3).map(sched => parseTime(sched.estimatedDeparture).toLocaleTimeString('id-ID', { timeStyle: 'short' })).join(', ')}
+                                {destination.schedules.slice(1, 3).map(sched => parseMinute(sched[1]).toLocaleTimeString('id-ID', { timeStyle: 'short' })).join(', ')}
                               </span>
                             )
                           : null}
