@@ -20,7 +20,11 @@ const WELL_KNOWN_STATION_NAMES: Record<string, string> = {
   'SUDIRMAN BARU': 'BNI City',
   'JAKARTAKOTA': 'Jakarta Kota',
   'TANAHABANG': 'Tanah Abang',
-  'TANJUNGPRIUK': 'Tanjung Priok'
+  'TANJUNGPRIUK': 'Tanjung Priok',
+  'KAMPUNGBANDAN VIA MRI': 'Kampung Bandan',
+  'KAMPUNGBANDAN VIA PSE': 'Kampung Bandan',
+  'ANGKE VIA MRI': 'Angke',
+  'CIKARANG VIA MRI': 'Cikarang'
 }
 
 // For mapping API line names to our line codes

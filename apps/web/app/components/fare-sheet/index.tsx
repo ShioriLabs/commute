@@ -22,6 +22,16 @@ const rupiah = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'ID
 const formatKm = (distanceM: number) => `${(distanceM / 1000).toLocaleString('id-ID', { maximumFractionDigits: 1 })} km`
 const operatorName = (code: string) => (OPERATORS as Record<string, { name: string }>)[code as Operator]?.name ?? code
 
+// At-a-glance segment fill: a gradient across the service colours for interlined
+// legs (shared track), otherwise the single line colour.
+function rideGlanceStyle(leg: FareResultRideLeg) {
+  const lines = leg.serviceLines
+  if (lines && lines.length > 1) {
+    return { flexGrow: leg.distanceM, backgroundImage: `linear-gradient(to right, ${lines[0].lineColor}, ${lines[lines.length - 1].lineColor})` }
+  }
+  return { flexGrow: leg.distanceM, backgroundColor: leg.lineColor }
+}
+
 function StationField({ label, station, onClick }: { label: string, station: Station | null, onClick: () => void }) {
   return (
     <button
@@ -44,6 +54,14 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
   // Optional-chained against a stale API during deploy skew.
   const intermediate = leg.stops?.slice(1, -1) ?? []
   const summary = `${leg.stationCount - 1} stasiun • ${formatKm(leg.distanceM)}`
+  // On interlined track (the LRT Jabodebek trunk) several service lines run the
+  // same leg — any train works. Fall back to the single line for ordinary legs.
+  const lines = leg.serviceLines ?? [{ lineCode: leg.lineCode, lineName: leg.lineName, lineColor: leg.lineColor, headsign: leg.headsign }]
+  const isInterlined = lines.length > 1
+  const directions = [...new Set(lines.map(line => line.headsign).filter((headsign): headsign is string => headsign !== null))]
+  const railStyle = isInterlined
+    ? { backgroundImage: `repeating-linear-gradient(to bottom, ${lines[0].lineColor} 0 8px, ${lines[lines.length - 1].lineColor} 8px 16px)` }
+    : { backgroundColor: leg.lineColor }
 
   return (
     <li className="flex flex-col">
@@ -66,21 +84,29 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
       </div>
       <div className="flex items-stretch gap-3">
         <span className="w-4 flex justify-center shrink-0">
-          <span className="w-1.5 rounded-full" style={{ backgroundColor: leg.lineColor }} />
+          <span className="w-1.5 rounded-full" style={railStyle} />
         </span>
         <div className="flex-1 my-2 bg-stone-100/80 rounded-xl p-3 flex flex-col gap-1 items-start">
-          <span
-            className={`text-sm font-semibold px-3 py-1 rounded-full w-fit ${getForegroundColor(leg.lineColor) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`}
-            style={{ backgroundColor: leg.lineColor }}
-          >
-            { leg.lineName }
-          </span>
-          {leg.headsign
+          <div className="flex flex-wrap gap-1.5">
+            {lines.map(line => (
+              <span
+                key={line.lineCode}
+                className={`text-sm font-semibold px-3 py-1 rounded-full w-fit ${getForegroundColor(line.lineColor) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`}
+                style={{ backgroundColor: line.lineColor }}
+              >
+                { line.lineName }
+              </span>
+            ))}
+          </div>
+          {isInterlined
+            ? <span className="text-sm font-medium text-slate-600">Naik salah satu kereta</span>
+            : null}
+          {directions.length > 0
             ? (
                 <span className="text-sm font-medium text-slate-600">
                   arah
                   {' '}
-                  { leg.headsign }
+                  { directions.join(' / ') }
                 </span>
               )
             : null}
@@ -167,7 +193,7 @@ function FareResultCard({ result }: { result: FareResult }) {
         {/* Journey at a glance: ride legs proportional to distance, walks as dots. */}
         <div className="my-1 flex h-2 gap-0.5" aria-hidden="true">
           {result.legs.map((leg, index) => leg.type === 'RIDE'
-            ? <span key={index} className="rounded-full min-w-2" style={{ flexGrow: leg.distanceM, backgroundColor: leg.lineColor }} />
+            ? <span key={index} className="rounded-full min-w-2" style={rideGlanceStyle(leg)} />
             : <span key={index} className="w-1.5 shrink-0 rounded-full bg-slate-300" />)}
         </div>
         <span className="text-sm text-slate-500">

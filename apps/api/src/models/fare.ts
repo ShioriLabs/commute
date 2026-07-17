@@ -5,6 +5,15 @@ export interface FareResultStation {
   name: string
 }
 
+export interface FareResultLineRef {
+  lineCode: string
+  lineName: string
+  lineColor: string
+  // Terminus this specific service heads toward (each interlining line forks to
+  // its own terminus); null when not determinable.
+  headsign: string | null
+}
+
 export interface FareResultRideLeg {
   type: 'RIDE'
   lineCode: string
@@ -20,6 +29,11 @@ export interface FareResultRideLeg {
   // lines, loop-ambiguous directions).
   headsign: string | null
   distanceM: number
+  // Set (length ≥ 2) only when the leg runs on interlined/shared track served
+  // by several service lines (e.g. the LRT Jabodebek DKA..CWG trunk); any of
+  // them gets the rider there. Includes the primary line (first). Omitted for
+  // ordinary single-line legs.
+  serviceLines?: FareResultLineRef[]
 }
 
 export interface FareResultTransferLeg {
