@@ -41,7 +41,8 @@ function HighlightedList({ title, items, className }: { title: string, items: Re
           to: `/hubs/${hub.slug}`,
           name: hub.name,
           subtitle: 'Stasiun Terintegrasi',
-          line: hub.lines[0] as Line | undefined
+          line: hub.lines[0] as Line | undefined,
+          operator: undefined as string | undefined
         }
       }
       const station = stations?.data?.find(station => station.id === item.id)
@@ -51,7 +52,8 @@ function HighlightedList({ title, items, className }: { title: string, items: Re
         to: `/stations/${station.operator.code}/${station.code}`,
         name: station.formattedName || station.name,
         subtitle: station.operator.name,
-        line: station.lines[0] as Line | undefined
+        line: station.lines[0] as Line | undefined,
+        operator: station.operator.code as string | undefined
       }
     })
     .filter(card => card !== null)
@@ -74,7 +76,7 @@ function HighlightedList({ title, items, className }: { title: string, items: Re
               style={card.line ? { backgroundColor: getTintFromColor(card.line.colorCode, 0.2, 'light'), color: card.line.colorCode } : undefined}
               replace
             >
-              {card.line ? <LineRoundel size="SM" code={card.line.lineCode} color={card.line.colorCode} /> : null}
+              {card.line ? <LineRoundel size="SM" code={card.line.lineCode} color={card.line.colorCode} operator={card.operator} /> : null}
               <span className="font-semibold mt-auto">{ card.name }</span>
               <span className={card.line ? 'text-slate-700' : ''}>{ card.subtitle }</span>
             </Link>
@@ -102,7 +104,8 @@ function LineChipList({ className }: { className?: string }) {
     <article className={`max-w-3xl mx-auto ${className}`}>
       <h1 className="text-xl font-bold mx-8">Lin</h1>
       <ul className="mt-2 flex flex-row flex-wrap gap-2 px-8">
-        {operators.data.flatMap(op => op.lines.map(line => (
+        {/* TJ excluded: its line-detail pages aren't built yet (no topology). */}
+        {operators.data.filter(op => op.code !== 'TJ').flatMap(op => op.lines.map(line => (
           <li key={`${op.code}-${line.lineCode}`}>
             <Link
               to={`/lines/${op.code}/${line.lineCode}`}
@@ -168,6 +171,8 @@ export default function SearchContent({ title, closeButton }: Props) {
 
     if (operators && operators.data) {
       for (const operator of operators.data) {
+        // TJ excluded: its line-detail pages aren't built yet (no topology).
+        if (operator.code === 'TJ') continue
         for (const line of operator.lines) {
           _searchables.push(lineToSearchable(operator, line))
         }

@@ -7,6 +7,7 @@ import { haptic } from 'utils/haptics'
 import { levenshteinDistance } from 'utils/levenshtein'
 import HighlightMatch from '~/components/highlight-match'
 import LineRoundel from '~/components/line-roundel'
+import { sortLinesForDisplay } from '~/utils/lines'
 
 const SCORE_THRESHOLD = 3
 
@@ -215,8 +216,8 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
                         {station.lines?.length
                           ? (
                               <span className="flex -space-x-1.5">
-                                {station.lines.map(line => (
-                                  <LineRoundel key={line.lineCode} size="SM" code={line.lineCode} color={line.colorCode} />
+                                {sortLinesForDisplay(station.lines, station.operator.code).map(line => (
+                                  <LineRoundel key={line.lineCode} size="SM" code={line.lineCode} color={line.colorCode} operator={station.operator.code} />
                                 ))}
                               </span>
                             )
@@ -251,9 +252,9 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
                     {station.lines?.length
                       ? (
                           <ul className="flex flex-row gap-1 flex-wrap">
-                            {station.lines.map(line => (
+                            {sortLinesForDisplay(station.lines, station.operator.code).map(line => (
                               <li key={line.lineCode}>
-                                <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} />
+                                <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={station.operator.code} />
                                 <span className="sr-only">{line.name}</span>
                               </li>
                             ))}

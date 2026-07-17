@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import BottomSheet from './bottom-sheet'
 import LineRoundel from './line-roundel'
 import StationContent, { useStationHeader } from './station-content'
+import { sortLinesForDisplay } from '~/utils/lines'
 
 interface StationSheetProps {
   operator: string | null
@@ -48,9 +49,9 @@ function SheetHeader({ operator, code, onClose }: { operator: string, code: stri
               <>
                 {header.lines.length > 0 && (
                   <ul className="flex flex-row gap-1 flex-wrap">
-                    {header.lines.map(line => (
+                    {sortLinesForDisplay(header.lines, operator ?? undefined).map(line => (
                       <li key={line.lineCode}>
-                        <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} />
+                        <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={operator ?? undefined} />
                         <span className="sr-only">{line.name}</span>
                       </li>
                     ))}

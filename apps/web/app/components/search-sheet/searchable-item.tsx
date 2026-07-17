@@ -49,7 +49,8 @@ export default function SearchableItem({ searchable, onClick, query, index = 0 }
               <ul className="flex flex-row gap-1 flex-wrap">
                 {(searchable as Searchable<Line[]>).body!.map(line => (
                   <li key={line.lineCode}>
-                    <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} />
+                    {/* STATION `to` is /stations/{operator}/{code}; drives TJ roundel style. */}
+                    <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={searchable.type === 'STATION' ? searchable.to.split('/')[2] : undefined} />
                     <span className="sr-only">{line.name}</span>
                   </li>
                 ))}
