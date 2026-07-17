@@ -424,13 +424,9 @@ app.get('/:operator/:stationCode/transfers', async (c) => {
 
   if (!checkStationResult.value.exists || checkStationResult.value.station === null) return c.json(NotFound('UNKNOWN_STATION', `Unknown Station Code ${stationCode} in Operator ${operator.code}`), 404)
 
-  if (transfers.value.length === 0) {
-    return c.json(
-      Ok([]),
-      200
-    )
-  }
-
+  // Cache the result even when it's empty. A station having no transfers is a
+  // stable topological fact, so re-running both D1 queries on every request is
+  // wasted work; without caching here, no-transfer stations never get a KV hit.
   c.executionCtx.waitUntil(
     kvRepository.set(kvKey, transfers.value)
   )
