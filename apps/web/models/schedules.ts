@@ -12,10 +12,10 @@ export interface Schedule {
   updatedAt: string
 }
 
-export interface CompactSchedule {
-  id: string
-  estimatedDeparture: string
-}
+// Wire-optimized departure: [tripNumber, minuteSinceMidnight]. tripNumber is
+// null for operators without trip numbers; minute is integer minutes since
+// local (Asia/Jakarta) midnight, 0–1439.
+export type CompactSchedule = [tripNumber: string | null, minute: number]
 
 // One boundFor bucket — a terminus row inside a direction group.
 export interface TimetableDestination {

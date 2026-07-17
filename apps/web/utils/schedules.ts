@@ -2,6 +2,15 @@ export function parseTime(timeString: string) {
   return new Date(`${new Date().toDateString()} ${timeString}`)
 }
 
+// Compact departures arrive as minutes since local midnight; pin them to today so
+// they share parseTime's timeline (post-midnight service still rolls forward via
+// departureSortKey). setMinutes normalizes values >59 into hours.
+export function parseMinute(minute: number): Date {
+  const date = new Date(new Date().toDateString())
+  date.setMinutes(minute)
+  return date
+}
+
 // parseTime pins every "HH:MM" to today, so post-midnight service (00:xx–03:xx)
 // sorts ahead of tonight's late-evening departures. During late night, roll
 // those after-midnight times forward a day so chronological ordering holds.

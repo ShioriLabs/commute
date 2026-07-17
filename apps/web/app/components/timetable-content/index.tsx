@@ -9,7 +9,7 @@ import LineRoundel from '~/components/line-roundel'
 import { fetcher } from 'utils/fetcher'
 import { normalizeGroupedTimetable } from 'utils/timetable-shim'
 import { useNetworkStatus } from '~/hooks/network'
-import { departureSortKey, isImmediateDeparture, parseTime } from 'utils/schedules'
+import { departureSortKey, isImmediateDeparture, parseMinute } from 'utils/schedules'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -19,10 +19,10 @@ const swrConfig = {
 }
 
 interface DepartureRow {
-  scheduleId: string
+  tripNumber: string | null
   boundFor: string
   via: string | null
-  estimatedDeparture: string
+  minute: number
   sortKey: number
 }
 
@@ -44,13 +44,13 @@ function buildSections(timetable: CompactLineGroupedTimetable, now: Date): Direc
       const rows: DepartureRow[] = []
       for (const destination of group.destinations) {
         for (const schedule of destination.schedules) {
-          const parsed = parseTime(schedule.estimatedDeparture)
+          const parsed = parseMinute(schedule[1])
           const sortKey = departureSortKey(parsed, now)
           rows.push({
-            scheduleId: schedule.id,
+            tripNumber: schedule[0],
             boundFor: destination.boundFor,
             via: destination.via,
-            estimatedDeparture: schedule.estimatedDeparture,
+            minute: schedule[1],
             sortKey
           })
         }
@@ -271,7 +271,7 @@ const TimetableContent = memo(function TimetableContent({ operator, code }: Prop
                   </header>
                   <ul className="flex flex-col mb-4">
                     {section.rows.map((row, index) => {
-                      const parsed = parseTime(row.estimatedDeparture)
+                      const parsed = parseMinute(row.minute)
                       const isNearest = index === nearestIndex
                       const isImminent = isNearest && isImmediateDeparture(lastUpdated, parsed)
                       const timeText = parsed.toLocaleTimeString('id-ID', { timeStyle: 'short' })
@@ -292,7 +292,7 @@ const TimetableContent = memo(function TimetableContent({ operator, code }: Prop
 
                       return (
                         <li
-                          key={row.scheduleId}
+                          key={`${section.key}:${row.tripNumber ?? index}`}
                           ref={isNearest && isGlobalNearestSection ? nearestRowRef : undefined}
                           className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 last:border-b-0"
                           aria-label={ariaLabel}

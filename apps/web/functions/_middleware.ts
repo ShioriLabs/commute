@@ -113,10 +113,8 @@ interface ApiLineDetail {
   segments: { stations: { name?: string, formattedName?: string | null }[] }[]
 }
 
-interface CompactSchedule {
-  id: string
-  estimatedDeparture: string
-}
+// Wire-optimized departure: [tripNumber, minuteSinceMidnight].
+type CompactSchedule = [tripNumber: string | null, minute: number]
 
 interface GroupedDestination {
   boundFor: string
@@ -160,12 +158,12 @@ function esc(value: string): string {
     .replace(/"/g, '&quot;')
 }
 
-// The compact timetable returns wall-clock local time as a bare "HH:MM:SS"
-// string (e.g. "05:27:00") -> "05:27". Guard the shape rather than assuming a
-// full ISO datetime.
-function departureTime(raw: string): string {
-  const m = /^(\d{2}):(\d{2})/.exec(raw)
-  return m ? `${m[1]}:${m[2]}` : ''
+// The compact timetable returns each departure as minutes since local midnight
+// (e.g. 327 -> "05:27") for the crawlable markup and JSON-LD.
+function departureTime(minute: number): string {
+  const hours = Math.floor(minute / 60)
+  const minutes = minute % 60
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
 }
 
 // Build the crawlable body block + JSON-LD for a station. Kept text-only and
@@ -194,7 +192,7 @@ function buildStationBody(
       for (const group of line.timetable) {
         for (const dest of group.destinations) {
           const times = dest.schedules
-            .map(s => departureTime(s.estimatedDeparture))
+            .map(s => departureTime(s[1]))
             .filter(Boolean)
           if (times.length === 0) continue
           const via = dest.via ? ` (via ${esc(dest.via)})` : ''
