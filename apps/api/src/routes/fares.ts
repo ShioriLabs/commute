@@ -4,9 +4,10 @@ import { Bindings } from 'app'
 import { EdgeRepository } from 'db/repositories/edges'
 import { KVRepository } from 'db/repositories/kv'
 import { StationRepository } from 'db/repositories/stations'
-import { FareResult, FareResultLeg } from 'models/fare'
+import { FareResult, FareResultLeg, FareResultLineRef } from 'models/fare'
 import { summarizeFares } from 'utils/fare-summary'
 import { computeHeadsignCode } from 'utils/headsign'
+import { findInterliningLineCodes, mergeInterlinedLegs } from 'utils/interlining'
 import { getLineByOperator } from 'utils/line'
 import { Internal, NotFound, Ok } from 'utils/response'
 import { buildGraph, findRoute, RouteGraph } from 'utils/router'
@@ -46,29 +47,46 @@ app.get('/:from/:to', async (c) => {
     }
 
     const graph = await getGraph(c.env.DB)
-    const legs = findRoute(graph, fromId, toId)
-    if (!legs) {
+    const rawLegs = findRoute(graph, fromId, toId)
+    if (!rawLegs) {
       return c.json(NotFound('NO_ROUTE', 'No route between these stations.'), 404)
     }
+    // Collapse phantom line changes at interlined trunk nodes into one-seat legs.
+    const legs = mergeInterlinedLegs(rawLegs)
 
     const summary = summarizeFares(legs)
 
     // Station ids are `${operator}-${topologyCode}`; the headsign walk works
     // in topology codes, so strip/re-add the operator prefix around it.
-    const headsigns = legs.map((leg) => {
+    type HeadsignRef = { terminusId: string, viaId: string | null }
+    const headsignRef = (operator: string, headsign: { code: string, viaCode: string | null } | null): HeadsignRef | null =>
+      headsign
+        ? { terminusId: `${operator}-${headsign.code}`, viaId: headsign.viaCode ? `${operator}-${headsign.viaCode}` : null }
+        : null
+
+    // Per RIDE leg, the service line(s) that run it, each with its own headsign.
+    // A leg on interlined track (the LRT Jabodebek DKA..CWG trunk) is served by
+    // several lines in topology order; an ordinary leg carries just its own line.
+    const legLines = legs.map((leg) => {
       if (leg.type !== 'RIDE') return null
-      const codes = leg.stationIds.map(id => id.slice(leg.operator.length + 1))
-      const headsign = computeHeadsignCode(leg.operator as Operator, leg.lineCode, codes)
-      if (!headsign) return null
+      const operator = leg.operator as Operator
+      const codes = leg.stationIds.map(id => id.slice(operator.length + 1))
+      const interlining = findInterliningLineCodes(operator, codes)
+      const lineCodes = interlining.length >= 2 ? interlining : [leg.lineCode]
       return {
-        terminusId: `${leg.operator}-${headsign.code}`,
-        viaId: headsign.viaCode ? `${leg.operator}-${headsign.viaCode}` : null
+        interlined: interlining.length >= 2,
+        lines: lineCodes.map(lineCode => ({
+          lineCode,
+          headsign: headsignRef(operator, computeHeadsignCode(operator, lineCode, codes))
+        }))
       }
     })
 
     const stationIds = [...new Set([
       ...legs.flatMap(leg => leg.type === 'RIDE' ? leg.stationIds : [leg.fromStationId, leg.toStationId]),
-      ...headsigns.flatMap(h => h ? [h.terminusId, ...(h.viaId ? [h.viaId] : [])] : [])
+      ...legLines.flatMap(meta => meta
+        ? meta.lines.flatMap(l => l.headsign ? [l.headsign.terminusId, ...(l.headsign.viaId ? [l.headsign.viaId] : [])] : [])
+        : [])
     ])]
     const stations = await stationRepository.getByIds(stationIds)
     const name = (id: string) => {
@@ -76,30 +94,43 @@ app.get('/:from/:to', async (c) => {
       return station ? (station.formattedName || station.name) : id
     }
     const stationRef = (id: string) => ({ id, name: name(id) })
+    const known = (id: string | null): id is string => id !== null && stations.some(s => s.id === id)
+    // A terminus missing from the DB would echo its raw id; omit instead.
+    const headsignName = (h: HeadsignRef | null): string | null =>
+      h && known(h.terminusId)
+        ? (known(h.viaId) ? `${name(h.terminusId)} via ${name(h.viaId)}` : name(h.terminusId))
+        : null
 
     const resultLegs: FareResultLeg[] = legs.map((leg, index) => {
       if (leg.type === 'TRANSFER') {
         return { type: 'TRANSFER', from: stationRef(leg.fromStationId), to: stationRef(leg.toStationId), distanceM: leg.distanceM }
       }
-      const line = getLineByOperator(leg.operator as Operator, leg.lineCode)
-      const known = (id: string | null): id is string => id !== null && stations.some(s => s.id === id)
-      const h = headsigns[index]
-      // A terminus missing from the DB would echo its raw id; omit instead.
-      const headsign = h && known(h.terminusId)
-        ? (known(h.viaId) ? `${name(h.terminusId)} via ${name(h.viaId)}` : name(h.terminusId))
-        : null
+      const meta = legLines[index]!
+      const serviceLines: FareResultLineRef[] = meta.lines.map((l) => {
+        const line = getLineByOperator(leg.operator as Operator, l.lineCode)
+        return {
+          lineCode: l.lineCode,
+          lineName: line?.name ?? l.lineCode,
+          lineColor: line?.colorCode ?? '#888888',
+          headsign: headsignName(l.headsign)
+        }
+      })
+      // On interlined track the router's line pick is arbitrary; present the
+      // first topology-ordered service line as the primary for a stable badge.
+      const primary = serviceLines[0]!
       return {
         type: 'RIDE',
-        lineCode: leg.lineCode,
-        lineName: line?.name ?? leg.lineCode,
-        lineColor: line?.colorCode ?? '#888888',
+        lineCode: primary.lineCode,
+        lineName: primary.lineName,
+        lineColor: primary.lineColor,
         operator: leg.operator,
         from: stationRef(leg.fromStationId),
         to: stationRef(leg.toStationId),
         stationCount: leg.stationIds.length,
         stops: leg.stationIds.map(stationRef),
-        headsign,
-        distanceM: leg.distanceM
+        headsign: primary.headsign,
+        distanceM: leg.distanceM,
+        ...(meta.interlined ? { serviceLines } : {})
       }
     })
 
