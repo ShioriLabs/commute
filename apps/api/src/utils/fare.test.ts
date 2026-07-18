@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FareContext } from '@commute/constants'
-import { calculateSegmentFare, calculateTransferFare, fareTimeBucket, LRTJBDB_FARE_CAP_OFFPEAK, LRTJBDB_FARE_CAP_PEAK } from 'utils/fare'
+import { calculateSegmentFare, calculateTransferFare, fareTimeBucket, LRTJBDB_FARE_CAP_OFFPEAK, LRTJBDB_FARE_CAP_PEAK, resolveCorridorMerges } from 'utils/fare'
 import type { RouteLeg } from 'utils/router'
 
 const ctx: FareContext = { paymentMethod: 'STORED_VALUE', departureAt: new Date('2026-07-18T08:00:00+07:00') }
@@ -130,7 +130,7 @@ describe('calculateTransferFare (Dukuh Atas priced corridor)', () => {
   })
 
   it('carries the corridor label', () => {
-    expect(calculateTransferFare('KCI-SUD', 'LRTJBDB-DKA', withMethod('STORED_VALUE'))?.corridor.label).toBe('Transit via Peron Stasiun Sudirman')
+    expect(calculateTransferFare('KCI-SUD', 'LRTJBDB-DKA', withMethod('STORED_VALUE'))?.corridor.label).toBe('Transit berbayar via Peron Sudirman')
   })
 
   it('returns null for an ordinary (free) walking transfer', () => {
@@ -175,5 +175,57 @@ describe('calculateTransferFare — Sudirman passerby surcharge', () => {
     // A KCI ride sitting as `next` while the gate is the transfer's `from` must be ignored.
     const surcharge = calculateTransferFare('KCI-SUD', 'LRTJBDB-DKA', ctx, { prev: walkLeg('MRTJ-DKA', 'KCI-SUD'), next: rideLeg('KCI', 'LRTJBDB-DKA', 'X') })
     expect(surcharge?.fare).toBe(1)
+  })
+})
+
+describe('resolveCorridorMerges', () => {
+  const ctx: FareContext = { paymentMethod: 'STORED_VALUE', departureAt: new Date('2026-07-20T08:00:00+07:00') }
+  const ride = (operator: string, from: string, to: string): RouteLeg =>
+    ({ type: 'RIDE', operator, lineCode: 'X', fromStationId: from, toStationId: to, stationIds: [from, to], distanceM: 5000 })
+  const walk = (from: string, to: string, distanceM: number): RouteLeg =>
+    ({ type: 'TRANSFER', fromStationId: from, toStationId: to, distanceM })
+
+  it('merges a surcharged corridor + chained free walk (Setiabudi → GI shape)', () => {
+    // LRT ride → [corridor LRTJBDB-DKA→KCI-SUD, Rp1] → [free walk KCI-SUD→MRTJ-DKA] → MRT ride
+    const legs: RouteLeg[] = [
+      ride('LRTJBDB', 'LRTJBDB-SET', 'LRTJBDB-DKA'),
+      walk('LRTJBDB-DKA', 'KCI-SUD', 310), // corridor (surcharged)
+      walk('KCI-SUD', 'MRTJ-DKA', 90), // free walk
+      ride('MRTJ', 'MRTJ-DKA', 'MRTJ-BHI')
+    ]
+    const merges = resolveCorridorMerges(legs, ctx)
+    const anchor = merges.get(1)
+    expect(anchor?.kind).toBe('MERGE_ANCHOR')
+    if (anchor?.kind === 'MERGE_ANCHOR') {
+      expect(anchor.fromStationId).toBe('LRTJBDB-DKA') // outer end of corridor
+      expect(anchor.toStationId).toBe('MRTJ-DKA') // outer end of free walk
+      expect(anchor.distanceM).toBe(310 + 90 + 140) // + internal peron walk
+      expect(anchor.fare).toBe(1)
+    }
+    expect(merges.get(2)).toEqual({ kind: 'ABSORBED' })
+  })
+
+  it('does not merge a lone surcharged corridor with no adjacent free walk', () => {
+    // ...→ [corridor KCI-SUD→LRTJBDB-DKA] end (routing to LRT DKA itself)
+    const legs: RouteLeg[] = [
+      ride('KCI', 'KCI-BKS', 'KCI-SUD'), // waiver would apply here → not surcharged anyway
+      walk('KCI-SUD', 'LRTJBDB-DKA', 310)
+    ]
+    expect(resolveCorridorMerges(legs, ctx).size).toBe(0)
+  })
+
+  it('does not merge when the corridor is waived (through-rider, no fee)', () => {
+    // KCI ride into KCI-SUD → corridor: waived, so nothing to merge even if a walk followed.
+    const legs: RouteLeg[] = [
+      ride('KCI', 'KCI-KRI', 'KCI-SUD'),
+      walk('KCI-SUD', 'LRTJBDB-DKA', 310), // corridor, but waived (prev is KCI ride)
+      ride('LRTJBDB', 'LRTJBDB-DKA', 'LRTJBDB-RAS')
+    ]
+    expect(resolveCorridorMerges(legs, ctx).size).toBe(0)
+  })
+
+  it('does not merge an ordinary free walk with no corridor', () => {
+    const legs: RouteLeg[] = [ride('KCI', 'KCI-A', 'KCI-B'), walk('KCI-B', 'KCI-C', 200), ride('KCI', 'KCI-C', 'KCI-D')]
+    expect(resolveCorridorMerges(legs, ctx).size).toBe(0)
   })
 })

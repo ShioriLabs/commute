@@ -55,7 +55,7 @@ describe('summarizeFares — Dukuh Atas priced corridor', () => {
   it('adds Rp1 for card taps on top of the ride fares', () => {
     const s = summarizeFares(corridorJourney(), { paymentMethod: 'STORED_VALUE', departureAt: ctx.departureAt })
     expect(s.surchargedTransfers).toHaveLength(1)
-    expect(s.surchargedTransfers[0]).toMatchObject({ fromStationId: 'KCI-SUD', toStationId: 'LRTJBDB-DKA', fare: 1, label: 'Transit via Peron Stasiun Sudirman' })
+    expect(s.surchargedTransfers[0]).toMatchObject({ fromStationId: 'KCI-SUD', toStationId: 'LRTJBDB-DKA', fare: 1, label: 'Transit berbayar via Peron Sudirman' })
     expect(s.totalFare).toBe(3000 + 5000 + 1) // MRT + LRT + corridor
     expect(s.transferCount).toBe(2) // both walks still count as transfers
   })

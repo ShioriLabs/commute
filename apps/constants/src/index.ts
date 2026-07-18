@@ -115,6 +115,11 @@ export interface SurchargedCorridor {
   discountedFare: number // STORED_VALUE / JAKLINGKO
   fullFare: number // QRIS_TAP
   label: string
+  // Metres walked *inside* the gated paid area (gate → peron → gate), between
+  // this corridor edge and a chained free-walk transfer on the other side.
+  // Edge distances are measured gate-to-gate, so this internal segment is
+  // uncounted until the two transfers are merged into one journey step.
+  internalWalkM?: number
 }
 
 export const SURCHARGED_CORRIDORS: SurchargedCorridor[] = [
@@ -124,7 +129,8 @@ export const SURCHARGED_CORRIDORS: SurchargedCorridor[] = [
     throughOperator: 'KCI',
     discountedFare: 1,
     fullFare: 3000,
-    label: 'Transit via Peron Stasiun Sudirman'
+    label: 'Transit berbayar via Peron Sudirman',
+    internalWalkM: 140
   }
 ]
 

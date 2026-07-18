@@ -5,7 +5,7 @@ import { EdgeRepository } from 'db/repositories/edges'
 import { KVRepository } from 'db/repositories/kv'
 import { StationRepository } from 'db/repositories/stations'
 import { FareResult, FareResultLeg, FareResultLineRef } from 'models/fare'
-import { calculateTransferFare, fareTimeBucket } from 'utils/fare'
+import { calculateTransferFare, fareTimeBucket, resolveCorridorMerges } from 'utils/fare'
 import { summarizeFares } from 'utils/fare-summary'
 import { computeHeadsignCode } from 'utils/headsign'
 import { findInterliningLineCodes, mergeInterlinedLegs } from 'utils/interlining'
@@ -78,6 +78,11 @@ app.get('/:from/:to', async (c) => {
 
     const summary = summarizeFares(legs, context)
 
+    // Fold a surcharged corridor crossing + its chained free walk into one
+    // display leg (adds the uncounted internal-peron walk). Fares/segments are
+    // untouched — this is display + reported distance only.
+    const corridorMerges = resolveCorridorMerges(legs, context)
+
     // Station ids are `${operator}-${topologyCode}`; the headsign walk works
     // in topology codes, so strip/re-add the operator prefix around it.
     type HeadsignRef = { terminusId: string, viaId: string | null }
@@ -123,19 +128,31 @@ app.get('/:from/:to', async (c) => {
         ? (known(h.viaId) ? `${name(h.terminusId)} via ${name(h.viaId)}` : name(h.terminusId))
         : null
 
-    const resultLegs: FareResultLeg[] = legs.map((leg, index) => {
+    const resultLegs: FareResultLeg[] = legs.flatMap((leg, index): FareResultLeg[] => {
       if (leg.type === 'TRANSFER') {
+        const merge = corridorMerges.get(index)
+        if (merge?.kind === 'ABSORBED') return [] // folded into the anchor leg
+        if (merge?.kind === 'MERGE_ANCHOR') {
+          return [{
+            type: 'TRANSFER',
+            from: stationRef(merge.fromStationId),
+            to: stationRef(merge.toStationId),
+            distanceM: merge.distanceM,
+            fare: merge.fare,
+            corridorLabel: merge.corridor.label
+          }]
+        }
         const surcharge = calculateTransferFare(leg.fromStationId, leg.toStationId, context, {
           prev: legs[index - 1],
           next: legs[index + 1]
         })
-        return {
+        return [{
           type: 'TRANSFER',
           from: stationRef(leg.fromStationId),
           to: stationRef(leg.toStationId),
           distanceM: leg.distanceM,
           ...(surcharge ? { fare: surcharge.fare, corridorLabel: surcharge.corridor.label } : {})
-        }
+        }]
       }
       const meta = legLines[index]!
       const serviceLines: FareResultLineRef[] = meta.lines.map((l) => {
@@ -150,7 +167,7 @@ app.get('/:from/:to', async (c) => {
       // On interlined track the router's line pick is arbitrary; present the
       // first topology-ordered service line as the primary for a stable badge.
       const primary = serviceLines[0]!
-      return {
+      return [{
         type: 'RIDE',
         lineCode: primary.lineCode,
         lineName: primary.lineName,
@@ -163,8 +180,18 @@ app.get('/:from/:to', async (c) => {
         headsign: primary.headsign,
         distanceM: leg.distanceM,
         ...(meta.interlined ? { serviceLines } : {})
-      }
+      }]
     })
+
+    // summary.totalDistanceM already counts both raw legs of each merge; the only
+    // uncounted distance is the internal-peron walk baked into each anchor.
+    const internalWalkExtra = [...corridorMerges.values()].reduce(
+      (sum, m) => sum + (m.kind === 'MERGE_ANCHOR' ? (m.corridor.internalWalkM ?? 0) : 0),
+      0
+    )
+    // Each merge folds two transfers into one visible interchange, so the
+    // rider-facing count drops by one per absorbed leg.
+    const absorbedCount = [...corridorMerges.values()].filter(m => m.kind === 'ABSORBED').length
 
     const result: FareResult = {
       from: stationRef(fromId),
@@ -172,8 +199,8 @@ app.get('/:from/:to', async (c) => {
       legs: resultLegs,
       segments: summary.segments.map(s => ({ ...s, fromName: name(s.fromStationId), toName: name(s.toStationId) })),
       totalFare: summary.totalFare,
-      totalDistanceM: summary.totalDistanceM,
-      transferCount: summary.transferCount
+      totalDistanceM: summary.totalDistanceM + internalWalkExtra,
+      transferCount: summary.transferCount - absorbedCount
     }
 
     c.executionCtx.waitUntil(kvRepository.set(kvKey, result))
