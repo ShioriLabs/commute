@@ -17,14 +17,19 @@ const SIZES = {
 interface Props {
   code: string
   color: `#${string}`
+  // Rendering style. Usually inferred from `operator` (TJ → filled corridor
+  // roundel); pass `mode` directly only when no operator is in scope.
   mode?: 'RAIL' | 'TJ'
+  // Operator code for the line; when 'TJ', renders the filled TJ corridor style.
+  operator?: string
   size?: keyof typeof SIZES
   station?: boolean
   dimmed?: boolean
 }
 
-export default function LineRoundel({ code, color, mode = 'RAIL', size = 'MD', station = false, dimmed = false }: Props) {
-  const filled = mode === 'TJ'
+export default function LineRoundel({ code, color, mode, operator, size = 'MD', station = false, dimmed = false }: Props) {
+  const resolvedMode = mode ?? (operator === 'TJ' ? 'TJ' : 'RAIL')
+  const filled = resolvedMode === 'TJ'
   const lightText = filled && getForegroundColor(color) === 'LIGHT'
   const compact = station || code.length >= 2
   const { prefix, num } = station ? splitStationNumber(code) : { prefix: '', num: code }

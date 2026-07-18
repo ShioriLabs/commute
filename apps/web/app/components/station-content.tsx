@@ -29,6 +29,7 @@ import LineRoundel from '~/components/line-roundel'
 import EmptyState from '~/components/empty-state'
 import { fetcher } from 'utils/fetcher'
 import { normalizeGroupedTimetable } from 'utils/timetable-shim'
+import { sortLinesForDisplay } from '~/utils/lines'
 import { useNetworkStatus } from '~/hooks/network'
 import { getUnservedStation } from '~/lib/unserved-stations'
 
@@ -190,6 +191,9 @@ const StationContent = memo(function StationContent({ operator, code }: StationC
         }
 
         if (networkStatus === 'OFFLINE') return <EmptyState mode="OFFLINE" onRetry={() => timetable.mutate()} />
+        // TransJakarta publishes no timetable — surface the boarding-board hint,
+        // not a load error.
+        if (operator === 'TJ') return <EmptyState mode="NO_SCHEDULE" />
         if (timetable.error) return <EmptyState mode="ERROR" onRetry={() => timetable.mutate()} />
         return <EmptyState mode="NO_DATA" />
       })()}
@@ -233,21 +237,36 @@ const StationContent = memo(function StationContent({ operator, code }: StationC
                       <span className="font-semibold text-gray-600 flex items-center">
                         {transfer.toStation.operatorName}
                       </span>
-                      {transfer.dataType === 'INTERNAL' && (
-                        <ul className="flex gap-2 items-center">
-                          {transfer.toStation.lines.map(line => (
-                            <li key={line.lineCode}>
-                              <Link
-                                to={`/lines/${transfer.toStation.stationId.split('-')[0]}/${line.lineCode}`}
-                                className="block"
-                                aria-label={`Lihat rute ${line.name}`}
-                              >
-                                <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} />
-                              </Link>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
+                      {transfer.dataType === 'INTERNAL' && (() => {
+                        const transferOperator = transfer.toStation.stationId.split('-')[0]
+                        // TJ has no line-detail (topology) pages yet, so render its
+                        // roundels non-clickable rather than linking to a 404.
+                        const linkable = transferOperator !== 'TJ'
+                        return (
+                          <ul className="flex gap-2 items-center">
+                            {sortLinesForDisplay(transfer.toStation.lines, transferOperator).map(line => (
+                              <li key={line.lineCode}>
+                                {linkable
+                                  ? (
+                                      <Link
+                                        to={`/lines/${transferOperator}/${line.lineCode}`}
+                                        className="block"
+                                        aria-label={`Lihat rute ${line.name}`}
+                                      >
+                                        <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={transferOperator} />
+                                      </Link>
+                                    )
+                                  : (
+                                      <>
+                                        <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={transferOperator} />
+                                        <span className="sr-only">{line.name}</span>
+                                      </>
+                                    )}
+                              </li>
+                            ))}
+                          </ul>
+                        )
+                      })()}
                     </div>
                     {transfer.notes
                       ? (

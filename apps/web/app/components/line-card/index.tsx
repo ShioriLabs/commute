@@ -80,7 +80,8 @@ export default function LineCard({ line, operator }: Props) {
         style={{ borderBottomColor: getTintFromColor(line.colorCode, 0.3) }}
         aria-labelledby={`line-name-${line.name}`}
       >
-        {operator
+        {/* TJ has no line-detail (topology) page yet — render its cards unlinked. */}
+        {operator && operator !== 'TJ'
           ? (
               <Link
                 to={`/lines/${operator}/${line.lineCode}`}

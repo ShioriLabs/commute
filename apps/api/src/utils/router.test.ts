@@ -46,4 +46,18 @@ describe('findRoute', () => {
     const legs = findRoute(graph, 'MRTJ-P', 'MRTJ-Q')!
     expect((legs[0] as { operator: string }).operator).toBe('MRTJ')
   })
+
+  it('stays on one line when two overlapping lines share a trunk (continuity bias)', () => {
+    // Lines P and Q both serve the exact same A-B-C-D trunk at equal distance —
+    // the shape that made TJ 13/13E ping-pong. Without the mid-ride line-change
+    // bias, Dijkstra could alternate P/Q hop by hop; with it, one line wins and
+    // the whole ride is a single leg.
+    const dup = [
+      ...edge('P', 'TJ-A', 'TJ-B'), ...edge('P', 'TJ-B', 'TJ-C'), ...edge('P', 'TJ-C', 'TJ-D'),
+      ...edge('Q', 'TJ-A', 'TJ-B'), ...edge('Q', 'TJ-B', 'TJ-C'), ...edge('Q', 'TJ-C', 'TJ-D')
+    ]
+    const legs = findRoute(buildGraph(dup, []), 'TJ-A', 'TJ-D')!
+    expect(legs).toHaveLength(1)
+    expect(legs[0]).toMatchObject({ type: 'RIDE', distanceM: 3000, stationIds: ['TJ-A', 'TJ-B', 'TJ-C', 'TJ-D'] })
+  })
 })
