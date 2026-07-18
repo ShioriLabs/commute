@@ -1,4 +1,4 @@
-import { Operator, OPERATORS } from '@commute/constants'
+import { FareContext, Operator, OPERATORS } from '@commute/constants'
 import { getMRTJFare } from 'operators/mrtj/fares'
 
 /*
@@ -22,7 +22,29 @@ export interface FareSegmentInput {
   toStationCode: string
 }
 
-export function calculateSegmentFare(segment: FareSegmentInput): number | null {
+/*
+ * Coarse time bucket for fare purposes. LRT Jabodebek's cap is peak on weekdays
+ * 07:00–09:00 and 16:00–19:00, off-peak otherwise (incl. weekends). Bucketing to
+ * peak|offpeak — rather than raw time — keeps the fare cache small while staying
+ * correct once the cap goes time-dependent (step 2). Times are WIB (UTC+7).
+ */
+export type FareTimeBucket = 'peak' | 'offpeak'
+
+const WIB_OFFSET_MS = 7 * 60 * 60 * 1000
+
+export function fareTimeBucket(date: Date): FareTimeBucket {
+  const wib = new Date(date.getTime() + WIB_OFFSET_MS)
+  const day = wib.getUTCDay() // 0 Sun … 6 Sat, in WIB after the shift
+  if (day === 0 || day === 6) return 'offpeak'
+  const hour = wib.getUTCHours()
+  const isPeak = (hour >= 7 && hour < 9) || (hour >= 16 && hour < 19)
+  return isPeak ? 'peak' : 'offpeak'
+}
+
+// `context` is threaded now for a stable signature; step 2 reads departureAt for
+// the LRT cap and step 4 reads paymentMethod. It is intentionally unused here.
+export function calculateSegmentFare(segment: FareSegmentInput, context: FareContext): number | null {
+  void context
   const { operator, distanceM } = segment
   switch (operator) {
     case OPERATORS.KCI.code:

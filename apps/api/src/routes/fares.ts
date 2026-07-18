@@ -1,10 +1,11 @@
 import { Hono } from 'hono'
-import { Operator } from '@commute/constants'
+import { FareContext, Operator, PAYMENT_METHODS, PaymentMethod } from '@commute/constants'
 import { Bindings } from 'app'
 import { EdgeRepository } from 'db/repositories/edges'
 import { KVRepository } from 'db/repositories/kv'
 import { StationRepository } from 'db/repositories/stations'
 import { FareResult, FareResultLeg, FareResultLineRef } from 'models/fare'
+import { fareTimeBucket } from 'utils/fare'
 import { summarizeFares } from 'utils/fare-summary'
 import { computeHeadsignCode } from 'utils/headsign'
 import { findInterliningLineCodes, mergeInterlinedLegs } from 'utils/interlining'
@@ -23,6 +24,25 @@ async function getGraph(d1: D1Database): Promise<RouteGraph> {
   return cachedGraph
 }
 
+// Resolve the fare context from optional query params, defaulting to today's
+// behaviour: single-tap stored value, departing now. Unknown/malformed values
+// fall back to the defaults rather than erroring.
+export function parseFareContext(paymentMethodRaw?: string, atRaw?: string): FareContext {
+  const paymentMethod: PaymentMethod
+    = paymentMethodRaw && paymentMethodRaw in PAYMENT_METHODS
+      ? paymentMethodRaw as PaymentMethod
+      : 'STORED_VALUE'
+  const parsed = atRaw ? new Date(atRaw) : null
+  const departureAt = parsed && !Number.isNaN(parsed.getTime()) ? parsed : new Date()
+  return { paymentMethod, departureAt }
+}
+
+// Fare depends on payment method + time bucket; key on both so peak/off-peak
+// and integrated fares (steps 2 & 4) can't be served a stale cached body.
+export function fareCacheKey(fromId: string, toId: string, context: FareContext, apiVersion: string): string {
+  return `fares:${fromId}:${toId}:${context.paymentMethod}:${fareTimeBucket(context.departureAt)}:${apiVersion}`
+}
+
 app.get('/:from/:to', async (c) => {
   const fromId = c.req.param('from')
   const toId = c.req.param('to')
@@ -30,8 +50,10 @@ app.get('/:from/:to', async (c) => {
     return c.json(NotFound('SAME_STATION', 'Origin and destination are the same station.'), 404)
   }
 
+  const context = parseFareContext(c.req.query('paymentMethod'), c.req.query('at'))
+
   const kvRepository = new KVRepository(c.env.KV)
-  const kvKey = `fares:${fromId}:${toId}:${c.env.API_VERSION}`
+  const kvKey = fareCacheKey(fromId, toId, context, c.env.API_VERSION)
 
   const cached = await kvRepository.get<FareResult>(kvKey)
   if (cached) {
@@ -54,7 +76,7 @@ app.get('/:from/:to', async (c) => {
     // Collapse phantom line changes at interlined trunk nodes into one-seat legs.
     const legs = mergeInterlinedLegs(rawLegs)
 
-    const summary = summarizeFares(legs)
+    const summary = summarizeFares(legs, context)
 
     // Station ids are `${operator}-${topologyCode}`; the headsign walk works
     // in topology codes, so strip/re-add the operator prefix around it.

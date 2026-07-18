@@ -66,6 +66,29 @@ export type AmenityType = keyof typeof AMENITY_TYPES
 
 export type TransferDataType = 'INTERNAL' | 'EXTERNAL'
 
+/**
+ * How the rider pays. Fares are currently modelled for STORED_VALUE (per-operator
+ * e-money — today's behaviour). JAKLINGKO enables integrated fares once the
+ * TransJakarta launch lands.
+ */
+export const PAYMENT_METHODS = {
+  STORED_VALUE: 'STORED_VALUE',
+  JAKLINGKO: 'JAKLINGKO'
+} as const
+
+export type PaymentMethod = keyof typeof PAYMENT_METHODS
+
+/**
+ * Journey-level context that fare calculation depends on beyond the path itself:
+ * payment method (integration rules) and departure time (peak/off-peak caps).
+ * `departureAt` is always supplied by the caller (the route defaults it to now);
+ * optionality lives at the request layer, not here.
+ */
+export interface FareContext {
+  paymentMethod: PaymentMethod
+  departureAt: Date
+}
+
 export const CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES = new Set([
   'CKR',
   'TLM',

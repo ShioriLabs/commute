@@ -1,4 +1,4 @@
-import type { Operator } from '@commute/constants'
+import type { FareContext, Operator } from '@commute/constants'
 import { calculateSegmentFare } from 'utils/fare'
 import type { RideLeg, RouteLeg } from 'utils/router'
 
@@ -24,7 +24,7 @@ export interface FareSummary {
 
 const stationCode = (stationId: string) => stationId.split('-').slice(1).join('-')
 
-export function summarizeFares(legs: RouteLeg[]): FareSummary {
+export function summarizeFares(legs: RouteLeg[], context: FareContext): FareSummary {
   const runs: RideLeg[][] = []
   let transferCount = 0
   let previousWasRide = false
@@ -57,7 +57,7 @@ export function summarizeFares(legs: RouteLeg[]): FareSummary {
         distanceM,
         fromStationCode: stationCode(fromStationId),
         toStationCode: stationCode(toStationId)
-      })
+      }, context)
     }
   })
 
