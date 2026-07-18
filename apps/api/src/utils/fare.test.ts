@@ -33,6 +33,13 @@ describe('LRTJ flat fare', () => {
   })
 })
 
+describe('TJ flat fare', () => {
+  it('is 3500 regardless of distance', () => {
+    expect(fare('TJ', 1000)).toBe(3500)
+    expect(fare('TJ', 40000)).toBe(3500)
+  })
+})
+
 describe('LRTJBDB distance fare with cap', () => {
   it('charges 5000 for the first km', () => {
     expect(fare('LRTJBDB', 900)).toBe(5000)
@@ -82,9 +89,10 @@ describe('fare context (payment method inert; departure time affects LRT cap)', 
   const offpeakWeekend: FareContext = { paymentMethod: 'STORED_VALUE', departureAt: new Date('2026-07-18T14:00:00+07:00') } // Sat
   const jaklingkoPeak: FareContext = { paymentMethod: 'JAKLINGKO', departureAt: new Date('2026-07-20T08:00:00+07:00') } // Mon peak
 
-  it('KCI and MRTJ fares are unaffected by payment method or departure time', () => {
+  it('KCI, MRTJ and TJ fares are unaffected by payment method or departure time', () => {
     // LRTJBDB is intentionally excluded — its cap is now time-dependent (see above).
-    for (const args of [['KCI', 54800], ['MRTJ', 15700, 'LBB', 'BHI']] as const) {
+    // TJ's JakLingko cap is a journey-level concern (summarizeFares), not per-segment.
+    for (const args of [['KCI', 54800], ['MRTJ', 15700, 'LBB', 'BHI'], ['TJ', 40000]] as const) {
       const [op, dist, from, to] = args
       expect(fare(op, dist, from, to, offpeakWeekend)).toBe(fare(op, dist, from, to, ctx))
       expect(fare(op, dist, from, to, jaklingkoPeak)).toBe(fare(op, dist, from, to, ctx))

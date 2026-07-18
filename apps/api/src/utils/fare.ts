@@ -1,5 +1,6 @@
 import { FareContext, Operator, OPERATORS, SURCHARGED_CORRIDORS, SurchargedCorridor } from '@commute/constants'
 import { getMRTJFare } from 'operators/mrtj/fares'
+import { TJ_FLAT_FARE } from 'operators/tj/fares'
 import type { RouteLeg } from 'utils/router'
 
 /*
@@ -12,10 +13,19 @@ import type { RouteLeg } from 'utils/router'
  *    (weekday 07:00–09:00 & 16:00–19:00 WIB), 10000 off-peak/weekends. The cap
  *    is chosen from context.departureAt via fareTimeBucket.
  *  - MRTJ: published OD matrix (operators/mrtj/fares.ts).
+ *  - TJ (TransJakarta): flat 3500 (TJ_FLAT_FARE). JakLingko integration caps the
+ *    whole journey at JAKLINGKO_JOURNEY_CAP — handled at the journey level in
+ *    summarizeFares, not here.
  */
 export const KCI_BASE_FARE = 3000
 export const LRTJBDB_FARE_CAP_PEAK = 20000
 export const LRTJBDB_FARE_CAP_OFFPEAK = 10000
+// JakLingko integration caps the MRTJ/LRTJ/TJ portion of a journey (within its
+// 3-hour window) at this amount — single tier, any order, but only across the
+// participating operators (JAKLINGKO_OPERATORS in @commute/constants; KCI and LRT
+// Jabodebek are excluded and charged in full). Applied in summarizeFares via
+// applyJakLingkoCap, only for paymentMethod === 'JAKLINGKO'.
+export const JAKLINGKO_JOURNEY_CAP = 10000
 
 export interface FareSegmentInput {
   operator: Operator
@@ -58,6 +68,8 @@ export function calculateSegmentFare(segment: FareSegmentInput, context: FareCon
     }
     case OPERATORS.MRTJ.code:
       return getMRTJFare(segment.fromStationCode, segment.toStationCode)
+    case OPERATORS.TJ.code:
+      return TJ_FLAT_FARE
     default:
       return null
   }
