@@ -12,6 +12,7 @@ export default defineConfig({
       db: path.resolve(__dirname, 'src/db'),
       models: path.resolve(__dirname, 'src/models'),
       operators: path.resolve(__dirname, 'src/operators'),
+      routes: path.resolve(__dirname, 'src/routes'),
       app: path.resolve(__dirname, 'src/app.ts')
     }
   }

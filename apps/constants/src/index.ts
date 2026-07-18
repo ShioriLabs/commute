@@ -66,6 +66,74 @@ export type AmenityType = keyof typeof AMENITY_TYPES
 
 export type TransferDataType = 'INTERNAL' | 'EXTERNAL'
 
+/**
+ * How the rider pays. STORED_VALUE is per-operator e-money (today's default).
+ * JAKLINGKO enables integrated fares once the TransJakarta launch lands.
+ * QRIS_TAP is the tap-to-pay QRIS flow — notably it can't apply the discounted
+ * Dukuh Atas surcharge, so it pays the full pass-through (see SURCHARGED_CORRIDORS).
+ */
+export const PAYMENT_METHODS = {
+  STORED_VALUE: 'STORED_VALUE',
+  JAKLINGKO: 'JAKLINGKO',
+  QRIS_TAP: 'QRIS_TAP'
+} as const
+
+export type PaymentMethod = keyof typeof PAYMENT_METHODS
+
+/**
+ * Journey-level context that fare calculation depends on beyond the path itself:
+ * payment method (integration rules) and departure time (peak/off-peak caps).
+ * `departureAt` is always supplied by the caller (the route defaults it to now);
+ * optionality lives at the request layer, not here.
+ */
+export interface FareContext {
+  paymentMethod: PaymentMethod
+  departureAt: Date
+}
+
+/**
+ * Transfers that cross a paid area and therefore may carry a passerby surcharge,
+ * unlike ordinary free walking transfers. LRT Jabodebek Dukuh Atas is reachable
+ * only across the JPM Dukuh Atas footbridge, which is gated behind KCI Sudirman
+ * (the KCI-SUD ↔ LRTJBDB-DKA transfer is its sole connection). Someone using
+ * Sudirman purely as a pedestrian pass-through taps into and out of its gates
+ * without boarding a KAI train — that tap-in/out is the surcharge: a nominal Rp1
+ * (card) / full KCI base fare (QRIS_TAP, which can't apply the discount).
+ *
+ * Riders who actually travel through Sudirman on a KCI train are already inside
+ * those gates, so no extra tap happens and the surcharge does not apply. That's
+ * `gatedStationId` + `throughOperator`: a `throughOperator` RIDE adjacent to the
+ * transfer at `gatedStationId` means the rider transited by train, not on foot.
+ *
+ * `stationIds` is an unordered pair of full `${operator}-${code}` ids (router
+ * transfers are symmetric).
+ */
+export interface SurchargedCorridor {
+  stationIds: [string, string]
+  gatedStationId: string // the paid-gate station whose tap-in/out is the surcharge
+  throughOperator: Operator // a RIDE on this operator at gatedStationId = transited by train, not a passerby
+  discountedFare: number // STORED_VALUE / JAKLINGKO
+  fullFare: number // QRIS_TAP
+  label: string
+  // Metres walked *inside* the gated paid area (gate → peron → gate), between
+  // this corridor edge and a chained free-walk transfer on the other side.
+  // Edge distances are measured gate-to-gate, so this internal segment is
+  // uncounted until the two transfers are merged into one journey step.
+  internalWalkM?: number
+}
+
+export const SURCHARGED_CORRIDORS: SurchargedCorridor[] = [
+  {
+    stationIds: ['KCI-SUD', 'LRTJBDB-DKA'],
+    gatedStationId: 'KCI-SUD',
+    throughOperator: 'KCI',
+    discountedFare: 1,
+    fullFare: 3000,
+    label: 'Transit berbayar via Peron Sudirman',
+    internalWalkM: 140
+  }
+]
+
 export const CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES = new Set([
   'CKR',
   'TLM',

@@ -41,6 +41,10 @@ export interface FareResultTransferLeg {
   from: FareResultStation
   to: FareResultStation
   distanceM: number
+  // Set only for paid corridors (e.g. Dukuh Atas via KCI Sudirman); ordinary
+  // walking transfers are free and omit both.
+  fare?: number
+  corridorLabel?: string
 }
 
 export type FareResultLeg = FareResultRideLeg | FareResultTransferLeg
