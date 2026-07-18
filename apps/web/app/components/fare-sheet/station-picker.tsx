@@ -1,6 +1,6 @@
 import type { Station } from 'models/stations'
 import { OPERATORS } from '@commute/constants'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react'
 import { CheckCircleIcon, MagnifyingGlassIcon, XIcon } from '@phosphor-icons/react'
 import { haptic } from 'utils/haptics'
@@ -51,6 +51,9 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
   onSelect: (station: Station) => void
 }) {
   const [query, setQuery] = useState('')
+  // Input stays instant; the levenshtein scan over the full station list runs
+  // against a deferred query so typing doesn't jank (same as the search sheet).
+  const deferredQuery = useDeferredValue(query)
   const [operatorFilter, setOperatorFilter] = useState<string | null>(null)
   const [recentIds, setRecentIds] = useState<string[]>([])
   // Same trick as BottomSheet: the station list mounts only after the
@@ -103,16 +106,16 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
   )
 
   const shownStations = useMemo(() => {
-    if (query.length < 2) {
+    if (deferredQuery.length < 2) {
       // No query: full list, most popular first, so common picks are one tap away.
       return [...filteredStations].sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.name.localeCompare(b.name))
     }
     return filteredStations
-      .map(station => ({ station, finalScore: getLevenshteinScore(station, query) + (1 - (station.score ?? 0) / 100) }))
+      .map(station => ({ station, finalScore: getLevenshteinScore(station, deferredQuery) + (1 - (station.score ?? 0) / 100) }))
       .filter(({ finalScore }) => finalScore < SCORE_THRESHOLD)
       .sort((a, b) => a.finalScore - b.finalScore || a.station.name.localeCompare(b.station.name))
       .map(({ station }) => station)
-  }, [query, filteredStations])
+  }, [deferredQuery, filteredStations])
 
   // Recent picks first, padded with the most popular stations for first-time
   // users (and when recents fall outside the pickable set).

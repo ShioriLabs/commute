@@ -3,7 +3,7 @@ import type { Hub } from 'models/hub'
 import type { OperatorWithLines } from 'models/operator'
 import type { StandardResponse } from '@schema/response'
 import type { ReactNode } from 'react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import useSWR from 'swr'
 import type { Line } from 'models/line'
@@ -134,6 +134,10 @@ export default function SearchContent({ title, closeButton }: Props) {
   const { data: hubs } = useSWR<StandardResponse<Hub[]>>(new URL('/hubs', import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
   const { data: operators } = useSWR<StandardResponse<OperatorWithLines[]>>(new URL('/operators', import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
   const [searchQuery, setSearchQuery] = useState<string>('')
+  // Keep the input instant while the expensive levenshtein filter runs against a
+  // lower-priority, deferred copy of the query — the index is several hundred
+  // searchables and scoring every keystroke synchronously was janking the field.
+  const deferredQuery = useDeferredValue(searchQuery)
   const [recentlySearched, setRecentlySearched] = useState<RecentEntry[]>([])
   const [savedStations, setSavedStations] = useState<string[]>([])
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -183,8 +187,8 @@ export default function SearchContent({ title, closeButton }: Props) {
   }, [stations, hubs, operators])
 
   const filteredSearchables = useMemo(() => {
-    if (searchables.length === 0 || searchQuery.length < 2) return []
-    const query = searchQuery.toLowerCase()
+    if (searchables.length === 0 || deferredQuery.length < 2) return []
+    const query = deferredQuery.toLowerCase()
 
     const scoredStations = searchables.map((searchable) => {
       let score = Infinity
@@ -208,17 +212,26 @@ export default function SearchContent({ title, closeButton }: Props) {
 
       const popularityFactor = (searchable.score ?? 0) / 100
       const finalScore = score + (1 - popularityFactor)
+      // Sub-unit ranking nudge applied only at sort time (NOT folded into
+      // finalScore, so it can't push a borderline result past SCORE_THRESHOLD and
+      // hide it). Always < 1, so it only reorders otherwise-close matches — never
+      // lifts a poor match above a clearly better one. Prefer stations over
+      // lines/hubs, and rail over TJ within stations.
+      const isStation = searchable.type === 'STATION'
+      const isTJ = isStation && searchable.to.startsWith('/stations/TJ/')
+      const sortNudge = (isStation ? 0 : 0.4) + (isTJ ? 0.2 : 0)
 
       return {
         ...searchable,
-        score: finalScore
+        score: finalScore,
+        sortNudge
       }
     }).filter((station) => {
       return station.score < SCORE_THRESHOLD
-    }).sort((a, b) => a.score - b.score || a.title.localeCompare(b.title))
+    }).sort((a, b) => (a.score + a.sortNudge) - (b.score + b.sortNudge) || a.title.localeCompare(b.title))
 
     return scoredStations
-  }, [searchQuery, searchables])
+  }, [deferredQuery, searchables])
 
   useEffect(() => {
     setRecentlySearched(readRecents())
@@ -308,7 +321,7 @@ export default function SearchContent({ title, closeButton }: Props) {
             </ul>
           )
         : null}
-      {searchQuery.length >= 2 && filteredSearchables.length === 0
+      {deferredQuery.length >= 2 && filteredSearchables.length === 0
         ? (
             <div className="w-full h-auto flex items-center justify-center mt-8 flex-col max-w-3xl mx-auto">
               <picture>
