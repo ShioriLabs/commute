@@ -5,9 +5,10 @@ import type { RideLeg, RouteLeg } from 'utils/router'
 /*
  * Every TRANSFER leg is a tap-out, so each contiguous run of RIDE legs is one
  * paid journey; line changes inside a run happen at shared nodes and cost
- * nothing. Most transfers are free walks, but a few cross a paid corridor (e.g.
- * Dukuh Atas via KCI Sudirman) and carry their own fare — those are collected in
- * `pricedTransfers` and added to the total on top of the ride segments.
+ * nothing. Most transfers are free walks, but a few cross a surcharged corridor
+ * (e.g. Dukuh Atas via KCI Sudirman) and carry a passerby surcharge — those are
+ * collected in `surchargedTransfers` and added to the total on top of the ride
+ * segments.
  */
 export interface FareSegment {
   operator: string
@@ -17,7 +18,7 @@ export interface FareSegment {
   fare: number | null
 }
 
-export interface PricedTransfer {
+export interface SurchargedTransfer {
   fromStationId: string
   toStationId: string
   fare: number
@@ -26,7 +27,7 @@ export interface PricedTransfer {
 
 export interface FareSummary {
   segments: FareSegment[]
-  pricedTransfers: PricedTransfer[]
+  surchargedTransfers: SurchargedTransfer[]
   totalFare: number | null
   totalDistanceM: number
   transferCount: number
@@ -36,20 +37,24 @@ const stationCode = (stationId: string) => stationId.split('-').slice(1).join('-
 
 export function summarizeFares(legs: RouteLeg[], context: FareContext): FareSummary {
   const runs: RideLeg[][] = []
-  const pricedTransfers: PricedTransfer[] = []
+  const surchargedTransfers: SurchargedTransfer[] = []
   let transferCount = 0
   let previousWasRide = false
-  for (const leg of legs) {
+  for (let i = 0; i < legs.length; i++) {
+    const leg = legs[i]!
     if (leg.type === 'TRANSFER') {
       transferCount++
       previousWasRide = false
-      const priced = calculateTransferFare(leg.fromStationId, leg.toStationId, context)
-      if (priced) {
-        pricedTransfers.push({
+      const surcharge = calculateTransferFare(leg.fromStationId, leg.toStationId, context, {
+        prev: legs[i - 1],
+        next: legs[i + 1]
+      })
+      if (surcharge) {
+        surchargedTransfers.push({
           fromStationId: leg.fromStationId,
           toStationId: leg.toStationId,
-          fare: priced.fare,
-          label: priced.corridor.label
+          fare: surcharge.fare,
+          label: surcharge.corridor.label
         })
       }
       continue
@@ -81,11 +86,11 @@ export function summarizeFares(legs: RouteLeg[], context: FareContext): FareSumm
     }
   })
 
-  const transfersTotal = pricedTransfers.reduce((sum, t) => sum + t.fare, 0)
+  const transfersTotal = surchargedTransfers.reduce((sum, t) => sum + t.fare, 0)
   return {
     segments,
-    pricedTransfers,
-    // Any unknown segment fare poisons the total; priced transfers are always
+    surchargedTransfers,
+    // Any unknown segment fare poisons the total; surcharged transfers are always
     // concrete so they only add.
     totalFare: segments.some(s => s.fare === null)
       ? null

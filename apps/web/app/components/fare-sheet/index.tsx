@@ -1,10 +1,10 @@
 import type { Station } from 'models/stations'
-import type { FareResult, FareResultRideLeg } from 'models/fare'
+import type { FareResult, FareResultRideLeg, FareResultTransferLeg } from 'models/fare'
 import type { StandardResponse } from '@schema/response'
 import { OPERATORS, type Operator } from '@commute/constants'
 import { useEffect, useMemo, useState } from 'react'
 import { CloseButton, DialogTitle } from '@headlessui/react'
-import { ArrowsDownUpIcon, CaretDownIcon, CaretRightIcon, MapPinIcon, PersonSimpleWalkIcon, XIcon, ShareNetworkIcon } from '@phosphor-icons/react'
+import { ArrowsDownUpIcon, CaretDownIcon, CaretRightIcon, MapPinIcon, PersonSimpleWalkIcon, TicketIcon, XIcon, ShareNetworkIcon } from '@phosphor-icons/react'
 import { useSearchParams } from 'react-router'
 import useSWR from 'swr'
 import { fetcher, FetchError } from 'utils/fetcher'
@@ -159,30 +159,69 @@ function JourneyTimeline({ result }: { result: FareResult }) {
           && previous?.type === 'RIDE'
           && previous.to.id === leg.from.id
 
-        return leg.type === 'RIDE'
-          ? <RideLeg key={index} leg={leg} isSameStationTransfer={isSameStationTransfer} />
-          : (
-              <li key={index} className="flex items-stretch gap-3 my-2">
-                <span className="w-4 flex justify-center shrink-0">
-                  <span className="w-1.5 rounded-full bg-slate-300" />
-                </span>
-                <div className="flex items-center gap-1.5 text-sm text-slate-500 py-1.5">
-                  <PersonSimpleWalkIcon weight="bold" className="w-3.5 h-3.5" />
-                  <span>
-                    Transit ke
-                    {' '}
-                    {leg.to.name}
-                    {leg.distanceM > 0 && ` (Jalan kaki ±${leg.distanceM}m)`}
+        if (leg.type === 'RIDE') {
+          return <RideLeg key={index} leg={leg} isSameStationTransfer={isSameStationTransfer} />
+        }
+
+        // Paid corridor (e.g. Dukuh Atas via KCI Sudirman): a transfer that
+        // crosses a paid area, so it reads as a ticketed step, not a free walk.
+        if (leg.corridorLabel != null && leg.fare != null) {
+          return (
+            <li key={index} className="flex items-stretch gap-3 my-2">
+              <span className="w-4 flex justify-center shrink-0">
+                <span className="w-1.5 rounded-full bg-rose-300" />
+              </span>
+              <div className="flex items-start gap-1.5 text-sm py-1.5">
+                <TicketIcon weight="fill" className="w-3.5 h-3.5 shrink-0 mt-0.5 text-rose-500" />
+                <div className="flex flex-col">
+                  <span className="text-rose-700">
+                    {leg.corridorLabel}
+                    {' • '}
+                    <b>{rupiah.format(leg.fare)}</b>
                   </span>
+                  {leg.distanceM > 0 && (
+                    <span className="text-slate-500">
+                      Jalan kaki ±
+                      {leg.distanceM}
+                      m
+                    </span>
+                  )}
                 </div>
-              </li>
-            )
+              </div>
+            </li>
+          )
+        }
+
+        return (
+          <li key={index} className="flex items-stretch gap-3 my-2">
+            <span className="w-4 flex justify-center shrink-0">
+              <span className="w-1.5 rounded-full bg-slate-300" />
+            </span>
+            <div className="flex items-center gap-1.5 text-sm text-slate-500 py-1.5">
+              <PersonSimpleWalkIcon weight="bold" className="w-3.5 h-3.5" />
+              <span>
+                Transit ke
+                {' '}
+                {leg.to.name}
+                {leg.distanceM > 0 && ` (Jalan kaki ±${leg.distanceM}m)`}
+              </span>
+            </div>
+          </li>
+        )
       })}
     </ol>
   )
 }
 
 function FareResultCard({ result }: { result: FareResult }) {
+  // Surcharged transfers (e.g. the Dukuh Atas corridor) aren't ride segments but
+  // do contribute to totalFare, so they need their own breakdown rows for the
+  // line items to reconcile with the total.
+  const surchargedTransfers = result.legs.filter(
+    (leg): leg is FareResultTransferLeg & { fare: number, corridorLabel: string } =>
+      leg.type === 'TRANSFER' && leg.fare != null && leg.corridorLabel != null
+  )
+
   return (
     <article className="mt-6">
       <div className="bg-rose-50 rounded-xl p-6 flex flex-col gap-1">
@@ -203,7 +242,7 @@ function FareResultCard({ result }: { result: FareResult }) {
       </div>
       <JourneyTimeline result={result} />
 
-      {result.segments.length > 1
+      {result.segments.length + surchargedTransfers.length > 1
         ? (
             <div className="mt-2">
               <h2 className="font-bold text-lg">Rincian Tarif</h2>
@@ -219,6 +258,19 @@ function FareResultCard({ result }: { result: FareResult }) {
                       </span>
                     </div>
                     <b className="shrink-0">{ segment.fare !== null ? rupiah.format(segment.fare) : 'N/A' }</b>
+                  </li>
+                ))}
+                {surchargedTransfers.map((leg, index) => (
+                  <li key={`transfer-${index}`} className="flex flex-row justify-between gap-4 bg-stone-100/80 rounded-xl px-4 py-3">
+                    <div className="flex flex-col">
+                      <b>{ leg.corridorLabel }</b>
+                      <span className="text-sm text-slate-500 flex flex-row flex-wrap items-center gap-1">
+                        { leg.from.name }
+                        <CaretRightIcon weight="bold" className="w-3 h-3 shrink-0" />
+                        { leg.to.name }
+                      </span>
+                    </div>
+                    <b className="shrink-0">{ rupiah.format(leg.fare) }</b>
                   </li>
                 ))}
               </ul>

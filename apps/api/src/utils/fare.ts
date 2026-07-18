@@ -1,5 +1,6 @@
-import { FareContext, Operator, OPERATORS, PRICED_CORRIDORS, PricedCorridor } from '@commute/constants'
+import { FareContext, Operator, OPERATORS, SURCHARGED_CORRIDORS, SurchargedCorridor } from '@commute/constants'
 import { getMRTJFare } from 'operators/mrtj/fares'
+import type { RouteLeg } from 'utils/router'
 
 /*
  * Tariff rules per operator. All amounts in rupiah, all distances in metres.
@@ -65,23 +66,50 @@ export function calculateSegmentFare(segment: FareSegmentInput, context: FareCon
 // Direction-normalised lookup: router transfers are symmetric, so key on the
 // sorted station-id pair.
 const corridorKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`)
-const CORRIDOR_BY_KEY = new Map<string, PricedCorridor>(
-  PRICED_CORRIDORS.map(c => [corridorKey(c.stationIds[0], c.stationIds[1]), c])
+const CORRIDOR_BY_KEY = new Map<string, SurchargedCorridor>(
+  SURCHARGED_CORRIDORS.map(c => [corridorKey(c.stationIds[0], c.stationIds[1]), c])
 )
 
+// The transfer leg's immediate neighbours in journey order, so the surcharge
+// check can tell whether the rider transited the gated station by train.
+export interface TransferNeighbors {
+  prev?: RouteLeg | null
+  next?: RouteLeg | null
+}
+
 /*
- * A transfer's fare. Ordinary walking transfers are free (null); a transfer
- * that crosses a priced corridor (e.g. Dukuh Atas via KCI Sudirman's paid area)
- * carries a fare that depends on payment method — card taps get the discounted
- * pass-through, QRIS_TAP pays the full fare.
+ * A transfer's fare. Ordinary walking transfers are free (null); a transfer that
+ * crosses a surcharged corridor (e.g. Dukuh Atas via KCI Sudirman's gated JPM
+ * bridge) may carry a passerby surcharge that depends on payment method — card
+ * taps get the discounted pass-through, QRIS_TAP pays the full fare.
+ *
+ * The surcharge only applies to a passerby who taps into/out of the gated station
+ * on foot. If the leg adjacent to this transfer at the gated station is a
+ * `throughOperator` RIDE, the rider transited by train and is already inside the
+ * paid gates, so no extra tap happens → no surcharge (null). `neighbors` supplies
+ * that adjacent leg; without it, the surcharge always applies.
  */
 export function calculateTransferFare(
   fromStationId: string,
   toStationId: string,
-  context: FareContext
-): { fare: number, corridor: PricedCorridor } | null {
+  context: FareContext,
+  neighbors?: TransferNeighbors
+): { fare: number, corridor: SurchargedCorridor } | null {
   const corridor = CORRIDOR_BY_KEY.get(corridorKey(fromStationId, toStationId))
   if (!corridor) return null
+
+  // The neighbour that shares the gated station: if the transfer departs the gate
+  // (from === gated), the ride into it is `prev`; if it enters the gate
+  // (to === gated), the ride out of it is `next`.
+  const atGate = fromStationId === corridor.gatedStationId
+    ? neighbors?.prev
+    : toStationId === corridor.gatedStationId
+      ? neighbors?.next
+      : null
+  if (atGate && atGate.type === 'RIDE' && atGate.operator === corridor.throughOperator) {
+    return null // transited by train — already inside the gates, no passerby surcharge
+  }
+
   const fare = context.paymentMethod === 'QRIS_TAP' ? corridor.fullFare : corridor.discountedFare
   return { fare, corridor }
 }

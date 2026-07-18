@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FareContext } from '@commute/constants'
 import { calculateSegmentFare, calculateTransferFare, fareTimeBucket, LRTJBDB_FARE_CAP_OFFPEAK, LRTJBDB_FARE_CAP_PEAK } from 'utils/fare'
+import type { RouteLeg } from 'utils/router'
 
 const ctx: FareContext = { paymentMethod: 'STORED_VALUE', departureAt: new Date('2026-07-18T08:00:00+07:00') }
 // LRTJBDB cap depends on the time bucket, so pin explicit peak/off-peak contexts
@@ -136,5 +137,43 @@ describe('calculateTransferFare (Dukuh Atas priced corridor)', () => {
     // MRT↔KCI Sudirman is a free walk, not the paid corridor.
     expect(calculateTransferFare('MRTJ-DKA', 'KCI-SUD', withMethod('STORED_VALUE'))).toBeNull()
     expect(calculateTransferFare('KCI-BKS', 'KCI-JAKK', withMethod('QRIS_TAP'))).toBeNull()
+  })
+})
+
+describe('calculateTransferFare — Sudirman passerby surcharge', () => {
+  const ctx: FareContext = { paymentMethod: 'STORED_VALUE', departureAt: new Date('2026-07-20T08:00:00+07:00') }
+  const rideLeg = (operator: string, from: string, to: string): RouteLeg =>
+    ({ type: 'RIDE', operator, lineCode: 'X', fromStationId: from, toStationId: to, stationIds: [from, to], distanceM: 1000 })
+  const walkLeg = (from: string, to: string): RouteLeg =>
+    ({ type: 'TRANSFER', fromStationId: from, toStationId: to, distanceM: 300 })
+
+  it('drops the surcharge when a KCI ride arrives at KCI-SUD before the corridor (Kranji shape)', () => {
+    // [KCI ride ->KCI-SUD] [corridor KCI-SUD->LRT DKA]: transfer.from is the gate, prev is the KCI ride.
+    const surcharge = calculateTransferFare('KCI-SUD', 'LRTJBDB-DKA', ctx, { prev: rideLeg('KCI', 'KCI-KRI', 'KCI-SUD'), next: null })
+    expect(surcharge).toBeNull()
+  })
+
+  it('drops the surcharge in the reverse direction when a KCI ride departs KCI-SUD after the corridor', () => {
+    // [corridor LRT DKA->KCI-SUD] [KCI ride KCI-SUD->...]: transfer.to is the gate, next is the KCI ride.
+    const surcharge = calculateTransferFare('LRTJBDB-DKA', 'KCI-SUD', ctx, { prev: null, next: rideLeg('KCI', 'KCI-SUD', 'KCI-KRI') })
+    expect(surcharge).toBeNull()
+  })
+
+  it('still charges when the approach to KCI-SUD is a walk, not a KCI ride (MRT passerby)', () => {
+    // [MRT ride] [walk MRTJ-DKA->KCI-SUD] [corridor KCI-SUD->LRT DKA]: prev of the corridor is the WALK.
+    const surcharge = calculateTransferFare('KCI-SUD', 'LRTJBDB-DKA', ctx, { prev: walkLeg('MRTJ-DKA', 'KCI-SUD'), next: null })
+    expect(surcharge?.fare).toBe(1)
+  })
+
+  it('still charges for a non-KCI ride at the gate', () => {
+    // An MRT ride touching KCI-SUD (hypothetical) is not the through operator.
+    const surcharge = calculateTransferFare('KCI-SUD', 'LRTJBDB-DKA', ctx, { prev: rideLeg('MRTJ', 'MRTJ-DKA', 'KCI-SUD'), next: null })
+    expect(surcharge?.fare).toBe(1)
+  })
+
+  it('still charges when the KCI ride is on the far (non-gated) side of the transfer', () => {
+    // A KCI ride sitting as `next` while the gate is the transfer's `from` must be ignored.
+    const surcharge = calculateTransferFare('KCI-SUD', 'LRTJBDB-DKA', ctx, { prev: walkLeg('MRTJ-DKA', 'KCI-SUD'), next: rideLeg('KCI', 'LRTJBDB-DKA', 'X') })
+    expect(surcharge?.fare).toBe(1)
   })
 })

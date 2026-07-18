@@ -54,21 +54,34 @@ describe('summarizeFares — Dukuh Atas priced corridor', () => {
 
   it('adds Rp1 for card taps on top of the ride fares', () => {
     const s = summarizeFares(corridorJourney(), { paymentMethod: 'STORED_VALUE', departureAt: ctx.departureAt })
-    expect(s.pricedTransfers).toHaveLength(1)
-    expect(s.pricedTransfers[0]).toMatchObject({ fromStationId: 'KCI-SUD', toStationId: 'LRTJBDB-DKA', fare: 1, label: 'Transit via Peron Stasiun Sudirman' })
+    expect(s.surchargedTransfers).toHaveLength(1)
+    expect(s.surchargedTransfers[0]).toMatchObject({ fromStationId: 'KCI-SUD', toStationId: 'LRTJBDB-DKA', fare: 1, label: 'Transit via Peron Stasiun Sudirman' })
     expect(s.totalFare).toBe(3000 + 5000 + 1) // MRT + LRT + corridor
     expect(s.transferCount).toBe(2) // both walks still count as transfers
   })
 
   it('adds Rp3000 for QRIS Tap instead of Rp1', () => {
     const s = summarizeFares(corridorJourney(), { paymentMethod: 'QRIS_TAP', departureAt: ctx.departureAt })
-    expect(s.pricedTransfers[0]!.fare).toBe(3000)
+    expect(s.surchargedTransfers[0]!.fare).toBe(3000)
     expect(s.totalFare).toBe(3000 + 5000 + 3000)
   })
 
   it('leaves ordinary free-walk journeys with no priced transfers', () => {
     const s = summarizeFares([ride('KCI', 'C', 'KCI-A', 'KCI-B', 10000), walk('KCI-B', 'KCI-C'), ride('KCI', 'T', 'KCI-C', 'KCI-D', 10000)], ctx)
-    expect(s.pricedTransfers).toHaveLength(0)
+    expect(s.surchargedTransfers).toHaveLength(0)
     expect(s.totalFare).toBe(6000) // unchanged from the free-walk test above
+  })
+
+  it('drops the surcharge when the rider transits KCI-SUD by KCI train (Kranji → LRT shape)', () => {
+    // KCI ride into KCI-SUD → corridor → LRT ride: already inside Sudirman's
+    // gates, so no passerby surcharge. KCI 17500m = 3000; LRTJBDB 900m off-peak = 5000.
+    const s = summarizeFares([
+      ride('KCI', 'C', 'KCI-KRI', 'KCI-SUD', 17500),
+      walk('KCI-SUD', 'LRTJBDB-DKA', 310), // corridor, but no surcharge (prev is a KCI ride)
+      ride('LRTJBDB', 'BK', 'LRTJBDB-DKA', 'LRTJBDB-RAS', 900)
+    ], { paymentMethod: 'STORED_VALUE', departureAt: ctx.departureAt })
+    expect(s.surchargedTransfers).toHaveLength(0)
+    expect(s.totalFare).toBe(3000 + 5000) // no corridor fee
+    expect(s.transferCount).toBe(1)
   })
 })

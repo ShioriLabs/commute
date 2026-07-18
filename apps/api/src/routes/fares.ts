@@ -125,13 +125,16 @@ app.get('/:from/:to', async (c) => {
 
     const resultLegs: FareResultLeg[] = legs.map((leg, index) => {
       if (leg.type === 'TRANSFER') {
-        const priced = calculateTransferFare(leg.fromStationId, leg.toStationId, context)
+        const surcharge = calculateTransferFare(leg.fromStationId, leg.toStationId, context, {
+          prev: legs[index - 1],
+          next: legs[index + 1]
+        })
         return {
           type: 'TRANSFER',
           from: stationRef(leg.fromStationId),
           to: stationRef(leg.toStationId),
           distanceM: leg.distanceM,
-          ...(priced ? { fare: priced.fare, corridorLabel: priced.corridor.label } : {})
+          ...(surcharge ? { fare: surcharge.fare, corridorLabel: surcharge.corridor.label } : {})
         }
       }
       const meta = legLines[index]!
