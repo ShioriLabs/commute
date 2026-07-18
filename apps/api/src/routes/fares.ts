@@ -5,7 +5,7 @@ import { EdgeRepository } from 'db/repositories/edges'
 import { KVRepository } from 'db/repositories/kv'
 import { StationRepository } from 'db/repositories/stations'
 import { FareResult, FareResultLeg, FareResultLineRef } from 'models/fare'
-import { fareTimeBucket } from 'utils/fare'
+import { calculateTransferFare, fareTimeBucket } from 'utils/fare'
 import { summarizeFares } from 'utils/fare-summary'
 import { computeHeadsignCode } from 'utils/headsign'
 import { findInterliningLineCodes, mergeInterlinedLegs } from 'utils/interlining'
@@ -125,7 +125,14 @@ app.get('/:from/:to', async (c) => {
 
     const resultLegs: FareResultLeg[] = legs.map((leg, index) => {
       if (leg.type === 'TRANSFER') {
-        return { type: 'TRANSFER', from: stationRef(leg.fromStationId), to: stationRef(leg.toStationId), distanceM: leg.distanceM }
+        const priced = calculateTransferFare(leg.fromStationId, leg.toStationId, context)
+        return {
+          type: 'TRANSFER',
+          from: stationRef(leg.fromStationId),
+          to: stationRef(leg.toStationId),
+          distanceM: leg.distanceM,
+          ...(priced ? { fare: priced.fare, corridorLabel: priced.corridor.label } : {})
+        }
       }
       const meta = legLines[index]!
       const serviceLines: FareResultLineRef[] = meta.lines.map((l) => {

@@ -1,4 +1,4 @@
-import { FareContext, Operator, OPERATORS } from '@commute/constants'
+import { FareContext, Operator, OPERATORS, PRICED_CORRIDORS, PricedCorridor } from '@commute/constants'
 import { getMRTJFare } from 'operators/mrtj/fares'
 
 /*
@@ -60,4 +60,28 @@ export function calculateSegmentFare(segment: FareSegmentInput, context: FareCon
     default:
       return null
   }
+}
+
+// Direction-normalised lookup: router transfers are symmetric, so key on the
+// sorted station-id pair.
+const corridorKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`)
+const CORRIDOR_BY_KEY = new Map<string, PricedCorridor>(
+  PRICED_CORRIDORS.map(c => [corridorKey(c.stationIds[0], c.stationIds[1]), c])
+)
+
+/*
+ * A transfer's fare. Ordinary walking transfers are free (null); a transfer
+ * that crosses a priced corridor (e.g. Dukuh Atas via KCI Sudirman's paid area)
+ * carries a fare that depends on payment method — card taps get the discounted
+ * pass-through, QRIS_TAP pays the full fare.
+ */
+export function calculateTransferFare(
+  fromStationId: string,
+  toStationId: string,
+  context: FareContext
+): { fare: number, corridor: PricedCorridor } | null {
+  const corridor = CORRIDOR_BY_KEY.get(corridorKey(fromStationId, toStationId))
+  if (!corridor) return null
+  const fare = context.paymentMethod === 'QRIS_TAP' ? corridor.fullFare : corridor.discountedFare
+  return { fare, corridor }
 }

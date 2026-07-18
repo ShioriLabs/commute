@@ -15,6 +15,10 @@ describe('parseFareContext', () => {
     expect(ctx.departureAt.toISOString()).toBe('2026-07-20T01:00:00.000Z')
   })
 
+  it('accepts QRIS_TAP', () => {
+    expect(parseFareContext('QRIS_TAP', undefined).paymentMethod).toBe('QRIS_TAP')
+  })
+
   it('falls back to defaults for unknown method / malformed time', () => {
     const before = Date.now()
     const ctx = parseFareContext('FOO', 'nonsense')

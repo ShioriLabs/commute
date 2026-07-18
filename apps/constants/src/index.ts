@@ -67,13 +67,15 @@ export type AmenityType = keyof typeof AMENITY_TYPES
 export type TransferDataType = 'INTERNAL' | 'EXTERNAL'
 
 /**
- * How the rider pays. Fares are currently modelled for STORED_VALUE (per-operator
- * e-money — today's behaviour). JAKLINGKO enables integrated fares once the
- * TransJakarta launch lands.
+ * How the rider pays. STORED_VALUE is per-operator e-money (today's default).
+ * JAKLINGKO enables integrated fares once the TransJakarta launch lands.
+ * QRIS_TAP is the tap-to-pay QRIS flow — notably it can't apply the discounted
+ * Dukuh Atas corridor fare, so it pays the full pass-through (see PRICED_CORRIDORS).
  */
 export const PAYMENT_METHODS = {
   STORED_VALUE: 'STORED_VALUE',
-  JAKLINGKO: 'JAKLINGKO'
+  JAKLINGKO: 'JAKLINGKO',
+  QRIS_TAP: 'QRIS_TAP'
 } as const
 
 export type PaymentMethod = keyof typeof PAYMENT_METHODS
@@ -88,6 +90,26 @@ export interface FareContext {
   paymentMethod: PaymentMethod
   departureAt: Date
 }
+
+/**
+ * Transfers that cross a paid area and therefore carry a fare, unlike ordinary
+ * free walking transfers. The Dukuh Atas corridor reaches LRT Jabodebek Dukuh
+ * Atas only by passing through KCI Sudirman's paid area (the KCI-SUD ↔
+ * LRTJBDB-DKA transfer is the sole connection), so every trip to/from LRT Dukuh
+ * Atas crosses it. Card taps get a nominal Rp1; QRIS_TAP can't apply that
+ * discount and pays the full KCI base fare. `stationIds` is an unordered pair of
+ * full `${operator}-${code}` ids (router transfers are symmetric).
+ */
+export interface PricedCorridor {
+  stationIds: [string, string]
+  discountedFare: number // STORED_VALUE / JAKLINGKO
+  fullFare: number // QRIS_TAP
+  label: string
+}
+
+export const PRICED_CORRIDORS: PricedCorridor[] = [
+  { stationIds: ['KCI-SUD', 'LRTJBDB-DKA'], discountedFare: 1, fullFare: 3000, label: 'Transit via Peron Stasiun Sudirman' }
+]
 
 export const CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES = new Set([
   'CKR',

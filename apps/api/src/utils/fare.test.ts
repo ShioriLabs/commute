@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FareContext } from '@commute/constants'
-import { calculateSegmentFare, fareTimeBucket, LRTJBDB_FARE_CAP_OFFPEAK, LRTJBDB_FARE_CAP_PEAK } from 'utils/fare'
+import { calculateSegmentFare, calculateTransferFare, fareTimeBucket, LRTJBDB_FARE_CAP_OFFPEAK, LRTJBDB_FARE_CAP_PEAK } from 'utils/fare'
 
 const ctx: FareContext = { paymentMethod: 'STORED_VALUE', departureAt: new Date('2026-07-18T08:00:00+07:00') }
 // LRTJBDB cap depends on the time bucket, so pin explicit peak/off-peak contexts
@@ -107,5 +107,34 @@ describe('fareTimeBucket', () => {
     expect(fareTimeBucket(new Date('2026-07-20T12:00:00+07:00'))).toBe('offpeak') // Mon midday
     expect(fareTimeBucket(new Date('2026-07-20T22:00:00+07:00'))).toBe('offpeak') // Mon night
     expect(fareTimeBucket(new Date('2026-07-18T08:00:00+07:00'))).toBe('offpeak') // Sat morning
+  })
+})
+
+describe('calculateTransferFare (Dukuh Atas priced corridor)', () => {
+  const at = new Date('2026-07-20T08:00:00+07:00')
+  const withMethod = (paymentMethod: FareContext['paymentMethod']): FareContext => ({ paymentMethod, departureAt: at })
+
+  it('charges Rp1 for card taps (stored value / JakLingko)', () => {
+    expect(calculateTransferFare('KCI-SUD', 'LRTJBDB-DKA', withMethod('STORED_VALUE'))?.fare).toBe(1)
+    expect(calculateTransferFare('KCI-SUD', 'LRTJBDB-DKA', withMethod('JAKLINGKO'))?.fare).toBe(1)
+  })
+
+  it('charges the full Rp3000 for QRIS Tap (vendor can\'t apply the discount)', () => {
+    expect(calculateTransferFare('KCI-SUD', 'LRTJBDB-DKA', withMethod('QRIS_TAP'))?.fare).toBe(3000)
+  })
+
+  it('is direction-agnostic', () => {
+    expect(calculateTransferFare('LRTJBDB-DKA', 'KCI-SUD', withMethod('STORED_VALUE'))?.fare).toBe(1)
+    expect(calculateTransferFare('LRTJBDB-DKA', 'KCI-SUD', withMethod('QRIS_TAP'))?.fare).toBe(3000)
+  })
+
+  it('carries the corridor label', () => {
+    expect(calculateTransferFare('KCI-SUD', 'LRTJBDB-DKA', withMethod('STORED_VALUE'))?.corridor.label).toBe('Transit via Peron Stasiun Sudirman')
+  })
+
+  it('returns null for an ordinary (free) walking transfer', () => {
+    // MRT↔KCI Sudirman is a free walk, not the paid corridor.
+    expect(calculateTransferFare('MRTJ-DKA', 'KCI-SUD', withMethod('STORED_VALUE'))).toBeNull()
+    expect(calculateTransferFare('KCI-BKS', 'KCI-JAKK', withMethod('QRIS_TAP'))).toBeNull()
   })
 })

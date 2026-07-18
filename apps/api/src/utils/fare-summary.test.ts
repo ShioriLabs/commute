@@ -41,3 +41,34 @@ describe('summarizeFares', () => {
     expect(s.totalFare).toBeNull()
   })
 })
+
+describe('summarizeFares — Dukuh Atas priced corridor', () => {
+  // MRT → free walk → paid corridor (KCI-SUD↔LRTJBDB-DKA) → LRT.
+  // MRT DKA→BHI = 3000; LRTJBDB 900m (off-peak Sat) = 5000.
+  const corridorJourney = (): RouteLeg[] => [
+    ride('MRTJ', 'M', 'MRTJ-BHI', 'MRTJ-DKA', 800),
+    walk('MRTJ-DKA', 'KCI-SUD', 90), // free
+    walk('KCI-SUD', 'LRTJBDB-DKA', 310), // paid corridor
+    ride('LRTJBDB', 'BK', 'LRTJBDB-DKA', 'LRTJBDB-SET', 900)
+  ]
+
+  it('adds Rp1 for card taps on top of the ride fares', () => {
+    const s = summarizeFares(corridorJourney(), { paymentMethod: 'STORED_VALUE', departureAt: ctx.departureAt })
+    expect(s.pricedTransfers).toHaveLength(1)
+    expect(s.pricedTransfers[0]).toMatchObject({ fromStationId: 'KCI-SUD', toStationId: 'LRTJBDB-DKA', fare: 1, label: 'Transit via Peron Stasiun Sudirman' })
+    expect(s.totalFare).toBe(3000 + 5000 + 1) // MRT + LRT + corridor
+    expect(s.transferCount).toBe(2) // both walks still count as transfers
+  })
+
+  it('adds Rp3000 for QRIS Tap instead of Rp1', () => {
+    const s = summarizeFares(corridorJourney(), { paymentMethod: 'QRIS_TAP', departureAt: ctx.departureAt })
+    expect(s.pricedTransfers[0]!.fare).toBe(3000)
+    expect(s.totalFare).toBe(3000 + 5000 + 3000)
+  })
+
+  it('leaves ordinary free-walk journeys with no priced transfers', () => {
+    const s = summarizeFares([ride('KCI', 'C', 'KCI-A', 'KCI-B', 10000), walk('KCI-B', 'KCI-C'), ride('KCI', 'T', 'KCI-C', 'KCI-D', 10000)], ctx)
+    expect(s.pricedTransfers).toHaveLength(0)
+    expect(s.totalFare).toBe(6000) // unchanged from the free-walk test above
+  })
+})
