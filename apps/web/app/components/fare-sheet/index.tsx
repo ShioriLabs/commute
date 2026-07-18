@@ -10,6 +10,7 @@ import useSWR from 'swr'
 import { fetcher, FetchError } from 'utils/fetcher'
 import { getForegroundColor } from 'utils/colors'
 import StationPickerDialog from './station-picker'
+import LineRoundel from '~/components/line-roundel'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -73,7 +74,7 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
               </span>
               <div className="flex items-center gap-1.5 text-sm text-slate-500 py-1.5">
                 <ArrowsDownUpIcon weight="bold" className="w-3.5 h-3.5" />
-                <span>Pindah kereta</span>
+                <span>{leg.operator === OPERATORS.TJ.code ? 'Pindah bus' : 'Pindah kereta'}</span>
               </div>
             </div>
           )
@@ -87,19 +88,25 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
           <span className="w-1.5 rounded-full" style={railStyle} />
         </span>
         <div className="flex-1 my-2 bg-stone-100/80 rounded-xl p-3 flex flex-col gap-1 items-start">
-          <div className="flex flex-wrap gap-1.5">
-            {lines.map(line => (
-              <span
-                key={line.lineCode}
-                className={`text-sm font-semibold px-3 py-1 rounded-full w-fit ${getForegroundColor(line.lineColor) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`}
-                style={{ backgroundColor: line.lineColor }}
-              >
-                { line.lineName }
-              </span>
-            ))}
+          <div className="flex flex-wrap gap-1.5 items-center">
+            {lines.map(line => (leg.operator === OPERATORS.TJ.code
+              // TJ is spoken as "naik koridor 9", not by the line's full name —
+              // show the corridor roundel instead of a name pill.
+              ? (
+                  <LineRoundel key={line.lineCode} size="SM" operator={leg.operator} code={line.lineCode} color={line.lineColor as `#${string}`} />
+                )
+              : (
+                  <span
+                    key={line.lineCode}
+                    className={`text-sm font-semibold px-3 py-1 rounded-full w-fit ${getForegroundColor(line.lineColor) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`}
+                    style={{ backgroundColor: line.lineColor }}
+                  >
+                    { line.lineName }
+                  </span>
+                )))}
           </div>
           {isInterlined
-            ? <span className="text-sm font-medium text-slate-600">Naik salah satu kereta</span>
+            ? <span className="text-sm font-medium text-slate-600">{leg.operator === OPERATORS.TJ.code ? 'Naik salah satu bus' : 'Naik salah satu kereta'}</span>
             : null}
           {directions.length > 0
             ? (

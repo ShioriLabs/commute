@@ -108,6 +108,18 @@ const patterns = new Map<string, StopTimeRow[]>()
 const referenced = new Set<string>()
 for (const list of patterns.values()) for (const r of list) referenced.add(r.stop)
 
+// Collapsed stops served by a BRT (koridor) route. Only these are searchable for
+// now: the Angkutan Umum Integrasi feeders route but have no topology, so we hide
+// their feeder-only haltes from search until they're properly modelled. A halte
+// shared with a BRT corridor stays searchable.
+const brtRouteIds = new Set(routes.filter(r => r.route_desc === 'BRT').map(r => r.route_id))
+const brtServed = new Set<string>()
+for (const [tripId, list] of patterns) {
+  const routeId = tripRoute.get(tripId)
+  if (!routeId || !brtRouteIds.has(routeId)) continue
+  for (const r of list) brtServed.add(r.stop)
+}
+
 // Drop temp-stop cruft (no H/B/G/P prefix convention).
 const stationStops = [...referenced].filter((id) => id.startsWith('H') || id.startsWith('B'))
 stationStops.sort()
@@ -122,7 +134,9 @@ for (const collapsedId of stationStops) {
   const s = stopById.get(collapsedId)
   if (!s) continue
   const isHalte = collapsedId.startsWith('H') || s.location_type === '1'
-  const searchable = isHalte ? 1 : 0
+  // Searchable only if it's a halte AND served by a BRT corridor. Feeder-only
+  // haltes are hidden for now (no topology yet); see brtServed above.
+  const searchable = isHalte && brtServed.has(collapsedId) ? 1 : 0
   if (searchable) searchableCount++; else hiddenCount++
   const name = esc(s.stop_name)
   stationRows.push(

@@ -1,4 +1,5 @@
 import type { Operator } from '@commute/constants'
+import { TJ_TOPOLOGY } from './topology.tj'
 
 /*
  * Line topology — the single source of truth for the network graph.
@@ -302,5 +303,7 @@ export const TOPOLOGY: LineTopology[] = [
       { station: 'CRC', pos: 'CB11' },
       { station: 'HAR', pos: 'CB12' }
     ]
-  }
+  },
+  // ── TransJakarta BRT corridors (generated; see topology.tj.ts) ────────────
+  ...TJ_TOPOLOGY
 ]
