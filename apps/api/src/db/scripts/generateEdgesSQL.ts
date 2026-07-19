@@ -36,14 +36,18 @@ function distance(line: LineTopology, a: Stop, b: Stop, coords: Map<string, Coor
   return { m: 0, src: 'unknown' }
 }
 
-function emit(line: LineTopology, a: Stop, b: Stop, coords: Map<string, Coord>): void {
+// `directed` emits a single a->b row (one travel direction); the default emits
+// both directions. Asymmetric corridors (line.pathReverse present) use directed
+// emits so each direction carries its own true stop sequence rather than a mirror.
+function emit(line: LineTopology, a: Stop, b: Stop, coords: Map<string, Coord>, directed = false): void {
   const aId = `${line.operator}-${a.station}`
   const bId = `${line.operator}-${b.station}`
   if (!coords.has(aId)) missingCoords.add(aId)
   if (!coords.has(bId)) missingCoords.add(bId)
   const { m, src } = distance(line, a, b, coords)
   srcCounts[src] = (srcCounts[src] ?? 0) + 1
-  for (const [from, to] of [[aId, bId], [bId, aId]] as const) {
+  const pairs = directed ? [[aId, bId]] as const : [[aId, bId], [bId, aId]] as const
+  for (const [from, to] of pairs) {
     out.push(
       `INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt)`
       + ` VALUES ('${line.lineCode}:${from}->${to}', '${line.lineCode}', '${from}', '${to}', ${m}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`
@@ -51,11 +55,11 @@ function emit(line: LineTopology, a: Stop, b: Stop, coords: Map<string, Coord>):
   }
 }
 
-function emitChain(line: LineTopology, stops: Stop[], coords: Map<string, Coord>): void {
+function emitChain(line: LineTopology, stops: Stop[], coords: Map<string, Coord>, directed = false): void {
   for (let i = 1; i < stops.length; i++) {
     const a = stops[i - 1]
     const b = stops[i]
-    if (a && b) emit(line, a, b, coords)
+    if (a && b) emit(line, a, b, coords, directed)
   }
 }
 
@@ -65,6 +69,16 @@ async function main(): Promise<void> {
     const byCode = new Map<string, Stop>()
     for (const s of line.path) byCode.set(s.station, s)
     for (const b of line.branches ?? []) for (const s of b.path) byCode.set(s.station, s)
+
+    if (line.pathReverse) {
+      // Asymmetric corridor: each direction carries its own true stop sequence.
+      // Emit forward-only edges from `path` and reverse-only edges from
+      // `pathReverse`; shared segments produce both directed rows naturally and
+      // INSERT OR REPLACE dedupes on the edge id. (Such lines have no branches.)
+      emitChain(line, line.path, coords, true)
+      emitChain(line, line.pathReverse, coords, true)
+      continue
+    }
 
     emitChain(line, line.path, coords)
 

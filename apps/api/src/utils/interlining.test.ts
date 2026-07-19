@@ -53,6 +53,15 @@ describe('findInterliningLineCodes', () => {
     const run = ['H00190P', 'H00189P', 'H00001P', 'H00091P', 'H00234P', 'H00040P', 'H00214P', 'H00101P', 'H00257P', 'H00130P', 'H00041P', 'H00249P', 'H00192P']
     expect(findInterliningLineCodes('TJ', run)).toContain('13E')
   })
+
+  // Koridor 1 is asymmetric: Kejagung (H00266P) is served in the Kota→Blok M
+  // direction only, so it appears in K1's `pathReverse`, never in `path`. A run
+  // through it must still resolve to line '1' — the match has to consult
+  // pathReverse, not just path.
+  it('matches a reverse-only run (K1 via Kejagung) against pathReverse', () => {
+    const run = ['H00127P', 'H00266P', 'H00014P'] // Masjid Agung → Kejagung → Blok M
+    expect(findInterliningLineCodes('TJ', run)).toContain('1')
+  })
 })
 
 describe('mergeInterlinedLegs', () => {

@@ -61,3 +61,72 @@ describe('findRoute', () => {
     expect(legs[0]).toMatchObject({ type: 'RIDE', distanceM: 3000, stationIds: ['TJ-A', 'TJ-B', 'TJ-C', 'TJ-D'] })
   })
 })
+
+// A single directed edge row (one travel direction only).
+const oneWay = (lineCode: string, from: string, to: string, distance = 1000) =>
+  ({ lineCode, fromStationId: from, toStationId: to, distance })
+
+describe('findRoute — asymmetric corridors (directed ride edges)', () => {
+  // TJ Koridor 1 shape in miniature. Forward (Blok M-bound): A→K→B→D, where K is
+  // an outbound-only stop. Reverse (Kota-bound): D→B→S→A, where S is a
+  // reverse-only stop. The two directions share A/B/D but each has a unique stop.
+  const fwd = [oneWay('1', 'TJ-A', 'TJ-K'), oneWay('1', 'TJ-K', 'TJ-B'), oneWay('1', 'TJ-B', 'TJ-D')]
+  const rev = [oneWay('1', 'TJ-D', 'TJ-B'), oneWay('1', 'TJ-B', 'TJ-S'), oneWay('1', 'TJ-S', 'TJ-A')]
+  const asymGraph = buildGraph([...fwd, ...rev], [])
+
+  it('routes the forward direction via the outbound-only stop, never the reverse-only one', () => {
+    const legs = findRoute(asymGraph, 'TJ-A', 'TJ-D')!
+    const stops = (legs[0] as { stationIds: string[] }).stationIds
+    expect(stops).toContain('TJ-K')
+    expect(stops).not.toContain('TJ-S')
+  })
+
+  it('routes the reverse direction via the reverse-only stop, never the outbound-only one', () => {
+    const legs = findRoute(asymGraph, 'TJ-D', 'TJ-A')!
+    const stops = (legs[0] as { stationIds: string[] }).stationIds
+    expect(stops).toContain('TJ-S')
+    expect(stops).not.toContain('TJ-K')
+  })
+})
+
+describe('findRoute — endpoint direction restriction (KCI-PSE)', () => {
+  // Loop fragment: GST — PSE — KMO — KPB, bidirectional track (both directions
+  // exist, matching real edges). PSE serves KPB-bound only, so GST is PSE's
+  // forbidden neighbor: no boarding at PSE toward GST, no alighting at PSE from GST.
+  const loop = [
+    ...edge('C', 'KCI-GST', 'KCI-PSE'), ...edge('C', 'KCI-PSE', 'KCI-KMO'),
+    ...edge('C', 'KCI-KMO', 'KCI-KPB'), ...edge('C', 'KCI-KPB', 'KCI-AK')
+  ]
+  const restriction = { stationId: 'KCI-PSE', forbiddenNeighborId: 'KCI-GST' }
+  const restricted = buildGraph(loop, [], [restriction])
+
+  it('through-routes past PSE in both directions (restriction never blocks pass-through)', () => {
+    expect(findRoute(restricted, 'KCI-GST', 'KCI-KPB')).not.toBeNull()
+    expect(findRoute(restricted, 'KCI-KPB', 'KCI-GST')).not.toBeNull()
+  })
+
+  it('forbids boarding at PSE toward the forbidden neighbor (GST-bound)', () => {
+    // The only way from PSE to GST is the single hop toward the forbidden
+    // neighbor; with the restriction there is no legal route.
+    expect(findRoute(restricted, 'KCI-PSE', 'KCI-GST')).toBeNull()
+  })
+
+  it('still allows boarding at PSE toward the served direction (KPB-bound)', () => {
+    expect(findRoute(restricted, 'KCI-PSE', 'KCI-KPB')).not.toBeNull()
+  })
+
+  it('forbids alighting at PSE having arrived from the forbidden neighbor', () => {
+    // GST→PSE is a single hop arriving from the forbidden neighbor.
+    expect(findRoute(restricted, 'KCI-GST', 'KCI-PSE')).toBeNull()
+  })
+
+  it('still allows alighting at PSE from the served direction (from KMO/KPB)', () => {
+    expect(findRoute(restricted, 'KCI-KPB', 'KCI-PSE')).not.toBeNull()
+  })
+
+  it('leaves routing unchanged when no restrictions are passed', () => {
+    const open = buildGraph(loop, [])
+    expect(findRoute(open, 'KCI-PSE', 'KCI-GST')).not.toBeNull()
+    expect(findRoute(open, 'KCI-GST', 'KCI-PSE')).not.toBeNull()
+  })
+})
