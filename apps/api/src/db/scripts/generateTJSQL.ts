@@ -112,6 +112,10 @@ for (const list of patterns.values()) for (const r of list) referenced.add(r.sto
 // now: the Angkutan Umum Integrasi feeders route but have no topology, so we hide
 // their feeder-only haltes from search until they're properly modelled. A halte
 // shared with a BRT corridor stays searchable.
+// TODO: re-enable the non-BRT services (Angkutan Umum Integrasi / Mikrotrans /
+// Royaltrans) later — needs per-line topology first (extend generateTJTopology
+// beyond BRT_CODES), then widen this gate; everything downstream (API list
+// filter, search surfaces, sitemap) keys off `searchable` and follows for free.
 const brtRouteIds = new Set(routes.filter(r => r.route_desc === 'BRT').map(r => r.route_id))
 const brtServed = new Set<string>()
 for (const [tripId, list] of patterns) {
