@@ -335,7 +335,10 @@ export default function FareSheet() {
   }, [origin, destination])
 
   const pickableStations = useMemo(
-    () => (stations?.data ?? []).filter(station => station.regionCode === 'CGK'),
+    // `searchable` matters since the TJ import: topology-only stops (TJ
+    // feeder/non-BRT) are hidden from every search surface, and without the
+    // filter they balloon the picker to ~2,300 rows.
+    () => (stations?.data ?? []).filter(station => station.regionCode === 'CGK' && station.searchable),
     [stations?.data]
   )
 

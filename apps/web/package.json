@@ -6,6 +6,7 @@
   "scripts": {
     "build": "react-router build",
     "dev": "react-router dev",
+    "test": "vitest run",
     "start": "react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc",
     "lint": "eslint",
@@ -44,6 +45,7 @@
     "typescript": "^5.7.2",
     "vite": "^6.3.5",
     "vite-tsconfig-paths": "^5.1.4",
+    "vitest": "^4.1.9",
     "wrangler": "^4.19.1"
   }
 }

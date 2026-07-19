@@ -1,6 +1,6 @@
 import type { Line } from 'models/line'
 import type { Searchable } from 'models/searchable'
-import { useMemo, type MouseEvent } from 'react'
+import { memo, useMemo, type MouseEvent } from 'react'
 import { Link } from 'react-router'
 import { getForegroundColor } from 'utils/colors'
 import HighlightMatch from '~/components/highlight-match'
@@ -16,7 +16,14 @@ interface Props {
   index?: number
 }
 
-export default function SearchableItem({ searchable, onClick, query, index = 0 }: Props) {
+// Cap the entrance stagger so long lists don't tail off forever (rows sit at
+// opacity 0 until their delay elapses). Mirrors the fare picker.
+const STAGGER_MAX_INDEX = 12
+
+// Memoized: rendered from the deferred filter pass, so the urgent keystroke
+// render must bail out here — otherwise every result re-renders per keystroke
+// and blocks the input.
+export default memo(function SearchableItem({ searchable, onClick, query, index = 0 }: Props) {
   const dataset = useMemo(() => {
     if (!searchable.data) return {}
     return Object.fromEntries(
@@ -25,7 +32,7 @@ export default function SearchableItem({ searchable, onClick, query, index = 0 }
   }, [searchable.data])
 
   return (
-    <li className="search-result-enter" style={{ animationDelay: `${index * 30}ms` }}>
+    <li className="search-result-enter" style={{ animationDelay: `${Math.min(index, STAGGER_MAX_INDEX) * 30}ms` }}>
       <Link
         to={searchable.to}
         className="px-8 py-4 flex flex-col gap-1 min-h-24 text-lg"
@@ -70,4 +77,4 @@ export default function SearchableItem({ searchable, onClick, query, index = 0 }
       </Link>
     </li>
   )
-}
+})
