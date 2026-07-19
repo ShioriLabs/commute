@@ -108,7 +108,7 @@ export async function syncTimetable(d1: D1Database, stationCode: string) {
         estimatedArrival: '00:00:00', // currently unused, TODO calculate by predefined timing
         lineCode: 'S',
         stationId: stationId,
-        tripNumber: `${stationId}-${time}-PGD-BOUND`
+        tripNumber: `${stationId}-${time}-VEL-BOUND`
       })
     }
   }
