@@ -11,6 +11,7 @@ import { computeHeadsignCode } from 'utils/headsign'
 import { findInterliningLineCodes, mergeInterlinedLegs } from 'utils/interlining'
 import { getLineByOperator } from 'utils/line'
 import { Internal, NotFound, Ok } from 'utils/response'
+import { ENDPOINT_RESTRICTIONS } from 'db/data/topology'
 import { buildGraph, findRoute, RouteGraph } from 'utils/router'
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -20,7 +21,13 @@ let cachedGraph: RouteGraph | null = null
 async function getGraph(d1: D1Database): Promise<RouteGraph> {
   if (cachedGraph) return cachedGraph
   const { edges, transfers } = await new EdgeRepository(d1).getGraphInputs()
-  cachedGraph = buildGraph(edges, transfers)
+  // Topology restrictions are authored in (operator, station) codes; the graph
+  // works in `${operator}-${station}` DB ids.
+  const restrictions = ENDPOINT_RESTRICTIONS.map(r => ({
+    stationId: `${r.operator}-${r.station}`,
+    forbiddenNeighborId: `${r.operator}-${r.forbiddenNeighbor}`
+  }))
+  cachedGraph = buildGraph(edges, transfers, restrictions)
   return cachedGraph
 }
 

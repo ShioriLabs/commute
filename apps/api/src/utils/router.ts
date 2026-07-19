@@ -24,7 +24,28 @@ interface GraphEdge {
   distanceM: number
   lineCode: string | null // null = walk transfer
 }
-export type RouteGraph = Map<string, GraphEdge[]>
+
+/*
+ * A stop served (board/alight) in only one travel direction while the track
+ * passes both ways (e.g. KCI-PSE). The through-edges stay in the graph so a
+ * trip may still ride PAST the stop; these entries only forbid the stop as a
+ * trip ENDPOINT in the banned direction — no boarding heading toward
+ * `forbiddenNeighbor`, no alighting having arrived from it.
+ */
+export interface EndpointRestriction {
+  stationId: string // DB id, e.g. `KCI-PSE`
+  forbiddenNeighborId: string // DB id, e.g. `KCI-GST`
+}
+
+/*
+ * The routing graph plus the endpoint restrictions that apply to it. Restrictions
+ * live on the graph (not passed per-query) since they're a static property of the
+ * network; `findRoute` consults them only for the trip's own origin/destination.
+ */
+export interface RouteGraph {
+  adjacency: Map<string, GraphEdge[]>
+  restrictions: Map<string, EndpointRestriction> // keyed by restricted stationId
+}
 
 export interface RideLeg {
   type: 'RIDE'
@@ -47,12 +68,13 @@ export type RouteLeg = RideLeg | TransferLeg
 
 export function buildGraph(
   edges: Pick<Edge, 'lineCode' | 'fromStationId' | 'toStationId' | 'distance'>[],
-  transfers: Pick<Transfer, 'fromStationId' | 'toStationId' | 'distance'>[]
+  transfers: Pick<Transfer, 'fromStationId' | 'toStationId' | 'distance'>[],
+  restrictions: EndpointRestriction[] = []
 ): RouteGraph {
-  const graph: RouteGraph = new Map()
+  const adjacency = new Map<string, GraphEdge[]>()
   const push = (from: string, edge: GraphEdge) => {
-    if (!graph.has(from)) graph.set(from, [])
-    graph.get(from)!.push(edge)
+    if (!adjacency.has(from)) adjacency.set(from, [])
+    adjacency.get(from)!.push(edge)
   }
   for (const e of edges) {
     push(e.fromStationId, { to: e.toStationId, distanceM: e.distance, lineCode: e.lineCode })
@@ -63,11 +85,21 @@ export function buildGraph(
     push(t.fromStationId, { to: t.toStationId, distanceM: t.distance, lineCode: null })
     push(t.toStationId, { to: t.fromStationId, distanceM: t.distance, lineCode: null })
   }
-  return graph
+  const restrictionMap = new Map<string, EndpointRestriction>()
+  for (const r of restrictions) restrictionMap.set(r.stationId, r)
+  return { adjacency, restrictions: restrictionMap }
 }
 
 export function findRoute(graph: RouteGraph, fromStationId: string, toStationId: string): RouteLeg[] | null {
-  if (!graph.has(fromStationId) || !graph.has(toStationId)) return null
+  const { adjacency, restrictions } = graph
+  if (!adjacency.has(fromStationId) || !adjacency.has(toStationId)) return null
+
+  // Endpoint direction rules for THIS trip's own origin/destination (a stop
+  // that's a served endpoint only one way, e.g. KCI-PSE). Mid-route pass-through
+  // is never affected — these only constrain the first hop out of the origin and
+  // the last hop into the destination.
+  const originRestriction = restrictions.get(fromStationId)
+  const destRestriction = restrictions.get(toStationId)
 
   const dist = new Map<string, number>([[fromStationId, 0]])
   const prev = new Map<string, { station: string, edge: GraphEdge }>()
@@ -86,7 +118,11 @@ export function findRoute(graph: RouteGraph, fromStationId: string, toStationId:
     if (current === toStationId) break
     visited.add(current)
     const incomingLine = prev.get(current)?.edge.lineCode ?? null
-    for (const edge of graph.get(current) ?? []) {
+    for (const edge of adjacency.get(current) ?? []) {
+      // Can't BOARD the origin heading toward its forbidden neighbor.
+      if (current === fromStationId && originRestriction && edge.to === originRestriction.forbiddenNeighborId) continue
+      // Can't ALIGHT at the destination having arrived from its forbidden neighbor.
+      if (edge.to === toStationId && destRestriction && current === destRestriction.forbiddenNeighborId) continue
       let penalty = 0
       if (edge.lineCode === null) {
         penalty = TRANSFER_PENALTY_M

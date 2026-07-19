@@ -29,11 +29,18 @@ function containsContiguous(haystack: string[], needle: string[]): boolean {
 export function findInterliningLineCodes(operator: Operator, stationCodes: string[]): string[] {
   if (!INTERLINING_OPERATORS.has(operator)) return []
   const reversed = [...stationCodes].reverse()
+  // A run matches a line if it's a contiguous run of that line's stops in either
+  // travel direction. For asymmetric corridors the two directions differ, so a
+  // reverse-only run (e.g. K1 via Kejagung) lives in `pathReverse`, not `path`;
+  // check both sequences.
+  const matches = (seq: { station: string }[]): boolean => {
+    const codes = seq.map(stop => stop.station)
+    return containsContiguous(codes, stationCodes) || containsContiguous(codes, reversed)
+  }
   return TOPOLOGY
     .filter((topology) => {
       if (topology.operator !== operator) return false
-      const path = topology.path.map(stop => stop.station)
-      return containsContiguous(path, stationCodes) || containsContiguous(path, reversed)
+      return matches(topology.path) || (topology.pathReverse ? matches(topology.pathReverse) : false)
     })
     .map(topology => topology.lineCode)
 }

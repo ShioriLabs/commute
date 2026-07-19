@@ -42,6 +42,17 @@ export interface LineTopology {
   lineCode: string
   path: Stop[] // consecutive stops => edges
   branches?: Branch[]
+  /*
+   * Reverse-direction stop sequence, present ONLY when the reverse direction is
+   * not the mirror of `path` (asymmetric corridors — e.g. TJ Koridor 1, where
+   * Kejagung is served Blok M-bound only while ASEAN/Kali Besar/Museum Sejarah
+   * are served Kota-bound only). When absent, generateEdgesSQL mirrors `path`.
+   * When present, the generator emits forward-only edges from `path` and
+   * reverse-only edges from `pathReverse` (no mirroring). Display/derivation
+   * consumers (line pages, headsigns, direction grouping) read `path` only;
+   * the router graph + interlining are the reverse-aware consumers.
+   */
+  pathReverse?: Stop[]
 }
 
 /*
@@ -56,6 +67,22 @@ export const BOGUS_MEMBERSHIPS: { operator: Operator, station: string, lineCode:
   { operator: 'KCI', station: 'PI', lineCode: 'A' }, // Poris
   { operator: 'KCI', station: 'PSG', lineCode: 'A' }, // Pesing
   { operator: 'KCI', station: 'TKO', lineCode: 'A' } // Taman Kota
+]
+
+/*
+ * Stops served (board/alight) in only ONE travel direction even though the
+ * track passes through both ways. The through-edges stay bidirectional so a
+ * passenger may still ride PAST the stop in either direction; the restriction
+ * only forbids the stop as a trip ENDPOINT in the banned direction. Expressed
+ * as `forbiddenNeighbor`: the router won't let a trip START at `station` heading
+ * toward that neighbor, nor END at `station` having arrived from it.
+ *
+ * KCI-PSE (Pasar Senen, C loop): only KPB-bound trains serve it (the loop order
+ * runs GST → PSE → KMO → … → KPB). The GST-side (Bekasi/Jatinegara-bound)
+ * direction passes through without stopping, so GST is the forbidden neighbor.
+ */
+export const ENDPOINT_RESTRICTIONS: { operator: Operator, station: string, lineCode: string, forbiddenNeighbor: string }[] = [
+  { operator: 'KCI', station: 'PSE', lineCode: 'C', forbiddenNeighbor: 'GST' }
 ]
 
 export const TOPOLOGY: LineTopology[] = [
