@@ -45,6 +45,14 @@ describe('findInterliningLineCodes', () => {
   it('is gated to interlining operators — KCI never reports multiple lines', () => {
     expect(findInterliningLineCodes('KCI', ['MRI', 'CKI', 'TEB'])).toEqual([])
   })
+
+  // TransJakarta 13-family: 13E is the all-stops extended corridor whose topology
+  // path contains this Puri Beta 2 → Karet Kuningan run contiguously; L13E is
+  // skip-stop and does NOT contain the all-stops run, so only 13E matches.
+  it('finds the TJ all-stops through-line (13E) for a Puri Beta 2 → Karet run', () => {
+    const run = ['H00190P', 'H00189P', 'H00001P', 'H00091P', 'H00234P', 'H00040P', 'H00214P', 'H00101P', 'H00257P', 'H00130P', 'H00041P', 'H00249P', 'H00192P']
+    expect(findInterliningLineCodes('TJ', run)).toContain('13E')
+  })
 })
 
 describe('mergeInterlinedLegs', () => {

@@ -9,7 +9,7 @@ import type { RouteLeg } from 'utils/router'
  * of the sharing lines, so the fare UI surfaces all of them rather than the one
  * the router happened to pick. Gated so ordinary networks are untouched.
  */
-export const INTERLINING_OPERATORS = new Set<Operator>(['LRTJBDB'])
+export const INTERLINING_OPERATORS = new Set<Operator>(['LRTJBDB', 'TJ'])
 
 // True when `needle` appears as a contiguous run inside `haystack`.
 function containsContiguous(haystack: string[], needle: string[]): boolean {

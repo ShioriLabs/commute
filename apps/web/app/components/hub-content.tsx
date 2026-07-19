@@ -6,6 +6,7 @@ import type { StandardResponse } from '@schema/response'
 import type { Hub } from 'models/hub'
 import { fetcher } from 'utils/fetcher'
 import LineRoundel from '~/components/line-roundel'
+import { sortLinesForDisplay } from '~/utils/lines'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -86,9 +87,9 @@ const HubContent = memo(function HubContent({ slug }: HubContentProps) {
               {member.lines.length > 0
                 ? (
                     <ul className="flex flex-row gap-1 flex-wrap">
-                      {member.lines.map(line => (
+                      {sortLinesForDisplay(member.lines, member.operator.code).map(line => (
                         <li key={line.lineCode}>
-                          <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} />
+                          <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={member.operator.code} />
                           <span className="sr-only">{line.name}</span>
                         </li>
                       ))}

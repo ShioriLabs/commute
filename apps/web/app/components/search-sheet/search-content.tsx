@@ -3,20 +3,19 @@ import type { Hub } from 'models/hub'
 import type { OperatorWithLines } from 'models/operator'
 import type { StandardResponse } from '@schema/response'
 import type { ReactNode } from 'react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import useSWR from 'swr'
 import type { Line } from 'models/line'
 import { fetcher } from 'utils/fetcher'
 import { getForegroundColor, getTintFromColor } from 'utils/colors'
 import LineRoundel from '~/components/line-roundel'
-import { levenshteinDistance } from 'utils/levenshtein'
+import { filterBestTier, keywordScore, SCORE_THRESHOLD } from 'utils/fuzzy-match'
 import type { Searchable } from 'models/searchable'
 import { hubToSearchable, lineToSearchable } from 'utils/searchables'
 import { readRecents, recordRecent, type RecentEntry } from 'utils/recents'
 import SearchableItem from './searchable-item'
 
-const SCORE_THRESHOLD = 3
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
   focusThrottleInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -41,7 +40,8 @@ function HighlightedList({ title, items, className }: { title: string, items: Re
           to: `/hubs/${hub.slug}`,
           name: hub.name,
           subtitle: 'Stasiun Terintegrasi',
-          line: hub.lines[0] as Line | undefined
+          line: hub.lines[0] as Line | undefined,
+          operator: undefined as string | undefined
         }
       }
       const station = stations?.data?.find(station => station.id === item.id)
@@ -51,7 +51,8 @@ function HighlightedList({ title, items, className }: { title: string, items: Re
         to: `/stations/${station.operator.code}/${station.code}`,
         name: station.formattedName || station.name,
         subtitle: station.operator.name,
-        line: station.lines[0] as Line | undefined
+        line: station.lines[0] as Line | undefined,
+        operator: station.operator.code as string | undefined
       }
     })
     .filter(card => card !== null)
@@ -74,7 +75,7 @@ function HighlightedList({ title, items, className }: { title: string, items: Re
               style={card.line ? { backgroundColor: getTintFromColor(card.line.colorCode, 0.2, 'light'), color: card.line.colorCode } : undefined}
               replace
             >
-              {card.line ? <LineRoundel size="SM" code={card.line.lineCode} color={card.line.colorCode} /> : null}
+              {card.line ? <LineRoundel size="SM" code={card.line.lineCode} color={card.line.colorCode} operator={card.operator} /> : null}
               <span className="font-semibold mt-auto">{ card.name }</span>
               <span className={card.line ? 'text-slate-700' : ''}>{ card.subtitle }</span>
             </Link>
@@ -102,7 +103,8 @@ function LineChipList({ className }: { className?: string }) {
     <article className={`max-w-3xl mx-auto ${className}`}>
       <h1 className="text-xl font-bold mx-8">Lin</h1>
       <ul className="mt-2 flex flex-row flex-wrap gap-2 px-8">
-        {operators.data.flatMap(op => op.lines.map(line => (
+        {/* TJ excluded: its line-detail pages aren't built yet (no topology). */}
+        {operators.data.filter(op => op.code !== 'TJ').flatMap(op => op.lines.map(line => (
           <li key={`${op.code}-${line.lineCode}`}>
             <Link
               to={`/lines/${op.code}/${line.lineCode}`}
@@ -131,6 +133,10 @@ export default function SearchContent({ title, closeButton }: Props) {
   const { data: hubs } = useSWR<StandardResponse<Hub[]>>(new URL('/hubs', import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
   const { data: operators } = useSWR<StandardResponse<OperatorWithLines[]>>(new URL('/operators', import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
   const [searchQuery, setSearchQuery] = useState<string>('')
+  // Keep the input instant while the fuzzy filter runs against a
+  // lower-priority, deferred copy of the query — the index is several hundred
+  // searchables and scoring every keystroke synchronously was janking the field.
+  const deferredQuery = useDeferredValue(searchQuery)
   const [recentlySearched, setRecentlySearched] = useState<RecentEntry[]>([])
   const [savedStations, setSavedStations] = useState<string[]>([])
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -168,6 +174,8 @@ export default function SearchContent({ title, closeButton }: Props) {
 
     if (operators && operators.data) {
       for (const operator of operators.data) {
+        // TJ excluded: its line-detail pages aren't built yet (no topology).
+        if (operator.code === 'TJ') continue
         for (const line of operator.lines) {
           _searchables.push(lineToSearchable(operator, line))
         }
@@ -178,8 +186,8 @@ export default function SearchContent({ title, closeButton }: Props) {
   }, [stations, hubs, operators])
 
   const filteredSearchables = useMemo(() => {
-    if (searchables.length === 0 || searchQuery.length < 2) return []
-    const query = searchQuery.toLowerCase()
+    if (searchables.length === 0 || deferredQuery.length < 2) return []
+    const query = deferredQuery.toLowerCase()
 
     const scoredStations = searchables.map((searchable) => {
       let score = Infinity
@@ -187,33 +195,36 @@ export default function SearchContent({ title, closeButton }: Props) {
       for (const keyword of keywords) {
         if (score === 0) break
 
-        if (keyword.includes(query)) {
-          score = 0
-          break
-        }
-
-        // Short keywords (1-2 char line codes like "B", "M") match by
-        // substring only — levenshtein would put them within threshold of
-        // nearly every 2-char query.
-        if (keyword.length < 3) continue
-
-        const levScore = levenshteinDistance(keyword, query)
-        if (levScore < score) score = levScore
+        const keywordMatch = keywordScore(keyword, query)
+        if (keywordMatch < score) score = keywordMatch
       }
 
       const popularityFactor = (searchable.score ?? 0) / 100
       const finalScore = score + (1 - popularityFactor)
+      // Sub-unit ranking nudge applied only at sort time (NOT folded into
+      // finalScore, so it can't push a borderline result past SCORE_THRESHOLD and
+      // hide it). Always < 1, so it only reorders otherwise-close matches — never
+      // lifts a poor match above a clearly better one. Prefer stations over
+      // lines/hubs, and rail over TJ within stations.
+      const isStation = searchable.type === 'STATION'
+      const isTJ = isStation && searchable.to.startsWith('/stations/TJ/')
+      const sortNudge = (isStation ? 0 : 0.4) + (isTJ ? 0.2 : 0)
 
       return {
         ...searchable,
-        score: finalScore
+        score: finalScore,
+        matchScore: score,
+        sortNudge
       }
     }).filter((station) => {
       return station.score < SCORE_THRESHOLD
-    }).sort((a, b) => a.score - b.score || a.title.localeCompare(b.title))
+    })
 
-    return scoredStations
-  }, [searchQuery, searchables])
+    // Corrections are a fallback: exact matches hide typo matches, word-typo
+    // matches hide window matches.
+    return filterBestTier(scoredStations, station => station.matchScore)
+      .sort((a, b) => (a.score + a.sortNudge) - (b.score + b.sortNudge) || a.title.localeCompare(b.title))
+  }, [deferredQuery, searchables])
 
   useEffect(() => {
     setRecentlySearched(readRecents())
@@ -228,14 +239,15 @@ export default function SearchContent({ title, closeButton }: Props) {
     }, 250)
   }, [searchInputRef])
 
-  const handleSearchClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+  // Stable identity so memoized SearchableItem rows don't re-render per keystroke.
+  const handleSearchClick = useCallback((e: React.MouseEvent<HTMLAnchorElement>) => {
     const { stationId, hubId } = e.currentTarget.dataset
     if (stationId) {
       recordRecent({ type: 'STATION', id: stationId })
     } else if (hubId) {
       recordRecent({ type: 'HUB', id: hubId })
     }
-  }
+  }, [])
 
   return (
     <section className="bg-white w-screen h-full overflow-y-auto pb-4">
@@ -296,14 +308,18 @@ export default function SearchContent({ title, closeButton }: Props) {
                   key={`${searchable.type}:${searchable.to}`}
                   searchable={searchable}
                   onClick={handleSearchClick}
-                  query={searchQuery}
+                  // Deferred on purpose: passing the live query would force every
+                  // row to re-render at urgent priority on each keystroke, blocking
+                  // the input — the exact jank useDeferredValue exists to avoid.
+                  // It also matches the list, which is filtered by deferredQuery.
+                  query={deferredQuery}
                   index={index}
                 />
               ))}
             </ul>
           )
         : null}
-      {searchQuery.length >= 2 && filteredSearchables.length === 0
+      {deferredQuery.length >= 2 && filteredSearchables.length === 0
         ? (
             <div className="w-full h-auto flex items-center justify-center mt-8 flex-col max-w-3xl mx-auto">
               <picture>

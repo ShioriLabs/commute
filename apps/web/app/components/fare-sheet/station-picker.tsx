@@ -1,30 +1,32 @@
 import type { Station } from 'models/stations'
 import { OPERATORS } from '@commute/constants'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react'
 import { CheckCircleIcon, MagnifyingGlassIcon, XIcon } from '@phosphor-icons/react'
 import { haptic } from 'utils/haptics'
-import { levenshteinDistance } from 'utils/levenshtein'
+import { filterBestTier, keywordScore, SCORE_THRESHOLD } from 'utils/fuzzy-match'
 import HighlightMatch from '~/components/highlight-match'
 import LineRoundel from '~/components/line-roundel'
+import { sortLinesForDisplay } from '~/utils/lines'
 
-const SCORE_THRESHOLD = 3
+// Pre-lowercased station fields so the per-keystroke scan doesn't re-lowercase
+// the whole list every pass.
+interface IndexedStation {
+  station: Station
+  // Empty when the station has none; skipped when scoring.
+  formattedName: string
+  name: string
+  code: string
+}
 
-function getLevenshteinScore(station: Station, query: string) {
-  const name = station.name.toLowerCase()
-  const formattedName = station.formattedName?.toLowerCase() ?? ''
-  const code = station.code.toLowerCase()
-  const q = query.toLowerCase()
-
-  if (name.includes(q) || formattedName.includes(q) || code.includes(q)) {
-    return 0
+function getStationScore({ name, formattedName, code }: IndexedStation, query: string) {
+  let score = keywordScore(name, query)
+  if (score === 0) return 0
+  if (formattedName !== '') {
+    score = Math.min(score, keywordScore(formattedName, query))
+    if (score === 0) return 0
   }
-
-  return Math.min(
-    levenshteinDistance(name, q),
-    levenshteinDistance(formattedName, q),
-    levenshteinDistance(code, q)
-  )
+  return Math.min(score, keywordScore(code, query))
 }
 
 // Recently picked fare stations feed the quick-pick chips (same pattern as
@@ -40,6 +42,56 @@ const STAGGER_MAX_INDEX = 12
 // never steals frames from anything visible.
 const INITIAL_ROWS = 20
 
+// Memoized: rendered from the deferred filter pass, so the urgent keystroke
+// render must bail out here — otherwise the whole list re-renders per
+// keystroke at urgent priority and blocks the input.
+const StationRow = memo(function StationRow({ station, index, selected, query, onSelect }: {
+  station: Station
+  index: number
+  selected: boolean
+  // Deferred query for highlighting; must match the list's filter pass.
+  query?: string
+  onSelect: (station: Station) => void
+}) {
+  return (
+    <li
+      // Stagger only the above-the-fold rows; the rest mount plain and
+      // skip offscreen paint entirely via content-visibility.
+      className={index <= STAGGER_MAX_INDEX ? 'search-result-enter' : '[content-visibility:auto] [contain-intrinsic-size:auto_76px]'}
+      style={index <= STAGGER_MAX_INDEX ? { animationDelay: `${index * 30}ms` } : undefined}
+    >
+      <button
+        type="button"
+        onClick={() => onSelect(station)}
+        className={`px-8 py-3 flex items-center gap-3 w-full text-left cursor-pointer ${selected ? 'bg-rose-50' : 'hover:bg-rose-50/60'}`}
+      >
+        <span className="flex flex-col gap-1 flex-1 min-w-0">
+          <b className="text-lg">
+            <HighlightMatch text={station.formattedName ?? station.name} query={query} />
+            {'  '}
+            <span className="text-sm font-semibold text-gray-600">{ station.operator.name }</span>
+          </b>
+          {station.lines?.length
+            ? (
+                <ul className="flex flex-row gap-1 flex-wrap">
+                  {sortLinesForDisplay(station.lines, station.operator.code).map(line => (
+                    <li key={line.lineCode}>
+                      <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={station.operator.code} />
+                      <span className="sr-only">{line.name}</span>
+                    </li>
+                  ))}
+                </ul>
+              )
+            : null}
+        </span>
+        {selected
+          ? <CheckCircleIcon weight="fill" className="w-6 h-6 shrink-0 text-[#F55875]" aria-label="Stasiun terpilih" />
+          : null}
+      </button>
+    </li>
+  )
+})
+
 export default function StationPickerDialog({ open, title, stations, selectedId, onClose, onSelect }: {
   open: boolean
   title: string
@@ -50,6 +102,9 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
   onSelect: (station: Station) => void
 }) {
   const [query, setQuery] = useState('')
+  // Input stays instant; the fuzzy scan over the full station list runs
+  // against a deferred query so typing doesn't jank (same as the search sheet).
+  const deferredQuery = useDeferredValue(query)
   const [operatorFilter, setOperatorFilter] = useState<string | null>(null)
   const [recentIds, setRecentIds] = useState<string[]>([])
   // Same trick as BottomSheet: the station list mounts only after the
@@ -101,17 +156,32 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
     [operatorFilter, stations]
   )
 
+  // Lowercase once per list change, not once per keystroke per station.
+  const searchIndex = useMemo<IndexedStation[]>(() => filteredStations.map(station => ({
+    station,
+    name: station.name.toLowerCase(),
+    formattedName: station.formattedName?.toLowerCase() ?? '',
+    code: station.code.toLowerCase()
+  })), [filteredStations])
+
   const shownStations = useMemo(() => {
-    if (query.length < 2) {
+    if (deferredQuery.length < 2) {
       // No query: full list, most popular first, so common picks are one tap away.
       return [...filteredStations].sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.name.localeCompare(b.name))
     }
-    return filteredStations
-      .map(station => ({ station, finalScore: getLevenshteinScore(station, query) + (1 - (station.score ?? 0) / 100) }))
+    const query = deferredQuery.toLowerCase()
+    const scored = searchIndex
+      .map((entry) => {
+        const matchScore = getStationScore(entry, query)
+        return { station: entry.station, matchScore, finalScore: matchScore + (1 - (entry.station.score ?? 0) / 100) }
+      })
       .filter(({ finalScore }) => finalScore < SCORE_THRESHOLD)
+    // Corrections are a fallback: exact matches hide typo matches, word-typo
+    // matches hide window matches.
+    return filterBestTier(scored, ({ matchScore }) => matchScore)
       .sort((a, b) => a.finalScore - b.finalScore || a.station.name.localeCompare(b.station.name))
       .map(({ station }) => station)
-  }, [query, filteredStations])
+  }, [deferredQuery, filteredStations, searchIndex])
 
   // Recent picks first, padded with the most popular stations for first-time
   // users (and when recents fall outside the pickable set).
@@ -132,14 +202,18 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
     return picks
   }, [recentIds, filteredStations])
 
-  const handleSelect = (station: Station) => {
+  // Stable across keystrokes (only changes on pick) so memoized StationRows
+  // don't re-render while typing.
+  const handleSelect = useCallback((station: Station) => {
     haptic()
-    const newRecents = [station.id, ...recentIds.filter(id => id !== station.id)].slice(0, RECENT_PICKS_MAX)
-    setRecentIds(newRecents)
-    localStorage.setItem(RECENT_PICKS_KEY, JSON.stringify(newRecents))
+    setRecentIds((current) => {
+      const newRecents = [station.id, ...current.filter(id => id !== station.id)].slice(0, RECENT_PICKS_MAX)
+      localStorage.setItem(RECENT_PICKS_KEY, JSON.stringify(newRecents))
+      return newRecents
+    })
     onSelect(station)
     onClose()
-  }
+  }, [onSelect, onClose])
 
   return (
     <Dialog open={open} onClose={onClose} className="relative z-50">
@@ -215,8 +289,8 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
                         {station.lines?.length
                           ? (
                               <span className="flex -space-x-1.5">
-                                {station.lines.map(line => (
-                                  <LineRoundel key={line.lineCode} size="SM" code={line.lineCode} color={line.colorCode} />
+                                {sortLinesForDisplay(station.lines, station.operator.code).map(line => (
+                                  <LineRoundel key={line.lineCode} size="SM" code={line.lineCode} color={line.colorCode} operator={station.operator.code} />
                                 ))}
                               </span>
                             )
@@ -230,42 +304,16 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
             : null}
           <ul className="mt-2 max-w-3xl mx-auto pb-8">
             {(ready ? (renderAll ? shownStations : shownStations.slice(0, INITIAL_ROWS)) : []).map((station, index) => (
-              <li
+              <StationRow
                 key={station.id}
-                // Stagger only the above-the-fold rows; the rest mount plain and
-                // skip offscreen paint entirely via content-visibility.
-                className={index <= STAGGER_MAX_INDEX ? 'search-result-enter' : '[content-visibility:auto] [contain-intrinsic-size:auto_76px]'}
-                style={index <= STAGGER_MAX_INDEX ? { animationDelay: `${index * 30}ms` } : undefined}
-              >
-                <button
-                  type="button"
-                  onClick={() => handleSelect(station)}
-                  className={`px-8 py-3 flex items-center gap-3 w-full text-left cursor-pointer ${station.id === selectedId ? 'bg-rose-50' : 'hover:bg-rose-50/60'}`}
-                >
-                  <span className="flex flex-col gap-1 flex-1 min-w-0">
-                    <b className="text-lg">
-                      <HighlightMatch text={station.formattedName ?? station.name} query={query.length >= 2 ? query : undefined} />
-                      {'  '}
-                      <span className="text-sm font-semibold text-gray-600">{ station.operator.name }</span>
-                    </b>
-                    {station.lines?.length
-                      ? (
-                          <ul className="flex flex-row gap-1 flex-wrap">
-                            {station.lines.map(line => (
-                              <li key={line.lineCode}>
-                                <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} />
-                                <span className="sr-only">{line.name}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        )
-                      : null}
-                  </span>
-                  {station.id === selectedId
-                    ? <CheckCircleIcon weight="fill" className="w-6 h-6 shrink-0 text-[#F55875]" aria-label="Stasiun terpilih" />
-                    : null}
-                </button>
-              </li>
+                station={station}
+                index={index}
+                selected={station.id === selectedId}
+                // Deferred on purpose: the live query would force every row to
+                // re-render at urgent priority on each keystroke.
+                query={deferredQuery.length >= 2 ? deferredQuery : undefined}
+                onSelect={handleSelect}
+              />
             ))}
             {ready && shownStations.length === 0
               ? <li className="px-8 py-10 text-center text-slate-400">Tidak ada stasiun yang cocok</li>

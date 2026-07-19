@@ -99,6 +99,7 @@ interface ApiStation {
   name: string
   formattedName: string | null
   lines: ApiLine[]
+  searchable?: boolean
 }
 
 interface ApiHub {
@@ -433,6 +434,10 @@ async function buildSitemap(env: Env): Promise<string> {
         urls.add(`${SITE_ORIGIN}/lines/${op.code}/${line.lineCode}`)
       }
       for (const station of stationLists[i] ?? []) {
+        // Topology-only stops (TJ feeders) are hidden from search; keep them
+        // out of the sitemap too. `=== false` so an API payload without the
+        // field (older deploy) doesn't drop every station.
+        if (station.searchable === false) continue
         // station.id is OPERATOR-CODE; the route path is /stations/:operator/:code.
         const code = station.id.split('-').slice(1).join('-')
         urls.add(`${SITE_ORIGIN}/stations/${op.code}/${code}`)

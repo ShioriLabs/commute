@@ -58,7 +58,7 @@ export default function LinePage({ params }: Route.ComponentProps) {
               ? (
                   <>
                     <div className="flex items-start gap-2 min-w-0">
-                      <LineRoundel code={detail.line.lineCode} color={detail.line.colorCode} />
+                      <LineRoundel code={detail.line.lineCode} color={detail.line.colorCode} operator={detail.operator.code} />
                       <div className="flex flex-col items-start">
                         <h1 className="font-bold text-xl truncate">{detail.line.name}</h1>
                         <span className="text-sm font-semibold text-gray-600">{detail.operator.name}</span>

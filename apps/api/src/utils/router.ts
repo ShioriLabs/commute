@@ -8,6 +8,17 @@ import type { Transfer } from 'db/schemas/transfers'
  */
 export const TRANSFER_PENALTY_M = 2500
 
+/*
+ * Routing-only bias against changing service line mid-ride. TransJakarta corridors
+ * heavily overlap (13 / 13E / L13E share a trunk; express variants skip stops),
+ * so plain per-hop cheapest-edge Dijkstra ping-pongs between sibling codes and
+ * produces a path no single line actually serves. This small penalty makes the
+ * router prefer staying on one line, so a one-seat ride stays one leg. Kept well
+ * below TRANSFER_PENALTY_M (a real tap-out must still cost more than a same-trunk
+ * line stay) and, like the transfer penalty, never enters reported distances.
+ */
+export const LINE_CHANGE_PENALTY_M = 500
+
 interface GraphEdge {
   to: string
   distanceM: number
@@ -74,8 +85,16 @@ export function findRoute(graph: RouteGraph, fromStationId: string, toStationId:
     if (current === null) return null
     if (current === toStationId) break
     visited.add(current)
+    const incomingLine = prev.get(current)?.edge.lineCode ?? null
     for (const edge of graph.get(current) ?? []) {
-      const penalty = edge.lineCode === null ? TRANSFER_PENALTY_M : 0
+      let penalty = 0
+      if (edge.lineCode === null) {
+        penalty = TRANSFER_PENALTY_M
+      } else if (incomingLine !== null && edge.lineCode !== incomingLine) {
+        // Switching service line mid-ride (no walk) — bias toward staying put so
+        // overlapping sibling corridors don't fragment a one-seat ride.
+        penalty = LINE_CHANGE_PENALTY_M
+      }
       const candidate = best + edge.distanceM + penalty
       if (candidate < (dist.get(edge.to) ?? Infinity)) {
         dist.set(edge.to, candidate)

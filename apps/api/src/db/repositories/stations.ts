@@ -33,6 +33,9 @@ export class StationRepository extends Repository {
       .leftJoin(linesSubquery.as('linesSubquery'), 'linesSubquery.stationId', 'stations.id')
       .selectAll('stations')
       .select(['linesSubquery.lines'])
+      // Topology-only stops (TJ feeders) are routable but not listed; they stay
+      // reachable via getById/getByIds (detail pages, transfers, fare legs).
+      .where('stations.searchable', '=', 1)
 
     if (page && limit) {
       query = query.limit(limit).offset((page - 1) * limit)
@@ -84,6 +87,7 @@ export class StationRepository extends Repository {
       .selectAll('stations')
       .select(['linesSubquery.lines'])
       .where('operator', '=', operator)
+      .where('stations.searchable', '=', 1)
 
     if (page && limit) {
       query = query.limit(limit).offset((page - 1) * limit)

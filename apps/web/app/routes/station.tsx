@@ -4,6 +4,7 @@ import { useNavigate, useNavigationType } from 'react-router'
 import { XIcon, PushPinIcon, PushPinSlashIcon } from '@phosphor-icons/react'
 import StationContent, { useStationHeader } from '~/components/station-content'
 import LineRoundel from '~/components/line-roundel'
+import { sortLinesForDisplay } from '~/utils/lines'
 
 export function meta() {
   return [
@@ -75,9 +76,9 @@ export default function StationPage({ params }: Route.ComponentProps) {
                   <>
                     {header.lines.length > 0 && (
                       <ul className="flex flex-row gap-1 flex-wrap">
-                        {header.lines.map(line => (
+                        {sortLinesForDisplay(header.lines, params.operator).map(line => (
                           <li key={line.lineCode}>
-                            <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} />
+                            <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={params.operator} />
                             <span className="sr-only">{line.name}</span>
                           </li>
                         ))}

@@ -21,6 +21,15 @@ export const OPERATORS = {
 
 export type Operator = keyof (typeof OPERATORS)
 
+/**
+ * Operators that participate in the JakLingko integrated fare (Tarif Integrasi):
+ * MRT Jakarta, LRT Jakarta, and TransJakarta (BRT) only. KCI (Commuter Line) and
+ * LRT Jabodebek (LRTJBDB) are NOT integrated — their legs are charged at full
+ * tariff on top of the capped integrated portion. See JAKLINGKO_JOURNEY_CAP.
+ * Verified 2026-07-18 against jaklingkoindonesia.co.id/faq-tarif-integrasi.
+ */
+export const JAKLINGKO_OPERATORS: ReadonlySet<Operator> = new Set(['MRTJ', 'LRTJ', 'TJ'])
+
 export const MRTJ_STATION_CODES: Record<number, string> = {
   20: 'LBB',
   21: 'FTM',
@@ -68,9 +77,20 @@ export type TransferDataType = 'INTERNAL' | 'EXTERNAL'
 
 /**
  * How the rider pays. STORED_VALUE is per-operator e-money (today's default).
- * JAKLINGKO enables integrated fares once the TransJakarta launch lands.
- * QRIS_TAP is the tap-to-pay QRIS flow — notably it can't apply the discounted
- * Dukuh Atas surcharge, so it pays the full pass-through (see SURCHARGED_CORRIDORS).
+ * JAKLINGKO is the tap-in integrated fare: a journey spanning two or more of the
+ * participating operators (MRTJ / LRTJ / TJ — see JAKLINGKO_OPERATORS) — in any
+ * order, no starting-operator requirement — has that portion capped at a single
+ * Rp 10,000 within a 3-hour window from the first tap-in. KCI and LRT Jabodebek
+ * are NOT integrated: their legs are charged at full tariff on top of the cap, and
+ * a single-operator trip (e.g. MRT end-to-end) is never capped. There is only one
+ * tier (no separate 5k branded-card cap; that Rp 5k figure belongs to the
+ * JakLingko *app* QR route-ticket, a different product we don't model). Any
+ * qualifying bank e-money (Flazz / e-Money / Brizzi / TapCash / JakCard) or
+ * JakLingko card gets this once activated. See JAKLINGKO_JOURNEY_CAP.
+ * QRIS_TAP is the tap-to-pay QRIS flow — NOT integrated (no cap), and notably it
+ * can't apply the discounted Dukuh Atas surcharge, so it pays the full
+ * pass-through (see SURCHARGED_CORRIDORS).
+ * Verified 2026-07-18 against jaklingkoindonesia.co.id/faq-tarif-integrasi.
  */
 export const PAYMENT_METHODS = {
   STORED_VALUE: 'STORED_VALUE',

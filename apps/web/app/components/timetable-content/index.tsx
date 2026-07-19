@@ -229,7 +229,7 @@ const TimetableContent = memo(function TimetableContent({ operator, code }: Prop
                   className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-slate-50 cursor-pointer text-left"
                   aria-pressed={isActive}
                 >
-                  <LineRoundel code={line.lineCode} color={line.colorCode} dimmed={!isActive} />
+                  <LineRoundel code={line.lineCode} color={line.colorCode} operator={operator} dimmed={!isActive} />
                   <span className={`text-sm font-semibold ${isActive ? 'text-slate-900' : 'text-slate-400 line-through'}`}>
                     {line.name}
                   </span>
@@ -253,7 +253,7 @@ const TimetableContent = memo(function TimetableContent({ operator, code }: Prop
                 <section key={section.key} aria-label={`Keberangkatan ${section.lineName} menuju ${section.label.join(', ')}`}>
                   {/* Sticks below the page header (p-8/pb-4 + two text lines = 6rem). */}
                   <header className="sticky top-24 z-[9] flex items-center gap-3 px-4 py-2.5 bg-white/90 backdrop-blur border-b border-slate-100">
-                    <LineRoundel code={section.lineCode} color={section.lineColor} />
+                    <LineRoundel code={section.lineCode} color={section.lineColor} operator={operator} />
                     <span className="flex-grow min-w-0 text-sm font-bold text-slate-900 truncate">
                       {'menuju '}
                       {section.label.join(' / ')}

@@ -1,0 +1,12 @@
+UPDATE transfers SET dataType = 'INTERNAL', toStationId = 'TJ-H00047P', toStationData = NULL, distance = 310, updatedAt = CURRENT_TIMESTAMP WHERE id = 'T-KCI-SUD-XTJ1';
+UPDATE transfers SET dataType = 'INTERNAL', toStationId = 'TJ-H00283P', toStationData = NULL, distance = 310, updatedAt = CURRENT_TIMESTAMP WHERE id = 'T-KCI-SUD-XTJ2';
+UPDATE transfers SET dataType = 'INTERNAL', toStationId = 'TJ-B07663P', toStationData = NULL, distance = 70, updatedAt = CURRENT_TIMESTAMP WHERE id = 'T-KCI-SUD-XTJ3';
+UPDATE transfers SET dataType = 'INTERNAL', toStationId = 'TJ-H00063S', toStationData = NULL, distance = distance, updatedAt = CURRENT_TIMESTAMP WHERE id = 'T-KCI-CW-XTJ1';
+UPDATE transfers SET dataType = 'INTERNAL', toStationId = 'TJ-H00064S', toStationData = NULL, distance = distance, updatedAt = CURRENT_TIMESTAMP WHERE id = 'T-LRJTBDB-CKK-XTJ1';
+UPDATE transfers SET dataType = 'INTERNAL', toStationId = 'TJ-H00276P', toStationData = NULL, distance = 170, updatedAt = CURRENT_TIMESTAMP WHERE id = 'T-LRTJBDB-CWG-XTJ1';
+UPDATE transfers SET dataType = 'INTERNAL', toStationId = 'TJ-H00062S', toStationData = NULL, distance = distance, updatedAt = CURRENT_TIMESTAMP WHERE id = 'T-LRTJBDB-CIL-XTJ1';
+UPDATE transfers SET dataType = 'INTERNAL', toStationId = 'TJ-H00198S', toStationData = NULL, distance = distance, updatedAt = CURRENT_TIMESTAMP WHERE id = 'T-LRTJBDB-PAN-XTJ1';
+UPDATE transfers SET dataType = 'INTERNAL', toStationId = 'TJ-H00043P', toStationData = NULL, distance = 80, updatedAt = CURRENT_TIMESTAMP WHERE id = 'T-LRTJBDB-KUA-XTJ1';
+UPDATE transfers SET dataType = 'INTERNAL', toStationId = 'TJ-H00069P', toStationData = NULL, distance = 80, updatedAt = CURRENT_TIMESTAMP WHERE id = 'T-LRTJBDB-RAS-XTJ1';
+UPDATE transfers SET dataType = 'INTERNAL', toStationId = 'TJ-H00215P', toStationData = NULL, distance = distance, updatedAt = CURRENT_TIMESTAMP WHERE id = 'T-LRTJBDB-SET-XTJ1';
+UPDATE transfers SET dataType = 'INTERNAL', toStationId = 'TJ-H00014P', toStationData = NULL, distance = 240, updatedAt = CURRENT_TIMESTAMP WHERE id = 'T-MRTJ-BLM-XTJ1';
