@@ -41,15 +41,17 @@ export function tryGetFormattedName(code: string, stationName: string) {
   const wellKnownName = WELL_KNOWN_STATION_NAMES[code]
   if (wellKnownName) return wellKnownName
 
-  // Return station name with capitalized each word name
-  return stationName.split(/[ ]/g)
+  // Return station name with capitalized each word name. Split on runs of
+  // whitespace and drop empty tokens so leading/trailing/double spaces don't
+  // leak literal "undefined" fragments.
+  return stationName.split(/\s+/g)
+    .filter(word => word.length > 0)
     .map((word) => {
       if (word === 'UNIV.') return 'Universitas'
       return `${word[0]}${word.toLowerCase().substring(1)}`
     }
     )
     .join(' ')
-    .trim()
 }
 
 export function getLineInfoFromAPIName(lineName: string) {

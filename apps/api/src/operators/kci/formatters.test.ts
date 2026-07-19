@@ -23,12 +23,15 @@ describe('tryGetFormattedName', () => {
     expect(tryGetFormattedName('XXX', 'A')).toBe('A')
   })
 
-  it('emits literal "undefined" fragments for empty/whitespace input', () => {
-    // BUG: word[0] is undefined for an empty token, producing the string
-    // "undefined". Pinning current behavior — empty and double-spaced names
-    // should not leak the literal word "undefined".
-    expect(tryGetFormattedName('XXX', '')).toBe('undefined')
-    expect(tryGetFormattedName('XXX', 'TANAH  ABANG')).toBe('Tanah undefined Abang')
+  it('does not leak literal "undefined" for empty/whitespace input', () => {
+    // Empty tokens (from empty input or double spaces) must be dropped, not
+    // rendered as the literal word "undefined".
+    expect(tryGetFormattedName('XXX', '')).toBe('')
+    expect(tryGetFormattedName('XXX', 'TANAH  ABANG')).toBe('Tanah Abang')
+  })
+
+  it('trims surrounding whitespace without leaking fragments', () => {
+    expect(tryGetFormattedName('XXX', ' TANAH ABANG ')).toBe('Tanah Abang')
   })
 })
 

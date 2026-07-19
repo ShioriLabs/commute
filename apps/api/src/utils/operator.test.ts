@@ -25,11 +25,11 @@ describe('getOperatorByCode', () => {
     expect(getOperatorByCode('kci')).toBe(null)
   })
 
-  it('leaks inherited Object.prototype members via bracket access', () => {
-    // BUG: OPERATORS[code] uses bracket access on a plain object, so prototype
-    // keys resolve to inherited functions instead of null. Pinning current
-    // behavior — 'toString'/'constructor' should arguably return null.
-    expect(typeof getOperatorByCode('toString')).toBe('function')
-    expect(typeof getOperatorByCode('constructor')).toBe('function')
+  it('returns null for inherited Object.prototype keys', () => {
+    // Bracket access must not resolve prototype members like 'toString' or
+    // 'constructor' to inherited functions — these are not operators.
+    expect(getOperatorByCode('toString')).toBe(null)
+    expect(getOperatorByCode('constructor')).toBe(null)
+    expect(getOperatorByCode('__proto__')).toBe(null)
   })
 })
