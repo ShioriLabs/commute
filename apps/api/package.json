@@ -4,6 +4,9 @@
   "description": "",
   "scripts": {
     "dev": "wrangler dev",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
     "migration:up": "wrangler d1 migrations apply commute",
@@ -30,6 +33,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250610.0",
     "@types/node": "^20.17.30",
+    "@vitest/coverage-v8": "^4.1.10",
     "tsc-alias": "^1.8.9",
     "tsx": "^4.10.0",
     "vitest": "^4.1.9",
