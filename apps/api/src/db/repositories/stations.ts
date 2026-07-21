@@ -1,7 +1,7 @@
 import { Operator } from '@commute/constants'
 import { db } from 'db'
 import { NewSchedule } from 'db/schemas/schedules'
-import { Amenity, NewStation, UpdatingStation } from 'db/schemas/stations'
+import { Amenity, NewStation, Station, UpdatingStation } from 'db/schemas/stations'
 import { sql } from 'kysely'
 import { Line } from 'models/line'
 import { Repository } from 'models/repository'
@@ -9,6 +9,30 @@ import { chunkArray } from 'utils/chunk'
 import { getLineByOperator } from 'utils/line'
 import { mapify } from 'utils/mapify'
 import { getOperatorByCode } from 'utils/operator'
+
+interface ExtendedStation extends Omit<Station, 'operator' | 'amenities' | 'searchable'> {
+  operator: NonNullable<ReturnType<typeof getOperatorByCode>>
+  amenities: Amenity[]
+  searchable: boolean
+  lines: Line[]
+}
+
+function mapStationRow<T extends { operator: Operator, lines: unknown, amenities: unknown, searchable: number }>(station: T) {
+  const operator = getOperatorByCode(station.operator)
+  if (operator === null) return null
+
+  const lines: Set<Line> = new Set()
+  for (const lineCode of ((station.lines as string | null) ?? '').split(',')) {
+    if (lineCode === '' || lineCode === 'NUL') continue
+    const line = getLineByOperator(station.operator, lineCode)
+    if (line) lines.add(line)
+  }
+
+  const amenities = station.amenities ? JSON.parse(station.amenities as unknown as string) as Amenity[] : []
+
+  const result: ExtendedStation = { ...station, amenities, operator, searchable: !!station.searchable, lines: Array.from(lines) }
+  return result
+}
 
 export class StationRepository extends Repository {
   private d1: D1Database
@@ -18,201 +42,57 @@ export class StationRepository extends Repository {
     this.d1 = d1
   }
 
-  async getAll(page?: number, limit?: number) {
-    const linesSubquery = db(this.d1)
+  private stationsQuery(stationFilter?: string | string[]) {
+    let linesSubquery = db(this.d1)
       .selectFrom('stationLines')
       .select(({ fn }) => [
         fn('group_concat', [sql`DISTINCT stationLines.lineCode`]).as('lines'),
         'stationLines.stationId'
       ])
       .where('stationLines.lineCode', 'is not', 'NUL')
-      .groupBy('stationLines.stationId')
 
-    let query = db(this.d1)
+    if (stationFilter) {
+      const ids = Array.isArray(stationFilter) ? stationFilter : [stationFilter]
+      linesSubquery = linesSubquery.where('stationLines.stationId', 'in', ids)
+    }
+
+    return db(this.d1)
       .selectFrom('stations')
-      .leftJoin(linesSubquery.as('linesSubquery'), 'linesSubquery.stationId', 'stations.id')
+      .leftJoin(linesSubquery.groupBy('stationLines.stationId').as('linesSubquery'), 'linesSubquery.stationId', 'stations.id')
       .selectAll('stations')
       .select(['linesSubquery.lines'])
-      // Topology-only stops (TJ feeders) are routable but not listed; they stay
-      // reachable via getById/getByIds (detail pages, transfers, fare legs).
-      .where('stations.searchable', '=', 1)
+  }
 
+  async getAll(page?: number, limit?: number) {
+    // Topology-only stops (TJ feeders) are routable but not listed; they stay
+    // reachable via getById/getByIds (detail pages, transfers, fare legs).
+    let query = this.stationsQuery().where('stations.searchable', '=', 1)
     if (page && limit) {
       query = query.limit(limit).offset((page - 1) * limit)
     }
 
     const stations = await query.execute()
-    const mappedStations = []
-
-    for (const station of stations) {
-      const operator = getOperatorByCode(station.operator)
-      if (operator === null) continue
-
-      const lines: Set<Line> = new Set()
-      if (station.lines !== null) {
-        for (const lineCode of (station.lines as string).split(',')) {
-          if (lineCode === 'NUL') continue
-          const line = getLineByOperator(station.operator, lineCode)
-          if (line === null) continue
-          lines.add(line)
-        }
-      }
-
-      const amenities = station.amenities ? JSON.parse(station.amenities as unknown as string) as Amenity[] : []
-      mappedStations.push({
-        ...station,
-        amenities,
-        operator,
-        searchable: !!station.searchable,
-        lines: Array.from(lines)
-      })
-    }
-
-    return mappedStations
+    return stations.map(station => mapStationRow(station)).filter((station): station is NonNullable<typeof station> => station !== null)
   }
 
   async getAllByOperator(operator: Operator, page?: number, limit?: number) {
-    const linesSubquery = db(this.d1)
-      .selectFrom('stationLines')
-      .select(({ fn }) => [
-        fn('group_concat', [sql`DISTINCT stationLines.lineCode`]).as('lines'),
-        'stationLines.stationId'
-      ])
-      .where('stationLines.lineCode', 'is not', 'NUL')
-      .groupBy('stationLines.stationId')
-
-    let query = db(this.d1)
-      .selectFrom('stations')
-      .leftJoin(linesSubquery.as('linesSubquery'), 'linesSubquery.stationId', 'stations.id')
-      .selectAll('stations')
-      .select(['linesSubquery.lines'])
-      .where('operator', '=', operator)
-      .where('stations.searchable', '=', 1)
-
+    let query = this.stationsQuery().where('operator', '=', operator).where('stations.searchable', '=', 1)
     if (page && limit) {
       query = query.limit(limit).offset((page - 1) * limit)
     }
 
     const stations = await query.execute()
-    const mappedStations = []
-
-    for (const station of stations) {
-      const operator = getOperatorByCode(station.operator)
-      if (operator === null) continue
-
-      const lines: Set<Line> = new Set()
-      if (station.lines !== null) {
-        for (const lineCode of (station.lines as string).split(',')) {
-          if (lineCode === 'NUL') continue
-          const line = getLineByOperator(station.operator, lineCode)
-          if (line === null) continue
-          lines.add(line)
-        }
-      }
-
-      const amenities = station.amenities ? JSON.parse(station.amenities as unknown as string) as Amenity[] : []
-      mappedStations.push({
-        ...station,
-        amenities,
-        operator,
-        searchable: !!station.searchable,
-        lines: Array.from(lines)
-      })
-    }
-
-    return mappedStations
+    return stations.map(station => mapStationRow(station)).filter((station): station is NonNullable<typeof station> => station !== null)
   }
 
   async getById(id: string) {
-    const linesSubquery = db(this.d1)
-      .selectFrom('stationLines')
-      .select(({ fn }) => [
-        fn('group_concat', [sql`DISTINCT stationLines.lineCode`]).as('lines'),
-        'stationLines.stationId'
-      ])
-      .where('stationLines.lineCode', 'is not', 'NUL')
-      .where('stationLines.stationId', '=', id)
-      .groupBy('stationLines.stationId')
-
-    const station = await db(this.d1)
-      .selectFrom('stations')
-      .leftJoin(linesSubquery.as('linesSubquery'), 'linesSubquery.stationId', 'stations.id')
-      .selectAll('stations')
-      .select(['linesSubquery.lines'])
-      .where('id', '=', id)
-      .executeTakeFirst()
-
-    if (!station) return null
-    const operator = getOperatorByCode(station.operator)
-    if (operator === null) return null
-
-    const lines: Set<Line> = new Set()
-    if (station.lines !== null) {
-      for (const lineCode of (station.lines as string).split(',')) {
-        if (lineCode === 'NUL') continue
-        const line = getLineByOperator(station.operator, lineCode)
-        if (line === null) continue
-        lines.add(line)
-      }
-    }
-
-    const amenities = station.amenities ? JSON.parse(station.amenities as unknown as string) as Amenity[] : []
-
-    return {
-      ...station,
-      amenities,
-      operator,
-      searchable: !!station.searchable,
-      lines: Array.from(lines)
-    }
+    const station = await this.stationsQuery(id).where('id', '=', id).executeTakeFirst()
+    return station ? mapStationRow(station) : null
   }
 
   async getByIds(ids: string[]) {
-    const linesSubquery = db(this.d1)
-      .selectFrom('stationLines')
-      .select(({ fn }) => [
-        fn('group_concat', [sql`DISTINCT stationLines.lineCode`]).as('lines'),
-        'stationLines.stationId'
-      ])
-      .where('stationLines.lineCode', 'is not', 'NUL')
-      .where('stationLines.stationId', 'in', ids)
-      .groupBy('stationLines.stationId')
-
-    const query = db(this.d1)
-      .selectFrom('stations')
-      .leftJoin(linesSubquery.as('linesSubquery'), 'linesSubquery.stationId', 'stations.id')
-      .selectAll('stations')
-      .select(['linesSubquery.lines'])
-      .where('id', 'in', ids)
-
-    const stations = await query.execute()
-    const mappedStations = []
-
-    for (const station of stations) {
-      const operator = getOperatorByCode(station.operator)
-      if (operator === null) continue
-
-      const lines: Set<Line> = new Set()
-      if (station.lines !== null) {
-        for (const lineCode of (station.lines as string).split(',')) {
-          if (lineCode === 'NUL') continue
-          const line = getLineByOperator(station.operator, lineCode)
-          if (line === null) continue
-          lines.add(line)
-        }
-      }
-
-      const amenities = station.amenities ? JSON.parse(station.amenities as unknown as string) as Amenity[] : []
-      mappedStations.push({
-        ...station,
-        amenities,
-        operator,
-        searchable: !!station.searchable,
-        lines: Array.from(lines)
-      })
-    }
-
-    return mappedStations
+    const stations = await this.stationsQuery(ids).where('id', 'in', ids).execute()
+    return stations.map(station => mapStationRow(station)).filter((station): station is NonNullable<typeof station> => station !== null)
   }
 
   async checkIfExists(id: string, operator?: Operator) {

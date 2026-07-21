@@ -15,12 +15,7 @@ export class KVRepository {
       return null
     }
 
-    try {
-      return value
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (error) {
-      return null
-    }
+    return value
   }
 
   async set<T>(id: string, data: T, ttl = 60 * 60 * 20): Promise<T> {
