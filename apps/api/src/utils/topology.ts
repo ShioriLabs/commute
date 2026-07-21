@@ -8,11 +8,11 @@ export function findTopology(operator: Operator, lineCode: string): LineTopology
 
 // Every stop on the line (trunk + branches) as DB station ids.
 export function collectStationIds(topology: LineTopology): string[] {
-  const ids = topology.path.map(stop => `${topology.operator}-${stop.station}`)
-  for (const branch of topology.branches ?? []) {
-    ids.push(...branch.path.map(stop => `${topology.operator}-${stop.station}`))
-  }
-  return ids
+  const toId = (stop: Stop) => `${topology.operator}-${stop.station}`
+  return [
+    ...topology.path.map(toId),
+    ...(topology.branches ?? []).flatMap(branch => branch.path.map(toId))
+  ]
 }
 
 // Minimal shape needed from StationRepository.getByIds results.
@@ -42,11 +42,12 @@ export function buildLineDetail(
   stationsById: Map<string, HydratedStation>
 ): LineDetail {
   const toDetailStation = (stop: Stop): LineDetailStation | null => {
-    const station = stationsById.get(`${topology.operator}-${stop.station}`)
+    const id = `${topology.operator}-${stop.station}`
+    const station = stationsById.get(id)
     if (!station) {
       // Topology drift (e.g. a future stop not yet in the DB) must not take
       // the whole line page down.
-      console.warn(`[lines] station ${topology.operator}-${stop.station} in topology but not in DB; skipping`)
+      console.warn(`[lines] station ${id} in topology but not in DB; skipping`)
       return null
     }
     const otherLines = station.lines.filter(l => l.lineCode !== line.lineCode)

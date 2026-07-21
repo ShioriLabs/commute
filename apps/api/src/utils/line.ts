@@ -24,5 +24,5 @@ for (const [operator, lines] of Object.entries(ALL_LINES)) {
 }
 
 export function getLineByOperator(operator: Operator, lineCode: string) {
-  return LINE_LOOKUP_TABLE.get(`${operator}:${lineCode}`) || null
+  return LINE_LOOKUP_TABLE.get(`${operator}:${lineCode}`) ?? null
 }

@@ -40,7 +40,7 @@ export function findInterliningLineCodes(operator: Operator, stationCodes: strin
   return TOPOLOGY
     .filter((topology) => {
       if (topology.operator !== operator) return false
-      return matches(topology.path) || (topology.pathReverse ? matches(topology.pathReverse) : false)
+      return matches(topology.path) || matches(topology.pathReverse ?? [])
     })
     .map(topology => topology.lineCode)
 }

@@ -46,11 +46,7 @@ export function tryGetFormattedName(code: string, stationName: string) {
   // leak literal "undefined" fragments.
   return stationName.split(/\s+/g)
     .filter(word => word.length > 0)
-    .map((word) => {
-      if (word === 'UNIV.') return 'Universitas'
-      return `${word[0]}${word.toLowerCase().substring(1)}`
-    }
-    )
+    .map(word => word === 'UNIV.' ? 'Universitas' : `${word[0]}${word.toLowerCase().substring(1)}`)
     .join(' ')
 }
 
