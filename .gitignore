@@ -140,3 +140,7 @@ apps/api/src/operators/lrtjbdb/output.sql
 # Large (~20MB extracted); re-extract from the provided zip when regenerating.
 apps/api/src/db/scripts/file_gtfs/
 file_gtfs.zip
+
+# TransJakarta poster scans + transcriptions — local scratch for authoring the
+# TJ topology overrides; the data lives in topology.tj.overrides.ts + its test.
+refresh-images/
