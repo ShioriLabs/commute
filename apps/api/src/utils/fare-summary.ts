@@ -8,7 +8,10 @@ import type { RideLeg, RouteLeg } from 'utils/router'
  * nothing. Most transfers are free walks, but a few cross a surcharged corridor
  * (e.g. Dukuh Atas via KCI Sudirman) and carry a passerby surcharge — those are
  * collected in `surchargedTransfers` and added to the total on top of the ride
- * segments.
+ * segments. Exception: a `noTap` transfer (e.g. the Simpang Kuningan <->
+ * Underpass Kuningan busway underpass) stays inside one paid zone with no gate
+ * on either side, so it does NOT end the run — the rides before and after it
+ * merge into one priced segment, same as if the walk weren't there.
  */
 export interface FareSegment {
   operator: string
@@ -83,7 +86,7 @@ export function summarizeFares(legs: RouteLeg[], context: FareContext): FareSumm
     const leg = legs[i]!
     if (leg.type === 'TRANSFER') {
       transferCount++
-      previousWasRide = false
+      if (!leg.noTap) previousWasRide = false
       const surcharge = calculateTransferFare(leg.fromStationId, leg.toStationId, context, {
         prev: legs[i - 1],
         next: legs[i + 1]

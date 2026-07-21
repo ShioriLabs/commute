@@ -9,8 +9,8 @@ const ctx: FareContext = { paymentMethod: 'STORED_VALUE', departureAt: new Date(
 
 const ride = (operator: string, lineCode: string, from: string, to: string, distanceM: number): RouteLeg =>
   ({ type: 'RIDE', operator, lineCode, fromStationId: from, toStationId: to, stationIds: [from, to], distanceM })
-const walk = (from: string, to: string, distanceM = 300): RouteLeg =>
-  ({ type: 'TRANSFER', fromStationId: from, toStationId: to, distanceM })
+const walk = (from: string, to: string, distanceM = 300, noTap = false): RouteLeg =>
+  ({ type: 'TRANSFER', fromStationId: from, toStationId: to, distanceM, noTap })
 
 describe('summarizeFares', () => {
   it('one fare for a same-operator trip across a line change', () => {
@@ -33,6 +33,15 @@ describe('summarizeFares', () => {
     expect(s.segments.map(x => x.fare)).toEqual([3000, 3000])
     expect(s.totalFare).toBe(6000)
     expect(s.totalDistanceM).toBe(23200)
+  })
+
+  it('a noTap walk does not start a new fare — same-operator legs price as one run', () => {
+    // Simpang Kuningan <-> Underpass Kuningan shape: TJ ride, gateless underpass
+    // walk, TJ ride. Should price as a single flat TJ fare, not two.
+    const s = summarizeFares([ride('TJ', '9', 'TJ-H00100P', 'TJ-H00113P', 2000), walk('TJ-H00113P', 'TJ-H00115P', 304, true), ride('TJ', '6', 'TJ-H00115P', 'TJ-H00120P', 2000)], ctx)
+    expect(s.segments).toHaveLength(1)
+    expect(s.totalFare).toBe(3500)
+    expect(s.transferCount).toBe(1)
   })
 
   it('null segment fare nulls the total', () => {
