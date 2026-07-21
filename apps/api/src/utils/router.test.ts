@@ -62,6 +62,20 @@ describe('findRoute', () => {
   })
 })
 
+describe('findRoute — noTap transfers', () => {
+  it('carries noTap through onto the TRANSFER leg when the transfer row is marked noTap', () => {
+    const noTapTransfers = [{ fromStationId: 'KCI-D', toStationId: 'MRTJ-P', distance: 300, noTap: 1 }]
+    const noTapGraph = buildGraph(edges, noTapTransfers)
+    const legs = findRoute(noTapGraph, 'KCI-A', 'MRTJ-Q')!
+    expect(legs[1]).toMatchObject({ type: 'TRANSFER', noTap: true })
+  })
+
+  it('defaults noTap to false for an ordinary transfer row', () => {
+    const legs = findRoute(graph, 'KCI-A', 'MRTJ-Q')!
+    expect(legs[1]).toMatchObject({ type: 'TRANSFER', noTap: false })
+  })
+})
+
 // A single directed edge row (one travel direction only).
 const oneWay = (lineCode: string, from: string, to: string, distance = 1000) =>
   ({ lineCode, fromStationId: from, toStationId: to, distance })

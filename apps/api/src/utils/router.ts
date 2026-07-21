@@ -23,6 +23,7 @@ interface GraphEdge {
   to: string
   distanceM: number
   lineCode: string | null // null = walk transfer
+  noTap?: boolean // walk transfers only: stays inside one paid zone, no fare gate
 }
 
 /*
@@ -62,13 +63,17 @@ export interface TransferLeg {
   fromStationId: string
   toStationId: string
   distanceM: number
+  // Stays inside one paid zone (no fare gate on either side), e.g. a busway
+  // underpass between two halte. Consumed by fare-summary to skip the usual
+  // tap-out boundary this leg would otherwise create.
+  noTap: boolean
 }
 
 export type RouteLeg = RideLeg | TransferLeg
 
 export function buildGraph(
   edges: Pick<Edge, 'lineCode' | 'fromStationId' | 'toStationId' | 'distance'>[],
-  transfers: Pick<Transfer, 'fromStationId' | 'toStationId' | 'distance'>[],
+  transfers: (Pick<Transfer, 'fromStationId' | 'toStationId' | 'distance'> & Partial<Pick<Transfer, 'noTap'>>)[],
   restrictions: EndpointRestriction[] = []
 ): RouteGraph {
   const adjacency = new Map<string, GraphEdge[]>()
@@ -81,9 +86,10 @@ export function buildGraph(
   }
   for (const t of transfers) {
     if (!t.toStationId) continue
+    const noTap = Boolean(t.noTap)
     // rows may exist in one direction only; make walking symmetric
-    push(t.fromStationId, { to: t.toStationId, distanceM: t.distance, lineCode: null })
-    push(t.toStationId, { to: t.fromStationId, distanceM: t.distance, lineCode: null })
+    push(t.fromStationId, { to: t.toStationId, distanceM: t.distance, lineCode: null, noTap })
+    push(t.toStationId, { to: t.fromStationId, distanceM: t.distance, lineCode: null, noTap })
   }
   const restrictionMap = new Map(restrictions.map(r => [r.stationId, r]))
   return { adjacency, restrictions: restrictionMap }
@@ -151,7 +157,7 @@ export function findRoute(graph: RouteGraph, fromStationId: string, toStationId:
   for (const hop of hops) {
     const last = legs[legs.length - 1]
     if (hop.edge.lineCode === null) {
-      legs.push({ type: 'TRANSFER', fromStationId: hop.from, toStationId: hop.to, distanceM: hop.edge.distanceM })
+      legs.push({ type: 'TRANSFER', fromStationId: hop.from, toStationId: hop.to, distanceM: hop.edge.distanceM, noTap: hop.edge.noTap ?? false })
     } else if (last && last.type === 'RIDE' && last.lineCode === hop.edge.lineCode) {
       last.toStationId = hop.to
       last.stationIds.push(hop.to)

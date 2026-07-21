@@ -153,7 +153,7 @@ describe('calculateTransferFare — Sudirman passerby surcharge', () => {
   const rideLeg = (operator: string, from: string, to: string): RouteLeg =>
     ({ type: 'RIDE', operator, lineCode: 'X', fromStationId: from, toStationId: to, stationIds: [from, to], distanceM: 1000 })
   const walkLeg = (from: string, to: string): RouteLeg =>
-    ({ type: 'TRANSFER', fromStationId: from, toStationId: to, distanceM: 300 })
+    ({ type: 'TRANSFER', fromStationId: from, toStationId: to, distanceM: 300, noTap: false })
 
   it('drops the surcharge when a KCI ride arrives at KCI-SUD before the corridor (Kranji shape)', () => {
     // [KCI ride ->KCI-SUD] [corridor KCI-SUD->LRT DKA]: transfer.from is the gate, prev is the KCI ride.
@@ -191,7 +191,7 @@ describe('resolveCorridorMerges', () => {
   const ride = (operator: string, from: string, to: string): RouteLeg =>
     ({ type: 'RIDE', operator, lineCode: 'X', fromStationId: from, toStationId: to, stationIds: [from, to], distanceM: 5000 })
   const walk = (from: string, to: string, distanceM: number): RouteLeg =>
-    ({ type: 'TRANSFER', fromStationId: from, toStationId: to, distanceM })
+    ({ type: 'TRANSFER', fromStationId: from, toStationId: to, distanceM, noTap: false })
 
   it('merges a surcharged corridor + chained free walk (Setiabudi → GI shape)', () => {
     // LRT ride → [corridor LRTJBDB-DKA→KCI-SUD, Rp1] → [free walk KCI-SUD→MRTJ-DKA] → MRT ride
