@@ -60,6 +60,32 @@ describe('findRoute', () => {
     expect(legs).toHaveLength(1)
     expect(legs[0]).toMatchObject({ type: 'RIDE', distanceM: 3000, stationIds: ['TJ-A', 'TJ-B', 'TJ-C', 'TJ-D'] })
   })
+
+  it('prefers a one-seat ride plus a short walk over a shorter-on-paper multi-transfer path (Kuningan Madya shape)', () => {
+    // One-seat-plus-walk option: ride line M for 2600m, walk 300m, ride line N for
+    // 6800m. Total 9700m real distance, one line change (the walk resets it, so
+    // boarding N afterward is penalty-free).
+    const oneSeatPlusWalk = [
+      ...edge('M', 'TJ-ORIGIN', 'TJ-M1', 800), ...edge('M', 'TJ-M1', 'TJ-M2', 900), ...edge('M', 'TJ-M2', 'TJ-WALKA', 900),
+      ...edge('N', 'TJ-WALKB', 'TJ-DEST', 6800)
+    ]
+    const walkTransfer = [{ fromStationId: 'TJ-WALKA', toStationId: 'TJ-WALKB', distance: 300 }]
+    // Multi-transfer option: five separate lines, shorter in raw meters (8950m)
+    // but four mid-ride line changes — real-world worse despite the shorter tape
+    // measure, same shape as Kuningan Madya -> Tanjung Duren Arah Barat.
+    const multiTransfer = [
+      ...edge('P', 'TJ-ORIGIN', 'TJ-P1', 1800),
+      ...edge('Q', 'TJ-P1', 'TJ-Q1', 1900),
+      ...edge('R', 'TJ-Q1', 'TJ-R1', 1900),
+      ...edge('S', 'TJ-R1', 'TJ-S1', 1750),
+      ...edge('U', 'TJ-S1', 'TJ-DEST', 1600)
+    ]
+    const graph = buildGraph([...oneSeatPlusWalk, ...multiTransfer], walkTransfer)
+    const legs = findRoute(graph, 'TJ-ORIGIN', 'TJ-DEST')!
+    expect(legs.map(l => l.type)).toEqual(['RIDE', 'TRANSFER', 'RIDE'])
+    expect((legs[0] as { lineCode: string }).lineCode).toBe('M')
+    expect((legs[2] as { lineCode: string }).lineCode).toBe('N')
+  })
 })
 
 describe('findRoute — noTap transfers', () => {

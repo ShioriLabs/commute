@@ -6,18 +6,23 @@ import type { Transfer } from 'db/schemas/transfers'
  * carry an extra weight penalty so the router only hops networks when it
  * genuinely helps; the penalty is never included in reported distances.
  */
-export const TRANSFER_PENALTY_M = 2500
+export const TRANSFER_PENALTY_M = 800
 
 /*
  * Routing-only bias against changing service line mid-ride. TransJakarta corridors
  * heavily overlap (13 / 13E / L13E share a trunk; express variants skip stops),
  * so plain per-hop cheapest-edge Dijkstra ping-pongs between sibling codes and
- * produces a path no single line actually serves. This small penalty makes the
- * router prefer staying on one line, so a one-seat ride stays one leg. Kept well
- * below TRANSFER_PENALTY_M (a real tap-out must still cost more than a same-trunk
- * line stay) and, like the transfer penalty, never enters reported distances.
+ * produces a path no single line actually serves. This penalty makes the router
+ * prefer staying on one line, so a one-seat ride stays one leg — and, sized well
+ * above a single hop, also discourages routing through many short same-vehicle-type
+ * transfers just to shave off a few hundred meters (each bus change costs riders
+ * real wait/hassle a flat distance comparison ignores). Deliberately kept ABOVE
+ * TRANSFER_PENALTY_M: boarding a different vehicle is worse than a short walk
+ * between two stops in the same paid zone (e.g. a busway underpass), so a real
+ * walk should win over an extra bus-to-bus change when both are short. Neither
+ * penalty enters reported distances.
  */
-export const LINE_CHANGE_PENALTY_M = 500
+export const LINE_CHANGE_PENALTY_M = 1200
 
 interface GraphEdge {
   to: string
