@@ -35,13 +35,14 @@ export interface LineGraph {
 export function buildLineGraph(topology: LineTopology): LineGraph {
   const adjacency = new Map<string, string[]>()
 
+  const link = (from: string, to: string) => {
+    const neighbors = adjacency.get(from) ?? []
+    if (!neighbors.includes(to)) neighbors.push(to)
+    adjacency.set(from, neighbors)
+  }
   const addEdge = (a: string, b: string) => {
-    const fromA = adjacency.get(a) ?? []
-    if (!fromA.includes(b)) fromA.push(b)
-    adjacency.set(a, fromA)
-    const fromB = adjacency.get(b) ?? []
-    if (!fromB.includes(a)) fromB.push(a)
-    adjacency.set(b, fromB)
+    link(a, b)
+    link(b, a)
   }
 
   for (let i = 0; i < topology.path.length - 1; i++) {
@@ -55,10 +56,7 @@ export function buildLineGraph(topology: LineTopology): LineGraph {
     }
   }
 
-  const degree = new Map<string, number>()
-  for (const [station, neighbors] of adjacency) {
-    degree.set(station, neighbors.length)
-  }
+  const degree = new Map([...adjacency].map(([station, neighbors]) => [station, neighbors.length]))
   return { adjacency, degree }
 }
 
@@ -169,11 +167,7 @@ export function buildLineMembershipCount(operator: Operator): Map<string, number
       lineCodesByStation.set(stop.station, lineCodes)
     }
   }
-  const counts = new Map<string, number>()
-  for (const [station, lineCodes] of lineCodesByStation) {
-    counts.set(station, lineCodes.size)
-  }
-  return counts
+  return new Map([...lineCodesByStation].map(([station, lineCodes]) => [station, lineCodes.size]))
 }
 
 export interface BoundForEntry {
@@ -235,12 +229,7 @@ export function groupDirections(params: {
       synthetic.push(syntheticGroup(entry))
       return
     }
-    let canonicalVia = ''
-    if (discriminators) {
-      const interior = path.slice(1)
-      if (interior.includes(discriminators[0])) canonicalVia = discriminators[0]
-      else if (interior.includes(discriminators[1])) canonicalVia = discriminators[1]
-    }
+    const canonicalVia = discriminators?.find(d => path.slice(1).includes(d)) ?? ''
     const key = `${path[1]}:${canonicalVia}`
     const group = walkedGroups.get(key) ?? []
     group.push({ ...entry, path, proxied })

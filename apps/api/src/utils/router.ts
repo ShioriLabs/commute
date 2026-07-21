@@ -85,8 +85,7 @@ export function buildGraph(
     push(t.fromStationId, { to: t.toStationId, distanceM: t.distance, lineCode: null })
     push(t.toStationId, { to: t.fromStationId, distanceM: t.distance, lineCode: null })
   }
-  const restrictionMap = new Map<string, EndpointRestriction>()
-  for (const r of restrictions) restrictionMap.set(r.stationId, r)
+  const restrictionMap = new Map(restrictions.map(r => [r.stationId, r]))
   return { adjacency, restrictions: restrictionMap }
 }
 

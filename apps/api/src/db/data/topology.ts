@@ -1,5 +1,6 @@
 import type { Operator } from '@commute/constants'
 import { TJ_TOPOLOGY } from './topology.tj'
+import { TJ_TOPOLOGY_OVERRIDES } from './topology.tj.overrides'
 
 /*
  * Line topology — the single source of truth for the network graph.
@@ -84,6 +85,14 @@ export const BOGUS_MEMBERSHIPS: { operator: Operator, station: string, lineCode:
 export const ENDPOINT_RESTRICTIONS: { operator: Operator, station: string, lineCode: string, forbiddenNeighbor: string }[] = [
   { operator: 'KCI', station: 'PSE', lineCode: 'C', forbiddenNeighbor: 'GST' }
 ]
+
+// TJ poster corrections (topology.tj.overrides.ts) replace the same-lineCode
+// GTFS-derived entries from topology.tj.ts, matched by lineCode.
+const TJ_MERGED: LineTopology[] = (() => {
+  const byCode = new Map(TJ_TOPOLOGY.map(t => [t.lineCode, t]))
+  for (const o of TJ_TOPOLOGY_OVERRIDES) byCode.set(o.lineCode, o)
+  return [...byCode.values()]
+})()
 
 export const TOPOLOGY: LineTopology[] = [
   // ── KCI Cikarang (loop / lollipop) ───────────────────────────────────────
@@ -332,5 +341,5 @@ export const TOPOLOGY: LineTopology[] = [
     ]
   },
   // ── TransJakarta BRT corridors (generated; see topology.tj.ts) ────────────
-  ...TJ_TOPOLOGY
+  ...TJ_MERGED
 ]
