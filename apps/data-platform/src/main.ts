@@ -1,11 +1,8 @@
 import "./style.css";
-import { initDotGrid } from "./dotgrid";
-import { initThemeToggle } from "./theme";
+import { initNetworkCanvas } from "./network-canvas";
 
-const canvas = document.querySelector<HTMLCanvasElement>("#hero-dot-grid");
-if (canvas) initDotGrid(canvas);
-
-initThemeToggle();
+const canvas = document.querySelector<HTMLCanvasElement>("#hero-network");
+if (canvas) initNetworkCanvas(canvas);
 
 document.querySelectorAll<HTMLAnchorElement>('a[href^="#"]').forEach((link) => {
   link.addEventListener("click", (event) => {

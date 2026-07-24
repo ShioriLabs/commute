@@ -20,7 +20,8 @@
     "generate:tj": "tsx ./src/db/scripts/generateTJSQL.ts",
     "generate:tj-transfers": "tsx ./src/db/scripts/generateTJTransferInternalizeSQL.ts",
     "generate:prune-feeder-edges": "tsx ./src/db/scripts/generatePruneFeederEdgesSQL.ts",
-    "generate:prune-stationlines": "tsx ./src/db/scripts/generatePruneStationLinesSQL.ts"
+    "generate:prune-stationlines": "tsx ./src/db/scripts/generatePruneStationLinesSQL.ts",
+    "generate:dataplatform-network": "tsx ./src/db/scripts/generateDataPlatformNetwork.ts"
   },
   "keywords": [],
   "author": "",

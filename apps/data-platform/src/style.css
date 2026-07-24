@@ -1,12 +1,20 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:where(.dark, .dark *));
-
 @theme {
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code", monospace;
   --color-accent: #f55875;
+  /* Dark-only palette (committed) */
+  --color-ink: #0d0f14; /* near-black ground */
+  --color-panel: #14171f; /* raised surfaces */
+  --color-line: #232733; /* hairline borders */
   --ease-ios-spring: cubic-bezier(0.36, 0.66, 0.04, 1);
+}
+
+html {
+  background: var(--color-ink);
+  color-scheme: dark;
 }
 
 body {
