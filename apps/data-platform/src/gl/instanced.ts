@@ -83,7 +83,12 @@ export function buildFieldPass(
   return buildInstanced(
     gl,
     programs.field,
-    { a_offset: { numComponents: 3, data: scene.field.offsets, divisor: 1 } },
+    {
+      a_offset: { numComponents: 3, data: scene.field.offsets, divisor: 1 },
+      // Static: the wordmark never moves, so unlike the highlight buffers this
+      // needs no DYNAMIC_DRAW or re-upload path. The reveal is a uniform.
+      a_isLogo: { numComponents: 1, data: scene.field.isLogo, divisor: 1 }
+    },
     scene.field.count
   )
 }

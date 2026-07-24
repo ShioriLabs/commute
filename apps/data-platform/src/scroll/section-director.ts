@@ -110,13 +110,13 @@ export function createSectionDirector(opts: {
     // Clamp before first / after last.
     if (y <= anchors[0]!) {
       setActive(anchored[0]!.id)
-      apply(anchored[0]!.pose, anchored[0]!.highlight, anchored[0]!.highlightSet)
+      apply(anchored[0]!.pose, anchored[0]!.highlight, anchored[0]!.highlightSet, anchored[0]!.logo)
       return
     }
     const last = anchored.length - 1
     if (y >= anchors[last]!) {
       setActive(anchored[last]!.id)
-      apply(anchored[last]!.pose, anchored[last]!.highlight, anchored[last]!.highlightSet)
+      apply(anchored[last]!.pose, anchored[last]!.highlight, anchored[last]!.highlightSet, anchored[last]!.logo)
       return
     }
 
@@ -133,7 +133,7 @@ export function createSectionDirector(opts: {
         setActive(near.id)
         if (reduceMotion) {
           // Snap to whichever beat is closer.
-          apply(near.pose, near.highlight, near.highlightSet)
+          apply(near.pose, near.highlight, near.highlightSet, near.logo)
         } else {
           const pose = lerpPose(from.pose, to.pose, t)
           // Between beats that spotlight DIFFERENT subjects, dip the emphasis to
@@ -144,19 +144,25 @@ export function createSectionDirector(opts: {
           const hl = swapping
             ? lerp(from.highlight, to.highlight, t) * Math.abs(t - 0.5) * 2
             : lerp(from.highlight, to.highlight, t)
-          apply(pose, hl, near.highlightSet)
+          apply(pose, hl, near.highlightSet, lerp(from.logo, to.logo, t))
         }
         return
       }
     }
   }
 
-  function apply(pose: Pose, highlight: number, highlightSet: HighlightId): void {
+  function apply(
+    pose: Pose,
+    highlight: number,
+    highlightSet: HighlightId,
+    logo: number
+  ): void {
     if (reduceMotion) camera.snap(pose)
     else camera.setTarget(pose)
     // Cheap when unchanged; only re-uploads on an actual subject change.
     renderer.setHighlightSet(highlightSet)
     renderer.setHighlightMix(highlight)
+    renderer.setLogoMix(logo)
     document.documentElement.setAttribute('data-active-beat-hl', highlight > 0.5 ? '1' : '0')
   }
 

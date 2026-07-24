@@ -28,6 +28,8 @@ const DRAW_IN_MS = 1700
 const MAX_DPR = 2
 
 const STATION_COLOR: Vec3Tuple = [0xcb / 255, 0xd0 / 255, 0xda / 255]
+// Brand accent (--color-accent), so the page closes in its own colour.
+const LOGO_COLOR: Vec3Tuple = [0xf5 / 255, 0x58 / 255, 0x75 / 255]
 
 export interface ProjectFn {
   (world: Vec3Tuple, vpW: number, vpH: number): {
@@ -58,6 +60,8 @@ export interface Renderer {
    * or the emphasis visibly jumps from one subject to another.
    */
   setHighlightSet(id: HighlightId): void
+  /** Reveals the wordmark lit into the dot field (0 = dark, 1 = full). Eased. */
+  setLogoMix(target: number): void
   dispose(): void
 }
 
@@ -109,6 +113,8 @@ export function createRenderer(opts: {
   let highlightMix = 0
   let highlightTarget = 0
   let highlightSet: HighlightId = 'none'
+  let logoMix = 0
+  let logoTarget = 0
   // Counts buffer re-uploads so tests can assert this isn't happening per frame.
   let highlightUploads = 0
 
@@ -124,6 +130,10 @@ export function createRenderer(opts: {
 
   function setHighlightMix(target: number): void {
     highlightTarget = Math.max(0, Math.min(1, target))
+  }
+
+  function setLogoMix(target: number): void {
+    logoTarget = Math.max(0, Math.min(1, target))
   }
 
   function setHighlightSet(id: HighlightId): void {
@@ -172,6 +182,7 @@ export function createRenderer(opts: {
     // section director via camera.snap(); here we just advance the ease.)
     const hT = 1 - Math.exp(-dt / 200)
     highlightMix += (highlightTarget - highlightMix) * (reduceMotion ? 1 : hT)
+    logoMix += (logoTarget - logoMix) * (reduceMotion ? 1 : hT)
     camera.update(dt)
 
     const aspect = viewportW / Math.max(viewportH, 1)
@@ -194,7 +205,9 @@ export function createRenderer(opts: {
       u_viewProj: viewProj,
       u_proj: uProj,
       u_radius: FIELD_RADIUS,
-      u_color: FIELD_COLOR
+      u_color: FIELD_COLOR,
+      u_logoColor: LOGO_COLOR,
+      u_logoMix: logoMix
     })
     twgl.drawBufferInfo(gl, fieldPass.vao, gl.TRIANGLE_STRIP, fieldPass.vao.numElements, 0, fieldPass.instanceCount)
 
@@ -262,7 +275,15 @@ export function createRenderer(opts: {
   }
 
   resize()
-  const api: Renderer = { start, stop, resize, setHighlightMix, setHighlightSet, dispose }
+  const api: Renderer = {
+    start,
+    stop,
+    resize,
+    setHighlightMix,
+    setHighlightSet,
+    setLogoMix,
+    dispose
+  }
 
   // Dev-only introspection for the headed-browser checks. Defined via
   // defineProperty rather than an object-literal getter inside a spread —

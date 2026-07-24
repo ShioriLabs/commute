@@ -5,7 +5,13 @@
 // y=0 ground plane, centered on the origin so camera lerps and the 45° tilt
 // are symmetric.
 import { NETWORK, type NetNode } from '../network'
+import { WORDMARK_CELLS, WORDMARK_SIZE } from '../wordmark'
 import { octRoute, type GridCell } from './octilinear'
+
+// Cells between the bottom of the network and the top of the wordmark. The field
+// extends 24 rows past the network and the wordmark is 17 tall, so this has to
+// stay small enough that the letters land on real field dots.
+const WORDMARK_GAP = 4
 
 // One world unit per lattice cell. Camera distances are expressed relative to
 // this. Centering on origin: worldX = (col - cols/2)*CELL.
@@ -91,6 +97,7 @@ export interface Vec3 {
 // on each builder's return type.
 export interface FieldInstances {
   offsets: Float32Array // vec3 per instance
+  isLogo: Float32Array // float 0/1 — cells spelling the wordmark
   count: number
 }
 
@@ -124,6 +131,8 @@ export interface NetworkScene {
   stationWorld: Map<string, Vec3>
   /** World-space AABB of the network (for camera framing). */
   bounds: { min: Vec3, max: Vec3, center: Vec3 }
+  /** Where the wordmark sits in the field, so the footer beat can frame it. */
+  wordmark: { center: Vec3, halfX: number, halfZ: number }
   cols: number
   rows: number
 }
@@ -260,10 +269,26 @@ export function buildScene(): NetworkScene {
   const FIELD_MARGIN_X = 70
   const FIELD_MARGIN_Z = 24
   const fieldOffsets: number[] = []
+  // Per-instance flag marking the cells that spell the wordmark. The field pass
+  // is otherwise uniform-coloured; this is the only thing that varies per dot,
+  // and it never changes after build (no re-upload path needed).
+  const fieldIsLogo: number[] = []
+
+  // Park the wordmark in the empty band BELOW the network (its stations stop at
+  // row 72, the field runs to rows + FIELD_MARGIN_Z), horizontally centred on
+  // the grid. Nothing else is drawn down there, so the letters never collide
+  // with line dots, stations, or trains.
+  const logoLeft = Math.round((cols - WORDMARK_SIZE.cols) / 2)
+  const logoTop = rows + WORDMARK_GAP
+  const logoCells = new Set(
+    WORDMARK_CELLS.map(([c, r]) => `${logoLeft + c},${logoTop + r}`)
+  )
+
   for (let col = -FIELD_MARGIN_X; col < cols + FIELD_MARGIN_X; col++) {
     for (let row = -FIELD_MARGIN_Z; row < rows + FIELD_MARGIN_Z; row++) {
       const w = cellToWorld(col, row, cols, rows)
       fieldOffsets.push(w.x, w.y, w.z)
+      fieldIsLogo.push(logoCells.has(`${col},${row}`) ? 1 : 0)
     }
   }
 
@@ -289,7 +314,11 @@ export function buildScene(): NetworkScene {
   const center: Vec3 = { x: (min.x + max.x) / 2, y: 0, z: (min.z + max.z) / 2 }
 
   return {
-    field: { offsets: new Float32Array(fieldOffsets), count: fieldOffsets.length / 3 },
+    field: {
+      offsets: new Float32Array(fieldOffsets),
+      isLogo: new Float32Array(fieldIsLogo),
+      count: fieldOffsets.length / 3
+    },
     dots: {
       offsets: new Float32Array(litOffsets),
       colors: new Float32Array(litColors),
@@ -306,6 +335,16 @@ export function buildScene(): NetworkScene {
     trainRoutes,
     stationWorld,
     bounds: { min, max, center },
+    wordmark: {
+      center: cellToWorld(
+        logoLeft + WORDMARK_SIZE.cols / 2,
+        logoTop + WORDMARK_SIZE.rows / 2,
+        cols,
+        rows
+      ),
+      halfX: WORDMARK_SIZE.cols / 2,
+      halfZ: WORDMARK_SIZE.rows / 2
+    },
     cols,
     rows
   }

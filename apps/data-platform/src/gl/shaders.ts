@@ -13,17 +13,30 @@
 //   u_viewProj : mat4
 //   u_proj     : vec2 (projection scale x,y — see above)
 
-// --- Faint dead-dot field: uniform color + radius, no per-instance variation.
+// --- Faint dead-dot field. Uniform color and radius except for one flag: the
+// cells that spell the wordmark, which the footer beat lights up in place. The
+// letters are the SAME dots at the SAME radius, only brighter — that is what
+// makes the logo read as the grid illuminated rather than type laid over it.
 export const FIELD_VS = /* glsl */ `#version 300 es
 in vec2 a_quad;
 in vec3 a_offset;
+in float a_isLogo;    // 0/1
 uniform mat4 u_viewProj;
 uniform vec2 u_proj;
 uniform float u_radius;
+uniform float u_logoMix; // 0..1 wordmark reveal
 out vec2 v_quad;
+out float v_logo;
 void main() {
+  v_logo = a_isLogo * u_logoMix;
   vec4 clip = u_viewProj * vec4(a_offset, 1.0);
-  clip.xy += a_quad * u_radius * u_proj;
+  // The field's radius is deliberately tiny (0.11) so the background stays
+  // faint. That makes lit cells read as small rather than dim, so the wordmark
+  // needs actual SIZE — alpha alone can't carry it, the disc is already opaque
+  // at its centre. Grown to roughly the lit line-dot radius, which is what makes
+  // the letters read as the same material as the map's own dots.
+  float r = u_radius * mix(1.0, 2.1, v_logo);
+  clip.xy += a_quad * r * u_proj;
   v_quad = a_quad;
   gl_Position = clip;
 }
@@ -32,13 +45,17 @@ void main() {
 export const FIELD_FS = /* glsl */ `#version 300 es
 precision highp float;
 in vec2 v_quad;
+in float v_logo;
 uniform vec3 u_color;
+uniform vec3 u_logoColor;
 out vec4 outColor;
 void main() {
   float d = length(v_quad);
   float alpha = 1.0 - smoothstep(0.85, 1.0, d);
   if (alpha <= 0.001) discard;
-  outColor = vec4(u_color * alpha, alpha);
+  vec3 color = mix(u_color, u_logoColor, v_logo);
+  float a = clamp(alpha, 0.0, 1.0);
+  outColor = vec4(color * a, a);
 }
 `
 

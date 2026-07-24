@@ -24,6 +24,8 @@ export interface Beat {
   highlight: number
   /** WHICH subject the emphasis applies to. */
   highlightSet: HighlightId
+  /** Wordmark reveal in the dot field (0 = dark, 1 = lit). */
+  logo: number
 }
 
 const DEG = Math.PI / 180
@@ -197,15 +199,23 @@ export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
     1.5 * narrow
   )
 
-  // Footer: the only true establishing shot left, so the page still ends wide.
+  // Footer: no longer an establishing shot. The camera drops to the wordmark
+  // sitting in the empty field below the network, which pushes the network up
+  // and out of frame — the map making room for the page's own name. Framed on
+  // the logo's extent so the letters fill the width at any aspect.
+  // NOT scaled by `narrow`: like the tarif corridor this subject is wide, and
+  // shrinking it on portrait would crop the letters. Portrait instead gets a
+  // tighter pad, since framingPose fits hx/aspect there and the default leaves
+  // the wordmark marooned in empty field.
+  const wm = scene.wordmark
   const footer = framingPose(
-    [scene.bounds.center.x, 0, scene.bounds.center.z],
-    hx,
-    hz,
+    [wm.center.x, 0, wm.center.z],
+    wm.halfX,
+    wm.halfZ,
     90, // top-down
     38 * DEG,
     aspect,
-    1.5 * narrow
+    twoColumn ? 1.25 : 1.12
   )
 
   // Ordered as a geographic sweep so the camera never doubles back: Manggarai ->
@@ -216,12 +226,12 @@ export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
   // swap happens between them; the beats differ only in framing and in which
   // overlay is anchored to the roundel (the record, then the raw response).
   return [
-    { id: 'hero', selector: '[data-beat=\'hero\']', pose: hero, highlight: 0, highlightSet: 'none' },
-    { id: 'jadwal', selector: '[data-beat=\'jadwal\']', pose: jadwal, highlight: 0, highlightSet: 'none' },
-    { id: 'topologi', selector: '[data-beat=\'topologi\']', pose: topologi, highlight: 1, highlightSet: 'cikarang' },
-    { id: 'tarif', selector: '[data-beat=\'tarif\']', pose: tarif, highlight: 1, highlightSet: 'mrt-lbb-bhi' },
-    { id: 'stasiun', selector: '[data-beat=\'stasiun\']', pose: stasiun, highlight: 1, highlightSet: 'rasuna' },
-    { id: 'api', selector: '[data-beat=\'api\']', pose: api, highlight: 0.45, highlightSet: 'rasuna' },
-    { id: 'footer', selector: '[data-beat=\'footer\']', pose: footer, highlight: 0, highlightSet: 'none' }
+    { id: 'hero', selector: '[data-beat=\'hero\']', pose: hero, highlight: 0, highlightSet: 'none', logo: 0 },
+    { id: 'jadwal', selector: '[data-beat=\'jadwal\']', pose: jadwal, highlight: 0, highlightSet: 'none', logo: 0 },
+    { id: 'topologi', selector: '[data-beat=\'topologi\']', pose: topologi, highlight: 1, highlightSet: 'cikarang', logo: 0 },
+    { id: 'tarif', selector: '[data-beat=\'tarif\']', pose: tarif, highlight: 1, highlightSet: 'mrt-lbb-bhi', logo: 0 },
+    { id: 'stasiun', selector: '[data-beat=\'stasiun\']', pose: stasiun, highlight: 1, highlightSet: 'rasuna', logo: 0 },
+    { id: 'api', selector: '[data-beat=\'api\']', pose: api, highlight: 0.45, highlightSet: 'rasuna', logo: 0 },
+    { id: 'footer', selector: '[data-beat=\'footer\']', pose: footer, highlight: 0, highlightSet: 'none', logo: 1 }
   ]
 }
