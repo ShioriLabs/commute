@@ -15,7 +15,14 @@
       rel="stylesheet"
     />
   </head>
-  <body class="bg-ink text-white/80 antialiased selection:bg-accent/30">
+  <body class="text-white/80 antialiased selection:bg-accent/30">
+    <!-- Persistent network map: fixed full-viewport WebGL background behind all
+         sections (html carries the ink ground so the canvas isn't occluded by a
+         body background). The scroll director re-frames its camera per section. -->
+    <canvas id="network-bg" class="pointer-events-none fixed inset-0 z-0 h-full w-full"></canvas>
+    <!-- Overlay root for projected station labels + the PIDS departures flyout. -->
+    <div id="overlay-root" class="pointer-events-none fixed inset-0 z-[1]"></div>
+
     <!-- Nav -->
     <header class="sticky top-0 z-20 border-b border-line/80 bg-ink/80 backdrop-blur-md">
       <div class="mx-auto flex max-w-6xl items-center justify-between gap-6 px-6 py-3.5">
@@ -45,9 +52,8 @@
     </header>
 
     <!-- Hero -->
-    <section class="relative flex min-h-[92vh] items-center overflow-hidden px-6 py-24">
-      <canvas id="hero-network" class="pointer-events-none absolute inset-0 h-full w-full"></canvas>
-      <!-- legibility scrim -->
+    <section data-beat="hero" class="relative z-10 flex min-h-[92vh] items-center overflow-hidden px-6 py-24">
+      <!-- legibility scrim over the fixed background map -->
       <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_55%_at_50%_45%,rgba(13,15,20,0.92)_0%,rgba(13,15,20,0.6)_45%,transparent_80%)]"></div>
       <div data-hero-content class="relative mx-auto max-w-3xl text-center">
         <p class="rise mb-5 font-mono text-xs uppercase tracking-[0.2em] text-accent" style="animation-delay: 0ms">
@@ -85,7 +91,7 @@
     </section>
 
     <!-- Stats -->
-    <section class="border-y border-line bg-panel/40 px-6 py-14">
+    <section class="relative z-10 border-y border-line/60 bg-ink/30 px-6 py-14 backdrop-blur-[2px]">
       <div class="mx-auto grid max-w-5xl grid-cols-2 gap-px overflow-hidden sm:grid-cols-4">
         <div class="px-6 py-8 text-center">
           <p class="mb-1.5 text-4xl font-extrabold text-accent">5</p>
@@ -108,72 +114,39 @@
 
     <!-- Features -->
     <section id="cakupan">
-      <!-- Beat 1: Jadwal Live -->
-      <div class="mx-auto grid max-w-5xl gap-12 px-6 py-20 md:grid-cols-2 md:items-center">
-        <div>
+      <!-- Beat 1: Jadwal — the map flies to Manggarai; the live PIDS departures
+           flyout (overlay/departures.ts) appears anchored to the roundel. Copy
+           sits in a readable column; the other half is left to the map. -->
+      <div data-beat="jadwal" class="relative z-10 mx-auto grid min-h-[85vh] max-w-5xl items-center gap-12 px-6 py-20 md:grid-cols-2">
+        <div class="max-w-md rounded-xl border border-line/50 bg-ink/45 p-6 backdrop-blur-sm">
           <p class="mb-3 font-mono text-xs uppercase tracking-[0.18em] text-accent">Jadwal</p>
           <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Semua jadwal, satu jalur.</h2>
-          <p class="leading-relaxed text-white/55">
+          <p class="leading-relaxed text-white/60">
             Jadwal keberangkatan dan kedatangan buat KRL, MRT, dan LRT mengalir jadi satu feed yang konsisten.
-            Lebih dari 27.000 perjalanan terjadwal, sinkron dari sumber aslinya.
+            Lebih dari 27.000 perjalanan terjadwal, sinkron dari sumber aslinya — kayak keberangkatan Manggarai di samping.
           </p>
         </div>
-        <div class="rounded-xl border border-line bg-panel/50 p-6">
-          <svg viewBox="0 0 440 220" class="h-auto w-full">
-            <path d="M 30 40 C 160 40, 200 110, 300 110 L 380 110" fill="none" stroke="#25B8EB" stroke-width="3" />
-            <path d="M 30 110 L 300 110" fill="none" stroke="#ca2a51" stroke-width="3" />
-            <path d="M 30 180 C 160 180, 200 110, 300 110 L 380 110" fill="none" stroke="#F26324" stroke-width="3" />
-            <circle cx="30" cy="40" r="6" fill="#25B8EB" />
-            <circle cx="120" cy="45" r="5" fill="#25B8EB" />
-            <circle cx="210" cy="80" r="5" fill="#25B8EB" />
-            <circle cx="30" cy="110" r="6" fill="#ca2a51" />
-            <circle cx="140" cy="110" r="5" fill="#ca2a51" />
-            <circle cx="220" cy="110" r="5" fill="#ca2a51" />
-            <circle cx="30" cy="180" r="6" fill="#F26324" />
-            <circle cx="120" cy="175" r="5" fill="#F26324" />
-            <circle cx="210" cy="140" r="5" fill="#F26324" />
-            <circle cx="300" cy="110" r="7" fill="#F55875" />
-            <circle cx="380" cy="110" r="7" fill="#F55875" />
-            <text x="30" y="24" font-family="JetBrains Mono, monospace" font-size="11" fill="#25B8EB">KRL</text>
-            <text x="30" y="98" font-family="JetBrains Mono, monospace" font-size="11" fill="#ca2a51">MRT</text>
-            <text x="30" y="200" font-family="JetBrains Mono, monospace" font-size="11" fill="#F26324">LRT</text>
-            <text x="352" y="98" font-family="JetBrains Mono, monospace" font-size="11" fill="#F55875">feed</text>
-          </svg>
-        </div>
+        <!-- right half intentionally open: the map + PIDS flyout live here -->
+        <div aria-hidden="true"></div>
       </div>
 
-      <!-- Beat 2: Peta Rute (JR East PIDS parody) -->
-      <div class="mx-auto grid max-w-5xl gap-12 px-6 py-20 md:grid-cols-2 md:items-center">
-        <div class="order-2 overflow-hidden rounded-xl border border-line bg-panel/50 md:order-1">
-          <div class="flex items-center gap-3 bg-[#0a0c11] px-4 py-2.5 text-white">
-            <span class="text-[11px] font-medium text-white/50">Next</span>
-            <span class="flex-1 truncate text-sm font-bold">Manggarai</span>
-            <span class="font-mono text-[11px] text-white/50">0:04</span>
-          </div>
-          <svg viewBox="0 0 440 170" class="h-auto w-full p-4">
-            <path d="M 20 140 Q 160 140, 260 70 T 420 20" fill="none" stroke="#25B8EB" stroke-width="10" stroke-linecap="round" />
-            <circle cx="20" cy="140" r="9" fill="#14171f" stroke="#25B8EB" stroke-width="4" />
-            <circle cx="150" cy="128" r="9" fill="#F55875" stroke="#F55875" stroke-width="4" />
-            <circle cx="270" cy="66" r="9" fill="#14171f" stroke="#25B8EB" stroke-width="4" />
-            <circle cx="390" cy="24" r="9" fill="#14171f" stroke="#25B8EB" stroke-width="4" />
-            <text x="8" y="160" font-family="Plus Jakarta Sans, sans-serif" font-size="11" fill="#9aa1ae">Sudirman Baru</text>
-            <text x="118" y="112" font-family="Plus Jakarta Sans, sans-serif" font-size="11" font-weight="700" fill="#F55875">Sudirman</text>
-            <text x="248" y="50" font-family="Plus Jakarta Sans, sans-serif" font-size="11" fill="#9aa1ae">Manggarai</text>
-            <text x="358" y="8" font-family="Plus Jakarta Sans, sans-serif" font-size="11" fill="#9aa1ae">Matraman</text>
-          </svg>
-        </div>
-        <div class="order-1 md:order-2">
+      <!-- Beat 2: Topologi — the map tilts to ~45° and highlights the Cikarang
+           chain Sudirman Baru → Sudirman → Manggarai → Matraman. -->
+      <div data-beat="topologi" class="relative z-10 mx-auto grid min-h-[85vh] max-w-5xl items-center gap-12 px-6 py-20 md:grid-cols-2">
+        <div aria-hidden="true" class="hidden md:block"></div>
+        <div class="max-w-md rounded-xl border border-line/50 bg-ink/45 p-6 backdrop-blur-sm">
           <p class="mb-3 font-mono text-xs uppercase tracking-[0.18em] text-accent">Topologi</p>
           <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Peta rute, bukan cuma titik.</h2>
-          <p class="leading-relaxed text-white/55">
+          <p class="leading-relaxed text-white/60">
             Stasiun, ruas, dan interchange dari 5 operator sebagai data graf terstruktur, lengkap dengan urutan
-            stasiun yang bener di tiap lin, kayak Lin Cikarang lewat Sudirman Baru, Sudirman, Manggarai, sampai Matraman.
+            stasiun yang bener di tiap lin, kayak Lin Cikarang lewat Sudirman Baru, Sudirman, Manggarai, sampai Matraman
+            yang lagi disorot di peta.
           </p>
         </div>
       </div>
 
       <!-- Beat 3: API Terbuka -->
-      <div id="api" class="mx-auto grid max-w-5xl gap-12 px-6 py-20 md:grid-cols-2 md:items-center">
+      <div id="api" data-beat="api" class="relative z-10 mx-auto grid max-w-5xl gap-12 px-6 py-20 md:grid-cols-2 md:items-center">
         <div>
           <p class="mb-3 font-mono text-xs uppercase tracking-[0.18em] text-accent">API</p>
           <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Satu skema buat seluruh jaringan.</h2>
@@ -263,7 +236,7 @@
     </section>
 
     <!-- Footer -->
-    <footer class="border-t border-line bg-panel/40 px-6 py-16">
+    <footer data-beat="footer" class="relative z-10 border-t border-line bg-ink/70 px-6 py-16 backdrop-blur-md">
       <div class="mx-auto max-w-6xl">
         <div class="mb-12 grid grid-cols-2 gap-8 sm:grid-cols-4">
           <div class="col-span-2 sm:col-span-1">

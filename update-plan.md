@@ -1,0 +1,3 @@
+- maybe remove airport line's dots
+- add a line connecting the dots for each line i think
+- add 2 dots padding to the grid

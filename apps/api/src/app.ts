@@ -18,18 +18,24 @@ export interface Bindings {
 
 const app = new Hono<{ Bindings: Bindings }>()
 
+// Allowed browser origins. The data-platform site (apps/data-platform) fetches
+// live departures for its homepage, so its dev + prod origins are included. In
+// dev, apps/web holds :5173 and the data-platform Vite server falls to :5174
+// (occasionally :5175). NOTE: confirm the deployed data-platform hostname —
+// data.commute.shiorilabs.id is the assumed prod origin; update if it differs.
+const ALLOWED_ORIGINS = new Set([
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+  'https://commute.shiorilabs.id',
+  'https://dev.commute.shiorilabs.id',
+  'https://data.commute.shiorilabs.id',
+])
+
 app.use('*', cors({
   origin(origin) {
-    if (
-      origin === 'http://localhost:3000'
-      || origin === 'http://localhost:5173'
-      || origin === 'https://commute.shiorilabs.id'
-      || origin === 'https://dev.commute.shiorilabs.id'
-    ) {
-      return origin
-    }
-
-    return null
+    return ALLOWED_ORIGINS.has(origin) ? origin : null
   },
   allowMethods: ['GET', 'POST', 'OPTIONS']
 }))

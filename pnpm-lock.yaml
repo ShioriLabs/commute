@@ -67,6 +67,10 @@ importers:
   apps/constants: {}
 
   apps/data-platform:
+    dependencies:
+      twgl.js:
+        specifier: ^7.0.0
+        version: 7.0.0
     devDependencies:
       '@tailwindcss/vite':
         specifier: ^4.0.0

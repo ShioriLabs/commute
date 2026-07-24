@@ -21,6 +21,8 @@ export default defineConfig([
   globalIgnores([
     'apps/api/.wrangler/**/*',
     'apps/api/dist/**/*',
+    'apps/data-platform/.wrangler/**/*',
+    'apps/data-platform/dist/**/*',
     'apps/opengraph/.wrangler/**/*',
     'apps/opengraph/dist/**/*',
     // Generated data: a vendored base64 font and the SVG card template string.
