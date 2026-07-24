@@ -9,6 +9,7 @@
   --color-ink: #0d0f14; /* near-black ground */
   --color-panel: #14171f; /* raised surfaces */
   --color-line: #232733; /* hairline borders */
+  --color-plate: #0a0c11; /* sign plates — matches the PIDS departures flyout */
   --ease-ios-spring: cubic-bezier(0.36, 0.66, 0.04, 1);
 }
 
@@ -21,7 +22,52 @@ body {
   font-optical-sizing: auto;
 }
 
+/* Sign plates: the page's copy blocks are modelled on Jakarta platform signage
+   and on the PIDS departures flyout (overlay/departures.ts) — square-cut, plate
+   coloured, with a left bar carrying the colour of the line that beat is showing
+   on the map. Rounded corners are reserved for controls, so the contrast between
+   cut plates and rounded buttons stays legible. */
+@layer components {
+  .sign {
+    border-left: 3px solid var(--sign-accent, var(--color-accent));
+    background: color-mix(in srgb, var(--color-plate) 80%, transparent);
+    backdrop-filter: blur(6px);
+  }
+
+  /* Eyebrow row: label left, the beat's own datum right, hairline beneath. */
+  .sign-eyebrow {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-line) 80%, transparent);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+  }
+
+  .sign-eyebrow > :first-child {
+    color: var(--sign-accent, var(--color-accent));
+  }
+
+  .sign-eyebrow > :last-child {
+    color: color-mix(in srgb, white 45%, transparent);
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+  }
+}
+
 @layer utilities {
+  /* Lets the hero scrim stay weak enough to keep the map visible behind the
+     copy while the headline still holds contrast. */
+  .sign-shadow {
+    text-shadow:
+      0 1px 24px rgba(13, 15, 20, 0.9),
+      0 1px 3px rgba(13, 15, 20, 0.8);
+  }
+
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }

@@ -3,7 +3,7 @@
 // viewport centre sits between and interpolate their poses, so transitions are
 // continuous rather than snapping at section edges. The camera's own damping
 // smooths residual jitter. Reduced-motion snaps to the nearest beat instead.
-import type { Camera, Pose, Vec3Tuple } from '../gl/camera'
+import { lerpAngle, orbit, type Camera, type Pose, type Vec3Tuple } from '../gl/camera'
 import type { Renderer } from '../gl/renderer'
 import type { Beat, BeatId } from './beats'
 
@@ -19,12 +19,31 @@ function lerpVec(a: Vec3Tuple, b: Vec3Tuple, t: number): Vec3Tuple {
   return [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)]
 }
 
+// Interpolate in ORBIT space (yaw/pitch/distance around the target), not on the
+// resolved eye vector. A straight line between an on-axis eye and a yawed eye is
+// a chord: it passes nearer the target than either endpoint, so the camera would
+// dive toward the plane mid-transition instead of orbiting around it. Poses built
+// by framingPose() carry their orbit params; anything else falls back to a plain
+// vector lerp.
 function lerpPose(a: Pose, b: Pose, t: number): Pose {
+  const target = lerpVec(a.target, b.target, t)
+  const fovY = lerp(a.fovY, b.fovY, t)
+  if (a.orbit && b.orbit) {
+    return orbit(
+      target,
+      {
+        yaw: lerpAngle(a.orbit.yaw, b.orbit.yaw, t),
+        pitch: lerp(a.orbit.pitch, b.orbit.pitch, t),
+        dist: lerp(a.orbit.dist, b.orbit.dist, t)
+      },
+      fovY
+    )
+  }
   return {
     eye: lerpVec(a.eye, b.eye, t),
-    target: lerpVec(a.target, b.target, t),
+    target,
     up: lerpVec(a.up, b.up, t),
-    fovY: lerp(a.fovY, b.fovY, t)
+    fovY
   }
 }
 

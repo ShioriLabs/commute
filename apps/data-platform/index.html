@@ -24,9 +24,18 @@
     <div id="overlay-root" class="pointer-events-none fixed inset-0 z-[1]"></div>
 
     <!-- Nav -->
-    <header class="sticky top-0 z-20 border-b border-line/80 bg-ink/80 backdrop-blur-md">
-      <div class="mx-auto flex max-w-6xl items-center justify-between gap-6 px-6 py-3.5">
-        <a href="#" class="flex items-center" aria-label="Commute">
+    <!-- No hard-edged slab: the bar itself keeps enough backing to stay readable
+         over the map, then fades out downward so the dots run under it with no
+         visible seam. Content scrolling past must not read through the links. -->
+    <!-- Flush to the dot grid: no bar, no rule, just a soft top-down fade so the
+         dots keep running behind the nav while scrolled content passing under it
+         never competes with the links. -->
+    <header
+      class="pointer-events-none sticky top-0 z-20 bg-[linear-gradient(180deg,rgba(13,15,20,0.92)_0%,rgba(13,15,20,0.75)_45%,rgba(13,15,20,0.35)_75%,transparent_100%)]"
+    >
+      <div class="pointer-events-auto">
+        <div class="mx-auto flex max-w-6xl items-center justify-between gap-6 px-6 py-3.5">
+          <a href="#" class="flex items-center" aria-label="Commute">
           <svg width="140" height="24" viewBox="0 0 275 47" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M259.557 46.28C256.357 46.28 253.648 45.768 251.429 44.744C249.21 43.6773 247.418 42.312 246.053 40.648C244.688 38.9413 243.685 37.1067 243.045 35.144C242.405 33.1813 242.085 31.2827 242.085 29.448C242.085 26.0773 242.832 23.112 244.325 20.552C245.818 17.992 247.888 15.9867 250.533 14.536C253.178 13.0853 256.208 12.36 259.621 12.36C262.266 12.36 264.528 12.7867 266.405 13.64C268.282 14.4933 269.797 15.5813 270.949 16.904C272.144 18.2267 273.018 19.6347 273.573 21.128C274.128 22.6213 274.405 24.008 274.405 25.288C274.405 27.72 273.808 29.576 272.613 30.856C271.418 32.136 269.882 32.776 268.005 32.776H254.373C254.544 33.4587 254.885 34.056 255.397 34.568C255.952 35.0373 256.634 35.4213 257.445 35.72C258.256 35.976 259.13 36.104 260.069 36.104C261.008 36.104 261.84 36.0613 262.565 35.976C263.29 35.848 263.909 35.6987 264.421 35.528C264.976 35.3573 265.466 35.1867 265.893 35.016C266.362 34.8453 266.768 34.7173 267.109 34.632C267.493 34.504 267.856 34.44 268.197 34.44C268.965 34.44 269.669 34.696 270.309 35.208C270.949 35.72 271.525 36.488 272.037 37.512C272.336 38.0667 272.549 38.6 272.677 39.112C272.805 39.5813 272.869 40.0293 272.869 40.456C272.869 41.736 272.336 42.8027 271.269 43.656C270.245 44.5093 268.752 45.1493 266.789 45.576C264.826 46.0453 262.416 46.28 259.557 46.28ZM254.373 26.76H261.541C262.138 26.76 262.565 26.632 262.821 26.376C263.12 26.12 263.269 25.736 263.269 25.224C263.269 24.6693 263.098 24.2 262.757 23.816C262.458 23.432 262.032 23.1547 261.477 22.984C260.922 22.7707 260.261 22.664 259.493 22.664C258.469 22.664 257.573 22.8773 256.805 23.304C256.037 23.688 255.44 24.2 255.013 24.84C254.629 25.4373 254.416 26.0773 254.373 26.76Z" fill="#F55875"/>
             <path d="M233.016 45.576C230.754 45.576 228.792 45.32 227.128 44.808C225.464 44.296 224.077 43.5067 222.968 42.44C221.901 41.3733 221.09 40.0293 220.536 38.408C220.024 36.7867 219.768 34.888 219.768 32.712V7.88001C219.768 6.89868 219.853 6.00268 220.024 5.19201C220.194 4.33868 220.685 3.65601 221.496 3.14401C222.306 2.58935 223.672 2.31201 225.592 2.31201C227.469 2.31201 228.813 2.61068 229.624 3.20801C230.434 3.76268 230.925 4.48801 231.096 5.38401C231.266 6.28001 231.352 7.19735 231.352 8.13601V32.136C231.352 32.6053 231.373 33.0107 231.416 33.352C231.501 33.6507 231.608 33.8853 231.736 34.056C231.864 34.2267 232.034 34.3547 232.248 34.44C232.461 34.5253 232.738 34.568 233.08 34.568C234.189 34.568 235.17 34.6533 236.024 34.824C236.92 34.9947 237.602 35.4427 238.072 36.168C238.584 36.8933 238.84 38.1094 238.84 39.816C238.84 41.736 238.541 43.1013 237.944 43.912C237.346 44.7227 236.6 45.192 235.704 45.32C234.808 45.4907 233.912 45.576 233.016 45.576ZM218.424 13.448H225.912L234.744 13.128C235.682 13.128 236.578 13.2133 237.432 13.384C238.328 13.5547 239.053 14.0453 239.608 14.856C240.205 15.6667 240.504 17.0533 240.504 19.016C240.504 20.808 240.205 22.1093 239.608 22.92C239.053 23.7307 238.328 24.2427 237.432 24.456C236.578 24.6693 235.661 24.776 234.68 24.776L226.552 24.584H218.168C216.717 24.4987 215.714 24.0293 215.16 23.176C214.605 22.3227 214.328 20.9147 214.328 18.952C214.328 17.1173 214.669 15.752 215.352 14.856C216.034 13.9173 217.058 13.448 218.424 13.448Z" fill="#F55875"/>
@@ -36,31 +45,35 @@
             <path d="M58.295 46.152C56.3323 46.152 54.3483 45.768 52.343 45C50.3377 44.1894 48.4817 43.0587 46.775 41.608C45.111 40.1147 43.767 38.344 42.743 36.296C41.7617 34.2054 41.271 31.88 41.271 29.32C41.271 26.9734 41.719 24.776 42.615 22.728C43.511 20.68 44.727 18.888 46.263 17.352C47.8417 15.7734 49.6337 14.536 51.639 13.64C53.687 12.744 55.863 12.296 58.167 12.296C61.3243 12.296 64.183 13.064 66.743 14.6C69.303 16.0934 71.351 18.12 72.887 20.68C74.423 23.24 75.191 26.0987 75.191 29.256C75.191 31.944 74.679 34.3334 73.655 36.424C72.631 38.5147 71.287 40.2854 69.623 41.736C67.959 43.1867 66.1243 44.2747 64.119 45C62.1563 45.768 60.215 46.152 58.295 46.152ZM58.167 34.44C58.807 34.44 59.5323 34.2907 60.343 33.992C61.1963 33.6507 61.9217 33.096 62.519 32.328C63.159 31.56 63.479 30.5147 63.479 29.192C63.479 28.1254 63.2443 27.208 62.775 26.44C62.3483 25.672 61.7297 25.0747 60.919 24.648C60.1083 24.2214 59.1697 24.008 58.103 24.008C57.1643 24.008 56.311 24.2427 55.543 24.712C54.775 25.1387 54.1563 25.7574 53.687 26.568C53.2177 27.336 52.983 28.232 52.983 29.256C52.983 30.536 53.2817 31.56 53.879 32.328C54.4763 33.096 55.1803 33.6507 55.991 33.992C56.8017 34.2907 57.527 34.44 58.167 34.44Z" fill="#F55875"/>
             <path d="M24.064 46.216C22.4 46.216 20.544 45.9387 18.496 45.384C16.448 44.872 14.3787 44.04 12.288 42.888C10.24 41.736 8.34133 40.2427 6.592 38.408C4.88533 36.5733 3.49866 34.376 2.432 31.816C1.408 29.256 0.895996 26.2907 0.895996 22.92C0.895996 19.6773 1.408 16.8187 2.432 14.344C3.49866 11.8693 4.88533 9.736 6.592 7.944C8.29866 6.152 10.176 4.70133 12.224 3.592C14.3147 2.48267 16.4053 1.672 18.496 1.16C20.5867 0.605335 22.5067 0.328003 24.256 0.328003C26.432 0.328003 28.352 0.605335 30.016 1.16C31.68 1.672 33.024 2.22667 34.048 2.824C35.1147 3.37867 35.776 3.74134 36.032 3.912C36.8853 4.46667 37.6747 5.08534 38.4 5.768C39.168 6.408 39.552 7.28267 39.552 8.392C39.552 8.94667 39.424 9.52267 39.168 10.12C38.9547 10.7173 38.6133 11.336 38.144 11.976C37.2907 13.1707 36.48 14.0453 35.712 14.6C34.9867 15.1547 34.2613 15.432 33.536 15.432C32.9813 15.432 32.448 15.304 31.936 15.048C31.424 14.792 30.8053 14.4293 30.08 13.96C29.7813 13.7467 29.3973 13.512 28.928 13.256C28.4587 12.9573 27.8187 12.7013 27.008 12.488C26.1973 12.232 25.1307 12.104 23.808 12.104C22.6987 12.104 21.4827 12.3173 20.16 12.744C18.88 13.128 17.664 13.768 16.512 14.664C15.36 15.5173 14.4213 16.6693 13.696 18.12C12.9707 19.528 12.608 21.2347 12.608 23.24C12.608 25.288 12.9707 27.016 13.696 28.424C14.464 29.832 15.424 30.984 16.576 31.88C17.728 32.7333 18.944 33.3733 20.224 33.8C21.5467 34.184 22.7413 34.376 23.808 34.376C24.9173 34.376 25.856 34.2907 26.624 34.12C27.392 33.9067 28.0747 33.6293 28.672 33.288C29.312 32.9467 29.888 32.6053 30.4 32.264C30.8693 31.9227 31.3813 31.624 31.936 31.368C32.4907 31.112 33.0453 30.984 33.6 30.984C34.3253 30.984 35.0507 31.2827 35.776 31.88C36.5013 32.4773 37.2693 33.3947 38.08 34.632C38.5493 35.3573 38.8907 36.04 39.104 36.68C39.36 37.2773 39.488 37.832 39.488 38.344C39.488 39.4107 39.104 40.264 38.336 40.904C37.6107 41.544 36.8213 42.12 35.968 42.632C35.6693 42.8027 35.0293 43.1867 34.048 43.784C33.0667 44.3813 31.744 44.936 30.08 45.448C28.416 45.96 26.4107 46.216 24.064 46.216Z" fill="#F55875"/>
           </svg>
-        </a>
-        <nav class="hidden items-center gap-7 text-sm font-medium text-white/55 md:flex">
-          <a href="#cakupan" class="transition-colors hover:text-white">Cakupan Data</a>
-          <a href="#api" class="transition-colors hover:text-white">Referensi API</a>
-          <a href="#" class="transition-colors hover:text-white">Changelog</a>
-        </nav>
-        <a
-          href="mailto:hai@shiorilabs.id?subject=Commute%20Data%20Platform%20API%20access"
-          class="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#ef4468]"
-        >
-          Minta Akses API
-        </a>
+          </a>
+          <nav class="hidden items-center gap-7 text-sm font-medium text-white/55 md:flex">
+            <a href="#cakupan" class="transition-colors hover:text-white">Cakupan Data</a>
+            <a href="#api" class="transition-colors hover:text-white">Referensi API</a>
+            <a href="#" class="transition-colors hover:text-white">Changelog</a>
+          </nav>
+          <a
+            href="mailto:hai@shiorilabs.id?subject=Commute%20Data%20Platform%20API%20access"
+            class="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#ef4468]"
+          >
+            Minta Akses API
+          </a>
+        </div>
       </div>
+      <div class="h-8"></div>
     </header>
 
     <!-- Hero -->
     <section data-beat="hero" class="relative z-10 flex min-h-[92vh] items-center overflow-hidden px-6 py-24">
-      <!-- legibility scrim over the fixed background map -->
-      <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_55%_at_50%_45%,rgba(13,15,20,0.92)_0%,rgba(13,15,20,0.6)_45%,transparent_80%)]"></div>
-      <div data-hero-content class="relative mx-auto max-w-3xl text-center">
-        <p class="rise mb-5 font-mono text-xs uppercase tracking-[0.2em] text-accent" style="animation-delay: 0ms">
-          Jaringan Transit Jabodetabek
-        </p>
+      <!-- Legibility scrim: a weak horizontal band behind the copy only. A radial
+           scrim would be darkest exactly where the network is densest, which is
+           what buried the dots; this leaves the full width and the top/bottom of
+           the hero clear and lets .sign-shadow carry the headline contrast. -->
+      <div class="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,transparent_0%,rgba(13,15,20,0.55)_28%,rgba(13,15,20,0.72)_50%,rgba(13,15,20,0.55)_72%,transparent_100%)]"></div>
+      <!-- Copy sits left; the map's dense core is framed into the open right
+           half (see the hero pose in scroll/beats.ts). -->
+      <div data-hero-content class="relative mx-auto w-full max-w-6xl">
         <h1
-          class="rise mb-6 text-5xl font-extrabold leading-[0.98] tracking-tight sm:text-6xl lg:text-7xl"
+          class="rise sign-shadow mb-6 max-w-2xl text-5xl font-extrabold leading-[0.98] tracking-tight sm:text-6xl lg:text-7xl"
           style="animation-delay: 80ms"
         >
           Data Kereta buat
@@ -68,12 +81,12 @@
           Developer Jakarta
         </h1>
         <p
-          class="rise mx-auto mb-9 max-w-lg text-lg leading-relaxed text-white/55"
+          class="rise sign-shadow mb-9 max-w-lg text-lg leading-relaxed text-white/65"
           style="animation-delay: 160ms"
         >
           Data KRL, MRT, LRT, dan TransJakarta yang udah rapi, kagak pake ribet buat di-integrate ke project kamu.
         </p>
-        <div class="rise flex flex-wrap items-center justify-center gap-3" style="animation-delay: 240ms">
+        <div class="rise flex flex-wrap items-center gap-3" style="animation-delay: 240ms">
           <a
             href="mailto:hai@shiorilabs.id?subject=Commute%20Data%20Platform%20API%20access"
             class="rounded-md bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#ef4468]"
@@ -90,36 +103,19 @@
       </div>
     </section>
 
-    <!-- Stats -->
-    <section class="relative z-10 border-y border-line/60 bg-ink/30 px-6 py-14 backdrop-blur-[2px]">
-      <div class="mx-auto grid max-w-5xl grid-cols-2 gap-px overflow-hidden sm:grid-cols-4">
-        <div class="px-6 py-8 text-center">
-          <p class="mb-1.5 text-4xl font-extrabold text-accent">5</p>
-          <p class="font-mono text-[11px] uppercase tracking-wider text-white/45">Operator</p>
-        </div>
-        <div class="px-6 py-8 text-center">
-          <p class="mb-1.5 text-4xl font-extrabold text-accent">110</p>
-          <p class="font-mono text-[11px] uppercase tracking-wider text-white/45">Lin Aktif</p>
-        </div>
-        <div class="px-6 py-8 text-center">
-          <p class="mb-1.5 text-4xl font-extrabold text-accent">2.356</p>
-          <p class="font-mono text-[11px] uppercase tracking-wider text-white/45">Stasiun &amp; Halte</p>
-        </div>
-        <div class="px-6 py-8 text-center">
-          <p class="mb-1.5 text-4xl font-extrabold text-accent">1.293</p>
-          <p class="font-mono text-[11px] uppercase tracking-wider text-white/45">Ruas Rute</p>
-        </div>
-      </div>
-    </section>
-
     <!-- Features -->
     <section id="cakupan">
       <!-- Beat 1: Jadwal — the map flies to Manggarai; the live PIDS departures
            flyout (overlay/departures.ts) appears anchored to the roundel. Copy
            sits in a readable column; the other half is left to the map. -->
       <div data-beat="jadwal" class="relative z-10 mx-auto grid min-h-[85vh] max-w-5xl items-center gap-12 px-6 py-20 md:grid-cols-2">
-        <div class="max-w-md rounded-xl border border-line/50 bg-ink/45 p-6 backdrop-blur-sm">
-          <p class="mb-3 font-mono text-xs uppercase tracking-[0.18em] text-accent">Jadwal</p>
+        <!-- Left bar carries Lin Cikarang's own colour — the line this beat and
+             the map's highlight are both showing. -->
+        <div class="sign max-w-md p-6 md:justify-self-start" style="--sign-accent: #25b8eb">
+          <p class="sign-eyebrow mb-4">
+            <span>Jadwal</span>
+            <span>27.094 Trip</span>
+          </p>
           <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Semua jadwal, satu jalur.</h2>
           <p class="leading-relaxed text-white/60">
             Jadwal keberangkatan dan kedatangan buat KRL, MRT, dan LRT mengalir jadi satu feed yang konsisten.
@@ -134,8 +130,11 @@
            chain Sudirman Baru → Sudirman → Manggarai → Matraman. -->
       <div data-beat="topologi" class="relative z-10 mx-auto grid min-h-[85vh] max-w-5xl items-center gap-12 px-6 py-20 md:grid-cols-2">
         <div aria-hidden="true" class="hidden md:block"></div>
-        <div class="max-w-md rounded-xl border border-line/50 bg-ink/45 p-6 backdrop-blur-sm">
-          <p class="mb-3 font-mono text-xs uppercase tracking-[0.18em] text-accent">Topologi</p>
+        <div class="sign max-w-md p-6 md:justify-self-end" style="--sign-accent: #25b8eb">
+          <p class="sign-eyebrow mb-4">
+            <span>Topologi</span>
+            <span>2.356 Stasiun · 1.293 Ruas</span>
+          </p>
           <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Peta rute, bukan cuma titik.</h2>
           <p class="leading-relaxed text-white/60">
             Stasiun, ruas, dan interchange dari 5 operator sebagai data graf terstruktur, lengkap dengan urutan
@@ -147,8 +146,13 @@
 
       <!-- Beat 3: API Terbuka -->
       <div id="api" data-beat="api" class="relative z-10 mx-auto grid max-w-5xl gap-12 px-6 py-20 md:grid-cols-2 md:items-center">
-        <div>
-          <p class="mb-3 font-mono text-xs uppercase tracking-[0.18em] text-accent">API</p>
+        <!-- Brand accent, not a line colour: this beat is about the platform
+             itself rather than any one operator. -->
+        <div class="sign p-6">
+          <p class="sign-eyebrow mb-4">
+            <span>API</span>
+            <span>5 Operator · 110 Lin</span>
+          </p>
           <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Satu skema buat seluruh jaringan.</h2>
           <p class="mb-6 leading-relaxed text-white/55">
             Kami lagi buka data model yang sama, yang dipakai aplikasi Commute. Ini yang direncanakan buat API publiknya.
@@ -178,7 +182,7 @@
             Daftar early access
           </a>
         </div>
-        <div class="overflow-x-auto rounded-xl border border-line bg-[#0a0c11] p-5">
+        <div class="overflow-x-auto border border-line bg-plate p-5">
           <p class="mb-3 font-mono text-xs text-white/45">GET /stations/KCI/BOO</p>
           <pre class="font-mono text-[13px] leading-relaxed text-white/85"><span class="text-white/35">{</span>
   <span class="text-sky-300">"status"</span><span class="text-white/35">:</span> <span class="text-amber-200">200</span><span class="text-white/35">,</span>
@@ -203,9 +207,9 @@
 
       <!-- Supporting features -->
       <div class="mx-auto max-w-5xl px-6 pb-24">
-        <div class="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-line sm:grid-cols-3">
-          <div class="bg-panel/40 p-8 transition-colors hover:bg-panel/70">
-            <div class="mb-4 flex h-9 w-9 items-center justify-center rounded-lg bg-accent/10 text-accent">
+        <div class="grid grid-cols-1 gap-px overflow-hidden border border-line bg-line sm:grid-cols-3">
+          <div class="bg-panel/70 p-8 backdrop-blur-sm transition-colors hover:bg-panel/90">
+            <div class="mb-4 flex h-9 w-9 items-center justify-center bg-accent/10 text-accent">
               <svg viewBox="0 0 256 256" width="20" height="20" fill="currentColor"><path d="M232,108a12,12,0,0,0,12-12V64a20,20,0,0,0-20-20H32A20,20,0,0,0,12,64V96a12,12,0,0,0,12,12,20,20,0,0,1,0,40,12,12,0,0,0-12,12v32a20,20,0,0,0,20,20H224a20,20,0,0,0,20-20V160a12,12,0,0,0-12-12,20,20,0,0,1,0-40ZM36,170.34a44,44,0,0,0,0-84.68V68H88V188H36Zm184,0V188H112V68H220V85.66a44,44,0,0,0,0,84.68Z"/></svg>
             </div>
             <h3 class="mb-2 text-base font-semibold text-white">Kalkulator Tarif</h3>
@@ -213,8 +217,8 @@
               Hitung tarif antar dua stasiun mana pun, per operator. Dukungan tarif terintegrasi JakLingko lagi kami garap.
             </p>
           </div>
-          <div class="bg-panel/40 p-8 transition-colors hover:bg-panel/70">
-            <div class="mb-4 flex h-9 w-9 items-center justify-center rounded-lg bg-accent/10 text-accent">
+          <div class="bg-panel/70 p-8 backdrop-blur-sm transition-colors hover:bg-panel/90">
+            <div class="mb-4 flex h-9 w-9 items-center justify-center bg-accent/10 text-accent">
               <svg viewBox="0 0 256 256" width="20" height="20" fill="currentColor"><path d="M240,204H228V96a20,20,0,0,0-20-20H172V32a20,20,0,0,0-28.45-18.12l-104,48.54A20.06,20.06,0,0,0,28,80.55V204H16a12,12,0,0,0,0,24H240a12,12,0,0,0,0-24ZM204,100V204H172V100ZM52,83.09,148,38.3V204H52ZM132,112v12a12,12,0,0,1-24,0V112a12,12,0,0,1,24,0Zm-40,0v12a12,12,0,0,1-24,0V112a12,12,0,0,1,24,0Zm0,52v12a12,12,0,0,1-24,0V164a12,12,0,0,1,24,0Zm40,0v12a12,12,0,0,1-24,0V164a12,12,0,0,1,24,0Z"/></svg>
             </div>
             <h3 class="mb-2 text-base font-semibold text-white">Info Stasiun</h3>
@@ -222,8 +226,8 @@
               Profil stasiun lengkap dengan fasilitas, koordinat, dan link interchange di seluruh jaringan.
             </p>
           </div>
-          <div class="bg-panel/40 p-8 transition-colors hover:bg-panel/70">
-            <div class="mb-4 flex h-9 w-9 items-center justify-center rounded-lg bg-accent/10 text-accent">
+          <div class="bg-panel/70 p-8 backdrop-blur-sm transition-colors hover:bg-panel/90">
+            <div class="mb-4 flex h-9 w-9 items-center justify-center bg-accent/10 text-accent">
               <svg viewBox="0 0 256 256" width="20" height="20" fill="currentColor"><path d="M100,36H56A20,20,0,0,0,36,56v44a20,20,0,0,0,20,20h44a20,20,0,0,0,20-20V56A20,20,0,0,0,100,36ZM96,96H60V60H96ZM200,36H156a20,20,0,0,0-20,20v44a20,20,0,0,0,20,20h44a20,20,0,0,0,20-20V56A20,20,0,0,0,200,36Zm-4,60H160V60h36Zm-96,40H56a20,20,0,0,0-20,20v44a20,20,0,0,0,20,20h44a20,20,0,0,0,20-20V156A20,20,0,0,0,100,136Zm-4,60H60V160H96Zm104-60H156a20,20,0,0,0-20,20v44a20,20,0,0,0,20,20h44a20,20,0,0,0,20-20V156A20,20,0,0,0,200,136Zm-4,60H160V160h36Z"/></svg>
             </div>
             <h3 class="mb-2 text-base font-semibold text-white">Direktori Operator</h3>

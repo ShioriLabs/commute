@@ -29,9 +29,11 @@ export function createDeparturesFlyout(
   reduceMotion: boolean
 ): DeparturesFlyout {
   const card = document.createElement('div')
+  // Square-cut to match the page's sign plates (.sign in style.css), which take
+  // their cue from this card in the first place.
   card.className
-    = 'absolute left-0 top-0 w-[248px] overflow-hidden rounded-xl border border-line/70 '
-      + 'bg-[#0a0c11]/95 shadow-xl shadow-black/40 backdrop-blur-sm will-change-transform'
+    = 'absolute left-0 top-0 w-[248px] overflow-hidden border border-line/70 '
+      + 'bg-plate/95 shadow-xl shadow-black/40 backdrop-blur-sm will-change-transform'
   card.style.opacity = '0'
   card.style.transition = reduceMotion ? 'none' : 'opacity 220ms ease, transform 220ms ease'
 
@@ -48,7 +50,7 @@ export function createDeparturesFlyout(
 
   function headerHTML(): string {
     return (
-      `<div class="flex items-center gap-2 bg-[#0a0c11] px-3.5 py-2.5 text-white">`
+      `<div class="flex items-center gap-2 bg-plate px-3.5 py-2.5 text-white">`
       + `<span class="text-[10px] font-medium uppercase tracking-wider text-white/45">Next</span>`
       + `<span class="flex-1 truncate text-sm font-bold">Manggarai</span>`
       + `<span class="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-accent"></span>`
@@ -60,7 +62,7 @@ export function createDeparturesFlyout(
     const timeText = r.relative ?? r.time
     const emphasize = r.relative === 'Sekarang'
     const platform = r.platformCode
-      ? `<span class="ml-2 shrink-0 rounded bg-white/10 px-1.5 py-0.5 font-mono text-[10px] text-white/60">${r.platformCode}</span>`
+      ? `<span class="ml-2 shrink-0 bg-white/10 px-1.5 py-0.5 font-mono text-[10px] text-white/60">${r.platformCode}</span>`
       : ''
     return (
       `<div class="flex items-center gap-2.5 px-3.5 py-2.5">`

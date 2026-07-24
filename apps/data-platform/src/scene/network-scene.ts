@@ -179,12 +179,17 @@ export function buildScene(): NetworkScene {
     stHighlight.push(highlightStations.has(node.id) ? 1 : 0)
   }
 
-  // Faint dead-dot field across a rectangle a bit larger than the network, so
-  // the tilted full-viewport plane never shows bare background. Margin in cells.
-  const FIELD_MARGIN = 18
+  // Faint dead-dot field across a rectangle larger than the network, so the
+  // full-viewport plane never shows bare background. Margins are in cells and
+  // asymmetric on purpose: the network is much wider (120 cells) than tall (75),
+  // and every beat frames by height, so a wide viewport runs out of field
+  // sideways long before it does vertically. Padding X harder than Z covers
+  // ultrawide screens without paying for rows nothing ever sees.
+  const FIELD_MARGIN_X = 70
+  const FIELD_MARGIN_Z = 24
   const fieldOffsets: number[] = []
-  for (let col = -FIELD_MARGIN; col < cols + FIELD_MARGIN; col++) {
-    for (let row = -FIELD_MARGIN; row < rows + FIELD_MARGIN; row++) {
+  for (let col = -FIELD_MARGIN_X; col < cols + FIELD_MARGIN_X; col++) {
+    for (let row = -FIELD_MARGIN_Z; row < rows + FIELD_MARGIN_Z; row++) {
       const w = cellToWorld(col, row, cols, rows)
       fieldOffsets.push(w.x, w.y, w.z)
     }
