@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Commute Data Platform — Data Kereta buat Developer Jakarta</title>
+    <title>Commute Data Platform · Data Kereta buat Developer Jakarta</title>
     <meta
       name="description"
       content="Data KRL, MRT, LRT, dan TransJakarta yang udah rapi, siap dipakai buat project kamu. Stasiun, lin, transfer, dan tarif dalam satu tempat."
@@ -116,10 +116,10 @@
             <span>Jadwal</span>
             <span>27.094 Trip</span>
           </p>
-          <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Semua jadwal, satu jalur.</h2>
+          <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Semua Jadwal, Sat Set Satu Feed</h2>
           <p class="leading-relaxed text-white/60">
             Jadwal keberangkatan dan kedatangan buat KRL, MRT, dan LRT mengalir jadi satu feed yang konsisten.
-            Lebih dari 27.000 perjalanan terjadwal, sinkron dari sumber aslinya — kayak keberangkatan Manggarai di samping.
+            Lebih dari 27.000 perjalanan terjadwal, sinkron langsung dari sumbernya, kayak keberangkatan Manggarai di samping.
           </p>
         </div>
         <!-- right half intentionally open: the map + PIDS flyout live here -->
@@ -135,11 +135,11 @@
             <span>Topologi</span>
             <span>2.356 Stasiun · 1.293 Ruas</span>
           </p>
-          <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Peta rute, bukan cuma titik.</h2>
+          <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Peta Rute, Bukan Cuma Titik</h2>
           <p class="leading-relaxed text-white/60">
-            Stasiun, ruas, dan interchange dari 5 operator sebagai data graf terstruktur, lengkap dengan urutan
-            stasiun yang bener di tiap lin, kayak Lin Cikarang lewat Sudirman Baru, Sudirman, Manggarai, sampai Matraman
-            yang lagi disorot di peta.
+            Stasiun, ruas, dan interchange dari 5 operator sebagai data graf, lengkap sama urutan stasiun yang bener
+            di tiap lin. Yang lagi disorot di peta itu Lin Cikarang, lewat Sudirman Baru, Sudirman, Manggarai,
+            sampai Matraman.
           </p>
         </div>
       </div>
@@ -153,10 +153,10 @@
             <span>Tarif</span>
             <span data-fare-datum>Rp7.000</span>
           </p>
-          <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Tau ongkosnya sebelum tap in.</h2>
+          <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Tau Ongkosnya Sebelum Tap In</h2>
           <p class="leading-relaxed text-white/60">
             Hitung tarif antar dua stasiun mana pun, udah kehitung sama jarak dan transfernya. Kayak Blok M
-            ke Dukuh Atas di peta — angkanya keluar dari endpoint yang sama yang bisa kamu panggil.
+            ke Dukuh Atas di peta, angkanya keluar dari endpoint yang sama yang bisa kamu panggil.
           </p>
         </div>
         <!-- right half intentionally open: the map + fare tag live here -->
@@ -173,12 +173,12 @@
             <span>Stasiun</span>
             <span data-station-datum>7 Fasilitas · 2 Lin</span>
           </p>
-          <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Sampai ke detail peronnya.</h2>
+          <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Sampai ke Detail Peronnya</h2>
           <!-- Prose only. Every figure — fasilitas, operator, lin, koordinat,
                transfer — lives on the factoid card anchored to the roundel, so
                the claim sits here and the evidence sits on the map. -->
           <p class="leading-relaxed text-white/60">
-            Tiap stasiun bawa profil lengkapnya sendiri — fasilitas, koordinat, lin yang lewat, sampai transfer ke
+            Tiap stasiun bawa profil lengkapnya sendiri: fasilitas, koordinat, lin yang lewat, sampai transfer ke
             operator lain. Ini Rasuna Said, tempat Lin Bekasi dan Lin Cibubur pakai jalur yang sama.
           </p>
         </div>
@@ -195,26 +195,26 @@
             <span>API</span>
             <span>5 Operator · 110 Lin</span>
           </p>
-          <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Satu skema buat seluruh jaringan.</h2>
+          <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Satu Skema Buat Seluruh Jaringan</h2>
           <p class="mb-6 leading-relaxed text-white/55">
-            Kami lagi buka data model yang sama, yang dipakai aplikasi Commute. Ini yang direncanakan buat API publiknya.
+            Data model yang dipake aplikasi Commute, kita buka apa adanya. Ini yang bakal jadi API publiknya.
           </p>
           <ul class="mb-8 flex flex-col gap-3.5">
             <li class="flex gap-3 text-sm leading-relaxed text-white/80">
               <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent"></span>
-              REST API dengan respons JSON, tanpa perlu SDK
+              REST, balikannya JSON, gak perlu SDK
             </li>
             <li class="flex gap-3 text-sm leading-relaxed text-white/80">
               <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent"></span>
-              Filter berdasarkan operator, lin, stasiun, atau zona tarif
+              Filter per operator, lin, stasiun, atau zona tarif
             </li>
             <li class="flex gap-3 text-sm leading-relaxed text-white/80">
               <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent"></span>
-              Pagination berbasis cursor buat dataset besar
+              Pagination pake cursor, aman buat dataset gede
             </li>
             <li class="flex gap-3 text-sm leading-relaxed text-white/80">
               <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent"></span>
-              Data operator, lin, stasiun, dan tarif dalam satu skema yang konsisten
+              ID stasiun konsisten lintas operator, gak perlu mapping sendiri
             </li>
           </ul>
           <a
