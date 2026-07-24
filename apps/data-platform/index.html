@@ -112,10 +112,6 @@
         <!-- Left bar carries Lin Cikarang's own colour — the line this beat and
              the map's highlight are both showing. -->
         <div class="sign max-w-md p-6 md:justify-self-start" style="--sign-accent: #25b8eb">
-          <p class="sign-eyebrow mb-4">
-            <span>Jadwal</span>
-            <span>27.094 Trip</span>
-          </p>
           <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Semua Jadwal, Sat Set Satu Feed</h2>
           <p class="leading-relaxed text-white/60">
             Jadwal keberangkatan dan kedatangan buat KRL, MRT, dan LRT mengalir jadi satu feed yang konsisten.
@@ -131,10 +127,6 @@
       <div data-beat="topologi" class="relative z-10 mx-auto grid min-h-[85vh] max-w-5xl items-center gap-12 px-6 py-20 md:grid-cols-2">
         <div aria-hidden="true" class="hidden md:block"></div>
         <div class="sign max-w-md p-6 md:justify-self-end" style="--sign-accent: #25b8eb">
-          <p class="sign-eyebrow mb-4">
-            <span>Topologi</span>
-            <span>2.356 Stasiun · 1.293 Ruas</span>
-          </p>
           <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Peta Rute, Bukan Cuma Titik</h2>
           <p class="leading-relaxed text-white/60">
             Stasiun, ruas, dan interchange dari 5 operator sebagai data graf, lengkap sama urutan stasiun yang bener
@@ -149,10 +141,6 @@
            Accent is Lin Utara Selatan's own colour. -->
       <div data-beat="tarif" class="relative z-10 mx-auto grid min-h-[85vh] max-w-5xl items-center gap-12 px-6 py-20 md:grid-cols-2">
         <div class="sign max-w-md p-6 md:justify-self-start" style="--sign-accent: #ca2a51">
-          <p class="sign-eyebrow mb-4">
-            <span>Tarif</span>
-            <span data-fare-datum>Rp7.000</span>
-          </p>
           <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Tau Ongkosnya Sebelum Tap In</h2>
           <p class="leading-relaxed text-white/60">
             Hitung tarif antar dua stasiun mana pun, udah kehitung sama jarak dan transfernya. Kayak Blok M
@@ -169,10 +157,6 @@
       <div data-beat="stasiun" class="relative z-10 mx-auto grid min-h-[85vh] max-w-5xl items-center gap-12 px-6 py-20 md:grid-cols-2">
         <div aria-hidden="true" class="hidden md:block"></div>
         <div class="sign max-w-md p-6 md:justify-self-end" style="--sign-accent: #006838">
-          <p class="sign-eyebrow mb-4">
-            <span>Stasiun</span>
-            <span data-station-datum>7 Fasilitas · 2 Lin</span>
-          </p>
           <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Sampai ke Detail Peronnya</h2>
           <!-- Prose only. Every figure — fasilitas, operator, lin, koordinat,
                transfer — lives on the factoid card anchored to the roundel, so
@@ -184,17 +168,13 @@
         </div>
       </div>
 
-      <!-- Beat 5: API Terbuka — the code panel shows the REAL response for the
-           station the previous beat just visited, so the reader sees one object
-           twice: as geometry, then as JSON. -->
-      <div id="api" data-beat="api" class="relative z-10 mx-auto grid max-w-5xl gap-12 px-6 py-20 md:grid-cols-2 md:items-center">
+      <!-- Beat 5: API Terbuka — the response panel is anchored to Rasuna Said's
+           roundel (overlay/api-panel.ts), so the station the previous beat just
+           visited as a record now appears as the raw JSON, on the same dot. -->
+      <div id="api" data-beat="api" class="relative z-10 mx-auto grid min-h-[85vh] max-w-5xl items-center gap-12 px-6 py-20 md:grid-cols-2">
         <!-- Brand accent, not a line colour: this beat is about the platform
              itself rather than any one operator. -->
-        <div class="sign p-6">
-          <p class="sign-eyebrow mb-4">
-            <span>API</span>
-            <span>5 Operator · 110 Lin</span>
-          </p>
+        <div class="sign max-w-md p-6 md:justify-self-start">
           <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Satu Skema Buat Seluruh Jaringan</h2>
           <p class="mb-6 leading-relaxed text-white/55">
             Data model yang dipake aplikasi Commute, kita buka apa adanya. Ini yang bakal jadi API publiknya.
@@ -224,29 +204,11 @@
             Daftar early access
           </a>
         </div>
-        <!-- Populated at runtime with the live GET /stations/LRTJBDB/RAS
-             response; the markup below is the fallback if that fetch fails. -->
-        <div class="overflow-x-auto border border-line bg-plate p-5">
-          <p class="mb-3 font-mono text-xs text-white/45" data-api-endpoint>GET /stations/KCI/BOO</p>
-          <pre class="font-mono text-[13px] leading-relaxed text-white/85" data-api-response><span class="text-white/35">{</span>
-  <span class="text-sky-300">"status"</span><span class="text-white/35">:</span> <span class="text-amber-200">200</span><span class="text-white/35">,</span>
-  <span class="text-sky-300">"data"</span><span class="text-white/35">:</span> <span class="text-white/35">{</span>
-    <span class="text-sky-300">"id"</span><span class="text-white/35">:</span> <span class="text-green-300">"KCI-BOO"</span><span class="text-white/35">,</span>
-    <span class="text-sky-300">"name"</span><span class="text-white/35">:</span> <span class="text-green-300">"Bogor"</span><span class="text-white/35">,</span>
-    <span class="text-sky-300">"code"</span><span class="text-white/35">:</span> <span class="text-green-300">"BOO"</span><span class="text-white/35">,</span>
-    <span class="text-sky-300">"region"</span><span class="text-white/35">:</span> <span class="text-green-300">"Jabodetabek"</span><span class="text-white/35">,</span>
-    <span class="text-sky-300">"operator"</span><span class="text-white/35">:</span> <span class="text-green-300">"KCI"</span><span class="text-white/35">,</span>
-    <span class="text-sky-300">"timetableSynced"</span><span class="text-white/35">:</span> <span class="text-amber-200">1</span><span class="text-white/35">,</span>
-    <span class="text-sky-300">"searchable"</span><span class="text-white/35">:</span> <span class="text-amber-200">true</span><span class="text-white/35">,</span>
-    <span class="text-sky-300">"amenities"</span><span class="text-white/35">:</span> <span class="text-white/35">[</span>
-      <span class="text-white/35">{</span> <span class="text-sky-300">"type"</span><span class="text-white/35">:</span> <span class="text-green-300">"TOILET"</span> <span class="text-white/35">},</span>
-      <span class="text-white/35">{</span> <span class="text-sky-300">"type"</span><span class="text-white/35">:</span> <span class="text-green-300">"PARKING"</span> <span class="text-white/35">}</span>
-    <span class="text-white/35">],</span>
-    <span class="text-sky-300">"latitude"</span><span class="text-white/35">:</span> <span class="text-amber-200">-6.5951</span><span class="text-white/35">,</span>
-    <span class="text-sky-300">"longitude"</span><span class="text-white/35">:</span> <span class="text-amber-200">106.7893</span>
-  <span class="text-white/35">}</span>
-<span class="text-white/35">}</span></pre>
-        </div>
+        <!-- Desktop: left empty so the map + the anchored response panel
+             (overlay/api-panel.ts) own this half. Below md: there is no open
+             column, so the panel docks into this slot as ordinary stacked
+             content instead of floating half-hidden behind the copy. -->
+        <div data-api-dock></div>
       </div>
 
     </section>

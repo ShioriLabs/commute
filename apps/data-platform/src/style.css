@@ -34,29 +34,6 @@ body {
     backdrop-filter: blur(6px);
   }
 
-  /* Eyebrow row: label left, the beat's own datum right, hairline beneath. */
-  .sign-eyebrow {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 1rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid color-mix(in srgb, var(--color-line) 80%, transparent);
-    font-family: var(--font-mono);
-    font-size: 0.6875rem;
-    text-transform: uppercase;
-    letter-spacing: 0.18em;
-  }
-
-  .sign-eyebrow > :first-child {
-    color: var(--sign-accent, var(--color-accent));
-  }
-
-  .sign-eyebrow > :last-child {
-    color: color-mix(in srgb, white 45%, transparent);
-    letter-spacing: 0.08em;
-    white-space: nowrap;
-  }
 }
 
 @layer utilities {

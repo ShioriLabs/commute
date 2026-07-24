@@ -178,8 +178,27 @@ export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
     1.6 * narrow
   )
 
-  // API + footer: ease back out to the top-down establishing shot.
+  // API: still on Rasuna Said, but pulled back from the stasiun close-up so the
+  // beat reads as easing out while keeping the anchor findable — the response
+  // panel hangs off that roundel, and framing the whole network here would bury
+  // it in the dense core. Copy sits left, so bias the station right.
+  // Smaller shift than the other beats: the panel opens to the RIGHT of the
+  // roundel, so the roundel needs to sit left of centre to leave it room.
+  // Mobile needs no shift: below md: the panel docks into the page rather than
+  // anchoring to the roundel, so nothing has to be dodged.
+  const apiShift = twoColumn ? 3 : 0
   const api = framingPose(
+    [ras.x - apiShift, 0, ras.z],
+    24,
+    24,
+    90, // top-down
+    40 * DEG,
+    aspect,
+    1.5 * narrow
+  )
+
+  // Footer: the only true establishing shot left, so the page still ends wide.
+  const footer = framingPose(
     [scene.bounds.center.x, 0, scene.bounds.center.z],
     hx,
     hz,
@@ -191,10 +210,11 @@ export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
 
   // Ordered as a geographic sweep so the camera never doubles back: Manggarai ->
   // the Cikarang chain through it -> the MRT corridor west of it -> Rasuna Said
-  // in the middle -> back out to the whole network.
+  // in the middle -> pull back on Rasuna Said -> out to the whole network.
   //
-  // The API beat keeps a low emphasis on Rasuna Said because its code panel shows
-  // that station's real response: same object, seen as geometry and as JSON.
+  // stasiun and api share both the subject and the highlight set, so no buffer
+  // swap happens between them; the beats differ only in framing and in which
+  // overlay is anchored to the roundel (the record, then the raw response).
   return [
     { id: 'hero', selector: '[data-beat=\'hero\']', pose: hero, highlight: 0, highlightSet: 'none' },
     { id: 'jadwal', selector: '[data-beat=\'jadwal\']', pose: jadwal, highlight: 0, highlightSet: 'none' },
@@ -202,6 +222,6 @@ export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
     { id: 'tarif', selector: '[data-beat=\'tarif\']', pose: tarif, highlight: 1, highlightSet: 'mrt-lbb-bhi' },
     { id: 'stasiun', selector: '[data-beat=\'stasiun\']', pose: stasiun, highlight: 1, highlightSet: 'rasuna' },
     { id: 'api', selector: '[data-beat=\'api\']', pose: api, highlight: 0.45, highlightSet: 'rasuna' },
-    { id: 'footer', selector: '[data-beat=\'footer\']', pose: api, highlight: 0, highlightSet: 'none' }
+    { id: 'footer', selector: '[data-beat=\'footer\']', pose: footer, highlight: 0, highlightSet: 'none' }
   ]
 }

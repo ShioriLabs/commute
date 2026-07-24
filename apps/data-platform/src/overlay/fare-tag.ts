@@ -6,6 +6,7 @@
 import type { FrameContext } from '../gl/renderer'
 import type { Vec3 } from '../scene/network-scene'
 import type { FareResult } from '../data/network-types'
+import { clamp } from './html'
 
 type State
   = | { kind: 'loading' }
@@ -129,8 +130,6 @@ export function createFareTag(
     // slide rather than jump.
     const w = card.offsetWidth || 200
     const h = card.offsetHeight || 64
-    const clamp = (v: number, lo: number, hi: number): number =>
-      Math.min(Math.max(v, lo), Math.max(lo, hi))
     const cardX = clamp(x + OFFSET_X, 8, ctx.viewportW - w - 8)
     const cardY = clamp(y + OFFSET_Y, 8, ctx.viewportH - h - 8)
     const cardTransform = `translate3d(${cardX}px, ${cardY}px, 0)`

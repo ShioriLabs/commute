@@ -14,7 +14,7 @@ import { createDeparturesFlyout } from './overlay/departures'
 import { createFareTag } from './overlay/fare-tag'
 import { createChainLabels } from './overlay/chain-labels'
 import { createStationCard } from './overlay/station-card'
-import { renderApiPanel, renderStationFacts } from './overlay/station-panel'
+import { createApiPanel } from './overlay/api-panel'
 import { fetchManggaraiDepartures } from './data/departures-api'
 import {
   fetchCorridorFare,
@@ -92,11 +92,22 @@ function bootNetworkBackground(): void {
       )
     : null
 
-  // The info-stasiun factoid card, anchored to Rasuna Said.
+  // Both of these anchor to Rasuna Said: the factoid card shows it as a record
+  // at the stasiun beat, the API panel as raw JSON at the api beat. They must
+  // never be visible together — see the beat gating in onActiveBeat below.
   const rasuna = scene.stationWorld.get('LRTJBDB-RAS')
   const stationCard
     = overlayRoot && rasuna
       ? createStationCard(overlayRoot, rasuna, reduceMotion)
+      : null
+  const apiPanel
+    = overlayRoot && rasuna
+      ? createApiPanel(
+          overlayRoot,
+          document.querySelector<HTMLElement>('[data-api-dock]'),
+          rasuna,
+          reduceMotion
+        )
       : null
 
   const renderer = createRenderer({
@@ -110,6 +121,7 @@ function bootNetworkBackground(): void {
       fareTag?.update(frameCtx)
       chainLabels?.update(frameCtx)
       stationCard?.update(frameCtx)
+      apiPanel?.update(frameCtx)
     }
   })
 
@@ -134,28 +146,27 @@ function bootNetworkBackground(): void {
     fetchCorridorFare()
       .then((fare) => {
         fareTag.setState({ kind: 'ready', fare })
-        // Mirror the headline figure into the plate's eyebrow datum.
-        const datum = document.querySelector<HTMLElement>('[data-fare-datum]')
-        if (datum) datum.textContent = `Rp${fare.totalFare.toLocaleString('id-ID')}`
       })
       .catch(() => fareTag.setState({ kind: 'error' }))
   }
 
-  // Rasuna Said backs BOTH the info-stasiun plate and the API beat's code panel,
-  // so one fetch serves both; the transfers call is separate and optional.
+  // Rasuna Said backs BOTH the factoid card and the API response panel, so one
+  // fetch serves both; the transfers call is separate and optional.
   let stationLoaded = false
   function loadStation(): void {
     stationCard?.setState({ kind: 'loading' })
+    apiPanel?.setState({ kind: 'loading' })
     fetchStationDetail()
       .then(async (station) => {
-        renderApiPanel(station)
+        apiPanel?.setState({ kind: 'ready', station })
         const transfers = await fetchStationTransfers().catch(() => [])
-        renderStationFacts(station)
         stationCard?.setState({ kind: 'ready', station, transfers })
       })
       .catch(() => {
-        // Leave the static fallback markup in place — it's accurate, just not live.
+        // Both overlays fall back to readable content of their own; the plate
+        // keeps whatever the markup already says.
         stationCard?.setState({ kind: 'error' })
+        apiPanel?.setState({ kind: 'error' })
       })
   }
 
@@ -184,7 +195,9 @@ function bootNetworkBackground(): void {
       // Chain codes belong to the topology beat only — that's what keeps them
       // from becoming the label clutter this page already removed once.
       chainLabels?.setVisible(id === 'topologi')
+      // Mutually exclusive: both hang off the same roundel.
       stationCard?.setVisible(id === 'stasiun')
+      apiPanel?.setVisible(id === 'api')
 
       // Fetch from the tarif beat onward: the station card wants data before the
       // reader arrives, and the API panel below reads the same response.

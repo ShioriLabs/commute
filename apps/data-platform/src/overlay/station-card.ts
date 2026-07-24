@@ -5,6 +5,7 @@
 import type { FrameContext } from '../gl/renderer'
 import type { Vec3 } from '../scene/network-scene'
 import type { StationDetail, StationTransfer } from '../data/network-types'
+import { clamp, escapeHTML } from './html'
 
 type State
   = | { kind: 'loading' }
@@ -20,12 +21,6 @@ export interface StationCard {
 
 const OFFSET_X = 20
 const OFFSET_Y = -14
-
-function escapeHTML(s: string): string {
-  return s.replace(/[&<>"]/g, c => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] ?? c
-  ))
-}
 
 function row(label: string, value: string): string {
   return (
@@ -167,8 +162,6 @@ export function createStationCard(
     const y = Math.round(p.y)
     const w = card.offsetWidth || 232
     const h = card.offsetHeight || 120
-    const clamp = (v: number, lo: number, hi: number): number =>
-      Math.min(Math.max(v, lo), Math.max(lo, hi))
     // Prefer the anchor's LEFT (the plate owns the right column at this beat),
     // then clamp into the viewport so a narrow screen can't push it off-edge.
     const cardX = clamp(x - OFFSET_X - w, 8, ctx.viewportW - w - 8)
