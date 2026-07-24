@@ -144,7 +144,49 @@
         </div>
       </div>
 
-      <!-- Beat 3: API Terbuka -->
+      <!-- Beat 3: Tarif — the map highlights the whole MRT run Lebak Bulus →
+           Bundaran HI and prices it in a flyout anchored to the destination.
+           Accent is Lin Utara Selatan's own colour. -->
+      <div data-beat="tarif" class="relative z-10 mx-auto grid min-h-[85vh] max-w-5xl items-center gap-12 px-6 py-20 md:grid-cols-2">
+        <div class="sign max-w-md p-6 md:justify-self-start" style="--sign-accent: #ca2a51">
+          <p class="sign-eyebrow mb-4">
+            <span>Tarif</span>
+            <span data-fare-datum>Rp7.000</span>
+          </p>
+          <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Tau ongkosnya sebelum tap in.</h2>
+          <p class="leading-relaxed text-white/60">
+            Hitung tarif antar dua stasiun mana pun, udah kehitung sama jarak dan transfernya. Kayak Blok M
+            ke Dukuh Atas di peta — angkanya keluar dari endpoint yang sama yang bisa kamu panggil.
+          </p>
+        </div>
+        <!-- right half intentionally open: the map + fare tag live here -->
+        <div aria-hidden="true"></div>
+      </div>
+
+      <!-- Beat 4: Info stasiun — camera drops to Rasuna Said. Two accents
+           because two lines share the track through it (Bekasi + Cibubur);
+           that's a fact about the station, not decoration. -->
+      <div data-beat="stasiun" class="relative z-10 mx-auto grid min-h-[85vh] max-w-5xl items-center gap-12 px-6 py-20 md:grid-cols-2">
+        <div aria-hidden="true" class="hidden md:block"></div>
+        <div class="sign max-w-md p-6 md:justify-self-end" style="--sign-accent: #006838">
+          <p class="sign-eyebrow mb-4">
+            <span>Stasiun</span>
+            <span data-station-datum>7 Fasilitas · 2 Lin</span>
+          </p>
+          <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Sampai ke detail peronnya.</h2>
+          <!-- Prose only. Every figure — fasilitas, operator, lin, koordinat,
+               transfer — lives on the factoid card anchored to the roundel, so
+               the claim sits here and the evidence sits on the map. -->
+          <p class="leading-relaxed text-white/60">
+            Tiap stasiun bawa profil lengkapnya sendiri — fasilitas, koordinat, lin yang lewat, sampai transfer ke
+            operator lain. Ini Rasuna Said, tempat Lin Bekasi dan Lin Cibubur pakai jalur yang sama.
+          </p>
+        </div>
+      </div>
+
+      <!-- Beat 5: API Terbuka — the code panel shows the REAL response for the
+           station the previous beat just visited, so the reader sees one object
+           twice: as geometry, then as JSON. -->
       <div id="api" data-beat="api" class="relative z-10 mx-auto grid max-w-5xl gap-12 px-6 py-20 md:grid-cols-2 md:items-center">
         <!-- Brand accent, not a line colour: this beat is about the platform
              itself rather than any one operator. -->
@@ -182,9 +224,11 @@
             Daftar early access
           </a>
         </div>
+        <!-- Populated at runtime with the live GET /stations/LRTJBDB/RAS
+             response; the markup below is the fallback if that fetch fails. -->
         <div class="overflow-x-auto border border-line bg-plate p-5">
-          <p class="mb-3 font-mono text-xs text-white/45">GET /stations/KCI/BOO</p>
-          <pre class="font-mono text-[13px] leading-relaxed text-white/85"><span class="text-white/35">{</span>
+          <p class="mb-3 font-mono text-xs text-white/45" data-api-endpoint>GET /stations/KCI/BOO</p>
+          <pre class="font-mono text-[13px] leading-relaxed text-white/85" data-api-response><span class="text-white/35">{</span>
   <span class="text-sky-300">"status"</span><span class="text-white/35">:</span> <span class="text-amber-200">200</span><span class="text-white/35">,</span>
   <span class="text-sky-300">"data"</span><span class="text-white/35">:</span> <span class="text-white/35">{</span>
     <span class="text-sky-300">"id"</span><span class="text-white/35">:</span> <span class="text-green-300">"KCI-BOO"</span><span class="text-white/35">,</span>
@@ -205,38 +249,6 @@
         </div>
       </div>
 
-      <!-- Supporting features -->
-      <div class="mx-auto max-w-5xl px-6 pb-24">
-        <div class="grid grid-cols-1 gap-px overflow-hidden border border-line bg-line sm:grid-cols-3">
-          <div class="bg-panel/70 p-8 backdrop-blur-sm transition-colors hover:bg-panel/90">
-            <div class="mb-4 flex h-9 w-9 items-center justify-center bg-accent/10 text-accent">
-              <svg viewBox="0 0 256 256" width="20" height="20" fill="currentColor"><path d="M232,108a12,12,0,0,0,12-12V64a20,20,0,0,0-20-20H32A20,20,0,0,0,12,64V96a12,12,0,0,0,12,12,20,20,0,0,1,0,40,12,12,0,0,0-12,12v32a20,20,0,0,0,20,20H224a20,20,0,0,0,20-20V160a12,12,0,0,0-12-12,20,20,0,0,1,0-40ZM36,170.34a44,44,0,0,0,0-84.68V68H88V188H36Zm184,0V188H112V68H220V85.66a44,44,0,0,0,0,84.68Z"/></svg>
-            </div>
-            <h3 class="mb-2 text-base font-semibold text-white">Kalkulator Tarif</h3>
-            <p class="text-sm leading-relaxed text-white/55">
-              Hitung tarif antar dua stasiun mana pun, per operator. Dukungan tarif terintegrasi JakLingko lagi kami garap.
-            </p>
-          </div>
-          <div class="bg-panel/70 p-8 backdrop-blur-sm transition-colors hover:bg-panel/90">
-            <div class="mb-4 flex h-9 w-9 items-center justify-center bg-accent/10 text-accent">
-              <svg viewBox="0 0 256 256" width="20" height="20" fill="currentColor"><path d="M240,204H228V96a20,20,0,0,0-20-20H172V32a20,20,0,0,0-28.45-18.12l-104,48.54A20.06,20.06,0,0,0,28,80.55V204H16a12,12,0,0,0,0,24H240a12,12,0,0,0,0-24ZM204,100V204H172V100ZM52,83.09,148,38.3V204H52ZM132,112v12a12,12,0,0,1-24,0V112a12,12,0,0,1,24,0Zm-40,0v12a12,12,0,0,1-24,0V112a12,12,0,0,1,24,0Zm0,52v12a12,12,0,0,1-24,0V164a12,12,0,0,1,24,0Zm40,0v12a12,12,0,0,1-24,0V164a12,12,0,0,1,24,0Z"/></svg>
-            </div>
-            <h3 class="mb-2 text-base font-semibold text-white">Info Stasiun</h3>
-            <p class="text-sm leading-relaxed text-white/55">
-              Profil stasiun lengkap dengan fasilitas, koordinat, dan link interchange di seluruh jaringan.
-            </p>
-          </div>
-          <div class="bg-panel/70 p-8 backdrop-blur-sm transition-colors hover:bg-panel/90">
-            <div class="mb-4 flex h-9 w-9 items-center justify-center bg-accent/10 text-accent">
-              <svg viewBox="0 0 256 256" width="20" height="20" fill="currentColor"><path d="M100,36H56A20,20,0,0,0,36,56v44a20,20,0,0,0,20,20h44a20,20,0,0,0,20-20V56A20,20,0,0,0,100,36ZM96,96H60V60H96ZM200,36H156a20,20,0,0,0-20,20v44a20,20,0,0,0,20,20h44a20,20,0,0,0,20-20V56A20,20,0,0,0,200,36Zm-4,60H160V60h36Zm-96,40H56a20,20,0,0,0-20,20v44a20,20,0,0,0,20,20h44a20,20,0,0,0,20-20V156A20,20,0,0,0,100,136Zm-4,60H60V160H96Zm104-60H156a20,20,0,0,0-20,20v44a20,20,0,0,0,20,20h44a20,20,0,0,0,20-20V156A20,20,0,0,0,200,136Zm-4,60H160V160h36Z"/></svg>
-            </div>
-            <h3 class="mb-2 text-base font-semibold text-white">Direktori Operator</h3>
-            <p class="text-sm leading-relaxed text-white/55">
-              Data terstruktur dari 5 operator transit Jakarta: Commuter Line, MRT Jakarta, LRT Jakarta, LRT Jabodebek, dan TransJakarta.
-            </p>
-          </div>
-        </div>
-      </div>
     </section>
 
     <!-- Footer -->

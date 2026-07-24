@@ -10,6 +10,12 @@ export interface InstancedPass {
   instanceCount: number
 }
 
+// A pass whose per-instance emphasis flags can be swapped at runtime, so one
+// baked geometry can spotlight different subjects as the scroll beats change.
+export interface HighlightablePass extends InstancedPass {
+  setHighlight(gl: WebGL2RenderingContext, data: Float32Array): void
+}
+
 export interface TrainPass {
   vao: twgl.VertexArrayInfo
   bufferInfo: twgl.BufferInfo
@@ -39,6 +45,36 @@ function buildInstanced(
   return { vao, instanceCount }
 }
 
+// As buildInstanced, but a_isHighlight is DYNAMIC_DRAW and re-uploadable. Starts
+// all-zero: the director pushes the active subject's flags on the first frame.
+function buildHighlightable(
+  gl: WebGL2RenderingContext,
+  program: twgl.ProgramInfo,
+  instanceArrays: twgl.Arrays,
+  instanceCount: number
+): HighlightablePass {
+  const arrays: twgl.Arrays = {
+    a_quad: { numComponents: 2, data: QUAD_CORNERS },
+    ...instanceArrays,
+    a_isHighlight: {
+      numComponents: 1,
+      data: new Float32Array(instanceCount),
+      divisor: 1,
+      drawType: gl.DYNAMIC_DRAW
+    }
+  }
+  const bufferInfo = twgl.createBufferInfoFromArrays(gl, arrays)
+  const vao = twgl.createVertexArrayInfo(gl, program, bufferInfo)
+
+  function setHighlight(g: WebGL2RenderingContext, data: Float32Array): void {
+    const attrib = bufferInfo.attribs!.a_isHighlight!
+    g.bindBuffer(g.ARRAY_BUFFER, attrib.buffer)
+    g.bufferSubData(g.ARRAY_BUFFER, 0, data)
+  }
+
+  return { vao, instanceCount, setHighlight }
+}
+
 export function buildFieldPass(
   gl: WebGL2RenderingContext,
   programs: Programs,
@@ -56,16 +92,15 @@ export function buildDotPass(
   gl: WebGL2RenderingContext,
   programs: Programs,
   scene: NetworkScene
-): InstancedPass {
-  return buildInstanced(
+): HighlightablePass {
+  return buildHighlightable(
     gl,
     programs.dot,
     {
       a_offset: { numComponents: 3, data: scene.dots.offsets, divisor: 1 },
       a_color: { numComponents: 3, data: scene.dots.colors, divisor: 1 },
       a_radius: { numComponents: 1, data: scene.dots.radii, divisor: 1 },
-      a_order: { numComponents: 1, data: scene.dots.order, divisor: 1 },
-      a_isHighlight: { numComponents: 1, data: scene.dots.isHighlight, divisor: 1 }
+      a_order: { numComponents: 1, data: scene.dots.order, divisor: 1 }
     },
     scene.dots.count
   )
@@ -75,14 +110,13 @@ export function buildStationPass(
   gl: WebGL2RenderingContext,
   programs: Programs,
   scene: NetworkScene
-): InstancedPass {
-  return buildInstanced(
+): HighlightablePass {
+  return buildHighlightable(
     gl,
     programs.station,
     {
       a_offset: { numComponents: 3, data: scene.stations.offsets, divisor: 1 },
-      a_radius: { numComponents: 1, data: scene.stations.radii, divisor: 1 },
-      a_isHighlight: { numComponents: 1, data: scene.stations.isHighlight, divisor: 1 }
+      a_radius: { numComponents: 1, data: scene.stations.radii, divisor: 1 }
     },
     scene.stations.count
   )

@@ -3,17 +3,27 @@
 // a highlight target (topology emphasis). Poses are built from the live scene so
 // they track the real network geometry.
 import { framingPose, type Pose } from '../gl/camera'
-import { HIGHLIGHT_CHAIN, type NetworkScene, type Vec3 } from '../scene/network-scene'
+import {
+  HIGHLIGHT_CHAIN,
+  MRT_FARE_FROM,
+  MRT_FARE_TO,
+  type HighlightId,
+  type NetworkScene,
+  type Vec3
+} from '../scene/network-scene'
 
-export type BeatId = 'hero' | 'jadwal' | 'topologi' | 'api' | 'footer'
+export type BeatId
+  = 'hero' | 'jadwal' | 'topologi' | 'tarif' | 'stasiun' | 'api' | 'footer'
 
 export interface Beat {
   id: BeatId
   /** Element the beat is anchored to (drives IntersectionObserver + progress). */
   selector: string
   pose: Pose
-  /** Topology emphasis target at this beat (0 = none, 1 = full). */
+  /** Emphasis strength at this beat (0 = none, 1 = full). */
   highlight: number
+  /** WHICH subject the emphasis applies to. */
+  highlightSet: HighlightId
 }
 
 const DEG = Math.PI / 180
@@ -111,6 +121,63 @@ export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
     1.6 * narrow
   )
 
+  // Tarif: the priced corridor, Blok M -> Dukuh Atas. It runs SW->NE, so a yaw
+  // turns that diagonal into a screen diagonal instead of letting it fight the
+  // plate edge. Pitch stays at 72 — BELOW the 78-89 up-vector blend band —
+  // because a yawed pose inside that band rolls the horizon on entry (see
+  // orbit() in gl/camera.ts).
+  const fareFrom = scene.stationWorld.get(MRT_FARE_FROM)!
+  const fareTo = scene.stationWorld.get(MRT_FARE_TO)!
+  const TARIF_YAW = 20
+  const tarifYawRad = TARIF_YAW * DEG
+  // Measure the corridor in the CAMERA's frame, not world XZ: yawed, its screen
+  // width and height are the projections of the endpoint delta onto the camera's
+  // right and forward axes. Feeding the raw span as both half-extents would
+  // over-frame the short axis and crop the long one.
+  const dx = fareTo.x - fareFrom.x
+  const dz = fareTo.z - fareFrom.z
+  const tarifHx = Math.abs(dx * Math.cos(tarifYawRad) - dz * Math.sin(tarifYawRad)) / 2
+  const tarifHz = Math.abs(dx * Math.sin(tarifYawRad) + dz * Math.cos(tarifYawRad)) / 2
+  // Desktop: copy sits left, so push the corridor into the open right half along
+  // the camera's own right vector (yaw makes screen-right != +X).
+  const tarifShift = twoColumn ? Math.hypot(dx, dz) * 0.22 : 0
+  // Mobile: the copy stacks full-width, so there is no open half to move into.
+  // Push the subject DOWN-screen instead, out from under the plate. At pitch 72
+  // screen-down is roughly the camera's forward axis on the ground plane.
+  const tarifDrop = twoColumn ? 0 : Math.hypot(dx, dz) * 0.18
+  // NOT scaled by `narrow`. That factor tightens beats whose subject is small
+  // relative to the viewport; this subject is a long diagonal that needs the full
+  // frame, and shrinking it on portrait pushed both endpoints off-screen.
+  const tarif = framingPose(
+    [
+      (fareFrom.x + fareTo.x) / 2 - Math.cos(tarifYawRad) * tarifShift - Math.sin(tarifYawRad) * tarifDrop,
+      0,
+      (fareFrom.z + fareTo.z) / 2 + Math.sin(tarifYawRad) * tarifShift - Math.cos(tarifYawRad) * tarifDrop
+    ],
+    tarifHx,
+    tarifHz,
+    72,
+    40 * DEG,
+    aspect,
+    twoColumn ? 1.25 : 1.15,
+    TARIF_YAW
+  )
+
+  // Info stasiun: Rasuna Said close-up — same top-down register as jadwal, so
+  // the two station beats read as the same kind of look. Copy sits right here,
+  // so bias the station toward the open left half.
+  const ras = scene.stationWorld.get('LRTJBDB-RAS')!
+  const stasiunShift = twoColumn ? 4 : 0
+  const stasiun = framingPose(
+    [ras.x + stasiunShift, 0, ras.z],
+    9,
+    9,
+    90,
+    42 * DEG,
+    aspect,
+    1.6 * narrow
+  )
+
   // API + footer: ease back out to the top-down establishing shot.
   const api = framingPose(
     [scene.bounds.center.x, 0, scene.bounds.center.z],
@@ -122,11 +189,19 @@ export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
     1.5 * narrow
   )
 
+  // Ordered as a geographic sweep so the camera never doubles back: Manggarai ->
+  // the Cikarang chain through it -> the MRT corridor west of it -> Rasuna Said
+  // in the middle -> back out to the whole network.
+  //
+  // The API beat keeps a low emphasis on Rasuna Said because its code panel shows
+  // that station's real response: same object, seen as geometry and as JSON.
   return [
-    { id: 'hero', selector: '[data-beat=\'hero\']', pose: hero, highlight: 0 },
-    { id: 'jadwal', selector: '[data-beat=\'jadwal\']', pose: jadwal, highlight: 0 },
-    { id: 'topologi', selector: '[data-beat=\'topologi\']', pose: topologi, highlight: 1 },
-    { id: 'api', selector: '[data-beat=\'api\']', pose: api, highlight: 0 },
-    { id: 'footer', selector: '[data-beat=\'footer\']', pose: api, highlight: 0 }
+    { id: 'hero', selector: '[data-beat=\'hero\']', pose: hero, highlight: 0, highlightSet: 'none' },
+    { id: 'jadwal', selector: '[data-beat=\'jadwal\']', pose: jadwal, highlight: 0, highlightSet: 'none' },
+    { id: 'topologi', selector: '[data-beat=\'topologi\']', pose: topologi, highlight: 1, highlightSet: 'cikarang' },
+    { id: 'tarif', selector: '[data-beat=\'tarif\']', pose: tarif, highlight: 1, highlightSet: 'mrt-lbb-bhi' },
+    { id: 'stasiun', selector: '[data-beat=\'stasiun\']', pose: stasiun, highlight: 1, highlightSet: 'rasuna' },
+    { id: 'api', selector: '[data-beat=\'api\']', pose: api, highlight: 0.45, highlightSet: 'rasuna' },
+    { id: 'footer', selector: '[data-beat=\'footer\']', pose: api, highlight: 0, highlightSet: 'none' }
   ]
 }

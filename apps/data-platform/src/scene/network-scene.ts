@@ -22,14 +22,63 @@ export const TRAINS_PER_LINE = 2
 export const TRAIN_STEP_MS = 90
 
 // The topology-beat highlight: a contiguous run on Lin Cikarang (segment 1).
-// Baked here so the shader's per-instance a_isHighlight is ready in Phase 1
-// even though the camera doesn't visit it until Phase 2.
 export const HIGHLIGHT_CHAIN = [
   'KCI-SUDB', // Sudirman Baru
   'KCI-SUD', //  Sudirman
   'KCI-MRI', //  Manggarai (interchange)
   'KCI-MTR' //  Matraman
 ] as const
+
+// The tarif beat prices Blok M -> Dukuh Atas: a short central run on MRT's Lin
+// Utara Selatan, chosen so the corridor stays readable on a portrait viewport.
+// Sliced out of the real line rather than typed by hand, so it can't drift from
+// the stop order the API prices; falls back to the endpoints if the slice fails.
+export const MRT_FARE_FROM = 'MRTJ-BLM'
+export const MRT_FARE_TO = 'MRTJ-DKA'
+
+function mrtCorridor(): readonly string[] {
+  const seg = NETWORK.lines.find(l => l.code === 'M')?.segments[0]
+  if (!seg) return [MRT_FARE_FROM, MRT_FARE_TO]
+  const a = seg.indexOf(MRT_FARE_FROM)
+  const b = seg.indexOf(MRT_FARE_TO)
+  if (a < 0 || b < 0) return [MRT_FARE_FROM, MRT_FARE_TO]
+  return seg.slice(Math.min(a, b), Math.max(a, b) + 1)
+}
+
+const MRT_CORRIDOR: readonly string[] = mrtCorridor()
+
+// Which subject the map emphasises. Every set is baked at build time (a few
+// thousand Float32Array writes each, once) and swapped at runtime by the
+// renderer, because a beat's subject is chosen by scroll position.
+export type HighlightId = 'none' | 'cikarang' | 'mrt-lbb-bhi' | 'rasuna'
+
+// The info-stasiun beat's subject. A lone station can't carry a beat — at
+// STATION_RADIUS it stays indistinguishable from its neighbours while everything
+// around it dims. So emphasise the run Rasuna Said sits on: Dukuh Atas ->
+// Setiabudi -> Rasuna Said -> Kuningan -> Pancoran, the stretch where Lin Bekasi
+// and Lin Cibubur share one track, which is exactly what the plate claims.
+const RASUNA_RUN = [
+  'LRTJBDB-DKA', // Dukuh Atas
+  'LRTJBDB-SET', // Setiabudi
+  'LRTJBDB-RAS', // Rasuna Said
+  'LRTJBDB-KUA', // Kuningan
+  'LRTJBDB-PAN' //  Pancoran
+] as const
+
+// Station chains to emphasise. Pairs are walked with octRoute() so the lit dots
+// BETWEEN stations light up too; a single-station set has no pairs and would mark
+// only the station itself.
+const HIGHLIGHT_SETS: Record<Exclude<HighlightId, 'none'>, readonly string[]> = {
+  'cikarang': HIGHLIGHT_CHAIN,
+  'mrt-lbb-bhi': MRT_CORRIDOR,
+  'rasuna': RASUNA_RUN
+}
+
+/** Per-instance emphasis flags for one subject, parallel to dots/stations. */
+export interface HighlightSet {
+  dots: Float32Array
+  stations: Float32Array
+}
 
 export interface Vec3 {
   x: number
@@ -50,14 +99,12 @@ export interface DotInstances {
   colors: Float32Array // vec3 (line color)
   radii: Float32Array // float
   order: Float32Array // float 0..1, staggered draw-in
-  isHighlight: Float32Array // float 0/1
   count: number
 }
 
 export interface StationInstances {
   offsets: Float32Array // vec3
   radii: Float32Array // float
-  isHighlight: Float32Array // float 0/1
   count: number
 }
 
@@ -71,6 +118,8 @@ export interface NetworkScene {
   field: FieldInstances
   dots: DotInstances
   stations: StationInstances
+  /** Emphasis flags per subject; the renderer uploads one set at a time. */
+  highlights: Map<HighlightId, HighlightSet>
   trainRoutes: TrainRoute[]
   stationWorld: Map<string, Vec3>
   /** World-space AABB of the network (for camera framing). */
@@ -109,17 +158,22 @@ export function buildScene(): NetworkScene {
     stationWorld.set(node.id, cellToWorld(node.col, node.row, cols, rows))
   }
 
-  // Cells that belong to the highlighted Cikarang sub-route (Sudirman Baru ->
-  // Sudirman -> Manggarai -> Matraman). Computed from the same octRoute the
-  // lit dots use, so the highlight lands exactly on drawn dots.
-  const highlightCells = new Set<string>()
-  for (let i = 0; i < HIGHLIGHT_CHAIN.length - 1; i++) {
-    const a = stationCells.get(HIGHLIGHT_CHAIN[i]!)
-    const b = stationCells.get(HIGHLIGHT_CHAIN[i + 1]!)
-    if (!a || !b) continue
-    for (const c of octRoute(a, b)) highlightCells.add(cellKey(c))
+  // Cells covered by each highlight subject. Computed from the same octRoute the
+  // lit dots use, so a highlight lands exactly on drawn dots. A one-station chain
+  // has no pairs, so this loop no-ops and only the station itself is marked.
+  const highlightCells = new Map<HighlightId, Set<string>>()
+  const highlightStations = new Map<HighlightId, Set<string>>()
+  for (const [id, chain] of Object.entries(HIGHLIGHT_SETS) as [HighlightId, readonly string[]][]) {
+    const cells = new Set<string>()
+    for (let i = 0; i < chain.length - 1; i++) {
+      const a = stationCells.get(chain[i]!)
+      const b = stationCells.get(chain[i + 1]!)
+      if (!a || !b) continue
+      for (const c of octRoute(a, b)) cells.add(cellKey(c))
+    }
+    highlightCells.set(id, cells)
+    highlightStations.set(id, new Set(chain))
   }
-  const highlightStations = new Set<string>(HIGHLIGHT_CHAIN)
 
   // Lit line dots: octilinear routes per line segment, deduped by (cell,color)
   // so overlapping/parallel colors don't stack. Also collect the per-color
@@ -128,7 +182,9 @@ export function buildScene(): NetworkScene {
   const litColors: number[] = []
   const litRadii: number[] = []
   const litOrder: number[] = []
-  const litHighlight: number[] = []
+  // Cell key per emitted dot, in instance order — lets every highlight set be
+  // derived after the fact instead of baking one subject into the geometry.
+  const litCellKeys: string[] = []
   const litKeys = new Set<string>()
   const routesByColor = new Map<string, GridCell[]>()
   const colorRgb = new Map<string, [number, number, number]>()
@@ -159,7 +215,7 @@ export function buildScene(): NetworkScene {
       litColors.push(rgb[0], rgb[1], rgb[2])
       litRadii.push(LINE_DOT_RADIUS)
       litOrder.push(i / total)
-      litHighlight.push(highlightCells.has(cellKey(c)) ? 1 : 0)
+      litCellKeys.push(cellKey(c))
     })
     const existing = routesByColor.get(line.color)
     if (!existing || lineRoute.length > existing.length) {
@@ -171,12 +227,28 @@ export function buildScene(): NetworkScene {
   // roundel, no labels), keeping the dense core legible.
   const stOffsets: number[] = []
   const stRadii: number[] = []
-  const stHighlight: number[] = []
+  const stIds: string[] = []
   for (const node of NETWORK.nodes) {
     const w = stationWorld.get(node.id)!
     stOffsets.push(w.x, w.y, w.z)
     stRadii.push(STATION_RADIUS)
-    stHighlight.push(highlightStations.has(node.id) ? 1 : 0)
+    stIds.push(node.id)
+  }
+
+  // Bake one flag array per subject, parallel to the instance arrays above.
+  // 'none' stays all-zero so the renderer can clear emphasis without a branch.
+  const highlights = new Map<HighlightId, HighlightSet>()
+  highlights.set('none', {
+    dots: new Float32Array(litCellKeys.length),
+    stations: new Float32Array(stIds.length)
+  })
+  for (const id of Object.keys(HIGHLIGHT_SETS) as Exclude<HighlightId, 'none'>[]) {
+    const cells = highlightCells.get(id)!
+    const stations = highlightStations.get(id)!
+    highlights.set(id, {
+      dots: Float32Array.from(litCellKeys, k => (cells.has(k) ? 1 : 0)),
+      stations: Float32Array.from(stIds, s => (stations.has(s) ? 1 : 0))
+    })
   }
 
   // Faint dead-dot field across a rectangle larger than the network, so the
@@ -223,15 +295,14 @@ export function buildScene(): NetworkScene {
       colors: new Float32Array(litColors),
       radii: new Float32Array(litRadii),
       order: new Float32Array(litOrder),
-      isHighlight: new Float32Array(litHighlight),
       count: litOffsets.length / 3
     },
     stations: {
       offsets: new Float32Array(stOffsets),
       radii: new Float32Array(stRadii),
-      isHighlight: new Float32Array(stHighlight),
       count: stOffsets.length / 3
     },
+    highlights,
     trainRoutes,
     stationWorld,
     bounds: { min, max, center },

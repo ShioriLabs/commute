@@ -10,10 +10,12 @@ import {
   buildDotPass,
   buildStationPass,
   buildTrainPass,
+  type HighlightablePass,
   type InstancedPass,
   type TrainPass
 } from './instanced'
 import {
+  type HighlightId,
   type NetworkScene,
   FIELD_COLOR,
   FIELD_RADIUS,
@@ -50,6 +52,12 @@ export interface Renderer {
   resize(): void
   /** Sets the topology-emphasis target (0 = none, 1 = full). Eased each frame. */
   setHighlightMix(target: number): void
+  /**
+   * Chooses WHICH subject the emphasis applies to. Cheap to call repeatedly —
+   * re-uploads only when the id actually changes. Swap while the mix is near 0,
+   * or the emphasis visibly jumps from one subject to another.
+   */
+  setHighlightSet(id: HighlightId): void
   dispose(): void
 }
 
@@ -70,8 +78,8 @@ export function createRenderer(opts: {
 
   const programs = createPrograms(gl)
   const fieldPass: InstancedPass = buildFieldPass(gl, programs, scene)
-  const dotPass: InstancedPass = buildDotPass(gl, programs, scene)
-  const stationPass: InstancedPass = buildStationPass(gl, programs, scene)
+  const dotPass: HighlightablePass = buildDotPass(gl, programs, scene)
+  const stationPass: HighlightablePass = buildStationPass(gl, programs, scene)
 
   // Trains: TRAINS_PER_LINE per line route, staggered start positions.
   const trainStates: TrainState[] = []
@@ -100,6 +108,9 @@ export function createRenderer(opts: {
   let lastTrainStep = 0
   let highlightMix = 0
   let highlightTarget = 0
+  let highlightSet: HighlightId = 'none'
+  // Counts buffer re-uploads so tests can assert this isn't happening per frame.
+  let highlightUploads = 0
 
   function resize(): void {
     const rect = canvas.getBoundingClientRect()
@@ -113,6 +124,16 @@ export function createRenderer(opts: {
 
   function setHighlightMix(target: number): void {
     highlightTarget = Math.max(0, Math.min(1, target))
+  }
+
+  function setHighlightSet(id: HighlightId): void {
+    if (id === highlightSet) return
+    const set = scene.highlights.get(id)
+    if (!set) return
+    highlightSet = id
+    highlightUploads++
+    dotPass.setHighlight(gl, set.dots)
+    stationPass.setHighlight(gl, set.stations)
   }
 
   function stepTrains(now: number): void {
@@ -241,5 +262,17 @@ export function createRenderer(opts: {
   }
 
   resize()
-  return { start, stop, resize, setHighlightMix, dispose }
+  const api: Renderer = { start, stop, resize, setHighlightMix, setHighlightSet, dispose }
+
+  // Dev-only introspection for the headed-browser checks. Defined via
+  // defineProperty rather than an object-literal getter inside a spread —
+  // spreading INVOKES a getter and copies its value, which would freeze this at
+  // its pre-render snapshot.
+  if (import.meta.env.DEV) {
+    Object.defineProperty(api, 'debugHighlight', {
+      get: () => ({ set: highlightSet, uploads: highlightUploads })
+    })
+  }
+
+  return api
 }

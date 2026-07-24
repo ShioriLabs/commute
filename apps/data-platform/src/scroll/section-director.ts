@@ -5,6 +5,7 @@
 // smooths residual jitter. Reduced-motion snaps to the nearest beat instead.
 import { lerpAngle, orbit, type Camera, type Pose, type Vec3Tuple } from '../gl/camera'
 import type { Renderer } from '../gl/renderer'
+import type { HighlightId } from '../scene/network-scene'
 import type { Beat, BeatId } from './beats'
 
 interface AnchoredBeat extends Beat {
@@ -109,13 +110,13 @@ export function createSectionDirector(opts: {
     // Clamp before first / after last.
     if (y <= anchors[0]!) {
       setActive(anchored[0]!.id)
-      apply(anchored[0]!.pose, anchored[0]!.highlight)
+      apply(anchored[0]!.pose, anchored[0]!.highlight, anchored[0]!.highlightSet)
       return
     }
     const last = anchored.length - 1
     if (y >= anchors[last]!) {
       setActive(anchored[last]!.id)
-      apply(anchored[last]!.pose, anchored[last]!.highlight)
+      apply(anchored[last]!.pose, anchored[last]!.highlight, anchored[last]!.highlightSet)
       return
     }
 
@@ -126,24 +127,35 @@ export function createSectionDirector(opts: {
       if (y >= a0 && y <= a1) {
         const raw = (y - a0) / Math.max(a1 - a0, 1)
         const t = smoothstep(raw)
-        setActive((t < 0.5 ? anchored[i]! : anchored[i + 1]!).id)
+        const from = anchored[i]!
+        const to = anchored[i + 1]!
+        const near = t < 0.5 ? from : to
+        setActive(near.id)
         if (reduceMotion) {
           // Snap to whichever beat is closer.
-          const near = t < 0.5 ? anchored[i]! : anchored[i + 1]!
-          apply(near.pose, near.highlight)
+          apply(near.pose, near.highlight, near.highlightSet)
         } else {
-          const pose = lerpPose(anchored[i]!.pose, anchored[i + 1]!.pose, t)
-          const hl = lerp(anchored[i]!.highlight, anchored[i + 1]!.highlight, t)
-          apply(pose, hl)
+          const pose = lerpPose(from.pose, to.pose, t)
+          // Between beats that spotlight DIFFERENT subjects, dip the emphasis to
+          // zero at the midpoint and swap the set there. Crossfading instead
+          // would teleport the highlight from one subject to the other, because
+          // a single mix drives whichever set is currently uploaded.
+          const swapping = from.highlightSet !== to.highlightSet
+          const hl = swapping
+            ? lerp(from.highlight, to.highlight, t) * Math.abs(t - 0.5) * 2
+            : lerp(from.highlight, to.highlight, t)
+          apply(pose, hl, near.highlightSet)
         }
         return
       }
     }
   }
 
-  function apply(pose: Pose, highlight: number): void {
+  function apply(pose: Pose, highlight: number, highlightSet: HighlightId): void {
     if (reduceMotion) camera.snap(pose)
     else camera.setTarget(pose)
+    // Cheap when unchanged; only re-uploads on an actual subject change.
+    renderer.setHighlightSet(highlightSet)
     renderer.setHighlightMix(highlight)
     document.documentElement.setAttribute('data-active-beat-hl', highlight > 0.5 ? '1' : '0')
   }
