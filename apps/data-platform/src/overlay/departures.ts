@@ -47,6 +47,11 @@ export function createDeparturesFlyout(
 
   let visible = false
   let state: State = { kind: 'loading' }
+  // The card starts untransformed at the overlay origin. Animating transform on
+  // the very first reveal would fly it in from the top-left corner, so the first
+  // positioning is applied with transitions suppressed — after that the card
+  // always holds a sane last position and can ease normally.
+  let placed = false
 
   function headerHTML(): string {
     return (
@@ -112,7 +117,12 @@ export function createDeparturesFlyout(
 
   function update(ctx: FrameContext): void {
     const p = ctx.project([anchorWorld.x, anchorWorld.y, anchorWorld.z], ctx.viewportW, ctx.viewportH)
-    const show = visible && p.visible && ctx.progress > 0.6
+    // project() reports (0,0) for a point behind the camera, and returns whatever
+    // the last viewProj gave before the camera has been driven at least once.
+    // Showing the card on such a frame parks it in the viewport's top-left corner,
+    // so require a real projected position, not just p.visible.
+    const anchored = Number.isFinite(p.x) && Number.isFinite(p.y) && !(p.x === 0 && p.y === 0)
+    const show = visible && p.visible && anchored && ctx.progress > 0.6
     if (!show) {
       card.style.opacity = '0'
       connector.style.opacity = '0'
@@ -120,14 +130,29 @@ export function createDeparturesFlyout(
     }
     const x = Math.round(p.x)
     const y = Math.round(p.y)
+    const cardTransform = `translate3d(${x + OFFSET_X}px, ${y + OFFSET_Y}px, 0)`
+    const connectorTransform = `translate3d(${x}px, ${y}px, 0)`
+
+    if (!placed) {
+      // Jump to the anchor with transitions off, flush it, then restore them so
+      // the reveal below is a fade in place rather than a slide from (0,0).
+      const cardEase = card.style.transition
+      card.style.transition = 'none'
+      card.style.transform = cardTransform
+      connector.style.transform = connectorTransform
+      void card.offsetWidth // force style flush before re-arming the transition
+      card.style.transition = cardEase
+      placed = true
+    }
+
     card.style.opacity = '1'
-    card.style.transform = `translate3d(${x + OFFSET_X}px, ${y + OFFSET_Y}px, 0)`
+    card.style.transform = cardTransform
 
     // Connector: from the roundel to the card's top-left corner.
     const len = Math.max(OFFSET_X, 4)
     connector.style.opacity = '0.5'
     connector.style.width = `${len}px`
-    connector.style.transform = `translate3d(${x}px, ${y}px, 0)`
+    connector.style.transform = connectorTransform
   }
 
   function dispose(): void {
