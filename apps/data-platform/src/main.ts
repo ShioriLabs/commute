@@ -9,7 +9,7 @@ import {
 } from './scene/network-scene'
 import { createCamera } from './gl/camera'
 import { createRenderer } from './gl/renderer'
-import { buildBeats } from './scroll/beats'
+import { bandLayout, buildBeats, viewportLayout, type BeatId } from './scroll/beats'
 import { createSectionDirector } from './scroll/section-director'
 import { createDeparturesFlyout } from './overlay/departures'
 import { createFareTag } from './overlay/fare-tag'
@@ -27,6 +27,19 @@ import {
   fetchStationTransfers
 } from './data/network-api'
 import { nextDepartures } from './data/next-departures'
+import { applyLineColors } from './theme/line-colors'
+
+// Default the page to its no-WebGL state, then promote it once a context is
+// actually in hand (below). The attribute used to be written only INSIDE
+// bootNetworkBackground(), which left it absent between parse and boot — so CSS
+// keyed on `off` could not style the first paint, and a browser that fails at
+// createGL after painting would never have been styled at all. Default-off then
+// promote-on is the only ordering that cannot flash the wrong state.
+document.documentElement.setAttribute('data-webgl', 'off')
+
+// Line colours as CSS custom properties, from the baked network. Runs on both
+// paths: the static evidence plates need their bars coloured with no WebGL.
+applyLineColors()
 
 // Smooth-scroll for in-page anchors. `block: 'center'` matters here: the nav
 // links point at beat sections, each a full viewport tall, and the director
@@ -51,8 +64,9 @@ function bootNetworkBackground(): void {
   const ctx = createGL(canvas)
   if (!ctx) {
     // No WebGL2 (old browser / headless without GPU / --disable-webgl): leave
-    // the page as-is. A static fallback lives in the DOM so nothing looks broken.
-    document.documentElement.setAttribute('data-webgl', 'off')
+    // the page in its default `data-webgl="off"` state, which reveals the static
+    // evidence plates (.sign-static in style.css) carrying the figures the
+    // anchored overlays would have shown.
     return
   }
   document.documentElement.setAttribute('data-webgl', 'on')
@@ -60,8 +74,36 @@ function bootNetworkBackground(): void {
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches
   const scene = buildScene()
 
-  const aspect = window.innerWidth / Math.max(window.innerHeight, 1)
-  const heroPose = buildBeats(scene, aspect)[0]!.pose
+  // Below the md: breakpoint the seven content beats render the map into a fixed
+  // IMAX-ish band at the top of the viewport, with their plates scrolling
+  // underneath. hero and footer keep the whole viewport on every device. The
+  // band is what bounds the anchored overlays on a phone — a 248px departures
+  // card in a 390px viewport used to hang ~70px off the right edge.
+  const BAND_BREAKPOINT = 768
+  const bandActive = (): boolean => window.innerWidth < BAND_BREAKPOINT
+  const layouts = (): [ReturnType<typeof viewportLayout>, ReturnType<typeof viewportLayout>] => {
+    const full = viewportLayout(window.innerWidth, window.innerHeight)
+    return [full, bandActive() ? bandLayout(window.innerWidth) : full]
+  }
+
+  // Only the content beats are banded; hero and footer are full-bleed.
+  const BANDED_BEATS = new Set<BeatId>(['jadwal', 'topologi', 'tarif', 'stasiun', 'rute', 'cakupan', 'api'])
+  // Tracked so a resize can re-evaluate the band on the CURRENT beat; the
+  // director only reports a beat when it changes.
+  let activeBeatId: BeatId | null = null
+  function applyBand(id: BeatId): void {
+    activeBeatId = id
+    const on = bandActive() && BANDED_BEATS.has(id)
+    const root = document.documentElement
+    if (on === root.hasAttribute('data-map-band')) return
+    if (on) root.setAttribute('data-map-band', '')
+    else root.removeAttribute('data-map-band')
+    // The canvas box just changed, so the GL viewport and projection aspect must
+    // be re-derived before the next frame projects any overlay against them.
+    renderer.resize()
+  }
+
+  const heroPose = buildBeats(scene, ...layouts())[0]!.pose
 
   const camera = createCamera(heroPose)
   camera.snap(heroPose)
@@ -79,12 +121,17 @@ function bootNetworkBackground(): void {
   // of both endpoint roundels.
   const fareA = scene.stationWorld.get(MRT_FARE_FROM)
   const fareB = scene.stationWorld.get(MRT_FARE_TO)
+  // The tag's left bar carries the priced line's own colour, read from the same
+  // baked network the map draws — so the bar, the plate beside it and the lit
+  // corridor cannot disagree.
+  const mrtColor = NETWORK.lines.find(l => l.operator === 'MRTJ' && l.code === 'M')?.color
   const fareTag
     = overlayRoot && fareA && fareB
       ? createFareTag(
           overlayRoot,
           { x: (fareA.x + fareB.x) / 2, y: 0, z: (fareA.z + fareB.z) / 2 },
-          reduceMotion
+          reduceMotion,
+          mrtColor
         )
       : null
 
@@ -239,8 +286,12 @@ function bootNetworkBackground(): void {
     reduceMotion,
     // Poses depend on aspect, so the director rebuilds them from the current
     // viewport whenever it needs them (initial + on resize).
-    buildBeats: () => buildBeats(scene, window.innerWidth / Math.max(window.innerHeight, 1)),
+    buildBeats: () => buildBeats(scene, ...layouts()),
     onActiveBeat: (id) => {
+      // Band first: it resizes the canvas, and every overlay below projects
+      // against that box on the frames that follow.
+      applyBand(id)
+
       const onJadwal = id === 'jadwal'
       flyout?.setVisible(onJadwal)
       if (onJadwal && !departuresLoaded) {
@@ -297,6 +348,12 @@ function bootNetworkBackground(): void {
   })
 
   window.addEventListener('resize', () => {
+    // Re-check the band before anything else: crossing the md: breakpoint (or
+    // rotating a phone) changes the canvas box, and `director.refresh()` below
+    // rebuilds poses from the layouts that box implies. Can't be left to
+    // onActiveBeat — the director only fires that when the ACTIVE BEAT changes,
+    // and a resize usually keeps the reader on the same beat.
+    if (activeBeatId) applyBand(activeBeatId)
     renderer.resize()
     director.refresh()
   })

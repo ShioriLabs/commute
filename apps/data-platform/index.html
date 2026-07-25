@@ -118,12 +118,24 @@
       <div id="jadwal" data-beat="jadwal" class="relative z-10 mx-auto grid min-h-screen max-w-5xl items-center gap-12 px-6 py-32 md:grid-cols-2">
         <!-- Left bar carries Lin Cikarang's own colour — the line this beat and
              the map's highlight are both showing. -->
-        <div class="sign max-w-md p-6 md:justify-self-start" style="--sign-accent: #25b8eb">
+        <div class="sign max-w-md p-6 md:justify-self-start" style="--sign-accent: var(--line-KCI-C)">
           <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Semua Jadwal, Sat Set Satu Feed</h2>
           <p class="leading-relaxed text-white/60">
             Jadwal keberangkatan dan kedatangan buat KRL, MRT, dan LRT mengalir jadi satu feed yang konsisten.
             Lebih dari 27.000 perjalanan terjadwal, sinkron langsung dari sumbernya, kayak keberangkatan Manggarai di samping.
           </p>
+          <!-- Static half of the signage pair: shown only when there's no WebGL
+               and the PIDS flyout beside this plate never got built. Times are
+               deliberately absent — a hardcoded departure would be wrong within
+               the minute. What's stable is the station and the feed itself. -->
+          <dl class="sign-static mt-5 hidden border-t border-line/70 pt-4 font-mono text-[11px]">
+            <dt class="text-white/35">Stasiun</dt>
+            <dd class="text-white/75">Manggarai · KCI-MRI</dd>
+            <dt class="text-white/35">Perjalanan</dt>
+            <dd class="text-white/75">27.094 terjadwal</dd>
+            <dt class="text-white/35">Operator</dt>
+            <dd class="text-white/75">KCI · MRTJ · LRTJ · LRTJBDB</dd>
+          </dl>
         </div>
         <!-- right half intentionally open: the map + PIDS flyout live here -->
         <div aria-hidden="true"></div>
@@ -133,13 +145,24 @@
            chain Sudirman Baru → Sudirman → Manggarai → Matraman. -->
       <div id="topologi" data-beat="topologi" class="relative z-10 mx-auto grid min-h-screen max-w-5xl items-center gap-12 px-6 py-32 md:grid-cols-2">
         <div aria-hidden="true" class="hidden md:block"></div>
-        <div class="sign max-w-md p-6 md:justify-self-end" style="--sign-accent: #25b8eb">
+        <div class="sign max-w-md p-6 md:justify-self-end" style="--sign-accent: var(--line-KCI-C)">
           <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Peta Rute, Bukan Cuma Titik</h2>
           <p class="leading-relaxed text-white/60">
             Stasiun, ruas, dan interchange dari 5 operator sebagai data graf, lengkap sama urutan stasiun yang bener
             di tiap lin. Yang lagi disorot di peta itu Lin Cikarang, lewat Sudirman Baru, Sudirman, Manggarai,
             sampai Matraman.
           </p>
+          <!-- Carries what the chain-label plates (overlay/chain-labels.ts) put
+               on the map: the highlighted run, in order, as station codes. The
+               order IS the data this beat is about, so it stays a sequence. -->
+          <dl class="sign-static mt-5 hidden border-t border-line/70 pt-4 font-mono text-[11px]">
+            <dt class="text-white/35">Lin</dt>
+            <dd class="text-white/75">Lin Cikarang · KCI-C</dd>
+            <dt class="text-white/35">Ruas</dt>
+            <dd class="text-white/75">SUDB → SUD → MRI → MTR</dd>
+            <dt class="text-white/35">Graf</dt>
+            <dd class="text-white/75">122 simpul · 9 lin</dd>
+          </dl>
         </div>
       </div>
 
@@ -147,12 +170,25 @@
            Bundaran HI and prices it in a flyout anchored to the destination.
            Accent is Lin Utara Selatan's own colour. -->
       <div id="tarif" data-beat="tarif" class="relative z-10 mx-auto grid min-h-screen max-w-5xl items-center gap-12 px-6 py-32 md:grid-cols-2">
-        <div class="sign max-w-md p-6 md:justify-self-start" style="--sign-accent: #ca2a51">
+        <div class="sign max-w-md p-6 md:justify-self-start" style="--sign-accent: var(--line-MRTJ-M)">
           <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Tau Ongkosnya Sebelum Tap In</h2>
           <p class="leading-relaxed text-white/60">
             Hitung tarif antar dua stasiun mana pun, udah kehitung sama jarak dan transfernya. Kayak Blok M
             ke Dukuh Atas di peta, angkanya keluar dari endpoint yang sama yang bisa kamu panggil.
           </p>
+          <!-- No price here on purpose. The fare tag on the map gets its number
+               from the live endpoint; a hardcoded rupiah figure would rot the
+               moment a tariff changes and would contradict the page's own
+               "angkanya keluar dari endpoint" claim. The corridor's shape is the
+               stable part, so that's what the static plate carries. -->
+          <dl class="sign-static mt-5 hidden border-t border-line/70 pt-4 font-mono text-[11px]">
+            <dt class="text-white/35">Koridor</dt>
+            <dd class="text-white/75">MRTJ-BLM → MRTJ-DKA</dd>
+            <dt class="text-white/35">Jarak</dt>
+            <dd class="text-white/75">5,9 km · 7 stasiun</dd>
+            <dt class="text-white/35">Endpoint</dt>
+            <dd class="text-white/75">/fares/{dari}/{ke}</dd>
+          </dl>
         </div>
         <!-- right half intentionally open: the map + fare tag live here -->
         <div aria-hidden="true"></div>
@@ -163,7 +199,7 @@
            that's a fact about the station, not decoration. -->
       <div id="stasiun" data-beat="stasiun" class="relative z-10 mx-auto grid min-h-screen max-w-5xl items-center gap-12 px-6 py-32 md:grid-cols-2">
         <div aria-hidden="true" class="hidden md:block"></div>
-        <div class="sign max-w-md p-6 md:justify-self-end" style="--sign-accent: #006838">
+        <div class="sign max-w-md p-6 md:justify-self-end" style="--sign-accent: var(--line-LRTJBDB-BK)">
           <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Sampai ke Detail Peronnya</h2>
           <!-- Prose only. Every figure — fasilitas, operator, lin, koordinat,
                transfer — lives on the factoid card anchored to the roundel, so
@@ -172,6 +208,19 @@
             Tiap stasiun bawa profil lengkapnya sendiri: fasilitas, koordinat, lin yang lewat, sampai transfer ke
             operator lain. Ini Rasuna Said, tempat Lin Bekasi dan Lin Cibubur pakai jalur yang sama.
           </p>
+          <!-- The same rows the factoid card (overlay/station-card.ts) puts on
+               the roundel: operator, lin, koordinat, transfer. Reference data
+               that changes on the order of years, so it is safe as enamel. -->
+          <dl class="sign-static mt-5 hidden border-t border-line/70 pt-4 font-mono text-[11px]">
+            <dt class="text-white/35">Stasiun</dt>
+            <dd class="text-white/75">Rasuna Said · LRTJBDB-RAS</dd>
+            <dt class="text-white/35">Lin</dt>
+            <dd class="text-white/75">Lin Bekasi · Lin Cibubur</dd>
+            <dt class="text-white/35">Koordinat</dt>
+            <dd class="text-white/75">-6,2215, 106,8321</dd>
+            <dt class="text-white/35">Transfer</dt>
+            <dd class="text-white/75">TransJakarta · 80 m</dd>
+          </dl>
         </div>
       </div>
 
@@ -181,7 +230,7 @@
            breakdown plus the 600 m walk between Cikoko and Cawang.
            Accent is Lin Bekasi's colour: the leg the journey boards on. -->
       <div id="rute" data-beat="rute" class="relative z-10 mx-auto grid min-h-screen max-w-5xl items-center gap-12 px-6 py-32 md:grid-cols-2">
-        <div class="sign max-w-md p-6 md:justify-self-start" style="--sign-accent: #006838">
+        <div class="sign max-w-md p-6 md:justify-self-start" style="--sign-accent: var(--line-LRTJBDB-BK)">
           <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Pindah Moda, Tetap Satu Rute</h2>
           <!-- Prose only, same rule as the stasiun beat: the claim sits here, the
                evidence (legs, jarak, ongkos) sits on the strip anchored to the map. -->
@@ -190,6 +239,21 @@
             Kayak Pancoran ke Pasar Minggu di peta, LRT dulu terus lanjut KRL. Jalan 600 meter di Cikoko ikut kehitung,
             bukan dianggap gratis.
           </p>
+          <!-- The journey as legs, in order — the one place a sequence is the
+               actual data. Without the map there is no dark gap between the two
+               lit runs to carry the transfer, so the walk has to be a row here
+               or the beat's whole point goes missing. Ongkos stays off the plate
+               for the same reason as the tarif beat: the strip fetches it. -->
+          <dl class="sign-static mt-5 hidden border-t border-line/70 pt-4 font-mono text-[11px]">
+            <dt class="text-white/35">Naik</dt>
+            <dd class="text-white/75">Lin Bekasi · PAN → CKK</dd>
+            <dt class="text-white/35">Jalan kaki</dt>
+            <dd class="text-white/75">Cikoko → Cawang · 600 m</dd>
+            <dt class="text-white/35">Lanjut</dt>
+            <dd class="text-white/75">Lin Bogor · CW → PSM</dd>
+            <dt class="text-white/35">Total</dt>
+            <dd class="text-white/75">7,3 km · 1 transfer</dd>
+          </dl>
         </div>
         <!-- right half intentionally open: the map + journey strip live here.
              Below md: the strip docks into this same slot instead of floating

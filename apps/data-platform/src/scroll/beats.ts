@@ -38,6 +38,47 @@ export interface Beat {
 
 const DEG = Math.PI / 180
 
+/** The IMAX-ish band the map is rendered into on mobile. See MapLayout. */
+export const BAND_ASPECT = 1.43
+
+/**
+ * How the map is framed for a given beat.
+ *
+ * Two separate facts, which used to be one. `aspect` and `frameH` describe the
+ * CANVAS; `copyBeside` describes the PAGE. They coincided while the canvas was
+ * always the full viewport — landscape implied a two-column layout — but the
+ * mobile band makes the canvas landscape while the copy sits BELOW it, so
+ * inferring one from the other sends every beat's plate-dodging shift the wrong
+ * way (the map swerves around a plate that is no longer beside it).
+ */
+export interface MapLayout {
+  /** Canvas width / height. */
+  aspect: number
+  /** Canvas width in CSS px — how much room a plate-dodging shift has to play with. */
+  frameW: number
+  /** Canvas height in CSS px — what actually starves a short band. */
+  frameH: number
+  /** True when the copy sits in a column beside the map (the md: two-column grid). */
+  copyBeside: boolean
+}
+
+/** Full-viewport framing: the desktop background, and mobile's hero + footer. */
+export function viewportLayout(w: number, h: number): MapLayout {
+  return {
+    aspect: w / Math.max(h, 1),
+    frameW: w,
+    frameH: h,
+    // The beats' two-column grid is the md: breakpoint (768px), and the poses'
+    // shifts exist to dodge that second column.
+    copyBeside: w >= 768
+  }
+}
+
+/** The mobile band: landscape canvas, copy stacked underneath it. */
+export function bandLayout(w: number): MapLayout {
+  return { aspect: BAND_ASPECT, frameW: w, frameH: w / BAND_ASPECT, copyBeside: false }
+}
+
 function centroid(scene: NetworkScene, ids: readonly string[]): Vec3 {
   let x = 0
   let z = 0
@@ -52,35 +93,89 @@ function centroid(scene: NetworkScene, ids: readonly string[]): Vec3 {
   return n ? { x: x / n, y: 0, z: z / n } : { x: 0, y: 0, z: 0 }
 }
 
-export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
+/**
+ * @param full  Framing for the beats that own the whole viewport (hero, footer).
+ * @param band  Framing for the content beats. On mobile this is the IMAX band;
+ *              on desktop callers pass `full` again and nothing changes.
+ */
+export function buildBeats(scene: NetworkScene, full: MapLayout, band: MapLayout = full): Beat[] {
   const hx = (scene.bounds.max.x - scene.bounds.min.x) / 2
   const hz = (scene.bounds.max.z - scene.bounds.min.z) / 2
 
-  // framingPose fits the larger of hz and hx/aspect. On a portrait viewport the
-  // width term dominates and pushes the camera far enough back that the network
-  // reads as empty space, so tighten the pad as the viewport narrows. Letting the
-  // wide network crop on mobile is the right trade: dots on screen beat a
-  // complete but invisible map. 1 at >=16:10, ~0.36 at 390x844.
-  const narrow = Math.min(1, Math.max(0.36, (aspect - 0.45) / 1.15))
+  // framingPose fits the larger of hz and hx/aspect, so `fit` scales camera
+  // distance linearly. Two things can starve the frame and the pad has to answer
+  // whichever is worse:
+  //
+  //  - a NARROW frame, where the hx/aspect term dominates and pushes the camera
+  //    back until the network reads as empty space (the portrait viewport), and
+  //  - a SHORT frame, where there simply aren't many pixels of height to fill
+  //    (the 273px mobile band, whose aspect is a comfortable 1.43 but which is a
+  //    third the height of a desktop window).
+  //
+  // Keying on aspect alone gets the band exactly backwards: it reads 1.43 as
+  // roomy, relaxes the pad to 0.85 and pulls the camera further back, which is
+  // how the whole-network beats ended up as a faint smudge. Letting the wide
+  // network crop is the right trade either way — dots on screen beat a complete
+  // but invisible map.
+  // The height floor is 0.62, not the aspect term's 0.36. `fit` multiplies a pad
+  // that is already 1.0-tight, so the two terms are not interchangeable: at 0.34
+  // topologi framed at fit 0.46 and cropped its own chain down to the middle two
+  // stations. 0.62 puts the band's close-ups at ~0.84 — pulled in enough that the
+  // dots read at a third of the screen height, loose enough to keep the whole
+  // subject. Desktop still resolves to 1.00 on both terms and is unaffected.
+  // The aspect term's floor scales with WIDTH. 0.36 was tuned for a 390px phone,
+  // where cropping the network is the right trade; a portrait tablet shares that
+  // sub-1 aspect but is twice as wide, and holding it to the phone's floor pulled
+  // the camera in so hard that topologi cropped its own chain down to the middle
+  // two stations at 834x1112. Interpolating the floor 0.36..0.75 across 390..1024
+  // keeps the phone framing identical and lets a wide portrait frame breathe.
+  const aspectFloor = (w: number): number =>
+    Math.min(0.75, Math.max(0.36, 0.36 + ((w - 390) / 634) * 0.39))
+  const narrowFor = (l: MapLayout): number => Math.min(
+    // 1 at >=16:10; floor is width-dependent (see above).
+    Math.min(1, Math.max(aspectFloor(l.frameW), (l.aspect - 0.45) / 1.15)),
+    // 1 at >=760px tall, 0.62 at the 273px band.
+    Math.min(1, Math.max(0.62, (l.frameH - 140) / 620))
+  )
+  const narrow = narrowFor(band)
+  const narrowFull = narrowFor(full)
 
-  // The beats' md: breakpoint splits copy and map into two columns. Below it the
-  // copy stacks full-width, so the off-centre framing that keeps a plate from
-  // covering its subject has nothing to dodge.
-  const twoColumn = aspect >= 1
+  // Whether a plate sits BESIDE the map, which is the only reason any pose is
+  // shifted off-centre. Not derived from aspect: see MapLayout.
+  const twoColumn = band.copyBeside
+  const twoColumnFull = full.copyBeside
+
+  // How much of a beat's plate-dodging shift to actually apply.
+  //
+  // Those shifts push a subject into the open column so the copy plate can't
+  // cover it, and they were all tuned on a wide window. Held flat they overshoot
+  // as soon as the two-column layout gets narrow — the subject clears the plate
+  // and keeps going, straight off the opposite edge. At 834px this pushed the
+  // rute beat's Cikoko interchange to x=916 (82px past the frame, so the journey
+  // strip's leader line pointed at a roundel that wasn't there) and drove two of
+  // the four topologi chain stations to negative x, where the map simply stopped
+  // drawing their labels.
+  //
+  // Easing the shift in across 768..1200 keeps the wide framing these were
+  // tuned against while letting a narrow two-column layout shift only as far as
+  // it can afford. The 0.25 floor is set by the tightest case (rute at 768).
+  const shiftScale = Math.min(1, Math.max(0.25, (band.frameW - 768) / 432))
 
   // Hero: whole-network, straight top-down — the OG flat schematic look. The
   // tilt is reserved for the topology beat, where it reads as a deliberate reveal.
   // Copy sits in the left half on desktop, so push the network right of centre.
   // Top-down and unyawed, so moving the target -X moves the subject +X on screen.
-  const heroShift = twoColumn ? hx * 0.34 : 0
+  // Hero keeps the FULL viewport on every device — it is the establishing shot,
+  // and the band would letterbox the one beat that has no overlay to bound.
+  const heroShift = twoColumnFull ? hx * 0.34 : 0
   const hero = framingPose(
     [scene.bounds.center.x - heroShift, 0, scene.bounds.center.z],
     hx,
     hz,
     90, // top-down
     38 * DEG,
-    aspect,
-    1.35 * narrow
+    full.aspect,
+    1.35 * narrowFull
   )
 
   // Topology: tilt to ~45° bird's-eye AND yaw 45° so the octilinear grid runs
@@ -98,7 +193,9 @@ export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
   // (right = [cos(yaw), 0, -sin(yaw)]) to move the subject left on screen.
   const TOPO_YAW = 45
   const yawRad = TOPO_YAW * DEG
-  const topoShift = twoColumn ? chainSpan * 0.3 : 0
+  // Scaled by available width — see shiftScale. Unscaled, this drove Sudirman
+  // Baru and Sudirman off the left edge on a tablet.
+  const topoShift = twoColumn ? chainSpan * 0.3 * shiftScale : 0
   const topologi = framingPose(
     [
       chainCenter.x + Math.cos(yawRad) * topoShift,
@@ -109,7 +206,7 @@ export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
     chainSpan / 2,
     46, // ~45° bird's-eye tilt
     40 * DEG,
-    aspect,
+    band.aspect,
     1.35 * narrow, // tighter crop than the 1.9 establishing framing
     TOPO_YAW // grid on the diagonal
   )
@@ -127,7 +224,7 @@ export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
     10,
     90,
     42 * DEG,
-    aspect,
+    band.aspect,
     1.6 * narrow
   )
 
@@ -173,7 +270,7 @@ export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
     tarifHz * 1.15,
     72,
     40 * DEG,
-    aspect,
+    band.aspect,
     twoColumn ? 1.25 : 1.15,
     TARIF_YAW
   )
@@ -189,7 +286,7 @@ export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
     9,
     90,
     42 * DEG,
-    aspect,
+    band.aspect,
     1.6 * narrow
   )
 
@@ -249,7 +346,10 @@ export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
   // journey strip: the shift runs along the camera's yawed right vector, so the
   // route slides along its OWN diagonal and the corner stays under the strip no
   // matter how this is tuned. The strip moves instead (see route-strip.ts).
-  const ruteShift = twoColumn ? ruteHx * 0.62 : 0
+  // Scaled by available width — see shiftScale. This is the tightest case: at a
+  // flat 0.62 the Cikoko interchange landed off the right edge on a tablet and
+  // the strip's leader line pointed at nothing.
+  const ruteShift = twoColumn ? ruteHx * 0.62 * shiftScale : 0
   const rute = framingPose(
     [
       ruteCx - Math.cos(ruteYawRad) * ruteShift,
@@ -260,7 +360,7 @@ export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
     ruteHz,
     RUTE_PITCH, // bird's-eye, yawed — see the note above
     42 * DEG,
-    aspect,
+    band.aspect,
     twoColumn ? 1.85 : 1.45,
     RUTE_YAW
   )
@@ -280,7 +380,7 @@ export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
     24,
     90, // top-down
     40 * DEG,
-    aspect,
+    band.aspect,
     1.5 * narrow
   )
 
@@ -302,7 +402,7 @@ export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
     hz,
     90, // top-down, same register as the hero
     38 * DEG,
-    aspect,
+    band.aspect,
     1.22 * narrow // tighter than the hero's 1.35
   )
 
@@ -314,6 +414,9 @@ export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
   // shrinking it on portrait would crop the letters. Portrait instead gets a
   // tighter pad, since framingPose fits hx/aspect there and the default leaves
   // the wordmark marooned in empty field.
+  // Also full-viewport, for the same reason as the hero: the wordmark reveal is
+  // the page's closing shot and wants every pixel of height it can get. In a
+  // 273px band the letters would be unreadable.
   const wm = scene.wordmark
   const footer = framingPose(
     [wm.center.x, 0, wm.center.z],
@@ -321,8 +424,8 @@ export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
     wm.halfZ,
     90, // top-down
     38 * DEG,
-    aspect,
-    twoColumn ? 1.25 : 1.12
+    full.aspect,
+    twoColumnFull ? 1.25 : 1.12
   )
 
   // Ordered as a geographic sweep so the camera never doubles back: Manggarai ->

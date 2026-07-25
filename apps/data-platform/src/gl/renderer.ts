@@ -23,13 +23,16 @@ import {
   TRAINS_PER_LINE,
   TRAIN_STEP_MS
 } from '../scene/network-scene'
+import { ACCENT_HEX, hexToRgbFloat } from '../theme/line-colors'
 
 const DRAW_IN_MS = 1700
 const MAX_DPR = 2
 
 const STATION_COLOR: Vec3Tuple = [0xcb / 255, 0xd0 / 255, 0xda / 255]
-// Brand accent (--color-accent), so the page closes in its own colour.
-const LOGO_COLOR: Vec3Tuple = [0xf5 / 255, 0x58 / 255, 0x75 / 255]
+// Brand accent, so the page closes in its own colour. Derived from the single
+// ACCENT_HEX constant rather than re-typed here, so it cannot drift from
+// --color-accent in style.css.
+const LOGO_COLOR: Vec3Tuple = hexToRgbFloat(ACCENT_HEX)
 
 export interface ProjectFn {
   (world: Vec3Tuple, vpW: number, vpH: number): {

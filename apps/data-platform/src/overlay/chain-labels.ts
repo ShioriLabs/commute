@@ -7,6 +7,7 @@
 // enough not to overlap at the framing that beat uses.
 import type { FrameContext } from '../gl/renderer'
 import type { Vec3 } from '../scene/network-scene'
+import { clamp } from './html'
 
 export interface ChainLabels {
   setVisible(v: boolean): void
@@ -27,6 +28,9 @@ const OFFSET_Y = -22
 // Baru and Sudirman are ~28px apart here). Flip the second one below its dot.
 const BELOW_Y = 14
 const COLLIDE_PX = 46
+// Sticky-header keep-out; a code plate tucked under the nav lockup is unreadable
+// against the wordmark. Mirrors TOP_GUTTER in route-strip.ts.
+const TOP_GUTTER = 64
 
 export function createChainLabels(
   root: HTMLElement,
@@ -84,7 +88,18 @@ export function createChainLabels(
         && Math.abs(p.y - prev.y) < COLLIDE_PX
       const dy = near ? BELOW_Y : OFFSET_Y
       prev = { x: p.x, y: p.y }
-      const t = `translate3d(${Math.round(p.x - halfW)}px, ${Math.round(p.y) + dy}px, 0)`
+      // Keep the plate inside the frame. It matters on mobile, where the frame is
+      // the map band: a label on a dot near the lower edge would otherwise render
+      // below the band, over the copy. Clamped rather than hidden — the code is
+      // the point of this beat, and a station whose label vanished would read as
+      // missing data.
+      const h = el.offsetHeight || 18
+      const lx = clamp(Math.round(p.x - halfW), 4, Math.max(4, ctx.viewportW - el.offsetWidth - 4))
+      // TOP_GUTTER, not 4: the sticky header's lockup owns the top-left corner, and
+      // a code plate tucked under it is unreadable against the wordmark. Same
+      // reasoning and same value as route-strip.ts.
+      const ly = clamp(Math.round(p.y) + dy, TOP_GUTTER, Math.max(TOP_GUTTER, ctx.viewportH - h - 4))
+      const t = `translate3d(${lx}px, ${ly}px, 0)`
       if (!placed) {
         const ease = el.style.transition
         el.style.transition = 'none'

@@ -3,7 +3,11 @@
 @theme {
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code", monospace;
+  /* JetBrains Mono leads: it is the face this page actually loads (see the
+     Google Fonts link in index.html) and the one the data voice is set in.
+     Behind ui-monospace / SF Mono it never won on any platform that has them,
+     so the download was paid for and discarded. */
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Fira Code", monospace;
   --color-accent: #f55875;
   /* Dark-only palette (committed) */
   --color-ink: #0d0f14; /* near-black ground */
@@ -22,6 +26,91 @@ body {
   font-optical-sizing: auto;
 }
 
+/* Every mono site on this page is a figure, a station code, or a unit — the
+   data voice. Transit boards set figures fixed-pitch so they align down the
+   column; tabular-nums is what makes that true when the values change (a
+   departure ticking 5 -> 4 mnt must not reflow the column). */
+@layer base {
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* The mobile IMAX band.
+   ---------------------
+   On a phone the map used to fill the whole portrait viewport behind the copy,
+   which starved it twice over: framingPose fits hx/aspect, so a 0.46 aspect
+   pushed the camera back until the network read as empty space, and the overlays
+   anchored to projected roundels had a 390px-wide box to land a 248px card in.
+   Three of them clipped off-screen.
+
+   For the seven content beats the map instead gets a fixed 1.43:1 band at the
+   top — the letterboxed frame of a PIDS screen mounted above the platform, with
+   the printed matter below it — and the plates scroll underneath. hero and
+   footer keep the full viewport: they are the establishing shot and the wordmark
+   reveal, they anchor no overlays, and letters in a 273px band can't be read.
+
+   1.43 is measured, not chosen for the reference: at 390px wide it leaves a
+   273px band and 571px of copy. Wider than ~1.6 crops the map below 240px and
+   2.39 starves every beat.
+
+   Desktop is untouched — the attribute is only set below the md: breakpoint, and
+   these rules are gated to match (see BAND_BREAKPOINT in main.ts). */
+@media (width < 48rem) {
+  html[data-map-band] #network-bg,
+  html[data-map-band] #overlay-root {
+    inset: 0 0 auto 0;
+    /* Overlays position inside #overlay-root against canvas-space coordinates
+       from project(), so the two boxes MUST stay identical. */
+    height: calc(100vw / 1.43);
+  }
+
+  /* Content beats centre their plate in the viewport (items-center), which on a
+     phone lands it over the band and buries the very figures the band is
+     showing. Push it clear of the band instead. */
+  html[data-map-band] [data-beat] {
+    align-items: start;
+    /* Band height plus a gutter. The gutter is what keeps a plate from grazing
+       an overlay card that is resting near the band's lower edge. */
+    padding-top: calc(100vw / 1.43 + 3rem);
+  }
+
+  /* Padding alone can't keep the copy out of the band: it positions the plate
+     WITHIN its section, and once that section scrolls up the plate rides over the
+     fixed band and covers the evidence there. The band therefore needs to be a
+     real surface that scrolling content passes behind — the ink ground, ending in
+     the same soft fade the header uses so the dots keep running under it with no
+     visible seam. Sits above the beats (z-10) and below the header (z-20). */
+  html[data-map-band] body::before {
+    content: "";
+    position: fixed;
+    inset: 0 0 auto 0;
+    height: calc(100vw / 1.43 + 2.5rem);
+    z-index: 11;
+    pointer-events: none;
+    /* Opaque across the band itself (the canvas draws on top of this, and it
+       clears to transparent, so the ground has to come from here), then fading
+       out over the last 2.5rem so the plate below is not cut by a hard line. */
+    background:
+      linear-gradient(
+        180deg,
+        var(--color-ink) 0%,
+        var(--color-ink) calc(100% - 2.5rem),
+        transparent 100%
+      );
+  }
+
+  /* The map and its overlays belong ABOVE that scrim — it exists to hide the
+     copy, not the evidence. */
+  html[data-map-band] #network-bg {
+    z-index: 12;
+  }
+
+  html[data-map-band] #overlay-root {
+    z-index: 13;
+  }
+}
+
 /* Sign plates: the page's copy blocks are modelled on Jakarta platform signage
    and on the PIDS departures flyout (overlay/departures.ts) — square-cut, plate
    coloured, with a left bar carrying the colour of the line that beat is showing
@@ -34,6 +123,21 @@ body {
     backdrop-filter: blur(6px);
   }
 
+  /* The static half of the signage pair. Jakarta platforms carry BOTH the live
+     PIDS board and the printed sheet bolted to the wall beneath it; when the
+     board is dark the figures fall back to the plate. With no WebGL2 the map
+     and all its anchored overlays are absent (see main.ts), and the plate copy
+     still says "di samping" / "di peta" — so the evidence has to land here or
+     the claim is unsupported. Enamel, not an error state: 11px mono, hairline
+     rule, values right-aligned into a column. */
+  .sign-static {
+    grid-template-columns: auto 1fr;
+    gap: 0.35rem 1rem;
+  }
+
+  .sign-static dd {
+    text-align: right;
+  }
 }
 
 @layer utilities {
@@ -57,6 +161,14 @@ body {
   .rise {
     opacity: 0;
     animation: rise 500ms var(--ease-ios-spring) forwards;
+  }
+
+  /* Reveals the static evidence plates when there is no WebGL. Must live in the
+     utilities layer, not components: the plates carry Tailwind's `hidden`
+     utility so they stay out of the layout on the normal path, and an earlier
+     layer loses to it regardless of selector specificity. */
+  html[data-webgl="off"] .sign-static {
+    display: grid;
   }
 }
 

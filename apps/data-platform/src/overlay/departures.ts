@@ -6,6 +6,7 @@
 import type { FrameContext } from '../gl/renderer'
 import type { Vec3 } from '../scene/network-scene'
 import type { DepartureRow } from '../data/next-departures'
+import { clamp } from './html'
 
 type State =
   | { kind: 'loading' }
@@ -22,6 +23,9 @@ export interface DeparturesFlyout {
 
 const OFFSET_X = 22 // px, place the card to the upper-right of the roundel
 const OFFSET_Y = -12
+// Bottom keep-out. Larger than the 8px used on the other three edges because the
+// copy plate butts directly against the band's lower edge on mobile.
+const EDGE_GAP_Y = 20
 
 export function createDeparturesFlyout(
   root: HTMLElement,
@@ -130,7 +134,19 @@ export function createDeparturesFlyout(
     }
     const x = Math.round(p.x)
     const y = Math.round(p.y)
-    const cardTransform = `translate3d(${x + OFFSET_X}px, ${y + OFFSET_Y}px, 0)`
+    // Prefer the roundel's upper-right, but clamp into the frame. This card is
+    // 248px wide in a 390px-wide mobile band, so on a phone it does not fit
+    // beside its own anchor at any offset and has to slide rather than flip —
+    // same reasoning as the fare tag. Unclamped it hung ~70px off the right edge
+    // and lost its header and every time.
+    const w = card.offsetWidth || 248
+    const h = card.offsetHeight || 140
+    const cardX = clamp(x + OFFSET_X, 8, Math.max(8, ctx.viewportW - w - 8))
+    // On mobile the frame IS the map band and the copy plate begins immediately
+    // under it, so a card resting on the bottom edge gets its last rows clipped
+    // by the plate. Hold it clear of that edge.
+    const cardY = clamp(y + OFFSET_Y, 8, Math.max(8, ctx.viewportH - h - EDGE_GAP_Y))
+    const cardTransform = `translate3d(${cardX}px, ${cardY}px, 0)`
     const connectorTransform = `translate3d(${x}px, ${y}px, 0)`
 
     if (!placed) {
@@ -148,11 +164,16 @@ export function createDeparturesFlyout(
     card.style.opacity = '1'
     card.style.transform = cardTransform
 
-    // Connector: from the roundel to the card's top-left corner.
-    const len = Math.max(OFFSET_X, 4)
-    connector.style.opacity = '0.5'
-    connector.style.width = `${len}px`
-    connector.style.transform = connectorTransform
+    // Connector: from the roundel to wherever the (possibly clamped) card landed.
+    // Hidden when the card overlaps its anchor, where a stub is just noise.
+    const reach = cardX - x
+    if (reach > 6) {
+      connector.style.opacity = '0.5'
+      connector.style.width = `${reach}px`
+      connector.style.transform = connectorTransform
+    } else {
+      connector.style.opacity = '0'
+    }
   }
 
   function dispose(): void {

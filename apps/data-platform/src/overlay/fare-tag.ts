@@ -26,7 +26,9 @@ export interface FareTag {
 const OFFSET_X = 18
 const OFFSET_Y = 14
 
-const MRT_COLOR = '#ca2a51'
+// Fallback only. The priced line's real colour is passed in by main.ts from the
+// baked network (see theme/line-colors.ts on why the hex is not duplicated here).
+const FALLBACK_COLOR = 'var(--color-accent)'
 
 function rupiah(n: number): string {
   return `Rp${n.toLocaleString('id-ID')}`
@@ -43,13 +45,14 @@ function shortName(name: string): string {
 export function createFareTag(
   root: HTMLElement,
   anchorWorld: Vec3,
-  reduceMotion: boolean
+  reduceMotion: boolean,
+  lineColor?: string
 ): FareTag {
   const card = document.createElement('div')
   card.className
     = 'absolute left-0 top-0 w-[200px] overflow-hidden border border-line/70 '
       + 'bg-plate/95 shadow-xl shadow-black/40 backdrop-blur-sm will-change-transform'
-  card.style.borderLeft = `3px solid ${MRT_COLOR}`
+  card.style.borderLeft = `3px solid ${lineColor ?? FALLBACK_COLOR}`
   card.style.opacity = '0'
   card.style.transition = reduceMotion ? 'none' : 'opacity 220ms ease, transform 220ms ease'
 
