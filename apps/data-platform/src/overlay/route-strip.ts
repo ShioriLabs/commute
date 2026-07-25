@@ -160,7 +160,7 @@ export function createRouteStrip(
         + [0, 1, 2]
           .map(i => `<div class="mb-2.5 h-3 animate-pulse rounded bg-white/10" style="width:${88 - i * 14}%"></div>`)
           .join('')
-        + `</div>`
+          + `</div>`
       )
     }
     if (state.kind === 'error') {

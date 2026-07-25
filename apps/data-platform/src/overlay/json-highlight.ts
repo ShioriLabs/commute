@@ -76,4 +76,3 @@ export function highlightJSON(value: unknown, indent = 0): string {
     .join(punct(',') + '\n')
   return punct('{') + '\n' + body + '\n' + pad + punct('}')
 }
-

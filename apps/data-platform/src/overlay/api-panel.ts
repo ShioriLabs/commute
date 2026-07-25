@@ -214,7 +214,7 @@ export function createApiPanel(
           + [0, 1, 2, 3, 4, 5]
             .map(i => `<div class="h-3 animate-pulse rounded bg-white/10" style="width:${90 - i * 9}%"></div>`)
             .join('')
-          + `</div>`,
+            + `</div>`,
           docked
         )
       )

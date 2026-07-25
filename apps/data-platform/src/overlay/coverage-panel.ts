@@ -121,7 +121,7 @@ export function createCoveragePanel(
         + [0, 1, 2, 3]
           .map(() => `<div class="mb-3 h-6 animate-pulse rounded bg-white/10"></div>`)
           .join('')
-        + `</div>`
+          + `</div>`
       )
     }
     if (state.kind === 'error') {

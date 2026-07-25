@@ -129,8 +129,8 @@ export function createStationCard(
             + `</span>`
         )
         .join('')
-      + `</div>`
-      + `</div>`
+        + `</div>`
+        + `</div>`
     )
   }
 
