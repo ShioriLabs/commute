@@ -56,7 +56,9 @@ const MRT_CORRIDOR: readonly string[] = mrtCorridor()
 // Which subject the map emphasises. Every set is baked at build time (a few
 // thousand Float32Array writes each, once) and swapped at runtime by the
 // renderer, because a beat's subject is chosen by scroll position.
-export type HighlightId = 'none' | 'cikarang' | 'mrt-lbb-bhi' | 'rasuna'
+export type HighlightId
+  = 'none' | 'cikarang' | 'mrt-lbb-bhi' | 'rasuna' | 'rute'
+    | 'rail-kci' | 'rail-mrtj' | 'rail-lrtj' | 'rail-lrtjbdb'
 
 // The info-stasiun beat's subject. A lone station can't carry a beat — at
 // STATION_RADIUS it stays indistinguishable from its neighbours while everything
@@ -71,13 +73,51 @@ const RASUNA_RUN = [
   'LRTJBDB-PAN' //  Pancoran
 ] as const
 
-// Station chains to emphasise. Pairs are walked with octRoute() so the lit dots
-// BETWEEN stations light up too; a single-station set has no pairs and would mark
-// only the station itself.
-const HIGHLIGHT_SETS: Record<Exclude<HighlightId, 'none'>, readonly string[]> = {
-  'cikarang': HIGHLIGHT_CHAIN,
-  'mrt-lbb-bhi': MRT_CORRIDOR,
-  'rasuna': RASUNA_RUN
+// The rute beat's subject: the router's own answer for Pancoran -> Pasar Minggu,
+// a real cross-operator journey (LRT Jabodebek to KRL Lin Bogor).
+//
+// TWO runs, not one chain. The legs are separated by a 600m WALK from Cikoko to
+// Cawang, and octRoute() bridges consecutive pairs — a single flat chain would
+// draw a lit line straight across the gap and claim track that doesn't exist.
+// The dark gap between the runs IS the transfer, which is the whole point of the
+// beat, so the runs stay separate and the walk is drawn by the overlay instead.
+const RUTE_LEG_LRT = [
+  'LRTJBDB-PAN', // Pancoran
+  'LRTJBDB-CKK' //  Cikoko          -- 600m walk from here...
+] as const
+const RUTE_LEG_KRL = [
+  'KCI-CW', //   Cawang            -- ...to here
+  'KCI-DRN', //  Duren Kalibata
+  'KCI-PSMB', // Pasar Minggu Baru
+  'KCI-PSM' //   Pasar Minggu
+] as const
+
+// Every line of one operator as it appears in the baked map, collected from
+// NETWORK rather than typed out, so the cakupan beat can't drift from what is
+// actually drawn. Filters on the line's own `operator` field, NOT on an id prefix:
+// 'LRTJ-' is a prefix of 'LRTJBDB-', so prefix matching would fold LRT Jabodebek
+// into LRT Jakarta. Segments (not nodes) because a subject needs adjacent pairs
+// for octRoute to light the dots BETWEEN stations.
+function railOperatorRuns(operator: string): readonly (readonly string[])[] {
+  return NETWORK.lines
+    .filter(line => line.operator === operator)
+    .flatMap(line => line.segments.filter(seg => seg.length >= 2))
+}
+
+// Station chains to emphasise. Each subject is a LIST OF RUNS; pairs within a run
+// are walked with octRoute() so the lit dots BETWEEN stations light up too.
+// Separate runs are never bridged, which is how a subject expresses a genuine gap
+// (a walking transfer) or a set of disjoint lines. A single-station run has no
+// pairs and would mark only the station itself.
+const HIGHLIGHT_SETS: Record<Exclude<HighlightId, 'none'>, readonly (readonly string[])[]> = {
+  'cikarang': [HIGHLIGHT_CHAIN],
+  'mrt-lbb-bhi': [MRT_CORRIDOR],
+  'rasuna': [RASUNA_RUN],
+  'rute': [RUTE_LEG_LRT, RUTE_LEG_KRL],
+  'rail-kci': railOperatorRuns('KCI'),
+  'rail-mrtj': railOperatorRuns('MRTJ'),
+  'rail-lrtj': railOperatorRuns('LRTJ'),
+  'rail-lrtjbdb': railOperatorRuns('LRTJBDB')
 }
 
 /** Per-instance emphasis flags for one subject, parallel to dots/stations. */
@@ -168,20 +208,26 @@ export function buildScene(): NetworkScene {
   }
 
   // Cells covered by each highlight subject. Computed from the same octRoute the
-  // lit dots use, so a highlight lands exactly on drawn dots. A one-station chain
-  // has no pairs, so this loop no-ops and only the station itself is marked.
+  // lit dots use, so a highlight lands exactly on drawn dots. Pairs are walked
+  // WITHIN each run only — consecutive runs are never joined, so the gap between
+  // them (a walking transfer) stays dark. A one-station run has no pairs, so this
+  // loop no-ops for it and only the station itself is marked.
   const highlightCells = new Map<HighlightId, Set<string>>()
   const highlightStations = new Map<HighlightId, Set<string>>()
-  for (const [id, chain] of Object.entries(HIGHLIGHT_SETS) as [HighlightId, readonly string[]][]) {
+  for (const [id, runs] of Object.entries(HIGHLIGHT_SETS) as [HighlightId, readonly (readonly string[])[]][]) {
     const cells = new Set<string>()
-    for (let i = 0; i < chain.length - 1; i++) {
-      const a = stationCells.get(chain[i]!)
-      const b = stationCells.get(chain[i + 1]!)
-      if (!a || !b) continue
-      for (const c of octRoute(a, b)) cells.add(cellKey(c))
+    const stations = new Set<string>()
+    for (const run of runs) {
+      for (const stationId of run) stations.add(stationId)
+      for (let i = 0; i < run.length - 1; i++) {
+        const a = stationCells.get(run[i]!)
+        const b = stationCells.get(run[i + 1]!)
+        if (!a || !b) continue
+        for (const c of octRoute(a, b)) cells.add(cellKey(c))
+      }
     }
     highlightCells.set(id, cells)
-    highlightStations.set(id, new Set(chain))
+    highlightStations.set(id, stations)
   }
 
   // Lit line dots: octilinear routes per line segment, deduped by (cell,color)

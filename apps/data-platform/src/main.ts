@@ -1,4 +1,5 @@
 import './style.css'
+import { NETWORK } from './network'
 import { createGL } from './gl/context'
 import {
   buildScene,
@@ -15,15 +16,23 @@ import { createFareTag } from './overlay/fare-tag'
 import { createChainLabels } from './overlay/chain-labels'
 import { createStationCard } from './overlay/station-card'
 import { createApiPanel } from './overlay/api-panel'
+import { createRouteStrip } from './overlay/route-strip'
+import { createCoveragePanel, toRailRoster, RAIL_OPERATOR_CYCLE } from './overlay/coverage-panel'
 import { fetchManggaraiDepartures } from './data/departures-api'
 import {
   fetchCorridorFare,
+  fetchJourney,
+  fetchOperators,
   fetchStationDetail,
   fetchStationTransfers
 } from './data/network-api'
 import { nextDepartures } from './data/next-departures'
 
-// Smooth-scroll for in-page anchors (unchanged from the original).
+// Smooth-scroll for in-page anchors. `block: 'center'` matters here: the nav
+// links point at beat sections, each a full viewport tall, and the director
+// anchors a beat when its CENTRE crosses the viewport centre. Aligning their top
+// edge (scrollIntoView's default) would leave every jump one half-viewport short
+// of the beat it named, with the camera still mid-transition on arrival.
 document.querySelectorAll<HTMLAnchorElement>('a[href^="#"]').forEach((link) => {
   link.addEventListener('click', (event) => {
     const id = link.getAttribute('href')?.slice(1)
@@ -31,7 +40,7 @@ document.querySelectorAll<HTMLAnchorElement>('a[href^="#"]').forEach((link) => {
     const target = document.getElementById(id)
     if (!target) return
     event.preventDefault()
-    target.scrollIntoView({ behavior: 'smooth' })
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' })
   })
 })
 
@@ -110,6 +119,32 @@ function bootNetworkBackground(): void {
         )
       : null
 
+  // The rute beat's journey strip, anchored to the INTERCHANGE rather than an
+  // endpoint. Cikoko and Cawang are diagonally adjacent cells on the lattice
+  // (they really are ~220m apart), so the two lit legs visually touch and the
+  // highlight alone can't show that you get off and walk. Anchoring the strip
+  // here is what names the transfer.
+  const interchange = scene.stationWorld.get('LRTJBDB-CKK')
+  const routeStrip
+    = overlayRoot && interchange
+      ? createRouteStrip(
+          overlayRoot,
+          document.querySelector<HTMLElement>('[data-rute-dock]'),
+          interchange,
+          reduceMotion
+        )
+      : null
+
+  // The cakupan beat's roster. Not anchored to anything: its subject is the
+  // whole network, and the map points by lighting one operator at a time.
+  const coveragePanel = overlayRoot
+    ? createCoveragePanel(
+        overlayRoot,
+        document.querySelector<HTMLElement>('[data-cakupan-dock]'),
+        reduceMotion
+      )
+    : null
+
   const renderer = createRenderer({
     gl: ctx.gl,
     canvas,
@@ -122,6 +157,8 @@ function bootNetworkBackground(): void {
       chainLabels?.update(frameCtx)
       stationCard?.update(frameCtx)
       apiPanel?.update(frameCtx)
+      routeStrip?.update(frameCtx)
+      coveragePanel?.update(frameCtx)
     }
   })
 
@@ -170,6 +207,32 @@ function bootNetworkBackground(): void {
       })
   }
 
+  let journeyLoaded = false
+  function loadJourney(): void {
+    if (!routeStrip) return
+    routeStrip.setState({ kind: 'loading' })
+    fetchJourney()
+      .then((route) => {
+        routeStrip.setState({ kind: 'ready', route })
+      })
+      .catch(() => routeStrip.setState({ kind: 'error' }))
+  }
+
+  let operatorsLoaded = false
+  function loadOperators(): void {
+    if (!coveragePanel) return
+    coveragePanel.setState({ kind: 'loading' })
+    fetchOperators()
+      .then((operators) => {
+        // The roster is filtered against the BAKED network, not just by operator:
+        // the API also reports rail lines this map doesn't draw (KCI's airport
+        // line), and listing one would show a row that never lights.
+        const drawn = new Set(NETWORK.lines.map(l => `${l.operator}:${l.code}`))
+        coveragePanel.setState({ kind: 'ready', operators: toRailRoster(operators, drawn) })
+      })
+      .catch(() => coveragePanel.setState({ kind: 'error' }))
+  }
+
   const director = createSectionDirector({
     camera,
     renderer,
@@ -205,6 +268,31 @@ function bootNetworkBackground(): void {
         stationLoaded = true
         loadStation()
       }
+
+      const onRute = id === 'rute'
+      routeStrip?.setVisible(onRute)
+      // One beat early, same reasoning as the station fetch: the strip is the
+      // whole point of the beat and shouldn't still be skeletons on arrival.
+      if ((id === 'stasiun' || onRute) && !journeyLoaded) {
+        journeyLoaded = true
+        loadJourney()
+      }
+
+      const onCakupan = id === 'cakupan'
+      coveragePanel?.setVisible(onCakupan)
+      // Prefetch from `rute`, the beat BEFORE this one. (It used to key on `api`,
+      // which was the preceding beat until api and cakupan swapped places; left
+      // alone it would only have started loading after the roster was on screen.)
+      if ((onRute || onCakupan) && !operatorsLoaded) {
+        operatorsLoaded = true
+        loadOperators()
+      }
+    },
+    // The cakupan beat steps through one rail operator at a time; mark the
+    // matching roster row so the panel and the lit lines never disagree.
+    onHighlightSet: (highlight) => {
+      const step = RAIL_OPERATOR_CYCLE.find(o => o.highlight === highlight)
+      if (step) coveragePanel?.setActiveOperator(step.code)
     }
   })
 

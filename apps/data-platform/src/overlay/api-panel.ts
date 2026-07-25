@@ -34,46 +34,102 @@ const OFFSET_Y = -28
 // The response the panel falls back to when the fetch fails. Keeping a real
 // example here (rather than an empty plate) means a failed request degrades to
 // what the page showed before this panel was anchored at all.
+//
+// This is Rasuna Said — the station this beat is actually anchored to — captured
+// from the live endpoint and truncated exactly as shownFields() truncates it, so
+// the offline case can't contradict the online one. It previously showed a Bogor
+// record with a flattened `operator` string, which matched neither the anchor nor
+// the real payload shape.
 const FALLBACK = {
   status: 200,
   data: {
-    id: 'KCI-BOO',
-    name: 'Bogor',
-    code: 'BOO',
+    id: 'LRTJBDB-RAS',
+    name: 'Rasuna Said',
+    code: 'RAS',
     region: 'Jabodetabek',
-    operator: 'KCI',
+    operator: { code: 'LRTJBDB', name: 'LRT Jabodebek' },
     timetableSynced: 1,
-    searchable: true,
-    latitude: -6.5951,
-    longitude: 106.7893
+    amenities: [
+      { type: 'TOILET' },
+      { type: 'TOILET_ACCESSIBLE' },
+      { type: 'CHARGING_STATION' }
+    ],
+    latitude: -6.2215,
+    longitude: 106.8321,
+    lines: [
+      { name: 'Lin Bekasi', colorCode: '#006838', lineCode: 'BK' },
+      { name: 'Lin Cibubur', colorCode: '#21409A', lineCode: 'CB' }
+    ]
   }
 }
 
-// Trim hard. This panel floats over the map anchored to a dot, so its height is
-// the constraint: a full record ran past the beat and covered its own anchor.
-// Lines collapse to their codes (the expanded objects cost 8 lines to say what
-// the station card already shows in colour), and the tail scalars go.
+// TRUNCATE, don't reshape. This panel floats over the map anchored to a dot, so
+// its height is the constraint: the full record runs past the beat and covers
+// its own anchor. So fields are DROPPED, but every field that survives keeps the
+// exact shape the API returns — `operator` stays the {code,name} object, `lines`
+// stay objects with their colours, `amenities` stay typed entries. An earlier
+// version flattened them (operator -> string, lines -> codes, amenities -> a
+// count), which made the panel a lie: a caller copying it would build the wrong
+// types. Showing a real prefix of the payload is the point of the beat.
+//
+// The panel shows a real response and lets it RUN OFF the bottom behind a fade,
+// rather than trimming it to fit. That reads as "here is the payload, there is
+// more of it" instead of "here is a small payload" — which is the honest claim,
+// since the real record is longer than any panel this size could hold.
+//
+// So nothing is capped for height any more; only the genuinely unbounded keys
+// are dropped (createdAt/updatedAt/score are noise, regionCode/searchable are
+// tail scalars). Everything kept has the exact shape the API returns.
 function shownFields(s: StationDetail): unknown {
   return {
     status: 200,
     data: {
       id: s.id,
-      name: s.formattedName || s.name,
-      operator: s.operator.code,
-      lines: s.lines.map(l => l.lineCode),
-      amenities: s.amenities.length,
+      name: s.name,
+      code: s.code,
+      formattedName: s.formattedName,
+      region: s.region,
+      operator: { code: s.operator.code, name: s.operator.name },
+      timetableSynced: 1,
+      amenities: s.amenities.map(a => ({ type: a.type })),
       latitude: s.latitude,
-      longitude: s.longitude
+      longitude: s.longitude,
+      lines: s.lines.map(l => ({ name: l.name, colorCode: l.colorCode, lineCode: l.lineCode }))
     }
   }
 }
 
+// `overflow-hidden`, NOT `overflow-auto`: the payload is meant to run past the
+// bottom edge and dissolve, so a scrollbar would both contradict the effect and
+// invite scrolling inside a panel that is pinned to a moving map. Long lines are
+// clipped at the right edge for the same reason (they used to force a horizontal
+// scrollbar, which was the only chrome on the whole page).
+// No BOTTOM border in either mode. A closed box under the fade re-caps the
+// payload and the effect reads as "a panel with a gradient in it"; leaving the
+// bottom open lets the text and the panel dissolve together.
 const FLOAT_CLASS
-  = 'absolute left-0 top-0 w-[320px] overflow-x-auto border border-line/70 '
-    + 'bg-plate/95 p-4 shadow-xl shadow-black/40 backdrop-blur-sm will-change-transform'
+  = 'absolute left-0 top-0 w-[320px] overflow-hidden border border-b-0 border-line/70 '
+    + 'bg-plate/95 shadow-xl shadow-black/40 backdrop-blur-sm will-change-transform'
 
 const DOCK_CLASS
-  = 'w-full overflow-x-auto border border-line bg-plate p-4'
+  = 'w-full overflow-hidden border border-b-0 border-line bg-plate'
+
+// How tall the payload is allowed to be before it fades out. Sized so a couple
+// of lines are always mid-dissolve: a fade that starts after the last line just
+// looks like a gradient border.
+const FLOAT_BODY_H = 400
+const DOCK_BODY_H = 340
+
+// The fade itself. Sits over the clipped box in the panel's OWN background
+// colour (--color-plate, #0a0c11) so the text dissolves into the plate instead
+// of being covered by a differently-tinted veil. The float variant stops at 0.95
+// to match `bg-plate/95`: running it to a solid 1 would make the bottom of a
+// translucent panel read as more opaque than its top.
+const FADE_CLASS = 'pointer-events-none absolute inset-x-0 bottom-0 h-28'
+const FADE_FLOAT_STYLE
+  = 'background:linear-gradient(180deg,rgba(10,12,17,0) 0%,rgba(10,12,17,0.7) 50%,rgba(10,12,17,0.95) 100%)'
+const FADE_DOCK_STYLE
+  = 'background:linear-gradient(180deg,rgba(10,12,17,0) 0%,rgba(10,12,17,0.75) 50%,rgba(10,12,17,1) 100%)'
 
 export function createApiPanel(
   root: HTMLElement,
@@ -105,6 +161,8 @@ export function createApiPanel(
   let docked = window.innerWidth < 768
 
   // Moves the card between the projected overlay layer and the in-flow slot.
+  // Re-renders because the two modes use different payload heights, so the
+  // markup depends on `docked` and not only the class name.
   function mount(toDock: boolean): void {
     if (toDock && dock) {
       card.className = DOCK_CLASS
@@ -120,34 +178,62 @@ export function createApiPanel(
       placed = false // re-place without a transition on the next visible frame
       root.appendChild(card)
     }
+    render()
   }
 
+  // The endpoint line stays OUTSIDE the clipped box: it's the panel's label, and
+  // it would be the first thing lost if it scrolled with the payload.
   function endpointHTML(path: string): string {
-    return `<p class="mb-3 font-mono text-xs text-white/45">GET ${path}</p>`
+    return `<p class="px-4 pb-3 pt-4 font-mono text-xs text-white/45">GET ${path}</p>`
+  }
+
+  /** Wraps the payload in the clipped, bottom-faded box. */
+  function payloadHTML(inner: string, tall: boolean): string {
+    const h = tall ? DOCK_BODY_H : FLOAT_BODY_H
+    const fadeStyle = tall ? FADE_DOCK_STYLE : FADE_FLOAT_STYLE
+    // `w-0 min-w-full` on the inner wrapper is what stops the un-wrapped <pre>
+    // from widening its ancestors. overflow-hidden clips what you SEE, but the
+    // element is still laid out at its widest line (558px inside a 390px
+    // viewport), and docked in page flow that pushed the whole document into a
+    // horizontal scroll. Pinning the width to the container instead makes the
+    // long lines overflow the box rather than stretch it.
+    return (
+      `<div class="relative w-0 min-w-full overflow-hidden" style="height:${h}px">`
+      + `<div class="px-4 pb-4">${inner}</div>`
+      + `<div class="${FADE_CLASS}" style="${fadeStyle}"></div>`
+      + `</div>`
+    )
   }
 
   function bodyHTML(): string {
     if (state.kind === 'loading') {
       return (
         endpointHTML(`/stations/${STATION_OPERATOR}/${STATION_CODE}`)
-        + `<div class="flex flex-col gap-2">`
-        + [0, 1, 2, 3, 4, 5]
-          .map(i => `<div class="h-3 animate-pulse rounded bg-white/10" style="width:${90 - i * 9}%"></div>`)
-          .join('')
-        + `</div>`
+        + payloadHTML(
+          `<div class="flex flex-col gap-2">`
+          + [0, 1, 2, 3, 4, 5]
+            .map(i => `<div class="h-3 animate-pulse rounded bg-white/10" style="width:${90 - i * 9}%"></div>`)
+            .join('')
+          + `</div>`,
+          docked
+        )
       )
     }
 
     const value = state.kind === 'ready' ? shownFields(state.station) : FALLBACK
-    const path = state.kind === 'ready'
-      ? `/stations/${STATION_OPERATOR}/${STATION_CODE}`
-      : '/stations/KCI/BOO'
+    const path = `/stations/${STATION_OPERATOR}/${STATION_CODE}`
 
     return (
       endpointHTML(path)
-      + `<pre class="font-mono text-[12px] leading-relaxed text-white/85">`
-      + highlightJSON(value)
-      + `</pre>`
+      // whitespace-pre (not pre-wrap): a wrapped JSON line reads as a different
+      // payload shape. Long lines run past the right edge and clip, matching the
+      // way the whole record runs past the bottom edge and fades.
+      + payloadHTML(
+        `<pre class="whitespace-pre font-mono text-[12px] leading-relaxed text-white/85">`
+        + highlightJSON(value)
+        + `</pre>`,
+        docked
+      )
     )
   }
 

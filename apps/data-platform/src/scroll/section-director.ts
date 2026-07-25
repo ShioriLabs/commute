@@ -68,8 +68,10 @@ export function createSectionDirector(opts: {
   reduceMotion: boolean
   /** Fired when the dominant (nearest) beat changes. */
   onActiveBeat?: (id: BeatId) => void
+  /** Fired when a cycling beat steps to a new subject (see `highlightCycle`). */
+  onHighlightSet?: (id: HighlightId) => void
 }): SectionDirector {
-  const { camera, renderer, buildBeats, reduceMotion, onActiveBeat } = opts
+  const { camera, renderer, buildBeats, reduceMotion, onActiveBeat, onHighlightSet } = opts
 
   let anchored: AnchoredBeat[] = []
   let activeBeat: BeatId | null = null
@@ -79,6 +81,37 @@ export function createSectionDirector(opts: {
     activeBeat = id
     onActiveBeat?.(id)
   }
+
+  // A cycling beat swaps subject as the reader moves across it. `t` is the eased
+  // fraction toward the NEXT beat, so it runs 0..1 across the second half of the
+  // approach and the first half of the departure; spend the middle band cycling
+  // and leave the tails alone, where a swap would fight the emphasis dip.
+  //
+  // The lead-in is deliberately long. cakupan follows rute, a tilted bird's-eye
+  // beat, and the camera is still unwinding that pitch well into the approach —
+  // at a 0.15 lead-in the first operator lit while the map was visibly still
+  // rotating out of the previous shot, so the highlight looked like it belonged
+  // to rute. 0.34 holds the field dark until the camera has actually arrived,
+  // then fits the whole cycle into the remaining band.
+  const CYCLE_LEAD_IN = 0.34
+  const CYCLE_TAIL = 0.08
+
+  function cycledSet(beat: AnchoredBeat, t: number): HighlightId {
+    const cycle = beat.highlightCycle
+    if (!cycle || cycle.length === 0) return beat.highlightSet
+    const span = 1 - CYCLE_LEAD_IN - CYCLE_TAIL
+    const eased = Math.min(1, Math.max(0, (t - CYCLE_LEAD_IN) / span))
+    const i = Math.min(cycle.length - 1, Math.floor(eased * cycle.length))
+    return cycle[i]!
+  }
+
+  function onCycleStep(id: HighlightId): void {
+    if (id === lastCycleStep) return
+    lastCycleStep = id
+    onHighlightSet?.(id)
+  }
+
+  let lastCycleStep: HighlightId | null = null
 
   function rebuild(): void {
     anchored = buildBeats()
@@ -140,11 +173,30 @@ export function createSectionDirector(opts: {
           // zero at the midpoint and swap the set there. Crossfading instead
           // would teleport the highlight from one subject to the other, because
           // a single mix drives whichever set is currently uploaded.
+          // A cycling beat picks its subject from scroll position rather than
+          // holding one. `near` only becomes the cycling beat once t crosses 0.5
+          // (approaching) and stays it until t crosses 0.5 again (departing), so
+          // the beat "owns" the second half of one span and the first half of the
+          // next. Re-map those two half-spans onto a single 0..1 pass, or the
+          // first operators would flash past before the reader has arrived.
+          const nearSet = near.highlightCycle
+            ? cycledSet(near, near === to ? (t - 0.5) : (t + 0.5))
+            : near.highlightSet
+          if (near.highlightCycle) onCycleStep(nearSet)
+
           const swapping = from.highlightSet !== to.highlightSet
           const hl = swapping
             ? lerp(from.highlight, to.highlight, t) * Math.abs(t - 0.5) * 2
             : lerp(from.highlight, to.highlight, t)
-          apply(pose, hl, near.highlightSet, lerp(from.logo, to.logo, t))
+          // The wordmark reveal is deliberately NOT a straight lerp. Lerping it
+          // starts lighting the letters the instant you leave the previous beat,
+          // so the logo is already half-visible while that beat is still the one
+          // being read. Hold it dark for the first 60% of the approach, then ramp
+          // over the last 40%, so it belongs to the footer it introduces.
+          const logoT = from.logo === to.logo
+            ? t
+            : Math.max(0, (t - 0.6) / 0.4)
+          apply(pose, hl, nearSet, lerp(from.logo, to.logo, logoT))
         }
         return
       }

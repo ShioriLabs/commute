@@ -13,7 +13,8 @@ import {
 } from '../scene/network-scene'
 
 export type BeatId
-  = 'hero' | 'jadwal' | 'topologi' | 'tarif' | 'stasiun' | 'api' | 'footer'
+  = 'hero' | 'jadwal' | 'topologi' | 'tarif' | 'stasiun' | 'rute' | 'api'
+    | 'cakupan' | 'footer'
 
 export interface Beat {
   id: BeatId
@@ -24,6 +25,13 @@ export interface Beat {
   highlight: number
   /** WHICH subject the emphasis applies to. */
   highlightSet: HighlightId
+  /**
+   * Subjects to step through WITHIN this beat, in order, as the reader scrolls
+   * across it. When set, it supersedes `highlightSet` while the beat is being
+   * traversed. Every other beat spotlights one fixed subject, so this stays
+   * undefined for them and the single-set path is unchanged.
+   */
+  highlightCycle?: readonly HighlightId[]
   /** Wordmark reveal in the dot field (0 = dark, 1 = lit). */
   logo: number
 }
@@ -141,8 +149,10 @@ export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
   const tarifHx = Math.abs(dx * Math.cos(tarifYawRad) - dz * Math.sin(tarifYawRad)) / 2
   const tarifHz = Math.abs(dx * Math.sin(tarifYawRad) + dz * Math.cos(tarifYawRad)) / 2
   // Desktop: copy sits left, so push the corridor into the open right half along
-  // the camera's own right vector (yaw makes screen-right != +X).
-  const tarifShift = twoColumn ? Math.hypot(dx, dz) * 0.22 : 0
+  // the camera's own right vector (yaw makes screen-right != +X). At 0.22 the
+  // corridor's lower half still ran under the plate — it's a diagonal, so the end
+  // nearest the copy column reaches furthest left.
+  const tarifShift = twoColumn ? Math.hypot(dx, dz) * 0.34 : 0
   // Mobile: the copy stacks full-width, so there is no open half to move into.
   // Push the subject DOWN-screen instead, out from under the plate. At pitch 72
   // screen-down is roughly the camera's forward axis on the ground plane.
@@ -156,8 +166,11 @@ export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
       0,
       (fareFrom.z + fareTo.z) / 2 + Math.sin(tarifYawRad) * tarifShift - Math.cos(tarifYawRad) * tarifDrop
     ],
-    tarifHx,
-    tarifHz,
+    // Pad the framed box so the corridor's ends don't sit flush against the
+    // frame edge: it ran off the bottom of the viewport past Blok M at a tight
+    // fit, because a yawed diagonal uses more screen height than its hz suggests.
+    tarifHx * 1.15,
+    tarifHz * 1.15,
     72,
     40 * DEG,
     aspect,
@@ -180,6 +193,78 @@ export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
     1.6 * narrow
   )
 
+  // Rute: the router's own answer for Pancoran -> Pasar Minggu. The route is an L
+  // — the LRT runs due east, the KRL due south — so unyawed it sits perfectly
+  // axis-aligned and reads as stiff next to the rest of the page.
+  //
+  // Yawed, both legs become screen diagonals meeting at a corner instead of a
+  // right angle squared to the frame.
+  //
+  // +45 rather than -45, and the sign is decided by where the route ENDS, not by
+  // the bounding box. -45 gives the nicer ratio on paper (13.4x8.5 landscape vs
+  // 8.5x13.4 portrait) but sends the KRL leg down-and-RIGHT, terminating at screen
+  // +6.7 — straight through the copy plate. At +45 the route runs top-right to
+  // down-LEFT and ends at screen -1.8, staying in the open half the whole way. A
+  // subject that fits the frame but lands under the copy is not framed.
+  //
+  // Tilted to a bird's-eye rather than left flat, so the journey reads as a path
+  // ACROSS a plane instead of a diagram drawn on one — this is the beat about
+  // travelling, and it earns its own register.
+  //
+  // 58 is chosen, not tuned by eye. It must sit BELOW 78: orbit() blends the up
+  // vector across 78-89, and a yawed pose inside that band rolls the horizon on
+  // entry (the reason tarif sits at 72). It should also stay clear of topologi's
+  // 46, which owns the steep-tilt look. 58 splits tarif's near-flat 72 and that
+  // 46, so the three tilted beats stay distinguishable from each other.
+  const RUTE_PITCH = 58
+  const RUTE_YAW = 45
+  const ruteYawRad = RUTE_YAW * DEG
+  const ruteIds = ['LRTJBDB-PAN', 'LRTJBDB-CKK', 'KCI-CW', 'KCI-DRN', 'KCI-PSMB', 'KCI-PSM']
+  const rutePts = ruteIds.map(id => scene.stationWorld.get(id)!).filter(Boolean)
+  const ruteCx = (Math.min(...rutePts.map(p => p.x)) + Math.max(...rutePts.map(p => p.x))) / 2
+  const ruteCz = (Math.min(...rutePts.map(p => p.z)) + Math.max(...rutePts.map(p => p.z))) / 2
+  // Measure in the CAMERA's frame, not world XZ: yawed, the subject's screen
+  // width and height are its extent projected onto the camera's right and
+  // forward axes. Feeding raw world extents would frame a box the shape of the
+  // unrotated L and crop the rotated one (same reasoning as tarif above).
+  const ruteScreen = rutePts.map(p => ({
+    sx: (p.x - ruteCx) * Math.cos(ruteYawRad) - (p.z - ruteCz) * Math.sin(ruteYawRad),
+    sy: (p.x - ruteCx) * Math.sin(ruteYawRad) + (p.z - ruteCz) * Math.cos(ruteYawRad)
+  }))
+  const ruteHx = (Math.max(...ruteScreen.map(p => p.sx)) - Math.min(...ruteScreen.map(p => p.sx))) / 2
+  // Tilting foreshortens the camera's forward axis: at pitch P the ground-plane
+  // depth a subject occupies on screen is its true depth * sin(P). Framing the
+  // untouched depth would reserve room the tilted view no longer needs and push
+  // the camera back, shrinking the whole route. (Top-down beats skip this because
+  // sin(90) = 1.)
+  const ruteDepth = (Math.max(...ruteScreen.map(p => p.sy)) - Math.min(...ruteScreen.map(p => p.sy))) / 2
+  const ruteHz = ruteDepth * Math.sin(RUTE_PITCH * DEG)
+  // Copy sits in the LEFT column, so the subject belongs in the open RIGHT half.
+  // Yawed, screen-right is no longer world +X: shift along the camera's own right
+  // vector [cos(yaw), 0, -sin(yaw)], the same way topologi and tarif do —
+  // NEGATED here, because moving the target left moves the subject right.
+  // Large because tilting compresses the subject toward the horizon, so a given
+  // world-space shift buys less screen movement than it does top-down.
+  // Clears the copy plate on the left. It cannot also be used to dodge the
+  // journey strip: the shift runs along the camera's yawed right vector, so the
+  // route slides along its OWN diagonal and the corner stays under the strip no
+  // matter how this is tuned. The strip moves instead (see route-strip.ts).
+  const ruteShift = twoColumn ? ruteHx * 0.62 : 0
+  const rute = framingPose(
+    [
+      ruteCx - Math.cos(ruteYawRad) * ruteShift,
+      0,
+      ruteCz + Math.sin(ruteYawRad) * ruteShift
+    ],
+    ruteHx,
+    ruteHz,
+    RUTE_PITCH, // bird's-eye, yawed — see the note above
+    42 * DEG,
+    aspect,
+    twoColumn ? 1.85 : 1.45,
+    RUTE_YAW
+  )
+
   // API: still on Rasuna Said, but pulled back from the stasiun close-up so the
   // beat reads as easing out while keeping the anchor findable — the response
   // panel hangs off that roundel, and framing the whole network here would bury
@@ -197,6 +282,28 @@ export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
     40 * DEG,
     aspect,
     1.5 * narrow
+  )
+
+  // Cakupan: back out to the whole network, one operator lit at a time.
+  //
+  // Shifted the SAME way as the hero, not mirrored. Mirroring it (copy right,
+  // network pushed left) looked symmetrical but the network isn't: MRT Jakarta
+  // is a dense north-south run at world x -25..-9, well west of the network
+  // centre (-0.5), so pushing everything left drove the whole MRT under the copy
+  // plate and cut the line in half. The copy therefore stays in the LEFT column
+  // here (see index.html) and the network sits right, exactly as in the hero.
+  //
+  // Held slightly tighter than the hero so returning here reads as a deliberate
+  // second look rather than a rewind to the top of the page.
+  const cakupanShift = twoColumn ? hx * 0.34 : 0
+  const cakupan = framingPose(
+    [scene.bounds.center.x - cakupanShift, 0, scene.bounds.center.z],
+    hx,
+    hz,
+    90, // top-down, same register as the hero
+    38 * DEG,
+    aspect,
+    1.22 * narrow // tighter than the hero's 1.35
   )
 
   // Footer: no longer an establishing shot. The camera drops to the wordmark
@@ -220,17 +327,41 @@ export function buildBeats(scene: NetworkScene, aspect: number): Beat[] {
 
   // Ordered as a geographic sweep so the camera never doubles back: Manggarai ->
   // the Cikarang chain through it -> the MRT corridor west of it -> Rasuna Said
-  // in the middle -> pull back on Rasuna Said -> out to the whole network.
+  // in the middle -> south-east down the Pancoran..Pasar Minggu journey -> out to
+  // the whole network -> back in to one station's raw JSON -> out to the wordmark.
   //
-  // stasiun and api share both the subject and the highlight set, so no buffer
-  // swap happens between them; the beats differ only in framing and in which
-  // overlay is anchored to the roundel (the record, then the raw response).
+  // rute follows stasiun because the rasuna run ENDS at Pancoran and the journey
+  // STARTS there: the camera hands off between subjects instead of jumping.
+  //
+  // cakupan sits BEFORE api, not after. Three reasons: it ends the page on the
+  // beat that carries the CTA rather than on a roster; it makes the last third a
+  // clean out-in-out (whole network -> one station -> wordmark) instead of two
+  // consecutive pull-backs; and it stops an unrelated beat from splitting the
+  // stasiun/api pair, which exist to show the same station twice.
+  //
+  // The rasuna set is still interrupted (stasiun -> rute -> ... -> api), so the
+  // buffer swap those two were once adjacent to avoid does happen. The director
+  // dips emphasis to zero at each midpoint, which reads as the map letting go of
+  // the station and picking it back up, not as a glitch.
   return [
     { id: 'hero', selector: '[data-beat=\'hero\']', pose: hero, highlight: 0, highlightSet: 'none', logo: 0 },
     { id: 'jadwal', selector: '[data-beat=\'jadwal\']', pose: jadwal, highlight: 0, highlightSet: 'none', logo: 0 },
     { id: 'topologi', selector: '[data-beat=\'topologi\']', pose: topologi, highlight: 1, highlightSet: 'cikarang', logo: 0 },
     { id: 'tarif', selector: '[data-beat=\'tarif\']', pose: tarif, highlight: 1, highlightSet: 'mrt-lbb-bhi', logo: 0 },
     { id: 'stasiun', selector: '[data-beat=\'stasiun\']', pose: stasiun, highlight: 1, highlightSet: 'rasuna', logo: 0 },
+    { id: 'rute', selector: '[data-beat=\'rute\']', pose: rute, highlight: 1, highlightSet: 'rute', logo: 0 },
+    {
+      id: 'cakupan',
+      selector: '[data-beat=\'cakupan\']',
+      pose: cakupan,
+      highlight: 1,
+      highlightSet: 'rail-kci',
+      // The one beat whose subject changes as you scroll THROUGH it: each rail
+      // operator lights in turn, largest network first. Order matches the roster
+      // in overlay/coverage-panel.ts, so the lit lines and the marked row agree.
+      highlightCycle: ['rail-kci', 'rail-mrtj', 'rail-lrtj', 'rail-lrtjbdb'],
+      logo: 0
+    },
     { id: 'api', selector: '[data-beat=\'api\']', pose: api, highlight: 0.45, highlightSet: 'rasuna', logo: 0 },
     { id: 'footer', selector: '[data-beat=\'footer\']', pose: footer, highlight: 0, highlightSet: 'none', logo: 1 }
   ]

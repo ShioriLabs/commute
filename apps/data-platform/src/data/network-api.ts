@@ -7,7 +7,7 @@
 // a beat on the same visit never refetches.
 import { API_BASE_URL } from '../env'
 import type { ApiEnvelope } from './schedules-types'
-import type { FareResult, StationDetail, StationTransfer } from './network-types'
+import type { FareResult, OperatorSummary, StationDetail, StationTransfer } from './network-types'
 
 const TTL_MS = 5 * 60_000
 
@@ -64,4 +64,27 @@ export function fetchStationTransfers(): Promise<StationTransfer[]> {
   return getJSON<StationTransfer[]>(
     `/stations/${STATION_OPERATOR}/${STATION_CODE}/transfers`
   )
+}
+
+// The rute beat: Pancoran -> Pasar Minggu, a real cross-operator journey the
+// router solves as LRT Jabodebek -> a 600 m walk at Cikoko -> KRL Lin Bogor.
+// Chosen over a longer pair (Lebak Bulus -> Bekasi also routes across operators)
+// because it spans only ~7 km, so the camera can sit close enough for both legs
+// and their two line colours to stay distinct.
+//
+// The station chain is mirrored as a highlight set in network-scene.ts; keep the
+// two in step. The fetch supplies the numbers, so fares and distances can never
+// drift from the API even though the geometry is baked.
+export const ROUTE_FROM = 'LRTJBDB-PAN'
+export const ROUTE_TO = 'KCI-PSM'
+
+export function fetchJourney(): Promise<FareResult> {
+  return getJSON<FareResult>(`/fares/${ROUTE_FROM}/${ROUTE_TO}`)
+}
+
+// The cakupan beat: every operator with its lines. Returns all five, including
+// TransJakarta, which the rail-only map does not draw — the roster filters it
+// out (toRailRoster in overlay/coverage-panel.ts) rather than the API.
+export function fetchOperators(): Promise<OperatorSummary[]> {
+  return getJSON<OperatorSummary[]>('/operators')
 }

@@ -8,8 +8,12 @@ export interface FareStationRef {
   name: string
 }
 
-export interface FareLeg {
-  type: string
+// Legs are a tagged union: a TRANSFER is a walk between stations and carries
+// none of the line fields. Modelling them as one flat shape (the earlier version
+// of this file) makes `leg.lineColor` look safe to read on a walk, where it is
+// undefined at runtime — which is exactly the leg the rute beat is about.
+export interface FareRideLeg {
+  type: 'RIDE'
   lineCode: string
   lineName: string
   lineColor: string
@@ -17,8 +21,24 @@ export interface FareLeg {
   from: FareStationRef
   to: FareStationRef
   stationCount: number
+  /** Full ordered stop list, boarding -> alighting, endpoints included. */
+  stops?: FareStationRef[]
+  /** Terminus the train heads toward. */
+  headsign?: string | null
   distanceM: number
 }
+
+export interface FareTransferLeg {
+  type: 'TRANSFER'
+  from: FareStationRef
+  to: FareStationRef
+  distanceM: number
+  /** Set only on a paid corridor crossing (e.g. the Sudirman footbridge). */
+  fare?: number
+  corridorLabel?: string
+}
+
+export type FareLeg = FareRideLeg | FareTransferLeg
 
 export interface FareResult {
   from: FareStationRef
@@ -33,6 +53,13 @@ export interface StationLine {
   name: string
   colorCode: string
   lineCode: string
+}
+
+/** GET /operators — every operator with its lines. Shared with the cakupan beat. */
+export interface OperatorSummary {
+  code: string
+  name: string
+  lines: StationLine[]
 }
 
 export interface StationAmenity {
