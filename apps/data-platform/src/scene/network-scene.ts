@@ -217,7 +217,17 @@ function runCells(
     const a = cellOf(run[i]!)
     const b = cellOf(run[i + 1]!)
     if (!a || !b) continue
-    const route = octRoute(a, b, entry)
+    // At the head of a run there is no bearing to continue, so look one station
+    // ahead instead and let the route END pointing where the line is going. Only
+    // useful for the first pair; after that `entry` carries the bearing.
+    let exit: Step | null = null
+    if (entry === null) {
+      const c = i + 2 < run.length ? cellOf(run[i + 2]!) : undefined
+      if (c && (c.col !== b.col || c.row !== b.row)) {
+        exit = { dc: Math.sign(c.col - b.col), dr: Math.sign(c.row - b.row) }
+      }
+    }
+    const route = octRoute(a, b, entry, exit)
     for (const c of route) {
       const last = cells[cells.length - 1]
       if (!last || last.col !== c.col || last.row !== c.row) cells.push(c)
@@ -308,11 +318,14 @@ export function buildScene(): NetworkScene {
   }
 
   // Stations — interchanges render identically to regular stops (no oversized
-  // roundel, no labels), keeping the dense core legible.
+  // roundel, no labels), keeping the dense core legible. Waypoints are skipped:
+  // they exist only to bend a route through a cell the printed diagram passes
+  // through, and a roundel there would invent a station that does not exist.
   const stOffsets: number[] = []
   const stRadii: number[] = []
   const stIds: string[] = []
   for (const node of NETWORK.nodes) {
+    if (node.waypoint) continue
     const w = stationWorld.get(node.id)!
     stOffsets.push(w.x, w.y, w.z)
     stRadii.push(STATION_RADIUS)
@@ -377,10 +390,13 @@ export function buildScene(): NetworkScene {
   }
 
   // World AABB from stations (the field extends past it, but framing keys off
-  // the actual network extent).
+  // the actual network extent). Real stations only — a waypoint placed outside
+  // the network would otherwise drag the bounds, and every camera pose in
+  // beats.ts is derived from them.
   const min: Vec3 = { x: Infinity, y: 0, z: Infinity }
   const max: Vec3 = { x: -Infinity, y: 0, z: -Infinity }
-  for (const w of stationWorld.values()) {
+  for (const id of stIds) {
+    const w = stationWorld.get(id)!
     min.x = Math.min(min.x, w.x)
     min.z = Math.min(min.z, w.z)
     max.x = Math.max(max.x, w.x)

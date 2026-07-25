@@ -31,6 +31,18 @@ export function exitStep(cells: GridCell[]): Step | null {
   return cells.length > 1 ? step(cells[cells.length - 2]!, cells[cells.length - 1]!) : null
 }
 
+/**
+ * How many 45° turns separate two unit steps, 0..4. Used to compare candidate
+ * routes when neither ends on exactly the wanted bearing.
+ */
+function turnCost(a: Step | null, b: Step | null): number {
+  if (a === null || b === null) return 4
+  const angle = (s: Step): number => Math.atan2(s.dr, s.dc)
+  const diff = Math.abs(angle(a) - angle(b))
+  const wrapped = Math.min(diff, Math.PI * 2 - diff)
+  return Math.round(wrapped / (Math.PI / 4))
+}
+
 /** Direction changes strictly inside one route. */
 function internalBends(cells: GridCell[]): number {
   let bends = 0
@@ -125,13 +137,38 @@ function straightFirst(a: GridCell, b: GridCell): GridCell[] {
  * rule is within 2 of optimal; the rest is inherent to a 120-column octilinear
  * grid. Callers thread `exitStep()` of the previous route in as `entryDir`.
  *
- * With no `entryDir` this is exactly the old diagonal-first behaviour, so
+ * `exitDir` is the mirror case, and it matters at the START of a run where no
+ * entry bearing exists yet. LRT Jabodebek leaves Dukuh Atas eastward and only
+ * then turns down into the Setiabudi/Rasuna Said trunk; with neither hint the
+ * fallback put the diagonal first and drew a staircase instead of the printed
+ * straight-then-corner. Aligning the route's LAST step with where the line is
+ * headed reproduces the diagram's shape.
+ *
+ * With neither hint this is exactly the old diagonal-first behaviour, so
  * single-pair callers are unaffected.
  */
-export function octRoute(a: GridCell, b: GridCell, entryDir: Step | null = null): GridCell[] {
+export function octRoute(
+  a: GridCell,
+  b: GridCell,
+  entryDir: Step | null = null,
+  exitDir: Step | null = null
+): GridCell[] {
   const diag = diagonalFirst(a, b)
-  if (entryDir === null) return diag
+  if (entryDir === null && exitDir === null) return diag
   const straight = straightFirst(a, b)
+  if (entryDir === null) {
+    // Only the outgoing bearing is known. An exact match is too strict to be
+    // useful: leaving Dukuh Atas neither variant ends heading straight down, so
+    // both would tie and the fallback would keep the staircase. Score by how far
+    // each one's final step has to turn to meet the outgoing bearing instead —
+    // straight-first ends on a diagonal (one 45° turn from vertical), while
+    // diagonal-first ends horizontal (two). The smaller turn puts the corner
+    // here, which is what the printed diagram draws.
+    const dTurn = turnCost(exitStep(diag), exitDir)
+    const sTurn = turnCost(exitStep(straight), exitDir)
+    if (dTurn !== sTurn) return dTurn < sTurn ? diag : straight
+    return internalBends(diag) <= internalBends(straight) ? diag : straight
+  }
   const diagContinues = sameStep(entryOf(diag), entryDir)
   const straightContinues = sameStep(entryOf(straight), entryDir)
   if (diagContinues && !straightContinues) return diag

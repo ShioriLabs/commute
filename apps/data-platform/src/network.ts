@@ -13,6 +13,8 @@ export interface NetNode {
   col: number
   row: number
   interchange: boolean
+  /** Bend point that steers a route but draws no station roundel. */
+  waypoint?: boolean
 }
 
 export interface NetLine {
@@ -51,7 +53,7 @@ export const NETWORK: Network = {
       "lat": -6.2572,
       "sx": 8199.223413046771,
       "sy": 4120.142249659238,
-      "col": 116,
+      "col": 115,
       "row": 38,
       "interchange": false
     },
@@ -62,7 +64,7 @@ export const NETWORK: Network = {
       "lat": -6.2617,
       "sx": 8101.928958507043,
       "sy": 4119.528008549615,
-      "col": 114,
+      "col": 113,
       "row": 38,
       "interchange": false
     },
@@ -73,7 +75,7 @@ export const NETWORK: Network = {
       "lat": -6.2586,
       "sx": 8003.943228894328,
       "sy": 4119.205257030952,
-      "col": 113,
+      "col": 111,
       "row": 38,
       "interchange": false
     },
@@ -84,7 +86,7 @@ export const NETWORK: Network = {
       "lat": -6.2468,
       "sx": 7907.342983706277,
       "sy": 4119.471931217503,
-      "col": 111,
+      "col": 109,
       "row": 38,
       "interchange": false
     },
@@ -95,7 +97,7 @@ export const NETWORK: Network = {
       "lat": -6.2364,
       "sx": 7810.34275854696,
       "sy": 4120.138604138595,
-      "col": 110,
+      "col": 107,
       "row": 38,
       "interchange": false
     },
@@ -106,7 +108,7 @@ export const NETWORK: Network = {
       "lat": -6.2244,
       "sx": 7712.780902071809,
       "sy": 4120.079656672218,
-      "col": 109,
+      "col": 105,
       "row": 38,
       "interchange": false
     },
@@ -117,7 +119,7 @@ export const NETWORK: Network = {
       "lat": -6.2189,
       "sx": 7594.2472941764845,
       "sy": 4119.74632959331,
-      "col": 107,
+      "col": 103,
       "row": 38,
       "interchange": false
     },
@@ -128,7 +130,7 @@ export const NETWORK: Network = {
       "lat": -6.2176,
       "sx": 7475.980358885888,
       "sy": 4120.74632959331,
-      "col": 105,
+      "col": 101,
       "row": 38,
       "interchange": false
     },
@@ -139,7 +141,7 @@ export const NETWORK: Network = {
       "lat": -6.2154,
       "sx": 7223.7459984553025,
       "sy": 4119.385689107112,
-      "col": 102,
+      "col": 99,
       "row": 38,
       "interchange": false
     },
@@ -249,7 +251,7 @@ export const NETWORK: Network = {
       "lat": -6.1446,
       "sx": 2958.6360682902045,
       "sy": 2169.788770145613,
-      "col": 41,
+      "col": 40,
       "row": 11,
       "interchange": false
     },
@@ -459,7 +461,7 @@ export const NETWORK: Network = {
       "sx": 5280.421242059746,
       "sy": 5602.176544531337,
       "col": 74,
-      "row": 59,
+      "row": 58,
       "interchange": false
     },
     {
@@ -470,7 +472,7 @@ export const NETWORK: Network = {
       "sx": 5280.168057911076,
       "sy": 5837.413595910363,
       "col": 74,
-      "row": 62,
+      "row": 60,
       "interchange": false
     },
     {
@@ -481,7 +483,7 @@ export const NETWORK: Network = {
       "sx": 5280.168057911076,
       "sy": 5983.013994782389,
       "col": 74,
-      "row": 64,
+      "row": 62,
       "interchange": false
     },
     {
@@ -492,7 +494,7 @@ export const NETWORK: Network = {
       "sx": 5280.396974307193,
       "sy": 6084.888587276785,
       "col": 74,
-      "row": 65,
+      "row": 64,
       "interchange": false
     },
     {
@@ -503,7 +505,7 @@ export const NETWORK: Network = {
       "sx": 5279.825068933635,
       "sy": 6196.022260564108,
       "col": 74,
-      "row": 67,
+      "row": 66,
       "interchange": false
     },
     {
@@ -601,7 +603,7 @@ export const NETWORK: Network = {
       "lat": -6.464,
       "sx": 5946.191400462006,
       "sy": 6333.655917608516,
-      "col": 83,
+      "col": 84,
       "row": 69,
       "interchange": false
     },
@@ -656,8 +658,8 @@ export const NETWORK: Network = {
       "lat": -6.2887,
       "sx": 2097.6360344646655,
       "sy": 5242.282188450468,
-      "col": 29,
-      "row": 54,
+      "col": 28,
+      "row": 55,
       "interchange": false
     },
     {
@@ -667,7 +669,7 @@ export const NETWORK: Network = {
       "lat": -6.2969,
       "sx": 1996.3022104734755,
       "sy": 5344.082664425907,
-      "col": 27,
+      "col": 26,
       "row": 55,
       "interchange": false
     },
@@ -1108,7 +1110,7 @@ export const NETWORK: Network = {
       "sx": 3635.36081619927,
       "sy": 3493.8723452556296,
       "col": 50,
-      "row": 30,
+      "row": 29,
       "interchange": false
     },
     {
@@ -1218,7 +1220,7 @@ export const NETWORK: Network = {
       "sx": 4314.639931138376,
       "sy": 4519.249301374852,
       "col": 60,
-      "row": 44,
+      "row": 45,
       "interchange": true
     },
     {
@@ -1294,7 +1296,7 @@ export const NETWORK: Network = {
       "lat": -6.2564,
       "sx": 7825.756602869294,
       "sy": 4809.1984534785215,
-      "col": 110,
+      "col": 111,
       "row": 48,
       "interchange": false
     },
@@ -1305,7 +1307,7 @@ export const NETWORK: Network = {
       "lat": -6.2546,
       "sx": 7938.223500807091,
       "sy": 4808.731820626328,
-      "col": 112,
+      "col": 113,
       "row": 48,
       "interchange": false
     },
@@ -1316,7 +1318,7 @@ export const NETWORK: Network = {
       "lat": -6.2528,
       "sx": 8050.583010498817,
       "sy": 4808.870088234224,
-      "col": 114,
+      "col": 115,
       "row": 48,
       "interchange": false
     },
@@ -1327,7 +1329,7 @@ export const NETWORK: Network = {
       "lat": -6.2638,
       "sx": 8163.116602042026,
       "sy": 4808.270088516306,
-      "col": 115,
+      "col": 117,
       "row": 48,
       "interchange": false
     },
@@ -1374,6 +1376,30 @@ export const NETWORK: Network = {
       "col": 96,
       "row": 68,
       "interchange": false
+    },
+    {
+      "id": "WP-KCI-KPB-KCI-AK-0",
+      "name": "",
+      "lng": 0,
+      "lat": 0,
+      "sx": 0,
+      "sy": 0,
+      "col": 64,
+      "row": 4,
+      "interchange": false,
+      "waypoint": true
+    },
+    {
+      "id": "WP-KCI-KPB-KCI-AK-1",
+      "name": "",
+      "lng": 0,
+      "lat": 0,
+      "sx": 0,
+      "sy": 0,
+      "col": 43,
+      "row": 4,
+      "interchange": false,
+      "waypoint": true
     }
   ],
   "lines": [
@@ -1406,6 +1432,8 @@ export const NETWORK: Network = {
           "KCI-KMO",
           "KCI-RJW",
           "KCI-KPB",
+          "WP-KCI-KPB-KCI-AK-0",
+          "WP-KCI-KPB-KCI-AK-1",
           "KCI-AK",
           "KCI-DU",
           "KCI-THB",
