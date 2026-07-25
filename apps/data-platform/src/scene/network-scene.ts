@@ -6,7 +6,7 @@
 // are symmetric.
 import { NETWORK, type NetNode } from '../network'
 import { WORDMARK_CELLS, WORDMARK_SIZE } from '../wordmark'
-import { octRoute, type GridCell } from './octilinear'
+import { exitStep, octRoute, type GridCell, type Step } from './octilinear'
 
 // Cells between the bottom of the network and the top of the wordmark. The field
 // extends 24 rows past the network and the wordmark is 17 tall, so this has to
@@ -194,6 +194,41 @@ function cellKey(c: GridCell): string {
   return `${c.col},${c.row}`
 }
 
+/**
+ * Walk one ordered run of stations into a continuous list of lattice cells.
+ *
+ * The bearing is carried across station pairs (see octRoute's `entryDir`), so a
+ * corridor the FDTJ diagram holds straight renders straight here instead of
+ * staircasing. That makes each pair's route depend on the ones before it, which
+ * is exactly why this is a single shared function: the lit-dot pass and the
+ * highlight-flag pass MUST agree cell-for-cell, or a highlight lands on a cell
+ * that was never lit. Any caller walking station pairs goes through here.
+ *
+ * Consecutive duplicate cells are dropped so the seam between two pairs (the
+ * shared station) is emitted once.
+ */
+function runCells(
+  run: readonly string[],
+  cellOf: (stationId: string) => GridCell | undefined
+): GridCell[] {
+  const cells: GridCell[] = []
+  let entry: Step | null = null
+  for (let i = 0; i < run.length - 1; i++) {
+    const a = cellOf(run[i]!)
+    const b = cellOf(run[i + 1]!)
+    if (!a || !b) continue
+    const route = octRoute(a, b, entry)
+    for (const c of route) {
+      const last = cells[cells.length - 1]
+      if (!last || last.col !== c.col || last.row !== c.row) cells.push(c)
+    }
+    // Carry the bearing only when this pair actually moved; a zero-length route
+    // would otherwise clear it and break continuity across a duplicate cell.
+    entry = exitStep(route) ?? entry
+  }
+  return cells
+}
+
 export function buildScene(): NetworkScene {
   const cols = NETWORK.grid.cols
   const rows = NETWORK.grid.rows
@@ -219,12 +254,9 @@ export function buildScene(): NetworkScene {
     const stations = new Set<string>()
     for (const run of runs) {
       for (const stationId of run) stations.add(stationId)
-      for (let i = 0; i < run.length - 1; i++) {
-        const a = stationCells.get(run[i]!)
-        const b = stationCells.get(run[i + 1]!)
-        if (!a || !b) continue
-        for (const c of octRoute(a, b)) cells.add(cellKey(c))
-      }
+      // Same walker as the lit-dot pass below, so every flagged cell is a cell
+      // that pass also emits.
+      for (const c of runCells(run, id => stationCells.get(id))) cells.add(cellKey(c))
     }
     highlightCells.set(id, cells)
     highlightStations.set(id, stations)
@@ -248,16 +280,13 @@ export function buildScene(): NetworkScene {
     const rgb = hexToRgb(line.color)
     colorRgb.set(line.color, rgb)
     const lineRoute: GridCell[] = []
+    // Per segment, not across the whole line: segments are disjoint (a branch, a
+    // loop tail, a gap left by a dropped station), so the bearing must restart at
+    // each one rather than continue across track that isn't there.
     for (const seg of line.segments) {
-      for (let i = 0; i < seg.length - 1; i++) {
-        const a = stationCells.get(seg[i]!)
-        const b = stationCells.get(seg[i + 1]!)
-        if (!a || !b) continue
-        const route = octRoute(a, b)
-        for (const c of route) {
-          const last = lineRoute[lineRoute.length - 1]
-          if (!last || last.col !== c.col || last.row !== c.row) lineRoute.push(c)
-        }
+      for (const c of runCells(seg, id => stationCells.get(id))) {
+        const last = lineRoute[lineRoute.length - 1]
+        if (!last || last.col !== c.col || last.row !== c.row) lineRoute.push(c)
       }
     }
     const total = Math.max(lineRoute.length, 1)
