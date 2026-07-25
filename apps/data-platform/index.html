@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Commute Data Platform · Data Kereta buat Developer Jakarta</title>
+    <meta
+      name="description"
+      content="Data KRL, MRT, LRT, dan TransJakarta yang udah rapi, siap dipakai buat project kamu. Stasiun, lin, transfer, dan tarif dalam satu tempat."
+    />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
+    <link rel="canonical" href="https://data.commute.shiorilabs.id/" />
+
+    <!-- Link previews. Absolute URLs are required here: crawlers do not resolve
+         relative paths, so these carry the canonical host even though every
+         other asset reference on this page is root-relative. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Commute Data Platform" />
+    <meta property="og:locale" content="id_ID" />
+    <meta property="og:url" content="https://data.commute.shiorilabs.id/" />
+    <meta
+      property="og:title"
+      content="Commute Data Platform · Data Kereta buat Developer Jakarta"
+    />
+    <meta
+      property="og:description"
+      content="Data KRL, MRT, LRT, dan TransJakarta yang udah rapi, siap dipakai buat project kamu. Stasiun, lin, transfer, dan tarif dalam satu tempat."
+    />
+    <meta
+      property="og:image"
+      content="https://data.commute.shiorilabs.id/og.png"
+    />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Commute Data Platform: Bikin Aplikasi Jadwal Kereta Kagak Pake Ribet"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400..800&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="text-white/80 antialiased selection:bg-accent/30">
+    <!-- Persistent network map: fixed full-viewport WebGL background behind all
+         sections (html carries the ink ground so the canvas isn't occluded by a
+         body background). The scroll director re-frames its camera per section. -->
+    <canvas id="network-bg" class="pointer-events-none fixed inset-0 z-0 h-full w-full"></canvas>
+    <!-- Overlay root for projected station labels + the PIDS departures flyout. -->
+    <div id="overlay-root" class="pointer-events-none fixed inset-0 z-[1]"></div>
+
+    <!-- Nav -->
+    <!-- No hard-edged slab: the bar itself keeps enough backing to stay readable
+         over the map, then fades out downward so the dots run under it with no
+         visible seam. Content scrolling past must not read through the links. -->
+    <!-- Flush to the dot grid: no bar, no rule, just a soft top-down fade so the
+         dots keep running behind the nav while scrolled content passing under it
+         never competes with the links. -->
+    <header
+      class="pointer-events-none sticky top-0 z-20 bg-[linear-gradient(180deg,rgba(13,15,20,0.92)_0%,rgba(13,15,20,0.75)_45%,rgba(13,15,20,0.35)_75%,transparent_100%)]"
+    >
+      <div class="pointer-events-auto">
+        <div class="mx-auto flex max-w-6xl items-center justify-between gap-6 px-6 py-3.5">
+          <a href="#" class="flex items-center" aria-label="Commute Data Platform">
+            <!-- Two-line lockup (431x137, ~3.15:1), so it is sized by HEIGHT and
+                 lets width follow. The old single-line wordmark was ~5.9:1; reusing
+                 its 140px width here would have made a 44px-tall logo in a bar with
+                 14px of vertical padding. -->
+            <img src="/logo.svg" alt="Commute Data Platform" width="431" height="137" class="h-9 w-auto sm:h-10" />
+          </a>
+          <!-- One link per content beat, in scroll order, so the nav doubles as
+               a table of contents for the page. Right-aligned with no trailing
+               CTA: access isn't open yet, so a button here would promise
+               something the page can't deliver (see the "Segera hadir" states).
+               Labels are single words where the beat allows it — six items only
+               stay scannable if each is read at a glance.
+               lg: not md: — six links plus the lockup overflow a 768px bar. -->
+          <nav class="hidden items-center gap-6 text-sm font-medium text-white/55 lg:flex">
+            <a href="#jadwal" class="transition-colors hover:text-white">Jadwal</a>
+            <a href="#topologi" class="transition-colors hover:text-white">Topologi</a>
+            <a href="#tarif" class="transition-colors hover:text-white">Tarif</a>
+            <a href="#stasiun" class="transition-colors hover:text-white">Stasiun</a>
+            <a href="#rute" class="transition-colors hover:text-white">Rute</a>
+            <a href="#cakupan" class="transition-colors hover:text-white">Cakupan</a>
+            <a href="#api" class="transition-colors hover:text-white">API</a>
+          </nav>
+        </div>
+      </div>
+      <div class="h-8"></div>
+    </header>
+
+    <!-- Hero -->
+    <section data-beat="hero" class="relative z-10 flex min-h-[92vh] items-center overflow-hidden px-6 py-24">
+      <!-- Legibility scrim: a weak horizontal band behind the copy only. A radial
+           scrim would be darkest exactly where the network is densest, which is
+           what buried the dots; this leaves the full width and the top/bottom of
+           the hero clear and lets .sign-shadow carry the headline contrast. -->
+      <div class="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,transparent_0%,rgba(13,15,20,0.55)_28%,rgba(13,15,20,0.72)_50%,rgba(13,15,20,0.55)_72%,transparent_100%)]"></div>
+      <!-- Copy sits left; the map's dense core is framed into the open right
+           half (see the hero pose in scroll/beats.ts). -->
+      <div data-hero-content class="relative mx-auto w-full max-w-6xl">
+        <h1
+          class="rise sign-shadow mb-6 max-w-2xl text-5xl font-extrabold leading-[0.98] tracking-tight sm:text-6xl lg:text-7xl"
+          style="animation-delay: 80ms"
+        >
+          Data Kereta buat
+          <br />
+          Developer Jakarta
+        </h1>
+        <p
+          class="rise sign-shadow mb-9 max-w-lg text-lg leading-relaxed text-white/65"
+          style="animation-delay: 160ms"
+        >
+          Data KRL, MRT, LRT, dan TransJakarta yang udah rapi, kagak pake ribet buat di-integrate ke project kamu.
+        </p>
+        <!-- Not buttons. Access isn't open, so these are STATUS, not actions: a
+             disabled-looking button still invites a click and reads as broken,
+             where a plain badge reads as a date that hasn't arrived. The one real
+             action left is the anchor to the API beat, kept as a quiet link. -->
+        <div class="rise flex flex-wrap items-center gap-4" style="animation-delay: 240ms">
+          <span
+            class="inline-flex items-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-4 py-2.5 text-sm font-semibold text-accent"
+          >
+            <span class="h-1.5 w-1.5 rounded-full bg-accent"></span>
+            Akses API segera hadir
+          </span>
+          <a
+            href="#api"
+            class="text-sm font-semibold text-white/70 underline decoration-white/25 underline-offset-4 transition-colors hover:text-white hover:decoration-white/60"
+          >
+            Lihat bentuk datanya
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section>
+      <!-- Beat 1: Jadwal — the map flies to Manggarai; the live PIDS departures
+           flyout (overlay/departures.ts) appears anchored to the roundel. Copy
+           sits in a readable column; the other half is left to the map. -->
+      <div id="jadwal" data-beat="jadwal" class="relative z-10 mx-auto grid min-h-screen max-w-5xl items-center gap-12 px-6 py-32 md:grid-cols-2">
+        <!-- Left bar carries Lin Cikarang's own colour — the line this beat and
+             the map's highlight are both showing. -->
+        <div class="sign max-w-md p-6 md:justify-self-start" style="--sign-accent: var(--line-KCI-C)">
+          <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Semua Jadwal, Sat Set Satu Feed</h2>
+          <p class="leading-relaxed text-white/60">
+            Jadwal keberangkatan dan kedatangan buat KRL, MRT, dan LRT mengalir jadi satu feed yang konsisten.
+            Lebih dari 27.000 perjalanan terjadwal, sinkron langsung dari sumbernya, kayak keberangkatan Manggarai di samping.
+          </p>
+          <!-- Static half of the signage pair: shown only when there's no WebGL
+               and the PIDS flyout beside this plate never got built. Times are
+               deliberately absent — a hardcoded departure would be wrong within
+               the minute. What's stable is the station and the feed itself. -->
+          <dl class="sign-static mt-5 hidden border-t border-line/70 pt-4 font-mono text-[11px]">
+            <dt class="text-white/35">Stasiun</dt>
+            <dd class="text-white/75">Manggarai · KCI-MRI</dd>
+            <dt class="text-white/35">Perjalanan</dt>
+            <dd class="text-white/75">27.094 terjadwal</dd>
+            <dt class="text-white/35">Operator</dt>
+            <dd class="text-white/75">KCI · MRTJ · LRTJ · LRTJBDB</dd>
+          </dl>
+        </div>
+        <!-- right half intentionally open: the map + PIDS flyout live here -->
+        <div aria-hidden="true"></div>
+      </div>
+
+      <!-- Beat 2: Topologi — the map tilts to ~45° and highlights the Cikarang
+           chain Sudirman Baru → Sudirman → Manggarai → Matraman. -->
+      <div id="topologi" data-beat="topologi" class="relative z-10 mx-auto grid min-h-screen max-w-5xl items-center gap-12 px-6 py-32 md:grid-cols-2">
+        <div aria-hidden="true" class="hidden md:block"></div>
+        <div class="sign max-w-md p-6 md:justify-self-end" style="--sign-accent: var(--line-KCI-C)">
+          <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Peta Rute, Bukan Cuma Titik</h2>
+          <p class="leading-relaxed text-white/60">
+            Stasiun, ruas, dan interchange dari 5 operator sebagai data graf, lengkap sama urutan stasiun yang bener
+            di tiap lin. Yang lagi disorot di peta itu Lin Cikarang, lewat Sudirman Baru, Sudirman, Manggarai,
+            sampai Matraman.
+          </p>
+          <!-- Carries what the chain-label plates (overlay/chain-labels.ts) put
+               on the map: the highlighted run, in order, as station codes. The
+               order IS the data this beat is about, so it stays a sequence. -->
+          <dl class="sign-static mt-5 hidden border-t border-line/70 pt-4 font-mono text-[11px]">
+            <dt class="text-white/35">Lin</dt>
+            <dd class="text-white/75">Lin Cikarang · KCI-C</dd>
+            <dt class="text-white/35">Ruas</dt>
+            <dd class="text-white/75">SUDB → SUD → MRI → MTR</dd>
+            <dt class="text-white/35">Graf</dt>
+            <dd class="text-white/75">122 simpul · 9 lin</dd>
+          </dl>
+        </div>
+      </div>
+
+      <!-- Beat 3: Tarif — the map highlights the whole MRT run Lebak Bulus →
+           Bundaran HI and prices it in a flyout anchored to the destination.
+           Accent is Lin Utara Selatan's own colour. -->
+      <div id="tarif" data-beat="tarif" class="relative z-10 mx-auto grid min-h-screen max-w-5xl items-center gap-12 px-6 py-32 md:grid-cols-2">
+        <div class="sign max-w-md p-6 md:justify-self-start" style="--sign-accent: var(--line-MRTJ-M)">
+          <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Tau Ongkosnya Sebelum Tap In</h2>
+          <p class="leading-relaxed text-white/60">
+            Hitung tarif antar dua stasiun mana pun, udah kehitung sama jarak dan transfernya. Kayak Blok M
+            ke Dukuh Atas di peta, angkanya keluar dari endpoint yang sama yang bisa kamu panggil.
+          </p>
+          <!-- No price here on purpose. The fare tag on the map gets its number
+               from the live endpoint; a hardcoded rupiah figure would rot the
+               moment a tariff changes and would contradict the page's own
+               "angkanya keluar dari endpoint" claim. The corridor's shape is the
+               stable part, so that's what the static plate carries. -->
+          <dl class="sign-static mt-5 hidden border-t border-line/70 pt-4 font-mono text-[11px]">
+            <dt class="text-white/35">Koridor</dt>
+            <dd class="text-white/75">MRTJ-BLM → MRTJ-DKA</dd>
+            <dt class="text-white/35">Jarak</dt>
+            <dd class="text-white/75">5,9 km · 7 stasiun</dd>
+            <dt class="text-white/35">Endpoint</dt>
+            <dd class="text-white/75">/fares/{dari}/{ke}</dd>
+          </dl>
+        </div>
+        <!-- right half intentionally open: the map + fare tag live here -->
+        <div aria-hidden="true"></div>
+      </div>
+
+      <!-- Beat 4: Info stasiun — camera drops to Rasuna Said. Two accents
+           because two lines share the track through it (Bekasi + Cibubur);
+           that's a fact about the station, not decoration. -->
+      <div id="stasiun" data-beat="stasiun" class="relative z-10 mx-auto grid min-h-screen max-w-5xl items-center gap-12 px-6 py-32 md:grid-cols-2">
+        <div aria-hidden="true" class="hidden md:block"></div>
+        <div class="sign max-w-md p-6 md:justify-self-end" style="--sign-accent: var(--line-LRTJBDB-BK)">
+          <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Sampai ke Detail Peronnya</h2>
+          <!-- Prose only. Every figure — fasilitas, operator, lin, koordinat,
+               transfer — lives on the factoid card anchored to the roundel, so
+               the claim sits here and the evidence sits on the map. -->
+          <p class="leading-relaxed text-white/60">
+            Tiap stasiun bawa profil lengkapnya sendiri: fasilitas, koordinat, lin yang lewat, sampai transfer ke
+            operator lain. Ini Rasuna Said, tempat Lin Bekasi dan Lin Cibubur pakai jalur yang sama.
+          </p>
+          <!-- The same rows the factoid card (overlay/station-card.ts) puts on
+               the roundel: operator, lin, koordinat, transfer. Reference data
+               that changes on the order of years, so it is safe as enamel. -->
+          <dl class="sign-static mt-5 hidden border-t border-line/70 pt-4 font-mono text-[11px]">
+            <dt class="text-white/35">Stasiun</dt>
+            <dd class="text-white/75">Rasuna Said · LRTJBDB-RAS</dd>
+            <dt class="text-white/35">Lin</dt>
+            <dd class="text-white/75">Lin Bekasi · Lin Cibubur</dd>
+            <dt class="text-white/35">Koordinat</dt>
+            <dd class="text-white/75">-6,2215, 106,8321</dd>
+            <dt class="text-white/35">Transfer</dt>
+            <dd class="text-white/75">TransJakarta · 80 m</dd>
+          </dl>
+        </div>
+      </div>
+
+      <!-- Beat 5: Rute — the router draws its own answer. The map lights the two
+           rides of Pancoran → Pasar Minggu as SEPARATE runs (network-scene.ts),
+           and the journey strip (overlay/route-strip.ts) carries the leg-by-leg
+           breakdown plus the 600 m walk between Cikoko and Cawang.
+           Accent is Lin Bekasi's colour: the leg the journey boards on. -->
+      <div id="rute" data-beat="rute" class="relative z-10 mx-auto grid min-h-screen max-w-5xl items-center gap-12 px-6 py-32 md:grid-cols-2">
+        <div class="sign max-w-md p-6 md:justify-self-start" style="--sign-accent: var(--line-LRTJBDB-BK)">
+          <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Pindah Moda, Tetap Satu Rute</h2>
+          <!-- Prose only, same rule as the stasiun beat: the claim sits here, the
+               evidence (legs, jarak, ongkos) sits on the strip anchored to the map. -->
+          <p class="leading-relaxed text-white/60">
+            Kasih dua stasiun, kita balikin satu perjalanan utuh: naik apa, turun di mana, sampai jalan kakinya.
+            Kayak Pancoran ke Pasar Minggu di peta, LRT dulu terus lanjut KRL. Jalan 600 meter di Cikoko ikut kehitung,
+            bukan dianggap gratis.
+          </p>
+          <!-- The journey as legs, in order — the one place a sequence is the
+               actual data. Without the map there is no dark gap between the two
+               lit runs to carry the transfer, so the walk has to be a row here
+               or the beat's whole point goes missing. Ongkos stays off the plate
+               for the same reason as the tarif beat: the strip fetches it. -->
+          <dl class="sign-static mt-5 hidden border-t border-line/70 pt-4 font-mono text-[11px]">
+            <dt class="text-white/35">Naik</dt>
+            <dd class="text-white/75">Lin Bekasi · PAN → CKK</dd>
+            <dt class="text-white/35">Jalan kaki</dt>
+            <dd class="text-white/75">Cikoko → Cawang · 600 m</dd>
+            <dt class="text-white/35">Lanjut</dt>
+            <dd class="text-white/75">Lin Bogor · CW → PSM</dd>
+            <dt class="text-white/35">Total</dt>
+            <dd class="text-white/75">7,3 km · 1 transfer</dd>
+          </dl>
+        </div>
+        <!-- right half intentionally open: the map + journey strip live here.
+             Below md: the strip docks into this same slot instead of floating
+             over the copy, so it is a spacer on desktop and content on mobile. -->
+        <div data-rute-dock></div>
+      </div>
+
+      <!-- Beat 6: API Terbuka — the response panel is anchored to Rasuna Said's
+           roundel (overlay/api-panel.ts), so the station the previous beat just
+           visited as a record now appears as the raw JSON, on the same dot. -->
+      <!-- Beat 6: Cakupan — the camera backs out to the whole network and lights
+           each rail operator's lines in turn (roster in overlay/coverage-panel.ts,
+           cycling driven by scroll position). Brand accent, not a line colour:
+           like the api beat, this one is about the platform, not one operator.
+           NOTE: the baked map is rail-only by design (see
+           generateDataPlatformNetwork.ts), so the copy and the roster cite ONLY
+           what is drawn. TransJakarta is served by the API but not on this map,
+           so it is deliberately not claimed here.
+           Copy sits LEFT and the network is pushed right, because MRT Jakarta
+           runs down the network's western half and a right-column plate would
+           cover it (see the cakupan pose in scroll/beats.ts). -->
+      <div id="cakupan" data-beat="cakupan" class="relative z-10 mx-auto grid min-h-screen max-w-5xl items-center gap-12 px-6 py-32 md:grid-cols-2">
+        <div class="sign max-w-md p-6 md:justify-self-start">
+          <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Empat Operator, Satu Jaringan</h2>
+          <p class="leading-relaxed text-white/60">
+            Yang lagi nyala di peta itu jaringan rel Jabodetabek: 122 stasiun, 9 lin, dari empat operator yang
+            selama ini datanya kepisah-pisah. Kita satuin jadi satu graf yang konsisten, satu penamaan, satu ID.
+          </p>
+        </div>
+        <!-- right half intentionally open: the map + operator roster live here -->
+        <div data-cakupan-dock class="md:hidden"></div>
+      </div>
+
+      <!-- Beat 7: API Terbuka — the response panel is anchored to Rasuna Said's
+           roundel (overlay/api-panel.ts). Last content beat on purpose: it is the
+           one carrying the CTA, and after the whole-network pull-back above it
+           the camera diving back to a single dot reads as the payoff. -->
+      <div id="api" data-beat="api" class="relative z-10 mx-auto grid min-h-screen max-w-5xl items-center gap-12 px-6 py-32 md:grid-cols-2">
+        <!-- Brand accent, not a line colour: this beat is about the platform
+             itself rather than any one operator. -->
+        <div class="sign max-w-md p-6 md:justify-self-start">
+          <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Satu Skema Buat Seluruh Jaringan</h2>
+          <p class="mb-6 leading-relaxed text-white/55">
+            Data model yang dipake aplikasi Commute, kita buka apa adanya. Ini yang bakal jadi API publiknya.
+          </p>
+          <ul class="mb-8 flex flex-col gap-3.5">
+            <li class="flex gap-3 text-sm leading-relaxed text-white/80">
+              <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent"></span>
+              REST, balikannya JSON, gak perlu SDK
+            </li>
+            <li class="flex gap-3 text-sm leading-relaxed text-white/80">
+              <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent"></span>
+              Filter per operator, lin, stasiun, atau zona tarif
+            </li>
+            <li class="flex gap-3 text-sm leading-relaxed text-white/80">
+              <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent"></span>
+              Pagination pake cursor, aman buat dataset gede
+            </li>
+            <li class="flex gap-3 text-sm leading-relaxed text-white/80">
+              <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent"></span>
+              ID stasiun konsisten lintas operator, gak perlu mapping sendiri
+            </li>
+          </ul>
+          <!-- Status, not a signup: the same reasoning as the hero badge. The
+               second line carries the honest detail a button would have hidden. -->
+          <div class="flex flex-col gap-2">
+            <span
+              class="inline-flex w-fit items-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-4 py-2.5 text-sm font-semibold text-accent"
+            >
+              <span class="h-1.5 w-1.5 rounded-full bg-accent"></span>
+              Segera hadir
+            </span>
+            <p class="text-xs leading-relaxed text-white/40">
+              Endpoint-nya masih kita rapihin. Skema di samping udah jalan di aplikasi Commute.
+            </p>
+          </div>
+        </div>
+        <!-- Desktop: left empty so the map + the anchored response panel
+             (overlay/api-panel.ts) own this half. Below md: there is no open
+             column, so the panel docks into this slot as ordinary stacked
+             content instead of floating half-hidden behind the copy. -->
+        <div data-api-dock></div>
+      </div>
+
+    </section>
+
+    <!-- Footer, abolished. The page ends on the map spelling its own name:
+         the camera drops to the empty field below the network and the cells
+         forming the wordmark light up (scene/network-scene.ts + FIELD_FS).
+         Nothing here but the attribution, flush on the grid — no panel, no
+         border, no backdrop. The header keeps the only nav the page needs. -->
+    <section data-beat="footer" class="relative z-10 flex min-h-screen items-end justify-center px-6 pb-10">
+      <p class="font-mono text-[11px] text-white/30">
+        © 2026 Commute Data Platform · Dibuat oleh Shiori Labs
+      </p>
+    </section>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

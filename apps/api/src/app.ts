@@ -18,18 +18,20 @@ export interface Bindings {
 
 const app = new Hono<{ Bindings: Bindings }>()
 
+const ALLOWED_ORIGINS = new Set([
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+  'https://commute.shiorilabs.id',
+  'https://dev.commute.shiorilabs.id',
+  'https://data.commute.shiorilabs.id',
+  'https://transportforjakarta.or.id'
+])
+
 app.use('*', cors({
   origin(origin) {
-    if (
-      origin === 'http://localhost:3000'
-      || origin === 'http://localhost:5173'
-      || origin === 'https://commute.shiorilabs.id'
-      || origin === 'https://dev.commute.shiorilabs.id'
-    ) {
-      return origin
-    }
-
-    return null
+    return ALLOWED_ORIGINS.has(origin) ? origin : null
   },
   allowMethods: ['GET', 'POST', 'OPTIONS']
 }))
