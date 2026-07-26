@@ -31,8 +31,14 @@ export const MAX_TIER: Tier = 4
 // radius in world units; omitted (or >= r) it degenerates to a capsule, so
 // every pre-`cr` points.json entry keeps its exact old shape. Hubs on the
 // FDTJ map are drawn as rounded rects — author those with a small `cr`.
+// `id` is the point's unique key — one per drawn shape. `station` names the
+// station it opens (`OPERATOR-CODE`) when that differs from `id`: the schematic
+// draws a few haltes in more than one place (e.g. Flyover Jatinegara has both a
+// teardrop and a bar), and each shape needs its own `id` while resolving to the
+// same station. Omit it and the id doubles as the station, as it always has.
 export interface Point {
   id: string
+  station?: string
   ax: number
   ay: number
   bx: number
@@ -44,6 +50,13 @@ export interface Point {
 // Effective corner radius: clamped to [0, r]; missing means fully rounded.
 export function pointCornerRadius(p: Point): number {
   return Math.max(0, Math.min(p.cr ?? p.r, p.r))
+}
+
+// The `OPERATOR-CODE` this point opens. Use this — never `p.id` — whenever the
+// station identity is what matters; extra dots for one station carry synthetic
+// ids (`TJ-H00037C-b`) that would not parse into a real code.
+export function pointStationId(p: Point): string {
+  return p.station ?? p.id
 }
 
 export interface PointsManifest {
@@ -130,6 +143,8 @@ export function hitTestPoints(
 
 // Hub tap targets are authored as points whose id starts with `HUB-` (mirroring
 // hubs.id, e.g. `HUB-DKA`). Station points use `OPERATOR-CODE`.
+// Deliberately tests `id`, not `pointStationId`: what a point *is* (hub region
+// vs station pill) is a property of the shape, not of the station it opens.
 export function isHubPoint(p: Point): boolean {
   return p.id.startsWith('HUB-')
 }

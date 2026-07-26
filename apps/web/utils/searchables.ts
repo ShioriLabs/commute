@@ -1,4 +1,5 @@
 import type { Hub } from 'models/hub'
+import { HUB_KIND_LABEL } from 'models/hub'
 import type { Line } from 'models/line'
 import type { Operator } from 'models/operator'
 import type { Searchable } from 'models/searchable'
@@ -16,7 +17,7 @@ export function hubToSearchable(hub: Hub): Searchable<Line[]> {
   return {
     type: 'HUB',
     title: hub.name,
-    subtitle: 'Stasiun Terintegrasi',
+    subtitle: HUB_KIND_LABEL[hub.kind ?? 'integrated'],
     to: `/hubs/${hub.slug}`,
     keywords: [hub.name.toLowerCase(), ...memberKeywords],
     body: hub.lines,

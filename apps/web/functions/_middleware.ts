@@ -104,8 +104,16 @@ interface ApiStation {
 
 interface ApiHub {
   name: string
+  kind?: 'hub' | 'integrated'
   heroImage: string | null
   members: ApiStation[]
+}
+
+// Mirrors HUB_KIND_LABEL in models/hub.ts — this file is a standalone Pages
+// Function and can't import from the app bundle, so keep the two in sync.
+// Defaults to the 'integrated' wording when the API predates the `kind` column.
+function hubKindLabel(hub: ApiHub): string {
+  return hub.kind === 'hub' ? 'Pumpunan Moda' : 'Stasiun Terintegrasi'
 }
 
 interface ApiLineDetail {
@@ -352,7 +360,7 @@ async function resolveOg(pathname: string, searchParams: URLSearchParams, env: E
       .filter(Boolean)
       .join(', ')
     return {
-      title: `Jadwal Kereta ${hub.name} - Stasiun Terintegrasi - Commute`,
+      title: `Jadwal Kereta ${hub.name} - ${hubKindLabel(hub)} - Commute`,
       description: memberNames
         ? `Cek jadwal kereta di ${hub.name} kagak pake ribet. Stasiun terintegrasi: ${memberNames}.`
         : `Cek jadwal kereta di stasiun terintegrasi ${hub.name} kagak pake ribet.`,

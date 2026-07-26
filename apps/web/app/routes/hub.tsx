@@ -2,6 +2,7 @@ import type { Route } from './+types/hub'
 import { useCallback, useEffect } from 'react'
 import { useNavigate, useNavigationType } from 'react-router'
 import { XIcon } from '@phosphor-icons/react'
+import { HUB_KIND_LABEL } from 'models/hub'
 import HubContent, { useHubHeader } from '~/components/hub-content'
 
 export function meta() {
@@ -43,7 +44,9 @@ export default function HubPage({ params }: Route.ComponentProps) {
               : (
                   <>
                     <h1 className="font-bold text-xl">{header.name}</h1>
-                    <span className="text-sm font-semibold text-gray-600">Stasiun Terintegrasi</span>
+                    <span className="text-sm font-semibold text-gray-600">
+                      {HUB_KIND_LABEL[header.kind ?? 'integrated']}
+                    </span>
                   </>
                 )}
           </div>

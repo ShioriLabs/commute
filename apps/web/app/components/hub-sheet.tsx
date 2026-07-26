@@ -1,5 +1,6 @@
 import { XIcon, ArrowSquareOutIcon } from '@phosphor-icons/react'
 import { Link } from 'react-router'
+import { HUB_KIND_LABEL } from 'models/hub'
 import BottomSheet from './bottom-sheet'
 import HubContent, { useHubHeader } from './hub-content'
 
@@ -45,7 +46,9 @@ function SheetHeader({ slug, onClose }: { slug: string, onClose: () => void }) {
           : (
               <>
                 <h2 className="font-bold text-xl truncate">{header.name}</h2>
-                <span className="text-sm font-semibold text-gray-600">Stasiun Terintegrasi</span>
+                <span className="text-sm font-semibold text-gray-600">
+                  {HUB_KIND_LABEL[header.kind ?? 'integrated']}
+                </span>
               </>
             )}
       </div>

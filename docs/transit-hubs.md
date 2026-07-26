@@ -245,8 +245,94 @@ from `transfers`). Same graph machinery as `platform-codes.md`.
 5. `/hubs/:slug` view (`StationContent` × members).
 6. Seed script (transfers connected-components → curated `hubs.sql`).
 
+## `kind` — hub vs integrated station (`0014_add_hub_kind.sql`)
+
+Not every grouping is an interchange *complex*. Two cases, distinguished by
+whether **members carry their own identity**:
+
+- **`hub`** — several distinct, differently-named stations. Dukuh Atas is
+  Sudirman + Sudirman Baru + Dukuh Atas BNI + Galunggung…; a rider must be told
+  *which* member. The grouping carries information.
+- **`integrated`** — one place that is a single station to a rider, split across
+  operators only in the data (Juanda KRL + Juanda BRT, Blok M, Bundaran HI,
+  Tanjung Priok). The hub name alone is sufficient.
+
+Useful non-discriminators, checked and rejected: **spread** and **operator
+count** do not separate the two — Cawang is tighter (218m, 3 operators) than
+Pasar Senen (486m, 2), yet Pasar Senen is the more hub-like of the pair.
+
+Defaults to `'hub'`, so the existing roster is unaffected. All three seeded hubs
+are `hub`; no `integrated` rows exist yet (none of those complexes are seeded).
+
+### Deferred: physical connection (roofed vs open-air)
+
+FDTJ's legend distinguishes **Halte Transit** (black connector — passengers stay
+inside the building) from **Halte/Stasiun Sambungan** (grey box — passengers must
+exit). That is *not* `kind`, and *not* fare:
+
+- It is **per-edge, not per-hub** — Cawang has a roofed LRT↔BRT link *and* an
+  open-air JPO to the KRL station in the same complex.
+- It is **independent of `transfers.noTap`** — a roofed link can still require a
+  tap-out (Cawang LRT↔Cikoko BRT is connected but not free), while
+  Kuningan Simpang↔Underpass is both roofed *and* `noTap=1`.
+
+So it belongs beside `noTap` on `transfers` (e.g. `covered`), not here. Note
+`noTap` is currently near-empty — 4 of 105 rows — so neither field is yet
+reliable enough to drive UI.
+
+## Current roster (`db/scripts/hubs.sql`)
+
+| id | slug | kind | members | max spread |
+|---|---|---|---|---|
+| `HUB-DKA` | `dukuh-atas` | `hub` | 7 — KCI ×2, MRTJ, LRTJBDB, **TJ ×3** | 753m |
+| `HUB-CW` | `cawang` | `hub` | 4 — KCI, LRTJBDB, **TJ ×2** (Cikoko both directions) | 218m |
+| `HUB-CSW` | `csw` | `hub` | 4 — MRTJ + **TJ ×3** (CSW 1, ASEAN, Kejaksaan Agung) | 201m |
+| `HUB-SEN` | `senen-sentral` | `hub` | 4 — KCI + **TJ ×3** (Jaga Jakarta, TOYOTA Rangga, Senen Raya) | 486m |
+
+### "Pumpunan moda" — the official term
+
+Indonesian for a multi-mode interchange building, and the term the operators use.
+Worth searching when vetting a candidate: it is how these complexes are named
+publicly, and it turned up two useful confirmations.
+
+- **CSW** is officially *Pumpunan Moda Cakra Selaras Wahana* — the art-deco ring
+  footbridge over Kyai Maja/Panglima Polim, open 2021-12-22, connecting the MRT
+  ASEAN station with the CSW/ASEAN/Kejaksaan Agung haltes. This independently
+  confirms the seeded roster.
+  **CSW 2 (`TJ-H00264P`) is deliberately excluded** though Wikipedia lists it: it
+  is a roadside non-BRT halte (`searchable=0`, serves only `1C/1M/1Q/8D/8E`, none
+  of which are BRT corridors).
+- **Senen Sentral** is named as a *pumpunan moda* in FDTJ's own map changelog,
+  which flags Jaga Jakarta ↔ Senen TOYOTA Rangga (60m apart) as *transit tanpa
+  keluar bangunan*. Note this is a **per-edge** property of one pair, not of the
+  whole 486m complex — see the deferred section above.
+- **Dukuh Atas** is being built into a six-mode complex (MRT, LRT Jabodebek, KRL,
+  Airport Rail, TJ, LRT Jakarta) via the *jembatan donat* pedestrian deck,
+  targeted end-2028. Expect the roster to grow.
+
+The seed is **purely additive** (`INSERT OR REPLACE` on stable PKs, no deletes),
+so re-applying is a verified no-op. It never removes membership: dropping a member
+means editing the file *and* deleting the stale `hubStations` row by hand.
+
+Spread is geographic (GTFS lat/lon), not the `transfers.distance` column — see the
+caveat below. Note `HUB-DKA`'s 753m comes from SUDIRMAN BARU ↔ LRT Dukuh Atas and
+predates the TJ additions; the TJ members sit inside the existing footprint.
+
+### Discovery caveats
+
+- **`transfers.distance` is mostly placeholder** — 66 of 105 rows are `0`. Rank
+  candidates on station lat/lon, not this column.
+- **The component query misses stations with no `transfers` rows.** `TJ-H00264P`
+  (CSW 2) has none, so discovery returned a 4-member CSW; it is 67m from CSW 1 and
+  was added by inspection. Cross-check candidates by name/proximity, not the graph
+  alone. Fixing the missing transfer rows would make discovery reproduce the
+  curated roster.
+
+Next candidates, all inside the accepted spread range (3 members, KCI+TJ unless
+noted): Jakarta Kota 367m, Grogol 394m, Kebayoran 425m, Jatinegara 439m, and
+Pasar Senen 486m (4 members).
+
 ## Open / to decide later
-- Final hub roster + slugs (run the discovery script first).
 - Member ordering convention (`position`: by operator? by prominence?). (prominence)
 - Centroid by hand vs computed mean of member lat/lng. (calc)
 - Whether to hide member stations from search when they belong to a hub. (no)
