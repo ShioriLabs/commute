@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import { CaretRightIcon } from '@phosphor-icons/react'
 import useSWR from 'swr'
 import type { StandardResponse } from '@schema/response'
-import type { Hub } from 'models/hub'
+import type { Hub, HubKind } from 'models/hub'
 import { fetcher } from 'utils/fetcher'
 import LineRoundel from '~/components/line-roundel'
 import { sortLinesForDisplay } from '~/utils/lines'
@@ -23,6 +23,7 @@ export interface HubHeader {
   isLoading: boolean
   name: string | null
   hubId: string | null
+  kind: HubKind | null
 }
 
 interface UseHubDataResult {
@@ -39,7 +40,8 @@ export function useHubHeader(slug: string): UseHubDataResult {
     header: {
       isLoading: hub.isLoading,
       name: hub.data?.data?.name ?? null,
-      hubId: hub.data?.data?.id ?? null
+      hubId: hub.data?.data?.id ?? null,
+      kind: hub.data?.data?.kind ?? null
     }
   }
 }

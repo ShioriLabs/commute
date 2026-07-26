@@ -1,4 +1,5 @@
 import { db } from 'db'
+import type { HubKind } from 'db/schemas/hubs'
 import { Line } from 'models/line'
 import { Repository } from 'models/repository'
 import { mapify } from 'utils/mapify'
@@ -20,6 +21,7 @@ export class HubRepository extends Repository {
     id: string
     slug: string
     name: string
+    kind: HubKind
     description: string | null
     heroImage: string | null
     latitude: number | null

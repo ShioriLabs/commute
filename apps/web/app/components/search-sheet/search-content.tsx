@@ -1,5 +1,6 @@
 import type { Station } from 'models/stations'
 import type { Hub } from 'models/hub'
+import { HUB_KIND_LABEL } from 'models/hub'
 import type { OperatorWithLines } from 'models/operator'
 import type { StandardResponse } from '@schema/response'
 import type { ReactNode } from 'react'
@@ -39,7 +40,7 @@ function HighlightedList({ title, items, className }: { title: string, items: Re
           key: `HUB:${hub.slug}`,
           to: `/hubs/${hub.slug}`,
           name: hub.name,
-          subtitle: 'Stasiun Terintegrasi',
+          subtitle: HUB_KIND_LABEL[hub.kind ?? 'integrated'],
           line: hub.lines[0] as Line | undefined,
           operator: undefined as string | undefined
         }
