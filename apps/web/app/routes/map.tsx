@@ -13,6 +13,7 @@ import {
   hitTest,
   pickTier,
   pointCornerRadius,
+  pointStationId,
   SCRIM_MAX_ALPHA,
   type Manifest,
   type Point,
@@ -279,7 +280,9 @@ export default function MapPage() {
     if (!spot || !selectedStation) return
     const color = spotlightStation?.data?.lines?.[0]?.colorCode
     if (!color) return
-    if (spot.point.id !== `${selectedStation.operator}-${selectedStation.code}`) return
+    // Compare on the station, not the id: an extra dot for a multi-drawn halte
+    // has a suffixed id that would never match and would leave the halo neutral.
+    if (pointStationId(spot.point) !== `${selectedStation.operator}-${selectedStation.code}`) return
     spot.color = hexToRgb01(color)
     dirtyRef.current = true
   }, [spotlightStation, selectedStation])
@@ -784,11 +787,14 @@ export default function MapPage() {
         }
       } else {
         // Pill IDs look like "KCI-MRI". Split on first hyphen so codes
-        // containing further hyphens still parse correctly.
-        const dash = hit.point.id.indexOf('-')
+        // containing further hyphens still parse correctly. Read the station
+        // via pointStationId: a halte drawn twice has one extra dot whose id is
+        // suffixed (`TJ-H00037C-b`) and whose `station` holds the real code.
+        const stationId = pointStationId(hit.point)
+        const dash = stationId.indexOf('-')
         if (dash > 0) {
-          const operator = hit.point.id.slice(0, dash)
-          const code = hit.point.id.slice(dash + 1)
+          const operator = stationId.slice(0, dash)
+          const code = stationId.slice(dash + 1)
           setSelectedHubSlug(null)
           setSelectedStation({ operator, code })
           haptic()
