@@ -24,6 +24,7 @@ import type { Line } from 'models/line'
 import type { Station } from 'models/stations'
 import type { CompactLineGroupedTimetable } from 'models/schedules'
 import type { Transfer } from 'models/transfers'
+import { directionalBaseName } from 'utils/directional-stations'
 import LineCard from '~/components/line-card'
 import LineRoundel from '~/components/line-roundel'
 import EmptyState from '~/components/empty-state'
@@ -100,10 +101,14 @@ export function useStationHeader(operator: string, code: string): UseStationData
     }
   }
 
+  const resolvedName = station.data?.data?.formattedName ?? null
+
   return {
     header: {
       isLoading: station.isLoading,
-      formattedName: station.data?.data?.formattedName ?? null,
+      // Directional haltes ("… Arah Utara") are one stop to a rider; the sheet
+      // shows the plain name, matching how search presents the joined pair.
+      formattedName: resolvedName === null ? null : directionalBaseName(resolvedName),
       stationId: station.data?.data?.id ?? null,
       lines: station.data?.data?.lines ?? [],
       unserved: false

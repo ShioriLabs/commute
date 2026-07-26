@@ -1,10 +1,10 @@
 # Authoring FDTJ map tap-targets (`points.json`)
 
 **Status:** Rail (`KCI-`/`MRTJ-`/`LRTJBDB-`/`LRTJ-`/`HUB-`) and **all TransJakarta
-BRT corridors** are done and verified — 229 `TJ-` points across Koridor 1–14
-(355 points total). 15 GTFS halte codes are deliberately unplotted: 14 directional
-`Arah …` pairs that share one drawn marker with their partner code, plus Kebon
-Sirih `H00267S`, which has no marker of its own. Non-BRT TJ services: TODO.
+BRT corridors** are done and verified — 374 points total, and **every GTFS halte
+code is reachable from a tap**. The 15 directional `Arah …` pairs share one drawn
+marker each: the partner code rides along as `<code>-b` with a `station` field
+(see *One halte drawn twice*). Non-BRT TJ services: TODO.
 
 `apps/web/public/maps/fdtj/points.json` holds tap-target shapes, consumed by
 `app/routes/map.tsx` → `app/lib/map-renderer.ts`. The map is a **schematic**
@@ -40,6 +40,15 @@ station is **`station ?? id`** (`pointStationId()` in `map-renderer.ts` — use 
 anywhere station identity matters, never raw `p.id`).
 
 Convention: extra dots suffix the station id with `-b`, `-c`, …
+
+The same field covers the inverse case: **directional halte pairs**. TransJakarta
+splits 15 haltes into two rows (`… Arah Utara`/`… Arah Selatan`, 32–168 m apart)
+but the map draws **one** marker. Both codes now point at that marker — the
+drawn one as the plain id, its partner as `<code>-b` with `station` set — so
+either direction resolves from a tap. Web-side, `utils/directional-stations.ts`
+folds the pair into a single search result carrying the **union** of both sides'
+lines (12 of 15 pairs serve different line sets, e.g. `7R` stops at Kali Grogol
+only northbound, so picking one side would hide routes).
 
 ```jsonc
 // primary — station parsed from id, as always
