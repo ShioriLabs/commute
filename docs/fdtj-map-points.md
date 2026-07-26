@@ -93,7 +93,7 @@ see edits made directly in the file.
   direction markers (1-2 → ASEAN `H00265P` on the `▷`, Kejaksaan Agung `H00266P`
   on the `▽`); one point when it's a single `○○` marker (Kebon Sirih = `H00268S`).
   Where one marker serves two codes, the **lower corridor-label number wins** and
-  the sibling goes unplotted (see the 16 codes listed under *Status*).
+  the sibling goes unplotted (see the 15 codes listed under *Status*).
 - **Match haltes by NAME, never by the corridor-label number.** The map's printed
   numbers routinely disagree with the feed's stop order (a stop listed as `4-13`
   may be drawn `5-13`), and similar names are distinct markers ~110 units apart —
