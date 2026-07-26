@@ -24,6 +24,7 @@ import type { Line } from 'models/line'
 import type { Station } from 'models/stations'
 import type { CompactLineGroupedTimetable } from 'models/schedules'
 import type { Transfer } from 'models/transfers'
+import { directionalBaseName } from 'utils/directional-stations'
 import LineCard from '~/components/line-card'
 import LineRoundel from '~/components/line-roundel'
 import EmptyState from '~/components/empty-state'
@@ -38,6 +39,46 @@ const swrConfig = {
   focusThrottleInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
   revalidateOnFocus: true,
   shouldRetryOnError: false
+}
+
+/**
+ * In memoriam block for Stasiun Bekasi Timur.
+ *
+ * On 27 April 2026 at ~20.57 WIB a KRL Commuter Line (PLB 5568A) struck a car
+ * on level crossing JPL 85; the Argo Bromo Anggrek following behind could not
+ * stop in time and hit the stationary KRL. Sixteen people were killed and
+ * around ninety injured. Basarnas confirmed every one of the dead was a woman.
+ *
+ * Hard-coded by request rather than modelled as station data: this is the only
+ * such block in the app, and inventing a general "memorial" schema off one
+ * event would be over-engineering. If a second one is ever needed, lift this
+ * into a keyed record then — do not shoehorn it into `amenities`, which is a
+ * facilities inventory and renders as a list of things a station offers.
+ *
+ * Deliberately restrained: no icon, no colour accent, no card chrome. The
+ * house voice is casual commuter Indonesian; that is wrong here, so this copy
+ * is plain and factual. Widely reported that the victims were in the
+ * women-only car, but the Indonesian Wikipedia account does not confirm the
+ * car placement, so it is not asserted — only that all sixteen were women.
+ *
+ * The phrasing "sedang dalam perjalanan menuju suatu tempat" is the author's
+ * and is load-bearing: they were commuters mid-journey, like whoever is
+ * reading this page. Do not edit it down to a casualty count.
+ */
+function BekasiTimurMemorial() {
+  return (
+    <section className="mt-8 border-t border-slate-200 pt-6">
+      <h2 className="font-semibold text-lg px-4">In Memoriam</h2>
+      <p className="mt-3 px-4 text-gray-700 leading-relaxed">
+        27 April 2026. Enam belas perempuan yang sedang dalam perjalanan menuju
+        suatu tempat kehilangan nyawanya di stasiun ini. Sekitar sembilan puluh
+        orang lainnya terluka.
+      </p>
+      <p className="mt-3 px-4 text-gray-700 leading-relaxed">
+        Kami mengenang mereka.
+      </p>
+    </section>
+  )
 }
 
 const AMENITY_ICONS: Record<AmenityType, JSX.Element> = {
@@ -100,10 +141,14 @@ export function useStationHeader(operator: string, code: string): UseStationData
     }
   }
 
+  const resolvedName = station.data?.data?.formattedName ?? null
+
   return {
     header: {
       isLoading: station.isLoading,
-      formattedName: station.data?.data?.formattedName ?? null,
+      // Directional haltes ("… Arah Utara") are one stop to a rider; the sheet
+      // shows the plain name, matching how search presents the joined pair.
+      formattedName: resolvedName === null ? null : directionalBaseName(resolvedName),
       stationId: station.data?.data?.id ?? null,
       lines: station.data?.data?.lines ?? [],
       unserved: false
@@ -113,6 +158,9 @@ export function useStationHeader(operator: string, code: string): UseStationData
 
 const StationContent = memo(function StationContent({ operator, code }: StationContentProps) {
   const unserved = getUnservedStation(operator, code)
+  // Route params are not case-normalised anywhere, so fold case here rather
+  // than let a lowercase URL silently drop the memorial.
+  const isBekasiTimur = operator.toUpperCase() === 'KCI' && code.toUpperCase() === 'BKST'
   const stationUrl = useMemo(() =>
     new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href,
   [operator, code]
@@ -197,6 +245,7 @@ const StationContent = memo(function StationContent({ operator, code }: StationC
         if (timetable.error) return <EmptyState mode="ERROR" onRetry={() => timetable.mutate()} />
         return <EmptyState mode="NO_DATA" />
       })()}
+      {isBekasiTimur && <BekasiTimurMemorial />}
       <section className="mt-8">
         <h2 className="font-semibold text-lg px-4">Fasilitas</h2>
         {station.data?.data?.amenities?.length

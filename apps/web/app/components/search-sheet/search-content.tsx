@@ -1,6 +1,7 @@
 import type { Station } from 'models/stations'
 import type { Hub } from 'models/hub'
 import { HUB_KIND_LABEL } from 'models/hub'
+import { directionalBaseName, joinDirectionalStations } from 'utils/directional-stations'
 import type { OperatorWithLines } from 'models/operator'
 import type { StandardResponse } from '@schema/response'
 import type { ReactNode } from 'react'
@@ -50,7 +51,9 @@ function HighlightedList({ title, items, className }: { title: string, items: Re
       return {
         key: `STATION:${station.id}`,
         to: `/stations/${station.operator.code}/${station.code}`,
-        name: station.formattedName || station.name,
+        // Drop the "Arah …" suffix here too, so a recently-viewed directional
+        // halte reads the same as its search result.
+        name: directionalBaseName(station.formattedName || station.name),
         subtitle: station.operator.name,
         line: station.lines[0] as Line | undefined,
         operator: station.operator.code as string | undefined
@@ -145,24 +148,31 @@ export default function SearchContent({ title, closeButton }: Props) {
   const searchables = useMemo(() => {
     const _searchables: Searchable[] = []
     if (stations && stations.data) {
-      for (const station of stations.data) {
-        if (station.regionCode !== 'CGK') continue // only jakarta area for now
-        if (!station.searchable) continue // topology-only stations never enter the index
+      const eligible = stations.data.filter(station =>
+        station.regionCode === 'CGK' // only jakarta area for now
+        && station.searchable // topology-only stations never enter the index
+      )
+      // Directional halte pairs ("… Arah Utara"/"… Arah Selatan") are one stop;
+      // fold them into a single result carrying the union of both sides' lines.
+      for (const group of joinDirectionalStations(eligible)) {
+        const { primary, members, name, lines } = group
         _searchables.push({
           type: 'STATION',
-          title: station.formattedName || station.name,
-          subtitle: station.operator.name,
-          to: `/stations/${station.operator.code}/${station.code}`,
-          keywords: [
-            station.name.toLowerCase(),
-            station.code.toLowerCase(),
-            ...(station.formattedName ? [station.formattedName.toLowerCase()] : [])
-          ],
-          body: station.lines,
+          title: name,
+          subtitle: primary.operator.name,
+          to: `/stations/${primary.operator.code}/${primary.code}`,
+          // Every member's name/code stays searchable, so "arah selatan" or the
+          // folded-away code still finds the joined entry.
+          keywords: members.flatMap(member => [
+            member.name.toLowerCase(),
+            member.code.toLowerCase(),
+            ...(member.formattedName ? [member.formattedName.toLowerCase()] : [])
+          ]).concat(name.toLowerCase()),
+          body: lines,
           data: {
-            'station-id': station.id
+            'station-id': primary.id
           },
-          score: station.score ?? 0
+          score: Math.max(...members.map(member => member.score ?? 0))
         })
       }
     }
