@@ -16,7 +16,8 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -73,6 +74,26 @@ type LeafInfo = { selector: string, bbox: BBox }
 
 function log(msg: string): void {
   console.log(`[build-map-tiles] ${msg}`)
+}
+
+/**
+ * Short content hash over every raster this build emitted, in a stable order.
+ *
+ * Only the rasters are hashed: they are what the renderer fetches through the
+ * versioned URLs. The per-tile SVGs are a fallback the happy path never reads,
+ * and including them would change the stamp on cosmetic SVG churn that no user
+ * would ever see.
+ */
+function hashTileOutputs(): string {
+  const h = createHash('sha256')
+  const names = readdirSync(OUT_DIR)
+    .filter(f => /^tile-\d+-\d+@[\d.]+x\.webp$/.test(f) || f === 'preview.webp')
+    .sort()
+  for (const name of names) {
+    h.update(name)
+    h.update(readFileSync(path.join(OUT_DIR, name)))
+  }
+  return h.digest('hex').slice(0, 8)
 }
 
 function runPdf2Svg(pdfPath: string, outSvgPath: string): void {
@@ -499,8 +520,23 @@ async function main(): Promise<void> {
 
     await browser.close()
 
+    // Cache-busting stamp for the tile URLs. `version` tracks the source PDF
+    // edition, so it does NOT change when the same artwork is re-tiled — that
+    // is exactly how a 4x4 build and an 8x8 build came to share tile filenames
+    // and URLs. Cloudflare serves those `immutable, max-age=31536000`, so the
+    // edge kept handing out year-old bytes for the overlapping coordinates.
+    //
+    // Hashing the emitted bytes (rather than stamping the time) keeps the build
+    // deterministic: rebuilding identical tiles produces the same stamp and
+    // costs nobody a re-download.
+    const buildHash = hashTileOutputs()
+
     const manifest = {
       version: VERSION,
+      // Short content hash over every emitted raster. Appended to tile URLs as
+      // `?v=` so regenerated tiles get fresh URLs — see tileUrl() in
+      // app/lib/map-renderer-tile-source.ts.
+      build: buildHash,
       source: path.basename(PDF_PATH),
       viewBox: [viewBox.x, viewBox.y, viewBox.w, viewBox.h],
       grid: { rows: GRID_ROWS, cols: GRID_COLS },
