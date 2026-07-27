@@ -373,7 +373,33 @@ export const PLATFORM_CODES: Record<string, string> = {
   'KCI-MJ:R:CTR': '1', // Maja — jalur 3 is a badug siding
   'KCI-MJ:R:CKY': '2',
   'KCI-CTR:R:RK': '1', // Citeras — jalur 3 is a storage/stopping track
-  'KCI-CTR:R:MJ': '2'
+  'KCI-CTR:R:MJ': '2',
+
+  // Lin Cikarang, far east. Bekasi Timur and Klender Baru are OPPOSITE to each
+  // other. As elsewhere on this line the via-Manggarai and via-Pasar Senen
+  // groups share a next hop and therefore one platform.
+  'KCI-BKST:C:TB': '1', // Bekasi Timur — jalur 1 to Cikarang
+  'KCI-BKST:C:BKS': '2',
+  'KCI-KLDB:C:BUA': '1', // Klender Baru — jalur 1 to Jakarta
+  'KCI-KLDB:C:CUK': '2',
+
+  // Lin Cikarang, Pasar Senen branch (the "full racket" loop).
+  'KCI-POK:C:JNG': '1', // Pondok Jati — jalur 1 to Jatinegara
+  'KCI-POK:C:KMT': '2',
+  'KCI-KMT:C:POK': '1', // Kramat — jalur 1 to Pondok Jati
+  'KCI-KMT:C:GST': '2',
+  'KCI-KMO:C:PSE': '1', // Kemayoran — jalur 1 to Pasar Senen/Cikampek
+  'KCI-KMO:C:RJW': '2',
+  'KCI-RJW:C:KMO': '1', // Rajawali — jalur 1 towards Pasar Senen/Cikarang
+  'KCI-RJW:C:KPB': '2',
+
+  // Lin Cikarang, western arc.
+  // NOTE Karet is scheduled to close on 28 Sep 2026 and become a concourse for
+  // BNI City; drop its two entries when that happens.
+  'KCI-KAT:C:THB': '1', // Karet — jalur 1 towards Tanah Abang/Angke
+  'KCI-KAT:C:SUDB': '2',
+  'KCI-SUDB:C:KAT': '1', // BNI City — jalur 1 towards Angke
+  'KCI-SUDB:C:SUD': '2'
 
   /*
    * Deliberately omitted — do not fill these in without a field check:
@@ -408,6 +434,21 @@ export const PLATFORM_CODES: Record<string, string> = {
    *
    * Rangkasbitung (RK) — terminus; the source does not say which of its several
    * platforms scheduled Tanah Abang departures use.
+   *
+   * Cikarang (CKR) and Angke (AK) — a bidirectional jalur 1 at each, with the
+   * remaining tracks not splitting cleanly across our direction groups.
+   *
+   * Bekasi (BKS) — eight tracks; the published jalur 5/6/7 assignments are
+   * described as "sepur lurus arah Jakarta Kota / Cikampek", which does not map
+   * onto our Manggarai vs Pasar Senen groups.
+   *
+   * Gang Sentiong (GST) — the source describes its two jalur as via-Pasar-Senen
+   * vs via-Manggarai, but our two groups there are towards Pasar Senen and
+   * towards Kramat/Jatinegara. The axes do not correspond; needs a field check.
+   *
+   * Pasar Senen (PSE) and Kampung Bandan (KPB) — PSE has a single direction
+   * group (no choice to disambiguate); KPB carries five groups across three
+   * lines including the Tanjung Priok shuttle, and no source covers that split.
    *
    * Citayam B:BJD and B:PDRG — the Bogor and Nambo services both depart from
    * jalur 2 and the source does not distinguish them. Only the northbound
