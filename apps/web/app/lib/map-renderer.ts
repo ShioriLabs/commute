@@ -20,10 +20,18 @@ export interface Manifest {
 
 export type Transform = { tx: number, ty: number, scale: number }
 
-export type Tier = 1 | 2 | 4
+// Raster scale relative to the SVG's intrinsic tile size. 0.5 is a genuine
+// half-resolution tier, not a placeholder: between the preview handoff and ~4x
+// zoom a tile is minified 2.2-7x, so a half-res texture still supplies more
+// texels than the screen shows while costing a quarter of the pixels. That band
+// is the memory peak — it is where the whole grid is resident at once.
+export type Tier = 0.5 | 1 | 2 | 4
 
-export const TIERS: Tier[] = [1, 2, 4]
+export const TIERS: Tier[] = [0.5, 1, 2, 4]
 export const MAX_TIER: Tier = 4
+// Coarsest tier available. Distinct from the `0` that TileEntry.tier uses to
+// mean "no pixels uploaded yet" — 0.5 is a real, drawable texture.
+export const MIN_TIER: Tier = 0.5
 
 // Tap-target shape: an oriented rounded rectangle. `ax,ay → bx,by` is the
 // centerline, `r` the half-width, and the bounding box extends `r` past both
@@ -233,7 +241,13 @@ export function createRenderer(
 export function pickTier(scale: number, dpr: number, currentTier: Tier, maxTier: Tier = MAX_TIER): Tier {
   const target = scale * dpr
   const cap = Math.min(MAX_TIER, maxTier)
-  const raw = Math.min(cap, Math.max(1, 2 ** Math.ceil(Math.log2(Math.max(target, 1)))))
+  // Round the required texel:pixel ratio up to a power of two, then clamp into
+  // [MIN_TIER, cap]. Flooring at MIN_TIER rather than 1 is what admits the
+  // half-res tier: below the preview handoff `target` runs ~0.14-0.45, which
+  // used to be served by a full-size texture minified up to 7x.
+  const raw = Math.min(cap, Math.max(MIN_TIER, 2 ** Math.ceil(Math.log2(Math.max(target, MIN_TIER)))))
+  // Hysteresis: don't upgrade until comfortably past the boundary, so a pinch
+  // that hovers on the threshold doesn't thrash between tiers.
   if (raw > currentTier && target <= currentTier * 1.1) return currentTier
   return raw as Tier
 }

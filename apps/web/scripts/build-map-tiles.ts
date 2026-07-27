@@ -50,7 +50,13 @@ const TILE_PAD = 0.5
 // Tier 1 ~= 1:1 with the SVG viewBox; tier 2 covers 2x DPR phones up to
 // moderate zoom. Tier 4 is intentionally absent — see app/lib/map-renderer.ts
 // pickTier maxTier cap.
-const RASTER_TIERS = [1, 2] as const
+// Tier 0.5 is a real half-resolution raster, not a placeholder. Between the
+// point where the preview stops being sufficient and roughly 4x zoom, a tile is
+// drawn minified 2.2-7x, so half-res still supplies >=1 texel per device pixel
+// while costing a quarter of the GPU bytes. That band is the memory peak — it
+// is the only time the whole grid is resident — so serving it at 0.5 halves the
+// worst case (see MIN_TIER / pickTier in app/lib/map-renderer.ts).
+const RASTER_TIERS = [0.5, 1, 2] as const
 const RASTER_QUALITY = 80
 // Width of the preview rendered as a first-paint placeholder — and, below the
 // zoom threshold in map-renderer-webgl.ts, as the *only* thing drawn.

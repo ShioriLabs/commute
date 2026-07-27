@@ -18,6 +18,7 @@
   "raster": {
     "format": "webp",
     "tiers": [
+      0.5,
       1,
       2
     ]
