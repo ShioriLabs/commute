@@ -335,7 +335,45 @@ export const PLATFORM_CODES: Record<string, string> = {
   'KCI-CIT:C:TLM': '1', // Cibitung — jalur 1 to Cikarang
   'KCI-CIT:C:TB': '2',
   'KCI-TLM:C:CIT': '1', // Metland Telagamurni — jalur 1 to Jakarta
-  'KCI-TLM:C:CKR': '2'
+  'KCI-TLM:C:CKR': '2',
+
+  // Lin Rangkasbitung, Tanah Abang -> Serpong. Mostly jalur 1 outbound
+  // (Serpong/Rangkasbitung) and jalur 2 to Tanah Abang, but Jurangmangu and
+  // Sudimara are REVERSED — read each from its own diagram.
+  'KCI-PLM:R:KBY': '1', // Palmerah
+  'KCI-PLM:R:THB': '2',
+  'KCI-KBY:R:PDJ': '1', // Kebayoran — jalur 3 exists but is a bidirectional
+  'KCI-KBY:R:PLM': '2', // "sepur salah"; only 1 and 2 are scheduled directions
+  'KCI-PDJ:R:JMU': '1', // Pondok Ranji
+  'KCI-PDJ:R:KBY': '2',
+  'KCI-JMU:R:PDJ': '1', // Jurangmangu — REVERSED: jalur 1 to Tanah Abang
+  'KCI-JMU:R:SDM': '2',
+  'KCI-SDM:R:RU': '1', // Sudimara — jalur 1 outbound, 2 to Tanah Abang
+  'KCI-SDM:R:JMU': '2', // (jalur 3 also Tanah Abang-bound but near-disused)
+  'KCI-RU:R:SRP': '1', // Rawa Buntu
+  'KCI-RU:R:SDM': '2',
+  'KCI-CSK:R:CC': '1', // Cisauk
+  'KCI-CSK:R:SRP': '2',
+
+  // Lin Rangkasbitung, Cicayur -> Rangkasbitung. Cilejit, Daru and Tenjo are
+  // REVERSED (jalur 1 to Tanah Abang) relative to their neighbours. Parung
+  // Panjang splits four tracks cleanly by direction, so it carries ranges.
+  'KCI-CC:R:JTK': '1', // Cicayur
+  'KCI-CC:R:CSK': '2',
+  'KCI-JTK:R:PRP': '1', // Jatake
+  'KCI-JTK:R:CC': '2',
+  'KCI-PRP:R:CJT': '1/2', // Parung Panjang — 1/2 outbound, 3/4 to Tanah Abang
+  'KCI-PRP:R:JTK': '3/4',
+  'KCI-DAR:R:CJT': '1', // Daru — REVERSED: jalur 1 to Tanah Abang
+  'KCI-DAR:R:TEJ': '2', // (jalur 3 is a badug siding)
+  'KCI-TEJ:R:DAR': '1', // Tenjo — REVERSED: jalur 1 to Tanah Abang
+  'KCI-TEJ:R:TGS': '2',
+  'KCI-CKY:R:MJ': '1', // Cikoya
+  'KCI-CKY:R:TGS': '2',
+  'KCI-MJ:R:CTR': '1', // Maja — jalur 3 is a badug siding
+  'KCI-MJ:R:CKY': '2',
+  'KCI-CTR:R:RK': '1', // Citeras — jalur 3 is a storage/stopping track
+  'KCI-CTR:R:MJ': '2'
 
   /*
    * Deliberately omitted — do not fill these in without a field check:
@@ -361,7 +399,15 @@ export const PLATFORM_CODES: Record<string, string> = {
    * Stations whose layout has no per-direction mapping (a platform serves both
    * ways, so no badge can be correct): Depok Baru (jalur 2 both directions),
    * Rawa Buaya (jalur 2 bidirectional and shared with Basoetta), Tambun
-   * (services spread over four tracks, jalur 1 both directions).
+   * (services spread over four tracks, jalur 1 both directions), Serpong
+   * (jalur 1 both directions, Tanah Abang split over 3 and 4), Tigaraksa
+   * (jalur 1 both directions, Tanah Abang split over 3 and 4).
+   *
+   * Cilejit (CJT) — the id.wikipedia diagram is captioned "rencana" (planned),
+   * so it describes an intended layout rather than current operations.
+   *
+   * Rangkasbitung (RK) — terminus; the source does not say which of its several
+   * platforms scheduled Tanah Abang departures use.
    *
    * Citayam B:BJD and B:PDRG — the Bogor and Nambo services both depart from
    * jalur 2 and the source does not distinguish them. Only the northbound
