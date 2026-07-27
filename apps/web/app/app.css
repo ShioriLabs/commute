@@ -121,6 +121,57 @@ body {
   }
 }
 
+/* Loading wordmark (root.tsx HydrateFallback). Letters rise in one at a time,
+   then the assembled mark breathes until the bundle lands.
+   Both animations run on separate elements — letters on the <path>s, the
+   breathe on their <g> — so neither has to wait on the other's property. */
+.wordmark-letter {
+  opacity: 0;
+  /* Without this, translateY on an SVG child resolves against the user-space
+     origin rather than the letter's own box. */
+  transform-box: fill-box;
+  /* ease-out per segment rather than --ease-ios-spring: the overshoot is
+     explicit in the keyframes below, and a spring curve on top of it would
+     compound into a second, unintended bounce. */
+  animation: wordmark-letter 300ms ease-out forwards;
+}
+
+@keyframes wordmark-letter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  /* Overshoot: the letter rises past its resting line and drops back, so it
+     arrives with weight instead of gliding to a stop. Opacity finishes early —
+     the settle should read as movement, not as a continuing fade. */
+  60% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Delayed past the last letter's landing (6 × 35ms stagger + 300ms) so the
+   mark is whole before it starts breathing. */
+.wordmark-breathe {
+  animation: wordmark-breathe 1.8s ease-in-out 560ms infinite;
+}
+
+@keyframes wordmark-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
 /* Every entrance class above starts at `opacity: 0` and relies on its animation
    to reveal the element. So switching the animation off alone would leave the
    content permanently invisible — each rule has to restore opacity and clear
@@ -130,11 +181,29 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .search-result-enter,
   .home-enter,
-  .home-enter-nav {
+  .home-enter-nav,
+  .wordmark-letter {
     animation: none;
     animation-delay: 0s;
     opacity: 1;
     transform: none;
+  }
+
+  /* The wordmark keeps breathing: it is the only thing on screen while the
+     bundle downloads, and a motionless logo reads as a hung page. Opacity alone
+     triggers nothing vestibular — slowed and shallowed rather than removed. */
+  .wordmark-breathe {
+    animation: wordmark-breathe-reduced 2.4s ease-in-out infinite;
+  }
+
+  @keyframes wordmark-breathe-reduced {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.75;
+    }
   }
 
   .map-ripple {

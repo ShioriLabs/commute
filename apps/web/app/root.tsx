@@ -10,6 +10,7 @@ import { useEffect } from 'react'
 import type { Route } from './+types/root'
 import './app.css'
 import { InstallableProvider } from './contexts/installable'
+import Wordmark from './components/wordmark'
 
 export const links: Route.LinksFunction = () => [
   { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
@@ -97,10 +98,8 @@ export function HydrateFallback() {
       aria-live="assertive"
       aria-busy="true"
     >
-      <div
-        className="rounded-full border-4 border-slate-600 border-t-transparent w-12 h-12 animate-spin"
-        aria-label="Memuat..."
-      />
+      <Wordmark className="w-56 max-w-[60vw] h-auto" />
+      <span className="sr-only">Memuat...</span>
     </div>
   )
 }
