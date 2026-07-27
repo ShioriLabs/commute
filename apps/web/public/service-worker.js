@@ -20,11 +20,15 @@
 // build-map-tiles.ts regenerates the grid. After the cache-first split below,
 // those are the only assets frozen for the lifetime of this cache, and a bump
 // costs every user a ~27 MB re-download of the full tile set.
-const CACHE_NAME = 'pwa-cache-v3'
+const CACHE_NAME = 'pwa-cache-v4'
 const TILE_PATH_PREFIX = '/maps/fdtj/'
 
-// Pre-cached map assets. Derived deterministically from the 4x4 grid in
-// build-map-tiles.ts — keep this list in sync if grid dimensions change.
+// Pre-cached map assets. Derived deterministically from the grid in
+// build-map-tiles.ts — keep MAP_ROWS/MAP_COLS/RASTER_TIERS in sync with
+// GRID_ROWS/GRID_COLS/RASTER_TIERS there, and bump CACHE_NAME when they change.
+// A stale copy of this list is worse than useless: it pre-caches tiles that no
+// longer exist and leaves the real ones out of IMMUTABLE_MAP_ASSETS, so they
+// miss the cache-first path entirely.
 //
 // Only genuinely-immutable, stable-URL assets belong here. Both JSON files
 // under /maps/fdtj/ are deliberately absent:
@@ -34,14 +38,17 @@ const TILE_PATH_PREFIX = '/maps/fdtj/'
 //     hash is a new URL, which no cache can have a stale copy of.
 //   - manifest.json is the map's version pointer, so it has to stay
 //     revalidated. It falls through to stale-while-revalidate in `fetch`.
-const MAP_ROWS = 4
-const MAP_COLS = 4
-const RASTER_TIERS = [1, 2]
-const buildMapAssetList = () => {
+const MAP_ROWS = 8
+const MAP_COLS = 8
+// 0.5 is the half-res tier; its files are named `@0.5x.webp`, matching the
+// `@${tier}x` template used by both the build script and the tile source.
+const RASTER_TIERS = [0.5, 1, 2]
+// Rasters + preview: what the renderer actually draws. Every tier it can ask
+// for is rasterized, so these cover the whole happy path.
+const buildRasterAssetList = () => {
   const urls = [`${TILE_PATH_PREFIX}preview.webp`]
   for (let r = 0; r < MAP_ROWS; r++) {
     for (let c = 0; c < MAP_COLS; c++) {
-      urls.push(`${TILE_PATH_PREFIX}tile-${r}-${c}.svg`)
       for (const t of RASTER_TIERS) {
         urls.push(`${TILE_PATH_PREFIX}tile-${r}-${c}@${t}x.webp`)
       }
@@ -50,13 +57,31 @@ const buildMapAssetList = () => {
   return urls
 }
 
-// Cache-first serves exactly the pre-cached set. The invariant: if an asset
-// isn't safe to freeze for the lifetime of CACHE_NAME, it isn't safe to serve
-// from cache without revalidating either. Membership is an allowlist rather
-// than a manifest.json denylist so it fails safe — any *future* file dropped
-// under /maps/fdtj/ gets revalidated instead of silently frozen.
-const MAP_PRECACHE_URLS = buildMapAssetList()
-const IMMUTABLE_MAP_ASSETS = new Set(MAP_PRECACHE_URLS)
+// Per-tile SVGs. map-renderer-tile-source.ts reads these only when a raster
+// fetch *fails*, which on the happy path never happens — so they are cached
+// on demand rather than pre-cached. Downloading all 64 up front cost ~24.7 MB
+// against ~9 MB for every asset the map actually reads.
+const buildSvgAssetList = () => {
+  const urls = []
+  for (let r = 0; r < MAP_ROWS; r++) {
+    for (let c = 0; c < MAP_COLS; c++) {
+      urls.push(`${TILE_PATH_PREFIX}tile-${r}-${c}.svg`)
+    }
+  }
+  return urls
+}
+
+// Fetched atomically on install so the map works offline after one visit.
+const MAP_PRECACHE_URLS = buildRasterAssetList()
+
+// Cache-first membership, which is broader than the pre-cache set: an SVG that
+// was never pre-cached is still immutable once fetched, so it should be served
+// from cache rather than revalidated. The invariant: if an asset isn't safe to
+// freeze for the lifetime of CACHE_NAME, it isn't safe to serve from cache
+// without revalidating either. An allowlist rather than a manifest.json
+// denylist so it fails safe — any *future* file dropped under /maps/fdtj/ gets
+// revalidated instead of silently frozen.
+const IMMUTABLE_MAP_ASSETS = new Set([...MAP_PRECACHE_URLS, ...buildSvgAssetList()])
 
 const HOSTNAME_WHITELIST = [
   self.location.hostname,
@@ -117,19 +142,12 @@ self.addEventListener('install', (event) => {
      */
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
+    // Dropping every cache that isn't CACHE_NAME is the whole migration now:
+    // the v3 -> v4 bump discards the old 4x4 tile set outright, including the
+    // stale points.json/manifest.json entries the previous version had to evict
+    // by hand.
     const keys = await caches.keys()
     await Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-    // One-time migration off the old cache-first JSON entries: points.json has
-    // moved to a hashed /assets/ URL, and manifest.json must be revalidated
-    // from now on. Evicting two entries costs nothing, whereas bumping
-    // CACHE_NAME to achieve the same thing would force every user to
-    // re-download ~27 MB of tiles. Safe to delete once CACHE_NAME next moves,
-    // since that drops the whole cache anyway.
-    const cache = await caches.open(CACHE_NAME)
-    await Promise.all([
-      cache.delete(`${TILE_PATH_PREFIX}points.json`),
-      cache.delete(`${TILE_PATH_PREFIX}manifest.json`)
-    ])
     await self.clients.claim()
   })())
 })
