@@ -399,7 +399,25 @@ export const PLATFORM_CODES: Record<string, string> = {
   'KCI-KAT:C:THB': '1', // Karet — jalur 1 towards Tanah Abang/Angke
   'KCI-KAT:C:SUDB': '2',
   'KCI-SUDB:C:KAT': '1', // BNI City — jalur 1 towards Angke
-  'KCI-SUDB:C:SUD': '2'
+  'KCI-SUDB:C:SUD': '2',
+
+  // Depok — four tracks, but only the outer pair is directional: jalur 1 is the
+  // northbound sepur lurus and jalur 4 the southbound one. Jalur 2 and 3 are
+  // bidirectional and deliberately not represented here.
+  'KCI-DP:B:DPB': '1',
+  'KCI-DP:B:CTA': '4',
+
+  // Lin Tangerang, Duri end. Pesing is REVERSED relative to Grogol and Taman
+  // Kota. Batu Ceper's commuter services use jalur 3/4, not 1/2 — the lower
+  // numbers there belong to the airport line and long-distance platforms.
+  'KCI-GGL:T:DU': '2', // Grogol — jalur 1 to Tangerang, 2 to Duri
+  'KCI-GGL:T:PSG': '1',
+  'KCI-PSG:T:GGL': '1', // Pesing — REVERSED: jalur 1 to Duri
+  'KCI-PSG:T:TKO': '2',
+  'KCI-TKO:T:PSG': '2', // Taman Kota — jalur 1 to Tangerang, 2 to Duri
+  'KCI-TKO:T:BOI': '1',
+  'KCI-BPR:T:PI': '4', // Batu Ceper — jalur 4 to Duri, 3 to Tangerang
+  'KCI-BPR:T:TTI': '3'
 
   /*
    * Deliberately omitted — do not fill these in without a field check:
@@ -449,6 +467,17 @@ export const PLATFORM_CODES: Record<string, string> = {
    * Pasar Senen (PSE) and Kampung Bandan (KPB) — PSE has a single direction
    * group (no choice to disambiguate); KPB carries five groups across three
    * lines including the Tanjung Priok shuttle, and no source covers that split.
+   *
+   * Nambo branch: Pondok Rajeg (PDRG) is single-track and Cibinong (CBN) runs
+   * both directions over its jalur 1, so neither has a per-direction platform.
+   *
+   * Jakarta Kota (JAKK) — Bogor departures are spread over jalur 10 and 11 with
+   * no rule for which is used, and the source does not cover the Cikarang
+   * groups at all.
+   *
+   * Single-group termini, where a badge would carry no information because
+   * there is only one way out: Bogor (BOO), Nambo (NMO), Pasar Senen (PSE),
+   * Rangkasbitung (RK), Tangerang (TNG).
    *
    * Citayam B:BJD and B:PDRG — the Bogor and Nambo services both depart from
    * jalur 2 and the source does not distinguish them. Only the northbound
