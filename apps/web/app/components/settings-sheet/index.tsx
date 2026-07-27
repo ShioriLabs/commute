@@ -1,5 +1,5 @@
 import { CloseButton, DialogTitle } from '@headlessui/react'
-import { PushPinSimpleIcon, ArchiveIcon, FilesIcon, InfoIcon, XIcon, DownloadSimpleIcon, GearIcon, DatabaseIcon } from '@phosphor-icons/react'
+import { PushPinSimpleIcon, ArchiveIcon, FilesIcon, InfoIcon, XIcon, DownloadSimpleIcon, GearIcon, DatabaseIcon, MapPinIcon } from '@phosphor-icons/react'
 import SettingsItem from './settings-item'
 import { useInstall } from '~/contexts/installable'
 
@@ -27,6 +27,10 @@ export default function SettingsSheet() {
           <SettingsItem to="/settings/saved-stations">
             <PushPinSimpleIcon weight="fill" className="w-6 h-6" />
             Stasiun Disimpan
+          </SettingsItem>
+          <SettingsItem to="/settings/location">
+            <MapPinIcon weight="fill" className="w-6 h-6" />
+            Lokasi
           </SettingsItem>
           <SettingsItem to="/settings/manage-data">
             <ArchiveIcon weight="fill" className="w-6 h-6" />

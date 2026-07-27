@@ -16,6 +16,9 @@ import { filterBestTier, keywordScore, SCORE_THRESHOLD } from 'utils/fuzzy-match
 import type { Searchable } from 'models/searchable'
 import { hubToSearchable, lineToSearchable } from 'utils/searchables'
 import { readRecents, recordRecent, type RecentEntry } from 'utils/recents'
+import { formatDistance, rankNearby } from 'utils/geo'
+import { useLocation } from '~/contexts/location'
+import { MapPinIcon } from '@phosphor-icons/react'
 import SearchableItem from './searchable-item'
 
 const swrConfig = {
@@ -23,6 +26,104 @@ const swrConfig = {
   focusThrottleInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
   revalidateOnFocus: true,
   shouldRetryOnError: false
+}
+
+interface RailCard {
+  key: string
+  to: string
+  name: string
+  subtitle: string
+  line: Line | undefined
+  operator: string | undefined
+}
+
+// Presentational horizontal card rail shared by every idle-state list. Renders
+// nothing when there is nothing to show.
+function StationRail({ title, cards, className }: { title: string, cards: RailCard[], className?: string }) {
+  if (cards.length === 0) {
+    return null
+  }
+
+  return (
+    <article className={`max-w-3xl mx-auto ${className}`}>
+      <h1 className="text-xl font-bold mx-8">{ title }</h1>
+      <ul
+        className="mt-2 flex flex-row gap-4 overflow-auto pb-2 rounded-xl ps-8 pe-8 scroll-smooth no-scrollbar"
+      >
+        {cards.map(card => (
+          <li key={card.key} className="shrink-0">
+            <Link
+              to={card.to}
+              className={`flex flex-col gap-2 w-[54vw] lg:w-48 aspect-[3/4] p-4 rounded-xl shadow-sm ${card.line ? 'shadow-slate-900/15' : 'bg-rose-100 text-pink-800 shadow-pink-900/15'}`}
+              style={card.line ? { backgroundColor: getTintFromColor(card.line.colorCode, 0.2, 'light'), color: card.line.colorCode } : undefined}
+              replace
+            >
+              {card.line ? <LineRoundel size="SM" code={card.line.lineCode} color={card.line.colorCode} operator={card.operator} /> : null}
+              <span className="font-semibold mt-auto">{ card.name }</span>
+              <span className={card.line ? 'text-slate-700' : ''}>{ card.subtitle }</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </article>
+  )
+}
+
+// The stations closest to the user, pinned above the other rails. Reuses the
+// /stations list the search index already holds, so this costs no extra fetch
+// — and no coordinate ever leaves the device.
+function NearbyRail({ stations, className }: { stations: Station[] | undefined, className?: string }) {
+  const { isReady, status, freshFix, prefs, request } = useLocation()
+  const [isRequesting, setIsRequesting] = useState(false)
+
+  const cards = useMemo(() => {
+    if (!stations || !freshFix) return []
+
+    return rankNearby(stations, freshFix).map(({ group, distanceM }) => ({
+      key: `NEARBY:${group.primary.id}`,
+      to: `/stations/${group.primary.operator.code}/${group.primary.code}`,
+      name: group.name,
+      subtitle: formatDistance(distanceM),
+      line: group.lines[0] as Line | undefined,
+      operator: group.primary.operator.code as string | undefined
+    }))
+  }, [stations, freshFix])
+
+  const handleEnable = useCallback(async () => {
+    setIsRequesting(true)
+    await request()
+    setIsRequesting(false)
+  }, [request])
+
+  if (!isReady || !prefs.nearby) {
+    return null
+  }
+
+  // A denied or unsupported browser gets nothing at all — re-asking someone who
+  // already said no is how you get uninstalled.
+  if (status === 'prompt') {
+    return (
+      <article className={`max-w-3xl mx-auto ${className}`}>
+        <h1 className="text-xl font-bold mx-8">Stasiun Terdekat</h1>
+        <div className="mt-2 px-8">
+          <button
+            onClick={handleEnable}
+            disabled={isRequesting}
+            className="w-full flex flex-row items-center gap-3 text-left bg-rose-100 text-pink-800 rounded-xl p-4 font-semibold cursor-pointer disabled:opacity-60"
+          >
+            <MapPinIcon weight="fill" className="w-6 h-6 shrink-0" />
+            { isRequesting ? 'Lagi cari lokasi kamu...' : 'Aktifkan lokasi buat lihat stasiun di sekitarmu' }
+          </button>
+        </div>
+      </article>
+    )
+  }
+
+  if (status !== 'granted') {
+    return null
+  }
+
+  return <StationRail title="Stasiun Terdekat" cards={cards} className={className} />
 }
 
 // Horizontal card rail for the idle state. Resolves mixed station/hub entries
@@ -61,33 +162,7 @@ function HighlightedList({ title, items, className }: { title: string, items: Re
     })
     .filter(card => card !== null)
 
-  if (cards.length === 0) {
-    return null
-  }
-
-  return (
-    <article className={`max-w-3xl mx-auto ${className}`}>
-      <h1 className="text-xl font-bold mx-8">{ title }</h1>
-      <ul
-        className="mt-2 flex flex-row gap-4 overflow-auto pb-2 rounded-xl ps-8 pe-8 scroll-smooth no-scrollbar"
-      >
-        {cards.map(card => (
-          <li key={card.key} className="shrink-0">
-            <Link
-              to={card.to}
-              className={`flex flex-col gap-2 w-[54vw] lg:w-48 aspect-[3/4] p-4 rounded-xl shadow-sm ${card.line ? 'shadow-slate-900/15' : 'bg-rose-100 text-pink-800 shadow-pink-900/15'}`}
-              style={card.line ? { backgroundColor: getTintFromColor(card.line.colorCode, 0.2, 'light'), color: card.line.colorCode } : undefined}
-              replace
-            >
-              {card.line ? <LineRoundel size="SM" code={card.line.lineCode} color={card.line.colorCode} operator={card.operator} /> : null}
-              <span className="font-semibold mt-auto">{ card.name }</span>
-              <span className={card.line ? 'text-slate-700' : ''}>{ card.subtitle }</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </article>
-  )
+  return <StationRail title={title} cards={cards} className={className} />
 }
 
 const asStations = (ids: string[]): RecentEntry[] => ids.map(id => ({ type: 'STATION', id }))
@@ -281,6 +356,7 @@ export default function SearchContent({ title, closeButton }: Props) {
       {searchQuery.length < 2
         ? (
             <>
+              <NearbyRail stations={stations?.data} className="mt-4" />
               {recentlySearched.length > 0
                 ? <HighlightedList title="Stasiun Terakhir Dicari" items={recentlySearched} className="mt-4" />
                 : null}

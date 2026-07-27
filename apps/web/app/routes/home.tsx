@@ -7,14 +7,17 @@ import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
 import { normalizeGroupedTimetable } from 'utils/timetable-shim'
 import SearchStationsButton from '~/components/nav-buttons/search-stations'
-import { CaretRightIcon, DownloadSimpleIcon, InfoIcon, WarningIcon } from '@phosphor-icons/react'
+import { CaretRightIcon, DownloadSimpleIcon, InfoIcon, MapPinIcon, WarningIcon } from '@phosphor-icons/react'
 import { Link } from 'react-router'
 import SettingsButton from '~/components/nav-buttons/settings'
 import FareButton from '~/components/nav-buttons/fare'
 import MapButton from '~/components/nav-buttons/map'
+import LocationBanner from '~/components/location-banner'
 import { useNetworkStatus } from '~/hooks/network'
 import { useInstall } from '~/contexts/installable'
+import { useLocation } from '~/contexts/location'
 import { useMapUnlock } from '~/hooks/secret-features'
+import { findCurrentStation } from 'utils/geo'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -62,7 +65,7 @@ function EmptyState({ mode = 'NO_SAVED' }: { mode: 'NO_SAVED' | 'OFFLINE' }) {
   )
 }
 
-function StationCard({ stationId }: { stationId: string }) {
+function StationCard({ stationId, isHere = false }: { stationId: string, isHere?: boolean }) {
   const [operator, code] = stationId.split(/-/g)
   const station = useSWR<StandardResponse<Station>>(new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
   const timetable = useSWR<StandardResponse<CompactLineGroupedTimetable>>(new URL(`/stations/${operator}/${code}/timetable/grouped?compact=1`, import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
@@ -90,6 +93,12 @@ function StationCard({ stationId }: { stationId: string }) {
               { station.data.data.formattedName }
               <CaretRightIcon weight="bold" className="inline w-3.5 h-3.5 group-hover:ml-3 ml-2 transition-[margin] duration-200 -mt-0.5" />
             </Link>
+            {isHere && (
+              <span className="flex items-center gap-1 shrink-0 text-[#F55875] normal-case tracking-normal">
+                <MapPinIcon weight="fill" className="w-3.5 h-3.5" />
+                Kamu di sini
+              </span>
+            )}
           </h1>
           { timetable.isLoading
             ? (
@@ -153,8 +162,35 @@ export default function HomePage() {
   const { isInstallable, showIOSInstructions, isStandalone, promptInstall } = useInstall()
   const [showInstallBanner, setShowInstallBanner] = useState(false)
   const { isUnlocked: isMapUnlocked } = useMapUnlock()
+  const { status: locationStatus, freshFix, prefs } = useLocation()
 
   const canInstall = (isInstallable || showIOSInstructions) && !isStandalone
+
+  const shouldLocate = prefs.here && locationStatus === 'granted' && freshFix !== null && stations.length > 0
+
+  // Coordinates only exist on the full station list, which the home screen
+  // otherwise never needs — so it stays unfetched until the user opts in. The
+  // search sheet requests the same URL, so SWR serves both from one response.
+  const { data: allStations } = useSWR<StandardResponse<Station[]>>(
+    shouldLocate ? new URL('/stations', import.meta.env.VITE_API_BASE_URL).href : null,
+    fetcher,
+    swrConfig
+  )
+
+  const currentStationId = useMemo(() => {
+    if (!freshFix || !allStations?.data) return null
+
+    const saved = allStations.data.filter(station => stations.includes(station.id))
+    return findCurrentStation(saved, freshFix)?.id ?? null
+  }, [allStations, freshFix, stations])
+
+  // Only the identified station moves; everything else keeps the order the user
+  // saved it in. Because this is keyed off the station's identity, a background
+  // refresh that lands on the same station re-renders nothing.
+  const orderedStations = useMemo(() => {
+    if (!currentStationId) return stations
+    return [currentStationId, ...stations.filter(stationId => stationId !== currentStationId)]
+  }, [stations, currentStationId])
 
   useEffect(() => {
     const isInstallBannerDismissed = localStorage.getItem('is-install-banner-dismissed') === 'true'
@@ -242,11 +278,15 @@ export default function HomePage() {
                 </div>
               )}
 
+              {/* One banner at a time on the front door; install wins. Stacking
+                  both pushes the first timetable off-screen entirely. */}
+              {stations.length > 0 && !(showInstallBanner && canInstall) && <LocationBanner />}
+
               {stations.length > 0
                 ? (
                     <ul className="flex flex-col gap-5 pb-42 max-w-3xl mx-auto" aria-label="Daftar stasiun tersimpan">
-                      {stations.map(station => (
-                        <StationCard key={station} stationId={station} />
+                      {orderedStations.map(station => (
+                        <StationCard key={station} stationId={station} isHere={station === currentStationId} />
                       ))}
                     </ul>
                   )

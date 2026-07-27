@@ -11,6 +11,7 @@ export default [
     route('hubs/:slug', 'routes/hub.tsx'),
     route('lines/:operator/:lineCode', 'routes/line.tsx'),
     route('settings/saved-stations', 'routes/settings/saved-stations.tsx'),
+    route('settings/location', 'routes/settings/location.tsx'),
     route('settings/manage-data', 'routes/settings/manage-data.tsx'),
     route('settings/installation', 'routes/settings/installation/index.tsx')
   ]),
