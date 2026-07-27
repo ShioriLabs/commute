@@ -427,6 +427,13 @@ export const PLATFORM_CODES: Record<string, string> = {
   'KCI-DP:B:DPB': '1',
   'KCI-DP:B:CTA': '4',
 
+  // Depok Baru — 1 towards Jakarta Kota, 3 towards Depok/Citayam/Nambo/Bogor.
+  // Rider-reported. The layout diagram shows jalur 2 serving both directions,
+  // which is why this was initially skipped; scheduled services use the outer
+  // pair, so jalur 2 is deliberately not represented.
+  'KCI-DPB:B:POC': '1',
+  'KCI-DPB:B:DP': '3',
+
   // Lin Tangerang, Duri end. Pesing is REVERSED relative to Grogol and Taman
   // Kota. Batu Ceper's commuter services use jalur 3/4, not 1/2 — the lower
   // numbers there belong to the airport line and long-distance platforms.
@@ -470,13 +477,19 @@ export const PLATFORM_CODES: Record<string, string> = {
    *
    * Operationally these are Commuter Line Cikarang runs, so they use the same
    * platforms as the Cikarang groups at each station (Tanah Abang: 1 towards
-   * Angke, 2 towards Manggarai; Duri: 2 towards Manggarai). They are filed
-   * under lineCode R and T here because the schedule feed numbers their trips
-   * in the Rangkasbitung/Tangerang series — a data-attribution quirk worth
-   * investigating separately, since lineCode also drives colour and roundel.
+   * Angke, 2 towards Manggarai; Duri: 2 towards Manggarai).
+   *
+   * They appear under lineCode R/T because KCI'S OWN FEED mislabels them, not
+   * because of anything we do: c-access shows trip 1676C badged "Commuter Line
+   * Rangkasbitung" while routing it Tanah Abang -> Karet -> Sudirman Baru ->
+   * Sudirman -> Manggarai (10:17-10:28), which is Cikarang alignment
+   * throughout. Do not "fix" this in the importer — a feed refresh would undo
+   * it. An override keyed on trip number is the durable shape if these ever
+   * need to display on the right line, since lineCode also drives colour and
+   * roundel.
    *
    * Stations whose layout has no per-direction mapping (a platform serves both
-   * ways, so no badge can be correct): Depok Baru (jalur 2 both directions),
+   * ways, so no badge can be correct):
    * Rawa Buaya (jalur 2 bidirectional and shared with Basoetta), Tambun
    * (services spread over four tracks, jalur 1 both directions), Serpong
    * (jalur 1 both directions, Tanah Abang split over 3 and 4), Tigaraksa
