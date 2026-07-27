@@ -239,12 +239,12 @@ export const PLATFORM_CODES: Record<string, string> = {
   'KCI-MRI:B:CKI': '9/10',
   'KCI-MRI:B:TEB': '11/12',
 
-  // Jatinegara (Lin Cikarang) — 1 to Bekasi/Cikarang, 2 to Manggarai. Supersedes
-  // the id.wikipedia diagram, which spreads commuter services over jalur 1-6 and
-  // flags the assignment as provisional. The third group (via Pasar Senen, next
-  // hop Pondok Jati) is a distinct direction and is deliberately left unset.
-  'KCI-JNG:C:KLD': '1',
-  'KCI-JNG:C:MTR': '2',
+  // Jatinegara (Lin Cikarang) — 2 towards Manggarai, 5 towards Pasar Senen.
+  // Both rider-reported, superseding the id.wikipedia diagram which spreads
+  // commuter services over jalur 1-6 and flags the assignment as provisional.
+  'KCI-JNG:C:MTR': '2', // towards Manggarai/BNI City/Kampung Bandan
+  'KCI-JNG:C:POK': '5', // towards Kramat/Pasar Senen/Kampung Bandan
+  // Eastbound (C:KLD) is deliberately unset — see the omissions note.
 
   // ── From id.wikipedia layout diagrams ────────────────────────────────────
   // Matraman (Lin Cikarang) — single island platform, two tracks, unambiguous.
@@ -321,9 +321,12 @@ export const PLATFORM_CODES: Record<string, string> = {
 
   // Lin Bogor, south of Depok. Bojonggede and Cilebut are REVERSED — jalur 2
   // northbound, jalur 1 to Bogor.
-  'KCI-CTA:B:DP': '1', // Citayam — jalur 1 to Jakarta Kota. The Bogor and Nambo
-  // groups both leave on jalur 2 and the source does not separate them, so only
-  // the northbound direction is recorded here.
+  // Citayam — 1 towards Manggarai/Jakarta Kota, 2 towards Bogor and towards
+  // Nambo. The branch splits south of here, so both southbound groups share
+  // jalur 2; rider-reported.
+  'KCI-CTA:B:DP': '1',
+  'KCI-CTA:B:BJD': '2',
+  'KCI-CTA:B:PDRG': '2',
   'KCI-BJD:B:CTA': '2', // Bojonggede
   'KCI-BJD:B:CLT': '1',
   'KCI-CLT:B:BJD': '2', // Cilebut
@@ -424,6 +427,13 @@ export const PLATFORM_CODES: Record<string, string> = {
   'KCI-DP:B:DPB': '1',
   'KCI-DP:B:CTA': '4',
 
+  // Depok Baru — 1 towards Jakarta Kota, 3 towards Depok/Citayam/Nambo/Bogor.
+  // Rider-reported. The layout diagram shows jalur 2 serving both directions,
+  // which is why this was initially skipped; scheduled services use the outer
+  // pair, so jalur 2 is deliberately not represented.
+  'KCI-DPB:B:POC': '1',
+  'KCI-DPB:B:DP': '3',
+
   // Lin Tangerang, Duri end. Pesing is REVERSED relative to Grogol and Taman
   // Kota. Batu Ceper's commuter services use jalur 3/4, not 1/2 — the lower
   // numbers there belong to the airport line and long-distance platforms.
@@ -450,19 +460,36 @@ export const PLATFORM_CODES: Record<string, string> = {
   /*
    * Deliberately omitted — do not fill these in without a field check:
    *
-   * Jatinegara C:POK (via Pasar Senen, next hop Pondok Jati). A third departure
-   * direction beyond the Bekasi/Manggarai pair recorded above; no report covers
-   * it, and it cannot be inferred from the other two.
+   * Jatinegara eastbound (C:KLD) — UNSET BY DECISION, not for lack of data.
+   * Bekasi/Cikarang departures use platform 1 or platform 6 depending on which
+   * way the train reached Jatinegara (the Cikarang line is a loop, arriving via
+   * Manggarai or via Pasar Senen). All 160 eastbound departures share a single
+   * direction group with no `via` split, so this key can hold only one value
+   * and either choice would mislead half the riders. Filling it in needs a
+   * per-arrival-route platform dimension the schema does not have.
    *
-   * Tanah Abang R:SYN:* — the Angke and Manggarai short-workings. The sources
-   * describe Rangkasbitung-line arrivals/departures but do not say which
-   * platform these specific short-turn services use.
+   * Short-turn services (Tanah Abang -> Angke / Manggarai, Duri -> Manggarai)
+   * CANNOT be given a platform here, whatever value is written. They are built
+   * by syntheticGroup() in utils/directions.ts, which sets nextHopCode: null,
+   * and the lookup in routes/stations.ts only fires when a next hop exists —
+   * so any key for them would be dead. Supporting them needs a fallback in
+   * that lookup, not another entry in this table.
    *
-   * Duri T:SYN:Manggarai — the Basoetta-shared jalur 3/4 distinction does not
-   * map cleanly onto this group.
+   * Operationally these are Commuter Line Cikarang runs, so they use the same
+   * platforms as the Cikarang groups at each station (Tanah Abang: 1 towards
+   * Angke, 2 towards Manggarai; Duri: 2 towards Manggarai).
+   *
+   * They appear under lineCode R/T because KCI'S OWN FEED mislabels them, not
+   * because of anything we do: c-access shows trip 1676C badged "Commuter Line
+   * Rangkasbitung" while routing it Tanah Abang -> Karet -> Sudirman Baru ->
+   * Sudirman -> Manggarai (10:17-10:28), which is Cikarang alignment
+   * throughout. Do not "fix" this in the importer — a feed refresh would undo
+   * it. An override keyed on trip number is the durable shape if these ever
+   * need to display on the right line, since lineCode also drives colour and
+   * roundel.
    *
    * Stations whose layout has no per-direction mapping (a platform serves both
-   * ways, so no badge can be correct): Depok Baru (jalur 2 both directions),
+   * ways, so no badge can be correct):
    * Rawa Buaya (jalur 2 bidirectional and shared with Basoetta), Tambun
    * (services spread over four tracks, jalur 1 both directions), Serpong
    * (jalur 1 both directions, Tanah Abang split over 3 and 4), Tigaraksa
@@ -499,9 +526,6 @@ export const PLATFORM_CODES: Record<string, string> = {
    * as done for Tanjung Priok (TPK). They are unset here only because no
    * source states which platform scheduled departures use.
    *
-   * Citayam B:BJD and B:PDRG — the Bogor and Nambo services both depart from
-   * jalur 2 and the source does not distinguish them. Only the northbound
-   * direction is recorded.
    */
 }
 

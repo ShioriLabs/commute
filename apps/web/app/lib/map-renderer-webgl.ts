@@ -151,7 +151,32 @@ interface TileEntry {
   // recomputed because the tier alone doesn't tell you whether the upload has
   // landed yet.
   bytes: number
+  // Frame counter at the last draw that touched this tile. Eviction sorts by
+  // this, so "least recently on screen" is what gets dropped first.
+  lastUsed: number
 }
+
+// Ceiling on resident tile pixels. The grid is 4x4 and a tier-2 tile is ~42 MB
+// with mipmaps, so a fully-visited map wants ~683 MB — enough to get the context
+// killed on a phone, and the measured figure on a Galaxy S23. Nothing evicted
+// before this budget existed: draw() only ever upgraded tiles, so panning around
+// at zoom accumulated all 16 at full tier and held them for the renderer's life.
+//
+// 192 MB comfortably covers the working set that is actually on screen (a
+// portrait phone sees at most 4 tier-2 tiles, ~171 MB, and typically 2), while
+// leaving headroom for the in-flight upgrade that triggered the sweep.
+const TILE_BUDGET_BYTES = 192 * 1024 * 1024
+
+// How far past the preview's native resolution the view may zoom before real
+// tiles are needed. 1.0 switches exactly where the map is drawn at the preview's
+// own pixel size, so the preview is never stretched beyond its detail — it is
+// pixel-lossless below the threshold and tiles take over above it.
+//
+// The preview is built at 1280px (build-map-tiles.ts PREVIEW_WIDTH) precisely so
+// this covers fit-to-screen on a 360px 3x-DPR phone, which needs 1080px. Raising
+// this would extend the tile-free range at the cost of visible softness; the
+// honest way to buy more range is a wider preview.
+const PREVIEW_SUFFICIENCY = 1
 
 // A mipmapped texture costs its base level plus the geometric series of halved
 // levels, which converges to 4/3. `bytesPerPixel` is 2 for RGB565, 4 for RGBA8.
@@ -228,6 +253,8 @@ export function createWebGLRenderer(
   const tileSource = createTileSource({ manifest, baseUrl })
   const tiles = new Map<string, TileEntry>()
   let disposed = false
+  // Monotonic draw counter, used as the LRU clock for evictTiles().
+  let frameCounter = 0
 
   // Preview texture rendered under the tile grid whenever a visible tile has no
   // pixels yet. Held until dispose() — see the note in draw().
@@ -311,10 +338,64 @@ export function createWebGLRenderer(
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-      entry = { texture, tier: 0, pendingTier: null, mipmapped: false, bytes: 0 }
+      entry = { texture, tier: 0, pendingTier: null, mipmapped: false, bytes: 0, lastUsed: frameCounter }
       tiles.set(key, entry)
     }
+    entry.lastUsed = frameCounter
     return entry
+  }
+
+  // Release off-screen tiles that are held at a finer tier than the current view
+  // would ever ask for. Zooming deep into one corner and then back out used to
+  // leave those tiles pinned at tier 2 (~42 MB each) forever, because nothing
+  // downgrades and the only tier transition in draw() is an upgrade.
+  //
+  // The pixels are dropped rather than re-uploaded at the coarser tier: the
+  // tile is off-screen, so the cheapest correct thing is to let draw() re-request
+  // it at whatever tier is right if it ever comes back. On-screen tiles are left
+  // alone even when over-resolved — they are already drawn, and swapping them to
+  // the placeholder would flash a blank tile under the user.
+  function downgradeOverResolvedTiles(currentTier: Tier) {
+    for (const [key, entry] of tiles) {
+      if (entry.lastUsed === frameCounter || entry.pendingTier !== null) continue
+      if (entry.tier <= currentTier) continue
+      gl.deleteTexture(entry.texture)
+      // Re-seeding the entry (rather than deleting it) would need a fresh
+      // texture allocation; dropping it entirely lets ensureTile() rebuild
+      // lazily and keeps one code path for "tile has no pixels".
+      tiles.delete(key)
+    }
+  }
+
+  // Drop least-recently-drawn tiles until resident pixels fit the budget.
+  //
+  // Only tiles that missed the current frame are candidates: everything on
+  // screen right now shares one `lastUsed`, and evicting any of it would just
+  // be re-requested by the next frame — a fetch/decode/upload loop that costs
+  // bandwidth and jank without ever freeing anything. If the visible set alone
+  // exceeds the budget there is nothing safe to drop, so the sweep stops and
+  // the budget is knowingly overshot rather than thrashing.
+  function evictTiles() {
+    let bytes = 0
+    for (const entry of tiles.values()) bytes += entry.bytes
+    if (bytes <= TILE_BUDGET_BYTES) return
+
+    const candidates: Array<[string, TileEntry]> = []
+    for (const [key, entry] of tiles) {
+      // An in-flight upgrade holds a reference to this exact entry object and
+      // re-checks identity before uploading; deleting it here is safe (that
+      // check fails and the bitmap is closed), but it would waste the fetch.
+      if (entry.lastUsed === frameCounter || entry.pendingTier !== null) continue
+      candidates.push([key, entry])
+    }
+    candidates.sort((a, b) => a[1].lastUsed - b[1].lastUsed)
+
+    for (const [key, entry] of candidates) {
+      if (bytes <= TILE_BUDGET_BYTES) break
+      gl.deleteTexture(entry.texture)
+      tiles.delete(key)
+      bytes -= entry.bytes
+    }
   }
 
   async function requestTier(r: number, c: number, tier: Tier): Promise<void> {
@@ -426,6 +507,10 @@ export function createWebGLRenderer(
 
   function draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null) {
     if (disposed || gl.isContextLost()) return
+    // Bump before any ensureTile() call so every tile touched this frame — the
+    // visibility scan below included — carries the current stamp and is exempt
+    // from the eviction sweep at the end.
+    frameCounter++
     gl.viewport(0, 0, Math.round(cssW * dpr), Math.round(cssH * dpr))
     gl.clearColor(1, 1, 1, 1)
     gl.clear(gl.COLOR_BUFFER_BIT)
@@ -444,15 +529,62 @@ export function createWebGLRenderer(
     const worldMaxX = (cssW - transform.tx) * invScale
     const worldMaxY = (cssH - transform.ty) * invScale
 
+    // Visible row/column span, derived arithmetically rather than by testing
+    // every tile in the grid. At 4x4 the scan was 16 iterations and not worth
+    // avoiding; on the finer grid the tile count grows with the square of the
+    // divisions, and this runs twice per frame.
+    const firstCol = Math.max(0, Math.floor(worldMinX / tileW))
+    const lastCol = Math.min(grid.cols - 1, Math.floor(worldMaxX / tileW))
+    const firstRow = Math.max(0, Math.floor(worldMinY / tileH))
+    const lastRow = Math.min(grid.rows - 1, Math.floor(worldMaxY / tileH))
+
+    // Zoomed far enough out that the preview carries as much detail as the tiles
+    // would: draw it alone and load no tiles at all.
+    //
+    // Fit-to-screen on a phone puts the map at ~0.038 scale, where a tier-1 tile
+    // is minified ~26x — about 1.4k useful pixels out of a 1M-pixel texture, and
+    // the full grid resident costs ~171 MB to draw something the 1.7 MB preview
+    // already covers. That case is now free, and it was the single largest
+    // remaining allocation once the grid got finer.
+    const previewOnly = manifest.preview !== undefined
+      && transform.scale * dpr * mapW <= manifest.preview.w * PREVIEW_SUFFICIENCY
+    if (previewOnly) {
+      if (!previewTexture) ensurePreview()
+      if (previewTexture) {
+        twgl.setUniforms(programInfo, {
+          u_tileOffset: [0, 0],
+          u_tileSize: [mapW, mapH],
+          u_transform: mat,
+          u_texture: previewTexture
+        })
+        twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
+        drawOverlays(mat, transform, cssW, cssH, selection)
+        // Nothing here draws a tile, so every resident tile is dead weight —
+        // release them outright rather than waiting for the budget sweep, which
+        // would keep a full grid (~171 MB) resident indefinitely because it sits
+        // just under the cap. This is also the path that cleans up after the
+        // first frame: the preview loads asynchronously, so frame 1 falls
+        // through below and requests tiles before the texture exists.
+        //
+        // Deliberately not releaseTiles(): that signals onDirty(), which would
+        // schedule another frame, which would release again — a redraw loop for
+        // as long as the map sits zoomed out. Nothing needs repainting here;
+        // the tiles being freed are ones this frame didn't draw.
+        if (tiles.size > 0) {
+          for (const entry of tiles.values()) gl.deleteTexture(entry.texture)
+          tiles.clear()
+        }
+        return
+      }
+      // No preview yet — fall through and draw tiles as usual rather than
+      // showing a blank map while it loads.
+    }
+
     // Check whether any visible tile is still missing — if so, the preview
     // underlay (if loaded) gets drawn first to cover blank gaps.
     let anyVisibleMissing = false
-    for (let r = 0; r < grid.rows && !anyVisibleMissing; r++) {
-      const tileY = r * tileH
-      if (tileY + tileH < worldMinY || tileY > worldMaxY) continue
-      for (let c = 0; c < grid.cols; c++) {
-        const tileX = c * tileW
-        if (tileX + tileW < worldMinX || tileX > worldMaxX) continue
+    for (let r = firstRow; r <= lastRow && !anyVisibleMissing; r++) {
+      for (let c = firstCol; c <= lastCol; c++) {
         const entry = ensureTile(r, c)
         if (!entry || entry.tier === 0) {
           anyVisibleMissing = true
@@ -480,12 +612,10 @@ export function createWebGLRenderer(
       }
     }
 
-    for (let r = 0; r < grid.rows; r++) {
+    for (let r = firstRow; r <= lastRow; r++) {
       const tileY = r * tileH
-      if (tileY + tileH < worldMinY || tileY > worldMaxY) continue
-      for (let c = 0; c < grid.cols; c++) {
+      for (let c = firstCol; c <= lastCol; c++) {
         const tileX = c * tileW
-        if (tileX + tileW < worldMinX || tileX > worldMaxX) continue
 
         const entry = ensureTile(r, c)
         if (!entry) continue
@@ -499,12 +629,36 @@ export function createWebGLRenderer(
         })
         twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
 
+        // Don't start tile fetches the preview is about to make redundant. This
+        // is the zoomed-out first frame, before ensurePreview() has resolved:
+        // without this the renderer requests the whole grid and then frees it
+        // a frame later, spending real bandwidth on textures never drawn.
+        if (previewOnly) continue
+
         if (entry.tier < currentTier && entry.pendingTier !== currentTier) {
           void requestTier(r, c, currentTier)
         }
       }
     }
 
+    // Every visible tile now carries this frame's stamp, so anything older is
+    // off-screen and safe to reclaim.
+    downgradeOverResolvedTiles(currentTier)
+    evictTiles()
+
+    drawOverlays(mat, transform, cssW, cssH, selection)
+  }
+
+  // Hitbox debug fill and the selection spotlight. Split out of draw() so the
+  // preview-only path can draw them too — a station stays selectable and
+  // spotlit when zoomed out, where no tiles are resident at all.
+  function drawOverlays(
+    mat: Float32Array,
+    transform: Transform,
+    cssW: number,
+    cssH: number,
+    selection?: SelectionOverlay | null
+  ) {
     if (debugHitboxes && pillVao && points.length > 0) {
       gl.useProgram(pillProgramInfo.program)
       twgl.setBuffersAndAttributes(twglGl, pillProgramInfo, pillVao)
