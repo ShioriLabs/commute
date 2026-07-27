@@ -23,8 +23,20 @@ import {
   type Tier,
   type Transform
 } from '../lib/map-renderer'
+import {
+  createRecoveryController,
+  MAX_RECOVERY_ATTEMPTS,
+  type RecoveryController,
+  type RecoveryState
+} from '../lib/map-context-recovery'
 import { getUnservedStation } from '../lib/unserved-stations'
 import { AuthorOverlay, handleAuthorTap } from '../components/map-author'
+import {
+  MapGlDebugPanel,
+  useMapGlDebugApi,
+  type MapGlDebugApi
+} from '../components/map-gl-debug'
+import { isMapGlDebugEnabled } from '../hooks/secret-features'
 import StationSheet from '../components/station-sheet'
 import HubSheet from '../components/hub-sheet'
 import { PEEK_FRACTION } from '../components/bottom-sheet'
@@ -57,6 +69,11 @@ const SPOTLIGHT_NEUTRAL_COLOR: [number, number, number] = [0.39, 0.45, 0.55]
 const DOUBLE_TAP_MS = 300
 const DOUBLE_TAP_RADIUS_CSS_PX = 30
 
+// How long the app has to stay backgrounded before its tile textures are freed.
+// Long enough that switching away and straight back is free, short enough to be
+// well inside the window where a phone might start reclaiming memory.
+const HIDDEN_RELEASE_DELAY_MS = 3000
+
 export function meta() {
   const title = 'Peta Integrasi - Commute'
   const description = 'Cek peta integrasi KRL, MRT, LRT, dan Transjakarta se-Jabodetabek, kagak pake ribet.'
@@ -76,6 +93,24 @@ export function meta() {
 
 const MAX_SCALE = 1.5
 const WHEEL_ZOOM_INTENSITY = 0.0015
+
+// Ceiling on the tile resolution we're willing to hold in memory.
+//
+// Tier 2 is a 4757x3363 raster per tile — 61 MB as RGBA, ~81 MB once mipmapped —
+// so the visible working set alone runs to a few hundred MB on a phone. Tier 4
+// would be four times that again, and isn't pre-rasterized either (it falls
+// through to the SVG path), so it stays desktop-only.
+//
+// The 2D fallback is capped hardest: it keeps tiles as ImageBitmaps rather than
+// GPU textures, and it's what a device that has already failed to give us WebGL
+// gets, so it can least afford the pixels.
+function pickMaxTier(rendererKind: Renderer['kind'], viewportW: number): Tier {
+  if (rendererKind === 'canvas2d') return 1
+  const isSmallViewport = viewportW < 768
+  const isLowCoreDevice = (navigator.hardwareConcurrency ?? 8) <= 4
+  if (isSmallViewport || isLowCoreDevice) return 2
+  return 4
+}
 
 function clampTransform(
   t: Transform,
@@ -380,37 +415,212 @@ export default function MapPage() {
     if (anchor || pointsManifest) didCenterRef.current = true
   }, [viewportSize.w, viewportSize.h, mapW, mapH, pointsManifest])
 
-  // Initialize renderer once the manifest is loaded.
+  // --- WebGL context-loss recovery ----------------------------------------
+  //
+  // Bumping the epoch remounts the <canvas> (it's keyed on this) and re-runs the
+  // renderer effect, so recovery goes through the same construction path every
+  // page load already exercises, rather than a second "rebuild GL objects in
+  // place" path that would rot the moment someone adds a new GL object.
+  // Everything that defines what the user is looking at — pan/zoom, selection,
+  // centering — lives in refs or on the wrapper div, so it survives untouched.
+  const [contextEpoch, setContextEpoch] = useState(0)
+  const [recoveryState, setRecoveryState] = useState<RecoveryState>('idle')
+  const recoveryRef = useRef<RecoveryController | null>(null)
+  if (!recoveryRef.current) {
+    recoveryRef.current = createRecoveryController({
+      rebuild: () => setContextEpoch(epoch => epoch + 1),
+      isPageVisible: () => document.visibilityState === 'visible',
+      onStateChange: setRecoveryState
+    })
+  }
+  const recovery = recoveryRef.current
+  // Symmetric on purpose. React may disconnect this subtree's passive effects
+  // and reconnect them later without unmounting the component, so a
+  // teardown-only effect would leave the controller permanently inert.
   useEffect(() => {
-    if (!manifest || !canvasRef.current) return
-    const renderer = createRenderer(
-      canvasRef.current,
-      manifest,
-      '/maps/fdtj/',
-      () => { dirtyRef.current = true }
-    )
+    recovery.activate()
+    return () => recovery.deactivate()
+  }, [recovery])
+
+  // Backstop detector. The loss happens while the app is backgrounded, and the
+  // webglcontextlost event is not guaranteed to have been delivered by the time
+  // we're looking at the page again — so on every return to the foreground,
+  // check the context directly. The controller collapses this and the event into
+  // a single recovery whichever order they arrive in.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return
+      if (rendererRef.current?.isContextLost()) recovery.notifyLost()
+      recovery.notifyVisible()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange)
+  }, [recovery])
+
+  // Hand the tile textures back while the app is in the background.
+  //
+  // The visible tile set is 160-330 MB of GPU memory on a phone (a tier-2 tile
+  // is a 4757x3363 raster — 61 MB, ~81 MB mipmapped). A backgrounded PWA sitting
+  // on that is exactly what Android's low-memory killer goes looking for, which
+  // is what takes the GL context away in the first place. Programs, buffers and
+  // the context itself are kilobytes and stay put, so coming back is a redraw
+  // rather than a rebuild; only the tiles go, and the preview underlay covers
+  // the refill.
+  //
+  // Nothing pauses the render loop, because nothing needs to: browsers don't
+  // fire requestAnimationFrame for a hidden page, so no frame runs to re-request
+  // what was just freed. (Force this path while the page is *visible* — as the
+  // debug hatch does — and the very next frame refills it, which is correct
+  // behaviour, just not a saving.)
+  const releaseTilesRef = useRef<() => void>(() => {})
+  useEffect(() => {
+    let timer: number | null = null
+    const cancel = () => {
+      if (timer === null) return
+      window.clearTimeout(timer)
+      timer = null
+    }
+    const release = () => {
+      cancel()
+      rendererRef.current?.releaseTiles()
+    }
+    releaseTilesRef.current = release
+
+    const onHidden = () => {
+      cancel()
+      // Grace period: glancing at a notification and coming straight back
+      // shouldn't cost a refetch of everything on screen.
+      timer = window.setTimeout(release, HIDDEN_RELEASE_DELAY_MS)
+    }
+    const onVisible = () => {
+      cancel()
+      // The frame clock and any in-flight fling are stale after a gap.
+      lastFrameTimeRef.current = 0
+      inertiaRef.current = null
+      const renderer = rendererRef.current
+      if (renderer && viewportSize.w && viewportSize.h) {
+        renderer.resize(viewportSize.w, viewportSize.h, window.devicePixelRatio || 1)
+      }
+      dirtyRef.current = true
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') onHidden()
+      else onVisible()
+    }
+
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    // Backstops for the delay above: a frozen page runs no timers, and a page
+    // being torn down never gets to run one either.
+    document.addEventListener('freeze', release)
+    window.addEventListener('pagehide', release)
+    return () => {
+      cancel()
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      document.removeEventListener('freeze', release)
+      window.removeEventListener('pagehide', release)
+    }
+  }, [viewportSize.w, viewportSize.h])
+
+  // Read after mount: localStorage isn't available while this tree is being
+  // prerendered, and "off" is the correct first paint either way.
+  const [glDebugEnabled, setGlDebugEnabled] = useState(false)
+  useEffect(() => setGlDebugEnabled(isMapGlDebugEnabled()), [])
+
+  const glDebugApi = useMemo<MapGlDebugApi>(() => ({
+    lose: () => rendererRef.current?.debug?.loseContext(),
+    restore: () => rendererRef.current?.debug?.restoreContext(),
+    isLost: () => rendererRef.current?.isContextLost() ?? false,
+    releaseTiles: () => releaseTilesRef.current(),
+    stats: () => {
+      const renderer = rendererRef.current
+      const { count, bytes } = renderer?.tileStats() ?? { count: 0, bytes: 0 }
+      return {
+        kind: renderer?.kind ?? null,
+        count,
+        bytes,
+        megabytes: bytes / (1024 * 1024),
+        epoch: contextEpoch,
+        // Read off the controller, not the React mirror: if the two ever
+        // disagree it's the mirror that's wrong, and that's worth being able
+        // to see.
+        recovery: recovery.state(),
+        attempts: recovery.attempts(),
+        contextLost: renderer?.isContextLost() ?? false
+      }
+    }
+  }), [contextEpoch, recovery])
+  useMapGlDebugApi(glDebugEnabled, glDebugApi)
+
+  // Initialize renderer once the manifest is loaded. Re-runs on contextEpoch to
+  // build against the canvas that a context-loss recovery just remounted.
+  useEffect(() => {
+    // Captured once: on an epoch bump React has already swapped canvasRef to the
+    // new element by the time this effect's cleanup runs, so the cleanup has to
+    // close over the canvas it actually built on.
+    const canvas = canvasRef.current
+    if (!manifest || !canvas) return
+
+    // A device that just lost its GL context must not quietly land on the 2D
+    // renderer — it keeps the same tiles as ImageBitmaps, trading a GPU-memory
+    // problem for a CPU-memory one. Allow it on the first attempt, where it's
+    // the legitimate no-WebGL2 fallback, and again on the last attempt, where a
+    // soft map beats no map.
+    const isFirstAttempt = contextEpoch === 0
+    const isLastAttempt = recovery.attempts() >= MAX_RECOVERY_ATTEMPTS - 1
+    let renderer: Renderer
+    try {
+      renderer = createRenderer(
+        canvas,
+        manifest,
+        '/maps/fdtj/',
+        () => { dirtyRef.current = true },
+        { allowCanvas2DFallback: isFirstAttempt || isLastAttempt }
+      )
+    } catch (err) {
+      console.warn('[map] renderer creation failed', err)
+      recovery.notifyAttemptFailed()
+      return
+    }
     rendererRef.current = renderer
+    recovery.notifyAttemptSucceeded()
+
+    // preventDefault() is what tells the browser this page wants a context back;
+    // without it the loss is final, which is why the map used to stay dead. We
+    // rebuild on a fresh canvas rather than wait for webglcontextrestored, which
+    // the browser withholds while the page is hidden or the GPU is still down.
+    const onContextLost = (ev: Event) => {
+      ev.preventDefault()
+      console.warn('[map] WebGL context lost; scheduling recovery')
+      recovery.notifyLost()
+    }
+    canvas.addEventListener('webglcontextlost', onContextLost)
+
     const dpr = window.devicePixelRatio || 1
-    const rect = canvasRef.current.getBoundingClientRect()
+    const rect = canvas.getBoundingClientRect()
     if (rect.width && rect.height) {
       renderer.resize(rect.width, rect.height, dpr)
     }
     dirtyRef.current = true
     return () => {
+      // Detach before disposing: dispose() releases the context on a detached
+      // canvas, which fires webglcontextlost and would otherwise read as a real
+      // loss on every route away.
+      canvas.removeEventListener('webglcontextlost', onContextLost)
       renderer.dispose()
       rendererRef.current = null
     }
-  }, [manifest])
+  }, [manifest, contextEpoch, recovery])
 
-  // Push points + debug flag to the renderer. Depends on manifest so it re-fires
-  // when the renderer is (re-)created after manifest load — covers the case
-  // where points load before the renderer exists.
+  // Push points + debug flag to the renderer. Depends on manifest and
+  // contextEpoch so it re-fires whenever the renderer is (re-)created — covers
+  // both points loading before the renderer exists and a recovered renderer,
+  // which would otherwise come back with no points at all.
   useEffect(() => {
     if (!rendererRef.current) return
     rendererRef.current.setPoints(workingPoints)
     // In author mode, always show hitboxes so the placed pills are visible.
     rendererRef.current.setDebugHitboxes(debugHitboxes || authorMode)
-  }, [workingPoints, debugHitboxes, authorMode, manifest])
+  }, [workingPoints, debugHitboxes, authorMode, manifest, contextEpoch])
 
   // Resize the renderer's backing store when the viewport changes.
   useEffect(() => {
@@ -449,6 +659,16 @@ export default function MapPage() {
       if (stopped) return
       const renderer = rendererRef.current
       if (!renderer || !viewportSize.w || !viewportSize.h) {
+        rafRef.current = requestAnimationFrame(tick)
+        return
+      }
+      // Catches a loss that happened with the page in the foreground, which the
+      // visibilitychange backstop would never see. Also stops the loop from
+      // spinning against a dead context: every GL call would no-op while draw()
+      // kept re-requesting tiles, refetching and re-decoding 61 MB rasters for
+      // a map nobody can see.
+      if (renderer.isContextLost()) {
+        recovery.notifyLost()
         rafRef.current = requestAnimationFrame(tick)
         return
       }
@@ -557,12 +777,7 @@ export default function MapPage() {
       if (dirtyRef.current) {
         const dpr = window.devicePixelRatio || 1
         const r = renderedRef.current
-        // Cap max tier on small viewports and low-core devices so mobile
-        // never asks for the 1024x1024-per-tile tier 4 (4 MB raster each).
-        // Tier 2 is plenty sharp at phone pixel densities.
-        const isSmall = viewportSize.w < 768
-        const lowCore = (navigator.hardwareConcurrency ?? 8) <= 4
-        const maxTier: Tier = (isSmall || lowCore) ? 2 : 4
+        const maxTier = pickMaxTier(renderer.kind, viewportSize.w)
         const targetTier = pickTier(r.scale, dpr, currentTierRef.current, maxTier)
         currentTierRef.current = targetTier
         renderer.draw(r, viewportSize.w, viewportSize.h, dpr, targetTier, overlay)
@@ -584,7 +799,7 @@ export default function MapPage() {
       stopped = true
       cancelAnimationFrame(rafRef.current)
     }
-  }, [viewportSize.w, viewportSize.h, mapW, mapH, minScale, authorMode])
+  }, [viewportSize.w, viewportSize.h, mapW, mapH, minScale, authorMode, recovery])
 
   const updateTransform = (next: Transform) => {
     targetRef.current = clampTransform(next, viewportSize.w, viewportSize.h, mapW, mapH, minScale)
@@ -937,7 +1152,10 @@ export default function MapPage() {
         role="img"
         aria-label="Peta integrasi transportasi umum Jakarta"
       >
-        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+        {/* Keyed on contextEpoch: recovery from a lost GL context throws the
+            dead canvas away and builds on a fresh one, since a canvas hands the
+            same (lost) context back from getContext() forever. */}
+        <canvas key={contextEpoch} ref={canvasRef} className="absolute inset-0 w-full h-full" />
         {ripples.map(r => (
           <span
             key={r.id}
@@ -948,6 +1166,36 @@ export default function MapPage() {
           />
         ))}
       </div>
+
+      {glDebugEnabled && <MapGlDebugPanel api={glDebugApi} />}
+
+      {/* Out of recovery attempts. The canvas underneath is showing the
+          browser's broken-canvas glyph, so cover it rather than leave the user
+          staring at a sad face with no way forward. */}
+      {recoveryState === 'fatal' && (
+        <div
+          role="alert"
+          className="absolute inset-0 z-30 bg-white flex flex-col items-center justify-center p-4"
+        >
+          <p className="text-center text-lg">Peta terputus.</p>
+          <p className="mt-1 text-center text-sm text-slate-500">
+            Perangkat kehabisan memori grafis. Tutup aplikasi lain, lalu coba lagi.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              recovery.reset()
+              recovery.notifyLost()
+            }}
+            className="mt-6 px-4 py-2 rounded-lg bg-rose-100 text-pink-800 font-semibold cursor-pointer"
+          >
+            Muat ulang peta
+          </button>
+          <Link to="/" className="mt-3 px-4 py-2 text-sm text-slate-500">
+            Kembali ke Beranda
+          </Link>
+        </div>
+      )}
 
       <div
         className={`absolute inset-x-0 top-0 z-10 bg-white/50 backdrop-blur border-b-2 border-b-gray-50/20 transition-opacity duration-200 ${chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}

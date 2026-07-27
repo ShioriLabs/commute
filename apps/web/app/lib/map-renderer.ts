@@ -92,6 +92,19 @@ export function ringOffsetWorld(ringProgress: number): number {
   return RING_MAX_OFFSET_WORLD + (RING_REST_OFFSET_WORLD - RING_MAX_OFFSET_WORLD) * ringProgress
 }
 
+export interface TileStats {
+  count: number
+  bytes: number
+}
+
+// Escape hatch for forcing context loss on demand. Only the WebGL renderer has
+// one, and only when the browser exposes WEBGL_lose_context — context loss
+// otherwise takes half an hour of real memory pressure to reproduce.
+export interface RendererDebug {
+  loseContext(): void
+  restoreContext(): void
+}
+
 export interface Renderer {
   kind: 'webgl2' | 'canvas2d'
   draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null): void
@@ -99,6 +112,15 @@ export interface Renderer {
   requestTier(r: number, c: number, tier: Tier): void
   setPoints(points: Point[]): void
   setDebugHitboxes(enabled: boolean): void
+  // True once the GPU has taken the drawing context away. Every GL call after
+  // that point is a silent no-op, so callers must stop drawing and rebuild the
+  // renderer rather than carry on against a dead context.
+  isContextLost(): boolean
+  // Drop every tile's pixels while keeping the renderer usable. Tiles re-request
+  // themselves on the next draw and the preview underlay covers the gap.
+  releaseTiles(): void
+  tileStats(): TileStats
+  debug?: RendererDebug
   dispose(): void
 }
 
@@ -185,15 +207,24 @@ export function hitTest(
   return null
 }
 
+export interface CreateRendererOptions {
+  // Context-loss recovery passes false. A device that just had its GPU context
+  // taken away must not be handed the 2D renderer, which keeps the same tiles
+  // as ImageBitmaps and would trade a GPU-memory problem for a CPU-memory one.
+  allowCanvas2DFallback?: boolean
+}
+
 export function createRenderer(
   canvas: HTMLCanvasElement,
   manifest: Manifest,
   baseUrl: string,
-  onDirty: () => void
+  onDirty: () => void,
+  opts: CreateRendererOptions = {}
 ): Renderer {
   try {
     return createWebGLRenderer(canvas, manifest, baseUrl, onDirty)
   } catch (e) {
+    if (opts.allowCanvas2DFallback === false) throw e
     console.warn('WebGL2 unavailable, falling back to 2D canvas', e)
     return createCanvas2DRenderer(canvas, manifest, baseUrl, onDirty)
   }
