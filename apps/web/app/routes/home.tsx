@@ -14,6 +14,8 @@ import MapButton from '~/components/nav-buttons/map'
 import { useNetworkStatus } from '~/hooks/network'
 import { useInstall } from '~/contexts/installable'
 import { useMapUnlock } from '~/hooks/secret-features'
+import { CARD_STAGGER, NAV_STAGGER, staggerDelay } from 'utils/stagger'
+import clsx from 'clsx'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -31,7 +33,7 @@ export function meta() {
 
 function EmptyState({ mode = 'NO_SAVED' }: { mode: 'NO_SAVED' | 'OFFLINE' }) {
   return (
-    <div className="w-screen h-screen flex items-center justify-center flex-col p-2" aria-live="polite">
+    <div className="home-enter w-screen h-screen flex items-center justify-center flex-col p-2" aria-live="polite">
       <picture>
         <source srcSet="/img/station.webp" type="image/webp" />
         <img src="/img/station.png" alt="Gambar peron stasiun dengan jembatan di atasnya" className="w-48 h-48 aspect-square object-contain" fetchPriority="high" />
@@ -61,27 +63,35 @@ function EmptyState({ mode = 'NO_SAVED' }: { mode: 'NO_SAVED' | 'OFFLINE' }) {
   )
 }
 
-function StationCard({ stationId }: { stationId: string }) {
+// The entrance lives on the outer <li>, above the loading fork on purpose: the
+// skeleton and the loaded card are different subtrees, so animating whichever
+// one happens to render would fire on the skeleton — and SWR's cache resolves a
+// warm revisit synchronously, meaning it would animate on some visits and not
+// others. Mounting one <li> for the card's whole life makes the entrance fire
+// exactly once, whatever is inside it.
+function StationCard({ stationId, index = 0 }: { stationId: string, index?: number }) {
   const [operator, code] = stationId.split(/-/g)
   const station = useSWR<StandardResponse<Station>>(new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
   const timetable = useSWR<StandardResponse<CompactLineGroupedTimetable>>(new URL(`/stations/${operator}/${code}/timetable/grouped?compact=1`, import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
   const timetableData = useMemo(() => normalizeGroupedTimetable(timetable.data?.data), [timetable.data])
   const networkStatus = useNetworkStatus()
 
-  if (station.isLoading) {
-    return (
-      <li className="animate-pulse px-4">
-        <article>
+  // Every branch below is wrapped by the single <li> at the end of this
+  // component. Horizontal padding stays on the branches, not the wrapper: the
+  // loaded card's children already inset themselves with `mx-4`, so hoisting a
+  // `px-4` would double the gutter on that branch only.
+  const content = (() => {
+    if (station.isLoading) {
+      return (
+        <article className="animate-pulse px-4">
           <div className="h-6 w-64 mt-4 mx-4 bg-slate-200 rounded" />
           <div className="mt-4 w-full h-[320px] bg-slate-200 rounded-xl" />
         </article>
-      </li>
-    )
-  }
+      )
+    }
 
-  if (station.data?.data) {
-    return (
-      <li>
+    if (station.data?.data) {
+      return (
         <article>
           <h1 className="font-bold text-xl flex px-4 py-4 sticky top-0 bg-rose-50/20 backdrop-blur-2xl z-10 lg:relative lg:backdrop-blur-none lg:bg-transparent">
             <Link to={`/stations/${station.data.data.operator.code}/${station.data.data.code}`} className="group flex-grow">
@@ -117,30 +127,36 @@ function StationCard({ stationId }: { stationId: string }) {
                   </div>
                 )}
         </article>
-      </li>
-    )
-  }
+      )
+    }
 
-  // The station itself failed to load (offline or fetch error). Render a
-  // compact, retry-able card — NOT the full-screen "no saved stations" empty
-  // state, which is the wrong message here (this IS a saved station) and would
-  // break the list layout.
+    // The station itself failed to load (offline or fetch error). Render a
+    // compact, retry-able card — NOT the full-screen "no saved stations" empty
+    // state, which is the wrong message here (this IS a saved station) and would
+    // break the list layout.
+    return (
+      <div className="px-4">
+        <article className="mx-4 mt-4 p-4 bg-rose-50 rounded-xl flex flex-col gap-3 items-start">
+          <span className="font-semibold text-slate-700">
+            {networkStatus === 'OFFLINE'
+              ? 'Tidak dapat memuat stasiun ini saat offline'
+              : 'Gagal memuat stasiun ini'}
+          </span>
+          <button
+            type="button"
+            onClick={() => { void Promise.all([station.mutate(), timetable.mutate()]) }}
+            className="bg-[#F55875] text-white font-bold px-4 py-2 rounded-lg cursor-pointer"
+          >
+            Coba Lagi
+          </button>
+        </article>
+      </div>
+    )
+  })()
+
   return (
-    <li className="px-4">
-      <article className="mx-4 mt-4 p-4 bg-rose-50 rounded-xl flex flex-col gap-3 items-start">
-        <span className="font-semibold text-slate-700">
-          {networkStatus === 'OFFLINE'
-            ? 'Tidak dapat memuat stasiun ini saat offline'
-            : 'Gagal memuat stasiun ini'}
-        </span>
-        <button
-          type="button"
-          onClick={() => { void Promise.all([station.mutate(), timetable.mutate()]) }}
-          className="bg-[#F55875] text-white font-bold px-4 py-2 rounded-lg cursor-pointer"
-        >
-          Coba Lagi
-        </button>
-      </article>
+    <li className="home-enter" style={{ animationDelay: staggerDelay(index, CARD_STAGGER) }}>
+      { content }
     </li>
   )
 }
@@ -183,6 +199,15 @@ export default function HomePage() {
       setIsReady(true)
     }
   }, [])
+
+  // Built as a list so the rail's entrance stagger indexes cleanly whether or
+  // not the map card is unlocked — otherwise Setelan's delay would jump when
+  // the card in front of it disappears.
+  const navItems = [
+    { key: 'search', railClassName: 'ml-4 lg:ml-2', node: <SearchStationsButton /> },
+    ...(isMapUnlocked ? [{ key: 'map', railClassName: '', node: <MapButton /> }] : []),
+    { key: 'settings', railClassName: canInstall ? '' : 'mr-4 lg:mr-2', node: <SettingsButton /> }
+  ]
 
   const handleDismissInstallBannerButton = () => {
     localStorage.setItem('is-install-banner-dismissed', 'true')
@@ -244,8 +269,8 @@ export default function HomePage() {
               {stations.length > 0
                 ? (
                     <ul className="flex flex-col gap-5 pb-42 max-w-3xl mx-auto" aria-label="Daftar stasiun tersimpan">
-                      {stations.map(station => (
-                        <StationCard key={station} stationId={station} />
+                      {stations.map((station, index) => (
+                        <StationCard key={station} stationId={station} index={index} />
                       ))}
                     </ul>
                   )
@@ -267,9 +292,19 @@ export default function HomePage() {
             is why Peta and Setelan read as missing rather than off-screen.
             Fare is no longer here: the search sheet's route mode covers it. */}
         <div className="w-full max-w-3xl mx-auto flex gap-3 overflow-x-auto no-scrollbar [mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)] lg:[mask-image:none]">
-          <SearchStationsButton className="ml-4 lg:ml-2" />
-          {isMapUnlocked && <MapButton />}
-          <SettingsButton className={canInstall ? '' : 'mr-4 lg:mr-2'} />
+          {navItems.map((item, index) => (
+            <div
+              key={item.key}
+              // The entrance rides a wrapper, not the card: the button owns
+              // `transition-transform` for its hover scale and a headlessui
+              // Transition for its face, and a third writer on that element
+              // would fight both.
+              className={clsx('home-enter-nav shrink-0', item.railClassName)}
+              style={{ animationDelay: staggerDelay(index, NAV_STAGGER) }}
+            >
+              { item.node }
+            </div>
+          ))}
         </div>
       </nav>
     </main>

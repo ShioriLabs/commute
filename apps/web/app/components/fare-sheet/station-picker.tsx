@@ -5,6 +5,7 @@ import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react'
 import { CheckCircleIcon, MagnifyingGlassIcon, XIcon } from '@phosphor-icons/react'
 import { haptic } from 'utils/haptics'
 import { filterBestTier, keywordScore, SCORE_THRESHOLD } from 'utils/fuzzy-match'
+import { LIST_STAGGER, LIST_STAGGER_MAX_INDEX, staggerDelay } from 'utils/stagger'
 import HighlightMatch from '~/components/highlight-match'
 import LineRoundel from '~/components/line-roundel'
 import { sortLinesForDisplay } from '~/utils/lines'
@@ -34,9 +35,6 @@ function getStationScore({ name, formattedName, code }: IndexedStation, query: s
 const RECENT_PICKS_KEY = 'fare-recent-stations'
 const RECENT_PICKS_MAX = 4
 
-// Cap the entrance stagger so long lists don't tail off forever.
-const STAGGER_MAX_INDEX = 12
-
 // Rows mounted right after the slide settles; comfortably past the fold.
 // The long tail mounts once the stagger has finished so its React commit
 // never steals frames from anything visible.
@@ -57,8 +55,8 @@ const StationRow = memo(function StationRow({ station, index, selected, query, o
     <li
       // Stagger only the above-the-fold rows; the rest mount plain and
       // skip offscreen paint entirely via content-visibility.
-      className={index <= STAGGER_MAX_INDEX ? 'search-result-enter' : '[content-visibility:auto] [contain-intrinsic-size:auto_76px]'}
-      style={index <= STAGGER_MAX_INDEX ? { animationDelay: `${index * 30}ms` } : undefined}
+      className={index <= LIST_STAGGER_MAX_INDEX ? 'search-result-enter' : '[content-visibility:auto] [contain-intrinsic-size:auto_76px]'}
+      style={index <= LIST_STAGGER_MAX_INDEX ? { animationDelay: staggerDelay(index, LIST_STAGGER) } : undefined}
     >
       <button
         type="button"

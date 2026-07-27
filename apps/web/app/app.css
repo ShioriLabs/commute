@@ -3,6 +3,13 @@
 @theme {
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+
+  /* iOS-style spring: overshoots slightly past the target before settling, so
+     entrances arrive with weight instead of decelerating politely into place.
+     Shared with the data platform (apps/data-platform/src/style.css) — keep the
+     two in sync. Declared here rather than as a plain custom property so
+     Tailwind also emits an `ease-ios-spring` utility for transitions. */
+  --ease-ios-spring: cubic-bezier(0.36, 0.66, 0.04, 1);
 }
 
 body {
@@ -70,5 +77,76 @@ body {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* Homepage entrance: station cards and the empty state rise in as the page
+   becomes ready (delay set inline, see utils/stagger.ts). Longer and taller
+   than .search-result-enter on purpose — these are 320px+ blocks, where 8px of
+   travel is invisible. */
+.home-enter {
+  opacity: 0;
+  animation: home-enter 300ms var(--ease-ios-spring) forwards;
+}
+
+@keyframes home-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Nav rail cards, staggered in after the station feed (delay set inline).
+   Applied to a wrapper around each card, never to the card itself: the button
+   carries `scale-100 lg:hover:scale-105 transition-transform` and its face runs
+   a headlessui Transition on open/close (nav-buttons/sheet-button.tsx), so a
+   second animation writing transform to that element would fight both. */
+.home-enter-nav {
+  opacity: 0;
+  animation: home-enter-nav 300ms var(--ease-ios-spring) forwards;
+}
+
+@keyframes home-enter-nav {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Every entrance class above starts at `opacity: 0` and relies on its animation
+   to reveal the element. So switching the animation off alone would leave the
+   content permanently invisible — each rule has to restore opacity and clear
+   the inline stagger delay it can no longer consume.
+   .map-ripple keeps its fade: it is tap *feedback*, and reduced motion means
+   fewer vestibular triggers, not less confirmation that a tap registered. */
+@media (prefers-reduced-motion: reduce) {
+  .search-result-enter,
+  .home-enter,
+  .home-enter-nav {
+    animation: none;
+    animation-delay: 0s;
+    opacity: 1;
+    transform: none;
+  }
+
+  .map-ripple {
+    animation: map-ripple-reduced 200ms ease-out forwards;
+  }
+
+  @keyframes map-ripple-reduced {
+    from {
+      opacity: 0.7;
+    }
+    to {
+      opacity: 0;
+    }
   }
 }
