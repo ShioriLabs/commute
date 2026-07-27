@@ -10,7 +10,6 @@ import SearchStationsButton from '~/components/nav-buttons/search-stations'
 import { CaretRightIcon, DownloadSimpleIcon, InfoIcon, WarningIcon } from '@phosphor-icons/react'
 import { Link } from 'react-router'
 import SettingsButton from '~/components/nav-buttons/settings'
-import FareButton from '~/components/nav-buttons/fare'
 import MapButton from '~/components/nav-buttons/map'
 import { useNetworkStatus } from '~/hooks/network'
 import { useInstall } from '~/contexts/installable'
@@ -43,9 +42,9 @@ function EmptyState({ mode = 'NO_SAVED' }: { mode: 'NO_SAVED' | 'OFFLINE' }) {
           <p className="text-center mt-2">
             Klik tombol
             {' '}
-            <b>Cari Stasiun</b>
+            <b>Mau ke mana?</b>
             {' '}
-            di bawah untuk mulai cari jadwal & simpan stasiun!
+            di bawah untuk cari jadwal, cek tarif & simpan stasiun!
           </p>
         </>
       )}
@@ -84,11 +83,11 @@ function StationCard({ stationId }: { stationId: string }) {
     return (
       <li>
         <article>
-          <h1 className="font-semibold text-sm uppercase tracking-wide text-slate-500 flex px-4 py-3 sticky top-0 bg-rose-50/20 backdrop-blur-2xl z-10 lg:relative lg:backdrop-blur-none lg:bg-transparent">
+          <h1 className="font-bold text-xl flex px-4 py-4 sticky top-0 bg-rose-50/20 backdrop-blur-2xl z-10 lg:relative lg:backdrop-blur-none lg:bg-transparent">
             <Link to={`/stations/${station.data.data.operator.code}/${station.data.data.code}`} className="group flex-grow">
               Stasiun&nbsp;
               { station.data.data.formattedName }
-              <CaretRightIcon weight="bold" className="inline w-3.5 h-3.5 group-hover:ml-3 ml-2 transition-[margin] duration-200 -mt-0.5" />
+              <CaretRightIcon weight="bold" className="inline w-4 h-4 group-hover:ml-3 ml-2 transition-[margin] duration-200 mb-1" />
             </Link>
           </h1>
           { timetable.isLoading
@@ -261,9 +260,14 @@ export default function HomePage() {
             </div>
           )}
       <nav className="fixed bottom-0 py-4 bg-gradient-to-t from-50% from-[#FFF8F8] to-transparent w-screen z-20" aria-label="Navigasi utama">
-        <div className="w-full max-w-3xl mx-auto flex gap-3 overflow-x-auto no-scrollbar">
+        {/* Three cards can't fit a phone (510px against ~380px usable at 412px
+            wide), so the rail scrolls by design. The accent primary card is
+            always the first thing in view, and the right-edge fade signals
+            there's more — the previous `no-scrollbar` hid that entirely, which
+            is why Peta and Setelan read as missing rather than off-screen.
+            Fare is no longer here: the search sheet's route mode covers it. */}
+        <div className="w-full max-w-3xl mx-auto flex gap-3 overflow-x-auto no-scrollbar [mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)] lg:[mask-image:none]">
           <SearchStationsButton className="ml-4 lg:ml-2" />
-          <FareButton />
           {isMapUnlocked && <MapButton />}
           <SettingsButton className={canInstall ? '' : 'mr-4 lg:mr-2'} />
         </div>

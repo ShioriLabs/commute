@@ -1,4 +1,5 @@
 import { Dialog, DialogBackdrop, DialogPanel, Transition, TransitionChild } from '@headlessui/react'
+import clsx from 'clsx'
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 
 interface Props {
@@ -11,6 +12,11 @@ interface Props {
   subtitle: ReactNode
   icon: ReactNode
   className?: string
+  // Fills the card face with the app accent instead of white. The rail holds
+  // more cards than fit on a phone, so the one action most people came for has
+  // to be visibly the primary one rather than the first of several identical
+  // white cards.
+  accent?: boolean
   // Sheet content, rendered inside the fullscreen DialogPanel. Use headlessui
   // CloseButton/DialogTitle inside it; closing goes through this Dialog.
   children: ReactNode
@@ -25,7 +31,7 @@ interface Props {
 // (250ms panel transform + margin; the white overlay runs 300ms).
 const LEAVE_DURATION_MS = 350
 
-export default function SheetButton({ url, ariaLabel, title, subtitle, icon, className, children }: Props) {
+export default function SheetButton({ url, ariaLabel, title, subtitle, icon, className, accent = false, children }: Props) {
   const [isOpen, setIsOpen] = useState(false)
   const [originalUrl, setOriginalUrl] = useState('')
   const [panelTransform, setPanelTransform] = useState('')
@@ -135,14 +141,22 @@ export default function SheetButton({ url, ariaLabel, title, subtitle, icon, cla
     <>
       <button
         type="button"
-        className={`bg-white p-4 rounded-xl shadow-2xs w-screen h-screen max-w-42 max-h-32 border-2 border-rose-50 flex flex-col relative overflow-clip select-none text-left cursor-pointer scale-100 lg:hover:scale-105 transition-transform transform-gpu ease-in-out shrink-0 ${className ? className : ''}`}
+        className={clsx(
+          'p-4 rounded-xl shadow-2xs w-screen h-screen max-w-42 max-h-32 border-2 flex flex-col relative overflow-clip select-none text-left cursor-pointer scale-100 lg:hover:scale-105 transition-transform transform-gpu ease-in-out shrink-0',
+          accent ? 'bg-[#F55875] text-white border-[#F55875]' : 'bg-white border-rose-50',
+          className
+        )}
         aria-label={ariaLabel}
         onClick={handleOpen}
         ref={buttonRef}
       >
         <Transition show={!isOpen}>
           <TransitionChild>
-            <div className="absolute -bottom-5 -right-5 rounded-full bg-slate-100 p-4 z-[1] ease-in-out translate-y-0 data-closed:translate-y-full transition-transform data-enter:delay-200 transform-gpu duration-200">
+            <div className={clsx(
+              'absolute -bottom-5 -right-5 rounded-full p-4 z-[1] ease-in-out translate-y-0 data-closed:translate-y-full transition-transform data-enter:delay-200 transform-gpu duration-200',
+              accent ? 'bg-white/20' : 'bg-slate-100'
+            )}
+            >
               <TransitionChild>
                 <div className="translate-y-0 data-closed:translate-y-4 ease-in-out data-enter:delay-200 transform-gpu">
                   {icon}
