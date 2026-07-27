@@ -286,7 +286,56 @@ export const PLATFORM_CODES: Record<string, string> = {
   'KCI-UP:B:LNA': '2', // Universitas Pancasila — REVERSED: jalur 2 to Jakarta Kota
   'KCI-UP:B:UI': '1',
   'KCI-CKI:B:GDD': '1', // Cikini — jalur 1 to Jakarta Kota
-  'KCI-CKI:B:MRI': '2'
+  'KCI-CKI:B:MRI': '2',
+
+  // Lin Bogor, city centre (Manggarai -> Jakarta Kota). Consistent along this
+  // stretch: jalur 1 to Jakarta Kota, jalur 2 to Bogor/Nambo.
+  'KCI-GDD:B:JUA': '1', // Gondangdia
+  'KCI-GDD:B:CKI': '2',
+  'KCI-JUA:B:SW': '1', // Juanda
+  'KCI-JUA:B:GDD': '2',
+  'KCI-SW:B:MGB': '1', // Sawah Besar
+  'KCI-SW:B:JUA': '2',
+  'KCI-MGB:B:JAY': '1', // Mangga Besar
+  'KCI-MGB:B:SW': '2',
+  'KCI-JAY:B:JAKK': '1', // Jayakarta
+  'KCI-JAY:B:MGB': '2',
+
+  // Lin Bogor, Depok stretch. Universitas Indonesia is REVERSED relative to
+  // Pondok Cina next door — jalur 1 southbound rather than northbound.
+  'KCI-UI:B:POC': '1', // Universitas Indonesia — jalur 1 to Depok/Bogor
+  'KCI-UI:B:UP': '2',
+  'KCI-POC:B:UI': '1', // Pondok Cina — jalur 1 to Jakarta Kota
+  'KCI-POC:B:DPB': '2',
+
+  // Lin Bogor, south of Depok. Bojonggede and Cilebut are REVERSED — jalur 2
+  // northbound, jalur 1 to Bogor.
+  'KCI-CTA:B:DP': '1', // Citayam — jalur 1 to Jakarta Kota. The Bogor and Nambo
+  // groups both leave on jalur 2 and the source does not separate them, so only
+  // the northbound direction is recorded here.
+  'KCI-BJD:B:CTA': '2', // Bojonggede
+  'KCI-BJD:B:CLT': '1',
+  'KCI-CLT:B:BJD': '2', // Cilebut
+  'KCI-CLT:B:BOO': '1',
+
+  // Lin Tangerang. Consistent along the line: jalur 1 to Duri, jalur 2 to
+  // Tangerang. Rawa Buaya is omitted — its jalur 2 is bidirectional and shared
+  // with the Basoetta line, so it has no per-direction mapping.
+  'KCI-BOI:T:TKO': '1', // Bojong Indah
+  'KCI-BOI:T:RW': '2',
+  'KCI-KDS:T:RW': '1', // Kalideres
+  'KCI-KDS:T:PI': '2',
+  'KCI-PI:T:KDS': '1', // Poris
+  'KCI-PI:T:BPR': '2',
+  'KCI-TTI:T:BPR': '1', // Tanah Tinggi
+  'KCI-TTI:T:TNG': '2',
+
+  // Lin Cikarang, far east. Cibitung and Metland Telagamurni are OPPOSITE to
+  // each other despite being adjacent — read each from its own diagram.
+  'KCI-CIT:C:TLM': '1', // Cibitung — jalur 1 to Cikarang
+  'KCI-CIT:C:TB': '2',
+  'KCI-TLM:C:CIT': '1', // Metland Telagamurni — jalur 1 to Jakarta
+  'KCI-TLM:C:CKR': '2'
 
   /*
    * Deliberately omitted — do not fill these in without a field check:
@@ -308,6 +357,15 @@ export const PLATFORM_CODES: Record<string, string> = {
    *
    * Duri T:SYN:Manggarai — the Basoetta-shared jalur 3/4 distinction does not
    * map cleanly onto this group.
+   *
+   * Stations whose layout has no per-direction mapping (a platform serves both
+   * ways, so no badge can be correct): Depok Baru (jalur 2 both directions),
+   * Rawa Buaya (jalur 2 bidirectional and shared with Basoetta), Tambun
+   * (services spread over four tracks, jalur 1 both directions).
+   *
+   * Citayam B:BJD and B:PDRG — the Bogor and Nambo services both depart from
+   * jalur 2 and the source does not distinguish them. Only the northbound
+   * direction is recorded.
    */
 }
 
