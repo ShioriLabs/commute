@@ -121,6 +121,24 @@ body {
   }
 }
 
+/* Content replacing a loading skeleton. Opacity only, no transform: the
+   skeleton is sized to approximate what lands here, so any movement would
+   read as the content correcting itself rather than arriving. Short, because
+   this fires when data is already in hand — a long fade would feel like a
+   second wait. */
+.content-fade {
+  animation: content-fade 180ms ease-out forwards;
+}
+
+@keyframes content-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* Loading wordmark (root.tsx HydrateFallback). Letters rise in one at a time,
    then the assembled mark breathes until the bundle lands.
    Both animations run on separate elements — letters on the <path>s, the
@@ -182,6 +200,7 @@ body {
   .search-result-enter,
   .home-enter,
   .home-enter-nav,
+  .content-fade,
   .wordmark-letter {
     animation: none;
     animation-delay: 0s;

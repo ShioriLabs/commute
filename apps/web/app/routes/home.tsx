@@ -31,6 +31,12 @@ export function meta() {
   ]
 }
 
+// Ceiling on placeholder blocks while a timetable loads. Interchanges like
+// Manggarai serve enough lines that one block each would fill several screens,
+// and a skeleton taller than the content it stands in for shoves the page the
+// other way when it resolves.
+const MAX_SKELETON_LINES = 3
+
 function EmptyState({ mode = 'NO_SAVED' }: { mode: 'NO_SAVED' | 'OFFLINE' }) {
   return (
     <div className="home-enter w-screen h-screen flex items-center justify-center flex-col p-2" aria-live="polite">
@@ -82,17 +88,22 @@ function StationCard({ stationId, index = 0 }: { stationId: string, index?: numb
   // `px-4` would double the gutter on that branch only.
   const content = (() => {
     if (station.isLoading) {
+      // The fade and the pulse have to sit on separate elements: `animation` is
+      // a single property, so putting both classes on one node means the later
+      // rule wins and the skeleton silently stops pulsing.
       return (
-        <article className="animate-pulse px-4">
-          <div className="h-6 w-64 mt-4 mx-4 bg-slate-200 rounded" />
-          <div className="mt-4 w-full h-[320px] bg-slate-200 rounded-xl" />
+        <article className="content-fade px-4">
+          <div className="animate-pulse">
+            <div className="h-6 w-64 mt-4 mx-4 bg-slate-200 rounded" />
+            <div className="mt-4 w-full h-[320px] bg-slate-200 rounded-xl" />
+          </div>
         </article>
       )
     }
 
     if (station.data?.data) {
       return (
-        <article>
+        <article className="content-fade">
           <h1 className="font-bold text-xl flex px-4 py-4 sticky top-0 bg-rose-50/20 backdrop-blur-2xl z-10 lg:relative lg:backdrop-blur-none lg:bg-transparent">
             <Link to={`/stations/${station.data.data.operator.code}/${station.data.data.code}`} className="group flex-grow">
               Stasiun&nbsp;
@@ -102,11 +113,31 @@ function StationCard({ stationId, index = 0 }: { stationId: string, index?: numb
           </h1>
           { timetable.isLoading
             ? (
-                <div className="flex h-[320px] bg-slate-200 rounded-xl mx-4 animate-pulse" />
+                // One placeholder per line the station serves, rather than a
+                // single fixed block. /stations resolves before the timetable
+                // and carries `lines`, so the skeleton can be roughly the shape
+                // of what replaces it — a flat 320px was ~536px short on
+                // Manggarai, and that gap is what made the swap feel like a
+                // shove rather than a load.
+                //
+                // It stays an estimate: a line with no departures is dropped
+                // from the timetable, and real cards run 203-638px depending on
+                // direction groups. Close beats exact here — the crossfade
+                // absorbs what's left.
+                <div className="content-fade">
+                  <div className="flex flex-col lg:grid lg:grid-cols-2 gap-4 mx-4 animate-pulse">
+                    {station.data.data.lines.slice(0, MAX_SKELETON_LINES).map(line => (
+                      <div key={line.lineCode} className="h-[280px] bg-slate-200 rounded-xl" />
+                    ))}
+                  </div>
+                </div>
               )
             : timetableData?.length
               ? (
-                  <ul className="flex flex-col lg:grid lg:grid-cols-2 gap-4 mx-4">
+                  // Fades in over the skeleton it replaces. The per-line
+                  // placeholders above get the height close, so this only has
+                  // to soften the remaining difference.
+                  <ul className="content-fade flex flex-col lg:grid lg:grid-cols-2 gap-4 mx-4">
                     {timetableData.map(line => (
                       <LineCard key={line.lineCode} line={line} />
                     ))}
