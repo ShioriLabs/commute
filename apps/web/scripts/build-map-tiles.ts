@@ -28,8 +28,22 @@ const REPO_ROOT = path.resolve(WEB_ROOT, '..', '..')
 const PDF_PATH = path.join(REPO_ROOT, '2026-06a-Peta-Integrasi-Jakarta-FDTJ-Web.pdf')
 const VERSION = '2026-06a'
 const OUT_DIR = path.join(WEB_ROOT, 'public', 'maps', 'fdtj')
-const GRID_ROWS = 4
-const GRID_COLS = 4
+// Grid granularity. This is the single biggest lever on GPU memory, though not
+// in the obvious way: total pixels are fixed by the map's size and the tier, so
+// a finer grid doesn't reduce them. What it reduces is the *working set* — how
+// much you must hold resident to fill one screen.
+//
+// At 4x4 a tier-2 tile is 4757x3363 (~42 MB with mipmaps) and covers a quarter
+// of the map, so a phone viewport clipping four tile corners pays for all four
+// in full: ~256 MB worst case, which is why the map could sit at ~600 MB after
+// panning and why it outgrew the renderer's eviction budget outright.
+//
+// At 8x8 a tier-2 tile is 2378x1682 (~10.7 MB) and the same worst-case viewport
+// costs ~85 MB — comfortably inside the budget in map-renderer-webgl.ts. Going
+// finer stops helping (12x12 is also ~85 MB) while multiplying request count and
+// per-file overhead, so 8 is the knee of the curve.
+const GRID_ROWS = 8
+const GRID_COLS = 8
 // Padding around each tile's bbox (in master SVG units) to avoid hairline gaps at seams.
 const TILE_PAD = 0.5
 // Raster output tiers (pixel ratio relative to the SVG's intrinsic tile size).
@@ -38,9 +52,15 @@ const TILE_PAD = 0.5
 // pickTier maxTier cap.
 const RASTER_TIERS = [1, 2] as const
 const RASTER_QUALITY = 80
-// Width of the low-res preview rendered as a first-paint placeholder. Keep
-// small so the file lands at ~30-80 KB.
-const PREVIEW_WIDTH = 768
+// Width of the preview rendered as a first-paint placeholder — and, below the
+// zoom threshold in map-renderer-webgl.ts, as the *only* thing drawn.
+//
+// 1280 is chosen against that second role: fit-to-screen on a 360px 3x-DPR
+// phone spans 1080 device px, so anything at or above that is pixel-lossless
+// there, and the whole zoomed-out range then costs one 4.6 MB texture instead
+// of the entire grid (~171 MB). Going below 1080 trades that for visible
+// softness; going far above only inflates the download.
+const PREVIEW_WIDTH = 1280
 
 type BBox = { x: number, y: number, w: number, h: number }
 type LeafInfo = { selector: string, bbox: BBox }
