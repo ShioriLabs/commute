@@ -1,5 +1,11 @@
 import { Dialog, DialogBackdrop, DialogPanel, Transition, TransitionChild } from '@headlessui/react'
+import clsx from 'clsx'
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+
+// 'card' is the 168x128 nav-rail tile used on the list home. 'compact' is a
+// 44px-tall pill for the map home, where the sheet already owns the bottom of
+// the screen and a row of tiles would eat half the viewport.
+export type SheetButtonSize = 'card' | 'compact'
 
 interface Props {
   // URL swapped in with pushState while the sheet is open ('/search', '/fare', …)
@@ -10,6 +16,10 @@ interface Props {
   title: string
   subtitle: ReactNode
   icon: ReactNode
+  size?: SheetButtonSize
+  // Single short label for the compact pill, where `subtitle` doesn't render
+  // and `title` alone can be too terse ("Cek" → "Tarif"). Defaults to `title`.
+  compactLabel?: string
   className?: string
   // Sheet content, rendered inside the fullscreen DialogPanel. Use headlessui
   // CloseButton/DialogTitle inside it; closing goes through this Dialog.
@@ -25,7 +35,8 @@ interface Props {
 // (250ms panel transform + margin; the white overlay runs 300ms).
 const LEAVE_DURATION_MS = 350
 
-export default function SheetButton({ url, ariaLabel, title, subtitle, icon, className, children }: Props) {
+export default function SheetButton({ url, ariaLabel, title, subtitle, icon, size = 'card', compactLabel, className, children }: Props) {
+  const isCompact = size === 'compact'
   const [isOpen, setIsOpen] = useState(false)
   const [originalUrl, setOriginalUrl] = useState('')
   const [panelTransform, setPanelTransform] = useState('')
@@ -135,36 +146,20 @@ export default function SheetButton({ url, ariaLabel, title, subtitle, icon, cla
     <>
       <button
         type="button"
-        className={`bg-white p-4 rounded-xl shadow-2xs w-screen h-screen max-w-42 max-h-32 border-2 border-rose-50 flex flex-col relative overflow-clip select-none text-left cursor-pointer scale-100 lg:hover:scale-105 transition-transform transform-gpu ease-in-out shrink-0 ${className ? className : ''}`}
+        className={clsx(
+          'bg-white shadow-2xs border-rose-50 flex relative overflow-clip select-none text-left cursor-pointer scale-100 lg:hover:scale-105 transition-transform transform-gpu ease-in-out shrink-0',
+          isCompact
+            ? 'h-11 rounded-full px-4 border-2 flex-row items-center gap-2'
+            : 'p-4 rounded-xl w-screen h-screen max-w-42 max-h-32 border-2 flex-col',
+          className
+        )}
         aria-label={ariaLabel}
         onClick={handleOpen}
         ref={buttonRef}
       >
-        <Transition show={!isOpen}>
-          <TransitionChild>
-            <div className="absolute -bottom-5 -right-5 rounded-full bg-slate-100 p-4 z-[1] ease-in-out translate-y-0 data-closed:translate-y-full transition-transform data-enter:delay-200 transform-gpu duration-200">
-              <TransitionChild>
-                <div className="translate-y-0 data-closed:translate-y-4 ease-in-out data-enter:delay-200 transform-gpu">
-                  {icon}
-                </div>
-              </TransitionChild>
-            </div>
-          </TransitionChild>
-          <TransitionChild>
-            <b
-              className="z-[2] translate-y-0 data-closed:-translate-y-[200%] ease-in-out transition-transform data-enter:delay-150 transform-gpu duration-200"
-            >
-              {title}
-            </b>
-          </TransitionChild>
-          <TransitionChild>
-            <span
-              className="leading-tight z-[2] translate-y-0 data-closed:-translate-y-[250%] ease-in-out transition-transform data-enter:delay-150 transform-gpu duration-200"
-            >
-              {subtitle}
-            </span>
-          </TransitionChild>
-        </Transition>
+        {isCompact
+          ? <CompactFace show={!isOpen} icon={icon} label={compactLabel ?? title} />
+          : <CardFace show={!isOpen} icon={icon} title={title} subtitle={subtitle} />}
       </button>
       <Dialog open={isOpen} onClose={handleClose} className="relative z-50">
         <DialogBackdrop transition className="fixed inset-0 bg-white/90 duration-200 ease-out data-closed:opacity-0" />
@@ -182,5 +177,55 @@ export default function SheetButton({ url, ariaLabel, title, subtitle, icon, cla
         </div>
       </Dialog>
     </>
+  )
+}
+
+// Each face owns its own <Transition>. They can't share one and branch inside
+// it: headlessui forwards a ref into whatever the Transition renders, and a
+// React fragment has nowhere to put it ("Passing props on Fragment!").
+
+function CardFace({ show, icon, title, subtitle }: {
+  show: boolean
+  icon: ReactNode
+  title: string
+  subtitle: ReactNode
+}) {
+  return (
+    <Transition show={show}>
+      <TransitionChild>
+        <div className="absolute -bottom-5 -right-5 rounded-full bg-slate-100 p-4 z-[1] ease-in-out translate-y-0 data-closed:translate-y-full transition-transform data-enter:delay-200 transform-gpu duration-200">
+          <TransitionChild>
+            <div className="translate-y-0 data-closed:translate-y-4 ease-in-out data-enter:delay-200 transform-gpu">
+              {icon}
+            </div>
+          </TransitionChild>
+        </div>
+      </TransitionChild>
+      <TransitionChild>
+        <b
+          className="z-[2] translate-y-0 data-closed:-translate-y-[200%] ease-in-out transition-transform data-enter:delay-150 transform-gpu duration-200"
+        >
+          {title}
+        </b>
+      </TransitionChild>
+      <TransitionChild>
+        <span
+          className="leading-tight z-[2] translate-y-0 data-closed:-translate-y-[250%] ease-in-out transition-transform data-enter:delay-150 transform-gpu duration-200"
+        >
+          {subtitle}
+        </span>
+      </TransitionChild>
+    </Transition>
+  )
+}
+
+function CompactFace({ show, icon, label }: { show: boolean, icon: ReactNode, label: string }) {
+  return (
+    <Transition show={show}>
+      <span className="flex flex-row items-center gap-2 opacity-100 data-closed:opacity-0 transition-opacity duration-150">
+        {icon}
+        <b className="whitespace-nowrap">{label}</b>
+      </span>
+    </Transition>
   )
 }

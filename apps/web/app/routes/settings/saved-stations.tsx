@@ -4,6 +4,7 @@ import type { Station } from 'models/stations'
 import { useState, useEffect, useCallback } from 'react'
 import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
+import { readSavedStations, writeSavedStations } from 'utils/saved-stations'
 
 export function meta() {
   return [
@@ -80,36 +81,14 @@ export default function SavedStationsSettingsPage() {
   const [isDirty, setIsDirty] = useState(false)
 
   useEffect(() => {
-    const savedStationsRaw = localStorage.getItem('saved-stations')
-    if (!savedStationsRaw) {
-      localStorage.setItem('saved-stations', '[]')
-      setIsReady(true)
-      return
-    }
-
-    try {
-      const parsedSavedStations = JSON.parse(savedStationsRaw)
-      if (!(parsedSavedStations instanceof Array)) {
-        localStorage.setItem('saved-stations', '[]')
-        setIsReady(true)
-        return
-      }
-
-      setStations((parsedSavedStations as string[]).map(stat => ({ id: stat, isSaved: true })))
-      setIsReady(true)
-    } catch (e) {
-      if (e instanceof SyntaxError) {
-        localStorage.setItem('saved-stations', '[]')
-      }
-      setIsReady(true)
-    }
+    setStations(readSavedStations().map(id => ({ id, isSaved: true })))
+    setIsReady(true)
   }, [])
 
   useEffect(() => {
     return () => {
       if (isDirty) {
-        const committed = stations.filter(station => station.isSaved).map(station => station.id)
-        localStorage.setItem('saved-stations', JSON.stringify(committed))
+        writeSavedStations(stations.filter(station => station.isSaved).map(station => station.id))
       }
     }
   }, [isDirty, stations])

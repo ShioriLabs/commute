@@ -1,19 +1,22 @@
 import { GearSixIcon } from '@phosphor-icons/react'
-import SheetButton from './sheet-button'
+import SheetButton, { type SheetButtonSize } from './sheet-button'
 import SettingsSheet from '../settings-sheet'
 
 interface Props {
   className?: string
+  size?: SheetButtonSize
 }
 
-export default function SettingsButton({ className }: Props) {
+export default function SettingsButton({ className, size = 'card' }: Props) {
+  const iconSize = size === 'compact' ? 'w-5 h-5' : 'w-12 h-12'
   return (
     <SheetButton
       url="/settings"
       ariaLabel="Pengaturan aplikasi"
       title="Pengaturan"
       subtitle="Aplikasi"
-      icon={<GearSixIcon weight="fill" className="w-12 h-12 text-slate-700" />}
+      icon={<GearSixIcon weight="fill" className={`${iconSize} text-slate-700`} />}
+      size={size}
       className={className}
     >
       <SettingsSheet />

@@ -22,7 +22,7 @@ export default function StationSheet({ operator, code, onClose, onDismissStart }
       onDismissStart={onDismissStart}
       ariaLabel="Detail stasiun"
       header={close => (operator && code
-        ? <SheetHeader operator={operator} code={code} onClose={close} />
+        ? <StationSheetHeader operator={operator} code={code} onClose={close} />
         : null)}
     >
       {ready => (ready && operator && code
@@ -36,7 +36,9 @@ export default function StationSheet({ operator, code, onClose, onDismissStart }
   )
 }
 
-function SheetHeader({ operator, code, onClose }: { operator: string, code: string, onClose: () => void }) {
+// Exported so the map home's stacked sheet can render a station view inside its
+// own single BottomSheet instead of mounting a second one.
+export function StationSheetHeader({ operator, code, onClose }: { operator: string, code: string, onClose: () => void }) {
   const { header } = useStationHeader(operator, code)
   return (
     <div className="flex items-center justify-between gap-3">

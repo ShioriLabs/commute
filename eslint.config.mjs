@@ -10,10 +10,14 @@ export default defineConfig([
     files: ['apps/**/*.ts', 'apps/**/*.tsx']
   },
   {
-    // Build-time scripts run under Node. generateWordmark.mjs also evaluates
-    // code inside a headless browser (rasterizing via Path2D), so it
-    // legitimately references both sets of globals.
-    files: ['apps/data-platform/scripts/**/*.{js,mjs,ts}'],
+    // Build-time and verification scripts run under Node. Several also evaluate
+    // code inside a headless browser — generateWordmark.mjs rasterizes via
+    // Path2D, and apps/web's verify-* scripts drive the app through Playwright
+    // — so they legitimately reference both sets of globals.
+    files: [
+      'apps/data-platform/scripts/**/*.{js,mjs,ts}',
+      'apps/web/scripts/**/*.{js,mjs,ts}'
+    ],
     languageOptions: { globals: { ...globals.node, ...globals.browser } }
   },
   pluginJs.configs.recommended,

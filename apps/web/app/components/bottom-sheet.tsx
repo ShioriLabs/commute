@@ -31,6 +31,12 @@ interface BottomSheetProps {
   // it is never followed by a re-open without `open` cycling.
   onDismissStart?: () => void
   ariaLabel: string
+  // Lowest snap the sheet may reach. 'peek' makes the sheet permanent — a
+  // dismiss gesture bottoms out at peek instead of closing, and onFloorDismiss
+  // fires so the host can treat it as "go back" rather than "go away". Used by
+  // the map home, whose sheet is the home screen and has nothing to close to.
+  floor?: 'closed' | 'peek'
+  onFloorDismiss?: () => void
   // Drag handle / header. Rendered inside the grabbable handle region. Receives
   // a `close` callback to animate the sheet shut (e.g. a header close button).
   // Interactive controls inside it escape the drag via the
@@ -41,7 +47,7 @@ interface BottomSheetProps {
   children: (ready: boolean) => ReactNode
 }
 
-export default function BottomSheet({ open, onClose, onDismissStart, ariaLabel, header, children }: BottomSheetProps) {
+export default function BottomSheet({ open, onClose, onDismissStart, ariaLabel, floor = 'closed', onFloorDismiss, header, children }: BottomSheetProps) {
   // Snap state controlled by parent open/close; persists open height across renders.
   const [snap, setSnap] = useState<SnapState>('closed')
   const [viewportH, setViewportH] = useState(0)
@@ -128,6 +134,24 @@ export default function BottomSheet({ open, onClose, onDismissStart, ariaLabel, 
   useEffect(() => {
     onDismissStartRef.current = onDismissStart
   }, [onDismissStart])
+  const onFloorDismissRef = useRef(onFloorDismiss)
+  useEffect(() => {
+    onFloorDismissRef.current = onFloorDismiss
+  }, [onFloorDismiss])
+
+  // Single funnel for every path that changes the snap by user intent (flick,
+  // release, close button, backdrop). A `floor='peek'` sheet turns a close into
+  // a bottom-out plus an onFloorDismiss notification.
+  const requestSnap = useCallback((next: SnapState) => {
+    if (next === 'closed' && floor === 'peek') {
+      onFloorDismissRef.current?.()
+      // Already-at-peek is a no-op state-wise, but the rAF loop still lerps the
+      // imperative height back up from wherever the finger left it.
+      setSnap('peek')
+      return
+    }
+    setSnap(next)
+  }, [floor])
   useEffect(() => {
     if (snap === 'closed' && wasOpenRef.current) onDismissStartRef.current?.()
   }, [snap])
@@ -399,10 +423,10 @@ export default function BottomSheet({ open, onClose, onDismissStart, ariaLabel, 
       else nextSnap = 'full'
     }
     if (nextSnap !== snap) haptic()
-    setSnap(nextSnap)
+    requestSnap(nextSnap)
   }
 
-  const handleClose = useCallback(() => setSnap('closed'), [])
+  const handleClose = useCallback(() => requestSnap('closed'), [requestSnap])
 
   // Wheel/trackpad: same Android-style handoff as touch. Wheel deltaY > 0
   // (scrolling "down" in content terms) maps to swiping up — expand the sheet

@@ -20,7 +20,7 @@ export default function HubSheet({ slug, onClose, onDismissStart }: HubSheetProp
       onDismissStart={onDismissStart}
       ariaLabel="Detail stasiun terintegrasi"
       header={close => (slug
-        ? <SheetHeader slug={slug} onClose={close} />
+        ? <HubSheetHeader slug={slug} onClose={close} />
         : null)}
     >
       {ready => (ready && slug
@@ -34,7 +34,9 @@ export default function HubSheet({ slug, onClose, onDismissStart }: HubSheetProp
   )
 }
 
-function SheetHeader({ slug, onClose }: { slug: string, onClose: () => void }) {
+// Exported so the map home's stacked sheet can render a hub view inside its own
+// single BottomSheet instead of mounting a second one.
+export function HubSheetHeader({ slug, onClose }: { slug: string, onClose: () => void }) {
   const { header } = useHubHeader(slug)
   return (
     <div className="flex items-center justify-between gap-3">
