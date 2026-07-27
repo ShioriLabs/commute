@@ -194,6 +194,11 @@ describe('webgl tile memory', () => {
     expect(renderer.tileStats().count).toBe(16)
   })
 
+  // The two preview-only tests below use a contain-fit transform, which the
+  // shipped map never produces: map.tsx uses cover-fit, so at minimum zoom the
+  // map still spans ~3400 device px against a 1280px preview and this branch
+  // stays dormant. They pin the behaviour for the day that changes — they are
+  // not evidence that the path runs in production today.
   it('loads no tiles at all when zoomed out far enough for the preview', async () => {
     const fake = createFakeGl()
     const renderer = createWebGLRenderer(

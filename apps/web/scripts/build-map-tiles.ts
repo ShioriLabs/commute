@@ -59,14 +59,15 @@ const TILE_PAD = 0.5
 // worst case (see MIN_TIER / pickTier in app/lib/map-renderer.ts).
 const RASTER_TIERS = [0.5, 1, 2] as const
 const RASTER_QUALITY = 80
-// Width of the preview rendered as a first-paint placeholder — and, below the
-// zoom threshold in map-renderer-webgl.ts, as the *only* thing drawn.
+// Width of the preview rendered as a first-paint placeholder under the tile
+// grid, and the underlay drawn wherever a visible tile has no pixels yet.
 //
-// 1280 is chosen against that second role: fit-to-screen on a 360px 3x-DPR
-// phone spans 1080 device px, so anything at or above that is pixel-lossless
-// there, and the whole zoomed-out range then costs one 4.6 MB texture instead
-// of the entire grid (~171 MB). Going below 1080 trades that for visible
-// softness; going far above only inflates the download.
+// 1280 was sized for a second role — being the *only* thing drawn when zoomed
+// out (map-renderer-webgl.ts). That branch does not currently trigger: the map
+// uses cover-fit, so at minimum zoom it still spans ~3400 device px on a phone.
+// The width is kept because it is also what the underlay is judged by, and a
+// sharper underlay is the difference between "briefly low-res" and "obviously
+// broken" while tiles stream in. Dropping to 768 would save ~90 KB.
 const PREVIEW_WIDTH = 1280
 
 type BBox = { x: number, y: number, w: number, h: number }
