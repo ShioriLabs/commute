@@ -417,7 +417,18 @@ export const PLATFORM_CODES: Record<string, string> = {
   'KCI-TKO:T:PSG': '2', // Taman Kota — jalur 1 to Tangerang, 2 to Duri
   'KCI-TKO:T:BOI': '1',
   'KCI-BPR:T:PI': '4', // Batu Ceper — jalur 4 to Duri, 3 to Tangerang
-  'KCI-BPR:T:TTI': '3'
+  'KCI-BPR:T:TTI': '3',
+
+  // Lin Tanjung Priok. Jalur 3-4 at Ancol and JIS are freight (KA peti kemas)
+  // on the Rajawali alignment and carry no passenger service.
+  'KCI-AC:TP:KPB': '1', // Ancol — jalur 1 to Jakarta Kota
+  'KCI-AC:TP:JIS': '2',
+  // JIS has four tracks but only ONE operational side platform: building the
+  // opposite face needs trackwork, and that side runs towards Rajawali rather
+  // than Jakarta Kota. Every passenger departure therefore uses jalur 1.
+  'KCI-JIS:TP:AC': '1',
+  // Tanjung Priok terminus — commuter services use jalur 1-2 of the eight.
+  'KCI-TPK:TP:JIS': '1/2'
 
   /*
    * Deliberately omitted — do not fill these in without a field check:
@@ -475,9 +486,12 @@ export const PLATFORM_CODES: Record<string, string> = {
    * no rule for which is used, and the source does not cover the Cikarang
    * groups at all.
    *
-   * Single-group termini, where a badge would carry no information because
-   * there is only one way out: Bogor (BOO), Nambo (NMO), Pasar Senen (PSE),
-   * Rangkasbitung (RK), Tangerang (TNG).
+   * Single-group termini: Bogor (BOO), Nambo (NMO), Pasar Senen (PSE),
+   * Rangkasbitung (RK), Tangerang (TNG). A badge cannot disambiguate a
+   * direction at these, but it still tells a rider which platform to walk to,
+   * so they are worth filling in when a source names the departure platform —
+   * as done for Tanjung Priok (TPK). They are unset here only because no
+   * source states which platform scheduled departures use.
    *
    * Citayam B:BJD and B:PDRG — the Bogor and Nambo services both depart from
    * jalur 2 and the source does not distinguish them. Only the northbound
