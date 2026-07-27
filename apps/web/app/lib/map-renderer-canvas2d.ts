@@ -58,7 +58,7 @@ export function createCanvas2DRenderer(
     if (entry.pendingTier !== null && entry.pendingTier >= tier) return
     entry.pendingTier = tier
     try {
-      const bitmap = await tileSource.loadTile(r, c, tier)
+      const { bitmap } = await tileSource.loadTile(r, c, tier)
       if (disposed) {
         bitmap.close?.()
         return

@@ -102,8 +102,19 @@ export interface TileSourceOptions {
   baseUrl: string
 }
 
+export interface LoadedTile {
+  bitmap: Bitmap
+  // Whether every pixel is fully opaque, which decides how cheaply the renderer
+  // can store it. The pre-rasterized WebPs are opaque because build-map-tiles.ts
+  // fills the canvas white before drawing (scripts/build-map-tiles.ts:309), and
+  // they carry no alpha channel at all. Rasterizing an SVG at runtime does not
+  // do that — those tiles keep a transparent background — so they must not be
+  // stored in a format that drops alpha.
+  opaque: boolean
+}
+
 export interface TileSource {
-  loadTile(r: number, c: number, tier: Tier): Promise<Bitmap>
+  loadTile(r: number, c: number, tier: Tier): Promise<LoadedTile>
   loadPreview(): Promise<Bitmap | null>
   dispose(): void
 }
@@ -145,16 +156,16 @@ export function createTileSource({ manifest, baseUrl }: TileSourceOptions): Tile
     return await rasterizeSvgSync(text, w, h)
   }
 
-  async function loadTile(r: number, c: number, tier: Tier): Promise<Bitmap> {
+  async function loadTile(r: number, c: number, tier: Tier): Promise<LoadedTile> {
     if (rasterTiers.has(tier)) {
       try {
-        return await loadRasterTile(r, c, tier)
+        return { bitmap: await loadRasterTile(r, c, tier), opaque: true }
       } catch (err) {
         console.warn(`[map] raster tier ${tier} unavailable for ${r},${c}; falling back to SVG`, err)
-        return await loadSvgTile(r, c, tier)
+        return { bitmap: await loadSvgTile(r, c, tier), opaque: false }
       }
     }
-    return await loadSvgTile(r, c, tier)
+    return { bitmap: await loadSvgTile(r, c, tier), opaque: false }
   }
 
   async function loadPreview(): Promise<Bitmap | null> {
