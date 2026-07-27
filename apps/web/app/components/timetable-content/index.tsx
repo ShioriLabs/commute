@@ -10,6 +10,7 @@ import { fetcher } from 'utils/fetcher'
 import { normalizeGroupedTimetable } from 'utils/timetable-shim'
 import { useNetworkStatus } from '~/hooks/network'
 import { departureSortKey, isImmediateDeparture, parseMinute } from 'utils/schedules'
+import { formatPlatformCode, joinLabels } from 'utils/labels'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -256,7 +257,7 @@ const TimetableContent = memo(function TimetableContent({ operator, code }: Prop
                     <LineRoundel code={section.lineCode} color={section.lineColor} operator={operator} />
                     <span className="flex-grow min-w-0 text-sm font-bold text-slate-900 truncate">
                       {'menuju '}
-                      {section.label.join(' / ')}
+                      {joinLabels(section.label)}
                     </span>
                     {section.platformCode && (
                       <span
@@ -265,7 +266,7 @@ const TimetableContent = memo(function TimetableContent({ operator, code }: Prop
                         aria-label={`Berangkat dari peron ${section.platformCode}`}
                       >
                         {'Peron '}
-                        {section.platformCode}
+                        {formatPlatformCode(section.platformCode)}
                       </span>
                     )}
                   </header>

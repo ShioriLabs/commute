@@ -9,6 +9,7 @@ import { useSearchParams } from 'react-router'
 import useSWR from 'swr'
 import { fetcher, FetchError } from 'utils/fetcher'
 import { getForegroundColor } from 'utils/colors'
+import { joinLabels } from 'utils/labels'
 import StationPickerDialog from './station-picker'
 import LineRoundel from '~/components/line-roundel'
 
@@ -113,7 +114,7 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
                 <span className="text-sm font-medium text-slate-600">
                   arah
                   {' '}
-                  { directions.join(' / ') }
+                  { joinLabels(directions) }
                 </span>
               )
             : null}

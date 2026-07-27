@@ -82,11 +82,11 @@ function StationCard({ stationId }: { stationId: string }) {
     return (
       <li>
         <article>
-          <h1 className="font-bold text-xl flex px-8 py-6 sticky top-0 bg-rose-50/20 backdrop-blur-2xl z-10 lg:relative lg:backdrop-blur-none lg:bg-transparent">
+          <h1 className="font-semibold text-sm uppercase tracking-wide text-slate-500 flex px-4 py-3 sticky top-0 bg-rose-50/20 backdrop-blur-2xl z-10 lg:relative lg:backdrop-blur-none lg:bg-transparent">
             <Link to={`/stations/${station.data.data.operator.code}/${station.data.data.code}`} className="group flex-grow">
               Stasiun&nbsp;
               { station.data.data.formattedName }
-              <CaretRightIcon weight="bold" className="inline w-4 h-4 group-hover:ml-3 ml-2 transition-[margin] duration-200 mb-1" />
+              <CaretRightIcon weight="bold" className="inline w-3.5 h-3.5 group-hover:ml-3 ml-2 transition-[margin] duration-200 -mt-0.5" />
             </Link>
           </h1>
           { timetable.isLoading
@@ -241,7 +241,7 @@ export default function HomePage() {
 
               {stations.length > 0
                 ? (
-                    <ul className="flex flex-col gap-8 pb-42 max-w-3xl mx-auto" aria-label="Daftar stasiun tersimpan">
+                    <ul className="flex flex-col gap-5 pb-42 max-w-3xl mx-auto" aria-label="Daftar stasiun tersimpan">
                       {stations.map(station => (
                         <StationCard key={station} stationId={station} />
                       ))}
