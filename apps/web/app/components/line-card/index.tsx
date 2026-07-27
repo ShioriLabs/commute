@@ -102,11 +102,14 @@ export default function LineCard({ line, operator }: Props) {
         {upcomingGroups.map((group) => {
           // Synthetic/shimmed single-destination groups label themselves by
           // their terminus; a "menuju X" header over an "X" row is noise.
-          const showHeader = !(
+          // A platform badge still has to surface though, so keep the header
+          // (minus the redundant label) whenever there is one to show.
+          const labelIsRedundant = (
             group.destinations.length === 1
             && group.label.length === 1
             && group.label[0] === group.destinations[0].boundFor
           )
+          const showHeader = !labelIsRedundant || Boolean(group.platformCode)
 
           return (
             <li
@@ -120,9 +123,11 @@ export default function LineCard({ line, operator }: Props) {
                   className="px-4 py-1.5 flex items-center gap-2"
                   style={{ backgroundColor: getTintFromColor(line.colorCode, 0.16) }}
                 >
-                  <NavigationArrowIcon weight="fill" className="w-3 h-3 rotate-90 shrink-0" style={{ color: line.colorCode }} />
+                  {!labelIsRedundant && (
+                    <NavigationArrowIcon weight="fill" className="w-3 h-3 rotate-90 shrink-0" style={{ color: line.colorCode }} />
+                  )}
                   <span className="flex-grow min-w-0 text-xs font-bold text-slate-700 uppercase tracking-wide truncate">
-                    {joinLabels(group.label)}
+                    {labelIsRedundant ? '' : joinLabels(group.label)}
                   </span>
                   {group.platformCode && (
                     <span

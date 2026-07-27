@@ -224,9 +224,20 @@ export const PLATFORM_CODES: Record<string, string> = {
   // to Bekasi/Cikarang. The rider report and the Dec 2023 reporting agree here:
   // "peron 1-2 arah Tanah Abang/Kampung Bandan" and "next hop Sudirman" are the
   // same platform described by destination vs by next stop.
-  // Lin Bogor at Manggarai is NOT recorded — see the omissions note below.
+  //
+  // RECHECK PERIODICALLY: Manggarai is the least stable station on the network.
+  // Cikarang services moved in SO-7 (Dec 2023), a further switch-over landed
+  // 1 Feb 2025, stopping points on peron 1-4 changed again 1 May 2026, and
+  // jalur 10 has been closed for revitalisation at least once. All four entries
+  // below are rider-reported and current as of Jul 2026.
   'KCI-MRI:C:SUD': '1/2',
   'KCI-MRI:C:MTR': '3/4',
+
+  // Manggarai (Lin Bogor) — 9/10 to Jakarta Kota, 11/12 to Bogor/Nambo/Depok.
+  // Reporting only ever said "peron 9-12 for Bogor services" without splitting
+  // them; the rider report supplies the split.
+  'KCI-MRI:B:CKI': '9/10',
+  'KCI-MRI:B:TEB': '11/12',
 
   // Jatinegara (Lin Cikarang) — 1 to Bekasi/Cikarang, 2 to Manggarai. Supersedes
   // the id.wikipedia diagram, which spreads commuter services over jalur 1-6 and
@@ -388,6 +399,12 @@ export const PLATFORM_CODES: Record<string, string> = {
   'KCI-POK:C:KMT': '2',
   'KCI-KMT:C:POK': '1', // Kramat — jalur 1 to Pondok Jati
   'KCI-KMT:C:GST': '2',
+  // Gang Sentiong — 1 towards Kramat/Jatinegara, 2 towards Pasar Senen and on
+  // to Kampung Bandan. Rider-reported: the published diagram labels these
+  // tracks by loop route ("via Pasar Senen" vs "via Manggarai") rather than by
+  // which way the train leaves, so it could not be mapped onto these groups.
+  'KCI-GST:C:KMT': '1',
+  'KCI-GST:C:PSE': '2',
   'KCI-KMO:C:PSE': '1', // Kemayoran — jalur 1 to Pasar Senen/Cikampek
   'KCI-KMO:C:RJW': '2',
   'KCI-RJW:C:KMO': '1', // Rajawali — jalur 1 towards Pasar Senen/Cikarang
@@ -433,13 +450,6 @@ export const PLATFORM_CODES: Record<string, string> = {
   /*
    * Deliberately omitted — do not fill these in without a field check:
    *
-   * Manggarai Lin Bogor (KCI-MRI:B:*). The Cikarang platforms above are from a
-   * rider report, but the Bogor-line ones are not. Published figures say peron
-   * 9-12, tracing to Dec 2023 reporting — and Manggarai has been reconfigured
-   * at least twice since (switch-over 1 Feb 2025; stopping points on peron 1-4
-   * moved again 1 May 2026), with jalur 10 closed for revitalisation at one
-   * point. Needs eyes on the platform, not a source.
-   *
    * Jatinegara C:POK (via Pasar Senen, next hop Pondok Jati). A third departure
    * direction beyond the Bekasi/Manggarai pair recorded above; no report covers
    * it, and it cannot be inferred from the other two.
@@ -470,10 +480,6 @@ export const PLATFORM_CODES: Record<string, string> = {
    * Bekasi (BKS) — eight tracks; the published jalur 5/6/7 assignments are
    * described as "sepur lurus arah Jakarta Kota / Cikampek", which does not map
    * onto our Manggarai vs Pasar Senen groups.
-   *
-   * Gang Sentiong (GST) — the source describes its two jalur as via-Pasar-Senen
-   * vs via-Manggarai, but our two groups there are towards Pasar Senen and
-   * towards Kramat/Jatinegara. The axes do not correspond; needs a field check.
    *
    * Pasar Senen (PSE) and Kampung Bandan (KPB) — PSE has a single direction
    * group (no choice to disambiguate); KPB carries five groups across three
