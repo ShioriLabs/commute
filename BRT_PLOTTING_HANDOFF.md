@@ -1,7 +1,7 @@
 # BRT tap-target plotting — session handoff
 
 **Task:** finish plotting the remaining ~221 TransJakarta **BRT** haltes as
-tap-targets in `apps/web/public/maps/fdtj/points.json`, reading positions off the
+tap-targets in `apps/web/app/data/points.json`, reading positions off the
 **schematic** map (TfL-style, not geo-accurate). Koridor 1 (23 haltes) is **done
 and verified**. Nothing here is committed (branch `development`).
 
@@ -164,7 +164,7 @@ for b in blocks:
 key = lambda lc: (int(re.search(r"\d+", lc).group()),
                   lc[:re.search(r"\d+", lc).start()], lc[re.search(r"\d+", lc).end():])
 placed = set(p["id"][3:] for p in json.load(open(
-    "apps/web/public/maps/fdtj/points.json"))["points"] if p["id"].startswith("TJ-"))
+    "apps/web/app/data/points.json"))["points"] if p["id"].startswith("TJ-"))
 home = {}
 for lc in sorted(corr, key=key):
     for i, c in enumerate(corr[lc]):

@@ -82,7 +82,7 @@ function parseCoords(): Map<string, { lat: number, lng: number }> {
  * is the station center.
  */
 function parseSchematicPoints(): Map<string, { sx: number, sy: number }> {
-  const raw = readFileSync(resolve(API_SRC, '../../web/public/maps/fdtj/points.json'), 'utf8')
+  const raw = readFileSync(resolve(API_SRC, '../../web/app/data/points.json'), 'utf8')
   const parsed = JSON.parse(raw) as { points: Array<{ id: string, ax: number, ay: number, bx: number, by: number }> }
   const out = new Map<string, { sx: number, sy: number }>()
   for (const p of parsed.points) out.set(p.id, { sx: (p.ax + p.bx) / 2, sy: (p.ay + p.by) / 2 })

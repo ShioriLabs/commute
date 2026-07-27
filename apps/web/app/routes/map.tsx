@@ -28,6 +28,11 @@ import { AuthorOverlay, handleAuthorTap } from '../components/map-author'
 import StationSheet from '../components/station-sheet'
 import HubSheet from '../components/hub-sheet'
 import { PEEK_FRACTION } from '../components/bottom-sheet'
+// Imported as a URL (not as data) so Vite content-hashes it into /assets/. The
+// file deliberately lives outside public/: assets under public/ are copied
+// verbatim with stable names, and a stable URL cannot be cached correctly for a
+// file that changes every time a tap target is edited. See docs/fdtj-map-points.md.
+import pointsUrl from '../data/points.json?url'
 
 const TAP_MOVEMENT_THRESHOLD_CSS_PX = 8
 const TOUCH_HIT_SLOP_CSS_PX = 12
@@ -100,7 +105,7 @@ export default function MapPage() {
     (url: string) => fetch(url).then(r => r.json())
   )
   const { data: pointsManifest } = useSWR<PointsManifest>(
-    '/maps/fdtj/points.json',
+    pointsUrl,
     (url: string) => fetch(url).then(r => r.json())
   )
   // Hubs power the map's hub tap targets: a `HUB-…` point id resolves to a hub
