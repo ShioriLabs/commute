@@ -1,4 +1,4 @@
-import type { Manifest, Point, Renderer, SelectionOverlay, Tier, Transform } from './map-renderer'
+import type { Manifest, Point, Renderer, SelectionOverlay, Tier, TileStats, Transform } from './map-renderer'
 import { RING_WIDTH_WORLD, SPOTLIGHT_FEATHER_WORLD, pointCornerRadius, ringOffsetWorld, tileKey } from './map-renderer'
 import { createTileSource } from './map-renderer-tile-source'
 
@@ -30,9 +30,8 @@ export function createCanvas2DRenderer(
   let points: Point[] = []
   let debugHitboxes = false
 
-  // Preview bitmap painted under the tile grid until all visible tiles have
-  // loaded. Released (set to null) once it's no longer needed so the GC can
-  // reclaim the memory.
+  // Preview bitmap painted under the tile grid whenever a visible tile has no
+  // pixels yet. Held until dispose() — see the note in draw().
   let preview: ImageBitmap | null = null
   let previewLoading = false
 
@@ -61,6 +60,14 @@ export function createCanvas2DRenderer(
     try {
       const bitmap = await tileSource.loadTile(r, c, tier)
       if (disposed) {
+        bitmap.close?.()
+        return
+      }
+      // Identity re-check, not just pendingTier: releaseTiles() can drop this
+      // entry while the fetch is in flight, and the replacement is a different
+      // object with pendingTier === null. Without this the bitmap would be
+      // stored on a detached entry and leak until GC.
+      if (tiles.get(tileKey(r, c)) !== entry) {
         bitmap.close?.()
         return
       }
@@ -187,12 +194,12 @@ export function createCanvas2DRenderer(
         }
       }
     }
-    if (anyVisibleMissing && preview) {
-      ctx.drawImage(preview, 0, 0, mapW, mapH)
-    } else if (preview && !anyVisibleMissing) {
-      // All visible tiles loaded; release the preview.
-      preview.close?.()
-      preview = null
+    // Kept resident for the renderer's whole life — see the matching comment in
+    // map-renderer-webgl.ts. releaseTiles() resets every tile to tier 0, and
+    // this underlay is what covers the refill.
+    if (anyVisibleMissing) {
+      if (!preview) ensurePreview()
+      if (preview) ctx.drawImage(preview, 0, 0, mapW, mapH)
     }
 
     for (let r = 0; r < grid.rows; r++) {
@@ -234,6 +241,23 @@ export function createCanvas2DRenderer(
     onDirty()
   }
 
+  // Mirrors the WebGL renderer: drop the tile pixels, keep the renderer usable.
+  // ImageBitmaps are often GPU-backed too, so this is worth doing here as well.
+  function releaseTiles() {
+    if (disposed) return
+    for (const entry of tiles.values()) entry.bitmap?.close?.()
+    tiles.clear()
+    onDirty()
+  }
+
+  function tileStats(): TileStats {
+    let bytes = 0
+    for (const entry of tiles.values()) {
+      if (entry.bitmap) bytes += entry.bitmap.width * entry.bitmap.height * 4
+    }
+    return { count: tiles.size, bytes }
+  }
+
   function dispose() {
     if (disposed) return
     disposed = true
@@ -255,6 +279,11 @@ export function createCanvas2DRenderer(
     requestTier: (r, c, tier) => { void requestTier(r, c, tier) },
     setPoints,
     setDebugHitboxes,
+    // A 2D context is never "lost" in the WebGL sense — the browser silently
+    // reallocates its backing store — so there is nothing to recover from.
+    isContextLost: () => false,
+    releaseTiles,
+    tileStats,
     dispose
   }
 }

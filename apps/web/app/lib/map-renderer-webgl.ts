@@ -1,5 +1,5 @@
 import * as twgl from 'twgl.js'
-import type { Manifest, Point, Renderer, SelectionOverlay, Tier, Transform } from './map-renderer'
+import type { Manifest, Point, Renderer, SelectionOverlay, Tier, TileStats, Transform } from './map-renderer'
 import { RING_WIDTH_WORLD, SPOTLIGHT_FEATHER_WORLD, pointCornerRadius, ringOffsetWorld, tileKey } from './map-renderer'
 import { createTileSource } from './map-renderer-tile-source'
 
@@ -147,7 +147,25 @@ interface TileEntry {
   tier: Tier | 0
   pendingTier: Tier | null
   mipmapped: boolean
+  // GPU bytes this entry currently holds, for tileStats(). Tracked rather than
+  // recomputed because the tier alone doesn't tell you whether the upload has
+  // landed yet.
+  bytes: number
 }
+
+// A mipmapped texture costs its base level plus the geometric series of halved
+// levels, which converges to 4/3.
+function textureBytes(w: number, h: number, mipmapped: boolean): number {
+  return Math.round(w * h * 4 * (mipmapped ? 4 / 3 : 1))
+}
+
+// Fill for a tile that has no pixels yet. Pale pink in dev so unloaded tiles are
+// obvious while authoring; opaque white in prod, where it sits over the map
+// route's white background — that makes every refill path (context recovery,
+// release-on-hide) invisible instead of flashing pink.
+const PLACEHOLDER_PIXEL = new Uint8Array(
+  import.meta.env.DEV ? [255, 241, 242, 102] : [255, 255, 255, 255]
+)
 
 export function createWebGLRenderer(
   canvas: HTMLCanvasElement,
@@ -155,12 +173,23 @@ export function createWebGLRenderer(
   baseUrl: string,
   onDirty: () => void
 ): Renderer {
+  // No MSAA: the tile quads are axis-aligned and screen-filling, so their edges
+  // are never visible, and the pill/spotlight shaders antialias analytically
+  // with smoothstep. Enabling it bought nothing and cost a multisampled
+  // renderbuffer plus its resolve target — tens of MB on a phone, on a screen
+  // that is already short of GPU memory (see tileStats()).
   const rawGl = canvas.getContext('webgl2', {
-    antialias: true,
+    antialias: false,
     premultipliedAlpha: true,
-    alpha: true
+    alpha: true,
+    powerPreference: 'low-power'
   }) as WebGL2RenderingContext | null
   if (!rawGl) throw new Error('WebGL2 not available')
+  // getContext() keeps returning the same context object for a given canvas, so
+  // on a canvas whose context was already lost this hands back a dead one. Fail
+  // loudly instead of returning a renderer that silently draws nothing — the
+  // caller's answer is a fresh canvas.
+  if (rawGl.isContextLost()) throw new Error('WebGL2 context is lost')
   const gl: WebGL2RenderingContext = rawGl
   // twgl's TypeScript signatures predate WebGL2; the runtime accepts both.
   const twglGl = gl as unknown as WebGLRenderingContext
@@ -183,6 +212,8 @@ export function createWebGLRenderer(
   })
   const spotVao = twgl.createVertexArrayInfo(twglGl, spotProgramInfo, spotBufferInfo)
 
+  const loseCtxExt = gl.getExtension('WEBGL_lose_context')
+
   const anisoExt = gl.getExtension('EXT_texture_filter_anisotropic')
     ?? gl.getExtension('MOZ_EXT_texture_filter_anisotropic')
     ?? gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic')
@@ -198,7 +229,8 @@ export function createWebGLRenderer(
   const tiles = new Map<string, TileEntry>()
   let disposed = false
 
-  // Preview texture rendered under the tile grid until visible tiles are ready.
+  // Preview texture rendered under the tile grid whenever a visible tile has no
+  // pixels yet. Held until dispose() — see the note in draw().
   let previewTexture: WebGLTexture | null = null
   let previewLoading = false
 
@@ -264,32 +296,45 @@ export function createWebGLRenderer(
 
   const placeholder = createPlaceholderTexture(gl)
 
-  function ensureTile(r: number, c: number): TileEntry {
+  function ensureTile(r: number, c: number): TileEntry | null {
     const key = tileKey(r, c)
     let entry = tiles.get(key)
     if (!entry) {
-      const texture = gl.createTexture()!
+      // Null once the context is lost — GL object allocation fails silently
+      // then, and storing that null would strand the entry at tier 0 forever
+      // while draw() re-requested it on every frame.
+      const texture = gl.createTexture()
+      if (!texture) return null
       gl.bindTexture(gl.TEXTURE_2D, texture)
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 241, 242, 102]))
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, PLACEHOLDER_PIXEL)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-      entry = { texture, tier: 0, pendingTier: null, mipmapped: false }
+      entry = { texture, tier: 0, pendingTier: null, mipmapped: false, bytes: 0 }
       tiles.set(key, entry)
     }
     return entry
   }
 
   async function requestTier(r: number, c: number, tier: Tier): Promise<void> {
-    if (disposed) return
+    if (disposed || gl.isContextLost()) return
     const entry = ensureTile(r, c)
+    if (!entry) return
     if (entry.tier >= tier) return
     if (entry.pendingTier !== null && entry.pendingTier >= tier) return
     entry.pendingTier = tier
     try {
       const bitmap = await tileSource.loadTile(r, c, tier)
-      if (disposed) {
+      if (disposed || gl.isContextLost()) {
+        bitmap.close?.()
+        return
+      }
+      // Identity re-check, not just pendingTier: releaseTiles() can delete this
+      // entry and its texture while the fetch is in flight, and the replacement
+      // entry is a different object with pendingTier === null. Uploading into
+      // the deleted texture would be a GL error and the pixels would be lost.
+      if (tiles.get(tileKey(r, c)) !== entry) {
         bitmap.close?.()
         return
       }
@@ -314,6 +359,7 @@ export function createWebGLRenderer(
       }
       entry.tier = tier
       entry.pendingTier = null
+      entry.bytes = textureBytes(bitmap.width, bitmap.height, entry.mipmapped)
       bitmap.close?.()
       onDirty()
     } catch (err) {
@@ -324,15 +370,20 @@ export function createWebGLRenderer(
 
   function ensurePreview() {
     if (previewTexture || previewLoading || !manifest.preview) return
+    if (disposed || gl.isContextLost()) return
     previewLoading = true
     tileSource.loadPreview().then((bitmap) => {
       previewLoading = false
-      if (disposed) {
+      if (disposed || gl.isContextLost()) {
         bitmap?.close?.()
         return
       }
       if (!bitmap) return
-      const tex = gl.createTexture()!
+      const tex = gl.createTexture()
+      if (!tex) {
+        bitmap.close?.()
+        return
+      }
       gl.bindTexture(gl.TEXTURE_2D, tex)
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true)
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap)
@@ -363,7 +414,7 @@ export function createWebGLRenderer(
   }
 
   function draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null) {
-    if (disposed) return
+    if (disposed || gl.isContextLost()) return
     gl.viewport(0, 0, Math.round(cssW * dpr), Math.round(cssH * dpr))
     gl.clearColor(1, 1, 1, 1)
     gl.clear(gl.COLOR_BUFFER_BIT)
@@ -392,23 +443,30 @@ export function createWebGLRenderer(
         const tileX = c * tileW
         if (tileX + tileW < worldMinX || tileX > worldMaxX) continue
         const entry = ensureTile(r, c)
-        if (entry.tier === 0) {
+        if (!entry || entry.tier === 0) {
           anyVisibleMissing = true
           break
         }
       }
     }
 
-    if (anyVisibleMissing && previewTexture) {
-      twgl.setUniforms(programInfo, {
-        u_tileOffset: [0, 0],
-        u_tileSize: [mapW, mapH],
-        u_transform: mat,
-        u_texture: previewTexture
-      })
-      twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
-    } else if (previewTexture && !anyVisibleMissing) {
-      releasePreview()
+    // The preview stays resident for the renderer's whole life rather than being
+    // freed once the tiles land. At 768x543 it costs 1.6 MB — nothing against
+    // ~81 MB per tile — and keeping it means every path that resets tiles to
+    // tier 0 (context recovery, release-on-hide) redraws through a correct
+    // low-res map instead of blank placeholders. ensurePreview() is idempotent,
+    // so calling it here also covers a renderer whose first load failed.
+    if (anyVisibleMissing) {
+      if (!previewTexture) ensurePreview()
+      if (previewTexture) {
+        twgl.setUniforms(programInfo, {
+          u_tileOffset: [0, 0],
+          u_tileSize: [mapW, mapH],
+          u_transform: mat,
+          u_texture: previewTexture
+        })
+        twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
+      }
     }
 
     for (let r = 0; r < grid.rows; r++) {
@@ -419,6 +477,7 @@ export function createWebGLRenderer(
         if (tileX + tileW < worldMinX || tileX > worldMaxX) continue
 
         const entry = ensureTile(r, c)
+        if (!entry) continue
         const texture = entry.tier > 0 ? entry.texture : placeholder
 
         twgl.setUniforms(programInfo, {
@@ -478,6 +537,22 @@ export function createWebGLRenderer(
     onDirty()
   }
 
+  // Drop every tile's pixels but keep the context, its programs and its buffers
+  // — those are kilobytes, the tiles are hundreds of megabytes. draw() re-requests
+  // whatever is on screen and the preview underlay covers the gap meanwhile.
+  function releaseTiles() {
+    if (disposed) return
+    for (const entry of tiles.values()) gl.deleteTexture(entry.texture)
+    tiles.clear()
+    onDirty()
+  }
+
+  function tileStats(): TileStats {
+    let bytes = 0
+    for (const entry of tiles.values()) bytes += entry.bytes
+    return { count: tiles.size, bytes }
+  }
+
   function dispose() {
     if (disposed) return
     disposed = true
@@ -508,6 +583,16 @@ export function createWebGLRenderer(
       if (buf) gl.deleteBuffer(buf)
     }
     tileSource.dispose()
+    // Hand the drawing buffer and the context slot back now rather than waiting
+    // for GC to collect the canvas. Browsers cap live WebGL contexts per page,
+    // and routing in and out of /map repeatedly would otherwise creep up on it.
+    //
+    // Only for a canvas that has already left the document, though: a canvas
+    // keeps handing the *same* context object back from getContext() forever, so
+    // losing it would poison any renderer built on that element afterwards.
+    // Detached means nothing can build on it again. Note this fires
+    // webglcontextlost, so callers must detach their listener first.
+    if (!canvas.isConnected && !gl.isContextLost()) loseCtxExt?.loseContext()
   }
 
   ensurePreview()
@@ -519,6 +604,15 @@ export function createWebGLRenderer(
     requestTier: (r, c, tier) => { void requestTier(r, c, tier) },
     setPoints,
     setDebugHitboxes,
+    isContextLost: () => gl.isContextLost(),
+    releaseTiles,
+    tileStats,
+    debug: loseCtxExt
+      ? {
+          loseContext: () => loseCtxExt.loseContext(),
+          restoreContext: () => loseCtxExt.restoreContext()
+        }
+      : undefined,
     dispose
   }
 }
@@ -526,7 +620,7 @@ export function createWebGLRenderer(
 function createPlaceholderTexture(gl: WebGL2RenderingContext): WebGLTexture {
   const tex = gl.createTexture()!
   gl.bindTexture(gl.TEXTURE_2D, tex)
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 241, 242, 102]))
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, PLACEHOLDER_PIXEL)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
