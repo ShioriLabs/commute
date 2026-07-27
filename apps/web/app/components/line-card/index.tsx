@@ -3,7 +3,9 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router'
 import { CaretRightIcon, NavigationArrowIcon } from '@phosphor-icons/react'
 import { getForegroundColor, getTintFromColor } from 'utils/colors'
-import { departureSortKey, getRelativeDepartureLabel, parseMinute } from 'utils/schedules'
+import { departureSortKey, getRelativeDepartureLabel, isImminentDeparture, parseMinute } from 'utils/schedules'
+import { formatPlatformCode, joinLabels } from 'utils/labels'
+import PidsChevrons from './pids-chevrons'
 
 function getNextSchedules(
   schedules: CompactSchedule[],
@@ -76,7 +78,7 @@ export default function LineCard({ line, operator }: Props) {
       aria-label={`Jadwal untuk jalur ${line.name}`}
     >
       <article
-        className="px-4 py-3 border-b-2"
+        className="px-4 py-2.5 border-b-2"
         style={{ borderBottomColor: getTintFromColor(line.colorCode, 0.3) }}
         aria-labelledby={`line-name-${line.name}`}
       >
@@ -88,12 +90,12 @@ export default function LineCard({ line, operator }: Props) {
                 className="flex items-center justify-between gap-2"
                 aria-label={`Lihat rute ${line.name}`}
               >
-                <h1 id={`line-name-${line.name}`} className="font-bold text-lg">{line.name}</h1>
+                <h1 id={`line-name-${line.name}`} className="font-bold text-base">{line.name}</h1>
                 <CaretRightIcon weight="bold" className="w-4 h-4 text-slate-600" />
               </Link>
             )
           : (
-              <h1 id={`line-name-${line.name}`} className="font-bold text-lg">{line.name}</h1>
+              <h1 id={`line-name-${line.name}`} className="font-bold text-base">{line.name}</h1>
             )}
       </article>
       <ul>
@@ -115,12 +117,12 @@ export default function LineCard({ line, operator }: Props) {
             >
               {showHeader && (
                 <div
-                  className="px-4 py-2 flex items-center gap-2"
+                  className="px-4 py-1.5 flex items-center gap-2"
                   style={{ backgroundColor: getTintFromColor(line.colorCode, 0.16) }}
                 >
-                  <NavigationArrowIcon weight="fill" className="w-3.5 h-3.5 rotate-90 shrink-0" style={{ color: line.colorCode }} />
-                  <span className="flex-grow min-w-0 text-sm font-bold text-slate-800 truncate">
-                    {group.label.join(' / ')}
+                  <NavigationArrowIcon weight="fill" className="w-3 h-3 rotate-90 shrink-0" style={{ color: line.colorCode }} />
+                  <span className="flex-grow min-w-0 text-xs font-bold text-slate-700 uppercase tracking-wide truncate">
+                    {joinLabels(group.label)}
                   </span>
                   {group.platformCode && (
                     <span
@@ -129,7 +131,7 @@ export default function LineCard({ line, operator }: Props) {
                       aria-label={`Berangkat dari peron ${group.platformCode}`}
                     >
                       {'Peron '}
-                      {group.platformCode}
+                      {formatPlatformCode(group.platformCode)}
                     </span>
                   )}
                 </div>
@@ -139,34 +141,38 @@ export default function LineCard({ line, operator }: Props) {
                   const departure = parseMinute(destination.schedules[0][1])
                   const relativeLabel = getRelativeDepartureLabel(lastUpdated, departure)
                   const absoluteTime = departure.toLocaleTimeString('id-ID', { timeStyle: 'short' })
+                  const imminent = isImminentDeparture(lastUpdated, departure)
 
                   return (
                     <li
                       key={`${destination.boundFor}${destination.via ? `:${destination.via}` : ''}`}
-                      className="py-3 px-4 flex items-start justify-between"
+                      className="py-2.5 px-4 flex items-baseline justify-between gap-3"
                       aria-label={`Jadwal menuju ${destination.boundFor}`}
                     >
-                      <div className="flex flex-col">
-                        <span className="font-semibold">{destination.boundFor}</span>
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-sm text-slate-800 truncate">{destination.boundFor}</span>
                         { /* eslint-disable-next-line @stylistic/jsx-one-expression-per-line */ }
-                        {destination.via && <span className="text-sm text-gray-600">via {destination.via}</span>}
+                        {destination.via && <span className="text-xs text-gray-500">via {destination.via}</span>}
                       </div>
-                      <div className="text-right flex flex-col">
-                        {relativeLabel
-                          ? (
-                              <span className="font-bold" aria-label={relativeLabel === 'Sekarang' ? 'Keberangkatan berikutnya dalam beberapa menit' : `Keberangkatan berikutnya dalam ${relativeLabel.replace('mnt', 'menit')}`}>
-                                {relativeLabel}
-                              </span>
-                            )
-                          : (
-                              <span className="font-bold" aria-label={`Keberangkatan berikutnya pada ${absoluteTime}`}>
-                                {absoluteTime}
-                              </span>
-                            )}
+                      <div className="text-right flex flex-col shrink-0">
+                        <span className="flex items-center justify-end gap-1.5">
+                          {imminent && <PidsChevrons color={line.colorCode} />}
+                          {relativeLabel
+                            ? (
+                                <span className="text-2xl font-bold tabular-nums leading-tight" aria-label={relativeLabel === 'Sekarang' ? 'Keberangkatan berikutnya dalam beberapa menit' : `Keberangkatan berikutnya dalam ${relativeLabel.replace('mnt', 'menit')}`}>
+                                  {relativeLabel}
+                                </span>
+                              )
+                            : (
+                                <span className="text-2xl font-bold tabular-nums leading-tight" aria-label={`Keberangkatan berikutnya pada ${absoluteTime}`}>
+                                  {absoluteTime}
+                                </span>
+                              )}
+                        </span>
                         {destination.schedules.length > 1
                           ? (
                               <span
-                                className="font-semibold text-sm text-gray-600"
+                                className="text-sm tabular-nums text-gray-600"
                                 aria-label={`Keberangkatan selanjutnya: ${destination.schedules.slice(1, 3).map(sched => parseMinute(sched[1]).toLocaleTimeString('id-ID', { timeStyle: 'short' })).join(', ')}`}
                               >
                                 lalu

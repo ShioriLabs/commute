@@ -27,7 +27,22 @@ export function isImmediateDeparture(now: Date, scheduledDeparture: Date) {
   return diff >= -60000 && diff <= 60000
 }
 
-export const RELATIVE_DEPARTURE_WINDOW_MINUTES = 15
+// Departure is close enough to warrant the PIDS arriving-now treatment.
+// Two-sided by design: getNextSchedules falls back to the first departure of
+// the day when nothing upcoming matches, so a row can hold a time many hours
+// in the past — that must never render as imminent.
+export const IMMINENT_DEPARTURE_WINDOW_MINUTES = 3
+
+export function isImminentDeparture(now: Date, departure: Date): boolean {
+  const minutes = Math.round((departure.getTime() - now.getTime()) / 60000)
+  return minutes >= -1 && minutes <= IMMINENT_DEPARTURE_WINDOW_MINUTES
+}
+
+// 30 minutes so the lead departure stays relative across a typical headway.
+// At 15 the label flipped to an absolute clock time while the "lalu" times
+// beside it stayed absolute too, leaving adjacent rows in mixed units and
+// forcing the reader to do arithmetic to compare their options.
+export const RELATIVE_DEPARTURE_WINDOW_MINUTES = 30
 
 // Returns 'Sekarang' | '<n> mnt' when the departure is within the relative
 // window, or null when the absolute time should be shown instead. The -1

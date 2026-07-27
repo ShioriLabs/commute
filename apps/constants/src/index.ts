@@ -171,11 +171,145 @@ export const CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES = new Set([
 
 /**
  * Curated platform overlay for departure direction groups.
- * Key: `${stationId}:${lineCode}:${nextHopStationCode}` (e.g. 'KCI-CUK:C:KLD').
+ * Key: `${stationId}:${lineCode}:${nextHopStationCode}` (e.g. 'KCI-CUK:C:KLDB').
  * Value: bare platform identifier per GTFS convention ("3/4", not "Peron 3/4");
  * the UI adds the "Peron" prefix. Missing key -> no badge, direction still renders.
+ *
+ * The next-hop code is the FIRST station served in that direction, which is not
+ * always the geographic neighbour — read it off the direction group's `key`
+ * (`${nextHopCode}:${via}`) rather than inferring it from the line topology.
+ * Several groups can share one next hop (Cakung's Manggarai-via and Senen-via
+ * Jakarta-bound groups both leave via KLDB) and correctly share one entry.
+ *
+ * Verified entries only. Platform assignments change with engineering work and
+ * are reassigned operationally, so an unverified guess is worse than no badge:
+ * absent -> the UI simply omits it, wrong -> riders wait trackside.
+ *
+ * Sourcing rule. Two acceptable sources:
+ *   (a) field observation;
+ *   (b) the id.wikipedia "diagram lintasan stasiun" table, which lists a
+ *       direction per numbered jalur — but ONLY for stations whose platforms
+ *       map one-to-one onto our direction groups.
+ * Wikipedia was validated against field data at Cakung and Sudirman: both
+ * matched exactly. It is NOT acceptable where the article flags the layout as
+ * provisional/under construction, or where one platform serves several of our
+ * direction groups (see the deliberate omissions below).
+ *
+ * Values are the platform a rider stands on. Where an island platform sits
+ * between two tracks that both serve one direction, the range is kept ("1/2")
+ * because that is how the station signs it.
  */
-export const PLATFORM_CODES: Record<string, string> = {}
+export const PLATFORM_CODES: Record<string, string> = {
+  // ── Field-verified (rider report) ────────────────────────────────────────
+  // Cakung (Lin Cikarang) — 1/2 eastbound to Bekasi, 3/4 westbound to Jakarta.
+  // Both Jakarta-bound groups (via Manggarai, via Pasar Senen) leave via KLDB.
+  // Corroborated by id.wikipedia: jalur 1-2 -> Cikarang, jalur 3-4 ->
+  // Jatinegara/Angke/Kampung Bandan.
+  'KCI-CUK:C:KRI': '1/2',
+  'KCI-CUK:C:KLDB': '3/4',
+
+  // Sudirman (Lin Cikarang) — 1 towards BNI City, 2 towards Manggarai.
+  // Corroborated by id.wikipedia: jalur 1 -> Angke/Kampung Bandan, jalur 2 ->
+  // Cikarang via Manggarai.
+  'KCI-SUD:C:SUDB': '1',
+  'KCI-SUD:C:MRI': '2',
+
+  // Kranji (Lin Cikarang) — 1 to Bekasi/Cikarang, 2 the reverse. Worth noting
+  // because id.wikipedia still describes the layout as a "trial" arrangement
+  // dating from the Jan 2019 new building; the field check supersedes that.
+  'KCI-KRI:C:BKS': '1',
+  'KCI-KRI:C:CUK': '2',
+
+  // Manggarai (Lin Cikarang) — 1/2 westbound (next hop Sudirman), 3/4 eastbound
+  // to Bekasi/Cikarang. The rider report and the Dec 2023 reporting agree here:
+  // "peron 1-2 arah Tanah Abang/Kampung Bandan" and "next hop Sudirman" are the
+  // same platform described by destination vs by next stop.
+  // Lin Bogor at Manggarai is NOT recorded — see the omissions note below.
+  'KCI-MRI:C:SUD': '1/2',
+  'KCI-MRI:C:MTR': '3/4',
+
+  // Jatinegara (Lin Cikarang) — 1 to Bekasi/Cikarang, 2 to Manggarai. Supersedes
+  // the id.wikipedia diagram, which spreads commuter services over jalur 1-6 and
+  // flags the assignment as provisional. The third group (via Pasar Senen, next
+  // hop Pondok Jati) is a distinct direction and is deliberately left unset.
+  'KCI-JNG:C:KLD': '1',
+  'KCI-JNG:C:MTR': '2',
+
+  // ── From id.wikipedia layout diagrams ────────────────────────────────────
+  // Matraman (Lin Cikarang) — single island platform, two tracks, unambiguous.
+  // jalur 1 -> Angke/Kampung Bandan, jalur 2 -> Bekasi/Cikarang (Jatinegara).
+  'KCI-MTR:C:MRI': '1',
+  'KCI-MTR:C:JNG': '2',
+
+  // Tanah Abang (new building, operational 4 Nov 2025; two outlets agree).
+  // Peron 1 -> Duri/Angke/Kampung Bandan AND Cikarang via Pasar Senen;
+  // peron 2 -> Bekasi/Cikarang via Manggarai. Rangkasbitung departures leave
+  // from 5/6 (arrivals terminate at 3/4 and are shunted across).
+  'KCI-THB:C:DU': '1',
+  'KCI-THB:C:KAT': '2',
+  'KCI-THB:R:PLM': '5/6',
+
+  // Duri — jalur 1 is the diverging track for Cikarang via Pasar Senen
+  // (Angke-bound), jalur 2 the straight track for Cikarang via Manggarai
+  // (Tanah Abang-bound); jalur 5 is the Tangerang line terminus.
+  'KCI-DU:C:AK': '1',
+  'KCI-DU:C:THB': '2',
+  'KCI-DU:T:GGL': '5',
+
+  // Lin Cikarang, eastern corridor. Each is an island platform between the two
+  // KRL tracks; the flanking jalur 3-4 are non-stop long-distance roads. As at
+  // Cakung, the via-Manggarai and via-Pasar Senen groups share one next hop and
+  // therefore one platform.
+  'KCI-KLD:C:BUA': '1', // Klender — jalur 1 to Cikarang
+  'KCI-KLD:C:JNG': '2', // jalur 2 to Jatinegara/Angke/Kampung Bandan
+  'KCI-BUA:C:KLDB': '1', // Buaran — jalur 1 to Cikarang
+  'KCI-BUA:C:KLD': '2',
+
+  // Lin Bogor, southern corridor. NOTE the numbering does NOT run consistently
+  // along the line — Tebet, Tanjung Barat and Universitas Pancasila put jalur 1
+  // on the Bogor-bound side while their neighbours put it on the Jakarta-bound
+  // side. Each was read off its own layout diagram; do not extrapolate.
+  'KCI-CW:B:TEB': '1', // Cawang — jalur 1 to Manggarai/Jakarta Kota
+  'KCI-CW:B:DRN': '2',
+  'KCI-DRN:B:CW': '1', // Duren Kalibata — jalur 1 to Jakarta Kota
+  'KCI-DRN:B:PSMB': '2',
+  'KCI-PSMB:B:DRN': '1', // Pasar Minggu Baru — jalur 1 to Jakarta Kota
+  'KCI-PSMB:B:PSM': '2',
+  'KCI-PSM:B:PSMB': '1/2', // Pasar Minggu — paired island platforms per direction
+  'KCI-PSM:B:TNT': '3/4',
+  'KCI-TEB:B:MRI': '2', // Tebet — REVERSED: jalur 2 to Jakarta Kota
+  'KCI-TEB:B:CW': '1',
+  'KCI-LNA:B:TNT': '1', // Lenteng Agung — jalur 1 to Manggarai
+  'KCI-LNA:B:UP': '2',
+  'KCI-TNT:B:PSM': '2', // Tanjung Barat — REVERSED: jalur 2 to Jakarta Kota
+  'KCI-TNT:B:LNA': '1',
+  'KCI-UP:B:LNA': '2', // Universitas Pancasila — REVERSED: jalur 2 to Jakarta Kota
+  'KCI-UP:B:UI': '1',
+  'KCI-CKI:B:GDD': '1', // Cikini — jalur 1 to Jakarta Kota
+  'KCI-CKI:B:MRI': '2'
+
+  /*
+   * Deliberately omitted — do not fill these in without a field check:
+   *
+   * Manggarai Lin Bogor (KCI-MRI:B:*). The Cikarang platforms above are from a
+   * rider report, but the Bogor-line ones are not. Published figures say peron
+   * 9-12, tracing to Dec 2023 reporting — and Manggarai has been reconfigured
+   * at least twice since (switch-over 1 Feb 2025; stopping points on peron 1-4
+   * moved again 1 May 2026), with jalur 10 closed for revitalisation at one
+   * point. Needs eyes on the platform, not a source.
+   *
+   * Jatinegara C:POK (via Pasar Senen, next hop Pondok Jati). A third departure
+   * direction beyond the Bekasi/Manggarai pair recorded above; no report covers
+   * it, and it cannot be inferred from the other two.
+   *
+   * Tanah Abang R:SYN:* — the Angke and Manggarai short-workings. The sources
+   * describe Rangkasbitung-line arrivals/departures but do not say which
+   * platform these specific short-turn services use.
+   *
+   * Duri T:SYN:Manggarai — the Basoetta-shared jalur 3/4 distinction does not
+   * map cleanly onto this group.
+   */
+}
 
 /**
  * Stations promoted into direction labels despite not being interchanges or
