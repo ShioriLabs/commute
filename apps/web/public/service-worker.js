@@ -16,20 +16,29 @@
         - Badges: https://microsoft.github.io/win-student-devs/#/30DaysOfPWA/advanced-capabilities/07?id=application-badges
     */
 
+// Bump this if and only if tile or preview *bytes* change — i.e. whenever
+// build-map-tiles.ts regenerates the grid. After the cache-first split below,
+// those are the only assets frozen for the lifetime of this cache, and a bump
+// costs every user a ~27 MB re-download of the full tile set.
 const CACHE_NAME = 'pwa-cache-v3'
 const TILE_PATH_PREFIX = '/maps/fdtj/'
 
 // Pre-cached map assets. Derived deterministically from the 4x4 grid in
 // build-map-tiles.ts — keep this list in sync if grid dimensions change.
+//
+// Only genuinely-immutable, stable-URL assets belong here. Both JSON files
+// under /maps/fdtj/ are deliberately absent:
+//   - points.json is edited constantly. It now lives at app/data/points.json
+//     and is imported with `?url`, so Vite content-hashes it into /assets/.
+//     There is no stable URL left to pre-cache, and none is needed — a new
+//     hash is a new URL, which no cache can have a stale copy of.
+//   - manifest.json is the map's version pointer, so it has to stay
+//     revalidated. It falls through to stale-while-revalidate in `fetch`.
 const MAP_ROWS = 4
 const MAP_COLS = 4
 const RASTER_TIERS = [1, 2]
 const buildMapAssetList = () => {
-  const urls = [
-    `${TILE_PATH_PREFIX}manifest.json`,
-    `${TILE_PATH_PREFIX}points.json`,
-    `${TILE_PATH_PREFIX}preview.webp`
-  ]
+  const urls = [`${TILE_PATH_PREFIX}preview.webp`]
   for (let r = 0; r < MAP_ROWS; r++) {
     for (let c = 0; c < MAP_COLS; c++) {
       urls.push(`${TILE_PATH_PREFIX}tile-${r}-${c}.svg`)
@@ -40,6 +49,14 @@ const buildMapAssetList = () => {
   }
   return urls
 }
+
+// Cache-first serves exactly the pre-cached set. The invariant: if an asset
+// isn't safe to freeze for the lifetime of CACHE_NAME, it isn't safe to serve
+// from cache without revalidating either. Membership is an allowlist rather
+// than a manifest.json denylist so it fails safe — any *future* file dropped
+// under /maps/fdtj/ gets revalidated instead of silently frozen.
+const MAP_PRECACHE_URLS = buildMapAssetList()
+const IMMUTABLE_MAP_ASSETS = new Set(MAP_PRECACHE_URLS)
 
 const HOSTNAME_WHITELIST = [
   self.location.hostname,
@@ -81,7 +98,7 @@ self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME)
     try {
-      await cache.addAll(buildMapAssetList())
+      await cache.addAll(MAP_PRECACHE_URLS)
     } catch (err) {
       // Don't block install if a tile asset isn't available yet (e.g. dev
       // server before the build script has run). The runtime cache-first
@@ -102,6 +119,17 @@ self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys()
     await Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+    // One-time migration off the old cache-first JSON entries: points.json has
+    // moved to a hashed /assets/ URL, and manifest.json must be revalidated
+    // from now on. Evicting two entries costs nothing, whereas bumping
+    // CACHE_NAME to achieve the same thing would force every user to
+    // re-download ~27 MB of tiles. Safe to delete once CACHE_NAME next moves,
+    // since that drops the whole cache anyway.
+    const cache = await caches.open(CACHE_NAME)
+    await Promise.all([
+      cache.delete(`${TILE_PATH_PREFIX}points.json`),
+      cache.delete(`${TILE_PATH_PREFIX}manifest.json`)
+    ])
     await self.clients.claim()
   })())
 })
@@ -116,7 +144,13 @@ const cacheFirst = async (request) => {
   const cached = await cache.match(request)
   if (cached) return cached
   try {
-    const response = await fetch(request)
+    // `cache: 'reload'` bypasses the HTTP disk cache, which still holds these
+    // under a one-year `immutable` entry. Without it a CACHE_NAME bump would
+    // refill CacheStorage from that stale HTTP copy and change nothing — the
+    // bump would appear to work while serving the old tiles. This path only
+    // runs on a CacheStorage miss (fresh install or post-bump), which is
+    // exactly when network authority is wanted, so it costs nothing otherwise.
+    const response = await fetch(request.url, { cache: 'reload' })
     if (response.ok) cache.put(request, response.clone()).catch(() => {})
     return response
   } catch (err) {
@@ -145,11 +179,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Tile assets: cache-first. They're immutable for the lifetime of this SW
-  // version, so network revalidation is wasted bytes.
+  // Immutable map assets (tiles + preview): cache-first. Their bytes never
+  // change for the lifetime of CACHE_NAME, so revalidation is wasted bytes.
+  // Everything else under /maps/fdtj/ — i.e. manifest.json — intentionally
+  // falls through to the stale-while-revalidate branch below, which fetches
+  // with `cache: 'no-store'` and so bypasses the HTTP cache as well.
   if (
     requestUrl.hostname === self.location.hostname
-    && requestUrl.pathname.startsWith(TILE_PATH_PREFIX)
+    && IMMUTABLE_MAP_ASSETS.has(requestUrl.pathname)
   ) {
     event.respondWith(cacheFirst(event.request))
     return

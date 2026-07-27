@@ -6,10 +6,19 @@ code is reachable from a tap**. The 15 directional `Arah …` pairs share one dr
 marker each: the partner code rides along as `<code>-b` with a `station` field
 (see *One halte drawn twice*). Non-BRT TJ services: TODO.
 
-`apps/web/public/maps/fdtj/points.json` holds tap-target shapes, consumed by
+`apps/web/app/data/points.json` holds tap-target shapes, consumed by
 `app/routes/map.tsx` → `app/lib/map-renderer.ts`. The map is a **schematic**
 (TfL-style, not geo-accurate) — read positions **off the drawing**, never from
 GTFS lat/lon.
+
+**Do not move this file back under `public/`.** It lives in `app/` so that
+`map.tsx` can import it as `../data/points.json?url`, which makes Vite
+content-hash it into `/assets/`. Files in `public/` are copied verbatim under
+stable names, and a stable URL cannot be cached correctly for a file that
+changes every time a tap target is edited — edits would ship to the origin but
+never reach users, pinned behind the service worker and a one-year `immutable`
+header. The tiles beside it (`public/maps/fdtj/`) stay put: those really are
+immutable between map releases.
 
 ## Point shape
 
@@ -130,7 +139,8 @@ Helpers are throwaway scratchpad PIL scripts (grid / fine-crop / overlay). Loop:
 
 Final human check: `/map?author=1` (dev) renders all hitboxes. Author mode
 hydrates from `localStorage['fdtj-author-points-v1']` first, so clear that key to
-see edits made directly in the file.
+see edits made directly in the file. Its Export button downloads a file named
+`points.json` — that belongs in `apps/web/app/data/`, not `public/maps/fdtj/`.
 
 ## Koridor 1 — conventions set
 

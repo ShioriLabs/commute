@@ -1,6 +1,18 @@
+# Rules must not overlap. Cloudflare Pages *appends* when two rules match the
+# same path, so a /maps/* catch-all plus a per-file override emits a doubled
+# `Cache-Control: ...immutable, public, max-age=300` — the override never wins.
+# Anything under /maps/ not matched here falls back to the Pages default
+# (max-age=0, must-revalidate), which errs toward fresh rather than frozen.
 /assets/*
   Cache-Control: public, max-age=2592000, immutable
-/maps/*
+# Tiles and preview are regenerated only by build:map-tiles; bump CACHE_NAME in
+# service-worker.js when they change.
+/maps/fdtj/tile-*
   Cache-Control: public, max-age=31536000, immutable
+/maps/fdtj/preview.webp
+  Cache-Control: public, max-age=31536000, immutable
+# The map's version pointer — mutable, so it must never be immutable.
+/maps/fdtj/manifest.json
+  Cache-Control: public, max-age=300, must-revalidate
 /index.html
   Cache-Control: public, max-age=600, stale-while-revalidate=86400

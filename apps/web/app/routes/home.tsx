@@ -11,8 +11,10 @@ import { CaretRightIcon, DownloadSimpleIcon, InfoIcon, WarningIcon } from '@phos
 import { Link } from 'react-router'
 import SettingsButton from '~/components/nav-buttons/settings'
 import FareButton from '~/components/nav-buttons/fare'
+import MapButton from '~/components/nav-buttons/map'
 import { useNetworkStatus } from '~/hooks/network'
 import { useInstall } from '~/contexts/installable'
+import { useMapUnlock } from '~/hooks/secret-features'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -150,6 +152,7 @@ export default function HomePage() {
   const networkStatus = useNetworkStatus()
   const { isInstallable, showIOSInstructions, isStandalone, promptInstall } = useInstall()
   const [showInstallBanner, setShowInstallBanner] = useState(false)
+  const { isUnlocked: isMapUnlocked } = useMapUnlock()
 
   const canInstall = (isInstallable || showIOSInstructions) && !isStandalone
 
@@ -261,6 +264,7 @@ export default function HomePage() {
         <div className="w-full max-w-3xl mx-auto flex gap-3 overflow-x-auto no-scrollbar">
           <SearchStationsButton className="ml-4 lg:ml-2" />
           <FareButton />
+          {isMapUnlocked && <MapButton />}
           <SettingsButton className={canInstall ? '' : 'mr-4 lg:mr-2'} />
         </div>
       </nav>
