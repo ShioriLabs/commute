@@ -159,7 +159,13 @@ self.addEventListener('activate', (event) => {
  */
 const cacheFirst = async (request) => {
   const cache = await caches.open(CACHE_NAME)
-  const cached = await cache.match(request)
+  // `ignoreSearch` so the `?v=<build>` cache-buster the renderer appends to tile
+  // URLs doesn't fragment the cache. The query exists to defeat Cloudflare's
+  // year-long `immutable` edge cache on stable tile filenames; CacheStorage is
+  // already scoped by CACHE_NAME, which moves whenever the tiles do, so keying
+  // on the path alone is both sufficient and what lets the pre-cached
+  // (unversioned) entries answer versioned requests.
+  const cached = await cache.match(request, { ignoreSearch: true })
   if (cached) return cached
   try {
     // `cache: 'reload'` bypasses the HTTP disk cache, which still holds these
@@ -169,7 +175,11 @@ const cacheFirst = async (request) => {
     // runs on a CacheStorage miss (fresh install or post-bump), which is
     // exactly when network authority is wanted, so it costs nothing otherwise.
     const response = await fetch(request.url, { cache: 'reload' })
-    if (response.ok) cache.put(request, response.clone()).catch(() => {})
+    // Store under the bare path so there is exactly one entry per asset,
+    // matching both the pre-cached URLs and the ignoreSearch lookup above.
+    if (response.ok) {
+      cache.put(new URL(request.url).pathname, response.clone()).catch(() => {})
+    }
     return response
   } catch (err) {
     // Offline + uncached — return a synthetic 504 so the renderer's onerror

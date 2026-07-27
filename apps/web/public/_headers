@@ -5,8 +5,16 @@
 # (max-age=0, must-revalidate), which errs toward fresh rather than frozen.
 /assets/*
   Cache-Control: public, max-age=2592000, immutable
-# Tiles and preview are regenerated only by build:map-tiles; bump CACHE_NAME in
-# service-worker.js when they change.
+# Tiles and preview keep stable filenames across builds, so `immutable` here is
+# only safe because the renderer requests them with `?v=<manifest.build>` — a
+# content hash that changes whenever build:map-tiles regenerates them (see
+# createTileSource in app/lib/map-renderer-tile-source.ts). Without that query
+# these URLs are frozen at the edge for a year: that is how an 8x8 build ended
+# up served as 4x4 pixels at the 16 overlapping coordinates.
+#
+# manifest.json below stays short-lived and revalidated, so a client picks up
+# the new hash within minutes and every tile URL turns over with it.
+# Also bump CACHE_NAME in service-worker.js when the tiles change.
 /maps/fdtj/tile-*
   Cache-Control: public, max-age=31536000, immutable
 /maps/fdtj/preview.webp

@@ -3,6 +3,12 @@ import { createCanvas2DRenderer } from './map-renderer-canvas2d'
 
 export interface Manifest {
   version: string
+  // Short content hash over the emitted rasters, appended to tile URLs as `?v=`.
+  // `version` tracks the source PDF edition and stays put when the same artwork
+  // is re-tiled, which is what let a new manifest point at year-old cached tiles
+  // at the edge. Optional so a manifest built before this field still loads —
+  // those URLs simply go unversioned, exactly as they did then.
+  build?: string
   source: string
   viewBox: [number, number, number, number]
   grid: { rows: number, cols: number }

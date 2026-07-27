@@ -123,6 +123,20 @@ export function createTileSource({ manifest, baseUrl }: TileSourceOptions): Tile
   const tileW = manifest.tileSize.w
   const tileH = manifest.tileSize.h
   const rasterTiers = new Set<Tier>(manifest.raster?.tiers ?? [])
+
+  // Tile filenames are stable across builds (`tile-0-0@1x.webp` names a
+  // different image after a re-tile), and _headers serves everything under
+  // /maps/fdtj/tile-* as `immutable, max-age=31536000`. Without a version in
+  // the URL the edge is entitled to serve the previous build's bytes for a
+  // year — which is precisely what happened when the grid went 4x4 -> 8x8: the
+  // manifest updated (max-age=300) while the 16 overlapping tile URLs kept
+  // returning cached 4x4 pixels.
+  //
+  // The stamp comes from the manifest, so a cached manifest and its tiles move
+  // together: whichever manifest a client holds, its `build` selects the
+  // matching tiles.
+  const cacheBust = manifest.build ? `?v=${manifest.build}` : ''
+  const assetUrl = (file: string) => `${baseUrl}${file}${cacheBust}`
   const worker = new RasterWorker()
   // Cache SVG text per (r,c) so tier upgrades don't re-fetch.
   const svgTextCache = new Map<string, Promise<string>>()
@@ -134,7 +148,7 @@ export function createTileSource({ manifest, baseUrl }: TileSourceOptions): Tile
   }
 
   async function loadRasterTile(r: number, c: number, tier: Tier): Promise<Bitmap> {
-    const url = `${baseUrl}tile-${r}-${c}@${tier}x.webp`
+    const url = assetUrl(`tile-${r}-${c}@${tier}x.webp`)
     const res = await fetch(url)
     if (!res.ok) throw new Error(`Raster tile fetch failed: ${url} (${res.status})`)
     const blob = await res.blob()
@@ -145,7 +159,7 @@ export function createTileSource({ manifest, baseUrl }: TileSourceOptions): Tile
     const key = `${r}-${c}`
     let textPromise = svgTextCache.get(key)
     if (!textPromise) {
-      textPromise = fetchText(`${baseUrl}tile-${r}-${c}.svg`)
+      textPromise = fetchText(assetUrl(`tile-${r}-${c}.svg`))
       svgTextCache.set(key, textPromise)
     }
     const text = await textPromise
@@ -172,7 +186,7 @@ export function createTileSource({ manifest, baseUrl }: TileSourceOptions): Tile
     const preview = manifest.preview
     if (!preview) return null
     try {
-      const res = await fetch(`${baseUrl}${preview.url}`)
+      const res = await fetch(assetUrl(preview.url))
       if (!res.ok) return null
       const blob = await res.blob()
       return await createImageBitmap(blob)
