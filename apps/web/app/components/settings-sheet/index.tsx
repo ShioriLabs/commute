@@ -1,5 +1,5 @@
 import { CloseButton, DialogTitle } from '@headlessui/react'
-import { PushPinSimpleIcon, ArchiveIcon, FilesIcon, InfoIcon, XIcon, DownloadSimpleIcon, GearIcon } from '@phosphor-icons/react'
+import { PushPinSimpleIcon, ArchiveIcon, FilesIcon, InfoIcon, XIcon, DownloadSimpleIcon, GearIcon, DatabaseIcon } from '@phosphor-icons/react'
 import SettingsItem from './settings-item'
 import { useInstall } from '~/contexts/installable'
 
@@ -53,6 +53,10 @@ export default function SettingsSheet() {
                   )
 
             }
+          </SettingsItem>
+          <SettingsItem href="https://data.commute.shiorilabs.id">
+            <DatabaseIcon weight="fill" className="w-6 h-6" />
+            Commute Data Platform
           </SettingsItem>
           <SettingsItem to="/settings/about">
             <InfoIcon weight="fill" className="w-6 h-6" />
