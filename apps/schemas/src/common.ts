@@ -160,21 +160,37 @@ export type HexColored<T> =
 
 export type Line = HexColored<v.InferOutput<typeof LineSchema>>
 export type LineKey = v.InferOutput<typeof LineKeySchema>
-export type ApiError = v.InferOutput<typeof ErrorSchema>
+export type APIError = v.InferOutput<typeof ErrorSchema>
 export type ErrorResponse = v.InferOutput<typeof ErrorResponseSchema>
 
 /*
  * The envelope as a CLIENT sees it, across every status.
  *
- * Both fields are optional here even though `Envelope()` requires `data` and
- * `ErrorResponseSchema` requires `error`: those describe one status each, while
- * a client holds a response before knowing which it got. Narrow by checking
- * `data` — the API never sends both.
+ * A discriminated union rather than one object with two optional fields: the
+ * API sends `data` or `error`, never both and never neither, and the type now
+ * says so. `error?: never` on the success arm is what does the discriminating —
+ * without it, an object carrying both fields would still satisfy the type.
  *
- * Matches apps/api/src/models/response.ts.
+ * Narrow before reading the payload; TypeScript resolves the other field:
+ *
+ *   if (response.error) return response.error.message
+ *   return response.data
+ *
+ * Optional chaining (`response.data?.name`) still works on the union, so this
+ * is not a breaking change for existing call sites.
+ *
+ * Mirrors apps/api/src/models/response.ts.
  */
-export interface StandardResponse<T = unknown> {
+export interface SuccessResponse<T = unknown> {
   status: number
-  data?: T
-  error?: ApiError
+  data: T
+  error?: never
 }
+
+export interface FailureResponse {
+  status: number
+  data?: never
+  error: APIError
+}
+
+export type StandardResponse<T = unknown> = SuccessResponse<T> | FailureResponse
