@@ -1,7 +1,6 @@
 import * as v from 'valibot'
-import type { HexColored } from './common'
-import { LineSchema } from './common'
-import { StationSchema } from './station'
+import { LineKeySchema } from './common'
+import { StationRefSchema } from './station'
 
 export const HubSchema = v.pipe(
   v.object({
@@ -17,24 +16,24 @@ export const HubSchema = v.pipe(
       v.description('`hub` — several differently-named stations in one complex, where the grouping carries information. `integrated` — one place to a rider, split across operators only in the data.'),
       v.metadata({ examples: ['hub'] })
     ),
-    description: v.nullable(v.string()),
-    heroImage: v.nullable(v.string()),
-    latitude: v.nullable(v.number()),
-    longitude: v.nullable(v.number()),
-    score: v.pipe(v.number(), v.description('Relative prominence, used for ranking.')),
+    heroImage: v.pipe(
+      v.nullable(v.string()),
+      v.description('Photo of the complex, for social cards and page headers.')
+    ),
     lines: v.pipe(
-      v.array(LineSchema),
+      v.array(LineKeySchema),
       v.description('Every line reachable from the hub, deduped across its members.')
     ),
+    // References rather than embedded stations: the full objects were most of
+    // this payload, and each member's own endpoint is one hop away.
     members: v.pipe(
-      v.array(StationSchema),
+      v.array(StationRefSchema),
       v.description('The stations making up this hub, in display order.')
-    ),
-    createdAt: v.string(),
-    updatedAt: v.string()
+    )
   }),
-  v.title('Hub')
+  v.title('Hub'),
+  v.description('An interchange complex grouping several stations under one name. A hub carries no coordinates of its own — its members have those.')
 )
 
-export type Hub = HexColored<v.InferOutput<typeof HubSchema>>
+export type Hub = v.InferOutput<typeof HubSchema>
 export type HubKind = Hub['kind']

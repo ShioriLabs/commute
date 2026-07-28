@@ -26,7 +26,12 @@ import { SearchableIndexSchema } from './searchable'
  * a CI box without egress doesn't fail the suite.
  */
 
-const BASE = 'https://api.commute.shiorilabs.id'
+/*
+ * Defaults to production. Point BASE at a local worker (`LIVE=1
+ * SCHEMAS_BASE=http://localhost:3020`) to validate a reshape before it deploys —
+ * production still serves the previous shape until then.
+ */
+const BASE = process.env.SCHEMAS_BASE ?? 'https://api.commute.shiorilabs.id'
 const live = process.env.LIVE === '1'
 
 async function fetchJson(path: string): Promise<unknown> {

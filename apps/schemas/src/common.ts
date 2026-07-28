@@ -79,6 +79,24 @@ export const LineSchema = v.pipe(
   v.title('Line')
 )
 
+/*
+ * A reference to a line, as `OPERATOR:CODE`.
+ *
+ * Responses carry keys rather than embedded Line objects: a line's name and
+ * colour are the same everywhere it appears, and repeating them across hundreds
+ * of stations made the payload mostly duplication. Resolve them against the
+ * dictionary from `/operators`, which every client already needs.
+ *
+ * Qualified by operator because codes are only unique within one — TransJakarta
+ * corridors are bare numerals that would otherwise collide.
+ */
+export const LineKeySchema = v.pipe(
+  v.string(),
+  v.title('Line key'),
+  v.description('`OPERATOR:CODE`, resolved against the line dictionary from `/operators`.'),
+  v.metadata({ examples: ['KCI:C', 'TJ:1'] })
+)
+
 export const ErrorSchema = v.pipe(
   v.object({
     code: v.pipe(
@@ -138,6 +156,7 @@ export type HexColored<T> =
         : T
 
 export type Line = HexColored<v.InferOutput<typeof LineSchema>>
+export type LineKey = v.InferOutput<typeof LineKeySchema>
 export type ApiError = v.InferOutput<typeof ErrorSchema>
 export type ErrorResponse = v.InferOutput<typeof ErrorResponseSchema>
 

@@ -1,6 +1,7 @@
 import { Link } from 'react-router'
 import type { LineDetailStation } from '@commute/schemas'
 import { getForegroundColor } from 'utils/colors'
+import { useLines } from '~/hooks/use-lines'
 import { splitStationNumber } from '~/components/line-roundel'
 
 export type NodeKind = 'TERMINUS' | 'REGULAR' | 'INTERCHANGE' | 'JUNCTION'
@@ -59,9 +60,12 @@ export default function StationRow({
   side = 'SINGLE',
   compact = false
 }: StationRowProps) {
-  const badges = station.otherLines.length > 0 && (
+  // otherLines are line keys; resolve them to names and colours for the badges.
+  const { lines: resolveLines } = useLines()
+  const otherLines = resolveLines(station.otherLines)
+  const badges = otherLines.length > 0 && (
     <ul className={`relative z-10 flex flex-wrap gap-1 ${side === 'RIGHT' ? 'justify-end' : ''}`}>
-      {station.otherLines.map(line => (
+      {otherLines.map(line => (
         <li key={line.lineCode}>
           <Link
             to={`/lines/${operator}/${line.lineCode}`}

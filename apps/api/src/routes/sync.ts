@@ -72,7 +72,11 @@ app.post('/:operator/:stationCode/timetable', async (c) => {
 
     const stationKVKey = `stations:${operator.code}-${stationCode}:${c.env.API_VERSION}`
     const timetableKVKey = `timetable:${operator.code}-${stationCode}:${c.env.API_VERSION}`
-    const groupedTimetableKVKey = `timetable:${operator.code}-${stationCode}:grouped:${c.env.API_VERSION}`
+    // Both wire formats are cached separately; a sync must drop both. The
+    // single unsuffixed key used here before matched neither.
+    const groupedTimetableKVKeys = (['compact', 'full'] as const).map(
+      format => `timetable:${operator.code}-${stationCode}:grouped:${format}:${c.env.API_VERSION}`
+    )
 
     const checkStationResult = await stationRepository.checkIfExists(`${operator.code}-${stationCode}`)
     if (!checkStationResult.exists || checkStationResult.station === null) return c.json(NotFound(`Unknown Station Code ${stationCode} in Operator ${operator.code}`), 404)
@@ -91,7 +95,7 @@ app.post('/:operator/:stationCode/timetable', async (c) => {
 
     await kvRepository.del(stationKVKey)
     await kvRepository.del(timetableKVKey)
-    await kvRepository.del(groupedTimetableKVKey)
+    await Promise.all(groupedTimetableKVKeys.map(key => kvRepository.del(key)))
 
     return c.json(
       Ok(

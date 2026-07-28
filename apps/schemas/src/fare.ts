@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { OperatorCodeSchema } from './common'
+import { LineKeySchema, OperatorCodeSchema } from './common'
 
 export const FareStationSchema = v.pipe(
   v.object({
@@ -11,10 +11,11 @@ export const FareStationSchema = v.pipe(
 
 export const LineRefSchema = v.pipe(
   v.object({
-    lineCode: v.string(),
-    lineName: v.string(),
-    lineColor: v.string(),
-    headsign: v.nullable(v.string())
+    line: LineKeySchema,
+    headsign: v.pipe(
+      v.nullable(v.string()),
+      v.description('Terminus this particular service heads toward.')
+    )
   }),
   v.title('FareLineRef')
 )
@@ -22,9 +23,9 @@ export const LineRefSchema = v.pipe(
 export const RideLegSchema = v.pipe(
   v.object({
     type: v.literal('RIDE'),
-    lineCode: v.string(),
-    lineName: v.pipe(v.string(), v.metadata({ examples: ['Lin Tanjung Priok'] })),
-    lineColor: v.string(),
+    // A line key; its name and colour resolve against /operators, as everywhere
+    // else. `operator` is kept because it is the leg's own fact, not the line's.
+    line: LineKeySchema,
     operator: OperatorCodeSchema,
     from: FareStationSchema,
     to: FareStationSchema,
@@ -67,11 +68,10 @@ export const FareLegSchema = v.pipe(
 export const FareSegmentSchema = v.pipe(
   v.object({
     operator: OperatorCodeSchema,
-    fromStationId: v.string(),
-    toStationId: v.string(),
-    fromName: v.string(),
-    toName: v.string(),
-    distanceM: v.number(),
+    // Nested from/to, like every other station reference in the API, rather
+    // than four flat fromStationId/fromName/toStationId/toName fields.
+    from: FareStationSchema,
+    to: FareStationSchema,
     fare: v.pipe(
       v.nullable(v.number()),
       v.description('Fare for this segment, in rupiah; null where it cannot be determined.')

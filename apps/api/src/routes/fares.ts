@@ -9,7 +9,6 @@ import { calculateTransferFare, fareTimeBucket, resolveCorridorMerges } from 'ut
 import { summarizeFares } from 'utils/fare-summary'
 import { computeHeadsignCode } from 'utils/headsign'
 import { findInterliningLineCodes, mergeInterlinedLegs } from 'utils/interlining'
-import { getLineByOperator } from 'utils/line'
 import { Internal, NotFound, Ok } from 'utils/response'
 import { ENDPOINT_RESTRICTIONS } from 'db/data/topology'
 import { buildGraph, findRoute, RouteGraph } from 'utils/router'
@@ -145,7 +144,7 @@ app.get(
       const stations = await stationRepository.getByIds(stationIds)
       const name = (id: string) => {
         const station = stations.find(s => s.id === id)
-        return station ? (station.formattedName || station.name) : id
+        return station ? station.name : id
       }
       const stationRef = (id: string) => ({ id, name: name(id) })
       const known = (id: string | null): id is string => id !== null && stations.some(s => s.id === id)
@@ -182,23 +181,18 @@ app.get(
           }]
         }
         const meta = legLines[index]!
-        const serviceLines: FareResultLineRef[] = meta.lines.map((l) => {
-          const line = getLineByOperator(leg.operator as Operator, l.lineCode)
-          return {
-            lineCode: l.lineCode,
-            lineName: line?.name ?? l.lineCode,
-            lineColor: line?.colorCode ?? '#888888',
-            headsign: headsignName(l.headsign)
-          }
-        })
+        // Line keys; name and colour resolve against /operators like everywhere
+        // else, so the leg no longer carries three denormalised line fields.
+        const serviceLines: FareResultLineRef[] = meta.lines.map(l => ({
+          line: `${leg.operator}:${l.lineCode}`,
+          headsign: headsignName(l.headsign)
+        }))
         // On interlined track the router's line pick is arbitrary; present the
         // first topology-ordered service line as the primary for a stable badge.
         const primary = serviceLines[0]!
         return [{
           type: 'RIDE',
-          lineCode: primary.lineCode,
-          lineName: primary.lineName,
-          lineColor: primary.lineColor,
+          line: primary.line,
           operator: leg.operator,
           from: stationRef(leg.fromStationId),
           to: stationRef(leg.toStationId),
@@ -224,7 +218,15 @@ app.get(
         from: stationRef(fromId),
         to: stationRef(toId),
         legs: resultLegs,
-        segments: summary.segments.map(s => ({ ...s, fromName: name(s.fromStationId), toName: name(s.toStationId) })),
+        // Nested from/to, matching every other station reference in the API,
+        // instead of four flat fromStationId/fromName/toStationId/toName fields.
+        // `distanceM` is dropped: only leg-level distance is ever rendered.
+        segments: summary.segments.map(s => ({
+          operator: s.operator,
+          from: stationRef(s.fromStationId),
+          to: stationRef(s.toStationId),
+          fare: s.fare
+        })),
         totalFare: summary.totalFare,
         totalDistanceM: summary.totalDistanceM + internalWalkExtra,
         transferCount: summary.transferCount - absorbedCount

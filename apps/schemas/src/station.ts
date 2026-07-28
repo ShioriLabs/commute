@@ -1,36 +1,39 @@
 import * as v from 'valibot'
 import type { HexColored } from './common'
-import { AmenitySchema, LineSchema, OperatorSchema, RegionCodeSchema } from './common'
+import { AmenitySchema, LineKeySchema, OperatorCodeSchema, RegionCodeSchema } from './common'
+
+const stationIdentity = {
+  id: v.pipe(
+    v.string(),
+    v.description('Stable identifier, `{operatorCode}-{stationCode}`. Use this for fare lookups.'),
+    v.metadata({ examples: ['KCI-AC'] })
+  ),
+  name: v.pipe(
+    v.string(),
+    v.description('Display name — what to show a rider.'),
+    v.metadata({ examples: ['Ancol'] })
+  ),
+  officialName: v.pipe(
+    v.string(),
+    v.description('The operator\'s own spelling, which often differs in substance rather than just casing — MRT Jakarta publishes "Stasiun Lebak Bulus" for the station displayed as "Lebak Bulus Bank Syariah Indonesia". Useful as a search alias.'),
+    v.metadata({ examples: ['ANCOL'] })
+  ),
+  code: v.pipe(
+    v.string(),
+    v.description('Operator-scoped station code — unique per operator, not globally.'),
+    v.metadata({ examples: ['AC'] })
+  ),
+  operator: OperatorCodeSchema,
+  lines: v.pipe(
+    v.array(LineKeySchema),
+    v.description('Lines calling at this station, as keys into the line dictionary from `/operators`. Empty for stations that exist only in the topology.')
+  )
+}
 
 export const StationSchema = v.pipe(
   v.object({
-    id: v.pipe(
-      v.string(),
-      v.description('Stable identifier, `{operatorCode}-{stationCode}`. Use this for fare lookups.'),
-      v.metadata({ examples: ['KCI-AC'] })
-    ),
-    name: v.pipe(
-      v.string(),
-      v.description('Name as the operator publishes it, often uppercase.'),
-      v.metadata({ examples: ['ANCOL'] })
-    ),
-    formattedName: v.pipe(
-      v.nullable(v.string()),
-      v.description('Display-ready name. Prefer this over `name`, falling back to it when null.'),
-      v.metadata({ examples: ['Ancol'] })
-    ),
-    code: v.pipe(
-      v.string(),
-      v.description('Operator-scoped station code — unique per operator, not globally.'),
-      v.metadata({ examples: ['AC'] })
-    ),
-    region: v.pipe(v.string(), v.metadata({ examples: ['Jabodetabek'] })),
+    ...stationIdentity,
     regionCode: RegionCodeSchema,
-    operator: OperatorSchema,
-    lines: v.pipe(
-      v.array(LineSchema),
-      v.description('Lines calling at this station. Empty for stations that exist only in the topology.')
-    ),
     amenities: v.array(AmenitySchema),
     latitude: v.pipe(
       v.nullable(v.number()),
@@ -48,15 +51,18 @@ export const StationSchema = v.pipe(
     searchable: v.pipe(
       v.boolean(),
       v.description('False for topology-only stops that exist for routing but are hidden from search. Always true in list responses, which filter them out.')
-    ),
-    timetableSynced: v.pipe(
-      v.number(),
-      v.description('1 when a timetable has been imported for this station, 0 otherwise.')
-    ),
-    createdAt: v.string(),
-    updatedAt: v.string()
+    )
   }),
   v.title('Station')
+)
+
+/*
+ * A station as referenced from another resource — a hub's members, a transfer's
+ * destination. Enough to render and link; fetch the station itself for detail.
+ */
+export const StationRefSchema = v.pipe(
+  v.object(stationIdentity),
+  v.title('StationRef')
 )
 
 /*
@@ -66,7 +72,9 @@ export const StationSchema = v.pipe(
  */
 const TransferBaseEntries = {
   id: v.string(),
-  distance: v.pipe(
+  // `distanceM`, matching FareLeg.distanceM and FareResult.totalDistanceM — one
+  // spelling for distance across the whole API.
+  distanceM: v.pipe(
     v.number(),
     v.description('Walking distance in metres.'),
     v.metadata({ examples: [200] })
@@ -82,15 +90,10 @@ export const InternalTransferSchema = v.pipe(
   v.object({
     ...TransferBaseEntries,
     dataType: v.literal('INTERNAL'),
-    toStation: v.object({
-      stationId: v.pipe(v.string(), v.metadata({ examples: ['MRTJ-DKA'] })),
-      name: v.string(),
-      operatorName: v.string(),
-      lines: v.array(LineSchema)
-    })
+    toStation: StationRefSchema
   }),
   v.title('InternalTransfer'),
-  v.description('A connection to another station in this API. `toStation` resolves to a real station id.')
+  v.description('A connection to another station in this API. `toStation` is a full station reference.')
 )
 
 export const ExternalTransferSchema = v.pipe(
@@ -99,7 +102,10 @@ export const ExternalTransferSchema = v.pipe(
     dataType: v.literal('EXTERNAL'),
     toStation: v.object({
       name: v.string(),
-      operatorName: v.string()
+      operatorName: v.pipe(
+        v.string(),
+        v.description('Free-text operator name — an external service has no operator code in this API.')
+      )
     })
   }),
   v.title('ExternalTransfer'),
@@ -112,21 +118,21 @@ export const TransferSchema = v.pipe(
   v.description('Discriminated on `dataType`. Current data is all INTERNAL; the EXTERNAL branch exists for off-network connections.')
 )
 
+/*
+ * A single scheduled departure. The row's own id, its station id and the
+ * timestamps are gone: a schedule is always read in the context of the station
+ * and line that own it, so repeating them was noise.
+ */
 export const ScheduleSchema = v.pipe(
   v.object({
-    id: v.string(),
-    stationId: v.pipe(v.string(), v.metadata({ examples: ['KCI-AC'] })),
     tripNumber: v.pipe(
       v.nullable(v.string()),
       v.description('Operator\'s trip/service number; null for operators that don\'t publish one.'),
       v.metadata({ examples: ['1151'] })
     ),
     estimatedDeparture: v.pipe(v.string(), v.description('Local time, `HH:MM:SS`.'), v.metadata({ examples: ['05:42:00'] })),
-    estimatedArrival: v.pipe(v.string(), v.metadata({ examples: ['05:41:00'] })),
     boundFor: v.pipe(v.string(), v.description('Terminus this service heads toward.'), v.metadata({ examples: ['JAKARTAKOTA'] })),
-    lineCode: v.string(),
-    createdAt: v.string(),
-    updatedAt: v.string()
+    lineCode: v.string()
   }),
   v.title('Schedule')
 )
@@ -181,9 +187,7 @@ const directionGroup = <T extends v.GenericSchema>(schedules: T, title: string) 
  */
 export const GroupedTimetableSchema = v.pipe(
   v.object({
-    name: v.string(),
-    colorCode: v.string(),
-    lineCode: v.string(),
+    line: v.pipe(LineKeySchema, v.description('The line these departures belong to.')),
     timetable: v.array(directionGroup(ScheduleSchema, 'TimetableDirectionGroup'))
   }),
   v.title('GroupedTimetable')
@@ -192,9 +196,7 @@ export const GroupedTimetableSchema = v.pipe(
 /** The `?compact=1` variant: identical structure, tuple schedules. */
 export const CompactGroupedTimetableSchema = v.pipe(
   v.object({
-    name: v.string(),
-    colorCode: v.string(),
-    lineCode: v.string(),
+    line: v.pipe(LineKeySchema, v.description('The line these departures belong to.')),
     timetable: v.array(directionGroup(CompactScheduleSchema, 'CompactTimetableDirectionGroup'))
   }),
   v.title('CompactGroupedTimetable')
@@ -214,9 +216,10 @@ export const LegacyTimetableEntrySchema = v.pipe(
   v.title('LegacyTimetableEntry')
 )
 
-export type Station = HexColored<v.InferOutput<typeof StationSchema>>
-export type Transfer = HexColored<v.InferOutput<typeof TransferSchema>>
-export type InternalTransfer = HexColored<v.InferOutput<typeof InternalTransferSchema>>
+export type Station = v.InferOutput<typeof StationSchema>
+export type StationRef = v.InferOutput<typeof StationRefSchema>
+export type Transfer = v.InferOutput<typeof TransferSchema>
+export type InternalTransfer = v.InferOutput<typeof InternalTransferSchema>
 export type ExternalTransfer = v.InferOutput<typeof ExternalTransferSchema>
 export type Schedule = v.InferOutput<typeof ScheduleSchema>
 /*
@@ -224,7 +227,7 @@ export type Schedule = v.InferOutput<typeof ScheduleSchema>
  * the OpenAPI-compat reason documented there; consumers get the precise tuple.
  */
 export type CompactSchedule = [tripNumber: string | null, minute: number]
-export type GroupedTimetable = HexColored<v.InferOutput<typeof GroupedTimetableSchema>>
+export type GroupedTimetable = v.InferOutput<typeof GroupedTimetableSchema>
 /*
  * `schedules` is re-typed to the real CompactSchedule tuple: the schema widens
  * it for OpenAPI-compat reasons (see CompactScheduleSchema), which would

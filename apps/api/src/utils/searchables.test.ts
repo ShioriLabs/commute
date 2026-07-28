@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { Operator } from '@commute/constants'
-import { Line } from 'models/line'
 import {
   buildSearchableIndex,
   directionalBaseName,
@@ -8,19 +7,18 @@ import {
   IndexableStation
 } from 'utils/searchables'
 
-const line = (lineCode: string, name = `Lin ${lineCode}`): Line => ({
-  name,
-  lineCode,
-  colorCode: '#000000'
-})
+/** Operator-qualified line key, as the repository now emits. */
+const key = (operator: Operator, lineCode: string) => `${operator}:${lineCode}`
 
-function station(overrides: Partial<IndexableStation> & { id: string, name: string, code: string }): IndexableStation {
+function station(
+  overrides: Partial<IndexableStation> & { id: string, name: string, code: string }
+): IndexableStation {
   return {
-    formattedName: null,
+    officialName: overrides.name,
     regionCode: 'CGK',
     searchable: true,
     score: 0,
-    operator: { code: 'TJ' as Operator, name: 'TransJakarta' },
+    operator: 'TJ' as Operator,
     lines: [],
     ...overrides
   }
@@ -50,13 +48,13 @@ describe('buildSearchableIndex — directional folding', () => {
       id: 'TJ-B01',
       name: 'Kali Grogol Arah Selatan',
       code: 'B01',
-      lines: [line('9'), line('7T')]
+      lines: [key('TJ', '9'), key('TJ', '7T')]
     }),
     station({
       id: 'TJ-A01',
       name: 'Kali Grogol Arah Utara',
       code: 'A01',
-      lines: [line('9'), line('7R')]
+      lines: [key('TJ', '9'), key('TJ', '7R')]
     })
   ]
 
@@ -101,7 +99,7 @@ describe('buildSearchableIndex — directional folding', () => {
         id: 'KCI-DKA',
         name: 'Dukuh Atas Arah Utara',
         code: 'DKA',
-        operator: { code: 'KCI', name: 'Commuter Line' }
+        operator: 'KCI'
       })
     ]
     expect(stationItems(buildSearchableIndex(crossOperator, []))).toHaveLength(2)
@@ -111,15 +109,16 @@ describe('buildSearchableIndex — directional folding', () => {
     const plain = [
       station({
         id: 'KCI-AC',
-        name: 'ANCOL',
-        formattedName: 'Ancol',
+        // `name` is display-ready; `officialName` is the operator's SHOUTING one.
+        name: 'Ancol',
+        officialName: 'ANCOL',
         code: 'AC',
-        operator: { code: 'KCI', name: 'Commuter Line' },
-        lines: [line('TP', 'Lin Tanjung Priok')]
+        operator: 'KCI',
+        lines: [key('KCI', 'TP')]
       })
     ]
     const [item] = stationItems(buildSearchableIndex(plain, []))
-    // formattedName wins over the SHOUTING name column.
+    // The display name is used as-is.
     expect(item?.title).toBe('Ancol')
     expect(item?.subtitle).toBe('Commuter Line')
     expect(item?.to).toBe('/stations/KCI/AC')
@@ -161,18 +160,18 @@ describe('buildSearchableIndex — hubs', () => {
     score: 100,
     members: [
       {
-        name: 'SUDIRMAN',
+        name: 'Sudirman',
+        officialName: 'SUDIRMAN',
         code: 'SUD',
-        formattedName: 'Sudirman',
-        operator: { code: 'KCI' },
-        lines: [line('C', 'Lin Cikarang')]
+        operator: 'KCI',
+        lines: [key('KCI', 'C')]
       },
       {
-        name: 'DUKUH ATAS BNI',
+        name: 'Dukuh Atas BNI',
+        officialName: 'DUKUH ATAS BNI',
         code: 'DKA',
-        formattedName: 'Dukuh Atas BNI',
-        operator: { code: 'MRTJ' },
-        lines: [line('M', 'Lin Utara Selatan')]
+        operator: 'MRTJ',
+        lines: [key('MRTJ', 'M')]
       }
     ]
   }
@@ -213,8 +212,8 @@ describe('buildSearchableIndex — hubs', () => {
     const shared: IndexableHub = {
       ...hub,
       members: [
-        { name: 'A', code: 'A', formattedName: null, operator: { code: 'KCI' }, lines: [line('C')] },
-        { name: 'B', code: 'B', formattedName: null, operator: { code: 'KCI' }, lines: [line('C')] }
+        { name: 'A', code: 'A', officialName: 'A', operator: 'KCI', lines: [key('KCI', 'C')] },
+        { name: 'B', code: 'B', officialName: 'A', operator: 'KCI', lines: [key('KCI', 'C')] }
       ]
     }
     expect(buildSearchableIndex([], [shared]).items[0]?.body).toEqual(['KCI:C'])
@@ -252,8 +251,8 @@ describe('buildSearchableIndex — line dictionary', () => {
         id: 'KCI-AC',
         name: 'Ancol',
         code: 'AC',
-        operator: { code: 'KCI', name: 'Commuter Line' },
-        lines: [line('TP', 'Lin Tanjung Priok')]
+        operator: 'KCI',
+        lines: [key('KCI', 'TP')]
       })
     ]
     const index = buildSearchableIndex(stations, [])

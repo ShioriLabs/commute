@@ -67,10 +67,11 @@ describe('StationRepository.getAll (row mapping)', () => {
     ])
     const result = await repo().getAll()
     expect(result).toHaveLength(1)
-    expect(result[0].operator).toEqual({ code: 'KCI', name: 'Commuter Line' })
-    expect(result[0].searchable).toBe(true)
-    expect(result[0].amenities).toEqual([{ type: 'TOILET' }])
-    expect(result[0].lines.map(l => l.lineCode).sort()).toEqual(['B', 'C'])
+    expect(result[0]?.operator).toBe('KCI')
+    expect(result[0]?.searchable).toBe(true)
+    expect(result[0]?.amenities).toEqual([{ type: 'TOILET' }])
+    // Operator-qualified line keys, not embedded Line objects.
+    expect(result[0]?.lines.slice().sort()).toEqual(['KCI:B', 'KCI:C'])
   })
 
   it('skips rows with an unresolvable operator', async () => {
@@ -88,8 +89,8 @@ describe('StationRepository.getAll (row mapping)', () => {
       { id: 'KCI-BOO', operator: 'KCI', lines: 'NUL,ZZ,C', amenities: null, searchable: 1 }
     ])
     const [row] = await repo().getAll()
-    expect(row.lines.map(l => l.lineCode)).toEqual(['C'])
-    expect(row.amenities).toEqual([])
+    expect(row?.lines).toEqual(['KCI:C'])
+    expect(row?.amenities).toEqual([])
   })
 
   it('accepts pagination params', async () => {
@@ -105,8 +106,8 @@ describe('StationRepository.getAllByOperator (row mapping)', () => {
     ])
     const result = await repo().getAllByOperator('KCI')
     expect(result).toHaveLength(1)
-    expect(result[0].operator.code).toBe('KCI')
-    expect(result[0].lines.map(l => l.lineCode)).toEqual(['C'])
+    expect(result[0]?.operator).toBe('KCI')
+    expect(result[0]?.lines).toEqual(['KCI:C'])
     expect(result[0].amenities).toEqual([{ type: 'LIFT' }])
   })
 
@@ -163,8 +164,8 @@ describe('StationRepository.getById', () => {
     terminalResults.push({ id: 'KCI-BOO', operator: 'KCI', lines: 'C', amenities: null, searchable: 1 })
     const station = await repo().getById('KCI-BOO')
     expect(station).not.toBeNull()
-    expect(station?.operator.code).toBe('KCI')
-    expect(station?.lines[0].lineCode).toBe('C')
+    expect(station?.operator).toBe('KCI')
+    expect(station?.lines[0]).toBe('KCI:C')
   })
 })
 
@@ -175,7 +176,7 @@ describe('StationRepository.getByIds', () => {
       { id: 'MRTJ-BHI', operator: 'MRTJ', lines: 'M', amenities: null, searchable: 1 }
     ])
     const result = await repo().getByIds(['KCI-BOO', 'MRTJ-BHI'])
-    expect(result.map(s => s.operator.code)).toEqual(['KCI', 'MRTJ'])
+    expect(result.map(s => s.operator)).toEqual(['KCI', 'MRTJ'])
   })
 })
 
@@ -234,21 +235,25 @@ describe('StationRepository.getTransfersFromStationId', () => {
     ])
     // 2nd execute(): getByIds() lookup for INTERNAL targets (only KCI-BOO resolves).
     terminalResults.push([
-      { id: 'KCI-BOO', operator: 'KCI', lines: 'C', amenities: null, searchable: 1, name: 'Bogor', formattedName: null }
+      { id: 'KCI-BOO', code: 'BOO', operator: 'KCI', lines: 'C', amenities: null, searchable: 1, name: 'Bogor', formattedName: null }
     ])
 
     const result = await repo().getTransfersFromStationId('KCI-DP')
     // INTERNAL#1 resolves, INTERNAL#2 (GONE) skipped, EXTERNAL#3 shaped, UNKNOWN#4 skipped.
     expect(result.map(t => t.id)).toEqual([1, 3])
     const internal = result[0]
-    expect(internal.dataType).toBe('INTERNAL')
-    expect(internal.toStation).toEqual({
-      stationId: 'KCI-BOO',
+    expect(internal?.dataType).toBe('INTERNAL')
+    // A StationRef: `id` like every other station reference, operator as a code,
+    // lines as keys.
+    expect(internal?.toStation).toEqual({
+      id: 'KCI-BOO',
       name: 'Bogor',
-      operatorName: 'Commuter Line',
-      lines: [{ name: 'Lin Cikarang', colorCode: '#25B8EB', lineCode: 'C' }]
+      officialName: 'Bogor',
+      code: 'BOO',
+      operator: 'KCI',
+      lines: ['KCI:C']
     })
-    expect(result[1].toStation).toEqual({ name: 'Ext' })
+    expect(result[1]?.toStation).toEqual({ name: 'Ext' })
   })
 })
 

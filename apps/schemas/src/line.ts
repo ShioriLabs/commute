@@ -1,12 +1,12 @@
 import * as v from 'valibot'
 import type { HexColored } from './common'
-import { LineSchema, OperatorSchema } from './common'
+import { LineKeySchema, LineSchema, OperatorCodeSchema, OperatorSchema } from './common'
 
 export const LineStationSchema = v.pipe(
   v.object({
     id: v.pipe(v.string(), v.metadata({ examples: ['KCI-AC'] })),
     code: v.string(),
-    name: v.pipe(v.string(), v.description('Display name — `formattedName` where set, otherwise `name`.')),
+    name: v.pipe(v.string(), v.description('Display name.')),
     stationNumber: v.pipe(
       v.string(),
       v.description('Position label along the line, e.g. `C13`.'),
@@ -14,12 +14,8 @@ export const LineStationSchema = v.pipe(
     ),
     isInterchange: v.boolean(),
     otherLines: v.pipe(
-      v.array(LineSchema),
-      v.description('Other lines of the SAME operator calling here; the current line is excluded. Cross-operator connections live on the station\'s transfers.')
-    ),
-    distanceFromOriginM: v.pipe(
-      v.nullable(v.number()),
-      v.description('Cumulative metres from the line origin, where known.')
+      v.array(LineKeySchema),
+      v.description('Other lines of the SAME operator calling here, as line keys; the current line is excluded. Cross-operator connections live on the station\'s transfers.')
     )
   }),
   v.title('LineStation')
@@ -36,10 +32,6 @@ export const LineSegmentSchema = v.pipe(
       v.nullable(v.string()),
       v.description('Station code where this branch leaves the trunk; null for `TRUNK`.')
     ),
-    closesAtCode: v.pipe(
-      v.nullable(v.string()),
-      v.description('Station code where the branch rejoins; set only for `LOOP`.')
-    ),
     stations: v.array(LineStationSchema)
   }),
   v.title('LineSegment')
@@ -48,6 +40,8 @@ export const LineSegmentSchema = v.pipe(
 export const LineDetailSchema = v.pipe(
   v.object({
     operator: OperatorSchema,
+    // The line itself is spelled out rather than keyed: this response IS the
+    // line, so making the reader resolve a key would be perverse.
     line: LineSchema,
     segments: v.pipe(
       v.array(LineSegmentSchema),
@@ -57,17 +51,22 @@ export const LineDetailSchema = v.pipe(
   v.title('LineDetail')
 )
 
+/*
+ * The line dictionary. Everything else in the API refers to lines by key
+ * (`KCI:C`); this is where those keys resolve to a name and colour, so the full
+ * Line objects belong here.
+ */
 export const OperatorWithLinesSchema = v.pipe(
   v.object({
-    code: OperatorSchema.entries.code,
+    code: OperatorCodeSchema,
     name: v.string(),
     lines: v.array(LineSchema)
   }),
   v.title('OperatorWithLines')
 )
 
-export type LineStation = HexColored<v.InferOutput<typeof LineStationSchema>>
-export type LineSegment = HexColored<v.InferOutput<typeof LineSegmentSchema>>
+export type LineStation = v.InferOutput<typeof LineStationSchema>
+export type LineSegment = v.InferOutput<typeof LineSegmentSchema>
 export type LineSegmentKind = LineSegment['kind']
 export type LineDetail = HexColored<v.InferOutput<typeof LineDetailSchema>>
 export type OperatorWithLines = HexColored<v.InferOutput<typeof OperatorWithLinesSchema>>

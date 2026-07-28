@@ -15,12 +15,9 @@ export interface LineDetailStation {
   name: string // formattedName ?? name
   stationNumber: string // topology `pos`, e.g. 'C13', 'b23'
   isInterchange: boolean
-  // Other same-operator lines at this station (current line excluded), for
-  // interchange badges. Cross-operator interchange lives in transfers.
-  otherLines: Line[]
-  // Cumulative metres from the line origin (topology cumM) where known.
-  // v2 hook for distance labels / train-position interpolation.
-  distanceFromOriginM: number | null
+  // Other same-operator lines at this station (current line excluded), as line
+  // keys. Cross-operator interchange lives in transfers.
+  otherLines: string[]
 }
 
 // TRUNK: the main path. CONTINUATION: a branch that extends the trunk's end
@@ -32,7 +29,6 @@ export type LineSegmentKind = 'TRUNK' | 'CONTINUATION' | 'RAMP' | 'LOOP'
 export interface LineDetailSegment {
   kind: LineSegmentKind
   joinsAtCode: string | null // branch.fromStation; null for TRUNK
-  closesAtCode: string | null // branch.closeTo; set only for LOOP
   stations: LineDetailStation[]
 }
 

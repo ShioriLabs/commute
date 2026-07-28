@@ -5,36 +5,51 @@ import { ArrowsDownUpIcon, CaretDownIcon, CaretRightIcon, PersonSimpleWalkIcon, 
 import { getForegroundColor } from 'utils/colors'
 import { joinLabels } from 'utils/labels'
 import LineRoundel from '~/components/line-roundel'
+import { codeOfLineKey, useLines } from '~/hooks/use-lines'
 
 const rupiah = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })
 const formatKm = (distanceM: number) => `${(distanceM / 1000).toLocaleString('id-ID', { maximumFractionDigits: 1 })} km`
 const operatorName = (code: string) => (OPERATORS as Record<string, { name: string }>)[code as Operator]?.name ?? code
 
-// At-a-glance segment fill: a gradient across the service colours for interlined
-// legs (shared track), otherwise the single line colour.
-function rideGlanceStyle(leg: FareResultRideLeg) {
-  const lines = leg.serviceLines
-  if (lines && lines.length > 1) {
-    return { flexGrow: leg.distanceM, backgroundImage: `linear-gradient(to right, ${lines[0].lineColor}, ${lines[lines.length - 1].lineColor})` }
+/*
+ * At-a-glance segment fill: a gradient across the service colours for interlined
+ * legs (shared track), otherwise the single line colour. Colours are resolved
+ * from the line dictionary, since legs carry keys rather than colours.
+ */
+function rideGlanceStyle(leg: FareResultRideLeg, colors: string[]) {
+  const first = colors[0] ?? '#888888'
+  if (colors.length > 1) {
+    return { flexGrow: leg.distanceM, backgroundImage: `linear-gradient(to right, ${first}, ${colors[colors.length - 1]})` }
   }
-  return { flexGrow: leg.distanceM, backgroundColor: leg.lineColor }
+  return { flexGrow: leg.distanceM, backgroundColor: first }
 }
 
 // One ride leg: board node, line-colored connector carrying the service card
 // (line pill, headsign, expandable intermediate stops), alight node.
 function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSameStationTransfer: boolean }) {
   const [expanded, setExpanded] = useState(false)
+  const { line: lookupLine } = useLines()
   // Optional-chained against a stale API during deploy skew.
   const intermediate = leg.stops?.slice(1, -1) ?? []
   const summary = `${leg.stationCount - 1} stasiun • ${formatKm(leg.distanceM)}`
-  // On interlined track (the LRT Jabodebek trunk) several service lines run the
-  // same leg — any train works. Fall back to the single line for ordinary legs.
-  const lines = leg.serviceLines ?? [{ lineCode: leg.lineCode, lineName: leg.lineName, lineColor: leg.lineColor, headsign: leg.headsign }]
+  /*
+   * On interlined track (the LRT Jabodebek trunk) several service lines run the
+   * same leg — any train works. Fall back to the leg's own line otherwise.
+   * Each carries a key; name and colour come from the dictionary.
+   */
+  const lines = (leg.serviceLines ?? [{ line: leg.line, headsign: leg.headsign }]).map(ref => ({
+    key: ref.line,
+    lineCode: codeOfLineKey(ref.line),
+    lineName: lookupLine(ref.line)?.name ?? codeOfLineKey(ref.line),
+    lineColor: lookupLine(ref.line)?.colorCode ?? '#888888',
+    headsign: ref.headsign
+  }))
   const isInterlined = lines.length > 1
+  const legColor = lines[0]?.lineColor ?? '#888888'
   const directions = [...new Set(lines.map(line => line.headsign).filter((headsign): headsign is string => headsign !== null))]
   const railStyle = isInterlined
-    ? { backgroundImage: `repeating-linear-gradient(to bottom, ${lines[0].lineColor} 0 8px, ${lines[lines.length - 1].lineColor} 8px 16px)` }
-    : { backgroundColor: leg.lineColor }
+    ? { backgroundImage: `repeating-linear-gradient(to bottom, ${lines[0]!.lineColor} 0 8px, ${lines[lines.length - 1]!.lineColor} 8px 16px)` }
+    : { backgroundColor: legColor }
 
   return (
     <li className="flex flex-col">
@@ -52,7 +67,7 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
           )
         : null}
       <div className="flex items-center gap-3">
-        <span className="w-4 h-4 rounded-full border-[5px] bg-white shrink-0" style={{ borderColor: leg.lineColor }} />
+        <span className="w-4 h-4 rounded-full border-[5px] bg-white shrink-0" style={{ borderColor: legColor }} />
         <b className="text-lg">{leg.from.name}</b>
       </div>
       <div className="flex items-stretch gap-3">
@@ -106,7 +121,7 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
                     <ul className="overflow-hidden min-h-0 flex flex-col">
                       {intermediate.map(stop => (
                         <li key={stop.id} className="flex items-center gap-2 py-1 text-sm text-slate-600">
-                          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: leg.lineColor }} />
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: legColor }} />
                           { stop.name }
                         </li>
                       ))}
@@ -117,7 +132,7 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
         </div>
       </div>
       <div className="flex items-center gap-3">
-        <span className="w-4 h-4 rounded-full border-[5px] bg-white shrink-0" style={{ borderColor: leg.lineColor }} />
+        <span className="w-4 h-4 rounded-full border-[5px] bg-white shrink-0" style={{ borderColor: legColor }} />
         <b className="text-lg">{leg.to.name}</b>
       </div>
     </li>
@@ -193,6 +208,11 @@ function JourneyTimeline({ result }: { result: FareResult }) {
 }
 
 export default function FareResultCard({ result }: { result: FareResult }) {
+  const { line: lookupLine } = useLines()
+  // Service colours for the glance strip, resolved from the line dictionary.
+  const legColors = (leg: FareResultRideLeg) =>
+    (leg.serviceLines ?? [{ line: leg.line, headsign: null }])
+      .map(ref => lookupLine(ref.line)?.colorCode ?? '#888888')
   // Surcharged transfers (e.g. the Dukuh Atas corridor) aren't ride segments but
   // do contribute to totalFare, so they need their own breakdown rows for the
   // line items to reconcile with the total.
@@ -211,7 +231,7 @@ export default function FareResultCard({ result }: { result: FareResult }) {
         {/* Journey at a glance: ride legs proportional to distance, walks as dots. */}
         <div className="my-1 flex h-2 gap-0.5" aria-hidden="true">
           {result.legs.map((leg, index) => leg.type === 'RIDE'
-            ? <span key={index} className="rounded-full min-w-2" style={rideGlanceStyle(leg)} />
+            ? <span key={index} className="rounded-full min-w-2" style={rideGlanceStyle(leg, legColors(leg))} />
             : <span key={index} className="w-1.5 shrink-0 rounded-full bg-slate-300" />)}
         </div>
         <span className="text-sm text-slate-500">
@@ -227,13 +247,13 @@ export default function FareResultCard({ result }: { result: FareResult }) {
               <h2 className="font-bold text-lg">Rincian Tarif</h2>
               <ul className="mt-2 flex flex-col gap-2">
                 {result.segments.map(segment => (
-                  <li key={`${segment.fromStationId}-${segment.toStationId}`} className="flex flex-row justify-between gap-4 bg-stone-100/80 rounded-xl px-4 py-3">
+                  <li key={`${segment.from.id}-${segment.to.id}`} className="flex flex-row justify-between gap-4 bg-stone-100/80 rounded-xl px-4 py-3">
                     <div className="flex flex-col">
                       <b>{ operatorName(segment.operator) }</b>
                       <span className="text-sm text-slate-500 flex flex-row flex-wrap items-center gap-1">
-                        { segment.fromName }
+                        { segment.from.name }
                         <CaretRightIcon weight="bold" className="w-3 h-3 shrink-0" />
-                        { segment.toName }
+                        { segment.to.name }
                       </span>
                     </div>
                     <b className="shrink-0">{ segment.fare !== null ? rupiah.format(segment.fare) : 'N/A' }</b>

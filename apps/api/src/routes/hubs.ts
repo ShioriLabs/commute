@@ -9,6 +9,23 @@ import { HubSchema } from '@commute/schemas'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
+/*
+ * `score` is our search ranking, not a fact about the hub: the searchables index
+ * reads it off the repository, consumers never see it.
+ */
+type RepositoryHub = Awaited<ReturnType<HubRepository['getBySlug']>>
+function toPublicHub(hub: NonNullable<RepositoryHub>) {
+  return {
+    id: hub.id,
+    slug: hub.slug,
+    name: hub.name,
+    kind: hub.kind,
+    heroImage: hub.heroImage,
+    lines: hub.lines,
+    members: hub.members
+  }
+}
+
 app.get(
   '/',
   doc({
@@ -31,7 +48,7 @@ app.get(
       )
     }
 
-    const hubs = await hubRepository.getAll()
+    const hubs = (await hubRepository.getAll()).map(toPublicHub)
 
     if (hubs.length > 0) {
       c.executionCtx.waitUntil(
@@ -74,10 +91,11 @@ app.get(
       )
     }
 
-    const hub = await hubRepository.getBySlug(slug)
-    if (!hub) {
+    const found = await hubRepository.getBySlug(slug)
+    if (!found) {
       return c.json(NotFound(`Unknown Hub: ${slug}`), 404)
     }
+    const hub = toPublicHub(found)
 
     c.executionCtx.waitUntil(
       kvRepository.set(kvKey, hub)

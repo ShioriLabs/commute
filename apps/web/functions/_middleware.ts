@@ -96,9 +96,12 @@ interface ApiLine {
 
 interface ApiStation {
   id: string
+  /** Display name. */
   name: string
-  formattedName: string | null
-  lines: ApiLine[]
+  /** The operator's own spelling; kept as a search/SEO alias. */
+  officialName?: string
+  /** Operator-qualified line keys, e.g. `KCI:C`. */
+  lines: string[]
   searchable?: boolean
 }
 
@@ -119,7 +122,16 @@ function hubKindLabel(hub: ApiHub): string {
 interface ApiLineDetail {
   operator: { code: string, name: string }
   line: ApiLine
-  segments: { stations: { name?: string, formattedName?: string | null }[] }[]
+  segments: { stations: { name?: string }[] }[]
+}
+
+/*
+ * `KCI:C` -> `C`. Grouped timetables carry line keys; resolving them to full
+ * names would mean fetching /operators on every crawl, and the bare code reads
+ * fine in a heading a crawler consumes.
+ */
+function lineLabel(key: string): string {
+  return key.split(':')[1] ?? key
 }
 
 // Wire-optimized departure: [tripNumber, minuteSinceMidnight].
@@ -132,9 +144,8 @@ interface GroupedDestination {
 }
 
 interface GroupedLineTimetable {
-  name: string
-  colorCode: string
-  lineCode: string
+  /** Operator-qualified line key. */
+  line: string
   timetable: { label: string, destinations: GroupedDestination[] }[]
 }
 
@@ -183,7 +194,7 @@ function buildStationBody(
   code: string,
   timetable: GroupedLineTimetable[] | null
 ): string {
-  const name = station.formattedName || station.name
+  const name = station.name
   const vocab = vocabFor(operator)
   const lineNames = station.lines.map(l => l.name)
 
@@ -212,14 +223,14 @@ function buildStationBody(
             scheduleLd.push({
               '@type': 'Schedule',
               'scheduleTimezone': 'Asia/Jakarta',
-              'name': `${line.name} → ${dest.boundFor}`,
+              'name': `${lineLabel(line.line)} → ${dest.boundFor}`,
               'departureTime': t
             })
           }
         }
       }
       if (rows.length > 0) {
-        blocks.push(`<h3>${esc(line.name)}</h3><ul>${rows.join('')}</ul>`)
+        blocks.push(`<h3>${esc(lineLabel(line.line))}</h3><ul>${rows.join('')}</ul>`)
       }
     }
     if (blocks.length > 0) {
@@ -252,7 +263,7 @@ function buildLineBody(detail: ApiLineDetail, stationCount: number): string {
   const stationNames: string[] = []
   for (const seg of detail.segments) {
     for (const s of seg.stations) {
-      const n = s.formattedName || s.name
+      const n = s.name
       if (n) stationNames.push(n)
     }
   }
@@ -287,7 +298,7 @@ function buildHubBody(hub: ApiHub, slug: string, memberNames: string): string {
     'description': memberNames ? `Stasiun terintegrasi: ${memberNames}` : undefined
   }
   const items = hub.members
-    .map(m => m.formattedName || m.name)
+    .map(m => m.name)
     .filter(Boolean)
     .map(n => `<li>${esc(n)}</li>`)
     .join('')
@@ -333,8 +344,8 @@ async function resolveOg(pathname: string, searchParams: URLSearchParams, env: E
       ])
 
       if (fromStation && toStation) {
-        const fromName = fromStation.formattedName || fromStation.name
-        const toName = toStation.formattedName || toStation.name
+        const fromName = fromStation.name
+        const toName = toStation.name
         return {
           title: `Cek Tarif ${fromName} ke ${toName} - Commute`,
           description: `Cek tarif dari ${fromName} ke ${toName} kagak pake ribet, biar pas tap out gak ada drama saldo kurang.`,
@@ -356,7 +367,7 @@ async function resolveOg(pathname: string, searchParams: URLSearchParams, env: E
     const hub = await fetchJson<ApiHub>(`${base}/hubs/${encodeURIComponent(slug)}`)
     if (!hub) return null
     const memberNames = hub.members
-      .map(m => m.formattedName || m.name)
+      .map(m => m.name)
       .filter(Boolean)
       .join(', ')
     return {
@@ -381,7 +392,7 @@ async function resolveOg(pathname: string, searchParams: URLSearchParams, env: E
     return {
       title: `Jadwal ${detail.line.name} - Rute & Jam Keberangkatan - Commute`,
       description: `Cek rute, ${stationCount} stasiun, dan jam keberangkatan ${detail.line.name} (${detail.operator.name}) kagak pake ribet.`,
-      image: lineOgImage(detail.operator.code, detail.line.lineCode),
+      image: lineOgImage(detail.operator, detail.line.lineCode),
       bodyHtml: buildLineBody(detail, stationCount)
     }
   }
@@ -395,7 +406,7 @@ async function resolveOg(pathname: string, searchParams: URLSearchParams, env: E
       fetchJson<GroupedLineTimetable[]>(`${base}/stations/${encodeURIComponent(operator)}/${encodeURIComponent(code)}/timetable/grouped?compact=1`)
     ])
     if (!station) return null
-    const name = station.formattedName || station.name
+    const name = station.name
     const vocab = vocabFor(operator)
     return {
       title: `Jadwal ${vocab.mode} ${vocab.stop} ${name} (${code}) - Commute`,

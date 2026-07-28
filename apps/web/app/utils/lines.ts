@@ -31,3 +31,16 @@ export function sortLinesForDisplay(lines: readonly Line[], operator?: string): 
     .filter(line => !HIDDEN_TJ_CODES.has(line.lineCode))
     .sort((a, b) => compareTJLineCode(a.lineCode, b.lineCode))
 }
+
+/*
+ * Same ordering, for the operator-qualified line keys (`TJ:6A`) that responses
+ * now carry. Sorting before resolution means a list still orders correctly while
+ * the line dictionary is in flight.
+ */
+export function sortLineKeysForDisplay(keys: readonly string[], operator?: string): string[] {
+  if (operator !== 'TJ') return [...keys]
+  const codeOf = (key: string) => key.split(':')[1] ?? key
+  return keys
+    .filter(key => !HIDDEN_TJ_CODES.has(codeOf(key)))
+    .sort((a, b) => compareTJLineCode(codeOf(a), codeOf(b)))
+}

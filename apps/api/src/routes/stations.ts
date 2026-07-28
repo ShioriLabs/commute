@@ -352,7 +352,13 @@ app.get(
     const nameIndex = isKCI ? await getNameIndex(operator.code, stationRepository) : null
     const membershipCount = isKCI ? getMembershipCount(operator.code) : new Map<string, number>()
 
-    const timetable = compactMode ? ([] as CompactLineGroupedTimetable) : ([] as LineGroupedTimetable)
+    /*
+     * One array typed as the union of both shapes. Declaring it via a ternary
+     * gave `A[] | B[]`, which TypeScript narrows to `A[] & B[]` at the push —
+     * an impossible intersection. The element union is what we actually mean:
+     * every entry is one shape or the other, chosen by compactMode.
+     */
+    const timetable: (LineGroupedTimetable[number] | CompactLineGroupedTimetable[number])[] = []
     for (const { line, boundForGroups } of lineGroups.values()) {
       const entries: BoundForEntry[] = Array.from(boundForGroups.entries()).map(([key, schedules]) => {
         const [boundFor, via] = key.split(':')
@@ -371,25 +377,44 @@ app.get(
           })
         : entries.map(syntheticGroup)
 
-      timetable.push({
-        name: line.name,
-        colorCode: line.colorCode,
-        lineCode: line.lineCode,
-        timetable: groups.map(group => ({
-          key: group.key,
-          label: group.label,
-          platformCode: group.nextHopCode
-            ? PLATFORM_CODES[`${stationID}:${line.lineCode}:${group.nextHopCode}`] ?? null
-            : null,
-          destinations: group.destinations.map(destination => ({
-            boundFor: destination.boundFor,
-            via: destination.via,
-            schedules: compactMode
-              ? mapSchedule(destination.schedules, true)
-              : mapSchedule(destination.schedules as Schedule[], false)
-          }))
-        }))
+      // Shared per-group fields; only `schedules` differs between the two
+      // wire formats, so the split happens once at the destination level.
+      const groupShell = (group: typeof groups[number]) => ({
+        key: group.key,
+        label: group.label,
+        platformCode: group.nextHopCode
+          ? PLATFORM_CODES[`${stationID}:${line.lineCode}:${group.nextHopCode}`] ?? null
+          : null
       })
+      // A line key rather than its denormalised name/colour: the same
+      // dictionary from /operators resolves it, as everywhere else.
+      const lineKey = `${operator.code}:${line.lineCode}`
+
+      if (compactMode) {
+        timetable.push({
+          line: lineKey,
+          timetable: groups.map(group => ({
+            ...groupShell(group),
+            destinations: group.destinations.map(destination => ({
+              boundFor: destination.boundFor,
+              via: destination.via,
+              schedules: mapSchedule(destination.schedules, true)
+            }))
+          }))
+        })
+      } else {
+        timetable.push({
+          line: lineKey,
+          timetable: groups.map(group => ({
+            ...groupShell(group),
+            destinations: group.destinations.map(destination => ({
+              boundFor: destination.boundFor,
+              via: destination.via,
+              schedules: mapSchedule(destination.schedules as Schedule[], false)
+            }))
+          }))
+        })
+      }
     }
 
     c.executionCtx.waitUntil(

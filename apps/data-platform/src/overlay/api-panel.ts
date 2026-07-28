@@ -86,15 +86,13 @@ function shownFields(s: StationDetail): unknown {
     data: {
       id: s.id,
       name: s.name,
+      officialName: s.officialName,
       code: s.code,
-      formattedName: s.formattedName,
-      region: s.region,
-      operator: { code: s.operator.code, name: s.operator.name },
-      timetableSynced: 1,
+      operator: s.operator,
       amenities: s.amenities.map(a => ({ type: a.type })),
       latitude: s.latitude,
       longitude: s.longitude,
-      lines: s.lines.map(l => ({ name: l.name, colorCode: l.colorCode, lineCode: l.lineCode }))
+      lines: s.lines
     }
   }
 }

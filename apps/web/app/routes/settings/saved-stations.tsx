@@ -1,3 +1,4 @@
+import { OPERATORS } from '@commute/constants'
 import { CaretLeftIcon, PushPinIcon, PushPinSlashIcon } from '@phosphor-icons/react'
 import type { StandardResponse } from '@schema/response'
 import type { Station } from '@commute/schemas'
@@ -54,10 +55,10 @@ function SavedStationItem({ stationId, isSaved, onSaveButtonClick }: SavedStatio
       <article className="px-8 py-4 flex items-center gap-4 justify-between">
         <div>
           <h1 className="font-semibold text-lg flex">
-            { station.data.data.formattedName }
+            { station.data.data.name }
           </h1>
           <h2 className="font-semibold text-sm text-slate-700">
-            {station.data.data.operator.name}
+            {OPERATORS[station.data.data.operator]?.name ?? station.data.data.operator}
           </h2>
         </div>
         <button onClick={handleSaveStationButton} className="cursor-pointer">

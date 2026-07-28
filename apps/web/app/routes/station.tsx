@@ -4,7 +4,8 @@ import { useNavigate, useNavigationType } from 'react-router'
 import { XIcon, PushPinIcon, PushPinSlashIcon } from '@phosphor-icons/react'
 import StationContent, { useStationHeader } from '~/components/station-content'
 import LineRoundel from '~/components/line-roundel'
-import { sortLinesForDisplay } from '~/utils/lines'
+import { sortLineKeysForDisplay } from '~/utils/lines'
+import { useLines } from '~/hooks/use-lines'
 
 export function meta() {
   return [
@@ -14,6 +15,7 @@ export function meta() {
 }
 
 export default function StationPage({ params }: Route.ComponentProps) {
+  const { lines: resolveLines } = useLines()
   const { header } = useStationHeader(params.operator, params.code)
   const navigationType = useNavigationType()
   const navigate = useNavigate()
@@ -30,10 +32,10 @@ export default function StationPage({ params }: Route.ComponentProps) {
     const savedStations = JSON.parse(savedStationsRaw) as string[]
     setSaved(savedStations.includes(header.stationId))
 
-    if (header.formattedName) {
-      document.title = `${header.formattedName} - Commute`
+    if (header.name) {
+      document.title = `${header.name} - Commute`
     }
-  }, [header.isLoading, header.formattedName, header.stationId])
+  }, [header.isLoading, header.name, header.stationId])
 
   const handleBackButton = useCallback(() => {
     if (navigationType === 'POP') {
@@ -76,7 +78,7 @@ export default function StationPage({ params }: Route.ComponentProps) {
                   <>
                     {header.lines.length > 0 && (
                       <ul className="flex flex-row gap-1 flex-wrap">
-                        {sortLinesForDisplay(header.lines, params.operator).map(line => (
+                        {resolveLines(sortLineKeysForDisplay(header.lines, params.operator)).map(line => (
                           <li key={line.lineCode}>
                             <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={params.operator} />
                             <span className="sr-only">{line.name}</span>
@@ -84,7 +86,7 @@ export default function StationPage({ params }: Route.ComponentProps) {
                         ))}
                       </ul>
                     )}
-                    <h1 className="font-bold text-xl">{header.formattedName}</h1>
+                    <h1 className="font-bold text-xl">{header.name}</h1>
                   </>
                 )}
           </div>

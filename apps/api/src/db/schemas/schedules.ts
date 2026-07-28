@@ -26,6 +26,18 @@ export type GroupingSchedule = Pick<
   'id' | 'lineCode' | 'boundFor' | 'estimatedDeparture' | 'tripNumber'
 >
 
+/*
+ * A departure as the API returns it. The row id, stationId and timestamps stay
+ * in the database: a schedule is always read through the station and line that
+ * own it.
+ */
+export interface PublicSchedule {
+  tripNumber: string | null
+  estimatedDeparture: string
+  boundFor: string
+  lineCode: string
+}
+
 export interface ScheduleWithLineInfo extends Schedule {
   line: Line | null
 }
@@ -34,7 +46,7 @@ export interface ScheduleWithLineInfo extends Schedule {
 export interface TimetableDestination {
   boundFor: string
   via: string | null
-  schedules: Schedule[]
+  schedules: PublicSchedule[]
 }
 
 // One physical departure direction out of the station: derived label
@@ -48,9 +60,8 @@ export interface TimetableDirectionGroup {
 }
 
 export interface LineTimetable {
-  name: string
-  lineCode: string
-  colorCode: `#${string}`
+  /** Operator-qualified line key, e.g. `KCI:C`. */
+  line: string
   timetable: TimetableDirectionGroup[]
 }
 

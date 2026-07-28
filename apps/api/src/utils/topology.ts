@@ -19,9 +19,9 @@ export function collectStationIds(topology: LineTopology): string[] {
 interface HydratedStation {
   id: string
   code: string
+  // Already the display name — the repository resolves it.
   name: string
-  formattedName: string | null
-  lines: Line[]
+  lines: string[]
 }
 
 // A branch that extends the trunk's end without closing reads as the mainline
@@ -50,15 +50,17 @@ export function buildLineDetail(
       console.warn(`[lines] station ${id} in topology but not in DB; skipping`)
       return null
     }
-    const otherLines = station.lines.filter(l => l.lineCode !== line.lineCode)
+    // Line keys, matching Station.lines. `distanceFromOriginM` is gone: it was
+    // a v2 hook nothing ever read.
+    const currentKey = `${topology.operator}:${line.lineCode}`
+    const otherLines = station.lines.filter(key => key !== currentKey)
     return {
       id: station.id,
       code: station.code,
-      name: station.formattedName ?? station.name,
+      name: station.name,
       stationNumber: stop.pos,
       isInterchange: otherLines.length > 0,
-      otherLines,
-      distanceFromOriginM: stop.cumM ?? null
+      otherLines
     }
   }
 
@@ -68,7 +70,6 @@ export function buildLineDetail(
   const segments: LineDetailSegment[] = [{
     kind: 'TRUNK',
     joinsAtCode: null,
-    closesAtCode: null,
     stations: mapStops(topology.path)
   }]
 
@@ -79,7 +80,6 @@ export function buildLineDetail(
     segments.push({
       kind,
       joinsAtCode: branch.fromStation,
-      closesAtCode: branch.closeTo ?? null,
       stations: mapStops(branch.path)
     })
   }

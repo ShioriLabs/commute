@@ -93,8 +93,8 @@ export function useFareQuery({
   useEffect(() => {
     if (!syncDocumentTitle) return
     if (origin && destination) {
-      const fromName = origin.formattedName ?? origin.name
-      const toName = destination.formattedName ?? destination.name
+      const fromName = origin.name
+      const toName = destination.name
       document.title = `Cek Tarif ${fromName} ke ${toName} - Commute`
     } else {
       document.title = 'Cek Tarif - Commute'

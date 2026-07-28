@@ -3,12 +3,13 @@ import useSWR from 'swr'
 import { Popover, PopoverButton, PopoverPanel } from '@headlessui/react'
 import { CaretDownIcon, WarningIcon } from '@phosphor-icons/react'
 import type { StandardResponse } from '@schema/response'
-import type { CompactLineGroupedTimetable } from '@commute/schemas'
+import type { CompactLineGroupedTimetable, Line } from '@commute/schemas'
 import EmptyState from '~/components/empty-state'
 import LineRoundel from '~/components/line-roundel'
 import { fetcher } from 'utils/fetcher'
 import { normalizeGroupedTimetable } from 'utils/timetable-shim'
 import { useNetworkStatus } from '~/hooks/network'
+import { codeOfLineKey, useLines } from '~/hooks/use-lines'
 import { departureSortKey, isImmediateDeparture, parseMinute } from 'utils/schedules'
 import { formatPlatformCode, joinLabels } from 'utils/labels'
 
@@ -37,7 +38,15 @@ interface DirectionSection {
   rows: DepartureRow[]
 }
 
-function buildSections(timetable: CompactLineGroupedTimetable, now: Date): DirectionSection[] {
+/*
+ * `resolveLine` turns the timetable's line key into its name and colour. Passed
+ * in rather than looked up here so this stays a pure function.
+ */
+function buildSections(
+  timetable: CompactLineGroupedTimetable,
+  now: Date,
+  resolveLine: (key: string) => Line | undefined
+): DirectionSection[] {
   const sections: DirectionSection[] = []
 
   for (const line of timetable) {
@@ -58,10 +67,10 @@ function buildSections(timetable: CompactLineGroupedTimetable, now: Date): Direc
       }
       rows.sort((a, b) => a.sortKey - b.sortKey)
       sections.push({
-        key: `${line.lineCode}:${group.key}`,
-        lineCode: line.lineCode,
-        lineName: line.name,
-        lineColor: line.colorCode,
+        key: `${line.line}:${group.key}`,
+        lineCode: codeOfLineKey(line.line),
+        lineName: resolveLine(line.line)?.name ?? codeOfLineKey(line.line),
+        lineColor: resolveLine(line.line)?.colorCode ?? '#94a3b8',
         label: group.label,
         platformCode: group.platformCode,
         rows
@@ -92,6 +101,7 @@ interface Props {
 }
 
 const TimetableContent = memo(function TimetableContent({ operator, code }: Props) {
+  const { line: resolveLine } = useLines()
   const timetableUrl = useMemo(() =>
     new URL(`/stations/${operator}/${code}/timetable/grouped?compact=1`, import.meta.env.VITE_API_BASE_URL).href,
   [operator, code]
@@ -114,11 +124,11 @@ const TimetableContent = memo(function TimetableContent({ operator, code }: Prop
   const lines: LineMeta[] = useMemo(() => {
     if (!timetableData) return []
     return timetableData.map(line => ({
-      lineCode: line.lineCode,
-      name: line.name,
-      colorCode: line.colorCode
+      lineCode: codeOfLineKey(line.line),
+      name: resolveLine(line.line)?.name ?? codeOfLineKey(line.line),
+      colorCode: resolveLine(line.line)?.colorCode ?? '#94a3b8'
     }))
-  }, [timetableData])
+  }, [timetableData, resolveLine])
 
   const [excludedLines, setExcludedLines] = useState<Set<string>>(new Set())
 
@@ -136,7 +146,7 @@ const TimetableContent = memo(function TimetableContent({ operator, code }: Prop
 
   const allSections = useMemo(() => {
     if (!timetableData) return []
-    return buildSections(timetableData, lastUpdated)
+    return buildSections(timetableData, lastUpdated, resolveLine)
   }, [timetableData, lastUpdated])
 
   const visibleSections = useMemo(() => {
