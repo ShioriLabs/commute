@@ -774,6 +774,7 @@ export function createWebGLRenderer(
     setDebugHitboxes,
     isContextLost: () => gl.isContextLost(),
     releaseTiles,
+    isPreviewReady: () => previewTexture !== null,
     tileStats,
     debug: loseCtxExt
       ? {

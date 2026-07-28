@@ -283,6 +283,7 @@ export function createCanvas2DRenderer(
     // reallocates its backing store — so there is nothing to recover from.
     isContextLost: () => false,
     releaseTiles,
+    isPreviewReady: () => preview !== null,
     tileStats,
     dispose
   }

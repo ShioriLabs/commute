@@ -40,6 +40,7 @@ import {
 import { isMapGlDebugEnabled } from '../hooks/secret-features'
 import StationSheet from '../components/station-sheet'
 import HubSheet from '../components/hub-sheet'
+import { MapPreviewBackdrop, useMapMorph } from '../components/map-morph'
 import { PEEK_FRACTION } from '../components/bottom-sheet'
 // Imported as a URL (not as data) so Vite content-hashes it into /assets/. The
 // file deliberately lives outside public/: assets under public/ are copied
@@ -154,6 +155,16 @@ export default function MapPage() {
     '/maps/fdtj/manifest.json',
     (url: string) => fetch(url).then(r => r.json())
   )
+
+  // Card→map morph overlay (entered from the home nav rail): it holds over
+  // this route until the first frame containing the map is presented, and must
+  // be told about failure so the error screen isn't revealed under a preview
+  // that suggests everything worked.
+  const morph = useMapMorph()
+  const morphReadySignaledRef = useRef(false)
+  useEffect(() => {
+    if (error) morph.notifyMapFailed()
+  }, [error, morph])
   const { data: pointsManifest } = useSWR<PointsManifest>(
     pointsUrl,
     (url: string) => fetch(url).then(r => r.json())
@@ -810,6 +821,18 @@ export default function MapPage() {
         renderer.draw(r, viewportSize.w, viewportSize.h, dpr, targetTier, overlay)
         dirtyRef.current = false
         if (import.meta.env.DEV && authorMode) setRenderTick(n => n + 1)
+
+        // Morph handoff: the first drawn frame that actually contains the map
+        // (preview texture resident) AND uses the anchored camera — the
+        // provisional map-center frame would hand off hundreds of px away from
+        // where the overlay's preview sits (didCenterRef latches when the
+        // anchor lands). One more rAF so the frame is *presented* before the
+        // overlay starts fading — same reasoning as the boot splash's double
+        // rAF.
+        if (!morphReadySignaledRef.current && didCenterRef.current && (renderer.isPreviewReady?.() ?? false)) {
+          morphReadySignaledRef.current = true
+          requestAnimationFrame(() => morph.notifyMapReady())
+        }
       }
 
       // Recenter button visibility: only flip state when it changes.
@@ -826,7 +849,7 @@ export default function MapPage() {
       stopped = true
       cancelAnimationFrame(rafRef.current)
     }
-  }, [viewportSize.w, viewportSize.h, mapW, mapH, minScale, authorMode, recovery])
+  }, [viewportSize.w, viewportSize.h, mapW, mapH, minScale, authorMode, recovery, morph])
 
   const updateTransform = (next: Transform) => {
     targetRef.current = clampTransform(next, viewportSize.w, viewportSize.h, mapW, mapH, minScale)
@@ -1177,9 +1200,16 @@ export default function MapPage() {
   }
 
   if (!manifest) {
+    // Preview backdrop rather than a bare spinner: direct-URL entries see the
+    // map immediately, and morph entries get the identical frame under the
+    // overlay so its fade never reveals a blank page. `fixed inset-0` matches
+    // the real main below so there's no layout jump when it swaps in.
     return (
-      <main className="w-screen h-screen flex items-center justify-center bg-[#FFF8F8]" aria-live="assertive">
-        <div className="rounded-full border-4 border-slate-600 border-t-transparent w-12 h-12 animate-spin" aria-label="Memuat peta..." />
+      <main className="fixed inset-0 overflow-hidden bg-[#FFF8F8]" aria-live="assertive">
+        <MapPreviewBackdrop />
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 rounded-full bg-white/90 backdrop-blur shadow-lg p-2.5">
+          <div className="rounded-full border-3 border-slate-600 border-t-transparent w-6 h-6 animate-spin" aria-label="Memuat peta..." />
+        </div>
       </main>
     )
   }

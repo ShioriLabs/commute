@@ -258,6 +258,41 @@ body {
   transition: opacity 200ms ease-out;
 }
 
+/* Card → map morph overlay (components/map-morph.tsx). The overlay mounts with
+   an inline transform mapping its box onto the nav card's (utils/morph.ts, the
+   same scheme as the sheet morph), which is then released so this transition
+   carries it to fullscreen. Timings come in as custom properties from the
+   component because their relationships are load-bearing (morph vs face vs
+   fade — see the constants there). Opacity is listed for the fade-out leg. */
+.map-morph-overlay {
+  transition:
+    transform var(--map-morph-ms, 250ms) var(--ease-ios-spring),
+    border-radius var(--map-morph-ms, 250ms) var(--ease-ios-spring),
+    opacity var(--map-morph-fade-ms, 200ms) ease-out;
+  will-change: transform;
+}
+
+.map-morph-fading {
+  opacity: 0;
+}
+
+/* Flat card face over the preview: holds the card's white for the first ~50ms —
+   the window where the overlay is squashed to card size and the preview inside
+   would read as smeared pixels — then clears while the morph carries on. The
+   sheet morph's mask trick (sheet-button.tsx), same numbers. */
+.map-morph-face {
+  position: absolute;
+  inset: 0;
+  background: white;
+  opacity: 1;
+  pointer-events: none;
+  transition: opacity var(--map-morph-face-ms, 100ms) ease-out var(--map-morph-face-delay-ms, 50ms);
+}
+
+.map-morph-open .map-morph-face {
+  opacity: 0;
+}
+
 /* Every entrance class above starts at `opacity: 0` and relies on its animation
    to reveal the element. So switching the animation off alone would leave the
    content permanently invisible — each rule has to restore opacity and clear
@@ -328,6 +363,18 @@ body {
      unmounts through the same code path as the full fade. */
   .boot-splash-leave {
     transition-duration: 1ms;
+  }
+
+  /* Belt-and-braces: the morph host already refuses to start under reduced
+     motion (components/map-morph.tsx), so this only bites when the preference
+     flips mid-morph. Nonzero for the same transitionend reason as above. */
+  .map-morph-overlay {
+    transition-duration: 1ms;
+  }
+
+  .map-morph-face {
+    transition-duration: 1ms;
+    transition-delay: 0s;
   }
 
   .map-ripple {
