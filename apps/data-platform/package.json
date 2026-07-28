@@ -12,6 +12,7 @@
     "lint:fix": "eslint --fix"
   },
   "dependencies": {
+    "@commute/schemas": "workspace:../schemas",
     "twgl.js": "^7.0.0"
   },
   "devDependencies": {

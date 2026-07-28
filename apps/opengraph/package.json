@@ -16,6 +16,7 @@
   "dependencies": {
     "@cloudflare/workers-types": "^5.20260714.1",
     "@commute/constants": "workspace:../constants",
+    "@commute/schemas": "workspace:../schemas",
     "@resvg/resvg-wasm": "^2.6.2",
     "@types/node": "^26.1.1",
     "hono": "^4.12.32",

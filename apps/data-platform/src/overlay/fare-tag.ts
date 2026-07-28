@@ -92,7 +92,7 @@ export function createFareTag(
       + `${from} <span class="text-white/30">&rarr;</span> ${to}`
       + `</p>`
       + `<p class="text-[26px] font-extrabold leading-none tracking-tight text-white">`
-      + rupiah(f.totalFare)
+      + (f.totalFare === null ? '&mdash;' : rupiah(f.totalFare))
       + `</p>`
       + `</div>`
     )

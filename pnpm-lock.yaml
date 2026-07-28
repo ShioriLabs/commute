@@ -95,6 +95,9 @@ importers:
 
   apps/data-platform:
     dependencies:
+      '@commute/schemas':
+        specifier: workspace:../schemas
+        version: link:../schemas
       twgl.js:
         specifier: ^7.0.0
         version: 7.0.0
@@ -123,6 +126,9 @@ importers:
       '@commute/constants':
         specifier: workspace:../constants
         version: link:../constants
+      '@commute/schemas':
+        specifier: workspace:../schemas
+        version: link:../schemas
       '@resvg/resvg-wasm':
         specifier: ^2.6.2
         version: 2.6.2

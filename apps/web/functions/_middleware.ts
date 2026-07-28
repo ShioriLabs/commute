@@ -1,3 +1,5 @@
+import type { CompactGroupedTimetable, Hub, Line, LineDetail, OperatorWithLines, Station } from '@commute/schemas'
+
 /**
  * Pages Function middleware: crawler-facing SEO for the client-rendered SPA.
  *
@@ -88,40 +90,41 @@ interface OgData {
   bodyHtml?: string
 }
 
-interface ApiLine {
-  name: string
-  lineCode: string
-  colorCode: string
-}
+/*
+ * Response subsets, derived from @commute/schemas rather than hand-declared.
+ *
+ * Only the fields this file renders are picked — a crawler needs a name and a
+ * line list, not amenities or coordinates — but `Pick` ties them to the real
+ * definitions, so a reshape that drops or renames one breaks the build here.
+ * Hand-copied shapes did not: this file silently read `station.lines.map(l =>
+ * l.name)` for a while after `lines` became a string array.
+ *
+ * The imports are type-only, so nothing is added to the bundle. (Wrangler
+ * resolves them fine; an older comment here claimed a Pages Function could not
+ * import from the workspace, which is no longer true.)
+ */
+type APILine = Pick<Line, 'name' | 'lineCode' | 'colorCode'>
 
-interface ApiStation {
-  id: string
-  /** Display name. */
-  name: string
+type APIStation = Pick<Station, 'id' | 'name' | 'lines'> & {
   /** The operator's own spelling; kept as a search/SEO alias. */
-  officialName?: string
-  /** Operator-qualified line keys, e.g. `KCI:C`. */
-  lines: string[]
-  searchable?: boolean
+  officialName?: Station['officialName']
+  searchable?: Station['searchable']
 }
 
-interface ApiHub {
-  name: string
-  kind?: 'hub' | 'integrated'
-  heroImage: string | null
-  members: ApiStation[]
+type APIHub = Pick<Hub, 'name' | 'heroImage'> & {
+  kind?: Hub['kind']
+  members: APIStation[]
 }
 
-// Mirrors HUB_KIND_LABEL in @commute/constants — this file is a standalone Pages
-// Function and can't import from the app bundle, so keep the two in sync.
-// Defaults to the 'integrated' wording when the API predates the `kind` column.
-function hubKindLabel(hub: ApiHub): string {
+// Inlined rather than imported from @commute/constants: HUB_KIND_LABEL is a
+// value, and keeping this file's runtime imports at zero keeps the crawler path
+// dependency-free. Defaults to the 'integrated' wording when the API predates
+// the `kind` column.
+function hubKindLabel(hub: APIHub): string {
   return hub.kind === 'hub' ? 'Pumpunan Moda' : 'Stasiun Terintegrasi'
 }
 
-interface ApiLineDetail {
-  operator: { code: string, name: string }
-  line: ApiLine
+type APILineDetail = Pick<LineDetail, 'operator' | 'line'> & {
   segments: { stations: { name?: string }[] }[]
 }
 
@@ -134,28 +137,23 @@ function lineLabel(key: string): string {
   return key.split(':')[1] ?? key
 }
 
-// Wire-optimized departure: [tripNumber, minuteSinceMidnight].
-type CompactSchedule = [tripNumber: string | null, minute: number]
-
-interface GroupedDestination {
-  boundFor: string
-  via: string | null
-  schedules: CompactSchedule[]
+/*
+ * The `?compact=1` grouped timetable. `label` is narrowed to a string because
+ * this file joins it before rendering, unlike the app which keeps the array.
+ */
+type GroupedLineTimetable = Pick<CompactGroupedTimetable, 'line'> & {
+  timetable: {
+    label: string
+    destinations: Pick<
+      CompactGroupedTimetable['timetable'][number]['destinations'][number],
+      'boundFor' | 'via' | 'schedules'
+    >[]
+  }[]
 }
 
-interface GroupedLineTimetable {
-  /** Operator-qualified line key. */
-  line: string
-  timetable: { label: string, destinations: GroupedDestination[] }[]
-}
+type APIOperator = Pick<OperatorWithLines, 'code' | 'name'> & { lines: APILine[] }
 
-interface ApiOperator {
-  code: string
-  name: string
-  lines: ApiLine[]
-}
-
-interface ApiResponse<T> {
+interface APIResponse<T> {
   status: number
   data?: T
   error?: { message: string, code: string }
@@ -189,14 +187,16 @@ function departureTime(minute: number): string {
 // Build the crawlable body block + JSON-LD for a station. Kept text-only and
 // visually hidden so it never affects the human SPA (which hydrates over it).
 function buildStationBody(
-  station: ApiStation,
+  station: APIStation,
   operator: string,
   code: string,
   timetable: GroupedLineTimetable[] | null
 ): string {
   const name = station.name
   const vocab = vocabFor(operator)
-  const lineNames = station.lines.map(l => l.name)
+  // `lines` are operator-qualified keys (`KCI:C`); the bare code is what a
+  // crawler needs, and resolving names would mean an extra /operators fetch.
+  const lineNames = station.lines.map(lineLabel)
 
   const lineItems = lineNames.map(n => `<li>${esc(n)}</li>`).join('')
   const linesSection = lineItems
@@ -259,7 +259,7 @@ function buildStationBody(
   )
 }
 
-function buildLineBody(detail: ApiLineDetail, stationCount: number): string {
+function buildLineBody(detail: APILineDetail, stationCount: number): string {
   const stationNames: string[] = []
   for (const seg of detail.segments) {
     for (const s of seg.stations) {
@@ -289,7 +289,7 @@ function buildLineBody(detail: ApiLineDetail, stationCount: number): string {
   )
 }
 
-function buildHubBody(hub: ApiHub, slug: string, memberNames: string): string {
+function buildHubBody(hub: APIHub, slug: string, memberNames: string): string {
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'TrainStation',
@@ -339,8 +339,8 @@ async function resolveOg(pathname: string, searchParams: URLSearchParams, env: E
       const [toOp, toCode] = toId.split('-')
 
       const [fromStation, toStation] = await Promise.all([
-        fetchJson<ApiStation>(`${base}/stations/${encodeURIComponent(fromOp)}/${encodeURIComponent(fromCode)}`),
-        fetchJson<ApiStation>(`${base}/stations/${encodeURIComponent(toOp)}/${encodeURIComponent(toCode)}`)
+        fetchJson<APIStation>(`${base}/stations/${encodeURIComponent(fromOp)}/${encodeURIComponent(fromCode)}`),
+        fetchJson<APIStation>(`${base}/stations/${encodeURIComponent(toOp)}/${encodeURIComponent(toCode)}`)
       ])
 
       if (fromStation && toStation) {
@@ -364,7 +364,7 @@ async function resolveOg(pathname: string, searchParams: URLSearchParams, env: E
   const hubMatch = pathname.match(/^\/hubs\/([^/]+)$/)
   if (hubMatch) {
     const slug = decodeURIComponent(hubMatch[1])
-    const hub = await fetchJson<ApiHub>(`${base}/hubs/${encodeURIComponent(slug)}`)
+    const hub = await fetchJson<APIHub>(`${base}/hubs/${encodeURIComponent(slug)}`)
     if (!hub) return null
     const memberNames = hub.members
       .map(m => m.name)
@@ -384,7 +384,7 @@ async function resolveOg(pathname: string, searchParams: URLSearchParams, env: E
   if (lineMatch) {
     const operator = decodeURIComponent(lineMatch[1])
     const lineCode = decodeURIComponent(lineMatch[2])
-    const detail = await fetchJson<ApiLineDetail>(
+    const detail = await fetchJson<APILineDetail>(
       `${base}/lines/${encodeURIComponent(operator)}/${encodeURIComponent(lineCode)}`
     )
     if (!detail) return null
@@ -392,7 +392,7 @@ async function resolveOg(pathname: string, searchParams: URLSearchParams, env: E
     return {
       title: `Jadwal ${detail.line.name} - Rute & Jam Keberangkatan - Commute`,
       description: `Cek rute, ${stationCount} stasiun, dan jam keberangkatan ${detail.line.name} (${detail.operator.name}) kagak pake ribet.`,
-      image: lineOgImage(detail.operator, detail.line.lineCode),
+      image: lineOgImage(detail.operator.code, detail.line.lineCode),
       bodyHtml: buildLineBody(detail, stationCount)
     }
   }
@@ -402,7 +402,7 @@ async function resolveOg(pathname: string, searchParams: URLSearchParams, env: E
     const operator = decodeURIComponent(stationMatch[1])
     const code = decodeURIComponent(stationMatch[2])
     const [station, timetable] = await Promise.all([
-      fetchJson<ApiStation>(`${base}/stations/${encodeURIComponent(operator)}/${encodeURIComponent(code)}`),
+      fetchJson<APIStation>(`${base}/stations/${encodeURIComponent(operator)}/${encodeURIComponent(code)}`),
       fetchJson<GroupedLineTimetable[]>(`${base}/stations/${encodeURIComponent(operator)}/${encodeURIComponent(code)}/timetable/grouped?compact=1`)
     ])
     if (!station) return null
@@ -423,7 +423,7 @@ async function fetchJson<T>(url: string): Promise<T | null> {
   try {
     const res = await fetch(url)
     if (!res.ok) return null
-    const body = await res.json() as ApiResponse<T>
+    const body = await res.json() as APIResponse<T>
     return body.data ?? null
   } catch {
     return null
@@ -443,10 +443,10 @@ async function buildSitemap(env: Env): Promise<string> {
   ])
 
   if (base) {
-    const operators = await fetchJson<ApiOperator[]>(`${base}/operators`) ?? []
+    const operators = await fetchJson<APIOperator[]>(`${base}/operators`) ?? []
     // Stations per operator + lines from the operator payload, fetched in parallel.
     const stationLists = await Promise.all(
-      operators.map(op => fetchJson<ApiStation[]>(`${base}/stations/${encodeURIComponent(op.code)}`))
+      operators.map(op => fetchJson<APIStation[]>(`${base}/stations/${encodeURIComponent(op.code)}`))
     )
     operators.forEach((op, i) => {
       for (const line of op.lines ?? []) {

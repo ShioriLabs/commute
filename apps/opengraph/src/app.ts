@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { renderFareCard } from './render'
+import type { FareResult as SharedFareResult } from '@commute/schemas'
 
 export interface Bindings {
   API_URL: string
@@ -16,16 +17,11 @@ interface StandardResponse<T = unknown> {
   }
 }
 
-interface FareStation {
-  id: string
-  name: string
-}
-
-interface FareResult {
-  from: FareStation
-  to: FareStation
-  totalFare: number | null
-}
+/*
+ * Only the fields the card renders. `Pick` from the shared definition rather
+ * than a hand-copy, so a fare reshape breaks the build instead of the image.
+ */
+type FareResult = Pick<SharedFareResult, 'from' | 'to' | 'totalFare'>
 
 // Generic branded fallback served whenever we can't render a real fare card.
 // Crawlers must always get a valid image, never a 4xx/5xx.

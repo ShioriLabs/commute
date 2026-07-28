@@ -180,7 +180,7 @@ export function createRouteStrip(
       + `</p>`
       + `<ul class="mb-3 flex flex-col gap-2.5">${legs}</ul>`
       + `<div class="flex items-baseline gap-2 border-t border-line/70 pt-2.5">`
-      + `<span class="text-[20px] font-extrabold leading-none tracking-tight text-white">${rupiah(r.totalFare)}</span>`
+      + `<span class="text-[20px] font-extrabold leading-none tracking-tight text-white">${r.totalFare === null ? '&mdash;' : rupiah(r.totalFare)}</span>`
       + `<span class="font-mono text-[10px] uppercase tracking-wider text-white/45">`
       + `${distance(r.totalDistanceM)} &middot; ${r.transferCount} transfer`
       + `</span>`

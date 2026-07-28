@@ -103,8 +103,14 @@ export function createStationCard(
       + `<div class="divide-y divide-line/50">`
       + row('Operator', escapeHTML(s.operator))
       + row('Lin', lines)
-      + row('Koordinat', `${s.latitude.toFixed(4)}, ${s.longitude.toFixed(4)}`)
-      + (t ? row('Transfer', `${escapeHTML(t.toStation.operator)} · ${t.distanceM} m`) : '')
+      + (s.latitude !== null && s.longitude !== null
+        ? row('Koordinat', `${s.latitude.toFixed(4)}, ${s.longitude.toFixed(4)}`)
+        : '')
+      + (t
+        // INTERNAL transfers name an operator by code; EXTERNAL ones carry only
+        // a free-text operator name.
+        ? row('Transfer', `${escapeHTML(t.dataType === 'INTERNAL' ? t.toStation.operator : t.toStation.operatorName)} · ${t.distanceM} m`)
+        : '')
       + `</div>`
       + amenitiesHTML(s)
     )

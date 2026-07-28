@@ -15,7 +15,7 @@ import { createDeparturesFlyout } from './overlay/departures'
 import { createFareTag } from './overlay/fare-tag'
 import { createChainLabels } from './overlay/chain-labels'
 import { createStationCard } from './overlay/station-card'
-import { createApiPanel } from './overlay/api-panel'
+import { createAPIPanel } from './overlay/api-panel'
 import { createRouteStrip } from './overlay/route-strip'
 import { createCoveragePanel, toRailRoster, RAIL_OPERATOR_CYCLE } from './overlay/coverage-panel'
 import { fetchManggaraiDepartures } from './data/departures-api'
@@ -27,6 +27,7 @@ import {
   fetchStationTransfers
 } from './data/network-api'
 import { nextDepartures } from './data/next-departures'
+import { buildLineDictionary } from './data/network-types'
 import { applyLineColors } from './theme/line-colors'
 
 // Default the page to its no-WebGL state, then promote it once a context is
@@ -158,7 +159,7 @@ function bootNetworkBackground(): void {
       : null
   const apiPanel
     = overlayRoot && rasuna
-      ? createApiPanel(
+      ? createAPIPanel(
           overlayRoot,
           document.querySelector<HTMLElement>('[data-api-dock]'),
           rasuna,
@@ -215,9 +216,11 @@ function bootNetworkBackground(): void {
   function loadDepartures(): void {
     if (!flyout) return
     flyout.setState({ kind: 'loading' })
-    fetchManggaraiDepartures()
-      .then((timetable) => {
-        const rows = nextDepartures(timetable, 4)
+    // Operators come along for the ride: the timetable refers to lines by key,
+    // and /operators is the dictionary that resolves them to a name and colour.
+    Promise.all([fetchManggaraiDepartures(), fetchOperators()])
+      .then(([timetable, operators]) => {
+        const rows = nextDepartures(timetable, 4, buildLineDictionary(operators))
         flyout.setState(rows.length ? { kind: 'ready', rows } : { kind: 'empty' })
       })
       .catch(() => flyout.setState({ kind: 'error' }))

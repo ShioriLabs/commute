@@ -1,37 +1,21 @@
-// Compact grouped-timetable types — the subset of apps/web/models/schedules.ts
-// that the departures flyout consumes. The API returns
-// GET /stations/:OP/:CODE/timetable/grouped?compact=1 wrapped as {status, data}
-// where data is CompactLineGroupedTimetable.
+/*
+ * Compact grouped-timetable types, re-exported from @commute/schemas.
+ *
+ * These used to be hand-copied here, and they drifted: the copy still described
+ * a line as `{ name, lineCode, colorCode }` long after the API switched to a
+ * single `line` key, so the departures flyout was reading fields that no longer
+ * existed and rendering `undefined`. Re-exporting means the next reshape breaks
+ * the build here instead of the page.
+ *
+ * The API returns GET /stations/:OP/:CODE/timetable/grouped?compact=1 wrapped as
+ * {status, data}, where data is CompactLineGroupedTimetable.
+ */
 
-// Wire-optimized departure: [tripNumber, minuteSinceMidnight]. tripNumber is
-// null for operators without trip numbers; minute is integer minutes since local
-// (Asia/Jakarta) midnight, 0–1439.
-export type CompactSchedule = [tripNumber: string | null, minute: number]
-
-export interface CompactTimetableDestination {
-  boundFor: string
-  via: string | null
-  schedules: CompactSchedule[]
-}
-
-export interface CompactTimetableDirectionGroup {
-  key: string
-  label: string[]
-  platformCode: string | null
-  destinations: CompactTimetableDestination[]
-}
-
-export interface CompactLineTimetable {
-  name: string
-  lineCode: string
-  colorCode: string
-  timetable: CompactTimetableDirectionGroup[]
-}
-
-export type CompactLineGroupedTimetable = CompactLineTimetable[]
-
-export interface ApiEnvelope<T> {
-  status: number
-  data?: T
-  error?: { code: string, message: string }
-}
+export type {
+  CompactSchedule,
+  CompactTimetableDestination,
+  CompactTimetableDirectionGroup,
+  CompactLineTimetable,
+  CompactLineGroupedTimetable,
+  StandardResponse as APIEnvelope
+} from '@commute/schemas'
