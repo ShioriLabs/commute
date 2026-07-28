@@ -6,7 +6,8 @@ import {
   Scripts,
   ScrollRestoration
 } from 'react-router'
-import { useEffect } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import clsx from 'clsx'
 import type { Route } from './+types/root'
 import './app.css'
 import { InstallableProvider } from './contexts/installable'
@@ -47,7 +48,51 @@ export const links: Route.LinksFunction = () => [
   }
 ]
 
+// The boot splash lives in Layout rather than HydrateFallback so it survives
+// hydration: Layout persists when the router swaps the fallback for real route
+// content, which is what lets the splash fade out over the mounting app
+// instead of disappearing in a single frame on unmount.
+type BootSplashPhase = 'visible' | 'leaving' | 'gone'
+
+const BootSplashDismissContext = createContext<() => void>(() => {})
+
+// Called from the components that mount when real content is on screen — App
+// (route tree committed) and ErrorBoundary (first render threw). Not from
+// Layout's own effect: that fires at hydration, when the route module may
+// still be a lazy chunk in flight and the splash is the only thing worth
+// showing.
+function useDismissBootSplash() {
+  const dismiss = useContext(BootSplashDismissContext)
+
+  useEffect(() => {
+    // Double rAF: the content underneath has not just committed but painted,
+    // so the fade reveals real pixels rather than racing first paint.
+    let raf2 = 0
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(dismiss)
+    })
+
+    return () => {
+      cancelAnimationFrame(raf1)
+      cancelAnimationFrame(raf2)
+    }
+  }, [dismiss])
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
+  // 'visible' initially so the first client render matches the prerendered
+  // markup; the fade is only ever triggered from effects. Layout is never
+  // unmounted, so once dismissed the splash stays gone for the life of the
+  // page — client-side navigation cannot re-show it.
+  const [splashPhase, setSplashPhase] = useState<BootSplashPhase>('visible')
+  const splashRef = useRef<HTMLDivElement>(null)
+
+  // Functional update makes dismissal one-shot: 'leaving'/'gone' never regress
+  // to 'visible', however many mounted routes call dismiss.
+  const dismissSplash = useCallback(() => {
+    setSplashPhase(phase => (phase === 'visible' ? 'leaving' : phase))
+  }, [])
+
   useEffect(() => {
     // First statement, before anything that could throw: this effect running at
     // all proves React hydrated, which is the only signal that tells the boot
@@ -56,6 +101,28 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
     registerServiceWorker(createBrowserDeps(import.meta.env.PROD))
   }, [])
+
+  useEffect(() => {
+    if (splashPhase !== 'leaving') return
+
+    const el = splashRef.current
+    const finish = () => setSplashPhase('gone')
+    // Guard on target and property: the wordmark's letter animations don't
+    // emit transitionend, but any future child transition would bubble here.
+    const handleTransitionEnd = (event: TransitionEvent) => {
+      if (event.target === el && event.propertyName === 'opacity') finish()
+    }
+
+    el?.addEventListener('transitionend', handleTransitionEnd)
+    // Fallback for when the transition never fires (hidden tab, transition
+    // skipped): the splash must still leave the DOM.
+    const timer = setTimeout(finish, 400)
+
+    return () => {
+      el?.removeEventListener('transitionend', handleTransitionEnd)
+      clearTimeout(timer)
+    }
+  }, [splashPhase])
 
   return (
     <html lang="en">
@@ -88,9 +155,35 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body className="bg-rose-50/50 text-slate-900">
         <InstallableProvider>
-          {children}
-          <ScrollRestoration />
-          <Scripts />
+          <BootSplashDismissContext.Provider value={dismissSplash}>
+            {children}
+            {/*
+              Prerendered into the static shell (Layout renders it
+              unconditionally at build time), so it paints before any JS
+              arrives. z-30 keeps it above the home nav rail (z-20) once real
+              content mounts underneath, and below the boot-fallback retry
+              panel (z-40). Permanently click-through: pre-hydration nothing
+              beneath it is interactive, and the watchdog's panel is a separate
+              element.
+            */}
+            {splashPhase !== 'gone' && (
+              <div
+                ref={splashRef}
+                className={clsx(
+                  'fixed inset-0 z-30 flex items-center justify-center bg-rose-50/50 pointer-events-none',
+                  splashPhase === 'leaving' && 'boot-splash-leave'
+                )}
+                aria-live="assertive"
+                aria-busy={splashPhase === 'visible'}
+                data-boot-splash
+              >
+                <Wordmark className="w-56 max-w-[60vw] h-auto" />
+                <span className="sr-only">Memuat...</span>
+              </div>
+            )}
+            <ScrollRestoration />
+            <Scripts />
+          </BootSplashDismissContext.Provider>
         </InstallableProvider>
       </body>
     </html>
@@ -98,6 +191,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  useDismissBootSplash()
+
   return (
     <>
       <Outlet />
@@ -105,23 +200,15 @@ export default function App() {
   )
 }
 
-// SPA mode (ssr: false) prerenders only this root route into index.html. Without
-// a HydrateFallback the shell is blank until the JS bundle downloads and
-// hydrates — a visible gap on first load. This markup is baked into the static
-// HTML, so it paints immediately and carries the user through to hydration,
-// then flows straight into each route's own loading state.
+// SPA mode (ssr: false) prerenders only this root route into index.html. The
+// visible boot splash lives in Layout (so it can persist past hydration and
+// fade out); what remains here is the watchdog's retry panel, kept in the
+// fallback on purpose: it is only reachable when hydration never happens — the
+// watchdog latches once React hydrates — so parking it in Layout would carry a
+// dead hidden panel and its retry wiring in the live app forever.
 export function HydrateFallback() {
   return (
     <>
-      <div
-        className="fixed inset-0 flex items-center justify-center bg-rose-50/50"
-        aria-live="assertive"
-        aria-busy="true"
-        data-boot-splash
-      >
-        <Wordmark className="w-56 max-w-[60vw] h-auto" />
-        <span className="sr-only">Memuat...</span>
-      </div>
       {/*
         Revealed by the boot watchdog when the bundle never arrives. Styled with
         inline styles rather than Tailwind classes on purpose: one of the
@@ -173,6 +260,11 @@ export function HydrateFallback() {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  // Without this a first-render crash would leave the splash covering the
+  // error screen forever: ErrorBoundary replaces App, so App's dismiss never
+  // runs.
+  useDismissBootSplash()
+
   let message = 'Oops!'
   let details = 'An unexpected error occurred.'
   let stack: string | undefined

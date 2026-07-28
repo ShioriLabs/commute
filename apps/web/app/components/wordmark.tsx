@@ -1,10 +1,10 @@
-import { WORDMARK_LETTER_STAGGER_MS } from 'utils/stagger'
+import { WORDMARK_LETTER_STAGGER_MS, WORDMARK_REVEAL_DELAY_MS } from 'utils/stagger'
 
 // The Commute wordmark as one path per letter, taken from
 // public/img/logotype.svg. Inlined rather than loaded as an <img> because this
-// renders inside root.tsx's HydrateFallback, which is prerendered into a ~3 KB
-// index.html and paints before any JS or webfont arrives — an external asset
-// would show nothing for exactly the window this exists to fill.
+// renders inside root.tsx's Layout boot splash, which is prerendered into a
+// ~3 KB index.html and paints before any JS or webfont arrives — an external
+// asset would show nothing for exactly the window this exists to fill.
 //
 // The source SVG lists its paths right-to-left; these are reversed so index 0
 // is the leading "C" and the reveal reads left to right.
@@ -47,7 +47,7 @@ export default function Wordmark({ className }: Props) {
             d={d}
             fill="#F55875"
             className="wordmark-letter"
-            style={{ animationDelay: `${index * WORDMARK_LETTER_STAGGER_MS}ms` }}
+            style={{ animationDelay: `${WORDMARK_REVEAL_DELAY_MS + index * WORDMARK_LETTER_STAGGER_MS}ms` }}
           />
         ))}
       </g>

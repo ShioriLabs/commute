@@ -179,10 +179,13 @@ body {
   }
 }
 
-/* Loading wordmark (root.tsx HydrateFallback). Letters rise in one at a time,
-   then the assembled mark breathes until the bundle lands.
+/* Loading wordmark (root.tsx Layout boot splash). Letters rise in one at a
+   time, then the assembled mark breathes until the bundle lands.
    Both animations run on separate elements — letters on the <path>s, the
-   breathe on their <g> — so neither has to wait on the other's property. */
+   breathe on their <g> — so neither has to wait on the other's property.
+   Every letter's inline delay includes a 250ms base (WORDMARK_REVEAL_DELAY_MS)
+   so fast loads dismiss the splash before the mark ever appears; the base
+   `opacity: 0` plus `forwards` fill keeps letters hidden through that window. */
 .wordmark-letter {
   opacity: 0;
   /* Without this, translateY on an SVG child resolves against the user-space
@@ -214,10 +217,10 @@ body {
   }
 }
 
-/* Delayed past the last letter's landing (6 × 35ms stagger + 300ms) so the
-   mark is whole before it starts breathing. */
+/* Delayed past the last letter's landing (250ms reveal delay + 6 × 35ms
+   stagger + 300ms) so the mark is whole before it starts breathing. */
 .wordmark-breathe {
-  animation: wordmark-breathe 1.8s ease-in-out 560ms infinite;
+  animation: wordmark-breathe 1.8s ease-in-out 810ms infinite;
 }
 
 @keyframes wordmark-breathe {
@@ -228,6 +231,15 @@ body {
   50% {
     opacity: 0.55;
   }
+}
+
+/* Boot splash leaving (root.tsx Layout): fades over the mounting app rather
+   than vanishing in one frame. Opacity only — the content underneath is
+   already running its own entrance, and a second movement on top of the card
+   cascade would read as two competing gestures. */
+.boot-splash-leave {
+  opacity: 0;
+  transition: opacity 200ms ease-out;
 }
 
 /* Every entrance class above starts at `opacity: 0` and relies on its animation
@@ -241,12 +253,32 @@ body {
   .home-enter,
   .home-enter-nav,
   .content-fade,
-  .map-chrome-enter,
-  .wordmark-letter {
+  .map-chrome-enter {
     animation: none;
     animation-delay: 0s;
     opacity: 1;
     transform: none;
+  }
+
+  /* Not in the group above: an instant reveal would flash the mark on fast
+     loads, where the whole point of the 250ms reveal delay is that the splash
+     dismisses before the wordmark ever appears. Only the animation name is
+     swapped — duration, easing, fill, and the inline per-letter delay (which
+     includes the base delay) carry over from the base rule, so letters still
+     wait out the blank window and then fade in without the rise. */
+  .wordmark-letter {
+    animation-name: wordmark-letter-reduced;
+  }
+
+  @keyframes wordmark-letter-reduced {
+    from {
+      opacity: 0;
+      transform: none;
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
   }
 
   /* Listed separately from the group above: this one does *not* start at
@@ -260,8 +292,10 @@ body {
   /* The wordmark keeps breathing: it is the only thing on screen while the
      bundle downloads, and a motionless logo reads as a hung page. Opacity alone
      triggers nothing vestibular — slowed and shallowed rather than removed. */
+  /* Same 810ms delay as the full-motion breathe: the reduced letter fade now
+     waits out the reveal delay too, so breathing must not start earlier. */
   .wordmark-breathe {
-    animation: wordmark-breathe-reduced 2.4s ease-in-out infinite;
+    animation: wordmark-breathe-reduced 2.4s ease-in-out 810ms infinite;
   }
 
   @keyframes wordmark-breathe-reduced {
@@ -272,6 +306,12 @@ body {
     50% {
       opacity: 0.75;
     }
+  }
+
+  /* Near-instant, but nonzero so transitionend still fires and the splash
+     unmounts through the same code path as the full fade. */
+  .boot-splash-leave {
+    transition-duration: 1ms;
   }
 
   .map-ripple {

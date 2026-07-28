@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { Station } from 'models/stations'
 import type { CompactLineGroupedTimetable } from 'models/schedules'
 import type { StandardResponse } from '@schema/response'
@@ -192,44 +192,55 @@ function StationCard({ stationId, index = 0 }: { stationId: string, index?: numb
   )
 }
 
-export default function HomePage() {
-  const [stations, setStations] = useState<string[]>([])
-  const [isReady, setIsReady] = useState(false)
-  const networkStatus = useNetworkStatus()
-  const { isInstallable, showIOSInstructions, isStandalone, promptInstall } = useInstall()
-  const [showInstallBanner, setShowInstallBanner] = useState(false)
-  const { isUnlocked: isMapUnlocked } = useMapUnlock()
-
-  const canInstall = (isInstallable || showIOSInstructions) && !isStandalone
-
-  useEffect(() => {
-    const isInstallBannerDismissed = localStorage.getItem('is-install-banner-dismissed') === 'true'
-    setShowInstallBanner(!isInstallBannerDismissed)
-
+// Synchronous on purpose: reading localStorage in an effect meant one render
+// with nothing to show, which put a full-screen spinner between the boot
+// splash and the skeletons. This route is not in the prerender list
+// (react-router.config.ts), so the component body only ever runs in the
+// browser and localStorage is safe to touch directly. The try/catch covers
+// blocked storage (private mode), where the old effect would have thrown
+// before setting ready and spun forever.
+function readSavedStations(): string[] {
+  try {
     const savedStationsRaw = localStorage.getItem('saved-stations')
     if (!savedStationsRaw) {
       localStorage.setItem('saved-stations', '[]')
-      setIsReady(true)
-      return
+      return []
     }
 
+    const parsedSavedStations = JSON.parse(savedStationsRaw)
+    if (!(parsedSavedStations instanceof Array)) {
+      localStorage.setItem('saved-stations', '[]')
+      return []
+    }
+
+    return parsedSavedStations as string[]
+  } catch (e) {
+    if (e instanceof SyntaxError) {
+      try {
+        localStorage.setItem('saved-stations', '[]')
+      } catch {
+        // Storage unwritable — nothing to reset.
+      }
+    }
+    return []
+  }
+}
+
+export default function HomePage() {
+  const [stations] = useState<string[]>(readSavedStations)
+  const networkStatus = useNetworkStatus()
+  const { isInstallable, showIOSInstructions, isStandalone, promptInstall } = useInstall()
+  const [showInstallBanner, setShowInstallBanner] = useState(() => {
     try {
-      const parsedSavedStations = JSON.parse(savedStationsRaw)
-      if (!(parsedSavedStations instanceof Array)) {
-        localStorage.setItem('saved-stations', '[]')
-        setIsReady(true)
-        return
-      }
-
-      setStations(parsedSavedStations as string[])
-      setIsReady(true)
-    } catch (e) {
-      if (e instanceof SyntaxError) {
-        localStorage.setItem('saved-stations', '[]')
-      }
-      setIsReady(true)
+      return localStorage.getItem('is-install-banner-dismissed') !== 'true'
+    } catch {
+      // A dismissal that can't persist would nag on every load — prefer hidden.
+      return false
     }
-  }, [])
+  })
+  const { isUnlocked: isMapUnlocked } = useMapUnlock()
+
+  const canInstall = (isInstallable || showIOSInstructions) && !isStandalone
 
   // Built as a list so the rail's entrance stagger indexes cleanly whether or
   // not the map card is unlocked — otherwise Setelan's delay would jump when
@@ -255,65 +266,55 @@ export default function HomePage() {
 
   return (
     <main className="w-full min-h-screen">
-      {isReady
+      {networkStatus === 'OFFLINE' && (
+        <div className="px-4 max-w-3xl mx-auto mt-8">
+          <div className="text-amber-950 bg-amber-100 flex flex-row gap-2 rounded-xl p-4 font-semibold">
+            <WarningIcon weight="duotone" className="w-6 h-6" />
+            Kamu sedang offline, data mungkin tidak up-to-date
+          </div>
+        </div>
+      )}
+
+      {showInstallBanner && canInstall && (
+        <div className="px-4 max-w-3xl mx-auto mt-8">
+          <div className="text-amber-950 bg-rose-100 flex flex-col gap-3 rounded-xl p-4 font-semibold">
+            { isInstallable && (
+              <>
+                Instal Commute ke perangkatmu biar tinggal tap kalo mau cek jadwal!
+                <button onClick={handleInstallBannerButton} className="flex flex-row text-center bg-[#F55875] text-white items-center justify-center rounded-lg px-4 py-2 gap-2 cursor-pointer">
+                  <DownloadSimpleIcon weight="bold" className="w-6 h-6" />
+                  {' '}
+                  Instal Sekarang
+                </button>
+              </>
+            )}
+            { showIOSInstructions && (
+              <>
+                Tambahkan Commute ke Home Screen iPhone-mu biar tinggal tap kalo mau cek jadwal!
+                <Link to="/settings/installation" className="flex flex-row text-center bg-[#F55875] text-white items-center justify-center rounded-lg px-4 py-2 gap-2 cursor-pointer">
+                  <InfoIcon weight="bold" className="w-6 h-6" />
+                  {' '}
+                  Lihat Caranya
+                </Link>
+              </>
+            )}
+            <button onClick={handleDismissInstallBannerButton} className="flex flex-row text-center bg-rose-50 text-[#F55875] items-center justify-center rounded-lg px-4 py-2 gap-2 font-bold cursor-pointer">
+              Nanti Saja
+            </button>
+          </div>
+        </div>
+      )}
+
+      {stations.length > 0
         ? (
-            <>
-              {networkStatus === 'OFFLINE' && (
-                <div className="px-4 max-w-3xl mx-auto mt-8">
-                  <div className="text-amber-950 bg-amber-100 flex flex-row gap-2 rounded-xl p-4 font-semibold">
-                    <WarningIcon weight="duotone" className="w-6 h-6" />
-                    Kamu sedang offline, data mungkin tidak up-to-date
-                  </div>
-                </div>
-              )}
-
-              {showInstallBanner && canInstall && (
-                <div className="px-4 max-w-3xl mx-auto mt-8">
-                  <div className="text-amber-950 bg-rose-100 flex flex-col gap-3 rounded-xl p-4 font-semibold">
-                    { isInstallable && (
-                      <>
-                        Instal Commute ke perangkatmu biar tinggal tap kalo mau cek jadwal!
-                        <button onClick={handleInstallBannerButton} className="flex flex-row text-center bg-[#F55875] text-white items-center justify-center rounded-lg px-4 py-2 gap-2 cursor-pointer">
-                          <DownloadSimpleIcon weight="bold" className="w-6 h-6" />
-                          {' '}
-                          Instal Sekarang
-                        </button>
-                      </>
-                    )}
-                    { showIOSInstructions && (
-                      <>
-                        Tambahkan Commute ke Home Screen iPhone-mu biar tinggal tap kalo mau cek jadwal!
-                        <Link to="/settings/installation" className="flex flex-row text-center bg-[#F55875] text-white items-center justify-center rounded-lg px-4 py-2 gap-2 cursor-pointer">
-                          <InfoIcon weight="bold" className="w-6 h-6" />
-                          {' '}
-                          Lihat Caranya
-                        </Link>
-                      </>
-                    )}
-                    <button onClick={handleDismissInstallBannerButton} className="flex flex-row text-center bg-rose-50 text-[#F55875] items-center justify-center rounded-lg px-4 py-2 gap-2 font-bold cursor-pointer">
-                      Nanti Saja
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {stations.length > 0
-                ? (
-                    <ul className="flex flex-col gap-5 pb-42 max-w-3xl mx-auto" aria-label="Daftar stasiun tersimpan">
-                      {stations.map((station, index) => (
-                        <StationCard key={station} stationId={station} index={index} />
-                      ))}
-                    </ul>
-                  )
-                : (
-                    <EmptyState mode="NO_SAVED" />
-                  )}
-            </>
+            <ul className="flex flex-col gap-5 pb-42 max-w-3xl mx-auto" aria-label="Daftar stasiun tersimpan">
+              {stations.map((station, index) => (
+                <StationCard key={station} stationId={station} index={index} />
+              ))}
+            </ul>
           )
         : (
-            <div className="w-screen h-screen flex items-center justify-center flex-col p-2" aria-live="assertive">
-              <div className="rounded-full border-4 border-slate-600 border-t-transparent w-12 h-12 m-auto animate-spin" aria-label="Memuat data..." />
-            </div>
+            <EmptyState mode="NO_SAVED" />
           )}
       <nav className="fixed bottom-0 py-4 bg-gradient-to-t from-50% from-[#FFF8F8] to-transparent w-screen z-20" aria-label="Navigasi utama">
         {/* Three cards can't fit a phone (510px against ~380px usable at 412px

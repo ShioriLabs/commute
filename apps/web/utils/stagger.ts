@@ -48,11 +48,17 @@ export const CARD_STAGGER: StaggerOptions = {
 export const NAV_STAGGER_OFFSET_MS = 120
 export const NAV_STAGGER_STEP_MS = 50
 
-// Per-letter delay for the wordmark reveal in root.tsx's HydrateFallback.
+// Per-letter delay for the wordmark reveal in root.tsx's boot splash.
 // Faster than the card cascade: seven letters at the card's 45ms would take
 // 315ms to spell a seven-character word, which reads as slow typing rather than
 // as one mark assembling.
 export const WORDMARK_LETTER_STAGGER_MS = 35
+
+// Blank window before the first letter starts. A load that finishes inside this
+// window never shows the wordmark at all — the splash is just the page
+// background fading into the app, so fast loads read as instant rather than as
+// a logo getting cut off mid-reveal.
+export const WORDMARK_REVEAL_DELAY_MS = 250
 
 export const NAV_STAGGER: StaggerOptions = {
   step: NAV_STAGGER_STEP_MS,
