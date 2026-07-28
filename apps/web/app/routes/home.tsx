@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { Station } from 'models/stations'
-import type { CompactLineGroupedTimetable } from 'models/schedules'
+import type { CompactLineGroupedTimetable, Station } from '@commute/schemas'
 import type { StandardResponse } from '@schema/response'
 import LineCard from '~/components/line-card'
 import useSWR from 'swr'

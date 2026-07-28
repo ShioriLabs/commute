@@ -1,7 +1,8 @@
 import * as v from 'valibot'
+import type { HexColored } from './common'
 import { LineSchema, OperatorSchema } from './common'
 
-const LineStationSchema = v.pipe(
+export const LineStationSchema = v.pipe(
   v.object({
     id: v.pipe(v.string(), v.metadata({ examples: ['KCI-AC'] })),
     code: v.string(),
@@ -24,7 +25,7 @@ const LineStationSchema = v.pipe(
   v.title('LineStation')
 )
 
-const LineSegmentSchema = v.pipe(
+export const LineSegmentSchema = v.pipe(
   v.object({
     kind: v.pipe(
       v.picklist(['TRUNK', 'CONTINUATION', 'RAMP', 'LOOP']),
@@ -64,3 +65,16 @@ export const OperatorWithLinesSchema = v.pipe(
   }),
   v.title('OperatorWithLines')
 )
+
+export type LineStation = HexColored<v.InferOutput<typeof LineStationSchema>>
+export type LineSegment = HexColored<v.InferOutput<typeof LineSegmentSchema>>
+export type LineSegmentKind = LineSegment['kind']
+export type LineDetail = HexColored<v.InferOutput<typeof LineDetailSchema>>
+export type OperatorWithLines = HexColored<v.InferOutput<typeof OperatorWithLinesSchema>>
+
+/*
+ * Aliases matching the names the web app has always used for these shapes.
+ * Kept so the migration to this package didn't have to rename call sites.
+ */
+export type LineDetailStation = LineStation
+export type LineDetailSegment = LineSegment

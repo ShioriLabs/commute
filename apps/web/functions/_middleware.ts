@@ -109,7 +109,7 @@ interface ApiHub {
   members: ApiStation[]
 }
 
-// Mirrors HUB_KIND_LABEL in models/hub.ts — this file is a standalone Pages
+// Mirrors HUB_KIND_LABEL in @commute/constants — this file is a standalone Pages
 // Function and can't import from the app bundle, so keep the two in sync.
 // Defaults to the 'integrated' wording when the API predates the `kind` column.
 function hubKindLabel(hub: ApiHub): string {

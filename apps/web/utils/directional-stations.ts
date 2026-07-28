@@ -1,5 +1,5 @@
-import type { Line } from 'models/line'
-import type { Station } from 'models/stations'
+import type { Line } from '@commute/schemas'
+import type { Station } from '@commute/schemas'
 
 /*
  * TransJakarta splits some haltes into two `stations` rows, one per direction of

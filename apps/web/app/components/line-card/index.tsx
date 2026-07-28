@@ -1,4 +1,4 @@
-import type { CompactLineTimetable, CompactSchedule } from 'models/schedules'
+import type { CompactLineTimetable, CompactSchedule } from '@commute/schemas'
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router'
 import { CaretRightIcon, NavigationArrowIcon } from '@phosphor-icons/react'

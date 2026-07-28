@@ -1,4 +1,4 @@
-import type { Station } from 'models/stations'
+import type { OperatorCode, Station } from '@commute/schemas'
 import { OPERATORS } from '@commute/constants'
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react'
@@ -144,7 +144,9 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
   // Operators present in the pickable set, in canonical OPERATORS order.
   const operators = useMemo(() => {
     const present = new Map(stations.map(station => [station.operator.code, station.operator.name]))
-    return (Object.keys(OPERATORS) as (keyof typeof OPERATORS)[])
+    // NUL is an internal placeholder and never appears on a station, so the
+    // cast matches the narrowed OperatorCode the schemas expose.
+    return (Object.keys(OPERATORS) as OperatorCode[])
       .filter(code => present.has(code))
       .map(code => ({ code, name: present.get(code)! }))
   }, [stations])

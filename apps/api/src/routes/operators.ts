@@ -5,7 +5,7 @@ import { Ok } from 'utils/response'
 import { ALL_LINES } from 'utils/line'
 import * as v from 'valibot'
 import { doc } from 'schemas/describe'
-import { OperatorWithLinesSchema } from 'schemas/line'
+import { OperatorWithLinesSchema } from '@commute/schemas'
 
 const app = new Hono<{ Bindings: Bindings }>()
 

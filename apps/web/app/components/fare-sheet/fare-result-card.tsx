@@ -1,4 +1,4 @@
-import type { FareResult, FareResultRideLeg, FareResultTransferLeg } from 'models/fare'
+import type { FareResult, FareResultRideLeg, FareResultTransferLeg } from '@commute/schemas'
 import { OPERATORS, type Operator } from '@commute/constants'
 import { useState } from 'react'
 import { ArrowsDownUpIcon, CaretDownIcon, CaretRightIcon, PersonSimpleWalkIcon, TicketIcon } from '@phosphor-icons/react'

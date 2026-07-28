@@ -14,7 +14,7 @@ import { Internal, NotFound, Ok } from 'utils/response'
 import { ENDPOINT_RESTRICTIONS } from 'db/data/topology'
 import { buildGraph, findRoute, RouteGraph } from 'utils/router'
 import { doc, pathParam, queryParam } from 'schemas/describe'
-import { FareResultSchema } from 'schemas/fare'
+import { FareResultSchema } from '@commute/schemas'
 
 const app = new Hono<{ Bindings: Bindings }>()
 

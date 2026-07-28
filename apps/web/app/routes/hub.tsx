@@ -2,7 +2,7 @@ import type { Route } from './+types/hub'
 import { useCallback, useEffect } from 'react'
 import { useNavigate, useNavigationType } from 'react-router'
 import { XIcon } from '@phosphor-icons/react'
-import { HUB_KIND_LABEL } from 'models/hub'
+import { HUB_KIND_LABEL } from '@commute/constants'
 import HubContent, { useHubHeader } from '~/components/hub-content'
 
 export function meta() {

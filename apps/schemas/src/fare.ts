@@ -1,7 +1,7 @@
 import * as v from 'valibot'
 import { OperatorCodeSchema } from './common'
 
-const FareStationSchema = v.pipe(
+export const FareStationSchema = v.pipe(
   v.object({
     id: v.pipe(v.string(), v.metadata({ examples: ['KCI-AC'] })),
     name: v.pipe(v.string(), v.metadata({ examples: ['Ancol'] }))
@@ -9,7 +9,7 @@ const FareStationSchema = v.pipe(
   v.title('FareStation')
 )
 
-const LineRefSchema = v.pipe(
+export const LineRefSchema = v.pipe(
   v.object({
     lineCode: v.string(),
     lineName: v.string(),
@@ -19,7 +19,7 @@ const LineRefSchema = v.pipe(
   v.title('FareLineRef')
 )
 
-const RideLegSchema = v.pipe(
+export const RideLegSchema = v.pipe(
   v.object({
     type: v.literal('RIDE'),
     lineCode: v.string(),
@@ -43,7 +43,7 @@ const RideLegSchema = v.pipe(
   v.title('FareRideLeg')
 )
 
-const TransferLegSchema = v.pipe(
+export const TransferLegSchema = v.pipe(
   v.object({
     type: v.literal('TRANSFER'),
     from: FareStationSchema,
@@ -64,7 +64,7 @@ export const FareLegSchema = v.pipe(
   v.description('A single stage of the journey. Discriminated on `type`.')
 )
 
-const FareSegmentSchema = v.pipe(
+export const FareSegmentSchema = v.pipe(
   v.object({
     operator: OperatorCodeSchema,
     fromStationId: v.string(),
@@ -72,7 +72,10 @@ const FareSegmentSchema = v.pipe(
     fromName: v.string(),
     toName: v.string(),
     distanceM: v.number(),
-    fare: v.pipe(v.number(), v.description('Fare for this segment, in rupiah.'))
+    fare: v.pipe(
+      v.nullable(v.number()),
+      v.description('Fare for this segment, in rupiah; null where it cannot be determined.')
+    )
   }),
   v.title('FareSegment'),
   v.description('A billed portion of the journey. Operators charge per continuous run on their own network, so segments and legs do not map one-to-one.')
@@ -94,3 +97,19 @@ export const FareResultSchema = v.pipe(
   }),
   v.title('FareResult')
 )
+
+export type FareStation = v.InferOutput<typeof FareStationSchema>
+export type FareLineRef = v.InferOutput<typeof LineRefSchema>
+export type FareRideLeg = v.InferOutput<typeof RideLegSchema>
+export type FareTransferLeg = v.InferOutput<typeof TransferLegSchema>
+export type FareLeg = v.InferOutput<typeof FareLegSchema>
+export type FareSegment = v.InferOutput<typeof FareSegmentSchema>
+export type FareResult = v.InferOutput<typeof FareResultSchema>
+
+/* Aliases matching the web app's long-standing names for these shapes. */
+export type FareResultStation = FareStation
+export type FareResultLineRef = FareLineRef
+export type FareResultRideLeg = FareRideLeg
+export type FareResultTransferLeg = FareTransferLeg
+export type FareResultLeg = FareLeg
+export type FareResultSegment = FareSegment

@@ -1,4 +1,4 @@
-import type { Station } from 'models/stations'
+import type { Station } from '@commute/schemas'
 
 interface Props {
   label: string

@@ -1,6 +1,6 @@
 import { describeRoute, resolver } from 'hono-openapi'
 import * as v from 'valibot'
-import { Envelope, ErrorResponseSchema } from './common'
+import { Envelope, ErrorResponseSchema } from '@commute/schemas'
 
 /*
  * Helpers so each route annotation stays a few readable lines instead of a
@@ -9,8 +9,14 @@ import { Envelope, ErrorResponseSchema } from './common'
 
 type Tag = 'Stations' | 'Hubs' | 'Lines' | 'Fares' | 'Operators'
 
+/*
+ * `target` matters: the converter defaults to draft-07, which encodes a tuple as
+ * `items: [...]`. That is invalid in OpenAPI 3.1 (which follows JSON Schema
+ * 2020-12 and expects `prefixItems`), and it is exactly the shape
+ * CompactSchedule produces. Without this the document fails spec validation.
+ */
 const json = (schema: v.GenericSchema) => ({
-  'application/json': { schema: resolver(schema) }
+  'application/json': { schema: resolver(schema, { target: 'draft-2020-12' }) }
 })
 
 interface DocOptions {

@@ -9,7 +9,7 @@ import { buildLineDetail, collectStationIds, findTopology } from 'utils/topology
 import { mapify } from 'utils/mapify'
 import { LineDetail } from 'models/line'
 import { doc, operatorParam, pathParam } from 'schemas/describe'
-import { LineDetailSchema } from 'schemas/line'
+import { LineDetailSchema } from '@commute/schemas'
 
 const app = new Hono<{ Bindings: Bindings }>()
 

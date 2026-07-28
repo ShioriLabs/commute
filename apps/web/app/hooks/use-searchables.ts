@@ -1,5 +1,5 @@
-import type { Line } from 'models/line'
-import type { Searchable } from 'models/searchable'
+import type { Line } from '@commute/schemas'
+import type { Searchable } from '@commute/schemas'
 import type { StandardResponse } from '@schema/response'
 import { useMemo } from 'react'
 import useSWR from 'swr'

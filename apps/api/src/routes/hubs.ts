@@ -5,7 +5,7 @@ import { KVRepository } from 'db/repositories/kv'
 import { NotFound, Ok } from 'utils/response'
 import * as v from 'valibot'
 import { doc, pathParam } from 'schemas/describe'
-import { HubSchema } from 'schemas/hub'
+import { HubSchema } from '@commute/schemas'
 
 const app = new Hono<{ Bindings: Bindings }>()
 

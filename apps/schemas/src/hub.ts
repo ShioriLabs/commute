@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import type { HexColored } from './common'
 import { LineSchema } from './common'
 import { StationSchema } from './station'
 
@@ -34,3 +35,6 @@ export const HubSchema = v.pipe(
   }),
   v.title('Hub')
 )
+
+export type Hub = HexColored<v.InferOutput<typeof HubSchema>>
+export type HubKind = Hub['kind']

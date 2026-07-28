@@ -1,5 +1,5 @@
-import type { Station } from 'models/stations'
-import type { FareResult } from 'models/fare'
+import type { Station } from '@commute/schemas'
+import type { FareResult } from '@commute/schemas'
 import type { StandardResponse } from '@schema/response'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import useSWR from 'swr'

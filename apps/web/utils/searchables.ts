@@ -1,8 +1,8 @@
-import type { Hub } from 'models/hub'
-import { HUB_KIND_LABEL } from 'models/hub'
-import type { Line } from 'models/line'
-import type { Operator } from 'models/operator'
-import type { Searchable } from 'models/searchable'
+import type { Hub } from '@commute/schemas'
+import { HUB_KIND_LABEL } from '@commute/constants'
+import type { Line } from '@commute/schemas'
+import type { Operator } from '@commute/schemas'
+import type { Searchable } from '@commute/schemas'
 
 // Map a hub to a Searchable. Keywords include every member's name & code so a
 // search for any member (e.g. "sudirman") surfaces the hub. Body carries the

@@ -1,5 +1,5 @@
 import { Link } from 'react-router'
-import type { LineDetailStation } from 'models/line'
+import type { LineDetailStation } from '@commute/schemas'
 import { getForegroundColor } from 'utils/colors'
 import { splitStationNumber } from '~/components/line-roundel'
 

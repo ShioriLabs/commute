@@ -1,6 +1,6 @@
 import { CaretLeftIcon, PushPinIcon, PushPinSlashIcon } from '@phosphor-icons/react'
 import type { StandardResponse } from '@schema/response'
-import type { Station } from 'models/stations'
+import type { Station } from '@commute/schemas'
 import { useState, useEffect, useCallback } from 'react'
 import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'

@@ -19,8 +19,8 @@ import {
   StationNameIndex
 } from 'utils/directions'
 import * as v from 'valibot'
-import { doc, operatorParam, pathParam, stationCodeParam } from 'schemas/describe'
-import { GroupedTimetableSchema, ScheduleSchema, StationSchema, TransferSchema } from 'schemas/station'
+import { doc, operatorParam, pathParam, queryParam, stationCodeParam } from 'schemas/describe'
+import { CompactGroupedTimetableSchema, GroupedTimetableSchema, ScheduleSchema, StationSchema, TransferSchema } from '@commute/schemas'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -247,10 +247,14 @@ app.get(
   '/:operator/:stationCode/timetable/grouped',
   doc({
     summary: 'Get a station\'s timetable, grouped',
-    description: 'Departures folded into line, then direction, then destination — the shape a departure board renders. Directions are derived from where each service terminates.',
+    description: 'Departures folded into line, then direction, then destination — the shape a departure board renders. Directions are derived from where each service terminates.\n\nSet `compact=1` for a smaller payload: each departure becomes a `[tripNumber, minutesSinceMidnight]` tuple instead of a full object. Minutes are local Asia/Jakarta time, 0–1439.',
     tag: 'Stations',
-    data: v.array(GroupedTimetableSchema),
-    parameters: [operatorParam, stationCodeParam],
+    data: v.union([v.array(GroupedTimetableSchema), v.array(CompactGroupedTimetableSchema)]),
+    parameters: [
+      operatorParam,
+      stationCodeParam,
+      queryParam('compact', 'Set to `1` for tuple-encoded departures. Any other value returns the full shape.', '1')
+    ],
     errors: { 404: 'Unknown operator or station code.' }
   }),
   async (c) => {

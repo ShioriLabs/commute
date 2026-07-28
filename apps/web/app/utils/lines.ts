@@ -1,4 +1,4 @@
-import type { Line } from 'models/line'
+import type { Line } from '@commute/schemas'
 
 // Parse a TJ corridor code into sortable parts. Codes look like `6`, `6A`,
 // `13E`, `L13E` (an express variant of 13 — the `L` is ignored for ordering, so

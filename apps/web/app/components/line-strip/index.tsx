@@ -1,5 +1,5 @@
 import { Fragment, useState } from 'react'
-import type { LineDetail } from 'models/line'
+import type { LineDetail } from '@commute/schemas'
 import StationRow, { type NodeKind } from './station-row'
 import BranchRamp from './branch-ramp'
 import LoopSection from './loop-section'
