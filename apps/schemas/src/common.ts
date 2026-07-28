@@ -110,15 +110,18 @@ export const ErrorSchema = v.pipe(
 )
 
 /*
- * Every response is wrapped in this envelope — success and failure alike. The
- * HTTP status is mirrored in `status`. On success `data` is present and `error`
- * absent; on failure the reverse.
+ * A successful response. `status` mirrors the HTTP status code and `data` holds
+ * the payload.
+ *
+ * `error` is deliberately absent: a 2xx never carries one, and declaring it
+ * optional here made the documented 200 shape show an `error` object beside
+ * `data` — describing a response the API cannot produce. Failures are
+ * ErrorResponseSchema, attached to the 4xx/5xx statuses instead.
  */
 export function Envelope<T extends v.GenericSchema>(data: T) {
   return v.object({
     status: v.pipe(v.number(), v.description('Mirrors the HTTP status code.'), v.metadata({ examples: [200] })),
-    data: v.optional(data),
-    error: v.optional(ErrorSchema)
+    data
   })
 }
 
@@ -161,8 +164,13 @@ export type ApiError = v.InferOutput<typeof ErrorSchema>
 export type ErrorResponse = v.InferOutput<typeof ErrorResponseSchema>
 
 /*
- * The envelope's inferred type. `Envelope()` is a function so its return type
- * varies per payload; this mirrors it for callers that just want the shape.
+ * The envelope as a CLIENT sees it, across every status.
+ *
+ * Both fields are optional here even though `Envelope()` requires `data` and
+ * `ErrorResponseSchema` requires `error`: those describe one status each, while
+ * a client holds a response before knowing which it got. Narrow by checking
+ * `data` — the API never sends both.
+ *
  * Matches apps/api/src/models/response.ts.
  */
 export interface StandardResponse<T = unknown> {
