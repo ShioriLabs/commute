@@ -76,7 +76,7 @@ function registeredRoutes() {
       // `ALL /*` is the CORS middleware, not a route.
       .filter(route => route.path !== '/*')
       // Documentation endpoints describe the API; they are not part of it.
-      .filter(route => route.path !== '/openapi.json' && route.path !== '/docs')
+      .filter(route => route.path !== '/openapi.json')
       // Mutations and internal endpoints are deliberately undocumented.
       .filter(route => !/^\/(sync|cache|_internal)\b/.test(route.path))
       // Hono writes `:param`; OpenAPI writes `{param}`.
@@ -166,12 +166,18 @@ describe('schema integrity', () => {
   })
 })
 
+/*
+ * There is no /docs route: the reference moved to CDP, which builds it from this
+ * document. Asserting its absence keeps a Scalar-style page from creeping back
+ * onto the worker.
+ */
 describe('GET /docs', () => {
-  it('renders the reference page', async () => {
+  it('is not served by the API', async () => {
     const res = await app.request('/docs')
-    expect(res.status).toBe(200)
-    expect(res.headers.get('content-type')).toContain('text/html')
-    const html = await res.text()
-    expect(html).toContain('/openapi.json')
+    expect(res.status).toBe(404)
+  })
+
+  it('points readers at the reference from the spec itself', () => {
+    expect(spec.info.description).toContain('data.commute.shiorilabs.id/docs')
   })
 })

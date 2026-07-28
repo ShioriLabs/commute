@@ -1,7 +1,6 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { openAPIRouteHandler } from 'hono-openapi'
-import { Scalar } from '@scalar/hono-api-reference'
 
 import stations from './routes/stations'
 import hubs from './routes/hubs'
@@ -77,7 +76,10 @@ app.get('/openapi.json', openAPIRouteHandler(app, {
         'A station id is `{operatorCode}-{stationCode}`, e.g. `KCI-AC`. Station codes are unique per operator, not globally, so most routes take the operator and the code separately. Fare lookups take full ids.',
         '',
         '### Authentication and stability',
-        'The read endpoints documented here need no authentication. Undocumented routes are not part of the public surface — in particular anything under `/_internal` is shaped for commute.shiorilabs.id and may change shape without notice.'
+        'The read endpoints documented here need no authentication. Undocumented routes are not part of the public surface — in particular anything under `/_internal` is shaped for commute.shiorilabs.id and may change shape without notice.',
+        '',
+        '### Reading this',
+        'A browsable version of this document is at [data.commute.shiorilabs.id/docs](https://data.commute.shiorilabs.id/docs).'
       ].join('\n'),
       contact: { name: 'Commute', url: 'https://commute.shiorilabs.id' },
       license: { name: 'MIT', identifier: 'MIT' }
@@ -102,17 +104,15 @@ app.get('/openapi.json', openAPIRouteHandler(app, {
 }))
 
 /*
- * Human-readable reference, rendered from the document above.
+ * There is no /docs route here on purpose.
  *
- * Scalar's bundle is loaded from jsDelivr rather than served by this worker, so
- * the page needs that CDN to be reachable. The spec itself at /openapi.json is
- * self-contained and has no such dependency — prefer it if you are generating a
- * client or need an offline copy.
+ * The human-readable reference lives at data.commute.shiorilabs.id/docs, built
+ * from this same document at deploy time. It replaced a Scalar page that pulled
+ * 3.55 MB of JavaScript from a third-party CDN to render a 45 KB spec; the
+ * static version ships ~0.5 KB and needs no CDN at all.
+ *
+ * This worker still serves /openapi.json, which is what tooling and client
+ * generators want.
  */
-app.get('/docs', Scalar({
-  url: '/openapi.json',
-  pageTitle: 'Commute API',
-  hideDownloadButton: false
-}))
 
 export default app
