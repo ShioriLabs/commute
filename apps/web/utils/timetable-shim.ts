@@ -5,11 +5,17 @@ import type {
   LineGroupedTimetable
 } from 'models/schedules'
 
-// Old service-worker-cached responses encoded each compact departure as
+// Old cached responses encoded each compact departure as
 // { id, estimatedDeparture: "HH:MM:SS" }; the current wire format is the
 // [tripNumber, minute] tuple. Upgrade any stale object entry so components only
 // ever handle tuples (tripNumber is unknown in the old shape -> null). Full-mode
 // Schedule rows, identified by lineCode, pass through untouched.
+//
+// The service worker used to be the source of these: it cached API responses
+// with no TTL at all. It now expires them after API_TTL_MS, but SWR's IndexedDB
+// provider (app/layouts/default.tsx) still persists payloads indefinitely, so a
+// long-dormant install can still hand the current bundle an old shape. This
+// stays load-bearing.
 function upgradeSchedule(schedule: unknown): unknown {
   if (Array.isArray(schedule)) return schedule
   const record = schedule as Record<string, unknown>

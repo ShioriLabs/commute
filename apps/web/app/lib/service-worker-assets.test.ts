@@ -23,12 +23,21 @@ interface SwLists {
   IMMUTABLE_MAP_ASSETS: Set<string>
 }
 
-// Evaluates the SW's list-building section in isolation. Everything above
-// HOSTNAME_WHITELIST is pure constant/function declarations with no side
-// effects and no access to service-worker globals beyond `self.location`.
+// The SW declares its constants above an explicit marker comment so this test
+// can evaluate that section in isolation. Splitting on a dedicated sentinel
+// rather than on whatever declaration happened to come next means the fetch
+// handler below it can be restructured freely without breaking these tests.
+const SPLIT_MARKER = '// --- test split marker ---'
+
+// Evaluates the SW's list-building section in isolation. Everything above the
+// marker is pure constant/function declarations with no side effects and no
+// access to service-worker globals beyond `self.location`.
 function loadSwLists(): SwLists {
   const src = readFileSync(path.join(PUBLIC_DIR, 'service-worker.js'), 'utf8')
-  const snippet = src.split('const HOSTNAME_WHITELIST')[0]
+  const [snippet, ...rest] = src.split(SPLIT_MARKER)
+  // A missing marker would silently evaluate the entire worker, which throws in
+  // ways that look like a grid mismatch. Fail with the real reason instead.
+  if (rest.length === 0) throw new Error(`service-worker.js is missing "${SPLIT_MARKER}"`)
   const factory = new Function(
     'self',
     `"use strict";${snippet}; return { CACHE_NAME, MAP_PRECACHE_URLS, IMMUTABLE_MAP_ASSETS }`

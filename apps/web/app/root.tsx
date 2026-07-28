@@ -11,6 +11,20 @@ import type { Route } from './+types/root'
 import './app.css'
 import { InstallableProvider } from './contexts/installable'
 import Wordmark from './components/wordmark'
+import {
+  BOOT_FALLBACK_COPY,
+  BOOT_FALLBACK_ID,
+  BOOT_FALLBACK_MESSAGE_ID,
+  BOOT_FALLBACK_RETRY_ID,
+  BOOT_WATCHDOG_SOURCE
+} from './lib/boot-watchdog'
+import { createBrowserDeps, registerServiceWorker } from './lib/register-service-worker'
+
+declare global {
+  interface Window {
+    __commuteBoot?: { ok: () => void, retry: () => void }
+  }
+}
 
 export const links: Route.LinksFunction = () => [
   { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
@@ -35,16 +49,12 @@ export const links: Route.LinksFunction = () => [
 
 export function Layout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
-    if (window !== undefined && import.meta.env.PROD && 'serviceWorker' in navigator) {
-      navigator.serviceWorker
-        .register('/service-worker.js')
-        .then((registration) => {
-          console.log('Service Worker registered with scope:', registration.scope)
-        })
-        .catch((error) => {
-          console.error('Service Worker registration failed:', error)
-        })
-    }
+    // First statement, before anything that could throw: this effect running at
+    // all proves React hydrated, which is the only signal that tells the boot
+    // watchdog to stand down.
+    window.__commuteBoot?.ok()
+
+    registerServiceWorker(createBrowserDeps(import.meta.env.PROD))
   }, [])
 
   return (
@@ -66,6 +76,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="twitter:card" content="summary_large_image" />
         <Meta />
         <Links />
+        {/*
+          Classic (non-module) script, so it executes synchronously and cannot
+          itself be a victim of the module-loading failure it exists to catch.
+          Prerendered into the static shell by the same mechanism as
+          HydrateFallback, and PROD-only to match the service worker.
+        */}
+        {import.meta.env.PROD && (
+          <script dangerouslySetInnerHTML={{ __html: BOOT_WATCHDOG_SOURCE }} />
+        )}
       </head>
       <body className="bg-rose-50/50 text-slate-900">
         <InstallableProvider>
@@ -93,14 +112,63 @@ export default function App() {
 // then flows straight into each route's own loading state.
 export function HydrateFallback() {
   return (
-    <div
-      className="fixed inset-0 flex items-center justify-center bg-rose-50/50"
-      aria-live="assertive"
-      aria-busy="true"
-    >
-      <Wordmark className="w-56 max-w-[60vw] h-auto" />
-      <span className="sr-only">Memuat...</span>
-    </div>
+    <>
+      <div
+        className="fixed inset-0 flex items-center justify-center bg-rose-50/50"
+        aria-live="assertive"
+        aria-busy="true"
+        data-boot-splash
+      >
+        <Wordmark className="w-56 max-w-[60vw] h-auto" />
+        <span className="sr-only">Memuat...</span>
+      </div>
+      {/*
+        Revealed by the boot watchdog when the bundle never arrives. Styled with
+        inline styles rather than Tailwind classes on purpose: one of the
+        failures this handles is /assets/root-*.css coming back as the SPA
+        fallback's HTML, in which case every utility class is a no-op and a
+        class-styled panel would be invisible exactly when it is needed. This is
+        the one place in the app where inline styles are the correct call.
+      */}
+      <div
+        id={BOOT_FALLBACK_ID}
+        hidden
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 40,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '16px',
+          padding: '24px',
+          background: '#fff8f8',
+          color: '#0f172a',
+          textAlign: 'center',
+          font: '600 16px/1.5 system-ui, sans-serif'
+        }}
+      >
+        <p id={BOOT_FALLBACK_MESSAGE_ID} style={{ margin: 0, maxWidth: '28rem' }}>
+          {BOOT_FALLBACK_COPY.failed}
+        </p>
+        <button
+          type="button"
+          id={BOOT_FALLBACK_RETRY_ID}
+          style={{
+            padding: '10px 20px',
+            borderRadius: '9999px',
+            border: 'none',
+            background: '#f55875',
+            color: '#ffffff',
+            font: 'inherit',
+            cursor: 'pointer'
+          }}
+        >
+          Muat ulang
+        </button>
+      </div>
+    </>
   )
 }
 
