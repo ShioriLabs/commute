@@ -15,7 +15,7 @@ export const LineStationSchema = v.pipe(
     isInterchange: v.boolean(),
     otherLines: v.pipe(
       v.array(LineKeySchema),
-      v.description('Lin lain dari operator yang SAMA yang berhenti di sini, berupa line key; lin yang sedang dibuka nggak termasuk. Sambungan lintas operator ada di transfer stasiunnya.')
+      v.description('Lin lain dari operator yang SAMA yang berhenti di sini, berupa line key. Lin yang sedang dibuka tidak termasuk. Sambungan lintas operator ada di transfer stasiunnya.')
     )
   }),
   v.title('LineStation')

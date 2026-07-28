@@ -65,7 +65,7 @@ app.get('/openapi.json', openAPIRouteHandler(app, {
         'Data transit Jakarta dan Jabodetabek: stasiun, lin, pumpunan moda, jadwal, dan tarif dari Commuter Line (KCI), MRT Jakarta, LRT Jakarta, LRT Jabodebek, dan TransJakarta.',
         '',
         '### Bentuk response',
-        'Semua response, berhasil atau gagal, dibungkus object yang sama. `status` mengikuti HTTP status code-nya. Kalau berhasil `data` yang keisi; kalau gagal `error` yang keisi, lengkap dengan `code` yang bisa dibaca mesin.',
+        'Semua response dibungkus object yang sama, baik berhasil maupun gagal. `status` mengikuti HTTP status code-nya. Kalau berhasil, yang terisi `data`. Kalau gagal, yang terisi `error`, lengkap dengan `code` yang bisa dibaca program.',
         '',
         '```json',
         '{ "status": 200, "data": { } }',
@@ -73,13 +73,13 @@ app.get('/openapi.json', openAPIRouteHandler(app, {
         '```',
         '',
         '### Identifier',
-        'Station id bentuknya `{operatorCode}-{stationCode}`, misalnya `KCI-AC`. Kode stasiun unik per operator, bukan secara global, jadi kebanyakan route minta operator dan kodenya terpisah. Buat cek tarif, pakai id lengkapnya.',
+        'Station ID bentuknya `{operatorCode}-{stationCode}`, misalnya `KCI-AC`. Kode stasiun cuma unik di dalam satu operator, jadi kebanyakan endpoint minta operator dan kodenya terpisah. Khusus buat cek tarif, pakai ID yang lengkap.',
         '',
         '### Autentikasi dan stabilitas',
-        'Endpoint baca yang didokumentasikan di sini nggak butuh autentikasi. Route yang nggak didokumentasikan bukan bagian dari API publik, khususnya apa pun di bawah `/_internal`, yang dibentuk buat commute.shiorilabs.id dan bisa berubah kapan aja tanpa pemberitahuan.',
+        'Semua endpoint yang ada di sini tidak butuh autentikasi. Yang tidak didokumentasikan di sini bukan bagian dari API publik, terutama yang ada di bawah `/_internal`. Itu dibuat khusus buat commute.shiorilabs.id dan bisa berubah sewaktu-waktu tanpa pemberitahuan.',
         '',
         '### Baca versi web-nya',
-        'Versi yang enak dibaca dari dokumen ini ada di [data.commute.shiorilabs.id/docs](https://data.commute.shiorilabs.id/docs).'
+        'Versi yang lebih enak dibaca ada di [data.commute.shiorilabs.id/docs](https://data.commute.shiorilabs.id/docs).'
       ].join('\n'),
       contact: { name: 'Commute', url: 'https://commute.shiorilabs.id' },
       license: { name: 'MIT', identifier: 'MIT' }

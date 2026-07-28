@@ -20,7 +20,7 @@ export const SearchableSchema = v.pipe(
     to: v.pipe(v.string(), v.description('Link relatif ke aplikasi buat hasil ini.'), v.metadata({ examples: ['/stations/KCI/AC'] })),
     keywords: v.pipe(
       v.array(v.string()),
-      v.description('Target pencocokan dalam huruf kecil. Dibangun di server karena sebagiannya nggak bisa diturunkan dari judul: kode stasiun anggota pumpunan moda, dan nama pasangan halte berarah yang digabung.')
+      v.description('Target pencocokan dalam huruf kecil. Dibuat di server karena sebagiannya tidak bisa diturunkan dari judul saja, seperti kode stasiun anggota pumpunan moda dan nama halte berarah yang sudah digabung.')
     ),
     subtitle: v.optional(v.string()),
     body: v.pipe(
@@ -29,15 +29,15 @@ export const SearchableSchema = v.pipe(
     ),
     data: v.pipe(
       v.optional(v.record(v.string(), v.string())),
-      v.description('Identifier buat data aslinya: `station-id` atau `hub-id`.')
+      v.description('Identifier buat data aslinya, `station-id` atau `hub-id`.')
     ),
     operator: v.pipe(
       v.optional(OperatorCodeSchema),
-      v.description('Nggak ada di pumpunan moda, yang mencakup beberapa operator.')
+      v.description('Tidak ada di pumpunan moda, karena satu pumpunan bisa mencakup beberapa operator.')
     ),
     score: v.pipe(
       v.optional(v.number()),
-      v.description('Popularitas. Dihilangkan kalau 0; baca aja pakai `?? 0`.')
+      v.description('Seberapa ramai. Tidak dikirim kalau nilainya 0, jadi baca pakai `?? 0`.')
     )
   }),
   v.title('Searchable')
@@ -46,7 +46,7 @@ export const SearchableSchema = v.pipe(
 export const SearchableLineSchema = v.pipe(
   v.object({
     name: v.string(),
-    lineCode: v.pipe(v.string(), v.description('Kode polos, buat glyph di roundel. Key kamusnya sendiri pakai awalan operator.')),
+    lineCode: v.pipe(v.string(), v.description('Kode polosnya, buat ditulis di dalam roundel. Key kamusnya sendiri pakai awalan operator.')),
     colorCode: v.string(),
     operator: OperatorCodeSchema
   }),

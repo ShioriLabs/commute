@@ -30,15 +30,15 @@ export const RideLegSchema = v.pipe(
     from: FareStationSchema,
     to: FareStationSchema,
     stationCount: v.pipe(v.number(), v.description('Jumlah stasiun yang dilewati, termasuk stasiun awal dan akhir.')),
-    stops: v.pipe(v.array(FareStationSchema), v.description('Daftar stasiun lengkap secara urut, dari naik sampai turun.')),
+    stops: v.pipe(v.array(FareStationSchema), v.description('Daftar stasiun lengkap dan urut, dari tempat naik sampai tempat turun.')),
     headsign: v.pipe(
       v.nullable(v.string()),
-      v.description('Stasiun akhir yang dituju; null kalau nggak bisa ditentukan.')
+      v.description('Stasiun akhir yang dituju. Null kalau tidak bisa ditentukan.')
     ),
     distanceM: v.number(),
     serviceLines: v.pipe(
       v.optional(v.array(LineRefSchema)),
-      v.description('Cuma ada di jalur yang dipakai bareng beberapa lin, jadi naik yang mana pun sampai. Lin utamanya ditaruh paling depan.')
+      v.description('Cuma muncul di jalur yang dipakai bersama beberapa lin, jadi naik yang mana pun tetap sampai. Lin utamanya ditaruh paling depan.')
     )
   }),
   v.title('FareRideLeg')
@@ -52,7 +52,7 @@ export const TransferLegSchema = v.pipe(
     distanceM: v.pipe(v.number(), v.description('Jarak jalan kaki dalam meter.')),
     fare: v.pipe(
       v.optional(v.number()),
-      v.description('Cuma ada di koridor berbayar; transfer jalan kaki biasa gratis dan nggak punya ini.')
+      v.description('Cuma ada di koridor berbayar. Transfer jalan kaki biasa gratis, jadi tidak punya ini.')
     ),
     corridorLabel: v.optional(v.string())
   }),
@@ -74,22 +74,22 @@ export const FareSegmentSchema = v.pipe(
     to: FareStationSchema,
     fare: v.pipe(
       v.nullable(v.number()),
-      v.description('Tarif buat segmen ini, dalam rupiah; null kalau nggak bisa ditentukan.')
+      v.description('Tarif buat segmen ini dalam rupiah. Null kalau tidak bisa dihitung.')
     )
   }),
   v.title('FareSegment'),
-  v.description('A billed portion of the journey. Operators charge per continuous run on their own network, so segments and legs do not map one-to-one.')
+  v.description('Satu bagian perjalanan yang ditagih. Tiap operator menagih per perjalanan menerus di jaringan mereka sendiri, makanya segment dan leg tidak selalu satu lawan satu.')
 )
 
 export const FareResultSchema = v.pipe(
   v.object({
     from: FareStationSchema,
     to: FareStationSchema,
-    legs: v.pipe(v.array(FareLegSchema), v.description('Perjalanan dari sisi penumpang: naik kereta dan transfer di antaranya.')),
+    legs: v.pipe(v.array(FareLegSchema), v.description('Perjalanan dari sisi penumpang: naik apa saja dan transfer di mana saja.')),
     segments: v.pipe(v.array(FareSegmentSchema), v.description('Perjalanan dari sisi penagihan tarif.')),
     totalFare: v.pipe(
       v.nullable(v.number()),
-      v.description('Total dalam rupiah, setelah dikenakan batas tarif integrasi. Null kalau tarif buat pasangan stasiun ini nggak bisa dihitung.'),
+      v.description('Total dalam rupiah, sudah termasuk batas tarif integrasi. Null kalau tarif buat pasangan stasiun ini tidak bisa dihitung.'),
       v.metadata({ examples: [14000] })
     ),
     totalDistanceM: v.number(),

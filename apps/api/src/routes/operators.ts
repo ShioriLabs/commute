@@ -13,7 +13,7 @@ app.get(
   '/',
   doc({
     summary: 'Daftar operator',
-    description: 'Semua operator transit, lengkap dengan lin yang dijalankan. Enaknya dipanggil duluan, karena kode di sini dipakai di seluruh API.',
+    description: 'Semua operator transit beserta lin yang mereka jalankan. Bagus dipanggil duluan, karena kode dari sini dipakai di seluruh API.',
     tag: 'Operator',
     data: v.array(OperatorWithLinesSchema)
   }),

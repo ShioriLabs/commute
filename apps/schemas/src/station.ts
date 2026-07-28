@@ -5,28 +5,28 @@ import { AmenitySchema, LineKeySchema, OperatorCodeSchema, RegionCodeSchema } fr
 const stationIdentity = {
   id: v.pipe(
     v.string(),
-    v.description('Identifier stabil, `{operatorCode}-{stationCode}`. Pakai ini buat cek tarif.'),
+    v.description('Identifier yang stabil, formatnya `{operatorCode}-{stationCode}`. Pakai ini kalau mau cek tarif.'),
     v.metadata({ examples: ['KCI-SUDB'] })
   ),
   name: v.pipe(
     v.string(),
-    v.description('Nama tampilan: yang ditunjukkan ke penumpang.'),
+    v.description('Nama yang ditampilkan ke penumpang.'),
     v.metadata({ examples: ['BNI City'] })
   ),
   officialName: v.pipe(
     v.string(),
-    v.description('Penulisan versi operatornya sendiri, yang sering beda bukan cuma soal huruf besar-kecil. KCI masih menulis "SUDIRMAN BARU" buat stasiun yang ditampilkan sebagai "BNI City". Layak dijadikan alias pencarian: banyak penumpang masih menyebut stasiunnya begitu.'),
+    v.description('Nama versi operatornya sendiri, yang sering beda jauh dari nama tampilannya. KCI, misalnya, masih menulis "SUDIRMAN BARU" buat stasiun yang kita tampilkan sebagai "BNI City". Berguna buat pencarian, karena banyak penumpang masih menyebut stasiunnya dengan nama ini.'),
     v.metadata({ examples: ['SUDIRMAN BARU'] })
   ),
   code: v.pipe(
     v.string(),
-    v.description('Kode stasiun dalam lingkup operator, unik per operator dan bukan secara global.'),
+    v.description('Kode stasiun versi operatornya. Unik di dalam satu operator, tapi belum tentu unik antar operator.'),
     v.metadata({ examples: ['SUDB'] })
   ),
   operator: OperatorCodeSchema,
   lines: v.pipe(
     v.array(LineKeySchema),
-    v.description('Lin yang berhenti di stasiun ini, berupa key ke kamus lin dari `/operators`. Kosong buat stasiun yang cuma ada di topologi.')
+    v.description('Lin yang berhenti di stasiun ini, dalam bentuk key ke kamus lin dari `/operators`. Kosong kalau stasiunnya cuma dipakai buat routing.')
   )
 }
 
@@ -37,7 +37,7 @@ export const StationSchema = v.pipe(
     amenities: v.array(AmenitySchema),
     latitude: v.pipe(
       v.nullable(v.number()),
-      v.description('Lintang WGS84; null kalau koordinatnya belum disurvei.'),
+      v.description('Lintang WGS84. Null kalau koordinatnya belum disurvei.'),
       v.metadata({ examples: [-6.2015] })
     ),
     longitude: v.pipe(
@@ -46,11 +46,11 @@ export const StationSchema = v.pipe(
     ),
     score: v.pipe(
       v.number(),
-      v.description('Popularitas relatif, dipakai buat mengurutkan hasil pencarian. Makin tinggi makin ramai.')
+      v.description('Seberapa ramai stasiunnya, dipakai buat mengurutkan hasil pencarian. Makin tinggi makin ramai.')
     ),
     searchable: v.pipe(
       v.boolean(),
-      v.description('Bernilai false buat perhentian yang cuma ada demi routing dan disembunyikan dari pencarian. Selalu true di response daftar, yang memang sudah memfilternya.')
+      v.description('False kalau stasiunnya cuma dipakai buat routing dan sengaja disembunyikan dari pencarian. Di response daftar selalu true, karena yang seperti itu sudah difilter duluan.')
     )
   }),
   v.title('Station')
@@ -82,7 +82,7 @@ const TransferBaseEntries = {
   // Null far more often than not — 13 of 15 sampled from production.
   notes: v.pipe(
     v.nullable(v.string()),
-    v.description('Petunjuk bebas buat jalan kakinya; null kalau nggak ada yang perlu ditambahkan.')
+    v.description('Petunjuk tambahan buat jalan kakinya. Null kalau tidak ada yang perlu dijelaskan.')
   )
 }
 
@@ -93,7 +93,7 @@ export const InternalTransferSchema = v.pipe(
     toStation: StationRefSchema
   }),
   v.title('InternalTransfer'),
-  v.description('Sambungan ke stasiun lain di API ini. `toStation` berisi referensi stasiun lengkap.')
+  v.description('Sambungan ke stasiun lain yang ada di API ini. `toStation` berisi referensi stasiun lengkap.')
 )
 
 export const ExternalTransferSchema = v.pipe(
@@ -104,18 +104,18 @@ export const ExternalTransferSchema = v.pipe(
       name: v.string(),
       operatorName: v.pipe(
         v.string(),
-        v.description('Nama operator dalam teks bebas, karena layanan luar nggak punya kode operator di API ini.')
+        v.description('Nama operatornya dalam teks biasa, karena layanan di luar API ini tidak punya kode operator.')
       )
     })
   }),
   v.title('ExternalTransfer'),
-  v.description('Sambungan ke layanan di luar API ini. Nggak ada station id atau lin, cuma nama.')
+  v.description('Sambungan ke layanan yang belum ada di API ini. Tidak ada station id atau lin, cuma nama.')
 )
 
 export const TransferSchema = v.pipe(
   v.variant('dataType', [InternalTransferSchema, ExternalTransferSchema]),
   v.title('Transfer'),
-  v.description('Dibedakan lewat `dataType`. Data yang ada sekarang semuanya INTERNAL; cabang EXTERNAL disiapkan buat sambungan ke luar jaringan.')
+  v.description('Dibedakan lewat `dataType`. Data yang ada sekarang semuanya INTERNAL. Bentuk EXTERNAL disiapkan buat sambungan ke luar jaringan.')
 )
 
 /*
@@ -127,7 +127,7 @@ export const ScheduleSchema = v.pipe(
   v.object({
     tripNumber: v.pipe(
       v.nullable(v.string()),
-      v.description('Nomor perjalanan versi operator; null buat operator yang nggak mempublikasikannya.'),
+      v.description('Nomor perjalanan versi operatornya. Null kalau operatornya tidak menerbitkan nomor.'),
       v.metadata({ examples: ['5198B'] })
     ),
     estimatedDeparture: v.pipe(v.string(), v.description('Waktu lokal, `HH:MM:SS`.'), v.metadata({ examples: ['00:05:30'] })),
@@ -157,23 +157,23 @@ export const CompactScheduleSchema = v.pipe(
     v.length(2)
   ),
   v.title('CompactSchedule'),
-  v.description('`[tripNumber, minutesSinceMidnight]`. Nomor perjalanan null kalau operatornya nggak mempublikasikan; menitnya waktu lokal Asia/Jakarta, 0–1439.'),
+  v.description('`[tripNumber, minutesSinceMidnight]`. Nomor perjalanannya null kalau operatornya tidak menerbitkan. Menitnya pakai waktu lokal Asia/Jakarta, dari 0 sampai 1439.'),
   v.metadata({ examples: [['5198B', 5]] })
 )
 
 const directionGroup = <T extends v.GenericSchema>(schedules: T, title: string) => v.pipe(
   v.object({
-    key: v.pipe(v.string(), v.description('Key stabil buat kelompok arah ini.')),
-    label: v.pipe(v.array(v.string()), v.description('Label arah, berisi nama tampilan stasiun. Gabungkan pakai " / " buat ditampilkan.')),
+    key: v.pipe(v.string(), v.description('Key yang stabil buat kelompok arah ini.')),
+    label: v.pipe(v.array(v.string()), v.description('Label arahnya, berisi nama stasiun. Gabungkan pakai " / " kalau mau ditampilkan.')),
     platformCode: v.pipe(
       v.nullable(v.string()),
-      v.description('Info peron hasil kurasi; null kalau peronnya belum diketahui.')
+      v.description('Info peron yang sudah kita kurasi. Null kalau peronnya belum diketahui.')
     ),
     destinations: v.array(v.object({
       boundFor: v.string(),
       via: v.pipe(
         v.nullable(v.string()),
-        v.description('Keisi kalau dua perjalanan ke stasiun akhir yang sama lewat jalur berbeda.')
+        v.description('Terisi kalau ada dua perjalanan ke stasiun akhir yang sama tapi lewat jalur berbeda.')
       ),
       schedules: v.array(schedules)
     }))

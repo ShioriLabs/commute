@@ -55,7 +55,7 @@ app.get(
   '/:from/:to',
   doc({
     summary: 'Tarif dan rute antara dua stasiun',
-    description: 'Menyusun rute perjalanan sekaligus menghitung tarifnya. `legs` menggambarkan perjalanan dari sisi penumpang, yaitu naik kereta dan jalan kaki di antaranya; `segments` menggambarkan cara penagihannya, yang beda karena tiap operator menagih per rangkaian perjalanan di jaringannya sendiri. Tarif integrasi sudah diperhitungkan di `totalFare`.',
+    description: 'Mencari rute perjalanan sekaligus menghitung tarifnya. `legs` adalah perjalanan dari sisi penumpang: naik apa saja dan jalan kaki di mana saja. `segments` adalah cara tarifnya dihitung, yang bisa berbeda karena tiap operator menagih per perjalanan di jaringan mereka sendiri. Tarif integrasi sudah dihitung di `totalFare`.',
     tag: 'Tarif',
     data: FareResultSchema,
     parameters: [
@@ -65,7 +65,7 @@ app.get(
       queryParam('at', 'Timestamp ISO 8601 buat perjalanannya, dipakai buat menentukan tarif peak atau off-peak. Default-nya waktu sekarang.', '2026-07-28T08:00:00Z')
     ],
     errors: {
-      404: 'Salah satu stasiunnya nggak dikenal, nggak ada rute di antara keduanya, atau asal dan tujuannya sama (`SAME_STATION`).',
+      404: 'Salah satu stasiunnya tidak ditemukan, tidak ada rute di antara keduanya, atau asal dan tujuannya sama (`SAME_STATION`).',
       500: 'Perhitungan tarif gagal (`DATABASE_ERROR`).'
     }
   }),

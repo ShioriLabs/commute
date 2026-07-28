@@ -72,4 +72,4 @@ export function queryParam(name: string, description: string, example?: string) 
 }
 
 export const operatorParam = pathParam('operator', 'Kode operator, misalnya `KCI`, `MRTJ`, `TJ`.', 'KCI')
-export const stationCodeParam = pathParam('stationCode', 'Kode stasiun dalam lingkup operator, bukan station id lengkap.', 'SUD')
+export const stationCodeParam = pathParam('stationCode', 'Kode stasiun versi operatornya, bukan station id yang lengkap.', 'SUD')

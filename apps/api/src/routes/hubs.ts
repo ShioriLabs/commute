@@ -30,7 +30,7 @@ app.get(
   '/',
   doc({
     summary: 'Daftar pumpunan moda',
-    description: 'Kompleks interchange yang menggabungkan beberapa stasiun dalam satu nama. Dukuh Atas, misalnya, mencakup Sudirman, BNI City, plus stasiun MRT dan LRT. Diurutkan dari yang paling ramai.',
+    description: 'Beberapa stasiun yang dianggap satu tempat karena saling terhubung. Dukuh Atas, misalnya, mencakup Sudirman, BNI City, plus stasiun MRT dan LRT-nya. Diurutkan dari yang paling ramai.',
     tag: 'Pumpunan Moda',
     data: v.array(HubSchema)
   }),
@@ -69,11 +69,11 @@ app.get(
   '/:slug',
   doc({
     summary: 'Detail pumpunan moda',
-    description: 'Satu kompleks interchange beserta stasiun anggotanya.',
+    description: 'Satu pumpunan moda lengkap dengan stasiun-stasiun di dalamnya.',
     tag: 'Pumpunan Moda',
     data: HubSchema,
-    parameters: [pathParam('slug', 'Kunci URL pumpunan moda, seperti yang dikembalikan `/hubs`.', 'dukuh-atas')],
-    errors: { 404: 'Nggak ada pumpunan moda dengan slug itu.' }
+    parameters: [pathParam('slug', 'Kunci URL pumpunan moda, bisa diambil dari `/hubs`.', 'dukuh-atas')],
+    errors: { 404: 'Tidak ada pumpunan moda dengan slug tersebut.' }
   }),
   async (c) => {
     const slug = c.req.param('slug')

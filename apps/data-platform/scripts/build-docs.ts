@@ -374,7 +374,7 @@ function render(spec: Spec): string {
             aria-label="Cari endpoint"
             class="w-full rounded border border-line/70 bg-plate px-3 py-2 text-[13.5px] text-white/85 placeholder:text-white/25 focus:border-accent/60 focus:outline-none"
           />
-          <p id="filter-empty" hidden class="py-6 text-center text-[13px] text-white/35">Nggak ada endpoint yang cocok.</p>
+          <p id="filter-empty" hidden class="py-6 text-center text-[13px] text-white/35">Tidak ada endpoint yang cocok.</p>
         </div>
 
         ${sections}

@@ -32,7 +32,7 @@ const amenityTypes = Object.keys(AMENITY_TYPES) as ConstantAmenityType[]
 export const OperatorCodeSchema = v.pipe(
   v.picklist(operatorCodes),
   v.title('Operator code'),
-  v.description('Operator transit. `NUL` cuma placeholder internal dan nggak pernah muncul di response.'),
+  v.description('Operator transit. `NUL` cuma placeholder internal dan tidak pernah muncul di response.'),
   v.metadata({ examples: ['KCI', 'MRTJ'] })
 )
 

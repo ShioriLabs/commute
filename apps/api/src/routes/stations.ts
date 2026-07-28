@@ -52,7 +52,7 @@ app.get(
   '/',
   doc({
     summary: 'Daftar semua stasiun',
-    description: 'Semua stasiun yang muncul di pencarian, dari seluruh operator. Perhentian yang cuma dipakai buat topologi routing nggak termasuk. Di-cache dan stabil. Ambil sekali, simpan.',
+    description: 'Semua stasiun dari seluruh operator yang bisa dicari. Stasiun yang cuma dipakai buat routing tidak termasuk di sini. Isinya jarang berubah, jadi bisa di-cache di sisi kamu.',
     tag: 'Stasiun',
     data: v.array(StationSchema)
   }),
@@ -94,7 +94,7 @@ app.get(
     tag: 'Stasiun',
     data: v.array(StationSchema),
     parameters: [operatorParam],
-    errors: { 404: 'Kode operator nggak dikenal.' }
+    errors: { 404: 'Kode operator tidak ditemukan.' }
   }),
   async (c) => {
     const operatorCode = c.req.param('operator')
@@ -137,11 +137,11 @@ app.get(
   '/:operator/:stationCode',
   doc({
     summary: 'Detail stasiun',
-    description: 'Detail lengkap satu stasiun, termasuk fasilitas dan koordinat. Beda dari endpoint daftar, yang ini juga mengembalikan perhentian topologi.',
+    description: 'Detail lengkap satu stasiun, termasuk fasilitas dan koordinatnya. Beda dengan endpoint daftar, di sini stasiun yang cuma dipakai buat routing juga ikut dikembalikan.',
     tag: 'Stasiun',
     data: StationSchema,
     parameters: [operatorParam, stationCodeParam],
-    errors: { 404: 'Kode operator atau stasiun nggak dikenal.' }
+    errors: { 404: 'Kode operator atau stasiun tidak ditemukan.' }
   }),
   async (c) => {
     const operatorCode = c.req.param('operator')
@@ -185,11 +185,11 @@ app.get(
   '/:operator/:stationCode/timetable',
   doc({
     summary: 'Jadwal stasiun',
-    description: 'Jadwal keberangkatan, datar dan nggak dikelompokkan per lin. Kalau butuh bentuk per arah seperti papan keberangkatan, pakai `/timetable/grouped`.',
+    description: 'Semua jadwal keberangkatan dalam satu daftar, tanpa dipisah per lin. Kalau butuh yang sudah dikelompokkan per arah seperti papan keberangkatan, pakai `/timetable/grouped`.',
     tag: 'Stasiun',
     data: v.array(ScheduleSchema),
     parameters: [operatorParam, stationCodeParam],
-    errors: { 404: 'Kode operator atau stasiun nggak dikenal.' }
+    errors: { 404: 'Kode operator atau stasiun tidak ditemukan.' }
   }),
   async (c) => {
     const operatorCode = c.req.param('operator')
@@ -247,15 +247,15 @@ app.get(
   '/:operator/:stationCode/timetable/grouped',
   doc({
     summary: 'Jadwal stasiun, dikelompokkan',
-    description: 'Keberangkatan dikelompokkan per lin, lalu per arah, lalu per tujuan, yaitu bentuk yang dipakai papan keberangkatan. Arah ditentukan dari stasiun akhir tiap perjalanan.\n\nPakai `compact=1` buat payload yang lebih kecil: tiap keberangkatan jadi tuple `[tripNumber, minutesSinceMidnight]`, bukan object penuh. Menitnya waktu lokal Asia/Jakarta, 0–1439.',
+    description: 'Jadwal keberangkatan yang sudah dikelompokkan per lin, arah, dan tujuan, sesuai bentuk yang ditampilkan papan keberangkatan. Arahnya ditentukan dari stasiun terakhir tiap perjalanan.\n\nKalau butuh response yang lebih ringan, pakai `compact=1`. Tiap keberangkatan jadi tuple `[tripNumber, minutesSinceMidnight]`, bukan object penuh. Menitnya pakai waktu lokal Asia/Jakarta, dari 0 sampai 1439.',
     tag: 'Stasiun',
     data: v.union([v.array(GroupedTimetableSchema), v.array(CompactGroupedTimetableSchema)]),
     parameters: [
       operatorParam,
       stationCodeParam,
-      queryParam('compact', 'Isi `1` buat keberangkatan dalam bentuk tuple. Nilai lain mengembalikan bentuk penuh.', '1')
+      queryParam('compact', 'Isi `1` kalau mau keberangkatannya dalam bentuk tuple. Nilai lain akan mengembalikan bentuk penuh.', '1')
     ],
-    errors: { 404: 'Kode operator atau stasiun nggak dikenal.' }
+    errors: { 404: 'Kode operator atau stasiun tidak ditemukan.' }
   }),
   async (c) => {
     const operatorCode = c.req.param('operator')
@@ -434,8 +434,8 @@ app.get(
     summary: 'Jadwal stasiun untuk satu lin',
     tag: 'Stasiun',
     data: v.array(ScheduleSchema),
-    parameters: [operatorParam, stationCodeParam, pathParam('line', 'Kode lin buat filter.', 'C')],
-    errors: { 404: 'Kode operator, stasiun, atau lin nggak dikenal.' }
+    parameters: [operatorParam, stationCodeParam, pathParam('line', 'Kode lin yang mau difilter.', 'C')],
+    errors: { 404: 'Kode operator, stasiun, atau lin tidak ditemukan.' }
   }),
   async (c) => {
     const operatorCode = c.req.param('operator')
@@ -487,11 +487,11 @@ app.get(
   '/:operator/:stationCode/transfers',
   doc({
     summary: 'Transfer dari satu stasiun',
-    description: 'Sambungan ke stasiun terdekat, termasuk lintas operator, lengkap dengan jarak jalan kaki. Transfer `INTERNAL` tetap di dalam area berbayar; `EXTERNAL` berarti harus tap keluar lalu tap masuk lagi.',
+    description: 'Sambungan ke stasiun terdekat, termasuk yang beda operator, lengkap dengan jarak jalan kakinya. Transfer `INTERNAL` masih di dalam area berbayar, sedangkan `EXTERNAL` berarti kamu harus tap keluar dulu lalu tap masuk lagi.',
     tag: 'Stasiun',
     data: v.array(TransferSchema),
     parameters: [operatorParam, stationCodeParam],
-    errors: { 404: 'Kode operator atau stasiun nggak dikenal.' }
+    errors: { 404: 'Kode operator atau stasiun tidak ditemukan.' }
   }),
   async (c) => {
     const operatorCode = c.req.param('operator')

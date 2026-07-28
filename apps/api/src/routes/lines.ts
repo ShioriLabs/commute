@@ -17,12 +17,12 @@ app.get(
   '/:operator/:lineCode',
   doc({
     summary: 'Detail lin',
-    description: 'Struktur lengkap satu lin, urut dari stasiun awal. Lin sederhana cuma punya satu segmen `TRUNK`; lin bercabang (loop Cikarang, ramp Nambo) menambah segmen lain yang menjelaskan di mana cabangnya berpisah dan menyatu lagi.',
+    description: 'Struktur lengkap satu lin, urut dari stasiun awal. Lin yang lurus cuma punya satu segmen `TRUNK`. Lin yang bercabang seperti loop Cikarang atau ramp Nambo punya segmen tambahan yang menunjukkan di mana cabangnya berpisah dan menyatu lagi.',
     tag: 'Lin',
     data: LineDetailSchema,
-    parameters: [operatorParam, pathParam('lineCode', 'Kode lin, seperti yang dikembalikan `/operators`.', 'C')],
+    parameters: [operatorParam, pathParam('lineCode', 'Kode lin, bisa diambil dari `/operators`.', 'C')],
     errors: {
-      404: 'Operator atau lin nggak dikenal, atau lin-nya belum punya data topologi (`NO_TOPOLOGY`).'
+      404: 'Operator atau lin-nya tidak ditemukan, atau lin-nya belum punya data topologi (`NO_TOPOLOGY`).'
     }
   }),
   async (c) => {
