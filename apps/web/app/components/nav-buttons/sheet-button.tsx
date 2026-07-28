@@ -1,6 +1,6 @@
 import { Dialog, DialogBackdrop, DialogPanel, Transition, TransitionChild } from '@headlessui/react'
 import clsx from 'clsx'
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type TransitionEvent } from 'react'
 
 interface Props {
   // URL swapped in with pushState while the sheet is open ('/search', '/fare', …)
@@ -27,14 +27,21 @@ interface Props {
 // --panel-transform), so opening animates the card expanding to fill the
 // screen. The real URL is swapped with pushState so the back button (and the
 // sheet's CloseButton) restores the previous page without a navigation.
-// How long the panel's leave transition needs before we may touch history
-// (250ms panel transform + margin; the white overlay runs 300ms).
-const LEAVE_DURATION_MS = 350
+// Last-resort upper bound on how long we wait for the panel's leave transition
+// before popping history anyway. The transform's transitionend is the real
+// signal; this only covers the case where it never arrives at all. It has to be
+// far larger than the 250ms transform, because the leave does not begin until
+// React has committed the closed state — on a slow device that alone can take
+// ~500ms, and a fallback that lands mid-shrink causes the very stutter the
+// transitionend handler exists to avoid. Firing late is harmless (the URL just
+// restores a little later); firing early is not.
+const LEAVE_FALLBACK_MS = 2500
 
 export default function SheetButton({ url, ariaLabel, title, subtitle, icon, className, accent = false, children }: Props) {
   const [isOpen, setIsOpen] = useState(false)
   const [originalUrl, setOriginalUrl] = useState('')
   const [panelTransform, setPanelTransform] = useState('')
+  const [panelRadius, setPanelRadius] = useState('')
   const buttonRef = useRef<HTMLButtonElement>(null)
   // Deferred history.back() scheduled by handleClose (see below).
   const pendingBackRef = useRef<number | null>(null)
@@ -77,7 +84,32 @@ export default function SheetButton({ url, ariaLabel, title, subtitle, icon, cla
       const dw = sw / ew
       const dh = sh / eh
       setPanelTransform(`translate(${dx}px, ${dy}px) scale(${dw}, ${dh})`)
+      // The closed radius is painted through that scale, so the card's own 12px
+      // corner comes out as 12*dw wide by 12*dh tall — about 5px by 2px, i.e.
+      // visibly sharp against the real card it is morphing into. Divide it back
+      // out so both axes land on the card's radius once scaled. Two-value
+      // syntax is horizontal / vertical radii. Read rather than hardcoded, so
+      // it tracks the button's rounding (including a caller's className).
+      const cardRadius = parseFloat(getComputedStyle(buttonRef.current).borderTopLeftRadius) || 0
+      setPanelRadius(`${cardRadius / dw}px / ${cardRadius / dh}px`)
     }
+  }
+
+  const runPendingBack = () => {
+    if (pendingBackRef.current === null) return
+    clearTimeout(pendingBackRef.current)
+    pendingBackRef.current = null
+    window.history.back()
+  }
+
+  // The POP re-renders the route underneath, so it has to land after the shrink
+  // has finished painting — on a slow device the leave starts late enough that a
+  // fixed timer fires mid-animation and visibly stutters the tail of it. Only
+  // the panel's own transform counts: transition-all also ends on border-radius,
+  // and the card-face overlay's opacity bubbles up from a child.
+  const handlePanelTransitionEnd = (event: TransitionEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget || event.propertyName !== 'transform') return
+    runPendingBack()
   }
 
   const handleClose = () => {
@@ -88,10 +120,7 @@ export default function SheetButton({ url, ariaLabel, title, subtitle, icon, cla
     // stomps it (the dialog unmounts instantly instead of morphing back).
     // Close first, pop the history entry once the animation is done.
     if (window.history.state?.modalOpen) {
-      pendingBackRef.current = window.setTimeout(() => {
-        pendingBackRef.current = null
-        window.history.back()
-      }, LEAVE_DURATION_MS)
+      pendingBackRef.current = window.setTimeout(runPendingBack, LEAVE_FALLBACK_MS)
     } else {
       // Fallback if state is lost
       window.history.replaceState(
@@ -185,12 +214,27 @@ export default function SheetButton({ url, ariaLabel, title, subtitle, icon, cla
         <div className="fixed inset-0 flex w-screen">
           <DialogPanel
             transition
-            style={{ '--panel-transform': panelTransform } as CSSProperties}
-            className="overflow-hidden relative w-screen h-screen mt-auto transition-all duration-250 transform-gpu ease-out rounded-none data-closed:transform-[var(--panel-transform)] data-closed:rounded-xl origin-top-left"
+            style={{ '--panel-transform': panelTransform, '--panel-radius': panelRadius } as CSSProperties}
+            onTransitionEnd={handlePanelTransitionEnd}
+            className="overflow-hidden relative w-screen h-screen mt-auto transition-all duration-250 transform-gpu ease-out rounded-none data-closed:transform-[var(--panel-transform)] data-closed:rounded-[var(--panel-radius,var(--radius-xl))] origin-top-left"
           >
             {children}
             <Transition show={isOpen} appear>
-              <div className="block w-screen h-screen absolute top-0 bg-white opacity-0 pointer-events-none data-closed:opacity-100 transition-all duration-300" />
+              <div className={clsx(
+                // Both directions resolve their colour early and let the morph
+                // carry the rest; the 300ms base only exists so the element
+                // outlives the panel's 250ms shrink (drop below that and
+                // headlessui unmounts the mask mid-shrink, re-revealing the
+                // sheet). Opening holds the card face flat over the first
+                // ~75ms, which is the window where the panel is still scaled
+                // enough to visibly distort its content, then clears in 150ms
+                // instead of trailing a tint over an already full-size sheet.
+                // Closing front-loads the curve so the face is opaque within
+                // ~60ms of the shrink starting.
+                'block w-screen h-screen absolute top-0 opacity-0 pointer-events-none data-closed:opacity-100 transition-all duration-300 data-enter:delay-50 data-enter:duration-100 data-leave:ease-[cubic-bezier(0,0.95,0.2,1)]',
+                accent ? 'bg-[#F55875]' : 'bg-white'
+              )}
+              />
             </Transition>
           </DialogPanel>
         </div>
