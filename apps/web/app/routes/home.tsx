@@ -322,7 +322,11 @@ export default function HomePage() {
             there's more — the previous `no-scrollbar` hid that entirely, which
             is why Peta and Setelan read as missing rather than off-screen.
             Fare is no longer here: the search sheet's route mode covers it. */}
-        <div className="w-full max-w-3xl mx-auto flex gap-3 overflow-x-auto no-scrollbar [mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)] lg:[mask-image:none]">
+        {/* py-2/-my-2: overflow-x-auto computes overflow-y to auto as well, so
+            the rail clips vertically too and shaves the cards' hover scale (and
+            their shadow) off the top and bottom. The padding gives that growth
+            room without changing the rail's layout height. */}
+        <div className="w-full max-w-3xl mx-auto flex gap-3 overflow-x-auto py-2 -my-2 no-scrollbar [mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)] lg:[mask-image:none]">
           {navItems.map((item, index) => (
             <div
               key={item.key}
