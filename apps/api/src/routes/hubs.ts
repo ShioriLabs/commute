@@ -3,70 +3,93 @@ import { Bindings } from 'app'
 import { HubRepository } from 'db/repositories/hubs'
 import { KVRepository } from 'db/repositories/kv'
 import { NotFound, Ok } from 'utils/response'
+import * as v from 'valibot'
+import { doc, pathParam } from 'schemas/describe'
+import { HubSchema } from 'schemas/hub'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
-app.get('/', async (c) => {
-  const kvRepository = new KVRepository(c.env.KV)
-  const hubRepository = new HubRepository(c.env.DB)
+app.get(
+  '/',
+  doc({
+    summary: 'List hubs',
+    description: 'Interchange complexes that group several stations under one name — Dukuh Atas, for instance, spans Sudirman, BNI City, and the MRT and LRT stations. Ordered by prominence.',
+    tag: 'Hubs',
+    data: v.array(HubSchema)
+  }),
+  async (c) => {
+    const kvRepository = new KVRepository(c.env.KV)
+    const hubRepository = new HubRepository(c.env.DB)
 
-  const kvKey = `hubs:${c.env.API_VERSION}`
+    const kvKey = `hubs:${c.env.API_VERSION}`
 
-  const cachedHubs = await kvRepository.get(kvKey)
-  if (cachedHubs) {
+    const cachedHubs = await kvRepository.get(kvKey)
+    if (cachedHubs) {
+      return c.json(
+        Ok(cachedHubs),
+        200
+      )
+    }
+
+    const hubs = await hubRepository.getAll()
+
+    if (hubs.length > 0) {
+      c.executionCtx.waitUntil(
+        kvRepository.set(kvKey, hubs)
+      )
+    }
+
     return c.json(
-      Ok(cachedHubs),
+      Ok(
+        hubs
+      ),
       200
     )
   }
+)
 
-  const hubs = await hubRepository.getAll()
+app.get(
+  '/:slug',
+  doc({
+    summary: 'Get a hub',
+    description: 'One interchange complex with its member stations.',
+    tag: 'Hubs',
+    data: HubSchema,
+    parameters: [pathParam('slug', 'Hub URL key, as returned by `/hubs`.', 'dukuh-atas')],
+    errors: { 404: 'No hub with that slug.' }
+  }),
+  async (c) => {
+    const slug = c.req.param('slug')
 
-  if (hubs.length > 0) {
+    const kvRepository = new KVRepository(c.env.KV)
+    const hubRepository = new HubRepository(c.env.DB)
+
+    const kvKey = `hubs:${slug}:${c.env.API_VERSION}`
+
+    const cachedHub = await kvRepository.get(kvKey)
+    if (cachedHub) {
+      return c.json(
+        Ok(cachedHub),
+        200
+      )
+    }
+
+    const hub = await hubRepository.getBySlug(slug)
+    if (!hub) {
+      return c.json(NotFound(`Unknown Hub: ${slug}`), 404)
+    }
+
     c.executionCtx.waitUntil(
-      kvRepository.set(kvKey, hubs)
+      kvRepository.set(kvKey, hub)
     )
-  }
 
-  return c.json(
-    Ok(
-      hubs
-    ),
-    200
-  )
-})
-
-app.get('/:slug', async (c) => {
-  const slug = c.req.param('slug')
-
-  const kvRepository = new KVRepository(c.env.KV)
-  const hubRepository = new HubRepository(c.env.DB)
-
-  const kvKey = `hubs:${slug}:${c.env.API_VERSION}`
-
-  const cachedHub = await kvRepository.get(kvKey)
-  if (cachedHub) {
     return c.json(
-      Ok(cachedHub),
+      Ok(
+        hub
+      ),
       200
     )
   }
-
-  const hub = await hubRepository.getBySlug(slug)
-  if (!hub) {
-    return c.json(NotFound(`Unknown Hub: ${slug}`), 404)
-  }
-
-  c.executionCtx.waitUntil(
-    kvRepository.set(kvKey, hub)
-  )
-
-  return c.json(
-    Ok(
-      hub
-    ),
-    200
-  )
-})
+)
 
 export default app
