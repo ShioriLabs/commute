@@ -8,6 +8,7 @@ import fares from './routes/fares'
 import syncRoutes from './routes/sync'
 import cacheRoutes from './routes/cache'
 import operatorRoutes from './routes/operators'
+import internalRoutes from './routes/internal'
 
 export interface Bindings {
   DB: D1Database
@@ -43,5 +44,7 @@ app.route('fares', fares)
 app.route('sync/stations', syncRoutes)
 app.route('cache', cacheRoutes)
 app.route('operators', operatorRoutes)
+// Shaped for commute.shiorilabs.id only — see routes/internal.ts.
+app.route('_internal', internalRoutes)
 
 export default app

@@ -1,22 +1,14 @@
+import type { HubKind } from '@commute/constants'
 import type { Line } from './line'
 import type { Station } from './stations'
 
 /*
- * `hub` — several distinct, differently-named stations under one complex.
- * `integrated` — one place to a rider, split across operators only in the data.
+ * Both now live in @commute/constants: the API needs them to build hub
+ * subtitles for /_internal/searchables, and duplicating the label strings
+ * across apps would let the two drift.
  */
-export type HubKind = 'hub' | 'integrated'
-
-/*
- * What we call each kind in the UI. "Pumpunan moda" is the operators' own term
- * for a multi-mode interchange building (CSW is officially Pumpunan Moda Cakra
- * Selaras Wahana), so a real complex gets that name; an `integrated` grouping is
- * one station to a rider and keeps the plainer label.
- */
-export const HUB_KIND_LABEL: Record<HubKind, string> = {
-  hub: 'Pumpunan Moda',
-  integrated: 'Stasiun Terintegrasi'
-}
+export type { HubKind } from '@commute/constants'
+export { HUB_KIND_LABEL } from '@commute/constants'
 
 export interface Hub {
   id: string

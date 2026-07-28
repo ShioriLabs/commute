@@ -3,6 +3,7 @@ import { NotFound, Ok } from 'utils/response'
 import { Bindings } from 'app'
 import { KVRepository } from 'db/repositories/kv'
 import { getOperatorByCode } from 'utils/operator'
+import { searchablesKVKey } from './internal'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -139,6 +140,25 @@ app.delete('/hubs/:slug/bust', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
 
   const kvKey = `hubs:${slug}:${c.env.API_VERSION}`
+  await kvRepository.del(kvKey)
+
+  return c.json(
+    Ok(
+      { message: `Cache ${kvKey} has been cleared.` }
+    ),
+    200
+  )
+})
+
+/*
+ * Registered before the /:operator/… patterns below: Hono matches in
+ * registration order, and "_internal" would otherwise be read as an operator
+ * code.
+ */
+app.delete('/_internal/searchables/bust', async (c) => {
+  const kvRepository = new KVRepository(c.env.KV)
+
+  const kvKey = searchablesKVKey(c.env.API_VERSION)
   await kvRepository.del(kvKey)
 
   return c.json(

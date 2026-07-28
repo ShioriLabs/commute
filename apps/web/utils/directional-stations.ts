@@ -7,9 +7,15 @@ import type { Station } from 'models/stations'
  * physical stop (the 15 pairs sit 32–168 m apart, on opposite sides of a road),
  * so showing both is noise: a rider searching "kali grogol" wants one result.
  *
- * This groups a pair back into a single presentational entry. It is deliberately
- * a WEB-SIDE concern — the API keeps both rows, because each direction really is
- * a distinct boarding point with its own platform and its own code.
+ * This groups a pair back into a single presentational entry.
+ *
+ * The public API keeps both rows, because each direction really is a distinct
+ * boarding point with its own platform and its own code. That still holds — but
+ * the folding itself is no longer web-only: /_internal/searchables now does it
+ * server-side, so the search sheet receives pre-folded entries and never calls
+ * joinDirectionalStations. This module remains for the surfaces that consume
+ * raw /stations rows (the fare picker among them) and still need the pairs
+ * reconciled locally.
  *
  * NOTE the two directions do NOT always serve the same lines: 12 of the 15 pairs
  * differ (7R stops at Kali Grogol only northbound; 7T at only one Walikota

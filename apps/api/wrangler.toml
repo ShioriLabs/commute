@@ -10,7 +10,7 @@ database_id = "1d187383-95a3-4e34-aee8-7c99b45aeaa0"
 migrations_dir = "src/db/migrations"
 
 [vars]
-API_VERSION = "20260722"
+API_VERSION = "20260728"
 
 [[kv_namespaces]]
 binding = "KV"

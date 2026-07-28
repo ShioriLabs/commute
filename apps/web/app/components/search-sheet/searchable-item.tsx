@@ -55,8 +55,8 @@ export default memo(function SearchableItem({ searchable, onClick, query, index 
               <ul className="flex flex-row gap-1 flex-wrap">
                 {(searchable as Searchable<Line[]>).body!.map(line => (
                   <li key={line.lineCode}>
-                    {/* STATION `to` is /stations/{operator}/{code}; drives TJ roundel style. */}
-                    <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={searchable.type === 'STATION' ? searchable.to.split('/')[2] : undefined} />
+                    {/* Drives TJ roundel style. Absent on hubs, which span operators. */}
+                    <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={searchable.operator} />
                     <span className="sr-only">{line.name}</span>
                   </li>
                 ))}

@@ -7,6 +7,7 @@ import { getOperatorByCode } from 'utils/operator'
 import { syncStations as syncStationsKCI, syncTimetable as syncTimetableKCI } from 'operators/kci/sync'
 import { syncStations as syncStationsMRTJ, syncTimetable as syncTimetableMRTJ } from 'operators/mrtj/sync'
 import { syncStations as syncStationsLRTJ, syncTimetable as syncTimetableLRTJ } from 'operators/lrtj/sync'
+import { searchablesKVKey } from './internal'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -19,6 +20,8 @@ app.post('/:operator', async (c) => {
 
   const allKVKey = `stations:${c.env.API_VERSION}`
   const kvKey = `stations:${operator.code}:${c.env.API_VERSION}`
+  // The search index is derived from stations, so it goes stale on every sync.
+  const searchablesKey = searchablesKVKey(c.env.API_VERSION)
   try {
     const kvRepository = new KVRepository(c.env.KV)
 
@@ -36,6 +39,7 @@ app.post('/:operator', async (c) => {
 
     await kvRepository.del(allKVKey)
     await kvRepository.del(kvKey)
+    await kvRepository.del(searchablesKey)
 
     return c.json(
       Ok(
