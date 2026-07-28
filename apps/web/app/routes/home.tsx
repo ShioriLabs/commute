@@ -39,7 +39,7 @@ const MAX_SKELETON_LINES = 3
 
 function EmptyState({ mode = 'NO_SAVED' }: { mode: 'NO_SAVED' | 'OFFLINE' }) {
   return (
-    <div className="home-enter w-screen h-screen flex items-center justify-center flex-col p-2" aria-live="polite">
+    <div className="home-enter w-full h-screen flex items-center justify-center flex-col p-2" aria-live="polite">
       <picture>
         <source srcSet="/img/station.webp" type="image/webp" />
         <img src="/img/station.png" alt="Gambar peron stasiun dengan jembatan di atasnya" className="w-48 h-48 aspect-square object-contain" fetchPriority="high" />
@@ -316,7 +316,11 @@ export default function HomePage() {
         : (
             <EmptyState mode="NO_SAVED" />
           )}
-      <nav className="fixed bottom-0 py-4 bg-gradient-to-t from-50% from-[#FFF8F8] to-transparent w-screen z-20" aria-label="Navigasi utama">
+      {/* w-full, not w-screen: 100vw includes the scrollbar gutter, which would
+          center the rail 7.5px off the feed's grid on classic-scrollbar
+          platforms (a fixed element's 100% resolves against the viewport minus
+          the scrollbar, same as the flow content). */}
+      <nav className="fixed bottom-0 py-4 bg-gradient-to-t from-50% from-[#FFF8F8] to-transparent w-full z-20" aria-label="Navigasi utama">
         {/* Three cards can't fit a phone (510px against ~380px usable at 412px
             wide), so the rail scrolls by design. The accent primary card is
             always the first thing in view, and the right-edge fade signals

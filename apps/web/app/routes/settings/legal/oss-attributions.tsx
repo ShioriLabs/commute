@@ -61,7 +61,7 @@ const rootDevDependencies = [
 export default function OSSAttributionsSettingsPage() {
   return (
     <main className="overflow-x-hidden">
-      <article className="bg-white w-screen h-full overflow-y-auto pb-8 overflow-x-hidden">
+      <article className="bg-white w-full h-full overflow-y-auto pb-8 overflow-x-hidden">
         <div className="p-8 sticky w-full top-0 max-w-3xl mx-auto bg-white">
           <div className="flex gap-3 items-center -ml-2">
             <button

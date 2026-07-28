@@ -12,6 +12,22 @@
   --ease-ios-spring: cubic-bezier(0.36, 0.66, 0.04, 1);
 }
 
+/* Classic scrollbars (Windows/Linux) steal ~15px of viewport when they appear,
+   shifting the centered layout every time a route or content change crosses the
+   one-screen threshold. Reserving the gutter keeps the layout grid identical
+   whether or not the page scrolls; overlay-scrollbar platforms (Android, iOS,
+   macOS) have zero-width scrollbars, so this reserves nothing there.
+
+   The padding-right override disarms Headless UI's scroll-lock compensation:
+   when a Dialog opens it sets an inline padding-right equal to the pre-lock
+   scrollbar width, but the reserved gutter already survives overflow: hidden,
+   so that padding would shove the page 15px left behind every sheet. Author
+   !important beats inline styles, and nothing else pads the root element. */
+html {
+  scrollbar-gutter: stable;
+  padding-right: 0 !important;
+}
+
 body {
   font-optical-sizing: auto;
   font-weight: 500;

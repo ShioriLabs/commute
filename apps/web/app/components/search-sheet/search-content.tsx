@@ -224,8 +224,11 @@ export default function SearchContent({ title, closeButton }: Props) {
     }
   }, [])
 
+  // scrollbar-gutter: results grow and shrink per keystroke; without the
+  // reserved gutter the whole sheet shifts sideways each time the list
+  // crosses one screen tall on classic-scrollbar platforms.
   return (
-    <section className="bg-white w-screen h-full overflow-y-auto pb-4">
+    <section className="bg-white w-screen h-full overflow-y-auto pb-4 [scrollbar-gutter:stable]">
       <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto bg-white">
         <div className="flex gap-4 items-center justify-between">
           { title }

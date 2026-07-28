@@ -127,7 +127,7 @@ export default function SavedStationsSettingsPage() {
   }
 
   return (
-    <main className="bg-white w-screen h-full min-h-screen overflow-y-auto pb-4">
+    <main className="bg-white w-full h-full min-h-screen overflow-y-auto pb-4">
       <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto bg-white">
         <div className="flex gap-3 items-center -ml-2">
           <button

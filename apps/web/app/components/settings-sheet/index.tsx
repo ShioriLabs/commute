@@ -9,7 +9,7 @@ export default function SettingsSheet() {
   const { isInstallable, showIOSInstructions } = useInstall()
 
   return (
-    <section className="bg-white w-screen h-full overflow-y-auto pb-4">
+    <section className="bg-white w-screen h-full overflow-y-auto pb-4 [scrollbar-gutter:stable]">
       <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto bg-white">
         <div className="flex gap-4 items-center justify-between">
           <DialogTitle className="font-bold text-2xl">Pengaturan</DialogTitle>

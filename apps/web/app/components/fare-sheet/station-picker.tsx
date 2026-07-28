@@ -221,7 +221,7 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
       <div className="fixed inset-0 flex w-screen items-end">
         <DialogPanel
           transition
-          className="bg-white w-screen h-[calc(100dvh-0.75rem)] overflow-y-auto rounded-t-2xl will-change-transform transition duration-300 ease-out data-closed:translate-y-full"
+          className="bg-white w-screen h-[calc(100dvh-0.75rem)] overflow-y-auto [scrollbar-gutter:stable] rounded-t-2xl will-change-transform transition duration-300 ease-out data-closed:translate-y-full"
         >
           <div className="p-8 pb-4 sticky top-0 z-[1] max-w-3xl mx-auto bg-white rounded-t-2xl">
             <div className="flex gap-4 items-center justify-between">

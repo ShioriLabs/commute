@@ -59,7 +59,7 @@ export default function FareSheet() {
   }
 
   return (
-    <section className="bg-white w-screen h-full overflow-y-auto">
+    <section className="bg-white w-screen h-full overflow-y-auto [scrollbar-gutter:stable]">
       <div className="p-8 pb-4 max-w-3xl mx-auto">
         <div className="flex gap-4 items-center justify-between">
           <DialogTitle className="font-bold text-2xl">Cek Tarif</DialogTitle>
