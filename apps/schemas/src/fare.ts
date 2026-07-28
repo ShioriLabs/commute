@@ -14,7 +14,7 @@ export const LineRefSchema = v.pipe(
     line: LineKeySchema,
     headsign: v.pipe(
       v.nullable(v.string()),
-      v.description('Terminus this particular service heads toward.')
+      v.description('Stasiun akhir yang dituju perjalanan ini.')
     )
   }),
   v.title('FareLineRef')
@@ -29,16 +29,16 @@ export const RideLegSchema = v.pipe(
     operator: OperatorCodeSchema,
     from: FareStationSchema,
     to: FareStationSchema,
-    stationCount: v.pipe(v.number(), v.description('Number of stations travelled, endpoints included.')),
-    stops: v.pipe(v.array(FareStationSchema), v.description('Full ordered station list, boarding to alighting.')),
+    stationCount: v.pipe(v.number(), v.description('Jumlah stasiun yang dilewati, termasuk stasiun awal dan akhir.')),
+    stops: v.pipe(v.array(FareStationSchema), v.description('Daftar stasiun lengkap secara urut, dari naik sampai turun.')),
     headsign: v.pipe(
       v.nullable(v.string()),
-      v.description('Terminus the service heads toward; null where it cannot be determined.')
+      v.description('Stasiun akhir yang dituju; null kalau nggak bisa ditentukan.')
     ),
     distanceM: v.number(),
     serviceLines: v.pipe(
       v.optional(v.array(LineRefSchema)),
-      v.description('Present only on interlined track served by several lines — any of them gets the rider there. Includes the primary line first.')
+      v.description('Cuma ada di jalur yang dipakai bareng beberapa lin, jadi naik yang mana pun sampai. Lin utamanya ditaruh paling depan.')
     )
   }),
   v.title('FareRideLeg')
@@ -49,10 +49,10 @@ export const TransferLegSchema = v.pipe(
     type: v.literal('TRANSFER'),
     from: FareStationSchema,
     to: FareStationSchema,
-    distanceM: v.pipe(v.number(), v.description('Walking distance in metres.')),
+    distanceM: v.pipe(v.number(), v.description('Jarak jalan kaki dalam meter.')),
     fare: v.pipe(
       v.optional(v.number()),
-      v.description('Present only for paid corridors; ordinary walking transfers are free and omit this.')
+      v.description('Cuma ada di koridor berbayar; transfer jalan kaki biasa gratis dan nggak punya ini.')
     ),
     corridorLabel: v.optional(v.string())
   }),
@@ -62,7 +62,7 @@ export const TransferLegSchema = v.pipe(
 export const FareLegSchema = v.pipe(
   v.variant('type', [RideLegSchema, TransferLegSchema]),
   v.title('FareLeg'),
-  v.description('A single stage of the journey. Discriminated on `type`.')
+  v.description('Satu tahap perjalanan. Dibedakan lewat `type`.')
 )
 
 export const FareSegmentSchema = v.pipe(
@@ -74,7 +74,7 @@ export const FareSegmentSchema = v.pipe(
     to: FareStationSchema,
     fare: v.pipe(
       v.nullable(v.number()),
-      v.description('Fare for this segment, in rupiah; null where it cannot be determined.')
+      v.description('Tarif buat segmen ini, dalam rupiah; null kalau nggak bisa ditentukan.')
     )
   }),
   v.title('FareSegment'),
@@ -85,11 +85,11 @@ export const FareResultSchema = v.pipe(
   v.object({
     from: FareStationSchema,
     to: FareStationSchema,
-    legs: v.pipe(v.array(FareLegSchema), v.description('The journey as a rider experiences it: rides and the transfers between them.')),
-    segments: v.pipe(v.array(FareSegmentSchema), v.description('The journey as it is charged.')),
+    legs: v.pipe(v.array(FareLegSchema), v.description('Perjalanan dari sisi penumpang: naik kereta dan transfer di antaranya.')),
+    segments: v.pipe(v.array(FareSegmentSchema), v.description('Perjalanan dari sisi penagihan tarif.')),
     totalFare: v.pipe(
       v.nullable(v.number()),
-      v.description('Total in rupiah, after any integrated-fare capping. Null when a fare cannot be computed for this pair.'),
+      v.description('Total dalam rupiah, setelah dikenakan batas tarif integrasi. Null kalau tarif buat pasangan stasiun ini nggak bisa dihitung.'),
       v.metadata({ examples: [14000] })
     ),
     totalDistanceM: v.number(),

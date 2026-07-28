@@ -60,6 +60,33 @@ interface Spec {
   paths: Record<string, Record<string, Operation>>
 }
 
+// ── signage ─────────────────────────────────────────────────────────────────
+
+/*
+ * Left-bar colour per tag, so each section of the reference reads as its own
+ * plate — the same device the homepage uses to colour a beat's plate with the
+ * line it is showing on the map (see .sign in src/style.css).
+ *
+ * Hardcoded rather than read from theme/line-colors.ts: that module imports the
+ * 34 KB NETWORK constant to derive its palette, which is a fine trade on a page
+ * that draws the network and a poor one here. These are build-time strings and
+ * never reach the browser as data.
+ *
+ * The values are the operator colours these tags correspond to; Fares and
+ * Operators are platform-level concerns rather than any one operator, so they
+ * take the brand accent.
+ */
+const TAG_ACCENT: Record<string, string> = {
+  'Stasiun': '#25B8EB', // KCI Commuter Line
+  'Lin': '#ca2a51', // MRT Jakarta
+  'Pumpunan Moda': '#F26324', // LRT Jakarta
+  'Tarif': 'var(--color-accent)',
+  'Operator': 'var(--color-accent)'
+}
+
+const tagAccent = (tag: string | undefined): string =>
+  (tag && TAG_ACCENT[tag]) || 'var(--color-accent)'
+
 // ── helpers ─────────────────────────────────────────────────────────────────
 
 const esc = (value: string): string =>
@@ -93,11 +120,11 @@ function schemaHTML(schema: JSONSchema | undefined, depth = 0): string {
       return schemaHTML({ ...nonNull[0]!, description: schema.description ?? nonNull[0]!.description }, depth)
         + (nullable ? '<span class="ml-1 text-white/30">| null</span>' : '')
     }
-    return `<span class="text-white/45">one of ${nonNull.length} shapes</span>`
+    return `<span class="text-white/45">salah satu dari ${nonNull.length} bentuk</span>`
   }
 
   if (schema.type === 'array' && schema.items) {
-    return `<span class="text-white/45">array of</span> ${schemaHTML(schema.items, depth)}`
+    return `<span class="text-white/45">array berisi</span> ${schemaHTML(schema.items, depth)}`
   }
 
   if (schema.type === 'object' && schema.properties) {
@@ -171,7 +198,8 @@ function jsonHTML(value: unknown): string {
 // ── page ────────────────────────────────────────────────────────────────────
 
 function operationHTML(path: string, method: string, op: Operation, index: number): string {
-  const id = `${slug(method + path)}-${index}`
+  // Not `id` — that name belongs to the translation helper above.
+  const anchor = `${slug(method + path)}-${index}`
   const params = op.parameters ?? []
   const pathParams = params.filter(p => p.in === 'path')
   const queryParams = params.filter(p => p.in === 'query')
@@ -208,18 +236,26 @@ function operationHTML(path: string, method: string, op: Operation, index: numbe
       + `</div>${body}</div>`
   }).join('')
 
-  return `<details id="${id}" class="scroll-mt-4 border-b border-line/60" data-endpoint data-search="${esc((method + ' ' + path + ' ' + (op.summary ?? '')).toLowerCase())}">`
-    + `<summary class="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 py-3 hover:bg-white/[0.02]">`
+  /*
+   * The path carries the English vocabulary on its own (`/stations/{operator}`,
+   * `/timetable/grouped`), so indexing method + path + the Indonesian summary
+   * already matches both "timetable" and "jadwal" — no separate English index
+   * is needed now that the summaries themselves are Indonesian.
+   */
+  const search = [method, path, op.summary ?? ''].join(' ').toLowerCase()
+
+  return `<details id="${anchor}" class="sign scroll-mt-4 mb-2" style="--sign-accent: ${tagAccent(op.tags?.[0])}" data-endpoint data-search="${esc(search)}">`
+    + `<summary class="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 hover:bg-white/[0.03]">`
     + `<span class="rounded bg-emerald-300/10 px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-emerald-300/90">${esc(method)}</span>`
     + `<code class="min-w-0 break-all font-mono text-[13px] text-white/90">${pathHTML(path)}</code>`
     + `<span class="ml-auto hidden truncate text-[12.5px] text-white/40 sm:block">${esc(op.summary ?? '')}</span>`
     + `<svg class="chev h-3 w-3 shrink-0 text-white/30 transition-transform" viewBox="0 0 12 12" fill="none" aria-hidden="true">`
     + `<path d="M4.2 2.4 8 6l-3.8 3.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`
     + `</summary>`
-    + `<div class="pb-5 pl-1">`
-    + (op.description ? `<p class="max-w-[62ch] text-[13.5px] leading-relaxed text-white/55">${ticks(op.description)}</p>` : '')
-    + paramRows(pathParams, 'Path')
-    + paramRows(queryParams, 'Query')
+    + `<div class="px-4 pb-5">`
+    + (op.description ? `<p class="max-w-[62ch] whitespace-pre-line text-[13.5px] leading-relaxed text-white/55">${ticks(op.description)}</p>` : '')
+    + paramRows(pathParams, 'Parameter path')
+    + paramRows(queryParams, 'Parameter query')
     + `<p class="mt-5 font-mono text-[10px] uppercase tracking-wider text-white/35">Respons</p>`
     + responses
     + `</div></details>`
@@ -242,15 +278,25 @@ function render(spec: Spec): string {
 
   const tagDescription = new Map((spec.tags ?? []).map(t => [t.name, t.description ?? '']))
 
+  // Anchors are slugged from the tag, so they moved with the translation
+  // (#stations -> #stasiun). Acceptable: the page has not shipped yet, so there
+  // are no links in the wild to break. Once it has, renaming a tag is a
+  // breaking change to every deep link into that section.
   const nav = order.map(tag =>
-    `<a href="#${slug(tag)}" class="block rounded px-2 py-1 text-[13px] text-white/50 hover:bg-white/[0.04] hover:text-white/80">${esc(tag)}</a>`
+    `<a href="#${slug(tag)}" class="flex items-center gap-2 rounded px-2 py-1 text-[13px] text-white/50 hover:bg-white/[0.04] hover:text-white/80">`
+    + `<span class="h-1.5 w-1.5 shrink-0 rounded-full" style="background: ${tagAccent(tag)}"></span>`
+    + `${esc(tag)}</a>`
   ).join('')
 
   const sections = order.map(tag =>
-    `<section id="${slug(tag)}" class="scroll-mt-4 pt-10">`
-    + `<h2 class="text-[19px] font-bold tracking-tight text-white">${esc(tag)}</h2>`
+    `<section id="${slug(tag)}" class="scroll-mt-4 pt-12">`
+    // A coloured rule rather than the mono eyebrow the homepage uses: with the
+    // tag names translated, an eyebrow would have repeated the heading word for
+    // word. The bar carries the section's colour on its own.
+    + `<div class="h-0.5 w-8 rounded-full" style="background: ${tagAccent(tag)}"></div>`
+    + `<h2 class="mt-3 text-[19px] font-bold tracking-tight text-white">${esc(tag)}</h2>`
     + (tagDescription.get(tag) ? `<p class="mt-1 max-w-[60ch] text-[13.5px] text-white/45">${esc(tagDescription.get(tag)!)}</p>` : '')
-    + `<div class="mt-3">${byTag.get(tag)!.join('')}</div>`
+    + `<div class="mt-4">${byTag.get(tag)!.join('')}</div>`
     + `</section>`
   ).join('')
 
@@ -274,19 +320,45 @@ function render(spec: Spec): string {
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet" />
     <script type="module" src="/src/docs.ts"></script>
   </head>
-  <body class="bg-ink font-sans text-white/80 antialiased">
-    <div class="mx-auto flex max-w-5xl gap-8 px-5 py-8 lg:px-8">
-      <nav class="sticky top-8 hidden h-[calc(100vh-4rem)] w-44 shrink-0 overflow-y-auto lg:block" aria-label="Bagian">
+  <body class="relative bg-ink font-sans text-white/80 antialiased">
+    <!-- Masthead band. The dot field runs the full height of the lockup AND the
+         title block below it, then fades out downward — the same device the
+         homepage header uses: no hard bar, no rule, the fade IS the edge.
+         Fixed height rather than content height so the canvas reserves its space
+         before it paints (zero CLS) and the fade always lands in the same place.
+         Both the canvas and the gradient are decorative and empty in the markup,
+         so neither can delay the text paint. -->
+    <div class="pointer-events-none absolute inset-x-0 top-0 h-[420px] overflow-hidden">
+      <canvas
+        id="docs-field"
+        aria-hidden="true"
+        class="absolute inset-0 h-full w-full"
+      ></canvas>
+      <div
+        class="absolute inset-0 bg-[linear-gradient(180deg,rgba(13,15,20,0.86)_0%,rgba(13,15,20,0.7)_45%,rgba(13,15,20,0.35)_75%,transparent_100%)]"
+      ></div>
+    </div>
+
+    <div class="relative mx-auto max-w-5xl px-5 pt-8 lg:px-8">
+      <a href="/" class="inline-flex items-center" aria-label="Commute Data Platform">
+        <!-- Sized by HEIGHT, width follows: the lockup is a two-line 431x137
+             (~3.15:1), so constraining width instead would blow up its height. -->
+        <img src="/logo.svg" alt="Commute Data Platform" width="431" height="137" class="h-9 w-auto sm:h-10" />
+      </a>
+    </div>
+
+    <div class="relative mx-auto flex max-w-5xl gap-8 px-5 pb-8 lg:px-8">
+      <nav class="sticky top-8 hidden h-[calc(100vh-4rem)] w-44 shrink-0 overflow-y-auto pt-10 lg:block" aria-label="Bagian">
         <a href="/" class="block font-mono text-[10px] uppercase tracking-wider text-white/35 hover:text-white/60">&larr; Commute Data</a>
         <p class="mt-5 font-mono text-[10px] uppercase tracking-wider text-white/35">Endpoint</p>
         <div class="mt-1.5 -ml-2">${nav}</div>
       </nav>
 
       <main class="min-w-0 flex-1">
-        <header class="border-b border-line/60 pb-7">
+        <header class="pt-8">
           <p class="font-mono text-[10px] uppercase tracking-wider text-accent">Referensi API</p>
-          <h1 class="mt-3 text-[30px] font-extrabold leading-tight tracking-tight text-white">${esc(spec.info.title)}</h1>
-          <p class="mt-3 max-w-[62ch] text-[14px] leading-relaxed text-white/55">${esc(intro)}</p>
+          <h1 class="sign-shadow mt-3 text-[30px] font-extrabold leading-tight tracking-tight text-white">${esc(spec.info.title)}</h1>
+          <p class="sign-shadow mt-3 max-w-[62ch] text-[14px] leading-relaxed text-white/55">${esc(intro)}</p>
           <div class="mt-5 flex flex-wrap items-center gap-2">
             <code class="rounded border border-line/70 bg-plate px-2.5 py-1.5 font-mono text-[12px] text-white/70">${esc(server)}</code>
             <a href="${esc(server)}/openapi.json" class="rounded border border-line/70 px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-wider text-white/45 hover:border-accent/50 hover:text-white/80">openapi.json</a>
@@ -294,7 +366,7 @@ function render(spec: Spec): string {
           <p class="mt-4 font-mono text-[10px] uppercase tracking-wider text-white/25">v${esc(spec.info.version)}${spec.info.license ? ` · ${esc(spec.info.license.name)}` : ''} · ${Object.keys(spec.paths).length} endpoint</p>
         </header>
 
-        <div class="mt-6">
+        <div class="mt-7">
           <input
             id="filter"
             type="search"
@@ -306,12 +378,25 @@ function render(spec: Spec): string {
         </div>
 
         ${sections}
-
-        <footer class="mt-14 border-t border-line/60 pt-6 font-mono text-[10px] uppercase tracking-wider text-white/25">
-          Dibuat dari /openapi.json waktu build · ${new Date().toISOString().slice(0, 10)}
-        </footer>
       </main>
     </div>
+
+    <!-- The page ends the way the homepage does: on the grid spelling its own
+         name. Outside the max-w-5xl container so the wordmark spans the full
+         viewport. 70vh rather than the homepage's full screen — this is a
+         lookup reference, and a whole empty viewport after the last endpoint
+         reads as a broken page rather than an ending. -->
+    <section class="relative mt-16 flex min-h-[70vh] items-end justify-center overflow-hidden px-6 pb-10">
+      <canvas
+        id="docs-wordmark"
+        aria-hidden="true"
+        class="pointer-events-none absolute inset-0 h-full w-full"
+      ></canvas>
+      <div class="relative text-center font-mono text-[11px] leading-relaxed">
+        <p class="text-white/30">© ${new Date().getFullYear()} Commute Data Platform · Dibuat oleh Shiori Labs</p>
+        <p class="mt-1 text-white/20">Dibuat dari /openapi.json waktu build · ${new Date().toISOString().slice(0, 10)}</p>
+      </div>
+    </section>
   </body>
 </html>
 `

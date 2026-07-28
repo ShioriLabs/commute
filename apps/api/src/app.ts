@@ -62,24 +62,24 @@ app.get('/openapi.json', openAPIRouteHandler(app, {
       title: 'Commute API',
       version: '1.0.0',
       description: [
-        'Transit data for Jakarta and the surrounding Jabodetabek region: stations, lines, interchange hubs, timetables, and fares across Commuter Line (KCI), MRT Jakarta, LRT Jakarta, LRT Jabodebek, and TransJakarta.',
+        'Data transit Jakarta dan Jabodetabek: stasiun, lin, pumpunan moda, jadwal, dan tarif dari Commuter Line (KCI), MRT Jakarta, LRT Jakarta, LRT Jabodebek, dan TransJakarta.',
         '',
-        '### Response envelope',
-        'Every response — success or failure — is wrapped in the same object. `status` mirrors the HTTP status code. On success `data` is set; on failure `error` is set with a machine-readable `code`.',
+        '### Bentuk response',
+        'Semua response, berhasil atau gagal, dibungkus object yang sama. `status` mengikuti HTTP status code-nya. Kalau berhasil `data` yang keisi; kalau gagal `error` yang keisi, lengkap dengan `code` yang bisa dibaca mesin.',
         '',
         '```json',
         '{ "status": 200, "data": { } }',
         '{ "status": 404, "error": { "code": "NOT_FOUND", "message": "Not found" } }',
         '```',
         '',
-        '### Identifiers',
-        'A station id is `{operatorCode}-{stationCode}`, e.g. `KCI-AC`. Station codes are unique per operator, not globally, so most routes take the operator and the code separately. Fare lookups take full ids.',
+        '### Identifier',
+        'Station id bentuknya `{operatorCode}-{stationCode}`, misalnya `KCI-AC`. Kode stasiun unik per operator, bukan secara global, jadi kebanyakan route minta operator dan kodenya terpisah. Buat cek tarif, pakai id lengkapnya.',
         '',
-        '### Authentication and stability',
-        'The read endpoints documented here need no authentication. Undocumented routes are not part of the public surface — in particular anything under `/_internal` is shaped for commute.shiorilabs.id and may change shape without notice.',
+        '### Autentikasi dan stabilitas',
+        'Endpoint baca yang didokumentasikan di sini nggak butuh autentikasi. Route yang nggak didokumentasikan bukan bagian dari API publik, khususnya apa pun di bawah `/_internal`, yang dibentuk buat commute.shiorilabs.id dan bisa berubah kapan aja tanpa pemberitahuan.',
         '',
-        '### Reading this',
-        'A browsable version of this document is at [data.commute.shiorilabs.id/docs](https://data.commute.shiorilabs.id/docs).'
+        '### Baca versi web-nya',
+        'Versi yang enak dibaca dari dokumen ini ada di [data.commute.shiorilabs.id/docs](https://data.commute.shiorilabs.id/docs).'
       ].join('\n'),
       contact: { name: 'Commute', url: 'https://commute.shiorilabs.id' },
       license: { name: 'MIT', identifier: 'MIT' }
@@ -91,11 +91,11 @@ app.get('/openapi.json', openAPIRouteHandler(app, {
     // credentials. Stating that beats leaving it unsaid.
     security: [],
     tags: [
-      { name: 'Stations', description: 'Stations, their timetables, and transfers between them.' },
-      { name: 'Lines', description: 'Line structure, including branches and loops.' },
-      { name: 'Hubs', description: 'Interchange complexes grouping several stations.' },
-      { name: 'Fares', description: 'Fare and route between two stations.' },
-      { name: 'Operators', description: 'Transit operators and the lines they run.' }
+      { name: 'Stasiun', description: 'Stasiun, jadwalnya, dan transfer antar stasiun.' },
+      { name: 'Lin', description: 'Struktur lin, termasuk percabangan dan loop.' },
+      { name: 'Pumpunan Moda', description: 'Kompleks interchange yang menggabungkan beberapa stasiun.' },
+      { name: 'Tarif', description: 'Tarif dan rute antara dua stasiun.' },
+      { name: 'Operator', description: 'Operator transit dan lin yang mereka jalankan.' }
     ]
   },
   excludeStaticFile: true,

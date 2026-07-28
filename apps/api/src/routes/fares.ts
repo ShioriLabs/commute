@@ -54,19 +54,19 @@ export function fareCacheKey(fromId: string, toId: string, context: FareContext,
 app.get(
   '/:from/:to',
   doc({
-    summary: 'Get fare and route between two stations',
-    description: 'Plans a journey and prices it. `legs` describe the trip as a rider experiences it — rides and the walks between them; `segments` describe how it is charged, which differs because operators bill per continuous run on their own network. Integrated-fare capping is already applied to `totalFare`.',
-    tag: 'Fares',
+    summary: 'Tarif dan rute antara dua stasiun',
+    description: 'Menyusun rute perjalanan sekaligus menghitung tarifnya. `legs` menggambarkan perjalanan dari sisi penumpang, yaitu naik kereta dan jalan kaki di antaranya; `segments` menggambarkan cara penagihannya, yang beda karena tiap operator menagih per rangkaian perjalanan di jaringannya sendiri. Tarif integrasi sudah diperhitungkan di `totalFare`.',
+    tag: 'Tarif',
     data: FareResultSchema,
     parameters: [
-      pathParam('from', 'Origin station id, `{operator}-{code}`.', 'KCI-SUD'),
-      pathParam('to', 'Destination station id.', 'MRTJ-LBB'),
-      queryParam('paymentMethod', 'Selects which tariff applies. Defaults to the standard stored-value fare.'),
-      queryParam('at', 'ISO 8601 timestamp for the journey, used to pick peak or off-peak pricing. Defaults to now.', '2026-07-28T08:00:00Z')
+      pathParam('from', 'Station id asal, `{operator}-{code}`.', 'KCI-SUD'),
+      pathParam('to', 'Station id tujuan.', 'MRTJ-LBB'),
+      queryParam('paymentMethod', 'Menentukan tarif mana yang dipakai. Default-nya tarif kartu uang elektronik biasa.'),
+      queryParam('at', 'Timestamp ISO 8601 buat perjalanannya, dipakai buat menentukan tarif peak atau off-peak. Default-nya waktu sekarang.', '2026-07-28T08:00:00Z')
     ],
     errors: {
-      404: 'Either station is unknown, no route exists between them, or origin and destination are the same (`SAME_STATION`).',
-      500: 'Fare computation failed (`DATABASE_ERROR`).'
+      404: 'Salah satu stasiunnya nggak dikenal, nggak ada rute di antara keduanya, atau asal dan tujuannya sama (`SAME_STATION`).',
+      500: 'Perhitungan tarif gagal (`DATABASE_ERROR`).'
     }
   }),
   async (c) => {

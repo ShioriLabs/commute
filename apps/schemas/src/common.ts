@@ -32,14 +32,14 @@ const amenityTypes = Object.keys(AMENITY_TYPES) as ConstantAmenityType[]
 export const OperatorCodeSchema = v.pipe(
   v.picklist(operatorCodes),
   v.title('Operator code'),
-  v.description('Transit operator. `NUL` is an internal placeholder and never appears in responses.'),
+  v.description('Operator transit. `NUL` cuma placeholder internal dan nggak pernah muncul di response.'),
   v.metadata({ examples: ['KCI', 'MRTJ'] })
 )
 
 export const RegionCodeSchema = v.pipe(
   v.picklist(regionCodes),
   v.title('Region code'),
-  v.description('Region, named for the nearest major airport\'s IATA code. `CGK` is Jabodetabek.'),
+  v.description('Wilayah, dinamai dari kode IATA bandara besar terdekat. `CGK` itu Jabodetabek.'),
   v.metadata({ examples: ['CGK'] })
 )
 
@@ -72,7 +72,7 @@ export const LineSchema = v.pipe(
     lineCode: v.pipe(v.string(), v.metadata({ examples: ['C'] })),
     colorCode: v.pipe(
       v.string(),
-      v.description('Hex colour used for this line\'s roundel and branding.'),
+      v.description('Warna hex buat roundel dan branding lin ini.'),
       v.metadata({ examples: ['#25B8EB'] })
     )
   }),
@@ -93,7 +93,7 @@ export const LineSchema = v.pipe(
 export const LineKeySchema = v.pipe(
   v.string(),
   v.title('Line key'),
-  v.description('`OPERATOR:CODE`, resolved against the line dictionary from `/operators`.'),
+  v.description('`OPERATOR:CODE`, dicocokkan ke kamus lin dari `/operators`.'),
   v.metadata({ examples: ['KCI:C', 'MRTJ:M'] })
 )
 
@@ -101,7 +101,7 @@ export const ErrorSchema = v.pipe(
   v.object({
     code: v.pipe(
       v.string(),
-      v.description('Machine-readable error code, e.g. `SAME_STATION`, `NOT_FOUND`.'),
+      v.description('Kode error yang bisa dibaca mesin, misalnya `SAME_STATION`, `NOT_FOUND`.'),
       v.metadata({ examples: ['NOT_FOUND'] })
     ),
     message: v.pipe(v.string(), v.metadata({ examples: ['Not found'] }))
@@ -120,7 +120,7 @@ export const ErrorSchema = v.pipe(
  */
 export function Envelope<T extends v.GenericSchema>(data: T) {
   return v.object({
-    status: v.pipe(v.number(), v.description('Mirrors the HTTP status code.'), v.metadata({ examples: [200] })),
+    status: v.pipe(v.number(), v.description('Sama dengan HTTP status code-nya.'), v.metadata({ examples: [200] })),
     data
   })
 }

@@ -16,13 +16,13 @@ const app = new Hono<{ Bindings: Bindings }>()
 app.get(
   '/:operator/:lineCode',
   doc({
-    summary: 'Get a line',
-    description: 'A line\'s full structure, ordered from origin. Simple lines are a single `TRUNK` segment; branching lines (Cikarang\'s loop, the Nambo ramp) add further segments describing where they join and rejoin.',
-    tag: 'Lines',
+    summary: 'Detail lin',
+    description: 'Struktur lengkap satu lin, urut dari stasiun awal. Lin sederhana cuma punya satu segmen `TRUNK`; lin bercabang (loop Cikarang, ramp Nambo) menambah segmen lain yang menjelaskan di mana cabangnya berpisah dan menyatu lagi.',
+    tag: 'Lin',
     data: LineDetailSchema,
-    parameters: [operatorParam, pathParam('lineCode', 'Line code, as returned by `/operators`.', 'C')],
+    parameters: [operatorParam, pathParam('lineCode', 'Kode lin, seperti yang dikembalikan `/operators`.', 'C')],
     errors: {
-      404: 'Unknown operator or line, or the line has no topology data yet (`NO_TOPOLOGY`).'
+      404: 'Operator atau lin nggak dikenal, atau lin-nya belum punya data topologi (`NO_TOPOLOGY`).'
     }
   }),
   async (c) => {

@@ -17,27 +17,27 @@ export const SearchableSchema = v.pipe(
   v.object({
     type: SearchableTypeSchema,
     title: v.pipe(v.string(), v.metadata({ examples: ['Dukuh Atas'] })),
-    to: v.pipe(v.string(), v.description('App-relative link for this result.'), v.metadata({ examples: ['/stations/KCI/AC'] })),
+    to: v.pipe(v.string(), v.description('Link relatif ke aplikasi buat hasil ini.'), v.metadata({ examples: ['/stations/KCI/AC'] })),
     keywords: v.pipe(
       v.array(v.string()),
-      v.description('Lowercased match targets. Built server-side because several cannot be derived from the title: hub member codes, and the folded-away names of directional halte pairs.')
+      v.description('Target pencocokan dalam huruf kecil. Dibangun di server karena sebagiannya nggak bisa diturunkan dari judul: kode stasiun anggota pumpunan moda, dan nama pasangan halte berarah yang digabung.')
     ),
     subtitle: v.optional(v.string()),
     body: v.pipe(
       v.optional(v.array(v.string())),
-      v.description('Keys into the response\'s `lines` dictionary, operator-qualified ("KCI:C").')
+      v.description('Key ke kamus `lines` di response ini, pakai awalan operator ("KCI:C").')
     ),
     data: v.pipe(
       v.optional(v.record(v.string(), v.string())),
-      v.description('Identifiers for the underlying record — `station-id` or `hub-id`.')
+      v.description('Identifier buat data aslinya: `station-id` atau `hub-id`.')
     ),
     operator: v.pipe(
       v.optional(OperatorCodeSchema),
-      v.description('Absent on hubs, which span operators.')
+      v.description('Nggak ada di pumpunan moda, yang mencakup beberapa operator.')
     ),
     score: v.pipe(
       v.optional(v.number()),
-      v.description('Popularity. Omitted when 0; read it as `?? 0`.')
+      v.description('Popularitas. Dihilangkan kalau 0; baca aja pakai `?? 0`.')
     )
   }),
   v.title('Searchable')
@@ -46,7 +46,7 @@ export const SearchableSchema = v.pipe(
 export const SearchableLineSchema = v.pipe(
   v.object({
     name: v.string(),
-    lineCode: v.pipe(v.string(), v.description('Bare code, for the roundel glyph — the dictionary key is operator-qualified.')),
+    lineCode: v.pipe(v.string(), v.description('Kode polos, buat glyph di roundel. Key kamusnya sendiri pakai awalan operator.')),
     colorCode: v.string(),
     operator: OperatorCodeSchema
   }),

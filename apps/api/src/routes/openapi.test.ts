@@ -55,10 +55,18 @@ describe('GET /openapi.json', () => {
     expect(spec.servers?.[0]?.url).toBe('https://api.commute.shiorilabs.id')
   })
 
+  /*
+   * The prose is Indonesian, so this asserts on the parts that do not
+   * translate — the field names and the worked JSON example. Those are what a
+   * reader actually needs from this section, and they stay stable if the
+   * wording is ever rephrased.
+   */
   it('explains the response envelope, which every route shares', () => {
-    expect(spec.info.description).toContain('envelope')
-    expect(spec.info.description).toContain('data')
-    expect(spec.info.description).toContain('error')
+    expect(spec.info.description).toContain('`status`')
+    expect(spec.info.description).toContain('`data`')
+    expect(spec.info.description).toContain('`error`')
+    expect(spec.info.description).toContain('"status": 200')
+    expect(spec.info.description).toContain('"code": "NOT_FOUND"')
   })
 })
 

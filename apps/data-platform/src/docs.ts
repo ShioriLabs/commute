@@ -1,13 +1,15 @@
 import './style.css'
+import { createDotField } from './docs-field'
 
 /*
  * The only script on the reference page.
  *
  * Everything readable is already in the HTML — endpoints, schemas, examples —
- * rendered at build time by scripts/build-docs.ts. This adds a filter box and
- * makes a deep link open the endpoint it points at. If it never runs, the page
- * still works: `<details>` toggles natively and the filter input simply does
- * nothing.
+ * rendered at build time by scripts/build-docs.ts. This adds a filter box,
+ * makes a deep link open the endpoint it points at, and paints the two
+ * decorative dot fields. If it never runs, the page still works: `<details>`
+ * toggles natively, the filter input simply does nothing, and the canvases stay
+ * empty without leaving a gap (they are sized by CSS, not by their content).
  */
 
 const filter = document.querySelector<HTMLInputElement>('#filter')
@@ -65,3 +67,52 @@ function openFromHash(): void {
 
 openFromHash()
 window.addEventListener('hashchange', openFromHash)
+
+// ── the dot fields ──────────────────────────────────────────────────────────
+
+/*
+ * Both canvases are decoration: every endpoint, schema and example is already
+ * in the markup, so nothing here can delay the text paint. That matters more on
+ * this page than on the homepage — people arrive at a reference from an error
+ * message, not from a landing page they chose to look at.
+ */
+
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches
+
+const mastheadCanvas = document.querySelector<HTMLCanvasElement>('#docs-field')
+const wordmarkCanvas = document.querySelector<HTMLCanvasElement>('#docs-wordmark')
+
+if (mastheadCanvas) {
+  const field = createDotField(mastheadCanvas, 'masthead')
+  // Deferred off the critical path: the lattice appearing one frame late is
+  // invisible, blocking first paint is not. requestIdleCallback is absent in
+  // Safari, hence the timeout.
+  const boot = (): void => field?.paintStatic()
+  if ('requestIdleCallback' in window) requestIdleCallback(boot, { timeout: 500 })
+  else setTimeout(boot, 1)
+}
+
+if (wordmarkCanvas) {
+  const field = createDotField(wordmarkCanvas, 'wordmark')
+
+  if (field && reduceMotion) {
+    // Revealed, not hidden. gl/renderer.ts collapses the same ease to an
+    // instant snap rather than withholding the wordmark, and the footer is the
+    // page's sign-off — someone who asked for less motion should still get it.
+    field.paintStatic()
+  } else if (field) {
+    /*
+     * The single most important perf decision on the page: the footer sits
+     * thousands of pixels down, so someone who opened the reference to check
+     * one field name never runs this loop at all. It starts when the footer is
+     * actually on screen and stops the moment it leaves.
+     */
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) field.start()
+        else field.stop()
+      }
+    }, { rootMargin: '100px' })
+    observer.observe(wordmarkCanvas)
+  }
+}

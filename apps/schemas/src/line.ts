@@ -6,16 +6,16 @@ export const LineStationSchema = v.pipe(
   v.object({
     id: v.pipe(v.string(), v.metadata({ examples: ['KCI-SUD'] })),
     code: v.string(),
-    name: v.pipe(v.string(), v.description('Display name.')),
+    name: v.pipe(v.string(), v.description('Nama tampilan.')),
     stationNumber: v.pipe(
       v.string(),
-      v.description('Position label along the line, e.g. `C13`.'),
+      v.description('Label posisi di sepanjang lin, misalnya `C13`.'),
       v.metadata({ examples: ['C12'] })
     ),
     isInterchange: v.boolean(),
     otherLines: v.pipe(
       v.array(LineKeySchema),
-      v.description('Other lines of the SAME operator calling here, as line keys; the current line is excluded. Cross-operator connections live on the station\'s transfers.')
+      v.description('Lin lain dari operator yang SAMA yang berhenti di sini, berupa line key; lin yang sedang dibuka nggak termasuk. Sambungan lintas operator ada di transfer stasiunnya.')
     )
   }),
   v.title('LineStation')
@@ -25,12 +25,12 @@ export const LineSegmentSchema = v.pipe(
   v.object({
     kind: v.pipe(
       v.picklist(['TRUNK', 'CONTINUATION', 'RAMP', 'LOOP']),
-      v.description('`TRUNK` — the main path. `CONTINUATION` — a branch extending the trunk that reads as the mainline. `RAMP` — a side branch forking off. `LOOP` — a branch closing back onto the trunk.'),
+      v.description('`TRUNK`: jalur utama. `CONTINUATION`: cabang yang meneruskan jalur utama dan terbaca sebagai mainline. `RAMP`: cabang samping yang memisah. `LOOP`: cabang yang menyatu kembali ke jalur utama.'),
       v.metadata({ examples: ['TRUNK'] })
     ),
     joinsAtCode: v.pipe(
       v.nullable(v.string()),
-      v.description('Station code where this branch leaves the trunk; null for `TRUNK`.')
+      v.description('Kode stasiun tempat cabang ini berpisah dari jalur utama; null buat `TRUNK`.')
     ),
     stations: v.array(LineStationSchema)
   }),
@@ -45,7 +45,7 @@ export const LineDetailSchema = v.pipe(
     line: LineSchema,
     segments: v.pipe(
       v.array(LineSegmentSchema),
-      v.description('The line\'s ordered structure. A simple line is one `TRUNK`; branching lines add further segments.')
+      v.description('Struktur lin secara urut. Lin sederhana cuma punya satu `TRUNK`; lin bercabang menambah segmen lain.')
     )
   }),
   v.title('LineDetail')

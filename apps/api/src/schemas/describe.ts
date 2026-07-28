@@ -7,7 +7,7 @@ import { Envelope, ErrorResponseSchema } from '@commute/schemas'
  * nested wall of OpenAPI boilerplate.
  */
 
-type Tag = 'Stations' | 'Hubs' | 'Lines' | 'Fares' | 'Operators'
+type Tag = 'Stasiun' | 'Pumpunan Moda' | 'Lin' | 'Tarif' | 'Operator'
 
 /*
  * `target` matters: the converter defaults to draft-07, which encodes a tuple as
@@ -32,7 +32,7 @@ interface DocOptions {
 
 export function doc({ summary, description, tag, data, errors, parameters }: DocOptions) {
   const responses = {
-    200: { description: 'Success.', content: json(Envelope(data)) },
+    200: { description: 'Berhasil.', content: json(Envelope(data)) },
     ...Object.fromEntries(
       Object.entries(errors ?? {}).map(([status, message]) => [
         status,
@@ -71,5 +71,5 @@ export function queryParam(name: string, description: string, example?: string) 
   }
 }
 
-export const operatorParam = pathParam('operator', 'Operator code, e.g. `KCI`, `MRTJ`, `TJ`.', 'KCI')
-export const stationCodeParam = pathParam('stationCode', 'Operator-scoped station code — not the full station id.', 'SUD')
+export const operatorParam = pathParam('operator', 'Kode operator, misalnya `KCI`, `MRTJ`, `TJ`.', 'KCI')
+export const stationCodeParam = pathParam('stationCode', 'Kode stasiun dalam lingkup operator, bukan station id lengkap.', 'SUD')

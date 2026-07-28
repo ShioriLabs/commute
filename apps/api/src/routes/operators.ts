@@ -12,9 +12,9 @@ const app = new Hono<{ Bindings: Bindings }>()
 app.get(
   '/',
   doc({
-    summary: 'List operators',
-    description: 'Every transit operator, each with the lines it runs. A good first call — the codes here appear throughout the rest of the API.',
-    tag: 'Operators',
+    summary: 'Daftar operator',
+    description: 'Semua operator transit, lengkap dengan lin yang dijalankan. Enaknya dipanggil duluan, karena kode di sini dipakai di seluruh API.',
+    tag: 'Operator',
     data: v.array(OperatorWithLinesSchema)
   }),
   async (c) => {

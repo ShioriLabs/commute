@@ -29,9 +29,9 @@ function toPublicHub(hub: NonNullable<RepositoryHub>) {
 app.get(
   '/',
   doc({
-    summary: 'List hubs',
-    description: 'Interchange complexes that group several stations under one name — Dukuh Atas, for instance, spans Sudirman, BNI City, and the MRT and LRT stations. Ordered by prominence.',
-    tag: 'Hubs',
+    summary: 'Daftar pumpunan moda',
+    description: 'Kompleks interchange yang menggabungkan beberapa stasiun dalam satu nama. Dukuh Atas, misalnya, mencakup Sudirman, BNI City, plus stasiun MRT dan LRT. Diurutkan dari yang paling ramai.',
+    tag: 'Pumpunan Moda',
     data: v.array(HubSchema)
   }),
   async (c) => {
@@ -68,12 +68,12 @@ app.get(
 app.get(
   '/:slug',
   doc({
-    summary: 'Get a hub',
-    description: 'One interchange complex with its member stations.',
-    tag: 'Hubs',
+    summary: 'Detail pumpunan moda',
+    description: 'Satu kompleks interchange beserta stasiun anggotanya.',
+    tag: 'Pumpunan Moda',
     data: HubSchema,
-    parameters: [pathParam('slug', 'Hub URL key, as returned by `/hubs`.', 'dukuh-atas')],
-    errors: { 404: 'No hub with that slug.' }
+    parameters: [pathParam('slug', 'Kunci URL pumpunan moda, seperti yang dikembalikan `/hubs`.', 'dukuh-atas')],
+    errors: { 404: 'Nggak ada pumpunan moda dengan slug itu.' }
   }),
   async (c) => {
     const slug = c.req.param('slug')
