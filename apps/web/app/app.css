@@ -121,6 +121,46 @@ body {
   }
 }
 
+/* Map page chrome (title pill, floating buttons), staggered in once the
+   manifest resolves. Shorter travel than .home-enter-nav: these are small
+   floating elements a few pixels tall, where 16px of rise would read as the
+   chrome sliding in from off-screen rather than settling into place.
+   The canvas underneath is deliberately not animated — it is the content, and
+   fading it would compete with tile loading. */
+.map-chrome-enter {
+  opacity: 0;
+  animation: map-chrome-enter 300ms var(--ease-ios-spring) forwards;
+}
+
+@keyframes map-chrome-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Attribution popover. Scales from its own bottom-right corner — the button
+   that opens it — so it reads as growing out of that control rather than
+   appearing beside it. */
+.map-popover-enter {
+  animation: map-popover-enter 200ms var(--ease-ios-spring) forwards;
+}
+
+@keyframes map-popover-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
 /* Content replacing a loading skeleton. Opacity only, no transform: the
    skeleton is sized to approximate what lands here, so any movement would
    read as the content correcting itself rather than arriving. Short, because
@@ -201,10 +241,19 @@ body {
   .home-enter,
   .home-enter-nav,
   .content-fade,
+  .map-chrome-enter,
   .wordmark-letter {
     animation: none;
     animation-delay: 0s;
     opacity: 1;
+    transform: none;
+  }
+
+  /* Listed separately from the group above: this one does *not* start at
+     opacity 0 (the popover is only mounted when open), so it needs the
+     animation removed but no opacity restored. */
+  .map-popover-enter {
+    animation: none;
     transform: none;
   }
 

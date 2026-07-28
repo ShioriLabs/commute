@@ -8,6 +8,7 @@ import type { Station } from 'models/stations'
 import { fetcher } from 'utils/fetcher'
 import { hexToRgb01 } from 'utils/colors'
 import { haptic } from 'utils/haptics'
+import { staggerDelay, type StaggerOptions } from 'utils/stagger'
 import {
   createRenderer,
   hitTest,
@@ -80,7 +81,10 @@ export function meta() {
   const image = 'https://commute.shiorilabs.id/img/og-map.png'
   return [
     { title },
-    { name: 'theme-color', content: '#FFFFFF' },
+    // Matches the loading/error background, which is what's on screen while the
+    // manifest loads — and the rest of the app's pages, so the browser chrome
+    // doesn't shift colour on the way in.
+    { name: 'theme-color', content: '#FFF8F8' },
     { name: 'description', content: description },
     { property: 'og:title', content: title },
     { property: 'og:description', content: description },
@@ -93,6 +97,17 @@ export function meta() {
 
 const MAX_SCALE = 1.5
 const WHEEL_ZOOM_INTENSITY = 0.0015
+
+// One spec for all three floating buttons. 44px is the tap-target minimum;
+// recenter and attribution used to be 40.
+const MAP_BUTTON_CLASS
+  = 'rounded-full bg-white/90 backdrop-blur shadow-lg w-11 h-11 flex items-center justify-center cursor-pointer'
+
+// Chrome entrance stagger: title pill, then the three buttons. A short step —
+// four small elements that should read as one gesture arriving rather than as
+// a sequence — and a small offset so the chrome follows the map's first paint
+// instead of racing it.
+const MAP_CHROME_STAGGER: StaggerOptions = { step: 60, maxIndex: 4, offset: 60 }
 
 // Ceiling on the tile resolution we're willing to hold in memory.
 //
@@ -135,7 +150,7 @@ function clampTransform(
 }
 
 export default function MapPage() {
-  const { data: manifest, error } = useSWR<Manifest>(
+  const { data: manifest, error, mutate: mutateManifest } = useSWR<Manifest>(
     '/maps/fdtj/manifest.json',
     (url: string) => fetch(url).then(r => r.json())
   )
@@ -338,6 +353,18 @@ export default function MapPage() {
     spot.ringFrom = spot.lastRing
     dirtyRef.current = true
   }, [])
+
+  // Escape closes the attribution popover. Outside-dismissal is already
+  // covered: the popover stops pointer propagation, and a canvas tap clears it
+  // at the top of tryHitTest.
+  useEffect(() => {
+    if (!attributionOpen) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setAttributionOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [attributionOpen])
 
   // Backstop: if the selection is cleared through any path that didn't go
   // through a sheet dismiss (the sheets' onDismissStart handles the common
@@ -1120,11 +1147,29 @@ export default function MapPage() {
     return () => el.removeEventListener('wheel', handler)
   }, [manifest, minScale, viewportSize.w, viewportSize.h, mapW, mapH])
 
+  // The three full-screen states below share the app's page background
+  // (#FFF8F8) rather than white, so routing into and out of the map doesn't
+  // flash against the rest of the app, and its primary-action styling.
+  //
+  // They deliberately don't route through the shared <EmptyState>: that
+  // component is an in-page block built around an illustration and a
+  // max-w-3xl column, and these are full-screen takeovers. Same vocabulary,
+  // different structure.
   if (error) {
     return (
-      <main className="w-screen h-screen flex items-center justify-center flex-col p-4 bg-white" aria-live="polite">
-        <p className="text-center text-lg">Gagal memuat peta integrasi.</p>
-        <Link to="/" className="mt-6 px-4 py-2 rounded-lg bg-rose-100 text-pink-800 font-semibold">
+      <main className="w-screen h-screen flex items-center justify-center flex-col p-4 bg-[#FFF8F8]" aria-live="polite">
+        <p className="text-center text-lg font-semibold text-slate-800">Gagal memuat peta integrasi.</p>
+        <p className="mt-1 text-center text-sm text-slate-500">
+          Periksa koneksimu, lalu coba lagi.
+        </p>
+        <button
+          type="button"
+          onClick={() => { void mutateManifest() }}
+          className="mt-6 bg-[#F55875] text-white font-bold px-6 py-2 rounded-xl cursor-pointer"
+        >
+          Coba Lagi
+        </button>
+        <Link to="/" className="mt-3 px-4 py-2 text-sm text-slate-500">
           Kembali ke Beranda
         </Link>
       </main>
@@ -1133,7 +1178,7 @@ export default function MapPage() {
 
   if (!manifest) {
     return (
-      <main className="w-screen h-screen flex items-center justify-center bg-white" aria-live="assertive">
+      <main className="w-screen h-screen flex items-center justify-center bg-[#FFF8F8]" aria-live="assertive">
         <div className="rounded-full border-4 border-slate-600 border-t-transparent w-12 h-12 animate-spin" aria-label="Memuat peta..." />
       </main>
     )
@@ -1175,9 +1220,9 @@ export default function MapPage() {
       {recoveryState === 'fatal' && (
         <div
           role="alert"
-          className="absolute inset-0 z-30 bg-white flex flex-col items-center justify-center p-4"
+          className="absolute inset-0 z-30 bg-[#FFF8F8] flex flex-col items-center justify-center p-4"
         >
-          <p className="text-center text-lg">Peta terputus.</p>
+          <p className="text-center text-lg font-semibold text-slate-800">Peta terputus.</p>
           <p className="mt-1 text-center text-sm text-slate-500">
             Perangkat kehabisan memori grafis. Tutup aplikasi lain, lalu coba lagi.
           </p>
@@ -1187,7 +1232,7 @@ export default function MapPage() {
               recovery.reset()
               recovery.notifyLost()
             }}
-            className="mt-6 px-4 py-2 rounded-lg bg-rose-100 text-pink-800 font-semibold cursor-pointer"
+            className="mt-6 bg-[#F55875] text-white font-bold px-6 py-2 rounded-xl cursor-pointer"
           >
             Muat ulang peta
           </button>
@@ -1197,54 +1242,83 @@ export default function MapPage() {
         </div>
       )}
 
+      {/* Floating chrome. The full-width bar this replaced spanned the viewport
+          to keep its title clear of the close button; a pill has to say so
+          itself, hence the max-width and truncation.
+
+          Only the pill follows `chromeVisible`. The buttons below deliberately
+          stay put during pan/zoom: close is the page's escape hatch and must
+          never need a tap to reveal it first, and recenter is most useful
+          precisely while the user is zoomed in and moving. They share a visual
+          language, not a visibility rule. */}
       <div
-        className={`absolute inset-x-0 top-0 z-10 bg-white/50 backdrop-blur border-b-2 border-b-gray-50/20 transition-opacity duration-200 ${chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        className={`map-chrome-enter absolute top-4 left-4 z-10 max-w-[calc(100%-8rem)] transition-opacity duration-200 ${chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        style={{ animationDelay: staggerDelay(0, MAP_CHROME_STAGGER) }}
       >
-        <div className="p-8 pb-4 pr-20 max-w-3xl mx-auto pointer-events-auto flex flex-col">
-          <h1 className="font-bold text-xl">Peta Integrasi</h1>
-        </div>
+        <h1 className="rounded-full bg-white/90 backdrop-blur shadow-lg px-4 py-2.5 font-bold text-base text-slate-800 truncate">
+          Peta Integrasi
+        </h1>
       </div>
 
-      <button
-        type="button"
-        onClick={handleBackButton}
-        aria-label="Tutup halaman peta"
-        className="absolute top-4 right-4 z-20 rounded-full bg-white/90 backdrop-blur shadow-lg w-11 h-11 flex items-center justify-center cursor-pointer"
+      {/* The entrance rides a wrapper on each button rather than the button
+          itself: `.map-chrome-enter` animates transform, and the recenter
+          button below owns an opacity transition of its own. Keeping the two
+          on separate elements stops them fighting. */}
+      <div
+        className="map-chrome-enter absolute top-4 right-4 z-20"
+        style={{ animationDelay: staggerDelay(1, MAP_CHROME_STAGGER) }}
       >
-        <XIcon weight="bold" className="w-6 h-6 text-slate-700" />
-      </button>
+        <button
+          type="button"
+          onClick={handleBackButton}
+          aria-label="Tutup halaman peta"
+          className={MAP_BUTTON_CLASS}
+        >
+          <XIcon weight="bold" className="w-5 h-5 text-slate-700" />
+        </button>
+      </div>
 
-      <button
-        type="button"
-        onClick={() => {
-          haptic()
-          flyTo(
-            clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale),
-            450
-          )
-        }}
-        aria-label="Kembali ke tampilan penuh"
-        tabIndex={isZoomedIn ? 0 : -1}
-        className={`absolute bottom-4 right-16 z-20 rounded-full bg-white/90 backdrop-blur shadow-lg w-10 h-10 flex items-center justify-center cursor-pointer transition-opacity duration-200 ${isZoomedIn ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+      <div
+        className="map-chrome-enter absolute bottom-4 right-16 z-20"
+        style={{ animationDelay: staggerDelay(2, MAP_CHROME_STAGGER) }}
       >
-        <CornersInIcon weight="bold" className="w-5 h-5 text-slate-700" />
-      </button>
+        <button
+          type="button"
+          onClick={() => {
+            haptic()
+            flyTo(
+              clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale),
+              450
+            )
+          }}
+          aria-label="Kembali ke tampilan penuh"
+          tabIndex={isZoomedIn ? 0 : -1}
+          className={`${MAP_BUTTON_CLASS} transition-opacity duration-200 ${isZoomedIn ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        >
+          <CornersInIcon weight="bold" className="w-5 h-5 text-slate-700" />
+        </button>
+      </div>
 
-      <button
-        type="button"
-        onClick={() => setAttributionOpen(o => !o)}
-        aria-label="Lihat atribusi peta"
-        aria-expanded={attributionOpen}
-        className="absolute bottom-4 right-4 z-20 rounded-full bg-white/90 backdrop-blur shadow-lg w-10 h-10 flex items-center justify-center cursor-pointer"
+      <div
+        className="map-chrome-enter absolute bottom-4 right-4 z-20"
+        style={{ animationDelay: staggerDelay(3, MAP_CHROME_STAGGER) }}
       >
-        <InfoIcon weight="bold" className="w-5 h-5 text-slate-700" />
-      </button>
+        <button
+          type="button"
+          onClick={() => setAttributionOpen(o => !o)}
+          aria-label="Lihat atribusi peta"
+          aria-expanded={attributionOpen}
+          className={MAP_BUTTON_CLASS}
+        >
+          <InfoIcon weight="bold" className="w-5 h-5 text-slate-700" />
+        </button>
+      </div>
 
       {attributionOpen && (
         <div
           role="dialog"
           aria-label="Atribusi peta"
-          className="absolute bottom-16 right-4 z-20 bg-white rounded-lg shadow-xl border border-slate-200 p-4 max-w-xs text-sm text-slate-700"
+          className="map-popover-enter absolute bottom-16 right-4 z-20 bg-white rounded-xl shadow-xl border border-slate-200 p-4 max-w-xs text-sm text-slate-700 origin-bottom-right"
           onPointerDown={e => e.stopPropagation()}
         >
           <div className="font-semibold mb-1">Peta Integrasi Jakarta</div>
