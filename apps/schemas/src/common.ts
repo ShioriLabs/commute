@@ -94,7 +94,7 @@ export const LineKeySchema = v.pipe(
   v.string(),
   v.title('Line key'),
   v.description('`OPERATOR:CODE`, resolved against the line dictionary from `/operators`.'),
-  v.metadata({ examples: ['KCI:C', 'TJ:1'] })
+  v.metadata({ examples: ['KCI:C', 'MRTJ:M'] })
 )
 
 export const ErrorSchema = v.pipe(

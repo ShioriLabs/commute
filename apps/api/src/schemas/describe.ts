@@ -72,4 +72,4 @@ export function queryParam(name: string, description: string, example?: string) 
 }
 
 export const operatorParam = pathParam('operator', 'Operator code, e.g. `KCI`, `MRTJ`, `TJ`.', 'KCI')
-export const stationCodeParam = pathParam('stationCode', 'Operator-scoped station code — not the full station id.', 'AC')
+export const stationCodeParam = pathParam('stationCode', 'Operator-scoped station code — not the full station id.', 'SUD')

@@ -6,22 +6,22 @@ const stationIdentity = {
   id: v.pipe(
     v.string(),
     v.description('Stable identifier, `{operatorCode}-{stationCode}`. Use this for fare lookups.'),
-    v.metadata({ examples: ['KCI-AC'] })
+    v.metadata({ examples: ['KCI-SUDB'] })
   ),
   name: v.pipe(
     v.string(),
     v.description('Display name — what to show a rider.'),
-    v.metadata({ examples: ['Ancol'] })
+    v.metadata({ examples: ['BNI City'] })
   ),
   officialName: v.pipe(
     v.string(),
-    v.description('The operator\'s own spelling, which often differs in substance rather than just casing — MRT Jakarta publishes "Stasiun Lebak Bulus" for the station displayed as "Lebak Bulus Bank Syariah Indonesia". Useful as a search alias.'),
-    v.metadata({ examples: ['ANCOL'] })
+    v.description('The operator\'s own spelling, which often differs in substance rather than just casing — KCI still publishes "SUDIRMAN BARU" for the station displayed as "BNI City". Worth indexing as a search alias: it is how many riders still refer to these stations.'),
+    v.metadata({ examples: ['SUDIRMAN BARU'] })
   ),
   code: v.pipe(
     v.string(),
     v.description('Operator-scoped station code — unique per operator, not globally.'),
-    v.metadata({ examples: ['AC'] })
+    v.metadata({ examples: ['SUDB'] })
   ),
   operator: OperatorCodeSchema,
   lines: v.pipe(
@@ -38,11 +38,11 @@ export const StationSchema = v.pipe(
     latitude: v.pipe(
       v.nullable(v.number()),
       v.description('WGS84 latitude; null where coordinates have not been surveyed.'),
-      v.metadata({ examples: [-6.128] })
+      v.metadata({ examples: [-6.2015] })
     ),
     longitude: v.pipe(
       v.nullable(v.number()),
-      v.metadata({ examples: [106.8451] })
+      v.metadata({ examples: [106.8196] })
     ),
     score: v.pipe(
       v.number(),
@@ -77,7 +77,7 @@ const TransferBaseEntries = {
   distanceM: v.pipe(
     v.number(),
     v.description('Walking distance in metres.'),
-    v.metadata({ examples: [200] })
+    v.metadata({ examples: [90] })
   ),
   // Null far more often than not — 13 of 15 sampled from production.
   notes: v.pipe(
@@ -128,10 +128,10 @@ export const ScheduleSchema = v.pipe(
     tripNumber: v.pipe(
       v.nullable(v.string()),
       v.description('Operator\'s trip/service number; null for operators that don\'t publish one.'),
-      v.metadata({ examples: ['1151'] })
+      v.metadata({ examples: ['5198B'] })
     ),
-    estimatedDeparture: v.pipe(v.string(), v.description('Local time, `HH:MM:SS`.'), v.metadata({ examples: ['05:42:00'] })),
-    boundFor: v.pipe(v.string(), v.description('Terminus this service heads toward.'), v.metadata({ examples: ['JAKARTAKOTA'] })),
+    estimatedDeparture: v.pipe(v.string(), v.description('Local time, `HH:MM:SS`.'), v.metadata({ examples: ['00:05:30'] })),
+    boundFor: v.pipe(v.string(), v.description('Terminus this service heads toward.'), v.metadata({ examples: ['Cikarang'] })),
     lineCode: v.string()
   }),
   v.title('Schedule')
@@ -158,7 +158,7 @@ export const CompactScheduleSchema = v.pipe(
   ),
   v.title('CompactSchedule'),
   v.description('`[tripNumber, minutesSinceMidnight]`. Trip number is null where the operator publishes none; minutes are local Asia/Jakarta time, 0–1439.'),
-  v.metadata({ examples: [['2200', 307]] })
+  v.metadata({ examples: [['5198B', 5]] })
 )
 
 const directionGroup = <T extends v.GenericSchema>(schedules: T, title: string) => v.pipe(

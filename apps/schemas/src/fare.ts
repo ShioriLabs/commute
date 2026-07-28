@@ -3,8 +3,8 @@ import { LineKeySchema, OperatorCodeSchema } from './common'
 
 export const FareStationSchema = v.pipe(
   v.object({
-    id: v.pipe(v.string(), v.metadata({ examples: ['KCI-AC'] })),
-    name: v.pipe(v.string(), v.metadata({ examples: ['Ancol'] }))
+    id: v.pipe(v.string(), v.metadata({ examples: ['KCI-SUD'] })),
+    name: v.pipe(v.string(), v.metadata({ examples: ['Sudirman'] }))
   }),
   v.title('FareStation')
 )
@@ -90,7 +90,7 @@ export const FareResultSchema = v.pipe(
     totalFare: v.pipe(
       v.nullable(v.number()),
       v.description('Total in rupiah, after any integrated-fare capping. Null when a fare cannot be computed for this pair.'),
-      v.metadata({ examples: [8000] })
+      v.metadata({ examples: [14000] })
     ),
     totalDistanceM: v.number(),
     transferCount: v.number()

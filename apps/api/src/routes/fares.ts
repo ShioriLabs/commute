@@ -59,8 +59,8 @@ app.get(
     tag: 'Fares',
     data: FareResultSchema,
     parameters: [
-      pathParam('from', 'Origin station id, `{operator}-{code}`.', 'KCI-AC'),
-      pathParam('to', 'Destination station id.', 'MRTJ-DKA'),
+      pathParam('from', 'Origin station id, `{operator}-{code}`.', 'KCI-SUD'),
+      pathParam('to', 'Destination station id.', 'MRTJ-LBB'),
       queryParam('paymentMethod', 'Selects which tariff applies. Defaults to the standard stored-value fare.'),
       queryParam('at', 'ISO 8601 timestamp for the journey, used to pick peak or off-peak pricing. Defaults to now.', '2026-07-28T08:00:00Z')
     ],

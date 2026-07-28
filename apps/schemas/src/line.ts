@@ -4,13 +4,13 @@ import { LineKeySchema, LineSchema, OperatorCodeSchema, OperatorSchema } from '.
 
 export const LineStationSchema = v.pipe(
   v.object({
-    id: v.pipe(v.string(), v.metadata({ examples: ['KCI-AC'] })),
+    id: v.pipe(v.string(), v.metadata({ examples: ['KCI-SUD'] })),
     code: v.string(),
     name: v.pipe(v.string(), v.description('Display name.')),
     stationNumber: v.pipe(
       v.string(),
       v.description('Position label along the line, e.g. `C13`.'),
-      v.metadata({ examples: ['C13'] })
+      v.metadata({ examples: ['C12'] })
     ),
     isInterchange: v.boolean(),
     otherLines: v.pipe(
