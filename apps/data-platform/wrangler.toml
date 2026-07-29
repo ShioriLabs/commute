@@ -3,3 +3,22 @@ compatibility_date = "2025-06-11"
 
 [assets]
 directory = "./dist"
+
+# Stated rather than inherited.
+#
+# The build emits a flat pair — index.html and docs.html — and three links on
+# the homepage point at `/docs`. That only resolves because asset serving maps a
+# clean path to its .html file, which is the default but was never written down
+# here; a default that three links depend on should be in the config, not in
+# someone's memory of the docs.
+#
+# auto-trailing-slash: /docs and /docs/ both serve docs.html, and / serves
+# index.html. drop-trailing-slash would 404 the trailing-slash form, which is
+# exactly the URL a browser produces when someone types the host and a path.
+html_handling = "auto-trailing-slash"
+
+# A miss should look like a miss. This is NOT a single-page app (that is
+# apps/web, which sets single-page-application because its router owns every
+# path) — here an unknown path really is unknown, and rewriting it to index.html
+# would answer a typo with a marketing page and a 200.
+not_found_handling = "none"
