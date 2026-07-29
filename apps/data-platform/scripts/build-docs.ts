@@ -123,6 +123,25 @@ const pathSplitHTML = (path: string): string => {
     + `<span class="font-semibold text-white">${pathHTML(path.slice(cut))}</span>`
 }
 
+/*
+ * The licence chip, linked where the identifier is one we know a canonical URL
+ * for. Falls back to plain text rather than guessing a URL from the name, so an
+ * unrecognised licence degrades to exactly what this used to render.
+ */
+const LICENSE_URL: Record<string, string> = {
+  'ODbL-1.0': 'https://opendatacommons.org/licenses/odbl/1-0/',
+  'MIT': 'https://opensource.org/licenses/MIT',
+  'CC-BY-4.0': 'https://creativecommons.org/licenses/by/4.0/',
+  'CC-BY-SA-4.0': 'https://creativecommons.org/licenses/by-sa/4.0/'
+}
+
+const licenseHTML = (license: { name: string } | undefined): string => {
+  if (!license) return ''
+  const url = LICENSE_URL[license.name]
+  if (!url) return ` · ${esc(license.name)}`
+  return ` · <a href="${esc(url)}" class="underline decoration-white/20 underline-offset-2 transition-colors hover:text-white/60 hover:decoration-white/40">${esc(license.name)}</a>`
+}
+
 const slug = (value: string): string =>
   value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
@@ -517,7 +536,13 @@ function render(spec: Spec): string {
             <code class="rounded border border-line/70 bg-plate px-2.5 py-1.5 font-mono text-[12px] text-white/70">${esc(server)}</code>
             <a href="${esc(server)}/openapi.json" class="rounded border border-line/70 px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-wider text-white/45 hover:border-accent/50 hover:text-white/80">openapi.json</a>
           </div>
-          <p class="mt-5 font-mono text-[10px] uppercase tracking-wider text-white/25">v${esc(spec.info.version)}${spec.info.license ? ` · ${esc(spec.info.license.name)}` : ''} · ${Object.keys(spec.paths).length} endpoint</p>
+          <!-- The licence is a link, not just a chip. This page renders only the
+               first paragraph of info.description, so the spec's own Lisensi
+               section never reaches it — an unexplained "ODbL-1.0" would be
+               the only mention, and the one term a data consumer most needs to
+               be able to look up. -->
+          <p class="mt-5 font-mono text-[10px] uppercase tracking-wider text-white/25">v${esc(spec.info.version)}${licenseHTML(spec.info.license)} · ${Object.keys(spec.paths).length} endpoint</p>
+          <p class="mt-2 max-w-[54ch] text-[12.5px] leading-relaxed text-white/35">Datanya bebas dipakai dan diolah, asal sumbernya tetap dicantumkan dan hasil olahannya dibagi dengan lisensi yang sama.</p>
         </header>
 
         <div class="mt-10 w-full max-w-[68ch]">

@@ -78,11 +78,24 @@ app.get('/openapi.json', openAPIRouteHandler(app, {
         '### Autentikasi dan stabilitas',
         'Semua endpoint yang ada di sini tidak butuh autentikasi. Yang tidak didokumentasikan di sini bukan bagian dari API publik, terutama yang ada di bawah `/_internal`. Itu dibuat khusus buat commute.shiorilabs.id dan bisa berubah sewaktu-waktu tanpa pemberitahuan.',
         '',
+        '### Lisensi',
+        'Datanya pakai [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/): bebas dipakai dan diolah, asal sumbernya tetap dicantumkan dan hasil olahannya dibagi dengan lisensi yang sama. Kode aplikasinya sendiri MIT.',
+        '',
         '### Baca versi web-nya',
         'Versi yang lebih enak dibaca ada di [data.commute.shiorilabs.id/docs](https://data.commute.shiorilabs.id/docs).'
       ].join('\n'),
       contact: { name: 'Commute', url: 'https://commute.shiorilabs.id' },
-      license: { name: 'MIT', identifier: 'MIT' }
+      /*
+       * ODbL, not MIT.
+       *
+       * Strictly, info.license describes the API DESCRIPTION DOCUMENT rather
+       * than the data it returns — but the thing a consumer of this API needs
+       * to know is what they may do with Jakarta transit data, and that is
+       * ODbL: attribute the source, share derived databases alike. The code in
+       * this repo stays MIT (see LICENSE.md); the Lisensi section above states
+       * both so the distinction is not left to inference.
+       */
+      license: { name: 'ODbL-1.0', identifier: 'ODbL-1.0' }
     },
     servers: [
       { url: 'https://api.commute.shiorilabs.id', description: 'Production' }
