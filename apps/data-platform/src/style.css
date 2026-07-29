@@ -263,12 +263,71 @@ body {
     }
   }
 
+  /* The hero's entrance. Named for the headline words it was built for, but it
+     carries the whole hero — subhead and buttons included — so everything there
+     arrives with the same weight.
+
+     Deliberately the app boot splash's animation (apps/web: .wordmark-letter)
+     rather than `.rise` with a shorter delay: 300ms ease-out over an explicit
+     overshoot, not 500ms of spring. Keep the two in sync.
+
+     No `display` here on purpose. The headline words need `inline-block` for
+     translateY to apply to them at all, but they carry Tailwind's own
+     `inline-block` for that — putting it in this rule would collapse the
+     subhead <p> to its text width and break its max-w-lg wrapping. */
+  .word {
+    opacity: 0;
+    /* ease-out per segment rather than --ease-ios-spring: the overshoot is
+       explicit in the keyframes, and a spring curve on top of it would compound
+       into a second, unintended bounce. */
+    animation: word 300ms ease-out forwards;
+  }
+
+  /* Same reasoning as `.rise` above — collapse the duration rather than using
+     `animation: none`, which would strand the headline at opacity 0. */
+  @media (prefers-reduced-motion: reduce) {
+    .word {
+      animation-duration: 1ms;
+    }
+  }
+
   /* Reveals the static evidence plates when there is no WebGL. Must live in the
      utilities layer, not components: the plates carry Tailwind's `hidden`
      utility so they stay out of the layout on the normal path, and an earlier
      layer loses to it regardless of selector specificity. */
   html[data-webgl="off"] .sign-static {
     display: grid;
+  }
+}
+
+@keyframes word {
+  from {
+    opacity: 0;
+    /* Focus-pull: the word resolves as it rises, rather than sliding in already
+       sharp. 4px is tuned to the 72px headline — enough to read as out of focus
+       at that size without smearing into an unreadable band. */
+    filter: blur(4px);
+    transform: translateY(8px);
+  }
+
+  /* Overshoot: the word rises past its resting line and drops back, so it
+     arrives with weight instead of gliding to a stop. Opacity and blur both
+     finish early — the settle should read as movement, not as a continuing
+     fade or a word still coming into focus. */
+  60% {
+    opacity: 1;
+    /* 0px, not 0: a bare zero minifies to an argument-less `blur()`, which
+       Chromium happens to accept as blur(0px) but is not something to rely on. */
+    filter: blur(0px);
+    transform: translateY(-2px);
+  }
+
+  to {
+    opacity: 1;
+    /* 0px, not 0: a bare zero minifies to an argument-less `blur()`, which
+       Chromium happens to accept as blur(0px) but is not something to rely on. */
+    filter: blur(0px);
+    transform: translateY(0);
   }
 }
 

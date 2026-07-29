@@ -115,17 +115,36 @@
       <!-- Copy sits left; the map's dense core is framed into the open right
            half (see the hero pose in scroll/beats.ts). -->
       <div data-hero-content class="relative mx-auto w-full max-w-6xl">
+        <!-- Word by word, 35ms apart, the same cadence and curve the app's boot
+             splash uses to assemble the wordmark letter by letter. Six words
+             spell the headline in 175ms, so it reads as one mark arriving rather
+             than as text being typed out.
+
+             Each word is its own inline-block: a translateY on an inline box
+             does nothing, and wrapping whole lines instead would lose the
+             per-word cascade. The whitespace between spans is the word spacing —
+             the browser collapses it to a single space, so no &nbsp; is needed
+             and the line still wraps naturally on a narrow viewport. -->
         <h1
-          class="rise sign-shadow mb-6 max-w-2xl text-5xl font-extrabold leading-[0.98] tracking-tight sm:text-6xl lg:text-7xl"
-          style="animation-delay: 80ms"
+          class="sign-shadow mb-6 max-w-2xl text-5xl font-extrabold leading-[0.98] tracking-tight sm:text-6xl lg:text-7xl"
         >
-          Data Kereta buat
+          <span class="word inline-block" style="animation-delay: 80ms">Data</span>
+          <span class="word inline-block" style="animation-delay: 115ms">Kereta</span>
+          <span class="word inline-block" style="animation-delay: 150ms">buat</span>
           <br />
-          Developer Jakarta
+          <span class="word inline-block" style="animation-delay: 185ms">Developer</span>
+          <span class="word inline-block" style="animation-delay: 220ms">Jakarta</span>
         </h1>
+        <!-- Starts on the second headword, not after the last one. The hero is
+             one gesture, so the block below begins while the headline is still
+             assembling above it — waiting for "Jakarta" to land read as a queue
+             of separate elements taking turns.
+
+             `.word` rather than `.rise`: same overshoot as the headline, so
+             everything in the hero arrives with the same weight. -->
         <p
-          class="rise sign-shadow mb-9 max-w-lg text-lg leading-relaxed text-white/65"
-          style="animation-delay: 160ms"
+          class="word sign-shadow mb-9 max-w-lg text-lg leading-relaxed text-white/65"
+          style="animation-delay: 115ms"
         >
           Data KRL, MRT, LRT, dan TransJakarta yang udah rapi, kagak pake ribet buat di-integrate ke project kamu.
         </p>
@@ -134,17 +153,26 @@
              invites a click and reads as broken, so it stayed a plain status
              span. The reference at /docs exists, so the primary slot becomes
              the link it was always meant to be. -->
-        <div class="rise flex flex-wrap items-center gap-4" style="animation-delay: 240ms">
+        <!-- One motion per button rather than one for the row: the headline
+             arrives word by word, and a single block fading in under it would
+             read as the cascade stopping short. The animation sits on each link,
+             not on the flex wrapper, so the row's layout never moves.
+
+             185/220ms puts them alongside the last two headwords rather than
+             after them — the whole hero lands inside half a second. -->
+        <div class="flex flex-wrap items-center gap-4">
           <a
             href="/docs"
-            class="inline-flex items-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-4 py-2.5 text-sm font-semibold text-accent transition-colors hover:border-accent/70 hover:bg-accent/20"
+            class="word inline-flex items-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-4 py-2.5 text-sm font-semibold text-accent transition-colors hover:border-accent/70 hover:bg-accent/20"
+            style="animation-delay: 185ms"
           >
             <span class="h-1.5 w-1.5 rounded-full bg-accent"></span>
             Baca referensi API
           </a>
           <a
             href="#api"
-            class="text-sm font-semibold text-white/70 underline decoration-white/25 underline-offset-4 transition-colors hover:text-white hover:decoration-white/60"
+            class="word text-sm font-semibold text-white/70 underline decoration-white/25 underline-offset-4 transition-colors hover:text-white hover:decoration-white/60"
+            style="animation-delay: 220ms"
           >
             Lihat bentuk datanya
           </a>
