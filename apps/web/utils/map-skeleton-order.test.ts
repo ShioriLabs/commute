@@ -8,7 +8,8 @@ import {
   FDTJ_MAP_W,
   previewCamera
 } from './map-morph-camera'
-import { orderSkeleton, parsePath, type SkeletonStroke } from './map-skeleton-order'
+import points from '../app/data/points.json'
+import { FDTJ_SPAWNS, orderSkeleton, parsePath, type SkeletonStroke } from './map-skeleton-order'
 
 const SPAN = 280
 
@@ -146,6 +147,104 @@ describe('map-skeleton.json stays in sync with the map', () => {
       expect(item.delayMs).toBeGreaterThanOrEqual(0)
       expect(item.delayMs).toBeLessThanOrEqual(SPAN)
     }
+  })
+})
+
+describe('per-line spawn points', () => {
+  const spawnOf = (id: string) => {
+    const p = points.points.find(x => x.id === id)!
+    return { x: (p.ax + p.bx) / 2, y: (p.ay + p.by) / 2 }
+  }
+  const ordered = orderSkeleton(skeleton.strokes, FDTJ_ANCHOR_X, FDTJ_ANCHOR_Y, SPAN)
+  const startsNear = (colour: string, at: { x: number, y: number }) =>
+    ordered
+      .filter(item => item.c === colour)
+      .map(item => parsePath(item.d)[0])
+      .filter(head => distance(head, at.x, at.y) < 150)
+
+  it('keeps the hardcoded coordinates in sync with points.json', () => {
+    for (const [id, colour] of [
+      ['MRTJ-BHI', '#CA2B51'],
+      ['LRTJBDB-DKA', '#026C3E'],
+      ['LRTJBDB-DKA', '#1251A2'],
+      ['KCI-JNG', '#00BDEF']
+    ] as const) {
+      const spawn = FDTJ_SPAWNS.find(s => s.c === colour)!
+      const station = spawnOf(id)
+      expect(spawn.x).toBeCloseTo(station.x, 9)
+      expect(spawn.y).toBeCloseTo(station.y, 9)
+    }
+  })
+
+  it('starts MRT Jakarta at Bundaran HI', () => {
+    expect(startsNear('#CA2B51', spawnOf('MRTJ-BHI'))).toHaveLength(1)
+  })
+
+  it('draws MRT Jakarta as one line, not one per source stroke', () => {
+    // The PDF splits MRT into three strokes meeting at Istora and Fatmawati. Chaining has
+    // to fuse them, or the two the spawn does not touch sprout their own origins — the
+    // line was visibly growing out of Istora and Bundaran HI at once.
+    const mrt = ordered.filter(item => item.c === '#CA2B51')
+    const istora = spawnOf('MRTJ-IST')
+    const fatmawati = spawnOf('MRTJ-FTM')
+    expect(startsNear('#CA2B51', istora)).toHaveLength(0)
+    expect(startsNear('#CA2B51', fatmawati)).toHaveLength(0)
+
+    // And the surviving line has to actually span the route, Bundaran HI through to
+    // Lebak Bulus, rather than having merely dropped the pieces it could not place.
+    const line = mrt.find(item => distance(parsePath(item.d)[0], spawnOf('MRTJ-BHI').x, spawnOf('MRTJ-BHI').y) < 150)!
+    const path = parsePath(line.d)
+    const passesNear = (at: { x: number, y: number }) =>
+      path.some(p => distance(p, at.x, at.y) < 150)
+    expect(passesNear(istora)).toBe(true)
+    expect(passesNear(fatmawati)).toBe(true)
+    expect(distance(path[path.length - 1], spawnOf('MRTJ-LBB').x, spawnOf('MRTJ-LBB').y)).toBeLessThan(150)
+  })
+
+  it('starts both LRT Jabodebek branches at Dukuh Atas', () => {
+    const dukuhAtas = spawnOf('LRTJBDB-DKA')
+    expect(startsNear('#026C3E', dukuhAtas)).toHaveLength(1)
+    expect(startsNear('#1251A2', dukuhAtas)).toHaveLength(1)
+  })
+
+  it('starts the Cikarang loop Pasar Senen arc at Jatinegara, heading for Kampung Bandan', () => {
+    const jatinegara = spawnOf('KCI-JNG')
+    const heads = startsNear('#00BDEF', jatinegara)
+    expect(heads).toHaveLength(1)
+
+    // The arc must run Jatinegara -> Pasar Senen -> Kampung Bandan in that order, which is
+    // the whole point of the override: drawn the other way it unzips away from the loop's
+    // closing point instead of towards it.
+    const arc = ordered.find(item => item.c === '#00BDEF' && distance(parsePath(item.d)[0], jatinegara.x, jatinegara.y) < 150)!
+    const nearestIndex = (at: { x: number, y: number }) => {
+      const path = parsePath(arc.d)
+      let best = Infinity
+      let index = -1
+      path.forEach((p, i) => {
+        const d = distance(p, at.x, at.y)
+        if (d >= best) return
+        best = d
+        index = i
+      })
+      return index
+    }
+    expect(nearestIndex(spawnOf('KCI-PSE'))).toBeLessThan(nearestIndex(spawnOf('KCI-KPB')))
+  })
+
+  it('does not leak a spawn onto other strokes of the same colour', () => {
+    // MRT is drawn as three strokes but only one ends at Bundaran HI, and the Cikarang
+    // main line runs through Jatinegara without terminating there.
+    const jatinegara = spawnOf('KCI-JNG')
+    const cikarang = ordered.filter(item => item.c === '#00BDEF')
+    expect(cikarang.length).toBeGreaterThan(1)
+    expect(cikarang.filter(item => distance(parsePath(item.d)[0], jatinegara.x, jatinegara.y) < 150)).toHaveLength(1)
+  })
+
+  it('leaves unmatched lines anchored on Manggarai', () => {
+    const plain = orderSkeleton(skeleton.strokes, FDTJ_ANCHOR_X, FDTJ_ANCHOR_Y, SPAN, [])
+    const spawnColours = new Set(FDTJ_SPAWNS.map(s => s.c))
+    const key = (list: typeof plain) => list.filter(i => !spawnColours.has(i.c)).map(i => i.d).join('|')
+    expect(key(ordered)).toBe(key(plain))
   })
 })
 
