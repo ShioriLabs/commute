@@ -321,6 +321,26 @@ body {
   }
 }
 
+/* Station markers, popping in as their own line's stroke reaches them (the delay is
+   computed per marker in utils/map-skeleton-order.ts). fill-box origin so the scale is
+   about the circle's own centre rather than the whole 9513x6727 SVG's. */
+.map-skeleton-station {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: map-skeleton-pop var(--map-skeleton-station-ms, 220ms) var(--ease-ios-spring) both;
+}
+
+@keyframes map-skeleton-pop {
+  from {
+    opacity: 0;
+    scale: 0.3;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
 /* Fades over the preview backdrop beneath it. Deliberately slower than the overlay's own
    fade (--map-morph-fade-ms): the skeleton has to clear before the overlay finishes, or the
    handoff reads as two sequential fades instead of the linework dissolving into the map. */
@@ -424,6 +444,13 @@ body {
     animation: none;
     animation-delay: 0s;
     stroke-dashoffset: 0;
+  }
+
+  .map-skeleton-station {
+    animation: none;
+    animation-delay: 0s;
+    opacity: 1;
+    scale: 1;
   }
 
   .map-skeleton {

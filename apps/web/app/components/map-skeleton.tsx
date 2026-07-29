@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useRef, type CSSProperties } from 'react'
 import clsx from 'clsx'
 import { FDTJ_ANCHOR_X, FDTJ_ANCHOR_Y, FDTJ_MAP_H, FDTJ_MAP_W } from 'utils/map-morph-camera'
-import { orderSkeleton, type SkeletonStroke } from 'utils/map-skeleton-order'
+import {
+  orderSkeleton,
+  orderStations,
+  type SkeletonStation,
+  type SkeletonStroke
+} from 'utils/map-skeleton-order'
 import { useMapCamera } from '~/hooks/map-camera'
 
 // The map drawing itself while it loads: the corridor centrelines extracted by
@@ -20,10 +25,25 @@ import { useMapCamera } from '~/hooks/map-camera'
 // it resolved into, so the handoff read as a swap rather than as detail filling in.
 const STROKE_SCALE = 1
 
+// Ring thickness of a station marker, world units. The tiles draw a marker as a 44x44
+// coloured disc with a 40x40 white one on top, so the ring that shows is 2 units — a
+// hairline at the loading camera's 0.5 scale, and deliberately so: anything bolder is
+// visibly heavier than the marker it resolves into.
+const STATION_RING = 2
+
+// Markers outside the viewport are dropped rather than hidden. Only ~8 of the 105 are ever
+// on screen at the loading camera, and leaving the rest in the document costs real frame
+// time — not paint, since they never rasterise, but per-frame animation bookkeeping. At
+// 6x CPU throttle keeping them all cost ~3ms a frame and 20 dropped frames; culling put it
+// back to within noise of no markers at all. The margin covers a marker whose centre sits
+// just outside while its ring still shows.
+const STATION_MARGIN = 80
+
 export interface SkeletonDoc {
   version: string
   viewBox: number[]
   strokes: SkeletonStroke[]
+  stations: SkeletonStation[]
 }
 
 export type SkeletonPhase = 'drawing' | 'settling' | 'fading'
@@ -85,9 +105,11 @@ interface Props {
   /** Window the fast-forward compresses the remainder into. */
   settleMs: number
   fadeMs: number
+  /** How long one station marker takes to pop in. */
+  stationMs: number
 }
 
-export function MapSkeleton({ doc, phase, strokeMs, spanMs, settleMs, fadeMs }: Props) {
+export function MapSkeleton({ doc, phase, strokeMs, spanMs, settleMs, fadeMs, stationMs }: Props) {
   const [wrapRef, camera] = useMapCamera()
   const svgRef = useRef<SVGSVGElement>(null)
 
@@ -95,6 +117,23 @@ export function MapSkeleton({ doc, phase, strokeMs, spanMs, settleMs, fadeMs }: 
     () => orderSkeleton(doc.strokes, FDTJ_ANCHOR_X, FDTJ_ANCHOR_Y, spanMs),
     [doc, spanMs]
   )
+
+  const stations = useMemo(
+    () => orderStations(doc.stations ?? [], strokes, strokeMs),
+    [doc, strokes, strokeMs]
+  )
+
+  const visibleStations = useMemo(() => {
+    if (!camera) return []
+    const width = wrapRef.current?.clientWidth ?? 0
+    const height = wrapRef.current?.clientHeight ?? 0
+    return stations.filter((station) => {
+      const x = camera.tx + station.x * camera.scale
+      const y = camera.ty + station.y * camera.scale
+      return x >= -STATION_MARGIN && x <= width + STATION_MARGIN
+        && y >= -STATION_MARGIN && y <= height + STATION_MARGIN
+    })
+  }, [stations, camera, wrapRef])
 
   useEffect(() => {
     if (phase === 'settling') fastForwardDraw(svgRef.current, settleMs)
@@ -110,7 +149,8 @@ export function MapSkeleton({ doc, phase, strokeMs, spanMs, settleMs, fadeMs }: 
       )}
       style={{
         '--map-skeleton-stroke-ms': `${strokeMs}ms`,
-        '--map-skeleton-fade-ms': `${fadeMs}ms`
+        '--map-skeleton-fade-ms': `${fadeMs}ms`,
+        '--map-skeleton-station-ms': `${stationMs}ms`
       } as CSSProperties}
     >
       {camera && (
@@ -140,6 +180,25 @@ export function MapSkeleton({ doc, phase, strokeMs, spanMs, settleMs, fadeMs }: 
                 // real length, so one keyframe draws them all at a comparable rate.
                 pathLength={1}
                 style={{ animationDelay: `${stroke.delayMs}ms` }}
+              />
+            ))}
+          </g>
+          {/* Drawn after the lines so a marker sits on top of the track it belongs to,
+              and timed to that track's own progress so it never lands on rail the
+              drawing has not laid yet. */}
+          {/* White interior, not the paper colour: that is what the tiles draw, so the
+              marker keeps matching once the crossfade starts. */}
+          <g fill="#FFFFFF">
+            {visibleStations.map(station => (
+              <circle
+                key={`${station.x}|${station.y}`}
+                className="map-skeleton-station"
+                cx={station.x}
+                cy={station.y}
+                r={station.r - STATION_RING / 2}
+                stroke={station.c}
+                strokeWidth={STATION_RING}
+                style={{ animationDelay: `${station.delayMs}ms` }}
               />
             ))}
           </g>

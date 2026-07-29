@@ -31,6 +31,17 @@ export interface OrderedStroke {
   delayMs: number
 }
 
+export interface SkeletonStation {
+  x: number
+  y: number
+  r: number
+  c: string
+}
+
+export interface OrderedStation extends SkeletonStation {
+  delayMs: number
+}
+
 export interface SkeletonSpawn {
   /** Line colour in app/data/map-skeleton.json this applies to. */
   c: string
@@ -290,4 +301,62 @@ export function orderSkeleton(
     d: serializePath(piece.points),
     delayMs: (rankOf.get(groupKey(piece))! / divisor) * spanMs
   }))
+}
+
+/** Shortest distance from p to segment ab, and how far along ab the closest point sits. */
+function projectOnSegment(p: Point, a: Point, b: Point): { distance: number, along: number } {
+  const dx = b[0] - a[0]
+  const dy = b[1] - a[1]
+  const lengthSquared = dx * dx + dy * dy
+  if (lengthSquared === 0) return { distance: Math.hypot(p[0] - a[0], p[1] - a[1]), along: 0 }
+  const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / lengthSquared))
+  const distance = Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy))
+  return { distance, along: t * Math.sqrt(lengthSquared) }
+}
+
+/**
+ * When each station marker appears: the moment its own line's stroke reaches it.
+ *
+ * Tying the markers to the drawing rather than giving them a cascade of their own is what
+ * makes them read as part of the line being drawn — the alternative, an independent
+ * stagger, has dots landing on track that has not been laid yet.
+ */
+export function orderStations(
+  stations: readonly SkeletonStation[],
+  strokes: readonly OrderedStroke[],
+  strokeMs: number
+): OrderedStation[] {
+  const lines = strokes.map((stroke) => {
+    const points = parsePath(stroke.d)
+    let total = 0
+    const cumulative = [0]
+    for (let i = 1; i < points.length; i++) {
+      total += Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1])
+      cumulative.push(total)
+    }
+    return { c: stroke.c, delayMs: stroke.delayMs, points, cumulative, total }
+  })
+
+  const ordered: OrderedStation[] = []
+
+  for (const station of stations) {
+    let best = Infinity
+    let delayMs: number | null = null
+
+    for (const line of lines) {
+      if (line.c !== station.c || line.total === 0) continue
+      for (let i = 0; i < line.points.length - 1; i++) {
+        const hit = projectOnSegment([station.x, station.y], line.points[i], line.points[i + 1])
+        if (hit.distance >= best) continue
+        best = hit.distance
+        delayMs = line.delayMs + ((line.cumulative[i] + hit.along) / line.total) * strokeMs
+      }
+    }
+
+    // A marker whose line is missing from this edition simply does not appear, rather than
+    // popping at time zero somewhere the drawing never goes.
+    if (delayMs !== null) ordered.push({ ...station, delayMs })
+  }
+
+  return ordered
 }

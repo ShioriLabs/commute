@@ -9,7 +9,13 @@ import {
   previewCamera
 } from './map-morph-camera'
 import points from '../app/data/points.json'
-import { FDTJ_SPAWNS, orderSkeleton, parsePath, type SkeletonStroke } from './map-skeleton-order'
+import {
+  FDTJ_SPAWNS,
+  orderSkeleton,
+  orderStations,
+  parsePath,
+  type SkeletonStroke
+} from './map-skeleton-order'
 
 const SPAN = 280
 
@@ -245,6 +251,68 @@ describe('per-line spawn points', () => {
     const spawnColours = new Set(FDTJ_SPAWNS.map(s => s.c))
     const key = (list: typeof plain) => list.filter(i => !spawnColours.has(i.c)).map(i => i.d).join('|')
     expect(key(ordered)).toBe(key(plain))
+  })
+})
+
+describe('station markers', () => {
+  const strokes = orderSkeleton(skeleton.strokes, FDTJ_ANCHOR_X, FDTJ_ANCHOR_Y, SPAN)
+  const STROKE_MS = 620
+  const stations = orderStations(skeleton.stations, strokes, STROKE_MS)
+
+  it('keeps every marker, each on a line that exists', () => {
+    expect(skeleton.stations.length).toBeGreaterThanOrEqual(60)
+    expect(stations).toHaveLength(skeleton.stations.length)
+    const colours = new Set(skeleton.strokes.map(s => s.c))
+    for (const station of skeleton.stations) expect(colours).toContain(station.c)
+  })
+
+  it('gives an interchange one marker per line it serves', () => {
+    // Manggarai is three discs on one diagonal — Bogor, Cikarang and the loop — and it
+    // sits dead centre of the loading camera, so an interchange rendered as a single dot
+    // (or, as it was, skipped entirely) is the most visible thing on the screen to get
+    // wrong. Their positions come from the artwork, not from the tap-target capsule.
+    const here = skeleton.stations.filter(s => distance([s.x, s.y], 4867, 3863) < 80)
+    expect(here).toHaveLength(3)
+    expect(new Set(here.map(s => s.c))).toEqual(new Set(['#EF3637', '#00BDEF', '#282A65']))
+  })
+
+  it('finds every MRT Jakarta station', () => {
+    // 13 is the real count, so this catches the disc predicate drifting either way.
+    expect(skeleton.stations.filter(s => s.c === '#CA2B51')).toHaveLength(13)
+  })
+
+  it('carries markers sized as the tiles draw them', () => {
+    for (const station of skeleton.stations) {
+      expect(station.r).toBeGreaterThanOrEqual(18)
+      expect(station.r).toBeLessThanOrEqual(28)
+      expect(station.c).toMatch(/^#[0-9A-F]{6}$/)
+      expect(Number.isInteger(station.x)).toBe(true)
+      expect(Number.isInteger(station.y)).toBe(true)
+    }
+  })
+
+  it('pops each marker while its own line is being stroked, never before it starts', () => {
+    for (const station of stations) {
+      const line = strokes.find(s => s.c === station.c)!
+      const earliest = Math.min(...strokes.filter(s => s.c === station.c).map(s => s.delayMs))
+      const latest = Math.max(...strokes.filter(s => s.c === station.c).map(s => s.delayMs))
+      expect(station.delayMs).toBeGreaterThanOrEqual(earliest)
+      expect(station.delayMs).toBeLessThanOrEqual(latest + STROKE_MS)
+      expect(Number.isFinite(line.delayMs)).toBe(true)
+    }
+  })
+
+  it('places a marker later the further along its line it sits', () => {
+    // Bogor line: Cikini is north of Manggarai and the line is split at the anchor, so
+    // both halves start there — a marker near the split must precede one at the far end.
+    const bogor = stations.filter(s => s.c === '#EF3637').sort((a, b) => a.delayMs - b.delayMs)
+    expect(bogor.length).toBeGreaterThan(2)
+    expect(bogor[0].delayMs).toBeLessThan(bogor[bogor.length - 1].delayMs)
+  })
+
+  it('drops a marker whose line is not in the skeleton', () => {
+    const orphan = [{ x: 0, y: 0, r: 22, c: '#123456' }]
+    expect(orderStations(orphan, strokes, STROKE_MS)).toEqual([])
   })
 })
 

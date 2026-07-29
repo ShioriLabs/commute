@@ -64,6 +64,9 @@ const SKELETON_MIN_DRAW_MS = 260
 const SKELETON_SETTLE_MS = 150
 // Longer than FADE_MS on purpose — see .map-skeleton in app.css.
 const SKELETON_FADE_MS = 260
+// One station marker popping in. Short relative to the stroke: a marker is punctuation on
+// a line that is already being drawn, not an entrance of its own.
+const SKELETON_STATION_MS = 220
 // Starting a 900ms draw long after the gesture is worse than not drawing at all,
 // so past this the overlay just holds as it always did.
 const SKELETON_LOAD_BUDGET_MS = 500
@@ -397,6 +400,7 @@ export function MapMorphProvider({ children }: { children: ReactNode }) {
               spanMs={SKELETON_SPAN_MS}
               settleMs={SKELETON_SETTLE_MS}
               fadeMs={SKELETON_FADE_MS}
+              stationMs={SKELETON_STATION_MS}
             />
           )}
           {!direct && <div className="map-morph-face" />}

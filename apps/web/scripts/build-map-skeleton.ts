@@ -74,6 +74,32 @@ const MAX_STROKES = 120
 const MAX_VERTICES = 12000
 const MAX_BYTES = 120 * 1024
 
+// Station markers. Every station on this map — plain or interchange — is the same object:
+// a saturated disc with a white disc stacked on it, so the ring is the sliver of the lower
+// one that shows. Plain stations are 44x44 (MRT uses 50x50), and an interchange is simply
+// several of them strung along its line, one per line served. So there is no interchange
+// case to handle: pull the discs and each is a marker.
+const DISC_MIN = 36
+const DISC_MAX = 56
+const DISC_SQUARENESS = 3
+// A marker sits directly on its line (real ones are within 3 units). This is what rejects
+// the legend keys and route badges drawn in the margins, which are the same discs but
+// nowhere near track.
+const STATION_ON_LINE = 30
+// The disc carries its own fill, which differs from the line it belongs to by a point or
+// two per channel (#EF3839 against the line's #EF3637). Requiring them to agree this
+// closely is what proves the disc was matched to the right line rather than to whichever
+// line happened to pass nearest.
+const STATION_COLOUR_TOLERANCE = 20
+const MIN_STATIONS = 60
+
+interface RawDisc {
+  x: number
+  y: number
+  r: number
+  colour: string
+}
+
 interface RawStroke {
   color: string
   width: number
@@ -86,6 +112,15 @@ export interface SkeletonStroke {
   cx: number
   cy: number
   d: string
+}
+
+export interface SkeletonStation {
+  x: number
+  y: number
+  /** Outer radius in world units, straight from the disc's own bbox. */
+  r: number
+  /** Ring colour: the line this marker sits on. */
+  c: string
 }
 
 function log(msg: string): void {
@@ -274,6 +309,112 @@ function serialize(points: number[][]): string {
   return 'M' + rounded.map(([x, y]) => `${x} ${y}`).join('L')
 }
 
+/** Every station disc in the SVG currently loaded in the page, in world coordinates. */
+async function extractDiscs(page: import('playwright').Page): Promise<RawDisc[]> {
+  return await page.evaluate((cfg: {
+    minSaturation: number
+    minLightness: number
+    maxLightness: number
+    min: number
+    max: number
+    squareness: number
+  }) => {
+    const rgbToHsl = (r: number, g: number, b: number) => {
+      const [rr, gg, bb] = [r / 255, g / 255, b / 255]
+      const max = Math.max(rr, gg, bb)
+      const min = Math.min(rr, gg, bb)
+      const l = (max + min) / 2
+      if (max === min) return { s: 0, l }
+      const delta = max - min
+      return { s: l > 0.5 ? delta / (2 - max - min) : delta / (max + min), l }
+    }
+
+    const out: { x: number, y: number, r: number, colour: string }[] = []
+    for (const el of document.querySelectorAll('path')) {
+      if (el.closest('defs')) continue
+
+      const style = getComputedStyle(el)
+      const match = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)/.exec(style.fill)
+      if (!match) continue
+      const [r, g, b] = [Number(match[1]), Number(match[2]), Number(match[3])]
+      const { s, l } = rgbToHsl(r, g, b)
+      if (s < cfg.minSaturation || l < cfg.minLightness || l > cfg.maxLightness) continue
+
+      const box = el.getBBox()
+      if (Math.abs(box.width - box.height) > cfg.squareness) continue
+      if (box.width < cfg.min || box.width > cfg.max) continue
+
+      const hex = '#' + [r, g, b].map(v => Math.round(v).toString(16).padStart(2, '0')).join('').toUpperCase()
+      out.push({ x: box.x + box.width / 2, y: box.y + box.height / 2, r: box.width / 2, colour: hex })
+    }
+    return out
+  }, {
+    minSaturation: MIN_SATURATION,
+    minLightness: MIN_LIGHTNESS,
+    maxLightness: MAX_LIGHTNESS,
+    min: DISC_MIN,
+    max: DISC_MAX,
+    squareness: DISC_SQUARENESS
+  })
+}
+
+/** Shortest distance from p to segment ab. */
+function segmentDistance(p: number[], a: number[], b: number[]): number {
+  const dx = b[0] - a[0]
+  const dy = b[1] - a[1]
+  const lengthSquared = dx * dx + dy * dy
+  if (lengthSquared === 0) return Math.hypot(p[0] - a[0], p[1] - a[1])
+  const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / lengthSquared))
+  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy))
+}
+
+function channelDistance(a: string, b: string): number {
+  let worst = 0
+  for (let i = 1; i < 7; i += 2) {
+    worst = Math.max(worst, Math.abs(parseInt(a.slice(i, i + 2), 16) - parseInt(b.slice(i, i + 2), 16)))
+  }
+  return worst
+}
+
+/**
+ * Pairs each extracted disc with the line it belongs to, dropping anything that is not a
+ * station on a rail line.
+ *
+ * Two independent things have to agree: the disc must sit on the line geometrically, and
+ * its own fill must match that line's colour. Either alone is too weak — at an interchange
+ * three discs sit within 40 units of each other and of all three lines, so distance alone
+ * would happily assign the red disc to the cyan line.
+ */
+function collectStations(
+  strokes: readonly SkeletonStroke[],
+  discs: readonly RawDisc[]
+): SkeletonStation[] {
+  const lines = strokes.map(stroke => ({
+    c: stroke.c,
+    points: stroke.d.slice(1).split('L').map(pair => pair.split(' ').map(Number))
+  }))
+
+  const out: SkeletonStation[] = []
+  for (const disc of discs) {
+    let best = STATION_ON_LINE
+    let colour: string | null = null
+    for (const line of lines) {
+      if (channelDistance(line.c, disc.colour) > STATION_COLOUR_TOLERANCE) continue
+      for (let i = 0; i < line.points.length - 1; i++) {
+        const d = segmentDistance([disc.x, disc.y], line.points[i], line.points[i + 1])
+        if (d < best) {
+          best = d
+          colour = line.c
+        }
+      }
+    }
+    if (!colour) continue
+
+    out.push({ x: Math.round(disc.x), y: Math.round(disc.y), r: Math.round(disc.r), c: colour })
+  }
+  return out
+}
+
 async function main(): Promise<void> {
   const tiles = readdirSync(TILE_DIR).filter(f => /^tile-\d+-\d+\.svg$/.test(f)).sort()
   if (tiles.length === 0) throw new Error(`no tile SVGs in ${TILE_DIR}`)
@@ -294,6 +435,7 @@ async function main(): Promise<void> {
   // Insertion-ordered, so identical geometry from a later tile collapses onto the first
   // occurrence and the output stays deterministic across runs.
   const strokes = new Map<string, SkeletonStroke>()
+  const discs = new Map<string, RawDisc>()
   let vertices = 0
 
   try {
@@ -318,6 +460,12 @@ async function main(): Promise<void> {
         })
         vertices += d.split('L').length
       }
+
+      // Same seam duplication as the strokes: a disc near a tile edge is cloned into every
+      // tile it touches, so collapse on rounded position.
+      for (const disc of await extractDiscs(page)) {
+        discs.set(`${Math.round(disc.x)}|${Math.round(disc.y)}|${disc.colour}`, disc)
+      }
     }
   } finally {
     await browser.close()
@@ -336,10 +484,16 @@ async function main(): Promise<void> {
   if (list.length > MAX_STROKES) throw new Error(`${list.length} strokes exceeds ${MAX_STROKES}`)
   if (vertices > MAX_VERTICES) throw new Error(`${vertices} vertices exceeds ${MAX_VERTICES}`)
 
+  const stations = collectStations(list, [...discs.values()])
+  log(`${stations.length} station markers`)
+  if (stations.length < MIN_STATIONS) {
+    throw new Error(`only ${stations.length} stations (min ${MIN_STATIONS}) — check the operator filter against points.json`)
+  }
+
   // Self-describing: the route fallback needs the skeleton *before* manifest.json has
   // resolved, so it cannot depend on the manifest for its coordinate space. A test
   // cross-checks the two rather than making the manifest a second source of truth.
-  const doc = { version: manifest.version, viewBox, strokes: list }
+  const doc = { version: manifest.version, viewBox, strokes: list, stations }
   const json = JSON.stringify(doc) + '\n'
   if (json.length > MAX_BYTES) throw new Error(`${json.length} bytes exceeds ${MAX_BYTES}`)
 
