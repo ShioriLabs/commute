@@ -72,16 +72,19 @@ interface Spec {
  * that draws the network and a poor one here. These are build-time strings and
  * never reach the browser as data.
  *
- * The values are the operator colours these tags correspond to; Fares and
- * Operators are platform-level concerns rather than any one operator, so they
- * take the brand accent.
+ * One real network colour per tag, and all five distinct. An earlier version
+ * gave Tarif and Operator the brand accent on the reasoning that they are
+ * platform-level concerns — but with the legend and the per-row dots now
+ * showing these side by side, three of five swatches came out the same pink and
+ * the whole system read as broken. Distinctness is what makes a legend a
+ * legend.
  */
 const TAG_ACCENT: Record<string, string> = {
   'Stasiun': '#25B8EB', // KCI Commuter Line
   'Lin': '#ca2a51', // MRT Jakarta
   'Pumpunan Moda': '#F26324', // LRT Jakarta
-  'Tarif': 'var(--color-accent)',
-  'Operator': 'var(--color-accent)'
+  'Tarif': '#96C83E', // KCI Rangkasbitung
+  'Operator': '#21409A' // LRT Jabodebek Cibubur
 }
 
 const tagAccent = (tag: string | undefined): string =>
@@ -99,6 +102,26 @@ const ticks = (value: string): string =>
 /** Highlights `{param}` segments so a path reads as a template, not a string. */
 const pathHTML = (path: string): string =>
   esc(path).replace(/\{(\w+)\}/g, '<span class="text-accent">{$1}</span>')
+
+/*
+ * The path with its last segment promoted.
+ *
+ * Seven of the twelve endpoints begin `/stations`, so the shared head is what
+ * reads first while the tail is what actually distinguishes the row. Dimming
+ * the head and bolding the tail is the difference between a scannable list and
+ * a wall of near-identical strings. `{param}` keeps its accent either way,
+ * because pathHTML() runs over both halves.
+ */
+const pathSplitHTML = (path: string): string => {
+  const cut = path.lastIndexOf('/')
+  if (cut <= 0) return `<span class="font-semibold text-white">${pathHTML(path)}</span>`
+  // Params in the head are dimmed along with it. At full accent they outshone
+  // the promoted tail and the row lost its focal point, which defeats the
+  // whole split.
+  const head = pathHTML(path.slice(0, cut)).replace(/text-accent/g, 'text-accent/45')
+  return `<span class="text-white/40">${head}</span>`
+    + `<span class="font-semibold text-white">${pathHTML(path.slice(cut))}</span>`
+}
 
 const slug = (value: string): string =>
   value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -204,37 +227,64 @@ function operationHTML(path: string, method: string, op: Operation, index: numbe
   const pathParams = params.filter(p => p.in === 'path')
   const queryParams = params.filter(p => p.in === 'query')
 
+  /** Mono eyebrow with a leading rule, the homepage's section-label device. */
+  const eyebrow = (label: string): string =>
+    `<p class="flex items-center gap-2.5 font-mono text-[9.5px] uppercase tracking-[0.14em] text-white/30">`
+    + `<span class="h-px w-4 bg-white/15"></span>${esc(label)}</p>`
+
   const paramRows = (list: Parameter[], label: string): string => {
     if (!list.length) return ''
-    return `<p class="mt-4 font-mono text-[10px] uppercase tracking-wider text-white/35">${label}</p>`
-      + `<div class="mt-1.5 divide-y divide-line/40">`
-      + list.map(p => `<div class="py-1.5">`
-        + `<div class="flex flex-wrap items-baseline gap-x-2">`
-        + `<code class="text-[13px] text-white/90">${esc(p.name)}</code>`
-        + (p.required ? '<span class="font-mono text-[10px] uppercase tracking-wider text-accent/70">wajib</span>' : '')
+    return `<div class="mt-6">${eyebrow(label)}`
+      + `<div class="mt-2 divide-y divide-line/40">`
+      + list.map(p => `<div class="py-2">`
+        + `<div class="flex flex-wrap items-baseline gap-x-2.5">`
+        + `<code class="text-[13px] font-medium text-white/90">${esc(p.name)}</code>`
+        + `<span class="font-mono text-[10px] uppercase tracking-wider text-white/30">${p.schema ? typeLabel(p.schema) : 'string'}</span>`
+        // Quieter than the accent it used to carry: at full strength the
+        // marker outshone the parameter name it was annotating.
+        + (p.required ? '<span class="font-mono text-[9.5px] uppercase tracking-wider text-accent/55">wajib</span>' : '')
         + (p.schema?.examples?.[0] !== undefined
-          ? `<code class="ml-auto text-[12px] text-white/40">${esc(String(p.schema.examples[0]))}</code>`
+          ? `<code class="ml-auto font-mono text-[12px] text-white/35">${esc(String(p.schema.examples[0]))}</code>`
           : '')
         + `</div>`
-        + (p.description ? `<p class="mt-0.5 text-[12px] leading-snug text-white/45">${ticks(p.description)}</p>` : '')
+        + (p.description ? `<p class="mt-1 text-[12px] leading-snug text-white/45">${ticks(p.description)}</p>` : '')
         + `</div>`).join('')
-      + `</div>`
+      + `</div></div>`
   }
 
-  const responses = Object.entries(op.responses ?? {}).map(([code, res]) => {
-    const schema = res.content?.['application/json']?.schema
+  /*
+   * Responses become tabs in the right column, the way every good reference does
+   * it — status chips across the top, one payload below. Built on radio inputs
+   * plus `:checked ~` sibling selectors so it costs ZERO JavaScript and still
+   * shows the first payload when scripting is off. `name` is scoped per
+   * endpoint so tab groups never fight each other.
+   */
+  const entries = Object.entries(op.responses ?? {})
+  const tabs = entries.map((_, i) =>
+    `<input type="radio" name="res-${anchor}" id="res-${anchor}-${i}" class="res-radio" data-res="${i}"${i === 0 ? ' checked' : ''} />`
+  ).join('')
+
+  const tabLabels = entries.map(([code], i) => {
     const ok = code.startsWith('2')
-    const tone = ok ? 'text-emerald-300/90 bg-emerald-300/10' : 'text-amber-300/90 bg-amber-300/10'
-    const body = ok && schema
-      ? `<pre class="mt-2 overflow-x-auto rounded border border-line/60 bg-plate p-3 font-mono text-[11.5px] leading-relaxed"><code>${jsonHTML(exampleValue(schema))}</code></pre>`
-      + `<div class="mt-3">${schemaHTML(schema)}</div>`
-      : ''
-    return `<div class="mt-3">`
-      + `<div class="flex items-baseline gap-2">`
-      + `<span class="rounded px-1.5 py-0.5 font-mono text-[11px] font-bold ${tone}">${esc(code)}</span>`
-      + `<span class="text-[13px] text-white/55">${esc(res.description ?? '')}</span>`
-      + `</div>${body}</div>`
+    const dot = ok ? 'bg-emerald-300/80' : 'bg-amber-300/80'
+    return `<label for="res-${anchor}-${i}" class="flex cursor-pointer items-center gap-1.5 px-2.5 py-1.5 font-mono text-[11px] text-white/35 transition-colors hover:text-white/70 res-tab" data-res="${i}">`
+      + `<span class="h-1.5 w-1.5 rounded-full ${dot}"></span>${esc(code)}</label>`
   }).join('')
+
+  const tabPanels = entries.map(([, res], i) => {
+    const schema = res.content?.['application/json']?.schema
+    return `<div class="res-panel" data-res="${i}">`
+      + `<p class="px-3.5 py-2.5 text-[12px] leading-snug text-white/45">${esc(res.description ?? '')}</p>`
+      + (schema
+        ? `<pre class="overflow-x-auto border-t border-line/50 bg-plate p-3.5 font-mono text-[11.5px] leading-relaxed"><code>${jsonHTML(exampleValue(schema))}</code></pre>`
+        : '')
+      + `</div>`
+  }).join('')
+
+  // The 2xx body schema is the field reference and belongs in the reading
+  // column, beside the parameters, not inside the payload panel.
+  const okSchema = entries.find(([code]) => code.startsWith('2'))?.[1]
+    ?.content?.['application/json']?.schema
 
   /*
    * The path carries the English vocabulary on its own (`/stations/{operator}`,
@@ -244,20 +294,43 @@ function operationHTML(path: string, method: string, op: Operation, index: numbe
    */
   const search = [method, path, op.summary ?? ''].join(' ').toLowerCase()
 
-  return `<details id="${anchor}" class="sign scroll-mt-4 mb-2" style="--sign-accent: ${tagAccent(op.tags?.[0])}" data-endpoint data-search="${esc(search)}">`
-    + `<summary class="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 hover:bg-white/[0.03]">`
-    + `<span class="rounded bg-emerald-300/10 px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-emerald-300/90">${esc(method)}</span>`
-    + `<code class="min-w-0 break-all font-mono text-[13px] text-white/90">${pathHTML(path)}</code>`
-    + `<span class="ml-auto hidden truncate text-[12.5px] text-white/40 sm:block">${esc(op.summary ?? '')}</span>`
-    + `<svg class="chev h-3 w-3 shrink-0 text-white/30 transition-transform" viewBox="0 0 12 12" fill="none" aria-hidden="true">`
+  return `<details id="${anchor}" class="group scroll-mt-24" data-endpoint data-search="${esc(search)}">`
+    /*
+     * A departure-board line (overlay/departures.ts): colour dot, the varying
+     * thing set largest, a square mono chip, and the secondary text right-
+     * aligned. Every row is the same height on purpose — that uniformity is
+     * what lets the colour dot and the promoted path tail do their work.
+     */
+    + `<summary class="flex cursor-pointer items-center gap-3 px-4 py-3.5 transition-colors hover:bg-white/[0.025]">`
+    + `<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background: ${tagAccent(op.tags?.[0])}"></span>`
+    // `shrink-0` only from md: — it keeps desktop rows a uniform height by
+    // making the summary absorb the flex pressure, but on a phone there is no
+    // summary to absorb it and an unshrinkable 380px path shoves the method
+    // chip and chevron clean off the viewport.
+    + `<code class="min-w-0 truncate font-mono text-[13.5px] tracking-tight sm:text-[14.5px] md:shrink-0 md:overflow-visible">${pathSplitHTML(path)}</code>`
+    + `<span class="ml-auto hidden min-w-0 truncate text-right text-[12.5px] text-white/35 md:block">${esc(op.summary ?? '')}</span>`
+    // Demoted, squared, and moved to the end: every endpoint here is GET, so a
+    // loud emerald chip was the highest-contrast element on the row carrying no
+    // information at all. This is the PIDS platform chip instead.
+    + `<span class="shrink-0 bg-white/[0.07] px-1.5 py-0.5 font-mono text-[9.5px] font-medium uppercase tracking-[0.12em] text-white/40">${esc(method)}</span>`
+    + `<svg class="chev h-3 w-3 shrink-0 text-white/25 transition-transform duration-200 group-hover:text-white/50" viewBox="0 0 12 12" fill="none" aria-hidden="true">`
     + `<path d="M4.2 2.4 8 6l-3.8 3.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`
     + `</summary>`
-    + `<div class="px-4 pb-5">`
-    + (op.description ? `<p class="max-w-[62ch] whitespace-pre-line text-[13.5px] leading-relaxed text-white/55">${ticks(op.description)}</p>` : '')
+    // Two columns from lg: prose and fields on the left, the payload riding
+    // along on the right so a field and its value are read together.
+    + `<div class="grid gap-8 border-t border-line/40 bg-plate/40 px-4 pb-8 pt-5 lg:grid-cols-[minmax(0,1fr)_26rem]">`
+    + `<div class="min-w-0">`
+    + (op.description ? `<p class="w-full max-w-[62ch] whitespace-pre-line text-[13.5px] leading-relaxed text-white/55">${ticks(op.description)}</p>` : '')
     + paramRows(pathParams, 'Parameter path')
     + paramRows(queryParams, 'Parameter query')
-    + `<p class="mt-5 font-mono text-[10px] uppercase tracking-wider text-white/35">Respons</p>`
-    + responses
+    + (okSchema ? `<div class="mt-6">${eyebrow('Bentuk data')}<div class="mt-2">${schemaHTML(okSchema)}</div></div>` : '')
+    + `</div>`
+    + `<div class="min-w-0 lg:sticky lg:top-24 lg:self-start">`
+    + `<div class="border border-line/50 bg-plate/80 backdrop-blur-[6px]">`
+    + tabs
+    + `<div class="flex items-center gap-1 border-b border-line/50 px-2 py-1.5">${tabLabels}</div>`
+    + tabPanels
+    + `</div></div>`
     + `</div></details>`
 }
 
@@ -288,16 +361,43 @@ function render(spec: Spec): string {
     + `${esc(tag)}</a>`
   ).join('')
 
-  const sections = order.map(tag =>
-    `<section id="${slug(tag)}" class="scroll-mt-4 pt-12">`
-    // A coloured rule rather than the mono eyebrow the homepage uses: with the
-    // tag names translated, an eyebrow would have repeated the heading word for
-    // word. The bar carries the section's colour on its own.
-    + `<div class="h-0.5 w-8 rounded-full" style="background: ${tagAccent(tag)}"></div>`
-    + `<h2 class="mt-3 text-[19px] font-bold tracking-tight text-white">${esc(tag)}</h2>`
-    + (tagDescription.get(tag) ? `<p class="mt-1 max-w-[60ch] text-[13.5px] text-white/45">${esc(tagDescription.get(tag)!)}</p>` : '')
-    + `<div class="mt-4">${byTag.get(tag)!.join('')}</div>`
-    + `</section>`
+  const sections = order.map((tag, i) => {
+    const rows = byTag.get(tag)!
+    // `first:` cannot do this — <main>'s first child is the header, not a
+    // section, so the variant never matches and every section including the
+    // first got the full 96px gap.
+    return `<section id="${slug(tag)}" class="scroll-mt-24 ${i === 0 ? 'pt-12' : 'pt-24'}">`
+      // The section's colour arrives as a structural left rule rather than the
+      // floating pill this used to carry: it is `.sign`'s own 3px device at
+      // section scale, and it binds the heading to its colour instead of
+      // hovering above it. The eyebrow is a count — actual information, and it
+      // sidesteps the problem that a translated tag name in an eyebrow would
+      // just repeat the heading word for word.
+      + `<div class="border-l-[3px] pl-4" style="border-color: ${tagAccent(tag)}">`
+      + `<p class="font-mono text-[9.5px] uppercase tracking-[0.16em] text-white/30">${rows.length} endpoint</p>`
+      + `<h2 class="mt-2 text-[26px] font-bold tracking-tight text-white sm:text-[30px]">${esc(tag)}</h2>`
+      + (tagDescription.get(tag) ? `<p class="mt-2 w-full max-w-[58ch] text-[14px] leading-relaxed text-white/45">${esc(tagDescription.get(tag)!)}</p>` : '')
+      + `</div>`
+      // One divided stack per section rather than N floating cards — the
+      // departures board (overlay/departures.ts) uses exactly this:
+      // `divide-y divide-line/50` inside a single plate. The backdrop blur only
+      // does anything now that the dot field runs behind the whole page.
+      + `<div class="mt-6 divide-y divide-line/50 border border-line/50 bg-plate/70 backdrop-blur-[6px]">${rows.join('')}</div>`
+      + `</section>`
+  }).join('')
+
+  /*
+   * Decodes every coloured dot on the page. Without it the tag colours are
+   * unexplained decoration; with it they are a system, and the masthead gains
+   * the only band where all five appear together. Swatch geometry is the
+   * coverage panel's (overlay/coverage-panel.ts): a short line segment, not a
+   * disc, because these stand for operators rather than stops.
+   */
+  const legend = order.map(tag =>
+    `<span class="flex items-center gap-1.5">`
+    + `<span class="h-1 w-5 rounded-full" style="background: ${tagAccent(tag)}"></span>`
+    + `<span class="font-mono text-[9.5px] uppercase tracking-[0.14em] text-white/35">${esc(tag)}</span>`
+    + `</span>`
   ).join('')
 
   const server = spec.servers?.[0]?.url ?? ''
@@ -320,26 +420,36 @@ function render(spec: Spec): string {
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet" />
     <script type="module" src="/src/docs.ts"></script>
   </head>
-  <body class="relative bg-ink font-sans text-white/80 antialiased">
-    <!-- Masthead band. The dot field runs the full height of the lockup AND the
-         title block below it, then fades out downward — the same device the
-         homepage header uses: no hard bar, no rule, the fade IS the edge.
-         Fixed height rather than content height so the canvas reserves its space
-         before it paints (zero CLS) and the fade always lands in the same place.
-         Both the canvas and the gradient are decorative and empty in the markup,
-         so neither can delay the text paint. -->
-    <div class="pointer-events-none absolute inset-x-0 top-0 h-[420px] overflow-hidden">
-      <canvas
-        id="docs-field"
-        aria-hidden="true"
-        class="absolute inset-0 h-full w-full"
-      ></canvas>
-      <div
-        class="absolute inset-0 bg-[linear-gradient(180deg,rgba(13,15,20,0.86)_0%,rgba(13,15,20,0.7)_45%,rgba(13,15,20,0.35)_75%,transparent_100%)]"
-      ></div>
-    </div>
+  <body class="font-sans text-white/80 antialiased selection:bg-accent/30">
+    <!-- The dot field, persistent across the whole page exactly as the homepage
+         does it (index.html: fixed inset-0 z-0). The ground colour lives on the
+         html element (src/style.css), NOT on body — a background here would
+         occlude the canvas entirely, since the canvas clears to transparent.
+         Content sits at z-10, so the dots run behind everything and the .sign
+         plates' backdrop-blur finally has something to blur. -->
+    <canvas
+      id="docs-field"
+      aria-hidden="true"
+      class="pointer-events-none fixed inset-0 z-0 h-full w-full"
+    ></canvas>
+    <!-- Two washes, both fixed rather than clipped to a band.
 
-    <div class="relative mx-auto max-w-5xl px-5 pt-8 lg:px-8">
+         The first is the homepage header's gradient verbatim: no bar, no rule,
+         the fade IS the edge, and because it is fixed it reads at the top and
+         only at the top.
+
+         The second is a full-viewport veil. Once the lattice runs the whole
+         page it sits behind dense schema prose and long JSON, and at the
+         brightness needed to be visible at all it competes with the text. The
+         homepage never has this problem — its copy lives on .sign plates over
+         an empty map. Two thirds of an ink wash keeps the texture legible as
+         texture while putting the type back in front. -->
+    <div class="pointer-events-none fixed inset-0 z-[1] bg-ink/65"></div>
+    <div
+      class="pointer-events-none fixed inset-x-0 top-0 z-[1] h-[560px] bg-[linear-gradient(180deg,rgba(13,15,20,0.92)_0%,rgba(13,15,20,0.7)_40%,rgba(13,15,20,0.3)_72%,transparent_100%)]"
+    ></div>
+
+    <div class="relative z-10 mx-auto max-w-[1600px] px-5 pt-8 lg:px-10">
       <a href="/" class="inline-flex items-center" aria-label="Commute Data Platform">
         <!-- Sized by HEIGHT, width follows: the lockup is a two-line 431x137
              (~3.15:1), so constraining width instead would blow up its height. -->
@@ -347,26 +457,27 @@ function render(spec: Spec): string {
       </a>
     </div>
 
-    <div class="relative mx-auto flex max-w-5xl gap-8 px-5 pb-8 lg:px-8">
-      <nav class="sticky top-8 hidden h-[calc(100vh-4rem)] w-44 shrink-0 overflow-y-auto pt-10 lg:block" aria-label="Bagian">
+    <div class="relative z-10 mx-auto flex max-w-[1600px] gap-10 px-5 pb-8 lg:px-10">
+      <nav class="sticky top-24 hidden h-[calc(100vh-7rem)] w-52 shrink-0 overflow-y-auto pt-14 lg:block" aria-label="Bagian">
         <a href="/" class="block font-mono text-[10px] uppercase tracking-wider text-white/35 hover:text-white/60">&larr; Commute Data</a>
-        <p class="mt-5 font-mono text-[10px] uppercase tracking-wider text-white/35">Endpoint</p>
-        <div class="mt-1.5 -ml-2">${nav}</div>
+        <p class="mt-6 font-mono text-[10px] uppercase tracking-[0.16em] text-white/35">Endpoint</p>
+        <div class="mt-2 -ml-2">${nav}</div>
       </nav>
 
       <main class="min-w-0 flex-1">
-        <header class="pt-8">
-          <p class="font-mono text-[10px] uppercase tracking-wider text-accent">Referensi API</p>
-          <h1 class="sign-shadow mt-3 text-[30px] font-extrabold leading-tight tracking-tight text-white">${esc(spec.info.title)}</h1>
-          <p class="sign-shadow mt-3 max-w-[62ch] text-[14px] leading-relaxed text-white/55">${esc(intro)}</p>
-          <div class="mt-5 flex flex-wrap items-center gap-2">
+        <header class="w-full max-w-[68ch] pt-14">
+          <p class="rise font-mono text-[10px] uppercase tracking-[0.18em] text-accent" style="animation-delay: 80ms">Referensi API</p>
+          <h1 class="rise sign-shadow mt-4 text-[38px] font-extrabold leading-[0.98] tracking-tight text-white sm:text-5xl lg:text-[56px]" style="animation-delay: 160ms">${esc(spec.info.title)}</h1>
+          <p class="rise sign-shadow mt-5 w-full max-w-[54ch] text-[15.5px] leading-relaxed text-white/60" style="animation-delay: 240ms">${esc(intro)}</p>
+          <div class="rise mt-7 flex flex-wrap items-center gap-2" style="animation-delay: 320ms">
             <code class="rounded border border-line/70 bg-plate px-2.5 py-1.5 font-mono text-[12px] text-white/70">${esc(server)}</code>
             <a href="${esc(server)}/openapi.json" class="rounded border border-line/70 px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-wider text-white/45 hover:border-accent/50 hover:text-white/80">openapi.json</a>
           </div>
-          <p class="mt-4 font-mono text-[10px] uppercase tracking-wider text-white/25">v${esc(spec.info.version)}${spec.info.license ? ` · ${esc(spec.info.license.name)}` : ''} · ${Object.keys(spec.paths).length} endpoint</p>
+          <p class="mt-5 font-mono text-[10px] uppercase tracking-wider text-white/25">v${esc(spec.info.version)}${spec.info.license ? ` · ${esc(spec.info.license.name)}` : ''} · ${Object.keys(spec.paths).length} endpoint</p>
+          <div class="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2">${legend}</div>
         </header>
 
-        <div class="mt-7">
+        <div class="mt-10 w-full max-w-[68ch]">
           <input
             id="filter"
             type="search"
@@ -386,15 +497,18 @@ function render(spec: Spec): string {
          viewport. 70vh rather than the homepage's full screen — this is a
          lookup reference, and a whole empty viewport after the last endpoint
          reads as a broken page rather than an ending. -->
-    <section class="relative mt-16 flex min-h-[70vh] items-end justify-center overflow-hidden px-6 pb-10">
+    <section class="relative z-10 mt-16 flex min-h-[70vh] items-end justify-center overflow-hidden px-6 pb-10">
       <canvas
         id="docs-wordmark"
         aria-hidden="true"
         class="pointer-events-none absolute inset-0 h-full w-full"
       ></canvas>
-      <div class="relative text-center font-mono text-[11px] leading-relaxed">
-        <p class="text-white/30">© ${new Date().getFullYear()} Commute Data Platform · Dibuat oleh Shiori Labs</p>
-        <p class="mt-1 text-white/20">Dibuat dari /openapi.json waktu build · ${new Date().toISOString().slice(0, 10)}</p>
+      <!-- sign-shadow, and brighter than the homepage's /30: the footer field
+           runs right under this line, and at /30 over a lit lattice the
+           attribution was effectively unreadable. -->
+      <div class="sign-shadow relative text-center font-mono text-[11px] leading-relaxed">
+        <p class="text-white/55">© ${new Date().getFullYear()} Commute Data Platform · Dibuat oleh Shiori Labs</p>
+        <p class="mt-1 text-white/35">Dibuat dari /openapi.json waktu build · ${new Date().toISOString().slice(0, 10)}</p>
       </div>
     </section>
   </body>

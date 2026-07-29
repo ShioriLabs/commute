@@ -27,13 +27,23 @@ import { WORDMARK_CELLS, WORDMARK_SIZE } from './wordmark'
  * gl/context.ts) but does have 2D canvas, so this is testable without xvfb.
  */
 
-const FIELD_COLOR = '#20242e'
+/*
+ * Brighter than scene/network-scene.ts's FIELD_COLOR (#20242e), on purpose.
+ *
+ * That value is tuned for a perspective camera that brings the lattice close
+ * and for a canvas the map's own lit dots and trains sit on top of. Here the
+ * field is flat, fixed, and alone — at #20242e over the #0d0f14 ground it was
+ * measurably painting (8,300+ pixels) and still reading as an empty page.
+ * #2b3040 is the same hue, lifted until the texture is actually visible behind
+ * the plates.
+ */
+const FIELD_COLOR = '#2b3040'
 const LOGO_COLOR = [0xf5, 0x58, 0x75] as const // --color-accent
-const FIELD_RGB = [0x20, 0x24, 0x2e] as const
+const FIELD_RGB = [0x2b, 0x30, 0x40] as const
 
 /** Lattice pitch in CSS px, and the dot radius at that pitch. */
-const CELL_PX = 14
-const DOT_RADIUS = 1.15
+const CELL_PX = 15
+const DOT_RADIUS = 1.4
 const LOGO_RADIUS_SCALE = 2.1
 
 /** Matches MAX_DPR in gl/renderer.ts — past 2x the dots cost more than they show. */
@@ -129,20 +139,31 @@ export function createDotField(canvas: HTMLCanvasElement, mode: FieldMode): DotF
     const scale = cell / CELL_PX
     const baseRadius = DOT_RADIUS * Math.min(1, Math.max(0.55, scale))
 
-    // Plain dots in one path — one fill for the whole field rather than a
-    // fillStyle change per dot.
-    ctx!.fillStyle = FIELD_COLOR
-    ctx!.beginPath()
-    for (let col = 0; col <= cols; col++) {
-      for (let row = 0; row <= rows; row++) {
-        if (logoCells.has(`${col},${row}`)) continue
-        const x = col * cell + cell / 2
-        const y = row * cell + cell / 2
-        ctx!.moveTo(x + baseRadius, y)
-        ctx!.arc(x, y, baseRadius, 0, Math.PI * 2)
+    /*
+     * The plain field, drawn in one path — one fill for the whole lattice
+     * rather than a fillStyle change per dot.
+     *
+     * Skipped entirely in 'wordmark' mode. That canvas sits on top of the
+     * page-wide masthead field, which is `fixed inset-0` and already covering
+     * the footer, so painting a second lattice here stacked two grids at
+     * different phase: density nearly doubled and a hard horizontal seam
+     * appeared exactly where the footer section began. The footer canvas draws
+     * the letters and nothing else.
+     */
+    if (mode === 'masthead') {
+      ctx!.fillStyle = FIELD_COLOR
+      ctx!.beginPath()
+      for (let col = 0; col <= cols; col++) {
+        for (let row = 0; row <= rows; row++) {
+          if (logoCells.has(`${col},${row}`)) continue
+          const x = col * cell + cell / 2
+          const y = row * cell + cell / 2
+          ctx!.moveTo(x + baseRadius, y)
+          ctx!.arc(x, y, baseRadius, 0, Math.PI * 2)
+        }
       }
+      ctx!.fill()
     }
-    ctx!.fill()
 
     if (!logoCells.size) return
 
@@ -183,9 +204,24 @@ export function createDotField(canvas: HTMLCanvasElement, mode: FieldMode): DotF
     else raf = 0
   }
 
-  // Repaint at whatever point the reveal had reached, so a resize mid-animation
-  // does not restart it and a resize after it does not wipe the wordmark.
+  /*
+   * Repaint at whatever point the reveal had reached, so a resize mid-animation
+   * does not restart it and a resize after it does not wipe the wordmark.
+   *
+   * The height guard matters more than it looks. The masthead canvas is
+   * `fixed inset-0`, so on iOS Safari and Chrome Android every scroll-direction
+   * change collapses or restores the URL bar, changes innerHeight by ~60-100px,
+   * and fires resize — which without this would repaint ~6,700 dots mid-scroll
+   * on exactly the devices least able to afford it.
+   *
+   * A height change cannot alter the masthead image: the lattice is laid out
+   * from the top-left on a fixed pitch, so taller just means more rows below the
+   * fold. Only 'wordmark' mode centres vertically and genuinely needs height.
+   */
   const onResize = (): void => {
+    const rect = canvas.getBoundingClientRect()
+    const widthChanged = Math.round(rect.width) !== Math.round(width)
+    if (!widthChanged && mode !== 'wordmark') return
     layout()
     paint(progress)
   }
