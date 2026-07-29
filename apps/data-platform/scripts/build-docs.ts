@@ -561,7 +561,12 @@ function render(spec: Spec): string {
     // `first:` cannot do this — <main>'s first child is the header, not a
     // section, so the variant never matches and every section including the
     // first got the full 96px gap.
-    return `<section id="${slug(tag)}" class="scroll-mt-24 ${i === 0 ? 'pt-12' : 'pt-24'}">`
+    // Only the first section joins the masthead's entrance cascade. `.rise` is a
+    // load-time animation with no trigger, so a section below the fold would play
+    // out while off-screen and be long settled before anyone scrolled to it —
+    // motion nobody sees, on an element that would sit at opacity 0 in the
+    // meantime. The first section is the only one reliably on screen at load.
+    return `<section id="${slug(tag)}" class="scroll-mt-24 ${i === 0 ? 'rise pt-12' : 'pt-24'}"${i === 0 ? ' style="animation-delay: 520ms"' : ''}>`
       // The section's colour arrives as a structural left rule rather than the
       // floating pill this used to carry: it is `.sign`'s own 3px device at
       // section scale, and it binds the heading to its colour instead of
@@ -733,8 +738,13 @@ function render(spec: Spec): string {
   ]
 
   const sectionBar = chips.length
+    // The entrance goes on the INNER row, not the sticky element. `rise` animates
+    // translateY(12px) → 0, and on a deep link the browser restores scroll before
+    // the animation settles — on the sticky box that reads as a bar sitting 12px
+    // out of place at the top of the viewport. Moving the chips inside it instead
+    // leaves the sticky geometry untouched.
     ? `<div class="no-scrollbar sticky top-0 z-20 -mx-5 overflow-x-auto border-b border-line/50 bg-ink/85 backdrop-blur-md lg:hidden">`
-    + `<div class="flex w-max items-center gap-1 px-5 py-2.5">`
+    + `<div class="rise flex w-max items-center gap-1 px-5 py-2.5" style="animation-delay: 460ms">`
     + chips.map(c =>
       `<a href="#${c.id}" data-spy-chip="${c.id}" class="flex shrink-0 items-center gap-1.5 rounded-full border border-line/60 px-3 py-1.5 text-[12.5px] text-white/55 transition-colors">`
       + `<span class="h-1.5 w-1.5 shrink-0 rounded-full" style="background: ${c.colour}"></span>`
@@ -792,7 +802,9 @@ function render(spec: Spec): string {
     ></div>
 
     <div class="relative z-10 mx-auto max-w-[1600px] px-5 pt-8 lg:px-10">
-      <a href="/" class="inline-flex items-center" aria-label="Commute Data Platform">
+      <!-- First in, ahead of the masthead eyebrow's 80ms: it is the topmost thing
+           on the page, and arriving after the copy below it would read backwards. -->
+      <a href="/" class="rise inline-flex items-center" style="animation-delay: 0ms" aria-label="Commute Data Platform">
         <!-- Sized by HEIGHT, width follows: the lockup is a two-line 431x137
              (~3.15:1), so constraining width instead would blow up its height. -->
         <img src="/logo.svg" alt="Commute Data Platform" width="431" height="137" class="h-9 w-auto sm:h-10" />
@@ -809,8 +821,15 @@ function render(spec: Spec): string {
         <!-- No back-link here: the logo lockup directly above already links to
              the homepage, and two stacked back-links in the same corner is one
              too many. -->
-        <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-white/35">Endpoint</p>
-        <div class="mt-3 -ml-2">${nav}${schemaNav(schemaNames)}${dictionaryNav}</div>
+        <!-- The entrance goes INSIDE the sticky nav, never on it: "rise" animates
+             translateY(12px) → 0, and on a deep link the browser restores scroll
+             before that settles, which would park the whole sidebar 12px out of
+             place. 120ms lands between the masthead eyebrow and the h1, so the two
+             columns arrive as one thing rather than the left one trailing. -->
+        <div class="rise" style="animation-delay: 120ms">
+          <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-white/35">Endpoint</p>
+          <div class="mt-3 -ml-2">${nav}${schemaNav(schemaNames)}${dictionaryNav}</div>
+        </div>
       </nav>
 
       <main class="min-w-0 flex-1">
@@ -834,11 +853,11 @@ function render(spec: Spec): string {
                section never reaches it — an unexplained "ODbL-1.0" would be
                the only mention, and the one term a data consumer most needs to
                be able to look up. -->
-          <p class="mt-5 font-mono text-[10px] uppercase tracking-wider text-white/25">v${esc(spec.info.version)}${licenseHTML(spec.info.license)} · ${Object.keys(spec.paths).length} endpoint</p>
-          <p class="mt-2 max-w-[54ch] text-[12.5px] leading-relaxed text-white/35">Datanya bebas dipakai dan diolah, asal sumbernya tetap dicantumkan dan hasil olahannya dibagi dengan lisensi yang sama.</p>
+          <p class="rise mt-5 font-mono text-[10px] uppercase tracking-wider text-white/25" style="animation-delay: 360ms">v${esc(spec.info.version)}${licenseHTML(spec.info.license)} · ${Object.keys(spec.paths).length} endpoint</p>
+          <p class="rise mt-2 max-w-[54ch] text-[12.5px] leading-relaxed text-white/35" style="animation-delay: 360ms">Datanya bebas dipakai dan diolah, asal sumbernya tetap dicantumkan dan hasil olahannya dibagi dengan lisensi yang sama.</p>
         </header>
 
-        <div class="mt-10 w-full max-w-[68ch]">
+        <div class="rise mt-10 w-full max-w-[68ch]" style="animation-delay: 400ms">
           <input
             id="filter"
             type="search"
