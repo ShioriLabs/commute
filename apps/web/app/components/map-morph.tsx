@@ -68,7 +68,10 @@ const SKELETON_FADE_MS = 260
 // a line that is already being drawn, not an entrance of its own.
 const SKELETON_STATION_MS = 220
 // Starting a 900ms draw long after the gesture is worse than not drawing at all,
-// so past this the overlay just holds as it always did.
+// so past this the overlay just holds as it always did. Card entries only: a
+// direct entry has no gesture to stay close to, and its alternative to a late
+// draw is staring at blank paper until the canvas is ready — so direct draws
+// whenever the geometry lands, however late.
 const SKELETON_LOAD_BUDGET_MS = 500
 
 type Phase = 'idle' | 'morphing' | 'drawing' | 'settling' | 'holding' | 'fading'
@@ -163,6 +166,8 @@ export function MapMorphProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false)
   // A direct entry has no card, so it has no squashed frames to mask.
   const [direct, setDirect] = useState(false)
+  // Mirrors `direct` for the synchronous read in loadSkeleton, same as skeletonRef.
+  const directRef = useRef(false)
   const [skeleton, setSkeleton] = useState<SkeletonDoc | null>(null)
   const [drew, setDrew] = useState(false)
 
@@ -213,6 +218,7 @@ export function MapMorphProvider({ children }: { children: ReactNode }) {
     readyRef.current = false
     setOpen(false)
     setDirect(false)
+    directRef.current = false
     setDrew(false)
     changePhase('idle')
   }, [changePhase])
@@ -272,9 +278,11 @@ export function MapMorphProvider({ children }: { children: ReactNode }) {
       skeletonRef.current = doc
       setSkeleton(doc)
       // Landed just after the morph gave up on it. Still worth drawing while it is
-      // inside the budget — the alternative is a hold that has barely begun.
+      // inside the budget — the alternative is a hold that has barely begun. Direct
+      // entries ignore the budget entirely (see SKELETON_LOAD_BUDGET_MS).
       const late = performance.now() - startedAtRef.current
-      if (phaseRef.current === 'holding' && late <= SKELETON_LOAD_BUDGET_MS) beginDraw()
+      const withinBudget = directRef.current || late <= SKELETON_LOAD_BUDGET_MS
+      if (phaseRef.current === 'holding' && withinBudget) beginDraw()
     })
   }, [beginDraw])
 
@@ -311,6 +319,7 @@ export function MapMorphProvider({ children }: { children: ReactNode }) {
     if (phaseRef.current !== 'idle') return
     if (reducedMotionRef.current) return
 
+    directRef.current = true
     begin()
     setDirect(true)
     // Fullscreen from the first frame: there is no card geometry to FLIP from, so
@@ -409,6 +418,9 @@ export function MapMorphProvider({ children }: { children: ReactNode }) {
           aria-hidden
           data-map-morph
           className={clsx(
+            // z-40 sits below the boot splash (z-[45]) on purpose: a direct
+            // /map entry mounts this overlay while the splash is still up, and
+            // the splash fades out over the drawing rather than being cut off.
             'map-morph-overlay fixed inset-0 z-40 overflow-hidden origin-top-left transform-gpu bg-[#FFF8F8] pointer-events-none',
             open && 'map-morph-open',
             phase === 'fading' && 'map-morph-fading'

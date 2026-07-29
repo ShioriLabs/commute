@@ -160,17 +160,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
             {/*
               Prerendered into the static shell (Layout renders it
               unconditionally at build time), so it paints before any JS
-              arrives. z-30 keeps it above the home nav rail (z-20) once real
-              content mounts underneath, and below the boot-fallback retry
-              panel (z-40). Permanently click-through: pre-hydration nothing
-              beneath it is interactive, and the watchdog's panel is a separate
-              element.
+              arrives. z-[45] keeps it above everything that can exist during
+              boot — including the map morph overlay (z-40), so a direct /map
+              entry crossfades the wordmark out over the skeleton already
+              drawing underneath instead of the overlay hard-cutting over the
+              splash — and below the boot-fallback retry panel (50).
+              Permanently click-through: pre-hydration nothing beneath it is
+              interactive, and the watchdog's panel is a separate element.
             */}
             {splashPhase !== 'gone' && (
               <div
                 ref={splashRef}
                 className={clsx(
-                  'fixed inset-0 z-30 flex items-center justify-center bg-rose-50/50 pointer-events-none',
+                  'fixed inset-0 z-[45] flex items-center justify-center bg-rose-50/50 pointer-events-none',
                   splashPhase === 'leaving' && 'boot-splash-leave'
                 )}
                 aria-live="assertive"
@@ -223,7 +225,9 @@ export function HydrateFallback() {
         style={{
           position: 'fixed',
           inset: 0,
-          zIndex: 40,
+          // Above the boot splash (z-[45] in Layout), which is still mounted
+          // and 'visible' whenever the watchdog reveals this panel.
+          zIndex: 50,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
