@@ -25,11 +25,15 @@ import { useMapCamera } from '~/hooks/map-camera'
 // it resolved into, so the handoff read as a swap rather than as detail filling in.
 const STROKE_SCALE = 1
 
-// Ring thickness of a station marker, world units. The tiles draw a marker as a 44x44
-// coloured disc with a 40x40 white one on top, so the ring that shows is 2 units — a
-// hairline at the loading camera's 0.5 scale, and deliberately so: anything bolder is
-// visibly heavier than the marker it resolves into.
-const STATION_RING = 2
+// Ring thickness of a station marker, world units.
+//
+// The tiles draw a marker as a 44x44 coloured disc under a 40x40 white one, so the real
+// ring is 2 — but 2 is one CSS pixel at the loading camera's 0.5 scale, and against a
+// 25-unit line it disappears: the markers read as plain white blobs. This is the one place
+// the skeleton deliberately departs from the artwork, because for the 900ms of the draw
+// there is no artwork on screen to be faithful to, and the difference is absorbed by the
+// crossfade. The outer radius still matches exactly; only the inside thickens.
+const STATION_RING = 6
 
 // Markers outside the viewport are dropped rather than hidden. Only ~8 of the 105 are ever
 // on screen at the loading camera, and leaving the rest in the document costs real frame
