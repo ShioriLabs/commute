@@ -32,8 +32,13 @@ interface JSONSchema {
   items?: JSONSchema
   required?: string[]
   enum?: string[]
+  /** Discriminator literal on a union branch (`type: "RIDE"`). */
+  const?: unknown
   examples?: unknown[]
   anyOf?: JSONSchema[]
+  // Discriminated unions (FareLeg's RIDE/TRANSFER, Transfer's INTERNAL/EXTERNAL)
+  // arrive as oneOf rather than anyOf.
+  oneOf?: JSONSchema[]
   allOf?: JSONSchema[]
 }
 
@@ -153,16 +158,37 @@ const slug = (value: string): string =>
 function schemaHTML(schema: JSONSchema | undefined, depth = 0): string {
   if (!schema || depth > 3) return ''
 
-  if (schema.anyOf?.length) {
+  // `oneOf` too, not just `anyOf`: the discriminated unions in this API
+  // (FareLeg's RIDE/TRANSFER, Transfer's INTERNAL/EXTERNAL) arrive as oneOf,
+  // and without this they rendered nothing at all here.
+  const union = schema.anyOf ?? schema.oneOf
+  if (union?.length) {
     // `nullable` is spelled anyOf: [T, null]; collapse it back rather than
     // rendering a union the reader has to decode.
-    const nonNull = schema.anyOf.filter(s => s.type !== 'null')
-    const nullable = schema.anyOf.length !== nonNull.length
+    const nonNull = union.filter(s => s.type !== 'null')
+    const nullable = union.length !== nonNull.length
     if (nonNull.length === 1) {
       return schemaHTML({ ...nonNull[0]!, description: schema.description ?? nonNull[0]!.description }, depth)
         + (nullable ? '<span class="ml-1 text-white/30">| null</span>' : '')
     }
-    return `<span class="text-white/45">salah satu dari ${nonNull.length} bentuk</span>`
+    /*
+     * A real union. Render every branch, labelled by its discriminator where
+     * one exists — `type: RIDE` / `type: TRANSFER` is exactly what a reader
+     * needs to tell the branches apart, and "salah satu dari 2 bentuk" (which
+     * is all this used to say) told them a union existed and nothing else.
+     */
+    const branches = nonNull.map((branch) => {
+      const discriminator = Object.entries(branch.properties ?? {})
+        .find(([, p]) => typeof p.const === 'string')
+      const label = discriminator
+        ? `<code>${esc(discriminator[0])}: ${esc(String(discriminator[1].const))}</code>`
+        : `bentuk ${nonNull.indexOf(branch) + 1}`
+      return `<div class="mt-2 first:mt-0">`
+        + `<p class="font-mono text-[10px] uppercase tracking-wider text-white/30">${label}</p>`
+        + `<div class="mt-1">${schemaHTML(branch, depth + 1)}</div>`
+        + `</div>`
+    }).join('')
+    return `<div class="border-l border-line/70 pl-3">${branches}</div>`
   }
 
   if (schema.type === 'array' && schema.items) {
@@ -177,8 +203,12 @@ function schemaHTML(schema: JSONSchema | undefined, depth = 0): string {
         ? prop.enum.map(v => `<code>${esc(String(v))}</code>`).join(' ')
         : typeLabel(prop)
       const note = prop.description ? `<p class="mt-0.5 text-[12px] leading-snug text-white/45">${ticks(prop.description)}</p>` : ''
-      const nested = (prop.type === 'object' || (prop.type === 'array' && prop.items?.type === 'object'))
-        ? `<div class="mt-1.5 border-l border-line/70 pl-3">${schemaHTML(prop.type === 'array' ? prop.items : prop, depth + 1)}</div>`
+      // Descend into objects, arrays of objects, AND unions — a `oneOf` field
+      // like FareResult.legs used to render its type chip and then nothing.
+      const inner = prop.type === 'array' ? prop.items : prop
+      const isUnion = (inner?.anyOf ?? inner?.oneOf ?? []).length > 1
+      const nested = (inner && (inner.type === 'object' || isUnion))
+        ? `<div class="mt-1.5 border-l border-line/70 pl-3">${schemaHTML(inner, depth + 1)}</div>`
         : ''
       return `<div class="py-1.5">`
         + `<div class="flex flex-wrap items-baseline gap-x-2">`
@@ -194,7 +224,38 @@ function schemaHTML(schema: JSONSchema | undefined, depth = 0): string {
 }
 
 function typeLabel(schema: JSONSchema): string {
+  // A discriminator carries `const` and no `type`, so it fell through to "any"
+  // — on the very field whose whole purpose is to say which branch you have.
+  // Its literal value IS its type.
+  if (schema.const !== undefined) return String(schema.const)
   if (schema.enum) return 'enum'
+
+  /*
+   * `nullable` is spelled `anyOf: [T, null]` in OpenAPI 3.1, and without this
+   * branch every nullable field rendered its type as "any" — latitude,
+   * longitude, tripNumber and the rest, sixteen of them, all claiming to accept
+   * anything when they are plainly `number` or `string`. schemaHTML() already
+   * collapses this shape one level up; the label had simply never learned to.
+   *
+   * The union is reported honestly when it is a real one (a discriminated
+   * union of object shapes), rather than being flattened to its first member.
+   */
+  const union = schema.anyOf ?? schema.oneOf
+  if (union?.length) {
+    const nonNull = union.filter(s => s.type !== 'null')
+    if (nonNull.length === 1) return typeLabel(nonNull[0]!)
+    if (nonNull.length > 1) {
+      // Distinct member types are worth naming ("string | number"); a union of
+      // several object shapes is not — "object | object | object" says less
+      // than "object", and the discriminator is already visible in the field
+      // list that schemaHTML renders below.
+      const labels = [...new Set(nonNull.map(typeLabel))]
+      return labels.length === 1 ? labels[0]! : labels.join(' | ')
+    }
+    return 'null'
+  }
+
+  if (schema.allOf?.length === 1) return typeLabel(schema.allOf[0]!)
   if (schema.type === 'array') return `${schema.items ? typeLabel(schema.items) : 'any'}[]`
   return schema.type ?? 'any'
 }
