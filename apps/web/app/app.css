@@ -276,10 +276,10 @@ body {
   opacity: 0;
 }
 
-/* Flat card face over the preview: holds the card's white for the first ~50ms —
-   the window where the overlay is squashed to card size and the preview inside
-   would read as smeared pixels — then clears while the morph carries on. The
-   sheet morph's mask trick (sheet-button.tsx), same numbers. */
+/* Flat card face: holds the card's white for the first ~50ms — the window where
+   the overlay is still squashed to card size — so the paper tint arrives with
+   the expansion rather than popping in place. The sheet morph's mask trick
+   (sheet-button.tsx), same numbers. */
 .map-morph-face {
   position: absolute;
   inset: 0;
@@ -306,17 +306,19 @@ body {
    alongside the settle: updatePlaybackRate rescales the timeline, so the curve is
    preserved over whatever progress remains instead of being flattened. */
 .map-skeleton-path {
+  /* Static, not part of the keyframes: dasharray never changes during the draw, and a
+     constant-valued animated property still pays per-frame style application on every
+     path. */
+  stroke-dasharray: 1;
   stroke-dashoffset: 1;
   animation: map-skeleton-draw var(--map-skeleton-stroke-ms, 620ms) var(--ease-ios-spring) both;
 }
 
 @keyframes map-skeleton-draw {
   from {
-    stroke-dasharray: 1;
     stroke-dashoffset: 1;
   }
   to {
-    stroke-dasharray: 1;
     stroke-dashoffset: 0;
   }
 }
@@ -341,9 +343,9 @@ body {
   }
 }
 
-/* Fades over the preview backdrop beneath it. Deliberately slower than the overlay's own
-   fade (--map-morph-fade-ms): the skeleton has to clear before the overlay finishes, or the
-   handoff reads as two sequential fades instead of the linework dissolving into the map. */
+/* Deliberately slower than the overlay's own fade (--map-morph-fade-ms): the skeleton has
+   to clear before the overlay finishes, or the handoff reads as two sequential fades
+   instead of the linework dissolving into the map. */
 .map-skeleton {
   transition: opacity var(--map-skeleton-fade-ms, 260ms) ease-out;
 }

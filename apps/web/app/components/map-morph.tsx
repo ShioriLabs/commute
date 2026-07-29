@@ -27,10 +27,10 @@ import { MapSkeleton, prefetchMapSkeleton, type SkeletonDoc } from './map-skelet
 // a dialog and never leave the page), tapping the map card runs a real route
 // navigation — so this overlay lives in the layout that hosts both `/` and
 // `/map` and plays *over* the navigation: it expands from the card showing the
-// map's own preview image, draws the network while the route chunk/manifest/
-// renderer load underneath, and fades once the canvas has painted the same
-// preview at the same camera. The wait happens inside the gesture instead of on
-// a spinner.
+// paper sheet, draws the network while the route chunk/manifest/renderer load
+// underneath, and fades once the canvas has painted its first frame at the same
+// camera the drawing used. The wait happens inside the gesture instead of on a
+// spinner.
 //
 // The map route also enters here directly (startDirect), without a card to morph
 // from. That is not just for consistency: `/map`'s own loading fallback only
@@ -106,8 +106,12 @@ export function useMapMorph(): MapMorphController {
 // The preview image positioned exactly where the map's first frame draws it:
 // map.tsx's initial camera (utils/map-morph-camera.ts) applied to the natural-
 // size image via a composited per-axis scale, matching how the renderer
-// stretches the preview over the full viewBox. Shared between the morph
-// overlay and the map route's loading fallback so both land on the same frame.
+// stretches the preview over the full viewBox. Only the map route's loading
+// fallback uses this now — it is what covers the wait for reduced-motion and
+// direct arrivals, where the morph overlay never runs. The overlay itself used
+// to layer it under the skeleton, but the skeleton's opaque sheet occluded it
+// for the whole draw and the real canvas is already painted before the fade,
+// so it never earned its raster there.
 export function MapPreviewBackdrop() {
   const [wrapRef, camera] = useMapCamera()
 
@@ -367,6 +371,11 @@ export function MapMorphProvider({ children }: { children: ReactNode }) {
     else if (event.propertyName === 'opacity' && phaseRef.current === 'fading') reset()
   }
 
+  // Gated on having actually started a draw, not merely on the geometry being loaded:
+  // reaching the fade straight from 'morphing' or 'holding' must not flash a screenful
+  // of undrawn linework on its way out.
+  const skeletonMounted = skeleton !== null && drew && phase !== 'morphing' && phase !== 'holding'
+
   return (
     <MapMorphContext.Provider value={controller}>
       {children}
@@ -388,11 +397,7 @@ export function MapMorphProvider({ children }: { children: ReactNode }) {
             '--map-morph-face-delay-ms': `${FACE_DELAY_MS}ms`
           } as CSSProperties}
         >
-          <MapPreviewBackdrop />
-          {/* Gated on having actually started a draw, not merely on the geometry being
-              loaded: reaching the fade straight from 'morphing' or 'holding' must not
-              flash a screenful of undrawn linework on its way out. */}
-          {skeleton && drew && phase !== 'morphing' && phase !== 'holding' && (
+          {skeletonMounted && skeleton && (
             <MapSkeleton
               doc={skeleton}
               phase={phase}

@@ -4,6 +4,7 @@ import { FDTJ_ANCHOR_X, FDTJ_ANCHOR_Y, FDTJ_MAP_H, FDTJ_MAP_W } from 'utils/map-
 import {
   orderSkeleton,
   orderStations,
+  parsePath,
   type SkeletonStation,
   type SkeletonStroke
 } from 'utils/map-skeleton-order'
@@ -13,10 +14,11 @@ import { useMapCamera } from '~/hooks/map-camera'
 // scripts/build-map-skeleton.ts, stroked on with stroke-dashoffset and radiating out from
 // Manggarai — which previewCamera() puts at the centre of the viewport whatever its size.
 //
-// Layered *over* MapPreviewBackdrop rather than replacing it. The backdrop is what
-// establishes the "overlay frame == canvas first frame" alignment that lets the morph fade
-// out invisibly; this draws on its own opaque sheet above it and clears first, so the
-// linework reads as ink on paper and the handoff underneath is untouched.
+// Draws on its own opaque sheet, camera-matched to the renderer's first frame — the
+// linework lands exactly on the bands it becomes, so the fade dissolves the drawing into
+// the real map with nothing shifting underneath. (This alignment used to be backed by a
+// blurred MapPreviewBackdrop under the sheet, but the sheet occluded it for the whole
+// draw and the canvas is painted before the fade, so the overlay dropped it.)
 
 // The source weight, unscaled. Rail is stroked at 25 world units on the schematic itself,
 // so drawing the skeleton at the same width means each line lands exactly on the band it
@@ -42,6 +44,15 @@ const STATION_RING = 6
 // back to within noise of no markers at all. The margin covers a marker whose centre sits
 // just outside while its ring still shows.
 const STATION_MARGIN = 80
+
+// Same treatment for the corridors themselves: only ~6-7 of the 16 strokes intersect the
+// viewport at the loading camera on a phone, and an off-screen path costs the same
+// per-frame animation bookkeeping a marker does — dashoffset even more so, since it also
+// invalidates paint. Culling is by the path's point bounding box, which is a superset of
+// the path, so a visible line can never be dropped. The margin covers a stroke whose
+// points all sit just outside while its band (up to 25 world units wide, plus round caps)
+// still reaches in.
+const STROKE_MARGIN = 40
 
 export interface SkeletonDoc {
   version: string
@@ -117,8 +128,22 @@ export function MapSkeleton({ doc, phase, strokeMs, spanMs, settleMs, fadeMs, st
   const [wrapRef, camera] = useMapCamera()
   const svgRef = useRef<SVGSVGElement>(null)
 
+  // The index is attached *before* any culling so it is stable across camera changes —
+  // it feeds the render key, and a key that shifted with the filtered list would remount
+  // paths on a mid-draw resize and restart their animations.
   const strokes = useMemo(
-    () => orderSkeleton(doc.strokes, FDTJ_ANCHOR_X, FDTJ_ANCHOR_Y, spanMs),
+    () => orderSkeleton(doc.strokes, FDTJ_ANCHOR_X, FDTJ_ANCHOR_Y, spanMs)
+      .map((stroke, index) => {
+        const points = parsePath(stroke.d)
+        return {
+          ...stroke,
+          index,
+          minX: Math.min(...points.map(p => p[0])),
+          minY: Math.min(...points.map(p => p[1])),
+          maxX: Math.max(...points.map(p => p[0])),
+          maxY: Math.max(...points.map(p => p[1]))
+        }
+      }),
     [doc, spanMs]
   )
 
@@ -126,6 +151,22 @@ export function MapSkeleton({ doc, phase, strokeMs, spanMs, settleMs, fadeMs, st
     () => orderStations(doc.stations ?? [], strokes, strokeMs),
     [doc, strokes, strokeMs]
   )
+
+  // Culled for rendering only: the full list keeps feeding orderStations above, so the
+  // delay choreography is identical whatever happens to be on screen.
+  const visibleStrokes = useMemo(() => {
+    if (!camera) return []
+    const width = wrapRef.current?.clientWidth ?? 0
+    const height = wrapRef.current?.clientHeight ?? 0
+    return strokes.filter((stroke) => {
+      const minX = camera.tx + stroke.minX * camera.scale
+      const minY = camera.ty + stroke.minY * camera.scale
+      const maxX = camera.tx + stroke.maxX * camera.scale
+      const maxY = camera.ty + stroke.maxY * camera.scale
+      return maxX >= -STROKE_MARGIN && minX <= width + STROKE_MARGIN
+        && maxY >= -STROKE_MARGIN && minY <= height + STROKE_MARGIN
+    })
+  }, [strokes, camera, wrapRef])
 
   const visibleStations = useMemo(() => {
     if (!camera) return []
@@ -173,9 +214,9 @@ export function MapSkeleton({ doc, phase, strokeMs, spanMs, settleMs, fadeMs, st
           style={{ transform: `translate(${camera.tx}px, ${camera.ty}px) scale(${camera.scale})` }}
         >
           <g fill="none" strokeLinecap="round" strokeLinejoin="round">
-            {strokes.map((stroke, index) => (
+            {visibleStrokes.map(stroke => (
               <path
-                key={`${stroke.c}|${stroke.w}|${index}`}
+                key={`${stroke.c}|${stroke.w}|${stroke.index}`}
                 className="map-skeleton-path"
                 d={stroke.d}
                 stroke={stroke.c}
