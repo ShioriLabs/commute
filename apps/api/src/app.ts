@@ -69,7 +69,18 @@ app.route('_internal', internalRoutes)
 app.get('/openapi.json', openAPIRouteHandler(app, {
   documentation: {
     info: {
-      title: 'Commute API',
+      /*
+       * One brand line: `Commute` is the rider app, `Commute Data Platform` is
+       * the site this document is published on, and this is its interface. The
+       * shared "Data" is what separates it from the consumer product — plain
+       * `Commute API` read like a description rather than a name, and named
+       * nothing in a generated client.
+       *
+       * This is public API surface: it becomes the class or namespace name in
+       * every generated client, so changing it later is a breaking change for
+       * anyone who has generated against it.
+       */
+      title: 'Commute Data API',
       version: '1.0.0',
       description: [
         'Data transit Jakarta dan Jabodetabek: stasiun, lin, pumpunan moda, jadwal, dan tarif dari Commuter Line (KCI), MRT Jakarta, LRT Jakarta, LRT Jabodebek, dan TransJakarta.',

@@ -754,7 +754,7 @@ function render(spec: Spec): string {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Referensi API · Commute Data Platform</title>
-    <meta name="description" content="Referensi endpoint Commute API: stasiun, lin, pumpunan moda, tarif, dan operator." />
+    <meta name="description" content="Referensi endpoint Commute Data API: stasiun, lin, pumpunan moda, tarif, dan operator." />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="canonical" href="https://data.commute.shiorilabs.id/docs" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />

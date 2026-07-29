@@ -47,7 +47,9 @@ const PUBLIC_ROUTES = [
 describe('GET /openapi.json', () => {
   it('serves a valid OpenAPI 3.1 document', () => {
     expect(spec.openapi).toMatch(/^3\.1\./)
-    expect(spec.info.title).toBe('Commute API')
+    // Public surface: this names the class in every generated client, so it is
+    // pinned rather than merely checked for truthiness.
+    expect(spec.info.title).toBe('Commute Data API')
     expect(spec.info.version).toBeTruthy()
   })
 
