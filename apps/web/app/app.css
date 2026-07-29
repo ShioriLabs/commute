@@ -276,10 +276,10 @@ body {
   opacity: 0;
 }
 
-/* Flat card face over the preview: holds the card's white for the first ~50ms —
-   the window where the overlay is squashed to card size and the preview inside
-   would read as smeared pixels — then clears while the morph carries on. The
-   sheet morph's mask trick (sheet-button.tsx), same numbers. */
+/* Flat card face: holds the card's white for the first ~50ms — the window where
+   the overlay is still squashed to card size — so the paper tint arrives with
+   the expansion rather than popping in place. The sheet morph's mask trick
+   (sheet-button.tsx), same numbers. */
 .map-morph-face {
   position: absolute;
   inset: 0;
@@ -290,6 +290,67 @@ body {
 }
 
 .map-morph-open .map-morph-face {
+  opacity: 0;
+}
+
+/* The map drawing itself while it loads (components/map-skeleton.tsx). Each corridor is
+   normalised to pathLength 1, so one keyframe strokes them all on at a comparable rate
+   whatever their real length, and the cascade comes from a per-path inline animationDelay
+   ranked by distance from Manggarai.
+
+   `both`, not `forwards`: with forwards a path renders fully drawn through its delay and
+   then pops to invisible the moment its animation starts.
+
+   Shares --ease-ios-spring with every other entrance in the app, so a line leaves its
+   origin quickly and decelerates into place rather than arriving at a constant rate. Safe
+   alongside the settle: updatePlaybackRate rescales the timeline, so the curve is
+   preserved over whatever progress remains instead of being flattened. */
+.map-skeleton-path {
+  /* Static, not part of the keyframes: dasharray never changes during the draw, and a
+     constant-valued animated property still pays per-frame style application on every
+     path. */
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: map-skeleton-draw var(--map-skeleton-stroke-ms, 620ms) var(--ease-ios-spring) both;
+}
+
+@keyframes map-skeleton-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Station markers, popping in as their own line's stroke reaches them (the delay is
+   computed per marker in utils/map-skeleton-order.ts). fill-box origin so the scale is
+   about the circle's own centre rather than the whole 9513x6727 SVG's. */
+.map-skeleton-station {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: map-skeleton-pop var(--map-skeleton-station-ms, 220ms) var(--ease-ios-spring) both;
+}
+
+@keyframes map-skeleton-pop {
+  from {
+    opacity: 0;
+    scale: 0.3;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+/* Deliberately slower than the overlay's own fade (--map-morph-fade-ms): the skeleton has
+   to clear before the overlay finishes, or the handoff reads as two sequential fades
+   instead of the linework dissolving into the map. */
+.map-skeleton {
+  transition: opacity var(--map-skeleton-fade-ms, 260ms) ease-out;
+}
+
+.map-skeleton-fading {
   opacity: 0;
 }
 
@@ -375,6 +436,27 @@ body {
   .map-morph-face {
     transition-duration: 1ms;
     transition-delay: 0s;
+  }
+
+  /* Same belt-and-braces as the overlay above: map-morph.tsx refuses to start the draw
+     under reduced motion at all, so these only bite when the preference flips mid-draw.
+     The path rule has to restore stroke-dashoffset for the reason the entrance group
+     does opacity — the base rule starts hidden and relies on its animation to reveal. */
+  .map-skeleton-path {
+    animation: none;
+    animation-delay: 0s;
+    stroke-dashoffset: 0;
+  }
+
+  .map-skeleton-station {
+    animation: none;
+    animation-delay: 0s;
+    opacity: 1;
+    scale: 1;
+  }
+
+  .map-skeleton {
+    transition-duration: 1ms;
   }
 
   .map-ripple {

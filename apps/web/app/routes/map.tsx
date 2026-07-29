@@ -41,12 +41,19 @@ import { isMapGlDebugEnabled } from '../hooks/secret-features'
 import StationSheet from '../components/station-sheet'
 import HubSheet from '../components/hub-sheet'
 import { MapPreviewBackdrop, useMapMorph } from '../components/map-morph'
+import { prefetchMapSkeleton } from '../components/map-skeleton'
 import { PEEK_FRACTION } from '../components/bottom-sheet'
 // Imported as a URL (not as data) so Vite content-hashes it into /assets/. The
 // file deliberately lives outside public/: assets under public/ are copied
 // verbatim with stable names, and a stable URL cannot be cached correctly for a
 // file that changes every time a tap target is edited. See docs/fdtj-map-points.md.
 import pointsUrl from '../data/points.json?url'
+
+// Module scope on purpose: on a direct /map entry the skeleton geometry races the
+// overlay's decision to draw, and kicking the fetch here — the moment the route chunk
+// evaluates, mid-navigation — beats waiting for mount + startDirect. On the card path
+// morph.prefetch already warmed it, so this deduplicates into a no-op.
+void prefetchMapSkeleton()
 
 const TAP_MOVEMENT_THRESHOLD_CSS_PX = 8
 const TOUCH_HIT_SLOP_CSS_PX = 12
@@ -165,6 +172,14 @@ export default function MapPage() {
   useEffect(() => {
     if (error) morph.notifyMapFailed()
   }, [error, morph])
+  // Arriving without a card to morph from (deep link, reload, back into /map).
+  // startDirect no-ops when a card morph is already running, so the gesture path
+  // still wins; this only covers the entries that would otherwise watch a bare
+  // canvas, since the route's own fallback ends when the manifest lands and the
+  // real wait is everything after it.
+  useEffect(() => {
+    morph.startDirect()
+  }, [morph])
   const { data: pointsManifest } = useSWR<PointsManifest>(
     pointsUrl,
     (url: string) => fetch(url).then(r => r.json())

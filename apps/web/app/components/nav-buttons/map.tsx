@@ -1,6 +1,6 @@
 import { MapTrifoldIcon } from '@phosphor-icons/react'
 import { Link } from 'react-router'
-import { useRef, type MouseEvent } from 'react'
+import { useEffect, useRef, type MouseEvent } from 'react'
 import clsx from 'clsx'
 import { useMapMorph } from '~/components/map-morph'
 
@@ -21,7 +21,26 @@ export default function MapButton({ className }: Props) {
     warmedRef.current = true
     void fetch('/maps/fdtj/manifest.json').catch(() => {})
     void fetch('/maps/fdtj/preview.webp').catch(() => {})
+    // The skeleton is a separate JS chunk, so it has to be in memory before the
+    // morph lands or the draw is skipped for that visit.
+    morph.prefetch()
   }
+
+  // Touch has no hover, and touchstart→click is far too short a window for the
+  // module work below to finish — so warm the JS at idle once the card is on
+  // screen. Only morph.prefetch, not the full warmUp: the module evaluations are
+  // the expensive main-thread tasks that otherwise land mid-draw, while the two
+  // fetches are cheap on intent and the manifest's max-age=300 could lapse
+  // between an idle warm and a much later tap.
+  const morphPrefetch = morph.prefetch
+  useEffect(() => {
+    if (typeof requestIdleCallback !== 'function') {
+      const timer = setTimeout(morphPrefetch, 2000)
+      return () => clearTimeout(timer)
+    }
+    const idle = requestIdleCallback(morphPrefetch)
+    return () => cancelIdleCallback(idle)
+  }, [morphPrefetch])
 
   const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
     // Plain left-click only: cmd/ctrl/shift/alt-click and non-primary buttons
