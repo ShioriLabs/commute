@@ -81,7 +81,8 @@ export interface MapMorphController {
   // Enter fullscreen with no card to morph from, for direct/deep-link arrivals
   // at /map. No-op if a card morph is already running, so the card path wins.
   startDirect(): void
-  // Warm the skeleton chunk ahead of a likely navigation.
+  // Warm the skeleton chunk and evaluate the map route module ahead of a
+  // likely navigation.
   prefetch(): void
   // Map route: first frame containing the map has been presented.
   notifyMapReady(): void
@@ -98,6 +99,23 @@ const noopController: MapMorphController = {
 }
 
 const MapMorphContext = createContext<MapMorphController>(noopController)
+
+// Evaluates the map route module (and with it the renderer modules it statically
+// imports) ahead of the navigation. The card's `prefetch="intent"` only fetches and
+// compiles the chunk — evaluation still runs at navigation time, and it landed as a
+// long main-thread task in the middle of the skeleton draw (measured via LoAF script
+// attribution; in dev, where each module is transformed on demand, it is the single
+// biggest freeze). A dynamic import here resolves to the same module React Router
+// code-split, so nothing is bundled twice; the cycle with map.tsx importing this file
+// is harmless because the import is dynamic.
+let mapRouteWarmed = false
+function prefetchMapRoute() {
+  if (mapRouteWarmed) return
+  mapRouteWarmed = true
+  void import('~/routes/map').catch(() => {
+    mapRouteWarmed = false
+  })
+}
 
 export function useMapMorph(): MapMorphController {
   return useContext(MapMorphContext)
@@ -260,6 +278,11 @@ export function MapMorphProvider({ children }: { children: ReactNode }) {
     })
   }, [beginDraw])
 
+  const prefetch = useCallback(() => {
+    loadSkeleton()
+    prefetchMapRoute()
+  }, [loadSkeleton])
+
   const begin = useCallback(() => {
     startedAtRef.current = performance.now()
     startLocationKeyRef.current = locationKeyRef.current
@@ -308,8 +331,8 @@ export function MapMorphProvider({ children }: { children: ReactNode }) {
   }, [beginFade])
 
   const controller = useMemo<MapMorphController>(
-    () => ({ start, startDirect, prefetch: loadSkeleton, notifyMapReady, notifyMapFailed }),
-    [start, startDirect, loadSkeleton, notifyMapReady, notifyMapFailed]
+    () => ({ start, startDirect, prefetch, notifyMapReady, notifyMapFailed }),
+    [start, startDirect, prefetch, notifyMapReady, notifyMapFailed]
   )
 
   // Back/popstate mid-morph, or any navigation that doesn't land on /map:
