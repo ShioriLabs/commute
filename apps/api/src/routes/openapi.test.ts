@@ -16,7 +16,7 @@ interface Spec {
   servers?: { url: string }[]
   tags?: { name: string }[]
   paths: Record<string, Record<string, { summary?: string, tags?: string[], responses?: Record<string, unknown> }>>
-  components?: { schemas?: Record<string, unknown> }
+  components?: { schemas?: Record<string, { description?: string, title?: string }> }
 }
 
 let spec: Spec
@@ -132,6 +132,33 @@ describe('coverage', () => {
   })
 })
 
+/*
+ * The sync and cache handlers exist in the repo but are NOT mounted: twelve
+ * mutating routes that took no credentials at all, reachable by anyone with
+ * curl. CORS restrains browsers, not clients, so it was never a control here.
+ *
+ * This asserts they are unreachable rather than merely undocumented — the
+ * difference between "we didn't advertise it" and "it isn't there".
+ */
+describe('maintenance routes', () => {
+  it.each([
+    ['POST', '/sync/stations/KCI'],
+    ['DELETE', '/cache/stations/bust'],
+    ['DELETE', '/cache/searchables/bust']
+  ])('%s %s is not served', async (method, path) => {
+    const res = await app.request(path, { method })
+    expect(res.status).toBe(404)
+  })
+
+  it('registers no mutating route at all', () => {
+    const routes = (app as unknown as { routes: { method: string, path: string }[] }).routes
+    const mutating = routes
+      .filter(r => ['POST', 'PUT', 'PATCH', 'DELETE'].includes(r.method))
+      .map(r => `${r.method} ${r.path}`)
+    expect(mutating, `unexpected mutating routes: ${mutating.join(', ')}`).toEqual([])
+  })
+})
+
 describe('what must never be published', () => {
   // These mutate data or are shaped for one consumer. Publishing them would
   // invite exactly the traffic they are not built for.
@@ -171,6 +198,36 @@ describe('schema integrity', () => {
     }
     // NUL is an internal placeholder and must not be offered to consumers.
     expect(json).not.toContain('"NUL"')
+  })
+})
+
+/*
+ * The registered schemas are the public vocabulary — `Station`, `FareResult`
+ * and the rest — and a consumer meets them by name in generated clients and on
+ * the reference page. An undescribed one is a name with no meaning attached.
+ *
+ * This also guards a bug that already bit once: `v.metadata({ ref })` must be
+ * the LAST entry in a valibot pipe, because the standard-openapi adapter
+ * converts the schema and returns `{ $ref }` the moment it sees it. Anything
+ * piped after — including v.description() — is silently discarded, and every
+ * schema-level description vanished from the document without any error.
+ */
+describe('components/schemas', () => {
+  it('registers shared shapes rather than inlining them', () => {
+    const schemas = spec.components?.schemas ?? {}
+    expect(Object.keys(schemas).length).toBeGreaterThan(15)
+    expect(JSON.stringify(spec.paths)).toContain('#/components/schemas/Station')
+  })
+
+  it('describes every registered schema', () => {
+    const undescribed = Object.entries(spec.components?.schemas ?? {})
+      .filter(([, schema]) => !schema.description)
+      .map(([name]) => name)
+
+    expect(
+      undescribed,
+      `undescribed schemas (is v.metadata({ ref }) last in the pipe?): ${undescribed.join(', ')}`
+    ).toEqual([])
   })
 })
 

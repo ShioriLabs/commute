@@ -32,7 +32,8 @@ export const HubSchema = v.pipe(
     )
   }),
   v.title('Hub'),
-  v.description('Beberapa stasiun yang dianggap satu tempat karena saling terhubung. Pumpunan moda sendiri tidak punya koordinat, yang punya stasiun-stasiun di dalamnya.')
+  v.description('Beberapa stasiun yang dianggap satu tempat karena saling terhubung. Pumpunan moda sendiri tidak punya koordinat, yang punya stasiun-stasiun di dalamnya.'),
+  v.metadata({ ref: 'Hub' })
 )
 
 export type Hub = v.InferOutput<typeof HubSchema>

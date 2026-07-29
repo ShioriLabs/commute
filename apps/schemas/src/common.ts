@@ -29,23 +29,46 @@ const operatorCodes = Object.keys(OPERATORS).filter(code => code !== 'NUL') as E
 const regionCodes = Object.keys(REGIONS).filter(code => code !== 'NUL') as Exclude<RegionCodeConst, 'NUL'>[]
 const amenityTypes = Object.keys(AMENITY_TYPES) as ConstantAmenityType[]
 
+/*
+ * `KCI: Commuter Line · MRTJ: MRT Jakarta · …`
+ *
+ * An enum of opaque codes documents nothing on its own: the reader learns that
+ * `MRTJ` is legal and still has to call /operators to find out it means MRT
+ * Jakarta. Folding the labels into the description puts them in the document
+ * itself, so generated clients and the reference page both get them for free.
+ *
+ * Generated from the constants rather than typed out, so a new operator or
+ * amenity cannot appear in the enum while going unexplained here.
+ */
+const glossary = (labels: Record<string, string>, codes: readonly string[]): string =>
+  codes.map(code => `\`${code}\`: ${labels[code] ?? code}`).join(' · ')
+
+const NAMED = <T extends Record<string, { name: string }>>(source: T): Record<string, string> =>
+  Object.fromEntries(Object.entries(source).map(([code, { name }]) => [code, name]))
+
 export const OperatorCodeSchema = v.pipe(
   v.picklist(operatorCodes),
   v.title('Operator code'),
-  v.description('Operator transit. `NUL` cuma placeholder internal dan tidak pernah muncul di response.'),
+  v.description(
+    `Operator transit. ${glossary(NAMED(OPERATORS), operatorCodes)}. `
+    + '`NUL` cuma placeholder internal dan tidak pernah muncul di response.'
+  ),
   v.metadata({ examples: ['KCI', 'MRTJ'] })
 )
 
 export const RegionCodeSchema = v.pipe(
   v.picklist(regionCodes),
   v.title('Region code'),
-  v.description('Wilayah, dinamai dari kode IATA bandara besar terdekat. `CGK` itu Jabodetabek.'),
+  v.description(
+    `Wilayah, dinamai dari kode IATA bandara besar terdekat. ${glossary(NAMED(REGIONS), regionCodes)}.`
+  ),
   v.metadata({ examples: ['CGK'] })
 )
 
 export const AmenityTypeSchema = v.pipe(
   v.picklist(amenityTypes),
   v.title('Amenity type'),
+  v.description(`Fasilitas yang ada di stasiun. ${glossary(AMENITY_TYPES, amenityTypes)}.`),
   v.metadata({ examples: ['TOILET', 'ELEVATOR_PAID'] })
 )
 
@@ -55,7 +78,9 @@ export const AmenitySchema = v.pipe(
     // Free-text qualifier, e.g. which concourse a lift serves.
     text: v.optional(v.string())
   }),
-  v.title('Amenity')
+  v.title('Amenity'),
+  v.description('Satu fasilitas yang ada di stasiun, kadang dengan keterangan lokasinya.'),
+  v.metadata({ ref: 'Amenity' })
 )
 
 export const OperatorSchema = v.pipe(
@@ -63,7 +88,9 @@ export const OperatorSchema = v.pipe(
     code: OperatorCodeSchema,
     name: v.pipe(v.string(), v.metadata({ examples: ['Commuter Line'] }))
   }),
-  v.title('Operator')
+  v.title('Operator'),
+  v.description('Operator transit yang menjalankan lin dan stasiun.'),
+  v.metadata({ ref: 'Operator' })
 )
 
 export const LineSchema = v.pipe(
@@ -76,7 +103,9 @@ export const LineSchema = v.pipe(
       v.metadata({ examples: ['#25B8EB'] })
     )
   }),
-  v.title('Line')
+  v.title('Line'),
+  v.description('Satu lin, dengan kode dan warna yang dipakai di roundel-nya.'),
+  v.metadata({ ref: 'Line' })
 )
 
 /*
@@ -106,7 +135,9 @@ export const ErrorSchema = v.pipe(
     ),
     message: v.pipe(v.string(), v.metadata({ examples: ['Not found'] }))
   }),
-  v.title('Error')
+  v.title('Error'),
+  v.description('Isi `error` waktu request-nya gagal.'),
+  v.metadata({ ref: 'Error' })
 )
 
 /*

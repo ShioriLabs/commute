@@ -6,8 +6,6 @@ import stations from './routes/stations'
 import hubs from './routes/hubs'
 import lines from './routes/lines'
 import fares from './routes/fares'
-import syncRoutes from './routes/sync'
-import cacheRoutes from './routes/cache'
 import operatorRoutes from './routes/operators'
 import internalRoutes from './routes/internal'
 
@@ -42,19 +40,31 @@ app.route('stations', stations)
 app.route('hubs', hubs)
 app.route('lines', lines)
 app.route('fares', fares)
-app.route('sync/stations', syncRoutes)
-app.route('cache', cacheRoutes)
 app.route('operators', operatorRoutes)
+
+/*
+ * routes/sync.ts and routes/cache.ts are NOT mounted.
+ *
+ * They are operational tooling — re-importing an operator's stations and
+ * timetables, and busting KV entries — and they were reachable by anyone with
+ * curl: twelve mutating routes taking no credentials at all. CORS does nothing
+ * here; it restrains browsers, not clients.
+ *
+ * The handlers stay in the repo because the work they do is still needed. To
+ * run a sync, mount them again for as long as it takes, or give them a shared
+ * secret first (KCI_API_TOKEN is the pattern already in this worker). Leaving
+ * them mounted and unauthenticated was the one option worth ruling out.
+ */
 // Shaped for commute.shiorilabs.id only — see routes/internal.ts.
 app.route('_internal', internalRoutes)
 
 /*
  * Machine-readable description of the public read API.
  *
- * Only the read routes are described. The sync and cache mounts are deliberately
- * absent: they mutate data and are not for third-party use. `/_internal` is
- * absent for the same reason — it is shaped around one consumer's screen and its
- * response may change without notice.
+ * Only the read routes are described. `/_internal` is deliberately absent: it is
+ * shaped around one consumer's screen and its response may change without
+ * notice. The sync and cache routes are not merely undocumented — they are not
+ * mounted at all (see above).
  */
 app.get('/openapi.json', openAPIRouteHandler(app, {
   documentation: {
@@ -113,6 +123,9 @@ app.get('/openapi.json', openAPIRouteHandler(app, {
   },
   excludeStaticFile: true,
   // Mutations and internal endpoints stay out of the published surface.
+  // sync and cache are unmounted rather than excluded, but the patterns stay:
+  // they cost nothing and mean remounting the handlers cannot silently publish
+  // twelve mutating routes into the public document.
   exclude: [/^\/sync/, /^\/cache/, /^\/_internal/]
 }))
 

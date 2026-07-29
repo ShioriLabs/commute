@@ -74,12 +74,21 @@
             <img src="/logo.svg" alt="Commute Data Platform" width="431" height="137" class="h-9 w-auto sm:h-10" />
           </a>
           <!-- One link per content beat, in scroll order, so the nav doubles as
-               a table of contents for the page. Right-aligned with no trailing
-               CTA: access isn't open yet, so a button here would promise
-               something the page can't deliver (see the "Segera hadir" states).
-               Labels are single words where the beat allows it — six items only
-               stay scannable if each is read at a glance.
-               lg: not md: — six links plus the lockup overflow a 768px bar. -->
+               a table of contents for the page. Labels are single words where
+               the beat allows it — seven items only stay scannable if each is
+               read at a glance.
+
+               The trailing Docs link is set apart on purpose. Everything to its
+               left is an in-page anchor; this one LEAVES the page, and styling
+               it identically would hide that. A divider plus the accent is the
+               smallest thing that says "different kind of destination" without
+               turning the bar into a landing page.
+
+               (This slot was empty while access wasn't open, on the reasoning
+               that a CTA must not promise what the page can't deliver. The
+               reference exists now, so it can.)
+
+               lg: not md: — the links plus the lockup overflow a 768px bar. -->
           <nav class="hidden items-center gap-6 text-sm font-medium text-white/55 lg:flex">
             <a href="#jadwal" class="transition-colors hover:text-white">Jadwal</a>
             <a href="#topologi" class="transition-colors hover:text-white">Topologi</a>
@@ -88,6 +97,8 @@
             <a href="#rute" class="transition-colors hover:text-white">Rute</a>
             <a href="#cakupan" class="transition-colors hover:text-white">Cakupan</a>
             <a href="#api" class="transition-colors hover:text-white">API</a>
+            <span class="h-4 w-px bg-line" aria-hidden="true"></span>
+            <a href="/docs" class="font-semibold text-accent transition-colors hover:text-accent/80">Docs</a>
           </nav>
         </div>
       </div>
@@ -118,17 +129,19 @@
         >
           Data KRL, MRT, LRT, dan TransJakarta yang udah rapi, kagak pake ribet buat di-integrate ke project kamu.
         </p>
-        <!-- Not buttons. Access isn't open, so these are STATUS, not actions: a
-             disabled-looking button still invites a click and reads as broken,
-             where a plain badge reads as a date that hasn't arrived. The one real
-             action left is the anchor to the API beat, kept as a quiet link. -->
+        <!-- A real action now. This was a "segera hadir" badge for as long as
+             there was nothing to send anyone to: a disabled-looking button
+             invites a click and reads as broken, so it stayed a plain status
+             span. The reference at /docs exists, so the primary slot becomes
+             the link it was always meant to be. -->
         <div class="rise flex flex-wrap items-center gap-4" style="animation-delay: 240ms">
-          <span
-            class="inline-flex items-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-4 py-2.5 text-sm font-semibold text-accent"
+          <a
+            href="/docs"
+            class="inline-flex items-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-4 py-2.5 text-sm font-semibold text-accent transition-colors hover:border-accent/70 hover:bg-accent/20"
           >
             <span class="h-1.5 w-1.5 rounded-full bg-accent"></span>
-            Akses API segera hadir
-          </span>
+            Baca referensi API
+          </a>
           <a
             href="#api"
             class="text-sm font-semibold text-white/70 underline decoration-white/25 underline-offset-4 transition-colors hover:text-white hover:decoration-white/60"
@@ -346,17 +359,20 @@
               ID stasiun konsisten lintas operator, gak perlu mapping sendiri
             </li>
           </ul>
-          <!-- Status, not a signup: the same reasoning as the hero badge. The
-               second line carries the honest detail a button would have hidden. -->
+          <!-- Was a "segera hadir" status with an honest caveat underneath. Both
+               are obsolete: the endpoints are documented and the reference is
+               live, so this is a link and the second line says what is actually
+               behind it. -->
           <div class="flex flex-col gap-2">
-            <span
-              class="inline-flex w-fit items-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-4 py-2.5 text-sm font-semibold text-accent"
+            <a
+              href="/docs"
+              class="inline-flex w-fit items-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-4 py-2.5 text-sm font-semibold text-accent transition-colors hover:border-accent/70 hover:bg-accent/20"
             >
               <span class="h-1.5 w-1.5 rounded-full bg-accent"></span>
-              Segera hadir
-            </span>
+              Baca referensi API
+            </a>
             <p class="text-xs leading-relaxed text-white/40">
-              Endpoint-nya masih kita rapihin. Skema di samping udah jalan di aplikasi Commute.
+              12 endpoint, lengkap sama contoh response dan bentuk datanya.
             </p>
           </div>
         </div>

@@ -25,6 +25,7 @@ const OUT = resolve(import.meta.dirname, '../docs.html')
 // ── the slice of OpenAPI this page renders ──────────────────────────────────
 
 interface JSONSchema {
+  $ref?: string
   type?: string
   title?: string
   description?: string
@@ -63,7 +64,23 @@ interface Spec {
   servers?: { url: string, description?: string }[]
   tags?: { name: string, description?: string }[]
   paths: Record<string, Record<string, Operation>>
+  components?: { schemas?: Record<string, JSONSchema> }
 }
+
+/*
+ * The document's named schemas, populated once per render.
+ *
+ * Responses reference shared shapes as `$ref: '#/components/schemas/Station'`
+ * rather than inlining them (see apps/schemas — each registered schema carries
+ * `v.metadata({ ref })`). Everything below that walks a schema has to be able
+ * to follow those pointers, and a module-level registry is simpler than
+ * threading the spec through eight recursive functions.
+ */
+let components: Record<string, JSONSchema> = {}
+
+/** `#/components/schemas/Station` -> `Station`, or '' for anything else. */
+const refName = (schema: JSONSchema | undefined): string =>
+  schema?.$ref?.replace('#/components/schemas/', '') ?? ''
 
 // ── signage ─────────────────────────────────────────────────────────────────
 
@@ -151,12 +168,36 @@ const slug = (value: string): string =>
   value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
 /*
+ * A copy control for the code block it sits in.
+ *
+ * It carries no payload of its own: the runtime handler reads the text from the
+ * sibling `<pre>`. Duplicating each JSON body into a `data-copy` attribute cost
+ * 1.7 KB gzipped (10% of the page) to store a string already present a few
+ * bytes away.
+ *
+ * Rendered `hidden`, and revealed by src/docs.ts. A copy button is useless
+ * without JavaScript, and a dead control is worse than an absent one; this way
+ * the no-JS page simply never shows it.
+ */
+const copyButton = (label: string): string =>
+  `<button type="button" class="copy absolute right-2 top-2 z-10 rounded border border-line/70 bg-plate/90 px-2 py-1 font-mono text-[9.5px] uppercase tracking-wider text-white/40 backdrop-blur-sm transition-colors hover:border-accent/50 hover:text-white/80" `
+  + `hidden aria-label="${esc(label)}">Salin</button>`
+
+/*
  * A schema rendered as an indented field list rather than raw JSON Schema.
  * Depth is capped: past three levels the shape stops being scannable and the
  * reader is better served by the example payload below it.
  */
 function schemaHTML(schema: JSONSchema | undefined, depth = 0): string {
   if (!schema || depth > 3) return ''
+
+  /*
+   * A reference stops here rather than expanding inline. Its fields live once
+   * in the Skema section, and the type chip above is already a link there —
+   * inlining a 2.8 KB Station under every endpoint that returns one is exactly
+   * the duplication the $refs were introduced to remove.
+   */
+  if (schema.$ref) return ''
 
   // `oneOf` too, not just `anyOf`: the discriminated unions in this API
   // (FareLeg's RIDE/TRANSFER, Transfer's INTERNAL/EXTERNAL) arrive as oneOf,
@@ -202,12 +243,19 @@ function schemaHTML(schema: JSONSchema | undefined, depth = 0): string {
       const kind = prop.enum
         ? prop.enum.map(v => `<code>${esc(String(v))}</code>`).join(' ')
         : typeLabel(prop)
-      const note = prop.description ? `<p class="mt-0.5 text-[12px] leading-snug text-white/45">${ticks(prop.description)}</p>` : ''
+      const note = prop.description ? `<p class="mt-0.5 w-full max-w-[68ch] text-[12px] leading-snug text-white/45">${ticks(prop.description)}</p>` : ''
       // Descend into objects, arrays of objects, AND unions — a `oneOf` field
       // like FareResult.legs used to render its type chip and then nothing.
       const inner = prop.type === 'array' ? prop.items : prop
-      const isUnion = (inner?.anyOf ?? inner?.oneOf ?? []).length > 1
-      const nested = (inner && (inner.type === 'object' || isUnion))
+      /*
+       * Only descend where there is something to show: an object's fields, or a
+       * real union's branches. A nullable SCALAR (`anyOf: [number, null]`) is
+       * already fully described by the type chip beside the name, and recursing
+       * into it printed a second, redundant "number | null" row underneath.
+       */
+      const branches = (inner?.anyOf ?? inner?.oneOf ?? []).filter(b => b.type !== 'null')
+      const isObjectUnion = branches.length > 1 && branches.every(b => b.type === 'object' || b.$ref)
+      const nested = (inner && !inner.$ref && (inner.type === 'object' || isObjectUnion))
         ? `<div class="mt-1.5 border-l border-line/70 pl-3">${schemaHTML(inner, depth + 1)}</div>`
         : ''
       return `<div class="py-1.5">`
@@ -224,6 +272,17 @@ function schemaHTML(schema: JSONSchema | undefined, depth = 0): string {
 }
 
 function typeLabel(schema: JSONSchema): string {
+  /*
+   * A reference renders as the NAME it points at, linked to its entry in the
+   * Skema section — `Station[]` rather than `object[]`. This is the whole point
+   * of registering the schemas: a field's type stops being a shrug and becomes
+   * a thing the reader can go and look at.
+   */
+  const ref = refName(schema)
+  if (ref) {
+    return `<a href="#skema-${slug(ref)}" class="text-white/60 underline decoration-white/20 underline-offset-2 transition-colors hover:text-accent hover:decoration-accent/50">${esc(ref)}</a>`
+  }
+
   // A discriminator carries `const` and no `type`, so it fell through to "any"
   // — on the very field whose whole purpose is to say which branch you have.
   // Its literal value IS its type.
@@ -329,7 +388,7 @@ function operationHTML(path: string, method: string, op: Operation, anchor: stri
           ? `<code class="ml-auto font-mono text-[12px] text-white/35">${esc(String(p.schema.examples[0]))}</code>`
           : '')
         + `</div>`
-        + (p.description ? `<p class="mt-1 text-[12px] leading-snug text-white/45">${ticks(p.description)}</p>` : '')
+        + (p.description ? `<p class="mt-1 w-full max-w-[68ch] text-[12px] leading-snug text-white/45">${ticks(p.description)}</p>` : '')
         + `</div>`).join('')
       + `</div></div>`
   }
@@ -353,12 +412,25 @@ function operationHTML(path: string, method: string, op: Operation, anchor: stri
       + `<span class="h-1.5 w-1.5 rounded-full ${dot}"></span>${esc(code)}</label>`
   }).join('')
 
-  const tabPanels = entries.map(([, res], i) => {
+  const tabPanels = entries.map(([code, res], i) => {
     const schema = res.content?.['application/json']?.schema
+    /*
+     * A live 200 body if the build could reach the API, otherwise the
+     * schema-synthesised shape. Only 2xx: an error example would need the
+     * request to actually fail, and the error envelope is small enough that
+     * the synthesised version says everything.
+     */
+    const live = code.startsWith('2') ? liveExamples.get(`${method} ${path}`) : undefined
+    const payload = live ?? (schema ? exampleValue(schema) : undefined)
+    const json = payload === undefined ? '' : JSON.stringify(payload, null, 2)
+
     return `<div class="res-panel" data-res="${i}">`
-      + `<p class="px-3.5 py-2.5 text-[12px] leading-snug text-white/45">${esc(res.description ?? '')}</p>`
-      + (schema
-        ? `<pre class="overflow-x-auto border-t border-line/50 bg-plate p-3.5 font-mono text-[11.5px] leading-relaxed"><code>${jsonHTML(exampleValue(schema))}</code></pre>`
+      + `<p class="max-w-[68ch] px-3.5 py-2.5 text-[12px] leading-snug text-white/45">${esc(res.description ?? '')}</p>`
+      + (json
+        ? `<div class="relative border-t border-line/50">`
+        + copyButton('Salin respons')
+        + `<pre class="overflow-x-auto bg-plate p-3.5 pr-12 font-mono text-[11.5px] leading-relaxed"><code>${jsonHTML(payload)}</code></pre>`
+        + `</div>`
         : '')
       + `</div>`
   }).join('')
@@ -425,6 +497,7 @@ interface Entry {
 }
 
 function render(spec: Spec): string {
+  components = spec.components?.schemas ?? {}
   const byTag = new Map<string, Entry[]>()
   let index = 0
 
@@ -496,8 +569,7 @@ function render(spec: Spec): string {
       // sidesteps the problem that a translated tag name in an eyebrow would
       // just repeat the heading word for word.
       + `<div class="border-l-[3px] pl-4" style="border-color: ${tagAccent(tag)}">`
-      + `<p class="font-mono text-[9.5px] uppercase tracking-[0.16em] text-white/30">${rows.length} endpoint</p>`
-      + `<h2 class="mt-2 text-[26px] font-bold tracking-tight text-white sm:text-[30px]">${esc(tag)}</h2>`
+      + `<h2 class="text-[26px] font-bold tracking-tight text-white sm:text-[30px]">${esc(tag)}</h2>`
       + (tagDescription.get(tag) ? `<p class="mt-2 w-full max-w-[58ch] text-[14px] leading-relaxed text-white/45">${esc(tagDescription.get(tag)!)}</p>` : '')
       + `</div>`
       // One divided stack per section rather than N floating cards — the
@@ -516,6 +588,159 @@ function render(spec: Spec): string {
    * labelled group, the legend was restating five labels that sit a column to
    * its left in the same five colours. The sidebar IS the legend.
    */
+
+  /*
+   * One entry per named schema, so a `Station[]` chip anywhere on the page has
+   * somewhere to point. Only schemas the document actually references are
+   * listed — an orphan in components/schemas would be documenting something no
+   * endpoint returns.
+   */
+  const referenced = new Set(
+    [...JSON.stringify({ paths: spec.paths, components })
+      .matchAll(/#\/components\/schemas\/([A-Za-z0-9_]+)/g)]
+      .map(m => m[1]!)
+  )
+  const schemaNames = Object.keys(components).filter(n => referenced.has(n)).sort()
+
+  /** The sidebar's sixth group, listing every named shape. */
+  const schemaNav = (names: string[]): string => names.length
+    ? `<div class="nav-group" data-spy="skema" style="--nav-accent: var(--color-accent)">`
+    + `<a href="#skema" class="nav-head flex items-center gap-2 rounded px-2 py-1 text-[13px] text-white/60 transition-colors hover:text-white">`
+    + `<span class="nav-dot h-1.5 w-1.5 shrink-0 rounded-full transition-transform" style="background: var(--color-accent)"></span>`
+    + `<span class="min-w-0 flex-1 truncate">Skema</span>`
+    + `<span class="font-mono text-[9.5px] text-white/25">${names.length}</span>`
+    + `</a>`
+    + `<div class="mt-0.5 mb-3 ml-2 border-l border-line/60 pl-1">`
+    + names.map(n => `<a href="#skema-${slug(n)}" class="block truncate rounded py-[3px] pl-[15px] font-mono text-[11.5px] text-white/35 transition-colors hover:text-white/75">${esc(n)}</a>`).join('')
+    + `</div></div>`
+    : ''
+
+  const schemaSection = schemaNames.length
+    ? `<section id="skema" class="scroll-mt-24 pt-24">`
+    + `<div class="border-l-[3px] pl-4" style="border-color: var(--color-accent)">`
+    + `<h2 class="text-[26px] font-bold tracking-tight text-white sm:text-[30px]">Skema</h2>`
+    + `<p class="mt-2 w-full max-w-[58ch] text-[14px] leading-relaxed text-white/45">Bentuk data yang dipakai berulang di beberapa endpoint. Tipe di atas menautkan ke sini.</p>`
+    + `</div>`
+    + `<div class="mt-6 divide-y divide-line/50 border border-line/50 bg-plate/70 backdrop-blur-[6px]">`
+    + schemaNames.map((name) => {
+      const schema = components[name]!
+      return `<details id="skema-${slug(name)}" class="group scroll-mt-24" data-schema>`
+        + `<summary class="flex cursor-pointer items-center gap-3 px-4 py-3.5 transition-colors hover:bg-white/[0.025]">`
+        + `<code class="min-w-0 shrink-0 font-mono text-[14.5px] font-semibold tracking-tight text-white">${esc(name)}</code>`
+        + (schema.description
+          ? `<span class="ml-auto hidden min-w-0 truncate text-right text-[12.5px] text-white/35 md:block">${esc(schema.description)}</span>`
+          : '<span class="ml-auto"></span>')
+        + `<svg class="chev h-3 w-3 shrink-0 text-white/25 transition-transform duration-200 group-hover:text-white/50" viewBox="0 0 12 12" fill="none" aria-hidden="true">`
+        + `<path d="M4.2 2.4 8 6l-3.8 3.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+        + `</summary>`
+        + `<div class="border-t border-line/40 bg-plate/40 px-4 pb-6 pt-4">`
+        + (schema.description ? `<p class="mb-4 max-w-[62ch] text-[13.5px] leading-relaxed text-white/55">${ticks(schema.description)}</p>` : '')
+        + schemaHTML({ ...schema, $ref: undefined })
+        + `</div></details>`
+    }).join('')
+    + `</div></section>`
+    : ''
+
+  /*
+   * The code dictionary.
+   *
+   * Every enum on the page is a set of opaque strings — `MRTJ`, `CGK`,
+   * `ESCALATOR_PAID` — and a reader hitting one mid-schema should not have to
+   * hunt for what it means. The labels are folded into each enum's description
+   * upstream (apps/schemas/src/common.ts), so this parses them back out rather
+   * than keeping a second copy that could disagree with the spec.
+   *
+   * Only enums whose descriptions actually carry `\`CODE\`: Label` pairs appear.
+   * `hub`/`integrated` and `TRUNK`/`RAMP`/… are deliberately absent: their
+   * descriptions already explain each value in prose, and a two-column table
+   * would just restate it.
+   */
+  const dictionaries: { title: string, entries: [string, string][] }[] = []
+  const seenDict = new Set<string>()
+
+  const collectEnums = (node: unknown): void => {
+    if (!node || typeof node !== 'object') return
+    if (Array.isArray(node)) {
+      for (const item of node) collectEnums(item)
+      return
+    }
+    const schema = node as JSONSchema
+    if (schema.enum?.length && schema.title && schema.description && !seenDict.has(schema.title)) {
+      const pairs = [...schema.description.matchAll(/`([A-Z0-9_]+)`: ([^·.]+)/g)]
+        .map(m => [m[1]!, m[2]!.trim()] as [string, string])
+      if (pairs.length > 1) {
+        seenDict.add(schema.title)
+        dictionaries.push({ title: schema.title, entries: pairs })
+      }
+    }
+    for (const value of Object.values(schema)) collectEnums(value)
+  }
+  collectEnums(spec.paths)
+  collectEnums(components)
+
+  const DICT_LABEL: Record<string, string> = {
+    'Operator code': 'Operator',
+    'Region code': 'Wilayah',
+    'Amenity type': 'Fasilitas'
+  }
+
+  const dictionarySection = dictionaries.length
+    ? `<section id="kamus" class="scroll-mt-24 pt-24">`
+    + `<div class="border-l-[3px] pl-4" style="border-color: var(--color-accent)">`
+    + `<h2 class="text-[26px] font-bold tracking-tight text-white sm:text-[30px]">Kamus</h2>`
+    + `<p class="mt-2 w-full max-w-[58ch] text-[14px] leading-relaxed text-white/45">Arti kode-kode yang dipakai di seluruh API.</p>`
+    + `</div>`
+    + `<div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">`
+    + dictionaries.map(d =>
+      `<div class="border border-line/50 bg-plate/70 backdrop-blur-[6px]">`
+      + `<p class="border-b border-line/50 px-4 py-2.5 font-mono text-[9.5px] uppercase tracking-[0.16em] text-white/40">${esc(DICT_LABEL[d.title] ?? d.title)}</p>`
+      + `<dl class="divide-y divide-line/40">`
+      + d.entries.map(([code, label]) =>
+        `<div class="flex items-baseline gap-3 px-4 py-2">`
+        + `<dt class="shrink-0 font-mono text-[11.5px] text-accent/80">${esc(code)}</dt>`
+        + `<dd class="min-w-0 flex-1 text-right text-[12.5px] text-white/60">${esc(label)}</dd>`
+        + `</div>`).join('')
+      + `</dl></div>`).join('')
+    + `</div></section>`
+    : ''
+
+  const dictionaryNav = dictionaries.length
+    ? `<div class="nav-group" data-spy="kamus" style="--nav-accent: var(--color-accent)">`
+    + `<a href="#kamus" class="nav-head flex items-center gap-2 rounded px-2 py-1 text-[13px] text-white/60 transition-colors hover:text-white">`
+    + `<span class="nav-dot h-1.5 w-1.5 shrink-0 rounded-full transition-transform" style="background: var(--color-accent)"></span>`
+    + `<span class="min-w-0 flex-1 truncate">Kamus</span>`
+    + `<span class="font-mono text-[9.5px] text-white/25">${dictionaries.length}</span>`
+    + `</a></div>`
+    : ''
+
+  /*
+   * The mobile section bar.
+   *
+   * Below lg: the sidebar is hidden and the page is six screens deep, which
+   * left a reader on a phone with no way to reach a section except scrolling
+   * past everything before it. This is a horizontally-scrolling strip of the
+   * same destinations, pinned under the masthead.
+   *
+   * Plain anchor links carrying `data-spy-chip`: with no JavaScript it is a
+   * working set of jump links, and with JavaScript the existing scroll-spy
+   * highlights the current one and scrolls it into view. No open/close state,
+   * nothing to trap focus in, nothing to get stuck open.
+   */
+  const chips = [
+    ...order.map(tag => ({ id: slug(tag), label: tag, colour: tagAccent(tag) })),
+    ...(schemaNames.length ? [{ id: 'skema', label: 'Skema', colour: 'var(--color-accent)' }] : []),
+    ...(dictionaries.length ? [{ id: 'kamus', label: 'Kamus', colour: 'var(--color-accent)' }] : [])
+  ]
+
+  const sectionBar = chips.length
+    ? `<div class="no-scrollbar sticky top-0 z-20 -mx-5 overflow-x-auto border-b border-line/50 bg-ink/85 backdrop-blur-md lg:hidden">`
+    + `<div class="flex w-max items-center gap-1 px-5 py-2.5">`
+    + chips.map(c =>
+      `<a href="#${c.id}" data-spy-chip="${c.id}" class="flex shrink-0 items-center gap-1.5 rounded-full border border-line/60 px-3 py-1.5 text-[12.5px] text-white/55 transition-colors">`
+      + `<span class="h-1.5 w-1.5 shrink-0 rounded-full" style="background: ${c.colour}"></span>`
+      + `${esc(c.label)}</a>`).join('')
+    + `</div></div>`
+    : ''
 
   const server = spec.servers?.[0]?.url ?? ''
 
@@ -585,7 +810,7 @@ function render(spec: Spec): string {
              the homepage, and two stacked back-links in the same corner is one
              too many. -->
         <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-white/35">Endpoint</p>
-        <div class="mt-3 -ml-2">${nav}</div>
+        <div class="mt-3 -ml-2">${nav}${schemaNav(schemaNames)}${dictionaryNav}</div>
       </nav>
 
       <main class="min-w-0 flex-1">
@@ -594,7 +819,14 @@ function render(spec: Spec): string {
           <h1 class="rise sign-shadow mt-4 text-[38px] font-extrabold leading-[0.98] tracking-tight text-white sm:text-5xl lg:text-[56px]" style="animation-delay: 160ms">${esc(spec.info.title)}</h1>
           <p class="rise sign-shadow mt-5 w-full max-w-[54ch] text-[15.5px] leading-relaxed text-white/60" style="animation-delay: 240ms">${esc(intro)}</p>
           <div class="rise mt-7 flex flex-wrap items-center gap-2" style="animation-delay: 320ms">
-            <code class="rounded border border-line/70 bg-plate px-2.5 py-1.5 font-mono text-[12px] text-white/70">${esc(server)}</code>
+            <!-- The base URL is the one string every reader needs to paste
+                 somewhere, so it gets a copy control of its own rather than
+                 being selected by hand. Inline rather than absolute: this chip
+                 sits in a flex row, not over a code block. -->
+            <span class="inline-flex items-stretch overflow-hidden rounded border border-line/70 bg-plate">
+              <code class="px-2.5 py-1.5 font-mono text-[12px] text-white/70">${esc(server)}</code>
+              <button type="button" class="copy border-l border-line/70 px-2 font-mono text-[9.5px] uppercase tracking-wider text-white/40 transition-colors hover:bg-white/[0.04] hover:text-white/80" hidden data-copy="${esc(server)}" aria-label="Salin base URL">Salin</button>
+            </span>
             <a href="${esc(server)}/openapi.json" class="rounded border border-line/70 px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-wider text-white/45 hover:border-accent/50 hover:text-white/80">openapi.json</a>
           </div>
           <!-- The licence is a link, not just a chip. This page renders only the
@@ -617,7 +849,11 @@ function render(spec: Spec): string {
           <p id="filter-empty" hidden class="py-6 text-center text-[13px] text-white/35">Tidak ada endpoint yang cocok.</p>
         </div>
 
+        ${sectionBar}
+
         ${sections}
+        ${schemaSection}
+        ${dictionarySection}
       </main>
     </div>
 
@@ -646,6 +882,98 @@ function render(spec: Spec): string {
 `
 }
 
+// ── live examples ───────────────────────────────────────────────────────────
+
+/*
+ * Real responses, fetched at build time, instead of values invented from the
+ * schema.
+ *
+ * A synthesised payload is honest about SHAPE and useless about everything
+ * else: the fares example read `"legs": ["string"]`, which is not a fare, and
+ * `"name": "string"` teaches a reader nothing about what a station looks like.
+ * The API is public, GET-only and needs no credentials, so the documentation
+ * can simply show what it actually returns — Sudirman with its real amenities,
+ * a real Rp14,000 journey.
+ *
+ * Each endpoint's URL is built from its own parameter examples, which the spec
+ * already carries, so nothing is hardcoded here and a new endpoint gets a live
+ * example for free as long as its parameters have examples.
+ */
+
+/** Arrays longer than this are cut; a 102 KB /stations dump helps nobody. */
+const MAX_ARRAY_ITEMS = 2
+
+/**
+ * The URL to call for an operation, or '' when a parameter has no example to
+ * fill it with.
+ */
+function exampleURL(path: string, op: Operation): string {
+  let url = path
+  for (const p of op.parameters ?? []) {
+    const value = p.schema?.examples?.[0]
+    if (value === undefined) continue
+    if (p.in === 'path') url = url.replace(`{${p.name}}`, encodeURIComponent(String(value)))
+  }
+  return url.includes('{') ? '' : url
+}
+
+/*
+ * Long arrays keep their first couple of entries and gain a marker saying what
+ * was dropped. Truncating rather than sampling keeps the JSON valid and the
+ * shape obvious; the marker stops a reader thinking Jakarta has two stations.
+ */
+function truncate(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    /*
+     * Cutting one item to add a "… 1 lainnya" marker trades a real entry for a
+     * note about it, which is a bad deal; only truncate when at least two are
+     * hidden.
+     */
+    if (value.length <= MAX_ARRAY_ITEMS + 1) return value.map(truncate)
+    const kept = value.slice(0, MAX_ARRAY_ITEMS).map(truncate)
+    return [...kept, `… ${value.length - MAX_ARRAY_ITEMS} lainnya`]
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, truncate(v)]))
+  }
+  return value
+}
+
+/**
+ * Live 200 bodies keyed by `METHOD path`. Missing entries fall back to the
+ * schema-synthesised example, so an unreachable API costs fidelity, never the
+ * build.
+ */
+const liveExamples = new Map<string, unknown>()
+
+async function collectLiveExamples(spec: Spec, base: string): Promise<void> {
+  const wanted: { key: string, url: string }[] = []
+  for (const [path, methods] of Object.entries(spec.paths)) {
+    for (const [method, op] of Object.entries(methods)) {
+      if (method !== 'get') continue
+      const url = exampleURL(path, op)
+      if (url) wanted.push({ key: `${method} ${path}`, url })
+    }
+  }
+
+  const results = await Promise.all(wanted.map(async ({ key, url }) => {
+    try {
+      const res = await fetch(base + url, { signal: AbortSignal.timeout(8000) })
+      if (!res.ok) return null
+      return { key, body: truncate(await res.json()) }
+    } catch {
+      return null
+    }
+  }))
+
+  for (const hit of results) if (hit) liveExamples.set(hit.key, hit.body)
+  const missed = wanted.length - liveExamples.size
+  console.log(
+    `live examples: ${liveExamples.size}/${wanted.length} from ${base}`
+    + (missed ? ` (${missed} fell back to synthesised)` : '')
+  )
+}
+
 // ── run ─────────────────────────────────────────────────────────────────────
 
 /*
@@ -671,6 +999,18 @@ if (!response.ok) {
 }
 
 const spec = await response.json() as Spec
+
+/*
+ * Examples come from the server the spec describes, not from SPEC_URL — those
+ * differ when the document is read from a file or a preview host while the API
+ * itself lives elsewhere. DOCS_API_BASE overrides for the case where neither
+ * is reachable.
+ */
+const apiBase = process.env.DOCS_API_BASE
+  ?? spec.servers?.[0]?.url
+  ?? SPEC_URL.replace(/\/openapi\.json$/, '')
+await collectLiveExamples(spec, apiBase)
+
 writeFileSync(OUT, render(spec))
 
 const endpoints = Object.values(spec.paths).reduce((n, methods) => n + Object.keys(methods).length, 0)

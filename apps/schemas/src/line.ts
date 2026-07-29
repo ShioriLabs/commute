@@ -12,13 +12,18 @@ export const LineStationSchema = v.pipe(
       v.description('Label posisi di sepanjang lin, misalnya `C13`.'),
       v.metadata({ examples: ['C12'] })
     ),
-    isInterchange: v.boolean(),
+    isInterchange: v.pipe(
+      v.boolean(),
+      v.description('True kalau stasiun ini titik pindah ke lin lain.')
+    ),
     otherLines: v.pipe(
       v.array(LineKeySchema),
       v.description('Lin lain dari operator yang SAMA yang berhenti di sini, berupa line key. Lin yang sedang dibuka tidak termasuk. Sambungan lintas operator ada di transfer stasiunnya.')
     )
   }),
-  v.title('LineStation')
+  v.title('LineStation'),
+  v.description('Satu stasiun di sepanjang lin, urut dari stasiun awal.'),
+  v.metadata({ ref: 'LineStation' })
 )
 
 export const LineSegmentSchema = v.pipe(
@@ -34,7 +39,9 @@ export const LineSegmentSchema = v.pipe(
     ),
     stations: v.array(LineStationSchema)
   }),
-  v.title('LineSegment')
+  v.title('LineSegment'),
+  v.description('Satu ruas lin. Lin lurus cuma punya satu ruas `TRUNK`; lin bercabang punya beberapa.'),
+  v.metadata({ ref: 'LineSegment' })
 )
 
 export const LineDetailSchema = v.pipe(
@@ -48,7 +55,9 @@ export const LineDetailSchema = v.pipe(
       v.description('Struktur lin secara urut. Lin sederhana cuma punya satu `TRUNK`; lin bercabang menambah segmen lain.')
     )
   }),
-  v.title('LineDetail')
+  v.title('LineDetail'),
+  v.description('Struktur lengkap satu lin: segmen-segmennya, plus stasiun yang dilewati tiap segmen.'),
+  v.metadata({ ref: 'LineDetail' })
 )
 
 /*
@@ -62,7 +71,9 @@ export const OperatorWithLinesSchema = v.pipe(
     name: v.string(),
     lines: v.array(LineSchema)
   }),
-  v.title('OperatorWithLines')
+  v.title('OperatorWithLines'),
+  v.description('Operator beserta seluruh lin yang dijalankannya. Ini yang dikembalikan `/operators`.'),
+  v.metadata({ ref: 'OperatorWithLines' })
 )
 
 export type LineStation = v.InferOutput<typeof LineStationSchema>

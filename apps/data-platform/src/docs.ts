@@ -68,6 +68,60 @@ function openFromHash(): void {
 openFromHash()
 window.addEventListener('hashchange', openFromHash)
 
+// ── copy buttons ────────────────────────────────────────────────────────────
+
+/*
+ * One delegated listener for every copy control on the page.
+ *
+ * The buttons ship `hidden` and are revealed here, so a reader without
+ * JavaScript never sees a control that cannot work. Each carries its own text
+ * in `data-copy`, which keeps this handler free of any mapping between buttons
+ * and payloads.
+ */
+const copyButtons = document.querySelectorAll<HTMLButtonElement>('button.copy')
+for (const button of copyButtons) button.hidden = false
+
+if (copyButtons.length) {
+  document.addEventListener('click', (event) => {
+    const button = (event.target as Element | null)?.closest<HTMLButtonElement>('button.copy')
+    if (!button) return
+
+    /*
+     * `data-copy` when the button carries its own value (the base URL chip),
+     * otherwise the text of the code block it sits in. Reading the DOM avoids
+     * duplicating every JSON body into an attribute, which measured 1.7 KB
+     * gzipped for strings already on the page.
+     */
+    const text = button.dataset.copy
+      ?? button.parentElement?.querySelector('pre')?.textContent
+      ?? ''
+    // execCommand is the fallback for insecure origins, where the async
+    // clipboard API is simply absent — including plain http:// previews of
+    // this very page.
+    const write = navigator.clipboard?.writeText(text) ?? Promise.reject(new Error('no clipboard'))
+
+    void write.catch(() => {
+      const scratch = document.createElement('textarea')
+      scratch.value = text
+      scratch.setAttribute('readonly', '')
+      scratch.style.position = 'fixed'
+      scratch.style.opacity = '0'
+      document.body.append(scratch)
+      scratch.select()
+      document.execCommand('copy')
+      scratch.remove()
+    }).finally(() => {
+      const original = button.textContent
+      button.textContent = 'Tersalin'
+      button.classList.add('text-accent')
+      setTimeout(() => {
+        button.textContent = original
+        button.classList.remove('text-accent')
+      }, 1200)
+    })
+  })
+}
+
 // ── sidebar scroll-spy ──────────────────────────────────────────────────────
 
 /*
@@ -89,8 +143,19 @@ const groups = [...document.querySelectorAll<HTMLElement>('.nav-group')]
   .map(group => ({ group, section: document.getElementById(group.dataset.spy ?? '') }))
   .filter((g): g is { group: HTMLElement, section: HTMLElement } => g.section !== null)
 
+/*
+ * The mobile section bar's chips, marked by the same pass. Keyed by section id
+ * rather than index, because the bar carries the sidebar's groups in the same
+ * order but the two lists are separate elements.
+ */
+const chips = new Map(
+  [...document.querySelectorAll<HTMLAnchorElement>('[data-spy-chip]')]
+    .map(chip => [chip.dataset.spyChip ?? '', chip])
+)
+
 if (groups.length) {
   let queued = false
+  let lastActive = ''
 
   const sync = (): void => {
     queued = false
@@ -104,6 +169,21 @@ if (groups.length) {
     }
     for (let i = 0; i < groups.length; i++) {
       groups[i]!.group.classList.toggle('is-active', i === active)
+    }
+
+    const activeId = active >= 0 ? groups[active]!.section.id : ''
+    if (activeId === lastActive) return
+    lastActive = activeId
+    for (const [id, chip] of chips) {
+      const on = id === activeId
+      chip.classList.toggle('is-active', on)
+      /*
+       * Keep the active chip reachable: the strip scrolls horizontally, and by
+       * the time you are reading Kamus its chip is off the right edge. Guarded
+       * on an actual change so this does not fight the user's own scrolling of
+       * the strip on every frame.
+       */
+      if (on) chip.scrollIntoView({ block: 'nearest', inline: 'center' })
     }
   }
 

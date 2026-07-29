@@ -171,6 +171,15 @@ body {
     color: rgb(255 255 255 / 0.55);
   }
 
+  /* The mobile section bar's active chip, set by the same scroll-spy that marks
+     the sidebar. Additive: with no JavaScript no chip is active and the strip is
+     still a working row of jump links. */
+  [data-spy-chip].is-active {
+    border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    color: rgb(255 255 255 / 0.9);
+  }
+
   /* Response tabs, CSS only.
      -----------------------
      The radios live at the top of the panel and every tab/panel pair carries a

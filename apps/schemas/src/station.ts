@@ -53,7 +53,9 @@ export const StationSchema = v.pipe(
       v.description('False kalau stasiunnya cuma dipakai buat routing dan sengaja disembunyikan dari pencarian. Di response daftar selalu true, karena yang seperti itu sudah difilter duluan.')
     )
   }),
-  v.title('Station')
+  v.title('Station'),
+  v.description('Satu stasiun lengkap dengan fasilitas, koordinat, dan lin yang berhenti di sana.'),
+  v.metadata({ ref: 'Station' })
 )
 
 /*
@@ -62,7 +64,9 @@ export const StationSchema = v.pipe(
  */
 export const StationRefSchema = v.pipe(
   v.object(stationIdentity),
-  v.title('StationRef')
+  v.title('StationRef'),
+  v.description('Rujukan ringkas ke sebuah stasiun. Dipakai di tempat yang cuma butuh nama dan kodenya, tanpa detail lengkap.'),
+  v.metadata({ ref: 'StationRef' })
 )
 
 /*
@@ -93,7 +97,8 @@ export const InternalTransferSchema = v.pipe(
     toStation: StationRefSchema
   }),
   v.title('InternalTransfer'),
-  v.description('Sambungan ke stasiun lain yang ada di API ini. `toStation` berisi referensi stasiun lengkap.')
+  v.description('Sambungan ke stasiun lain yang ada di API ini. `toStation` berisi referensi stasiun lengkap.'),
+  v.metadata({ ref: 'InternalTransfer' })
 )
 
 export const ExternalTransferSchema = v.pipe(
@@ -109,13 +114,15 @@ export const ExternalTransferSchema = v.pipe(
     })
   }),
   v.title('ExternalTransfer'),
-  v.description('Sambungan ke layanan yang belum ada di API ini. Tidak ada station id atau lin, cuma nama.')
+  v.description('Sambungan ke layanan yang belum ada di API ini. Tidak ada station id atau lin, cuma nama.'),
+  v.metadata({ ref: 'ExternalTransfer' })
 )
 
 export const TransferSchema = v.pipe(
   v.variant('dataType', [InternalTransferSchema, ExternalTransferSchema]),
   v.title('Transfer'),
-  v.description('Dibedakan lewat `dataType`. Data yang ada sekarang semuanya INTERNAL. Bentuk EXTERNAL disiapkan buat sambungan ke luar jaringan.')
+  v.description('Dibedakan lewat `dataType`. Data yang ada sekarang semuanya INTERNAL. Bentuk EXTERNAL disiapkan buat sambungan ke luar jaringan.'),
+  v.metadata({ ref: 'Transfer' })
 )
 
 /*
@@ -134,7 +141,9 @@ export const ScheduleSchema = v.pipe(
     boundFor: v.pipe(v.string(), v.description('Stasiun akhir yang dituju perjalanan ini.'), v.metadata({ examples: ['Cikarang'] })),
     lineCode: v.string()
   }),
-  v.title('Schedule')
+  v.title('Schedule'),
+  v.description('Satu keberangkatan: kapan berangkat, menuju ke mana, dan dari peron berapa.'),
+  v.metadata({ ref: 'Schedule' })
 )
 
 /*
@@ -169,14 +178,20 @@ const directionGroup = <T extends v.GenericSchema>(schedules: T, title: string) 
       v.nullable(v.string()),
       v.description('Info peron yang sudah kita kurasi. Null kalau peronnya belum diketahui.')
     ),
-    destinations: v.array(v.object({
-      boundFor: v.string(),
-      via: v.pipe(
-        v.nullable(v.string()),
-        v.description('Terisi kalau ada dua perjalanan ke stasiun akhir yang sama tapi lewat jalur berbeda.')
-      ),
-      schedules: v.array(schedules)
-    }))
+    destinations: v.pipe(
+      v.array(v.object({
+        boundFor: v.pipe(v.string(), v.description('Stasiun akhir yang dituju.')),
+        via: v.pipe(
+          v.nullable(v.string()),
+          v.description('Terisi kalau ada dua perjalanan ke stasiun akhir yang sama tapi lewat jalur berbeda.')
+        ),
+        schedules: v.pipe(
+          v.array(schedules),
+          v.description('Keberangkatan menuju stasiun akhir itu, urut dari yang paling awal.')
+        )
+      })),
+      v.description('Satu entri per stasiun akhir di arah ini.')
+    )
   }),
   v.title(title)
 )
@@ -188,18 +203,28 @@ const directionGroup = <T extends v.GenericSchema>(schedules: T, title: string) 
 export const GroupedTimetableSchema = v.pipe(
   v.object({
     line: v.pipe(LineKeySchema, v.description('Lin yang punya keberangkatan ini.')),
-    timetable: v.array(directionGroup(ScheduleSchema, 'TimetableDirectionGroup'))
+    timetable: v.pipe(
+      v.array(directionGroup(ScheduleSchema, 'TimetableDirectionGroup')),
+      v.description('Satu entri per arah keberangkatan.')
+    )
   }),
-  v.title('GroupedTimetable')
+  v.title('GroupedTimetable'),
+  v.description('Jadwal satu lin, dikelompokkan tiga tingkat: per arah, lalu per stasiun tujuan, lalu daftar keberangkatannya. Ini bentuk yang dipakai papan keberangkatan.'),
+  v.metadata({ ref: 'GroupedTimetable' })
 )
 
 /** The `?compact=1` variant: identical structure, tuple schedules. */
 export const CompactGroupedTimetableSchema = v.pipe(
   v.object({
     line: v.pipe(LineKeySchema, v.description('Lin yang punya keberangkatan ini.')),
-    timetable: v.array(directionGroup(CompactScheduleSchema, 'CompactTimetableDirectionGroup'))
+    timetable: v.pipe(
+      v.array(directionGroup(CompactScheduleSchema, 'CompactTimetableDirectionGroup')),
+      v.description('Satu entri per arah keberangkatan.')
+    )
   }),
-  v.title('CompactGroupedTimetable')
+  v.title('CompactGroupedTimetable'),
+  v.description('Sama dengan GroupedTimetable, tapi tiap keberangkatan diringkas jadi tuple `[tripNumber, minutesSinceMidnight]` biar payload-nya lebih kecil.'),
+  v.metadata({ ref: 'CompactGroupedTimetable' })
 )
 
 /*
