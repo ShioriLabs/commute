@@ -21,6 +21,9 @@ export default function MapButton({ className }: Props) {
     warmedRef.current = true
     void fetch('/maps/fdtj/manifest.json').catch(() => {})
     void fetch('/maps/fdtj/preview.webp').catch(() => {})
+    // The skeleton is a separate JS chunk, so it has to be in memory before the
+    // morph lands or the draw is skipped for that visit.
+    morph.prefetch()
   }
 
   const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {

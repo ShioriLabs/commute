@@ -165,6 +165,14 @@ export default function MapPage() {
   useEffect(() => {
     if (error) morph.notifyMapFailed()
   }, [error, morph])
+  // Arriving without a card to morph from (deep link, reload, back into /map).
+  // startDirect no-ops when a card morph is already running, so the gesture path
+  // still wins; this only covers the entries that would otherwise watch a bare
+  // canvas, since the route's own fallback ends when the manifest lands and the
+  // real wait is everything after it.
+  useEffect(() => {
+    morph.startDirect()
+  }, [morph])
   const { data: pointsManifest } = useSWR<PointsManifest>(
     pointsUrl,
     (url: string) => fetch(url).then(r => r.json())

@@ -12,6 +12,7 @@
     "lint": "eslint",
     "lint:fix": "eslint --fix",
     "build:map-tiles": "tsx scripts/build-map-tiles.ts",
+    "build:map-skeleton": "tsx scripts/build-map-skeleton.ts",
     "build:og": "tsx scripts/build-og-images.ts"
   },
   "dependencies": {
