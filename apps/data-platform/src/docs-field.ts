@@ -49,7 +49,13 @@ const LOGO_RADIUS_SCALE = 2.1
 /** Matches MAX_DPR in gl/renderer.ts — past 2x the dots cost more than they show. */
 const MAX_DPR = 2
 
-const REVEAL_MS = 1400
+/*
+ * Long enough for the exponential damp below to effectively finish (98.9% at
+ * the 200ms time constant) without a tail of imperceptible change. The old
+ * 1400ms was sized for a per-column wipe that had to traverse 100 cells; a
+ * whole-logo fade settles far sooner.
+ */
+const REVEAL_MS = 900
 
 export type FieldMode = 'masthead' | 'wordmark'
 
@@ -64,11 +70,15 @@ export interface DotField {
 }
 
 /*
- * cubic-bezier(0.36, 0.66, 0.04, 1) — the --ease-ios-spring token, sampled.
- * Solving the bezier per dot per frame is not worth it for a decorative field;
- * this approximation carries the same overshoot-free fast-out settle.
+ * The homepage does not ease its wordmark on a curve — gl/renderer.ts damps
+ * `logoMix` toward its target exponentially, `mix += (target - mix) * (1 -
+ * exp(-dt / 200))`, so the letters rush in and settle asymptotically. This is
+ * the closed form of that same damping over the reveal window, which is what
+ * makes the two pages feel like the same animation rather than merely the same
+ * picture.
  */
-const ease = (t: number): number => 1 - Math.pow(1 - t, 3)
+const TIME_CONSTANT_MS = 200
+const ease = (t: number): number => 1 - Math.exp((-t * REVEAL_MS) / TIME_CONSTANT_MS)
 
 export function createDotField(canvas: HTMLCanvasElement, mode: FieldMode): DotField | null {
   // Can be null when canvas is disabled or under extreme memory pressure. Bail
@@ -84,8 +94,8 @@ export function createDotField(canvas: HTMLCanvasElement, mode: FieldMode): DotF
   let width = 0
   let height = 0
   let cell = CELL_PX
-  /** Cell keys the wordmark occupies -> normalised column, for the stagger. */
-  let logoCells = new Map<string, number>()
+  /** Cell keys the wordmark occupies. */
+  let logoCells = new Set<string>()
 
   function layout(): void {
     const rect = canvas.getBoundingClientRect()
@@ -113,7 +123,7 @@ export function createDotField(canvas: HTMLCanvasElement, mode: FieldMode): DotF
       cell = Math.min(CELL_PX, usable / WORDMARK_SIZE.cols)
     }
 
-    logoCells = new Map()
+    logoCells = new Set()
     if (mode !== 'wordmark') return
 
     // Centre the lockup on the lattice, biased above the middle so it clears the
@@ -123,9 +133,7 @@ export function createDotField(canvas: HTMLCanvasElement, mode: FieldMode): DotF
     const left = Math.round((cols - WORDMARK_SIZE.cols) / 2)
     const top = Math.round(rows / 2 - WORDMARK_SIZE.rows / 2) - 2
     for (const [c, r] of WORDMARK_CELLS) {
-      // Normalised column drives the stagger, so the wordmark writes itself
-      // left to right — the same idea as a_order in DOT_VS.
-      logoCells.set(`${left + c},${top + r}`, c / WORDMARK_SIZE.cols)
+      logoCells.add(`${left + c},${top + r}`)
     }
   }
 
@@ -167,30 +175,38 @@ export function createDotField(canvas: HTMLCanvasElement, mode: FieldMode): DotF
 
     if (!logoCells.size) return
 
-    // Lit cells, each at its own point in the stagger. Grouped by the rounded
-    // mix value so near-identical dots share a fill.
-    for (const [key, order] of logoCells) {
+    /*
+     * ONE mix for every lit cell, not a per-column stagger.
+     *
+     * The homepage drives its wordmark with a single `u_logoMix` uniform
+     * (gl/renderer.ts) that every lit instance reads, damped toward its target
+     * — so the letters brighten and grow together, as one object. The
+     * per-cell `a_order` stagger in the shaders belongs to the LINE dots, which
+     * draw in along a route; borrowing it here made the logo wipe left-to-right
+     * like a progress bar, which is not what the homepage does.
+     */
+    const mix = ease(at)
+    if (mix <= 0) return
+
+    const radius = baseRadius * (1 + (LOGO_RADIUS_SCALE - 1) * mix)
+    const r = Math.round(FIELD_RGB[0] + (LOGO_COLOR[0] - FIELD_RGB[0]) * mix)
+    const g = Math.round(FIELD_RGB[1] + (LOGO_COLOR[1] - FIELD_RGB[1]) * mix)
+    const b = Math.round(FIELD_RGB[2] + (LOGO_COLOR[2] - FIELD_RGB[2]) * mix)
+
+    // Uniform colour and radius means the whole wordmark is one path and one
+    // fill, rather than a fillStyle change per cell.
+    ctx!.fillStyle = `rgb(${r},${g},${b})`
+    ctx!.beginPath()
+    for (const key of logoCells) {
       const parts = key.split(',')
       const col = Number(parts[0])
       const row = Number(parts[1])
-      // Each dot runs its own 0..1 over the back half of the window, offset by
-      // column so the reveal sweeps.
-      const local = Math.min(1, Math.max(0, (at - order * 0.45) / 0.55))
-      const mix = ease(local)
-      if (mix <= 0) continue
-
       const x = col * cell + cell / 2
       const y = row * cell + cell / 2
-      const radius = baseRadius * (1 + (LOGO_RADIUS_SCALE - 1) * mix)
-      const r = Math.round(FIELD_RGB[0] + (LOGO_COLOR[0] - FIELD_RGB[0]) * mix)
-      const g = Math.round(FIELD_RGB[1] + (LOGO_COLOR[1] - FIELD_RGB[1]) * mix)
-      const b = Math.round(FIELD_RGB[2] + (LOGO_COLOR[2] - FIELD_RGB[2]) * mix)
-
-      ctx!.fillStyle = `rgb(${r},${g},${b})`
-      ctx!.beginPath()
+      ctx!.moveTo(x + radius, y)
       ctx!.arc(x, y, radius, 0, Math.PI * 2)
-      ctx!.fill()
     }
+    ctx!.fill()
   }
 
   function frame(now: number): void {

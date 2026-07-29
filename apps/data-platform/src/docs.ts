@@ -68,6 +68,60 @@ function openFromHash(): void {
 openFromHash()
 window.addEventListener('hashchange', openFromHash)
 
+// ── sidebar scroll-spy ──────────────────────────────────────────────────────
+
+/*
+ * Marks the section you are currently reading in the sidebar.
+ *
+ * Additive by construction: the markup ships with no group marked active, so
+ * with scripting off the sidebar is simply a list of anchor links that already
+ * work. Nothing here is load-bearing.
+ *
+ * Intersection alone answers the wrong question here — sections are tall and
+ * unevenly sized, so several are "visible" at once and the observer's callback
+ * order says nothing about which one you are reading. So the observer is used
+ * only as a cheap signal that something moved, and the decision is made by
+ * position: the last section whose top has passed the reading line. That also
+ * gives a correct answer on first paint, which a purely intersection-driven
+ * version cannot (nothing has changed yet, so nothing is marked).
+ */
+const groups = [...document.querySelectorAll<HTMLElement>('.nav-group')]
+  .map(group => ({ group, section: document.getElementById(group.dataset.spy ?? '') }))
+  .filter((g): g is { group: HTMLElement, section: HTMLElement } => g.section !== null)
+
+if (groups.length) {
+  let queued = false
+
+  const sync = (): void => {
+    queued = false
+    // A fifth of the way down the viewport: high enough that the active group
+    // changes as a heading settles into reading position, low enough that it
+    // does not flip while the previous section is still the one on screen.
+    const line = window.innerHeight * 0.2
+    let active = -1
+    for (let i = 0; i < groups.length; i++) {
+      if (groups[i]!.section.getBoundingClientRect().top <= line) active = i
+    }
+    for (let i = 0; i < groups.length; i++) {
+      groups[i]!.group.classList.toggle('is-active', i === active)
+    }
+  }
+
+  const schedule = (): void => {
+    if (queued) return
+    queued = true
+    requestAnimationFrame(sync)
+  }
+
+  // Scroll drives it; the observer only wakes things when a section edge
+  // crosses the viewport, so idle scrolling in the middle of a long section
+  // costs nothing.
+  const spy = new IntersectionObserver(schedule)
+  for (const { section } of groups) spy.observe(section)
+  window.addEventListener('scroll', schedule, { passive: true })
+  sync()
+}
+
 // ── the dot fields ──────────────────────────────────────────────────────────
 
 /*

@@ -220,9 +220,11 @@ function jsonHTML(value: unknown): string {
 
 // ── page ────────────────────────────────────────────────────────────────────
 
-function operationHTML(path: string, method: string, op: Operation, index: number): string {
-  // Not `id` — that name belongs to the translation helper above.
-  const anchor = `${slug(method + path)}-${index}`
+/** Shared by the endpoint row and the sidebar link that targets it. */
+const anchorOf = (method: string, path: string, index: number): string =>
+  `${slug(method + path)}-${index}`
+
+function operationHTML(path: string, method: string, op: Operation, anchor: string): string {
   const params = op.parameters ?? []
   const pathParams = params.filter(p => p.in === 'path')
   const queryParams = params.filter(p => p.in === 'query')
@@ -334,15 +336,24 @@ function operationHTML(path: string, method: string, op: Operation, index: numbe
     + `</div></details>`
 }
 
+/** One operation, as both rendered markup and the bits the sidebar needs. */
+interface Entry {
+  anchor: string
+  path: string
+  summary: string
+  html: string
+}
+
 function render(spec: Spec): string {
-  const byTag = new Map<string, string[]>()
+  const byTag = new Map<string, Entry[]>()
   let index = 0
 
   for (const [path, methods] of Object.entries(spec.paths)) {
     for (const [method, op] of Object.entries(methods)) {
       const tag = op.tags?.[0] ?? 'Lainnya'
-      const html = operationHTML(path, method, op, index++)
-      byTag.set(tag, [...(byTag.get(tag) ?? []), html])
+      const anchor = anchorOf(method, path, index++)
+      const html = operationHTML(path, method, op, anchor)
+      byTag.set(tag, [...(byTag.get(tag) ?? []), { anchor, path, summary: op.summary ?? '', html }])
     }
   }
 
@@ -355,11 +366,42 @@ function render(spec: Spec): string {
   // (#stations -> #stasiun). Acceptable: the page has not shipped yet, so there
   // are no links in the wild to break. Once it has, renaming a tag is a
   // breaking change to every deep link into that section.
-  const nav = order.map(tag =>
-    `<a href="#${slug(tag)}" class="flex items-center gap-2 rounded px-2 py-1 text-[13px] text-white/50 hover:bg-white/[0.04] hover:text-white/80">`
-    + `<span class="h-1.5 w-1.5 shrink-0 rounded-full" style="background: ${tagAccent(tag)}"></span>`
-    + `${esc(tag)}</a>`
-  ).join('')
+  /*
+   * The sidebar maps the whole API, not just its five section names — with
+   * twelve endpoints the full tree still fits without scrolling, and it is the
+   * difference between "where is the Tarif section" and "where is the endpoint
+   * I need". Both reference docs the design was drawn from nest this way.
+   *
+   * Endpoint labels are the path TAIL, for the same reason the rows promote it:
+   * seven of twelve paths start `/stations`, so the head is noise in a 13rem
+   * column. `data-spy` pairs a group with its section for the scroll-spy in
+   * src/docs.ts; without JS these are simply anchor links that already work.
+   */
+  const nav = order.map((tag) => {
+    const entries = byTag.get(tag)!
+    /*
+     * The summary, not the path, is the label.
+     *
+     * Path tails do not survive this API's shape: three of the seven station
+     * routes reduce to `/stations/…`, and `/timetable` vs `/grouped` vs
+     * `/timetable/…` gives no clue which is which. The summaries are already
+     * written to distinguish exactly these ("Jadwal stasiun", "Jadwal stasiun,
+     * dikelompokkan"), so they do the job the path cannot. The full path stays
+     * on the title attribute for anyone who wants it.
+     */
+    const links = entries.map(e =>
+      `<a href="#${e.anchor}" class="block truncate rounded py-[3px] pl-[15px] text-[12px] text-white/35 transition-colors hover:text-white/75" title="${esc(e.path)}">${esc(e.summary || e.path)}</a>`
+    ).join('')
+
+    return `<div class="nav-group" data-spy="${slug(tag)}" style="--nav-accent: ${tagAccent(tag)}">`
+      + `<a href="#${slug(tag)}" class="nav-head flex items-center gap-2 rounded px-2 py-1 text-[13px] text-white/60 transition-colors hover:text-white">`
+      + `<span class="nav-dot h-1.5 w-1.5 shrink-0 rounded-full transition-transform" style="background: ${tagAccent(tag)}"></span>`
+      + `<span class="min-w-0 flex-1 truncate">${esc(tag)}</span>`
+      + `<span class="font-mono text-[9.5px] text-white/25">${entries.length}</span>`
+      + `</a>`
+      + `<div class="mt-0.5 mb-3 ml-2 border-l border-line/60 pl-1">${links}</div>`
+      + `</div>`
+  }).join('')
 
   const sections = order.map((tag, i) => {
     const rows = byTag.get(tag)!
@@ -382,23 +424,18 @@ function render(spec: Spec): string {
       // departures board (overlay/departures.ts) uses exactly this:
       // `divide-y divide-line/50` inside a single plate. The backdrop blur only
       // does anything now that the dot field runs behind the whole page.
-      + `<div class="mt-6 divide-y divide-line/50 border border-line/50 bg-plate/70 backdrop-blur-[6px]">${rows.join('')}</div>`
+      + `<div class="mt-6 divide-y divide-line/50 border border-line/50 bg-plate/70 backdrop-blur-[6px]">${rows.map(r => r.html).join('')}</div>`
       + `</section>`
   }).join('')
 
   /*
-   * Decodes every coloured dot on the page. Without it the tag colours are
-   * unexplained decoration; with it they are a system, and the masthead gains
-   * the only band where all five appear together. Swatch geometry is the
-   * coverage panel's (overlay/coverage-panel.ts): a short line segment, not a
-   * disc, because these stand for operators rather than stops.
+   * There is deliberately no colour legend in the masthead.
+   *
+   * One existed while the sidebar was five bare section links, and it did real
+   * work then. Once the sidebar grew to list every endpoint under a coloured,
+   * labelled group, the legend was restating five labels that sit a column to
+   * its left in the same five colours. The sidebar IS the legend.
    */
-  const legend = order.map(tag =>
-    `<span class="flex items-center gap-1.5">`
-    + `<span class="h-1 w-5 rounded-full" style="background: ${tagAccent(tag)}"></span>`
-    + `<span class="font-mono text-[9.5px] uppercase tracking-[0.14em] text-white/35">${esc(tag)}</span>`
-    + `</span>`
-  ).join('')
 
   const server = spec.servers?.[0]?.url ?? ''
 
@@ -458,10 +495,17 @@ function render(spec: Spec): string {
     </div>
 
     <div class="relative z-10 mx-auto flex max-w-[1600px] gap-10 px-5 pb-8 lg:px-10">
-      <nav class="sticky top-24 hidden h-[calc(100vh-7rem)] w-52 shrink-0 overflow-y-auto pt-14 lg:block" aria-label="Bagian">
-        <a href="/" class="block font-mono text-[10px] uppercase tracking-wider text-white/35 hover:text-white/60">&larr; Commute Data</a>
-        <p class="mt-6 font-mono text-[10px] uppercase tracking-[0.16em] text-white/35">Endpoint</p>
-        <div class="mt-2 -ml-2">${nav}</div>
+      <!-- self-start is load-bearing: the parent is a flex row, so without it
+           the nav stretches to the full height of the content column, and a
+           sticky element taller than the viewport simply scrolls away. Height is
+           capped to the viewport minus the offset, with its own scrollbar for
+           the rare case the tree outgrows it. -->
+      <nav class="no-scrollbar sticky top-20 hidden max-h-[calc(100vh-6rem)] w-[13.5rem] shrink-0 self-start overflow-y-auto pb-8 lg:block" style="margin-top: 3.5rem" aria-label="Bagian">
+        <!-- No back-link here: the logo lockup directly above already links to
+             the homepage, and two stacked back-links in the same corner is one
+             too many. -->
+        <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-white/35">Endpoint</p>
+        <div class="mt-3 -ml-2">${nav}</div>
       </nav>
 
       <main class="min-w-0 flex-1">
@@ -474,7 +518,6 @@ function render(spec: Spec): string {
             <a href="${esc(server)}/openapi.json" class="rounded border border-line/70 px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-wider text-white/45 hover:border-accent/50 hover:text-white/80">openapi.json</a>
           </div>
           <p class="mt-5 font-mono text-[10px] uppercase tracking-wider text-white/25">v${esc(spec.info.version)}${spec.info.license ? ` · ${esc(spec.info.license.name)}` : ''} · ${Object.keys(spec.paths).length} endpoint</p>
-          <div class="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2">${legend}</div>
         </header>
 
         <div class="mt-10 w-full max-w-[68ch]">
@@ -503,13 +546,14 @@ function render(spec: Spec): string {
         aria-hidden="true"
         class="pointer-events-none absolute inset-0 h-full w-full"
       ></canvas>
-      <!-- sign-shadow, and brighter than the homepage's /30: the footer field
+      <!-- Attribution only. A second line naming the spec source and build date
+           used to sit under this; it was build metadata shown to readers who
+           have no use for it, and anyone who does can read the spec directly.
+
+           sign-shadow, and brighter than the homepage's /30: the footer field
            runs right under this line, and at /30 over a lit lattice the
            attribution was effectively unreadable. -->
-      <div class="sign-shadow relative text-center font-mono text-[11px] leading-relaxed">
-        <p class="text-white/55">© ${new Date().getFullYear()} Commute Data Platform · Dibuat oleh Shiori Labs</p>
-        <p class="mt-1 text-white/35">Dibuat dari /openapi.json waktu build · ${new Date().toISOString().slice(0, 10)}</p>
-      </div>
+      <p class="sign-shadow relative text-center font-mono text-[11px] text-white/55">© ${new Date().getFullYear()} Commute Data Platform · Dibuat oleh Shiori Labs</p>
     </section>
   </body>
 </html>

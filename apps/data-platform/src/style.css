@@ -146,6 +146,31 @@ body {
     transform: rotate(90deg);
   }
 
+  /* Sidebar active state, set by the scroll-spy in src/docs.ts.
+     -----------------------------------------------------------
+     Purely additive: without JavaScript no group is ever marked active and the
+     sidebar is still a working list of anchor links, which is the whole
+     contract of this page. The marker is a left bar in the section's own colour
+     — the same 3px device the section headings use — so the sidebar and the
+     heading you are reading agree. */
+  .nav-group.is-active > .nav-head {
+    color: rgb(255 255 255 / 0.95);
+  }
+
+  .nav-group.is-active > .nav-head .nav-dot {
+    transform: scale(1.35);
+  }
+
+  /* The rail picks up the section's own colour, carried as --nav-accent on the
+     group (currentColor would resolve against the wrapper's text, not the tag). */
+  .nav-group.is-active > div {
+    border-left-color: color-mix(in srgb, var(--nav-accent, var(--color-accent)) 55%, transparent);
+  }
+
+  .nav-group.is-active a[href]:not(.nav-head) {
+    color: rgb(255 255 255 / 0.55);
+  }
+
   /* Response tabs, CSS only.
      -----------------------
      The radios live at the top of the panel and every tab/panel pair carries a
