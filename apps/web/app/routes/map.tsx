@@ -6,6 +6,7 @@ import clsx from 'clsx'
 import type { StandardResponse } from '@schema/response'
 import type { Hub } from '@commute/schemas'
 import type { Station } from '@commute/schemas'
+import type { FareResult } from '@commute/schemas'
 import { fetcher } from 'utils/fetcher'
 import { useLines } from '~/hooks/use-lines'
 import { hexToRgb01 } from 'utils/colors'
@@ -14,6 +15,7 @@ import { staggerDelay, type StaggerOptions } from 'utils/stagger'
 import { buildFarePath } from 'utils/fare-url'
 import { IS_LITE } from '~/lib/build-mode'
 import { HOME_EXIT } from '~/lib/exit-links'
+import { FARE_SWR_CONFIG, fareApiUrl } from 'utils/fare-api'
 import {
   createRenderer,
   DESKTOP_TILE_BUDGET_CEILING_BYTES,
@@ -23,15 +25,19 @@ import {
   pointCornerRadius,
   pointStationId,
   renderDpr,
+  ROUTE_SCRIM_MAX_ALPHA,
   SCRIM_MAX_ALPHA,
   type Manifest,
   type Point,
   type PointsManifest,
   type Renderer,
+  type RouteOverlayFrame,
   type SelectionOverlay,
   type Tier,
   type Transform
 } from '../lib/map-renderer'
+import { buildRouteOverlayModel, type RouteOverlayModel } from '../lib/map-route-overlay'
+import MapFareChip from '../components/map-fare-chip'
 import {
   createRecoveryController,
   MAX_RECOVERY_ATTEMPTS,
@@ -93,6 +99,14 @@ const DOUBLE_TAP_RADIUS_CSS_PX = 30
 // Long enough that switching away and straight back is free, short enough to be
 // well inside the window where a phone might start reclaiming memory.
 const HIDDEN_RELEASE_DELAY_MS = 3000
+
+// Route overlay fade in/out.
+const ROUTE_FADE_MS = 250
+// The fit-bounds flight biases the route upward by this much so it clears the
+// fare chip floating at the bottom.
+const CHIP_CLEARANCE_PX = 88
+// Viewport padding around the fitted route bounds.
+const FIT_BOUNDS_PAD_CSS_PX = 48
 
 export function meta() {
   const title = 'Peta Integrasi - Commute'
@@ -281,6 +295,48 @@ export default function MapPage() {
   const debugHitboxes = import.meta.env.DEV && searchParams.get('debug') === 'hitboxes'
   const authorMode = import.meta.env.DEV && searchParams.get('author') === '1'
 
+  // Fare pair shown on the map. React state is the source of truth; the URL is
+  // a write-only mirror (read once at mount, below) because replaceState never
+  // notifies the router — reading searchParams after a sheet action would go
+  // stale. Same latch idea as useFareQuery's deep link.
+  const [routePair, setRoutePair] = useState<{ fromId: string | null, toId: string | null }>(() => {
+    const parse = (v: string | null) => (v && v.includes('-') ? v : null)
+    return { fromId: parse(searchParams.get('from')), toId: parse(searchParams.get('to')) }
+  })
+
+  // Merge into the live query string rather than replacing it: `?debug=` and
+  // `?author=` must survive route edits (FareSheet's mirror replaces the whole
+  // string, which is fine on /fare where the pair is the only param).
+  const syncRouteUrl = (fromId: string | null, toId: string | null) => {
+    const params = new URLSearchParams(window.location.search)
+    if (fromId) params.set('from', fromId)
+    else params.delete('from')
+    if (toId) params.set('to', toId)
+    else params.delete('to')
+    const qs = params.toString()
+    history.replaceState(history.state, '', qs ? `${window.location.pathname}?${qs}` : window.location.pathname)
+  }
+
+  // Same swap rule as useFareQuery.handleSelect: picking the other end's
+  // station swaps instead of dead-ending on a same-station pair.
+  const setRouteEndpoint = (which: 'from' | 'to', stationId: string) => {
+    let { fromId, toId } = routePair
+    if (which === 'from') {
+      if (stationId === toId) toId = fromId
+      fromId = stationId
+    } else {
+      if (stationId === fromId) fromId = toId
+      toId = stationId
+    }
+    setRoutePair({ fromId, toId })
+    syncRouteUrl(fromId, toId)
+  }
+
+  const clearRoute = () => {
+    setRoutePair({ fromId: null, toId: null })
+    syncRouteUrl(null, null)
+  }
+
   const navigate = useNavigate()
   const navigationType = useNavigationType()
   const handleBackButton = useCallback(() => {
@@ -344,6 +400,23 @@ export default function MapPage() {
       console.warn('[author] localStorage write failed', e)
     }
   }, [authorMode, workingPoints])
+
+  // Fare for the route pair. Same key + config as the fare sheet, so opening
+  // /fare from the chip hits the SWR cache instead of refetching.
+  const fareUrl = fareApiUrl(routePair.fromId, routePair.toId)
+  const {
+    data: fareResponse,
+    error: fareError,
+    isLoading: fareLoading
+  } = useSWR<StandardResponse<FareResult>>(fareUrl, fetcher, FARE_SWR_CONFIG)
+
+  // Drawable overlay geometry. Null fare is fine — pins resolve straight from
+  // the pair, so a deep link shows its endpoints before the fare lands.
+  const routeModel = useMemo<RouteOverlayModel | null>(() => {
+    if (!routePair.fromId && !routePair.toId) return null
+    if (workingPoints.length === 0) return null
+    return buildRouteOverlayModel(fareResponse?.data ?? null, routePair, workingPoints, resolveLine)
+  }, [fareResponse, routePair, workingPoints, resolveLine])
 
   const viewportRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -456,6 +529,24 @@ export default function MapPage() {
   // Eased camera flight (selection centering, double-tap zoom, recenter).
   // While active it writes both target and rendered so the plain lerp is inert.
   const flyToRef = useRef<{ from: Transform, to: Transform, start: number, duration: number } | null>(null)
+  // Route overlay fade, animated in the rAF tick like the spotlight. `lastAlpha`
+  // seeds phase changes so a pair swap mid-fade doesn't blink.
+  const routeAnimRef = useRef<{ visible: boolean, phaseStart: number, alphaFrom: number, lastAlpha: number }>({
+    visible: false,
+    phaseStart: 0,
+    alphaFrom: 0,
+    lastAlpha: 0
+  })
+  // Mirror of the current model for the tick (which only reads refs): whether
+  // anything is drawable, and whether a polyline exists (pins-only overlays
+  // get no scrim).
+  const routeStateRef = useRef<{ show: boolean, scrim: boolean }>({ show: false, scrim: false })
+  // Fit-bounds flight waiting for the morph handoff. Executed by the tick once
+  // the first real frame has been presented; canceled by any gesture.
+  const pendingFitRef = useRef<{ bbox: RouteOverlayModel['bbox'], hasPolyline: boolean } | null>(null)
+  // One fit flight per pair — a refetch or points update must not re-yank the
+  // camera the user has since moved.
+  const fittedPairRef = useRef<string | null>(null)
   // Previous clean tap, for double-tap detection.
   const lastTapRef = useRef<{ t: number, x: number, y: number, wasEmpty: boolean } | null>(null)
   // Recenter button visibility; ref mirrors state so the tick only calls
@@ -813,6 +904,50 @@ export default function MapPage() {
     rendererRef.current.setDebugHitboxes(debugHitboxes || authorMode)
   }, [workingPoints, debugHitboxes, authorMode, manifest, contextEpoch])
 
+  // Push the route overlay geometry. Same dep shape as the points push, so a
+  // recovered renderer gets the overlay back. On clear, the geometry is kept
+  // for the fade-out and released just after it lands.
+  useEffect(() => {
+    const renderer = rendererRef.current
+    if (!renderer) return
+    if (routeModel) {
+      renderer.setRouteOverlay(routeModel.overlay)
+      return
+    }
+    const timer = window.setTimeout(() => {
+      rendererRef.current?.setRouteOverlay(null)
+    }, ROUTE_FADE_MS + 50)
+    return () => window.clearTimeout(timer)
+  }, [routeModel, manifest, contextEpoch])
+
+  // Drive the fade + scrim mirrors, and queue the one-per-pair fit flight.
+  useEffect(() => {
+    const show = routeModel !== null
+    const hasPolyline = routeModel !== null && routeModel.overlay.segments.length > 0
+    const anim = routeAnimRef.current
+    if (show !== anim.visible) {
+      anim.visible = show
+      anim.phaseStart = performance.now()
+      anim.alphaFrom = anim.lastAlpha
+    }
+    routeStateRef.current = { show, scrim: hasPolyline }
+    dirtyRef.current = true
+
+    if (routeModel) {
+      const pairKey = `${routePair.fromId}|${routePair.toId}`
+      if (fittedPairRef.current !== pairKey) {
+        // Latch on the polyline flight: a deep link resolves pins first and the
+        // polyline only when the fare lands, and the pins-only centering must
+        // not consume the pair's one flight before then.
+        if (hasPolyline) fittedPairRef.current = pairKey
+        pendingFitRef.current = { bbox: routeModel.bbox, hasPolyline }
+      }
+    } else {
+      pendingFitRef.current = null
+      fittedPairRef.current = null
+    }
+  }, [routeModel, routePair])
+
   // Resize the renderer's backing store when the viewport changes.
   useEffect(() => {
     if (!rendererRef.current) return
@@ -977,6 +1112,69 @@ export default function MapPage() {
         }
       }
 
+      // Route overlay fade. The scrim yields to the selection spotlight's scrim
+      // (which is stronger) instead of stacking with it — as the spotlight comes
+      // up, the route dim proportionally bows out.
+      let routeFrame: RouteOverlayFrame | null = null
+      {
+        const anim = routeAnimRef.current
+        const targetAlpha = anim.visible ? 1 : 0
+        const p = Math.min(1, (now - anim.phaseStart) / ROUTE_FADE_MS)
+        const e = 1 - Math.pow(1 - p, 3) // easeOutCubic
+        const alpha = anim.alphaFrom + (targetAlpha - anim.alphaFrom) * e
+        if (p < 1) dirtyRef.current = true
+        anim.lastAlpha = alpha
+        if (alpha > 0) {
+          const scrimTarget = routeStateRef.current.scrim ? ROUTE_SCRIM_MAX_ALPHA : 0
+          // Reads spotScrim rather than the overlay object: that object is now
+          // built lazily further down, inside the branch that actually draws,
+          // and it carries this very value.
+          const spotShare = spotScrim / SCRIM_MAX_ALPHA
+          routeFrame = { alpha, scrimAlpha: scrimTarget * alpha * (1 - spotShare) }
+        }
+      }
+
+      // Queued fit-bounds flight: wait for the morph handoff so a deep-link
+      // flight never races the overlay fade, and stand down for any gesture.
+      const pendingFit = pendingFitRef.current
+      if (pendingFit && morphReadySignaledRef.current && !gestureActiveRef.current) {
+        pendingFitRef.current = null
+        const { bbox, hasPolyline } = pendingFit
+        const cx = (bbox.minX + bbox.maxX) / 2
+        const cy = (bbox.minY + bbox.maxY) / 2
+        let to: Transform
+        if (hasPolyline) {
+          const w = Math.max(1, bbox.maxX - bbox.minX)
+          const h = Math.max(1, bbox.maxY - bbox.minY)
+          const availW = Math.max(1, viewportSize.w - FIT_BOUNDS_PAD_CSS_PX * 2)
+          const availH = Math.max(1, viewportSize.h - FIT_BOUNDS_PAD_CSS_PX * 2 - CHIP_CLEARANCE_PX)
+          const scale = Math.max(minScale, Math.min(MAX_SCALE, Math.min(availW / w, availH / h)))
+          to = clampTransform(
+            {
+              tx: viewportSize.w / 2 - cx * scale,
+              ty: (viewportSize.h - CHIP_CLEARANCE_PX) / 2 - cy * scale,
+              scale
+            },
+            viewportSize.w, viewportSize.h, mapW, mapH, minScale
+          )
+        } else {
+          // Single pin: just bring it into view at the current zoom.
+          const s = targetRef.current.scale
+          to = clampTransform(
+            { tx: viewportSize.w / 2 - cx * s, ty: viewportSize.h / 2 - cy * s, scale: s },
+            viewportSize.w, viewportSize.h, mapW, mapH, minScale
+          )
+        }
+        inertiaRef.current = null
+        flyToRef.current = {
+          from: { ...renderedRef.current },
+          to,
+          start: now,
+          duration: 600
+        }
+        dirtyRef.current = true
+      }
+
       if (dirtyRef.current) {
         // Overlay object only exists on frames that draw — a held selection
         // over an otherwise idle map allocates nothing.
@@ -1007,7 +1205,7 @@ export default function MapPage() {
         // so the loop parked with decoded tiles stranded and the map stayed on
         // the blurry preview until an unrelated event happened to wake it.
         dirtyRef.current = false
-        renderer.draw(r, viewportSize.w, viewportSize.h, dpr, targetTier, overlay)
+        renderer.draw(r, viewportSize.w, viewportSize.h, dpr, targetTier, overlay, routeFrame)
         if (import.meta.env.DEV && authorMode) setRenderTick(n => n + 1)
 
         // Morph handoff: the first drawn frame that actually contains the map
@@ -1163,6 +1361,8 @@ export default function MapPage() {
     // where the eye sees the map — no teleport, no jarring stop.
     inertiaRef.current = null
     flyToRef.current = null
+    // A queued route fit that hasn't launched yet loses to the gesture too.
+    pendingFitRef.current = null
     targetRef.current = renderedRef.current
     gestureActiveRef.current = true
     if (pointersRef.current.size === 2) {
@@ -1655,6 +1855,17 @@ export default function MapPage() {
         />
       )}
 
+      {routePair.fromId && routePair.toId && (
+        <MapFareChip
+          fromId={routePair.fromId}
+          toId={routePair.toId}
+          fare={fareResponse?.data ?? null}
+          hasError={!!fareError}
+          isLoading={fareLoading}
+          onClear={clearRoute}
+        />
+      )}
+
       {/* Hosts the cards a detail surface can push on top of itself (a full
           timetable, a hub member's station). `baseKey` is the only wiring it
           needs: any change to it means the selection the deck was built on is
@@ -1670,6 +1881,23 @@ export default function MapPage() {
           // sheet is closing because the user switched to a hub, whose
           // spotlight is already animating in.
           onDismissStart={() => { if (!selectedHubSlug) beginSpotlightExit() }}
+          routeActions={selectedStation
+            ? {
+                isOrigin: routePair.fromId === `${selectedStation.operator}-${selectedStation.code}`,
+                isDestination: routePair.toId === `${selectedStation.operator}-${selectedStation.code}`,
+                onSetOrigin: () => {
+                  haptic()
+                  setRouteEndpoint('from', `${selectedStation.operator}-${selectedStation.code}`)
+                  // Close the sheet: the fit flight and the chip take the stage.
+                  setSelectedStation(null)
+                },
+                onSetDestination: () => {
+                  haptic()
+                  setRouteEndpoint('to', `${selectedStation.operator}-${selectedStation.code}`)
+                  setSelectedStation(null)
+                }
+              }
+            : undefined}
         />
 
         <HubSheet

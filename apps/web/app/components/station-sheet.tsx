@@ -1,11 +1,22 @@
 import { useMemo, useRef } from 'react'
-import { XIcon, ArrowSquareOutIcon, ArrowLeftIcon } from '@phosphor-icons/react'
+import { XIcon, ArrowSquareOutIcon, ArrowLeftIcon, CircleDashedIcon, MapPinIcon } from '@phosphor-icons/react'
+import clsx from 'clsx'
 import DetailSurface from './detail-surface'
 import ExitLink from './exit-link'
 import LineRoundel from './line-roundel'
 import StationContent, { useStationHeader } from './station-content'
 import { sortLineKeysForDisplay } from '~/utils/lines'
 import { useLines } from '~/hooks/use-lines'
+
+// Map-only affordance: mark this station as the fare pair's origin or
+// destination. Provided by the /map route; other surfaces leave it unset and
+// get the plain sheet.
+export interface StationRouteActions {
+  isOrigin: boolean
+  isDestination: boolean
+  onSetOrigin: () => void
+  onSetDestination: () => void
+}
 
 interface StationSheetProps {
   operator: string | null
@@ -15,9 +26,10 @@ interface StationSheetProps {
   // Map-only: primes the map's pick-a-departure mode. Passed through to
   // StationContent's "Petunjuk Arah" button, composed with an animated close.
   onSelectDeparture?: () => void
+  routeActions?: StationRouteActions
 }
 
-export default function StationSheet({ operator, code, onClose, onDismissStart, onSelectDeparture }: StationSheetProps) {
+export default function StationSheet({ operator, code, onClose, onDismissStart, onSelectDeparture, routeActions }: StationSheetProps) {
   const open = !!(operator && code)
 
   // The surface unmounts the instant `open` flips false, so closing via the
@@ -43,7 +55,12 @@ export default function StationSheet({ operator, code, onClose, onDismissStart, 
       header={(close) => {
         animatedCloseRef.current = close
         return operator && code
-          ? <StationPaneHeader operator={operator} code={code} onClose={close} />
+          ? (
+              <>
+                <StationPaneHeader operator={operator} code={code} onClose={close} />
+                {routeActions && <RouteActionsRow actions={routeActions} />}
+              </>
+            )
           : null
       }}
     >
@@ -55,6 +72,25 @@ export default function StationSheet({ operator, code, onClose, onDismissStart, 
             </div>
           ))}
     </DetailSurface>
+  )
+}
+
+function RouteActionsRow({ actions }: { actions: StationRouteActions }) {
+  const buttonClass = (active: boolean) => clsx(
+    'flex-1 flex items-center justify-center gap-1.5 rounded-full px-3 py-2 text-sm font-semibold cursor-pointer',
+    active ? 'bg-[#F55875] text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+  )
+  return (
+    <div className="flex gap-2 mt-3">
+      <button type="button" onClick={actions.onSetOrigin} className={buttonClass(actions.isOrigin)}>
+        <CircleDashedIcon weight="bold" className="w-4 h-4" />
+        Jadikan Asal
+      </button>
+      <button type="button" onClick={actions.onSetDestination} className={buttonClass(actions.isDestination)}>
+        <MapPinIcon weight="bold" className="w-4 h-4" />
+        Jadikan Tujuan
+      </button>
+    </div>
   )
 }
 

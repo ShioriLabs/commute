@@ -58,10 +58,12 @@ function createFakeGl() {
   let bound: FakeTexture | null = null
   const enabled = new Set<number>()
   const uploads: UploadRecord[] = []
+  let drawElementsCalls = 0
 
   const gl = {
     RGBA: 0x1908, RGB: 0x1907, RGB565: 0x8d62, UNSIGNED_BYTE: 0x1401,
-    UNSIGNED_SHORT_5_6_5: 0x8363, TEXTURE_2D: 0x0de1, TEXTURE_MIN_FILTER: 0x2801,
+    UNSIGNED_SHORT_5_6_5: 0x8363, UNSIGNED_SHORT: 0x1403, TEXTURE_2D: 0x0de1,
+    TEXTURE_MIN_FILTER: 0x2801,
     TEXTURE_MAG_FILTER: 0x2800, TEXTURE_WRAP_S: 0x2802, TEXTURE_WRAP_T: 0x2803,
     LINEAR: 0x2601, LINEAR_MIPMAP_LINEAR: 0x2703, CLAMP_TO_EDGE: 0x812f,
     COLOR_BUFFER_BIT: 0x4000, BLEND: 0x0be2, ONE: 1, ONE_MINUS_SRC_ALPHA: 0x0303,
@@ -112,6 +114,7 @@ function createFakeGl() {
     blendFunc() {}, useProgram() {},
     createBuffer: () => ({}), deleteBuffer() {},
     createVertexArray: () => ({}), deleteVertexArray() {}, bindVertexArray() {},
+    drawElements() { drawElementsCalls++ },
     // Read by the twgl drawBufferInfo mock, which is handed this object as its
     // first argument, so a recorded draw carries the blend state in force.
     __isEnabled: (cap: number) => enabled.has(cap)
@@ -124,7 +127,8 @@ function createFakeGl() {
     // Uploads of a real tile — the 1x1 placeholder is excluded, since every
     // assertion here is about tile pixels.
     tileUploads: () => uploads.filter(u => u.width > 1 || u.height > 1),
-    isEnabled: (cap: number) => enabled.has(cap)
+    isEnabled: (cap: number) => enabled.has(cap),
+    drawElementsCalls: () => drawElementsCalls
   }
 }
 
@@ -663,5 +667,44 @@ describe('webgl draw pass', () => {
       expect(upload.format).toBe(0x1907) // RGB
       expect(upload.type).toBe(0x8363) // UNSIGNED_SHORT_5_6_5
     }
+  })
+})
+
+describe('webgl route overlay', () => {
+  const overlay = {
+    segments: [
+      { ax: 0, ay: 0, bx: 100, by: 0, r: 7, color: [1, 0, 0] as [number, number, number], kind: 'ride' as const },
+      { ax: 100, ay: 0, bx: 200, by: 0, r: 7, color: [0, 0, 1] as [number, number, number], kind: 'ride' as const }
+    ],
+    pins: [
+      { x: 0, y: 0, kind: 'origin' as const },
+      { x: 200, y: 0, kind: 'destination' as const }
+    ]
+  }
+
+  it('draws one ranged call per color run when a route frame is passed', () => {
+    const { renderer, drawElementsCalls } = setup()
+    renderer.setRouteOverlay(overlay)
+    renderer.draw(wholeMapTransform(0.2), 360, 780, 3, 1, null, { alpha: 1, scrimAlpha: 0.2 })
+    // Paint list: casing (1 white run), red, blue, then per pin white/ink/white
+    // with the two runs at the origin/destination boundary NOT merging (white
+    // inner of pin 1 and white casing of pin 2 are adjacent) — so ≥ 5 runs.
+    expect(drawElementsCalls()).toBeGreaterThanOrEqual(5)
+  })
+
+  it('draws nothing extra when the overlay is cleared or the frame is absent', () => {
+    const { renderer, drawElementsCalls } = setup()
+    renderer.setRouteOverlay(overlay)
+    renderer.setRouteOverlay(null)
+    renderer.draw(wholeMapTransform(0.2), 360, 780, 3, 1, null, { alpha: 1, scrimAlpha: 0.2 })
+    renderer.setRouteOverlay(overlay)
+    renderer.draw(wholeMapTransform(0.2), 360, 780, 3, 1)
+    expect(drawElementsCalls()).toBe(0)
+  })
+
+  it('survives dispose with a route overlay set', () => {
+    const { renderer } = setup()
+    renderer.setRouteOverlay(overlay)
+    expect(() => renderer.dispose()).not.toThrow()
   })
 })

@@ -106,6 +106,127 @@ export function ringOffsetWorld(ringProgress: number): number {
   return RING_MAX_OFFSET_WORLD + (RING_REST_OFFSET_WORLD - RING_MAX_OFFSET_WORLD) * ringProgress
 }
 
+// Route overlay: the fare pair drawn on the map — a polyline through station
+// centroids per ride leg, dashed connectors for transfers, and origin/
+// destination pins. Same doctrine as the selection overlay: geometry is pushed
+// statefully via setRouteOverlay, while map.tsx animates the frame values and
+// passes them per draw.
+export interface RouteSegment {
+  ax: number
+  ay: number
+  bx: number
+  by: number
+  r: number // half-width, world units
+  color: [number, number, number] // 0..1 rgb
+  kind: 'ride' | 'transfer'
+}
+
+export interface RoutePin {
+  x: number
+  y: number
+  kind: 'origin' | 'destination'
+}
+
+export interface RouteOverlay {
+  // Transfers arrive pre-dashed (dashSegment), so renderers draw every entry
+  // the same way and need no dash logic of their own.
+  segments: RouteSegment[]
+  pins: RoutePin[]
+}
+
+export interface RouteOverlayFrame {
+  alpha: number // 0..1 whole-overlay fade
+  scrimAlpha: number // 0..ROUTE_SCRIM_MAX_ALPHA flat dim under the route
+}
+
+// Lighter than the selection spotlight's SCRIM_MAX_ALPHA: the route dim is
+// ambient (it stays up while browsing), the spotlight is momentary.
+export const ROUTE_SCRIM_MAX_ALPHA = 0.2
+// World units, like the spotlight constants, so the route stays glued to the
+// map across zoom instead of fattening as the view pulls out. The artwork's
+// own rail corridors are 25 world units wide (BRT 15), so the route line must
+// beat 12.5 half-width to read over them — and at a fitted zoom (~0.16 scale)
+// anything much thinner dissolves into its own antialiasing feather.
+export const ROUTE_LINE_HALF_WIDTH_WORLD = 16
+export const ROUTE_CASING_EXTRA_WORLD = 3
+export const ROUTE_TRANSFER_DASH_WORLD = 24
+export const ROUTE_TRANSFER_GAP_WORLD = 14
+export const ROUTE_PIN_RADIUS_WORLD = 26
+
+// Pin styling, shared by both renderers via routeDrawItems. The dark ink
+// matches the spotlight scrim so the overlay reads as one system.
+const ROUTE_INK: [number, number, number] = [0.06, 0.09, 0.16]
+const ROUTE_WHITE: [number, number, number] = [1, 1, 1]
+// Origin is a ring (thick white center), destination is a filled dot with a
+// small white core — the classic "here → there" asymmetry without glyphs.
+const ROUTE_PIN_INNER_ORIGIN_WORLD = 16
+const ROUTE_PIN_INNER_DESTINATION_WORLD = 9
+
+// One entry of the route overlay's paint list: an oriented capsule (degenerate
+// — a == b — for pin discs). Renderers draw these verbatim, in order, so the
+// WebGL and Canvas2D paths can't drift apart stylistically.
+export interface RouteDrawItem {
+  ax: number
+  ay: number
+  bx: number
+  by: number
+  r: number
+  color: [number, number, number]
+}
+
+// Flatten an overlay into paint order: white casing under every segment, then
+// the colored fills, then the pins on top.
+export function routeDrawItems(route: RouteOverlay): RouteDrawItem[] {
+  const items: RouteDrawItem[] = []
+  for (const s of route.segments) {
+    items.push({ ax: s.ax, ay: s.ay, bx: s.bx, by: s.by, r: s.r + ROUTE_CASING_EXTRA_WORLD, color: ROUTE_WHITE })
+  }
+  for (const s of route.segments) {
+    items.push({ ax: s.ax, ay: s.ay, bx: s.bx, by: s.by, r: s.r, color: s.color })
+  }
+  for (const pin of route.pins) {
+    const disc = (r: number, color: [number, number, number]) => {
+      items.push({ ax: pin.x, ay: pin.y, bx: pin.x, by: pin.y, r, color })
+    }
+    disc(ROUTE_PIN_RADIUS_WORLD + ROUTE_CASING_EXTRA_WORLD, ROUTE_WHITE)
+    disc(ROUTE_PIN_RADIUS_WORLD, ROUTE_INK)
+    disc(pin.kind === 'origin' ? ROUTE_PIN_INNER_ORIGIN_WORLD : ROUTE_PIN_INNER_DESTINATION_WORLD, ROUTE_WHITE)
+  }
+  return items
+}
+
+// Split a→b into dash sub-segments. The pattern is centered — equal margins at
+// both ends — and a segment shorter than one dash yields itself whole, so very
+// close stations still get a visible connector.
+export function dashSegment(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  dashLen: number,
+  gapLen: number
+): Array<{ ax: number, ay: number, bx: number, by: number }> {
+  const len = Math.hypot(bx - ax, by - ay)
+  if (len <= 0) return []
+  const dirX = (bx - ax) / len
+  const dirY = (by - ay) / len
+  const count = Math.max(1, Math.floor((len + gapLen) / (dashLen + gapLen)))
+  const patternLen = count * dashLen + (count - 1) * gapLen
+  const margin = (len - patternLen) / 2
+  const dashes: Array<{ ax: number, ay: number, bx: number, by: number }> = []
+  for (let i = 0; i < count; i++) {
+    const start = Math.max(0, margin + i * (dashLen + gapLen))
+    const end = Math.min(len, start + dashLen)
+    dashes.push({
+      ax: ax + dirX * start,
+      ay: ay + dirY * start,
+      bx: ax + dirX * end,
+      by: ay + dirY * end
+    })
+  }
+  return dashes
+}
+
 export interface TileStats {
   count: number
   bytes: number
@@ -132,10 +253,11 @@ export interface RendererDebug {
 
 export interface Renderer {
   kind: 'webgl2' | 'canvas2d'
-  draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null): void
+  draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null, route?: RouteOverlayFrame | null): void
   resize(cssW: number, cssH: number, dpr: number): void
   requestTier(r: number, c: number, tier: Tier): void
   setPoints(points: Point[]): void
+  setRouteOverlay(route: RouteOverlay | null): void
   setDebugHitboxes(enabled: boolean): void
   // True once the GPU has taken the drawing context away. Every GL call after
   // that point is a silent no-op, so callers must stop drawing and rebuild the

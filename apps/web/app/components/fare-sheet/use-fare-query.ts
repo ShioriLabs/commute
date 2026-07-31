@@ -6,21 +6,14 @@ import { fetcher } from 'utils/fetcher'
 import { useSearchables } from '~/hooks/use-searchables'
 import {
   DEFAULT_FARE_CRITERIA,
-  fareQueryParams,
   readFareCriteria,
   writeFareCriteria,
   type FareCriteria
 } from 'utils/fare-criteria'
+import { FARE_SWR_CONFIG, fareApiUrl } from 'utils/fare-api'
 import { resolveStationId, toPickableStations, type PickableStation } from './pickable-station'
 import { operatorsPresent } from './criteria/labels'
 import type { OperatorCode } from '@commute/schemas'
-
-const swrConfig = {
-  dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
-  focusThrottleInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
-  revalidateOnFocus: false,
-  shouldRetryOnError: false
-}
 
 export interface FareQueryOptions {
   // Station ids to preselect, from a `/fare?from=&to=` deep link (or the
@@ -192,14 +185,11 @@ export function useFareQuery({
     }
   }, [origin, destination, syncDocumentTitle])
 
-  const query = fareQueryParams(criteria).toString()
-  const fareUrl = criteriaReady && origin && destination && origin.id !== destination.id
-    ? new URL(
-      `/fares/${origin.id}/${destination.id}${query ? `?${query}` : ''}`,
-      import.meta.env.VITE_API_BASE_URL
-    ).href
-    : null
-  const { data: fare, error, isLoading } = useSWR<StandardResponse<FareResult>>(fareUrl, fetcher, swrConfig)
+  // criteriaReady gates the fetch, per the comment on its declaration: pricing
+  // a pair under the default criteria before storage lands would show a number
+  // under a payment method the rider never chose.
+  const fareUrl = criteriaReady ? fareApiUrl(origin?.id, destination?.id, criteria) : null
+  const { data: fare, error, isLoading } = useSWR<StandardResponse<FareResult>>(fareUrl, fetcher, FARE_SWR_CONFIG)
 
   const handleSwap = useCallback(() => {
     setOrigin(destination)

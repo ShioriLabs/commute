@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  dashSegment,
   DESKTOP_TILE_BUDGET_CEILING_BYTES,
   LOW_MEMORY_CEILING_BYTES,
   MAX_RENDER_DPR,
@@ -7,7 +8,11 @@ import {
   PHONE_TILE_BUDGET_CEILING_BYTES,
   pickTier,
   renderDpr,
+  ROUTE_CASING_EXTRA_WORLD,
+  ROUTE_PIN_RADIUS_WORLD,
+  routeDrawItems,
   tileBudgetBytes,
+  type RouteOverlay,
   type Tier
 } from './map-renderer'
 
@@ -178,5 +183,108 @@ describe('renderDpr', () => {
     // currentTier 2 so the hysteresis branch can't mask a downgrade.
     expect(pickTier(0.4, 3, 2, 2)).toBe(2)
     expect(pickTier(0.4, renderDpr(3), 2, 2)).toBe(1)
+  })
+})
+
+// dashSegment pre-splits transfer connectors into capsule sub-segments on the
+// CPU, so the renderers draw dashes with the same program as solid segments
+// and no shader dash math. The pattern is centered: margins at both ends are
+// equal, so a dash never starts flush at one station and ragged at the other.
+
+describe('dashSegment', () => {
+  it('returns nothing for a zero-length segment', () => {
+    expect(dashSegment(10, 20, 10, 20, 14, 10)).toEqual([])
+  })
+
+  it('covers a segment shorter than one dash with a single full-length dash', () => {
+    // Two stations nearly touching: the connector is still visible, just short.
+    expect(dashSegment(0, 0, 8, 0, 14, 10)).toEqual([
+      { ax: 0, ay: 0, bx: 8, by: 0 }
+    ])
+  })
+
+  it('lays out an exact-fit pattern with no margins', () => {
+    // len 38 = 14 + 10 + 14: two dashes, one gap, flush at both ends.
+    expect(dashSegment(0, 0, 38, 0, 14, 10)).toEqual([
+      { ax: 0, ay: 0, bx: 14, by: 0 },
+      { ax: 24, ay: 0, bx: 38, by: 0 }
+    ])
+  })
+
+  it('centers the pattern when there is leftover length', () => {
+    // len 42 leaves 4 over the exact-fit 38: margin 2 at each end.
+    expect(dashSegment(0, 0, 42, 0, 14, 10)).toEqual([
+      { ax: 2, ay: 0, bx: 16, by: 0 },
+      { ax: 26, ay: 0, bx: 40, by: 0 }
+    ])
+  })
+
+  it('has a centered pattern the same from either end', () => {
+    const forward = dashSegment(0, 0, 42, 0, 14, 10)
+    const backward = dashSegment(42, 0, 0, 0, 14, 10)
+    expect(backward.map(d => ({ ax: d.bx, ay: d.by, bx: d.ax, by: d.ay })).reverse()).toEqual(forward)
+  })
+
+  it('follows the segment direction off-axis', () => {
+    // 3-4-5 direction, len 50: exact fit for 14+10+14 is 38, margin 6 each end.
+    const dashes = dashSegment(0, 0, 30, 40, 14, 10)
+    expect(dashes).toHaveLength(2)
+    const [first, second] = dashes
+    expect(first.ax).toBeCloseTo(6 * 0.6)
+    expect(first.ay).toBeCloseTo(6 * 0.8)
+    expect(first.bx).toBeCloseTo(20 * 0.6)
+    expect(first.by).toBeCloseTo(20 * 0.8)
+    expect(second.ax).toBeCloseTo(30 * 0.6)
+    expect(second.ay).toBeCloseTo(30 * 0.8)
+    expect(second.bx).toBeCloseTo(44 * 0.6)
+    expect(second.by).toBeCloseTo(44 * 0.8)
+  })
+})
+
+// routeDrawItems flattens a RouteOverlay into an ordered paint list — casing
+// under color under pins — that both renderers rasterize verbatim, so the two
+// paths can't drift apart stylistically.
+
+describe('routeDrawItems', () => {
+  const lastIndexWhere = (items: ReturnType<typeof routeDrawItems>, pred: (item: ReturnType<typeof routeDrawItems>[number]) => boolean) => {
+    for (let i = items.length - 1; i >= 0; i--) {
+      if (pred(items[i])) return i
+    }
+    return -1
+  }
+
+  const overlay: RouteOverlay = {
+    segments: [
+      { ax: 0, ay: 0, bx: 100, by: 0, r: 7, color: [1, 0, 0], kind: 'ride' },
+      { ax: 100, ay: 0, bx: 200, by: 0, r: 7, color: [0, 0, 1], kind: 'ride' }
+    ],
+    pins: [
+      { x: 0, y: 0, kind: 'origin' },
+      { x: 200, y: 0, kind: 'destination' }
+    ]
+  }
+
+  it('paints casing for every segment before any color fill', () => {
+    const items = routeDrawItems(overlay)
+    const lastCasing = lastIndexWhere(items, i => i.r === 7 + ROUTE_CASING_EXTRA_WORLD)
+    const firstColor = items.findIndex(i => i.color[0] === 1 && i.color[1] === 0)
+    expect(lastCasing).toBeGreaterThanOrEqual(1)
+    expect(firstColor).toBeGreaterThan(lastCasing)
+  })
+
+  it('paints pins last, as degenerate capsules on the pin centroid', () => {
+    const items = routeDrawItems(overlay)
+    const pinItems = items.filter(i => i.ax === i.bx && i.ay === i.by)
+    expect(pinItems.length).toBeGreaterThanOrEqual(4) // ≥ disc + inner per pin
+    const firstPin = items.indexOf(pinItems[0])
+    const lastSegment = lastIndexWhere(items, i => i.ax !== i.bx)
+    expect(firstPin).toBeGreaterThan(lastSegment)
+    expect(pinItems.every(i => i.ax === 0 || i.ax === 200)).toBe(true)
+  })
+
+  it('keeps the pin footprint inside the bbox margin the model promises', () => {
+    for (const item of routeDrawItems(overlay).filter(i => i.ax === i.bx && i.ay === i.by)) {
+      expect(item.r).toBeLessThanOrEqual(ROUTE_PIN_RADIUS_WORLD + ROUTE_CASING_EXTRA_WORLD)
+    }
   })
 })
