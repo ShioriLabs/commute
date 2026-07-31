@@ -22,7 +22,8 @@ import {
   type Renderer,
   type SelectionOverlay,
   type Tier,
-  type Transform
+  type Transform,
+  type VectorMode
 } from '../lib/map-renderer'
 import {
   createRecoveryController,
@@ -54,6 +55,14 @@ import pointsUrl from '../data/points.json?url'
 // evaluates, mid-navigation — beats waiting for mount + startDirect. On the card path
 // morph.prefetch already warmed it, so this deduplicates into a no-op.
 void prefetchMapSkeleton()
+
+// Dev-only `?vector=` values → renderer vector mode. `1` is shorthand for the
+// registration-check overlay.
+function parseVectorMode(param: string | null): VectorMode {
+  if (param === 'only') return 'only'
+  if (param === '1' || param === 'overlay') return 'overlay'
+  return 'off'
+}
 
 const TAP_MOVEMENT_THRESHOLD_CSS_PX = 8
 const TOUCH_HIT_SLOP_CSS_PX = 12
@@ -210,6 +219,7 @@ export default function MapPage() {
   const [searchParams] = useSearchParams()
   const debugHitboxes = import.meta.env.DEV && searchParams.get('debug') === 'hitboxes'
   const authorMode = import.meta.env.DEV && searchParams.get('author') === '1'
+  const vectorMode: VectorMode = import.meta.env.DEV ? parseVectorMode(searchParams.get('vector')) : 'off'
 
   const navigate = useNavigate()
   const navigationType = useNavigationType()
@@ -674,6 +684,70 @@ export default function MapPage() {
     // In author mode, always show hitboxes so the placed pills are visible.
     rendererRef.current.setDebugHitboxes(debugHitboxes || authorMode)
   }, [workingPoints, debugHitboxes, authorMode, manifest, contextEpoch])
+
+  // Dev-only vector-primitive layer (?vector=overlay|only). Depends on manifest
+  // and contextEpoch for the same reason the points push does: a recovered
+  // renderer comes back empty and needs the geometry re-supplied. The dataset and
+  // its builder load via dynamic import behind the DEV guard, so production
+  // bundles never ship either.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    if (vectorMode === 'off') return
+    const renderer = rendererRef.current
+    if (!renderer?.setVectorGeometry) return
+
+    let cancelled = false
+    void (async () => {
+      try {
+        const [{ default: raw }, { parseMapGeometry, buildVectorBuffers }] = await Promise.all([
+          import('../data/map-geometry.json'),
+          import('../lib/map-vector-geometry')
+        ])
+        if (cancelled || renderer.isContextLost()) return
+        renderer.setVectorGeometry?.(buildVectorBuffers(parseMapGeometry(raw)))
+        renderer.setVectorMode?.(vectorMode)
+        dirtyRef.current = true
+      } catch (err) {
+        console.warn('[map] vector layer load failed', err)
+      }
+
+      // Labels ride the same effect but fail independently: until the label
+      // dataset is built (it needs the source PDF — see build-map-labels.ts),
+      // the geometry should still render on its own.
+      try {
+        const [{ default: labelsRaw }, { default: atlasRaw }, { default: atlasUrl }, labelGeometry] = await Promise.all([
+          import('../data/map-labels.json'),
+          import('../data/map-label-atlas.json'),
+          import('../data/map-label-atlas.png?url'),
+          import('../lib/map-label-geometry')
+        ])
+        if (cancelled || renderer.isContextLost()) return
+        const labels = labelGeometry.parseMapLabels(labelsRaw)
+        const atlas = labelGeometry.parseLabelAtlas(atlasRaw)
+        renderer.setLabelGeometry?.(labelGeometry.buildLabelBuffers(labels, atlas))
+
+        const response = await fetch(atlasUrl)
+        const bitmap = await createImageBitmap(await response.blob())
+        if (cancelled || renderer.isContextLost()) {
+          bitmap.close?.()
+          return
+        }
+        renderer.setLabelAtlas?.(bitmap, atlas.distanceRange)
+        bitmap.close?.()
+        dirtyRef.current = true
+      } catch {
+        console.warn('[map] label layer unavailable (run build:map-labels)')
+      }
+    })()
+    return () => {
+      cancelled = true
+      renderer.setVectorGeometry?.(null)
+      renderer.setVectorMode?.('off')
+      renderer.setLabelGeometry?.(null)
+      renderer.setLabelAtlas?.(null, 0)
+      dirtyRef.current = true
+    }
+  }, [vectorMode, manifest, contextEpoch])
 
   // Resize the renderer's backing store when the viewport changes.
   useEffect(() => {

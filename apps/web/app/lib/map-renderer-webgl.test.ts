@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Manifest, Tier, Transform } from './map-renderer'
 import { createWebGLRenderer } from './map-renderer-webgl'
+import { buildVectorBuffers } from './map-vector-geometry'
+import type { MapGeometryDoc } from './map-vector-geometry'
+import { buildLabelBuffers } from './map-label-geometry'
+import type { LabelAtlasDoc, MapLabelsDoc } from './map-label-geometry'
 
 // These tests drive the real renderer against a fake WebGL2 context, asserting
 // on GPU texture lifetime — the thing that actually decides whether the map
@@ -96,15 +100,16 @@ vi.mock('./map-renderer-tile-source', () => ({
 
 // twgl does real program compilation and attribute introspection, neither of
 // which a fake context can satisfy. Every twgl entry point the renderer uses is
-// stubbed to an inert value; none of them affect tile lifetime, which is what
-// these tests assert on.
+// stubbed to an inert value; drawBufferInfo records its calls so mode tests can
+// count passes, but nothing here affects tile lifetime.
+const drawnVaos: unknown[] = []
 vi.mock('twgl.js', () => ({
   createProgramInfo: () => ({ program: {}, uniformSetters: {}, attribSetters: {} }),
   createBufferInfoFromArrays: () => ({ attribs: {}, numElements: 4 }),
   createVertexArrayInfo: () => ({ vertexArrayObject: {}, numElements: 4 }),
   setBuffersAndAttributes: () => {},
   setUniforms: () => {},
-  drawBufferInfo: () => {}
+  drawBufferInfo: (_gl: unknown, vao: unknown) => { drawnVaos.push(vao) }
 }))
 
 function createCanvas(gl: WebGL2RenderingContext): HTMLCanvasElement {
@@ -278,5 +283,110 @@ describe('webgl tile memory', () => {
     renderer.draw(away, vw, vh, 3, 1)
 
     expect(renderer.tileStats().bytes).toBeLessThanOrEqual(tier1TileBytes * 16)
+  })
+})
+
+// Minimal but complete vector dataset: one stroke and one region fill, enough to
+// give the layer both an SDF pass and a mesh pass.
+function vectorDoc(): MapGeometryDoc {
+  return {
+    version: 'test',
+    viewBox: [0, 0, TILE_W * 4, TILE_H * 4],
+    scale: 4,
+    canvas: [0, 0, TILE_W * 4, TILE_H * 4],
+    palette: ['#FF0000', '#00FF00'],
+    layers: [
+      { name: 'rail', kind: 'stroke', items: [{ c: 0, w: 100, pts: [0, 0, 4000, 0] }] },
+      { name: 'region-fill', kind: 'mesh', items: [{ c: 1, tris: [0, 0, 400, 0, 0, 400] }] }
+    ]
+  }
+}
+
+describe('vector modes', () => {
+  it('\'only\' mode draws and requests no tiles at all', async () => {
+    const { renderer } = setup()
+    renderer.setVectorGeometry?.(buildVectorBuffers(vectorDoc()))
+    renderer.setVectorMode?.('only')
+
+    const t = wholeMapTransform(0.05)
+    renderer.draw(t, 360, 780, 3, 1)
+    await flush()
+    renderer.draw(t, 360, 780, 3, 1)
+
+    expect(renderer.tileStats().count).toBe(0)
+    expect(renderer.tileStats().bytes).toBe(0)
+  })
+
+  it('\'overlay\' mode leaves tile residency identical to the tile path', async () => {
+    const { renderer } = setup()
+    renderer.setVectorGeometry?.(buildVectorBuffers(vectorDoc()))
+    renderer.setVectorMode?.('overlay')
+
+    // Same whole-map draw as the "does not evict visible tiles" test: all 16
+    // tiles must still load and stay resident with the overlay active.
+    const t = wholeMapTransform(0.05)
+    renderer.draw(t, 360, 780, 3, 1)
+    await flush()
+    renderer.draw(t, 360, 780, 3, 1)
+
+    expect(renderer.tileStats().count).toBe(16)
+  })
+
+  const labelsDoc: MapLabelsDoc = {
+    version: 'test',
+    scale: 4,
+    fonts: ['F'],
+    palette: ['#19181C'],
+    runs: [{ f: 0, s: 130, c: 0, x: 0, y: 0, t: 'A', a: [0] }]
+  }
+  const atlasDoc: LabelAtlasDoc = {
+    size: [64, 64],
+    distanceRange: 8,
+    fonts: [{ name: 'F', fontSize: 48, base: 38, glyphs: { A: { x: 0, y: 0, w: 8, h: 8, xo: 0, yo: 0 } } }]
+  }
+
+  it('\'only\' mode draws the label pass after the vector passes', async () => {
+    const { renderer } = setup()
+    renderer.setVectorGeometry?.(buildVectorBuffers(vectorDoc()))
+    renderer.setVectorMode?.('only')
+    renderer.setLabelGeometry?.(buildLabelBuffers(labelsDoc, atlasDoc))
+    renderer.setLabelAtlas?.({} as TexImageSource, 8)
+
+    drawnVaos.length = 0
+    renderer.draw(wholeMapTransform(0.05), 360, 780, 3, 1)
+    // Fill mesh pass + capsule SDF pass + label pass, nothing else (no tiles).
+    expect(drawnVaos.length).toBe(3)
+  })
+
+  it('\'overlay\' mode never draws the label pass', async () => {
+    const { renderer } = setup()
+    renderer.setVectorGeometry?.(buildVectorBuffers(vectorDoc()))
+    renderer.setVectorMode?.('overlay')
+    renderer.setLabelGeometry?.(buildLabelBuffers(labelsDoc, atlasDoc))
+    renderer.setLabelAtlas?.({} as TexImageSource, 8)
+
+    const t = wholeMapTransform(0.05)
+    renderer.draw(t, 360, 780, 3, 1)
+    await flush()
+    drawnVaos.length = 0
+    renderer.draw(t, 360, 780, 3, 1)
+    // 16 tile quads + 1 capsule SDF pass (overlay skips region fills and labels).
+    expect(drawnVaos.length).toBe(17)
+  })
+
+  it('switching back to \'off\' restores the pure tile path', async () => {
+    const { renderer } = setup()
+    renderer.setVectorGeometry?.(buildVectorBuffers(vectorDoc()))
+    renderer.setVectorMode?.('only')
+    const t = wholeMapTransform(0.05)
+    renderer.draw(t, 360, 780, 3, 1)
+    await flush()
+    expect(renderer.tileStats().count).toBe(0)
+
+    renderer.setVectorMode?.('off')
+    renderer.draw(t, 360, 780, 3, 1)
+    await flush()
+    renderer.draw(t, 360, 780, 3, 1)
+    expect(renderer.tileStats().count).toBe(16)
   })
 })

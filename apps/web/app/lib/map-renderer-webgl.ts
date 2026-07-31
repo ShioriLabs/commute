@@ -1,7 +1,13 @@
 import * as twgl from 'twgl.js'
-import type { Manifest, Point, Renderer, SelectionOverlay, Tier, TileStats, Transform } from './map-renderer'
+import type { Manifest, Point, Renderer, SelectionOverlay, Tier, TileStats, Transform, VectorMode } from './map-renderer'
 import { RING_WIDTH_WORLD, SPOTLIGHT_FEATHER_WORLD, pointCornerRadius, ringOffsetWorld, tileKey } from './map-renderer'
 import { createTileSource } from './map-renderer-tile-source'
+import { createVectorLayer } from './map-vector-layer'
+import type { VectorLayer } from './map-vector-layer'
+import type { VectorBuffers } from './map-vector-geometry'
+import { createLabelLayer } from './map-label-layer'
+import type { LabelLayer } from './map-label-layer'
+import type { LabelBuffers } from './map-label-geometry'
 
 const VS = `#version 300 es
 in vec2 a_position;
@@ -266,6 +272,13 @@ export function createWebGLRenderer(
   let pillVao: twgl.VertexArrayInfo | null = null
   let debugHitboxes = false
 
+  // Vector-primitive layer, created lazily on the first geometry push so the
+  // default tile path never pays for its programs.
+  let vectorLayer: VectorLayer | null = null
+  let vectorMode: VectorMode = 'off'
+  // Same deal for the MSDF label layer.
+  let labelLayer: LabelLayer | null = null
+
   function rebuildPillBuffers() {
     if (pillBufferInfo) {
       // twgl doesn't expose a delete helper for BufferInfo; recreate buffers fresh.
@@ -519,6 +532,21 @@ export function createWebGLRenderer(
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
 
     const mat = buildTransformMat3(transform, cssW, cssH)
+    // Analytic AA feather: 0.75 device pixels either side of the edge, in world
+    // units. Tighter than the hitbox debug's 1 CSS px so hairline furniture
+    // (the width-8 street grid) doesn't read blurry at high DPR.
+    const vectorEdge = 0.75 / (transform.scale * dpr)
+
+    // Vector-only mode replaces the whole tile pass: no visibility scan, no tile
+    // requests, no eviction. The preview pipeline is untouched (ensurePreview()
+    // ran at construction), so isPreviewReady() and the morph handoff behave
+    // exactly as they do on the tile path.
+    if (vectorMode === 'only' && vectorLayer?.hasGeometry()) {
+      vectorLayer.draw(mat, vectorEdge, true)
+      labelLayer?.draw(mat)
+      drawOverlays(mat, transform, cssW, cssH, selection)
+      return
+    }
 
     gl.useProgram(programInfo.program)
     twgl.setBuffersAndAttributes(twglGl, programInfo, quadVao)
@@ -561,6 +589,9 @@ export function createWebGLRenderer(
           u_texture: previewTexture
         })
         twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
+        if (vectorMode === 'overlay' && vectorLayer?.hasGeometry()) {
+          vectorLayer.draw(mat, vectorEdge, false)
+        }
         drawOverlays(mat, transform, cssW, cssH, selection)
         // Nothing here draws a tile, so every resident tile is dead weight —
         // release them outright rather than waiting for the budget sweep, which
@@ -649,6 +680,11 @@ export function createWebGLRenderer(
     downgradeOverResolvedTiles(currentTier)
     evictTiles()
 
+    // Intended final stack, bottom to top: tiles → vector primitives → route
+    // overlay (experimental/map-fare) → hitboxes/spotlight.
+    if (vectorMode === 'overlay' && vectorLayer?.hasGeometry()) {
+      vectorLayer.draw(mat, vectorEdge, false)
+    }
     drawOverlays(mat, transform, cssW, cssH, selection)
   }
 
@@ -705,6 +741,38 @@ export function createWebGLRenderer(
     onDirty()
   }
 
+  function setVectorGeometry(buffers: VectorBuffers | null) {
+    if (disposed || gl.isContextLost()) return
+    if (buffers && !vectorLayer) {
+      vectorLayer = createVectorLayer(gl, twglGl, SHAPE_SDF_GLSL)
+    }
+    vectorLayer?.setGeometry(buffers)
+    onDirty()
+  }
+
+  function setVectorMode(mode: VectorMode) {
+    vectorMode = mode
+    onDirty()
+  }
+
+  function setLabelGeometry(buffers: LabelBuffers | null) {
+    if (disposed || gl.isContextLost()) return
+    if (buffers && !labelLayer) {
+      labelLayer = createLabelLayer(gl, twglGl)
+    }
+    labelLayer?.setGeometry(buffers)
+    onDirty()
+  }
+
+  function setLabelAtlas(image: TexImageSource | null, distanceRange: number) {
+    if (disposed || gl.isContextLost()) return
+    if (image && !labelLayer) {
+      labelLayer = createLabelLayer(gl, twglGl)
+    }
+    labelLayer?.setAtlas(image, distanceRange)
+    onDirty()
+  }
+
   // Drop every tile's pixels but keep the context, its programs and its buffers
   // — those are kilobytes, the tiles are hundreds of megabytes. draw() re-requests
   // whatever is on screen and the preview underlay covers the gap meanwhile.
@@ -750,6 +818,10 @@ export function createWebGLRenderer(
       const buf = spotBufferInfo.attribs[k].buffer
       if (buf) gl.deleteBuffer(buf)
     }
+    vectorLayer?.dispose()
+    vectorLayer = null
+    labelLayer?.dispose()
+    labelLayer = null
     tileSource.dispose()
     // Hand the drawing buffer and the context slot back now rather than waiting
     // for GC to collect the canvas. Browsers cap live WebGL contexts per page,
@@ -772,6 +844,10 @@ export function createWebGLRenderer(
     requestTier: (r, c, tier) => { void requestTier(r, c, tier) },
     setPoints,
     setDebugHitboxes,
+    setVectorGeometry,
+    setVectorMode,
+    setLabelGeometry,
+    setLabelAtlas,
     isContextLost: () => gl.isContextLost(),
     releaseTiles,
     isPreviewReady: () => previewTexture !== null,

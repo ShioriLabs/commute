@@ -1,5 +1,7 @@
 import { createWebGLRenderer } from './map-renderer-webgl'
 import { createCanvas2DRenderer } from './map-renderer-canvas2d'
+import type { VectorBuffers } from './map-vector-geometry'
+import type { LabelBuffers } from './map-label-geometry'
 
 export interface Manifest {
   version: string
@@ -111,6 +113,11 @@ export interface TileStats {
   bytes: number
 }
 
+// Vector-primitive layer mode (dev-flagged, see map.tsx `?vector=`):
+// 'overlay' draws the primitives over the tiles for registration checks,
+// 'only' replaces the tile pass entirely for coverage checks.
+export type VectorMode = 'off' | 'overlay' | 'only'
+
 // Escape hatch for forcing context loss on demand. Only the WebGL renderer has
 // one, and only when the browser exposes WEBGL_lose_context — context loss
 // otherwise takes half an hour of real memory pressure to reproduce.
@@ -138,6 +145,15 @@ export interface Renderer {
   // (components/map-morph.tsx) holds until then. Optional so test doubles and
   // future renderers don't have to care.
   isPreviewReady?(): boolean
+  // Vector-primitive layer (see map-vector-layer.ts). WebGL-only — Canvas2D
+  // keeps drawing tiles and simply doesn't implement these — so both are
+  // optional exactly like isPreviewReady, and callers guard with `?.`.
+  setVectorGeometry?(buffers: VectorBuffers | null): void
+  setVectorMode?(mode: VectorMode): void
+  // MSDF text labels (see map-label-layer.ts), drawn only in 'only' vector
+  // mode — the tiles already rasterize this text, so overlay never doubles it.
+  setLabelGeometry?(buffers: LabelBuffers | null): void
+  setLabelAtlas?(image: TexImageSource | null, distanceRange: number): void
   tileStats(): TileStats
   debug?: RendererDebug
   dispose(): void

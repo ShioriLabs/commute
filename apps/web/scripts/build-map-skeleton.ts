@@ -25,6 +25,7 @@ import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
+import { channelDistance, pointSegmentDistance, simplify } from './lib/map-extract-common'
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const WEB_ROOT = path.resolve(SCRIPT_DIR, '..')
@@ -252,46 +253,6 @@ async function extractStrokes(page: import('playwright').Page): Promise<RawStrok
   })
 }
 
-/** Perpendicular distance from p to the segment ab. */
-function pointSegmentDistance(p: number[], a: number[], b: number[]): number {
-  const dx = b[0] - a[0]
-  const dy = b[1] - a[1]
-  const lengthSquared = dx * dx + dy * dy
-  if (lengthSquared === 0) return Math.hypot(p[0] - a[0], p[1] - a[1])
-  let t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / lengthSquared
-  t = Math.max(0, Math.min(1, t))
-  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy))
-}
-
-/** Douglas-Peucker, iterative so a 4000-point sample can't blow the stack. */
-function simplify(points: number[][], epsilon: number): number[][] {
-  if (points.length <= 2) return points
-
-  const keep = new Array<boolean>(points.length).fill(false)
-  keep[0] = true
-  keep[points.length - 1] = true
-  const stack: [number, number][] = [[0, points.length - 1]]
-
-  while (stack.length > 0) {
-    const [first, last] = stack.pop()!
-    let maxDistance = 0
-    let index = -1
-    for (let i = first + 1; i < last; i++) {
-      const distance = pointSegmentDistance(points[i], points[first], points[last])
-      if (distance > maxDistance) {
-        maxDistance = distance
-        index = i
-      }
-    }
-    if (index !== -1 && maxDistance > epsilon) {
-      keep[index] = true
-      stack.push([first, index], [index, last])
-    }
-  }
-
-  return points.filter((_, i) => keep[i])
-}
-
 /**
  * Integer world coordinates. One world unit is 0.5 CSS px at the initial camera, so
  * rounding is invisible, and it is by far the biggest lever on file size.
@@ -358,24 +319,6 @@ async function extractDiscs(page: import('playwright').Page): Promise<RawDisc[]>
   })
 }
 
-/** Shortest distance from p to segment ab. */
-function segmentDistance(p: number[], a: number[], b: number[]): number {
-  const dx = b[0] - a[0]
-  const dy = b[1] - a[1]
-  const lengthSquared = dx * dx + dy * dy
-  if (lengthSquared === 0) return Math.hypot(p[0] - a[0], p[1] - a[1])
-  const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / lengthSquared))
-  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy))
-}
-
-function channelDistance(a: string, b: string): number {
-  let worst = 0
-  for (let i = 1; i < 7; i += 2) {
-    worst = Math.max(worst, Math.abs(parseInt(a.slice(i, i + 2), 16) - parseInt(b.slice(i, i + 2), 16)))
-  }
-  return worst
-}
-
 /**
  * Pairs each extracted disc with the line it belongs to, dropping anything that is not a
  * station on a rail line.
@@ -401,7 +344,7 @@ function collectStations(
     for (const line of lines) {
       if (channelDistance(line.c, disc.colour) > STATION_COLOUR_TOLERANCE) continue
       for (let i = 0; i < line.points.length - 1; i++) {
-        const d = segmentDistance([disc.x, disc.y], line.points[i], line.points[i + 1])
+        const d = pointSegmentDistance([disc.x, disc.y], line.points[i], line.points[i + 1])
         if (d < best) {
           best = d
           colour = line.c
