@@ -318,7 +318,17 @@
              so centring it means (50vh - 11rem). It is floored at 6rem to clear
              the sticky nav lockup, which the plate otherwise slides under near
              the end of the traverse. -->
-        <div class="sign max-w-md p-6 md:sticky md:top-[max(6rem,calc(50vh-11rem))] md:justify-self-start" style="--sign-accent: var(--line-KCI-C)">
+        <div class="sign relative max-w-md p-6 md:sticky md:top-[max(6rem,calc(50vh-11rem))] md:justify-self-start" style="--sign-accent: var(--line-KCI-C)">
+          <!-- The MOBILE anchor for this beat, and mobile only (`md:hidden`, so
+               liveBeats() drops it on desktop where the sweep cells take over).
+               `absolute inset-0` makes it span the plate exactly, so its centre
+               IS the plate's centre: the director anchors on centres, and this
+               beat has to fire where its copy is READ. It previously sat on the
+               dock cell, whose centre is 752px below the plate — so the JPM copy
+               was on screen while the map still drew tarif's fare tag. It cannot
+               be the plate element itself either, because on desktop that is
+               position:sticky and its rect follows the viewport. -->
+          <div data-beat="jpm" aria-hidden="true" class="pointer-events-none absolute inset-0 md:hidden"></div>
           <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Ada Transfer yang Punya Tarif</h2>
           <p class="leading-relaxed text-white/60">
             Di data kita, transfer nggak cuma jarak jalan kaki. Nyebrang JPM Dukuh Atas lewat Stasiun
@@ -353,12 +363,16 @@
              arrangement as the api beat. On desktop this column also carries
              the sweep's far anchor below, stacked a full viewport down so the
              camera has room to travel. -->
-        <!-- `data-beat="jpm"` lives HERE, on the first anchor cell, not on the
-             grid: the director anchors a beat at its element's CENTRE, so
-             measuring one beat from the whole grid and the other from a single
-             cell put their anchor points barely 400px apart. Two same-shaped
-             sibling cells put them a clean viewport apart. -->
-        <div data-beat="jpm" data-jpm-dock class="md:h-screen"></div>
+        <!-- The desktop sweep's near end, and the mobile dock for the leg panel.
+             `data-beat="jpm-sud"` is md:-only via the marker pattern below: as a
+             MOBILE anchor its centre sits 752px under the copy, which is what
+             desynced the beat from its own plate. Keeping the anchor on a child
+             rather than adding a fourth grid cell matters — a two-column grid
+             auto-placed an extra sibling BESIDE this one, giving both sweep ends
+             the same centre and collapsing the dolly to zero travel. -->
+        <div data-jpm-dock class="relative md:h-screen">
+          <div data-beat="jpm-sud" aria-hidden="true" class="pointer-events-none absolute inset-0 hidden md:block"></div>
+        </div>
         <!-- The sweep's far end: a scroll anchor for the DKA-end pose and
              nothing else, which is why it is aria-hidden and carries no copy. -->
         <div data-beat="jpm-dka" aria-hidden="true" class="pointer-events-none hidden md:block md:h-screen"></div>
@@ -515,6 +529,10 @@
          forming the wordmark light up (scene/network-scene.ts + FIELD_FS).
          Nothing here but the attribution, flush on the grid — no panel, no
          border, no backdrop. The header keeps the only nav the page needs. -->
+    <!-- Exactly one viewport. The footer draws the map with the FULL-viewport
+         pose (see `footer` in scroll/beats.ts), so the wordmark is centred on the
+         SCREEN, not on this box — any height beyond 100vh opens bare ink between
+         the mark and the copyright. -->
     <section data-beat="footer" class="relative z-10 flex min-h-screen items-end justify-center px-6 pb-10">
       <p class="font-mono text-[11px] text-white/30">
         © 2026 Commute Data Platform · Dibuat oleh Shiori Labs

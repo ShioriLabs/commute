@@ -125,31 +125,93 @@ export function createSectionDirector(opts: {
   let running = false
   let ticking = false
 
-  // The "anchor line" is the viewport centre. Each beat's progress point is the
-  // scroll position at which its section centre crosses the viewport centre.
-  function beatAnchorY(el: HTMLElement): number {
-    const rect = el.getBoundingClientRect()
-    const centreInDoc = rect.top + window.scrollY + rect.height / 2
-    return centreInDoc - window.innerHeight / 2
+  /**
+   * The beats that are actually on the page right now, paired with their anchors
+   * and guaranteed to ascend — the invariant every branch below depends on.
+   *
+   * The "anchor line" is the viewport centre: a beat's anchor is the scroll
+   * position at which its section centre crosses it.
+   *
+   * A beat can be declared but not rendered: `jpm-dka` is `hidden md:block`,
+   * because the SUD -> DKA sweep is a desktop affordance. A `display:none`
+   * element has an all-zero rect, so beatAnchorY() returns -innerHeight/2 — a
+   * NEGATIVE anchor sitting mid-list. That silently broke the bracketing scan on
+   * mobile: past the jpm anchor it matched `jpm-dka -> stasiun` (a0 = -422)
+   * instead of `jpm -> stasiun`, landing straight in that pair's departing ramp,
+   * so the structure folded flat the moment the reader scrolled past the copy.
+   *
+   * Filtered here rather than in rebuild() on purpose: rebuild() only runs on
+   * start() and refresh() (resize), but applyBand() toggles `data-map-band` on
+   * every beat change, which relayouts without a resize. evaluate() already
+   * measures every beat each frame, so the rect it needs is in hand.
+   *
+   * The rect is the render test, not offsetParent, which also reports null for
+   * position:fixed elements. The monotonic guard is belt-and-braces: it makes
+   * "anchors ascend" explicit, so any future ordering surprise degrades to a
+   * skipped beat instead of a wrong one.
+   */
+  function liveBeats(): { beat: AnchoredBeat, anchor: number }[] {
+    const out: { beat: AnchoredBeat, anchor: number }[] = []
+    for (const beat of anchored) {
+      const rect = beat.el.getBoundingClientRect()
+      if (rect.width === 0 && rect.height === 0) continue
+      const anchor = rect.top + window.scrollY + rect.height / 2 - window.innerHeight / 2
+      const prev = out[out.length - 1]
+      if (prev && anchor <= prev.anchor) continue
+      out.push({ beat, anchor })
+    }
+
+    // The last beat's anchor can sit at or past the furthest the page can
+    // actually scroll. The footer is the standing case: it is the final section
+    // and one viewport tall, so its CENTRE lands exactly at maxScroll and the
+    // transition into it can only reach t=1 on the document's very last pixel —
+    // the wordmark reveal never finishes. Page geometry cannot fix this from the
+    // other side either: adding height to any earlier section pushes the footer
+    // down with it (measured — headroom stayed 0), and trailing space after it
+    // leaves bare ink below the mark, because the map is viewport-fixed and has
+    // nothing left to draw there.
+    //
+    // So pull the tail anchors back into reach instead. The last one is seated a
+    // short way ABOVE maxScroll, not exactly on it, so the transition completes
+    // while the reader is still scrolling rather than on the final pixel; any
+    // earlier beats that would then collide are stepped back to keep the list
+    // strictly ascending.
+    const maxScroll = Math.max(
+      0,
+      document.documentElement.scrollHeight - window.innerHeight
+    )
+    // Enough travel for the incoming beat to resolve, capped so a short page
+    // cannot push the seat above the beat before it.
+    const TAIL_INSET = Math.min(200, Math.round(window.innerHeight * 0.25))
+    for (let i = out.length - 1; i >= 0; i--) {
+      const seat = maxScroll - TAIL_INSET - (out.length - 1 - i)
+      if (out[i]!.anchor <= seat) break
+      const floor = i > 0 ? out[i - 1]!.anchor + 1 : 0
+      out[i]!.anchor = Math.max(floor, seat)
+    }
+    return out
   }
 
   function evaluate(): void {
     if (anchored.length === 0) return
     const y = window.scrollY
 
-    // Anchor scroll positions, ascending by document order.
-    const anchors = anchored.map(b => beatAnchorY(b.el))
+    // Rendered beats only, anchors ascending — see liveBeats().
+    const live = liveBeats()
+    if (live.length === 0) return
+    const anchors = live.map(e => e.anchor)
+    const beats = live.map(e => e.beat)
 
     // Clamp before first / after last.
     if (y <= anchors[0]!) {
-      setActive(anchored[0]!.id)
-      apply(anchored[0]!.pose, anchored[0]!.highlight, anchored[0]!.highlightSet, anchored[0]!.logo, anchored[0]!.jpm)
+      setActive(beats[0]!.id)
+      apply(beats[0]!.pose, beats[0]!.highlight, beats[0]!.highlightSet, beats[0]!.logo, beats[0]!.jpm)
       return
     }
-    const last = anchored.length - 1
+    const last = beats.length - 1
     if (y >= anchors[last]!) {
-      setActive(anchored[last]!.id)
-      apply(anchored[last]!.pose, anchored[last]!.highlight, anchored[last]!.highlightSet, anchored[last]!.logo, anchored[last]!.jpm)
+      setActive(beats[last]!.id)
+      apply(beats[last]!.pose, beats[last]!.highlight, beats[last]!.highlightSet, beats[last]!.logo, beats[last]!.jpm)
       return
     }
 
@@ -160,8 +222,8 @@ export function createSectionDirector(opts: {
       if (y >= a0 && y <= a1) {
         const raw = (y - a0) / Math.max(a1 - a0, 1)
         const t = smoothstep(raw)
-        const from = anchored[i]!
-        const to = anchored[i + 1]!
+        const from = beats[i]!
+        const to = beats[i + 1]!
         const near = t < 0.5 ? from : to
         setActive(near.id)
         if (reduceMotion) {
@@ -200,27 +262,23 @@ export function createSectionDirector(opts: {
             ? t
             : Math.max(0, (t - 0.6) / 0.4)
           // The JPM unfold is scroll-driven, in its own phase on each side of
-          // the beat. Approaching: hold flat, then rise over the remainder, so
-          // the structure doesn't start growing while the camera is still flying
-          // in from tarif's near-top-down pose (same reasoning as the wordmark
-          // hold and cakupan's CYCLE_LEAD_IN). Departing: fold over the first
-          // 40%, done BEFORE the midpoint hands the highlight to the next beat.
-          // Both ends are continuous — morph is exactly 1 at the jpm anchor from
-          // either side and exactly 0 at its neighbours' anchors — so scrubbing
+          // the beat. Approaching: hold flat for the first 60% so the structure
+          // doesn't start rising while the camera is still flying in from
+          // tarif's near-top-down pose (same reasoning as the wordmark hold and
+          // cakupan's CYCLE_LEAD_IN). Departing: fold over the first 40%, done
+          // BEFORE the midpoint hands the highlight to the next beat. Both ends
+          // are continuous — morph is exactly 1 at the jpm anchor from either
+          // side and exactly 0 at its neighbours' anchors — so scrubbing
           // backwards reverses the unfold with no pop at the handoff.
           //
-          // The hold is SHORTER on mobile. Desktop can afford 0.6 because the
-          // copy plate is sticky there and waits for the structure; stacked on a
-          // phone it is not, and at 0.6 the plate had already scrolled past
-          // (measured: 444px above the fold at the anchor) before the structure
-          // finished growing, so the claim and its picture never shared the
-          // screen. Starting at 0.25 puts the unfold under the copy while the
-          // copy is still being read.
-          const jpmLeadIn = window.innerWidth < 768 ? 0.25 : 0.6
+          // One shared lead-in, no mobile branch. A 0.25 mobile value lived here
+          // briefly; it was tuning around the unrendered-beat bug that liveBeats()
+          // now fixes, where the morph was pinned near 0 for the whole mobile beat
+          // regardless of this constant.
           const jpmT = from.jpm === to.jpm
             ? from.jpm
             : to.jpm > from.jpm
-              ? Math.max(0, (t - jpmLeadIn) / (1 - jpmLeadIn))
+              ? Math.max(0, (t - 0.6) / 0.4)
               : Math.max(0, 1 - t / 0.4)
           apply(pose, hl, nearSet, lerp(from.logo, to.logo, logoT), jpmT)
         }

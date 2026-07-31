@@ -96,7 +96,7 @@ function bootNetworkBackground(): void {
   // Only the content beats are banded; hero and footer are full-bleed.
   // 'jpm-dka' is the far end of the jpm sweep; it must band like its other half
   // or the map would drop out of the band mid-traverse.
-  const BANDED_BEATS = new Set<BeatId>(['jadwal', 'topologi', 'tarif', 'jpm', 'jpm-dka', 'stasiun', 'rute', 'cakupan', 'api'])
+  const BANDED_BEATS = new Set<BeatId>(['jadwal', 'topologi', 'tarif', 'jpm', 'jpm-sud', 'jpm-dka', 'stasiun', 'rute', 'cakupan', 'api'])
   // Tracked so a resize can re-evaluate the band on the CURRENT beat; the
   // director only reports a beat when it changes.
   let activeBeatId: BeatId | null = null
@@ -343,7 +343,7 @@ function bootNetworkBackground(): void {
       // screen here, so the plates have nothing to label anywhere else.
       // Both halves of the travelling shot: the structure is on screen for the
       // whole sweep, so its labels and leg belong to both anchors.
-      jpmTransfer?.setVisible(id === 'jpm' || id === 'jpm-dka')
+      jpmTransfer?.setVisible(id === 'jpm' || id === 'jpm-sud' || id === 'jpm-dka')
 
       // Fetch from the tarif beat onward: the station card wants data before the
       // reader arrives, and the API panel below reads the same response.

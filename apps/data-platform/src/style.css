@@ -67,12 +67,59 @@ body {
 
   /* Content beats centre their plate in the viewport (items-center), which on a
      phone lands it over the band and buries the very figures the band is
-     showing. Push it clear of the band instead. */
-  html[data-map-band] [data-beat] {
+     showing. Push it clear of the band instead.
+
+     NOT keyed on [data-map-band], deliberately, even though the band it reserves
+     room for is. applyBand() toggles that attribute from onActiveBeat, so keying
+     LAYOUT on it makes a feedback loop: the director measures anchors, picks a
+     beat, applyBand mutates padding, the anchors move, and a different beat wins
+     — measured shifts up to 1097px, more than a viewport, which had the api beat
+     oscillating between `cakupan->api` and `api->footer` on every frame and the
+     band strobing on/off. The gutter is now reserved for every content beat at
+     this width whether the band is currently up or not, so toggling it cannot
+     move a single anchor.
+
+     Scoped to the beat SECTIONS by id, not to [data-beat] generally: hero and
+     footer are full-bleed on every device (they are not in BANDED_BEATS) and
+     must not carry the gutter, and the jpm/jpm-sud/jpm-dka anchors are markers
+     and grid cells inside a section that already has it. */
+  #jadwal,
+  #topologi,
+  #tarif,
+  #jpm,
+  #stasiun,
+  #rute,
+  #cakupan,
+  #api {
     align-items: start;
     /* Band height plus a gutter. The gutter is what keeps a plate from grazing
        an overlay card that is resting near the band's lower edge. */
     padding-top: calc(100vw / 1.43 + 3rem);
+
+    /* Let a banded section be as tall as its content instead of a forced
+       viewport. The beats carry `min-h-screen` + `py-32` for the desktop layout,
+       but here the band gutter above already accounts for the map, so those two
+       stack into dead space below the plate — measured 148-367px on every banded
+       beat at 393x851 (worst: tarif). */
+    min-height: auto;
+  }
+
+  /* padding-bottom is ZERO, not a nominal 4rem, because the separation between
+     two plates is already paid for by the NEXT section's gutter: measured 387px
+     between the topologi and tarif plates, of which 323px was that gutter and
+     only 64px this padding. Anything here is added on top of a gap that is a
+     third of a viewport tall. The gutter is the rhythm.
+
+     #api is excluded: it is the last banded beat, so there is no next gutter to
+     inherit separation from — it keeps its own py-32 bottom. */
+  #jadwal,
+  #topologi,
+  #tarif,
+  #jpm,
+  #stasiun,
+  #rute,
+  #cakupan {
+    padding-bottom: 0;
   }
 
   /* Padding alone can't keep the copy out of the band: it positions the plate

@@ -14,8 +14,8 @@ import {
 import { JPM_PITCH, JPM_YAW, type JpmScene } from '../scene/jpm-scene'
 
 export type BeatId
-  = 'hero' | 'jadwal' | 'topologi' | 'tarif' | 'jpm' | 'jpm-dka' | 'stasiun'
-    | 'rute' | 'api' | 'cakupan' | 'footer'
+  = 'hero' | 'jadwal' | 'topologi' | 'tarif' | 'jpm' | 'jpm-sud' | 'jpm-dka'
+    | 'stasiun' | 'rute' | 'api' | 'cakupan' | 'footer'
 
 export interface Beat {
   id: BeatId
@@ -586,42 +586,52 @@ export function buildBeats(
     // Skipped entirely if the corridor's stations are missing from the baked
     // network: the section still scrolls past, and the director simply
     // interpolates tarif -> stasiun across it.
-    // Two anchors, one section: the camera tracks from the Sudirman end to the
-    // LRT end as the reader crosses it. Both carry jpm: 1 so the structure is
-    // fully unfolded for the whole traverse — the morph belongs to the approach,
-    // not to the sweep, and re-running it mid-travel would fight the dolly.
-    ...(jpmSudPose && jpmDkaPose
-      ? [
-          {
-            id: 'jpm' as const,
-            selector: '[data-beat=\'jpm\']',
-            pose: jpmSudPose,
-            highlight: 1,
-            highlightSet: 'jpm-transfer' as const,
-            logo: 0,
-            jpm: 1
-          },
-          {
-            id: 'jpm-dka' as const,
-            selector: '[data-beat=\'jpm-dka\']',
-            pose: jpmDkaPose,
-            highlight: 1,
-            highlightSet: 'jpm-transfer' as const,
-            logo: 0,
-            jpm: 1
-          }
-        ]
-      : jpmPose
-        ? [{
-            id: 'jpm' as const,
-            selector: '[data-beat=\'jpm\']',
-            pose: jpmPose,
-            highlight: 1,
-            highlightSet: 'jpm-transfer' as const,
-            logo: 0,
-            jpm: 1
-          }]
-        : []),
+    // THREE declared anchors; each viewport renders exactly one set of them.
+    //
+    // MOBILE renders only `jpm` — a marker inside the copy plate, so the beat is
+    // anchored where its prose is actually read. DESKTOP renders only `jpm-sud`
+    // and `jpm-dka`, the two ends the camera dollies between; `jpm`'s marker is
+    // md:hidden there because the plate it rides is position:sticky, whose rect
+    // follows the viewport and would make a meaningless anchor.
+    //
+    // liveBeats() in the director drops whichever are display:none, so the array
+    // can declare all three and let layout decide. All carry jpm: 1 so the
+    // structure stays unfolded across the whole beat — the morph belongs to the
+    // approach from tarif, not to the sweep, and re-running it mid-travel would
+    // fight the dolly.
+    ...(jpmPose
+      ? [{
+          id: 'jpm' as const,
+          selector: '[data-beat=\'jpm\']',
+          pose: jpmPose,
+          highlight: 1,
+          highlightSet: 'jpm-transfer' as const,
+          logo: 0,
+          jpm: 1
+        }]
+      : []),
+    ...(jpmSudPose
+      ? [{
+          id: 'jpm-sud' as const,
+          selector: '[data-beat=\'jpm-sud\']',
+          pose: jpmSudPose,
+          highlight: 1,
+          highlightSet: 'jpm-transfer' as const,
+          logo: 0,
+          jpm: 1
+        }]
+      : []),
+    ...(jpmDkaPose
+      ? [{
+          id: 'jpm-dka' as const,
+          selector: '[data-beat=\'jpm-dka\']',
+          pose: jpmDkaPose,
+          highlight: 1,
+          highlightSet: 'jpm-transfer' as const,
+          logo: 0,
+          jpm: 1
+        }]
+      : []),
     { id: 'stasiun', selector: '[data-beat=\'stasiun\']', pose: stasiun, highlight: 1, highlightSet: 'rasuna', logo: 0, jpm: 0 },
     { id: 'rute', selector: '[data-beat=\'rute\']', pose: rute, highlight: 1, highlightSet: 'rute', logo: 0, jpm: 0 },
     {
