@@ -136,9 +136,11 @@ export interface FareContext {
 
 /**
  * Transfers that cross a paid area and therefore may carry a passerby surcharge,
- * unlike ordinary free walking transfers. LRT Jabodebek Dukuh Atas is reachable
- * only across the JPM Dukuh Atas footbridge, which is gated behind KCI Sudirman
- * (the KCI-SUD ↔ LRTJBDB-DKA transfer is its sole connection). Someone using
+ * unlike ordinary free walking transfers. The JPM Dukuh Atas footbridge is a
+ * public building, freely enterable from the river's south bank; what is gated
+ * is the CROSSING from the north, which runs through KCI Sudirman. So this
+ * models the northern approach — the KCI-SUD ↔ LRTJBDB-DKA transfer, the only
+ * connection the network graph carries. Someone using
  * Sudirman purely as a pedestrian pass-through taps into and out of its gates
  * without boarding a KAI train — that tap-in/out is the surcharge: a nominal Rp1
  * (card) / full KCI base fare (QRIS_TAP, which can't apply the discount).
@@ -150,6 +152,18 @@ export interface FareContext {
  *
  * `stationIds` is an unordered pair of full `${operator}-${code}` ids (router
  * transfers are symmetric).
+ *
+ * Two things a future reader should not "correct" from a web search:
+ *
+ * 1. The free south-bank entry noted above is field-verified, not documented.
+ *    Operator and press sources only ever describe the northern gated approach,
+ *    so they will look like a contradiction. They are not — they just never
+ *    cover the other side.
+ * 2. KAI Commuter (3 Jan 2026) attaches a condition to the Rp1 we do not model:
+ *    it applies only if the rider clears the gates within 15 minutes, otherwise
+ *    the normal Rp3.000 applies even on a card. Modelling it needs a dwell time
+ *    the router does not have, and at internalWalkM 140 m the discounted fare is
+ *    correct for any ordinary walk. Left for the fare-cap rework.
  */
 export interface SurchargedCorridor {
   stationIds: [string, string]

@@ -10,10 +10,12 @@ import {
   buildDotPass,
   buildStationPass,
   buildTrainPass,
+  buildJpmPass,
   type HighlightablePass,
   type InstancedPass,
   type TrainPass
 } from './instanced'
+import type { JpmScene } from '../scene/jpm-scene'
 import {
   type HighlightId,
   type NetworkScene,
@@ -65,6 +67,11 @@ export interface Renderer {
   setHighlightSet(id: HighlightId): void
   /** Reveals the wordmark lit into the dot field (0 = dark, 1 = full). Eased. */
   setLogoMix(target: number): void
+  /**
+   * Drives the JPM unfold (0 = flat on the lattice, 1 = full structure). The
+   * target is scroll-derived by the director; easing here keeps scrubbing smooth.
+   */
+  setJpmMorph(target: number): void
   dispose(): void
 }
 
@@ -79,14 +86,17 @@ export function createRenderer(opts: {
   scene: NetworkScene
   camera: Camera
   reduceMotion: boolean
+  /** The JPM structure, if the corridor's stations exist in the baked network. */
+  jpm?: JpmScene | null
   onFrame?: (ctx: FrameContext) => void
 }): Renderer {
-  const { gl, canvas, scene, camera, reduceMotion, onFrame } = opts
+  const { gl, canvas, scene, camera, reduceMotion, jpm, onFrame } = opts
 
   const programs = createPrograms(gl)
   const fieldPass: InstancedPass = buildFieldPass(gl, programs, scene)
   const dotPass: HighlightablePass = buildDotPass(gl, programs, scene)
   const stationPass: HighlightablePass = buildStationPass(gl, programs, scene)
+  const jpmPass: InstancedPass | null = jpm ? buildJpmPass(gl, programs, jpm) : null
 
   // Trains: TRAINS_PER_LINE per line route, staggered start positions.
   const trainStates: TrainState[] = []
@@ -118,6 +128,8 @@ export function createRenderer(opts: {
   let highlightSet: HighlightId = 'none'
   let logoMix = 0
   let logoTarget = 0
+  let jpmMix = 0
+  let jpmTarget = 0
   // Counts buffer re-uploads so tests can assert this isn't happening per frame.
   let highlightUploads = 0
 
@@ -137,6 +149,10 @@ export function createRenderer(opts: {
 
   function setLogoMix(target: number): void {
     logoTarget = Math.max(0, Math.min(1, target))
+  }
+
+  function setJpmMorph(target: number): void {
+    jpmTarget = Math.max(0, Math.min(1, target))
   }
 
   function setHighlightSet(id: HighlightId): void {
@@ -186,6 +202,7 @@ export function createRenderer(opts: {
     const hT = 1 - Math.exp(-dt / 200)
     highlightMix += (highlightTarget - highlightMix) * (reduceMotion ? 1 : hT)
     logoMix += (logoTarget - logoMix) * (reduceMotion ? 1 : hT)
+    jpmMix += (jpmTarget - jpmMix) * (reduceMotion ? 1 : hT)
     camera.update(dt)
 
     const aspect = viewportW / Math.max(viewportH, 1)
@@ -221,24 +238,44 @@ export function createRenderer(opts: {
       u_viewProj: viewProj,
       u_proj: uProj,
       u_progress: progress,
-      u_highlightMix: highlightMix
+      u_highlightMix: highlightMix,
+      // the mute LEADS the unfold: the map is fully grey before the
+      // structure finishes rising
+      u_muteMix: Math.min(1, jpmMix * 1.4)
     })
     twgl.drawBufferInfo(gl, dotPass.vao, gl.TRIANGLE_STRIP, dotPass.vao.numElements, 0, dotPass.instanceCount)
 
-    // 3) Trains (hop dot-to-dot) — only after the draw-in is half done.
-    if (trainPass && progress > 0.5) {
+    // 3) Trains (hop dot-to-dot) — only after the draw-in is half done, and
+    // faded out entirely while the jpm beat holds the stage.
+    if (trainPass && progress > 0.5 && jpmMix < 0.999) {
       stepTrains(now)
       gl.useProgram(programs.train.program)
       twgl.setBuffersAndAttributes(gl, programs.train, trainPass.vao)
       twgl.setUniforms(programs.train, {
         u_viewProj: viewProj,
         u_proj: uProj,
-        u_radius: TRAIN_RADIUS
+        u_radius: TRAIN_RADIUS,
+        u_fade: 1 - Math.min(1, jpmMix * 1.4)
       })
       twgl.drawBufferInfo(gl, trainPass.vao, gl.TRIANGLE_STRIP, trainPass.vao.numElements, 0, trainPass.count)
     }
 
-    // 4) Stations + interchanges (drawn last so roundels sit above line dots).
+    // 4) JPM structure — only while its beat has begun the unfold. At mix 0 the
+    // pass draws nothing (its flat seeds sit in the corridor's dark gap, and the
+    // map there must stay pixel-identical to a neighbouring corridor). Before
+    // the stations so roundels keep sitting above everything.
+    if (jpmPass && jpmMix > 0.001) {
+      gl.useProgram(programs.jpm.program)
+      twgl.setBuffersAndAttributes(gl, programs.jpm, jpmPass.vao)
+      twgl.setUniforms(programs.jpm, {
+        u_viewProj: viewProj,
+        u_proj: uProj,
+        u_morph: jpmMix
+      })
+      twgl.drawBufferInfo(gl, jpmPass.vao, gl.TRIANGLE_STRIP, jpmPass.vao.numElements, 0, jpmPass.instanceCount)
+    }
+
+    // 5) Stations + interchanges (drawn last so roundels sit above line dots).
     gl.useProgram(programs.station.program)
     twgl.setBuffersAndAttributes(gl, programs.station, stationPass.vao)
     twgl.setUniforms(programs.station, {
@@ -285,6 +322,7 @@ export function createRenderer(opts: {
     setHighlightMix,
     setHighlightSet,
     setLogoMix,
+    setJpmMorph,
     dispose
   }
 

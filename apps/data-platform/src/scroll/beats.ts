@@ -2,7 +2,7 @@
 // page section to a camera pose (how the persistent map frames itself there) and
 // a highlight target (topology emphasis). Poses are built from the live scene so
 // they track the real network geometry.
-import { framingPose, type Pose } from '../gl/camera'
+import { framingPose, orbit, type Pose, type Vec3Tuple } from '../gl/camera'
 import {
   HIGHLIGHT_CHAIN,
   MRT_FARE_FROM,
@@ -11,10 +11,11 @@ import {
   type NetworkScene,
   type Vec3
 } from '../scene/network-scene'
+import { JPM_PITCH, JPM_YAW, type JpmScene } from '../scene/jpm-scene'
 
 export type BeatId
-  = 'hero' | 'jadwal' | 'topologi' | 'tarif' | 'stasiun' | 'rute' | 'api'
-    | 'cakupan' | 'footer'
+  = 'hero' | 'jadwal' | 'topologi' | 'tarif' | 'jpm' | 'jpm-dka' | 'stasiun'
+    | 'rute' | 'api' | 'cakupan' | 'footer'
 
 export interface Beat {
   id: BeatId
@@ -34,6 +35,12 @@ export interface Beat {
   highlightCycle?: readonly HighlightId[]
   /** Wordmark reveal in the dot field (0 = dark, 1 = lit). */
   logo: number
+  /**
+   * JPM unfold at this beat (0 = flat on the lattice, 1 = full structure).
+   * Like `logo`, the director ramps it in its own phase rather than lerping
+   * straight across the approach — see the morph derivation in evaluate().
+   */
+  jpm: number
 }
 
 const DEG = Math.PI / 180
@@ -98,7 +105,12 @@ function centroid(scene: NetworkScene, ids: readonly string[]): Vec3 {
  * @param band  Framing for the content beats. On mobile this is the IMAX band;
  *              on desktop callers pass `full` again and nothing changes.
  */
-export function buildBeats(scene: NetworkScene, full: MapLayout, band: MapLayout = full): Beat[] {
+export function buildBeats(
+  scene: NetworkScene,
+  full: MapLayout,
+  band: MapLayout = full,
+  jpm?: JpmScene | null
+): Beat[] {
   const hx = (scene.bounds.max.x - scene.bounds.min.x) / 2
   const hz = (scene.bounds.max.z - scene.bounds.min.z) / 2
 
@@ -428,10 +440,130 @@ export function buildBeats(scene: NetworkScene, full: MapLayout, band: MapLayout
     twoColumnFull ? 1.25 : 1.12
   )
 
+  // Jpm: the gated transfer, KCI-SUD <-> LRTJBDB-DKA. The subject is the
+  // structure jpm-scene.ts unfolds over the corridor's dark gap, so the framing
+  // comes from ITS solid point cloud, not the shared bounds: the network AABB
+  // discards Y (min/max are seeded y:0), and plain hx/hz framing would crop the
+  // LRT deck off the top. Project the cloud into the camera's own frame instead
+  // — the same move rute makes for its yawed L, extended to carry height: a
+  // ground displacement along the camera's forward axis foreshortens by
+  // sin(pitch), a vertical one contributes cos(pitch).
+  //
+  // Pitch 28 continues the deliberate ladder 72 (tarif) -> 58 (rute) -> 46
+  // (topologi) -> 28: the flattest tilt on the page belongs to the only beat
+  // whose subject has real height, and it stays far below the 78-89 up-vector
+  // blend band that rolls a yawed horizon. The yaw is NOT perpendicular to the
+  // corridor: the building runs along the canal and the LRT station along the
+  // corridor, perpendicular to each other, so a view square to either looks
+  // straight down the other and flattens it (the scratch bench proved this
+  // twice). JPM_YAW sits ~45° oblique to both, from the west — the reader
+  // stands at the Sudirman gate side looking across the water to the LRT.
+  //
+  // The framing is the SOLID state on purpose. The pose holds still while the
+  // geometry grows underneath it; framing the flat seeds would let the
+  // structure expand straight out of frame.
+  let jpmPose: Pose | null = null
+  // The two ends of the travelling shot; see the derivation below.
+  let jpmSudPose: Pose | null = null
+  let jpmDkaPose: Pose | null = null
+  if (jpm) {
+    // Billboards blow up into streaks when a shallow pitch brings the near edge
+    // of the structure close to the eye (dot radius is divided by clip w). The
+    // mobile band's narrow=0.62 would otherwise pull dist under this.
+    const JPM_MIN_DIST = 34
+    const jpmYawRad = JPM_YAW * DEG
+    const jpmPitchRad = JPM_PITCH * DEG
+    const jc = jpm.center
+    let minSx = Infinity
+    let maxSx = -Infinity
+    let minSv = Infinity
+    let maxSv = -Infinity
+    for (let i = 0; i < jpm.count; i++) {
+      const dx = jpm.solid[i * 3]! - jc.x
+      const dy = jpm.solid[i * 3 + 1]! - jc.y
+      const dz = jpm.solid[i * 3 + 2]! - jc.z
+      const sx = dx * Math.cos(jpmYawRad) - dz * Math.sin(jpmYawRad)
+      const depth = dx * Math.sin(jpmYawRad) + dz * Math.cos(jpmYawRad)
+      const sv = depth * Math.sin(jpmPitchRad) + dy * Math.cos(jpmPitchRad)
+      minSx = Math.min(minSx, sx)
+      maxSx = Math.max(maxSx, sx)
+      minSv = Math.min(minSv, sv)
+      maxSv = Math.max(maxSv, sv)
+    }
+    const jpmHx = (maxSx - minSx) / 2
+    const jpmHv = (maxSv - minSv) / 2
+    // Copy sits in the left column, so bias the structure toward the open right
+    // half — negated along the camera's right vector, same as rute.
+    // 0.4 (was 0.25): the v12 solid is wider than v10, and the user wants
+    // the camera nudged left — the structure sits deeper in the right half
+    const jpmShift = twoColumn ? jpmHx * 0.4 * shiftScale : 0
+    const framed = framingPose(
+      [
+        jc.x - Math.cos(jpmYawRad) * jpmShift,
+        jc.y,
+        jc.z + Math.sin(jpmYawRad) * jpmShift
+      ],
+      jpmHx,
+      jpmHv,
+      JPM_PITCH,
+      40 * DEG,
+      band.aspect,
+      1.2 * narrow,
+      JPM_YAW
+    )
+    jpmPose = framed.orbit && framed.orbit.dist < JPM_MIN_DIST
+      ? orbit(framed.target, { ...framed.orbit, dist: JPM_MIN_DIST }, framed.fovY)
+      : framed
+
+    // The travelling pair. This beat tracks along the span instead of holding
+    // one framing: the same yaw, pitch and distance throughout, with only the
+    // TARGET sliding from the Sudirman end to the LRT end, which reads as a
+    // dolly beside the bridge rather than a zoom or an orbit.
+    //
+    // Both ends reuse `framed`'s orbit wholesale, so whatever fitting the
+    // viewport produced (including the JPM_MIN_DIST floor and the narrow-band
+    // scaling) carries into the sweep unchanged. Only .target differs — which
+    // is also why lerpPose interpolates these two cleanly: identical orbit
+    // params mean the lerp reduces to a straight line between the two targets,
+    // with no yaw unwinding or distance drift mid-travel.
+    if (jpmPose.orbit) {
+      const o = jpmPose.orbit
+      // Pull the framing in from the extreme ends: aiming exactly at the tips
+      // puts half the frame on empty air beyond the structure.
+      //
+      // The two ends need DIFFERENT biases because the frame is not symmetric.
+      // The copy plate owns the left column and the leg panel sits upper-right,
+      // so at the DKA end the LRT tip has to clear BOTH. Bias is distance the
+      // TARGET travels along the span, and pushing the target further carries
+      // the structure further across the frame — so the DKA end runs LONGER
+      // than the SUD end, not shorter. (Shortening it to 0.34 was backwards: it
+      // ended the sweep near mid-span with the Sudirman end still dominating.)
+      const SUD_BIAS = 0.62
+      const DKA_BIAS = 0.92
+      const c = jpmPose.target
+      const endTarget = (e: Vec3, bias: number): Vec3Tuple => [
+        c[0] + (e.x - c[0]) * bias,
+        c[1] + (e.y - c[1]) * bias,
+        c[2] + (e.z - c[2]) * bias
+      ]
+      jpmSudPose = orbit(endTarget(jpm.ends.kci, SUD_BIAS), o, jpmPose.fovY)
+      jpmDkaPose = orbit(endTarget(jpm.ends.lrt, DKA_BIAS), o, jpmPose.fovY)
+    }
+  }
+
   // Ordered as a geographic sweep so the camera never doubles back: Manggarai ->
-  // the Cikarang chain through it -> the MRT corridor west of it -> Rasuna Said
-  // in the middle -> south-east down the Pancoran..Pasar Minggu journey -> out to
-  // the whole network -> back in to one station's raw JSON -> out to the wordmark.
+  // the Cikarang chain through it -> the MRT corridor west of it -> in close on
+  // the Dukuh Atas gate where that pricing breaks -> Rasuna Said in the middle
+  // -> south-east down the Pancoran..Pasar Minggu journey -> out to the whole
+  // network -> back in to one station's raw JSON -> out to the wordmark.
+  //
+  // jpm follows tarif deliberately: tarif is the beat about what a trip costs,
+  // and the KCI-SUD <-> LRTJBDB-DKA crossing is its counter-example — the one
+  // corridor where the price is a gate, not a distance. It is also the largest
+  // pose change on the page (the only yawed, tilted AND tall framing), so it
+  // sits where the camera's target barely travels: tarif already frames the
+  // Dukuh Atas end of the MRT corridor, and stasiun picks up one LRT stop away
+  // on the rasuna run.
   //
   // rute follows stasiun because the rasuna run ENDS at Pancoran and the journey
   // STARTS there: the camera hands off between subjects instead of jumping.
@@ -447,12 +579,51 @@ export function buildBeats(scene: NetworkScene, full: MapLayout, band: MapLayout
   // dips emphasis to zero at each midpoint, which reads as the map letting go of
   // the station and picking it back up, not as a glitch.
   return [
-    { id: 'hero', selector: '[data-beat=\'hero\']', pose: hero, highlight: 0, highlightSet: 'none', logo: 0 },
-    { id: 'jadwal', selector: '[data-beat=\'jadwal\']', pose: jadwal, highlight: 0, highlightSet: 'none', logo: 0 },
-    { id: 'topologi', selector: '[data-beat=\'topologi\']', pose: topologi, highlight: 1, highlightSet: 'cikarang', logo: 0 },
-    { id: 'tarif', selector: '[data-beat=\'tarif\']', pose: tarif, highlight: 1, highlightSet: 'mrt-lbb-bhi', logo: 0 },
-    { id: 'stasiun', selector: '[data-beat=\'stasiun\']', pose: stasiun, highlight: 1, highlightSet: 'rasuna', logo: 0 },
-    { id: 'rute', selector: '[data-beat=\'rute\']', pose: rute, highlight: 1, highlightSet: 'rute', logo: 0 },
+    { id: 'hero', selector: '[data-beat=\'hero\']', pose: hero, highlight: 0, highlightSet: 'none', logo: 0, jpm: 0 },
+    { id: 'jadwal', selector: '[data-beat=\'jadwal\']', pose: jadwal, highlight: 0, highlightSet: 'none', logo: 0, jpm: 0 },
+    { id: 'topologi', selector: '[data-beat=\'topologi\']', pose: topologi, highlight: 1, highlightSet: 'cikarang', logo: 0, jpm: 0 },
+    { id: 'tarif', selector: '[data-beat=\'tarif\']', pose: tarif, highlight: 1, highlightSet: 'mrt-lbb-bhi', logo: 0, jpm: 0 },
+    // Skipped entirely if the corridor's stations are missing from the baked
+    // network: the section still scrolls past, and the director simply
+    // interpolates tarif -> stasiun across it.
+    // Two anchors, one section: the camera tracks from the Sudirman end to the
+    // LRT end as the reader crosses it. Both carry jpm: 1 so the structure is
+    // fully unfolded for the whole traverse — the morph belongs to the approach,
+    // not to the sweep, and re-running it mid-travel would fight the dolly.
+    ...(jpmSudPose && jpmDkaPose
+      ? [
+          {
+            id: 'jpm' as const,
+            selector: '[data-beat=\'jpm\']',
+            pose: jpmSudPose,
+            highlight: 1,
+            highlightSet: 'jpm-transfer' as const,
+            logo: 0,
+            jpm: 1
+          },
+          {
+            id: 'jpm-dka' as const,
+            selector: '[data-beat=\'jpm-dka\']',
+            pose: jpmDkaPose,
+            highlight: 1,
+            highlightSet: 'jpm-transfer' as const,
+            logo: 0,
+            jpm: 1
+          }
+        ]
+      : jpmPose
+        ? [{
+            id: 'jpm' as const,
+            selector: '[data-beat=\'jpm\']',
+            pose: jpmPose,
+            highlight: 1,
+            highlightSet: 'jpm-transfer' as const,
+            logo: 0,
+            jpm: 1
+          }]
+        : []),
+    { id: 'stasiun', selector: '[data-beat=\'stasiun\']', pose: stasiun, highlight: 1, highlightSet: 'rasuna', logo: 0, jpm: 0 },
+    { id: 'rute', selector: '[data-beat=\'rute\']', pose: rute, highlight: 1, highlightSet: 'rute', logo: 0, jpm: 0 },
     {
       id: 'cakupan',
       selector: '[data-beat=\'cakupan\']',
@@ -463,9 +634,10 @@ export function buildBeats(scene: NetworkScene, full: MapLayout, band: MapLayout
       // operator lights in turn, largest network first. Order matches the roster
       // in overlay/coverage-panel.ts, so the lit lines and the marked row agree.
       highlightCycle: ['rail-kci', 'rail-mrtj', 'rail-lrtj', 'rail-lrtjbdb'],
-      logo: 0
+      logo: 0,
+      jpm: 0
     },
-    { id: 'api', selector: '[data-beat=\'api\']', pose: api, highlight: 0.45, highlightSet: 'rasuna', logo: 0 },
-    { id: 'footer', selector: '[data-beat=\'footer\']', pose: footer, highlight: 0, highlightSet: 'none', logo: 1 }
+    { id: 'api', selector: '[data-beat=\'api\']', pose: api, highlight: 0.45, highlightSet: 'rasuna', logo: 0, jpm: 0 },
+    { id: 'footer', selector: '[data-beat=\'footer\']', pose: footer, highlight: 0, highlightSet: 'none', logo: 1, jpm: 0 }
   ]
 }

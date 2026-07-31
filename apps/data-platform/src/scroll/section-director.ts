@@ -143,13 +143,13 @@ export function createSectionDirector(opts: {
     // Clamp before first / after last.
     if (y <= anchors[0]!) {
       setActive(anchored[0]!.id)
-      apply(anchored[0]!.pose, anchored[0]!.highlight, anchored[0]!.highlightSet, anchored[0]!.logo)
+      apply(anchored[0]!.pose, anchored[0]!.highlight, anchored[0]!.highlightSet, anchored[0]!.logo, anchored[0]!.jpm)
       return
     }
     const last = anchored.length - 1
     if (y >= anchors[last]!) {
       setActive(anchored[last]!.id)
-      apply(anchored[last]!.pose, anchored[last]!.highlight, anchored[last]!.highlightSet, anchored[last]!.logo)
+      apply(anchored[last]!.pose, anchored[last]!.highlight, anchored[last]!.highlightSet, anchored[last]!.logo, anchored[last]!.jpm)
       return
     }
 
@@ -165,8 +165,11 @@ export function createSectionDirector(opts: {
         const near = t < 0.5 ? from : to
         setActive(near.id)
         if (reduceMotion) {
-          // Snap to whichever beat is closer.
-          apply(near.pose, near.highlight, near.highlightSet, near.logo)
+          // Snap to whichever beat is closer. The morph snaps with it: there is
+          // no scroll fraction here to scrub, so the structure must resolve to
+          // a definite state (solid on the beat, flat off it), never freeze
+          // mid-unfold.
+          apply(near.pose, near.highlight, near.highlightSet, near.logo, near.jpm)
         } else {
           const pose = lerpPose(from.pose, to.pose, t)
           // Between beats that spotlight DIFFERENT subjects, dip the emphasis to
@@ -196,7 +199,30 @@ export function createSectionDirector(opts: {
           const logoT = from.logo === to.logo
             ? t
             : Math.max(0, (t - 0.6) / 0.4)
-          apply(pose, hl, nearSet, lerp(from.logo, to.logo, logoT))
+          // The JPM unfold is scroll-driven, in its own phase on each side of
+          // the beat. Approaching: hold flat, then rise over the remainder, so
+          // the structure doesn't start growing while the camera is still flying
+          // in from tarif's near-top-down pose (same reasoning as the wordmark
+          // hold and cakupan's CYCLE_LEAD_IN). Departing: fold over the first
+          // 40%, done BEFORE the midpoint hands the highlight to the next beat.
+          // Both ends are continuous — morph is exactly 1 at the jpm anchor from
+          // either side and exactly 0 at its neighbours' anchors — so scrubbing
+          // backwards reverses the unfold with no pop at the handoff.
+          //
+          // The hold is SHORTER on mobile. Desktop can afford 0.6 because the
+          // copy plate is sticky there and waits for the structure; stacked on a
+          // phone it is not, and at 0.6 the plate had already scrolled past
+          // (measured: 444px above the fold at the anchor) before the structure
+          // finished growing, so the claim and its picture never shared the
+          // screen. Starting at 0.25 puts the unfold under the copy while the
+          // copy is still being read.
+          const jpmLeadIn = window.innerWidth < 768 ? 0.25 : 0.6
+          const jpmT = from.jpm === to.jpm
+            ? from.jpm
+            : to.jpm > from.jpm
+              ? Math.max(0, (t - jpmLeadIn) / (1 - jpmLeadIn))
+              : Math.max(0, 1 - t / 0.4)
+          apply(pose, hl, nearSet, lerp(from.logo, to.logo, logoT), jpmT)
         }
         return
       }
@@ -207,7 +233,8 @@ export function createSectionDirector(opts: {
     pose: Pose,
     highlight: number,
     highlightSet: HighlightId,
-    logo: number
+    logo: number,
+    jpm: number
   ): void {
     if (reduceMotion) camera.snap(pose)
     else camera.setTarget(pose)
@@ -215,6 +242,7 @@ export function createSectionDirector(opts: {
     renderer.setHighlightSet(highlightSet)
     renderer.setHighlightMix(highlight)
     renderer.setLogoMix(logo)
+    renderer.setJpmMorph(jpm)
     document.documentElement.setAttribute('data-active-beat-hl', highlight > 0.5 ? '1' : '0')
   }
 
