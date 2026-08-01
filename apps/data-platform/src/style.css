@@ -57,13 +57,11 @@ body {
    Desktop is untouched — the attribute is only set below the md: breakpoint, and
    these rules are gated to match (see BAND_BREAKPOINT in main.ts). */
 @media (width < 48rem) {
-  html[data-map-band] #network-bg,
-  html[data-map-band] #overlay-root {
-    inset: 0 0 auto 0;
-    /* Overlays position inside #overlay-root against canvas-space coordinates
-       from project(), so the two boxes MUST stay identical. */
-    height: calc(100vw / 1.43);
-  }
+  /* The canvas and overlay boxes themselves — including the animated height that
+     makes the band hand over smoothly — live UNLAYERED at the bottom of this
+     file. They have to: both elements carry the `inset-0 h-full` utilities, and
+     a rule in this layer loses to the utilities layer however specific its
+     selector is, while an unlayered rule outranks every layer. */
 
   /* Content beats centre their plate in the viewport (items-center), which on a
      phone lands it over the band and buries the very figures the band is
@@ -386,5 +384,60 @@ body {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* The band's height is ANIMATED, not snapped. Toggling `data-map-band` used to
+   jump the canvas 273px -> 844px in a single frame (3.1x at 390px wide), and
+   since the GL viewport, the projection aspect and every anchored overlay are
+   derived from that box, the map lurched and every card teleported together.
+
+   This must stay UNLAYERED, which is why it sits below every @layer block in
+   this file. Both elements carry the `inset-0 h-full` utilities, and a rule in
+   @layer base or @layer components loses to the utilities layer however specific
+   its selector is (an id does not help — layer order is decided before
+   specificity). Unlayered declarations outrank every layer, so they win here;
+   putting them in @layer utilities instead does NOT work, because Tailwind v4
+   discards hand-written rules from that layer and the transition then vanishes
+   from the bundle silently. The base state also needs an explicit height, or
+   there is nothing for the transition to interpolate from.
+
+   main.ts hands the duration to renderer.trackBox() — see BAND_TRANSITION_MS,
+   which must stay in step with the 540ms here. */
+@media (width < 48rem) {
+  #network-bg,
+  #overlay-root {
+    top: 0;
+    bottom: auto;
+    height: 100dvh;
+    /* 540ms, matched to the CAMERA rather than chosen to look good alone. The
+       camera damps exponentially at tau 180ms (DEFAULT_TAU_MS in gl/camera.ts),
+       so it is ~95% settled at 3*tau = 540ms.
+
+       Matching the camera's DURATION is not enough — the shape has to match too.
+       The previous cubic-bezier(0.16, 1, 0.3, 1) is an ease-out-expo: it was 79%
+       done at 108ms while the camera was only 48% through its travel, a 28-point
+       gap. The box landed by ~200ms and the camera kept drifting to ~820ms, so
+       the handover read as a box snap followed by a separate map move.
+
+       This curve is a least-squares fit to (1 - e^(-t/180)) normalised to reach
+       1 at 540ms: it tracks the camera to within 0.2 percentage points across
+       the whole transition, so the box and the map travel together. If
+       DEFAULT_TAU_MS or the duration changes, refit — do not eyeball it. */
+    transition: height 540ms cubic-bezier(0.23, 0.74, 0.55, 0.94);
+  }
+
+  /* Overlays position inside #overlay-root against canvas-space coordinates
+     from project(), so the two boxes MUST stay identical. */
+  html[data-map-band] #network-bg,
+  html[data-map-band] #overlay-root {
+    height: calc(100vw / 1.43);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #network-bg,
+    #overlay-root {
+      transition: none;
+    }
   }
 }

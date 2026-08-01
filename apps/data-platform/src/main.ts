@@ -100,6 +100,12 @@ function bootNetworkBackground(): void {
   // Tracked so a resize can re-evaluate the band on the CURRENT beat; the
   // director only reports a beat when it changes.
   let activeBeatId: BeatId | null = null
+  // Must match the height transition on #network-bg / #overlay-root in
+  // style.css. The band changes the canvas box, and the GL viewport, the
+  // projection aspect and every anchored overlay are all derived from it — so
+  // the box cannot simply be left to CSS while the renderer samples it once.
+  const BAND_TRANSITION_MS = 540
+
   function applyBand(id: BeatId): void {
     activeBeatId = id
     const on = bandActive() && BANDED_BEATS.has(id)
@@ -107,9 +113,35 @@ function bootNetworkBackground(): void {
     if (on === root.hasAttribute('data-map-band')) return
     if (on) root.setAttribute('data-map-band', '')
     else root.removeAttribute('data-map-band')
-    // The canvas box just changed, so the GL viewport and projection aspect must
-    // be re-derived before the next frame projects any overlay against them.
+
+    // The poses were fitted to the OLD aspect. buildBeats() frames each beat for
+    // a specific canvas shape (bandLayout is 1.43:1, viewportLayout is the whole
+    // screen, ~0.44 on a phone), so leaving them alone means the projection
+    // aspect swings 0.44 -> 1.38 underneath a camera still aiming at the old
+    // framing — the map gets reframed by two things at once and the handover
+    // reads as a lurch even though nothing jitters. Rebuilding here hands the
+    // director poses fitted to where the box is GOING, and camera damping in
+    // apply() eases into them over roughly the same span as the height
+    // transition, so the two motions become one.
+    //
+    // reframe(), not refresh(): this runs inside onActiveBeat, which evaluate()
+    // drives, and refresh() calls evaluate() again — straight back into here.
+    director.reframe()
+
+    // Re-derive the GL viewport EVERY frame while the height animates, not once
+    // at the start. Sampling once was the old behaviour and the box moved out
+    // from under it: the canvas jumped 273px -> 844px in a single frame and the
+    // map, its projection and every card lurched together.
+    //
+    // This MUST be the renderer's own frame doing the resizing, not an rAF loop
+    // out here. A separate callback is registered after the renderer's, so it
+    // ran after the draw — and because resize() reallocates the drawing buffer
+    // whenever the size actually changes (which is every frame of a height
+    // animation), it cleared the canvas immediately after each frame was drawn.
+    // The map was blank for the whole 540ms and only appeared once the box
+    // stopped moving, which is what made the handover read as two events.
     renderer.resize()
+    renderer.trackBox(BAND_TRANSITION_MS + 60)
   }
 
   const heroPose = buildBeats(scene, ...layouts())[0]!.pose

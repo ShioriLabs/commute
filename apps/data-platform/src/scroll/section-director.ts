@@ -58,6 +58,8 @@ export interface SectionDirector {
   stop(): void
   /** Recompute anchor positions (after layout/resize). */
   refresh(): void
+  /** Re-fit poses to a changed canvas shape; safe to call during evaluate(). */
+  reframe(): void
 }
 
 export function createSectionDirector(opts: {
@@ -331,5 +333,20 @@ export function createSectionDirector(opts: {
     evaluate()
   }
 
-  return { start, stop, refresh }
+  /**
+   * Rebuild the beats' poses for a changed canvas shape WITHOUT re-evaluating.
+   *
+   * The mobile band toggle needs this: buildBeats() fits every pose to a
+   * specific canvas aspect, so when the band opens or closes the existing poses
+   * are framed for the wrong shape. But the toggle happens inside onActiveBeat,
+   * which evaluate() drives — so calling refresh() from there would recurse
+   * (refresh -> evaluate -> onActiveBeat -> refresh). Rebuilding alone is enough:
+   * the next scroll frame picks the new poses up, and camera damping eases into
+   * them rather than snapping.
+   */
+  function reframe(): void {
+    rebuild()
+  }
+
+  return { start, stop, refresh, reframe }
 }

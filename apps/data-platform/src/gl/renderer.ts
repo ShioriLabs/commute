@@ -57,6 +57,14 @@ export interface Renderer {
   start(): void
   stop(): void
   resize(): void
+  /**
+   * Re-derives the viewport at the TOP of each frame for the next `ms`, for use
+   * while the canvas box is animating. Callers must not drive resize() from
+   * their own rAF: resizing reallocates (and so clears) the drawing buffer, and
+   * a second callback lands after this one's draw, blanking the canvas for the
+   * whole animation. Ordering the resize before the draw is the point.
+   */
+  trackBox(ms: number): void
   /** Sets the topology-emphasis target (0 = none, 1 = full). Eased each frame. */
   setHighlightMix(target: number): void
   /**
@@ -132,14 +140,26 @@ export function createRenderer(opts: {
   let jpmTarget = 0
   // Counts buffer re-uploads so tests can assert this isn't happening per frame.
   let highlightUploads = 0
+  // Wall-clock deadline for sampling the canvas box every frame; see trackBox().
+  let trackBoxUntil = 0
 
   function resize(): void {
     const rect = canvas.getBoundingClientRect()
     dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR)
     viewportW = rect.width
     viewportH = rect.height
-    canvas.width = Math.round(viewportW * dpr)
-    canvas.height = Math.round(viewportH * dpr)
+    const w = Math.round(viewportW * dpr)
+    const h = Math.round(viewportH * dpr)
+    // Assigning canvas.width/height REALLOCATES the drawing buffer even when the
+    // value is unchanged, which is far too expensive to do per frame. The band
+    // transition calls this every frame while the box animates (see applyBand in
+    // main.ts), so the guard is what makes that affordable: viewportW/H above are
+    // still refreshed each call, so the projection tracks the box continuously
+    // while the buffer is only reallocated on a real size change.
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w
+      canvas.height = h
+    }
     gl.viewport(0, 0, canvas.width, canvas.height)
   }
 
@@ -186,6 +206,12 @@ export function createRenderer(opts: {
   }
 
   function frame(now: number): void {
+    // BEFORE the draw, never after. resize() reallocates the drawing buffer on a
+    // real size change, and reallocation clears it — so a resize that lands
+    // after this frame's draw presents an empty canvas. Doing it here also means
+    // the aspect below is sampled at the same instant the frame is drawn.
+    if (now < trackBoxUntil) resize()
+
     if (!startTime) {
       startTime = now
       lastTime = now
@@ -310,6 +336,12 @@ export function createRenderer(opts: {
     rafId = 0
   }
 
+  function trackBox(ms: number): void {
+    // Extend, never shorten: a second band flip mid-transition must not cut the
+    // first one's tracking short.
+    trackBoxUntil = Math.max(trackBoxUntil, performance.now() + ms)
+  }
+
   function dispose(): void {
     stop()
   }
@@ -319,6 +351,7 @@ export function createRenderer(opts: {
     start,
     stop,
     resize,
+    trackBox,
     setHighlightMix,
     setHighlightSet,
     setLogoMix,
