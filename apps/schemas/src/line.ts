@@ -1,6 +1,6 @@
 import * as v from 'valibot'
 import type { HexColored } from './common'
-import { LineKeySchema, LineSchema, OperatorCodeSchema, OperatorSchema } from './common'
+import { LineKeySchema, LineSchema, OperatorDetailSchema, OperatorSchema } from './common'
 
 export const LineStationSchema = v.pipe(
   v.object({
@@ -67,8 +67,7 @@ export const LineDetailSchema = v.pipe(
  */
 export const OperatorWithLinesSchema = v.pipe(
   v.object({
-    code: OperatorCodeSchema,
-    name: v.string(),
+    ...OperatorDetailSchema.entries,
     lines: v.array(LineSchema)
   }),
   v.title('OperatorWithLines'),

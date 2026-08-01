@@ -83,6 +83,18 @@ export const AmenitySchema = v.pipe(
   v.metadata({ ref: 'Amenity' })
 )
 
+/*
+ * Mode of transport, named after the GTFS `route_type` it corresponds to:
+ * RAIL = 2, SUBWAY = 1, TRAM = 0, BUS = 3. The name is carried rather than the
+ * integer because it survives being read by a human.
+ */
+export const TransitModeSchema = v.pipe(
+  v.picklist(['RAIL', 'SUBWAY', 'TRAM', 'BUS']),
+  v.title('TransitMode'),
+  v.description('Moda transportasinya, mengikuti `route_type` di GTFS: `RAIL` (2), `SUBWAY` (1), `TRAM` (0), `BUS` (3).'),
+  v.metadata({ examples: ['RAIL'], ref: 'TransitMode' })
+)
+
 export const OperatorSchema = v.pipe(
   v.object({
     code: OperatorCodeSchema,
@@ -93,6 +105,43 @@ export const OperatorSchema = v.pipe(
   v.metadata({ ref: 'Operator' })
 )
 
+/*
+ * The operator plus the `agency.txt` fields, as served by /operators.
+ *
+ * Kept separate from OperatorSchema because most responses embed an operator
+ * only to name it — a station does not need to restate the agency's timezone
+ * on every row. The full form appears where an operator is the subject.
+ *
+ * Its `entries` are spread into OperatorWithLines rather than referenced, so
+ * these fields appear inline on the one response that carries them instead of
+ * as a second component a client has to follow. No `ref` metadata for that
+ * reason: nothing emits this schema under its own name.
+ */
+export const OperatorDetailSchema = v.pipe(
+  v.object({
+    code: OperatorCodeSchema,
+    name: v.pipe(v.string(), v.metadata({ examples: ['Commuter Line'] })),
+    url: v.pipe(
+      v.string(),
+      v.description('Situs resmi operatornya. Sama dengan `agency_url` di GTFS.'),
+      v.metadata({ examples: ['https://kci.id/'] })
+    ),
+    timezone: v.pipe(
+      v.string(),
+      v.description('Zona waktu yang dipakai semua jadwal operator ini. Sama dengan `agency_timezone` di GTFS, dan selalu `Asia/Jakarta` di sini.'),
+      v.metadata({ examples: ['Asia/Jakarta'] })
+    ),
+    lang: v.pipe(
+      v.string(),
+      v.description('Bahasa yang dipakai buat nama stasiun dan lin. Sama dengan `agency_lang` di GTFS.'),
+      v.metadata({ examples: ['id'] })
+    ),
+    mode: TransitModeSchema
+  }),
+  v.title('OperatorDetail'),
+  v.description('Operator transit lengkap dengan metadata gaya GTFS `agency.txt`.')
+)
+
 export const LineSchema = v.pipe(
   v.object({
     name: v.pipe(v.string(), v.metadata({ examples: ['Lin Cikarang'] })),
@@ -101,7 +150,15 @@ export const LineSchema = v.pipe(
       v.string(),
       v.description('Warna hex buat roundel dan branding lin ini.'),
       v.metadata({ examples: ['#25B8EB'] })
-    )
+    ),
+    /*
+     * Optional because `Line` is the shape every producer of a line uses, and
+     * not all of them carry a mode: /_internal/searchables ships a trimmed
+     * SearchableLine for the roundel and has no reason to know the mode. The
+     * line dictionary from /operators always sets it (utils/line.ts fills it
+     * from the operator), which is where a client should resolve modes anyway.
+     */
+    mode: v.optional(TransitModeSchema)
   }),
   v.title('Line'),
   v.description('Satu lin, dengan kode dan warna yang dipakai di roundel-nya.'),

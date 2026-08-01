@@ -1,9 +1,18 @@
-import type { Operator } from '@commute/constants'
+import type { Operator, TransitMode } from '@commute/constants'
 
 export interface Line {
   name: string
   lineCode: string
   colorCode: `#${string}`
+  /*
+   * GTFS puts the mode on the route, not the agency, because an agency can run
+   * several. None of ours does today, so this is optional and filled in from
+   * the operating agency's `mode` when the line dictionary is built (see
+   * utils/line.ts). Set it explicitly on a line only when that line's mode
+   * differs from its operator's — which is exactly the case the operator-level
+   * field cannot express.
+   */
+  mode?: TransitMode
 }
 
 // ── Line detail (GET /lines/:operator/:lineCode) ────────────────────────────

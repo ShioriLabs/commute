@@ -10,14 +10,116 @@ export const REGIONS = {
 
 export type RegionCode = keyof (typeof REGIONS)
 
-export const OPERATORS = {
-  KCI: { code: 'KCI', name: 'Commuter Line' },
-  MRTJ: { code: 'MRTJ', name: 'MRT Jakarta' },
-  LRTJ: { code: 'LRTJ', name: 'LRT Jakarta' },
-  LRTJBDB: { code: 'LRTJBDB', name: 'LRT Jabodebek' },
-  TJ: { code: 'TJ', name: 'TransJakarta' },
-  NUL: { code: 'NUL', name: 'Unknown' }
+/*
+ * Transit modes, named after the GTFS `route_type` values they map to.
+ *
+ * GTFS spells the mode as an integer on each route; we carry the name and keep
+ * the number beside it, because `RAIL` survives a schema change and `2` does
+ * not. The four here are the ones Jabodetabek actually runs — GTFS defines
+ * others (ferry, cable tram, funicular) that no operator in this dataset uses,
+ * so they are left out rather than declared and never referenced.
+ *
+ * The distinction that matters to a rider is SUBWAY vs RAIL: both are trains,
+ * but Commuter Line is a commuter railway sharing national track while MRT
+ * Jakarta is a metro. GTFS draws the same line.
+ */
+export const TRANSIT_MODES = {
+  RAIL: { name: 'RAIL', gtfsRouteType: 2, label: 'Kereta' },
+  SUBWAY: { name: 'SUBWAY', gtfsRouteType: 1, label: 'MRT' },
+  TRAM: { name: 'TRAM', gtfsRouteType: 0, label: 'LRT' },
+  BUS: { name: 'BUS', gtfsRouteType: 3, label: 'Bus' }
 } as const
+
+export type TransitMode = keyof typeof TRANSIT_MODES
+
+/*
+ * Operators, carrying the fields GTFS puts in `agency.txt`.
+ *
+ * `code`/`name` are `agency_id`/`agency_name`; `url`, `timezone`, and `lang`
+ * are the other three fields GTFS marks Required. They were previously
+ * implicit — every timestamp in this API is already Asia/Jakarta and every
+ * name already Indonesian — and stating them costs nothing while making an
+ * agency.txt export a mapping rather than a research task.
+ *
+ * `agency_id` here is our own code, not the one an operator publishes in its
+ * own feed: TransJakarta's feed calls itself `Tije`. Ours is the ID this API
+ * has always used and that every station and line key is built from, so it
+ * stays. An exporter that needs to match an upstream feed should map at the
+ * boundary rather than have us rename our primary key.
+ *
+ * `mode` is the operator's predominant mode, used to label an operator when no
+ * specific line is in hand. It is NOT a substitute for a per-line mode: GTFS
+ * puts route_type on the route, and an operator running mixed modes would need
+ * it there. None here do today.
+ *
+ * `agency_phone`, `agency_email`, and `agency_fare_url` are deliberately
+ * absent: they are Optional in GTFS, and publishing an operator's customer
+ * service line in a developer API invites it to be used as one.
+ */
+export const OPERATORS = {
+  KCI: {
+    code: 'KCI',
+    name: 'Commuter Line',
+    // commuterline.id redirects here; kci.id is the canonical host.
+    url: 'https://kci.id/',
+    timezone: 'Asia/Jakarta',
+    lang: 'id',
+    mode: 'RAIL'
+  },
+  MRTJ: {
+    code: 'MRTJ',
+    name: 'MRT Jakarta',
+    url: 'https://jakartamrt.co.id/',
+    timezone: 'Asia/Jakarta',
+    lang: 'id',
+    mode: 'SUBWAY'
+  },
+  LRTJ: {
+    code: 'LRTJ',
+    name: 'LRT Jakarta',
+    url: 'https://lrtjakarta.co.id/',
+    timezone: 'Asia/Jakarta',
+    lang: 'id',
+    mode: 'TRAM'
+  },
+  LRTJBDB: {
+    code: 'LRTJBDB',
+    name: 'LRT Jabodebek',
+    url: 'https://lrtjabodebek.kai.id/',
+    timezone: 'Asia/Jakarta',
+    lang: 'id',
+    mode: 'TRAM'
+  },
+  TJ: {
+    code: 'TJ',
+    name: 'TransJakarta',
+    // The URL TransJakarta publishes in its own GTFS agency.txt.
+    url: 'https://transjakarta.co.id/',
+    timezone: 'Asia/Jakarta',
+    lang: 'id',
+    mode: 'BUS'
+  },
+  /*
+   * Not a real operator and never served: `getOperatorByCode` returns it for an
+   * unknown code, and /operators filters it out. Its fields are placeholders
+   * that exist only so the type stays uniform.
+   */
+  NUL: {
+    code: 'NUL',
+    name: 'Unknown',
+    url: '',
+    timezone: 'Asia/Jakarta',
+    lang: 'id',
+    mode: 'RAIL'
+  }
+} as const satisfies Record<string, {
+  code: string
+  name: string
+  url: string
+  timezone: string
+  lang: string
+  mode: TransitMode
+}>
 
 export type Operator = keyof (typeof OPERATORS)
 

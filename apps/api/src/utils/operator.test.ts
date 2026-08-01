@@ -1,10 +1,26 @@
-import { OPERATORS } from '@commute/constants'
+import { OPERATORS, TRANSIT_MODES } from '@commute/constants'
 import { describe, expect, it } from 'vitest'
 import { getOperatorByCode } from 'utils/operator'
 
 describe('getOperatorByCode', () => {
   it('resolves a known operator code', () => {
-    expect(getOperatorByCode('KCI')).toEqual({ code: 'KCI', name: 'Commuter Line' })
+    expect(getOperatorByCode('KCI')).toBe(OPERATORS.KCI)
+  })
+
+  /*
+   * The GTFS agency.txt fields. Asserted by name rather than as a whole-object
+   * literal so adding another optional field here is not a test failure, but
+   * dropping one of these — which a consumer generating a feed would depend on
+   * — still is.
+   */
+  it('carries the GTFS agency fields on every real operator', () => {
+    for (const [code, operator] of Object.entries(OPERATORS)) {
+      if (code === 'NUL') continue // placeholder for unknown codes; never served
+      expect(operator.timezone, code).toBe('Asia/Jakarta')
+      expect(operator.lang, code).toBe('id')
+      expect(operator.url, code).toMatch(/^https:\/\/\S+$/)
+      expect(TRANSIT_MODES[operator.mode], code).toBeDefined()
+    }
   })
 
   it('resolves every defined operator code', () => {

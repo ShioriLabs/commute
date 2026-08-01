@@ -26,7 +26,7 @@ interface DocOptions {
   /** Response body inside `data`. */
   data: v.GenericSchema
   /** Error statuses this route can return, with what they mean. */
-  errors?: Partial<Record<404 | 500, string>>
+  errors?: Partial<Record<400 | 404 | 500, string>>
   parameters?: unknown[]
 }
 
@@ -73,3 +73,12 @@ export function queryParam(name: string, description: string, example?: string) 
 
 export const operatorParam = pathParam('operator', 'Kode operator, misalnya `KCI`, `MRTJ`, `TJ`.', 'KCI')
 export const stationCodeParam = pathParam('stationCode', 'Kode stasiun versi operatornya, bukan station id yang lengkap.', 'SUD')
+
+/*
+ * The departure-window pair, shared by every timetable endpoint so the three of
+ * them cannot drift into describing the same two params differently.
+ */
+export const timeWindowParams = [
+  queryParam('from', 'Awal rentang jam keberangkatan, format `HH:MM` 24 jam, waktu lokal Asia/Jakarta. Dibulatkan ke bawah ke jam bulat, jadi `12:13` sama saja dengan `12:00`. Kalau cuma `to` yang diisi, rentangnya mulai dari `00:00`.', '12:00'),
+  queryParam('to', 'Akhir rentang jam keberangkatan. Dibulatkan ke atas sampai akhir jamnya, jadi `15:18` mencakup semua keberangkatan sampai `15:59` dan yang diminta tidak ada yang hilang. Boleh lebih kecil dari `from` buat rentang yang melewati tengah malam, misalnya `22:00` sampai `02:00`. Kalau persis sama dengan `from`, yang keluar sehari penuh.', '15:00')
+]

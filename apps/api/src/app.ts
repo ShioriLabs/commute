@@ -8,12 +8,25 @@ import lines from './routes/lines'
 import fares from './routes/fares'
 import operatorRoutes from './routes/operators'
 import internalRoutes from './routes/internal'
+import { cacheControl, MAX_AGE } from './middleware/cache-control'
+import { rateLimit } from './middleware/rate-limit'
+
+/**
+ * Cloudflare's rate limiting binding. Optional because local `wrangler dev` and
+ * the test harness run without the namespace; the middleware fails open when it
+ * is absent rather than rejecting everything.
+ */
+export interface RateLimiter {
+  limit(options: { key: string }): Promise<{ success: boolean }>
+}
 
 export interface Bindings {
   DB: D1Database
   KV: KVNamespace
   API_VERSION: string
   KCI_API_TOKEN: string
+  RATE_LIMIT_DEFAULT?: RateLimiter
+  RATE_LIMIT_FARE?: RateLimiter
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -35,6 +48,23 @@ app.use('*', cors({
   },
   allowMethods: ['GET', 'POST', 'OPTIONS']
 }))
+
+/*
+ * Caching and the abuse backstop, applied per group so each states its own
+ * freshness rather than inheriting one global guess. Order matters: the limiter
+ * runs first, so a rejected request never reaches a handler, and a 304 is
+ * cheap for the caller precisely because the limiter already let it through.
+ *
+ * `/stations` carries the topology TTL rather than the timetable one even
+ * though timetables hang beneath it — the tighter value is applied on those
+ * subpaths below, and a more specific `app.use` wins by running second.
+ */
+app.use('/stations/*', rateLimit('DEFAULT'), cacheControl(MAX_AGE.TOPOLOGY))
+app.use('/stations/:operator/:stationCode/timetable/*', cacheControl(MAX_AGE.TIMETABLE))
+app.use('/hubs/*', rateLimit('DEFAULT'), cacheControl(MAX_AGE.TOPOLOGY))
+app.use('/lines/*', rateLimit('DEFAULT'), cacheControl(MAX_AGE.STATIC))
+app.use('/operators', rateLimit('DEFAULT'), cacheControl(MAX_AGE.STATIC))
+app.use('/fares/*', rateLimit('FARE'), cacheControl(MAX_AGE.FARE))
 
 app.route('stations', stations)
 app.route('hubs', hubs)
