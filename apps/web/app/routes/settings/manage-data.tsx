@@ -134,7 +134,9 @@ export default function ManageDataSettingsPage() {
 
   return (
     <main className="bg-white w-screen h-full min-h-screen overflow-y-auto pb-4">
-      <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto bg-white">
+      {/* z-[1] so the list scrolls under this header rather than through it —
+          `sticky` on its own does not raise it above later siblings. */}
+      <div className="p-8 pb-4 sticky top-0 z-[1] max-w-3xl mx-auto bg-white">
         <div className="flex gap-3 items-center -ml-2">
           <button
             aria-label="Kembali"

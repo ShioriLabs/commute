@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildFarePath, buildFareShareUrl } from './fare-url'
+import { DEFAULT_FARE_CRITERIA } from './fare-criteria'
 
 // Only /fare is SEO-decorated (functions/_middleware.ts:322) and rendered by the
 // OG image worker. The search sheet shows the same fare UI under /search, so a
@@ -64,5 +65,42 @@ describe('buildFarePath', () => {
     const path = buildFarePath('KCI-MRI', 'MRTJ-DKA')
     const url = buildFareShareUrl('KCI-MRI', 'MRTJ-DKA', 'https://commute.shiorilabs.id')
     expect(url).toBe(`https://commute.shiorilabs.id${path}`)
+  })
+})
+
+describe('fare URLs with criteria', () => {
+  /*
+   * The compatibility promise. functions/_middleware.ts and the OG image worker
+   * both key on the `?from=&to=` shape, so a default search must produce
+   * byte-identical output to what shipped before criteria existed.
+   */
+  it('is unchanged for default criteria', () => {
+    const withDefaults = buildFarePath('KCI-SUD', 'LRTJBDB-DKA', DEFAULT_FARE_CRITERIA)
+    expect(withDefaults).toBe(buildFarePath('KCI-SUD', 'LRTJBDB-DKA'))
+    expect(withDefaults).toBe('/fare?from=KCI-SUD&to=LRTJBDB-DKA')
+  })
+
+  it('carries a non-default payment method so a share reproduces the number', () => {
+    const path = buildFarePath('KCI-SUD', 'LRTJBDB-DKA', {
+      ...DEFAULT_FARE_CRITERIA,
+      paymentMethod: 'QRIS_TAP'
+    })
+    expect(path).toContain('paymentMethod=QRIS_TAP')
+  })
+
+  it('never carries the operator filter, which scopes the picker not the price', () => {
+    const path = buildFarePath('KCI-SUD', 'LRTJBDB-DKA', {
+      ...DEFAULT_FARE_CRITERIA,
+      operator: 'KCI'
+    })
+    expect(path).toBe('/fare?from=KCI-SUD&to=LRTJBDB-DKA')
+  })
+
+  it('keeps station ids percent-encoded alongside criteria', () => {
+    const url = buildFareShareUrl('TJ-H00061S', 'KCI-AC', 'https://commute.shiorilabs.id', {
+      ...DEFAULT_FARE_CRITERIA,
+      paymentMethod: 'QRIS_TAP'
+    })
+    expect(url).toBe('https://commute.shiorilabs.id/fare?from=TJ-H00061S&to=KCI-AC&paymentMethod=QRIS_TAP')
   })
 })

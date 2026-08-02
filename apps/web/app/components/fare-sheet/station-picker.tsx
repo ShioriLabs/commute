@@ -1,4 +1,3 @@
-import type { OperatorCode } from '@commute/schemas'
 import type { PickableStation } from './pickable-station'
 import { OPERATORS } from '@commute/constants'
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
@@ -108,7 +107,6 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
   // Input stays instant; the fuzzy scan over the full station list runs
   // against a deferred query so typing doesn't jank (same as the search sheet).
   const deferredQuery = useDeferredValue(query)
-  const [operatorFilter, setOperatorFilter] = useState<string | null>(null)
   const [recentIds, setRecentIds] = useState<string[]>([])
   // Same trick as BottomSheet: the station list mounts only after the
   // slide-up settles — painting ~150 rows mid-transform drops frames.
@@ -126,7 +124,6 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
     // this one (and resetting here, not on select, keeps the list stable
     // while the panel slides out).
     setQuery('')
-    setOperatorFilter(null)
     try {
       const parsed = JSON.parse(localStorage.getItem(RECENT_PICKS_KEY) ?? '[]') as unknown
       if (parsed instanceof Array) setRecentIds(parsed as string[])
@@ -146,28 +143,13 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
     }
   }, [open])
 
-  // Operators present in the pickable set, in canonical OPERATORS order.
-  const operators = useMemo(() => {
-    const present = new Map(stations.map(station => [station.operator, OPERATORS[station.operator]?.name ?? station.operator]))
-    // NUL is an internal placeholder and never appears on a station, so the
-    // cast matches the narrowed OperatorCode the schemas expose.
-    return (Object.keys(OPERATORS) as OperatorCode[])
-      .filter(code => present.has(code))
-      .map(code => ({ code, name: present.get(code)! }))
-  }, [stations])
-
-  const filteredStations = useMemo(
-    () => (operatorFilter ? stations.filter(station => station.operator === operatorFilter) : stations),
-    [operatorFilter, stations]
-  )
-
   const shownStations = useMemo(() => {
     if (deferredQuery.length < 2) {
       // No query: full list, most popular first, so common picks are one tap away.
-      return [...filteredStations].sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.name.localeCompare(b.name))
+      return [...stations].sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.name.localeCompare(b.name))
     }
     const query = deferredQuery.toLowerCase()
-    const scored = filteredStations
+    const scored = stations
       .map((station) => {
         const matchScore = getStationScore(station, query)
         return { station, matchScore, finalScore: matchScore + (1 - (station.score ?? 0) / 100) }
@@ -178,26 +160,26 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
     return filterBestTier(scored, ({ matchScore }) => matchScore)
       .sort((a, b) => a.finalScore - b.finalScore || a.station.name.localeCompare(b.station.name))
       .map(({ station }) => station)
-  }, [deferredQuery, filteredStations])
+  }, [deferredQuery, stations])
 
   // Recent picks first, padded with the most popular stations for first-time
   // users (and when recents fall outside the pickable set).
   const quickPicks = useMemo(() => {
-    const byId = new Map(filteredStations.map(station => [station.id, station]))
+    const byId = new Map(stations.map(station => [station.id, station]))
     const picks: PickableStation[] = []
     for (const id of recentIds) {
       const station = byId.get(id)
       if (station && !picks.some(pick => pick.id === station.id)) picks.push(station)
       if (picks.length === RECENT_PICKS_MAX) return picks
     }
-    const popular = [...filteredStations].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+    const popular = [...stations].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
     for (const station of popular) {
       if (picks.some(pick => pick.id === station.id)) continue
       picks.push(station)
       if (picks.length === RECENT_PICKS_MAX) break
     }
     return picks
-  }, [recentIds, filteredStations])
+  }, [recentIds, stations])
 
   // Stable across keystrokes (only changes on pick) so memoized StationRows
   // don't re-render while typing.
@@ -220,7 +202,11 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
       <div className="fixed inset-0 flex w-screen items-end">
         <DialogPanel
           transition
-          className="bg-white w-screen h-[calc(100dvh-0.75rem)] overflow-y-auto [scrollbar-gutter:stable] rounded-t-2xl will-change-transform transition duration-300 ease-out data-closed:translate-y-full"
+          // ease-ios-spring (app.css), shared with the criteria sheets and the
+          // map/home entrance animations: it front-loads the travel and settles,
+          // which reads as weight rather than a polite decelerate. The scrim
+          // above stays ease-out — see criteria/criterion-sheet.tsx.
+          className="bg-white w-screen h-[calc(100dvh-0.75rem)] overflow-y-auto [scrollbar-gutter:stable] rounded-t-2xl will-change-transform transition duration-300 ease-ios-spring data-closed:translate-y-full"
         >
           <div className="p-8 pb-4 sticky top-0 z-[1] max-w-3xl mx-auto bg-white rounded-t-2xl">
             <div className="flex gap-4 items-center justify-between">
@@ -245,31 +231,6 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
                 aria-label="Cari stasiun berdasarkan nama atau kode"
               />
             </div>
-            {operators.length > 1
-              ? (
-                  <div className="mt-3 -mx-8 px-8 flex gap-2 overflow-x-auto no-scrollbar" role="group" aria-label="Saring berdasarkan operator">
-                    <button
-                      type="button"
-                      onClick={() => setOperatorFilter(null)}
-                      aria-pressed={operatorFilter === null}
-                      className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-semibold border-2 cursor-pointer transition-colors duration-150 ${operatorFilter === null ? 'bg-rose-100 text-pink-800 border-rose-200' : 'bg-white text-slate-500 border-stone-200/70'}`}
-                    >
-                      Semua
-                    </button>
-                    {operators.map(operator => (
-                      <button
-                        key={operator.code}
-                        type="button"
-                        onClick={() => setOperatorFilter(current => (current === operator.code ? null : operator.code))}
-                        aria-pressed={operatorFilter === operator.code}
-                        className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-semibold border-2 cursor-pointer transition-colors duration-150 ${operatorFilter === operator.code ? 'bg-rose-100 text-pink-800 border-rose-200' : 'bg-white text-slate-500 border-stone-200/70'}`}
-                      >
-                        { operator.name }
-                      </button>
-                    ))}
-                  </div>
-                )
-              : null}
           </div>
           {ready && query.length < 2 && quickPicks.length > 0
             ? (
