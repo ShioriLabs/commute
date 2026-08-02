@@ -475,6 +475,55 @@ async function buildSitemap(env: Env): Promise<string> {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>\n`
 }
 
+/*
+ * Build output that must never be answered by the SPA fallback.
+ *
+ * `not_found_handling = "single-page-application"` turns a 404 for a missing
+ * /assets/<hash>.js into a 200 text/html. On its own that only breaks the one
+ * request — but public/_headers stamps /assets/* with
+ * `max-age=2592000, immutable`, so Cloudflare's edge caches that HTML under a
+ * JS URL for thirty days. Every later visitor to the same edge node then gets
+ * HTML for a module, fails the strict MIME check, and the app never hydrates.
+ *
+ * That is not hypothetical: it happened to /assets/manifest-f354457b.js during
+ * a deploy, when the shell went live a moment before its assets did. A request
+ * landed in that window, the fallback answered, and the poisoned entry outlived
+ * the deploy that caused it. Purging the cache was the only way out.
+ *
+ * The window is inherent to deploying — assets and the shell referencing them
+ * cannot go live atomically — so the fix is to make the fallback uncacheable
+ * for these paths rather than to try to close it.
+ */
+// Exported for app/lib/asset-fallback-guard.test.ts. Pages Functions have no
+// test runner of their own here, and these two predicates are the whole
+// decision — worth pinning even though the handler around them isn't covered.
+export const HASHED_ASSET_PATH = /^\/assets\/.+\.(?:js|mjs|css|json|map)$/
+export const HTML_CONTENT_TYPE = /^\s*text\/html/i
+
+/** True when `next()` answered a hashed-asset request with the SPA fallback. */
+export function isFallbackForAsset(pathname: string, contentType: string | null): boolean {
+  return HASHED_ASSET_PATH.test(pathname) && HTML_CONTENT_TYPE.test(contentType ?? '')
+}
+
+/*
+ * A 404 with `no-store`, in place of the SPA fallback's cacheable 200 HTML.
+ *
+ * 404 rather than a 5xx because the asset genuinely is not there, and it is
+ * what the browser's module loader and the service worker's own
+ * `isSpaFallbackPoison` check already expect. `no-store` is the load-bearing
+ * part: it keeps this response out of the edge cache and the browser's, so the
+ * next request after the deploy settles gets the real file.
+ */
+function assetNotFound(): Response {
+  return new Response('', {
+    status: 404,
+    headers: {
+      'cache-control': 'no-store, must-revalidate',
+      'content-type': 'text/plain; charset=utf-8'
+    }
+  })
+}
+
 // Overwrite the `content` attribute of a matched <meta> element.
 class AttrSetter {
   constructor(private readonly value: string) {}
@@ -503,6 +552,16 @@ class HtmlAppender {
 export const onRequest: PagesFunction<Env> = async (ctx) => {
   const { request, next, env } = ctx
   const url = new URL(request.url)
+
+  // Ahead of everything else: a content-hashed asset must never be answered
+  // with the SPA fallback's cacheable HTML. Only the response is inspected, so
+  // a real asset costs one comparison and is passed through untouched.
+  if (HASHED_ASSET_PATH.test(url.pathname)) {
+    const res = await next()
+    return isFallbackForAsset(url.pathname, res.headers.get('content-type'))
+      ? assetNotFound()
+      : res
+  }
 
   // Sitemap is served for every UA, built from the API and edge-cached.
   if (url.pathname === '/sitemap.xml') {

@@ -247,6 +247,43 @@ describe('hashed build assets', () => {
     expect(harness.calls).toHaveLength(0)
   })
 
+  // A cache hit is normally authoritative — a content-hashed URL can't change
+  // meaning. But CacheStorage can already hold HTML under a module URL: while a
+  // deploy was mid-flight the edge served the SPA fallback with `immutable`, and
+  // this worker cached whatever it got. Once that entry exists the cache-first
+  // path returns it forever, so fixing the origin (or purging the edge) changes
+  // nothing and the app can only be recovered by clearing site data by hand.
+  //
+  // It also fails silently: the page gets a cached 200, not a 504, so the boot
+  // watchdog sees no evidence and falls through to its bare timeout — the
+  // "Lama banget ya?" panel rather than an actual recovery.
+  it('does not serve poisoned HTML from the asset cache', async () => {
+    await harness.seed('commute-assets-v1', '/assets/root-ABC12345.js', html('<html>SPA FALLBACK</html>'))
+    harness.route('/assets/root-ABC12345.js', () => script('real chunk'))
+
+    const dispatch = harness.dispatchFetch(
+      createRequest('/assets/root-ABC12345.js', { destination: 'script' })
+    )
+    const response = await expectResponse(dispatch)
+
+    expect(await response.text()).toBe('real chunk')
+  })
+
+  it('evicts a poisoned asset entry rather than leaving it to be re-served', async () => {
+    await harness.seed('commute-assets-v1', '/assets/root-ABC12345.js', html('<html>SPA FALLBACK</html>'))
+    harness.route('/assets/root-ABC12345.js', () => script('real chunk'))
+
+    const dispatch = harness.dispatchFetch(
+      createRequest('/assets/root-ABC12345.js', { destination: 'script' })
+    )
+    await expectResponse(dispatch)
+    await dispatch.drain()
+
+    const store = await harness.caches.open('commute-assets-v1')
+    const stored = await store.match(`${ORIGIN}/assets/root-ABC12345.js`)
+    expect(await stored?.text()).toBe('real chunk')
+  })
+
   it('fetches a chunk without a cache-buster and caches it', async () => {
     harness.route('/assets/root-ABC12345.js', () => script('fresh chunk'))
 

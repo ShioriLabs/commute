@@ -4,6 +4,6 @@ import { defineConfig } from 'vitest/config'
 // cloudflare plugins, which vitest doesn't need (and chokes on).
 export default defineConfig({
   test: {
-    include: ['utils/**/*.test.ts', 'app/**/*.test.ts']
+    include: ['utils/**/*.test.ts', 'app/**/*.test.ts', 'functions/**/*.test.ts']
   }
 })

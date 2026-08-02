@@ -346,7 +346,20 @@ const assetCacheFirst = async (event, cacheName, maxEntries) => {
   const url = new URL(request.url)
   const cache = await caches.open(cacheName)
   const cached = await cache.match(request)
-  if (cached) return cached
+  // A hit is normally authoritative — a content-hashed URL cannot change
+  // meaning — but it is only trustworthy if it holds what was asked for. An
+  // entry can predate the guard in isCacheable: while a deploy is mid-flight
+  // the edge answers a not-yet-live chunk with the SPA fallback under an
+  // `immutable` header, and any worker that cached that keeps serving HTML for
+  // a module forever. Purging the edge or fixing the origin cannot dislodge it,
+  // and it fails quietly — the page gets a cached 200 rather than a 504, so the
+  // boot watchdog sees no evidence and only ever reaches its bare timeout.
+  // Dropping the entry here turns an unrecoverable state into one more fetch.
+  if (cached && isSpaFallbackPoison(request, url, cached)) {
+    await cache.delete(request)
+  } else if (cached) {
+    return cached
+  }
 
   try {
     const response = await fetch(request)
