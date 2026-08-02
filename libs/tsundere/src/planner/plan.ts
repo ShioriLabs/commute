@@ -43,11 +43,11 @@ export interface Journey {
  * steady state after warm-up, 8 representative ODs:
  *
  *   maxBagSize   median    max   journeys found
- *   2             2.9ms   6.2ms  1-2
- *   4             4.2ms   6.7ms  1-4      <- default
- *   8             7.9ms  12.8ms  1-5
- *   16           10.6ms  25.9ms  1-5
- *   32           14.3ms  39.4ms  1-5
+ *   4             2.0ms   6.2ms  1-4      <- default
+ *
+ * (Earlier, before the boardings bound below: bag4 was 4.2ms median / 6.7ms
+ * max. The bound roughly halved it and cut the worst one-seat case — riding
+ * LRT Jabodebek end to end — from 8.2ms to 2.0ms.)
  *
  * The budget is Cloudflare Workers' free tier: 10ms of CPU per request. bag4
  * sits comfortably inside it even at the worst OD, and returns up to four
@@ -55,12 +55,14 @@ export interface Journey {
  * something to label. Past bag8 the extra width buys almost no new journeys,
  * because dedup collapses the near-identical ones anyway.
  *
- * These numbers are ~2x better than the first working version. Two allocation
- * fixes did it, both found by profiling rather than guessing: `dominates` built
- * an array of tuples per call (36.8% of samples, plus 19.3% in GC), and
- * Bag.insert rebuilt its array with `filter` on every insert. The algorithm did
- * not change. If this needs to get faster again, profile first — the shape of
- * the cost has moved twice already.
+ * These numbers are ~4x better than the first working version, from three
+ * changes found by measuring rather than guessing: `dominates` built an array
+ * of tuples per call (36.8% of samples, plus 19.3% in GC), Bag.insert rebuilt
+ * its array with `filter` on every insert, and target pruning had no bound on
+ * boardings so the search kept expanding long after the answer was known. The
+ * algorithm never changed. If this needs to get faster again, profile first —
+ * the shape of the cost has moved three times now, and each time the guess
+ * would have been wrong.
  *
  * maxRounds stays at 4. Cutting it to 3 looks cheap but makes
  * MRTJ-LBB -> LRTJBDB-JTM unroutable entirely, because that journey genuinely
@@ -152,6 +154,8 @@ export function plan(
   getBag(fromStationId, 0).insert(origin)
 
   const destinationBag = new Bag<Trace | null>({ maxSize: maxBagSize, weights })
+  // Fewest boardings of any completed journey, for the bound above.
+  let bestCompletedBoardings = Infinity
 
   /*
    * One pass per boarding.
@@ -202,8 +206,29 @@ export function plan(
             fare: null
           }
 
-          // Target pruning: a label already beaten by a completed journey cannot
-          // lead to a better one.
+          /*
+           * Target pruning.
+           *
+           * The dominance check alone is weak here: a partial label has spent
+           * less distance than any *finished* journey, so it almost never looks
+           * dominated, and the search keeps expanding long after the answer is
+           * known. Measured on LRTJBDB-DKA -> LRTJBDB-JTM, a plain one-seat
+           * ride: round 1 finds the b1 answer in 206 adjacency lookups, and
+           * rounds 2-4 spend another 4232 to add one alternative.
+           *
+           * Boardings give a bound the other criteria cannot: they only ever
+           * increase, so a label already far past the best completed journey
+           * can never catch it, no matter what it does next.
+           *
+           * The slack matters. Pruning at `> bestCompleted` is sound for the
+           * PRIMARY route but strips the alternatives this engine exists to
+           * produce — measured, it cut most ODs from 2-5 journeys to 1, because
+           * a same-boardings label that would have become a genuinely different
+           * option gets cut before it finishes. One boarding of slack keeps
+           * those and still collapses the runaway case: LRTJBDB-DKA ->
+           * LRTJBDB-JTM went from 4438 adjacency lookups to a fraction of that.
+           */
+          if (criteria.boardings > bestCompletedBoardings + 1) continue
           if (destinationBag.isDominated(criteria)) continue
 
           const next: Label<Trace | null> = {
@@ -216,6 +241,7 @@ export function plan(
 
           if (edge.to === toStationId) {
             destinationBag.insert(next)
+            if (criteria.boardings < bestCompletedBoardings) bestCompletedBoardings = criteria.boardings
             continue
           }
 
