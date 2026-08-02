@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildGraph, findRoute } from 'utils/router'
+import { buildGraph, findRoute } from './router'
 
 // Line X: A-B-C-D (1000m hops). Line Y: C-E (1000m). Transfer: D <-> P (300m).
 // Line Z (other operator): P-Q (1000m).

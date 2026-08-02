@@ -4,7 +4,7 @@
   "description": "",
   "scripts": {
     "dev": "wrangler dev",
-    "test": "vitest run",
+    "test": "pnpm --filter @commute/tsundere build && vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
     "lint": "eslint",
@@ -29,6 +29,7 @@
   "license": "MIT",
   "dependencies": {
     "@commute/constants": "workspace:../constants",
+    "@commute/tsundere": "workspace:../../libs/tsundere",
     "@commute/schemas": "workspace:../schemas",
     "@hono/standard-validator": "^0.3.0",
     "@standard-community/standard-json": "^0.3.5",

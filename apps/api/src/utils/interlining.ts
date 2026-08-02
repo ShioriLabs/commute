@@ -1,6 +1,6 @@
 import type { Operator } from '@commute/constants'
 import { TOPOLOGY } from 'db/data/topology'
-import type { RouteLeg } from 'utils/router'
+import type { RouteLeg } from '@commute/tsundere'
 
 /*
  * Operators that run interlined services — distinct service lines sharing a

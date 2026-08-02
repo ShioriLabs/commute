@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { findInterliningLineCodes, mergeInterlinedLegs } from 'utils/interlining'
-import type { RideLeg, RouteLeg } from 'utils/router'
+import type { RideLeg, RouteLeg } from '@commute/tsundere'
 
 const ride = (lineCode: string, stations: string[], distanceM: number): RideLeg => ({
   type: 'RIDE',

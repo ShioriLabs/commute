@@ -11,25 +11,27 @@ import { computeHeadsignCode } from 'utils/headsign'
 import { findInterliningLineCodes, mergeInterlinedLegs } from 'utils/interlining'
 import { Internal, NotFound, Ok } from 'utils/response'
 import { ENDPOINT_RESTRICTIONS } from 'db/data/topology'
-import { buildGraph, findRoute, RouteGraph } from 'utils/router'
+import { loadGraph, type Tsundere } from '@commute/tsundere'
 import { doc, pathParam, queryParam } from 'schemas/describe'
 import { FareResultSchema } from '@commute/schemas'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
-// Graph inputs only change with deploys/reseeds; cache the built graph per isolate.
-let cachedGraph: RouteGraph | null = null
-async function getGraph(d1: D1Database): Promise<RouteGraph> {
-  if (cachedGraph) return cachedGraph
+// Graph inputs only change with deploys/reseeds; cache the loaded engine per
+// isolate. Rebuilding it per request would re-read every edge and transfer row.
+let cachedRouter: Tsundere | null = null
+async function getRouter(d1: D1Database): Promise<Tsundere> {
+  if (cachedRouter) return cachedRouter
   const { edges, transfers } = await new EdgeRepository(d1).getGraphInputs()
   // Topology restrictions are authored in (operator, station) codes; the graph
-  // works in `${operator}-${station}` DB ids.
+  // works in `${operator}-${station}` DB ids. tsundere treats node ids as
+  // opaque, so this mapping stays here rather than in the engine.
   const restrictions = ENDPOINT_RESTRICTIONS.map(r => ({
     stationId: `${r.operator}-${r.station}`,
     forbiddenNeighborId: `${r.operator}-${r.forbiddenNeighbor}`
   }))
-  cachedGraph = buildGraph(edges, transfers, restrictions)
-  return cachedGraph
+  cachedRouter = loadGraph({ edges, transfers, restrictions })
+  return cachedRouter
 }
 
 // Resolve the fare context from optional query params, defaulting to today's
@@ -94,8 +96,8 @@ app.get(
         return c.json(NotFound('UNKNOWN_STATION', 'One or both stations do not exist.'), 404)
       }
 
-      const graph = await getGraph(c.env.DB)
-      const rawLegs = findRoute(graph, fromId, toId)
+      const router = await getRouter(c.env.DB)
+      const rawLegs = router.findRoute(fromId, toId)
       if (!rawLegs) {
         return c.json(NotFound('NO_ROUTE', 'No route between these stations.'), 404)
       }

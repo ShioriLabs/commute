@@ -7,7 +7,7 @@ import stylistic from '@stylistic/eslint-plugin'
 export default defineConfig([
   {
     languageOptions: { globals: globals.browser },
-    files: ['apps/**/*.ts', 'apps/**/*.tsx']
+    files: ['apps/**/*.ts', 'apps/**/*.tsx', 'libs/**/*.ts']
   },
   {
     // Build-time scripts run under Node. generateWordmark.mjs also evaluates
@@ -35,6 +35,8 @@ export default defineConfig([
     'apps/data-platform/dist/**/*',
     'apps/opengraph/.wrangler/**/*',
     'apps/opengraph/dist/**/*',
+    // Build output of the routing engine, emitted by `tsc -p libs/tsundere`.
+    'libs/*/dist/**/*',
     // Generated data: a vendored base64 font and the SVG card template string.
     'apps/opengraph/src/assets/font.ts',
     'apps/opengraph/src/assets/og-fare-template.ts',

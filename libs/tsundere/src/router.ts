@@ -1,5 +1,29 @@
-import type { Edge } from 'db/schemas/edges'
-import type { Transfer } from 'db/schemas/transfers'
+/*
+ * Structural inputs to buildGraph.
+ *
+ * These used to be `Pick<Edge, …>` / `Pick<Transfer, …>` against the API's
+ * Kysely row types, which is what tied a dependency-free routing engine to a
+ * database schema. They were only ever consumed structurally, so declaring the
+ * shape here severs that without changing a single call site: a real
+ * `Selectable<EdgeSchema>` row still satisfies EdgeInput, and the test fixtures
+ * that omit id/timestamps still typecheck.
+ */
+export interface EdgeInput {
+  lineCode: string
+  fromStationId: string
+  toStationId: string
+  /** Metres. Also the fare input, so it is the real distance, never a weight. */
+  distance: number
+}
+
+export interface TransferInput {
+  fromStationId: string
+  /** Null for external transfers, which have no routable target — skipped below. */
+  toStationId: string | null
+  distance: number
+  /** D1 stores this as 0|1, hence the number; coerced with Boolean() below. */
+  noTap?: number | boolean
+}
 
 /*
  * Shortest-distance routing over ride edges + walk transfers. Transfer edges
@@ -24,7 +48,12 @@ export const TRANSFER_PENALTY_M = 800
  */
 export const LINE_CHANGE_PENALTY_M = 1200
 
-interface GraphEdge {
+/*
+ * One arc in the adjacency map. Exported because it appears in the public
+ * RouteGraph type — while it was module-private no consumer could name the
+ * shape of the graph they were handed.
+ */
+export interface GraphEdge {
   to: string
   distanceM: number
   lineCode: string | null // null = walk transfer
@@ -77,8 +106,8 @@ export interface TransferLeg {
 export type RouteLeg = RideLeg | TransferLeg
 
 export function buildGraph(
-  edges: Pick<Edge, 'lineCode' | 'fromStationId' | 'toStationId' | 'distance'>[],
-  transfers: (Pick<Transfer, 'fromStationId' | 'toStationId' | 'distance'> & Partial<Pick<Transfer, 'noTap'>>)[],
+  edges: EdgeInput[],
+  transfers: TransferInput[],
   restrictions: EndpointRestriction[] = []
 ): RouteGraph {
   const adjacency = new Map<string, GraphEdge[]>()
@@ -127,6 +156,23 @@ export function findRoute(graph: RouteGraph, fromStationId: string, toStationId:
     if (current === null) return null
     if (current === toStationId) break
     visited.add(current)
+    /*
+     * KNOWN LIMITATION, deliberately left as-is.
+     *
+     * `incomingLine` is read from the *current best-known* predecessor, so the
+     * line-change penalty applied to an edge depends on a path that a later
+     * relaxation may supersede — while `dist` is a plain scalar keyed on the
+     * station alone. That is Dijkstra over a state space its key does not
+     * capture: correct handling keys on `(station, incomingLine)`.
+     *
+     * In practice the penalties are large enough relative to hop distances that
+     * the chosen path is stable, and the two regression tests below (the TJ
+     * 13/13E continuity bias and the one-seat-plus-walk case) pin the behaviour
+     * riders actually see. Fixing it here would change routes and destroy this
+     * function's value as the oracle the multi-criteria engine is diffed
+     * against, so the fix belongs in that engine, whose per-(stop, round) bags
+     * carry the boarded line in the label and make the state space explicit.
+     */
     const incomingLine = prev.get(current)?.edge.lineCode ?? null
     for (const edge of adjacency.get(current) ?? []) {
       // Can't BOARD the origin heading toward its forbidden neighbor.
