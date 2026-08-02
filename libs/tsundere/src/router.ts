@@ -1,3 +1,5 @@
+import { hopsToLegs, type Hop } from './planner/materialise'
+
 /*
  * Structural inputs to buildGraph.
  *
@@ -196,7 +198,11 @@ export function findRoute(graph: RouteGraph, fromStationId: string, toStationId:
   }
 
   // Reconstruct hops, then merge consecutive same-line hops into legs.
-  const hops: { from: string, to: string, edge: GraphEdge }[] = []
+  // Assembly is shared with the multi-criteria planner (planner/materialise.ts)
+  // so the two engines cannot drift apart in how they build legs — a difference
+  // there would be indistinguishable from a real routing difference when the
+  // two are diffed against each other.
+  const hops: Hop[] = []
   let cursor = toStationId
   while (cursor !== fromStationId) {
     const step = prev.get(cursor)!
@@ -204,26 +210,5 @@ export function findRoute(graph: RouteGraph, fromStationId: string, toStationId:
     cursor = step.station
   }
 
-  const legs: RouteLeg[] = []
-  for (const hop of hops) {
-    const last = legs[legs.length - 1]
-    if (hop.edge.lineCode === null) {
-      legs.push({ type: 'TRANSFER', fromStationId: hop.from, toStationId: hop.to, distanceM: hop.edge.distanceM, noTap: hop.edge.noTap ?? false })
-    } else if (last && last.type === 'RIDE' && last.lineCode === hop.edge.lineCode) {
-      last.toStationId = hop.to
-      last.stationIds.push(hop.to)
-      last.distanceM += hop.edge.distanceM
-    } else {
-      legs.push({
-        type: 'RIDE',
-        lineCode: hop.edge.lineCode,
-        operator: hop.from.split('-')[0]!,
-        fromStationId: hop.from,
-        toStationId: hop.to,
-        stationIds: [hop.from, hop.to],
-        distanceM: hop.edge.distanceM
-      })
-    }
-  }
-  return legs
+  return hopsToLegs(hops)
 }

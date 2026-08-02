@@ -10,8 +10,9 @@
  * Keep it that way. The moment this package imports @commute/constants or a
  * database type, it stops being a routing engine and becomes part of the API.
  *
- *   const tsun = loadGraph({ edges, transfers, restrictions })
- *   const legs = tsun.findRoute('KCI-SUD', 'MRTJ-LBB')
+ *   const tsun = loadGraph({ edges, transfers, restrictions, headwaysS })
+ *   const legs = tsun.findRoute('KCI-SUD', 'MRTJ-LBB')       // one best route
+ *   const options = tsun.findRoutes('KCI-SUD', 'MRTJ-LBB')   // several, scored
  *
  * ── The public surface is deliberately small ─────────────────────────────────
  *
@@ -31,6 +32,21 @@
  * method is cheap; `Tsundere` exposing its graph is not.
  */
 export { loadGraph, Tsundere, type LoadGraphInput } from './tsundere'
+
+/*
+ * The multi-criteria surface. `Criteria` is the vector a journey is scored on —
+ * boardings, distance, walking, waiting, fare — not to be confused with the
+ * web app's FareCriteria, which is what the rider *chooses*.
+ */
+export type { FareScorer, Journey, PlanOptions } from './planner/plan'
+export {
+  DEFAULT_RANK_WEIGHTS,
+  WALKING_WEIGHTS,
+  weightsForWalking,
+  type Criteria,
+  type RankWeights,
+  type WalkingPreference
+} from './planner/criteria'
 
 /*
  * The leg shapes. These are unavoidably public: findRoute returns them, and the

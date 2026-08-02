@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loadGraph, Tsundere } from './index'
+import { loadGraph, Tsundere, weightsForWalking } from './index'
 import { buildGraph, findRoute } from './router'
 
 // The algorithm itself is covered in router.test.ts. This covers only what the
@@ -68,5 +68,45 @@ describe('loadGraph', () => {
     expect(restricted.findRoute('KCI-C', 'KCI-A')).toBeNull()
     // A pair that never touches the restricted stop is unaffected.
     expect(restricted.findRoute('KCI-B', 'KCI-C')).not.toBeNull()
+  })
+})
+
+describe('findRoutes', () => {
+  it('returns several journeys where alternatives exist', () => {
+    const tsun = loadGraph({ edges, transfers })
+    const journeys = tsun.findRoutes('KCI-A', 'MRTJ-Q')
+    expect(journeys.length).toBeGreaterThan(0)
+    expect(journeys[0]!.criteria.boardings).toBeGreaterThan(0)
+  })
+
+  it('agrees with findRoute on the primary route', () => {
+    const tsun = loadGraph({ edges, transfers })
+    expect(tsun.findRoutes('KCI-A', 'MRTJ-Q')[0]!.legs).toEqual(tsun.findRoute('KCI-A', 'MRTJ-Q'))
+  })
+
+  it('returns nothing for an unroutable pair, like findRoute', () => {
+    const tsun = loadGraph({ edges, transfers })
+    expect(tsun.findRoutes('KCI-A', 'KCI-NOPE')).toEqual([])
+    expect(tsun.findRoute('KCI-A', 'KCI-NOPE')).toBeNull()
+  })
+
+  // Headways belong to the loaded network, so a query does not have to supply
+  // them — but a per-call override still wins.
+  it('uses headways supplied at load time', () => {
+    const tsun = loadGraph({ edges, transfers, headwaysS: new Map([['X', 600]]) })
+    expect(tsun.findRoutes('KCI-A', 'KCI-C')[0]!.criteria.waitS).toBe(300)
+  })
+
+  it('lets a per-call option override the loaded headways', () => {
+    const tsun = loadGraph({ edges, transfers, headwaysS: new Map([['X', 600]]) })
+    const journeys = tsun.findRoutes('KCI-A', 'KCI-C', { headwaysS: new Map([['X', 1200]]) })
+    expect(journeys[0]!.criteria.waitS).toBe(600)
+  })
+
+  it('honours a walking preference', () => {
+    const tsun = loadGraph({ edges, transfers })
+    // Both preferences must still FIND the journey; only the order may differ.
+    expect(tsun.findRoutes('KCI-A', 'MRTJ-Q', { weights: weightsForWalking('AVOID') }).length)
+      .toBeGreaterThan(0)
   })
 })

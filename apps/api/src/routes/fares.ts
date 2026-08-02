@@ -12,6 +12,7 @@ import { findInterliningLineCodes, mergeInterlinedLegs } from 'utils/interlining
 import { Internal, NotFound, Ok } from 'utils/response'
 import { ENDPOINT_RESTRICTIONS } from 'db/data/topology'
 import { loadGraph, type Tsundere } from '@commute/tsundere'
+import { HEADWAYS_S } from 'db/data/headways'
 import { doc, pathParam, queryParam } from 'schemas/describe'
 import { FareResultSchema } from '@commute/schemas'
 
@@ -30,7 +31,14 @@ async function getRouter(d1: D1Database): Promise<Tsundere> {
     stationId: `${r.operator}-${r.station}`,
     forbiddenNeighborId: `${r.operator}-${r.forbiddenNeighbor}`
   }))
-  cachedRouter = loadGraph({ edges, transfers, restrictions })
+  cachedRouter = loadGraph({
+    edges,
+    transfers,
+    restrictions,
+    // Only findRoutes reads these; findRoute — which this route still calls —
+    // ignores them entirely, so wiring them in changes nothing today.
+    headwaysS: new Map(Object.entries(HEADWAYS_S))
+  })
   return cachedRouter
 }
 

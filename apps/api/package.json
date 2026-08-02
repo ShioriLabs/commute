@@ -16,6 +16,7 @@
     "generate:stationcoords": "tsx ./src/db/scripts/generateLatLngSQL.ts",
     "generate:stationcodes": "tsx ./src/db/scripts/generateStationCodesSQL.ts",
     "generate:edges": "tsx ./src/db/scripts/generateEdgesSQL.ts",
+    "generate:headways": "tsx ./src/db/scripts/generateHeadways.ts",
     "generate:tj-topology": "tsx ./src/db/scripts/generateTJTopology.ts",
     "generate:tj": "tsx ./src/db/scripts/generateTJSQL.ts",
     "generate:tj-transfers": "tsx ./src/db/scripts/generateTJTransferInternalizeSQL.ts",
