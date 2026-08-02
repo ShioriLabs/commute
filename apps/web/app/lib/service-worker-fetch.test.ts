@@ -124,8 +124,42 @@ describe('navigations', () => {
     expect(harness.clock.pending()).toEqual([3000])
     harness.clock.fireAll()
 
+    // The navigation timeout no longer settles the race on its own: a cached
+    // shell is only served after the network has also had its grace window,
+    // because serving a stale shell is what loops the app after a deploy.
+    await flush()
+    expect(harness.clock.pending()).toEqual([2000])
+    harness.clock.fireAll()
+
     const response = await expectResponse(dispatch)
     expect(await response.text()).toContain('OLD SHELL')
+  })
+
+  // The reload loop, pinned. The timeout fallback cannot tell "the network is
+  // slow" from "the network is fine but the tile pre-cache is saturating it",
+  // and in the second case the cached shell it serves is guaranteed toxic after
+  // a deploy: its chunks are gone, the SW 504s them, React Router reloads, and
+  // the next navigation races again. Observed in production as ~65 main-frame
+  // navigations in 8s, alternating between the new and the previous build.
+  //
+  // So a timeout must not resolve the race on its own. Once the network does
+  // answer, its shell is authoritative and must win.
+  it('prefers the network shell even when the timeout fired first', async () => {
+    const network = deferred<Response>()
+    await harness.seed('commute-shell-v1', '/', html('<html>OLD SHELL</html>'))
+    harness.route('/', () => network.promise)
+
+    const dispatch = harness.dispatchFetch(navigationRequest('/'))
+    await flush()
+    // The navigation timeout fires and the cached shell is right there...
+    expect(harness.clock.pending()).toEqual([3000])
+    harness.clock.fireAll()
+    await flush()
+    // ...but the network answers inside the grace window, so it still wins.
+    network.resolve(html('<html>FRESH SHELL</html>'))
+
+    const response = await expectResponse(dispatch)
+    expect(await response.text()).toContain('FRESH SHELL')
   })
 
   it('keeps waiting on the network when the timeout fires with nothing cached', async () => {

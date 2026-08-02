@@ -130,6 +130,12 @@ const CACHED_AT_HEADER = 'x-sw-cached-at'
 // Long enough to prefer a fresh shell on a normal mobile connection, short
 // enough that an unreachable origin doesn't hold the splash hostage.
 const NAVIGATION_TIMEOUT_MS = 3000
+// How much longer a late navigation response gets to arrive before the cached
+// shell is served instead. Only spent when the cache actually has a shell to
+// fall back to, so an offline load still fails fast at NAVIGATION_TIMEOUT_MS.
+// The cached shell is the riskier answer of the two — see the grace window in
+// raceNetworkAgainstCache — so it is worth waiting a little to avoid it.
+const NAVIGATION_GRACE_MS = 2000
 const MANIFEST_TIMEOUT_MS = 2000
 
 // Posted to every open window when a chunk request comes back as the SPA
@@ -387,8 +393,30 @@ const raceNetworkAgainstCache = async (request, network, cacheName, timeoutMs, f
     // a 500. Only silence falls through to the cache.
     const winner = await Promise.race([network.then(response => response), timeout])
     if (winner) return winner
+
+    // The timeout fired, but a *shell* is not like any other cached response:
+    // after a deploy the cached one points at /assets/<oldhash> chunks the
+    // origin no longer has. Serving it unconditionally is what produced the
+    // production reload loop — the asset handler 504s those chunks, React
+    // Router reloads, and the next navigation races the timer again,
+    // alternating between the new and previous build indefinitely (~65
+    // navigations in 8s when observed). And the timer is easy to lose
+    // innocently: `install` is pre-caching ~9 MB of map tiles over the same
+    // connection, so a perfectly healthy network routinely misses 3s.
+    //
+    // A late network answer is therefore worth strictly more than the cached
+    // shell, because it is the only one guaranteed to match the chunks on the
+    // origin. Give it a bounded second chance rather than discarding it: the
+    // offline case still resolves at TOTAL, and the merely-slow case now
+    // returns a shell that actually works.
     const cached = await cache.match(request)
-    if (cached) return cached
+    if (cached) {
+      const graced = await Promise.race([
+        network.then(response => response, () => null),
+        new Promise(resolve => setTimeout(() => resolve(null), NAVIGATION_GRACE_MS))
+      ])
+      return graced || cached
+    }
     // Nothing cached for this URL: the timeout bought us nothing, so keep
     // waiting on the network rather than inventing a failure.
     return await network

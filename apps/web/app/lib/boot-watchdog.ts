@@ -20,7 +20,17 @@
 // via dangerouslySetInnerHTML. Everything is read off the single `w` parameter
 // so app/lib/boot-watchdog.test.ts can run it against a fake window.
 
-import { RECOVERY_STORAGE_KEY } from './register-service-worker'
+// The watchdog's reload budget is deliberately NOT the one in
+// register-service-worker.ts. They used to share RECOVERY_STORAGE_KEY, and the
+// collision had teeth: a deploy landing on a live tab fires controllerchange,
+// the updater reloads once and writes 1, and the reloaded page can still come
+// up on the previous shell (the HTTP cache had it). The service worker then
+// answers its chunk requests with a synthetic 504 and posts
+// commute:stale-shell — and the watchdog, reading a budget someone else had
+// already spent, showed the retry panel instead of recovering. Two independent
+// causes of a reload need two independent budgets; sharing one meant the more
+// common event could disarm the rarer, more serious one.
+export const BOOT_RECOVERY_STORAGE_KEY = 'commute:boot-watchdog-recovery'
 
 // Caches the watchdog may clear. pwa-cache-v4 is deliberately absent: it holds
 // the ~9 MB map tile set, and a recovery that re-downloaded that would be worse
@@ -57,7 +67,7 @@ export const BOOT_WATCHDOG_SOURCE = `
 
   var RECOVERABLE = ${JSON.stringify(RECOVERABLE_CACHES)}
   var COPY = ${JSON.stringify(BOOT_FALLBACK_COPY)}
-  var STORAGE_KEY = ${JSON.stringify(RECOVERY_STORAGE_KEY)}
+  var STORAGE_KEY = ${JSON.stringify(BOOT_RECOVERY_STORAGE_KEY)}
 
   function readCount() {
     return Number(w.sessionStorage.getItem(STORAGE_KEY) || 0)

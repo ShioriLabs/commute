@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import {
   BOOT_FALLBACK_COPY,
+  BOOT_RECOVERY_STORAGE_KEY,
   BOOT_TIMEOUT_MS,
   BOOT_WATCHDOG_SOURCE,
   RECOVERABLE_CACHES,
   STALE_SHELL_MESSAGE
 } from './boot-watchdog'
 import { RECOVERY_STORAGE_KEY } from './register-service-worker'
+
+// What register-service-worker writes to *its* key when a new worker takes over
+// a controlled page. The watchdog keys its budget separately, so this must not
+// affect it — see 'still recovers after a worker-update reload'.
+const SW_UPDATE_RELOADS_SPENT = 1
 
 // The watchdog ships as an inline classic script, so it can't be imported. It
 // reads everything off a single `w` parameter precisely so it can be driven
@@ -48,7 +54,10 @@ function createElement(id: string): FakeElement {
 function setup(options: {
   onLine?: boolean
   storage?: 'ok' | 'throws'
+  /** Seeds the watchdog's own reload budget. */
   stored?: string
+  /** Seeds the service-worker updater's separate reload budget. */
+  swStored?: string
   /** Simulates a failure detected while <head> is still parsing. */
   bodyParsed?: boolean
 } = {}) {
@@ -69,7 +78,11 @@ function setup(options: {
   let reloads = 0
   let unregisters = 0
   const store = new Map<string, string>()
-  if (options.stored !== undefined) store.set(RECOVERY_STORAGE_KEY, options.stored)
+  // Seeds the *watchdog's* own budget key. Tests that need to simulate the
+  // service-worker updater having spent its budget seed `swStored` instead —
+  // the two are deliberately independent.
+  if (options.stored !== undefined) store.set(BOOT_RECOVERY_STORAGE_KEY, options.stored)
+  if (options.swStored !== undefined) store.set(RECOVERY_STORAGE_KEY, options.swStored)
 
   const throwingStorage = {
     getItem: () => { throw new Error('storage disabled') },
@@ -147,7 +160,8 @@ function setup(options: {
     deletedCaches,
     reloads: () => reloads,
     unregisters: () => unregisters,
-    stored: () => store.get(RECOVERY_STORAGE_KEY),
+    stored: () => store.get(BOOT_RECOVERY_STORAGE_KEY),
+    swStored: () => store.get(RECOVERY_STORAGE_KEY),
     fireBootTimeout: () => {
       const due = [...timers.entries()].filter(([, t]) => t.ms === BOOT_TIMEOUT_MS)
       for (const [id, timer] of due) {
@@ -278,6 +292,20 @@ describe('boot watchdog', () => {
 
     expect(harness.reloads()).toBe(0)
     expect(harness.message.textContent).toBe(BOOT_FALLBACK_COPY.failed)
+  })
+
+  // The scenario that produced the 504-stale-asset console: a deploy lands on a
+  // live tab, the new worker claims it, and register-service-worker reloads once
+  // — spending from its own budget. The reloaded page is still the *old* shell
+  // (the HTTP cache had it), so the SW answers its chunk requests with a stale
+  // 504 and posts commute:stale-shell. The watchdog must still have a life left
+  // to spend, or the tab is stranded on the retry panel for good.
+  it('still recovers after a worker-update reload has already happened', async () => {
+    const harness = setup({ swStored: String(SW_UPDATE_RELOADS_SPENT) })
+    harness.fireStaleShellMessage()
+    await harness.settle()
+
+    expect(harness.reloads()).toBe(1)
   })
 
   it('does not reload when sessionStorage is unavailable', async () => {
