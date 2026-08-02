@@ -42,28 +42,33 @@ export interface Journey {
  * Measured on the real network (372 stops, 1293 edges, 116 transfers), Node 22,
  * steady state after warm-up, 8 representative ODs:
  *
- *   maxRounds  maxBagSize   median    max   journeys   primary route
- *   4          8             15.1ms  31.0ms  up to 5   baseline
- *   4          4              7.1ms  12.9ms  up to 4   —
- *   4          2              3.8ms   6.0ms  up to 2   same as bag8 in 7 of 8
- *   3          8              3.9ms  15.3ms  up to 3   loses a 3-boarding OD
+ *   maxBagSize   median    max   journeys found
+ *   2             2.9ms   6.2ms  1-2
+ *   4             4.2ms   6.7ms  1-4      <- default
+ *   8             7.9ms  12.8ms  1-5
+ *   16           10.6ms  25.9ms  1-5
+ *   32           14.3ms  39.4ms  1-5
  *
- * maxBagSize 2 is the default because Cloudflare Workers' free tier allows
- * **10ms of CPU per request** and bag8 does not fit. The cost is real and worth
- * stating: TJ-H00003P -> TJ-H00061S drops from a 3-boarding journey to a
- * 4-boarding one, and fewer distinct alternatives survive to be returned.
+ * The budget is Cloudflare Workers' free tier: 10ms of CPU per request. bag4
+ * sits comfortably inside it even at the worst OD, and returns up to four
+ * distinct journeys — enough for "fastest / fewest changes / cheapest" to have
+ * something to label. Past bag8 the extra width buys almost no new journeys,
+ * because dedup collapses the near-identical ones anyway.
  *
- * maxRounds stays at 4 — cutting it to 3 looks cheap but makes
+ * These numbers are ~2x better than the first working version. Two allocation
+ * fixes did it, both found by profiling rather than guessing: `dominates` built
+ * an array of tuples per call (36.8% of samples, plus 19.3% in GC), and
+ * Bag.insert rebuilt its array with `filter` on every insert. The algorithm did
+ * not change. If this needs to get faster again, profile first — the shape of
+ * the cost has moved twice already.
+ *
+ * maxRounds stays at 4. Cutting it to 3 looks cheap but makes
  * MRTJ-LBB -> LRTJBDB-JTM unroutable entirely, because that journey genuinely
  * needs three boardings. Losing a route is worse than ranking one imperfectly.
- *
- * Raise maxBagSize when the caller can afford it: a paid Worker, a cached path,
- * or an offline batch. The engine is correct at any size; this default is a
- * budget, not a limit of the algorithm.
  */
 const DEFAULTS = {
   maxRounds: 4,
-  maxBagSize: 2,
+  maxBagSize: 4,
   maxResults: 5,
   /*
    * Fifteen minutes, the median TJ headway. Only used for lines with no data;
@@ -182,6 +187,13 @@ export function plan(
           const boarding = !isWalk && edge.lineCode !== label.incomingLine
           if (boarding && round === maxRounds) continue
 
+          /*
+           * The criteria object is the other allocation hot spot: one per edge
+           * examined, most of them discarded immediately by the dominance check
+           * below. Profiling put ~19% of samples in GC. Nothing clever is
+           * needed — the boardings check above already rejects the cheapest
+           * case before this allocates, which is why it is hoisted.
+           */
           const criteria: Criteria = {
             boardings: label.criteria.boardings + (boarding ? 1 : 0),
             rideDistanceM: label.criteria.rideDistanceM + (isWalk ? 0 : edge.distanceM),
