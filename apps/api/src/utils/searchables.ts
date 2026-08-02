@@ -188,7 +188,26 @@ function stationToSearchable(group: IndexableStation[]): Searchable | null {
     to: `/stations/${primary.operator}/${primary.code}`,
     keywords,
     body: lineKeys,
-    data: { 'station-id': primary.id },
+    data: {
+      'station-id': primary.id,
+      /*
+       * Every member of a folded group, primary first, comma-separated.
+       *
+       * Folding is right for search — one physical stop should be one result —
+       * but it makes the sibling's id unreachable, and not every consumer of
+       * this index is search. A fare is computed between two specific boarding
+       * points, so the fare picker needs the real station behind each half of
+       * an "Arah …" pair; without this it had to keep loading /stations
+       * separately, and the two directions of 15 TJ stops could not be priced
+       * at all.
+       *
+       * Only emitted when something was actually folded, so the ~360 unfolded
+       * entries do not each carry a duplicate of their own id.
+       */
+      ...(members.length > 1
+        ? { 'station-ids': members.map(member => member.id).join(',') }
+        : {})
+    },
     operator: primary.operator,
     ...(score > 0 ? { score } : {})
   }

@@ -1,4 +1,5 @@
-import type { OperatorCode, Station } from '@commute/schemas'
+import type { OperatorCode } from '@commute/schemas'
+import type { PickableStation } from './pickable-station'
 import { OPERATORS } from '@commute/constants'
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react'
@@ -9,30 +10,29 @@ import { LIST_STAGGER, LIST_STAGGER_MAX_INDEX, staggerDelay } from 'utils/stagge
 import HighlightMatch from '~/components/highlight-match'
 import LineRoundel from '~/components/line-roundel'
 import { sortLineKeysForDisplay } from '~/utils/lines'
-import { useLines } from '~/hooks/use-lines'
-
-// Pre-lowercased station fields so the per-keystroke scan doesn't re-lowercase
-// the whole list every pass.
-interface IndexedStation {
-  station: Station
-  // Empty when the station has none; skipped when scoring.
-  officialName: string
-  name: string
-  code: string
-}
+import { sortLinesForDisplay } from './pickable-station'
 
 /*
- * Matches on the display name AND the operator's own spelling — "sudirman baru"
- * has to keep finding BNI City, and only `officialName` carries that.
+ * Best match across everything the station is known by.
+ *
+ * This used to lowercase `name`/`officialName`/`code` into a client-side index
+ * and score each field in turn — "sudirman baru" has to keep finding BNI City,
+ * and only the operator's own spelling carries that. The prebuilt index now
+ * ships all of them pre-lowercased in `keywords`, including both halves of a
+ * folded directional pair, so the per-field pass collapses into one scan and
+ * the index it needed disappears.
+ *
+ * Lowest wins: keywordScore returns 0 for an exact match and grows with edit
+ * distance, so the closest keyword is the station's score.
  */
-function getStationScore({ name, officialName, code }: IndexedStation, query: string) {
-  let score = keywordScore(name, query)
-  if (score === 0) return 0
-  if (officialName !== '' && officialName !== name) {
-    score = Math.min(score, keywordScore(officialName, query))
+function getStationScore(station: PickableStation, query: string) {
+  let best = Number.POSITIVE_INFINITY
+  for (const keyword of station.keywords) {
+    const score = keywordScore(keyword, query)
     if (score === 0) return 0
+    if (score < best) best = score
   }
-  return Math.min(score, keywordScore(code, query))
+  return best
 }
 
 // Recently picked fare stations feed the quick-pick chips (same pattern as
@@ -49,14 +49,13 @@ const INITIAL_ROWS = 20
 // render must bail out here — otherwise the whole list re-renders per
 // keystroke at urgent priority and blocks the input.
 const StationRow = memo(function StationRow({ station, index, selected, query, onSelect }: {
-  station: Station
+  station: PickableStation
   index: number
   selected: boolean
   // Deferred query for highlighting; must match the list's filter pass.
   query?: string
-  onSelect: (station: Station) => void
+  onSelect: (station: PickableStation) => void
 }) {
-  const { lines: resolveLines } = useLines()
   return (
     <li
       // Stagger only the above-the-fold rows; the rest mount plain and
@@ -78,7 +77,7 @@ const StationRow = memo(function StationRow({ station, index, selected, query, o
           {station.lines?.length
             ? (
                 <ul className="flex flex-row gap-1 flex-wrap">
-                  {resolveLines(sortLineKeysForDisplay(station.lines, station.operator)).map(line => (
+                  {sortLinesForDisplay(station.lines, station.operator, sortLineKeysForDisplay).map(line => (
                     <li key={line.lineCode}>
                       <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={station.operator} />
                       <span className="sr-only">{line.name}</span>
@@ -99,13 +98,12 @@ const StationRow = memo(function StationRow({ station, index, selected, query, o
 export default function StationPickerDialog({ open, title, stations, selectedId, onClose, onSelect }: {
   open: boolean
   title: string
-  stations: Station[]
+  stations: PickableStation[]
   // Station currently chosen for the field being picked, shown with a check.
   selectedId?: string | null
   onClose: () => void
-  onSelect: (station: Station) => void
+  onSelect: (station: PickableStation) => void
 }) {
-  const { lines: resolveLines } = useLines()
   const [query, setQuery] = useState('')
   // Input stays instant; the fuzzy scan over the full station list runs
   // against a deferred query so typing doesn't jank (same as the search sheet).
@@ -163,24 +161,16 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
     [operatorFilter, stations]
   )
 
-  // Lowercase once per list change, not once per keystroke per station.
-  const searchIndex = useMemo<IndexedStation[]>(() => filteredStations.map(station => ({
-    station,
-    name: station.name.toLowerCase(),
-    officialName: station.officialName.toLowerCase(),
-    code: station.code.toLowerCase()
-  })), [filteredStations])
-
   const shownStations = useMemo(() => {
     if (deferredQuery.length < 2) {
       // No query: full list, most popular first, so common picks are one tap away.
       return [...filteredStations].sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.name.localeCompare(b.name))
     }
     const query = deferredQuery.toLowerCase()
-    const scored = searchIndex
-      .map((entry) => {
-        const matchScore = getStationScore(entry, query)
-        return { station: entry.station, matchScore, finalScore: matchScore + (1 - (entry.station.score ?? 0) / 100) }
+    const scored = filteredStations
+      .map((station) => {
+        const matchScore = getStationScore(station, query)
+        return { station, matchScore, finalScore: matchScore + (1 - (station.score ?? 0) / 100) }
       })
       .filter(({ finalScore }) => finalScore < SCORE_THRESHOLD)
     // Corrections are a fallback: exact matches hide typo matches, word-typo
@@ -188,13 +178,13 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
     return filterBestTier(scored, ({ matchScore }) => matchScore)
       .sort((a, b) => a.finalScore - b.finalScore || a.station.name.localeCompare(b.station.name))
       .map(({ station }) => station)
-  }, [deferredQuery, filteredStations, searchIndex])
+  }, [deferredQuery, filteredStations])
 
   // Recent picks first, padded with the most popular stations for first-time
   // users (and when recents fall outside the pickable set).
   const quickPicks = useMemo(() => {
     const byId = new Map(filteredStations.map(station => [station.id, station]))
-    const picks: Station[] = []
+    const picks: PickableStation[] = []
     for (const id of recentIds) {
       const station = byId.get(id)
       if (station && !picks.some(pick => pick.id === station.id)) picks.push(station)
@@ -211,7 +201,7 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
 
   // Stable across keystrokes (only changes on pick) so memoized StationRows
   // don't re-render while typing.
-  const handleSelect = useCallback((station: Station) => {
+  const handleSelect = useCallback((station: PickableStation) => {
     haptic()
     setRecentIds((current) => {
       const newRecents = [station.id, ...current.filter(id => id !== station.id)].slice(0, RECENT_PICKS_MAX)
@@ -296,7 +286,7 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
                         {station.lines?.length
                           ? (
                               <span className="flex -space-x-1.5">
-                                {resolveLines(sortLineKeysForDisplay(station.lines, station.operator)).map(line => (
+                                {sortLinesForDisplay(station.lines, station.operator, sortLineKeysForDisplay).map(line => (
                                   <LineRoundel key={line.lineCode} size="SM" code={line.lineCode} color={line.colorCode} operator={station.operator} />
                                 ))}
                               </span>

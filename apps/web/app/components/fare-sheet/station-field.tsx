@@ -1,8 +1,8 @@
-import type { Station } from '@commute/schemas'
+import type { PickableStation } from './pickable-station'
 
 interface Props {
   label: string
-  station: Station | null
+  station: PickableStation | null
   onClick: () => void
 }
 

@@ -1,9 +1,10 @@
-import type { Station } from '@commute/schemas'
 import type { FareResult } from '@commute/schemas'
 import type { StandardResponse } from '@schema/response'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
+import { useSearchables } from '~/hooks/use-searchables'
+import { resolveStationId, toPickableStations, type PickableStation } from './pickable-station'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -28,15 +29,15 @@ export interface FareQueryOptions {
 }
 
 export interface FareQuery {
-  origin: Station | null
-  destination: Station | null
+  origin: PickableStation | null
+  destination: PickableStation | null
   pickerTarget: 'origin' | 'destination'
   pickerOpen: boolean
   openPickerFor: (target: 'origin' | 'destination') => void
   closePicker: () => void
-  handleSelect: (station: Station) => void
+  handleSelect: (station: PickableStation) => void
   handleSwap: () => void
-  pickableStations: Station[]
+  pickableStations: PickableStation[]
   fare: StandardResponse<FareResult> | undefined
   error: unknown
   isLoading: boolean
@@ -51,13 +52,13 @@ export function useFareQuery({
   onPairChange,
   syncDocumentTitle = false
 }: FareQueryOptions = {}): FareQuery {
-  const { data: stations } = useSWR<StandardResponse<Station[]>>(
-    new URL('/stations', import.meta.env.VITE_API_BASE_URL).href,
-    fetcher,
-    swrConfig
-  )
-  const [origin, setOrigin] = useState<Station | null>(null)
-  const [destination, setDestination] = useState<Station | null>(null)
+  // The prebuilt search index, shared with the search sheet through the same
+  // SWR key — opening both surfaces now costs one fetch, not two overlapping
+  // station lists. It also already carries everything the picker needs, so the
+  // /stations call this used to make is gone: see pickable-station.ts.
+  const { searchables } = useSearchables()
+  const [origin, setOrigin] = useState<PickableStation | null>(null)
+  const [destination, setDestination] = useState<PickableStation | null>(null)
   // Which field is being picked never resets on close, so the picker title
   // stays correct while the dialog animates out.
   const [pickerTarget, setPickerTarget] = useState<'origin' | 'destination'>('origin')
@@ -69,6 +70,15 @@ export function useFareQuery({
   }
   const closePicker = () => setPickerOpen(false)
 
+  // No filtering left to do here: the index is already Jabodetabek-only and
+  // already excludes the topology-only stops (TJ feeder/non-BRT) that would
+  // otherwise balloon the picker to ~2,300 rows. That used to be a client-side
+  // `regionCode === 'CGK' && searchable` pass over the full station list.
+  const pickableStations = useMemo(
+    () => toPickableStations(searchables),
+    [searchables]
+  )
+
   // Deep link applies once, not on every change of the incoming pair.
   // onPairChange rewrites the query string as the user picks stations, which
   // feeds back into initialPair on the /fare route — without the latch a pick
@@ -79,16 +89,16 @@ export function useFareQuery({
 
   useEffect(() => {
     if (deepLinkApplied.current) return
-    if (!fromId || !toId || !stations?.data) return
+    if (!fromId || !toId || pickableStations.length === 0) return
 
-    const fromStation = stations.data.find(s => s.id === fromId)
-    const toStation = stations.data.find(s => s.id === toId)
+    const fromStation = resolveStationId(pickableStations, fromId)
+    const toStation = resolveStationId(pickableStations, toId)
     if (fromStation && toStation) {
       deepLinkApplied.current = true
       setOrigin(fromStation)
       setDestination(toStation)
     }
-  }, [stations?.data, fromId, toId])
+  }, [pickableStations, fromId, toId])
 
   useEffect(() => {
     if (!syncDocumentTitle) return
@@ -100,14 +110,6 @@ export function useFareQuery({
       document.title = 'Cek Tarif - Commute'
     }
   }, [origin, destination, syncDocumentTitle])
-
-  const pickableStations = useMemo(
-    // `searchable` matters since the TJ import: topology-only stops (TJ
-    // feeder/non-BRT) are hidden from every search surface, and without the
-    // filter they balloon the picker to ~2,300 rows.
-    () => (stations?.data ?? []).filter(station => station.regionCode === 'CGK' && station.searchable),
-    [stations?.data]
-  )
 
   const fareUrl = origin && destination && origin.id !== destination.id
     ? new URL(`/fares/${origin.id}/${destination.id}`, import.meta.env.VITE_API_BASE_URL).href
@@ -123,7 +125,7 @@ export function useFareQuery({
     }
   }
 
-  const handleSelect = (station: Station) => {
+  const handleSelect = (station: PickableStation) => {
     let newOrigin = origin
     let newDestination = destination
 
