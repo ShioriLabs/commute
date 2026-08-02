@@ -375,8 +375,28 @@ export default function SheetButton({ url, ariaLabel, title, subtitle, icon, cla
                   // within ~60ms of the shrink starting — without which the
                   // panel sits at scale 0.61/0.42 behind a mask only 31% opaque
                   // and you watch the text distort.
-                  'block w-screen h-screen absolute top-0 opacity-0 pointer-events-none data-closed:opacity-100 transition-all duration-[var(--mask-ms)] data-enter:delay-50 data-enter:duration-100 data-leave:ease-[cubic-bezier(0,0.95,0.2,1)]',
-                  accent ? 'bg-[#F55875]' : 'bg-white'
+                  // transition-opacity, NOT transition-all: the mask's colour must
+                  // SNAP between states rather than interpolate. That is what lets
+                  // the accent face be pink on the way out and white on the way in
+                  // (see below) — with transition-all the colour would crossfade
+                  // instead, which is the pink wash all over again.
+                  'block w-screen h-screen absolute top-0 opacity-0 pointer-events-none data-closed:opacity-100 transition-opacity duration-[var(--mask-ms)] data-enter:delay-50 data-enter:duration-100 data-leave:ease-[cubic-bezier(0,0.95,0.2,1)]',
+                  // The mask covers the panel for the whole morph, so it is
+                  // exactly as large as the panel — up to the full viewport. That
+                  // is fine while it is white (a white mask over a white sheet is
+                  // invisible) and is why the non-accent cards never flashed. In
+                  // accent pink it was a flash across two thirds of the screen:
+                  // the panel is ~42% of fullscreen by 30ms and ~79% by 80ms, so
+                  // there is no fade fast enough to keep a pink mask small. The
+                  // colour has to go, not the timing.
+                  //
+                  // Direction is what makes it safe to drop. Opening, the pink is
+                  // decorative — the card face is already behind the backdrop and
+                  // the sheet it becomes is white, so entering white loses nothing
+                  // and the mask still hides the scaled content underneath.
+                  // Closing, the pink IS the destination: the sheet has to read as
+                  // collapsing back into a pink card, so data-closed keeps it.
+                  accent ? 'bg-white data-closed:bg-[#F55875]' : 'bg-white'
                 )}
               />
             </Transition>
