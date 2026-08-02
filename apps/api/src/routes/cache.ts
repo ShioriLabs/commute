@@ -179,13 +179,20 @@ app.delete('/:operator/:stationCode/timetable/grouped', async (c) => {
 
   const kvRepository = new KVRepository(c.env.KV)
 
-  const kvKey = `timetable:${operator.code}-${stationCode}:grouped:${c.env.API_VERSION}`
+  /*
+   * The grouped timetable is cached per wire format — `?compact=1` and the full
+   * shape have separate entries — so both must go. This previously deleted a key
+   * with no format segment, which matched neither and silently busted nothing.
+   */
+  const kvKeys = (['compact', 'full'] as const).map(
+    format => `timetable:${operator.code}-${stationCode}:grouped:${format}:${c.env.API_VERSION}`
+  )
 
-  await kvRepository.del(kvKey)
+  await Promise.all(kvKeys.map(key => kvRepository.del(key)))
 
   return c.json(
     Ok(
-      { message: `Cache ${kvKey} has been cleared.` }
+      { message: `Caches ${kvKeys.join(', ')} have been cleared.` }
     ),
     200
   )

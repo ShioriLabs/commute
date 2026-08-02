@@ -144,3 +144,12 @@ file_gtfs.zip
 # TransJakarta poster scans + transcriptions — local scratch for authoring the
 # TJ topology overrides; the data lives in topology.tj.overrides.ts + its test.
 refresh-images/
+
+# JPM Dukuh Atas source material — aerials, schematics and the as-built vector
+# the footprint was registered from, plus the Figma file that transform was
+# decoded out of. Local-only and not reproducible from the repo, so keep local
+# backups; the derived outline ships in
+# apps/data-platform/src/scene/jpm-footprint.ts.
+jpm-dukat/
+Untitled.fig
+Group 1 (2).png

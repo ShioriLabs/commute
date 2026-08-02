@@ -18,12 +18,11 @@ import {
   WarningIcon,
   WheelchairIcon
 } from '@phosphor-icons/react'
-import { AMENITY_TYPES, type AmenityType } from '@commute/constants'
+import { AMENITY_TYPES, OPERATORS, type AmenityType } from '@commute/constants'
 import type { StandardResponse } from '@schema/response'
-import type { Line } from 'models/line'
-import type { Station } from 'models/stations'
-import type { CompactLineGroupedTimetable } from 'models/schedules'
-import type { Transfer } from 'models/transfers'
+import type { Station } from '@commute/schemas'
+import type { CompactLineGroupedTimetable } from '@commute/schemas'
+import type { Transfer } from '@commute/schemas'
 import { directionalBaseName } from 'utils/directional-stations'
 import LineCard from '~/components/line-card'
 import LineRoundel from '~/components/line-roundel'
@@ -33,6 +32,7 @@ import { normalizeGroupedTimetable } from 'utils/timetable-shim'
 import { sortLinesForDisplay } from '~/utils/lines'
 import { useNetworkStatus } from '~/hooks/network'
 import { getUnservedStation } from '~/lib/unserved-stations'
+import { useLines } from '~/hooks/use-lines'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -109,9 +109,11 @@ interface StationContentProps {
 
 export interface StationHeader {
   isLoading: boolean
-  formattedName: string | null
+  /** Display name, with any directional "Arah …" suffix stripped. */
+  name: string | null
   stationId: string | null
-  lines: Line[]
+  /** Operator-qualified line keys. */
+  lines: string[]
   // The station exists (e.g. on the map) but no operator we cover serves it
   // yet, so there is no API record to fetch.
   unserved: boolean
@@ -133,7 +135,7 @@ export function useStationHeader(operator: string, code: string): UseStationData
     return {
       header: {
         isLoading: false,
-        formattedName: unserved.formattedName,
+        name: unserved.formattedName,
         stationId: null,
         lines: [],
         unserved: true
@@ -141,14 +143,14 @@ export function useStationHeader(operator: string, code: string): UseStationData
     }
   }
 
-  const resolvedName = station.data?.data?.formattedName ?? null
+  const resolvedName = station.data?.data?.name ?? null
 
   return {
     header: {
       isLoading: station.isLoading,
       // Directional haltes ("… Arah Utara") are one stop to a rider; the sheet
       // shows the plain name, matching how search presents the joined pair.
-      formattedName: resolvedName === null ? null : directionalBaseName(resolvedName),
+      name: resolvedName === null ? null : directionalBaseName(resolvedName),
       stationId: station.data?.data?.id ?? null,
       lines: station.data?.data?.lines ?? [],
       unserved: false
@@ -178,6 +180,8 @@ const StationContent = memo(function StationContent({ operator, code }: StationC
   const timetable = useSWR<StandardResponse<CompactLineGroupedTimetable>>(unserved ? null : timetableUrl, fetcher, swrConfig)
   const timetableData = useMemo(() => normalizeGroupedTimetable(timetable.data?.data), [timetable.data])
   const transfers = useSWR<StandardResponse<Transfer[]>>(unserved ? null : transfersUrl, fetcher, swrConfig)
+  // Line keys on stations and transfers resolve through the dictionary.
+  const { lines: resolveLines } = useLines()
   const networkStatus = useNetworkStatus()
 
   if (unserved) {
@@ -212,7 +216,7 @@ const StationContent = memo(function StationContent({ operator, code }: StationC
                 {station.data?.data?.latitude && station.data.data.longitude
                   ? (
                       <a
-                        href={`https://maps.google.com/maps?q=${station.data.data.latitude},${station.data.data.longitude}(${encodeURIComponent(station.data.data.formattedName || station.data.data.name)})`}
+                        href={`https://maps.google.com/maps?q=${station.data.data.latitude},${station.data.data.longitude}(${encodeURIComponent(station.data.data.name)})`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex flex-row gap-2 justify-center bg-[#F55875] text-white font-bold p-4 rounded-xl text-center w-full text-sm"
@@ -231,7 +235,7 @@ const StationContent = memo(function StationContent({ operator, code }: StationC
               </div>
               <ul className="flex flex-col gap-2 mt-4">
                 {timetableData.map(line => (
-                  <LineCard key={line.lineCode} line={line} operator={operator} />
+                  <LineCard key={line.line} line={line} operator={operator} />
                 ))}
               </ul>
             </>
@@ -279,21 +283,25 @@ const StationContent = memo(function StationContent({ operator, code }: StationC
                         <span className="text-gray-600 flex flex-row items-center ml-2">
                           <PersonSimpleWalkIcon weight="bold" className="w-4 h-4" aria-label="Jarak transit" />
                           &nbsp;
-                          {transfer.distance}
+                          {transfer.distanceM}
                           m
                         </span>
                       </span>
                       <span className="font-semibold text-gray-600 flex items-center">
-                        {transfer.toStation.operatorName}
+                        {/* INTERNAL transfers carry an operator code; EXTERNAL ones
+                            only a free-text operator name. */}
+                        {transfer.dataType === 'INTERNAL'
+                          ? OPERATORS[transfer.toStation.operator]?.name ?? transfer.toStation.operator
+                          : transfer.toStation.operatorName}
                       </span>
                       {transfer.dataType === 'INTERNAL' && (() => {
-                        const transferOperator = transfer.toStation.stationId.split('-')[0]
+                        const transferOperator = transfer.toStation.operator
                         // TJ has no line-detail (topology) pages yet, so render its
                         // roundels non-clickable rather than linking to a 404.
                         const linkable = transferOperator !== 'TJ'
                         return (
                           <ul className="flex gap-2 items-center">
-                            {sortLinesForDisplay(transfer.toStation.lines, transferOperator).map(line => (
+                            {sortLinesForDisplay(resolveLines(transfer.toStation.lines), transferOperator).map(line => (
                               <li key={line.lineCode}>
                                 {linkable
                                   ? (

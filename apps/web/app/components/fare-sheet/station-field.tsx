@@ -1,4 +1,4 @@
-import type { Station } from 'models/stations'
+import type { Station } from '@commute/schemas'
 
 interface Props {
   label: string
@@ -18,7 +18,7 @@ export default function StationField({ label, station, onClick }: Props) {
     >
       <span className="text-sm font-semibold text-slate-500">{ label }</span>
       {station
-        ? <b className="truncate w-full">{ station.formattedName ?? station.name }</b>
+        ? <b className="truncate w-full">{ station.name }</b>
         : <span className="text-slate-400">Pilih stasiun</span>}
     </button>
   )

@@ -58,6 +58,8 @@ export interface SectionDirector {
   stop(): void
   /** Recompute anchor positions (after layout/resize). */
   refresh(): void
+  /** Re-fit poses to a changed canvas shape; safe to call during evaluate(). */
+  reframe(): void
 }
 
 export function createSectionDirector(opts: {
@@ -125,31 +127,103 @@ export function createSectionDirector(opts: {
   let running = false
   let ticking = false
 
-  // The "anchor line" is the viewport centre. Each beat's progress point is the
-  // scroll position at which its section centre crosses the viewport centre.
-  function beatAnchorY(el: HTMLElement): number {
-    const rect = el.getBoundingClientRect()
-    const centreInDoc = rect.top + window.scrollY + rect.height / 2
-    return centreInDoc - window.innerHeight / 2
+  /**
+   * The beats that are actually on the page right now, paired with their anchors
+   * and guaranteed to ascend — the invariant every branch below depends on.
+   *
+   * The "anchor line" is the viewport centre: a beat's anchor is the scroll
+   * position at which its section centre crosses it.
+   *
+   * A beat can be declared but not rendered: `jpm-dka` is `hidden md:block`,
+   * because the SUD -> DKA sweep is a desktop affordance. A `display:none`
+   * element has an all-zero rect, so beatAnchorY() returns -innerHeight/2 — a
+   * NEGATIVE anchor sitting mid-list. That silently broke the bracketing scan on
+   * mobile: past the jpm anchor it matched `jpm-dka -> stasiun` (a0 = -422)
+   * instead of `jpm -> stasiun`, landing straight in that pair's departing ramp,
+   * so the structure folded flat the moment the reader scrolled past the copy.
+   *
+   * Filtered here rather than in rebuild() on purpose: rebuild() only runs on
+   * start() and refresh() (resize), but applyBand() toggles `data-map-band` on
+   * every beat change, which relayouts without a resize. evaluate() already
+   * measures every beat each frame, so the rect it needs is in hand.
+   *
+   * The rect is the render test, not offsetParent, which also reports null for
+   * position:fixed elements. The monotonic guard is belt-and-braces: it makes
+   * "anchors ascend" explicit, so any future ordering surprise degrades to a
+   * skipped beat instead of a wrong one.
+   */
+  function liveBeats(): { beat: AnchoredBeat, anchor: number }[] {
+    const out: { beat: AnchoredBeat, anchor: number }[] = []
+    for (const beat of anchored) {
+      const rect = beat.el.getBoundingClientRect()
+      if (rect.width === 0 && rect.height === 0) continue
+      const anchor = rect.top + window.scrollY + rect.height / 2 - window.innerHeight / 2
+      const prev = out[out.length - 1]
+      if (prev && anchor <= prev.anchor) continue
+      out.push({ beat, anchor })
+    }
+
+    // The last beat's anchor can sit at or past the furthest the page can
+    // actually scroll. The footer is the standing case: it is the final section
+    // and one viewport tall, so its CENTRE lands exactly at maxScroll and the
+    // transition into it can only reach t=1 on the document's very last pixel —
+    // the wordmark reveal never finishes. Page geometry cannot fix this from the
+    // other side either: adding height to any earlier section pushes the footer
+    // down with it (measured — headroom stayed 0), and trailing space after it
+    // leaves bare ink below the mark, because the map is viewport-fixed and has
+    // nothing left to draw there.
+    //
+    // So pull the tail anchors back into reach instead. The last one is seated a
+    // short way ABOVE maxScroll, not exactly on it, so the transition completes
+    // while the reader is still scrolling rather than on the final pixel; any
+    // earlier beats that would then collide are stepped back to keep the list
+    // strictly ascending.
+    const maxScroll = Math.max(
+      0,
+      document.documentElement.scrollHeight - window.innerHeight
+    )
+    // Just enough travel that the transition resolves before the last pixel,
+    // and no more. Whatever this inset is, the reader scrolls through it AFTER
+    // the reveal has finished — it is dead scroll by construction, so it buys
+    // nothing above the minimum. At 25% of the viewport it was 200px, and the
+    // dots sat at full brightness for the last 208px of the page (measured,
+    // 1440x900: reveal complete at 8996, maxScroll 9204).
+    //
+    // Shrinking it also LENGTHENS the reveal rather than rushing it: the ramp is
+    // the last 40% of the api->footer span, and pulling the seat down from
+    // maxScroll-200 to maxScroll-32 grows that span, so the dots light over more
+    // scroll, and the hold that keeps them dark while the api beat is being read
+    // ends later too.
+    const TAIL_INSET = 32
+    for (let i = out.length - 1; i >= 0; i--) {
+      const seat = maxScroll - TAIL_INSET - (out.length - 1 - i)
+      if (out[i]!.anchor <= seat) break
+      const floor = i > 0 ? out[i - 1]!.anchor + 1 : 0
+      out[i]!.anchor = Math.max(floor, seat)
+    }
+    return out
   }
 
   function evaluate(): void {
     if (anchored.length === 0) return
     const y = window.scrollY
 
-    // Anchor scroll positions, ascending by document order.
-    const anchors = anchored.map(b => beatAnchorY(b.el))
+    // Rendered beats only, anchors ascending — see liveBeats().
+    const live = liveBeats()
+    if (live.length === 0) return
+    const anchors = live.map(e => e.anchor)
+    const beats = live.map(e => e.beat)
 
     // Clamp before first / after last.
     if (y <= anchors[0]!) {
-      setActive(anchored[0]!.id)
-      apply(anchored[0]!.pose, anchored[0]!.highlight, anchored[0]!.highlightSet, anchored[0]!.logo)
+      setActive(beats[0]!.id)
+      apply(beats[0]!.pose, beats[0]!.highlight, beats[0]!.highlightSet, beats[0]!.logo, beats[0]!.jpm)
       return
     }
-    const last = anchored.length - 1
+    const last = beats.length - 1
     if (y >= anchors[last]!) {
-      setActive(anchored[last]!.id)
-      apply(anchored[last]!.pose, anchored[last]!.highlight, anchored[last]!.highlightSet, anchored[last]!.logo)
+      setActive(beats[last]!.id)
+      apply(beats[last]!.pose, beats[last]!.highlight, beats[last]!.highlightSet, beats[last]!.logo, beats[last]!.jpm)
       return
     }
 
@@ -160,13 +234,16 @@ export function createSectionDirector(opts: {
       if (y >= a0 && y <= a1) {
         const raw = (y - a0) / Math.max(a1 - a0, 1)
         const t = smoothstep(raw)
-        const from = anchored[i]!
-        const to = anchored[i + 1]!
+        const from = beats[i]!
+        const to = beats[i + 1]!
         const near = t < 0.5 ? from : to
         setActive(near.id)
         if (reduceMotion) {
-          // Snap to whichever beat is closer.
-          apply(near.pose, near.highlight, near.highlightSet, near.logo)
+          // Snap to whichever beat is closer. The morph snaps with it: there is
+          // no scroll fraction here to scrub, so the structure must resolve to
+          // a definite state (solid on the beat, flat off it), never freeze
+          // mid-unfold.
+          apply(near.pose, near.highlight, near.highlightSet, near.logo, near.jpm)
         } else {
           const pose = lerpPose(from.pose, to.pose, t)
           // Between beats that spotlight DIFFERENT subjects, dip the emphasis to
@@ -196,7 +273,26 @@ export function createSectionDirector(opts: {
           const logoT = from.logo === to.logo
             ? t
             : Math.max(0, (t - 0.6) / 0.4)
-          apply(pose, hl, nearSet, lerp(from.logo, to.logo, logoT))
+          // The JPM unfold is scroll-driven, in its own phase on each side of
+          // the beat. Approaching: hold flat for the first 60% so the structure
+          // doesn't start rising while the camera is still flying in from
+          // tarif's near-top-down pose (same reasoning as the wordmark hold and
+          // cakupan's CYCLE_LEAD_IN). Departing: fold over the first 40%, done
+          // BEFORE the midpoint hands the highlight to the next beat. Both ends
+          // are continuous — morph is exactly 1 at the jpm anchor from either
+          // side and exactly 0 at its neighbours' anchors — so scrubbing
+          // backwards reverses the unfold with no pop at the handoff.
+          //
+          // One shared lead-in, no mobile branch. A 0.25 mobile value lived here
+          // briefly; it was tuning around the unrendered-beat bug that liveBeats()
+          // now fixes, where the morph was pinned near 0 for the whole mobile beat
+          // regardless of this constant.
+          const jpmT = from.jpm === to.jpm
+            ? from.jpm
+            : to.jpm > from.jpm
+              ? Math.max(0, (t - 0.6) / 0.4)
+              : Math.max(0, 1 - t / 0.4)
+          apply(pose, hl, nearSet, lerp(from.logo, to.logo, logoT), jpmT)
         }
         return
       }
@@ -207,7 +303,8 @@ export function createSectionDirector(opts: {
     pose: Pose,
     highlight: number,
     highlightSet: HighlightId,
-    logo: number
+    logo: number,
+    jpm: number
   ): void {
     if (reduceMotion) camera.snap(pose)
     else camera.setTarget(pose)
@@ -215,6 +312,7 @@ export function createSectionDirector(opts: {
     renderer.setHighlightSet(highlightSet)
     renderer.setHighlightMix(highlight)
     renderer.setLogoMix(logo)
+    renderer.setJpmMorph(jpm)
     document.documentElement.setAttribute('data-active-beat-hl', highlight > 0.5 ? '1' : '0')
   }
 
@@ -245,5 +343,20 @@ export function createSectionDirector(opts: {
     evaluate()
   }
 
-  return { start, stop, refresh }
+  /**
+   * Rebuild the beats' poses for a changed canvas shape WITHOUT re-evaluating.
+   *
+   * The mobile band toggle needs this: buildBeats() fits every pose to a
+   * specific canvas aspect, so when the band opens or closes the existing poses
+   * are framed for the wrong shape. But the toggle happens inside onActiveBeat,
+   * which evaluate() drives — so calling refresh() from there would recurse
+   * (refresh -> evaluate -> onActiveBeat -> refresh). Rebuilding alone is enough:
+   * the next scroll frame picks the new poses up, and camera damping eases into
+   * them rather than snapping.
+   */
+  function reframe(): void {
+    rebuild()
+  }
+
+  return { start, stop, refresh, reframe }
 }

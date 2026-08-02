@@ -3,7 +3,7 @@ import type {
   CompactSchedule,
   LegacyTimetableEntry,
   LineGroupedTimetable
-} from 'models/schedules'
+} from '@commute/schemas'
 
 // Old cached responses encoded each compact departure as
 // { id, estimatedDeparture: "HH:MM:SS" }; the current wire format is the

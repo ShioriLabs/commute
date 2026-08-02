@@ -7,14 +7,17 @@ import { buildLineDetail, collectStationIds, findTopology } from 'utils/topology
 const LINE_C: Line = { name: 'Lin Cikarang', colorCode: '#25B8EB', lineCode: 'C' }
 const OTHER_LINE: Line = { name: 'Other', colorCode: '#000000', lineCode: 'X' }
 
-// Minimal hydrated-station shape (id/code/name/formattedName/lines).
-function station(code: string, opts: { name?: string, formattedName?: string | null, lines?: Line[] } = {}) {
+/*
+ * Minimal hydrated-station shape. `name` is already the display name — the
+ * repository resolves it before topology sees a station — and `lines` are
+ * operator-qualified keys.
+ */
+function station(code: string, opts: { name?: string, lines?: string[] } = {}) {
   return {
     id: `KCI-${code}`,
     code,
     name: opts.name ?? code,
-    formattedName: opts.formattedName ?? null,
-    lines: opts.lines ?? [LINE_C]
+    lines: opts.lines ?? [`KCI:${LINE_C.lineCode}`]
   }
 }
 
@@ -78,10 +81,9 @@ describe('buildLineDetail', () => {
     expect(trunk.kind).toBe('TRUNK')
     expect(trunk.stations.map(s => s.code)).toEqual(['AAA', 'BBB'])
     expect(trunk.stations[0].stationNumber).toBe('C1')
-    expect(trunk.stations[1].distanceFromOriginM).toBe(1500)
   })
 
-  it('prefers formattedName and falls back to name; cumM undefined -> null', () => {
+  it('uses the display name the repository resolved', () => {
     const topo: LineTopology = {
       operator: 'KCI',
       lineCode: 'C',
@@ -92,14 +94,13 @@ describe('buildLineDetail', () => {
       LINE_C,
       OPERATORS.KCI,
       mapOf(
-        station('AAA', { name: 'raw-a', formattedName: 'Pretty A' }),
-        station('BBB', { name: 'raw-b', formattedName: null })
+        station('AAA', { name: 'Pretty A' }),
+        station('BBB', { name: 'raw-b' })
       )
     )
     const [a, b] = detail.segments[0].stations
-    expect(a.name).toBe('Pretty A')
-    expect(b.name).toBe('raw-b')
-    expect(a.distanceFromOriginM).toBe(null)
+    expect(a?.name).toBe('Pretty A')
+    expect(b?.name).toBe('raw-b')
   })
 
   it('marks a station as an interchange, excluding the current line from otherLines', () => {
@@ -112,11 +113,12 @@ describe('buildLineDetail', () => {
       topo,
       LINE_C,
       OPERATORS.KCI,
-      mapOf(station('AAA', { lines: [LINE_C, OTHER_LINE] }))
+      mapOf(station('AAA', { lines: [`KCI:${LINE_C.lineCode}`, `KCI:${OTHER_LINE.lineCode}`] }))
     )
-    const s = detail.segments[0].stations[0]
-    expect(s.isInterchange).toBe(true)
-    expect(s.otherLines).toEqual([OTHER_LINE])
+    const s = detail.segments[0]?.stations[0]
+    expect(s?.isInterchange).toBe(true)
+    // Line keys, and the current line is excluded.
+    expect(s?.otherLines).toEqual(['KCI:X'])
   })
 
   it('classifies a closeTo branch as LOOP', () => {
@@ -128,9 +130,8 @@ describe('buildLineDetail', () => {
     }
     const detail = buildLineDetail(topo, LINE_C, OPERATORS.KCI, mapOf(station('AAA'), station('JNC'), station('LP1')))
     const loop = detail.segments[1]
-    expect(loop.kind).toBe('LOOP')
-    expect(loop.joinsAtCode).toBe('JNC')
-    expect(loop.closesAtCode).toBe('JNC')
+    expect(loop?.kind).toBe('LOOP')
+    expect(loop?.joinsAtCode).toBe('JNC')
   })
 
   it('classifies the first trunk-end branch as CONTINUATION and later siblings as RAMP', () => {

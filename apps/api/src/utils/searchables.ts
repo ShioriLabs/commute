@@ -55,14 +55,17 @@ export interface SearchableIndex {
 // rows satisfy it without the builder depending on the repository.
 export interface IndexableStation {
   id: string
+  /** Display name. */
   name: string
-  formattedName: string | null
+  /** The operator's own spelling; a search alias, often differing from `name`. */
+  officialName: string
   code: string
   regionCode: string
   searchable: boolean
   score: number
-  operator: { code: Operator, name: string }
-  lines: readonly Line[]
+  operator: Operator
+  /** Operator-qualified line keys. */
+  lines: readonly string[]
 }
 
 export interface IndexableHub {
@@ -70,15 +73,14 @@ export interface IndexableHub {
   name: string
   kind: 'hub' | 'integrated'
   score: number
-  // Lines are read off the members rather than the hub's own flattened `lines`,
-  // which drops the operator each line belongs to — ambiguous once a hub spans
-  // operators, which is the entire point of a hub.
+  // Read off the members: each already carries operator-qualified line keys, so
+  // a hub spanning operators stays unambiguous.
   members: readonly {
     name: string
+    officialName: string
     code: string
-    formattedName: string | null
-    operator: { code: Operator }
-    lines: readonly Line[]
+    operator: Operator
+    lines: readonly string[]
   }[]
 }
 
@@ -134,8 +136,8 @@ function groupDirectionalStations(stations: IndexableStation[]): IndexableStatio
   const order: string[] = []
 
   for (const station of stations) {
-    const key = ARAH_SUFFIX.test(station.name)
-      ? `${station.operator.code}:${directionalBaseName(station.name)}`
+    const key = ARAH_SUFFIX.test(station.officialName)
+      ? `${station.operator}:${directionalBaseName(station.officialName)}`
       : `id:${station.id}`
 
     let group = groups.get(key)
@@ -162,19 +164,18 @@ function stationToSearchable(group: IndexableStation[]): Searchable | null {
   const lineKeys: string[] = []
   const seenLines = new Set<string>()
   for (const member of members) {
-    for (const line of member.lines) {
-      const key = lineKey(member.operator.code, line.lineCode)
+    for (const key of member.lines) {
       if (seenLines.has(key)) continue
       seenLines.add(key)
       lineKeys.push(key)
     }
   }
 
-  const title = directionalBaseName(primary.formattedName || primary.name)
+  const title = directionalBaseName(primary.name)
   // Every member's name/code stays searchable, so "arah selatan" or the
   // folded-away code still finds the joined entry.
   const keywords = lowercasedKeywords([
-    ...members.flatMap(member => [member.name, member.code, member.formattedName]),
+    ...members.flatMap(member => [member.name, member.officialName, member.code]),
     title
   ])
 
@@ -183,12 +184,12 @@ function stationToSearchable(group: IndexableStation[]): Searchable | null {
   return {
     type: 'STATION',
     title,
-    subtitle: primary.operator.name,
-    to: `/stations/${primary.operator.code}/${primary.code}`,
+    subtitle: OPERATORS[primary.operator].name,
+    to: `/stations/${primary.operator}/${primary.code}`,
     keywords,
     body: lineKeys,
     data: { 'station-id': primary.id },
-    operator: primary.operator.code,
+    operator: primary.operator,
     ...(score > 0 ? { score } : {})
   }
 }
@@ -200,7 +201,7 @@ function stationToSearchable(group: IndexableStation[]): Searchable | null {
 function hubToSearchable(hub: IndexableHub): Searchable {
   const keywords = lowercasedKeywords([
     hub.name,
-    ...hub.members.flatMap(member => [member.name, member.code, member.formattedName])
+    ...hub.members.flatMap(member => [member.name, member.officialName, member.code])
   ])
 
   // Deduped across members, in member order — a hub's badges read the same as
@@ -208,8 +209,7 @@ function hubToSearchable(hub: IndexableHub): Searchable {
   const lineKeys: string[] = []
   const seenLines = new Set<string>()
   for (const member of hub.members) {
-    for (const line of member.lines) {
-      const key = lineKey(member.operator.code, line.lineCode)
+    for (const key of member.lines) {
       if (seenLines.has(key)) continue
       seenLines.add(key)
       lineKeys.push(key)

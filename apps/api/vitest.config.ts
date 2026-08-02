@@ -26,6 +26,7 @@ export default defineConfig({
       models: path.resolve(__dirname, 'src/models'),
       operators: path.resolve(__dirname, 'src/operators'),
       routes: path.resolve(__dirname, 'src/routes'),
+      schemas: path.resolve(__dirname, 'src/schemas'),
       app: path.resolve(__dirname, 'src/app.ts')
     }
   }

@@ -3,9 +3,10 @@ import { Link, useNavigate, useNavigationType, useSearchParams } from 'react-rou
 import { XIcon, InfoIcon, CornersInIcon } from '@phosphor-icons/react'
 import useSWR from 'swr'
 import type { StandardResponse } from '@schema/response'
-import type { Hub } from 'models/hub'
-import type { Station } from 'models/stations'
+import type { Hub } from '@commute/schemas'
+import type { Station } from '@commute/schemas'
 import { fetcher } from 'utils/fetcher'
+import { useLines } from '~/hooks/use-lines'
 import { hexToRgb01 } from 'utils/colors'
 import { haptic } from 'utils/haptics'
 import { staggerDelay, type StaggerOptions } from 'utils/stagger'
@@ -158,6 +159,7 @@ function clampTransform(
 }
 
 export default function MapPage() {
+  const { line: resolveLine } = useLines()
   const { data: manifest, error, mutate: mutateManifest } = useSWR<Manifest>(
     '/maps/fdtj/manifest.json',
     (url: string) => fetch(url).then(r => r.json())
@@ -195,17 +197,18 @@ export default function MapPage() {
     const index = new Map<string, string>()
     for (const hub of hubs?.data ?? []) index.set(hub.id, hub.slug)
     return index
-  }, [hubs])
+  }, [hubs, resolveLine])
   // Spotlight halo color per hub, resolvable synchronously at tap time (the
   // hubs list is already loaded; stations need a fetch — see the effect below).
   const hubColorById = useMemo(() => {
     const index = new Map<string, [number, number, number]>()
     for (const hub of hubs?.data ?? []) {
-      const color = hub.lines[0]?.colorCode
+      // Hubs carry line keys; the dictionary supplies the tint.
+      const color = resolveLine(hub.lines[0])?.colorCode
       if (color) index.set(hub.id, hexToRgb01(color))
     }
     return index
-  }, [hubs])
+  }, [hubs, resolveLine])
 
   const [searchParams] = useSearchParams()
   const debugHitboxes = import.meta.env.DEV && searchParams.get('debug') === 'hitboxes'
@@ -359,7 +362,7 @@ export default function MapPage() {
   useEffect(() => {
     const spot = spotlightRef.current
     if (!spot || !selectedStation) return
-    const color = spotlightStation?.data?.lines?.[0]?.colorCode
+    const color = resolveLine(spotlightStation?.data?.lines?.[0])?.colorCode
     if (!color) return
     // Compare on the station, not the id: an extra dot for a multi-drawn halte
     // has a suffixed id that would never match and would leave the halo neutral.

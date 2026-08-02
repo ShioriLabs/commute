@@ -1,5 +1,4 @@
-import type { Line } from 'models/line'
-import type { Station } from 'models/stations'
+import type { Station } from '@commute/schemas'
 
 /*
  * TransJakarta splits some haltes into two `stations` rows, one per direction of
@@ -48,8 +47,8 @@ export interface JoinedStation {
   members: Station[]
   /** Display name with the "Arah …" suffix stripped. */
   name: string
-  /** Union of every member's lines, deduped by lineCode. */
-  lines: Line[]
+  /** Union of every member's line keys, deduped. */
+  lines: string[]
   /** True when two or more rows were folded together. */
   joined: boolean
 }
@@ -66,7 +65,7 @@ export function joinDirectionalStations(stations: Station[]): JoinedStation[] {
 
   for (const station of stations) {
     const key = isDirectionalStation(station)
-      ? `${station.operator.code}:${directionalBaseName(station.name)}`
+      ? `${station.operator}:${directionalBaseName(station.name)}`
       : `id:${station.id}`
     if (!groups.has(key)) {
       groups.set(key, [])
@@ -78,19 +77,20 @@ export function joinDirectionalStations(stations: Station[]): JoinedStation[] {
   return order.map((key) => {
     const members = groups.get(key)!.slice().sort((a, b) => a.code.localeCompare(b.code))
     const primary = members[0]!
-    const lines: Line[] = []
+    // Line keys, deduped across both directions of the pair.
+    const lines: string[] = []
     const seen = new Set<string>()
     for (const member of members) {
-      for (const line of member.lines) {
-        if (seen.has(line.lineCode)) continue
-        seen.add(line.lineCode)
-        lines.push(line)
+      for (const key of member.lines) {
+        if (seen.has(key)) continue
+        seen.add(key)
+        lines.push(key)
       }
     }
     return {
       primary,
       members,
-      name: directionalBaseName(primary.formattedName || primary.name),
+      name: directionalBaseName(primary.name),
       lines,
       joined: members.length > 1
     }

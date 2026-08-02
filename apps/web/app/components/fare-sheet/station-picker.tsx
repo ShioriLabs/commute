@@ -1,4 +1,4 @@
-import type { Station } from 'models/stations'
+import type { OperatorCode, Station } from '@commute/schemas'
 import { OPERATORS } from '@commute/constants'
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react'
@@ -8,23 +8,28 @@ import { filterBestTier, keywordScore, SCORE_THRESHOLD } from 'utils/fuzzy-match
 import { LIST_STAGGER, LIST_STAGGER_MAX_INDEX, staggerDelay } from 'utils/stagger'
 import HighlightMatch from '~/components/highlight-match'
 import LineRoundel from '~/components/line-roundel'
-import { sortLinesForDisplay } from '~/utils/lines'
+import { sortLineKeysForDisplay } from '~/utils/lines'
+import { useLines } from '~/hooks/use-lines'
 
 // Pre-lowercased station fields so the per-keystroke scan doesn't re-lowercase
 // the whole list every pass.
 interface IndexedStation {
   station: Station
   // Empty when the station has none; skipped when scoring.
-  formattedName: string
+  officialName: string
   name: string
   code: string
 }
 
-function getStationScore({ name, formattedName, code }: IndexedStation, query: string) {
+/*
+ * Matches on the display name AND the operator's own spelling — "sudirman baru"
+ * has to keep finding BNI City, and only `officialName` carries that.
+ */
+function getStationScore({ name, officialName, code }: IndexedStation, query: string) {
   let score = keywordScore(name, query)
   if (score === 0) return 0
-  if (formattedName !== '') {
-    score = Math.min(score, keywordScore(formattedName, query))
+  if (officialName !== '' && officialName !== name) {
+    score = Math.min(score, keywordScore(officialName, query))
     if (score === 0) return 0
   }
   return Math.min(score, keywordScore(code, query))
@@ -51,6 +56,7 @@ const StationRow = memo(function StationRow({ station, index, selected, query, o
   query?: string
   onSelect: (station: Station) => void
 }) {
+  const { lines: resolveLines } = useLines()
   return (
     <li
       // Stagger only the above-the-fold rows; the rest mount plain and
@@ -65,16 +71,16 @@ const StationRow = memo(function StationRow({ station, index, selected, query, o
       >
         <span className="flex flex-col gap-1 flex-1 min-w-0">
           <b className="text-lg">
-            <HighlightMatch text={station.formattedName ?? station.name} query={query} />
+            <HighlightMatch text={station.name} query={query} />
             {'  '}
-            <span className="text-sm font-semibold text-gray-600">{ station.operator.name }</span>
+            <span className="text-sm font-semibold text-gray-600">{ OPERATORS[station.operator]?.name ?? station.operator }</span>
           </b>
           {station.lines?.length
             ? (
                 <ul className="flex flex-row gap-1 flex-wrap">
-                  {sortLinesForDisplay(station.lines, station.operator.code).map(line => (
+                  {resolveLines(sortLineKeysForDisplay(station.lines, station.operator)).map(line => (
                     <li key={line.lineCode}>
-                      <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={station.operator.code} />
+                      <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={station.operator} />
                       <span className="sr-only">{line.name}</span>
                     </li>
                   ))}
@@ -99,6 +105,7 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
   onClose: () => void
   onSelect: (station: Station) => void
 }) {
+  const { lines: resolveLines } = useLines()
   const [query, setQuery] = useState('')
   // Input stays instant; the fuzzy scan over the full station list runs
   // against a deferred query so typing doesn't jank (same as the search sheet).
@@ -143,14 +150,16 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
 
   // Operators present in the pickable set, in canonical OPERATORS order.
   const operators = useMemo(() => {
-    const present = new Map(stations.map(station => [station.operator.code, station.operator.name]))
-    return (Object.keys(OPERATORS) as (keyof typeof OPERATORS)[])
+    const present = new Map(stations.map(station => [station.operator, OPERATORS[station.operator]?.name ?? station.operator]))
+    // NUL is an internal placeholder and never appears on a station, so the
+    // cast matches the narrowed OperatorCode the schemas expose.
+    return (Object.keys(OPERATORS) as OperatorCode[])
       .filter(code => present.has(code))
       .map(code => ({ code, name: present.get(code)! }))
   }, [stations])
 
   const filteredStations = useMemo(
-    () => (operatorFilter ? stations.filter(station => station.operator.code === operatorFilter) : stations),
+    () => (operatorFilter ? stations.filter(station => station.operator === operatorFilter) : stations),
     [operatorFilter, stations]
   )
 
@@ -158,7 +167,7 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
   const searchIndex = useMemo<IndexedStation[]>(() => filteredStations.map(station => ({
     station,
     name: station.name.toLowerCase(),
-    formattedName: station.formattedName?.toLowerCase() ?? '',
+    officialName: station.officialName.toLowerCase(),
     code: station.code.toLowerCase()
   })), [filteredStations])
 
@@ -287,13 +296,13 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
                         {station.lines?.length
                           ? (
                               <span className="flex -space-x-1.5">
-                                {sortLinesForDisplay(station.lines, station.operator.code).map(line => (
-                                  <LineRoundel key={line.lineCode} size="SM" code={line.lineCode} color={line.colorCode} operator={station.operator.code} />
+                                {resolveLines(sortLineKeysForDisplay(station.lines, station.operator)).map(line => (
+                                  <LineRoundel key={line.lineCode} size="SM" code={line.lineCode} color={line.colorCode} operator={station.operator} />
                                 ))}
                               </span>
                             )
                           : null}
-                        { station.formattedName ?? station.name }
+                        { station.name }
                       </button>
                     ))}
                   </div>

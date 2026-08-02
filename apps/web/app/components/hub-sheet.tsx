@@ -1,6 +1,6 @@
 import { XIcon, ArrowSquareOutIcon } from '@phosphor-icons/react'
 import { Link } from 'react-router'
-import { HUB_KIND_LABEL } from 'models/hub'
+import { HUB_KIND_LABEL } from '@commute/constants'
 import BottomSheet from './bottom-sheet'
 import HubContent, { useHubHeader } from './hub-content'
 

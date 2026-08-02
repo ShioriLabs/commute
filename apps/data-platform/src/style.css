@@ -57,22 +57,67 @@ body {
    Desktop is untouched — the attribute is only set below the md: breakpoint, and
    these rules are gated to match (see BAND_BREAKPOINT in main.ts). */
 @media (width < 48rem) {
-  html[data-map-band] #network-bg,
-  html[data-map-band] #overlay-root {
-    inset: 0 0 auto 0;
-    /* Overlays position inside #overlay-root against canvas-space coordinates
-       from project(), so the two boxes MUST stay identical. */
-    height: calc(100vw / 1.43);
-  }
+  /* The canvas and overlay boxes themselves — including the animated height that
+     makes the band hand over smoothly — live UNLAYERED at the bottom of this
+     file. They have to: both elements carry the `inset-0 h-full` utilities, and
+     a rule in this layer loses to the utilities layer however specific its
+     selector is, while an unlayered rule outranks every layer. */
 
   /* Content beats centre their plate in the viewport (items-center), which on a
      phone lands it over the band and buries the very figures the band is
-     showing. Push it clear of the band instead. */
-  html[data-map-band] [data-beat] {
+     showing. Push it clear of the band instead.
+
+     NOT keyed on [data-map-band], deliberately, even though the band it reserves
+     room for is. applyBand() toggles that attribute from onActiveBeat, so keying
+     LAYOUT on it makes a feedback loop: the director measures anchors, picks a
+     beat, applyBand mutates padding, the anchors move, and a different beat wins
+     — measured shifts up to 1097px, more than a viewport, which had the api beat
+     oscillating between `cakupan->api` and `api->footer` on every frame and the
+     band strobing on/off. The gutter is now reserved for every content beat at
+     this width whether the band is currently up or not, so toggling it cannot
+     move a single anchor.
+
+     Scoped to the beat SECTIONS by id, not to [data-beat] generally: hero and
+     footer are full-bleed on every device (they are not in BANDED_BEATS) and
+     must not carry the gutter, and the jpm/jpm-sud/jpm-dka anchors are markers
+     and grid cells inside a section that already has it. */
+  #jadwal,
+  #topologi,
+  #tarif,
+  #jpm,
+  #stasiun,
+  #rute,
+  #cakupan,
+  #api {
     align-items: start;
     /* Band height plus a gutter. The gutter is what keeps a plate from grazing
        an overlay card that is resting near the band's lower edge. */
     padding-top: calc(100vw / 1.43 + 3rem);
+
+    /* Let a banded section be as tall as its content instead of a forced
+       viewport. The beats carry `min-h-screen` + `py-32` for the desktop layout,
+       but here the band gutter above already accounts for the map, so those two
+       stack into dead space below the plate — measured 148-367px on every banded
+       beat at 393x851 (worst: tarif). */
+    min-height: auto;
+  }
+
+  /* padding-bottom is ZERO, not a nominal 4rem, because the separation between
+     two plates is already paid for by the NEXT section's gutter: measured 387px
+     between the topologi and tarif plates, of which 323px was that gutter and
+     only 64px this padding. Anything here is added on top of a gap that is a
+     third of a viewport tall. The gutter is the rhythm.
+
+     #api is excluded: it is the last banded beat, so there is no next gutter to
+     inherit separation from — it keeps its own py-32 bottom. */
+  #jadwal,
+  #topologi,
+  #tarif,
+  #jpm,
+  #stasiun,
+  #rute,
+  #cakupan {
+    padding-bottom: 0;
   }
 
   /* Padding alone can't keep the copy out of the band: it positions the plate
@@ -138,6 +183,94 @@ body {
   .sign-static dd {
     text-align: right;
   }
+
+  /* The disclosure arrow on an endpoint row (scripts/build-docs.ts). It carries
+     `transition-transform` in the markup; this is the rule that gives it
+     something to transition. Points right when closed, down when open. */
+  details[open] > summary .chev {
+    transform: rotate(90deg);
+  }
+
+  /* Sidebar active state, set by the scroll-spy in src/docs.ts.
+     -----------------------------------------------------------
+     Purely additive: without JavaScript no group is ever marked active and the
+     sidebar is still a working list of anchor links, which is the whole
+     contract of this page. The marker is a left bar in the section's own colour
+     — the same 3px device the section headings use — so the sidebar and the
+     heading you are reading agree. */
+  .nav-group.is-active > .nav-head {
+    color: rgb(255 255 255 / 0.95);
+  }
+
+  .nav-group.is-active > .nav-head .nav-dot {
+    transform: scale(1.35);
+  }
+
+  /* The rail picks up the section's own colour, carried as --nav-accent on the
+     group (currentColor would resolve against the wrapper's text, not the tag). */
+  .nav-group.is-active > div {
+    border-left-color: color-mix(in srgb, var(--nav-accent, var(--color-accent)) 55%, transparent);
+  }
+
+  .nav-group.is-active a[href]:not(.nav-head) {
+    color: rgb(255 255 255 / 0.55);
+  }
+
+  /* The mobile section bar's active chip, set by the same scroll-spy that marks
+     the sidebar. Additive: with no JavaScript no chip is active and the strip is
+     still a working row of jump links. */
+  [data-spy-chip].is-active {
+    border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    color: rgb(255 255 255 / 0.9);
+  }
+
+  /* Response tabs, CSS only.
+     -----------------------
+     The radios live at the top of the panel and every tab/panel pair carries a
+     matching `data-res` index, so `:checked` can reach both through sibling
+     combinators. No JavaScript, and with scripting off the first response is
+     already checked and visible — which is the whole reason for doing it this
+     way on a page whose selling point is that it works before JS runs.
+
+     :has() would let this collapse into far fewer rules, but the sibling form
+     works further back and this file has no build-time nesting to lean on. */
+  .res-radio {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .res-panel {
+    display: none;
+  }
+
+  .res-radio[data-res="0"]:checked ~ * .res-tab[data-res="0"],
+  .res-radio[data-res="1"]:checked ~ * .res-tab[data-res="1"],
+  .res-radio[data-res="2"]:checked ~ * .res-tab[data-res="2"],
+  .res-radio[data-res="3"]:checked ~ * .res-tab[data-res="3"] {
+    color: rgb(255 255 255 / 0.85);
+    background: rgb(255 255 255 / 0.06);
+  }
+
+  .res-radio[data-res="0"]:checked ~ .res-panel[data-res="0"],
+  .res-radio[data-res="1"]:checked ~ .res-panel[data-res="1"],
+  .res-radio[data-res="2"]:checked ~ .res-panel[data-res="2"],
+  .res-radio[data-res="3"]:checked ~ .res-panel[data-res="3"] {
+    display: block;
+  }
+
+  /* Keyboard users must still see which tab has focus, since the real control
+     is a visually-hidden radio. Indexed the same way as the rules above — a
+     single `[data-res="0"]` selector here would have drawn the ring on the
+     first tab no matter which radio actually held focus. */
+  .res-radio[data-res="0"]:focus-visible ~ * .res-tab[data-res="0"],
+  .res-radio[data-res="1"]:focus-visible ~ * .res-tab[data-res="1"],
+  .res-radio[data-res="2"]:focus-visible ~ * .res-tab[data-res="2"],
+  .res-radio[data-res="3"]:focus-visible ~ * .res-tab[data-res="3"] {
+    outline: 1px solid var(--color-accent);
+    outline-offset: -1px;
+  }
 }
 
 @layer utilities {
@@ -163,12 +296,83 @@ body {
     animation: rise 500ms var(--ease-ios-spring) forwards;
   }
 
+  /* `.rise` starts at opacity 0 and depends on the animation to bring it back.
+     Browsers do NOT disable CSS animations under prefers-reduced-motion, so
+     this works today — but a user stylesheet or an extension that suppresses
+     animations would leave the copy permanently invisible, and on the reference
+     page that copy is the masthead. Collapse the duration instead of using
+     `animation: none`, which would strand opacity at 0. */
+  @media (prefers-reduced-motion: reduce) {
+    .rise {
+      animation-duration: 1ms;
+    }
+  }
+
+  /* The hero's entrance. Named for the headline words it was built for, but it
+     carries the whole hero — subhead and buttons included — so everything there
+     arrives with the same weight.
+
+     Deliberately the app boot splash's animation (apps/web: .wordmark-letter)
+     rather than `.rise` with a shorter delay: 300ms ease-out over an explicit
+     overshoot, not 500ms of spring. Keep the two in sync.
+
+     No `display` here on purpose. The headline words need `inline-block` for
+     translateY to apply to them at all, but they carry Tailwind's own
+     `inline-block` for that — putting it in this rule would collapse the
+     subhead <p> to its text width and break its max-w-lg wrapping. */
+  .word {
+    opacity: 0;
+    /* ease-out per segment rather than --ease-ios-spring: the overshoot is
+       explicit in the keyframes, and a spring curve on top of it would compound
+       into a second, unintended bounce. */
+    animation: word 300ms ease-out forwards;
+  }
+
+  /* Same reasoning as `.rise` above — collapse the duration rather than using
+     `animation: none`, which would strand the headline at opacity 0. */
+  @media (prefers-reduced-motion: reduce) {
+    .word {
+      animation-duration: 1ms;
+    }
+  }
+
   /* Reveals the static evidence plates when there is no WebGL. Must live in the
      utilities layer, not components: the plates carry Tailwind's `hidden`
      utility so they stay out of the layout on the normal path, and an earlier
      layer loses to it regardless of selector specificity. */
   html[data-webgl="off"] .sign-static {
     display: grid;
+  }
+}
+
+@keyframes word {
+  from {
+    opacity: 0;
+    /* Focus-pull: the word resolves as it rises, rather than sliding in already
+       sharp. 4px is tuned to the 72px headline — enough to read as out of focus
+       at that size without smearing into an unreadable band. */
+    filter: blur(4px);
+    transform: translateY(8px);
+  }
+
+  /* Overshoot: the word rises past its resting line and drops back, so it
+     arrives with weight instead of gliding to a stop. Opacity and blur both
+     finish early — the settle should read as movement, not as a continuing
+     fade or a word still coming into focus. */
+  60% {
+    opacity: 1;
+    /* 0px, not 0: a bare zero minifies to an argument-less `blur()`, which
+       Chromium happens to accept as blur(0px) but is not something to rely on. */
+    filter: blur(0px);
+    transform: translateY(-2px);
+  }
+
+  to {
+    opacity: 1;
+    /* 0px, not 0: a bare zero minifies to an argument-less `blur()`, which
+       Chromium happens to accept as blur(0px) but is not something to rely on. */
+    filter: blur(0px);
+    transform: translateY(0);
   }
 }
 
@@ -180,5 +384,60 @@ body {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* The band's height is ANIMATED, not snapped. Toggling `data-map-band` used to
+   jump the canvas 273px -> 844px in a single frame (3.1x at 390px wide), and
+   since the GL viewport, the projection aspect and every anchored overlay are
+   derived from that box, the map lurched and every card teleported together.
+
+   This must stay UNLAYERED, which is why it sits below every @layer block in
+   this file. Both elements carry the `inset-0 h-full` utilities, and a rule in
+   @layer base or @layer components loses to the utilities layer however specific
+   its selector is (an id does not help — layer order is decided before
+   specificity). Unlayered declarations outrank every layer, so they win here;
+   putting them in @layer utilities instead does NOT work, because Tailwind v4
+   discards hand-written rules from that layer and the transition then vanishes
+   from the bundle silently. The base state also needs an explicit height, or
+   there is nothing for the transition to interpolate from.
+
+   main.ts hands the duration to renderer.trackBox() — see BAND_TRANSITION_MS,
+   which must stay in step with the 540ms here. */
+@media (width < 48rem) {
+  #network-bg,
+  #overlay-root {
+    top: 0;
+    bottom: auto;
+    height: 100dvh;
+    /* 540ms, matched to the CAMERA rather than chosen to look good alone. The
+       camera damps exponentially at tau 180ms (DEFAULT_TAU_MS in gl/camera.ts),
+       so it is ~95% settled at 3*tau = 540ms.
+
+       Matching the camera's DURATION is not enough — the shape has to match too.
+       The previous cubic-bezier(0.16, 1, 0.3, 1) is an ease-out-expo: it was 79%
+       done at 108ms while the camera was only 48% through its travel, a 28-point
+       gap. The box landed by ~200ms and the camera kept drifting to ~820ms, so
+       the handover read as a box snap followed by a separate map move.
+
+       This curve is a least-squares fit to (1 - e^(-t/180)) normalised to reach
+       1 at 540ms: it tracks the camera to within 0.2 percentage points across
+       the whole transition, so the box and the map travel together. If
+       DEFAULT_TAU_MS or the duration changes, refit — do not eyeball it. */
+    transition: height 540ms cubic-bezier(0.23, 0.74, 0.55, 0.94);
+  }
+
+  /* Overlays position inside #overlay-root against canvas-space coordinates
+     from project(), so the two boxes MUST stay identical. */
+  html[data-map-band] #network-bg,
+  html[data-map-band] #overlay-root {
+    height: calc(100vw / 1.43);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #network-bg,
+    #overlay-root {
+      transition: none;
+    }
   }
 }

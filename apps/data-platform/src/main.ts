@@ -7,6 +7,7 @@ import {
   MRT_FARE_FROM,
   MRT_FARE_TO
 } from './scene/network-scene'
+import { buildJpmScene } from './scene/jpm-scene'
 import { createCamera } from './gl/camera'
 import { createRenderer } from './gl/renderer'
 import { bandLayout, buildBeats, viewportLayout, type BeatId } from './scroll/beats'
@@ -14,8 +15,9 @@ import { createSectionDirector } from './scroll/section-director'
 import { createDeparturesFlyout } from './overlay/departures'
 import { createFareTag } from './overlay/fare-tag'
 import { createChainLabels } from './overlay/chain-labels'
+import { createJpmTransfer } from './overlay/jpm-transfer'
 import { createStationCard } from './overlay/station-card'
-import { createApiPanel } from './overlay/api-panel'
+import { createAPIPanel } from './overlay/api-panel'
 import { createRouteStrip } from './overlay/route-strip'
 import { createCoveragePanel, toRailRoster, RAIL_OPERATOR_CYCLE } from './overlay/coverage-panel'
 import { fetchManggaraiDepartures } from './data/departures-api'
@@ -27,6 +29,7 @@ import {
   fetchStationTransfers
 } from './data/network-api'
 import { nextDepartures } from './data/next-departures'
+import { buildLineDictionary } from './data/network-types'
 import { applyLineColors } from './theme/line-colors'
 
 // Default the page to its no-WebGL state, then promote it once a context is
@@ -73,6 +76,10 @@ function bootNetworkBackground(): void {
 
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches
   const scene = buildScene()
+  // The JPM structure the jpm beat unfolds over the KCI-SUD <-> LRTJBDB-DKA
+  // corridor. Null if those stations ever leave the baked network, in which
+  // case the beat is skipped and its section scrolls past as plain copy.
+  const jpmScene = buildJpmScene(scene)
 
   // Below the md: breakpoint the seven content beats render the map into a fixed
   // IMAX-ish band at the top of the viewport, with their plates scrolling
@@ -87,10 +94,18 @@ function bootNetworkBackground(): void {
   }
 
   // Only the content beats are banded; hero and footer are full-bleed.
-  const BANDED_BEATS = new Set<BeatId>(['jadwal', 'topologi', 'tarif', 'stasiun', 'rute', 'cakupan', 'api'])
+  // 'jpm-dka' is the far end of the jpm sweep; it must band like its other half
+  // or the map would drop out of the band mid-traverse.
+  const BANDED_BEATS = new Set<BeatId>(['jadwal', 'topologi', 'tarif', 'jpm', 'jpm-sud', 'jpm-dka', 'stasiun', 'rute', 'cakupan', 'api'])
   // Tracked so a resize can re-evaluate the band on the CURRENT beat; the
   // director only reports a beat when it changes.
   let activeBeatId: BeatId | null = null
+  // Must match the height transition on #network-bg / #overlay-root in
+  // style.css. The band changes the canvas box, and the GL viewport, the
+  // projection aspect and every anchored overlay are all derived from it — so
+  // the box cannot simply be left to CSS while the renderer samples it once.
+  const BAND_TRANSITION_MS = 540
+
   function applyBand(id: BeatId): void {
     activeBeatId = id
     const on = bandActive() && BANDED_BEATS.has(id)
@@ -98,9 +113,35 @@ function bootNetworkBackground(): void {
     if (on === root.hasAttribute('data-map-band')) return
     if (on) root.setAttribute('data-map-band', '')
     else root.removeAttribute('data-map-band')
-    // The canvas box just changed, so the GL viewport and projection aspect must
-    // be re-derived before the next frame projects any overlay against them.
+
+    // The poses were fitted to the OLD aspect. buildBeats() frames each beat for
+    // a specific canvas shape (bandLayout is 1.43:1, viewportLayout is the whole
+    // screen, ~0.44 on a phone), so leaving them alone means the projection
+    // aspect swings 0.44 -> 1.38 underneath a camera still aiming at the old
+    // framing — the map gets reframed by two things at once and the handover
+    // reads as a lurch even though nothing jitters. Rebuilding here hands the
+    // director poses fitted to where the box is GOING, and camera damping in
+    // apply() eases into them over roughly the same span as the height
+    // transition, so the two motions become one.
+    //
+    // reframe(), not refresh(): this runs inside onActiveBeat, which evaluate()
+    // drives, and refresh() calls evaluate() again — straight back into here.
+    director.reframe()
+
+    // Re-derive the GL viewport EVERY frame while the height animates, not once
+    // at the start. Sampling once was the old behaviour and the box moved out
+    // from under it: the canvas jumped 273px -> 844px in a single frame and the
+    // map, its projection and every card lurched together.
+    //
+    // This MUST be the renderer's own frame doing the resizing, not an rAF loop
+    // out here. A separate callback is registered after the renderer's, so it
+    // ran after the draw — and because resize() reallocates the drawing buffer
+    // whenever the size actually changes (which is every frame of a height
+    // animation), it cleared the canvas immediately after each frame was drawn.
+    // The map was blank for the whole 540ms and only appeared once the box
+    // stopped moving, which is what made the handover read as two events.
     renderer.resize()
+    renderer.trackBox(BAND_TRANSITION_MS + 60)
   }
 
   const heroPose = buildBeats(scene, ...layouts())[0]!.pose
@@ -158,10 +199,24 @@ function bootNetworkBackground(): void {
       : null
   const apiPanel
     = overlayRoot && rasuna
-      ? createApiPanel(
+      ? createAPIPanel(
           overlayRoot,
           document.querySelector<HTMLElement>('[data-api-dock]'),
           rasuna,
+          reduceMotion
+        )
+      : null
+
+  // The jpm beat's transfer leg, floating over the middle of the span, plus the
+  // two endpoint plates naming which station each end belongs to. The three
+  // read as one diagram: SUD at one end, DKA at the other, the leg between.
+  const jpmTransfer
+    = overlayRoot && jpmScene
+      ? createJpmTransfer(
+          overlayRoot,
+          document.querySelector<HTMLElement>('[data-jpm-dock]'),
+          jpmScene.span,
+          jpmScene.ends,
           reduceMotion
         )
       : null
@@ -198,12 +253,14 @@ function bootNetworkBackground(): void {
     scene,
     camera,
     reduceMotion,
+    jpm: jpmScene,
     onFrame: (frameCtx) => {
       flyout?.update(frameCtx)
       fareTag?.update(frameCtx)
       chainLabels?.update(frameCtx)
       stationCard?.update(frameCtx)
       apiPanel?.update(frameCtx)
+      jpmTransfer?.update(frameCtx)
       routeStrip?.update(frameCtx)
       coveragePanel?.update(frameCtx)
     }
@@ -215,9 +272,11 @@ function bootNetworkBackground(): void {
   function loadDepartures(): void {
     if (!flyout) return
     flyout.setState({ kind: 'loading' })
-    fetchManggaraiDepartures()
-      .then((timetable) => {
-        const rows = nextDepartures(timetable, 4)
+    // Operators come along for the ride: the timetable refers to lines by key,
+    // and /operators is the dictionary that resolves them to a name and colour.
+    Promise.all([fetchManggaraiDepartures(), fetchOperators()])
+      .then(([timetable, operators]) => {
+        const rows = nextDepartures(timetable, 4, buildLineDictionary(operators))
         flyout.setState(rows.length ? { kind: 'ready', rows } : { kind: 'empty' })
       })
       .catch(() => flyout.setState({ kind: 'error' }))
@@ -286,7 +345,7 @@ function bootNetworkBackground(): void {
     reduceMotion,
     // Poses depend on aspect, so the director rebuilds them from the current
     // viewport whenever it needs them (initial + on resize).
-    buildBeats: () => buildBeats(scene, ...layouts()),
+    buildBeats: () => buildBeats(scene, ...layouts(), jpmScene),
     onActiveBeat: (id) => {
       // Band first: it resizes the canvas, and every overlay below projects
       // against that box on the frames that follow.
@@ -312,6 +371,11 @@ function bootNetworkBackground(): void {
       // Mutually exclusive: both hang off the same roundel.
       stationCard?.setVisible(id === 'stasiun')
       apiPanel?.setVisible(id === 'api')
+      // Scoped to its own beat, like the chain codes: the structure is only on
+      // screen here, so the plates have nothing to label anywhere else.
+      // Both halves of the travelling shot: the structure is on screen for the
+      // whole sweep, so its labels and leg belong to both anchors.
+      jpmTransfer?.setVisible(id === 'jpm' || id === 'jpm-sud' || id === 'jpm-dka')
 
       // Fetch from the tarif beat onward: the station card wants data before the
       // reader arrives, and the API panel below reads the same response.
@@ -371,6 +435,7 @@ function bootNetworkBackground(): void {
       camera,
       renderer,
       scene,
+      jpmScene,
       director,
       loadDepartures,
       loadFare,

@@ -115,7 +115,7 @@ function normalizeName(raw: string): string {
   return s
 }
 
-interface ApiStation {
+interface APIStation {
   names: Map<string, string>
   coords: Map<string, { lat: number, lng: number }>
 }
@@ -125,7 +125,7 @@ interface ApiStation {
  * id. Coords here are the fallback for stations not yet in stations_lat_lng.sql
  * (e.g. newly-opened JTK/JIS), so the generator self-heals as the DB grows.
  */
-async function fetchStations(): Promise<ApiStation> {
+async function fetchStations(): Promise<APIStation> {
   const names = new Map<string, string>()
   const coords = new Map<string, { lat: number, lng: number }>()
   for (const op of RAIL_OPERATORS) {

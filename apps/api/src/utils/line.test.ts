@@ -1,5 +1,35 @@
+import { OPERATORS } from '@commute/constants'
 import { describe, expect, it } from 'vitest'
 import { ALL_LINES, getLineByOperator, LINE_LOOKUP_TABLE } from 'utils/line'
+
+/*
+ * `mode` is optional on Line so trimmed producers (SearchableLine) need not
+ * carry it, which means nothing in the type system guarantees the dictionary
+ * fills it. These are that guarantee: /operators is where a client resolves a
+ * line's mode, so every line it serves must have one.
+ */
+describe('line modes', () => {
+  it('fills every line with its operator mode', () => {
+    for (const [code, lines] of Object.entries(ALL_LINES)) {
+      const operator = OPERATORS[code as keyof typeof OPERATORS]
+      for (const line of lines) {
+        expect(line.mode, `${code}:${line.lineCode}`).toBe(operator.mode)
+      }
+    }
+  })
+
+  it('gives TJ corridors the BUS mode and MRT the SUBWAY mode', () => {
+    expect(getLineByOperator('TJ', '1')?.mode).toBe('BUS')
+    expect(getLineByOperator('MRTJ', 'M')?.mode).toBe('SUBWAY')
+    expect(getLineByOperator('KCI', 'C')?.mode).toBe('RAIL')
+  })
+
+  // Filling the default must not mutate the operator's own LINES array.
+  it('does not mutate the source line definitions', async () => {
+    const { LINES } = await import('operators/kci/lines')
+    expect(LINES.every(line => !('mode' in line))).toBe(true)
+  })
+})
 
 describe('getLineByOperator', () => {
   it('resolves a real line for KCI', () => {

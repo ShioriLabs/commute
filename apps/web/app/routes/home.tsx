@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { Station } from 'models/stations'
-import type { CompactLineGroupedTimetable } from 'models/schedules'
+import type { CompactLineGroupedTimetable, Station } from '@commute/schemas'
 import type { StandardResponse } from '@schema/response'
 import LineCard from '~/components/line-card'
 import useSWR from 'swr'
@@ -105,9 +104,9 @@ function StationCard({ stationId, index = 0 }: { stationId: string, index?: numb
       return (
         <article className="content-fade">
           <h1 className="font-bold text-xl flex px-4 py-4 sticky top-0 bg-rose-50/20 backdrop-blur-2xl z-10 lg:relative lg:backdrop-blur-none lg:bg-transparent">
-            <Link to={`/stations/${station.data.data.operator.code}/${station.data.data.code}`} className="group flex-grow">
+            <Link to={`/stations/${station.data.data.operator}/${station.data.data.code}`} className="group flex-grow">
               Stasiun&nbsp;
-              { station.data.data.formattedName }
+              { station.data.data.name }
               <CaretRightIcon weight="bold" className="inline w-4 h-4 group-hover:ml-3 ml-2 transition-[margin] duration-200 mb-1" />
             </Link>
           </h1>
@@ -126,8 +125,8 @@ function StationCard({ stationId, index = 0 }: { stationId: string, index?: numb
                 // absorbs what's left.
                 <div className="content-fade">
                   <div className="flex flex-col lg:grid lg:grid-cols-2 gap-4 mx-4 animate-pulse">
-                    {station.data.data.lines.slice(0, MAX_SKELETON_LINES).map(line => (
-                      <div key={line.lineCode} className="h-[280px] bg-slate-200 rounded-xl" />
+                    {station.data.data.lines.slice(0, MAX_SKELETON_LINES).map(lineKey => (
+                      <div key={lineKey} className="h-[280px] bg-slate-200 rounded-xl" />
                     ))}
                   </div>
                 </div>
@@ -139,7 +138,7 @@ function StationCard({ stationId, index = 0 }: { stationId: string, index?: numb
                   // to soften the remaining difference.
                   <ul className="content-fade flex flex-col lg:grid lg:grid-cols-2 gap-4 mx-4">
                     {timetableData.map(line => (
-                      <LineCard key={line.lineCode} line={line} />
+                      <LineCard key={line.line} line={line} />
                     ))}
                   </ul>
                 )

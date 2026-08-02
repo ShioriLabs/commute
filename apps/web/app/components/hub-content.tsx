@@ -1,12 +1,14 @@
+import { OPERATORS } from '@commute/constants'
 import { memo, useMemo } from 'react'
 import { Link } from 'react-router'
 import { CaretRightIcon } from '@phosphor-icons/react'
 import useSWR from 'swr'
 import type { StandardResponse } from '@schema/response'
-import type { Hub, HubKind } from 'models/hub'
+import type { Hub, HubKind } from '@commute/schemas'
 import { fetcher } from 'utils/fetcher'
 import LineRoundel from '~/components/line-roundel'
-import { sortLinesForDisplay } from '~/utils/lines'
+import { sortLineKeysForDisplay } from '~/utils/lines'
+import { useLines } from '~/hooks/use-lines'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -49,6 +51,7 @@ export function useHubHeader(slug: string): UseHubDataResult {
 // Renders a hub as a compact list of its member stations, each linking to that
 // station's own page. Members are ordered by the API (hubStations.position).
 const HubContent = memo(function HubContent({ slug }: HubContentProps) {
+  const { lines: resolveLines } = useLines()
   const hubUrl = useMemo(() =>
     new URL(`/hubs/${slug}`, import.meta.env.VITE_API_BASE_URL).href,
   [slug]
@@ -75,23 +78,23 @@ const HubContent = memo(function HubContent({ slug }: HubContentProps) {
       {members.map(member => (
         <li key={member.id}>
           <Link
-            to={`/stations/${member.operator.code}/${member.code}`}
+            to={`/stations/${member.operator}/${member.code}`}
             className="px-8 py-4 flex items-center gap-4 border-b border-b-stone-100 last:border-b-0"
           >
             <div className="flex flex-col gap-1 min-w-0 flex-1">
               <b className="text-lg">
-                {member.formattedName || member.name}
+                {member.name}
                 <span className="text-sm font-semibold text-gray-600">
                   &nbsp;&nbsp;
-                  {member.operator.name}
+                  {OPERATORS[member.operator]?.name ?? member.operator}
                 </span>
               </b>
               {member.lines.length > 0
                 ? (
                     <ul className="flex flex-row gap-1 flex-wrap">
-                      {sortLinesForDisplay(member.lines, member.operator.code).map(line => (
+                      {resolveLines(sortLineKeysForDisplay(member.lines, member.operator)).map(line => (
                         <li key={line.lineCode}>
-                          <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={member.operator.code} />
+                          <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={member.operator} />
                           <span className="sr-only">{line.name}</span>
                         </li>
                       ))}
