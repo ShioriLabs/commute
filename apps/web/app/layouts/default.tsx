@@ -2,6 +2,7 @@ import { createStore, set, keys as getAllKeys, del, get } from 'idb-keyval'
 import { useRef } from 'react'
 import { Outlet } from 'react-router'
 import { SWRConfig } from 'swr'
+import { MapMorphProvider } from '~/components/map-morph'
 
 const store = createStore('swr-db', 'cache-store')
 
@@ -54,7 +55,16 @@ export default function DefaultLayout() {
 
   return (
     <SWRConfig value={{ provider: () => cache }}>
-      <Outlet />
+      {/*
+        The map morph overlay lives here, not in the map button or root.tsx:
+        both `/` and `/map` render under this layout, so the overlay survives
+        the navigation it plays over (the button unmounts with the home route
+        mid-morph), and a root ErrorBoundary replacing the layout tears a
+        stuck overlay down with it.
+      */}
+      <MapMorphProvider>
+        <Outlet />
+      </MapMorphProvider>
     </SWRConfig>
   )
 }

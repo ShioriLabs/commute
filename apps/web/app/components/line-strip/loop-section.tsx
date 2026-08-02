@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import type { LineDetailSegment, LineDetailStation } from 'models/line'
+import type { LineDetailSegment, LineDetailStation } from '@commute/schemas'
 import StationRow, { RAIL_CENTER_PX, RAIL_WIDTH_PX } from './station-row'
 
 interface LoopSectionProps {

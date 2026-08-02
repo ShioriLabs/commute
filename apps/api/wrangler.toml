@@ -10,8 +10,24 @@ database_id = "1d187383-95a3-4e34-aee8-7c99b45aeaa0"
 migrations_dir = "src/db/migrations"
 
 [vars]
-API_VERSION = "20260722"
+API_VERSION = "20260802"
 
 [[kv_namespaces]]
 binding = "KV"
 id = "000e0f51c09844f1b9f85ad26e068129"
+
+# Abuse backstop, not a quota — see src/middleware/rate-limit.ts for why the
+# limits are generous and undocumented. `period` may only be 10 or 60.
+# namespace_id is an arbitrary integer unique within the account, not a
+# resource that needs creating.
+[[ratelimits]]
+name = "RATE_LIMIT_DEFAULT"
+namespace_id = "1001"
+simple = { limit = 600, period = 60 }
+
+# Fares run Dijkstra and cache-key on payment method + time bucket, so they are
+# both the costliest route and the easiest to miss cache on deliberately.
+[[ratelimits]]
+name = "RATE_LIMIT_FARE"
+namespace_id = "1002"
+simple = { limit = 120, period = 60 }

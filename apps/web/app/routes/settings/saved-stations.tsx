@@ -1,6 +1,7 @@
+import { OPERATORS } from '@commute/constants'
 import { CaretLeftIcon, PushPinIcon, PushPinSlashIcon } from '@phosphor-icons/react'
 import type { StandardResponse } from '@schema/response'
-import type { Station } from 'models/stations'
+import type { Station } from '@commute/schemas'
 import { useState, useEffect, useCallback } from 'react'
 import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
@@ -54,10 +55,10 @@ function SavedStationItem({ stationId, isSaved, onSaveButtonClick }: SavedStatio
       <article className="px-8 py-4 flex items-center gap-4 justify-between">
         <div>
           <h1 className="font-semibold text-lg flex">
-            { station.data.data.formattedName }
+            { station.data.data.name }
           </h1>
           <h2 className="font-semibold text-sm text-slate-700">
-            {station.data.data.operator.name}
+            {OPERATORS[station.data.data.operator]?.name ?? station.data.data.operator}
           </h2>
         </div>
         <button onClick={handleSaveStationButton} className="cursor-pointer">
@@ -127,7 +128,7 @@ export default function SavedStationsSettingsPage() {
   }
 
   return (
-    <main className="bg-white w-screen h-full min-h-screen overflow-y-auto pb-4">
+    <main className="bg-white w-full h-full min-h-screen overflow-y-auto pb-4">
       <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto bg-white">
         <div className="flex gap-3 items-center -ml-2">
           <button

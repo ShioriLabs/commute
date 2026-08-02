@@ -18,7 +18,7 @@ type State
     | { kind: 'error' }
     | { kind: 'ready', station: StationDetail }
 
-export interface ApiPanel {
+export interface APIPanel {
   setVisible(v: boolean): void
   setState(s: State): void
   update(ctx: FrameContext): void
@@ -86,15 +86,13 @@ function shownFields(s: StationDetail): unknown {
     data: {
       id: s.id,
       name: s.name,
+      officialName: s.officialName,
       code: s.code,
-      formattedName: s.formattedName,
-      region: s.region,
-      operator: { code: s.operator.code, name: s.operator.name },
-      timetableSynced: 1,
+      operator: s.operator,
       amenities: s.amenities.map(a => ({ type: a.type })),
       latitude: s.latitude,
       longitude: s.longitude,
-      lines: s.lines.map(l => ({ name: l.name, colorCode: l.colorCode, lineCode: l.lineCode }))
+      lines: s.lines
     }
   }
 }
@@ -131,13 +129,13 @@ const FADE_FLOAT_STYLE
 const FADE_DOCK_STYLE
   = 'background:linear-gradient(180deg,rgba(10,12,17,0) 0%,rgba(10,12,17,0.75) 50%,rgba(10,12,17,1) 100%)'
 
-export function createApiPanel(
+export function createAPIPanel(
   root: HTMLElement,
   /** In-flow slot used below the md: breakpoint (see `docked`). */
   dock: HTMLElement | null,
   anchorWorld: Vec3,
   reduceMotion: boolean
-): ApiPanel {
+): APIPanel {
   const card = document.createElement('div')
   card.className = FLOAT_CLASS
   card.style.opacity = '0'

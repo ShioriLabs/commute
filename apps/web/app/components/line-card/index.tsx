@@ -1,4 +1,4 @@
-import type { CompactLineTimetable, CompactSchedule } from 'models/schedules'
+import type { CompactLineTimetable, CompactSchedule } from '@commute/schemas'
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router'
 import { CaretRightIcon, NavigationArrowIcon } from '@phosphor-icons/react'
@@ -6,6 +6,7 @@ import { getForegroundColor, getTintFromColor } from 'utils/colors'
 import { departureSortKey, getRelativeDepartureLabel, isImminentDeparture, parseMinute } from 'utils/schedules'
 import { formatPlatformCode, joinLabels } from 'utils/labels'
 import PidsChevrons from './pids-chevrons'
+import { codeOfLineKey, useLines } from '~/hooks/use-lines'
 
 function getNextSchedules(
   schedules: CompactSchedule[],
@@ -39,6 +40,16 @@ interface Props {
 
 export default function LineCard({ line, operator }: Props) {
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
+  /*
+   * The timetable carries a line key; its name and colour come from the
+   * dictionary. Falls back to the bare code and a neutral grey while
+   * /operators is still in flight, so the card renders rather than blanking.
+   */
+  const { line: lookupLine } = useLines()
+  const resolved = lookupLine(line.line)
+  const lineCode = codeOfLineKey(line.line)
+  const lineName = resolved?.name ?? lineCode
+  const lineColor = resolved?.colorCode ?? '#94a3b8'
 
   useEffect(() => {
     setLastUpdated(new Date())
@@ -74,28 +85,28 @@ export default function LineCard({ line, operator }: Props) {
   return (
     <li
       className="rounded-xl w-full min-h-8 shadow-lg border-t-[16px] border-gray-100"
-      style={{ borderTopColor: line.colorCode, backgroundColor: getTintFromColor(line.colorCode, 0.065) }}
-      aria-label={`Jadwal untuk jalur ${line.name}`}
+      style={{ borderTopColor: lineColor, backgroundColor: getTintFromColor(lineColor, 0.065) }}
+      aria-label={`Jadwal untuk jalur ${lineName}`}
     >
       <article
         className="px-4 py-2.5 border-b-2"
-        style={{ borderBottomColor: getTintFromColor(line.colorCode, 0.3) }}
-        aria-labelledby={`line-name-${line.name}`}
+        style={{ borderBottomColor: getTintFromColor(lineColor, 0.3) }}
+        aria-labelledby={`line-name-${lineName}`}
       >
         {/* TJ has no line-detail (topology) page yet — render its cards unlinked. */}
         {operator && operator !== 'TJ'
           ? (
               <Link
-                to={`/lines/${operator}/${line.lineCode}`}
+                to={`/lines/${operator}/${lineCode}`}
                 className="flex items-center justify-between gap-2"
-                aria-label={`Lihat rute ${line.name}`}
+                aria-label={`Lihat rute ${lineName}`}
               >
-                <h1 id={`line-name-${line.name}`} className="font-bold text-base">{line.name}</h1>
+                <h1 id={`line-name-${lineName}`} className="font-bold text-base">{lineName}</h1>
                 <CaretRightIcon weight="bold" className="w-4 h-4 text-slate-600" />
               </Link>
             )
           : (
-              <h1 id={`line-name-${line.name}`} className="font-bold text-base">{line.name}</h1>
+              <h1 id={`line-name-${lineName}`} className="font-bold text-base">{lineName}</h1>
             )}
       </article>
       <ul>
@@ -115,24 +126,24 @@ export default function LineCard({ line, operator }: Props) {
             <li
               key={group.key}
               className="border-t first:border-t-0"
-              style={{ borderTopColor: getTintFromColor(line.colorCode, 0.3) }}
+              style={{ borderTopColor: getTintFromColor(lineColor, 0.3) }}
               aria-label={`Jadwal menuju ${group.label.join(', ')}`}
             >
               {showHeader && (
                 <div
                   className="px-4 py-1.5 flex items-center gap-2"
-                  style={{ backgroundColor: getTintFromColor(line.colorCode, 0.16) }}
+                  style={{ backgroundColor: getTintFromColor(lineColor, 0.16) }}
                 >
                   {!labelIsRedundant && (
-                    <NavigationArrowIcon weight="fill" className="w-3 h-3 rotate-90 shrink-0" style={{ color: line.colorCode }} />
+                    <NavigationArrowIcon weight="fill" className="w-3 h-3 rotate-90 shrink-0" style={{ color: lineColor }} />
                   )}
                   <span className="flex-grow min-w-0 text-xs font-bold text-slate-700 uppercase tracking-wide truncate">
                     {labelIsRedundant ? '' : joinLabels(group.label)}
                   </span>
                   {group.platformCode && (
                     <span
-                      className={`text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${getForegroundColor(line.colorCode) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`}
-                      style={{ backgroundColor: line.colorCode }}
+                      className={`text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${getForegroundColor(lineColor) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`}
+                      style={{ backgroundColor: lineColor }}
                       aria-label={`Berangkat dari peron ${group.platformCode}`}
                     >
                       {'Peron '}
@@ -161,7 +172,7 @@ export default function LineCard({ line, operator }: Props) {
                       </div>
                       <div className="text-right flex flex-col shrink-0">
                         <span className="flex items-center justify-end gap-1.5">
-                          {imminent && <PidsChevrons color={line.colorCode} />}
+                          {imminent && <PidsChevrons color={lineColor} />}
                           {relativeLabel
                             ? (
                                 <span className="text-2xl font-bold tabular-nums leading-tight" aria-label={relativeLabel === 'Sekarang' ? 'Keberangkatan berikutnya dalam beberapa menit' : `Keberangkatan berikutnya dalam ${relativeLabel.replace('mnt', 'menit')}`}>

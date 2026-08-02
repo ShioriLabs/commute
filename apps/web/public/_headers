@@ -22,5 +22,24 @@
 # The map's version pointer — mutable, so it must never be immutable.
 /maps/fdtj/manifest.json
   Cache-Control: public, max-age=300, must-revalidate
+# The SPA shell. `/` needs its own rule: Pages matches _headers against the
+# request path, and a navigation to the site root has path `/`, which the
+# /index.html rule does not match — that rule was inert on its own.
+#
+# These are no-cache rather than short-lived because the service worker fetches
+# navigations with a plain fetch(request). It has to: building a Request from
+# one whose mode is "navigate" downgrades the mode to "same-origin" per the
+# Fetch spec, so an init object can't be passed to force freshness. That leaves
+# the browser's HTTP cache as the only gate on shell staleness, and a stale
+# shell points at /assets/<hash> files a new deploy has already removed.
+/
+  Cache-Control: no-cache
 /index.html
-  Cache-Control: public, max-age=600, stale-while-revalidate=86400
+  Cache-Control: no-cache
+/settings/*
+  Cache-Control: no-cache
+# The worker script. Browsers already bypass the HTTP cache for the update check
+# and register() passes updateViaCache: 'none', but stating it means an update
+# check can never be answered from a stale intermediary.
+/service-worker.js
+  Cache-Control: no-cache

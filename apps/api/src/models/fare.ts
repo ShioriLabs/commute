@@ -1,14 +1,11 @@
-import type { FareSegment } from 'utils/fare-summary'
-
 export interface FareResultStation {
   id: string
   name: string
 }
 
 export interface FareResultLineRef {
-  lineCode: string
-  lineName: string
-  lineColor: string
+  /** Operator-qualified line key, e.g. `KCI:C`. */
+  line: string
   // Terminus this specific service heads toward (each interlining line forks to
   // its own terminus); null when not determinable.
   headsign: string | null
@@ -16,9 +13,8 @@ export interface FareResultLineRef {
 
 export interface FareResultRideLeg {
   type: 'RIDE'
-  lineCode: string
-  lineName: string
-  lineColor: string
+  /** Operator-qualified line key, e.g. `KCI:C`. */
+  line: string
   operator: string
   from: FareResultStation
   to: FareResultStation
@@ -49,7 +45,12 @@ export interface FareResultTransferLeg {
 
 export type FareResultLeg = FareResultRideLeg | FareResultTransferLeg
 
-export type FareResultSegment = FareSegment & { fromName: string, toName: string }
+export interface FareResultSegment {
+  operator: string
+  from: FareResultStation
+  to: FareResultStation
+  fare: number | null
+}
 
 export interface FareResult {
   from: FareResultStation

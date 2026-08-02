@@ -11,7 +11,9 @@ import {
   STATION_VS,
   STATION_FS,
   TRAIN_VS,
-  TRAIN_FS
+  TRAIN_FS,
+  JPM_VS,
+  JPM_FS
 } from './shaders'
 
 export interface Programs {
@@ -19,6 +21,7 @@ export interface Programs {
   dot: twgl.ProgramInfo
   station: twgl.ProgramInfo
   train: twgl.ProgramInfo
+  jpm: twgl.ProgramInfo
 }
 
 export function createPrograms(gl: WebGL2RenderingContext): Programs {
@@ -26,6 +29,7 @@ export function createPrograms(gl: WebGL2RenderingContext): Programs {
   const dot = twgl.createProgramInfo(gl, [DOT_VS, DOT_FS])
   const station = twgl.createProgramInfo(gl, [STATION_VS, STATION_FS])
   const train = twgl.createProgramInfo(gl, [TRAIN_VS, TRAIN_FS])
+  const jpm = twgl.createProgramInfo(gl, [JPM_VS, JPM_FS])
 
-  return { field, dot, station, train }
+  return { field, dot, station, train, jpm }
 }

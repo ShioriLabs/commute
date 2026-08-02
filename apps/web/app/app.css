@@ -3,6 +3,29 @@
 @theme {
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+
+  /* iOS-style spring: overshoots slightly past the target before settling, so
+     entrances arrive with weight instead of decelerating politely into place.
+     Shared with the data platform (apps/data-platform/src/style.css) — keep the
+     two in sync. Declared here rather than as a plain custom property so
+     Tailwind also emits an `ease-ios-spring` utility for transitions. */
+  --ease-ios-spring: cubic-bezier(0.36, 0.66, 0.04, 1);
+}
+
+/* Classic scrollbars (Windows/Linux) steal ~15px of viewport when they appear,
+   shifting the centered layout every time a route or content change crosses the
+   one-screen threshold. Reserving the gutter keeps the layout grid identical
+   whether or not the page scrolls; overlay-scrollbar platforms (Android, iOS,
+   macOS) have zero-width scrollbars, so this reserves nothing there.
+
+   The padding-right override disarms Headless UI's scroll-lock compensation:
+   when a Dialog opens it sets an inline padding-right equal to the pre-lock
+   scrollbar width, but the reserved gutter already survives overflow: hidden,
+   so that padding would shove the page 15px left behind every sheet. Author
+   !important beats inline styles, and nothing else pads the root element. */
+html {
+  scrollbar-gutter: stable;
+  padding-right: 0 !important;
 }
 
 body {
@@ -70,5 +93,382 @@ body {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* Homepage entrance: station cards and the empty state rise in as the page
+   becomes ready (delay set inline, see utils/stagger.ts). Longer and taller
+   than .search-result-enter on purpose — these are 320px+ blocks, where 8px of
+   travel is invisible. */
+.home-enter {
+  opacity: 0;
+  animation: home-enter 300ms var(--ease-ios-spring) forwards;
+}
+
+@keyframes home-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Nav rail cards, staggered in after the station feed (delay set inline).
+   Applied to a wrapper around each card, never to the card itself: the button
+   carries `scale-100 lg:hover:scale-105 transition-transform` and its face runs
+   a headlessui Transition on open/close (nav-buttons/sheet-button.tsx), so a
+   second animation writing transform to that element would fight both. */
+.home-enter-nav {
+  opacity: 0;
+  animation: home-enter-nav 300ms var(--ease-ios-spring) forwards;
+}
+
+@keyframes home-enter-nav {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Map page chrome (title pill, floating buttons), staggered in once the
+   manifest resolves. Shorter travel than .home-enter-nav: these are small
+   floating elements a few pixels tall, where 16px of rise would read as the
+   chrome sliding in from off-screen rather than settling into place.
+   The canvas underneath is deliberately not animated — it is the content, and
+   fading it would compete with tile loading. */
+.map-chrome-enter {
+  opacity: 0;
+  animation: map-chrome-enter 300ms var(--ease-ios-spring) forwards;
+}
+
+@keyframes map-chrome-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Attribution popover. Scales from its own bottom-right corner — the button
+   that opens it — so it reads as growing out of that control rather than
+   appearing beside it. */
+.map-popover-enter {
+  animation: map-popover-enter 200ms var(--ease-ios-spring) forwards;
+}
+
+@keyframes map-popover-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Content replacing a loading skeleton. Opacity only, no transform: the
+   skeleton is sized to approximate what lands here, so any movement would
+   read as the content correcting itself rather than arriving. Short, because
+   this fires when data is already in hand — a long fade would feel like a
+   second wait. */
+.content-fade {
+  animation: content-fade 180ms ease-out forwards;
+}
+
+@keyframes content-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Loading wordmark (root.tsx Layout boot splash). Letters rise in one at a
+   time, then the assembled mark breathes until the bundle lands.
+   Both animations run on separate elements — letters on the <path>s, the
+   breathe on their <g> — so neither has to wait on the other's property.
+   Every letter's inline delay includes a 250ms base (WORDMARK_REVEAL_DELAY_MS)
+   so fast loads dismiss the splash before the mark ever appears; the base
+   `opacity: 0` plus `forwards` fill keeps letters hidden through that window. */
+.wordmark-letter {
+  opacity: 0;
+  /* Without this, translateY on an SVG child resolves against the user-space
+     origin rather than the letter's own box. */
+  transform-box: fill-box;
+  /* ease-out per segment rather than --ease-ios-spring: the overshoot is
+     explicit in the keyframes below, and a spring curve on top of it would
+     compound into a second, unintended bounce. */
+  animation: wordmark-letter 300ms ease-out forwards;
+}
+
+@keyframes wordmark-letter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  /* Overshoot: the letter rises past its resting line and drops back, so it
+     arrives with weight instead of gliding to a stop. Opacity finishes early —
+     the settle should read as movement, not as a continuing fade. */
+  60% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Delayed past the last letter's landing (250ms reveal delay + 6 × 35ms
+   stagger + 300ms) so the mark is whole before it starts breathing. */
+.wordmark-breathe {
+  animation: wordmark-breathe 1.8s ease-in-out 810ms infinite;
+}
+
+@keyframes wordmark-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* Boot splash leaving (root.tsx Layout): fades over the mounting app rather
+   than vanishing in one frame. Opacity only — the content underneath is
+   already running its own entrance, and a second movement on top of the card
+   cascade would read as two competing gestures. */
+.boot-splash-leave {
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+}
+
+/* Card → map morph overlay (components/map-morph.tsx). The overlay mounts with
+   an inline transform mapping its box onto the nav card's (utils/morph.ts, the
+   same scheme as the sheet morph), which is then released so this transition
+   carries it to fullscreen. Timings come in as custom properties from the
+   component because their relationships are load-bearing (morph vs face vs
+   fade — see the constants there). Opacity is listed for the fade-out leg. */
+.map-morph-overlay {
+  transition:
+    transform var(--map-morph-ms, 250ms) var(--ease-ios-spring),
+    border-radius var(--map-morph-ms, 250ms) var(--ease-ios-spring),
+    opacity var(--map-morph-fade-ms, 200ms) ease-out;
+  will-change: transform;
+}
+
+.map-morph-fading {
+  opacity: 0;
+}
+
+/* Flat card face: holds the card's white for the first ~50ms — the window where
+   the overlay is still squashed to card size — so the paper tint arrives with
+   the expansion rather than popping in place. The sheet morph's mask trick
+   (sheet-button.tsx), same numbers. */
+.map-morph-face {
+  position: absolute;
+  inset: 0;
+  background: white;
+  opacity: 1;
+  pointer-events: none;
+  transition: opacity var(--map-morph-face-ms, 100ms) ease-out var(--map-morph-face-delay-ms, 50ms);
+}
+
+.map-morph-open .map-morph-face {
+  opacity: 0;
+}
+
+/* The map drawing itself while it loads (components/map-skeleton.tsx). Each corridor is
+   normalised to pathLength 1, so one keyframe strokes them all on at a comparable rate
+   whatever their real length, and the cascade comes from a per-path inline animationDelay
+   ranked by distance from Manggarai.
+
+   `both`, not `forwards`: with forwards a path renders fully drawn through its delay and
+   then pops to invisible the moment its animation starts.
+
+   Shares --ease-ios-spring with every other entrance in the app, so a line leaves its
+   origin quickly and decelerates into place rather than arriving at a constant rate. Safe
+   alongside the settle: updatePlaybackRate rescales the timeline, so the curve is
+   preserved over whatever progress remains instead of being flattened. */
+.map-skeleton-path {
+  /* Static, not part of the keyframes: dasharray never changes during the draw, and a
+     constant-valued animated property still pays per-frame style application on every
+     path. */
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: map-skeleton-draw var(--map-skeleton-stroke-ms, 620ms) var(--ease-ios-spring) both;
+}
+
+@keyframes map-skeleton-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Station markers, popping in as their own line's stroke reaches them (the delay is
+   computed per marker in utils/map-skeleton-order.ts). fill-box origin so the scale is
+   about the circle's own centre rather than the whole 9513x6727 SVG's. */
+.map-skeleton-station {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: map-skeleton-pop var(--map-skeleton-station-ms, 220ms) var(--ease-ios-spring) both;
+}
+
+@keyframes map-skeleton-pop {
+  from {
+    opacity: 0;
+    scale: 0.3;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+/* Deliberately slower than the overlay's own fade (--map-morph-fade-ms): the skeleton has
+   to clear before the overlay finishes, or the handoff reads as two sequential fades
+   instead of the linework dissolving into the map. */
+.map-skeleton {
+  transition: opacity var(--map-skeleton-fade-ms, 260ms) ease-out;
+}
+
+.map-skeleton-fading {
+  opacity: 0;
+}
+
+/* Every entrance class above starts at `opacity: 0` and relies on its animation
+   to reveal the element. So switching the animation off alone would leave the
+   content permanently invisible — each rule has to restore opacity and clear
+   the inline stagger delay it can no longer consume.
+   .map-ripple keeps its fade: it is tap *feedback*, and reduced motion means
+   fewer vestibular triggers, not less confirmation that a tap registered. */
+@media (prefers-reduced-motion: reduce) {
+  .search-result-enter,
+  .home-enter,
+  .home-enter-nav,
+  .content-fade,
+  .map-chrome-enter {
+    animation: none;
+    animation-delay: 0s;
+    opacity: 1;
+    transform: none;
+  }
+
+  /* Not in the group above: an instant reveal would flash the mark on fast
+     loads, where the whole point of the 250ms reveal delay is that the splash
+     dismisses before the wordmark ever appears. Only the animation name is
+     swapped — duration, easing, fill, and the inline per-letter delay (which
+     includes the base delay) carry over from the base rule, so letters still
+     wait out the blank window and then fade in without the rise. */
+  .wordmark-letter {
+    animation-name: wordmark-letter-reduced;
+  }
+
+  @keyframes wordmark-letter-reduced {
+    from {
+      opacity: 0;
+      transform: none;
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* Listed separately from the group above: this one does *not* start at
+     opacity 0 (the popover is only mounted when open), so it needs the
+     animation removed but no opacity restored. */
+  .map-popover-enter {
+    animation: none;
+    transform: none;
+  }
+
+  /* The wordmark keeps breathing: it is the only thing on screen while the
+     bundle downloads, and a motionless logo reads as a hung page. Opacity alone
+     triggers nothing vestibular — slowed and shallowed rather than removed. */
+  /* Same 810ms delay as the full-motion breathe: the reduced letter fade now
+     waits out the reveal delay too, so breathing must not start earlier. */
+  .wordmark-breathe {
+    animation: wordmark-breathe-reduced 2.4s ease-in-out 810ms infinite;
+  }
+
+  @keyframes wordmark-breathe-reduced {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.75;
+    }
+  }
+
+  /* Near-instant, but nonzero so transitionend still fires and the splash
+     unmounts through the same code path as the full fade. */
+  .boot-splash-leave {
+    transition-duration: 1ms;
+  }
+
+  /* Belt-and-braces: the morph host already refuses to start under reduced
+     motion (components/map-morph.tsx), so this only bites when the preference
+     flips mid-morph. Nonzero for the same transitionend reason as above. */
+  .map-morph-overlay {
+    transition-duration: 1ms;
+  }
+
+  .map-morph-face {
+    transition-duration: 1ms;
+    transition-delay: 0s;
+  }
+
+  /* Same belt-and-braces as the overlay above: map-morph.tsx refuses to start the draw
+     under reduced motion at all, so these only bite when the preference flips mid-draw.
+     The path rule has to restore stroke-dashoffset for the reason the entrance group
+     does opacity — the base rule starts hidden and relies on its animation to reveal. */
+  .map-skeleton-path {
+    animation: none;
+    animation-delay: 0s;
+    stroke-dashoffset: 0;
+  }
+
+  .map-skeleton-station {
+    animation: none;
+    animation-delay: 0s;
+    opacity: 1;
+    scale: 1;
+  }
+
+  .map-skeleton {
+    transition-duration: 1ms;
+  }
+
+  .map-ripple {
+    animation: map-ripple-reduced 200ms ease-out forwards;
+  }
+
+  @keyframes map-ripple-reduced {
+    from {
+      opacity: 0.7;
+    }
+    to {
+      opacity: 0;
+    }
   }
 }

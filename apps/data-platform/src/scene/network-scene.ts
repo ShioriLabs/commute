@@ -57,7 +57,7 @@ const MRT_CORRIDOR: readonly string[] = mrtCorridor()
 // thousand Float32Array writes each, once) and swapped at runtime by the
 // renderer, because a beat's subject is chosen by scroll position.
 export type HighlightId
-  = 'none' | 'cikarang' | 'mrt-lbb-bhi' | 'rasuna' | 'rute'
+  = 'none' | 'cikarang' | 'mrt-lbb-bhi' | 'rasuna' | 'rute' | 'jpm-transfer'
     | 'rail-kci' | 'rail-mrtj' | 'rail-lrtj' | 'rail-lrtjbdb'
 
 // The info-stasiun beat's subject. A lone station can't carry a beat — at
@@ -92,6 +92,21 @@ const RUTE_LEG_KRL = [
   'KCI-PSM' //   Pasar Minggu
 ] as const
 
+// The jpm beat's subject: the two rail runs the gated JPM footbridge joins.
+// Same two-runs device as the rute beat, deployed for the opposite reason:
+// KCI-SUD and LRTJBDB-DKA are 3 cells apart with NO track between them, so a
+// single run would light invented track across the gap. The runs stay separate,
+// the gap stays dark — and the dark gap is where the JPM structure itself
+// unfolds (jpm-scene.ts), a transfer that is walkable but NOT free.
+const JPM_LEG_KRL = [
+  'KCI-SUDB', // Sudirman Baru
+  'KCI-SUD' //   Sudirman          -- the paid gate; the JPM starts inside it...
+] as const
+const JPM_LEG_LRT = [
+  'LRTJBDB-DKA', // Dukuh Atas     -- ...and ends here, one level up
+  'LRTJBDB-SET' //  Setiabudi
+] as const
+
 // Every line of one operator as it appears in the baked map, collected from
 // NETWORK rather than typed out, so the cakupan beat can't drift from what is
 // actually drawn. Filters on the line's own `operator` field, NOT on an id prefix:
@@ -114,6 +129,7 @@ const HIGHLIGHT_SETS: Record<Exclude<HighlightId, 'none'>, readonly (readonly st
   'mrt-lbb-bhi': [MRT_CORRIDOR],
   'rasuna': [RASUNA_RUN],
   'rute': [RUTE_LEG_LRT, RUTE_LEG_KRL],
+  'jpm-transfer': [JPM_LEG_KRL, JPM_LEG_LRT],
   'rail-kci': railOperatorRuns('KCI'),
   'rail-mrtj': railOperatorRuns('MRTJ'),
   'rail-lrtj': railOperatorRuns('LRTJ'),

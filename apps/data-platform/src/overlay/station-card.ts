@@ -5,6 +5,7 @@
 import type { FrameContext } from '../gl/renderer'
 import type { Vec3 } from '../scene/network-scene'
 import type { StationDetail, StationTransfer } from '../data/network-types'
+import { lineCodeOf } from '../data/network-types'
 import { clamp, escapeHTML } from './html'
 
 type State
@@ -87,27 +88,29 @@ export function createStationCard(
 
     const s = state.station
     const t = state.transfers[0]
+    // Stations carry line keys; this card shows the bare code. Resolving the
+    // colour would mean fetching /operators for a panel that only lists codes.
     const lines = s.lines
-      .map(
-        l =>
-          `<span class="inline-flex items-center gap-1">`
-          + `<span class="inline-block h-1.5 w-1.5 rounded-full" style="background:${l.colorCode}"></span>`
-          + escapeHTML(l.lineCode)
-          + `</span>`
-      )
+      .map(key => `<span class="inline-flex items-center gap-1">${escapeHTML(lineCodeOf(key))}</span>`)
       .join('<span class="text-white/25"> · </span>')
 
     return (
       // Header carries the identity; the rows are the record.
       `<div class="flex items-center gap-2 bg-plate px-3 py-2 text-white">`
       + `<span class="font-mono text-[10px] uppercase tracking-wider text-white/45">${escapeHTML(s.code)}</span>`
-      + `<span class="flex-1 truncate text-[13px] font-bold">${escapeHTML(s.formattedName || s.name)}</span>`
+      + `<span class="flex-1 truncate text-[13px] font-bold">${escapeHTML(s.name)}</span>`
       + `</div>`
       + `<div class="divide-y divide-line/50">`
-      + row('Operator', escapeHTML(s.operator.code))
+      + row('Operator', escapeHTML(s.operator))
       + row('Lin', lines)
-      + row('Koordinat', `${s.latitude.toFixed(4)}, ${s.longitude.toFixed(4)}`)
-      + (t ? row('Transfer', `${escapeHTML(t.toStation.operatorName)} · ${t.distance} m`) : '')
+      + (s.latitude !== null && s.longitude !== null
+        ? row('Koordinat', `${s.latitude.toFixed(4)}, ${s.longitude.toFixed(4)}`)
+        : '')
+      + (t
+        // INTERNAL transfers name an operator by code; EXTERNAL ones carry only
+        // a free-text operator name.
+        ? row('Transfer', `${escapeHTML(t.dataType === 'INTERNAL' ? t.toStation.operator : t.toStation.operatorName)} · ${t.distanceM} m`)
+        : '')
       + `</div>`
       + amenitiesHTML(s)
     )

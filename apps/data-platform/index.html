@@ -74,12 +74,21 @@
             <img src="/logo.svg" alt="Commute Data Platform" width="431" height="137" class="h-9 w-auto sm:h-10" />
           </a>
           <!-- One link per content beat, in scroll order, so the nav doubles as
-               a table of contents for the page. Right-aligned with no trailing
-               CTA: access isn't open yet, so a button here would promise
-               something the page can't deliver (see the "Segera hadir" states).
-               Labels are single words where the beat allows it — six items only
-               stay scannable if each is read at a glance.
-               lg: not md: — six links plus the lockup overflow a 768px bar. -->
+               a table of contents for the page. Labels are single words where
+               the beat allows it — seven items only stay scannable if each is
+               read at a glance.
+
+               The trailing Docs link is set apart on purpose. Everything to its
+               left is an in-page anchor; this one LEAVES the page, and styling
+               it identically would hide that. A divider plus the accent is the
+               smallest thing that says "different kind of destination" without
+               turning the bar into a landing page.
+
+               (This slot was empty while access wasn't open, on the reasoning
+               that a CTA must not promise what the page can't deliver. The
+               reference exists now, so it can.)
+
+               lg: not md: — the links plus the lockup overflow a 768px bar. -->
           <nav class="hidden items-center gap-6 text-sm font-medium text-white/55 lg:flex">
             <a href="#jadwal" class="transition-colors hover:text-white">Jadwal</a>
             <a href="#topologi" class="transition-colors hover:text-white">Topologi</a>
@@ -88,6 +97,8 @@
             <a href="#rute" class="transition-colors hover:text-white">Rute</a>
             <a href="#cakupan" class="transition-colors hover:text-white">Cakupan</a>
             <a href="#api" class="transition-colors hover:text-white">API</a>
+            <span class="h-4 w-px bg-line" aria-hidden="true"></span>
+            <a href="/docs" class="font-semibold text-accent transition-colors hover:text-accent/80">Docs</a>
           </nav>
         </div>
       </div>
@@ -104,34 +115,64 @@
       <!-- Copy sits left; the map's dense core is framed into the open right
            half (see the hero pose in scroll/beats.ts). -->
       <div data-hero-content class="relative mx-auto w-full max-w-6xl">
+        <!-- Word by word, 35ms apart, the same cadence and curve the app's boot
+             splash uses to assemble the wordmark letter by letter. Six words
+             spell the headline in 175ms, so it reads as one mark arriving rather
+             than as text being typed out.
+
+             Each word is its own inline-block: a translateY on an inline box
+             does nothing, and wrapping whole lines instead would lose the
+             per-word cascade. The whitespace between spans is the word spacing —
+             the browser collapses it to a single space, so no &nbsp; is needed
+             and the line still wraps naturally on a narrow viewport. -->
         <h1
-          class="rise sign-shadow mb-6 max-w-2xl text-5xl font-extrabold leading-[0.98] tracking-tight sm:text-6xl lg:text-7xl"
-          style="animation-delay: 80ms"
+          class="sign-shadow mb-6 max-w-2xl text-5xl font-extrabold leading-[0.98] tracking-tight sm:text-6xl lg:text-7xl"
         >
-          Data Kereta buat
+          <span class="word inline-block" style="animation-delay: 80ms">Data</span>
+          <span class="word inline-block" style="animation-delay: 115ms">Kereta</span>
+          <span class="word inline-block" style="animation-delay: 150ms">buat</span>
           <br />
-          Developer Jakarta
+          <span class="word inline-block" style="animation-delay: 185ms">Developer</span>
+          <span class="word inline-block" style="animation-delay: 220ms">Jakarta</span>
         </h1>
+        <!-- Starts on the second headword, not after the last one. The hero is
+             one gesture, so the block below begins while the headline is still
+             assembling above it — waiting for "Jakarta" to land read as a queue
+             of separate elements taking turns.
+
+             `.word` rather than `.rise`: same overshoot as the headline, so
+             everything in the hero arrives with the same weight. -->
         <p
-          class="rise sign-shadow mb-9 max-w-lg text-lg leading-relaxed text-white/65"
-          style="animation-delay: 160ms"
+          class="word sign-shadow mb-9 max-w-lg text-lg leading-relaxed text-white/65"
+          style="animation-delay: 115ms"
         >
           Data KRL, MRT, LRT, dan TransJakarta yang udah rapi, kagak pake ribet buat di-integrate ke project kamu.
         </p>
-        <!-- Not buttons. Access isn't open, so these are STATUS, not actions: a
-             disabled-looking button still invites a click and reads as broken,
-             where a plain badge reads as a date that hasn't arrived. The one real
-             action left is the anchor to the API beat, kept as a quiet link. -->
-        <div class="rise flex flex-wrap items-center gap-4" style="animation-delay: 240ms">
-          <span
-            class="inline-flex items-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-4 py-2.5 text-sm font-semibold text-accent"
+        <!-- A real action now. This was a "segera hadir" badge for as long as
+             there was nothing to send anyone to: a disabled-looking button
+             invites a click and reads as broken, so it stayed a plain status
+             span. The reference at /docs exists, so the primary slot becomes
+             the link it was always meant to be. -->
+        <!-- One motion per button rather than one for the row: the headline
+             arrives word by word, and a single block fading in under it would
+             read as the cascade stopping short. The animation sits on each link,
+             not on the flex wrapper, so the row's layout never moves.
+
+             185/220ms puts them alongside the last two headwords rather than
+             after them — the whole hero lands inside half a second. -->
+        <div class="flex flex-wrap items-center gap-4">
+          <a
+            href="/docs"
+            class="word inline-flex items-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-4 py-2.5 text-sm font-semibold text-accent transition-colors hover:border-accent/70 hover:bg-accent/20"
+            style="animation-delay: 185ms"
           >
             <span class="h-1.5 w-1.5 rounded-full bg-accent"></span>
-            Akses API segera hadir
-          </span>
+            Baca referensi API
+          </a>
           <a
             href="#api"
-            class="text-sm font-semibold text-white/70 underline decoration-white/25 underline-offset-4 transition-colors hover:text-white hover:decoration-white/60"
+            class="word text-sm font-semibold text-white/70 underline decoration-white/25 underline-offset-4 transition-colors hover:text-white hover:decoration-white/60"
+            style="animation-delay: 220ms"
           >
             Lihat bentuk datanya
           </a>
@@ -223,7 +264,121 @@
         <div aria-hidden="true"></div>
       </div>
 
-      <!-- Beat 4: Info stasiun — camera drops to Rasuna Said. Two accents
+      <!-- Beat 4: JPM — the one beat about the TRANSFER MODEL itself. Deliberately
+           NOT another transfer/fare story: `rute` already owns mode-switching and
+           counted walking, `tarif` owns fare lookup, `stasiun` owns per-station
+           transfer lists. What only this corridor can show is that a transfer leg
+           carries a PRICE and that the price is CONDITIONAL on the preceding leg —
+           calculateTransferFare() returns null when the adjacent leg is a
+           throughOperator RIDE, because the rider never left the paid area. Same
+           edge, two answers, resolved per request. (It is also not a hub: no
+           `hubs` entry, nothing to do with Pumpunan Moda.)
+           The corridor KCI-SUD ↔ LRTJBDB-DKA is the one crossing priced by a
+           GATE, not a distance (SURCHARGED_CORRIDORS in @commute/constants). NOTE the JPM
+           itself is a PUBLIC building, not paid area: from the river's south
+           bank you walk in and reach the LRT for free. What is gated is the
+           CROSSING — coming from the north, the only way over the river runs
+           through Sudirman's paid area, so the same destination costs a tap or
+           nothing depending which bank you start on. The flat map cannot draw
+           why, so this is the one beat that leaves it — the corridor's own dots
+           unfold into the structure (scene/jpm-scene.ts) as the reader scrolls.
+           Gate accent = KCI, whose tap it is. -->
+      <!-- The page's one TRAVELLING beat: the camera tracks along the span from
+           the Sudirman end to the LRT end while the reader scrolls, so the
+           crossing is something you move across rather than look at. That needs
+           two anchors, not one — the director interpolates between consecutive
+           beats, so `jpm` (SUD end) and `jpm-dka` (LRT end) sit at the section's
+           two halves and the dolly falls out of the existing interpolation.
+           md:min-h-[200vh] is what gives those anchors room to separate; at one
+           viewport they would collapse onto nearly the same scroll position and
+           the sweep would happen in a few pixels. Mobile keeps min-h-screen: the
+           copy stacks over the map band there, so a long traverse buys nothing. -->
+      <!-- ONE grid spanning the whole traverse. The left column holds the copy,
+           stuck to the viewport for the duration; the right column stacks the
+           two scroll anchors the camera travels between. Keeping both anchors
+           in the same column as siblings is what makes their centres — and so
+           their director anchor points — a full viewport apart. Earlier layouts
+           put the second anchor after the grid (which ended the sticky plate's
+           container exactly where the second half began) and then inside the
+           right column beside the dock (which collapsed the two anchors to
+           ~200px apart and left no room to dolly). -->
+      <!-- md:pt-32 md:pb-0, not the shared py-32: the top padding is the gap
+           from the tarif beat, which without it butts its copy plate straight
+           against this one's headline (both are on screen at once at the
+           boundary). The BOTTOM stays 0 because the two full-height anchor
+           cells below already carry the section's height, and padding there
+           would push the DKA anchor's centre off the viewport it is meant to
+           mark. -->
+      <!-- `content-start` on mobile, not the shared `items-center`: stacked, the
+           two rows are the copy and the docked leg, and centring them inside a
+           min-h-screen grid pushed a screenful of dead space between the claim
+           and its evidence. Desktop is unaffected — it uses md:items-start. -->
+      <div id="jpm" class="relative z-10 mx-auto grid min-h-screen max-w-5xl content-start items-center gap-12 px-6 py-32 md:grid-cols-2 md:content-normal md:items-start md:pb-0 md:pt-32">
+        <!-- Sticky offset is measured, not eyeballed: the plate is ~22rem tall,
+             so centring it means (50vh - 11rem). It is floored at 6rem to clear
+             the sticky nav lockup, which the plate otherwise slides under near
+             the end of the traverse. -->
+        <div class="sign relative max-w-md p-6 md:sticky md:top-[max(6rem,calc(50vh-11rem))] md:justify-self-start" style="--sign-accent: var(--line-KCI-C)">
+          <!-- The MOBILE anchor for this beat, and mobile only (`md:hidden`, so
+               liveBeats() drops it on desktop where the sweep cells take over).
+               `absolute inset-0` makes it span the plate exactly, so its centre
+               IS the plate's centre: the director anchors on centres, and this
+               beat has to fire where its copy is READ. It previously sat on the
+               dock cell, whose centre is 752px below the plate — so the JPM copy
+               was on screen while the map still drew tarif's fare tag. It cannot
+               be the plate element itself either, because on desktop that is
+               position:sticky and its rect follows the viewport. -->
+          <div data-beat="jpm" aria-hidden="true" class="pointer-events-none absolute inset-0 md:hidden"></div>
+          <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Ada Transfer yang Punya Tarif</h2>
+          <p class="leading-relaxed text-white/60">
+            Di data kita, transfer nggak cuma jarak jalan kaki. Nyebrang JPM Dukuh Atas lewat Stasiun
+            Sudirman itu salah satu koridor yang harganya nempel di transfernya sendiri, bukan di
+            perjalanannya. Dan angkanya nggak tetap: kalau kamu baru turun dari KRL, kamu belum keluar
+            gate, jadi gratis. Kalau kamu cuma numpang lewat, kena Rp1 pakai kartu atau Rp3.000 pakai
+            QRIS Tap. Koridor yang sama, harganya beda, tergantung langkah kamu sebelumnya.
+          </p>
+          <!-- The corridor's shape and rule, not live figures: the surcharge is
+               a published tariff that changes on the order of years, and its
+               source of truth is SURCHARGED_CORRIDORS, not an endpoint.
+               Deliberately shorter than the other beats' strips: the leg panel
+               stacked above already shows `fare` and `corridorLabel` as real
+               response keys, so repeating them here would say the same thing
+               twice in one column. What is left is what the panel does NOT
+               carry — the conditional, which is a rule rather than a field.
+               With no WebGL2 the panel never mounts, so this keeps the beat's
+               claim evidenced on its own. -->
+          <dl class="sign-static mt-5 hidden border-t border-line/70 pt-4 font-mono text-[11px]">
+            <dt class="text-white/35">Koridor</dt>
+            <dd class="text-white/75">KCI-SUD ↔ LRTJBDB-DKA</dd>
+            <dt class="text-white/35">Habis naik KRL</dt>
+            <dd class="text-white/75">tanpa fare</dd>
+            <dt class="text-white/35">Cuma lewat</dt>
+            <dd class="text-white/75">fare: 1 / 3000 (QRIS Tap)</dd>
+          </dl>
+        </div>
+        <!-- Right half intentionally open: the structure unfolds here, with the
+             /fares leg floating over the middle of its span
+             (overlay/jpm-transfer.ts). Below md: there is no open column, so
+             the leg docks into this slot as ordinary stacked content — same
+             arrangement as the api beat. On desktop this column also carries
+             the sweep's far anchor below, stacked a full viewport down so the
+             camera has room to travel. -->
+        <!-- The desktop sweep's near end, and the mobile dock for the leg panel.
+             `data-beat="jpm-sud"` is md:-only via the marker pattern below: as a
+             MOBILE anchor its centre sits 752px under the copy, which is what
+             desynced the beat from its own plate. Keeping the anchor on a child
+             rather than adding a fourth grid cell matters — a two-column grid
+             auto-placed an extra sibling BESIDE this one, giving both sweep ends
+             the same centre and collapsing the dolly to zero travel. -->
+        <div data-jpm-dock class="relative md:h-screen">
+          <div data-beat="jpm-sud" aria-hidden="true" class="pointer-events-none absolute inset-0 hidden md:block"></div>
+        </div>
+        <!-- The sweep's far end: a scroll anchor for the DKA-end pose and
+             nothing else, which is why it is aria-hidden and carries no copy. -->
+        <div data-beat="jpm-dka" aria-hidden="true" class="pointer-events-none hidden md:block md:h-screen"></div>
+      </div>
+
+      <!-- Beat 5: Info stasiun — camera drops to Rasuna Said. Two accents
            because two lines share the track through it (Bekasi + Cibubur);
            that's a fact about the station, not decoration. -->
       <div id="stasiun" data-beat="stasiun" class="relative z-10 mx-auto grid min-h-screen max-w-5xl items-center gap-12 px-6 py-32 md:grid-cols-2">
@@ -253,7 +408,7 @@
         </div>
       </div>
 
-      <!-- Beat 5: Rute — the router draws its own answer. The map lights the two
+      <!-- Beat 6: Rute — the router draws its own answer. The map lights the two
            rides of Pancoran → Pasar Minggu as SEPARATE runs (network-scene.ts),
            and the journey strip (overlay/route-strip.ts) carries the leg-by-leg
            breakdown plus the 600 m walk between Cikoko and Cawang.
@@ -290,10 +445,7 @@
         <div data-rute-dock></div>
       </div>
 
-      <!-- Beat 6: API Terbuka — the response panel is anchored to Rasuna Said's
-           roundel (overlay/api-panel.ts), so the station the previous beat just
-           visited as a record now appears as the raw JSON, on the same dot. -->
-      <!-- Beat 6: Cakupan — the camera backs out to the whole network and lights
+      <!-- Beat 7: Cakupan — the camera backs out to the whole network and lights
            each rail operator's lines in turn (roster in overlay/coverage-panel.ts,
            cycling driven by scroll position). Brand accent, not a line colour:
            like the api beat, this one is about the platform, not one operator.
@@ -316,7 +468,7 @@
         <div data-cakupan-dock class="md:hidden"></div>
       </div>
 
-      <!-- Beat 7: API Terbuka — the response panel is anchored to Rasuna Said's
+      <!-- Beat 8: API Terbuka — the response panel is anchored to Rasuna Said's
            roundel (overlay/api-panel.ts). Last content beat on purpose: it is the
            one carrying the CTA, and after the whole-network pull-back above it
            the camera diving back to a single dot reads as the payoff. -->
@@ -326,7 +478,7 @@
         <div class="sign max-w-md p-6 md:justify-self-start">
           <h2 class="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">Satu Skema Buat Seluruh Jaringan</h2>
           <p class="mb-6 leading-relaxed text-white/55">
-            Data model yang dipake aplikasi Commute, kita buka apa adanya. Ini yang bakal jadi API publiknya.
+            Data model yang dipake aplikasi Commute, kita buka apa adanya.
           </p>
           <ul class="mb-8 flex flex-col gap-3.5">
             <li class="flex gap-3 text-sm leading-relaxed text-white/80">
@@ -335,28 +487,31 @@
             </li>
             <li class="flex gap-3 text-sm leading-relaxed text-white/80">
               <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent"></span>
-              Filter per operator, lin, stasiun, atau zona tarif
+              Endpoint sendiri buat tiap operator, lin, dan stasiun
             </li>
             <li class="flex gap-3 text-sm leading-relaxed text-white/80">
               <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent"></span>
-              Pagination pake cursor, aman buat dataset gede
+              Ada openapi.json, tinggal generate client-nya sendiri
             </li>
             <li class="flex gap-3 text-sm leading-relaxed text-white/80">
               <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent"></span>
               ID stasiun konsisten lintas operator, gak perlu mapping sendiri
             </li>
           </ul>
-          <!-- Status, not a signup: the same reasoning as the hero badge. The
-               second line carries the honest detail a button would have hidden. -->
+          <!-- Was a "segera hadir" status with an honest caveat underneath. Both
+               are obsolete: the endpoints are documented and the reference is
+               live, so this is a link and the second line says what is actually
+               behind it. -->
           <div class="flex flex-col gap-2">
-            <span
-              class="inline-flex w-fit items-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-4 py-2.5 text-sm font-semibold text-accent"
+            <a
+              href="/docs"
+              class="inline-flex w-fit items-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-4 py-2.5 text-sm font-semibold text-accent transition-colors hover:border-accent/70 hover:bg-accent/20"
             >
               <span class="h-1.5 w-1.5 rounded-full bg-accent"></span>
-              Segera hadir
-            </span>
+              Baca referensi API
+            </a>
             <p class="text-xs leading-relaxed text-white/40">
-              Endpoint-nya masih kita rapihin. Skema di samping udah jalan di aplikasi Commute.
+              12 endpoint, lengkap sama contoh response dan bentuk datanya. Datanya ODbL-1.0.
             </p>
           </div>
         </div>
@@ -374,6 +529,10 @@
          forming the wordmark light up (scene/network-scene.ts + FIELD_FS).
          Nothing here but the attribution, flush on the grid — no panel, no
          border, no backdrop. The header keeps the only nav the page needs. -->
+    <!-- Exactly one viewport. The footer draws the map with the FULL-viewport
+         pose (see `footer` in scroll/beats.ts), so the wordmark is centred on the
+         SCREEN, not on this box — any height beyond 100vh opens bare ink between
+         the mark and the copyright. -->
     <section data-beat="footer" class="relative z-10 flex min-h-screen items-end justify-center px-6 pb-10">
       <p class="font-mono text-[11px] text-white/30">
         © 2026 Commute Data Platform · Dibuat oleh Shiori Labs

@@ -1,8 +1,9 @@
-import type { Line } from 'models/line'
-import type { Searchable } from 'models/searchable'
+import type { Line } from '@commute/schemas'
+import type { Searchable } from '@commute/schemas'
 import { memo, useMemo, type MouseEvent } from 'react'
 import { Link } from 'react-router'
 import { getForegroundColor } from 'utils/colors'
+import { LIST_STAGGER, staggerDelay } from 'utils/stagger'
 import HighlightMatch from '~/components/highlight-match'
 import LineRoundel from '~/components/line-roundel'
 
@@ -16,10 +17,6 @@ interface Props {
   index?: number
 }
 
-// Cap the entrance stagger so long lists don't tail off forever (rows sit at
-// opacity 0 until their delay elapses). Mirrors the fare picker.
-const STAGGER_MAX_INDEX = 12
-
 // Memoized: rendered from the deferred filter pass, so the urgent keystroke
 // render must bail out here — otherwise every result re-renders per keystroke
 // and blocks the input.
@@ -31,8 +28,10 @@ export default memo(function SearchableItem({ searchable, onClick, query, index 
     )
   }, [searchable.data])
 
+  // Unlike the fare picker, every row animates — this list is short enough that
+  // rows past the cap sharing the maximum delay reads fine.
   return (
-    <li className="search-result-enter" style={{ animationDelay: `${Math.min(index, STAGGER_MAX_INDEX) * 30}ms` }}>
+    <li className="search-result-enter" style={{ animationDelay: staggerDelay(index, LIST_STAGGER) }}>
       <Link
         to={searchable.to}
         className="px-8 py-4 flex flex-col gap-1 min-h-24 text-lg"
@@ -56,8 +55,8 @@ export default memo(function SearchableItem({ searchable, onClick, query, index 
               <ul className="flex flex-row gap-1 flex-wrap">
                 {(searchable as Searchable<Line[]>).body!.map(line => (
                   <li key={line.lineCode}>
-                    {/* STATION `to` is /stations/{operator}/{code}; drives TJ roundel style. */}
-                    <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={searchable.type === 'STATION' ? searchable.to.split('/')[2] : undefined} />
+                    {/* Drives TJ roundel style. Absent on hubs, which span operators. */}
+                    <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={searchable.operator} />
                     <span className="sr-only">{line.name}</span>
                   </li>
                 ))}

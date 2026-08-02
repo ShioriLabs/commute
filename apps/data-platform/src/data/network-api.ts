@@ -6,7 +6,7 @@
 // Payloads here are static reference data, so the TTL is generous — re-entering
 // a beat on the same visit never refetches.
 import { API_BASE_URL } from '../env'
-import type { ApiEnvelope } from './schedules-types'
+import type { APIEnvelope } from './schedules-types'
 import type { FareResult, OperatorSummary, StationDetail, StationTransfer } from './network-types'
 
 const TTL_MS = 5 * 60_000
@@ -25,7 +25,7 @@ function getJSON<T>(path: string): Promise<T> {
   const req = fetch(url, { headers: { accept: 'application/json' } })
     .then(async (res) => {
       if (!res.ok) throw new Error(`${path} HTTP ${res.status}`)
-      const body = (await res.json()) as ApiEnvelope<T>
+      const body = (await res.json()) as APIEnvelope<T>
       if (body.status !== 200 || body.data === undefined) {
         throw new Error(body.error?.message ?? `${path} unavailable`)
       }

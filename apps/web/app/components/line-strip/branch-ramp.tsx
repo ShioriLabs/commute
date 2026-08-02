@@ -1,5 +1,5 @@
 import { ArrowBendDownRightIcon } from '@phosphor-icons/react'
-import type { LineDetailSegment } from 'models/line'
+import type { LineDetailSegment } from '@commute/schemas'
 import { getTintFromColor } from 'utils/colors'
 import { GUTTER_CLASS, RAIL_CENTER_PX, RAIL_WIDTH_PX } from './station-row'
 

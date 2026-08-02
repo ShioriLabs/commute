@@ -71,6 +71,8 @@ uniform mat4 u_viewProj;
 uniform vec2 u_proj;
 uniform float u_progress;     // 0..1 draw-in
 uniform float u_highlightMix; // 0..1 topology emphasis
+uniform float u_muteMix;      // 0..1 — the jpm beat greys the whole map so
+                              // the structure is the only saturated thing
 out vec2 v_quad;
 out vec3 v_color;
 out float v_alpha;
@@ -80,8 +82,9 @@ void main() {
   // Highlight: dim non-highlighted dots, brighten highlighted ones.
   float dim = mix(1.0, mix(0.3, 1.0, a_isHighlight), u_highlightMix);
   float bright = mix(1.0, mix(1.0, 1.4, a_isHighlight), u_highlightMix);
-  v_color = a_color * bright;
-  v_alpha = 0.95 * reveal * dim;
+  float lum = dot(a_color, vec3(0.299, 0.587, 0.114));
+  v_color = mix(a_color * bright, vec3(lum) * 0.55, u_muteMix);
+  v_alpha = 0.95 * reveal * dim * mix(1.0, 0.8, u_muteMix);
 
   vec4 clip = u_viewProj * vec4(a_offset, 1.0);
   // Highlighted dots swell slightly under emphasis.
@@ -178,14 +181,75 @@ export const TRAIN_FS = /* glsl */ `#version 300 es
 precision highp float;
 in vec2 v_quad;
 in vec3 v_color;
+uniform float u_fade; // 1 normally; ramps to 0 while the jpm beat holds
 out vec4 outColor;
 void main() {
   float d = length(v_quad);
   // Solid core (inner ~0.43 of the padded quad) + soft glow falloff outside.
   float core = 1.0 - smoothstep(0.40, 0.46, d);
   float glow = exp(-d * 3.2) * 0.3;
-  float a = clamp(core + glow, 0.0, 1.0);
+  float a = clamp(core + glow, 0.0, 1.0) * u_fade;
   if (a <= 0.002) discard;
+  outColor = vec4(v_color * a, a);
+}
+`
+
+// --- JPM Dukuh Atas: the gated-transfer beat's structure. Each instance
+// carries TWO positions and the morph lerps between them: a_flat is the dot's
+// seat on the octilinear lattice, a_solid its place in the 3D structure, so the
+// map's own corridor unfolds into the building as the reader scrolls.
+//
+// Three ramps hang off the one uniform:
+//   position  — smoothstepped mix, staggered by a_level so the structure rises
+//               street-first instead of translating as one rigid body;
+//   alpha     — 0 until the unfold has begun (the flat seeds sit in the
+//               corridor's dark gap between two highlight runs; at morph 0 this
+//               pass must leave the map pixel-identical to a neighbouring
+//               corridor, so it draws nothing);
+//   colour    — desaturates toward the map's neutral dot grey at low morph, so
+//               the fade-in doesn't flash operator colours the flat map never
+//               showed.
+export const JPM_VS = /* glsl */ `#version 300 es
+in vec2 a_quad;
+in vec3 a_flat;
+in vec3 a_solid;
+in vec3 a_color;
+in float a_radius;
+in float a_level;      // 0..1 height rank of the SOLID position
+uniform mat4 u_viewProj;
+uniform vec2 u_proj;
+uniform float u_morph; // 0..1, eased CPU-side toward the scroll-driven target
+out vec2 v_quad;
+out vec3 v_color;
+out float v_alpha;
+void main() {
+  // Stagger the unfold by level: low parts move first, the LRT deck last.
+  float e = smoothstep(0.0, 1.0, clamp(u_morph * 1.25 - a_level * 0.25, 0.0, 1.0));
+  vec3 p = mix(a_flat, a_solid, e);
+
+  float aIn = smoothstep(0.0, 0.15, u_morph);
+  float sat = smoothstep(0.10, 0.60, u_morph);
+  v_color = mix(vec3(0.290, 0.318, 0.376), a_color, sat);
+  v_alpha = 0.95 * aIn;
+
+  vec4 clip = u_viewProj * vec4(p, 1.0);
+  clip.xy += a_quad * a_radius * u_proj;
+  v_quad = a_quad;
+  gl_Position = clip;
+}
+`
+
+export const JPM_FS = /* glsl */ `#version 300 es
+precision highp float;
+in vec2 v_quad;
+in vec3 v_color;
+in float v_alpha;
+out vec4 outColor;
+void main() {
+  if (v_alpha <= 0.001) discard;
+  float d = length(v_quad);
+  float a = (1.0 - smoothstep(0.8, 1.0, d)) * v_alpha;
+  if (a <= 0.001) discard;
   outColor = vec4(v_color * a, a);
 }
 `

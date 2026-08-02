@@ -4,6 +4,7 @@
 import * as twgl from 'twgl.js'
 import type { Programs } from './programs'
 import type { NetworkScene } from '../scene/network-scene'
+import type { JpmScene } from '../scene/jpm-scene'
 
 export interface InstancedPass {
   vao: twgl.VertexArrayInfo
@@ -124,6 +125,29 @@ export function buildStationPass(
       a_radius: { numComponents: 1, data: scene.stations.radii, divisor: 1 }
     },
     scene.stations.count
+  )
+}
+
+// JPM structure: fully static buffers — both morph endpoints ship per instance
+// and the unfold is a uniform, so like a_isLogo there is no re-upload path.
+// Instances are pre-sorted back-to-front for the beat's authored pose
+// (jpm-scene.ts); array order IS the painter's order.
+export function buildJpmPass(
+  gl: WebGL2RenderingContext,
+  programs: Programs,
+  jpm: JpmScene
+): InstancedPass {
+  return buildInstanced(
+    gl,
+    programs.jpm,
+    {
+      a_flat: { numComponents: 3, data: jpm.flat, divisor: 1 },
+      a_solid: { numComponents: 3, data: jpm.solid, divisor: 1 },
+      a_color: { numComponents: 3, data: jpm.colors, divisor: 1 },
+      a_radius: { numComponents: 1, data: jpm.radii, divisor: 1 },
+      a_level: { numComponents: 1, data: jpm.levels, divisor: 1 }
+    },
+    jpm.count
   )
 }
 

@@ -3,7 +3,8 @@ import { Link } from 'react-router'
 import BottomSheet from './bottom-sheet'
 import LineRoundel from './line-roundel'
 import StationContent, { useStationHeader } from './station-content'
-import { sortLinesForDisplay } from '~/utils/lines'
+import { sortLineKeysForDisplay } from '~/utils/lines'
+import { useLines } from '~/hooks/use-lines'
 
 interface StationSheetProps {
   operator: string | null
@@ -37,6 +38,7 @@ export default function StationSheet({ operator, code, onClose, onDismissStart }
 }
 
 function SheetHeader({ operator, code, onClose }: { operator: string, code: string, onClose: () => void }) {
+  const { lines: resolveLines } = useLines()
   const { header } = useStationHeader(operator, code)
   return (
     <div className="flex items-center justify-between gap-3">
@@ -49,7 +51,7 @@ function SheetHeader({ operator, code, onClose }: { operator: string, code: stri
               <>
                 {header.lines.length > 0 && (
                   <ul className="flex flex-row gap-1 flex-wrap">
-                    {sortLinesForDisplay(header.lines, operator ?? undefined).map(line => (
+                    {resolveLines(sortLineKeysForDisplay(header.lines, operator ?? undefined)).map(line => (
                       <li key={line.lineCode}>
                         <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={operator ?? undefined} />
                         <span className="sr-only">{line.name}</span>
@@ -57,7 +59,7 @@ function SheetHeader({ operator, code, onClose }: { operator: string, code: stri
                     ))}
                   </ul>
                 )}
-                <h2 className="font-bold text-xl truncate">{header.formattedName}</h2>
+                <h2 className="font-bold text-xl truncate">{header.name}</h2>
               </>
             )}
       </div>

@@ -10,17 +10,18 @@ export default function SearchStationsButton({ className }: Props) {
   return (
     <SheetButton
       url="/search"
-      ariaLabel="Cari stasiun"
-      title="Temukan"
+      ariaLabel="Cari stasiun, rute, dan tarif"
+      title="Mau ke mana?"
       subtitle={(
         <>
-          Stasiun
+          Cari stasiun
           <br />
-          & Lainnya
+          & rute
         </>
       )}
-      icon={<MagnifyingGlassIcon weight="bold" className="w-12 h-12 text-slate-700" />}
+      icon={<MagnifyingGlassIcon weight="bold" className="w-12 h-12 text-white" />}
       className={className}
+      accent
     >
       <SearchSheet />
     </SheetButton>

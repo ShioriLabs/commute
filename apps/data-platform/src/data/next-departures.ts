@@ -4,6 +4,7 @@
 // cross-midnight Date juggling in apps/web/utils/schedules.ts.
 import { jakartaMinutesSinceMidnight } from './time-jakarta'
 import type { CompactLineGroupedTimetable } from './schedules-types'
+import { lineCodeOf, type LineDictionary } from './network-types'
 
 const MINUTES_PER_DAY = 24 * 60
 // Departures within this window render as a relative countdown ("Sekarang" /
@@ -46,9 +47,15 @@ function forwardDelta(nowMin: number, schedMin: number): number {
   return ((schedMin - nowMin) % MINUTES_PER_DAY + MINUTES_PER_DAY) % MINUTES_PER_DAY
 }
 
+/*
+ * `lines` resolves the timetable's operator-qualified line keys (`KCI:B`) to a
+ * name and colour. Passed in rather than fetched here so this stays pure — see
+ * buildLineDictionary in network-types.
+ */
 export function nextDepartures(
   timetable: CompactLineGroupedTimetable,
   count: number,
+  lines: LineDictionary,
   nowMin: number = jakartaMinutesSinceMidnight()
 ): DepartureRow[] {
   const rows: DepartureRow[] = []
@@ -58,10 +65,11 @@ export function nextDepartures(
       for (const dest of dir.destinations) {
         for (const [, minute] of dest.schedules) {
           const minutesUntil = forwardDelta(nowMin, minute)
+          const resolved = lines.get(line.line)
           rows.push({
-            lineName: line.name,
-            lineCode: line.lineCode,
-            color: line.colorCode,
+            lineName: resolved?.name ?? lineCodeOf(line.line),
+            lineCode: lineCodeOf(line.line),
+            color: resolved?.colorCode ?? '#94a3b8',
             boundFor: dest.boundFor,
             via: dest.via,
             platformCode: dir.platformCode,

@@ -19,10 +19,10 @@ export default function TimetablePage({ params }: Route.ComponentProps) {
 
   useEffect(() => {
     if (header.isLoading) return
-    if (header.formattedName) {
-      document.title = `${header.formattedName} - Jadwal Lengkap - Commute`
+    if (header.name) {
+      document.title = `${header.name} - Jadwal Lengkap - Commute`
     }
-  }, [header.isLoading, header.formattedName])
+  }, [header.isLoading, header.name])
 
   const handleBackButton = useCallback(() => {
     if (navigationType === 'POP') {
@@ -43,7 +43,7 @@ export default function TimetablePage({ params }: Route.ComponentProps) {
                 )
               : (
                   <>
-                    <h1 className="font-bold text-xl">{header.formattedName}</h1>
+                    <h1 className="font-bold text-xl">{header.name}</h1>
                     <p className="text-sm text-gray-600">Jadwal Lengkap</p>
                   </>
                 )}

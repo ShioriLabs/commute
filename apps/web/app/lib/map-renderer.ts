@@ -133,6 +133,11 @@ export interface Renderer {
   // Drop every tile's pixels while keeping the renderer usable. Tiles re-request
   // themselves on the next draw and the preview underlay covers the gap.
   releaseTiles(): void
+  // True once the preview underlay can be drawn — the earliest frame that
+  // contains the map rather than a blank canvas. The card→map morph overlay
+  // (components/map-morph.tsx) holds until then. Optional so test doubles and
+  // future renderers don't have to care.
+  isPreviewReady?(): boolean
   tileStats(): TileStats
   debug?: RendererDebug
   dispose(): void

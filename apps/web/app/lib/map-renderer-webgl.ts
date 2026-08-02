@@ -541,11 +541,14 @@ export function createWebGLRenderer(
     // Zoomed far enough out that the preview carries as much detail as the tiles
     // would: draw it alone and load no tiles at all.
     //
-    // Fit-to-screen on a phone puts the map at ~0.038 scale, where a tier-1 tile
-    // is minified ~26x — about 1.4k useful pixels out of a 1M-pixel texture, and
-    // the full grid resident costs ~171 MB to draw something the 1.7 MB preview
-    // already covers. That case is now free, and it was the single largest
-    // remaining allocation once the grid got finer.
+    // NOTE: unreachable on the FDTJ map as currently configured. map.tsx derives
+    // minScale with max(viewport/map) — cover-fit — so the map never shrinks to
+    // fit the screen; at minimum zoom it still spans ~3400 device px on a phone,
+    // against a 1280px preview. Satisfying this branch would need a ~3400px
+    // preview costing ~32 MB of texture, which is worse than the ~20 MiB of
+    // tier-0.5 tiles it would replace. Kept because it costs one comparison per
+    // frame and becomes correct the moment the map uses contain-fit; do not
+    // widen the preview to try to activate it without redoing that arithmetic.
     const previewOnly = manifest.preview !== undefined
       && transform.scale * dpr * mapW <= manifest.preview.w * PREVIEW_SUFFICIENCY
     if (previewOnly) {
@@ -771,6 +774,7 @@ export function createWebGLRenderer(
     setDebugHitboxes,
     isContextLost: () => gl.isContextLost(),
     releaseTiles,
+    isPreviewReady: () => previewTexture !== null,
     tileStats,
     debug: loseCtxExt
       ? {

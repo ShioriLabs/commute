@@ -7,6 +7,7 @@
 import type { FrameContext } from '../gl/renderer'
 import type { Vec3 } from '../scene/network-scene'
 import type { FareResult, FareLeg } from '../data/network-types'
+import { lineCodeOf } from '../data/network-types'
 import { clamp, escapeHTML } from './html'
 
 type State
@@ -77,11 +78,11 @@ function rideHTML(leg: Extract<FareLeg, { type: 'RIDE' }>): string {
   const stops = leg.stationCount > 0 ? `${leg.stationCount} stasiun` : ''
   return (
     `<li class="flex gap-2.5">`
-    + `<span class="mt-1 h-2 w-2 shrink-0 rounded-full" style="background:${escapeHTML(leg.lineColor)}"></span>`
+    + `<span class="mt-1 h-2 w-2 shrink-0 rounded-full bg-white/40"></span>`
     + `<span class="min-w-0">`
     + `<span class="block text-[12px] font-semibold leading-tight text-white/90">${escapeHTML(shortName(leg.from.name))} <span class="text-white/30">&rarr;</span> ${escapeHTML(shortName(leg.to.name))}</span>`
     + `<span class="block font-mono text-[10px] uppercase tracking-wider text-white/45">`
-    + `${escapeHTML(leg.lineName)}${stops ? ` &middot; ${stops}` : ''}`
+    + `${escapeHTML(lineCodeOf(leg.line))}${stops ? ` &middot; ${stops}` : ''}`
     + `</span>`
     + `</span>`
     + `</li>`
@@ -179,7 +180,7 @@ export function createRouteStrip(
       + `</p>`
       + `<ul class="mb-3 flex flex-col gap-2.5">${legs}</ul>`
       + `<div class="flex items-baseline gap-2 border-t border-line/70 pt-2.5">`
-      + `<span class="text-[20px] font-extrabold leading-none tracking-tight text-white">${rupiah(r.totalFare)}</span>`
+      + `<span class="text-[20px] font-extrabold leading-none tracking-tight text-white">${r.totalFare === null ? '&mdash;' : rupiah(r.totalFare)}</span>`
       + `<span class="font-mono text-[10px] uppercase tracking-wider text-white/45">`
       + `${distance(r.totalDistanceM)} &middot; ${r.transferCount} transfer`
       + `</span>`

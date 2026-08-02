@@ -4,7 +4,7 @@
 // payload is the FULL static daily timetable — "next N" is computed client-side
 // against Jakarta time, so there's no per-request freshness concern.
 import { API_BASE_URL } from '../env'
-import type { ApiEnvelope, CompactLineGroupedTimetable } from './schedules-types'
+import type { APIEnvelope, CompactLineGroupedTimetable } from './schedules-types'
 
 // Manggarai. Operator + station codes are UPPERCASE in the path.
 const OPERATOR = 'KCI'
@@ -28,7 +28,7 @@ export function fetchManggaraiDepartures(): Promise<CompactLineGroupedTimetable>
   inflight = fetch(url, { headers: { accept: 'application/json' } })
     .then(async (res) => {
       if (!res.ok) throw new Error(`departures HTTP ${res.status}`)
-      const body = (await res.json()) as ApiEnvelope<CompactLineGroupedTimetable>
+      const body = (await res.json()) as APIEnvelope<CompactLineGroupedTimetable>
       if (body.status !== 200 || !body.data) {
         throw new Error(body.error?.message ?? 'departures unavailable')
       }

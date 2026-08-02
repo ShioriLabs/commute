@@ -1,0 +1,23 @@
+{
+  // Pages Functions run on the Workers runtime, not in a browser: they need
+  // HTMLRewriter and PagesFunction rather than DOM, which is why `functions` is
+  // excluded from the main tsconfig instead of just being folded into it.
+  //
+  // Without this project the directory went unchecked entirely — and a reshape
+  // silently left _middleware.ts reading fields that no longer existed. Run via
+  // `pnpm typecheck` alongside the app.
+  "include": ["functions/**/*.ts"],
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["@cloudflare/workers-types"],
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "esModuleInterop": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true
+  }
+}

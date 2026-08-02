@@ -1,0 +1,20 @@
+{
+  "name": "@commute/schemas",
+  "version": "1.0.0",
+  "description": "Valibot schemas for the Commute API's response shapes, shared by the API and the web app.",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "test:live": "vitest run --mode live"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@commute/constants": "workspace:../constants",
+    "valibot": "^1.4.2"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.9"
+  }
+}

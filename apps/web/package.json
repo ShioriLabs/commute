@@ -8,15 +8,17 @@
     "dev": "react-router dev",
     "test": "vitest run",
     "start": "react-router-serve ./build/server/index.js",
-    "typecheck": "react-router typegen && tsc",
+    "typecheck": "react-router typegen && tsc && tsc -p tsconfig.functions.json",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
     "build:map-tiles": "tsx scripts/build-map-tiles.ts",
+    "build:map-skeleton": "tsx scripts/build-map-skeleton.ts",
     "build:og": "tsx scripts/build-og-images.ts"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.6.0",
     "@commute/constants": "workspace:../constants",
+    "@commute/schemas": "workspace:../schemas",
     "@headlessui/react": "^2.2.4",
     "@phosphor-icons/react": "^2.1.10",
     "@react-router/node": "^7.6.2",

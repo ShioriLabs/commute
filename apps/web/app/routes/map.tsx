@@ -3,11 +3,13 @@ import { Link, useNavigate, useNavigationType, useSearchParams } from 'react-rou
 import { XIcon, InfoIcon, CornersInIcon } from '@phosphor-icons/react'
 import useSWR from 'swr'
 import type { StandardResponse } from '@schema/response'
-import type { Hub } from 'models/hub'
-import type { Station } from 'models/stations'
+import type { Hub } from '@commute/schemas'
+import type { Station } from '@commute/schemas'
 import { fetcher } from 'utils/fetcher'
+import { useLines } from '~/hooks/use-lines'
 import { hexToRgb01 } from 'utils/colors'
 import { haptic } from 'utils/haptics'
+import { staggerDelay, type StaggerOptions } from 'utils/stagger'
 import {
   createRenderer,
   hitTest,
@@ -39,12 +41,20 @@ import {
 import { isMapGlDebugEnabled } from '../hooks/secret-features'
 import StationSheet from '../components/station-sheet'
 import HubSheet from '../components/hub-sheet'
+import { MapPreviewBackdrop, useMapMorph } from '../components/map-morph'
+import { prefetchMapSkeleton } from '../components/map-skeleton'
 import { PEEK_FRACTION } from '../components/bottom-sheet'
 // Imported as a URL (not as data) so Vite content-hashes it into /assets/. The
 // file deliberately lives outside public/: assets under public/ are copied
 // verbatim with stable names, and a stable URL cannot be cached correctly for a
 // file that changes every time a tap target is edited. See docs/fdtj-map-points.md.
 import pointsUrl from '../data/points.json?url'
+
+// Module scope on purpose: on a direct /map entry the skeleton geometry races the
+// overlay's decision to draw, and kicking the fetch here — the moment the route chunk
+// evaluates, mid-navigation — beats waiting for mount + startDirect. On the card path
+// morph.prefetch already warmed it, so this deduplicates into a no-op.
+void prefetchMapSkeleton()
 
 const TAP_MOVEMENT_THRESHOLD_CSS_PX = 8
 const TOUCH_HIT_SLOP_CSS_PX = 12
@@ -80,7 +90,10 @@ export function meta() {
   const image = 'https://commute.shiorilabs.id/img/og-map.png'
   return [
     { title },
-    { name: 'theme-color', content: '#FFFFFF' },
+    // Matches the loading/error background, which is what's on screen while the
+    // manifest loads — and the rest of the app's pages, so the browser chrome
+    // doesn't shift colour on the way in.
+    { name: 'theme-color', content: '#FFF8F8' },
     { name: 'description', content: description },
     { property: 'og:title', content: title },
     { property: 'og:description', content: description },
@@ -93,6 +106,17 @@ export function meta() {
 
 const MAX_SCALE = 1.5
 const WHEEL_ZOOM_INTENSITY = 0.0015
+
+// One spec for all three floating buttons. 44px is the tap-target minimum;
+// recenter and attribution used to be 40.
+const MAP_BUTTON_CLASS
+  = 'rounded-full bg-white/90 backdrop-blur shadow-lg w-11 h-11 flex items-center justify-center cursor-pointer'
+
+// Chrome entrance stagger: title pill, then the three buttons. A short step —
+// four small elements that should read as one gesture arriving rather than as
+// a sequence — and a small offset so the chrome follows the map's first paint
+// instead of racing it.
+const MAP_CHROME_STAGGER: StaggerOptions = { step: 60, maxIndex: 4, offset: 60 }
 
 // Ceiling on the tile resolution we're willing to hold in memory.
 //
@@ -135,10 +159,29 @@ function clampTransform(
 }
 
 export default function MapPage() {
-  const { data: manifest, error } = useSWR<Manifest>(
+  const { line: resolveLine } = useLines()
+  const { data: manifest, error, mutate: mutateManifest } = useSWR<Manifest>(
     '/maps/fdtj/manifest.json',
     (url: string) => fetch(url).then(r => r.json())
   )
+
+  // Card→map morph overlay (entered from the home nav rail): it holds over
+  // this route until the first frame containing the map is presented, and must
+  // be told about failure so the error screen isn't revealed under a preview
+  // that suggests everything worked.
+  const morph = useMapMorph()
+  const morphReadySignaledRef = useRef(false)
+  useEffect(() => {
+    if (error) morph.notifyMapFailed()
+  }, [error, morph])
+  // Arriving without a card to morph from (deep link, reload, back into /map).
+  // startDirect no-ops when a card morph is already running, so the gesture path
+  // still wins; this only covers the entries that would otherwise watch a bare
+  // canvas, since the route's own fallback ends when the manifest lands and the
+  // real wait is everything after it.
+  useEffect(() => {
+    morph.startDirect()
+  }, [morph])
   const { data: pointsManifest } = useSWR<PointsManifest>(
     pointsUrl,
     (url: string) => fetch(url).then(r => r.json())
@@ -154,17 +197,18 @@ export default function MapPage() {
     const index = new Map<string, string>()
     for (const hub of hubs?.data ?? []) index.set(hub.id, hub.slug)
     return index
-  }, [hubs])
+  }, [hubs, resolveLine])
   // Spotlight halo color per hub, resolvable synchronously at tap time (the
   // hubs list is already loaded; stations need a fetch — see the effect below).
   const hubColorById = useMemo(() => {
     const index = new Map<string, [number, number, number]>()
     for (const hub of hubs?.data ?? []) {
-      const color = hub.lines[0]?.colorCode
+      // Hubs carry line keys; the dictionary supplies the tint.
+      const color = resolveLine(hub.lines[0])?.colorCode
       if (color) index.set(hub.id, hexToRgb01(color))
     }
     return index
-  }, [hubs])
+  }, [hubs, resolveLine])
 
   const [searchParams] = useSearchParams()
   const debugHitboxes = import.meta.env.DEV && searchParams.get('debug') === 'hitboxes'
@@ -318,7 +362,7 @@ export default function MapPage() {
   useEffect(() => {
     const spot = spotlightRef.current
     if (!spot || !selectedStation) return
-    const color = spotlightStation?.data?.lines?.[0]?.colorCode
+    const color = resolveLine(spotlightStation?.data?.lines?.[0])?.colorCode
     if (!color) return
     // Compare on the station, not the id: an extra dot for a multi-drawn halte
     // has a suffixed id that would never match and would leave the halo neutral.
@@ -338,6 +382,18 @@ export default function MapPage() {
     spot.ringFrom = spot.lastRing
     dirtyRef.current = true
   }, [])
+
+  // Escape closes the attribution popover. Outside-dismissal is already
+  // covered: the popover stops pointer propagation, and a canvas tap clears it
+  // at the top of tryHitTest.
+  useEffect(() => {
+    if (!attributionOpen) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setAttributionOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [attributionOpen])
 
   // Backstop: if the selection is cleared through any path that didn't go
   // through a sheet dismiss (the sheets' onDismissStart handles the common
@@ -783,6 +839,18 @@ export default function MapPage() {
         renderer.draw(r, viewportSize.w, viewportSize.h, dpr, targetTier, overlay)
         dirtyRef.current = false
         if (import.meta.env.DEV && authorMode) setRenderTick(n => n + 1)
+
+        // Morph handoff: the first drawn frame that actually contains the map
+        // (preview texture resident) AND uses the anchored camera — the
+        // provisional map-center frame would hand off hundreds of px away from
+        // where the overlay's preview sits (didCenterRef latches when the
+        // anchor lands). One more rAF so the frame is *presented* before the
+        // overlay starts fading — same reasoning as the boot splash's double
+        // rAF.
+        if (!morphReadySignaledRef.current && didCenterRef.current && (renderer.isPreviewReady?.() ?? false)) {
+          morphReadySignaledRef.current = true
+          requestAnimationFrame(() => morph.notifyMapReady())
+        }
       }
 
       // Recenter button visibility: only flip state when it changes.
@@ -799,7 +867,7 @@ export default function MapPage() {
       stopped = true
       cancelAnimationFrame(rafRef.current)
     }
-  }, [viewportSize.w, viewportSize.h, mapW, mapH, minScale, authorMode, recovery])
+  }, [viewportSize.w, viewportSize.h, mapW, mapH, minScale, authorMode, recovery, morph])
 
   const updateTransform = (next: Transform) => {
     targetRef.current = clampTransform(next, viewportSize.w, viewportSize.h, mapW, mapH, minScale)
@@ -1120,11 +1188,29 @@ export default function MapPage() {
     return () => el.removeEventListener('wheel', handler)
   }, [manifest, minScale, viewportSize.w, viewportSize.h, mapW, mapH])
 
+  // The three full-screen states below share the app's page background
+  // (#FFF8F8) rather than white, so routing into and out of the map doesn't
+  // flash against the rest of the app, and its primary-action styling.
+  //
+  // They deliberately don't route through the shared <EmptyState>: that
+  // component is an in-page block built around an illustration and a
+  // max-w-3xl column, and these are full-screen takeovers. Same vocabulary,
+  // different structure.
   if (error) {
     return (
-      <main className="w-screen h-screen flex items-center justify-center flex-col p-4 bg-white" aria-live="polite">
-        <p className="text-center text-lg">Gagal memuat peta integrasi.</p>
-        <Link to="/" className="mt-6 px-4 py-2 rounded-lg bg-rose-100 text-pink-800 font-semibold">
+      <main className="w-screen h-screen flex items-center justify-center flex-col p-4 bg-[#FFF8F8]" aria-live="polite">
+        <p className="text-center text-lg font-semibold text-slate-800">Gagal memuat peta integrasi.</p>
+        <p className="mt-1 text-center text-sm text-slate-500">
+          Periksa koneksimu, lalu coba lagi.
+        </p>
+        <button
+          type="button"
+          onClick={() => { void mutateManifest() }}
+          className="mt-6 bg-[#F55875] text-white font-bold px-6 py-2 rounded-xl cursor-pointer"
+        >
+          Coba Lagi
+        </button>
+        <Link to="/" className="mt-3 px-4 py-2 text-sm text-slate-500">
           Kembali ke Beranda
         </Link>
       </main>
@@ -1132,9 +1218,16 @@ export default function MapPage() {
   }
 
   if (!manifest) {
+    // Preview backdrop rather than a bare spinner: direct-URL entries see the
+    // map immediately, and morph entries get the identical frame under the
+    // overlay so its fade never reveals a blank page. `fixed inset-0` matches
+    // the real main below so there's no layout jump when it swaps in.
     return (
-      <main className="w-screen h-screen flex items-center justify-center bg-white" aria-live="assertive">
-        <div className="rounded-full border-4 border-slate-600 border-t-transparent w-12 h-12 animate-spin" aria-label="Memuat peta..." />
+      <main className="fixed inset-0 overflow-hidden bg-[#FFF8F8]" aria-live="assertive">
+        <MapPreviewBackdrop />
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 rounded-full bg-white/90 backdrop-blur shadow-lg p-2.5">
+          <div className="rounded-full border-3 border-slate-600 border-t-transparent w-6 h-6 animate-spin" aria-label="Memuat peta..." />
+        </div>
       </main>
     )
   }
@@ -1175,9 +1268,9 @@ export default function MapPage() {
       {recoveryState === 'fatal' && (
         <div
           role="alert"
-          className="absolute inset-0 z-30 bg-white flex flex-col items-center justify-center p-4"
+          className="absolute inset-0 z-30 bg-[#FFF8F8] flex flex-col items-center justify-center p-4"
         >
-          <p className="text-center text-lg">Peta terputus.</p>
+          <p className="text-center text-lg font-semibold text-slate-800">Peta terputus.</p>
           <p className="mt-1 text-center text-sm text-slate-500">
             Perangkat kehabisan memori grafis. Tutup aplikasi lain, lalu coba lagi.
           </p>
@@ -1187,7 +1280,7 @@ export default function MapPage() {
               recovery.reset()
               recovery.notifyLost()
             }}
-            className="mt-6 px-4 py-2 rounded-lg bg-rose-100 text-pink-800 font-semibold cursor-pointer"
+            className="mt-6 bg-[#F55875] text-white font-bold px-6 py-2 rounded-xl cursor-pointer"
           >
             Muat ulang peta
           </button>
@@ -1197,54 +1290,83 @@ export default function MapPage() {
         </div>
       )}
 
+      {/* Floating chrome. The full-width bar this replaced spanned the viewport
+          to keep its title clear of the close button; a pill has to say so
+          itself, hence the max-width and truncation.
+
+          Only the pill follows `chromeVisible`. The buttons below deliberately
+          stay put during pan/zoom: close is the page's escape hatch and must
+          never need a tap to reveal it first, and recenter is most useful
+          precisely while the user is zoomed in and moving. They share a visual
+          language, not a visibility rule. */}
       <div
-        className={`absolute inset-x-0 top-0 z-10 bg-white/50 backdrop-blur border-b-2 border-b-gray-50/20 transition-opacity duration-200 ${chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        className={`map-chrome-enter absolute top-4 left-4 z-10 max-w-[calc(100%-8rem)] transition-opacity duration-200 ${chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        style={{ animationDelay: staggerDelay(0, MAP_CHROME_STAGGER) }}
       >
-        <div className="p-8 pb-4 pr-20 max-w-3xl mx-auto pointer-events-auto flex flex-col">
-          <h1 className="font-bold text-xl">Peta Integrasi</h1>
-        </div>
+        <h1 className="rounded-full bg-white/90 backdrop-blur shadow-lg px-4 py-2.5 font-bold text-base text-slate-800 truncate">
+          Peta Integrasi
+        </h1>
       </div>
 
-      <button
-        type="button"
-        onClick={handleBackButton}
-        aria-label="Tutup halaman peta"
-        className="absolute top-4 right-4 z-20 rounded-full bg-white/90 backdrop-blur shadow-lg w-11 h-11 flex items-center justify-center cursor-pointer"
+      {/* The entrance rides a wrapper on each button rather than the button
+          itself: `.map-chrome-enter` animates transform, and the recenter
+          button below owns an opacity transition of its own. Keeping the two
+          on separate elements stops them fighting. */}
+      <div
+        className="map-chrome-enter absolute top-4 right-4 z-20"
+        style={{ animationDelay: staggerDelay(1, MAP_CHROME_STAGGER) }}
       >
-        <XIcon weight="bold" className="w-6 h-6 text-slate-700" />
-      </button>
+        <button
+          type="button"
+          onClick={handleBackButton}
+          aria-label="Tutup halaman peta"
+          className={MAP_BUTTON_CLASS}
+        >
+          <XIcon weight="bold" className="w-5 h-5 text-slate-700" />
+        </button>
+      </div>
 
-      <button
-        type="button"
-        onClick={() => {
-          haptic()
-          flyTo(
-            clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale),
-            450
-          )
-        }}
-        aria-label="Kembali ke tampilan penuh"
-        tabIndex={isZoomedIn ? 0 : -1}
-        className={`absolute bottom-4 right-16 z-20 rounded-full bg-white/90 backdrop-blur shadow-lg w-10 h-10 flex items-center justify-center cursor-pointer transition-opacity duration-200 ${isZoomedIn ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+      <div
+        className="map-chrome-enter absolute bottom-4 right-16 z-20"
+        style={{ animationDelay: staggerDelay(2, MAP_CHROME_STAGGER) }}
       >
-        <CornersInIcon weight="bold" className="w-5 h-5 text-slate-700" />
-      </button>
+        <button
+          type="button"
+          onClick={() => {
+            haptic()
+            flyTo(
+              clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale),
+              450
+            )
+          }}
+          aria-label="Kembali ke tampilan penuh"
+          tabIndex={isZoomedIn ? 0 : -1}
+          className={`${MAP_BUTTON_CLASS} transition-opacity duration-200 ${isZoomedIn ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        >
+          <CornersInIcon weight="bold" className="w-5 h-5 text-slate-700" />
+        </button>
+      </div>
 
-      <button
-        type="button"
-        onClick={() => setAttributionOpen(o => !o)}
-        aria-label="Lihat atribusi peta"
-        aria-expanded={attributionOpen}
-        className="absolute bottom-4 right-4 z-20 rounded-full bg-white/90 backdrop-blur shadow-lg w-10 h-10 flex items-center justify-center cursor-pointer"
+      <div
+        className="map-chrome-enter absolute bottom-4 right-4 z-20"
+        style={{ animationDelay: staggerDelay(3, MAP_CHROME_STAGGER) }}
       >
-        <InfoIcon weight="bold" className="w-5 h-5 text-slate-700" />
-      </button>
+        <button
+          type="button"
+          onClick={() => setAttributionOpen(o => !o)}
+          aria-label="Lihat atribusi peta"
+          aria-expanded={attributionOpen}
+          className={MAP_BUTTON_CLASS}
+        >
+          <InfoIcon weight="bold" className="w-5 h-5 text-slate-700" />
+        </button>
+      </div>
 
       {attributionOpen && (
         <div
           role="dialog"
           aria-label="Atribusi peta"
-          className="absolute bottom-16 right-4 z-20 bg-white rounded-lg shadow-xl border border-slate-200 p-4 max-w-xs text-sm text-slate-700"
+          className="map-popover-enter absolute bottom-16 right-4 z-20 bg-white rounded-xl shadow-xl border border-slate-200 p-4 max-w-xs text-sm text-slate-700 origin-bottom-right"
           onPointerDown={e => e.stopPropagation()}
         >
           <div className="font-semibold mb-1">Peta Integrasi Jakarta</div>

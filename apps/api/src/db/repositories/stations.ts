@@ -1,37 +1,124 @@
 import { Operator } from '@commute/constants'
 import { db } from 'db'
 import { NewSchedule } from 'db/schemas/schedules'
-import { Amenity, NewStation, Station, UpdatingStation } from 'db/schemas/stations'
+import { Amenity, NewStation, UpdatingStation } from 'db/schemas/stations'
 import { sql } from 'kysely'
-import { Line } from 'models/line'
 import { Repository } from 'models/repository'
 import { chunkArray } from 'utils/chunk'
 import { getLineByOperator } from 'utils/line'
 import { mapify } from 'utils/mapify'
 import { getOperatorByCode } from 'utils/operator'
 
-interface ExtendedStation extends Omit<Station, 'operator' | 'amenities' | 'searchable'> {
-  operator: NonNullable<ReturnType<typeof getOperatorByCode>>
+/*
+ * The public Station shape.
+ *
+ * Deliberately not a row: `createdAt`/`updatedAt`/`timetableSynced` describe our
+ * database rather than the network, and `region` is 1:1 with `regionCode`, so
+ * none of them are emitted. `operator` collapses to its code and `lines` to
+ * operator-qualified keys — both resolve against /operators, which every client
+ * already fetches, instead of repeating the same names and colours on all 393
+ * stations.
+ *
+ * NOTE `officialName` is the operator's own spelling ("Stasiun Lebak Bulus"),
+ * `name` the display one ("Lebak Bulus Bank Syariah Indonesia"). They are two
+ * different names, not a formatted pair — search matches on both, and 236 of 361
+ * indexed stations are reachable only via the official one ("sudirman baru" →
+ * BNI City).
+ */
+export interface PublicStation {
+  id: string
+  name: string
+  officialName: string
+  code: string
+  regionCode: string
+  operator: Operator
+  lines: string[]
   amenities: Amenity[]
+  latitude: number | null
+  longitude: number | null
+  score: number
   searchable: boolean
-  lines: Line[]
 }
 
-function mapStationRow<T extends { operator: Operator, lines: unknown, amenities: unknown, searchable: number }>(station: T) {
+/*
+ * Station as referenced from another resource — hub members, transfers.
+ *
+ * `officialName` is carried despite the trim: it is the search alias, and hub
+ * members are precisely where it earns its keep ("sudirman baru" must keep
+ * finding the Dukuh Atas hub via its BNI City member).
+ */
+export interface StationRef {
+  id: string
+  name: string
+  officialName: string
+  code: string
+  operator: Operator
+  lines: string[]
+}
+
+/** Dictionary key for a line; qualified because codes collide across operators. */
+export function lineKey(operator: Operator, lineCode: string): string {
+  return `${operator}:${lineCode}`
+}
+
+export function toStationRef(station: PublicStation): StationRef {
+  return {
+    id: station.id,
+    name: station.name,
+    officialName: station.officialName,
+    code: station.code,
+    operator: station.operator,
+    lines: station.lines
+  }
+}
+
+function mapStationRow<T extends {
+  id: string
+  name: string
+  formattedName: string | null
+  code: string
+  regionCode: string
+  operator: Operator
+  latitude: number | null
+  longitude: number | null
+  score: number
+  lines: unknown
+  amenities: unknown
+  searchable: number
+}>(station: T): PublicStation | null {
   const operator = getOperatorByCode(station.operator)
   if (operator === null) return null
 
-  const lines: Set<Line> = new Set()
+  const lines: string[] = []
+  const seen = new Set<string>()
   for (const lineCode of ((station.lines as string | null) ?? '').split(',')) {
     if (lineCode === '' || lineCode === 'NUL') continue
     const line = getLineByOperator(station.operator, lineCode)
-    if (line) lines.add(line)
+    if (!line) continue
+    const key = lineKey(station.operator, line.lineCode)
+    if (seen.has(key)) continue
+    seen.add(key)
+    lines.push(key)
   }
 
   const amenities = station.amenities ? JSON.parse(station.amenities as unknown as string) as Amenity[] : []
 
-  const result: ExtendedStation = { ...station, amenities, operator, searchable: !!station.searchable, lines: Array.from(lines) }
-  return result
+  return {
+    id: station.id,
+    // The display name wins the plain `name`; callers stop writing
+    // `formattedName ?? name`.
+    name: station.formattedName || station.name,
+    officialName: station.name,
+    code: station.code,
+    regionCode: station.regionCode,
+    operator: operator.code,
+    lines,
+    amenities,
+    latitude: station.latitude,
+    longitude: station.longitude,
+    score: station.score,
+    searchable: !!station.searchable
+  }
 }
 
 export class StationRepository extends Repository {
@@ -56,10 +143,24 @@ export class StationRepository extends Repository {
       linesSubquery = linesSubquery.where('stationLines.stationId', 'in', ids)
     }
 
+    // Explicit column list, not selectAll: the response shape is a design
+    // decision, and selectAll would silently re-add every future column to it.
     return db(this.d1)
       .selectFrom('stations')
       .leftJoin(linesSubquery.groupBy('stationLines.stationId').as('linesSubquery'), 'linesSubquery.stationId', 'stations.id')
-      .selectAll('stations')
+      .select([
+        'stations.id',
+        'stations.name',
+        'stations.formattedName',
+        'stations.code',
+        'stations.regionCode',
+        'stations.operator',
+        'stations.latitude',
+        'stations.longitude',
+        'stations.score',
+        'stations.amenities',
+        'stations.searchable'
+      ])
       .select(['linesSubquery.lines'])
   }
 
@@ -251,12 +352,9 @@ export class StationRepository extends Repository {
         const toStationData = internalToStations.get(transfer.toStationId)
         if (!toStationData) continue
 
-        toStation = {
-          stationId: toStationData.id,
-          name: toStationData.formattedName || toStationData.name,
-          operatorName: toStationData.operator.name,
-          lines: toStationData.lines
-        }
+        // `id`, not `stationId`: every other shape in the API refers to a
+        // station by `id`, and `operator` as a code rather than a display name.
+        toStation = toStationRef(toStationData)
       } else if (transfer.dataType === 'EXTERNAL') {
         if (!transfer.toStationData) continue
         toStation = JSON.parse(transfer.toStationData as unknown as string)
@@ -268,7 +366,8 @@ export class StationRepository extends Repository {
         id: transfer.id,
         dataType: transfer.dataType,
         toStation,
-        distance: transfer.distance,
+        // `distanceM`, matching FareLeg.distanceM and FareResult.totalDistanceM.
+        distanceM: transfer.distance,
         notes: transfer.notes
       })
     }

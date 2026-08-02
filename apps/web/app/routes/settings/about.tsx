@@ -38,7 +38,7 @@ export default function AboutSettingsPage() {
   const showTapHint = !isUnlocked && tapCount >= TAPS_BEFORE_HINT
 
   return (
-    <main className="bg-white w-screen h-full overflow-y-auto pb-4 min-h-screen">
+    <main className="bg-white w-full h-full overflow-y-auto pb-4 min-h-screen">
       <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto bg-white">
         <div className="flex gap-3 items-center -ml-2">
           <button

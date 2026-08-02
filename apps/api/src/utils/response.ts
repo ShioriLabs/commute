@@ -7,6 +7,16 @@ export function Ok<T = unknown>(data: T): StandardResponse<T> {
   }
 }
 
+export function BadRequest(errorCode: string = 'BAD_REQUEST', message: string = 'Bad request'): StandardResponse {
+  return {
+    status: 400,
+    error: {
+      code: errorCode,
+      message
+    }
+  }
+}
+
 export function NotFound(errorCode: string = 'NOT_FOUND', message: string = 'Not found'): StandardResponse {
   return {
     status: 404,
