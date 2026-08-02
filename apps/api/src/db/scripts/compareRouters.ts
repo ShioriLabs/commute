@@ -14,12 +14,32 @@ import { ENDPOINT_RESTRICTIONS } from '../data/topology'
  * the old one where it should, and where it differs, is the difference
  * explainable?
  *
- * Every difference must land in one of two buckets:
- *   - the `incomingLine` state-space fix (findRoute applied a line-change
- *     penalty against a predecessor a later relaxation superseded), or
- *   - the wait model (waiting is now an explicit criterion rather than being
- *     folded into LINE_CHANGE_PENALTY_M).
- * Anything else is a bug.
+ * Traced 2026-08-02 against the 15 ODs below. Nine primaries match findRoute
+ * exactly; the six that differ have THREE distinct causes, not the two this
+ * comment originally claimed:
+ *
+ *   Wait model (3) — TJ-H00003P->TJ-H00061S, TJ-H00010P->TJ-H00069P,
+ *     MRTJ-LBB->LRTJBDB-JTM. Each collapses back to findRoute's exact route
+ *     when headways are removed, so waiting is what shifted the tradeoff.
+ *
+ *   State-space fix (2) — TJ-H00061S->TJ-H00003P and TJ-H00093P->TJ-H00069P.
+ *     The planner's route is cheaper *by findRoute's own weighted metric*
+ *     (17688 vs 17703; 14872 vs 16078). That is the documented `incomingLine`
+ *     bug made concrete: findRoute charged a line-change penalty against a
+ *     predecessor a later relaxation superseded, so it returned a route its own
+ *     cost function scores as worse. Not a tie-break — the second case is 1206
+ *     units.
+ *
+ *   Criteria tradeoff (1) — TJ-H00061S->KCI-AC. The planner's route is *worse*
+ *     on the old metric (22822 vs 21173) because it spends 3.2km of extra
+ *     distance to save a boarding. Neither engine is wrong; the multi-criteria
+ *     model simply weighs that differently, which is the entire point of it.
+ *
+ * A difference that fits none of the three is a bug. To re-derive the split:
+ * run plan() with `headwaysS: new Map(), defaultHeadwayS: 0` — anything that
+ * then matches findRoute was the wait model — and score both leg lists with
+ * findRoute's own distance + TRANSFER_PENALTY_M + LINE_CHANGE_PENALTY_M to
+ * separate the remaining two.
  *
  * Also reports bag pressure, which fixtures cannot measure: the caps are an
  * approximation, and TJ's overlapping corridors are the shape that stresses them.
