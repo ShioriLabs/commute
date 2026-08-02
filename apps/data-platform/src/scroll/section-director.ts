@@ -182,9 +182,19 @@ export function createSectionDirector(opts: {
       0,
       document.documentElement.scrollHeight - window.innerHeight
     )
-    // Enough travel for the incoming beat to resolve, capped so a short page
-    // cannot push the seat above the beat before it.
-    const TAIL_INSET = Math.min(200, Math.round(window.innerHeight * 0.25))
+    // Just enough travel that the transition resolves before the last pixel,
+    // and no more. Whatever this inset is, the reader scrolls through it AFTER
+    // the reveal has finished — it is dead scroll by construction, so it buys
+    // nothing above the minimum. At 25% of the viewport it was 200px, and the
+    // dots sat at full brightness for the last 208px of the page (measured,
+    // 1440x900: reveal complete at 8996, maxScroll 9204).
+    //
+    // Shrinking it also LENGTHENS the reveal rather than rushing it: the ramp is
+    // the last 40% of the api->footer span, and pulling the seat down from
+    // maxScroll-200 to maxScroll-32 grows that span, so the dots light over more
+    // scroll, and the hold that keeps them dark while the api beat is being read
+    // ends later too.
+    const TAIL_INSET = 32
     for (let i = out.length - 1; i >= 0; i--) {
       const seat = maxScroll - TAIL_INSET - (out.length - 1 - i)
       if (out[i]!.anchor <= seat) break
