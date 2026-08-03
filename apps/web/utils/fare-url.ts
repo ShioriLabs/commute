@@ -43,3 +43,13 @@ export function buildFarePath(
   }
   return `/fare?${params.toString()}`
 }
+
+// Destination-only entry point, for the station page's "Petunjuk Arah" button:
+// the destination is known, the origin gets picked on arrival (/fare auto-opens
+// the origin picker for a to-only URL). Deliberately separate from
+// buildFarePath, which stays both-required — shares and SEO decoration must
+// never emit a half pair.
+export function buildFareDestinationPath(toId: string | null | undefined): string | null {
+  if (!toId) return null
+  return `/fare?${new URLSearchParams({ to: toId }).toString()}`
+}

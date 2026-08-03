@@ -10,6 +10,7 @@ import { useLines } from '~/hooks/use-lines'
 import { hexToRgb01 } from 'utils/colors'
 import { haptic } from 'utils/haptics'
 import { staggerDelay, type StaggerOptions } from 'utils/stagger'
+import { buildFarePath } from 'utils/fare-url'
 import {
   createRenderer,
   hitTest,
@@ -291,6 +292,16 @@ export default function MapPage() {
   // `OPERATOR-CODE` (e.g. KCI-MRI); split on first hyphen.
   const [selectedStation, setSelectedStation] = useState<{ operator: string, code: string } | null>(null)
   const [selectedHubSlug, setSelectedHubSlug] = useState<string | null>(null)
+  // Pick-a-departure mode, primed by the station sheet's "Petunjuk Arah":
+  // holds the destination station id (`OPERATOR-CODE`); while set, the next
+  // station tap becomes the origin and navigates to /fare with the pair.
+  const [departurePickFor, setDeparturePickFor] = useState<string | null>(null)
+  // useCallback keeps the sheet→content prop chain referentially stable:
+  // StationContent is memoized and this participates in its shallow compare.
+  const handleSelectDeparture = useCallback(() => {
+    if (!selectedStation) return
+    setDeparturePickFor(`${selectedStation.operator}-${selectedStation.code}`)
+  }, [selectedStation])
 
   // Two transforms: `target` is where we want to be; `rendered` is what we
   // currently draw. The rAF loop lerps rendered toward target each frame so
@@ -587,6 +598,7 @@ export default function MapPage() {
     restore: () => rendererRef.current?.debug?.restoreContext(),
     isLost: () => rendererRef.current?.isContextLost() ?? false,
     releaseTiles: () => releaseTilesRef.current(),
+    camera: () => ({ ...renderedRef.current }),
     stats: () => {
       const renderer = rendererRef.current
       const { count, bytes } = renderer?.tileStats() ?? { count: 0, bytes: 0 }
@@ -1062,6 +1074,10 @@ export default function MapPage() {
     const hit = points.length > 0 ? hitTest(worldX, worldY, points, slopWorld) : null
     if (hit) {
       if (hit.kind === 'hub') {
+        // A hub is not a boarding station: while picking a departure, a hub
+        // tap neither picks nor opens a sheet — the mode's contract is that
+        // the next station tap is the origin.
+        if (departurePickFor) return false
         // Hub region tapped (no member pill won). Resolve `HUB-…` id → slug.
         const slug = hubSlugById.get(hit.point.id)
         if (slug) {
@@ -1083,6 +1099,17 @@ export default function MapPage() {
         if (dash > 0) {
           const operator = stationId.slice(0, dash)
           const code = stationId.slice(dash + 1)
+          if (departurePickFor) {
+            // Departure pick: this tap is the origin. The destination itself
+            // and unserved stations (no fare coverage) are not pickable.
+            if (stationId === departurePickFor || getUnservedStation(operator, code)) return false
+            setDeparturePickFor(null)
+            haptic()
+            const path = buildFarePath(stationId, departurePickFor)
+            if (path) navigate(path)
+            // No sheet, no spotlight, no flyTo — we are leaving the map.
+            return false
+          }
           setSelectedHubSlug(null)
           setSelectedStation({ operator, code })
           haptic()
@@ -1308,6 +1335,25 @@ export default function MapPage() {
         </h1>
       </div>
 
+      {/* Departure-pick prompt. A mode indicator, so like the close button it
+          ignores `chromeVisible` — the user must always see the map is in a
+          different state and have a way out of it. */}
+      {departurePickFor && (
+        <div className="map-chrome-enter absolute inset-x-4 top-16 z-20 flex justify-center pointer-events-none">
+          <div className="pointer-events-auto rounded-full bg-white/90 backdrop-blur shadow-lg pl-4 pr-1.5 py-1.5 flex items-center gap-2">
+            <span className="font-bold text-sm text-slate-800 truncate">Pilih stasiun keberangkatan</span>
+            <button
+              type="button"
+              onClick={() => setDeparturePickFor(null)}
+              aria-label="Batalkan pemilihan stasiun keberangkatan"
+              className="rounded-full w-8 h-8 flex items-center justify-center hover:bg-slate-100 cursor-pointer"
+            >
+              <XIcon weight="bold" className="w-4 h-4 text-slate-700" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* The entrance rides a wrapper on each button rather than the button
           itself: `.map-chrome-enter` animates transform, and the recenter
           button below owns an opacity transition of its own. Keeping the two
@@ -1412,6 +1458,7 @@ export default function MapPage() {
         operator={selectedStation?.operator ?? null}
         code={selectedStation?.code ?? null}
         onClose={() => setSelectedStation(null)}
+        onSelectDeparture={handleSelectDeparture}
         // Start the spotlight exit as soon as the dismiss begins — unless the
         // sheet is closing because the user switched to a hub, whose
         // spotlight is already animating in.

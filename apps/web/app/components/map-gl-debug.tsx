@@ -19,6 +19,9 @@ export interface MapGlDebugApi {
   isLost(): boolean
   // Run the release-on-hide path without actually backgrounding the app.
   releaseTiles(): void
+  // The rendered transform. The camera lives in refs, so this is the only
+  // scripted way to observe flights or map world→screen coordinates.
+  camera(): { tx: number, ty: number, scale: number }
   stats(): {
     kind: Renderer['kind'] | null
     count: number

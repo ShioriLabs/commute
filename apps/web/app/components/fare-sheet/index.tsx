@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CloseButton, DialogTitle } from '@headlessui/react'
 import { XIcon, ShareNetworkIcon } from '@phosphor-icons/react'
 import { useSearchParams } from 'react-router'
@@ -32,10 +32,11 @@ export default function FareSheet() {
   // payment method.
   const writeUrl = (fromId: string | null, toId: string | null, criteria: FareCriteria) => {
     const params = new URLSearchParams()
-    if (fromId && toId) {
-      params.set('from', fromId)
-      params.set('to', toId)
-    }
+    // Written independently, not only as a pair: a to-only deep link from the
+    // station page must survive a criteria change made before the origin is
+    // picked, or the URL would silently lose its `?to=`.
+    if (fromId) params.set('from', fromId)
+    if (toId) params.set('to', toId)
     for (const [key, value] of fareQueryParams(criteria)) params.set(key, value)
     const search = params.toString()
     window.history.replaceState(
@@ -56,7 +57,23 @@ export default function FareSheet() {
     onStateChange: writeUrl,
     syncDocumentTitle: true
   })
-  const { origin, destination, criteria } = query
+  const { origin, destination, criteria, openPickerFor } = query
+
+  // A to-only deep link (station page's "Petunjuk Arah") lands here with the
+  // destination set and no origin — open the origin picker so the next step is
+  // obvious. One-shot, keyed on the *initial* params via ref: writeUrl's
+  // replaceState later rewrites the query string, and clearing the picker must
+  // not re-trigger. Waiting for `destination` (not the raw param) guarantees
+  // the station index has loaded, so the picker never opens against an empty
+  // list; the always-mounted StationPickerDialog animates in normally.
+  const wantsOriginPicker = useRef(!!searchParams.get('to') && !searchParams.get('from'))
+  useEffect(() => {
+    if (!wantsOriginPicker.current) return
+    if (destination && !origin) {
+      wantsOriginPicker.current = false
+      openPickerFor('origin')
+    }
+  }, [destination, origin, openPickerFor])
 
   const handleShare = async () => {
     // Built from the pair rather than read from window.location.href: the same

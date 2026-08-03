@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildFarePath, buildFareShareUrl } from './fare-url'
+import { buildFareDestinationPath, buildFarePath, buildFareShareUrl } from './fare-url'
 import { DEFAULT_FARE_CRITERIA } from './fare-criteria'
 
 // Only /fare is SEO-decorated (functions/_middleware.ts:322) and rendered by the
@@ -65,6 +65,22 @@ describe('buildFarePath', () => {
     const path = buildFarePath('KCI-MRI', 'MRTJ-DKA')
     const url = buildFareShareUrl('KCI-MRI', 'MRTJ-DKA', 'https://commute.shiorilabs.id')
     expect(url).toBe(`https://commute.shiorilabs.id${path}`)
+  })
+})
+
+describe('buildFareDestinationPath', () => {
+  it('builds a to-only path for the station page entry point', () => {
+    expect(buildFareDestinationPath('KCI-MRI')).toBe('/fare?to=KCI-MRI')
+  })
+
+  it('returns null without a destination', () => {
+    expect(buildFareDestinationPath(null)).toBeNull()
+    expect(buildFareDestinationPath(undefined)).toBeNull()
+    expect(buildFareDestinationPath('')).toBeNull()
+  })
+
+  it('percent-encodes the station id', () => {
+    expect(buildFareDestinationPath('KCI-C&D')).toBe('/fare?to=KCI-C%26D')
   })
 })
 
