@@ -84,6 +84,25 @@ describe('buildSearchableIndex — directional folding', () => {
     expect(item?.keywords).toContain('kali grogol')
   })
 
+  // Folding is right for search — one physical stop, one result — but it hides
+  // the sibling's id, and a fare needs a specific boarding point as an endpoint.
+  // Without this the 15 real "Arah …" stations are unreachable from any surface
+  // built on this index, which is what kept the fare picker on /stations.
+  it('exposes the folded-away sibling ids for non-search consumers', () => {
+    const [item] = stationItems(buildSearchableIndex(pair, []))
+    expect(item?.data?.['station-id']).toBe('TJ-A01')
+    expect(item?.data?.['station-ids']).toBe('TJ-A01,TJ-B01')
+  })
+
+  it('omits station-ids when there is nothing folded away', () => {
+    const single = [station({ id: 'KCI-AC', name: 'Ancol', code: 'AC' })]
+    const [item] = stationItems(buildSearchableIndex(single, []))
+    expect(item?.data?.['station-id']).toBe('KCI-AC')
+    // A lone station has no siblings, so the extra key would be pure noise on
+    // every one of the ~360 unfolded entries.
+    expect(item?.data?.['station-ids']).toBeUndefined()
+  })
+
   it('takes the highest score across members', () => {
     const scored = [
       station({ id: 'TJ-A01', name: 'X Arah Utara', code: 'A01', score: 3 }),

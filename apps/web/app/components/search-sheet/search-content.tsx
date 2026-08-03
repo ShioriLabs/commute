@@ -229,7 +229,13 @@ export default function SearchContent({ title, closeButton }: Props) {
   // crosses one screen tall on classic-scrollbar platforms.
   return (
     <section className="bg-white w-screen h-full overflow-y-auto pb-4 [scrollbar-gutter:stable]">
-      <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto bg-white">
+      {/* z-index matters twice here. `sticky` alone does not raise an element
+          above later siblings, so without one the panel below scrolls *through*
+          this header. And it has to beat z-[1], not merely have one: FarePanel's
+          swap button carries z-[1] to sit above the two station fields it
+          straddles, so a header at the same level loses to it on paint order and
+          the button floats over the title. */}
+      <div className="p-8 pb-4 sticky top-0 z-[2] max-w-3xl mx-auto bg-white">
         <div className="flex gap-4 items-center justify-between">
           { title }
           { closeButton }

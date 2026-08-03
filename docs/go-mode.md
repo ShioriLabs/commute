@@ -69,11 +69,13 @@ changes with the clock.
   Cikarang↔Jakarta Kota late-night ops (and the KCI-JAKK-C grouping) are exactly the
   "the best route at 02:00 ≠ the best route at 14:00 / does the last train still run?"
   problem. A static router can't express it; a time-dependent one must.
-- **Bonus: fares get *more accurate*, not just routes.** `fare.ts` already notes the
-  LRTJBDB cap is time-dependent (peak 20000 / off-peak & weekend 10000) and is currently
-  **flattened to the peak cap "because fares here are time-agnostic."** Once Tier 2 knows
-  the departure time, that flattening lifts — the fare number sharpens as a side effect of
-  routing over time. The time layer pays back into the fare slice you shipped first.
+- **Bonus: fares get *more accurate*, not just routes.** The LRTJBDB cap is
+  time-dependent (peak 20000 / off-peak & weekend 10000). This is **no longer flattened**:
+  `fare.ts` buckets `context.departureAt` through `fareTimeBucket`, and since the fare
+  criteria bar shipped, riders can pick that bucket directly. What Tier 2 adds is having
+  the departure time *derived from the route* rather than chosen — the fare stops
+  depending on the rider telling us when they are travelling.
+  (Corrected 2026-08-02: this bullet previously claimed the cap was still flattened.)
 
 This tier is a **different algorithm class** (time-expanded graph / CSA / RAPTOR), which
 is why it's the "half-step" rather than another weight tweak — and it's the interesting

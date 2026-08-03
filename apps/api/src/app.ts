@@ -31,22 +31,36 @@ export interface Bindings {
 
 const app = new Hono<{ Bindings: Bindings }>()
 
-const ALLOWED_ORIGINS = new Set([
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'http://localhost:5175',
-  'https://commute.shiorilabs.id',
-  'https://dev.commute.shiorilabs.id',
-  'https://data.commute.shiorilabs.id',
-  'https://transportforjakarta.or.id'
-])
-
+/*
+ * Open CORS, deliberately.
+ *
+ * Every mounted route is read-only public data, and the docs say so in as many
+ * words: "Datanya bebas dipakai dan diolah, asal sumbernya tetap dicantumkan."
+ * An origin allowlist contradicts that — it is the one restriction that stops
+ * *only* browser JavaScript, so it blocked hobbyists building a map in a page
+ * while doing nothing about curl, servers, apps or scrapers, which could always
+ * read this API freely. It also meant every new consumer (data.commute, the
+ * TransportForJakarta embed, the Commute Lite build on their `maps.` subdomain)
+ * needed a deploy here before it could make a single request.
+ *
+ * What this is NOT: access control. That distinction is already stated where it
+ * matters most — routes/sync.ts and routes/cache.ts are unmounted precisely
+ * because CORS would not have protected them. Abuse is bounded by rateLimit()
+ * below, which is origin-independent and therefore unaffected by this, and by
+ * the cacheControl() TTLs plus KV read-through that keep repeat reads off D1.
+ *
+ * The cost this shifts is load, not risk: a popular site embedding the API puts
+ * many client IPs on it at once, which per-IP limiting bounds only loosely. The
+ * caching above is what absorbs that, and it is why this is safe to open now.
+ *
+ * `GET` and `OPTIONS` only. Nothing mounted mutates, so allowing `POST` would
+ * advertise a capability that does not exist; if a mutating route is ever
+ * mounted it must carry its own credentials rather than inherit trust from an
+ * origin header a client controls.
+ */
 app.use('*', cors({
-  origin(origin) {
-    return ALLOWED_ORIGINS.has(origin) ? origin : null
-  },
-  allowMethods: ['GET', 'POST', 'OPTIONS']
+  origin: '*',
+  allowMethods: ['GET', 'OPTIONS']
 }))
 
 /*

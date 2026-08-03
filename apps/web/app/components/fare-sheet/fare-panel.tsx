@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { ArrowsDownUpIcon, MapPinIcon } from '@phosphor-icons/react'
 import { FetchError } from 'utils/fetcher'
+import CriteriaBar from './criteria/criteria-bar'
 import FareResultCard from './fare-result-card'
 import StationField from './station-field'
 import StationPickerDialog from './station-picker'
@@ -28,6 +29,9 @@ export default function FarePanel({ query, footer }: Props) {
     handleSelect,
     handleSwap,
     pickableStations,
+    operators,
+    criteria,
+    setCriteria,
     fare,
     error,
     isLoading
@@ -47,6 +51,12 @@ export default function FarePanel({ query, footer }: Props) {
           <ArrowsDownUpIcon weight="bold" className="w-5 h-5" />
         </button>
       </div>
+
+      <CriteriaBar
+        criteria={criteria}
+        onChange={setCriteria}
+        operators={operators}
+      />
 
       {!origin || !destination
         ? (

@@ -153,3 +153,20 @@ refresh-images/
 jpm-dukat/
 Untitled.fig
 Group 1 (2).png
+
+# Working scratch. Everything above is a named exception added after some
+# artifact had already landed at the root and needed excluding one by one; this
+# is the general case, so new working files have somewhere to go that does not
+# need a .gitignore edit first.
+#
+# What belongs here: meeting notes, partner-facing drafts, announcement
+# graphics, one-off probe scripts, exports, anything not reproducible by the
+# build and not meant to ship. This repo is PUBLIC — an unreleased map, an
+# unsigned partner scope, or a draft announcement must not reach it by accident,
+# and an untracked-but-unlisted file at the root is one `git add .` away from
+# doing exactly that.
+#
+# What does NOT belong here: anything the build reads, or anything worth keeping
+# — scratch/ is not backed up by git, so treat it as losable. Promote it into
+# the tree when it matters.
+scratch/

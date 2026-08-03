@@ -4,6 +4,8 @@ import { XIcon, ShareNetworkIcon } from '@phosphor-icons/react'
 import { useSearchParams } from 'react-router'
 import { buildFareShareUrl } from 'utils/fare-url'
 import FarePanel from './fare-panel'
+import { PAYMENT_METHODS, type PaymentMethod } from '@commute/constants'
+import { fareQueryParams, type FareCriteria } from 'utils/fare-criteria'
 import { useFareQuery } from './use-fare-query'
 
 // Rendered inside a headlessui Dialog in both contexts: the homepage
@@ -23,22 +25,43 @@ export default function FareSheet() {
   // would resolve against '/' and stomp the pathname. Write the query string
   // directly instead; window.location.pathname is '/fare' in both contexts,
   // and keeping history.state intact preserves SheetButton's modalOpen flag.
-  const updateUrlParams = (fromId: string, toId: string) => {
-    const params = new URLSearchParams({ from: fromId, to: toId })
-    window.history.replaceState(window.history.state, '', `${window.location.pathname}?${params.toString()}`)
+  //
+  // One writer for the pair AND the criteria: they share a query string, so
+  // writing either on its own would wipe the other. Picking a station used to
+  // rebuild the params from scratch, which would now silently drop a chosen
+  // payment method.
+  const writeUrl = (fromId: string | null, toId: string | null, criteria: FareCriteria) => {
+    const params = new URLSearchParams()
+    if (fromId && toId) {
+      params.set('from', fromId)
+      params.set('to', toId)
+    }
+    for (const [key, value] of fareQueryParams(criteria)) params.set(key, value)
+    const search = params.toString()
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${window.location.pathname}${search ? `?${search}` : ''}`
+    )
   }
 
+  const urlPaymentMethod = searchParams.get('paymentMethod')
   const query = useFareQuery({
     initialPair: { fromId: searchParams.get('from'), toId: searchParams.get('to') },
-    onPairChange: updateUrlParams,
+    // A shared link's payment method beats the recipient's stored preference,
+    // so the number they see is the number the sender saw.
+    initialCriteria: urlPaymentMethod && urlPaymentMethod in PAYMENT_METHODS
+      ? { paymentMethod: urlPaymentMethod as PaymentMethod }
+      : undefined,
+    onStateChange: writeUrl,
     syncDocumentTitle: true
   })
-  const { origin, destination } = query
+  const { origin, destination, criteria } = query
 
   const handleShare = async () => {
     // Built from the pair rather than read from window.location.href: the same
     // helper serves the search sheet, where the address bar says /search.
-    const url = buildFareShareUrl(origin?.id, destination?.id, window.location.origin)
+    const url = buildFareShareUrl(origin?.id, destination?.id, window.location.origin, criteria)
     if (!url) return
 
     if (navigator.share) {

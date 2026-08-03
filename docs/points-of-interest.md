@@ -29,7 +29,7 @@ access walk adds no fare — a POI origin cannot distort the tariff.
 
 A big POI (GBK, Ancol) doesn't have one "nearest station" — it has several
 entrances near different stations. **Don't pick one.** Give the POI *several* walk
-edges (GBK → Istora, Senayan, Palmerah) and `TRANSFER_PENALTY_M` (2500 m, a routing
+edges (GBK → Istora, Senayan, Palmerah) and `TRANSFER_PENALTY_M` (800 m, a routing
 weight that is **excluded from reported distance**) makes Dijkstra choose the best
 entrance **per destination** automatically, with an honest walk distance shown. You
 curate candidate walk edges; the router curates the answer.
@@ -158,9 +158,17 @@ fares keep using the untouched singleton.
 
 **Why inject instead of baking POIs into the base graph:** it's a *hard* guarantee that
 a POI is never used as a **mid-route walking shortcut** between two stations (A → walk →
-POI → walk → B). The double transfer penalty (5000 m) already makes that nearly
+POI → walk → B). The double transfer penalty (1600 m) already makes that nearly
 impossible, but "nearly" isn't "never" — injecting only the queried endpoint's POI
-removes the possibility entirely. (Rejected alternative: store access walks as
+removes the possibility entirely.
+
+> **Corrected 2026-08-02.** This section previously cited `TRANSFER_PENALTY_M` as
+> 2500 m (double: 5000 m). The real value is **800 m** (`router.ts`), so the
+> penalty is roughly a third of what was assumed here. The conclusion still
+> holds — injection is a hard guarantee and the penalty was only ever a soft one
+> — but the "nearly impossible" fallback is meaningfully weaker than written, and
+> anyone reconsidering the rejected `transfers`-row alternative should re-derive
+> it against 800 rather than trusting the old figure. (Rejected alternative: store access walks as
 `transfers` rows and lean on the penalty. Cleaner storage, weaker guarantee, and it
 muddies fare-summary semantics below.)
 

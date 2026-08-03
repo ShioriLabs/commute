@@ -29,7 +29,7 @@ export const SearchableSchema = v.pipe(
     ),
     data: v.pipe(
       v.optional(v.record(v.string(), v.string())),
-      v.description('Identifier buat data aslinya, `station-id` atau `hub-id`.')
+      v.description('Identifier buat data aslinya, `station-id` atau `hub-id`. Halte berarah yang digabung juga bawa `station-ids`: semua anggotanya, dipisah koma, primary di depan. Cuma ada kalau memang ada yang digabung.')
     ),
     operator: v.pipe(
       v.optional(OperatorCodeSchema),
