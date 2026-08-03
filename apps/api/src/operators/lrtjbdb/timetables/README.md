@@ -13,7 +13,7 @@ committed SQL under `src/db/scripts/`.
 - Content: one departure per line, 24-hour `H:MM` or `HH:MM`, in poster order
   (ascending). Blank lines are ignored.
 - Line codes: `BK` (Lin Bekasi), `CB` (Lin Cibubur).
-- Destination codes: `JTM` (Jatimulya), `HAR` (Harjamukti), `DKA` (Dukuh Atas BNI).
+- Destination codes: `JTM` (Jatimulya), `HAR` (Harjamukti), `DKA` (Dukuh Atas BSI).
 
 ## Workflow
 
@@ -39,7 +39,8 @@ committed SQL under `src/db/scripts/`.
 
 | Batch | IG post | Poster date |
 | ----- | ------- | ----------- |
-| (seed) `SET_BK_JTM.csv` | reconstructed from previously committed SQL, not a poster | — |
+| All 26 `*_BK_*` files | https://www.instagram.com/lrt_jabodebek/p/DZ-eJKrDzME/ (weekday tables; carousel of 12 slides) | effective 15 Juni 2026 |
+| All 22 `*_CB_*` files | https://www.instagram.com/lrt_jabodebek/p/DZ-eIyAj2MY/ (weekday tables; carousel of 12 slides) | effective 15 Juni 2026 |
 
 ## Transcription checklist
 
@@ -48,60 +49,60 @@ both lines.
 
 ### Lin Bekasi (BK) — arah Jatimulya (JTM)
 
-- [ ] DKA_BK_JTM
-- [ ] BEK_BK_JTM
-- [ ] CIL_BK_JTM
-- [ ] CK1_BK_JTM
-- [ ] CK2_BK_JTM
-- [ ] CKK_BK_JTM
-- [ ] CWG_BK_JTM
-- [ ] HAL_BK_JTM
-- [ ] JBU_BK_JTM
-- [ ] KUA_BK_JTM
-- [ ] PAN_BK_JTM
-- [ ] RAS_BK_JTM
-- [ ] SET_BK_JTM
+- [x] DKA_BK_JTM
+- [x] BEK_BK_JTM
+- [x] CIL_BK_JTM
+- [x] CK1_BK_JTM
+- [x] CK2_BK_JTM
+- [x] CKK_BK_JTM
+- [x] CWG_BK_JTM
+- [x] HAL_BK_JTM
+- [x] JBU_BK_JTM
+- [x] KUA_BK_JTM
+- [x] PAN_BK_JTM
+- [x] RAS_BK_JTM
+- [x] SET_BK_JTM
 
-### Lin Bekasi (BK) — arah Dukuh Atas BNI (DKA)
+### Lin Bekasi (BK) — arah Dukuh Atas BSI (DKA)
 
-- [ ] JTM_BK_DKA
-- [ ] BEK_BK_DKA
-- [ ] CIL_BK_DKA
-- [ ] CK1_BK_DKA
-- [ ] CK2_BK_DKA
-- [ ] CKK_BK_DKA
-- [ ] CWG_BK_DKA
-- [ ] HAL_BK_DKA
-- [ ] JBU_BK_DKA
-- [ ] KUA_BK_DKA
-- [ ] PAN_BK_DKA
-- [ ] RAS_BK_DKA
-- [ ] SET_BK_DKA
+- [x] JTM_BK_DKA
+- [x] BEK_BK_DKA
+- [x] CIL_BK_DKA
+- [x] CK1_BK_DKA
+- [x] CK2_BK_DKA
+- [x] CKK_BK_DKA
+- [x] CWG_BK_DKA
+- [x] HAL_BK_DKA
+- [x] JBU_BK_DKA
+- [x] KUA_BK_DKA
+- [x] PAN_BK_DKA
+- [x] RAS_BK_DKA
+- [x] SET_BK_DKA
 
 ### Lin Cibubur (CB) — arah Harjamukti (HAR)
 
-- [ ] DKA_CB_HAR
-- [ ] CIL_CB_HAR
-- [ ] CKK_CB_HAR
-- [ ] CRC_CB_HAR
-- [ ] CWG_CB_HAR
-- [ ] KAM_CB_HAR
-- [ ] KUA_CB_HAR
-- [ ] PAN_CB_HAR
-- [ ] RAS_CB_HAR
-- [ ] SET_CB_HAR
-- [ ] TMI_CB_HAR
+- [x] DKA_CB_HAR
+- [x] CIL_CB_HAR
+- [x] CKK_CB_HAR
+- [x] CRC_CB_HAR
+- [x] CWG_CB_HAR
+- [x] KAM_CB_HAR
+- [x] KUA_CB_HAR
+- [x] PAN_CB_HAR
+- [x] RAS_CB_HAR
+- [x] SET_CB_HAR
+- [x] TMI_CB_HAR
 
-### Lin Cibubur (CB) — arah Dukuh Atas BNI (DKA)
+### Lin Cibubur (CB) — arah Dukuh Atas BSI (DKA)
 
-- [ ] HAR_CB_DKA
-- [ ] CIL_CB_DKA
-- [ ] CKK_CB_DKA
-- [ ] CRC_CB_DKA
-- [ ] CWG_CB_DKA
-- [ ] KAM_CB_DKA
-- [ ] KUA_CB_DKA
-- [ ] PAN_CB_DKA
-- [ ] RAS_CB_DKA
-- [ ] SET_CB_DKA
-- [ ] TMI_CB_DKA
+- [x] HAR_CB_DKA
+- [x] CIL_CB_DKA
+- [x] CKK_CB_DKA
+- [x] CRC_CB_DKA
+- [x] CWG_CB_DKA
+- [x] KAM_CB_DKA
+- [x] KUA_CB_DKA
+- [x] PAN_CB_DKA
+- [x] RAS_CB_DKA
+- [x] SET_CB_DKA
+- [x] TMI_CB_DKA

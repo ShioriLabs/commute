@@ -15,8 +15,10 @@ import { LINES } from './lines'
 const INPUT_DIR = path.join(__dirname, 'timetables')
 const OUTPUT_DIR = path.resolve(__dirname, '../../db/scripts')
 
+// boundFor uses the terminus's sponsored display name (stations.formattedName)
+// — keep in sync with lrtjbdb_stations_insert.sql when a sponsor changes.
 export const DEST_BOUND_FOR: Record<string, string> = {
-  DKA: 'Dukuh Atas BNI',
+  DKA: 'Dukuh Atas Bank Syariah Indonesia',
   JTM: 'Jatimulya',
   HAR: 'Harjamukti'
 }
@@ -45,6 +47,9 @@ export function parseTimetableFilename(basename: string): TimetableFileKey | { e
   if (station === dest) {
     return { error: `"${basename}" departs from its own destination` }
   }
+  if (TRIP_NUMBER_BASE[`${line}_${dest}`] === undefined) {
+    return { error: `"${basename}" pairs line ${line} with destination ${dest}, which is not a service pattern (expected ${Object.keys(TRIP_NUMBER_BASE).join('/')})` }
+  }
 
   return { station, line, dest }
 }
@@ -58,19 +63,42 @@ export function normalizeTime(raw: string): string | null {
   return `${match[1].padStart(2, '0')}:${match[2]}:00`
 }
 
+/**
+ * Network-wide trip numbers, derived from poster column order. The source
+ * posters are trip matrices (columns = trains), and each CSV preserves that
+ * column order, so line k of every station's CSV in a direction is the same
+ * physical train — no correlation needed, unlike the MRTJ sync. This only
+ * holds while every trip serves every station; main() enforces it by
+ * requiring equal departure counts across a direction's CSVs.
+ *
+ * Numbering mirrors the MRTJ convention: towards the central terminus
+ * (Dukuh Atas) even, away odd, ordered by origin departure; Bekasi line
+ * takes the 1000-series and Cibubur the 2000-series so trunk stations
+ * (SET..CWG) serving both lines never collide.
+ */
+export const TRIP_NUMBER_BASE: Record<string, number> = {
+  BK_DKA: 1000,
+  BK_JTM: 1001,
+  CB_DKA: 2000,
+  CB_HAR: 2001
+}
+
 export function buildTimetableSQL(station: string, line: string, dest: string, times: string[]): string {
   const stationId = `LRTJBDB-${station}`
   const boundFor = DEST_BOUND_FOR[dest]
+  const tripNumberBase = TRIP_NUMBER_BASE[`${line}_${dest}`]
 
   const rows = times.map((time, index) => {
     const id = `${stationId}-${line}-${index + 1}-${dest}`
-    return `('${id}', '${stationId}', '${index + 1}', '${time}', '${time}', '${boundFor}', '${line}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+    const tripNumber = `LRTJBDB-${tripNumberBase! + index * 2}`
+    return `('${id}', '${stationId}', '${tripNumber}', '${time}', '${time}', '${boundFor}', '${line}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
   })
 
   // The delete makes re-applying a file safe on an already-loaded station
-  // (a resync would otherwise hit primary-key conflicts). Scoped to the
-  // station+line+direction this file owns.
-  const clearStatement = `DELETE FROM schedules WHERE stationId = '${stationId}' AND lineCode = '${line}' AND boundFor = '${boundFor}';\n`
+  // (a resync would otherwise hit primary-key conflicts). Scoped by id
+  // pattern rather than boundFor: ids are stable while boundFor labels
+  // change on terminus re-sponsoring, which would strand old rows.
+  const clearStatement = `DELETE FROM schedules WHERE id LIKE '${stationId}-${line}-%-${dest}';\n`
   const insertStatement = 'INSERT INTO schedules (id, stationId, tripNumber, estimatedDeparture, estimatedArrival, boundFor, lineCode, createdAt, updatedAt) VALUES\n'
   const switchTimetableSynced = `UPDATE stations SET timetableSynced = 1 WHERE id = '${stationId}';\n`
   return clearStatement + insertStatement + rows.join(',\n') + ';\n\n' + switchTimetableSynced
@@ -101,6 +129,7 @@ function main() {
   const errors: string[] = []
   const written: string[] = []
   const transcribed = new Set<string>()
+  const parsedFiles: { key: TimetableFileKey, times: string[] }[] = []
 
   for (const file of csvFiles.sort()) {
     const key = parseTimetableFilename(file)
@@ -132,10 +161,33 @@ function main() {
       continue
     }
 
-    const outputPath = path.join(OUTPUT_DIR, `lrtjbdb_${key.station}_${key.line}_${key.dest}_timetable.sql`)
-    fs.writeFileSync(outputPath, buildTimetableSQL(key.station, key.line, key.dest, times))
-    written.push(outputPath)
-    transcribed.add(`${key.station}_${key.line}_${key.dest}`)
+    parsedFiles.push({ key, times })
+  }
+
+  // Trip numbers are assigned by CSV line index, which identifies the same
+  // train across stations only if every trip serves every station. A count
+  // mismatch within a direction means a short-working or a transcription
+  // slip — refuse to number rather than misalign silently.
+  const countsByDirection = new Map<string, Set<number>>()
+  for (const { key, times } of parsedFiles) {
+    const direction = `${key.line}_${key.dest}`
+    const counts = countsByDirection.get(direction) ?? new Set()
+    counts.add(times.length)
+    countsByDirection.set(direction, counts)
+  }
+  for (const [direction, counts] of countsByDirection) {
+    if (counts.size > 1) {
+      errors.push(`${direction} CSVs disagree on departure count (${[...counts].sort().join(' vs ')}) — trip numbers cannot align by index`)
+    }
+  }
+
+  if (!errors.some(error => error.includes('cannot align'))) {
+    for (const { key, times } of parsedFiles) {
+      const outputPath = path.join(OUTPUT_DIR, `lrtjbdb_${key.station}_${key.line}_${key.dest}_timetable.sql`)
+      fs.writeFileSync(outputPath, buildTimetableSQL(key.station, key.line, key.dest, times))
+      written.push(outputPath)
+      transcribed.add(`${key.station}_${key.line}_${key.dest}`)
+    }
   }
 
   for (const outputPath of written) {

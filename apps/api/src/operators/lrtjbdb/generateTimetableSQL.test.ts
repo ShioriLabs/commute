@@ -24,6 +24,11 @@ describe('parseTimetableFilename', () => {
     expect(parseTimetableFilename('JTM_BK_JTM.csv')).toHaveProperty('error')
   })
 
+  it('rejects line/destination pairs that are not service patterns', () => {
+    expect(parseTimetableFilename('SET_BK_HAR.csv')).toHaveProperty('error')
+    expect(parseTimetableFilename('SET_CB_JTM.csv')).toHaveProperty('error')
+  })
+
   it('rejects lowercase and non-csv names', () => {
     expect(parseTimetableFilename('set_bk_jtm.csv')).toHaveProperty('error')
     expect(parseTimetableFilename('SET_BK_JTM.txt')).toHaveProperty('error')
@@ -49,31 +54,24 @@ describe('normalizeTime', () => {
 })
 
 describe('buildTimetableSQL', () => {
-  it('regenerates the committed SET_BK_JTM file modulo the deliberate changes', () => {
-    // Golden round-trip against the committed SQL. Compared to the original
-    // hand-generated format, the generator output differs in three deliberate
-    // ways: departure hours are zero-padded (lexical-sort fix), a scoped
-    // DELETE precedes the INSERT (safe re-apply), and the trailing UPDATE
-    // gains its missing semicolon. The committed file is normalized for all
-    // three before comparing — each normalization is a no-op once the file
-    // has been regenerated, so the test holds for both formats.
-    const committedPath = path.resolve(__dirname, '../../db/scripts/lrtjbdb_SET_BK_JTM_timetable.sql')
-    const committed = fs.readFileSync(committedPath, 'utf8')
+  it('assigns even trip numbers towards Dukuh Atas and odd away, per line series', () => {
+    const towardsDKA = buildTimetableSQL('SET', 'BK', 'DKA', ['05:59:00', '06:07:00'])
+    expect(towardsDKA).toContain('\'LRTJBDB-SET-BK-1-DKA\', \'LRTJBDB-SET\', \'LRTJBDB-1000\'')
+    expect(towardsDKA).toContain('\'LRTJBDB-SET-BK-2-DKA\', \'LRTJBDB-SET\', \'LRTJBDB-1002\'')
 
-    const times = [...committed.matchAll(/'LRTJBDB-SET', '\d+', '(\d{1,2}):(\d{2}):00'/g)]
-      .map(match => `${match[1]}:${match[2]}`)
+    const awayFromDKA = buildTimetableSQL('SET', 'CB', 'HAR', ['06:12:00', '06:20:00'])
+    expect(awayFromDKA).toContain('\'LRTJBDB-SET-CB-1-HAR\', \'LRTJBDB-SET\', \'LRTJBDB-2001\'')
+    expect(awayFromDKA).toContain('\'LRTJBDB-SET-CB-2-HAR\', \'LRTJBDB-SET\', \'LRTJBDB-2003\'')
+  })
+
+  it('round-trips the committed SET_BK_JTM CSV to the committed SQL byte-for-byte', () => {
+    const csv = fs.readFileSync(path.resolve(__dirname, 'timetables/SET_BK_JTM.csv'), 'utf8')
+    const times = csv.split(/\r?\n/).filter(line => line.trim()).map(line => normalizeTime(line))
     expect(times.length).toBeGreaterThan(0)
+    expect(times).not.toContain(null)
 
-    const normalized = times.map(time => normalizeTime(time))
-    expect(normalized).not.toContain(null)
-
-    const generated = buildTimetableSQL('SET', 'BK', 'JTM', normalized as string[])
-
-    const expected = 'DELETE FROM schedules WHERE stationId = \'LRTJBDB-SET\' AND lineCode = \'BK\' AND boundFor = \'Jatimulya\';\n'
-      + committed
-        .replace(/^DELETE FROM schedules[^\n]*\n/, '')
-        .replace(/'(\d):(\d{2}):00'/g, '\'0$1:$2:00\'')
-        .replace(/WHERE id = 'LRTJBDB-SET'\n$/, 'WHERE id = \'LRTJBDB-SET\';\n')
-    expect(generated).toBe(expected)
+    const generated = buildTimetableSQL('SET', 'BK', 'JTM', times as string[])
+    const committed = fs.readFileSync(path.resolve(__dirname, '../../db/scripts/lrtjbdb_SET_BK_JTM_timetable.sql'), 'utf8')
+    expect(generated).toBe(committed)
   })
 })
