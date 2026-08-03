@@ -23,6 +23,8 @@ export default [
     IS_LITE_BUILD ? index('routes/map.tsx', { id: 'map-index' }) : index('routes/home.tsx'),
     route('search', 'routes/search.tsx'),
     route('fare', 'routes/fare.tsx'),
+    // Unlisted: nothing links here and it is not in the sitemap. See the file.
+    route('trip', 'routes/trip.tsx'),
     route('map', 'routes/map.tsx'),
     route('stations/:operator/:code', 'routes/station.tsx'),
     route('stations/:operator/:code/timetable', 'routes/timetable.tsx'),

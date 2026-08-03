@@ -45,9 +45,17 @@ export interface FareQueryOptions {
   // Criteria named by the incoming URL, which beat stored preferences for this
   // visit. Applied once, like initialPair.
   initialCriteria?: Partial<FareCriteria>
-  // Whether to drive document.title from the selection. On for /fare, where the
-  // title is the page's; off in the search sheet, which owns its own title.
+  // Whether to drive document.title from the selection. On for the standalone
+  // routes, where the title is the page's; off in the search sheet, which owns
+  // its own title.
   syncDocumentTitle?: boolean
+  /*
+   * Leading words of that title, e.g. "Cek Tarif Bekasi ke Blok A - Commute".
+   * Passed in rather than hard-coded because /fare and /trip render the same
+   * sheet under different names while both exist, and a tab reading "Cek Tarif"
+   * on /trip contradicts the heading right above it.
+   */
+  documentTitlePrefix?: string
 }
 
 export interface FareQuery {
@@ -95,7 +103,8 @@ export function useFareQuery({
   controlledPair,
   onStateChange,
   initialCriteria,
-  syncDocumentTitle = false
+  syncDocumentTitle = false,
+  documentTitlePrefix = 'Cek Tarif'
 }: FareQueryOptions = {}): FareQuery {
   const controlled = controlledPair !== undefined
   // The prebuilt search index, shared with the search sheet through the same
@@ -240,11 +249,11 @@ export function useFareQuery({
     if (origin && destination) {
       const fromName = origin.name
       const toName = destination.name
-      document.title = `Cek Tarif ${fromName} ke ${toName} - Commute`
+      document.title = `${documentTitlePrefix} ${fromName} ke ${toName} - Commute`
     } else {
-      document.title = 'Cek Tarif - Commute'
+      document.title = `${documentTitlePrefix} - Commute`
     }
-  }, [origin, destination, syncDocumentTitle])
+  }, [origin, destination, syncDocumentTitle, documentTitlePrefix])
 
   /*
    * Built through the shared helper so this key is byte-identical to the map's

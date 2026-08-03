@@ -1,11 +1,13 @@
-import type { FareResult, FareResultRideLeg, FareResultTransferLeg } from '@commute/schemas'
+import type { FareJourney, FareResult, FareResultLeg, FareResultRideLeg, FareResultTransferLeg } from '@commute/schemas'
 import { OPERATORS, type Operator } from '@commute/constants'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowsDownUpIcon, CaretDownIcon, CaretRightIcon, PersonSimpleWalkIcon, TicketIcon } from '@phosphor-icons/react'
 import { getForegroundColor } from 'utils/colors'
 import { joinLabels } from 'utils/labels'
 import LineRoundel from '~/components/line-roundel'
 import { codeOfLineKey, useLines } from '~/hooks/use-lines'
+import { JOURNEY_LABELS } from './journey-labels'
+import { journeysOf, sortJourneyLabels, walkDistanceOf } from './journeys'
 
 const rupiah = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })
 const formatKm = (distanceM: number) => `${(distanceM / 1000).toLocaleString('id-ID', { maximumFractionDigits: 1 })} km`
@@ -142,13 +144,13 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
 // Itinerary timeline: ringed nodes at board/alight stations, line-colored
 // connectors carrying the service card, walks as full-width cards that break
 // the rail (TfL Go-style).
-function JourneyTimeline({ result }: { result: FareResult }) {
+function JourneyTimeline({ legs }: { legs: FareResultLeg[] }) {
   return (
     <ol className="mt-6 flex flex-col">
-      {result.legs.map((leg, index) => {
+      {legs.map((leg, index) => {
         // Two consecutive rides through the same station = same-station
         // interchange (no walk leg): bridge the islands with a grey rail.
-        const previous = index > 0 ? result.legs[index - 1] : null
+        const previous = index > 0 ? legs[index - 1] : null
         const isSameStationTransfer = leg.type === 'RIDE'
           && previous?.type === 'RIDE'
           && previous.to.id === leg.from.id
@@ -207,46 +209,99 @@ function JourneyTimeline({ result }: { result: FareResult }) {
   )
 }
 
-export default function FareResultCard({ result }: { result: FareResult }) {
+// Service colours for the glance strip, resolved from the line dictionary.
+function useLegColors() {
   const { line: lookupLine } = useLines()
-  // Service colours for the glance strip, resolved from the line dictionary.
-  const legColors = (leg: FareResultRideLeg) =>
+  return (leg: FareResultRideLeg) =>
     (leg.serviceLines ?? [{ line: leg.line, headsign: null }])
       .map(ref => lookupLine(ref.line)?.colorCode ?? '#888888')
+}
+
+/*
+ * The face of one option: fare, what it wins, and the shape of the trip.
+ *
+ * Presented as a button only when there is something to choose between. A lone
+ * journey renders the identical block inert, because a press affordance on the
+ * only answer invites a rider to look for an alternative that does not exist.
+ */
+function JourneyCardFace({ journey, selected, onSelect }: {
+  journey: FareJourney
+  selected: boolean
+  onSelect?: () => void
+}) {
+  const legColors = useLegColors()
+  const labels = sortJourneyLabels(journey.labels)
+  const walkM = walkDistanceOf(journey)
+
+  const body = (
+    <>
+      {labels.length > 0
+        ? (
+            <div className="flex flex-wrap gap-1.5">
+              {labels.map(label => (
+                <span key={label} className="text-xs font-bold px-2.5 py-1 rounded-full bg-rose-100 text-rose-900">
+                  { JOURNEY_LABELS[label] }
+                </span>
+              ))}
+            </div>
+          )
+        : null}
+      <span className="text-3xl font-bold">
+        {journey.totalFare !== null ? rupiah.format(journey.totalFare) : 'Tarif tidak tersedia'}
+      </span>
+      {/* Journey at a glance: ride legs proportional to distance, walks as dots. */}
+      <div className="my-1 flex h-2 gap-0.5" aria-hidden="true">
+        {journey.legs.map((leg, index) => leg.type === 'RIDE'
+          ? <span key={index} className="rounded-full min-w-2" style={rideGlanceStyle(leg, legColors(leg))} />
+          : <span key={index} className="w-1.5 shrink-0 rounded-full bg-slate-300" />)}
+      </div>
+      <span className="text-sm text-slate-500">
+        {formatKm(journey.totalDistanceM)}
+        {journey.transferCount > 0 ? ` • ${journey.transferCount}x transit` : ''}
+        {/* Omitted, not zeroed, when the response could not say — see journeys.ts. */}
+        {walkM !== null && walkM > 0 ? ` • jalan ${walkM} m` : ''}
+      </span>
+    </>
+  )
+
+  if (!onSelect) {
+    return <div className="bg-rose-50 rounded-xl p-6 flex flex-col gap-1">{ body }</div>
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-expanded={selected}
+      className={`w-full text-left rounded-xl p-6 flex flex-col gap-1 cursor-pointer transition-colors ${
+        selected ? 'bg-rose-50 border-2 border-rose-200' : 'bg-stone-100/80 border-2 border-transparent'
+      }`}
+    >
+      { body }
+    </button>
+  )
+}
+
+/** The chosen option in full: itinerary, fare breakdown, disclaimer. */
+function JourneyDetail({ journey }: { journey: FareJourney }) {
   // Surcharged transfers (e.g. the Dukuh Atas corridor) aren't ride segments but
   // do contribute to totalFare, so they need their own breakdown rows for the
   // line items to reconcile with the total.
-  const surchargedTransfers = result.legs.filter(
+  const surchargedTransfers = journey.legs.filter(
     (leg): leg is FareResultTransferLeg & { fare: number, corridorLabel: string } =>
       leg.type === 'TRANSFER' && leg.fare != null && leg.corridorLabel != null
   )
 
   return (
-    <article className="mt-6">
-      <div className="bg-rose-50 rounded-xl p-6 flex flex-col gap-1">
-        <span className="text-sm font-semibold text-slate-500">Total Tarif</span>
-        <span className="text-3xl font-bold">
-          {result.totalFare !== null ? rupiah.format(result.totalFare) : 'Tarif tidak tersedia'}
-        </span>
-        {/* Journey at a glance: ride legs proportional to distance, walks as dots. */}
-        <div className="my-1 flex h-2 gap-0.5" aria-hidden="true">
-          {result.legs.map((leg, index) => leg.type === 'RIDE'
-            ? <span key={index} className="rounded-full min-w-2" style={rideGlanceStyle(leg, legColors(leg))} />
-            : <span key={index} className="w-1.5 shrink-0 rounded-full bg-slate-300" />)}
-        </div>
-        <span className="text-sm text-slate-500">
-          {formatKm(result.totalDistanceM)}
-          {result.transferCount > 0 ? ` • ${result.transferCount}x transit` : ''}
-        </span>
-      </div>
-      <JourneyTimeline result={result} />
+    <>
+      <JourneyTimeline legs={journey.legs} />
 
-      {result.segments.length + surchargedTransfers.length > 1
+      {journey.segments.length + surchargedTransfers.length > 1
         ? (
             <div className="mt-2">
               <h2 className="font-bold text-lg">Rincian Tarif</h2>
               <ul className="mt-2 flex flex-col gap-2">
-                {result.segments.map(segment => (
+                {journey.segments.map(segment => (
                   <li key={`${segment.from.id}-${segment.to.id}`} className="flex flex-row justify-between gap-4 bg-stone-100/80 rounded-xl px-4 py-3">
                     <div className="flex flex-col">
                       <b>{ operatorName(segment.operator) }</b>
@@ -280,6 +335,41 @@ export default function FareResultCard({ result }: { result: FareResult }) {
       <p className="mt-6 text-xs text-slate-400">
         Estimasi berdasarkan tarif resmi per Juli 2026. Tarif LRT Jabodebek memakai batas atas jam sibuk; di luar jam sibuk dan akhir pekan bisa lebih murah
       </p>
+    </>
+  )
+}
+
+export default function FareResultCard({ result }: { result: FareResult }) {
+  const journeys = journeysOf(result)
+  const [selected, setSelected] = useState(0)
+
+  /*
+   * Reset on a new answer. The index is an ordinal into a set recomputed per
+   * request, not a stable identifier: change the payment method and the third
+   * option may be a different route, or may not exist at all.
+   */
+  useEffect(() => setSelected(0), [result])
+
+  const journey = journeys[selected] ?? journeys[0]!
+
+  return (
+    <article className="mt-6">
+      {journeys.length > 1
+        ? (
+            <div className="flex flex-col gap-2">
+              {journeys.map((option, index) => (
+                <JourneyCardFace
+                  key={index}
+                  journey={option}
+                  selected={index === selected}
+                  onSelect={() => setSelected(index)}
+                />
+              ))}
+            </div>
+          )
+        : <JourneyCardFace journey={journey} selected />}
+
+      <JourneyDetail journey={journey} />
     </article>
   )
 }

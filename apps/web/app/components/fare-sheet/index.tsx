@@ -15,7 +15,15 @@ import { useFareQuery } from './use-fare-query'
 // SEO-decorates `/fare`, the OG image worker is keyed on it, and the sitemap
 // lists it. The search sheet renders the same FarePanel but never writes these
 // URLs — see use-fare-query.ts.
-export default function FareSheet() {
+interface Props {
+  /*
+   * Heading and close-button label. Defaults to the fare wording because /fare
+   * is still the canonical URL; /trip passes its own while the two coexist.
+   */
+  title?: string
+}
+
+export default function FareSheet({ title = 'Cek Tarif' }: Props) {
   const [searchParams] = useSearchParams()
 
   // On the homepage the sheet lives behind a faked URL (SheetButton pushStates
@@ -56,7 +64,9 @@ export default function FareSheet() {
     // only one of the two is written back.
     initialCriteria: readCriteriaFromUrl(searchParams),
     onStateChange: writeUrl,
-    syncDocumentTitle: true
+    syncDocumentTitle: true,
+    // Keep the tab and the heading saying the same thing on both routes.
+    documentTitlePrefix: title
   })
   const { origin, destination, criteria, openPickerFor } = query
 
@@ -80,11 +90,11 @@ export default function FareSheet() {
     <section className="bg-white w-screen h-full overflow-y-auto [scrollbar-gutter:stable]">
       <div className="p-8 pb-4 max-w-3xl mx-auto">
         <div className="flex gap-4 items-center justify-between">
-          <DialogTitle className="font-bold text-2xl">Cek Tarif</DialogTitle>
+          <DialogTitle className="font-bold text-2xl">{ title }</DialogTitle>
           <div className="flex gap-4">
             <FareShareButton fromId={origin?.id} toId={destination?.id} criteria={criteria} />
             <CloseButton
-              aria-label="Tutup halaman cek tarif"
+              aria-label={`Tutup halaman ${title.toLowerCase()}`}
               className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
             >
               <XIcon weight="bold" className="w-6 h-6" />
