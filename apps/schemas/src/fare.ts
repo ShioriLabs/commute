@@ -94,6 +94,36 @@ export const FareSegmentSchema = v.pipe(
   v.metadata({ ref: 'FareSegment' })
 )
 
+export const FareJourneyLabelSchema = v.pipe(
+  v.picklist(['FEWEST_CHANGES', 'LEAST_WALKING', 'CHEAPEST', 'SHORTEST_WAIT']),
+  v.title('FareJourneyLabel'),
+  v.description('Kelebihan yang cuma dipunya satu pilihan rute: `FEWEST_CHANGES` paling jarang ganti kendaraan, `LEAST_WALKING` paling sedikit jalan kaki, `CHEAPEST` paling murah, `SHORTEST_WAIT` kendaraannya paling sering lewat. Kalau ada dua rute yang sama-sama unggul, dua-duanya tidak dapat label, biar labelnya benar-benar membedakan.'),
+  v.metadata({ ref: 'FareJourneyLabel' })
+)
+
+export const FareJourneySchema = v.pipe(
+  v.object({
+    legs: v.pipe(v.array(FareLegSchema), v.description('Perjalanan dari sisi penumpang: naik apa saja dan transfer di mana saja.')),
+    segments: v.pipe(v.array(FareSegmentSchema), v.description('Perjalanan dari sisi penagihan tarif.')),
+    totalFare: v.pipe(
+      v.nullable(v.number()),
+      v.description('Total dalam rupiah buat pilihan rute ini. Null kalau tarifnya tidak bisa dihitung.'),
+      v.metadata({ examples: [14000] })
+    ),
+    totalDistanceM: v.pipe(v.number(), v.description('Total jarak pilihan rute ini dalam meter.')),
+    transferCount: v.pipe(v.number(), v.description('Berapa kali harus pindah kendaraan, dihitung dari sisi penumpang.')),
+    labels: v.pipe(
+      v.array(FareJourneyLabelSchema),
+      v.description('Boleh kosong, dan itu wajar: rute yang tidak menang sendirian di kriteria mana pun memang tidak punya kelebihan khusus buat disebut.')
+    ),
+    boardings: v.pipe(v.number(), v.description('Berapa kali naik kendaraan. Beda tipis dari `transferCount`: ganti kereta di peron yang sama tetap dihitung naik, tapi tidak dihitung transit.')),
+    walkDistanceM: v.pipe(v.number(), v.description('Total jarak jalan kaki di pilihan rute ini dalam meter.'))
+  }),
+  v.title('FareJourney'),
+  v.description('Satu pilihan rute lengkap dengan tarifnya. Yang dibandingkan cuma jumlah naik kendaraan, jarak jalan kaki, rata-rata lama nunggu, dan tarif — bukan waktu tempuh, karena mesinnya memang tidak punya jadwal.'),
+  v.metadata({ ref: 'FareJourney' })
+)
+
 export const FareResultSchema = v.pipe(
   v.object({
     from: FareStationSchema,
@@ -106,10 +136,19 @@ export const FareResultSchema = v.pipe(
       v.metadata({ examples: [14000] })
     ),
     totalDistanceM: v.pipe(v.number(), v.description('Total jarak seluruh perjalanan dalam meter.')),
-    transferCount: v.pipe(v.number(), v.description('Berapa kali harus pindah kendaraan.'))
+    transferCount: v.pipe(v.number(), v.description('Berapa kali harus pindah kendaraan.')),
+    /*
+     * Optional, not nullable. schemas.live.test.ts validates against production,
+     * and bodies cached before this shipped simply lack the key — optional
+     * passes on an absent key, nullable would not.
+     */
+    journeys: v.pipe(
+      v.optional(v.array(FareJourneySchema)),
+      v.description('Pilihan rute lain buat pasangan stasiun yang sama, diurutkan dari yang paling masuk akal. Yang pertama sama persis dengan `legs`, `segments`, dan `totalFare` di atas, jadi yang cuma butuh satu jawaban boleh mengabaikan bagian ini.')
+    )
   }),
   v.title('FareResult'),
-  v.description('Hasil pencarian rute: perjalanannya seperti apa (`legs`) dan tarifnya dihitung bagaimana (`segments`).'),
+  v.description('Hasil pencarian rute: perjalanannya seperti apa (`legs`), tarifnya dihitung bagaimana (`segments`), dan pilihan rute lainnya kalau ada (`journeys`).'),
   v.metadata({ ref: 'FareResult' })
 )
 
@@ -119,6 +158,8 @@ export type FareRideLeg = v.InferOutput<typeof RideLegSchema>
 export type FareTransferLeg = v.InferOutput<typeof TransferLegSchema>
 export type FareLeg = v.InferOutput<typeof FareLegSchema>
 export type FareSegment = v.InferOutput<typeof FareSegmentSchema>
+export type FareJourneyLabel = v.InferOutput<typeof FareJourneyLabelSchema>
+export type FareJourney = v.InferOutput<typeof FareJourneySchema>
 export type FareResult = v.InferOutput<typeof FareResultSchema>
 
 /* Aliases matching the web app's long-standing names for these shapes. */

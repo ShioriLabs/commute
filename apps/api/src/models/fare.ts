@@ -52,12 +52,57 @@ export interface FareResultSegment {
   fare: number | null
 }
 
-export interface FareResult {
-  from: FareResultStation
-  to: FareResultStation
+/**
+ * What a journey uniquely wins against the others in the same response.
+ *
+ * Mirrors @commute/tsundere's JourneyLabel. Uniqueness-based: a tie earns
+ * nobody the label, and a lone journey earns none at all — a badge is a
+ * comparison, and there is nothing to compare a single answer against.
+ */
+export type FareJourneyLabel = 'FEWEST_CHANGES' | 'LEAST_WALKING' | 'CHEAPEST' | 'SHORTEST_WAIT'
+
+export interface FareJourney {
   legs: FareResultLeg[]
   segments: FareResultSegment[]
   totalFare: number | null
   totalDistanceM: number
   transferCount: number
+  labels: FareJourneyLabel[]
+  /*
+   * Vehicle boardings. Deliberately NOT transferCount, which counts visible
+   * interchanges after corridor folding — a same-station line change is a
+   * boarding but not an interchange. FEWEST_CHANGES is decided on this number,
+   * so rendering transferCount beside that badge would occasionally show two
+   * journeys with equal counts and only one badge.
+   */
+  boardings: number
+  walkDistanceM: number
+  /*
+   * No waitS, on purpose. It exists in the engine's Criteria and it decides
+   * SHORTEST_WAIT, but it is derived from average headways rather than a
+   * timetable. A number in seconds invites the UI to render "tunggu ±7 menit",
+   * which is a departure-time promise this engine cannot keep. The label
+   * carries the comparison; the figure would carry a lie.
+   */
+}
+
+export interface FareResult {
+  from: FareResultStation
+  to: FareResultStation
+  /*
+   * journeys[0], flattened. Kept at the root because apps/opengraph reads
+   * `totalFare` off it through a Pick<>, and because a client that never learns
+   * about `journeys` keeps working unchanged.
+   */
+  legs: FareResultLeg[]
+  segments: FareResultSegment[]
+  totalFare: number | null
+  totalDistanceM: number
+  transferCount: number
+  /*
+   * Alternatives, best first, never empty when the route resolved. Optional in
+   * the type only so a body cached before this shipped still parses — KV holds
+   * pre-change bodies for up to 20 hours.
+   */
+  journeys?: FareJourney[]
 }

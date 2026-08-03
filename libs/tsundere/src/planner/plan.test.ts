@@ -157,6 +157,89 @@ describe('plan', () => {
     })
   })
 
+  describe('labels', () => {
+    /*
+     * Labels drive the result cards, so a wrong one is user-visible in a way a
+     * wrong criteria value is not: "Cheapest" on the dearer option is a lie the
+     * rider acts on.
+     */
+    it('leaves a lone journey unlabelled', () => {
+      // One journey, one option — it is not "the cheapest of several", it is
+      // the only one. Labelling it would imply a comparison that never happened
+      // and send the rider looking for an alternative that does not exist.
+      const journeys = plan(graph, 'KCI-A', 'KCI-B')
+      expect(journeys).toHaveLength(1)
+      expect(journeys[0]!.labels).toEqual([])
+    })
+
+    /*
+     * A fork with a genuine tradeoff: the direct ride is one boarding but a
+     * 500m walk at the end, the indirect one is two boardings and no walk.
+     * Neither dominates, so both survive to be labelled.
+     */
+    const forked = buildGraph([
+      ...edge('D', 'F-ORIG', 'F-NEAR'),
+      ...edge('I', 'F-ORIG', 'F-MID'),
+      ...edge('J', 'F-MID', 'F-DEST')
+    ], [
+      { fromStationId: 'F-NEAR', toStationId: 'F-DEST', distance: 500 }
+    ])
+
+    it('labels the option that uniquely needs fewest boardings', () => {
+      const journeys = plan(forked, 'F-ORIG', 'F-DEST')
+      expect(journeys.length).toBeGreaterThan(1)
+      const labelled = journeys.filter(j => j.labels.includes('FEWEST_CHANGES'))
+      expect(labelled).toHaveLength(1)
+      const fewest = Math.min(...journeys.map(j => j.criteria.boardings))
+      expect(labelled[0]!.criteria.boardings).toBe(fewest)
+    })
+
+    it('labels the option that uniquely walks least', () => {
+      const journeys = plan(forked, 'F-ORIG', 'F-DEST')
+      const labelled = journeys.filter(j => j.labels.includes('LEAST_WALKING'))
+      expect(labelled).toHaveLength(1)
+      expect(labelled[0]!.criteria.walkDistanceM).toBe(0)
+    })
+
+    it('withholds CHEAPEST when two journeys share the lowest fare', () => {
+      // A tie means neither is "the cheapest one". Two cards both claiming it
+      // would be worse than neither claiming it.
+      const journeys = plan(forked, 'F-ORIG', 'F-DEST', { scoreFare: () => 5000 })
+      expect(journeys.length).toBeGreaterThan(1)
+      expect(journeys.filter(j => j.labels.includes('CHEAPEST'))).toHaveLength(0)
+    })
+
+    it('never labels CHEAPEST on a journey with an unknown fare', () => {
+      const journeys = plan(forked, 'F-ORIG', 'F-DEST', { scoreFare: () => null })
+      expect(journeys.every(j => !j.labels.includes('CHEAPEST'))).toBe(true)
+    })
+
+    it('labels the cheaper option when fares genuinely differ', () => {
+      const journeys = plan(forked, 'F-ORIG', 'F-DEST', {
+        // The walking option is the dear one; the two-boarding option is cheap.
+        scoreFare: legs => (legs.some(l => l.type === 'TRANSFER') ? 9000 : 3000)
+      })
+      const labelled = journeys.filter(j => j.labels.includes('CHEAPEST'))
+      expect(labelled).toHaveLength(1)
+      expect(labelled[0]!.criteria.fare).toBe(3000)
+    })
+
+    it('ignores walking differences too small to bucket', () => {
+      // 20m apart is the same walk as far as the rider is concerned, and the
+      // dominance test already treats it that way. Labels must agree, or the UI
+      // claims a win the search does not believe in.
+      const near = buildGraph([
+        ...edge('P', 'S1', 'S2'),
+        ...edge('Q', 'S1', 'S3')
+      ], [
+        { fromStationId: 'S2', toStationId: 'DEST', distance: 100 },
+        { fromStationId: 'S3', toStationId: 'DEST', distance: 120 }
+      ])
+      const journeys = plan(near, 'S1', 'DEST')
+      expect(journeys.filter(j => j.labels.includes('LEAST_WALKING'))).toHaveLength(0)
+    })
+  })
+
   describe('endpoint restrictions', () => {
     const restricted = buildGraph(edges, transfers, [
       { stationId: 'KCI-A', forbiddenNeighborId: 'KCI-B' }

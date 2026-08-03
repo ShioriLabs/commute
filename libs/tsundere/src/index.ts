@@ -38,7 +38,7 @@ export { loadGraph, Tsundere, type LoadGraphInput } from './tsundere'
  * boardings, distance, walking, waiting, fare — not to be confused with the
  * web app's FareCriteria, which is what the rider *chooses*.
  */
-export type { FareScorer, Journey, PlanOptions } from './planner/plan'
+export type { FareScorer, Journey, JourneyLabel, PlanOptions } from './planner/plan'
 export {
   DEFAULT_RANK_WEIGHTS,
   WALKING_WEIGHTS,

@@ -33,9 +33,27 @@ export interface PlanOptions {
   scoreFare?: FareScorer
 }
 
+/*
+ * What a journey uniquely wins.
+ *
+ * The result set is a Pareto front, so every member is best at *something* —
+ * but only the axes a rider recognises are worth surfacing. These are the ones
+ * a person would name out loud when choosing.
+ */
+export type JourneyLabel = 'FEWEST_CHANGES' | 'LEAST_WALKING' | 'CHEAPEST' | 'SHORTEST_WAIT'
+
 export interface Journey {
   legs: RouteLeg[]
   criteria: Criteria
+  /*
+   * Labels this journey and no other in the result set earns.
+   *
+   * Empty is normal and correct: a journey that ties on every axis it might
+   * have won has nothing to distinguish it, and inventing a label ("Balanced")
+   * would claim a property the engine never measured. Uniqueness is the whole
+   * point — two cards both reading "Cheapest" tell a rider nothing.
+   */
+  labels: JourneyLabel[]
 }
 
 /*
@@ -268,11 +286,12 @@ export function plan(
     const legs = hopsToLegs(traceToHops(label.trace))
     return {
       legs,
-      criteria: { ...label.criteria, fare: scoreFare ? scoreFare(legs) : null }
+      criteria: { ...label.criteria, fare: scoreFare ? scoreFare(legs) : null },
+      labels: []
     }
   })
 
-  return rank(journeys, weights).slice(0, maxResults)
+  return labelJourneys(rank(journeys, weights).slice(0, maxResults))
 }
 
 /*
@@ -297,4 +316,70 @@ function rank(journeys: Journey[], weights: RankWeights): Journey[] {
     unique.push(journey)
   }
   return unique
+}
+
+/*
+ * Tag each journey with the axes it uniquely wins.
+ *
+ * Applied AFTER the maxResults cut, deliberately: a label has to describe the
+ * set the rider is actually looking at. Labelling first and then trimming can
+ * leave "Cheapest" on a card that is no longer the cheapest thing on screen.
+ *
+ * Quantised the same way `dominates` quantises, so a label means the same thing
+ * the search meant. Without it a 30m walking difference reads as a win on
+ * "least walking", which is noise a rider cannot act on and, worse, is a
+ * *different* answer than the one dominance already gave.
+ *
+ * Fare is compared only among journeys that have one. An unpriced journey
+ * cannot win CHEAPEST and cannot block another from winning it — same rule as
+ * the dominance test, where unknown means incomparable rather than best or
+ * worst.
+ */
+function labelJourneys(journeys: Journey[]): Journey[] {
+  /*
+   * A label is a comparison, so it needs something to compare against. A lone
+   * journey is not "the one with fewest changes" — it is the only way to get
+   * there, and badging it invites the rider to look for the alternative it
+   * implies.
+   */
+  if (journeys.length < 2) return journeys
+
+  /*
+   * Index of the single lowest value, or -1 if nothing wins outright.
+   *
+   * Nulls are skipped rather than treated as high or low — an unknown fare is
+   * incomparable, exactly as in `dominates`.
+   */
+  const winner = (values: (number | null)[]): number => {
+    let bestIndex = -1
+    let best = Infinity
+    let tied = false
+    for (let i = 0; i < values.length; i++) {
+      const value = values[i]
+      if (value === null || value === undefined) continue
+      if (value < best) {
+        best = value
+        bestIndex = i
+        tied = false
+      } else if (value === best) {
+        tied = true
+      }
+    }
+    // A tie is not a win. Two journeys sharing the lowest fare means neither is
+    // "the cheapest one", and saying so on both would be a lie by repetition.
+    return tied ? -1 : bestIndex
+  }
+
+  const bucket = (value: number, size: number) => Math.round(value / size)
+
+  const assign = (index: number, label: JourneyLabel) => {
+    if (index >= 0) journeys[index]!.labels.push(label)
+  }
+
+  assign(winner(journeys.map(j => j.criteria.boardings)), 'FEWEST_CHANGES')
+  assign(winner(journeys.map(j => bucket(j.criteria.walkDistanceM, 100))), 'LEAST_WALKING')
+  assign(winner(journeys.map(j => bucket(j.criteria.waitS, 60))), 'SHORTEST_WAIT')
+  assign(winner(journeys.map(j => j.criteria.fare)), 'CHEAPEST')
+
+  return journeys
 }

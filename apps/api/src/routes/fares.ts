@@ -1,14 +1,14 @@
 import { Hono } from 'hono'
-import { FareContext, Operator, PAYMENT_METHODS, PaymentMethod } from '@commute/constants'
+import { FareContext, PAYMENT_METHODS, PaymentMethod } from '@commute/constants'
 import { Bindings } from 'app'
 import { EdgeRepository } from 'db/repositories/edges'
 import { KVRepository } from 'db/repositories/kv'
 import { StationRepository } from 'db/repositories/stations'
-import { FareResult, FareResultLeg, FareResultLineRef } from 'models/fare'
-import { calculateTransferFare, fareTimeBucket, resolveCorridorMerges } from 'utils/fare'
+import { FareResult } from 'models/fare'
+import { fareTimeBucket } from 'utils/fare'
+import { assembleJourney, planJourney, stationNamer } from 'utils/fare-journey'
 import { summarizeFares } from 'utils/fare-summary'
-import { computeHeadsignCode } from 'utils/headsign'
-import { findInterliningLineCodes, mergeInterlinedLegs } from 'utils/interlining'
+import { mergeInterlinedLegs } from 'utils/interlining'
 import { Internal, NotFound, Ok } from 'utils/response'
 import { ENDPOINT_RESTRICTIONS } from 'db/data/topology'
 import { loadGraph, type Tsundere } from '@commute/tsundere'
@@ -35,8 +35,8 @@ async function getRouter(d1: D1Database): Promise<Tsundere> {
     edges,
     transfers,
     restrictions,
-    // Only findRoutes reads these; findRoute — which this route still calls —
-    // ignores them entirely, so wiring them in changes nothing today.
+    // Read by findRoutes to price the expected wait per boarding, which is what
+    // separates journeys that are otherwise equal on distance and changes.
     headwaysS: new Map(Object.entries(HEADWAYS_S))
   })
   return cachedRouter
@@ -65,7 +65,7 @@ app.get(
   '/:from/:to',
   doc({
     summary: 'Tarif dan rute antara dua stasiun',
-    description: 'Mencari rute perjalanan sekaligus menghitung tarifnya. `legs` adalah perjalanan dari sisi penumpang: naik apa saja dan jalan kaki di mana saja. `segments` adalah cara tarifnya dihitung, yang bisa berbeda karena tiap operator menagih per perjalanan di jaringan mereka sendiri. Tarif integrasi sudah dihitung di `totalFare`.',
+    description: 'Mencari rute perjalanan sekaligus menghitung tarifnya. `legs` adalah perjalanan dari sisi penumpang: naik apa saja dan jalan kaki di mana saja. `segments` adalah cara tarifnya dihitung, yang bisa berbeda karena tiap operator menagih per perjalanan di jaringan mereka sendiri. Tarif integrasi sudah dihitung di `totalFare`. Kalau ada beberapa rute yang sama-sama masuk akal, semuanya ada di `journeys` — yang pertama sama persis dengan `legs` dan `segments` di atas.',
     tag: 'Tarif',
     data: FareResultSchema,
     parameters: [
@@ -105,141 +105,50 @@ app.get(
       }
 
       const router = await getRouter(c.env.DB)
-      const rawLegs = router.findRoute(fromId, toId)
-      if (!rawLegs) {
+      const routed = router.findRoutes(fromId, toId, {
+        /*
+         * Pricing the journeys is what makes the CHEAPEST label reachable at
+         * all — without a scorer every journey's `fare` criterion is null and
+         * the axis is skipped as incomparable.
+         *
+         * The legs are merged first, exactly as the display pipeline merges
+         * them, so the fare the label was decided on and the fare the rider
+         * sees are computed over the same decomposition by construction.
+         * Scoring the raw legs would let the two disagree.
+         */
+        scoreFare: legs => summarizeFares(mergeInterlinedLegs([...legs]), context).totalFare
+      })
+      // findRoutes reports "no route" as an empty front, where findRoute
+      // returned null.
+      if (routed.length === 0) {
         return c.json(NotFound('NO_ROUTE', 'No route between these stations.'), 404)
       }
-      // Collapse phantom line changes at interlined trunk nodes into one-seat legs.
-      const legs = mergeInterlinedLegs(rawLegs)
 
-      const summary = summarizeFares(legs, context)
+      const plans = routed.map(journey => planJourney(journey.legs, journey.criteria, journey.labels, context))
 
-      // Fold a surcharged corridor crossing + its chained free walk into one
-      // display leg (adds the uncounted internal-peron walk). Fares/segments are
-      // untouched — this is display + reported distance only.
-      const corridorMerges = resolveCorridorMerges(legs, context)
+      /*
+       * One batched lookup across every journey, which is why planJourney
+       * reports the ids it needs instead of resolving names itself. Journeys
+       * between the same pair overlap heavily, so the union is barely larger
+       * than a single journey's set — and a query per journey would cost more
+       * than the search that produced them.
+       */
+      const stations = await stationRepository.getByIds([...new Set(plans.flatMap(p => p.stationIds))])
+      const namer = stationNamer(stations)
+      const journeys = plans.map(plan => assembleJourney(plan, namer, context))
 
-      // Station ids are `${operator}-${topologyCode}`; the headsign walk works
-      // in topology codes, so strip/re-add the operator prefix around it.
-      type HeadsignRef = { terminusId: string, viaId: string | null }
-      const headsignRef = (operator: string, headsign: { code: string, viaCode: string | null } | null): HeadsignRef | null =>
-        headsign
-          ? { terminusId: `${operator}-${headsign.code}`, viaId: headsign.viaCode ? `${operator}-${headsign.viaCode}` : null }
-          : null
-
-      // Per RIDE leg, the service line(s) that run it, each with its own headsign.
-      // A leg on interlined track (the LRT Jabodebek DKA..CWG trunk) is served by
-      // several lines in topology order; an ordinary leg carries just its own line.
-      const legLines = legs.map((leg) => {
-        if (leg.type !== 'RIDE') return null
-        const operator = leg.operator as Operator
-        const codes = leg.stationIds.map(id => id.slice(operator.length + 1))
-        const interlining = findInterliningLineCodes(operator, codes)
-        const lineCodes = interlining.length >= 2 ? interlining : [leg.lineCode]
-        return {
-          interlined: interlining.length >= 2,
-          lines: lineCodes.map(lineCode => ({
-            lineCode,
-            headsign: headsignRef(operator, computeHeadsignCode(operator, lineCode, codes))
-          }))
-        }
-      })
-
-      const stationIds = [...new Set([
-        ...legs.flatMap(leg => leg.type === 'RIDE' ? leg.stationIds : [leg.fromStationId, leg.toStationId]),
-        ...legLines.flatMap(meta => meta
-          ? meta.lines.flatMap(l => l.headsign ? [l.headsign.terminusId, ...(l.headsign.viaId ? [l.headsign.viaId] : [])] : [])
-          : [])
-      ])]
-      const stations = await stationRepository.getByIds(stationIds)
-      const name = (id: string) => {
-        const station = stations.find(s => s.id === id)
-        return station ? station.name : id
-      }
-      const stationRef = (id: string) => ({ id, name: name(id) })
-      const known = (id: string | null): id is string => id !== null && stations.some(s => s.id === id)
-      // A terminus missing from the DB would echo its raw id; omit instead.
-      const headsignName = (h: HeadsignRef | null): string | null =>
-        h && known(h.terminusId)
-          ? (known(h.viaId) ? `${name(h.terminusId)} via ${name(h.viaId)}` : name(h.terminusId))
-          : null
-
-      const resultLegs: FareResultLeg[] = legs.flatMap((leg, index): FareResultLeg[] => {
-        if (leg.type === 'TRANSFER') {
-          const merge = corridorMerges.get(index)
-          if (merge?.kind === 'ABSORBED') return [] // folded into the anchor leg
-          if (merge?.kind === 'MERGE_ANCHOR') {
-            return [{
-              type: 'TRANSFER',
-              from: stationRef(merge.fromStationId),
-              to: stationRef(merge.toStationId),
-              distanceM: merge.distanceM,
-              fare: merge.fare,
-              corridorLabel: merge.corridor.label
-            }]
-          }
-          const surcharge = calculateTransferFare(leg.fromStationId, leg.toStationId, context, {
-            prev: legs[index - 1],
-            next: legs[index + 1]
-          })
-          return [{
-            type: 'TRANSFER',
-            from: stationRef(leg.fromStationId),
-            to: stationRef(leg.toStationId),
-            distanceM: leg.distanceM,
-            ...(surcharge ? { fare: surcharge.fare, corridorLabel: surcharge.corridor.label } : {})
-          }]
-        }
-        const meta = legLines[index]!
-        // Line keys; name and colour resolve against /operators like everywhere
-        // else, so the leg no longer carries three denormalised line fields.
-        const serviceLines: FareResultLineRef[] = meta.lines.map(l => ({
-          line: `${leg.operator}:${l.lineCode}`,
-          headsign: headsignName(l.headsign)
-        }))
-        // On interlined track the router's line pick is arbitrary; present the
-        // first topology-ordered service line as the primary for a stable badge.
-        const primary = serviceLines[0]!
-        return [{
-          type: 'RIDE',
-          line: primary.line,
-          operator: leg.operator,
-          from: stationRef(leg.fromStationId),
-          to: stationRef(leg.toStationId),
-          stationCount: leg.stationIds.length,
-          stops: leg.stationIds.map(stationRef),
-          headsign: primary.headsign,
-          distanceM: leg.distanceM,
-          ...(meta.interlined ? { serviceLines } : {})
-        }]
-      })
-
-      // summary.totalDistanceM already counts both raw legs of each merge; the only
-      // uncounted distance is the internal-peron walk baked into each anchor.
-      const internalWalkExtra = [...corridorMerges.values()].reduce(
-        (sum, m) => sum + (m.kind === 'MERGE_ANCHOR' ? (m.corridor.internalWalkM ?? 0) : 0),
-        0
-      )
-      // Each merge folds two transfers into one visible interchange, so the
-      // rider-facing count drops by one per absorbed leg.
-      const absorbedCount = [...corridorMerges.values()].filter(m => m.kind === 'ABSORBED').length
-
+      const primary = journeys[0]!
       const result: FareResult = {
-        from: stationRef(fromId),
-        to: stationRef(toId),
-        legs: resultLegs,
-        // Nested from/to, matching every other station reference in the API,
-        // instead of four flat fromStationId/fromName/toStationId/toName fields.
-        // `distanceM` is dropped: only leg-level distance is ever rendered.
-        segments: summary.segments.map(s => ({
-          operator: s.operator,
-          from: stationRef(s.fromStationId),
-          to: stationRef(s.toStationId),
-          fare: s.fare
-        })),
-        totalFare: summary.totalFare,
-        totalDistanceM: summary.totalDistanceM + internalWalkExtra,
-        transferCount: summary.transferCount - absorbedCount
+        from: namer.ref(fromId),
+        to: namer.ref(toId),
+        // The primary flattened onto the root, where it has always been. Every
+        // existing client — including the OG worker's Pick<> — reads it there.
+        legs: primary.legs,
+        segments: primary.segments,
+        totalFare: primary.totalFare,
+        totalDistanceM: primary.totalDistanceM,
+        transferCount: primary.transferCount,
+        journeys
       }
 
       c.executionCtx.waitUntil(kvRepository.set(kvKey, result))
