@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { useEffect, useRef, type MouseEvent } from 'react'
 import clsx from 'clsx'
 import { useMapMorph } from '~/components/map-morph'
+import { MAP_MANIFEST_URL, MAP_PREVIEW_URL } from '~/lib/map-assets'
 
 interface Props {
   className?: string
@@ -13,14 +14,18 @@ export default function MapButton({ className }: Props) {
 
   // The manifest is max-age=300 (public/_headers), so a throwaway fetch warms
   // the HTTP cache and the map route's SWR resolves without a round-trip.
-  // The preview warms the no-service-worker/dev path; with the SW installed
-  // both are precached already (ignoreSearch covers the ?v variant).
+  // The preview warms the no-service-worker/dev path.
   const warmedRef = useRef(false)
   const warmUp = () => {
     if (warmedRef.current) return
     warmedRef.current = true
-    void fetch('/maps/fdtj/manifest.json').catch(() => {})
-    void fetch('/maps/fdtj/preview.webp').catch(() => {})
+    void fetch(MAP_MANIFEST_URL).catch(() => {})
+    // Must be the identical URL MapPreviewBackdrop's <img> asks for. Both were
+    // bare until now, which was accidentally coherent; the moment one is
+    // stamped and the other isn't, this warms a URL nothing reads *and* keeps
+    // the unversioned year-long immutable HTTP entry alive. Sharing one
+    // constant makes drifting apart impossible.
+    void fetch(MAP_PREVIEW_URL).catch(() => {})
     // The skeleton is a separate JS chunk, so it has to be in memory before the
     // morph lands or the draw is skipped for that visit.
     morph.prefetch()

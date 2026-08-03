@@ -19,6 +19,7 @@ const TILE_DIR = path.join(PUBLIC_DIR, 'maps', 'fdtj')
 
 interface SwLists {
   CACHE_NAME: string
+  TILE_BUILD: string
   MAP_PRECACHE_URLS: string[]
   IMMUTABLE_MAP_ASSETS: Set<string>
 }
@@ -40,7 +41,7 @@ function loadSwLists(): SwLists {
   if (rest.length === 0) throw new Error(`service-worker.js is missing "${SPLIT_MARKER}"`)
   const factory = new Function(
     'self',
-    `"use strict";${snippet}; return { CACHE_NAME, MAP_PRECACHE_URLS, IMMUTABLE_MAP_ASSETS }`
+    `"use strict";${snippet}; return { CACHE_NAME, TILE_BUILD, MAP_PRECACHE_URLS, IMMUTABLE_MAP_ASSETS }`
   ) as (self: unknown) => SwLists
   return factory({ location: { hostname: 'example.test', protocol: 'https:' } })
 }
@@ -90,8 +91,44 @@ describe('service worker map assets', () => {
       (n, u) => n + statSync(path.join(PUBLIC_DIR, u)).size,
       0
     )
-    // ~9 MB today. cache.addAll is atomic, so this is one all-or-nothing
-    // download on first visit; the SVG tiles alone would have tripled it.
+    // 8.6 MiB today, and this is what a cache rotation costs every user, since
+    // precacheTiles is atomic and a new CACHE_NAME starts empty. The 64 SVG
+    // fallbacks (~24 MB) are cached on demand and stay out of it.
     expect(bytes).toBeLessThanOrEqual(12 * 1024 * 1024)
+  })
+})
+
+// The invariant cacheFirst depends on: because it matches with `ignoreSearch`,
+// the `?v=` stamp on the page's requests is invisible to CacheStorage, so the
+// cache name is the *only* thing that can invalidate a tile. It used to be
+// hand-edited while manifest.build rotated automatically, which meant a re-tile
+// shipped bytes no client would ever see. build-map-tiles.ts stamps it now, and
+// these tests are what stop the two drifting apart again.
+describe('service worker cache identity', () => {
+  it('is stamped with the build hash of the shipped tiles', () => {
+    const { build } = JSON.parse(readFileSync(path.join(TILE_DIR, 'manifest.json'), 'utf8'))
+    const { TILE_BUILD } = loadSwLists()
+
+    // Red here means the tiles were regenerated without committing the stamped
+    // worker. Re-run `pnpm build:map-tiles` and commit both files together.
+    expect(TILE_BUILD).toBe(build)
+  })
+
+  it('derives the cache name from the build hash', () => {
+    const { CACHE_NAME, TILE_BUILD } = loadSwLists()
+
+    // A stamp that lands but never reaches the cache identity would be inert.
+    expect(CACHE_NAME).toContain(TILE_BUILD)
+  })
+
+  // The anti-stranding pin. Clients poisoned by the old scheme only heal if the
+  // name they hold is superseded: install's `missing` diff finds all 193 entries
+  // already present under `pwa-cache-v4` and skips the re-fetch entirely, so
+  // reverting to that literal would strand every one of them on a worker that
+  // contains the fix.
+  it('never reverts to the pre-fix cache name', () => {
+    const { CACHE_NAME } = loadSwLists()
+
+    expect(CACHE_NAME).not.toBe('pwa-cache-v4')
   })
 })

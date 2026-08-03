@@ -22,6 +22,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium, type Page } from 'playwright'
+import { stampServiceWorker } from './stamp-service-worker'
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const WEB_ROOT = path.resolve(SCRIPT_DIR, '..')
@@ -29,6 +30,7 @@ const REPO_ROOT = path.resolve(WEB_ROOT, '..', '..')
 const PDF_PATH = path.join(REPO_ROOT, '2026-06a-Peta-Integrasi-Jakarta-FDTJ-Web.pdf')
 const VERSION = '2026-06a'
 const OUT_DIR = path.join(WEB_ROOT, 'public', 'maps', 'fdtj')
+const SW_PATH = path.join(WEB_ROOT, 'public', 'service-worker.js')
 // Grid granularity. This is the single biggest lever on GPU memory, though not
 // in the obvious way: total pixels are fixed by the map's size and the tier, so
 // a finer grid doesn't reduce them. What it reduces is the *working set* — how
@@ -554,6 +556,14 @@ async function main(): Promise<void> {
     }
     writeFileSync(path.join(OUT_DIR, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n')
     log(`wrote manifest.json + ${GRID_ROWS * GRID_COLS} SVG tiles + ${GRID_ROWS * GRID_COLS * RASTER_TIERS.length} WebP rasters + preview to ${OUT_DIR}`)
+
+    // The service worker names its tile cache after this same hash, so the two
+    // files have to be written — and committed — together. Doing it here rather
+    // than by hand is the fix for the bug where manifest.build rotated on every
+    // re-tile while the worker's CACHE_NAME never did, leaving every client
+    // pinned to the previous build's bytes for good.
+    writeFileSync(SW_PATH, stampServiceWorker(readFileSync(SW_PATH, 'utf8'), buildHash))
+    log(`stamped TILE_BUILD=${buildHash} into ${path.relative(WEB_ROOT, SW_PATH)}`)
   } finally {
     rmSync(tmp, { recursive: true, force: true })
   }

@@ -16,17 +16,37 @@
         - Badges: https://microsoft.github.io/win-student-devs/#/30DaysOfPWA/advanced-capabilities/07?id=application-badges
     */
 
-// Bump this if and only if tile or preview *bytes* change — i.e. whenever
-// build-map-tiles.ts regenerates the grid. After the cache-first split below,
-// those are the only assets frozen for the lifetime of this cache, and a bump
-// costs every user a ~27 MB re-download of the full tile set.
-const CACHE_NAME = 'pwa-cache-v4'
+// Stamped by scripts/build-map-tiles.ts from manifest.build — do not hand-edit.
+// app/lib/service-worker-assets.test.ts fails if this and
+// public/maps/fdtj/manifest.json disagree, which is what makes the invariant in
+// cacheFirst below ("CACHE_NAME moves whenever the tiles do") enforced rather
+// than merely asserted. It used to be neither: manifest.build rotated on every
+// re-tile while CACHE_NAME sat still, so `ignoreSearch` happily answered every
+// `?v=<new build>` request out of the previous build's bytes, forever.
+const TILE_BUILD = '20f1255a'
+// Two halves on purpose. `v5` is the *scheme* version — bump it by hand when
+// what is stored changes shape (a new pre-cache set, a new key convention).
+// TILE_BUILD is the *content* version and moves on its own. Either one moving
+// rotates the cache, and `activate`'s unmanaged-cache sweep collects the loser.
+//
+// A rotation costs every user an 8.6 MiB re-fetch of the raster set. That is
+// correct — those bytes genuinely changed — but it isn't free, so don't rotate
+// the scheme half casually. The 64 SVG fallbacks (~24 MB) are cached on demand
+// and are *not* part of that cost.
+const CACHE_NAME = `pwa-cache-v5-${TILE_BUILD}`
 const TILE_PATH_PREFIX = '/maps/fdtj/'
 const TILE_MANIFEST_PATH = `${TILE_PATH_PREFIX}manifest.json`
 
+// Every network read of a tile goes through this. The worker stamps with its
+// *own* TILE_BUILD rather than reusing whatever query the page sent: the page's
+// stamp comes from a manifest.json that may be up to five minutes stale, while
+// this one comes from the same build that named the cache. Keying network reads
+// on the value the cache is named after is what keeps the two from disagreeing.
+const versionedTileUrl = (pathname) => `${pathname}?v=${TILE_BUILD}`
+
 // The runtime caches, split out from CACHE_NAME so they can be swept without
 // touching the tiles. They used to share one bucket, which meant the only way
-// to evict a poisoned index.html was a CACHE_NAME bump — i.e. a ~27 MB
+// to evict a poisoned index.html was a CACHE_NAME bump — i.e. an 8.6 MiB
 // re-download for every user. Splitting them makes eviction cheap, and lets
 // each one carry the entry budget that suits it.
 //
@@ -213,25 +233,69 @@ const notifyStaleShell = async () => {
 }
 
 /**
+ * Fetch a set of tile URLs and commit them, atomically.
+ *
+ * This used to be `cache.addAll`, which is four characters and does the same
+ * job — except addAll accepts no RequestInit, so every entry is fetched under
+ * the default cache mode and reads the browser's HTTP disk cache. public/_headers
+ * serves these same URLs `immutable, max-age=31536000`, and that was the whole
+ * bug: DevTools "Clear site data" wipes CacheStorage and unregisters the worker
+ * but leaves the HTTP cache alone, so the worker reinstalled, addAll refilled
+ * CacheStorage out of the year-old disk entries, and cacheFirst's ignoreSearch
+ * served those bytes to every `?v=` request. Only "Empty cache and hard reload"
+ * — the one action that clears the HTTP cache — broke the loop.
+ *
+ * Two independent defences, because either alone has a gap:
+ *   - `?v=<TILE_BUILD>` makes it a URL the HTTP cache has never seen. Needs no
+ *     browser support at all, which covers the iOS Safari versions (< 16.4)
+ *     that ignore the `cache` init entirely.
+ *   - `cache: 'reload'` bypasses the HTTP cache and any intermediary, which
+ *     holds even if an edge rule ever starts stripping query strings.
+ * Don't drop either one.
+ *
+ * Atomicity is preserved by hand, since addAll's all-or-nothing rollback went
+ * with it: every response is fetched and checked before the first put, so one
+ * failure leaves the cache exactly as it was. That matters because install's
+ * catch swallows the error and lets the worker activate — a half-filled cache
+ * would look complete to the `missing` diff below and never heal.
+ */
+const precacheTiles = async (cache, urls) => {
+  const fetched = await Promise.all(urls.map(async (url) => {
+    const response = await fetch(versionedTileUrl(url), { cache: 'reload' })
+    if (!response.ok) throw new TypeError(`pre-cache failed for ${url} (${response.status})`)
+    return [url, response]
+  }))
+  // Stored under the bare path: one entry per asset, matching both the
+  // ignoreSearch lookup in cacheFirst and the IMMUTABLE_MAP_ASSETS allowlist
+  // that `activate` sweeps against. Sequential so the bodies drain one at a
+  // time rather than all being resident at once.
+  for (const [url, response] of fetched) await cache.put(url, response)
+}
+
+/**
  *  @Lifecycle Install
  *  Pre-cache the full set of map tile assets so the map works offline after the
- *  first visit. cache.addAll is atomic — a single failure rolls back the batch,
+ *  first visit. precacheTiles is atomic — a single failure rolls back the batch,
  *  so a partial-cache state is impossible.
  */
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME)
     try {
-      // Only fetch what's actually missing. cache.addAll *always* hits the
-      // network — it does not skip entries already present — so an unfiltered
-      // call would re-download the whole ~9 MB tile set on every reinstall.
-      // The boot watchdog recovers a stranded page by unregistering the worker,
+      // Only fetch what's actually missing. precacheTiles *always* hits the
+      // network — deliberately, that is the point of it — so an unfiltered call
+      // would re-download the whole 8.6 MiB tile set on every reinstall. The
+      // boot watchdog recovers a stranded page by unregistering the worker,
       // which forces exactly that reinstall, so this filter is what makes the
       // recovery affordable rather than worse than the failure it fixes.
+      //
+      // After a TILE_BUILD rotation `caches.open(CACHE_NAME)` yields a brand-new
+      // empty cache, so `missing` is the full set and the whole 8.6 MiB is
+      // re-fetched. That is the intended cost of a re-tile, not a miss here.
       const cached = await cache.keys()
       const present = new Set(cached.map(req => new URL(req.url).pathname))
       const missing = MAP_PRECACHE_URLS.filter(url => !present.has(url))
-      if (missing.length > 0) await cache.addAll(missing)
+      if (missing.length > 0) await precacheTiles(cache, missing)
     } catch (err) {
       // Don't block install if a tile asset isn't available yet (e.g. dev
       // server before the build script has run). The runtime cache-first
@@ -306,19 +370,29 @@ const cacheFirst = async (request) => {
   // `ignoreSearch` so the `?v=<build>` cache-buster the renderer appends to tile
   // URLs doesn't fragment the cache. The query exists to defeat Cloudflare's
   // year-long `immutable` edge cache on stable tile filenames; CacheStorage is
-  // already scoped by CACHE_NAME, which moves whenever the tiles do, so keying
-  // on the path alone is both sufficient and what lets the pre-cached
+  // already scoped by CACHE_NAME, which now genuinely moves whenever the tiles
+  // do — build-map-tiles.ts stamps TILE_BUILD in, and
+  // app/lib/service-worker-assets.test.ts fails if the two ever disagree. So
+  // keying on the path alone is both sufficient and what lets the pre-cached
   // (unversioned) entries answer versioned requests.
   const cached = await cache.match(request, { ignoreSearch: true })
   if (cached) return cached
   try {
-    // `cache: 'reload'` bypasses the HTTP disk cache, which still holds these
-    // under a one-year `immutable` entry. Without it a CACHE_NAME bump would
-    // refill CacheStorage from that stale HTTP copy and change nothing — the
-    // bump would appear to work while serving the old tiles. This path only
-    // runs on a CacheStorage miss (fresh install or post-bump), which is
+    // Re-stamped through versionedTileUrl rather than reusing request.url, on
+    // both axes:
+    //   - the query is the worker's TILE_BUILD, not whatever the caller sent.
+    //     This path also serves the SVG fallbacks, which any future caller
+    //     might request unstamped — normalising here means the worker can never
+    //     issue an unversioned tile request, so it can never re-poison the bare
+    //     HTTP entry that precacheTiles just stopped reading.
+    //   - `cache: 'reload'` bypasses the HTTP disk cache, which still holds
+    //     these under a one-year `immutable` entry. Without it a CACHE_NAME
+    //     rotation would refill CacheStorage from that stale HTTP copy and
+    //     change nothing — the rotation would appear to work while serving the
+    //     old tiles.
+    // This only runs on a CacheStorage miss (fresh install or post-rotation),
     // exactly when network authority is wanted, so it costs nothing otherwise.
-    const response = await fetch(request.url, { cache: 'reload' })
+    const response = await fetch(versionedTileUrl(new URL(request.url).pathname), { cache: 'reload' })
     // Store under the bare path so there is exactly one entry per asset,
     // matching both the pre-cached URLs and the ignoreSearch lookup above.
     if (response.ok) {

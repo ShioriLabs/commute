@@ -82,8 +82,6 @@ class FakeCache {
   // Insertion-ordered, which is what the worker's FIFO trimming relies on.
   readonly entries = new Map<string, StoredResponse>()
 
-  constructor(private readonly fetchImpl: (input: RequestLike | string) => Promise<Response>) {}
-
   // The worker sometimes puts under a bare pathname string (real CacheStorage
   // resolves those against the worker's scope), so normalise everything to an
   // absolute href before it becomes a key.
@@ -124,27 +122,19 @@ class FakeCache {
     return [...this.entries.keys()].map(url => ({ url, method: 'GET' }))
   }
 
-  async addAll(urls: string[]): Promise<void> {
-    // Atomic, like the real thing: fetch everything first and only commit if
-    // every response was ok.
-    const fetched = await Promise.all(urls.map(async (url) => {
-      const response = await this.fetchImpl(new URL(url, ORIGIN).href)
-      if (!response.ok) throw new TypeError(`addAll failed for ${url}`)
-      return [url, response] as const
-    }))
-    for (const [url, response] of fetched) await this.put(url, response)
-  }
+  // Deliberately no addAll. The worker pre-caches through its own precacheTiles
+  // instead, because addAll takes no RequestInit and so cannot be kept off the
+  // HTTP disk cache — which is the bug that made tiles immortal. Faking an API
+  // the worker must never use again is how someone reintroduces it.
 }
 
 class FakeCacheStorage {
   readonly stores = new Map<string, FakeCache>()
 
-  constructor(private readonly fetchImpl: (input: RequestLike | string) => Promise<Response>) {}
-
   async open(name: string): Promise<FakeCache> {
     const existing = this.stores.get(name)
     if (existing) return existing
-    const created = new FakeCache(this.fetchImpl)
+    const created = new FakeCache()
     this.stores.set(name, created)
     return created
   }
@@ -201,8 +191,25 @@ export interface FakeClient {
   messages: unknown[]
 }
 
+/**
+ * The worker's own cache-identity constants, read out of the evaluated source.
+ *
+ * Tests assert against these rather than string literals because CACHE_NAME is
+ * now derived from TILE_BUILD, which scripts/build-map-tiles.ts rewrites on
+ * every re-tile. A hardcoded 'pwa-cache-v5-20f1255a' in a test would go stale
+ * the first time the tiles are regenerated.
+ */
+export interface WorkerNames {
+  CACHE_NAME: string
+  TILE_BUILD: string
+  SHELL_CACHE: string
+  ASSET_CACHE: string
+  API_CACHE: string
+}
+
 export interface Harness {
   caches: FakeCacheStorage
+  names: WorkerNames
   clock: Clock
   /** Every fetch the worker made, in order. */
   calls: FetchCall[]
@@ -267,7 +274,7 @@ export function createHarness(): Harness {
     return new Response('not routed', { status: 404 })
   }
 
-  const caches = new FakeCacheStorage(fetchImpl)
+  const caches = new FakeCacheStorage()
 
   let skipWaitingCalls = 0
   let claimCalls = 0
@@ -307,10 +314,14 @@ export function createHarness(): Harness {
   }
 
   const source = readFileSync(path.join(PUBLIC_DIR, 'service-worker.js'), 'utf8')
+  // The trailing `return` hands back the cache-identity constants. Everything in
+  // the worker is a function-scoped `const`, and its last statement is an
+  // addEventListener call, so appending a return is safe and needs no parsing.
   const factory = new Function(
-    'self', 'caches', 'fetch', 'console', 'setTimeout', 'clearTimeout', source
-  ) as (...args: unknown[]) => void
-  factory(self, caches, fetchImpl, consoleStub, setTimer, clearTimer)
+    'self', 'caches', 'fetch', 'console', 'setTimeout', 'clearTimeout',
+    `${source}\n;return { CACHE_NAME, TILE_BUILD, SHELL_CACHE, ASSET_CACHE, API_CACHE }`
+  ) as (...args: unknown[]) => WorkerNames
+  const names = factory(self, caches, fetchImpl, consoleStub, setTimer, clearTimer)
 
   const dispatchLifecycle = async (type: 'install' | 'activate') => {
     const handler = listeners.get(type)
@@ -325,6 +336,7 @@ export function createHarness(): Harness {
 
   return {
     caches,
+    names,
     calls,
     clients,
     warnings,

@@ -14,7 +14,12 @@
 #
 # manifest.json below stays short-lived and revalidated, so a client picks up
 # the new hash within minutes and every tile URL turns over with it.
-# Also bump CACHE_NAME in service-worker.js when the tiles change.
+#
+# The service worker's tile cache is named after the same hash, and
+# build:map-tiles stamps it in automatically — nothing to bump by hand. That
+# used to be a manual step, and skipping it meant CacheStorage answered every
+# `?v=` request out of the previous build's bytes for good, because cacheFirst
+# matches with ignoreSearch. See TILE_BUILD in public/service-worker.js.
 /maps/fdtj/tile-*
   Cache-Control: public, max-age=31536000, immutable
 /maps/fdtj/preview.webp
