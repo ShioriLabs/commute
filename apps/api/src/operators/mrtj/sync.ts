@@ -1,7 +1,7 @@
 import { MRTJ_STATIONS_BY_SLUG, OPERATORS, REGIONS } from '@commute/constants'
 import { StationRepository } from 'db/repositories/stations'
 import { NewStation } from 'db/schemas/stations'
-import { MRTJDatumRow, buildStationTimetable, cleanDisplayName, isStationRow, resolveTerminusNames } from 'operators/mrtj/datum'
+import { MRTJDatumRow, buildStationTimetable, cleanDisplayName, isStationRow, resolveTerminusNames, synthesizeTripNumbers } from 'operators/mrtj/datum'
 import { chunkArray } from 'utils/chunk'
 
 // NOTE: dev-looking host, but it is what the production jakartamrt.co.id
@@ -63,7 +63,7 @@ export async function syncTimetable(d1: D1Database, stationCode: string) {
   if (!row) return []
 
   const stationId = `${OPERATORS.MRTJ.code}-${stationCode}`
-  const timetable = buildStationTimetable(row, stationId, resolveTerminusNames(rows))
+  const timetable = buildStationTimetable(row, stationId, resolveTerminusNames(rows), synthesizeTripNumbers(rows))
 
   return await new StationRepository(d1).insertTimetable(stationId, timetable)
 }
