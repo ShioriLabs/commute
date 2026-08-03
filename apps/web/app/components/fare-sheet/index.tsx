@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { CloseButton, DialogTitle } from '@headlessui/react'
-import { XIcon, ShareNetworkIcon } from '@phosphor-icons/react'
+import { XIcon } from '@phosphor-icons/react'
 import { useSearchParams } from 'react-router'
-import { buildFareShareUrl } from 'utils/fare-url'
 import FarePanel from './fare-panel'
+import FareShareButton from './fare-share-button'
 import { PAYMENT_METHODS, type PaymentMethod } from '@commute/constants'
 import { fareQueryParams, type FareCriteria } from 'utils/fare-criteria'
 import { useFareQuery } from './use-fare-query'
@@ -18,7 +18,6 @@ import { useFareQuery } from './use-fare-query'
 // URLs — see use-fare-query.ts.
 export default function FareSheet() {
   const [searchParams] = useSearchParams()
-  const [copied, setCopied] = useState(false)
 
   // On the homepage the sheet lives behind a faked URL (SheetButton pushStates
   // '/fare' while the router still thinks it's on '/'), so setSearchParams
@@ -78,45 +77,13 @@ export default function FareSheet() {
     }
   }, [destination, origin, openPickerFor])
 
-  const handleShare = async () => {
-    // Built from the pair rather than read from window.location.href: the same
-    // helper serves the search sheet, where the address bar says /search.
-    const url = buildFareShareUrl(origin?.id, destination?.id, window.location.origin, criteria)
-    if (!url) return
-
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: 'Cek Tarif Commute',
-          url
-        })
-        return
-      } catch {
-        // User cancelled or share failed, fall back to clipboard.
-      }
-    }
-
-    await navigator.clipboard.writeText(url)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
   return (
     <section className="bg-white w-screen h-full overflow-y-auto [scrollbar-gutter:stable]">
       <div className="p-8 pb-4 max-w-3xl mx-auto">
         <div className="flex gap-4 items-center justify-between">
           <DialogTitle className="font-bold text-2xl">Cek Tarif</DialogTitle>
           <div className="flex gap-4">
-            {origin && destination && (
-              <button
-                type="button"
-                onClick={handleShare}
-                aria-label="Bagikan rute ini"
-                className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
-              >
-                {copied ? <span className="text-[10px] font-bold text-green-600">✓</span> : <ShareNetworkIcon weight="bold" className="w-6 h-6" />}
-              </button>
-            )}
+            <FareShareButton fromId={origin?.id} toId={destination?.id} criteria={criteria} />
             <CloseButton
               aria-label="Tutup halaman cek tarif"
               className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"

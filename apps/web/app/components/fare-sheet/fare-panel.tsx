@@ -13,12 +13,15 @@ interface Props {
   // for its "open on /fare" link, which is how a route found in the sheet
   // becomes a shareable URL — see utils/fare-url.ts.
   footer?: ReactNode
+  // Wrap the criteria chips instead of scrolling them. Set by the map's fare
+  // sheet, where a horizontally-scrolling rail cannot work — see CriteriaBar.
+  wrapCriteria?: boolean
 }
 
 // The fare query body: the Dari/Ke pair, the swap control, and whichever of
 // empty/loading/error/result applies. Shared verbatim by the /fare route and the
 // search sheet's route mode, so the two can never drift apart visually.
-export default function FarePanel({ query, footer }: Props) {
+export default function FarePanel({ query, footer, wrapCriteria = false }: Props) {
   const {
     origin,
     destination,
@@ -56,6 +59,7 @@ export default function FarePanel({ query, footer }: Props) {
         criteria={criteria}
         onChange={setCriteria}
         operators={operators}
+        wrap={wrapCriteria}
       />
 
       {!origin || !destination

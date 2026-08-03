@@ -1,5 +1,6 @@
 import type { OperatorCode } from '@commute/schemas'
 import { useMemo, useState } from 'react'
+import clsx from 'clsx'
 import { haptic } from 'utils/haptics'
 import { DEFAULT_FARE_CRITERIA, type FareCriteria } from 'utils/fare-criteria'
 import CriterionSheet, { type CriterionOption } from './criterion-sheet'
@@ -17,6 +18,19 @@ interface Props {
   onChange: (criteria: FareCriteria) => void
   /** Operators present in the pickable set, so the sheet offers only real ones. */
   operators: OperatorCode[]
+  /*
+   * Wrap the chips onto multiple lines instead of scrolling them horizontally.
+   *
+   * Off by default, so /fare and the search sheet keep the scrolling rail. The
+   * map's fare sheet must set it: components/bottom-sheet.tsx puts
+   * touch-action: none on the sheet and its body to drive scrollTop by hand,
+   * touch-action intersects down the ancestor chain so a descendant cannot
+   * re-enable panning, and the sheet's drag engine only commits on vertical
+   * movement — a horizontal swipe there is swallowed entirely, leaving the
+   * overflowing chips visible but unreachable. Wrapping also drops the
+   * -mx-8 px-8 bleed, which suits the narrow desktop side pane.
+   */
+  wrap?: boolean
 }
 
 type OpenCriterion = 'payment' | 'time' | 'operator' | null
@@ -35,7 +49,7 @@ type OpenCriterion = 'payment' | 'time' | 'operator' | null
  * one system. The -mx-8 px-8 bleed assumes 8-unit parent padding, which /fare
  * (p-8) and the search sheet (px-8) both provide.
  */
-export default function CriteriaBar({ criteria, onChange, operators }: Props) {
+export default function CriteriaBar({ criteria, onChange, operators, wrap = false }: Props) {
   const [open, setOpen] = useState<OpenCriterion>(null)
 
   const paymentOptions = useMemo<CriterionOption<FareCriteria['paymentMethod']>[]>(
@@ -93,7 +107,10 @@ export default function CriteriaBar({ criteria, onChange, operators }: Props) {
       {/* Rendered whether or not a pair is chosen: it is a standing setting, and
           revealing it only once both stations land would jump the layout. */}
       <div
-        className="mt-3 -mx-8 px-8 flex gap-2 overflow-x-auto no-scrollbar"
+        className={clsx(
+          'mt-3 flex gap-2',
+          wrap ? 'flex-wrap' : '-mx-8 px-8 overflow-x-auto no-scrollbar'
+        )}
         role="group"
         aria-label="Pengaturan tarif"
       >

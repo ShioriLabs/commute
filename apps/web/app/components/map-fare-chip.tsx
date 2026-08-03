@@ -1,28 +1,26 @@
-import { XIcon, CaretRightIcon } from '@phosphor-icons/react'
-import { Link } from 'react-router'
+import { XIcon } from '@phosphor-icons/react'
 import clsx from 'clsx'
 import type { FareResult } from '@commute/schemas'
-import { buildFarePath } from 'utils/fare-url'
-
-const rupiah = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })
+import FareSummary from './fare-summary'
 
 interface MapFareChipProps {
-  fromId: string
-  toId: string
   fare: FareResult | null
   hasError: boolean
   isLoading: boolean
   onClear: () => void
 }
 
-// Floating fare summary for the map's route overlay. The body links into the
-// full fare page (same pair, served from the shared SWR cache); the X is the
-// only way out of route mode, so it is always present.
-export default function MapFareChip({ fromId, toId, fare, hasError, isLoading, onClear }: MapFareChipProps) {
-  const farePath = buildFarePath(fromId, toId)
-  const isUnavailable = hasError || (!isLoading && fare?.totalFare == null)
-  const transferCount = fare?.transferCount ?? 0
-
+/*
+ * Floating fare total for the map's route overlay, shown while the fare sheet
+ * is closed — the map route gates that, so this stays presentational.
+ *
+ * The body is deliberately inert. It used to link into /fare, which unmounted
+ * the map; the detail view is now the fare sheet, reached from the map's fare
+ * button, and a chip that looks tappable but only repeats what the sheet header
+ * already says would be a second answer to the same question. The X remains the
+ * way out of route mode.
+ */
+export default function MapFareChip({ fare, hasError, isLoading, onClear }: MapFareChipProps) {
   return (
     <div
       className={clsx(
@@ -31,30 +29,9 @@ export default function MapFareChip({ fromId, toId, fare, hasError, isLoading, o
         'flex items-center'
       )}
     >
-      <Link
-        to={farePath ?? '/fare'}
-        className="flex items-center gap-1.5 pl-4 pr-1 py-2.5 min-w-0 cursor-pointer"
-        aria-label="Lihat rincian tarif"
-      >
-        {isLoading && (
-          <span className="animate-pulse bg-slate-200 rounded-full w-20 h-5" aria-label="Menghitung tarif..." />
-        )}
-        {!isLoading && isUnavailable && (
-          <span className="text-sm text-slate-500 truncate">Tarif tidak tersedia</span>
-        )}
-        {!isLoading && !isUnavailable && (
-          <span className="min-w-0 flex items-baseline gap-1.5 truncate">
-            <b className="text-base text-slate-800">{rupiah.format(fare!.totalFare!)}</b>
-            {transferCount > 0 && (
-              <span className="text-xs text-slate-500 whitespace-nowrap">
-                {transferCount}
-                x transit
-              </span>
-            )}
-          </span>
-        )}
-        <CaretRightIcon weight="bold" className="w-4 h-4 text-slate-400 shrink-0" />
-      </Link>
+      <div className="flex items-center gap-1.5 pl-4 pr-1 py-2.5 min-w-0">
+        <FareSummary fare={fare} hasError={hasError} isLoading={isLoading} />
+      </div>
       <button
         type="button"
         onClick={onClear}

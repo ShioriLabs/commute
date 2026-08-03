@@ -1,21 +1,17 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useNavigationType, useSearchParams } from 'react-router'
-import { XIcon, InfoIcon, CornersInIcon } from '@phosphor-icons/react'
+import { XIcon, InfoIcon, CornersInIcon, ReceiptIcon } from '@phosphor-icons/react'
 import useSWR from 'swr'
 import clsx from 'clsx'
 import type { StandardResponse } from '@schema/response'
-import type { Hub } from '@commute/schemas'
-import type { Station } from '@commute/schemas'
-import type { FareResult } from '@commute/schemas'
+import type { Hub, Station } from '@commute/schemas'
 import { fetcher } from 'utils/fetcher'
 import { useLines } from '~/hooks/use-lines'
 import { hexToRgb01 } from 'utils/colors'
 import { haptic } from 'utils/haptics'
 import { staggerDelay, type StaggerOptions } from 'utils/stagger'
-import { buildFarePath } from 'utils/fare-url'
 import { IS_LITE } from '~/lib/build-mode'
 import { HOME_EXIT } from '~/lib/exit-links'
-import { FARE_SWR_CONFIG, fareApiUrl } from 'utils/fare-api'
 import {
   createRenderer,
   DESKTOP_TILE_BUDGET_CEILING_BYTES,
@@ -37,7 +33,10 @@ import {
   type Transform
 } from '../lib/map-renderer'
 import { buildRouteOverlayModel, type RouteOverlayModel } from '../lib/map-route-overlay'
+import { surfaceInset } from '../lib/map-surface-inset'
 import MapFareChip from '../components/map-fare-chip'
+import MapFareSheet from '../components/map-fare-sheet'
+import { useFareQuery } from '../components/fare-sheet/use-fare-query'
 import {
   createRecoveryController,
   MAX_RECOVERY_ATTEMPTS,
@@ -131,14 +130,14 @@ export function meta() {
 const MAX_SCALE = 1.5
 const WHEEL_ZOOM_INTENSITY = 0.0015
 
-// One spec for all three floating buttons. 44px is the tap-target minimum;
+// One spec for all four floating buttons. 44px is the tap-target minimum;
 // recenter and attribution used to be 40.
 const MAP_BUTTON_CLASS
   = 'rounded-full bg-white/90 backdrop-blur shadow-lg w-11 h-11 flex items-center justify-center cursor-pointer'
 
-// Chrome entrance stagger: title pill, then the three buttons. A short step —
-// four small elements that should read as one gesture arriving rather than as
-// a sequence — and a small offset so the chrome follows the map's first paint
+// Chrome entrance stagger: title pill, then the four buttons. A short step —
+// small elements that should read as one gesture arriving rather than as a
+// sequence — and a small offset so the chrome follows the map's first paint
 // instead of racing it.
 const MAP_CHROME_STAGGER: StaggerOptions = { step: 60, maxIndex: 4, offset: 60 }
 
@@ -401,14 +400,41 @@ export default function MapPage() {
     }
   }, [authorMode, workingPoints])
 
-  // Fare for the route pair. Same key + config as the fare sheet, so opening
-  // /fare from the chip hits the SWR cache instead of refetching.
-  const fareUrl = fareApiUrl(routePair.fromId, routePair.toId)
-  const {
-    data: fareResponse,
-    error: fareError,
-    isLoading: fareLoading
-  } = useSWR<StandardResponse<FareResult>>(fareUrl, fetcher, FARE_SWR_CONFIG)
+  /*
+   * The one fare query on this route, feeding all three consumers — the overlay
+   * geometry, the chip, and the fare sheet. One hook instance means one useSWR
+   * call, so a shared cache entry is structural rather than something two URL
+   * builders have to be kept agreeing on.
+   *
+   * routePair stays the owner of the pair (see controlledPair): raw ids draw
+   * pins and price a route before the search index loads, the overlay needs
+   * them, and three things write the pair — this panel's picker, a station tap,
+   * and the chip's clear.
+   */
+  const fareQuery = useFareQuery({
+    controlledPair: routePair,
+    /*
+     * The pair is mirrored into the URL; the criteria deliberately are not.
+     * /fare owns the canonical `?paymentMethod=` form — it is the SEO-decorated,
+     * OG-imaged, sitemapped URL — and the map's address bar stays `?from=&to=`
+     * plus whatever `?debug=`/`?author=` the developer had. The third argument
+     * is ignored on purpose; criteria still refetch, because they are in the
+     * SWR key.
+     *
+     * Guarded on an actual change: setCriteria reports through here too, and an
+     * unguarded setRoutePair would hand the overlay memo a new object identity
+     * on every criteria edit and rebuild geometry that did not move.
+     */
+    onStateChange: (fromId, toId) => {
+      setRoutePair(prev => (prev.fromId === fromId && prev.toId === toId ? prev : { fromId, toId }))
+      syncRouteUrl(fromId, toId)
+    },
+    // The map owns document.title through its own meta() export.
+    syncDocumentTitle: false
+  })
+  const fareResponse = fareQuery.fare
+  const fareError = fareQuery.error
+  const fareLoading = fareQuery.isLoading
 
   // Drawable overlay geometry. Null fare is fine — pins resolve straight from
   // the pair, so a deep link shows its endpoints before the fare lands.
@@ -459,9 +485,24 @@ export default function MapPage() {
   // `OPERATOR-CODE` (e.g. KCI-MRI); split on first hyphen.
   const [selectedStation, setSelectedStation] = useState<{ operator: string, code: string } | null>(null)
   const [selectedHubSlug, setSelectedHubSlug] = useState<string | null>(null)
+  /*
+   * The fare sheet, and the snap this opening asked for. One state object rather
+   * than a boolean plus a snap: the snap belongs to the opening, and a stale one
+   * left over from the last open would land the next one wrong.
+   *
+   * `id` identifies the opening, and keys the component below. BottomSheet only
+   * re-snaps on an `open` false→true edge, but its own close button sets its
+   * internal snap without telling us — the parent does not learn until onClose
+   * lands. Re-opening inside that window would otherwise write {snap} over an
+   * already-truthy value, `open` would never transition, and the sheet would
+   * quietly finish closing instead of coming back. A fresh key makes it a new
+   * mount, which is exactly what a new opening is.
+   */
+  const [fareSheet, setFareSheet] = useState<{ snap: 'peek' | 'full', id: number } | null>(null)
+  const detailSurfaceOpen = !!(selectedStation || selectedHubSlug || fareSheet)
   // Desktop only: an open detail pane sits over the top-left corner the title
   // pill lives in, so it hides for as long as one is open.
-  const paneCoversChrome = isDesktop && !!(selectedStation || selectedHubSlug)
+  const paneCoversChrome = isDesktop && detailSurfaceOpen
   const pillVisible = chromeVisible && !paneCoversChrome
   // Identity of whatever the detail surface is currently showing. The pane stack
   // watches this to know when the card it stacked onto has been replaced or
@@ -470,16 +511,31 @@ export default function MapPage() {
   const baseSelectionKey = selectedStation
     ? `station:${selectedStation.operator}/${selectedStation.code}`
     : selectedHubSlug && `hub:${selectedHubSlug}`
-  // Pick-a-departure mode, primed by the station sheet's "Petunjuk Arah":
-  // holds the destination station id (`OPERATOR-CODE`); while set, the next
-  // station tap becomes the origin and navigates to /fare with the pair.
-  const [departurePickFor, setDeparturePickFor] = useState<string | null>(null)
+  // Pick-an-origin mode, primed by the station sheet's "OTW Ke Sini". A plain
+  // flag, not the destination id: the destination is pinned into routePair the
+  // moment the mode is primed, so holding it here too would be a second source
+  // of truth for one fact. While set, the next station tap becomes the origin.
+  const [pickingOrigin, setPickingOrigin] = useState(false)
+
+  /*
+   * Exactly one detail surface at a time. All three are DetailSurfaces at z-30 —
+   * two open at once would stack two cards on desktop, or two independently
+   * draggable sheets on a phone.
+   */
+  const openFareSheet = (snap: 'peek' | 'full') => {
+    setSelectedStation(null)
+    setSelectedHubSlug(null)
+    setFareSheet(prev => ({ snap, id: (prev?.id ?? 0) + 1 }))
+  }
   // useCallback keeps the sheet→content prop chain referentially stable:
   // StationContent is memoized and this participates in its shallow compare.
   const handleSelectDeparture = useCallback(() => {
     if (!selectedStation) return
-    setDeparturePickFor(`${selectedStation.operator}-${selectedStation.code}`)
-  }, [selectedStation])
+    // Pin the destination straight away so the map answers the tap with a pin
+    // instead of an empty prompt, and cancelling leaves that pin behind.
+    setRouteEndpoint('to', `${selectedStation.operator}-${selectedStation.code}`)
+    setPickingOrigin(true)
+  }, [selectedStation, setRouteEndpoint])
 
   // Two transforms: `target` is where we want to be; `rendered` is what we
   // currently draw. The rAF loop lerps rendered toward target each frame so
@@ -920,6 +976,37 @@ export default function MapPage() {
     return () => window.clearTimeout(timer)
   }, [routeModel, manifest, contextEpoch])
 
+  /*
+   * Screen the chrome takes away from the map, mirrored into a ref because the
+   * fit-bounds flight runs in the rAF tick, which reads refs and never state.
+   *
+   * Declared above the fit-queueing effect below so it has already committed by
+   * the time a pending fit is enqueued in the same commit — the peek auto-open
+   * sets the pair and opens the sheet together, and the flight has to know the
+   * sheet is there.
+   */
+  const surfaceInsetRef = useRef(surfaceInset({
+    isDesktop: false,
+    surfaceOpen: false,
+    hasPair: false,
+    viewportH: 0,
+    panePx: SIDE_PANE_OCCUPIED_PX,
+    peekFraction: PEEK_FRACTION,
+    chipPx: CHIP_CLEARANCE_PX
+  }))
+  useEffect(() => {
+    surfaceInsetRef.current = surfaceInset({
+      isDesktop,
+      surfaceOpen: detailSurfaceOpen,
+      hasPair: !!(routePair.fromId && routePair.toId),
+      viewportH: window.innerHeight,
+      panePx: SIDE_PANE_OCCUPIED_PX,
+      peekFraction: PEEK_FRACTION,
+      chipPx: CHIP_CLEARANCE_PX
+    })
+    dirtyRef.current = true
+  }, [isDesktop, detailSurfaceOpen, routePair])
+
   // Drive the fade + scrim mirrors, and queue the one-per-pair fit flight.
   useEffect(() => {
     const show = routeModel !== null
@@ -1142,17 +1229,20 @@ export default function MapPage() {
         const { bbox, hasPolyline } = pendingFit
         const cx = (bbox.minX + bbox.maxX) / 2
         const cy = (bbox.minY + bbox.maxY) / 2
+        // Whatever a detail surface or the fare chip is covering right now, so
+        // the route lands in the part of the map the rider can actually see.
+        const { left: insetL, bottom: insetB } = surfaceInsetRef.current
         let to: Transform
         if (hasPolyline) {
           const w = Math.max(1, bbox.maxX - bbox.minX)
           const h = Math.max(1, bbox.maxY - bbox.minY)
-          const availW = Math.max(1, viewportSize.w - FIT_BOUNDS_PAD_CSS_PX * 2)
-          const availH = Math.max(1, viewportSize.h - FIT_BOUNDS_PAD_CSS_PX * 2 - CHIP_CLEARANCE_PX)
+          const availW = Math.max(1, viewportSize.w - insetL - FIT_BOUNDS_PAD_CSS_PX * 2)
+          const availH = Math.max(1, viewportSize.h - insetB - FIT_BOUNDS_PAD_CSS_PX * 2)
           const scale = Math.max(minScale, Math.min(MAX_SCALE, Math.min(availW / w, availH / h)))
           to = clampTransform(
             {
-              tx: viewportSize.w / 2 - cx * scale,
-              ty: (viewportSize.h - CHIP_CLEARANCE_PX) / 2 - cy * scale,
+              tx: insetL + (viewportSize.w - insetL) / 2 - cx * scale,
+              ty: (viewportSize.h - insetB) / 2 - cy * scale,
               scale
             },
             viewportSize.w, viewportSize.h, mapW, mapH, minScale
@@ -1161,7 +1251,11 @@ export default function MapPage() {
           // Single pin: just bring it into view at the current zoom.
           const s = targetRef.current.scale
           to = clampTransform(
-            { tx: viewportSize.w / 2 - cx * s, ty: viewportSize.h / 2 - cy * s, scale: s },
+            {
+              tx: insetL + (viewportSize.w - insetL) / 2 - cx * s,
+              ty: (viewportSize.h - insetB) / 2 - cy * s,
+              scale: s
+            },
             viewportSize.w, viewportSize.h, mapW, mapH, minScale
           )
         }
@@ -1458,11 +1552,12 @@ export default function MapPage() {
         // A hub is not a boarding station: while picking a departure, a hub
         // tap neither picks nor opens a sheet — the mode's contract is that
         // the next station tap is the origin.
-        if (departurePickFor) return false
+        if (pickingOrigin) return false
         // Hub region tapped (no member pill won). Resolve `HUB-…` id → slug.
         const slug = hubSlugById.get(hit.point.id)
         if (slug) {
           setSelectedStation(null)
+          setFareSheet(null)
           setSelectedHubSlug(slug)
           haptic()
           beginSpotlight(hit.point, hubColorById.get(hit.point.id) ?? SPOTLIGHT_NEUTRAL_COLOR)
@@ -1480,18 +1575,22 @@ export default function MapPage() {
         if (dash > 0) {
           const operator = stationId.slice(0, dash)
           const code = stationId.slice(dash + 1)
-          if (departurePickFor) {
-            // Departure pick: this tap is the origin. The destination itself
+          if (pickingOrigin) {
+            // Origin pick: this tap completes the pair. The destination itself
             // and unserved stations (no fare coverage) are not pickable.
-            if (stationId === departurePickFor || getUnservedStation(operator, code)) return false
-            setDeparturePickFor(null)
+            if (stationId === routePair.toId || getUnservedStation(operator, code)) return false
+            setPickingOrigin(false)
             haptic()
-            const path = buildFarePath(stationId, departurePickFor)
-            if (path) navigate(path)
-            // No sheet, no spotlight, no flyTo — we are leaving the map.
+            setRouteEndpoint('from', stationId)
+            // Peek, not full: the route this prices has just been drawn, so the
+            // sheet answers with the total while leaving the map behind it.
+            openFareSheet('peek')
+            // No station sheet, no spotlight, no flyTo — the route's fit flight
+            // owns the camera from here.
             return false
           }
           setSelectedHubSlug(null)
+          setFareSheet(null)
           setSelectedStation({ operator, code })
           haptic()
           // Halo starts neutral; re-tints when the station fetch resolves.
@@ -1733,13 +1832,15 @@ export default function MapPage() {
       {/* Departure-pick prompt. A mode indicator, so like the close button it
           ignores `chromeVisible` — the user must always see the map is in a
           different state and have a way out of it. */}
-      {departurePickFor && (
+      {pickingOrigin && (
         <div className="map-chrome-enter absolute inset-x-4 top-16 z-20 flex justify-center pointer-events-none">
           <div className="pointer-events-auto rounded-full bg-white/90 backdrop-blur shadow-lg pl-4 pr-1.5 py-1.5 flex items-center gap-2">
             <span className="font-bold text-sm text-slate-800 truncate">Pilih stasiun keberangkatan</span>
             <button
               type="button"
-              onClick={() => setDeparturePickFor(null)}
+              // Cancels the mode only — the destination stays pinned, so the
+              // rider keeps their pick and can set an origin another way.
+              onClick={() => setPickingOrigin(false)}
               aria-label="Batalkan pemilihan stasiun keberangkatan"
               className="rounded-full w-8 h-8 flex items-center justify-center hover:bg-slate-100 cursor-pointer"
             >
@@ -1791,6 +1892,32 @@ export default function MapPage() {
           className={`${MAP_BUTTON_CLASS} transition-opacity duration-200 ${isZoomedIn ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         >
           <CornersInIcon weight="bold" className="w-5 h-5 text-slate-700" />
+        </button>
+      </div>
+
+      {/* Bottom-left is the only free corner: the title pill owns top-left, the
+          close button top-right, recenter and attribution the bottom-right pair,
+          and the fare chip the bottom centre. */}
+      <div
+        className="map-chrome-enter absolute bottom-4 left-4 z-20"
+        style={{ animationDelay: staggerDelay(4, MAP_CHROME_STAGGER) }}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            haptic()
+            // Cancel a half-finished origin pick: the sheet is a second way to
+            // set the same pair, and leaving the mode armed behind it would make
+            // the next station tap do something the rider no longer expects.
+            setPickingOrigin(false)
+            // Full, not peek: both fields may be empty, so there is nothing to
+            // peek at and the next act is picking a station.
+            openFareSheet('full')
+          }}
+          aria-label="Cek tarif perjalanan"
+          className={MAP_BUTTON_CLASS}
+        >
+          <ReceiptIcon weight="bold" className="w-5 h-5 text-slate-700" />
         </button>
       </div>
 
@@ -1855,10 +1982,10 @@ export default function MapPage() {
         />
       )}
 
-      {routePair.fromId && routePair.toId && (
+      {/* Closed-only: the sheet header carries the same total, and at peek the
+          sheet sits exactly where the chip does. */}
+      {routePair.fromId && routePair.toId && !fareSheet && (
         <MapFareChip
-          fromId={routePair.fromId}
-          toId={routePair.toId}
           fare={fareResponse?.data ?? null}
           hasError={!!fareError}
           isLoading={fareLoading}
@@ -1898,6 +2025,16 @@ export default function MapPage() {
                 }
               }
             : undefined}
+        />
+
+        {/* No onDismissStart: unlike the station and hub sheets this one owns no
+            spotlight, and the route overlay outlives it deliberately. */}
+        <MapFareSheet
+          key={fareSheet?.id ?? 'closed'}
+          open={!!fareSheet}
+          initialSnap={fareSheet?.snap}
+          query={fareQuery}
+          onClose={() => setFareSheet(null)}
         />
 
         <HubSheet
