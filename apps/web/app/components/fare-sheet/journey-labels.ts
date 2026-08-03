@@ -7,15 +7,22 @@ import type { FareJourneyLabel } from '@commute/schemas'
  * criteria/labels.ts: a fifth label added to the engine should break this build
  * instead of rendering `SHORTEST_WAIT` to a rider.
  *
- * "Paling" is literally true here and not marketing. The engine only assigns a
- * label when exactly one journey wins that axis — a tie leaves both unlabelled —
- * so a badge always names a real difference the rider can act on.
+ * Superlatives are literally true here and not marketing. The engine only
+ * assigns a label when exactly one journey wins that axis — a tie leaves both
+ * unlabelled — so a badge always names a real difference the rider can act on.
+ *
+ * One word each, wherever the language allows it. These sit beside the fare on
+ * a card scanned in a crowd, and "Paling sedikit transit" was long enough that
+ * it truncated at 320px and crowded out the price it was meant to qualify. The
+ * superlative prefix survives only where dropping it would change the claim:
+ * "sedikit jalan" is a fact about the walk, "paling sedikit jalan" is a
+ * comparison, and the comparison is the point.
  */
 export const JOURNEY_LABELS: Record<FareJourneyLabel, string> = {
-  CHEAPEST: 'Paling murah',
-  FEWEST_CHANGES: 'Paling sedikit transit',
-  LEAST_WALKING: 'Paling sedikit jalan',
-  SHORTEST_WAIT: 'Paling sebentar nunggu'
+  CHEAPEST: 'Termurah',
+  FEWEST_CHANGES: 'Paling santai',
+  LEAST_WALKING: 'Minim jalan',
+  SHORTEST_WAIT: 'Sering lewat'
 }
 
 /*

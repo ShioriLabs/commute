@@ -3,6 +3,7 @@ import ExitLink from '~/components/exit-link'
 import { getForegroundColor } from 'utils/colors'
 import { useLines } from '~/hooks/use-lines'
 import { splitStationNumber } from '~/components/line-roundel'
+import { GUTTER_CLASS, RAIL_CENTER_PX, RAIL_WIDTH_PX } from '~/components/transit-geometry'
 
 export type NodeKind = 'TERMINUS' | 'REGULAR' | 'INTERCHANGE' | 'JUNCTION'
 export type RowSide = 'SINGLE' | 'LEFT' | 'RIGHT'
@@ -22,9 +23,11 @@ interface StationRowProps {
 // Rail geometry (px, CSS): the rail is a 6px bar whose centerline sits at
 // RAIL_CENTER within the row's leading gutter. The loop ring in
 // loop-section.tsx aligns its borders to the same centerline.
-export const RAIL_CENTER_PX = 22
-export const RAIL_WIDTH_PX = 6
-export const GUTTER_CLASS = 'grid-cols-[2.75rem_1fr]' // 44px gutter
+//
+// Defined in ~/components/transit-geometry now that the fare timeline draws the
+// same rail at its own gauge; re-exported here so this stays the import site for
+// the strip's own pieces.
+export { GUTTER_CLASS, RAIL_CENTER_PX, RAIL_WIDTH_PX } from '~/components/transit-geometry'
 
 // The node is a true circle riding the rail, FDTJ-map style: the line letter
 // stacked over the station number. Outlined (white core, colored ring) for

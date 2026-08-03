@@ -1,66 +1,106 @@
 import type { FareJourney, FareResult, FareResultLeg, FareResultRideLeg, FareResultTransferLeg, TripResult } from '@commute/schemas'
 import { OPERATORS, type Operator } from '@commute/constants'
-import { useEffect, useState } from 'react'
+import { type CSSProperties, useEffect, useState } from 'react'
 import { ArrowsDownUpIcon, CaretDownIcon, CaretRightIcon, PersonSimpleWalkIcon, TicketIcon } from '@phosphor-icons/react'
 import { getForegroundColor } from 'utils/colors'
 import { joinLabels } from 'utils/labels'
 import LineRoundel from '~/components/line-roundel'
+import { FARE_GUTTER_CLASS, FARE_RAIL_CENTER_PX, LINE_COLOR_FALLBACK, RAIL_WIDTH_PX } from '~/components/transit-geometry'
 import { codeOfLineKey, useLines } from '~/hooks/use-lines'
 import { JOURNEY_LABELS } from './journey-labels'
 import { journeysOf, sortJourneyLabels, walkDistanceOf } from './journeys'
+import RouteBar from './route-bar'
+import { routeBarSegments } from './route-bar-segments'
 
 const rupiah = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })
 const formatKm = (distanceM: number) => `${(distanceM / 1000).toLocaleString('id-ID', { maximumFractionDigits: 1 })} km`
 const operatorName = (code: string) => (OPERATORS as Record<string, { name: string }>)[code as Operator]?.name ?? code
 
 /*
- * At-a-glance segment fill: a gradient across the service colours for interlined
- * legs (shared track), otherwise the single line colour. Colours are resolved
- * from the line dictionary, since legs carry keys rather than colours.
+ * A leg's lines, resolved to display identity.
+ *
+ * Legs carry keys; names and colours live in the dictionary from /operators.
+ * On interlined track (the LRT Jabodebek trunk) several service lines run the
+ * same leg — any train works, and the primary leads. A leg without
+ * `serviceLines` predates the field, so it stands in as its own single service.
+ *
+ * One resolver for the whole card: the timeline and the route bar were reading
+ * the same dictionary through two different shapes, which is how they could
+ * have come to disagree about a line's colour on one screen.
  */
-function rideGlanceStyle(leg: FareResultRideLeg, colors: string[]) {
-  const first = colors[0] ?? '#888888'
-  if (colors.length > 1) {
-    return { flexGrow: leg.distanceM, backgroundImage: `linear-gradient(to right, ${first}, ${colors[colors.length - 1]})` }
-  }
-  return { flexGrow: leg.distanceM, backgroundColor: first }
+function useLegLines() {
+  const { line: lookupLine } = useLines()
+  return (leg: FareResultRideLeg) =>
+    (leg.serviceLines ?? [{ line: leg.line, headsign: leg.headsign }]).map(ref => ({
+      key: ref.line,
+      code: codeOfLineKey(ref.line),
+      name: lookupLine(ref.line)?.name ?? codeOfLineKey(ref.line),
+      color: lookupLine(ref.line)?.colorCode ?? LINE_COLOR_FALLBACK,
+      headsign: ref.headsign
+    }))
+}
+
+/*
+ * The rail running down a timeline row.
+ *
+ * Absolutely positioned against a declared centerline, the way the line strip
+ * draws its own rail — rather than a flex child centered in a gutter, which is
+ * what these rows used to do. The difference shows at the joins: a flex rail
+ * with its own margins leaves a hairline gap under every node, so an itinerary
+ * read as a column of disconnected pieces instead of one continuous line.
+ *
+ * `cap` stops the bar half way, so the first and last rails of a run terminate
+ * at their node instead of bleeding past it.
+ */
+function Rail({ style, cap }: { style: CSSProperties, cap?: 'START' | 'END' }) {
+  return (
+    <span
+      className="absolute"
+      style={{
+        width: RAIL_WIDTH_PX,
+        left: FARE_RAIL_CENTER_PX - RAIL_WIDTH_PX / 2,
+        top: cap === 'START' ? '50%' : 0,
+        bottom: cap === 'END' ? '50%' : 0,
+        ...style
+      }}
+    />
+  )
+}
+
+/** A board or alight node: a white core ringed in the line's colour. */
+function Node({ color }: { color: string }) {
+  return (
+    <span
+      className="absolute z-10 w-4 h-4 rounded-full border-[4px] bg-white"
+      style={{ borderColor: color, left: FARE_RAIL_CENTER_PX, top: '50%', transform: 'translate(-50%, -50%)' }}
+    />
+  )
 }
 
 // One ride leg: board node, line-colored connector carrying the service card
 // (line pill, headsign, expandable intermediate stops), alight node.
 function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSameStationTransfer: boolean }) {
   const [expanded, setExpanded] = useState(false)
-  const { line: lookupLine } = useLines()
+  const legLines = useLegLines()
   // Optional-chained against a stale API during deploy skew.
   const intermediate = leg.stops?.slice(1, -1) ?? []
   const summary = `${leg.stationCount - 1} stasiun • ${formatKm(leg.distanceM)}`
-  /*
-   * On interlined track (the LRT Jabodebek trunk) several service lines run the
-   * same leg — any train works. Fall back to the leg's own line otherwise.
-   * Each carries a key; name and colour come from the dictionary.
-   */
-  const lines = (leg.serviceLines ?? [{ line: leg.line, headsign: leg.headsign }]).map(ref => ({
-    key: ref.line,
-    lineCode: codeOfLineKey(ref.line),
-    lineName: lookupLine(ref.line)?.name ?? codeOfLineKey(ref.line),
-    lineColor: lookupLine(ref.line)?.colorCode ?? '#888888',
-    headsign: ref.headsign
-  }))
+  const lines = legLines(leg)
   const isInterlined = lines.length > 1
-  const legColor = lines[0]?.lineColor ?? '#888888'
+  const legColor = lines[0]?.color ?? LINE_COLOR_FALLBACK
   const directions = [...new Set(lines.map(line => line.headsign).filter((headsign): headsign is string => headsign !== null))]
   const railStyle = isInterlined
-    ? { backgroundImage: `repeating-linear-gradient(to bottom, ${lines[0]!.lineColor} 0 8px, ${lines[lines.length - 1]!.lineColor} 8px 16px)` }
+    ? { backgroundImage: `repeating-linear-gradient(to bottom, ${lines[0]!.color} 0 8px, ${lines[lines.length - 1]!.color} 8px 16px)` }
     : { backgroundColor: legColor }
 
   return (
     <li className="flex flex-col">
       {isSameStationTransfer
         ? (
-            <div className="flex items-stretch gap-3">
-              <span className="w-4 flex justify-center shrink-0">
-                <span className="w-1.5 rounded-full bg-slate-300" />
-              </span>
+            <div className={`relative grid ${FARE_GUTTER_CLASS}`}>
+              <div className="relative">
+                <Rail style={{ backgroundColor: 'var(--color-slate-300)' }} />
+              </div>
               <div className="flex items-center gap-1.5 text-sm text-slate-500 py-1.5">
                 <ArrowsDownUpIcon weight="bold" className="w-3.5 h-3.5" />
                 <span>{leg.operator === OPERATORS.TJ.code ? 'Pindah bus' : 'Pindah kereta'}</span>
@@ -68,29 +108,36 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
             </div>
           )
         : null}
-      <div className="flex items-center gap-3">
-        <span className="w-4 h-4 rounded-full border-[5px] bg-white shrink-0" style={{ borderColor: legColor }} />
-        <b className="text-lg">{leg.from.name}</b>
+      <div className={`relative grid ${FARE_GUTTER_CLASS}`}>
+        <div className="relative">
+          <Rail style={railStyle} cap="START" />
+          <Node color={legColor} />
+        </div>
+        <b className="text-lg py-0.5">{leg.from.name}</b>
       </div>
-      <div className="flex items-stretch gap-3">
-        <span className="w-4 flex justify-center shrink-0">
-          <span className="w-1.5 rounded-full" style={railStyle} />
-        </span>
-        <div className="flex-1 my-2 bg-stone-100/80 rounded-xl p-3 flex flex-col gap-1 items-start">
+      <div className={`relative grid ${FARE_GUTTER_CLASS}`}>
+        <div className="relative">
+          <Rail style={railStyle} />
+        </div>
+        {/* No plate: the rail already says which service this is and where it
+            runs, so a filled card around it drew a second box for the same
+            fact — and set it competing with the journey plates above, which
+            are the things actually being chosen between. */}
+        <div className="my-2 flex flex-col gap-1 items-start">
           <div className="flex flex-wrap gap-1.5 items-center">
             {lines.map(line => (leg.operator === OPERATORS.TJ.code
               // TJ is spoken as "naik koridor 9", not by the line's full name —
               // show the corridor roundel instead of a name pill.
               ? (
-                  <LineRoundel key={line.lineCode} size="SM" operator={leg.operator} code={line.lineCode} color={line.lineColor as `#${string}`} />
+                  <LineRoundel key={line.code} size="SM" operator={leg.operator} code={line.code} color={line.color as `#${string}`} />
                 )
               : (
                   <span
-                    key={line.lineCode}
-                    className={`text-sm font-semibold px-3 py-1 rounded-full w-fit ${getForegroundColor(line.lineColor) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`}
-                    style={{ backgroundColor: line.lineColor }}
+                    key={line.code}
+                    className={`text-sm font-semibold px-3 py-1 rounded-md w-fit ${getForegroundColor(line.color) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`}
+                    style={{ backgroundColor: line.color }}
                   >
-                    { line.lineName }
+                    { line.name }
                   </span>
                 )))}
           </div>
@@ -109,33 +156,65 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
           {intermediate.length === 0
             ? <span className="text-sm text-slate-500">{ summary }</span>
             : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setExpanded(value => !value)}
-                    aria-expanded={expanded}
-                    className="flex items-center gap-1 text-sm text-slate-500 cursor-pointer"
-                  >
-                    { summary }
-                    <CaretDownIcon weight="bold" className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
-                  </button>
-                  <div className={`grid transition-[grid-template-rows] duration-300 ${expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'} w-full`}>
-                    <ul className="overflow-hidden min-h-0 flex flex-col">
-                      {intermediate.map(stop => (
-                        <li key={stop.id} className="flex items-center gap-2 py-1 text-sm text-slate-600">
-                          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: legColor }} />
-                          { stop.name }
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </>
+                <button
+                  type="button"
+                  onClick={() => setExpanded(value => !value)}
+                  aria-expanded={expanded}
+                  className="flex items-center gap-1 text-sm text-slate-500 cursor-pointer"
+                >
+                  { summary }
+                  <CaretDownIcon weight="bold" className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                </button>
               )}
         </div>
       </div>
-      <div className="flex items-center gap-3">
-        <span className="w-4 h-4 rounded-full border-[5px] bg-white shrink-0" style={{ borderColor: legColor }} />
-        <b className="text-lg">{leg.to.name}</b>
+
+      {/*
+        * The stops passed through, on the rail rather than beside it.
+        *
+        * They used to live inside the service card, which gave them a second
+        * column of dots running parallel to the line they are actually on —
+        * two verticals claiming to be the same journey. Riding the rail, each
+        * stop is a node on the line between the two terminals, which is what it
+        * is, and matches how the line strip draws the same object.
+        */}
+      {intermediate.length > 0
+        ? (
+            <div className={`grid transition-[grid-template-rows] duration-300 ${expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+              <ul className="overflow-hidden min-h-0">
+                {intermediate.map(stop => (
+                  <li key={stop.id} className={`relative grid ${FARE_GUTTER_CLASS}`}>
+                    <div className="relative">
+                      <Rail style={railStyle} />
+                      {/* A tick across the rail, not a hole punched through it:
+                          at the rail's own width the gaps read as a dashed
+                          line, which says "unknown route", the opposite of a
+                          list of every stop it calls at. */}
+                      <span
+                        className="absolute z-10 rounded-full bg-white"
+                        style={{
+                          width: RAIL_WIDTH_PX,
+                          height: 2,
+                          left: FARE_RAIL_CENTER_PX,
+                          top: '50%',
+                          transform: 'translate(-50%, -50%)'
+                        }}
+                      />
+                    </div>
+                    <span className="text-sm text-slate-600 py-1">{ stop.name }</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )
+        : null}
+
+      <div className={`relative grid ${FARE_GUTTER_CLASS}`}>
+        <div className="relative">
+          <Rail style={railStyle} cap="END" />
+          <Node color={legColor} />
+        </div>
+        <b className="text-lg py-0.5">{leg.to.name}</b>
       </div>
     </li>
   )
@@ -163,10 +242,10 @@ function JourneyTimeline({ legs }: { legs: FareResultLeg[] }) {
         // crosses a paid area, so it reads as a ticketed step, not a free walk.
         if (leg.corridorLabel != null && leg.fare != null) {
           return (
-            <li key={index} className="flex items-stretch gap-3 my-2">
-              <span className="w-4 flex justify-center shrink-0">
-                <span className="w-1.5 rounded-full bg-rose-300" />
-              </span>
+            <li key={index} className={`relative grid ${FARE_GUTTER_CLASS} my-2`}>
+              <div className="relative">
+                <Rail style={{ backgroundColor: 'var(--color-rose-300)' }} />
+              </div>
               <div className="flex items-start gap-1.5 text-sm py-1.5">
                 <TicketIcon weight="fill" className="w-3.5 h-3.5 shrink-0 mt-0.5 text-rose-500" />
                 <div className="flex flex-col">
@@ -189,10 +268,10 @@ function JourneyTimeline({ legs }: { legs: FareResultLeg[] }) {
         }
 
         return (
-          <li key={index} className="flex items-stretch gap-3 my-2">
-            <span className="w-4 flex justify-center shrink-0">
-              <span className="w-1.5 rounded-full bg-slate-300" />
-            </span>
+          <li key={index} className={`relative grid ${FARE_GUTTER_CLASS} my-2`}>
+            <div className="relative">
+              <Rail style={{ backgroundColor: 'var(--color-slate-300)' }} />
+            </div>
             <div className="flex items-center gap-1.5 text-sm text-slate-500 py-1.5">
               <PersonSimpleWalkIcon weight="bold" className="w-3.5 h-3.5" />
               <span>
@@ -209,16 +288,18 @@ function JourneyTimeline({ legs }: { legs: FareResultLeg[] }) {
   )
 }
 
-// Service colours for the glance strip, resolved from the line dictionary.
-function useLegColors() {
-  const { line: lookupLine } = useLines()
-  return (leg: FareResultRideLeg) =>
-    (leg.serviceLines ?? [{ line: leg.line, headsign: null }])
-      .map(ref => lookupLine(ref.line)?.colorCode ?? '#888888')
-}
-
 /*
- * The face of one option: fare, what it wins, and the shape of the trip.
+ * The face of one option: the shape of the trip, what it costs, what it wins.
+ *
+ * The route leads. A rider scanning two options is choosing between journeys,
+ * not between prices — the fare only means something once you know what you are
+ * buying — so the diagram is the largest thing here and the fare reads beneath
+ * it as a figure rather than a headline.
+ *
+ * Square-cut plate with a rule down the side in the colour of the line boarded
+ * first, after the sign plates on the data platform. Colour is data here: the
+ * rule is the same fact the bar and the timeline are drawing, so a plate can
+ * never quietly disagree with the journey printed beside it.
  *
  * Presented as a button only when there is something to choose between. A lone
  * journey renders the identical block inert, because a press affordance on the
@@ -229,43 +310,86 @@ function JourneyCardFace({ journey, selected, onSelect }: {
   selected: boolean
   onSelect?: () => void
 }) {
-  const legColors = useLegColors()
-  const labels = sortJourneyLabels(journey.labels)
+  const legLines = useLegLines()
+  /*
+   * At most two badges. Four stacked lines of capitals drowned the fare they
+   * were meant to qualify; two is what fits on one line beside it, and
+   * sortJourneyLabels already ranks them so the pair a rider scans for leads.
+   * The rest are recoverable by comparison — the option that is not the
+   * cheapest has its price printed right there.
+   */
+  const labels = sortJourneyLabels(journey.labels).slice(0, 2)
   const walkM = walkDistanceOf(journey)
+  const segments = routeBarSegments(journey.legs, leg => legLines(leg))
 
   const body = (
     <>
-      {labels.length > 0
-        ? (
-            <div className="flex flex-wrap gap-1.5">
-              {labels.map(label => (
-                <span key={label} className="text-xs font-bold px-2.5 py-1 rounded-full bg-rose-100 text-rose-900">
-                  { JOURNEY_LABELS[label] }
-                </span>
-              ))}
-            </div>
-          )
-        : null}
-      <span className="text-3xl font-bold">
-        {journey.totalFare !== null ? rupiah.format(journey.totalFare) : 'Tarif tidak tersedia'}
-      </span>
-      {/* Journey at a glance: ride legs proportional to distance, walks as dots. */}
-      <div className="my-1 flex h-2 gap-0.5" aria-hidden="true">
-        {journey.legs.map((leg, index) => leg.type === 'RIDE'
-          ? <span key={index} className="rounded-full min-w-2" style={rideGlanceStyle(leg, legColors(leg))} />
-          : <span key={index} className="w-1.5 shrink-0 rounded-full bg-slate-300" />)}
+      {/*
+        * Unselected options step back rather than being marked: the route is
+        * the thing being chosen between, so muting it is a stronger signal than
+        * any badge on the card's edge, and it leaves exactly one journey in
+        * full line colour at a time.
+        */}
+      <div className={`transition-[filter,opacity] duration-200 ${selected ? '' : 'saturate-50 opacity-75'}`}>
+        <RouteBar segments={segments} />
       </div>
-      <span className="text-sm text-slate-500">
-        {formatKm(journey.totalDistanceM)}
-        {journey.transferCount > 0 ? ` • ${journey.transferCount}x transit` : ''}
-        {/* Omitted, not zeroed, when the response could not say — see journeys.ts. */}
-        {walkM !== null && walkM > 0 ? ` • jalan ${walkM} m` : ''}
-      </span>
+
+      <div className="mt-3 flex items-center gap-2 flex-wrap">
+        <span className="figure text-xl font-bold tracking-tight shrink-0">
+          {journey.totalFare !== null ? rupiah.format(journey.totalFare) : 'Tarif tidak tersedia'}
+        </span>
+        {labels.map(label => (
+          <span key={label} className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 shrink-0">
+            { JOURNEY_LABELS[label] }
+          </span>
+        ))}
+      </div>
+
+      {/*
+        * Counts, not a sentence. "13,5 km • 2x transit • jalan 460 m" reads as
+        * prose and has to be parsed; a figure against its own pictogram is
+        * scanned. Walk is omitted rather than zeroed when the response could
+        * not say — see journeys.ts.
+        */}
+      <div className="mt-1.5 flex items-center gap-3 figure text-xs text-slate-500">
+        <span>{ formatKm(journey.totalDistanceM) }</span>
+        <span className="flex items-center gap-1">
+          <ArrowsDownUpIcon weight="bold" className="w-3.5 h-3.5 shrink-0" />
+          { journey.transferCount }
+        </span>
+        {walkM !== null && walkM > 0
+          ? (
+              <span className="flex items-center gap-1">
+                <PersonSimpleWalkIcon weight="bold" className="w-3.5 h-3.5 shrink-0" />
+                {walkM}
+                {' m'}
+              </span>
+            )
+          : null}
+      </div>
     </>
   )
 
+  /*
+   * No coloured rule down the edge.
+   *
+   * It was the third place the boarded line's colour appeared — rule, opening
+   * roundel, track — and the roundel sits a few pixels away saying the same
+   * thing better, because it also names the line. What the rule was really
+   * carrying was selection, and that now rides on the route bar itself.
+   *
+   * `--plate-ground` is published for the roundel halos: they have to occlude
+   * the track they sit on, and a hardcoded white ring would print a keyline on
+   * the tinted plates, exactly where a rider is looking.
+   */
+  const plate = 'rounded-sm px-4 py-4 transition-colors'
+
   if (!onSelect) {
-    return <div className="bg-rose-50 rounded-xl p-6 flex flex-col gap-1">{ body }</div>
+    return (
+      <div className={`${plate} bg-white`} style={{ '--plate-ground': 'var(--color-white)' } as CSSProperties}>
+        { body }
+      </div>
+    )
   }
 
   return (
@@ -273,9 +397,12 @@ function JourneyCardFace({ journey, selected, onSelect }: {
       type="button"
       onClick={onSelect}
       aria-expanded={selected}
-      className={`w-full text-left rounded-xl p-6 flex flex-col gap-1 cursor-pointer transition-colors ${
-        selected ? 'bg-rose-50 border-2 border-rose-200' : 'bg-stone-100/80 border-2 border-transparent'
+      className={`${plate} w-full text-left cursor-pointer ${
+        selected ? 'bg-rose-50' : 'bg-stone-100/60 hover:bg-stone-100'
       }`}
+      style={{
+        '--plate-ground': selected ? 'var(--color-rose-50)' : 'var(--color-stone-100)'
+      } as CSSProperties}
     >
       { body }
     </button>
@@ -302,7 +429,7 @@ function JourneyDetail({ journey }: { journey: FareJourney }) {
               <h2 className="font-bold text-lg">Rincian Tarif</h2>
               <ul className="mt-2 flex flex-col gap-2">
                 {journey.segments.map(segment => (
-                  <li key={`${segment.from.id}-${segment.to.id}`} className="flex flex-row justify-between gap-4 bg-stone-100/80 rounded-xl px-4 py-3">
+                  <li key={`${segment.from.id}-${segment.to.id}`} className="flex flex-row justify-between gap-4 bg-stone-100/80 rounded-sm px-4 py-3">
                     <div className="flex flex-col">
                       <b>{ operatorName(segment.operator) }</b>
                       <span className="text-sm text-slate-500 flex flex-row flex-wrap items-center gap-1">
@@ -311,11 +438,11 @@ function JourneyDetail({ journey }: { journey: FareJourney }) {
                         { segment.to.name }
                       </span>
                     </div>
-                    <b className="shrink-0">{ segment.fare !== null ? rupiah.format(segment.fare) : 'N/A' }</b>
+                    <b className="shrink-0 figure">{ segment.fare !== null ? rupiah.format(segment.fare) : 'N/A' }</b>
                   </li>
                 ))}
                 {surchargedTransfers.map((leg, index) => (
-                  <li key={`transfer-${index}`} className="flex flex-row justify-between gap-4 bg-stone-100/80 rounded-xl px-4 py-3">
+                  <li key={`transfer-${index}`} className="flex flex-row justify-between gap-4 bg-stone-100/80 rounded-sm px-4 py-3">
                     <div className="flex flex-col">
                       <b>{ leg.corridorLabel }</b>
                       <span className="text-sm text-slate-500 flex flex-row flex-wrap items-center gap-1">
@@ -324,7 +451,7 @@ function JourneyDetail({ journey }: { journey: FareJourney }) {
                         { leg.to.name }
                       </span>
                     </div>
-                    <b className="shrink-0">{ rupiah.format(leg.fare) }</b>
+                    <b className="shrink-0 figure">{ rupiah.format(leg.fare) }</b>
                   </li>
                 ))}
               </ul>
@@ -378,7 +505,7 @@ export default function FareResultCard({ result, alternatives = false }: {
   const journey = journeys[selected] ?? journeys[0]!
 
   return (
-    <article className="mt-6">
+    <article className="mt-6 content-fade">
       {journeys.length > 1
         ? (
             <div className="flex flex-col gap-2">

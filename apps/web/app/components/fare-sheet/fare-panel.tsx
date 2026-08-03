@@ -74,12 +74,25 @@ export default function FarePanel({ query, footer, wrapCriteria = false, alterna
           )
         : null}
 
+      {/*
+        * Traces the plate that is about to land: route bar, fare figure and
+        * marker, meta line. One plate even on /trip, where several may arrive —
+        * the panel cannot know how many until the answer does, and guessing
+        * three then landing one flashes worse than growing from one.
+        */}
       {isLoading
         ? (
-            <div className="mt-6 animate-pulse flex flex-col gap-4">
-              <div className="h-28 bg-slate-200 rounded-xl" />
-              <div className="h-4 w-48 bg-slate-200 rounded" />
-              <div className="h-4 w-32 bg-slate-200 rounded" />
+            <div className="mt-6 animate-pulse">
+              <div className="rounded-sm bg-stone-100/60 px-4 py-4">
+                <div className="h-7 bg-slate-200 rounded-sm" />
+                <div className="mt-3 flex items-center gap-2">
+                  <div className="h-5 w-24 bg-slate-200 rounded" />
+                  <div className="h-3 w-20 bg-slate-200 rounded" />
+                </div>
+                <div className="mt-1.5 h-3 w-40 bg-slate-200 rounded" />
+              </div>
+              <div className="mt-6 h-4 w-48 bg-slate-200 rounded" />
+              <div className="mt-2 h-4 w-32 bg-slate-200 rounded" />
             </div>
           )
         : null}
