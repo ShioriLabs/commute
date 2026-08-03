@@ -7,8 +7,6 @@ import { StationRepository } from 'db/repositories/stations'
 import { FareResult } from 'models/fare'
 import { fareTimeBucket } from 'utils/fare'
 import { assembleJourney, planJourney, stationNamer } from 'utils/fare-journey'
-import { summarizeFares } from 'utils/fare-summary'
-import { mergeInterlinedLegs } from 'utils/interlining'
 import { Internal, NotFound, Ok } from 'utils/response'
 import { ENDPOINT_RESTRICTIONS } from 'db/data/topology'
 import { loadGraph, type Tsundere } from '@commute/tsundere'
@@ -20,8 +18,10 @@ const app = new Hono<{ Bindings: Bindings }>()
 
 // Graph inputs only change with deploys/reseeds; cache the loaded engine per
 // isolate. Rebuilding it per request would re-read every edge and transfer row.
+// Exported so /_internal/trips shares this instance rather than loading a second
+// copy of the same graph into the same isolate.
 let cachedRouter: Tsundere | null = null
-async function getRouter(d1: D1Database): Promise<Tsundere> {
+export async function getRouter(d1: D1Database): Promise<Tsundere> {
   if (cachedRouter) return cachedRouter
   const { edges, transfers } = await new EdgeRepository(d1).getGraphInputs()
   // Topology restrictions are authored in (operator, station) codes; the graph
@@ -65,7 +65,7 @@ app.get(
   '/:from/:to',
   doc({
     summary: 'Tarif dan rute antara dua stasiun',
-    description: 'Mencari rute perjalanan sekaligus menghitung tarifnya. `legs` adalah perjalanan dari sisi penumpang: naik apa saja dan jalan kaki di mana saja. `segments` adalah cara tarifnya dihitung, yang bisa berbeda karena tiap operator menagih per perjalanan di jaringan mereka sendiri. Tarif integrasi sudah dihitung di `totalFare`. Kalau ada beberapa rute yang sama-sama masuk akal, semuanya ada di `journeys` — yang pertama sama persis dengan `legs` dan `segments` di atas.',
+    description: 'Mencari rute perjalanan sekaligus menghitung tarifnya. `legs` adalah perjalanan dari sisi penumpang: naik apa saja dan jalan kaki di mana saja. `segments` adalah cara tarifnya dihitung, yang bisa berbeda karena tiap operator menagih per perjalanan di jaringan mereka sendiri. Tarif integrasi sudah dihitung di `totalFare`.',
     tag: 'Tarif',
     data: FareResultSchema,
     parameters: [
@@ -105,50 +105,42 @@ app.get(
       }
 
       const router = await getRouter(c.env.DB)
-      const routed = router.findRoutes(fromId, toId, {
-        /*
-         * Pricing the journeys is what makes the CHEAPEST label reachable at
-         * all — without a scorer every journey's `fare` criterion is null and
-         * the axis is skipped as incomparable.
-         *
-         * The legs are merged first, exactly as the display pipeline merges
-         * them, so the fare the label was decided on and the fare the rider
-         * sees are computed over the same decomposition by construction.
-         * Scoring the raw legs would let the two disagree.
-         */
-        scoreFare: legs => summarizeFares(mergeInterlinedLegs([...legs]), context).totalFare
-      })
-      // findRoutes reports "no route" as an empty front, where findRoute
-      // returned null.
-      if (routed.length === 0) {
+      /*
+       * Still findRoute, singular, and deliberately so.
+       *
+       * findRoutes picks a different primary on some pairs — it weighs a saved
+       * boarding against a longer ride, so Bogor -> Lebak Bulus becomes a
+       * one-transfer Rp 20.000 route where this returns the three-transfer
+       * Rp 17.500 one. Neither is wrong, but this endpoint is the shared URL,
+       * the OG card and the TransportForJakarta embed, so its answer should not
+       * move until that change is deliberately released.
+       *
+       * The multi-journey answer lives at `/_internal/trips/:from/:to`, which
+       * carries no compatibility promise. Both call the same pipeline in
+       * utils/fare-journey.ts, so they cannot drift apart in how they render a
+       * journey — only in how many they return.
+       */
+      const rawLegs = router.findRoute(fromId, toId)
+      if (!rawLegs) {
         return c.json(NotFound('NO_ROUTE', 'No route between these stations.'), 404)
       }
 
-      const plans = routed.map(journey => planJourney(journey.legs, journey.criteria, journey.labels, context))
-
-      /*
-       * One batched lookup across every journey, which is why planJourney
-       * reports the ids it needs instead of resolving names itself. Journeys
-       * between the same pair overlap heavily, so the union is barely larger
-       * than a single journey's set — and a query per journey would cost more
-       * than the search that produced them.
-       */
-      const stations = await stationRepository.getByIds([...new Set(plans.flatMap(p => p.stationIds))])
+      // No criteria and no labels: findRoute produces neither, and a single
+      // answer has nothing to be labelled against anyway.
+      const plan = planJourney(rawLegs, null, [], context)
+      const stations = await stationRepository.getByIds(plan.stationIds)
       const namer = stationNamer(stations)
-      const journeys = plans.map(plan => assembleJourney(plan, namer, context))
+      const journey = assembleJourney(plan, namer, context)
 
-      const primary = journeys[0]!
       const result: FareResult = {
         from: namer.ref(fromId),
         to: namer.ref(toId),
-        // The primary flattened onto the root, where it has always been. Every
-        // existing client — including the OG worker's Pick<> — reads it there.
-        legs: primary.legs,
-        segments: primary.segments,
-        totalFare: primary.totalFare,
-        totalDistanceM: primary.totalDistanceM,
-        transferCount: primary.transferCount,
-        journeys
+        legs: journey.legs,
+        segments: journey.segments,
+        totalFare: journey.totalFare,
+        totalDistanceM: journey.totalDistanceM,
+        transferCount: journey.transferCount
+        // No `journeys`: this endpoint answers with one route, as it always has.
       }
 
       c.executionCtx.waitUntil(kvRepository.set(kvKey, result))

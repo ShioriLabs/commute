@@ -1,9 +1,16 @@
 import { Hono } from 'hono'
+import type { FareContext } from '@commute/constants'
 import { Bindings } from 'app'
 import { HubRepository } from 'db/repositories/hubs'
 import { KVRepository } from 'db/repositories/kv'
 import { StationRepository } from 'db/repositories/stations'
-import { Ok } from 'utils/response'
+import { TripResult } from 'models/fare'
+import { getRouter, parseFareContext } from 'routes/fares'
+import { fareTimeBucket } from 'utils/fare'
+import { assembleJourney, planJourney, stationNamer } from 'utils/fare-journey'
+import { summarizeFares } from 'utils/fare-summary'
+import { mergeInterlinedLegs } from 'utils/interlining'
+import { Internal, NotFound, Ok } from 'utils/response'
 import { buildSearchableIndex } from 'utils/searchables'
 
 /*
@@ -59,6 +66,91 @@ app.get('/searchables', async (c) => {
     Ok(index),
     200
   )
+})
+
+/** KV key for a trip answer. Distinct namespace from `fares:` — different shape. */
+export const tripCacheKey = (fromId: string, toId: string, context: FareContext, apiVersion: string): string =>
+  `trips:${fromId}:${toId}:${context.paymentMethod}:${fareTimeBucket(context.departureAt)}:${apiVersion}`
+
+/*
+ * Several journeys for one station pair, each priced.
+ *
+ * The multi-criteria answer, kept here rather than on `/fares/:from/:to` because
+ * the two genuinely differ: findRoutes weighs a saved boarding against a longer
+ * ride, so it picks a different primary on some pairs (Bogor -> Lebak Bulus
+ * becomes a one-transfer Rp 20.000 route where /fares returns the
+ * three-transfer Rp 17.500 one). /fares is the shared URL, the OG card and the
+ * TransportForJakarta embed, so its answer must not move until that is
+ * deliberately released.
+ *
+ * Rendering is identical either way: both go through utils/fare-journey.ts, so
+ * a leg looks the same on both endpoints. Only the number of journeys differs.
+ */
+app.get('/trips/:from/:to', async (c) => {
+  const fromId = c.req.param('from')
+  const toId = c.req.param('to')
+  if (fromId === toId) {
+    return c.json(NotFound('SAME_STATION', 'Origin and destination are the same station.'), 404)
+  }
+
+  const context = parseFareContext(c.req.query('paymentMethod'), c.req.query('at'))
+  const kvRepository = new KVRepository(c.env.KV)
+  const kvKey = tripCacheKey(fromId, toId, context, c.env.API_VERSION)
+
+  const cached = await kvRepository.get<TripResult>(kvKey)
+  if (cached) return c.json(Ok(cached), 200)
+
+  const stationRepository = new StationRepository(c.env.DB)
+
+  try {
+    const endpoints = await stationRepository.getByIds([fromId, toId])
+    if (endpoints.length < 2) {
+      return c.json(NotFound('UNKNOWN_STATION', 'One or both stations do not exist.'), 404)
+    }
+
+    const router = await getRouter(c.env.DB)
+    const routed = router.findRoutes(fromId, toId, {
+      /*
+       * Pricing the journeys is what makes the CHEAPEST label reachable at all —
+       * without a scorer every journey's `fare` criterion is null and the axis
+       * is skipped as incomparable.
+       *
+       * The legs are merged first, exactly as planJourney merges them, so the
+       * fare a label was decided on and the fare the rider sees are computed
+       * over the same decomposition. Scoring raw legs would let them disagree.
+       */
+      scoreFare: legs => summarizeFares(mergeInterlinedLegs([...legs]), context).totalFare
+    })
+    // findRoutes reports "no route" as an empty front, where findRoute returns null.
+    if (routed.length === 0) {
+      return c.json(NotFound('NO_ROUTE', 'No route between these stations.'), 404)
+    }
+
+    const plans = routed.map(journey => planJourney(journey.legs, journey.criteria, journey.labels, context))
+
+    /*
+     * One batched lookup across every journey, which is why planJourney reports
+     * the ids it needs instead of resolving names itself. Journeys between the
+     * same pair overlap heavily, so the union is barely larger than a single
+     * journey's set, and a query per journey would cost more than the search
+     * that produced them.
+     */
+    const stations = await stationRepository.getByIds([...new Set(plans.flatMap(p => p.stationIds))])
+    const namer = stationNamer(stations)
+
+    const result: TripResult = {
+      from: namer.ref(fromId),
+      to: namer.ref(toId),
+      journeys: plans.map(plan => assembleJourney(plan, namer, context))
+    }
+
+    c.executionCtx.waitUntil(kvRepository.set(kvKey, result))
+
+    return c.json(Ok(result), 200)
+  } catch (error) {
+    console.error(error)
+    return c.json(Internal('DATABASE_ERROR', 'Can\'t connect to database, please try again later.'), 500)
+  }
 })
 
 export default app

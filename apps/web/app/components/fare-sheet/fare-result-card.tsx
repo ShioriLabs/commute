@@ -1,4 +1,4 @@
-import type { FareJourney, FareResult, FareResultLeg, FareResultRideLeg, FareResultTransferLeg } from '@commute/schemas'
+import type { FareJourney, FareResult, FareResultLeg, FareResultRideLeg, FareResultTransferLeg, TripResult } from '@commute/schemas'
 import { OPERATORS, type Operator } from '@commute/constants'
 import { useEffect, useState } from 'react'
 import { ArrowsDownUpIcon, CaretDownIcon, CaretRightIcon, PersonSimpleWalkIcon, TicketIcon } from '@phosphor-icons/react'
@@ -339,8 +339,33 @@ function JourneyDetail({ journey }: { journey: FareJourney }) {
   )
 }
 
-export default function FareResultCard({ result }: { result: FareResult }) {
-  const journeys = journeysOf(result)
+export default function FareResultCard({ result, alternatives = false }: {
+  result: FareResult | TripResult
+  /*
+   * Whether to offer the other journeys the API returned.
+   *
+   * Off by default, so /fare and the search sheet render exactly what they
+   * rendered before alternatives existed: one result, no badges, no cards to
+   * choose between. Only /trip turns it on while the feature is unreleased.
+   *
+   * Gating here rather than at the route is what makes the staging real. All
+   * three surfaces share FarePanel, so a route-level flag would have shipped
+   * the cards to every one of them — including the /fare page embedded in
+   * TransportForJakarta's site, which is the surface this is protecting.
+   */
+  alternatives?: boolean
+}) {
+  /*
+   * Always the full list, so the hooks below never change shape; the primary is
+   * sliced off afterwards when alternatives are off.
+   *
+   * Its labels go with them. A badge is a comparison — "paling murah" only means
+   * anything beside the option it beats — so keeping them on a lone card would
+   * boast about a choice the rider was never shown. Same rule the engine
+   * applies when it declines to label a single journey.
+   */
+  const all = journeysOf(result)
+  const journeys = alternatives ? all : all.slice(0, 1).map(j => ({ ...j, labels: [] }))
   const [selected, setSelected] = useState(0)
 
   /*

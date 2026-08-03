@@ -12,11 +12,15 @@ import { readDismissContext, resolveDismiss } from '~/lib/sheet-route-dismiss'
  * which notes the unlock "hides the entry point only" — here there is no entry
  * point yet, so there is nothing to gate).
  *
- * It renders the same sheet as /fare, so the journey alternatives can be lived
- * with on a real URL before any of the risky migration lands: the /fare -> /trip
- * redirect, the sitemap move, the middleware branch, and the copy change. Those
- * are deliberately deferred so the TransportForJakarta embed, which points at
- * /fare, is not disturbed.
+ * It renders the same sheet as /fare, but it is the ONLY surface that offers
+ * the journey alternatives: `alternatives` is off everywhere else, so /fare and
+ * the search sheet keep showing a single result exactly as they did before.
+ * That gate is the point of this route. All three surfaces share FarePanel, so
+ * without it the cards would ship to /fare too — including the /fare page
+ * embedded in TransportForJakarta's site, which is the thing being protected.
+ *
+ * Also deferred, and unrelated to that gate: the /fare -> /trip redirect, the
+ * sitemap move, the middleware branch, and the copy change.
  */
 export function meta() {
   return [
@@ -44,7 +48,8 @@ export default function TripPage() {
           transition
           className="overflow-hidden relative w-screen h-screen mt-auto"
         >
-          <FareSheet title="Rute & Tarif" />
+          {/* The only surface offering alternatives while they are unreleased. */}
+          <FareSheet title="Rute & Tarif" alternatives />
         </DialogPanel>
       </Dialog>
     </main>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { FareJourney, FareResult } from '@commute/schemas'
+import type { FareJourney, FareResult, TripResult } from '@commute/schemas'
 import { JOURNEY_LABELS, JOURNEY_LABEL_DESCRIPTIONS } from './journey-labels'
 import { journeysOf, sortJourneyLabels, walkDistanceOf } from './journeys'
 
@@ -28,7 +28,7 @@ const journey = (over: Partial<FareJourney> = {}): FareJourney => ({
 describe('journeysOf', () => {
   it('returns the alternatives when the response carries them', () => {
     const cheap = journey({ labels: ['CHEAPEST'] })
-    expect(journeysOf({ ...legacy, journeys: [journey(), cheap] })).toHaveLength(2)
+    expect(journeysOf({ from: legacy.from, to: legacy.to, journeys: [journey(), cheap] })).toHaveLength(2)
   })
 
   /*
@@ -49,12 +49,64 @@ describe('journeysOf', () => {
   })
 
   it('treats an empty journeys array as absent', () => {
-    expect(journeysOf({ ...legacy, journeys: [] })).toHaveLength(1)
+    // Should never happen — the endpoint 404s rather than returning an empty
+    // front — but falling through to the flat fields beats rendering nothing.
+    expect(journeysOf({ ...legacy, journeys: [] } as FareResult & TripResult)).toHaveLength(1)
   })
 
   it('derives boardings from the interchange count', () => {
     expect(journeysOf(legacy)[0]!.boardings).toBe(2)
     expect(journeysOf({ ...legacy, transferCount: 0 })[0]!.boardings).toBe(1)
+  })
+})
+
+/*
+ * The release gate, as FareResultCard applies it.
+ *
+ * Asserted on the data rather than the DOM (vitest collects `.test.ts` only, so
+ * the component itself is uncoverable) — but this IS the gate: the component
+ * does `alternatives ? all : all.slice(0, 1).map(j => ({ ...j, labels: [] }))`
+ * and renders whatever comes out. If this shape is right, /fare is right.
+ */
+describe('the alternatives gate', () => {
+  const gate = (result: FareResult | TripResult, alternatives: boolean) => {
+    const all = journeysOf(result)
+    return alternatives ? all : all.slice(0, 1).map(j => ({ ...j, labels: [] }))
+  }
+
+  const twoOptions: TripResult = {
+    from: legacy.from,
+    to: legacy.to,
+    journeys: [
+      journey({ totalFare: 11000, labels: ['FEWEST_CHANGES', 'LEAST_WALKING'] }),
+      journey({ totalFare: 10500, labels: ['CHEAPEST'] })
+    ]
+  }
+
+  it('offers every option when the surface opts in', () => {
+    expect(gate(twoOptions, true)).toHaveLength(2)
+  })
+
+  it('shows only the primary when it does not', () => {
+    const shown = gate(twoOptions, false)
+    expect(shown).toHaveLength(1)
+    expect(shown[0]!.totalFare).toBe(11000)
+  })
+
+  /*
+   * The subtle half. Slicing to one journey keeps that journey's labels, which
+   * would badge "paling sedikit transit" on a card with nothing beside it —
+   * boasting about a choice the rider was never offered. /fare showed three
+   * such badges before this was fixed.
+   */
+  it('strips the badges from a gated primary', () => {
+    expect(gate(twoOptions, false)[0]!.labels).toEqual([])
+  })
+
+  it('leaves the journey otherwise untouched', () => {
+    const [gated] = gate(twoOptions, false)
+    const [full] = journeysOf(twoOptions)
+    expect({ ...gated, labels: full!.labels }).toEqual(full)
   })
 })
 

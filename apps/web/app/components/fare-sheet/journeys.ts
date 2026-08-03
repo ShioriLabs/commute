@@ -1,4 +1,4 @@
-import type { FareJourney, FareJourneyLabel, FareResult } from '@commute/schemas'
+import type { FareJourney, FareJourneyLabel, FareResult, TripResult } from '@commute/schemas'
 
 /*
  * Bridging a fare answer to the list of alternatives it may or may not carry.
@@ -8,30 +8,34 @@ import type { FareJourney, FareJourneyLabel, FareResult } from '@commute/schemas
  */
 
 /**
- * The journeys to render, given any fare answer.
+ * The journeys to render, from either endpoint's answer.
  *
- * `journeys` is absent from two real sources: a response cached before the field
- * shipped (the API's KV holds bodies for 20 hours, and the app's own IDB cache
- * longer), and a deployed web build talking to an API that has not caught up.
- * Both must render, so the primary is promoted to a one-item list rather than
- * the page failing on a missing array.
+ * `/_internal/trips` returns a `journeys` array; `/fares` returns a single route
+ * with the fields at the top level. Normalising here means the card list does
+ * not care which surface it is on — and a body cached under either shape still
+ * renders, which matters because SWR persists them to IndexedDB and the API's
+ * KV holds them for 20 hours.
  */
-export function journeysOf(result: FareResult): FareJourney[] {
-  if (result.journeys?.length) return result.journeys
+export function journeysOf(result: FareResult | TripResult): FareJourney[] {
+  if ('journeys' in result && result.journeys?.length) return result.journeys
+  // Narrowed by elimination: only FareResult carries the flat fields.
+  const single = result as FareResult
   return [{
-    legs: result.legs,
-    segments: result.segments,
-    totalFare: result.totalFare,
-    totalDistanceM: result.totalDistanceM,
-    transferCount: result.transferCount,
-    // A promoted primary was never compared against anything, so it has won
+    legs: single.legs,
+    segments: single.segments,
+    totalFare: single.totalFare,
+    totalDistanceM: single.totalDistanceM,
+    transferCount: single.transferCount,
+    // A single route was never compared against anything, so it has won
     // nothing. Empty is the honest answer, and the card renders no badge.
     labels: [],
-    // Neither figure exists in the old shape. boardings is recoverable —
-    // interchanges plus the first boarding — but walking distance is not, and
-    // guessing zero would render "0 m jalan kaki" over a journey that walks.
-    // The card omits the figure instead; see walkDistanceOf.
-    boardings: result.transferCount + 1,
+    /*
+     * Neither figure exists in the /fares shape. `boardings` is recoverable —
+     * interchanges plus the first boarding — but walking distance is not, and
+     * guessing zero would render "jalan 0 m" over a journey that walks. The
+     * card omits the figure instead; see walkDistanceOf.
+     */
+    boardings: single.transferCount + 1,
     walkDistanceM: -1
   }]
 }

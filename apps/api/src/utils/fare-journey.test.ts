@@ -196,6 +196,41 @@ describe('assembleJourney', () => {
     expect(journey.walkDistanceM).toBe(460)
   })
 
+  /*
+   * /fares/:from/:to runs this pipeline on a findRoute result, which has no
+   * criteria vector at all — only the planner produces one. Both figures are
+   * then counted off the legs, and must agree with what the planner would have
+   * reported for the same journey.
+   */
+  describe('without an engine criteria vector', () => {
+    const legs = [
+      ride('KCI', 'C', ['BOO', 'SUD'], 4000),
+      walk('KCI-SUD', 'MRTJ-DKA', 90),
+      ride('MRTJ', 'M', ['DKA', 'LBB'], 8000)
+    ]
+    const assemble = () => {
+      const plan = planJourney(legs, null, [], CONTEXT)
+      return assembleJourney(plan, namerFor(plan.legs, plan.stationIds), CONTEXT)
+    }
+
+    it('counts one boarding per ride leg', () => {
+      expect(assemble().boardings).toBe(2)
+    })
+
+    it('sums the transfer distances for walking', () => {
+      expect(assemble().walkDistanceM).toBe(90)
+    })
+
+    it('agrees with the planner on the same journey', () => {
+      // The planner increments boardings exactly when it boards a line, which
+      // is one per RIDE leg once interlined legs have been merged.
+      const planned = planJourney(legs, criteria({ boardings: 2, walkDistanceM: 90 }), [], CONTEXT)
+      const fromCriteria = assembleJourney(planned, namerFor(planned.legs, planned.stationIds), CONTEXT)
+      expect(assemble().boardings).toBe(fromCriteria.boardings)
+      expect(assemble().walkDistanceM).toBe(fromCriteria.walkDistanceM)
+    })
+  })
+
   it('passes labels through unchanged, including none at all', () => {
     const { journey } = build([ride('KCI', 'C', ['BOO', 'MRI'], 1000)], {}, ['CHEAPEST', 'LEAST_WALKING'])
     expect(journey.labels).toEqual(['CHEAPEST', 'LEAST_WALKING'])

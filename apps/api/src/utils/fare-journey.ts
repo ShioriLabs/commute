@@ -39,7 +39,12 @@ export interface JourneyPlan {
   summary: FareSummary
   corridorMerges: Map<number, CorridorMerge>
   legLines: (LegLineMeta | null)[]
-  criteria: Criteria
+  /*
+   * The engine's own numbers, when a planner produced this journey. Absent for
+   * a findRoute result, which has no criteria vector — `boardings` and
+   * `walkDistanceM` are then derived from the legs instead.
+   */
+  criteria: Criteria | null
   labels: JourneyLabel[]
   /**
    * Every station id this journey needs a name for — stops, plus each service
@@ -53,7 +58,7 @@ export interface JourneyPlan {
 /** Everything derivable from the legs alone. No I/O. */
 export function planJourney(
   rawLegs: RouteLeg[],
-  criteria: Criteria,
+  criteria: Criteria | null,
   labels: JourneyLabel[],
   context: FareContext
 ): JourneyPlan {
@@ -211,7 +216,14 @@ export function assembleJourney(plan: JourneyPlan, namer: StationNamer, context:
     totalDistanceM: summary.totalDistanceM + internalWalkExtra,
     transferCount: summary.transferCount - absorbedCount,
     labels: plan.labels.map(l => LABELS[l]),
-    boardings: plan.criteria.boardings,
-    walkDistanceM: plan.criteria.walkDistanceM
+    /*
+     * From the engine when a planner produced this journey, otherwise counted
+     * off the legs. The two agree: the planner increments `boardings` exactly
+     * when it boards a line, which is one per RIDE leg after interlined legs
+     * have been merged, and walking is the sum of the transfer distances.
+     */
+    boardings: plan.criteria?.boardings ?? legs.filter(l => l.type === 'RIDE').length,
+    walkDistanceM: plan.criteria?.walkDistanceM
+      ?? legs.reduce((sum, l) => sum + (l.type === 'TRANSFER' ? l.distanceM : 0), 0)
   }
 }

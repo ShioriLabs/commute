@@ -21,9 +21,15 @@ interface Props {
    * is still the canonical URL; /trip passes its own while the two coexist.
    */
   title?: string
+  /*
+   * Offer the alternative journeys. Off for /fare, which must keep rendering
+   * exactly what it rendered before — it is the URL people have shared and the
+   * one embedded in TransportForJakarta's site. Only /trip turns it on.
+   */
+  alternatives?: boolean
 }
 
-export default function FareSheet({ title = 'Cek Tarif' }: Props) {
+export default function FareSheet({ title = 'Cek Tarif', alternatives = false }: Props) {
   const [searchParams] = useSearchParams()
 
   // On the homepage the sheet lives behind a faked URL (SheetButton pushStates
@@ -66,7 +72,9 @@ export default function FareSheet({ title = 'Cek Tarif' }: Props) {
     onStateChange: writeUrl,
     syncDocumentTitle: true,
     // Keep the tab and the heading saying the same thing on both routes.
-    documentTitlePrefix: title
+    documentTitlePrefix: title,
+    // Decides which endpoint is queried, not just what is rendered.
+    alternatives
   })
   const { origin, destination, criteria, openPickerFor } = query
 
@@ -102,7 +110,7 @@ export default function FareSheet({ title = 'Cek Tarif' }: Props) {
           </div>
         </div>
 
-        <FarePanel query={query} />
+        <FarePanel query={query} alternatives={alternatives} />
       </div>
     </section>
   )

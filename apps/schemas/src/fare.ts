@@ -136,20 +136,33 @@ export const FareResultSchema = v.pipe(
       v.metadata({ examples: [14000] })
     ),
     totalDistanceM: v.pipe(v.number(), v.description('Total jarak seluruh perjalanan dalam meter.')),
-    transferCount: v.pipe(v.number(), v.description('Berapa kali harus pindah kendaraan.')),
-    /*
-     * Optional, not nullable. schemas.live.test.ts validates against production,
-     * and bodies cached before this shipped simply lack the key — optional
-     * passes on an absent key, nullable would not.
-     */
-    journeys: v.pipe(
-      v.optional(v.array(FareJourneySchema)),
-      v.description('Pilihan rute lain buat pasangan stasiun yang sama, diurutkan dari yang paling masuk akal. Yang pertama sama persis dengan `legs`, `segments`, dan `totalFare` di atas, jadi yang cuma butuh satu jawaban boleh mengabaikan bagian ini.')
-    )
+    transferCount: v.pipe(v.number(), v.description('Berapa kali harus pindah kendaraan.'))
   }),
   v.title('FareResult'),
-  v.description('Hasil pencarian rute: perjalanannya seperti apa (`legs`), tarifnya dihitung bagaimana (`segments`), dan pilihan rute lainnya kalau ada (`journeys`).'),
+  v.description('Hasil pencarian rute: perjalanannya seperti apa (`legs`) dan tarifnya dihitung bagaimana (`segments`).'),
   v.metadata({ ref: 'FareResult' })
+)
+
+/*
+ * The multi-journey answer, served from `/_internal/trips/:from/:to`.
+ *
+ * Not part of the documented API: `/_internal` is shaped around the web app's
+ * screen and carries no compatibility promise. The schema lives here anyway so
+ * apps/web parses the same definition the API builds, and so the pieces are
+ * ready to promote if this ever becomes a public endpoint.
+ */
+export const TripResultSchema = v.pipe(
+  v.object({
+    from: FareStationSchema,
+    to: FareStationSchema,
+    journeys: v.pipe(
+      v.array(FareJourneySchema),
+      v.description('Pilihan rute buat pasangan stasiun ini, diurutkan dari yang paling masuk akal. Selalu ada isinya kalau rutenya ketemu.')
+    )
+  }),
+  v.title('TripResult'),
+  v.description('Beberapa pilihan rute sekaligus buat satu pasangan stasiun, masing-masing lengkap dengan tarifnya.'),
+  v.metadata({ ref: 'TripResult' })
 )
 
 export type FareStation = v.InferOutput<typeof FareStationSchema>
@@ -161,6 +174,7 @@ export type FareSegment = v.InferOutput<typeof FareSegmentSchema>
 export type FareJourneyLabel = v.InferOutput<typeof FareJourneyLabelSchema>
 export type FareJourney = v.InferOutput<typeof FareJourneySchema>
 export type FareResult = v.InferOutput<typeof FareResultSchema>
+export type TripResult = v.InferOutput<typeof TripResultSchema>
 
 /* Aliases matching the web app's long-standing names for these shapes. */
 export type FareResultStation = FareStation

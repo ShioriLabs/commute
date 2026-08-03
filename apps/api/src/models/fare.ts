@@ -89,20 +89,25 @@ export interface FareJourney {
 export interface FareResult {
   from: FareResultStation
   to: FareResultStation
-  /*
-   * journeys[0], flattened. Kept at the root because apps/opengraph reads
-   * `totalFare` off it through a Pick<>, and because a client that never learns
-   * about `journeys` keeps working unchanged.
-   */
   legs: FareResultLeg[]
   segments: FareResultSegment[]
   totalFare: number | null
   totalDistanceM: number
   transferCount: number
-  /*
-   * Alternatives, best first, never empty when the route resolved. Optional in
-   * the type only so a body cached before this shipped still parses — KV holds
-   * pre-change bodies for up to 20 hours.
-   */
-  journeys?: FareJourney[]
+}
+
+/*
+ * The multi-journey answer, served from `/_internal/trips/:from/:to`.
+ *
+ * Separate from FareResult rather than an optional field on it, because the two
+ * endpoints genuinely answer different questions: `/fares` returns the one route
+ * it has always returned, and this returns everything worth choosing between.
+ * Keeping `journeys` off FareResult means the public shape cannot quietly change
+ * under the OG worker or the TransportForJakarta embed while this is unreleased.
+ */
+export interface TripResult {
+  from: FareResultStation
+  to: FareResultStation
+  /** Best first, never empty when the route resolved. */
+  journeys: FareJourney[]
 }

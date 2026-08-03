@@ -1,4 +1,4 @@
-import type { FareResult } from '@commute/schemas'
+import type { FareResult, TripResult } from '@commute/schemas'
 import type { StandardResponse } from '@schema/response'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import useSWR from 'swr'
@@ -11,7 +11,7 @@ import {
   writeFareCriteria,
   type FareCriteria
 } from 'utils/fare-criteria'
-import { FARE_SWR_CONFIG, fareApiUrl } from 'utils/fare-api'
+import { FARE_SWR_CONFIG, fareApiUrl, tripApiUrl } from 'utils/fare-api'
 import { resolveStationId, toPickableStations, type PickableStation } from './pickable-station'
 import { operatorsPresent } from './criteria/labels'
 import type { OperatorCode } from '@commute/schemas'
@@ -56,6 +56,12 @@ export interface FareQueryOptions {
    * on /trip contradicts the heading right above it.
    */
   documentTitlePrefix?: string
+  /*
+   * Ask for every journey worth choosing between, from `/_internal/trips`,
+   * rather than the single route `/fares` returns. Only /trip does while the
+   * feature is unreleased — see the endpoint comment below.
+   */
+  alternatives?: boolean
 }
 
 export interface FareQuery {
@@ -89,7 +95,9 @@ export interface FareQuery {
   operators: OperatorCode[]
   criteria: FareCriteria
   setCriteria: (criteria: FareCriteria) => void
-  fare: StandardResponse<FareResult> | undefined
+  /* Either shape: `/fares` answers with one route, `/_internal/trips` with
+   * several. FareResultCard normalises the two via journeysOf. */
+  fare: StandardResponse<FareResult | TripResult> | undefined
   error: unknown
   isLoading: boolean
 }
@@ -104,7 +112,8 @@ export function useFareQuery({
   onStateChange,
   initialCriteria,
   syncDocumentTitle = false,
-  documentTitlePrefix = 'Cek Tarif'
+  documentTitlePrefix = 'Cek Tarif',
+  alternatives = false
 }: FareQueryOptions = {}): FareQuery {
   const controlled = controlledPair !== undefined
   // The prebuilt search index, shared with the search sheet through the same
@@ -256,9 +265,10 @@ export function useFareQuery({
   }, [origin, destination, syncDocumentTitle, documentTitlePrefix])
 
   /*
-   * Built through the shared helper so this key is byte-identical to the map's
+   * Built through the shared helpers so this key is byte-identical to the map's
    * — the two surfaces must share one SWR entry, or the chip and the sheet can
-   * show different prices for one route.
+   * show different prices for one route. `alternatives` picks the endpoint, and
+   * with it the key: see tripApiUrl for why the two must not converge.
    *
    * Keyed on the controlled ids rather than the resolved stations: those ids can
    * arrive before the search index does (a /map?from=&to= deep link), and the
@@ -266,8 +276,10 @@ export function useFareQuery({
    */
   const keyFromId = controlled ? controlledPair?.fromId ?? null : origin?.id ?? null
   const keyToId = controlled ? controlledPair?.toId ?? null : destination?.id ?? null
-  const fareUrl = criteriaReady ? fareApiUrl(keyFromId, keyToId, criteria) : null
-  const { data: fare, error, isLoading } = useSWR<StandardResponse<FareResult>>(fareUrl, fetcher, FARE_SWR_CONFIG)
+  const journeyApiUrl = alternatives ? tripApiUrl : fareApiUrl
+  const fareUrl = criteriaReady ? journeyApiUrl(keyFromId, keyToId, criteria) : null
+  const { data: fare, error, isLoading }
+    = useSWR<StandardResponse<FareResult | TripResult>>(fareUrl, fetcher, FARE_SWR_CONFIG)
 
   /*
    * The one place the pair moves. Uncontrolled keeps the both-ends guard it has

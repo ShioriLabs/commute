@@ -16,12 +16,15 @@ interface Props {
   // Wrap the criteria chips instead of scrolling them. Set by the map's fare
   // sheet, where a horizontally-scrolling rail cannot work — see CriteriaBar.
   wrapCriteria?: boolean
+  // Offer the alternative journeys. Only /trip does while the feature is
+  // unreleased; see FareResultCard.
+  alternatives?: boolean
 }
 
 // The fare query body: the Dari/Ke pair, the swap control, and whichever of
 // empty/loading/error/result applies. Shared verbatim by the /fare route and the
 // search sheet's route mode, so the two can never drift apart visually.
-export default function FarePanel({ query, footer, wrapCriteria = false }: Props) {
+export default function FarePanel({ query, footer, wrapCriteria = false, alternatives = false }: Props) {
   const {
     origin,
     destination,
@@ -91,7 +94,7 @@ export default function FarePanel({ query, footer, wrapCriteria = false }: Props
           )
         : null}
 
-      {fare?.data ? <FareResultCard result={fare.data} /> : null}
+      {fare?.data ? <FareResultCard result={fare.data} alternatives={alternatives} /> : null}
       {fare?.data ? footer : null}
 
       <StationPickerDialog
