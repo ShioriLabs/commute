@@ -1,6 +1,6 @@
 /*
  * Official MRT Jakarta OD fare matrix (rupiah), keyed by our station codes
- * (see MRTJ_STATION_CODES in @commute/constants). MRTJ fares are published
+ * (see MRTJ_STATIONS_BY_SLUG in @commute/constants). MRTJ fares are published
  * per station pair, not formula-derived. Each unordered pair is stored once
  * in south->north order; getMRTJFare falls back to the reverse direction.
  * Source: published MRTJ tariff table (Rp 3.000-14.000), cross-checked

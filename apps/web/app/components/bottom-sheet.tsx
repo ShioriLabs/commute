@@ -18,7 +18,9 @@ const SCROLL_MIN_VELOCITY = 0.02
 
 type SnapState = 'closed' | 'peek' | 'full'
 
-interface BottomSheetProps {
+// Exported because SidePane implements the same contract and DetailSurface
+// picks between the two by viewport width.
+export interface BottomSheetProps {
   // Parent-controlled open state. The sheet opens to peek when this flips true
   // and animates closed (then calls onClose) when it flips false or the user
   // dismisses it.
@@ -33,8 +35,9 @@ interface BottomSheetProps {
   ariaLabel: string
   // Drag handle / header. Rendered inside the grabbable handle region. Receives
   // a `close` callback to animate the sheet shut (e.g. a header close button).
-  // Interactive controls inside it escape the drag via the
-  // `button, a, input, [role="button"]` closest() check in handlePointerDown.
+  // Interactive controls (here and in the body) stay tappable because pointer
+  // capture is deferred until a drag commits — a plain tap never captures, so
+  // its click lands on the control as usual.
   header: (close: () => void) => ReactNode
   // Body content, mounted only once the open animation lands (`ready`) so the
   // first render of heavy subtrees doesn't drop frames during the slide.
@@ -199,6 +202,17 @@ export default function BottomSheet({ open, onClose, onDismissStart, ariaLabel, 
   // Active "passthrough scroll": the sheet root captured the pointer but the
   // gesture should drive body scrolling rather than resize the sheet.
   const scrollDragRef = useRef<{ pointerId: number, lastY: number } | null>(null)
+  // Swallow the click that follows a committed drag/scroll gesture. Capture
+  // retargeting usually prevents it, but engines have differed — a fling that
+  // started on a hub member link must never also navigate to that station.
+  const suppressClickRef = useRef(false)
+  // Committing a gesture (sheet drag or passthrough scroll): take pointer
+  // capture so the stream survives the pointer leaving the sheet, and arm the
+  // click suppressor. Not done at pointerdown — see handlePointerDown.
+  const commitGesture = (pointerId: number) => {
+    sheetRef.current?.setPointerCapture(pointerId)
+    suppressClickRef.current = true
+  }
   // rAF id for the post-release inertial body scroll (0 = none).
   const momentumRef = useRef(0)
   // Cancel any in-flight inertial scroll if the sheet unmounts mid-glide.
@@ -213,13 +227,17 @@ export default function BottomSheet({ open, onClose, onDismissStart, ariaLabel, 
       cancelAnimationFrame(momentumRef.current)
       momentumRef.current = 0
     }
-    // Ignore taps on interactive controls inside the header.
+    suppressClickRef.current = false
     const target = e.target as HTMLElement
-    if (target.closest('button, a, input, [role="button"]')) return
     const fromHandle = !!target.closest('[data-sheet-handle]')
-    // Capture immediately so touch UAs can't reclaim the gesture for native
-    // scrolling once it crosses a few pixels.
-    ;(e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId)
+    // Every pointerdown is a drag candidate, even on links and buttons — the
+    // hub sheet's body is tiled edge-to-edge with member links, and bailing on
+    // interactive targets made that whole sheet undraggable. Pointer capture
+    // is deferred to the commit in handlePointerMove: capturing here would
+    // retarget the eventual click to this root and break plain taps on those
+    // controls. Touch pointers are implicitly captured by the target itself,
+    // so the move stream reaches us (bubbling) either way; nothing native can
+    // reclaim the gesture because the sheet is touch-action: none.
     dragCandidateRef.current = {
       y: e.clientY,
       sheetTopAtStart: heightRef.current,
@@ -310,6 +328,7 @@ export default function BottomSheet({ open, onClose, onDismissStart, ariaLabel, 
     if (startScroll) {
       dragCandidateRef.current = null
       scrollDragRef.current = { pointerId: e.pointerId, lastY: e.clientY }
+      commitGesture(e.pointerId)
       return
     }
 
@@ -319,6 +338,7 @@ export default function BottomSheet({ open, onClose, onDismissStart, ariaLabel, 
       time: e.timeStamp
     }
     dragCandidateRef.current = null
+    commitGesture(e.pointerId)
 
     // Apply the move we just observed so the sheet jumps to where the finger
     // already is (rather than lagging by DRAG_COMMIT_THRESHOLD pixels).
@@ -482,6 +502,15 @@ export default function BottomSheet({ open, onClose, onDismissStart, ariaLabel, 
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
+        onClickCapture={(e) => {
+          if (!suppressClickRef.current) return
+          suppressClickRef.current = false
+          e.preventDefault()
+          e.stopPropagation()
+        }}
+        // Mouse-dragging the sheet from a link would otherwise start a native
+        // HTML5 link drag, which cancels the pointer stream mid-gesture.
+        onDragStart={e => e.preventDefault()}
         role="dialog"
         aria-label={ariaLabel}
       >

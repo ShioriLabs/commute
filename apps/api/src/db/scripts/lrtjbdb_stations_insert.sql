@@ -1,5 +1,5 @@
 INSERT INTO stations (id, name, code, formattedName, region, regionCode, operator, timetableSynced, createdAt, updatedAt) VALUES
-('LRTJBDB-DKA', 'Dukuh Atas', 'DKA', 'Dukuh Atas BNI', 'Jabodetabek', 'CGK', 'LRTJBDB', FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('LRTJBDB-DKA', 'Dukuh Atas', 'DKA', 'Dukuh Atas Bank Syariah Indonesia', 'Jabodetabek', 'CGK', 'LRTJBDB', FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 ('LRTJBDB-SET', 'Setiabudi', 'SET', 'Setiabudi', 'Jabodetabek', 'CGK', 'LRTJBDB', FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 ('LRTJBDB-RAS', 'Rasuna Said', 'RAS', 'Rasuna Said', 'Jabodetabek', 'CGK', 'LRTJBDB', FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 ('LRTJBDB-KUA', 'Kuningan', 'KUA', 'Kuningan', 'Jabodetabek', 'CGK', 'LRTJBDB', FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),

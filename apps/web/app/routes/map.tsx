@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Link, useNavigate, useNavigationType, useSearchParams } from 'react-router'
 import { XIcon, InfoIcon, CornersInIcon } from '@phosphor-icons/react'
 import useSWR from 'swr'
+import clsx from 'clsx'
 import type { StandardResponse } from '@schema/response'
 import type { Hub } from '@commute/schemas'
 import type { Station } from '@commute/schemas'
@@ -10,6 +11,7 @@ import { useLines } from '~/hooks/use-lines'
 import { hexToRgb01 } from 'utils/colors'
 import { haptic } from 'utils/haptics'
 import { staggerDelay, type StaggerOptions } from 'utils/stagger'
+import { buildFarePath } from 'utils/fare-url'
 import {
   createRenderer,
   hitTest,
@@ -44,6 +46,8 @@ import HubSheet from '../components/hub-sheet'
 import { MapPreviewBackdrop, useMapMorph } from '../components/map-morph'
 import { prefetchMapSkeleton } from '../components/map-skeleton'
 import { PEEK_FRACTION } from '../components/bottom-sheet'
+import { SIDE_PANE_OCCUPIED_PX } from '../components/side-pane'
+import { useIsDesktop } from '~/hooks/is-desktop'
 // Imported as a URL (not as data) so Vite content-hashes it into /assets/. The
 // file deliberately lives outside public/: assets under public/ are copied
 // verbatim with stable names, and a stable URL cannot be cached correctly for a
@@ -282,6 +286,9 @@ export default function MapPage() {
   const currentTierRef = useRef<Tier>(1)
 
   const [viewportSize, setViewportSize] = useState({ w: 0, h: 0 })
+  // Detail surfaces sit below the map on phones and beside it on desktop, which
+  // moves where a selected pill has to land and whether the title pill has room.
+  const isDesktop = useIsDesktop()
 
   // Chrome (top bar) auto-hides during map interaction and reappears when the
   // user taps empty space. Author mode toolbar / edit panel are unaffected.
@@ -291,6 +298,20 @@ export default function MapPage() {
   // `OPERATOR-CODE` (e.g. KCI-MRI); split on first hyphen.
   const [selectedStation, setSelectedStation] = useState<{ operator: string, code: string } | null>(null)
   const [selectedHubSlug, setSelectedHubSlug] = useState<string | null>(null)
+  // Desktop only: an open detail pane sits over the top-left corner the title
+  // pill lives in, so it hides for as long as one is open.
+  const paneCoversChrome = isDesktop && !!(selectedStation || selectedHubSlug)
+  const pillVisible = chromeVisible && !paneCoversChrome
+  // Pick-a-departure mode, primed by the station sheet's "Petunjuk Arah":
+  // holds the destination station id (`OPERATOR-CODE`); while set, the next
+  // station tap becomes the origin and navigates to /fare with the pair.
+  const [departurePickFor, setDeparturePickFor] = useState<string | null>(null)
+  // useCallback keeps the sheet→content prop chain referentially stable:
+  // StationContent is memoized and this participates in its shallow compare.
+  const handleSelectDeparture = useCallback(() => {
+    if (!selectedStation) return
+    setDeparturePickFor(`${selectedStation.operator}-${selectedStation.code}`)
+  }, [selectedStation])
 
   // Two transforms: `target` is where we want to be; `rendered` is what we
   // currently draw. The rAF loop lerps rendered toward target each frame so
@@ -587,6 +608,7 @@ export default function MapPage() {
     restore: () => rendererRef.current?.debug?.restoreContext(),
     isLost: () => rendererRef.current?.isContextLost() ?? false,
     releaseTiles: () => releaseTilesRef.current(),
+    camera: () => ({ ...renderedRef.current }),
     stats: () => {
       const renderer = rendererRef.current
       const { count, bytes } = renderer?.tileStats() ?? { count: 0, bytes: 0 }
@@ -901,18 +923,23 @@ export default function MapPage() {
     dirtyRef.current = true
   }
 
-  // Center a selected pill in the area left visible above the peeked sheet.
+  // Center a selected pill in the area the detail surface leaves visible: above
+  // the peeked sheet on phones, right of the pane on desktop.
   const flyToPoint = (p: Point) => {
     const cx = (p.ax + p.bx) / 2
     const cy = (p.ay + p.by) / 2
     const s = targetRef.current.scale
-    const peekPx = Math.round(window.innerHeight * PEEK_FRACTION)
+    const paneEdge = isDesktop ? SIDE_PANE_OCCUPIED_PX : 0
+    const peekPx = isDesktop ? 0 : Math.round(window.innerHeight * PEEK_FRACTION)
     const to = clampTransform(
       {
-        tx: viewportSize.w / 2 - cx * s,
+        tx: paneEdge + (viewportSize.w - paneEdge) / 2 - cx * s,
         ty: (viewportSize.h - peekPx) / 2 - cy * s,
         scale: s
       },
+      // Still clamped to the map's own edges, which know nothing about the
+      // surface — near a corner the selection can end up under it, same as the
+      // sheet has always done.
       viewportSize.w, viewportSize.h, mapW, mapH, minScale
     )
     flyTo(to, 450)
@@ -1062,6 +1089,10 @@ export default function MapPage() {
     const hit = points.length > 0 ? hitTest(worldX, worldY, points, slopWorld) : null
     if (hit) {
       if (hit.kind === 'hub') {
+        // A hub is not a boarding station: while picking a departure, a hub
+        // tap neither picks nor opens a sheet — the mode's contract is that
+        // the next station tap is the origin.
+        if (departurePickFor) return false
         // Hub region tapped (no member pill won). Resolve `HUB-…` id → slug.
         const slug = hubSlugById.get(hit.point.id)
         if (slug) {
@@ -1083,6 +1114,17 @@ export default function MapPage() {
         if (dash > 0) {
           const operator = stationId.slice(0, dash)
           const code = stationId.slice(dash + 1)
+          if (departurePickFor) {
+            // Departure pick: this tap is the origin. The destination itself
+            // and unserved stations (no fare coverage) are not pickable.
+            if (stationId === departurePickFor || getUnservedStation(operator, code)) return false
+            setDeparturePickFor(null)
+            haptic()
+            const path = buildFarePath(stationId, departurePickFor)
+            if (path) navigate(path)
+            // No sheet, no spotlight, no flyTo — we are leaving the map.
+            return false
+          }
           setSelectedHubSlug(null)
           setSelectedStation({ operator, code })
           haptic()
@@ -1298,15 +1340,52 @@ export default function MapPage() {
           stay put during pan/zoom: close is the page's escape hatch and must
           never need a tap to reveal it first, and recenter is most useful
           precisely while the user is zoomed in and moving. They share a visual
-          language, not a visibility rule. */}
+          language, not a visibility rule.
+
+          On desktop the side pane occupies this corner, so the pill fades out
+          for as long as one is open. Shifting it right instead would leave it
+          stranded mid-map and jumping on every open and close, and the pane's
+          own header already names what is selected.
+
+          The entrance and the fade live on different elements on purpose.
+          `map-chrome-enter` fills forwards, and a filling animation outranks a
+          plain class, so an `opacity-0` utility on the same element is simply
+          ignored once the entrance has landed — the pill would never hide. */}
       <div
-        className={`map-chrome-enter absolute top-4 left-4 z-10 max-w-[calc(100%-8rem)] transition-opacity duration-200 ${chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        className={clsx(
+          'map-chrome-enter absolute top-4 left-4 z-10 max-w-[calc(100%-8rem)]',
+          !pillVisible && 'pointer-events-none'
+        )}
         style={{ animationDelay: staggerDelay(0, MAP_CHROME_STAGGER) }}
       >
-        <h1 className="rounded-full bg-white/90 backdrop-blur shadow-lg px-4 py-2.5 font-bold text-base text-slate-800 truncate">
+        <h1
+          className={clsx(
+            'rounded-full bg-white/90 backdrop-blur shadow-lg px-4 py-2.5 font-bold text-base text-slate-800 truncate transition-opacity duration-200',
+            pillVisible ? 'opacity-100' : 'opacity-0'
+          )}
+        >
           Peta Integrasi
         </h1>
       </div>
+
+      {/* Departure-pick prompt. A mode indicator, so like the close button it
+          ignores `chromeVisible` — the user must always see the map is in a
+          different state and have a way out of it. */}
+      {departurePickFor && (
+        <div className="map-chrome-enter absolute inset-x-4 top-16 z-20 flex justify-center pointer-events-none">
+          <div className="pointer-events-auto rounded-full bg-white/90 backdrop-blur shadow-lg pl-4 pr-1.5 py-1.5 flex items-center gap-2">
+            <span className="font-bold text-sm text-slate-800 truncate">Pilih stasiun keberangkatan</span>
+            <button
+              type="button"
+              onClick={() => setDeparturePickFor(null)}
+              aria-label="Batalkan pemilihan stasiun keberangkatan"
+              className="rounded-full w-8 h-8 flex items-center justify-center hover:bg-slate-100 cursor-pointer"
+            >
+              <XIcon weight="bold" className="w-4 h-4 text-slate-700" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* The entrance rides a wrapper on each button rather than the button
           itself: `.map-chrome-enter` animates transform, and the recenter
@@ -1412,6 +1491,7 @@ export default function MapPage() {
         operator={selectedStation?.operator ?? null}
         code={selectedStation?.code ?? null}
         onClose={() => setSelectedStation(null)}
+        onSelectDeparture={handleSelectDeparture}
         // Start the spotlight exit as soon as the dismiss begins — unless the
         // sheet is closing because the user switched to a hub, whose
         // spotlight is already animating in.

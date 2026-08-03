@@ -5,6 +5,7 @@ import {
   ArrowSquareOutIcon,
   BabyIcon,
   BicycleIcon,
+  NavigationArrowIcon,
   BroadcastIcon,
   ElevatorIcon,
   EscalatorDownIcon,
@@ -33,6 +34,7 @@ import { sortLinesForDisplay } from '~/utils/lines'
 import { useNetworkStatus } from '~/hooks/network'
 import { getUnservedStation } from '~/lib/unserved-stations'
 import { useLines } from '~/hooks/use-lines'
+import { buildFareDestinationPath } from 'utils/fare-url'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -105,6 +107,10 @@ const AMENITY_ICONS: Record<AmenityType, JSX.Element> = {
 interface StationContentProps {
   operator: string
   code: string
+  // Map-only: "Petunjuk Arah" primes the map's pick-a-departure mode instead of
+  // linking to /fare. Supplied by StationSheet; the full station page leaves it
+  // unset. Must be referentially stable — it participates in the memo compare.
+  onSelectDeparture?: () => void
 }
 
 export interface StationHeader {
@@ -158,7 +164,7 @@ export function useStationHeader(operator: string, code: string): UseStationData
   }
 }
 
-const StationContent = memo(function StationContent({ operator, code }: StationContentProps) {
+const StationContent = memo(function StationContent({ operator, code, onSelectDeparture }: StationContentProps) {
   const unserved = getUnservedStation(operator, code)
   // Route params are not case-normalised anywhere, so fold case here rather
   // than let a lowercase URL silently drop the memorial.
@@ -213,19 +219,30 @@ const StationContent = memo(function StationContent({ operator, code }: StationC
                 </div>
               )}
               <div className="flex flex-row gap-2">
-                {station.data?.data?.latitude && station.data.data.longitude
-                  ? (
-                      <a
-                        href={`https://maps.google.com/maps?q=${station.data.data.latitude},${station.data.data.longitude}(${encodeURIComponent(station.data.data.name)})`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex flex-row gap-2 justify-center bg-[#F55875] text-white font-bold p-4 rounded-xl text-center w-full text-sm"
-                      >
-                        Petunjuk Arah
-                        <ArrowSquareOutIcon className="w-5 h-5" weight="bold" aria-label="Link eksternal, akan membuka Google Maps" />
-                      </a>
+                {(() => {
+                  // In the map sheet the button primes departure picking on the
+                  // map; on the full page it deep-links to /fare with this
+                  // station as the destination. Built from the API id, not the
+                  // route params — params are not case-normalised (see the
+                  // Bekasi Timur fold above) and the id is canonical.
+                  const buttonClass = 'flex flex-row gap-2 justify-center bg-[#F55875] text-white font-bold p-4 rounded-xl text-center w-full text-sm cursor-pointer'
+                  if (onSelectDeparture) {
+                    return (
+                      <button type="button" onClick={onSelectDeparture} className={buttonClass}>
+                        <NavigationArrowIcon className="w-5 h-5" weight="bold" mirrored aria-hidden />
+                        OTW Ke Sini
+                      </button>
                     )
-                  : null}
+                  }
+                  const farePath = buildFareDestinationPath(station.data?.data?.id)
+                  if (!farePath) return null
+                  return (
+                    <Link to={farePath} className={buttonClass}>
+                      <NavigationArrowIcon className="w-5 h-5" weight="bold" mirrored aria-hidden />
+                      OTW Ke Sini
+                    </Link>
+                  )
+                })()}
                 <Link
                   to={`/stations/${operator}/${code}/timetable`}
                   className="flex flex-row gap-2 justify-center bg-slate-200 text-[#F55875] font-bold p-4 rounded-xl text-center w-full text-sm"
@@ -270,6 +287,23 @@ const StationContent = memo(function StationContent({ operator, code }: StationC
               <p className="mt-4 px-4 text-gray-600">Tidak ada data fasilitas untuk stasiun ini</p>
             )}
       </section>
+      {/* Outside the timetable branch on purpose: TJ stops have no timetable
+          but still deserve a way to the physical halte. */}
+      {station.data?.data?.latitude && station.data.data.longitude
+        ? (
+            <section className="mt-8">
+              <a
+                href={`https://maps.google.com/maps?q=${station.data.data.latitude},${station.data.data.longitude}(${encodeURIComponent(station.data.data.name)})`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex flex-row gap-2 justify-center bg-slate-200 text-[#F55875] font-bold p-4 rounded-xl text-center w-full text-sm"
+              >
+                Buka di Google Maps
+                <ArrowSquareOutIcon className="w-5 h-5" weight="bold" aria-label="Link eksternal, akan membuka Google Maps" />
+              </a>
+            </section>
+          )
+        : null}
       {transfers.data?.data?.length
         ? (
             <section className="mt-8">

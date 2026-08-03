@@ -23,8 +23,9 @@ const swrConfig = {
 }
 
 export interface FareQueryOptions {
-  // Station ids to preselect, from a `/fare?from=&to=` deep link. Applied once,
-  // the first time both resolve against the station list — see deepLinkApplied.
+  // Station ids to preselect, from a `/fare?from=&to=` deep link (or the
+  // station page's to-only `/fare?to=`). Applied once, the first time at least
+  // one side resolves against the station list — see deepLinkApplied.
   // The search sheet passes nothing: it has no deep link and must not be coupled
   // to the router's search params, which would let unrelated param changes stomp
   // the user's selection.
@@ -157,15 +158,18 @@ export function useFareQuery({
 
   useEffect(() => {
     if (deepLinkApplied.current) return
-    if (!fromId || !toId || allPickableStations.length === 0) return
+    if ((!fromId && !toId) || allPickableStations.length === 0) return
 
-    const fromStation = resolveStationId(allPickableStations, fromId)
-    const toStation = resolveStationId(allPickableStations, toId)
-    if (fromStation && toStation) {
-      deepLinkApplied.current = true
-      setOrigin(fromStation)
-      setDestination(toStation)
-    }
+    // Apply whichever side resolves: a to-only link fills the destination and
+    // leaves the origin to the picker, and a full link with one bogus id still
+    // applies the valid half rather than nothing.
+    const fromStation = fromId ? resolveStationId(allPickableStations, fromId) : null
+    const toStation = toId ? resolveStationId(allPickableStations, toId) : null
+    if (!fromStation && !toStation) return
+
+    deepLinkApplied.current = true
+    if (fromStation) setOrigin(fromStation)
+    if (toStation) setDestination(toStation)
   }, [allPickableStations, fromId, toId])
 
   useEffect(() => {

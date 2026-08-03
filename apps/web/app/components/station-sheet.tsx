@@ -1,6 +1,7 @@
+import { useMemo, useRef } from 'react'
 import { XIcon, ArrowSquareOutIcon } from '@phosphor-icons/react'
 import { Link } from 'react-router'
-import BottomSheet from './bottom-sheet'
+import DetailSurface from './detail-surface'
 import LineRoundel from './line-roundel'
 import StationContent, { useStationHeader } from './station-content'
 import { sortLineKeysForDisplay } from '~/utils/lines'
@@ -11,29 +12,49 @@ interface StationSheetProps {
   code: string | null
   onClose: () => void
   onDismissStart?: () => void
+  // Map-only: primes the map's pick-a-departure mode. Passed through to
+  // StationContent's "Petunjuk Arah" button, composed with an animated close.
+  onSelectDeparture?: () => void
 }
 
-export default function StationSheet({ operator, code, onClose, onDismissStart }: StationSheetProps) {
+export default function StationSheet({ operator, code, onClose, onDismissStart, onSelectDeparture }: StationSheetProps) {
   const open = !!(operator && code)
 
+  // The surface unmounts the instant `open` flips false, so closing via the
+  // parent's state would skip the exit animation. The animated close handle is
+  // only surfaced to the header render prop — capture it so the departure
+  // action can lerp the sheet away like the X button does.
+  const animatedCloseRef = useRef<() => void>(() => {})
+  // useMemo, not an inline arrow: StationContent is memoized against snap-drag
+  // re-renders and this prop participates in its shallow compare.
+  const handleSelectDeparture = useMemo(() => (onSelectDeparture
+    ? () => {
+        onSelectDeparture()
+        animatedCloseRef.current()
+      }
+    : undefined), [onSelectDeparture])
+
   return (
-    <BottomSheet
+    <DetailSurface
       open={open}
       onClose={onClose}
       onDismissStart={onDismissStart}
       ariaLabel="Detail stasiun"
-      header={close => (operator && code
-        ? <SheetHeader operator={operator} code={code} onClose={close} />
-        : null)}
+      header={(close) => {
+        animatedCloseRef.current = close
+        return operator && code
+          ? <SheetHeader operator={operator} code={code} onClose={close} />
+          : null
+      }}
     >
       {ready => (ready && operator && code
-        ? <StationContent operator={operator} code={code} />
+        ? <StationContent operator={operator} code={code} onSelectDeparture={handleSelectDeparture} />
         : (
             <div className="px-4 pt-4 flex flex-col gap-2 max-w-3xl mx-auto">
               <div className="animate-pulse w-full h-32 bg-slate-200 rounded-lg" />
             </div>
           ))}
-    </BottomSheet>
+    </DetailSurface>
   )
 }
 
