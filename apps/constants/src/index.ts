@@ -132,20 +132,28 @@ export type Operator = keyof (typeof OPERATORS)
  */
 export const JAKLINGKO_OPERATORS: ReadonlySet<Operator> = new Set(['MRTJ', 'LRTJ', 'TJ'])
 
-export const MRTJ_STATION_CODES: Record<number, string> = {
-  20: 'LBB',
-  21: 'FTM',
-  29: 'CPR',
-  30: 'HJN',
-  31: 'BLA',
-  32: 'BLM',
-  33: 'SSM',
-  34: 'SNY',
-  35: 'IST',
-  36: 'BNH',
-  37: 'STB',
-  38: 'DKA',
-  39: 'BHI'
+/**
+ * MRT Jakarta stations keyed by the CMS slug from the middleware datum feed
+ * (see operators/mrtj/sync.ts). `name` is the sponsor-free official base name
+ * ("Lebak Bulus"); the sponsored display name comes from the feed at sync time.
+ * Slugs can change when a station is re-sponsored (they sometimes embed the
+ * sponsor, e.g. bundaran-hi-bank-jakarta) — unknown slugs are skipped by the
+ * sync, so update this map when a station drops out of a resync.
+ */
+export const MRTJ_STATIONS_BY_SLUG: Record<string, { code: string, name: string }> = {
+  'stasiun-lebak-bulus': { code: 'LBB', name: 'Lebak Bulus' },
+  'stasiun-fatmawati-indomaret': { code: 'FTM', name: 'Fatmawati' },
+  'stasiun-cipete-raya': { code: 'CPR', name: 'Cipete Raya' },
+  'stasiun-haji-nawi': { code: 'HJN', name: 'Haji Nawi' },
+  'stasiun-blok-a': { code: 'BLA', name: 'Blok A' },
+  'stasiun-blok-m-bca': { code: 'BLM', name: 'Blok M' },
+  'stasiun-asean': { code: 'SSM', name: 'ASEAN' },
+  'stasiun-senayan-mastercard': { code: 'SNY', name: 'Senayan' },
+  'stasiun-istora-mandiri': { code: 'IST', name: 'Istora' },
+  'stasiun-bendungan-hilir': { code: 'BNH', name: 'Bendungan Hilir' },
+  'stasiun-setiabudi-astra': { code: 'STB', name: 'Setiabudi' },
+  'stasiun-dukuh-atas-bni': { code: 'DKA', name: 'Dukuh Atas' },
+  'bundaran-hi-bank-jakarta': { code: 'BHI', name: 'Bundaran HI' }
 }
 
 export const LRTJ_STATION_CODES: Record<number, string> = {
