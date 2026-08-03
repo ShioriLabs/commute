@@ -18,7 +18,9 @@ const SCROLL_MIN_VELOCITY = 0.02
 
 type SnapState = 'closed' | 'peek' | 'full'
 
-interface BottomSheetProps {
+// Exported because SidePane implements the same contract and DetailSurface
+// picks between the two by viewport width.
+export interface BottomSheetProps {
   // Parent-controlled open state. The sheet opens to peek when this flips true
   // and animates closed (then calls onClose) when it flips false or the user
   // dismisses it.

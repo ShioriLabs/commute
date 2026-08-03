@@ -1,7 +1,7 @@
 import { XIcon, ArrowSquareOutIcon } from '@phosphor-icons/react'
 import { Link } from 'react-router'
 import { HUB_KIND_LABEL } from '@commute/constants'
-import BottomSheet from './bottom-sheet'
+import DetailSurface from './detail-surface'
 import HubContent, { useHubHeader } from './hub-content'
 
 interface HubSheetProps {
@@ -14,7 +14,7 @@ export default function HubSheet({ slug, onClose, onDismissStart }: HubSheetProp
   const open = !!slug
 
   return (
-    <BottomSheet
+    <DetailSurface
       open={open}
       onClose={onClose}
       onDismissStart={onDismissStart}
@@ -30,7 +30,7 @@ export default function HubSheet({ slug, onClose, onDismissStart }: HubSheetProp
               <div className="animate-pulse w-full h-32 bg-slate-200 rounded-lg" />
             </div>
           ))}
-    </BottomSheet>
+    </DetailSurface>
   )
 }
 

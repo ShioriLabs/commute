@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react'
 import { XIcon, ArrowSquareOutIcon } from '@phosphor-icons/react'
 import { Link } from 'react-router'
-import BottomSheet from './bottom-sheet'
+import DetailSurface from './detail-surface'
 import LineRoundel from './line-roundel'
 import StationContent, { useStationHeader } from './station-content'
 import { sortLineKeysForDisplay } from '~/utils/lines'
@@ -20,7 +20,7 @@ interface StationSheetProps {
 export default function StationSheet({ operator, code, onClose, onDismissStart, onSelectDeparture }: StationSheetProps) {
   const open = !!(operator && code)
 
-  // BottomSheet unmounts the instant `open` flips false, so closing via the
+  // The surface unmounts the instant `open` flips false, so closing via the
   // parent's state would skip the exit animation. The animated close handle is
   // only surfaced to the header render prop — capture it so the departure
   // action can lerp the sheet away like the X button does.
@@ -35,7 +35,7 @@ export default function StationSheet({ operator, code, onClose, onDismissStart, 
     : undefined), [onSelectDeparture])
 
   return (
-    <BottomSheet
+    <DetailSurface
       open={open}
       onClose={onClose}
       onDismissStart={onDismissStart}
@@ -54,7 +54,7 @@ export default function StationSheet({ operator, code, onClose, onDismissStart, 
               <div className="animate-pulse w-full h-32 bg-slate-200 rounded-lg" />
             </div>
           ))}
-    </BottomSheet>
+    </DetailSurface>
   )
 }
 
