@@ -3,6 +3,7 @@ import { reactRouter } from '@react-router/dev/vite'
 import tailwindcss from '@tailwindcss/vite'
 import { defineConfig, type Plugin } from 'vite'
 import tsconfigPaths from 'vite-tsconfig-paths'
+import { IS_LITE_BUILD } from './scripts/lite-flag'
 
 // Dev-only: rewrite @phosphor-icons/react barrel imports to per-icon modules.
 //
@@ -56,7 +57,18 @@ function phosphorPerIconDev(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [phosphorPerIconDev(), tailwindcss(), reactRouter(), tsconfigPaths(), cloudflare()],
+  plugins: [
+    phosphorPerIconDev(),
+    tailwindcss(),
+    reactRouter(),
+    tsconfigPaths(),
+    // The Cloudflare plugin reads wrangler.toml and emits
+    // build/client/wrangler.json, which tells Workers Assets how to serve the
+    // SPA. The lite bundle is a zip served by Apache/LiteSpeed — there is no
+    // Worker to configure, the file is dead weight in the archive, and keeping
+    // the plugin would make packaging depend on Cloudflare tooling for nothing.
+    ...(IS_LITE_BUILD ? [] : [cloudflare()])
+  ],
   define: {
     __APP_VERSION__: JSON.stringify(process.env.npm_package_version)
   }

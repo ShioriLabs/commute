@@ -28,6 +28,7 @@ import { directionalBaseName } from 'utils/directional-stations'
 import LineCard from '~/components/line-card'
 import LineRoundel from '~/components/line-roundel'
 import EmptyState from '~/components/empty-state'
+import ExitLink from '~/components/exit-link'
 import { fetcher } from 'utils/fetcher'
 import { normalizeGroupedTimetable } from 'utils/timetable-shim'
 import { sortLinesForDisplay } from '~/utils/lines'
@@ -340,13 +341,13 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
                               <li key={line.lineCode}>
                                 {linkable
                                   ? (
-                                      <Link
+                                      <ExitLink
                                         to={`/lines/${transferOperator}/${line.lineCode}`}
                                         className="block"
                                         aria-label={`Lihat rute ${line.name}`}
                                       >
                                         <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={transferOperator} />
-                                      </Link>
+                                      </ExitLink>
                                     )
                                   : (
                                       <>

@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react'
 import { XIcon, ArrowSquareOutIcon, ArrowLeftIcon } from '@phosphor-icons/react'
-import { Link } from 'react-router'
 import DetailSurface from './detail-surface'
+import ExitLink from './exit-link'
 import LineRoundel from './line-roundel'
 import StationContent, { useStationHeader } from './station-content'
 import { sortLineKeysForDisplay } from '~/utils/lines'
@@ -105,13 +105,13 @@ export function StationPaneHeader({ operator, code, onClose, onBack }: StationPa
               </>
             )}
       </div>
-      <Link
+      <ExitLink
         to={`/stations/${operator}/${code}`}
         aria-label="Buka halaman stasiun lengkap"
         className="rounded-full flex items-center justify-center w-9 h-9 text-slate-700 hover:bg-slate-100"
       >
         <ArrowSquareOutIcon weight="bold" className="w-5 h-5" />
-      </Link>
+      </ExitLink>
       <button
         type="button"
         onClick={onClose}
