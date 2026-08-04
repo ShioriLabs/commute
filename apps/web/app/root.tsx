@@ -12,6 +12,7 @@ import type { Route } from './+types/root'
 import './app.css'
 import { InstallableProvider } from './contexts/installable'
 import Wordmark from './components/wordmark'
+import NotFound from './components/not-found'
 import {
   BOOT_FALLBACK_COPY,
   BOOT_FALLBACK_ID,
@@ -269,16 +270,19 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   // runs.
   useDismissBootSplash()
 
+  // A missing page isn't a crash — it gets the app's own screen rather than the
+  // bare stack-dump treatment below, which is for genuine failures.
+  if (isRouteErrorResponse(error) && error.status === 404) {
+    return <NotFound />
+  }
+
   let message = 'Oops!'
   let details = 'An unexpected error occurred'
   let stack: string | undefined
 
   if (isRouteErrorResponse(error)) {
-    message = error.status === 404 ? '404' : 'Error'
-    details
-      = error.status === 404
-        ? 'The requested page could not be found'
-        : error.statusText || details
+    message = 'Error'
+    details = error.statusText || details
   } else if (import.meta.env.DEV && error && error instanceof Error) {
     details = error.message
     stack = error.stack
