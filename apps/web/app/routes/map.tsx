@@ -1372,9 +1372,9 @@ export default function MapPage() {
   if (error) {
     return (
       <main className="w-screen h-screen flex items-center justify-center flex-col p-4 bg-[#FFF8F8]" aria-live="polite">
-        <p className="text-center text-lg font-semibold text-slate-800">Gagal memuat peta integrasi.</p>
+        <p className="text-center text-lg font-semibold text-slate-800">Gagal memuat peta integrasi</p>
         <p className="mt-1 text-center text-sm text-slate-500">
-          Periksa koneksimu, lalu coba lagi.
+          Periksa koneksimu, lalu coba lagi
         </p>
         <button
           type="button"
@@ -1443,9 +1443,9 @@ export default function MapPage() {
           role="alert"
           className="absolute inset-0 z-30 bg-[#FFF8F8] flex flex-col items-center justify-center p-4"
         >
-          <p className="text-center text-lg font-semibold text-slate-800">Peta terputus.</p>
+          <p className="text-center text-lg font-semibold text-slate-800">Peta terputus</p>
           <p className="mt-1 text-center text-sm text-slate-500">
-            Perangkat kehabisan memori grafis. Tutup aplikasi lain, lalu coba lagi.
+            Perangkat kehabisan memori grafis. Tutup aplikasi lain, lalu coba lagi
           </p>
           <button
             type="button"

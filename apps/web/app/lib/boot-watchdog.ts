@@ -56,9 +56,9 @@ export const BOOT_FALLBACK_RETRY_ID = 'boot-fallback-retry'
 
 // Indonesian, matching the app's register ("Memuat...", the offline banners).
 export const BOOT_FALLBACK_COPY = {
-  slow: 'Lama banget ya? Coba muat ulang.',
-  offline: 'Kamu lagi offline dan datanya belum tersimpan. Sambungin internet dulu, ya.',
-  failed: 'Gagal memuat aplikasi. Coba muat ulang.'
+  slow: 'Lama banget ya? Coba muat ulang',
+  offline: 'Kamu lagi offline dan datanya belum tersimpan. Sambungin internet dulu, ya',
+  failed: 'Gagal memuat aplikasi. Coba muat ulang'
 }
 
 export const BOOT_WATCHDOG_SOURCE = `

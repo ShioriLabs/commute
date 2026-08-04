@@ -278,7 +278,7 @@ export default function FareResultCard({ result }: { result: FareResult }) {
         : null}
 
       <p className="mt-6 text-xs text-slate-400">
-        Estimasi berdasarkan tarif resmi per Juli 2026. Tarif LRT Jabodebek memakai batas atas jam sibuk; di luar jam sibuk dan akhir pekan bisa lebih murah.
+        Estimasi berdasarkan tarif resmi per Juli 2026. Tarif LRT Jabodebek memakai batas atas jam sibuk; di luar jam sibuk dan akhir pekan bisa lebih murah
       </p>
     </article>
   )
