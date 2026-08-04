@@ -10,6 +10,11 @@ const store = createStore('swr-db', 'cache-store')
 
 export const idbCacheProvider = () => {
   const map = new Map()
+  // Last data reference persisted per key. SWR re-sets a key on every state
+  // transition (isLoading → isValidating → data), so mirroring each set would
+  // structured-clone the full payload into IDB several times per fetch. Only
+  // a change in the data itself is worth persisting.
+  const persistedData = new Map<string, unknown>()
 
   return {
     get(key: string) {
@@ -17,10 +22,14 @@ export const idbCacheProvider = () => {
     },
     set(key: string, value: unknown) {
       map.set(key, value)
+      const data = (value as { data?: unknown } | null | undefined)?.data
+      if (data === undefined || persistedData.get(key) === data) return
+      persistedData.set(key, data)
       set(key, value, store)
     },
     delete(key: string) {
       map.delete(key)
+      persistedData.delete(key)
       del(key, store)
     },
     keys() {

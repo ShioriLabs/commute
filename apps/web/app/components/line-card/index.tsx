@@ -1,10 +1,11 @@
 import type { CompactLineTimetable, CompactSchedule } from '@commute/schemas'
-import { useState, useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import { Link } from 'react-router'
 import { CaretRightIcon, NavigationArrowIcon } from '@phosphor-icons/react'
 import { getForegroundColor, getTintFromColor } from 'utils/colors'
 import { departureSortKey, getRelativeDepartureLabel, isImminentDeparture, parseMinute } from 'utils/schedules'
 import { formatPlatformCode, joinLabels } from 'utils/labels'
+import { useClock } from '~/hooks/clock'
 import PidsChevrons from './pids-chevrons'
 import { codeOfLineKey, useLines } from '~/hooks/use-lines'
 
@@ -39,7 +40,10 @@ interface Props {
 }
 
 export default function LineCard({ line, operator }: Props) {
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
+  // Shared 10s clock — one timer for the whole feed instead of one per card.
+  const nowMs = useClock()
+  const lastUpdated = useMemo(() => new Date(nowMs), [nowMs])
+
   /*
    * The timetable carries a line key; its name and colour come from the
    * dictionary. Falls back to the bare code and a neutral grey while
@@ -50,14 +54,6 @@ export default function LineCard({ line, operator }: Props) {
   const lineCode = codeOfLineKey(line.line)
   const lineName = resolved?.name ?? lineCode
   const lineColor = resolved?.colorCode ?? '#94a3b8'
-
-  useEffect(() => {
-    setLastUpdated(new Date())
-    const interval = setInterval(() => {
-      setLastUpdated(new Date())
-    }, 10000)
-    return () => clearInterval(interval)
-  }, [])
 
   const upcomingGroups = useMemo(() => {
     return line.timetable

@@ -459,6 +459,38 @@ const assetCacheFirst = async (event, cacheName, maxEntries) => {
 }
 
 /**
+ * Stale-while-revalidate for the in-app illustrations under /img/*.
+ *
+ * They are static files but not content-hashed, so cache-first-forever could
+ * serve an edited image stale indefinitely, and network-only (the previous
+ * behavior) left the offline empty states without their artwork. Serve from
+ * cache for instant paint, refresh the stored copy in the background.
+ */
+const imageStaleWhileRevalidate = async (event, cacheName, maxEntries) => {
+  const request = event.request
+  const url = new URL(request.url)
+  const cache = await caches.open(cacheName)
+  const cached = await cache.match(request)
+
+  const refresh = fetch(request).then((response) => {
+    if (isCacheable(request, url, response)) {
+      event.waitUntil(cachePut(cacheName, request, response.clone(), maxEntries))
+    }
+    return response
+  })
+
+  if (cached) {
+    event.waitUntil(refresh.catch(() => {}))
+    return cached
+  }
+  try {
+    return await refresh
+  } catch (err) {
+    return new Response('', { status: 504, statusText: 'image unavailable offline' })
+  }
+}
+
+/**
  * Race the network against a timer, falling back to cache — never to undefined.
  *
  * The old handler's `Promise.race([fetched.catch(_ => cached), cached])` had the
@@ -662,6 +694,14 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Everything else — the font stylesheet, /manifest.json, /img/*, and anything
+  // In-app illustrations (empty states, OG images): cached for offline and
+  // instant repeat paint, refreshed in the background since these URLs are
+  // not content-hashed.
+  if (sameOrigin && url.pathname.startsWith('/img/')) {
+    event.respondWith(imageStaleWhileRevalidate(event, ASSET_CACHE, MAX_ASSET_ENTRIES))
+    return
+  }
+
+  // Everything else — the font stylesheet, /manifest.json, and anything
   // unforeseen — goes to the network untouched.
 })

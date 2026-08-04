@@ -285,6 +285,27 @@ export default function MapPage() {
   const dirtyRef = useRef(true)
   const rafRef = useRef<number>(0)
   const currentTierRef = useRef<Tier>(1)
+  // Re-arms the (parked) render loop; set by the rAF effect. Every mutation
+  // made outside the loop goes through markDirty so the loop can sleep when
+  // the map is idle instead of waking 60×/s to find nothing to do.
+  const wakeRef = useRef<() => void>(() => {})
+  const markDirty = useCallback(() => {
+    dirtyRef.current = true
+    wakeRef.current()
+  }, [])
+
+  // Viewport rect, cached: zoomAt runs on every pinch-move and wheel tick, and
+  // re-reading layout there forces a reflow whenever the same frame also wrote
+  // to the DOM (chrome toggle, tap ripple). The viewport is a full-screen
+  // element, so its rect only changes with the resizes the observer below
+  // already watches.
+  const viewportRectRef = useRef<DOMRect | null>(null)
+  const getViewportRect = () => {
+    if (!viewportRectRef.current && viewportRef.current) {
+      viewportRectRef.current = viewportRef.current.getBoundingClientRect()
+    }
+    return viewportRectRef.current
+  }
 
   const [viewportSize, setViewportSize] = useState({ w: 0, h: 0 })
   // Detail surfaces sit below the map on phones and beside it on desktop, which
@@ -397,8 +418,8 @@ export default function MapPage() {
     // has a suffixed id that would never match and would leave the halo neutral.
     if (pointStationId(spot.point) !== `${selectedStation.operator}-${selectedStation.code}`) return
     spot.color = hexToRgb01(color)
-    dirtyRef.current = true
-  }, [spotlightStation, selectedStation])
+    markDirty()
+  }, [spotlightStation, selectedStation, markDirty])
 
   // Fade the spotlight out from whatever it currently shows. No-ops when
   // there's no spotlight or it's already exiting.
@@ -409,8 +430,8 @@ export default function MapPage() {
     spot.phaseStart = performance.now()
     spot.scrimFrom = spot.lastScrim
     spot.ringFrom = spot.lastRing
-    dirtyRef.current = true
-  }, [])
+    markDirty()
+  }, [markDirty])
 
   // Escape closes the attribution popover. Outside-dismissal is already
   // covered: the popover stops pointer propagation, and a canvas tap clears it
@@ -437,12 +458,16 @@ export default function MapPage() {
     const el = viewportRef.current
     const update = () => {
       const rect = el.getBoundingClientRect()
+      viewportRectRef.current = rect
       setViewportSize({ w: rect.width, h: rect.height })
     }
     update()
     const ro = new ResizeObserver(update)
     ro.observe(el)
-    return () => ro.disconnect()
+    return () => {
+      ro.disconnect()
+      viewportRectRef.current = null
+    }
   }, [manifest])
 
   // Compute the minimum scale that fits the whole map into the viewport (with a small bleed).
@@ -493,12 +518,12 @@ export default function MapPage() {
     )
     targetRef.current = initial
     renderedRef.current = initial
-    dirtyRef.current = true
+    markDirty()
     provisionalCenterRef.current = initial
     // Latch once the anchor was used — or points have loaded and it doesn't
     // exist, in which case the fallback is as good as it gets.
     if (anchor || pointsManifest) didCenterRef.current = true
-  }, [viewportSize.w, viewportSize.h, mapW, mapH, pointsManifest])
+  }, [viewportSize.w, viewportSize.h, mapW, mapH, pointsManifest, markDirty])
 
   // --- WebGL context-loss recovery ----------------------------------------
   //
@@ -586,7 +611,7 @@ export default function MapPage() {
       if (renderer && viewportSize.w && viewportSize.h) {
         renderer.resize(viewportSize.w, viewportSize.h, window.devicePixelRatio || 1)
       }
-      dirtyRef.current = true
+      markDirty()
     }
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') onHidden()
@@ -604,7 +629,7 @@ export default function MapPage() {
       document.removeEventListener('freeze', release)
       window.removeEventListener('pagehide', release)
     }
-  }, [viewportSize.w, viewportSize.h])
+  }, [viewportSize.w, viewportSize.h, markDirty])
 
   // Read after mount: localStorage isn't available while this tree is being
   // prerendered, and "off" is the correct first paint either way.
@@ -659,7 +684,7 @@ export default function MapPage() {
         canvas,
         manifest,
         '/maps/fdtj/',
-        () => { dirtyRef.current = true },
+        markDirty,
         { allowCanvas2DFallback: isFirstAttempt || isLastAttempt }
       )
     } catch (err) {
@@ -686,7 +711,7 @@ export default function MapPage() {
     if (rect.width && rect.height) {
       renderer.resize(rect.width, rect.height, dpr)
     }
-    dirtyRef.current = true
+    markDirty()
     return () => {
       // Detach before disposing: dispose() releases the context on a detached
       // canvas, which fires webglcontextlost and would otherwise read as a real
@@ -695,7 +720,7 @@ export default function MapPage() {
       renderer.dispose()
       rendererRef.current = null
     }
-  }, [manifest, contextEpoch, recovery])
+  }, [manifest, contextEpoch, recovery, markDirty])
 
   // Push points + debug flag to the renderer. Depends on manifest and
   // contextEpoch so it re-fires whenever the renderer is (re-)created — covers
@@ -713,8 +738,8 @@ export default function MapPage() {
     if (!rendererRef.current) return
     if (!viewportSize.w || !viewportSize.h) return
     rendererRef.current.resize(viewportSize.w, viewportSize.h, window.devicePixelRatio || 1)
-    dirtyRef.current = true
-  }, [viewportSize.w, viewportSize.h])
+    markDirty()
+  }, [viewportSize.w, viewportSize.h, markDirty])
 
   // Watch for DPR changes (browser zoom).
   useEffect(() => {
@@ -724,7 +749,7 @@ export default function MapPage() {
       const dpr = window.devicePixelRatio || 1
       if (rendererRef.current && viewportSize.w && viewportSize.h) {
         rendererRef.current.resize(viewportSize.w, viewportSize.h, dpr)
-        dirtyRef.current = true
+        markDirty()
       }
       mql.removeEventListener('change', handler)
       mql = window.matchMedia(`(resolution: ${dpr}dppx)`)
@@ -739,13 +764,29 @@ export default function MapPage() {
 
   // requestAnimationFrame loop: integrates inertia, lerps rendered toward
   // target, and draws when anything moved (or dirty was set externally).
+  // Parks itself when the map is idle — no animation, nothing to lerp, no
+  // pending dirty — and is re-armed by markDirty(), which every mutation
+  // outside the loop goes through.
   useEffect(() => {
     let stopped = false
+    let scheduled = false
+    // Per effect-run (viewport width is a dep) and per renderer kind:
+    // pickMaxTier reads navigator.hardwareConcurrency and was re-evaluated on
+    // every drawn frame for a value that's constant across the session.
+    let cachedMaxTier: Tier | null = null
+    let cachedTierKind: Renderer['kind'] | null = null
+    const schedule = () => {
+      if (stopped || scheduled) return
+      scheduled = true
+      rafRef.current = requestAnimationFrame(tick)
+    }
     const tick = (now: number) => {
+      scheduled = false
       if (stopped) return
       const renderer = rendererRef.current
       if (!renderer || !viewportSize.w || !viewportSize.h) {
-        rafRef.current = requestAnimationFrame(tick)
+        // Park: the renderer-init and resize effects mark dirty (and wake)
+        // once these exist, and dirtyRef survives the wait.
         return
       }
       // Catches a loss that happened with the page in the foreground, which the
@@ -755,7 +796,7 @@ export default function MapPage() {
       // a map nobody can see.
       if (renderer.isContextLost()) {
         recovery.notifyLost()
-        rafRef.current = requestAnimationFrame(tick)
+        schedule()
         return
       }
       const last = lastFrameTimeRef.current || now
@@ -826,45 +867,52 @@ export default function MapPage() {
       // they run); in the steady `hold` phase the overlay is drawn on any
       // dirty frame — tracking pan/zoom — without forcing continuous redraws.
       const spot = spotlightRef.current
-      let overlay: SelectionOverlay | null = null
+      let spotScrim = 0
+      let spotRing = 0
       if (spot) {
         const elapsed = now - spot.phaseStart
-        const pt = spot.point
-        let scrimAlpha: number
-        let ringProgress: number
         if (spot.phase === 'in') {
           const p = Math.min(1, elapsed / SPOTLIGHT_IN_MS)
           const e = 1 - Math.pow(1 - p, 3) // easeOutCubic
-          scrimAlpha = spot.scrimFrom + (SCRIM_MAX_ALPHA - spot.scrimFrom) * e
-          ringProgress = spot.ringFrom + (1 - spot.ringFrom) * e
+          spotScrim = spot.scrimFrom + (SCRIM_MAX_ALPHA - spot.scrimFrom) * e
+          spotRing = spot.ringFrom + (1 - spot.ringFrom) * e
           if (p >= 1) spot.phase = 'hold'
           else dirtyRef.current = true
         } else if (spot.phase === 'hold') {
-          scrimAlpha = SCRIM_MAX_ALPHA
-          ringProgress = 1
+          spotScrim = SCRIM_MAX_ALPHA
+          spotRing = 1
         } else {
           const p = Math.min(1, elapsed / SPOTLIGHT_OUT_MS)
-          scrimAlpha = spot.scrimFrom * (1 - p)
-          ringProgress = spot.ringFrom * (1 - p)
+          spotScrim = spot.scrimFrom * (1 - p)
+          spotRing = spot.ringFrom * (1 - p)
           if (p >= 1) spotlightRef.current = null
           dirtyRef.current = true
-        }
-        spot.lastScrim = scrimAlpha
-        spot.lastRing = ringProgress
-        overlay = {
-          ax: pt.ax, ay: pt.ay, bx: pt.bx, by: pt.by, r: pt.r,
-          cr: pointCornerRadius(pt),
-          color: spot.color,
-          scrimAlpha,
-          ringProgress
         }
       }
 
       if (dirtyRef.current) {
+        // Overlay object only exists on frames that draw — a held selection
+        // over an otherwise idle map allocates nothing.
+        let overlay: SelectionOverlay | null = null
+        if (spot) {
+          spot.lastScrim = spotScrim
+          spot.lastRing = spotRing
+          const pt = spot.point
+          overlay = {
+            ax: pt.ax, ay: pt.ay, bx: pt.bx, by: pt.by, r: pt.r,
+            cr: pointCornerRadius(pt),
+            color: spot.color,
+            scrimAlpha: spotScrim,
+            ringProgress: spotRing
+          }
+        }
         const dpr = window.devicePixelRatio || 1
         const r = renderedRef.current
-        const maxTier = pickMaxTier(renderer.kind, viewportSize.w)
-        const targetTier = pickTier(r.scale, dpr, currentTierRef.current, maxTier)
+        if (cachedMaxTier === null || cachedTierKind !== renderer.kind) {
+          cachedTierKind = renderer.kind
+          cachedMaxTier = pickMaxTier(renderer.kind, viewportSize.w)
+        }
+        const targetTier = pickTier(r.scale, dpr, currentTierRef.current, cachedMaxTier)
         currentTierRef.current = targetTier
         renderer.draw(r, viewportSize.w, viewportSize.h, dpr, targetTier, overlay)
         dirtyRef.current = false
@@ -890,23 +938,37 @@ export default function MapPage() {
         setIsZoomedIn(zoomedIn)
       }
 
-      rafRef.current = requestAnimationFrame(tick)
+      // Park when idle. `dirtyRef` can be true here only when something set it
+      // after the draw branch cleared it (in-loop animations); everything
+      // outside the loop re-arms via markDirty().
+      const animating = flyToRef.current !== null
+        || inertiaRef.current !== null
+        || (spotlightRef.current !== null && spotlightRef.current.phase !== 'hold')
+      if (animating || moved || dirtyRef.current) {
+        schedule()
+      } else {
+        // Fresh dt on the next wake: the parked gap isn't an animation stall.
+        lastFrameTimeRef.current = 0
+      }
     }
-    rafRef.current = requestAnimationFrame(tick)
+    wakeRef.current = schedule
+    schedule()
     return () => {
       stopped = true
+      wakeRef.current = () => {}
       cancelAnimationFrame(rafRef.current)
     }
   }, [viewportSize.w, viewportSize.h, mapW, mapH, minScale, authorMode, recovery, morph])
 
   const updateTransform = (next: Transform) => {
     targetRef.current = clampTransform(next, viewportSize.w, viewportSize.h, mapW, mapH, minScale)
-    dirtyRef.current = true
+    markDirty()
   }
 
   const zoomAt = (clientX: number, clientY: number, factor: number) => {
     const t = transformRef.current
-    const rect = viewportRef.current!.getBoundingClientRect()
+    const rect = getViewportRect()
+    if (!rect) return
     const px = clientX - rect.left
     const py = clientY - rect.top
     // Clamp scale first so the anchor math matches the actual rendered scale.
@@ -928,7 +990,7 @@ export default function MapPage() {
       start: performance.now(),
       duration
     }
-    dirtyRef.current = true
+    markDirty()
   }
 
   // Center a selected pill in the area the detail surface leaves visible: above
@@ -968,7 +1030,7 @@ export default function MapPage() {
       lastScrim: prevScrim,
       lastRing: 0
     }
-    dirtyRef.current = true
+    markDirty()
   }
 
   const doubleTapZoom = (clientX: number, clientY: number) => {
@@ -979,7 +1041,7 @@ export default function MapPage() {
       to = clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale)
     } else {
       // Zoom a 2x step toward the tap point (world point under it stays put).
-      const rect = viewportRef.current!.getBoundingClientRect()
+      const rect = getViewportRect()!
       const px = clientX - rect.left
       const py = clientY - rect.top
       const nextScale = Math.min(MAX_SCALE, t.scale * 2)
@@ -1012,7 +1074,9 @@ export default function MapPage() {
     targetRef.current = renderedRef.current
     gestureActiveRef.current = true
     if (pointersRef.current.size === 2) {
-      const [a, b] = Array.from(pointersRef.current.values())
+      const it = pointersRef.current.values()
+      const a = it.next().value!
+      const b = it.next().value!
       const dist = Math.hypot(b.x - a.x, b.y - a.y)
       pinchStartRef.current = {
         dist,
@@ -1049,7 +1113,9 @@ export default function MapPage() {
       const dy = e.clientY - prev.y
       updateTransform({ tx: t.tx + dx, ty: t.ty + dy, scale: t.scale })
     } else if (pointersRef.current.size === 2 && pinchStartRef.current) {
-      const [a, b] = Array.from(pointersRef.current.values())
+      const it = pointersRef.current.values()
+      const a = it.next().value!
+      const b = it.next().value!
       const dist = Math.hypot(b.x - a.x, b.y - a.y)
       const factor = dist / pinchStartRef.current.dist
       const targetScale = pinchStartRef.current.scale * factor
@@ -1062,7 +1128,7 @@ export default function MapPage() {
   }
 
   const clientToWorld = (clientX: number, clientY: number) => {
-    const rect = viewportRef.current!.getBoundingClientRect()
+    const rect = getViewportRect()!
     const px = clientX - rect.left
     const py = clientY - rect.top
     const t = transformRef.current
@@ -1167,7 +1233,7 @@ export default function MapPage() {
       && !wasPinching
     ) {
       // Tap ripple (screen-space DOM overlay; capped to 4 concurrent).
-      const rect = viewportRef.current?.getBoundingClientRect()
+      const rect = getViewportRect()
       if (rect) {
         const id = rippleIdRef.current++
         const x = e.clientX - rect.left
@@ -1214,7 +1280,7 @@ export default function MapPage() {
             vx: (last.x - first.x) / dt,
             vy: (last.y - first.y) / dt
           }
-          dirtyRef.current = true
+          markDirty()
         }
       }
     }

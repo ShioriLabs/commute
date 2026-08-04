@@ -505,6 +505,18 @@ export function createWebGLRenderer(
     if (canvas.height !== h) canvas.height = h
   }
 
+  // Scratch state reused across frames: twgl.setUniforms reads values at call
+  // time, so mutating these in place avoids allocating a uniform object plus
+  // two arrays for every tile on every drawn frame — and setting the
+  // frame-constant u_transform/u_tileSize once per frame stops the mat3 being
+  // re-uploaded per tile.
+  const transformMat = new Float32Array(9)
+  const frameUniforms = { u_transform: transformMat, u_tileSize: [0, 0] }
+  const tileUniforms: { u_tileOffset: number[], u_texture: WebGLTexture | null } = {
+    u_tileOffset: [0, 0],
+    u_texture: null
+  }
+
   function draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null) {
     if (disposed || gl.isContextLost()) return
     // Bump before any ensureTile() call so every tile touched this frame — the
@@ -518,7 +530,7 @@ export function createWebGLRenderer(
     gl.enable(gl.BLEND)
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
 
-    const mat = buildTransformMat3(transform, cssW, cssH)
+    const mat = buildTransformMat3(transform, cssW, cssH, transformMat)
 
     gl.useProgram(programInfo.program)
     twgl.setBuffersAndAttributes(twglGl, programInfo, quadVao)
@@ -615,6 +627,11 @@ export function createWebGLRenderer(
       }
     }
 
+    // Frame-constant uniforms once; only offset + texture change per tile.
+    frameUniforms.u_tileSize[0] = tileW
+    frameUniforms.u_tileSize[1] = tileH
+    twgl.setUniforms(programInfo, frameUniforms)
+
     for (let r = firstRow; r <= lastRow; r++) {
       const tileY = r * tileH
       for (let c = firstCol; c <= lastCol; c++) {
@@ -624,12 +641,10 @@ export function createWebGLRenderer(
         if (!entry) continue
         const texture = entry.tier > 0 ? entry.texture : placeholder
 
-        twgl.setUniforms(programInfo, {
-          u_tileOffset: [tileX, tileY],
-          u_tileSize: [tileW, tileH],
-          u_transform: mat,
-          u_texture: texture
-        })
+        tileUniforms.u_tileOffset[0] = tileX
+        tileUniforms.u_tileOffset[1] = tileY
+        tileUniforms.u_texture = texture
+        twgl.setUniforms(programInfo, tileUniforms)
         twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
 
         // Don't start tile fetches the preview is about to make redundant. This
@@ -797,17 +812,20 @@ function createPlaceholderTexture(gl: WebGL2RenderingContext): WebGLTexture {
   return tex
 }
 
-function buildTransformMat3(transform: Transform, cssW: number, cssH: number): Float32Array {
+// Writes into `out` (a scratch matrix owned by the caller) so drawing doesn't
+// allocate a fresh Float32Array every frame.
+function buildTransformMat3(transform: Transform, cssW: number, cssH: number, out: Float32Array): Float32Array {
   const { tx, ty, scale } = transform
   const sx = 2 / cssW
   const sy = -2 / cssH
-  const a = scale * sx
-  const d = scale * sy
-  const e = tx * sx - 1
-  const f = ty * sy + 1
-  return new Float32Array([
-    a, 0, 0,
-    0, d, 0,
-    e, f, 1
-  ])
+  out[0] = scale * sx
+  out[1] = 0
+  out[2] = 0
+  out[3] = 0
+  out[4] = scale * sy
+  out[5] = 0
+  out[6] = tx * sx - 1
+  out[7] = ty * sy + 1
+  out[8] = 1
+  return out
 }

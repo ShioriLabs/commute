@@ -474,7 +474,48 @@ describe('requests the worker must not touch', () => {
 
   it('ignores same-origin files outside the managed paths', () => {
     expect(harness.dispatchFetch(createRequest('/manifest.json')).respondWithCalled).toBe(false)
-    expect(harness.dispatchFetch(createRequest('/img/og-image.png')).respondWithCalled).toBe(false)
+  })
+
+  it('caches an in-app illustration on first fetch', async () => {
+    harness.route('/img/station.webp', () => new Response('fresh art', { headers: { 'content-type': 'image/webp' } }))
+
+    const dispatch = harness.dispatchFetch(createRequest('/img/station.webp', { destination: 'image' }))
+    const response = await expectResponse(dispatch)
+    await dispatch.drain()
+
+    expect(await response.text()).toBe('fresh art')
+    expect(await harness.cached('commute-assets-v1')).toEqual([`${ORIGIN}/img/station.webp`])
+  })
+
+  it('serves a cached illustration immediately and revalidates behind it', async () => {
+    await harness.seed('commute-assets-v1', '/img/station.webp', new Response('stale art', { headers: { 'content-type': 'image/webp' } }))
+    harness.route('/img/station.webp', () => new Response('fresh art', { headers: { 'content-type': 'image/webp' } }))
+
+    const dispatch = harness.dispatchFetch(createRequest('/img/station.webp', { destination: 'image' }))
+    const response = await expectResponse(dispatch)
+    await dispatch.drain()
+
+    // Stale copy answers the page; the background refresh replaces it — these
+    // URLs aren't content-hashed, so cache-first-forever would pin an edited
+    // image indefinitely.
+    expect(await response.text()).toBe('stale art')
+    expect(harness.calls).toHaveLength(1)
+    const store = await harness.caches.open('commute-assets-v1')
+    const refreshed = await store.match(`${ORIGIN}/img/station.webp`)
+    expect(await refreshed?.text()).toBe('fresh art')
+  })
+
+  it('serves a cached illustration when offline', async () => {
+    await harness.seed('commute-assets-v1', '/img/station.webp', new Response('cached art', { headers: { 'content-type': 'image/webp' } }))
+    harness.route('/img/station.webp', () => {
+      throw new TypeError('Failed to fetch')
+    })
+
+    const dispatch = harness.dispatchFetch(createRequest('/img/station.webp', { destination: 'image' }))
+    const response = await expectResponse(dispatch)
+    await dispatch.drain()
+
+    expect(await response.text()).toBe('cached art')
   })
 
   it('still caches Google Fonts woff2 files', async () => {
