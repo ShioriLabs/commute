@@ -1,6 +1,14 @@
 import * as twgl from 'twgl.js'
 import type { Manifest, Point, Renderer, SelectionOverlay, Tier, TileStats, Transform } from './map-renderer'
-import { RING_WIDTH_WORLD, SPOTLIGHT_FEATHER_WORLD, pointCornerRadius, ringOffsetWorld, tileKey } from './map-renderer'
+import {
+  PHONE_TILE_BUDGET_CEILING_BYTES,
+  RING_WIDTH_WORLD,
+  SPOTLIGHT_FEATHER_WORLD,
+  pointCornerRadius,
+  ringOffsetWorld,
+  tileBudgetBytes,
+  tileKey
+} from './map-renderer'
 import { createTileSource } from './map-renderer-tile-source'
 
 const VS = `#version 300 es
@@ -147,6 +155,10 @@ interface TileEntry {
   tier: Tier | 0
   pendingTier: Tier | null
   mipmapped: boolean
+  // Whether the uploaded texture is alpha-free (the pre-rasterized WebPs) or
+  // genuinely transparent (a runtime-rasterized SVG). The draw pass turns
+  // blending on only when a visible tile needs it; see the tile loop.
+  opaque: boolean
   // GPU bytes this entry currently holds, for tileStats(). Tracked rather than
   // recomputed because the tier alone doesn't tell you whether the upload has
   // landed yet.
@@ -156,16 +168,30 @@ interface TileEntry {
   lastUsed: number
 }
 
-// Ceiling on resident tile pixels. The grid is 4x4 and a tier-2 tile is ~42 MB
-// with mipmaps, so a fully-visited map wants ~683 MB — enough to get the context
-// killed on a phone, and the measured figure on a Galaxy S23. Nothing evicted
-// before this budget existed: draw() only ever upgraded tiles, so panning around
-// at zoom accumulated all 16 at full tier and held them for the renderer's life.
+// The resident-tile budget is derived per frame from the visible working set —
+// see tileBudgetBytes() in map-renderer.ts. Nothing evicted at all before a
+// budget existed: draw() only ever upgraded tiles, so panning around at zoom
+// accumulated the whole grid at full tier (~683 MB on the 8x8 map) and held it
+// for the renderer's life, which is what got a context killed on a Galaxy S23.
+
+// Bound on tile loading in flight.
 //
-// 192 MB comfortably covers the working set that is actually on screen (a
-// portrait phone sees at most 4 tier-2 tiles, ~171 MB, and typically 2), while
-// leaving headroom for the in-flight upgrade that triggered the sweep.
-const TILE_BUDGET_BYTES = 192 * 1024 * 1024
+// draw() used to fire a request for every visible tile needing an upgrade, with
+// nothing in between. Crossing a tier boundary on a pinch is 6-8 tiles, and each
+// one lands a texImage2D of a multi-megapixel bitmap plus a generateMipmap on
+// the main thread, in whatever turn its promise happens to resolve — so they
+// pile into a single frame. The tiles are ~158 KB on the wire, so the network
+// was never the constraint; the GL work is.
+//
+// Two concurrent loads keeps one fetch in flight while the other uploads, which
+// hides mobile round-trip latency without stacking GL work, and bounds the
+// transient decoded bitmaps at two rather than the whole visible set.
+const MAX_CONCURRENT_TILE_LOADS = 2
+
+// One upload per frame is the cap that actually bounds the per-frame stall.
+// Eight tiles then arrive staggered across eight frames instead of freezing one,
+// and the preview underlay is what makes that staggering acceptable to look at.
+const MAX_UPLOADS_PER_FRAME = 1
 
 // How far past the preview's native resolution the view may zoom before real
 // tiles are needed. 1.0 switches exactly where the map is drawn at the preview's
@@ -196,17 +222,27 @@ export function createWebGLRenderer(
   canvas: HTMLCanvasElement,
   manifest: Manifest,
   baseUrl: string,
-  onDirty: () => void
+  onDirty: () => void,
+  // Device policy lives with the caller, which is what knows the viewport and
+  // the tier cap; the renderer only does the accounting. Defaults to the phone
+  // ceiling so an omitted option is the conservative one.
+  budgetCeilingBytes: number = PHONE_TILE_BUDGET_CEILING_BYTES
 ): Renderer {
+  const deviceMemoryGb = (navigator as { deviceMemory?: number }).deviceMemory
   // No MSAA: the tile quads are axis-aligned and screen-filling, so their edges
   // are never visible, and the pill/spotlight shaders antialias analytically
   // with smoothstep. Enabling it bought nothing and cost a multisampled
   // renderbuffer plus its resolve target — tens of MB on a phone, on a screen
   // that is already short of GPU memory (see tileStats()).
+  // alpha: false — nothing is meant to show through the map. The canvas is
+  // absolutely positioned over a white <main>, the splash/morph overlay
+  // composites above it rather than below, and every frame starts with an
+  // opaque white clear. Declaring the drawing buffer opaque lets the compositor
+  // skip blending a full-screen layer over the page on every frame and lets
+  // that layer occlude what is behind it.
   const rawGl = canvas.getContext('webgl2', {
     antialias: false,
-    premultipliedAlpha: true,
-    alpha: true,
+    alpha: false,
     powerPreference: 'low-power'
   }) as WebGL2RenderingContext | null
   if (!rawGl) throw new Error('WebGL2 not available')
@@ -238,11 +274,6 @@ export function createWebGLRenderer(
   const spotVao = twgl.createVertexArrayInfo(twglGl, spotProgramInfo, spotBufferInfo)
 
   const loseCtxExt = gl.getExtension('WEBGL_lose_context')
-
-  const anisoExt = gl.getExtension('EXT_texture_filter_anisotropic')
-    ?? gl.getExtension('MOZ_EXT_texture_filter_anisotropic')
-    ?? gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic')
-  const maxAniso = anisoExt ? gl.getParameter(anisoExt.MAX_TEXTURE_MAX_ANISOTROPY_EXT) as number : 1
 
   const { grid, tileSize } = manifest
   const tileW = tileSize.w
@@ -338,7 +369,17 @@ export function createWebGLRenderer(
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-      entry = { texture, tier: 0, pendingTier: null, mipmapped: false, bytes: 0, lastUsed: frameCounter }
+      // opaque starts true so a tier-0 tile — which is never drawn — can't force
+      // blending on for the whole frame before it has any pixels to blend.
+      entry = {
+        texture,
+        tier: 0,
+        pendingTier: null,
+        mipmapped: false,
+        opaque: true,
+        bytes: 0,
+        lastUsed: frameCounter
+      }
       tiles.set(key, entry)
     }
     entry.lastUsed = frameCounter
@@ -347,7 +388,7 @@ export function createWebGLRenderer(
 
   // Release off-screen tiles that are held at a finer tier than the current view
   // would ever ask for. Zooming deep into one corner and then back out used to
-  // leave those tiles pinned at tier 2 (~42 MB each) forever, because nothing
+  // leave those tiles pinned at tier 2 (~10.7 MB each) forever, because nothing
   // downgrades and the only tier transition in draw() is an upgrade.
   //
   // The pixels are dropped rather than re-uploaded at the coarser tier: the
@@ -358,6 +399,16 @@ export function createWebGLRenderer(
   function downgradeOverResolvedTiles(currentTier: Tier) {
     for (const [key, entry] of tiles) {
       if (entry.lastUsed === frameCounter || entry.pendingTier !== null) continue
+      // An off-screen entry that never received pixels is pure bookkeeping — a
+      // 1x1 texture and a Map slot. It costs nothing to rebuild lazily, and
+      // leaving it resident makes tileStats().count report tiles that hold no
+      // map. These accumulate now that uploads are paced: a tile can be
+      // scanned, entered and then panned away from before its turn came up.
+      if (entry.tier === 0) {
+        gl.deleteTexture(entry.texture)
+        tiles.delete(key)
+        continue
+      }
       if (entry.tier <= currentTier) continue
       gl.deleteTexture(entry.texture)
       // Re-seeding the entry (rather than deleting it) would need a fresh
@@ -375,10 +426,10 @@ export function createWebGLRenderer(
   // bandwidth and jank without ever freeing anything. If the visible set alone
   // exceeds the budget there is nothing safe to drop, so the sweep stops and
   // the budget is knowingly overshot rather than thrashing.
-  function evictTiles() {
+  function evictTiles(budget: number) {
     let bytes = 0
     for (const entry of tiles.values()) bytes += entry.bytes
-    if (bytes <= TILE_BUDGET_BYTES) return
+    if (bytes <= budget) return
 
     const candidates: Array<[string, TileEntry]> = []
     for (const [key, entry] of tiles) {
@@ -391,38 +442,154 @@ export function createWebGLRenderer(
     candidates.sort((a, b) => a[1].lastUsed - b[1].lastUsed)
 
     for (const [key, entry] of candidates) {
-      if (bytes <= TILE_BUDGET_BYTES) break
+      if (bytes <= budget) break
       gl.deleteTexture(entry.texture)
       tiles.delete(key)
       bytes -= entry.bytes
     }
   }
 
-  async function requestTier(r: number, c: number, tier: Tier): Promise<void> {
-    if (disposed || gl.isContextLost()) return
-    const entry = ensureTile(r, c)
-    if (!entry) return
-    if (entry.tier >= tier) return
-    if (entry.pendingTier !== null && entry.pendingTier >= tier) return
+  // A tile whose pixels are on the way, or already decoded and waiting for the
+  // frame that will upload them.
+  interface QueuedTile {
+    r: number
+    c: number
+    tier: Tier
+    entry: TileEntry
+    // Squared distance from the viewport centre, in tile widths. Lower goes
+    // first, so what the user is looking at sharpens before the edges do.
+    priority: number
+  }
+
+  interface ReadyTile extends QueuedTile {
+    bitmap: ImageBitmap
+    opaque: boolean
+  }
+
+  const requestQueue: QueuedTile[] = []
+  const readyUploads: ReadyTile[] = []
+  let inFlight = 0
+  let totalUploadMs = 0
+
+  // Claim the upgrade. pendingTier is set here rather than when the fetch
+  // actually starts, because it is what dedupes repeat requests across frames
+  // and what exempts the entry from both reclaim sweeps while its pixels are in
+  // transit — an entry queued but not yet started must not be evicted.
+  function enqueueTier(r: number, c: number, tier: Tier, entry: TileEntry, priority: number) {
     entry.pendingTier = tier
-    try {
-      const { bitmap, opaque } = await tileSource.loadTile(r, c, tier)
-      if (disposed || gl.isContextLost()) {
-        bitmap.close?.()
-        return
+    requestQueue.push({ r, c, tier, entry, priority })
+  }
+
+  function cancelQueued(q: QueuedTile) {
+    // Guarded: a newer enqueue for the same entry may already own pendingTier,
+    // and clearing it blindly would strand that request's eviction exemption.
+    if (q.entry.pendingTier === q.tier) q.entry.pendingTier = null
+  }
+
+  // Drop pending work the view has moved past. All three rules are required:
+  // the tier check alone leaves an off-screen tile queued forever at a matching
+  // tier, and because pendingTier stays set it would be exempt from both
+  // reclaim sweeps — turning the eviction exemption into a leak.
+  //
+  // Both lists are swept, not just the queue. A decoded bitmap waiting for its
+  // upload slot pins its entry the same way, and uploading a tile that has
+  // already been panned off screen is precisely the wasted GL work the pacing
+  // exists to avoid.
+  function isStale(q: QueuedTile, currentTier: Tier): boolean {
+    // ensureTile() stamps lastUsed on every tile in this frame's visible span,
+    // so an older stamp means the tile has been panned off screen.
+    return q.tier !== currentTier
+      || q.entry.lastUsed !== frameCounter
+      || tiles.get(tileKey(q.r, q.c)) !== q.entry
+  }
+
+  function prunePendingLoads(currentTier: Tier) {
+    for (let i = requestQueue.length - 1; i >= 0; i--) {
+      const q = requestQueue[i]
+      if (!isStale(q, currentTier)) continue
+      requestQueue.splice(i, 1)
+      cancelQueued(q)
+    }
+    for (let i = readyUploads.length - 1; i >= 0; i--) {
+      const ready = readyUploads[i]
+      if (!isStale(ready, currentTier)) continue
+      readyUploads.splice(i, 1)
+      ready.bitmap.close?.()
+      cancelQueued(ready)
+    }
+  }
+
+  function pumpQueue() {
+    while (inFlight < MAX_CONCURRENT_TILE_LOADS && requestQueue.length > 0) {
+      let best = 0
+      for (let i = 1; i < requestQueue.length; i++) {
+        if (requestQueue[i].priority < requestQueue[best].priority) best = i
       }
+      const q = requestQueue.splice(best, 1)[0]
+      // Cancelled between enqueue and start.
+      if (q.entry.pendingTier !== q.tier) continue
+      inFlight++
+      void startLoad(q)
+    }
+  }
+
+  async function startLoad(q: QueuedTile): Promise<void> {
+    try {
+      const { bitmap, opaque } = await tileSource.loadTile(q.r, q.c, q.tier)
       // Identity re-check, not just pendingTier: releaseTiles() can delete this
       // entry and its texture while the fetch is in flight, and the replacement
       // entry is a different object with pendingTier === null. Uploading into
       // the deleted texture would be a GL error and the pixels would be lost.
-      if (tiles.get(tileKey(r, c)) !== entry) {
+      const usable = !disposed
+        && !gl.isContextLost()
+        && tiles.get(tileKey(q.r, q.c)) === q.entry
+        && q.entry.pendingTier === q.tier
+      if (!usable) {
         bitmap.close?.()
+        cancelQueued(q)
         return
       }
-      if (entry.pendingTier !== tier) {
-        bitmap.close?.()
-        return
-      }
+      readyUploads.push({ ...q, bitmap, opaque })
+      // Wake the loop: the upload itself happens in the next draw, which is
+      // what keeps a burst of arrivals from landing in one frame.
+      onDirty()
+    } catch (err) {
+      cancelQueued(q)
+      console.warn(`Tile ${q.r},${q.c} tier ${q.tier} load failed`, err)
+    } finally {
+      inFlight--
+      pumpQueue()
+    }
+  }
+
+  // Upload at most MAX_UPLOADS_PER_FRAME decoded tiles. This is the cap that
+  // actually bounds the per-frame main-thread stall: one texImage2D of a
+  // multi-megapixel bitmap plus one generateMipmap.
+  function drainUploads() {
+    let uploaded = 0
+    while (uploaded < MAX_UPLOADS_PER_FRAME && readyUploads.length > 0) {
+      uploadTile(readyUploads.shift()!)
+      uploaded++
+    }
+  }
+
+  function uploadTile(ready: ReadyTile) {
+    const { entry, tier, bitmap, opaque } = ready
+    // Re-check on the way in as well as on the way out of the fetch: an
+    // arbitrary number of frames can pass between the two, and releaseTiles()
+    // or a tier change in that window invalidates this upload.
+    if (
+      disposed
+      || gl.isContextLost()
+      || tiles.get(tileKey(ready.r, ready.c)) !== entry
+      || entry.pendingTier !== tier
+    ) {
+      bitmap.close?.()
+      cancelQueued(ready)
+      return
+    }
+    const uploadStart = performance.now()
+    try {
       gl.bindTexture(gl.TEXTURE_2D, entry.texture)
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true)
       // Opaque tiles go in at 16bpp instead of 32. The pre-rasterized WebPs have
@@ -440,23 +607,35 @@ export function createWebGLRenderer(
       // pickTier promotes to tier 2 as soon as scale*dpr exceeds 1, so tier 1 is
       // only ever drawn at <=1:1 — i.e. minified, heavily so at max zoom-out.
       // Generate mipmaps for every tier so minification filters cleanly with
-      // LINEAR_MIPMAP_LINEAR (+ anisotropy below) instead of aliasing into jagged
-      // lines under plain LINEAR. (WebGL2 allows mipmaps on NPOT textures.)
+      // LINEAR_MIPMAP_LINEAR instead of aliasing into jagged lines under plain
+      // LINEAR. (WebGL2 allows mipmaps on NPOT textures.)
+      //
+      // Deliberately no anisotropic filtering. It only does anything when the
+      // sample footprint is elongated, and this projection cannot elongate one:
+      // buildTransformMat3 writes no rotation or skew, and u_tileSize against
+      // the texture's own size makes texels-per-world-unit exactly `tier` on
+      // both axes. The footprint is an axis-aligned square at every fragment,
+      // so the anisotropy ratio is identically 1 and the parameter was inert.
       gl.generateMipmap(gl.TEXTURE_2D)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
       entry.mipmapped = true
-      if (anisoExt && entry.mipmapped) {
-        gl.texParameterf(gl.TEXTURE_2D, anisoExt.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(16, maxAniso))
-      }
       entry.tier = tier
       entry.pendingTier = null
+      entry.opaque = opaque
       entry.bytes = textureBytes(bitmap.width, bitmap.height, entry.mipmapped, opaque ? 2 : 4)
-      bitmap.close?.()
       onDirty()
     } catch (err) {
       entry.pendingTier = null
-      console.warn(`Tile ${r},${c} tier ${tier} load failed`, err)
+      console.warn(`Tile ${ready.r},${ready.c} tier ${tier} upload failed`, err)
+    } finally {
+      // Measured around the whole GL block, so it captures generateMipmap as
+      // well as the texImage2D — on a 4 megapixel tile the mipmap generation is
+      // the larger half, and both land on the thread that owns the context.
+      totalUploadMs += performance.now() - uploadStart
+      // Closed on every path, including the throw: the old code leaked a
+      // decoded bitmap whenever the upload itself failed.
+      bitmap.close?.()
     }
   }
 
@@ -478,7 +657,11 @@ export function createWebGLRenderer(
       }
       gl.bindTexture(gl.TEXTURE_2D, tex)
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true)
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap)
+      // Same reasoning as the opaque tile path: preview.webp is built from the
+      // master SVG onto a white fill and carries no alpha channel, so 16bpp
+      // costs only colour depth and halves a texture that stays resident for
+      // the renderer's whole life (4.6 MB -> 2.3 MB at 1280x905).
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB565, gl.RGB, gl.UNSIGNED_SHORT_5_6_5, bitmap)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
@@ -517,18 +700,36 @@ export function createWebGLRenderer(
     u_texture: null
   }
 
+  // The visible tiles for the current frame, in the same spirit as the uniform
+  // scratch above: allocated once at grid size and refilled per frame, so the
+  // single visibility pass doesn't hand the GC a fresh array every 16 ms.
+  // `visibleCount` is the cursor; entries past it are stale and never read.
+  const gridCells = grid.rows * grid.cols
+  const visibleEntries: (TileEntry | null)[] = new Array(gridCells).fill(null)
+  const visibleRows = new Int32Array(gridCells)
+  const visibleCols = new Int32Array(gridCells)
+  let visibleCount = 0
+
   function draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null) {
     if (disposed || gl.isContextLost()) return
     // Bump before any ensureTile() call so every tile touched this frame — the
     // visibility scan below included — carries the current stamp and is exempt
     // from the eviction sweep at the end.
     frameCounter++
+    // Land at most one decoded tile before drawing, so a burst of arrivals is
+    // spread across frames instead of stalling one.
+    drainUploads()
     gl.viewport(0, 0, Math.round(cssW * dpr), Math.round(cssH * dpr))
     gl.clearColor(1, 1, 1, 1)
     gl.clear(gl.COLOR_BUFFER_BIT)
 
-    gl.enable(gl.BLEND)
+    // blendFunc is sticky context state and never varies; the enable/disable is
+    // decided per pass below (tiles and the preview are opaque, overlays are
+    // not). Start each frame with it off so every path — including the
+    // preview-only early return — has a known state rather than inheriting the
+    // last frame's.
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
+    gl.disable(gl.BLEND)
 
     const mat = buildTransformMat3(transform, cssW, cssH, transformMat)
 
@@ -540,6 +741,8 @@ export function createWebGLRenderer(
     const worldMinY = -transform.ty * invScale
     const worldMaxX = (cssW - transform.tx) * invScale
     const worldMaxY = (cssH - transform.ty) * invScale
+    const viewCx = (worldMinX + worldMaxX) / 2
+    const viewCy = (worldMinY + worldMaxY) / 2
 
     // Visible row/column span, derived arithmetically rather than by testing
     // every tile in the grid. At 4x4 the scan was 16 iterations and not worth
@@ -555,10 +758,11 @@ export function createWebGLRenderer(
     //
     // NOTE: unreachable on the FDTJ map as currently configured. map.tsx derives
     // minScale with max(viewport/map) — cover-fit — so the map never shrinks to
-    // fit the screen; at minimum zoom it still spans ~3400 device px on a phone,
-    // against a 1280px preview. Satisfying this branch would need a ~3400px
-    // preview costing ~32 MB of texture, which is worse than the ~20 MiB of
-    // tier-0.5 tiles it would replace. Kept because it costs one comparison per
+    // fit the screen; at minimum zoom it still spans ~2270 device px on a phone
+    // (MAX_RENDER_DPR caps what used to be ~3400), against a 1280px preview.
+    // Satisfying this branch would need a ~2270px preview costing ~10 MB of
+    // texture, which is worse than the ~20 MiB of tier-0.5 tiles it would
+    // replace. Kept because it costs one comparison per
     // frame and becomes correct the moment the map uses contain-fit; do not
     // widen the preview to try to activate it without redoing that arithmetic.
     const previewOnly = manifest.preview !== undefined
@@ -576,7 +780,7 @@ export function createWebGLRenderer(
         drawOverlays(mat, transform, cssW, cssH, selection)
         // Nothing here draws a tile, so every resident tile is dead weight —
         // release them outright rather than waiting for the budget sweep, which
-        // would keep a full grid (~171 MB) resident indefinitely because it sits
+        // would keep a full grid (~43 MB of tier-0.5 tiles) resident indefinitely because it sits
         // just under the cap. This is also the path that cleans up after the
         // first frame: the preview loads asynchronously, so frame 1 falls
         // through below and requests tiles before the texture exists.
@@ -589,31 +793,52 @@ export function createWebGLRenderer(
           for (const entry of tiles.values()) gl.deleteTexture(entry.texture)
           tiles.clear()
         }
+        // Same reasoning as the textures: anything queued or already decoded is
+        // for a tile this path will never draw.
+        discardPendingLoads()
         return
       }
       // No preview yet — fall through and draw tiles as usual rather than
       // showing a blank map while it loads.
     }
 
-    // Check whether any visible tile is still missing — if so, the preview
-    // underlay (if loaded) gets drawn first to cover blank gaps.
+    // One pass over the visible span, collecting everything the rest of the
+    // frame needs: the entries themselves, whether any tile is still blank (the
+    // preview underlay), and whether any carries real transparency (the blend
+    // state). This used to be two passes that each walked the same rectangle
+    // and called ensureTile() on every cell.
+    visibleCount = 0
     let anyVisibleMissing = false
-    for (let r = firstRow; r <= lastRow && !anyVisibleMissing; r++) {
+    let anyVisibleNonOpaque = false
+    for (let r = firstRow; r <= lastRow; r++) {
       for (let c = firstCol; c <= lastCol; c++) {
         const entry = ensureTile(r, c)
-        if (!entry || entry.tier === 0) {
+        if (!entry) {
+          // Texture allocation failed — context lost mid-frame. Nothing to draw
+          // for this cell, so the preview is the only honest thing to put here.
           anyVisibleMissing = true
-          break
+          continue
         }
+        if (entry.tier === 0) anyVisibleMissing = true
+        else if (!entry.opaque) anyVisibleNonOpaque = true
+        visibleRows[visibleCount] = r
+        visibleCols[visibleCount] = c
+        visibleEntries[visibleCount] = entry
+        visibleCount++
       }
     }
 
+    // Every visible tile now carries this frame's stamp, so the queue can tell
+    // which of its pending requests the view has moved away from.
+    prunePendingLoads(currentTier)
+
     // The preview stays resident for the renderer's whole life rather than being
-    // freed once the tiles land. At 768x543 it costs 1.6 MB — nothing against
-    // ~81 MB per tile — and keeping it means every path that resets tiles to
-    // tier 0 (context recovery, release-on-hide) redraws through a correct
-    // low-res map instead of blank placeholders. ensurePreview() is idempotent,
-    // so calling it here also covers a renderer whose first load failed.
+    // freed once the tiles land. At 1280x905 it costs 2.3 MB as RGB565 — nothing
+    // against ~10.7 MB per tier-2 tile — and keeping it means every path that
+    // resets tiles to tier 0 (context recovery, release-on-hide) redraws through
+    // a correct low-res map instead of blank placeholders. ensurePreview() is
+    // idempotent, so calling it here also covers a renderer whose first load
+    // failed.
     if (anyVisibleMissing) {
       if (!previewTexture) ensurePreview()
       if (previewTexture) {
@@ -627,44 +852,82 @@ export function createWebGLRenderer(
       }
     }
 
+    // Blending costs a framebuffer read per fragment for a result that, on an
+    // alpha-free source, is always just the source. The pre-rasterized WebPs
+    // have no alpha channel at all, so the tile pass only needs blending when a
+    // visible tile is a runtime-rasterized SVG — those have a genuinely
+    // transparent background and must composite over the preview underlay.
+    // The debug placeholder is a translucent tint, so it needs it too.
+    const tilePassNeedsBlend = anyVisibleNonOpaque || (debugHitboxes && anyVisibleMissing)
+    if (tilePassNeedsBlend) gl.enable(gl.BLEND)
+    else gl.disable(gl.BLEND)
+
     // Frame-constant uniforms once; only offset + texture change per tile.
     frameUniforms.u_tileSize[0] = tileW
     frameUniforms.u_tileSize[1] = tileH
     twgl.setUniforms(programInfo, frameUniforms)
 
-    for (let r = firstRow; r <= lastRow; r++) {
-      const tileY = r * tileH
-      for (let c = firstCol; c <= lastCol; c++) {
-        const tileX = c * tileW
+    for (let i = 0; i < visibleCount; i++) {
+      const entry = visibleEntries[i]!
+      const r = visibleRows[i]
+      const c = visibleCols[i]
 
-        const entry = ensureTile(r, c)
-        if (!entry) continue
-        const texture = entry.tier > 0 ? entry.texture : placeholder
-
-        tileUniforms.u_tileOffset[0] = tileX
-        tileUniforms.u_tileOffset[1] = tileY
+      // A tile with no pixels yet draws nothing at all. The frame is cleared to
+      // opaque white and the preview underlay above has already covered this
+      // rect with real map — drawing the placeholder over it would replace a
+      // correct low-res map with a white hole, which is exactly what it did:
+      // PLACEHOLDER_PIXEL is opaque white in prod, so every unloaded tile
+      // painted straight over the preview that had just been drawn for it.
+      const texture = entry.tier > 0 ? entry.texture : (debugHitboxes ? placeholder : null)
+      if (texture) {
+        tileUniforms.u_tileOffset[0] = c * tileW
+        tileUniforms.u_tileOffset[1] = r * tileH
         tileUniforms.u_texture = texture
         twgl.setUniforms(programInfo, tileUniforms)
         twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
+      }
 
-        // Don't start tile fetches the preview is about to make redundant. This
-        // is the zoomed-out first frame, before ensurePreview() has resolved:
-        // without this the renderer requests the whole grid and then frees it
-        // a frame later, spending real bandwidth on textures never drawn.
-        if (previewOnly) continue
+      // Don't start tile fetches the preview is about to make redundant. This
+      // is the zoomed-out first frame, before ensurePreview() has resolved:
+      // without this the renderer requests the whole grid and then frees it
+      // a frame later, spending real bandwidth on textures never drawn.
+      if (previewOnly) continue
 
-        if (entry.tier < currentTier && entry.pendingTier !== currentTier) {
-          void requestTier(r, c, currentTier)
-        }
+      if (entry.tier < currentTier && entry.pendingTier !== currentTier) {
+        // Nearest the centre of what the user is looking at goes first. Both
+        // axes are normalised by tile size, so a tall-thin phone viewport
+        // doesn't systematically favour rows over columns.
+        const dx = ((c + 0.5) * tileW - viewCx) / tileW
+        const dy = ((r + 0.5) * tileH - viewCy) / tileH
+        enqueueTier(r, c, currentTier, entry, dx * dx + dy * dy)
       }
     }
 
+    pumpQueue()
+
     // Every visible tile now carries this frame's stamp, so anything older is
-    // off-screen and safe to reclaim.
+    // off-screen and safe to reclaim. The budget is derived from what this
+    // frame actually shows: a tier-0.5 view and a tier-4 one differ by 128x per
+    // tile, so one flat number could only ever be right for one of them.
     downgradeOverResolvedTiles(currentTier)
-    evictTiles()
+    evictTiles(tileBudgetBytes({
+      visibleTiles: visibleCount,
+      tileBytes: textureBytes(
+        Math.round(tileW * currentTier),
+        Math.round(tileH * currentTier),
+        true,
+        anyVisibleNonOpaque ? 4 : 2
+      ),
+      ceilingBytes: budgetCeilingBytes,
+      deviceMemoryGb
+    }))
 
     drawOverlays(mat, transform, cssW, cssH, selection)
+
+    // Decoded tiles still waiting on a frame to upload them: ask for one. This
+    // terminates because each frame drains at least one, unlike the redraw loop
+    // the preview-only path warns about.
+    if (readyUploads.length > 0) onDirty()
   }
 
   // Hitbox debug fill and the selection spotlight. Split out of draw() so the
@@ -677,6 +940,13 @@ export function createWebGLRenderer(
     cssH: number,
     selection?: SelectionOverlay | null
   ) {
+    // Everything here is genuinely translucent — the debug pill fill, the
+    // spotlight scrim and its ring all composite over the map. draw() leaves
+    // blending off for the opaque tile pass, and this is called from two places
+    // (the tiled path and the preview-only early return), so own the state here
+    // rather than depending on what the caller happened to leave set.
+    gl.enable(gl.BLEND)
+
     if (debugHitboxes && pillVao && points.length > 0) {
       gl.useProgram(pillProgramInfo.program)
       twgl.setBuffersAndAttributes(twglGl, pillProgramInfo, pillVao)
@@ -727,18 +997,38 @@ export function createWebGLRenderer(
     if (disposed) return
     for (const entry of tiles.values()) gl.deleteTexture(entry.texture)
     tiles.clear()
+    // Everything queued or decoded refers to entries that no longer exist. The
+    // guards would discard them anyway, but a decoded bitmap sitting in
+    // readyUploads is real memory — exactly what this function is here to hand
+    // back — so drop it now rather than at the next drain.
+    discardPendingLoads()
     onDirty()
+  }
+
+  // In-flight fetches are not cancellable, but their results are: startLoad's
+  // identity re-check sees the replaced entry and closes the bitmap itself.
+  function discardPendingLoads() {
+    requestQueue.length = 0
+    for (const ready of readyUploads) ready.bitmap.close?.()
+    readyUploads.length = 0
   }
 
   function tileStats(): TileStats {
     let bytes = 0
     for (const entry of tiles.values()) bytes += entry.bytes
-    return { count: tiles.size, bytes }
+    return {
+      count: tiles.size,
+      bytes,
+      queued: requestQueue.length,
+      ready: readyUploads.length,
+      uploadMs: totalUploadMs
+    }
   }
 
   function dispose() {
     if (disposed) return
     disposed = true
+    discardPendingLoads()
     for (const entry of tiles.values()) gl.deleteTexture(entry.texture)
     gl.deleteTexture(placeholder)
     releasePreview()
@@ -784,7 +1074,17 @@ export function createWebGLRenderer(
     kind: 'webgl2',
     draw,
     resize,
-    requestTier: (r, c, tier) => { void requestTier(r, c, tier) },
+    requestTier: (r, c, tier) => {
+      if (disposed || gl.isContextLost()) return
+      const entry = ensureTile(r, c)
+      if (!entry) return
+      if (entry.tier >= tier) return
+      if (entry.pendingTier !== null && entry.pendingTier >= tier) return
+      // Priority 0: an explicit request from outside the draw loop names one
+      // tile, so it outranks the frame's own visible-span work.
+      enqueueTier(r, c, tier, entry, 0)
+      pumpQueue()
+    },
     setPoints,
     setDebugHitboxes,
     isContextLost: () => gl.isContextLost(),

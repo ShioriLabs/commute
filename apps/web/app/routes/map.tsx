@@ -14,10 +14,13 @@ import { staggerDelay, type StaggerOptions } from 'utils/stagger'
 import { buildFarePath } from 'utils/fare-url'
 import {
   createRenderer,
+  DESKTOP_TILE_BUDGET_CEILING_BYTES,
   hitTest,
+  PHONE_TILE_BUDGET_CEILING_BYTES,
   pickTier,
   pointCornerRadius,
   pointStationId,
+  renderDpr,
   SCRIM_MAX_ALPHA,
   type Manifest,
   type Point,
@@ -125,10 +128,12 @@ const MAP_CHROME_STAGGER: StaggerOptions = { step: 60, maxIndex: 4, offset: 60 }
 
 // Ceiling on the tile resolution we're willing to hold in memory.
 //
-// Tier 2 is a 4757x3363 raster per tile — 61 MB as RGBA, ~81 MB once mipmapped —
-// so the visible working set alone runs to a few hundred MB on a phone. Tier 4
-// would be four times that again, and isn't pre-rasterized either (it falls
-// through to the SVG path), so it stays desktop-only.
+// On the shipped 8x8 grid a tier-2 tile is a 2378x1682 raster — ~10.7 MB once
+// mipmapped as RGB565 — so a phone's visible working set runs to ~65 MB. Tier 4
+// is 4757x3363, and it isn't pre-rasterized: it falls through to the runtime SVG
+// path, which keeps its transparent background and so uploads as RGBA. That is
+// ~85 MB per tile, eight times a tier-2 one. Desktop-only, and the tile budget
+// in map-renderer-webgl.ts carries a matching ceiling for it.
 //
 // The 2D fallback is capped hardest: it keeps tiles as ImageBitmaps rather than
 // GPU textures, and it's what a device that has already failed to give us WebGL
@@ -139,6 +144,32 @@ function pickMaxTier(rendererKind: Renderer['kind'], viewportW: number): Tier {
   const isLowCoreDevice = (navigator.hardwareConcurrency ?? 8) <= 4
   if (isSmallViewport || isLowCoreDevice) return 2
   return 4
+}
+
+// Rolling window of rAF intervals for the debug panel's p95.
+//
+// A ring buffer written from the render loop, so it allocates nothing per
+// frame. 240 samples is ~4 seconds at 60fps — long enough to survive a pinch,
+// short enough that the number reflects what just happened rather than the
+// session average. The p95 rather than the mean because a single 200 ms upload
+// stall is precisely what a mean hides.
+const FRAME_SAMPLE_COUNT = 240
+const frameSamples = new Float32Array(FRAME_SAMPLE_COUNT)
+let frameSampleCursor = 0
+let frameSamplesFilled = 0
+
+function recordFrameInterval(ms: number) {
+  frameSamples[frameSampleCursor] = ms
+  frameSampleCursor = (frameSampleCursor + 1) % FRAME_SAMPLE_COUNT
+  if (frameSamplesFilled < FRAME_SAMPLE_COUNT) frameSamplesFilled++
+}
+
+function frameP95(): number {
+  if (frameSamplesFilled === 0) return 0
+  // Copied before sorting: sorting the live buffer in place would scramble the
+  // ring's ordering and corrupt every later sample.
+  const sorted = Array.from(frameSamples.subarray(0, frameSamplesFilled)).sort((a, b) => a - b)
+  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))]
 }
 
 function clampTransform(
@@ -569,8 +600,9 @@ export default function MapPage() {
 
   // Hand the tile textures back while the app is in the background.
   //
-  // The visible tile set is 160-330 MB of GPU memory on a phone (a tier-2 tile
-  // is a 4757x3363 raster — 61 MB, ~81 MB mipmapped). A backgrounded PWA sitting
+  // The visible tile set is on the order of 20-65 MB of GPU memory on a phone
+  // (a tier-2 tile is a 2378x1682 raster — 8 MB as RGB565, ~10.7 MB mipmapped —
+  // and the clamped DPR keeps at most ~6 of them on screen). A backgrounded PWA sitting
   // on that is exactly what Android's low-memory killer goes looking for, which
   // is what takes the GL context away in the first place. Programs, buffers and
   // the context itself are kilobytes and stay put, so coming back is a redraw
@@ -609,7 +641,7 @@ export default function MapPage() {
       inertiaRef.current = null
       const renderer = rendererRef.current
       if (renderer && viewportSize.w && viewportSize.h) {
-        renderer.resize(viewportSize.w, viewportSize.h, window.devicePixelRatio || 1)
+        renderer.resize(viewportSize.w, viewportSize.h, renderDpr(window.devicePixelRatio))
       }
       markDirty()
     }
@@ -644,12 +676,17 @@ export default function MapPage() {
     camera: () => ({ ...renderedRef.current }),
     stats: () => {
       const renderer = rendererRef.current
-      const { count, bytes } = renderer?.tileStats() ?? { count: 0, bytes: 0 }
+      const tiles = renderer?.tileStats() ?? { count: 0, bytes: 0 }
+      const { count, bytes } = tiles
       return {
         kind: renderer?.kind ?? null,
         count,
         bytes,
         megabytes: bytes / (1024 * 1024),
+        queued: tiles.queued ?? 0,
+        ready: tiles.ready ?? 0,
+        uploadMs: tiles.uploadMs ?? 0,
+        frameP95: frameP95(),
         epoch: contextEpoch,
         // Read off the controller, not the React mirror: if the two ever
         // disagree it's the mirror that's wrong, and that's worth being able
@@ -685,7 +722,15 @@ export default function MapPage() {
         manifest,
         '/maps/fdtj/',
         markDirty,
-        { allowCanvas2DFallback: isFirstAttempt || isLastAttempt }
+        {
+          allowCanvas2DFallback: isFirstAttempt || isLastAttempt,
+          // Same signal pickMaxTier uses, for the same reason: a device that
+          // can reach tier 4 needs a ceiling that accommodates a tier-4 working
+          // set, and one that caps at tier 2 should not be handed that much.
+          tileBudgetCeilingBytes: pickMaxTier('webgl2', viewportSize.w) > 2
+            ? DESKTOP_TILE_BUDGET_CEILING_BYTES
+            : PHONE_TILE_BUDGET_CEILING_BYTES
+        }
       )
     } catch (err) {
       console.warn('[map] renderer creation failed', err)
@@ -706,7 +751,7 @@ export default function MapPage() {
     }
     canvas.addEventListener('webglcontextlost', onContextLost)
 
-    const dpr = window.devicePixelRatio || 1
+    const dpr = renderDpr(window.devicePixelRatio)
     const rect = canvas.getBoundingClientRect()
     if (rect.width && rect.height) {
       renderer.resize(rect.width, rect.height, dpr)
@@ -737,7 +782,7 @@ export default function MapPage() {
   useEffect(() => {
     if (!rendererRef.current) return
     if (!viewportSize.w || !viewportSize.h) return
-    rendererRef.current.resize(viewportSize.w, viewportSize.h, window.devicePixelRatio || 1)
+    rendererRef.current.resize(viewportSize.w, viewportSize.h, renderDpr(window.devicePixelRatio))
     markDirty()
   }, [viewportSize.w, viewportSize.h, markDirty])
 
@@ -746,13 +791,17 @@ export default function MapPage() {
     if (typeof window.matchMedia !== 'function') return
     let mql = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
     const handler = () => {
-      const dpr = window.devicePixelRatio || 1
+      // The query watches the *raw* ratio; only the value handed to the renderer
+      // is clamped. Re-arming with the clamped one would build a query that is
+      // false on any device above MAX_RENDER_DPR — it would never match again,
+      // and the watcher would silently stop after its first fire.
+      const rawDpr = window.devicePixelRatio || 1
       if (rendererRef.current && viewportSize.w && viewportSize.h) {
-        rendererRef.current.resize(viewportSize.w, viewportSize.h, dpr)
+        rendererRef.current.resize(viewportSize.w, viewportSize.h, renderDpr(rawDpr))
         markDirty()
       }
       mql.removeEventListener('change', handler)
-      mql = window.matchMedia(`(resolution: ${dpr}dppx)`)
+      mql = window.matchMedia(`(resolution: ${rawDpr}dppx)`)
       mql.addEventListener('change', handler)
     }
     mql.addEventListener('change', handler)
@@ -801,6 +850,9 @@ export default function MapPage() {
       }
       const last = lastFrameTimeRef.current || now
       const dt = Math.min(64, now - last) // clamp to 64ms to avoid huge jumps after a stall
+      // Unclamped, unlike dt: a stall is exactly what this is here to record.
+      // Skipped on the first frame after a wake, where `last` is synthetic.
+      if (lastFrameTimeRef.current !== 0) recordFrameInterval(now - last)
       lastFrameTimeRef.current = now
 
       // Eased camera flight: drives both target and rendered so the plain
@@ -906,7 +958,7 @@ export default function MapPage() {
             ringProgress: spotRing
           }
         }
-        const dpr = window.devicePixelRatio || 1
+        const dpr = renderDpr(window.devicePixelRatio)
         const r = renderedRef.current
         if (cachedMaxTier === null || cachedTierKind !== renderer.kind) {
           cachedTierKind = renderer.kind
@@ -914,8 +966,13 @@ export default function MapPage() {
         }
         const targetTier = pickTier(r.scale, dpr, currentTierRef.current, cachedMaxTier)
         currentTierRef.current = targetTier
-        renderer.draw(r, viewportSize.w, viewportSize.h, dpr, targetTier, overlay)
+        // Consume the flag *before* drawing, not after. draw() legitimately
+        // raises it again — a paced tile upload still queued asks for the frame
+        // that will land it — and clearing afterwards swallowed that request,
+        // so the loop parked with decoded tiles stranded and the map stayed on
+        // the blurry preview until an unrelated event happened to wake it.
         dirtyRef.current = false
+        renderer.draw(r, viewportSize.w, viewportSize.h, dpr, targetTier, overlay)
         if (import.meta.env.DEV && authorMode) setRenderTick(n => n + 1)
 
         // Morph handoff: the first drawn frame that actually contains the map
