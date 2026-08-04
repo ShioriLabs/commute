@@ -21,7 +21,11 @@ export interface PickableStation {
   operator: OperatorCode
   /** Lines serving the stop, already resolved against the index dictionary. */
   lines: Line[]
-  /** Crowding, for ordering the no-query list. Absent means 0. */
+  /**
+   * How busy the station is (0-100), for ordering the no-query list. Measured
+   * ridership where operators publish it, estimated from service and network
+   * structure elsewhere. Absent means 0.
+   */
   score?: number
   /**
    * The other boarding points folded into this entry, for the 15 directional

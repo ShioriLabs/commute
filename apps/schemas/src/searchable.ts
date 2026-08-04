@@ -37,7 +37,7 @@ export const SearchableSchema = v.pipe(
     ),
     score: v.pipe(
       v.optional(v.number()),
-      v.description('Seberapa ramai. Tidak dikirim kalau nilainya 0, jadi baca pakai `?? 0`.')
+      v.description('Seberapa ramai (0-100): jumlah penumpang beneran kalau operatornya merilis, selain itu perkiraan dari frekuensi kereta dan bentuk jaringan. Tidak dikirim kalau nilainya 0, jadi baca pakai `?? 0`.')
     )
   }),
   v.title('Searchable')

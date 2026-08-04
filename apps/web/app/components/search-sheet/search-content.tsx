@@ -4,7 +4,7 @@ import { Link } from 'react-router'
 import type { Line } from '@commute/schemas'
 import { getForegroundColor, getTintFromColor } from 'utils/colors'
 import LineRoundel from '~/components/line-roundel'
-import { filterBestTier, keywordScore, SCORE_THRESHOLD } from 'utils/fuzzy-match'
+import { filterBestTier, keywordScore, popularityTerm, SCORE_THRESHOLD } from 'utils/fuzzy-match'
 import type { Searchable } from '@commute/schemas'
 import { useSearchables } from '~/hooks/use-searchables'
 import { CaretRightIcon } from '@phosphor-icons/react'
@@ -167,8 +167,7 @@ export default function SearchContent({ title, closeButton }: Props) {
         if (keywordMatch < score) score = keywordMatch
       }
 
-      const popularityFactor = (searchable.score ?? 0) / 100
-      const finalScore = score + (1 - popularityFactor)
+      const finalScore = score + (1 - popularityTerm(searchable.score))
       if (finalScore >= SCORE_THRESHOLD) continue
 
       // Sub-unit ranking nudge applied only at sort time (NOT folded into

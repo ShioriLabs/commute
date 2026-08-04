@@ -206,6 +206,17 @@ export const HUB_KIND_LABEL: Record<HubKind, string> = {
   integrated: 'Stasiun Terintegrasi'
 }
 
+/**
+ * Upper bound of `stations.score` and `hubs.score`.
+ *
+ * The search surfaces divide by this to get a popularity term in [0, 1], and
+ * utils/fuzzy-match.ts spaces its match tiers 2 apart on the strength of that
+ * bound — a wider span would let a popular station's window-typo match outrank
+ * an unpopular station's exact match. Generated scores are clamped to it; see
+ * apps/api/src/db/scripts/generateStationScoresSQL.ts.
+ */
+export const STATION_SCORE_MAX = 100
+
 export type TransferDataType = 'INTERNAL' | 'EXTERNAL'
 
 /**
@@ -678,9 +689,14 @@ export const PLATFORM_CODES: Record<string, string> = {
 
 /**
  * Stations promoted into direction labels despite not being interchanges or
- * junctions. Stands in for the search score (unset network-wide today).
+ * junctions. Curated, and staying that way: `stations.score` cannot replace it.
+ * Score is constant along a line (every train stops everywhere), so PSE scores
+ * identically to every other Line-C station, and the resolution this needs is
+ * exactly the resolution score lacks. `groupDirections` is also deliberately
+ * DB-free — see utils/directions.ts.
  * Key: `${operator}:${stationCode}`.
- * KMT: Kramat becomes a transfer point when the LRTJ extension opens.
+ * KMT: Kramat becomes a transfer point when the LRTJ extension opens, so no
+ * derived signal could produce it today anyway.
  */
 export const DIRECTION_LABEL_BOOST_STATIONS = new Set([
   'KCI:PSE',
