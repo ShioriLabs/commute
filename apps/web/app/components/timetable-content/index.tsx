@@ -263,7 +263,11 @@ const TimetableContent = memo(function TimetableContent({ operator, code }: Prop
               return (
                 <section key={section.key} aria-label={`Keberangkatan ${section.lineName} menuju ${section.label.join(', ')}`}>
                   {/* Sticks below the page header (p-8/pb-4 + two text lines = 6rem). */}
-                  <header className="sticky top-24 z-[9] flex items-center gap-3 px-4 py-2.5 bg-white/90 backdrop-blur border-b border-slate-100">
+                  {/* 6rem clears the standalone page's sticky header. Inside a
+                      pushed pane the scroll container is the card body and
+                      there is nothing above these, so the pane sets the var to
+                      0. */}
+                  <header className="sticky top-[var(--timetable-sticky-top,6rem)] z-[9] flex items-center gap-3 px-4 py-2.5 bg-white/90 backdrop-blur border-b border-slate-100">
                     <LineRoundel code={section.lineCode} color={section.lineColor} operator={operator} />
                     <span className="flex-grow min-w-0 text-sm font-bold text-slate-900 truncate">
                       {'menuju '}

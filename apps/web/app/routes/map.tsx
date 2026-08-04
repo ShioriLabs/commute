@@ -43,6 +43,7 @@ import {
 import { isMapGlDebugEnabled } from '../hooks/secret-features'
 import StationSheet from '../components/station-sheet'
 import HubSheet from '../components/hub-sheet'
+import PaneStackProvider from '../components/pane-stack'
 import { MapPreviewBackdrop, useMapMorph } from '../components/map-morph'
 import { prefetchMapSkeleton } from '../components/map-skeleton'
 import { PEEK_FRACTION } from '../components/bottom-sheet'
@@ -302,6 +303,13 @@ export default function MapPage() {
   // pill lives in, so it hides for as long as one is open.
   const paneCoversChrome = isDesktop && !!(selectedStation || selectedHubSlug)
   const pillVisible = chromeVisible && !paneCoversChrome
+  // Identity of whatever the detail surface is currently showing. The pane stack
+  // watches this to know when the card it stacked onto has been replaced or
+  // dismissed; the two selections are mutually exclusive, so one string covers
+  // both.
+  const baseSelectionKey = selectedStation
+    ? `station:${selectedStation.operator}/${selectedStation.code}`
+    : selectedHubSlug && `hub:${selectedHubSlug}`
   // Pick-a-departure mode, primed by the station sheet's "Petunjuk Arah":
   // holds the destination station id (`OPERATOR-CODE`); while set, the next
   // station tap becomes the origin and navigates to /fare with the pair.
@@ -1487,22 +1495,29 @@ export default function MapPage() {
         />
       )}
 
-      <StationSheet
-        operator={selectedStation?.operator ?? null}
-        code={selectedStation?.code ?? null}
-        onClose={() => setSelectedStation(null)}
-        onSelectDeparture={handleSelectDeparture}
-        // Start the spotlight exit as soon as the dismiss begins — unless the
-        // sheet is closing because the user switched to a hub, whose
-        // spotlight is already animating in.
-        onDismissStart={() => { if (!selectedHubSlug) beginSpotlightExit() }}
-      />
+      {/* Hosts the cards a detail surface can push on top of itself (a full
+          timetable, a hub member's station). `baseKey` is the only wiring it
+          needs: any change to it means the selection the deck was built on is
+          gone, so the deck collapses — which covers both dismissing the surface
+          and tapping a different point on the map. */}
+      <PaneStackProvider baseKey={baseSelectionKey}>
+        <StationSheet
+          operator={selectedStation?.operator ?? null}
+          code={selectedStation?.code ?? null}
+          onClose={() => setSelectedStation(null)}
+          onSelectDeparture={handleSelectDeparture}
+          // Start the spotlight exit as soon as the dismiss begins — unless the
+          // sheet is closing because the user switched to a hub, whose
+          // spotlight is already animating in.
+          onDismissStart={() => { if (!selectedHubSlug) beginSpotlightExit() }}
+        />
 
-      <HubSheet
-        slug={selectedHubSlug}
-        onClose={() => setSelectedHubSlug(null)}
-        onDismissStart={() => { if (!selectedStation) beginSpotlightExit() }}
-      />
+        <HubSheet
+          slug={selectedHubSlug}
+          onClose={() => setSelectedHubSlug(null)}
+          onDismissStart={() => { if (!selectedStation) beginSpotlightExit() }}
+        />
+      </PaneStackProvider>
     </main>
   )
 }

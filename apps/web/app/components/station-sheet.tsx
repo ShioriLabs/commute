@@ -1,5 +1,5 @@
 import { useMemo, useRef } from 'react'
-import { XIcon, ArrowSquareOutIcon } from '@phosphor-icons/react'
+import { XIcon, ArrowSquareOutIcon, ArrowLeftIcon } from '@phosphor-icons/react'
 import { Link } from 'react-router'
 import DetailSurface from './detail-surface'
 import LineRoundel from './line-roundel'
@@ -43,7 +43,7 @@ export default function StationSheet({ operator, code, onClose, onDismissStart, 
       header={(close) => {
         animatedCloseRef.current = close
         return operator && code
-          ? <SheetHeader operator={operator} code={code} onClose={close} />
+          ? <StationPaneHeader operator={operator} code={code} onClose={close} />
           : null
       }}
     >
@@ -58,11 +58,32 @@ export default function StationSheet({ operator, code, onClose, onDismissStart, 
   )
 }
 
-function SheetHeader({ operator, code, onClose }: { operator: string, code: string, onClose: () => void }) {
+interface StationPaneHeaderProps {
+  operator: string
+  code: string
+  onClose: () => void
+  /** Present when this station is a card pushed over another one: shows a back
+   * affordance, and `onClose` then means "dismiss the whole deck". */
+  onBack?: () => void
+}
+
+// Exported so a station pushed onto the pane stack gets the same header as the
+// base card rather than a near-copy of it.
+export function StationPaneHeader({ operator, code, onClose, onBack }: StationPaneHeaderProps) {
   const { lines: resolveLines } = useLines()
   const { header } = useStationHeader(operator, code)
   return (
     <div className="flex items-center justify-between gap-3">
+      {onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Kembali"
+          className="shrink-0 -ml-2 rounded-full flex items-center justify-center w-9 h-9 text-slate-700 hover:bg-slate-100 cursor-pointer"
+        >
+          <ArrowLeftIcon weight="bold" className="w-5 h-5" />
+        </button>
+      )}
       <div className="flex-1 min-w-0 flex flex-col gap-1">
         {header.isLoading
           ? (

@@ -35,6 +35,7 @@ import { useNetworkStatus } from '~/hooks/network'
 import { getUnservedStation } from '~/lib/unserved-stations'
 import { useLines } from '~/hooks/use-lines'
 import { buildFareDestinationPath } from 'utils/fare-url'
+import PaneLink from '~/components/pane-stack/pane-link'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -243,12 +244,12 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
                     </Link>
                   )
                 })()}
-                <Link
-                  to={`/stations/${operator}/${code}/timetable`}
+                <PaneLink
+                  pane={{ kind: 'timetable', operator, code }}
                   className="flex flex-row gap-2 justify-center bg-slate-200 text-[#F55875] font-bold p-4 rounded-xl text-center w-full text-sm"
                 >
                   Jadwal Lengkap
-                </Link>
+                </PaneLink>
               </div>
               <ul className="flex flex-col gap-2 mt-4">
                 {timetableData.map(line => (

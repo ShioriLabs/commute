@@ -1,6 +1,5 @@
 import { OPERATORS } from '@commute/constants'
 import { memo, useMemo } from 'react'
-import { Link } from 'react-router'
 import { CaretRightIcon } from '@phosphor-icons/react'
 import useSWR from 'swr'
 import type { StandardResponse } from '@schema/response'
@@ -9,6 +8,7 @@ import { fetcher } from 'utils/fetcher'
 import LineRoundel from '~/components/line-roundel'
 import { sortLineKeysForDisplay } from '~/utils/lines'
 import { useLines } from '~/hooks/use-lines'
+import PaneLink from '~/components/pane-stack/pane-link'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -77,8 +77,8 @@ const HubContent = memo(function HubContent({ slug }: HubContentProps) {
     <ul className="max-w-3xl mx-auto">
       {members.map(member => (
         <li key={member.id}>
-          <Link
-            to={`/stations/${member.operator}/${member.code}`}
+          <PaneLink
+            pane={{ kind: 'station', operator: member.operator, code: member.code }}
             className="px-8 py-4 flex items-center gap-4 border-b border-b-stone-100 last:border-b-0"
           >
             <div className="flex flex-col gap-1 min-w-0 flex-1">
@@ -103,7 +103,7 @@ const HubContent = memo(function HubContent({ slug }: HubContentProps) {
                 : null}
             </div>
             <CaretRightIcon weight="bold" className="w-5 h-5 text-slate-400 shrink-0" />
-          </Link>
+          </PaneLink>
         </li>
       ))}
     </ul>
