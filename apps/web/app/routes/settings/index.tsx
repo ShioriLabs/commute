@@ -24,7 +24,9 @@ export default function SettingsPage() {
       <Dialog open onClose={dismiss}>
         <DialogPanel
           transition
-          className="overflow-hidden relative w-screen h-screen mt-auto"
+          // See routes/fare.tsx: 100vh is the large viewport, so the bottom of
+          // this scroller hides under a bottom browser toolbar.
+          className="overflow-hidden relative w-screen h-dvh mt-auto"
         >
           <SettingsSheet />
         </DialogPanel>

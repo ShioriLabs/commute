@@ -26,7 +26,13 @@ export default function FarePage() {
       <Dialog open onClose={dismiss}>
         <DialogPanel
           transition
-          className="overflow-hidden relative w-screen h-screen mt-auto"
+          // h-dvh, not h-screen: 100vh is the *large* viewport, the height the
+          // page would have with the browser toolbar retracted. On Android
+          // Chrome/Edge, whose toolbar sits at the bottom, that puts the last
+          // ~60px of this scroll container permanently underneath it — the end
+          // of the fare breakdown was unreachable however far you scrolled.
+          // dvh tracks the visible area instead. Matches routes/search.tsx.
+          className="overflow-hidden relative w-screen h-dvh mt-auto"
         >
           <FareSheet />
         </DialogPanel>
