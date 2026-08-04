@@ -10,7 +10,7 @@
     "lint": "eslint",
     "lint:fix": "eslint --fix",
     "migration:up": "wrangler d1 migrations apply commute",
-    "build": "wrangler build",
+    "build": "pnpm --filter @commute/tsundere build && wrangler build",
     "start": "wrangler dev",
     "generate:lrtjbdbtimetable": "tsx ./src/operators/lrtjbdb/generateTimetableSQL.ts",
     "generate:stationcoords": "tsx ./src/db/scripts/generateLatLngSQL.ts",
