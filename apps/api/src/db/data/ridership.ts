@@ -23,16 +23,24 @@
  * its entries are marked and may be understated by up to 2x, which on the log
  * scale is worth about one 19-point step.
  *
- * Cross-checked against KCI's 2024 annual report, which names Bogor at 1,566,584
- * departures per month over Jan-May 2025. That is 52,220/day, within 6% of the
- * Sem I boardings series (49,109/day) and half the in-out series used here —
- * three independent publications agreeing once the units are lined up.
+ * Confirmed against KCI's 2024 Combined Report (p.47), which for May 2025 breaks
+ * the two halves out separately — departures and arrivals per station — and so
+ * settles the metric question rather than merely corroborating it:
  *
- * The same report is why this table uses in-out rather than departures: it lists
- * Sudirman among the busiest DESTINATIONS (1,006,102/month) but not among the
- * busiest departures. CBD stations absorb in the morning and shed in the
- * evening, so a departures-only metric understates exactly the office-district
- * stations riders search for most.
+ *   Bogor        1,566,584 dep + 1,583,171 arr = 3,149,755/mo = 101,605/day
+ *   Tanah Abang  1,314,359 dep + 1,252,660 arr = 2,567,019/mo =  82,807/day
+ *   Sudirman                     1,006,102 arr             =  32,455/day arr
+ *
+ * Against the anchors below: Bogor 99,047 (2.6% apart), Tanah Abang 89,126
+ * (7.1%, and our period spans the busier months), Sudirman's arrivals doubled
+ * ~64,910 against 67,543 (3.9%). Bogor's departures alone are 50,535/day, which
+ * lands within 3% of the Sem I boardings series — so both series are exactly
+ * what they looked like, and the in-out figures used here are dep + arr.
+ *
+ * That breakdown is also why this table uses in-out rather than departures:
+ * Sudirman is among the busiest DESTINATIONS but not the busiest departures. CBD
+ * stations absorb in the morning and shed in the evening, so departures-only
+ * understates exactly the office-district stations riders search for most.
  *
  * Every figure is normalised to passengers per day AT AUTHORING TIME, because
  * the sources mix periods freely and must never be compared raw. Divisors:
@@ -111,8 +119,10 @@ export const RIDERSHIP_ANCHORS: RidershipAnchor[] = [
     // reads the same as Sudirman, which is why the estimate had it at 68.
     // Measurement is the only thing that corrects a behavioural gap.
     //
-    // Expect it to rise sharply if Karet closes and its traffic is moved here —
-    // refresh this entry when that happens.
+    // Expect it to rise sharply when Karet closes and its traffic moves here.
+    // That is company policy, not speculation: the 2024 Combined Report lists
+    // "penggabungan Stasiun BNI City dan Karet" among the year's Operation
+    // Excellence commitments (p.44). Refresh this entry when it happens.
     stationId: 'KCI-SUDB',
     gatePerDay: 2_408, // 878,751 / 365
     period: '2025',

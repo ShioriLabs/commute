@@ -37,14 +37,25 @@ station's demand is the sum of both.
 
 **Pick one series per operator.** KAI Commuter publishes Bogor as both 8,888,669 (Sem I 2025) and
 33,081,659 (Jan–Nov 2025). That is not growth, it is boardings versus gate in-out, a factor of ~2.
-Everything in the table is gate in-out. KCI's 2024 annual report independently corroborates this:
-it names Bogor at 1,566,584 departures per month over Jan–May 2025, which is 52,220/day — within
-6% of the boardings series and half the in-out series.
+Everything in the table is gate in-out.
 
-The same report is why in-out is the right metric rather than departures: it lists Sudirman among
-the busiest *destinations* but not the busiest *departures*. CBD stations absorb in the morning and
-shed in the evening, so departures-only understates exactly the office-district stations riders
-search for most.
+KCI's 2024 Combined Report (p.47) settles this rather than merely corroborating it, because for
+May 2025 it breaks the two halves out separately:
+
+| station | departures | arrivals | total/day |
+|---|---|---|---|
+| Bogor | 1,566,584 | 1,583,171 | 101,605 |
+| Tanah Abang | 1,314,359 | 1,252,660 | 82,807 |
+| Sudirman | — | 1,006,102 | 32,455 (arrivals only) |
+
+Against the anchors: Bogor 99,047 (2.6% apart), Tanah Abang 89,126 (7.1%, and our period spans the
+busier months), Sudirman's arrivals doubled ≈64,910 against 67,543 (3.9%). Bogor's departures alone
+are 50,535/day, within 3% of the Sem I boardings series. Both series are exactly what they looked
+like, and the in-out figures are departures + arrivals.
+
+That breakdown is also why in-out beats departures: Sudirman is among the busiest *destinations*
+but not the busiest *departures*. CBD stations absorb in the morning and shed in the evening, so
+departures-only understates exactly the office-district stations riders search for most.
 
 MRT Jakarta does not state which metric it publishes. Its entries are flagged and may be
 understated by up to 2x — about one 19-point step on the log scale.
@@ -76,6 +87,26 @@ seating ~300, not 12-car KRLs. The annual report puts Basoetta at 2,246,651 for 
 over 64 trips, ~96 a train — so the operator default overstated Duri, Batu Ceper, Rawa Buaya and
 BNI City by roughly 6x on this term. Add an override whenever a line does not run its operator's
 usual stock.
+
+The reports corroborate the service model in several places. The 2024 report plans Basoetta at **64
+trains a day** for 2025 (p.209), exactly the peak our `schedules` table holds; the 2023 report shows
+that line reaching 56/day after the 1 June 2023 GAPEKA change (p.146), so 56 → 64 is a real
+progression and our data is current. The route is confirmed as Manggarai–BNI City–Duri–Rawa
+Buaya–Soekarno-Hatta (2024 p.149), with Rawa Buaya added as a stop during 2024 (p.45).
+
+The strongest check is audited carrying capacity, and it holds across two years:
+
+| | trips/yr | capacity/yr | capacity/trip | capacity/day |
+|---|---|---|---|---|
+| 2023 | 499,068 | 812,154,075 | 1,627 | 2,224,970 |
+| 2024 | 494,577 | 787,077,817 | 1,591 | 2,156,377 |
+
+Our seat-pass model totals **2,107,200/day** for the Jabodetabek lines, against 2,156,377/day
+audited across *all* KCI services including Lokal and Basoetta — within 2.3% while covering
+slightly less, so the KCI constant of 2000 is mildly generous. That is expected and fine: 2000 is a
+12-car Jabodetabek set, while the ~1,600 fleet average is dragged down by shorter Lokal and
+Basoetta stock. A uniform KCI scaling shifts every KCI station together on a log scale and cannot
+reorder them, so the residual is worth about one point and is not worth chasing.
 
 Measured per-line peaks: `B 348, C 320, M 284, CB 216, BK 214, S 204, R 192, T 120, TP 64, A 64`.
 
