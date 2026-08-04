@@ -63,6 +63,19 @@ const CAPACITY: Record<RailOperator, number> = {
 }
 
 /*
+ * Per-line overrides, where a line does not run its operator's usual stock.
+ *
+ * 'A' is the Soekarno-Hatta airport line: a 6-car KA Bandara set seating ~300,
+ * not a 12-car KRL. KCI's 2024 annual report puts the Basoetta line at
+ * 2,246,651 passengers — 6,155 a day over 64 trips, about 96 a train — so the
+ * operator default overstated every airport-line station by roughly 6x on this
+ * term. Duri, Batu Ceper, Rawa Buaya and BNI City all sit on it.
+ */
+const LINE_CAPACITY: Record<string, number> = {
+  A: 300
+}
+
+/*
  * Log-scale anchors for the service term, in seat-passes per day.
  *
  * Fixed, not observed min/max: with min-max every station's score depends on
@@ -270,7 +283,7 @@ function main() {
     const lines = linesByStation.get(id) ?? []
     const capacity = CAPACITY[operator] ?? 0
     const service = lines.length > 0
-      ? lines.reduce((total, lineCode) => total + (peakByLine.get(lineCode) ?? 0) * capacity, 0)
+      ? lines.reduce((total, lineCode) => total + (peakByLine.get(lineCode) ?? 0) * (LINE_CAPACITY[lineCode] ?? capacity), 0)
       : (ownDepartures.get(id) ?? 0) * capacity
     const anchor = RIDERSHIP_BY_STATION_ID.get(id)
 

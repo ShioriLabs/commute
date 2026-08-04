@@ -3,8 +3,8 @@
 `stations.score` (0–100) is how busy a station is. It orders search results, the fare picker's
 idle list and quick-pick chips, and the hub list.
 
-It is **measured** for the 15 stations operators publish figures for, and an **estimate** for
-everything else. Those are different claims and the code keeps them apart on purpose.
+It is **measured** for the 16 stations with published figures, and an **estimate** for everything
+else. Those are different claims and the code keeps them apart on purpose.
 
 ## Why it exists in this form
 
@@ -70,6 +70,12 @@ opinions about stations, and the honest reason a 12-car KRL line outranks a 2-ca
 | MRTJ | 1200 | 6-car Nippon Sharyo |
 | LRTJBDB | 740 | 6-car |
 | LRTJ | 270 | 2-car |
+
+One per-line override, in `LINE_CAPACITY`: line **A** (Soekarno-Hatta) runs 6-car KA Bandara sets
+seating ~300, not 12-car KRLs. The annual report puts Basoetta at 2,246,651 for 2024 — 6,155/day
+over 64 trips, ~96 a train — so the operator default overstated Duri, Batu Ceper, Rawa Buaya and
+BNI City by roughly 6x on this term. Add an override whenever a line does not run its operator's
+usual stock.
 
 Measured per-line peaks: `B 348, C 320, M 284, CB 216, BK 214, S 204, R 192, T 120, TP 64, A 64`.
 
@@ -140,6 +146,14 @@ busiest member station.
 - **The eight plain MRT stations tie at 35.** See "what the estimate cannot do".
 - **Karet scores 46** on three lines. An earlier service-only draft put it at 88 — a minor halt
   outranking Sudirman — which is what the 0.60 service weight and the structure cap now prevent.
+- **BNI City (Sudirman Baru) needed an anchor to come down**, from an estimated 68 to a measured
+  25 — 2,408 a day, about 100 an hour against a 2,000/hour design capacity, or 3.5% of Sudirman's
+  traffic. Not for want of a station: it is the newer and better-appointed of the two. It only
+  began serving Commuter Line in July 2022 and riders still walk to the stations they always used.
+  On the inputs the estimate reads — lineCount, transfers, hub membership — it is identical to
+  Sudirman, so no amount of network data could have found the gap. This is the clearest case in
+  the table of why the two layers stay separate: habit is invisible to structure and shows up only
+  in measurement. **Refresh if Karet closes** and its traffic is redirected here.
 
 ## Runbook
 

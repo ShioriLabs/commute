@@ -11,7 +11,7 @@ UPDATE stations SET score = 77, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-BK
 UPDATE stations SET score = 46, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-BKST';
 UPDATE stations SET score = 30, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-BOI';
 UPDATE stations SET score = 85, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-BOO'; -- measured
-UPDATE stations SET score = 45, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-BPR';
+UPDATE stations SET score = 39, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-BPR';
 UPDATE stations SET score = 46, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-BUA';
 UPDATE stations SET score = 47, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-CBN';
 UPDATE stations SET score = 37, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-CC';
@@ -35,7 +35,7 @@ UPDATE stations SET score = 0, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-DL'
 UPDATE stations SET score = 47, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-DP';
 UPDATE stations SET score = 47, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-DPB';
 UPDATE stations SET score = 47, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-DRN';
-UPDATE stations SET score = 67, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-DU';
+UPDATE stations SET score = 65, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-DU';
 UPDATE stations SET score = 47, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-GDD';
 UPDATE stations SET score = 36, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-GGL';
 UPDATE stations SET score = 46, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-GST';
@@ -87,13 +87,13 @@ UPDATE stations SET score = 0, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-PWS
 UPDATE stations SET score = 46, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-RJW';
 UPDATE stations SET score = 40, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-RK';
 UPDATE stations SET score = 37, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-RU';
-UPDATE stations SET score = 42, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-RW';
+UPDATE stations SET score = 36, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-RW';
 UPDATE stations SET score = 37, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-SDM';
 UPDATE stations SET score = 0, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-SK';
 UPDATE stations SET score = 0, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-SLO';
 UPDATE stations SET score = 37, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-SRP';
 UPDATE stations SET score = 79, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-SUD'; -- measured
-UPDATE stations SET score = 68, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-SUDB';
+UPDATE stations SET score = 25, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-SUDB'; -- measured
 UPDATE stations SET score = 47, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-SW';
 UPDATE stations SET score = 0, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-SWT';
 UPDATE stations SET score = 46, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-TB';

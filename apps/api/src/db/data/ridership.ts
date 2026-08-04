@@ -100,6 +100,26 @@ export const RIDERSHIP_ANCHORS: RidershipAnchor[] = [
     source: KCI_SOURCE
   },
   {
+    // Carries 3.5% of Sudirman's traffic: ~100 riders an hour against a
+    // 2,000/hour design capacity. Karet, 800m away, moves 2,075 in the evening
+    // peak hour ALONE — most of BNI City's day.
+    //
+    // Not because the station is lacking; it is the newer and better-appointed
+    // of the two. It only began serving Commuter Line in July 2022, and riders
+    // still walk to the stations they always used. That is habit, and the score
+    // inputs cannot see it: on lineCount, transfers and hub membership BNI City
+    // reads the same as Sudirman, which is why the estimate had it at 68.
+    // Measurement is the only thing that corrects a behavioural gap.
+    //
+    // Expect it to rise sharply if Karet closes and its traffic is moved here —
+    // refresh this entry when that happens.
+    stationId: 'KCI-SUDB',
+    gatePerDay: 2_408, // 878,751 / 365
+    period: '2025',
+    published: '878.751 orang/tahun atau 2.408 orang/hari (studi MTI)',
+    source: 'https://mti.or.id/penataan-stasiun-karet-untuk-keselamatan-dan-kenyamanan/'
+  },
+  {
     // The station the gate rankings miss, and the reason this table carries two
     // metrics at all. Transit is ~5x its own gate traffic and the largest single
     // figure anywhere here.
