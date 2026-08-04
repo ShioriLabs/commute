@@ -170,3 +170,41 @@ describe('findRoute — endpoint direction restriction (KCI-PSE)', () => {
     expect(findRoute(open, 'KCI-GST', 'KCI-PSE')).not.toBeNull()
   })
 })
+
+/*
+ * Real geometry: TJ Bali Mester -> KCI Jatinegara is 460m door to door, but a
+ * TJ halte (Stasiun Jatinegara) sits between them at 300m + 110m. The chain
+ * looks 50m cheaper only because passing through the halte is free in the
+ * graph, while the rider actually walks its full length.
+ */
+describe('findRoute - walk chains cannot undercut a measured direct walk', () => {
+  const ride = [
+    ...edge('TJ5', 'TJ-ANCOL', 'TJ-BALIMESTER'),
+    ...edge('KCIC', 'KCI-JNG', 'KCI-SUD')
+  ]
+  const chained = [
+    { fromStationId: 'TJ-BALIMESTER', toStationId: 'TJ-STJNG', distance: 300 },
+    { fromStationId: 'TJ-STJNG', toStationId: 'KCI-JNG', distance: 110 },
+    { fromStationId: 'TJ-BALIMESTER', toStationId: 'KCI-JNG', distance: 460 }
+  ]
+
+  it('takes the direct walk rather than hopping through the middle stop', () => {
+    const legs = findRoute(buildGraph(ride, chained), 'TJ-ANCOL', 'KCI-SUD')!
+    const walks = legs.filter(l => l.type === 'TRANSFER')
+    expect(walks).toHaveLength(1)
+    expect(walks[0]).toMatchObject({ fromStationId: 'TJ-BALIMESTER', toStationId: 'KCI-JNG', distanceM: 460 })
+  })
+
+  it('still reports the honest distance for a trip that ends at the middle stop', () => {
+    const legs = findRoute(buildGraph(ride, chained), 'TJ-ANCOL', 'TJ-STJNG')!
+    const walk = legs.find(l => l.type === 'TRANSFER')!
+    expect(walk).toMatchObject({ toStationId: 'TJ-STJNG', distanceM: 300 })
+  })
+
+  it('leaves a chain alone when the two ends have no direct walk between them', () => {
+    const noDirect = chained.slice(0, 2)
+    const legs = findRoute(buildGraph(ride, noDirect), 'TJ-ANCOL', 'KCI-SUD')!
+    const walks = legs.filter(l => l.type === 'TRANSFER')
+    expect(walks.map(w => w.distanceM)).toEqual([300, 110])
+  })
+})

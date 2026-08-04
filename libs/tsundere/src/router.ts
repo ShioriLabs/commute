@@ -58,6 +58,13 @@ export const LINE_CHANGE_PENALTY_M = 1200
 export interface GraphEdge {
   to: string
   distanceM: number
+  /*
+   * What Dijkstra pays to cross this edge, when that differs from the distance
+   * a rider is told. Only walk hops set it, and only where a chain of them
+   * would otherwise undercut a measured direct walk — see buildGraph. Reported
+   * distances always come from `distanceM`, never this.
+   */
+  routingCostM?: number
   lineCode: string | null // null = walk transfer
   noTap?: boolean // walk transfers only: stays inside one paid zone, no fare gate
 }
@@ -120,12 +127,78 @@ export function buildGraph(
   for (const e of edges) {
     push(e.fromStationId, { to: e.toStationId, distanceM: e.distance, lineCode: e.lineCode })
   }
-  for (const t of transfers) {
-    if (!t.toStationId) continue
+  /*
+   * Walk transfers, with chains held to the measured direct figure.
+   *
+   * A direct transfer is measured door to door, so it already contains whatever
+   * lies between the two stations - above all the length of any structure on the
+   * way. A chain of walks does not: passing through an intermediate stop costs
+   * nothing, so Bali Mester -> Stasiun Jatinegara -> Jatinegara priced the walk
+   * at 300 + 110 = 410m, silently dropping the length of the halte the rider
+   * walks end to end, and beat the true 460m door-to-door edge.
+   *
+   * Where a chain undercuts a measured direct edge, its hops are surcharged so
+   * the crossing costs strictly more than the figure someone actually walked.
+   * Only the routing cost moves: each leg still reports its own measured
+   * distance, so a trip that genuinely STARTS or ENDS at the middle station is
+   * still quoted the honest per-hop walk.
+   *
+   * Chains between stations with NO direct edge are untouched - those are real
+   * multi-stop walks, and the chain is the only thing the graph knows.
+   */
+  const walks = transfers.filter(t => t.toStationId)
+  const shortest = new Map<string, Map<string, number>>()
+  const note = (a: string, b: string, d: number) => {
+    if (!shortest.has(a)) shortest.set(a, new Map())
+    const row = shortest.get(a)!
+    const seen = row.get(b)
+    if (seen === undefined || d < seen) row.set(b, d)
+  }
+  for (const t of walks) {
+    note(t.fromStationId, t.toStationId!, t.distance)
+    note(t.toStationId!, t.fromStationId, t.distance)
+  }
+
+  /*
+   * Extra metres a walk hop must carry to stop it forming a shortcut. Keyed by
+   * the hop, in both directions, so either half of an undercutting chain is
+   * enough to push the pair past the direct edge it was beating.
+   */
+  const surcharge = new Map<string, number>()
+  const hopKey = (a: string, b: string) => a + '>' + b
+  for (const [a, row] of shortest) {
+    for (const [mid, first] of row) {
+      for (const [b, second] of shortest.get(mid) ?? []) {
+        if (b === a) continue
+        const direct = shortest.get(a)?.get(b)
+        if (direct === undefined || first + second >= direct) continue
+        /*
+         * Each hop carries the whole shortfall rather than half of it, so the
+         * chain lands strictly above the direct edge instead of level with it.
+         * A tie would leave the outcome to Dijkstra's visit order and the
+         * transfer penalty, which is not something to depend on.
+         */
+        const shortfall = direct - first - second
+        for (const k of [hopKey(a, mid), hopKey(mid, b), hopKey(b, mid), hopKey(mid, a)]) {
+          surcharge.set(k, Math.max(surcharge.get(k) ?? 0, shortfall))
+        }
+      }
+    }
+  }
+
+  for (const t of walks) {
     const noTap = Boolean(t.noTap)
+    const from = t.fromStationId
+    const to = t.toStationId!
+    /*
+     * Only the routing cost moves; the leg still reports its measured distance,
+     * so a rider is never quoted a walk longer than the one they take.
+     */
+    const out = surcharge.get(hopKey(from, to)) ?? 0
+    const back = surcharge.get(hopKey(to, from)) ?? 0
     // rows may exist in one direction only; make walking symmetric
-    push(t.fromStationId, { to: t.toStationId, distanceM: t.distance, lineCode: null, noTap })
-    push(t.toStationId, { to: t.fromStationId, distanceM: t.distance, lineCode: null, noTap })
+    push(from, { to, distanceM: t.distance, routingCostM: t.distance + out, lineCode: null, noTap })
+    push(to, { to: from, distanceM: t.distance, routingCostM: t.distance + back, lineCode: null, noTap })
   }
   const restrictionMap = new Map(restrictions.map(r => [r.stationId, r]))
   return { adjacency, restrictions: restrictionMap }
@@ -189,7 +262,9 @@ export function findRoute(graph: RouteGraph, fromStationId: string, toStationId:
         // overlapping sibling corridors don't fragment a one-seat ride.
         penalty = LINE_CHANGE_PENALTY_M
       }
-      const candidate = best + edge.distanceM + penalty
+      // routingCostM where a walk hop is surcharged to stop it shortcutting a
+      // measured direct walk; the plain distance everywhere else.
+      const candidate = best + (edge.routingCostM ?? edge.distanceM) + penalty
       if (candidate < (dist.get(edge.to) ?? Infinity)) {
         dist.set(edge.to, candidate)
         prev.set(edge.to, { station: current, edge })
