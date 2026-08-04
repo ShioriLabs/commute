@@ -135,14 +135,17 @@ export function MapSkeleton({ doc, phase, strokeMs, spanMs, settleMs, fadeMs, st
     () => orderSkeleton(doc.strokes, FDTJ_ANCHOR_X, FDTJ_ANCHOR_Y, spanMs)
       .map((stroke, index) => {
         const points = parsePath(stroke.d)
-        return {
-          ...stroke,
-          index,
-          minX: Math.min(...points.map(p => p[0])),
-          minY: Math.min(...points.map(p => p[1])),
-          maxX: Math.max(...points.map(p => p[0])),
-          maxY: Math.max(...points.map(p => p[1]))
+        let minX = Infinity
+        let minY = Infinity
+        let maxX = -Infinity
+        let maxY = -Infinity
+        for (const [x, y] of points) {
+          if (x < minX) minX = x
+          if (y < minY) minY = y
+          if (x > maxX) maxX = x
+          if (y > maxY) maxY = y
         }
+        return { ...stroke, index, minX, minY, maxX, maxY }
       }),
     [doc, spanMs]
   )

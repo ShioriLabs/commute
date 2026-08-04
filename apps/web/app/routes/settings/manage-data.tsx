@@ -42,14 +42,14 @@ function DataEntryItem({ title, subtitle, onClearButtonClick, showClearButton = 
 }
 
 async function getSWRCacheSize() {
-  let sizeBytes = 0
   const store = createStore('swr-db', 'cache-store')
   const keys = await getAllKeys(store)
+  const entries = await Promise.all(keys.map(key => get(key, store)))
 
-  for (const key of keys) {
-    const data = await get(key, store)
-    const bytes = new TextEncoder().encode(JSON.stringify(data.data)).length
-    sizeBytes += bytes
+  const encoder = new TextEncoder()
+  let sizeBytes = 0
+  for (const data of entries) {
+    sizeBytes += encoder.encode(JSON.stringify(data.data)).length
   }
 
   return sizeBytes / 1024

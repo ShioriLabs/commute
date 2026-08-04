@@ -444,10 +444,13 @@ async function buildSitemap(env: Env): Promise<string> {
 
   if (base) {
     const operators = await fetchJson<APIOperator[]>(`${base}/operators`) ?? []
-    // Stations per operator + lines from the operator payload, fetched in parallel.
-    const stationLists = await Promise.all(
-      operators.map(op => fetchJson<APIStation[]>(`${base}/stations/${encodeURIComponent(op.code)}`))
-    )
+    // Stations per operator + lines from the operator payload + hubs, fetched in parallel.
+    const [stationLists, hubs] = await Promise.all([
+      Promise.all(
+        operators.map(op => fetchJson<APIStation[]>(`${base}/stations/${encodeURIComponent(op.code)}`))
+      ),
+      fetchJson<{ slug?: string, name?: string }[]>(`${base}/hubs`).then(h => h ?? [])
+    ])
     operators.forEach((op, i) => {
       for (const line of op.lines ?? []) {
         urls.add(`${SITE_ORIGIN}/lines/${op.code}/${line.lineCode}`)
@@ -463,7 +466,6 @@ async function buildSitemap(env: Env): Promise<string> {
       }
     })
 
-    const hubs = await fetchJson<{ slug?: string, name?: string }[]>(`${base}/hubs`) ?? []
     for (const hub of hubs) {
       if (hub.slug) urls.add(`${SITE_ORIGIN}/hubs/${encodeURIComponent(hub.slug)}`)
     }

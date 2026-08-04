@@ -31,6 +31,17 @@ export interface MapGlDebugApi {
     recovery: RecoveryState
     attempts: number
     contextLost: boolean
+    // Tile loads queued, and decoded tiles waiting on an upload slot. Watch
+    // these through a pinch to tune the pacing: a queue that stays deep means
+    // the limits are too tight for the device.
+    queued: number
+    ready: number
+    // Cumulative ms in texImage2D + generateMipmap.
+    uploadMs: number
+    // 95th percentile of the last few seconds of rAF intervals, in ms. The
+    // number a paced upload is supposed to protect: the mean hides a single
+    // 200 ms stall, the p95 does not.
+    frameP95: number
   }
 }
 
@@ -74,6 +85,14 @@ export function MapGlDebugPanel({ api }: PanelProps) {
         <span>{stats.kind ?? '—'}</span>
         <span>{`${stats.count} tiles`}</span>
         <span>{`${stats.megabytes.toFixed(0)} MiB`}</span>
+      </div>
+      <div className="mt-1 flex gap-3 text-slate-400">
+        {/* Amber past ~33 ms: two frames' budget, i.e. a visible hitch. */}
+        <span className={clsx(stats.frameP95 > 33 && 'text-amber-300')}>
+          {`p95 ${stats.frameP95.toFixed(1)}ms`}
+        </span>
+        <span>{`up ${stats.uploadMs.toFixed(0)}ms`}</span>
+        <span>{`q ${stats.queued}/${stats.ready}`}</span>
       </div>
       <div className="mt-1 flex gap-3 text-slate-400">
         <span>{`epoch ${stats.epoch}`}</span>

@@ -154,7 +154,10 @@ export default function SearchContent({ title, closeButton }: Props) {
     if (searchables.length === 0 || deferredQuery.length < 2) return []
     const query = deferredQuery.toLowerCase()
 
-    const scoredStations = searchables.map((searchable) => {
+    // Score first, spread later: only the (few) matches below the threshold get
+    // decorated into new objects — not the whole index on every keystroke.
+    const scoredStations = []
+    for (const searchable of searchables) {
       let score = Infinity
       const keywords = searchable.keywords
       for (const keyword of keywords) {
@@ -166,6 +169,8 @@ export default function SearchContent({ title, closeButton }: Props) {
 
       const popularityFactor = (searchable.score ?? 0) / 100
       const finalScore = score + (1 - popularityFactor)
+      if (finalScore >= SCORE_THRESHOLD) continue
+
       // Sub-unit ranking nudge applied only at sort time (NOT folded into
       // finalScore, so it can't push a borderline result past SCORE_THRESHOLD and
       // hide it). Always < 1, so it only reorders otherwise-close matches — never
@@ -175,15 +180,13 @@ export default function SearchContent({ title, closeButton }: Props) {
       const isTJ = isStation && searchable.operator === 'TJ'
       const sortNudge = (isStation ? 0 : 0.4) + (isTJ ? 0.2 : 0)
 
-      return {
+      scoredStations.push({
         ...searchable,
         score: finalScore,
         matchScore: score,
         sortNudge
-      }
-    }).filter((station) => {
-      return station.score < SCORE_THRESHOLD
-    })
+      })
+    }
 
     // Corrections are a fallback: exact matches hide typo matches, word-typo
     // matches hide window matches.

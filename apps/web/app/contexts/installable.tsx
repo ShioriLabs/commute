@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>
@@ -89,8 +89,13 @@ export function InstallableProvider({ children }: { children: React.ReactNode })
     return outcome === 'accepted'
   }, [deferredPrompt])
 
+  const value = useMemo(
+    () => ({ isInstallable, showIOSInstructions, isStandalone, promptInstall }),
+    [isInstallable, showIOSInstructions, isStandalone, promptInstall]
+  )
+
   return (
-    <InstallContext.Provider value={{ isInstallable, showIOSInstructions, isStandalone, promptInstall }}>
+    <InstallContext.Provider value={value}>
       {children}
     </InstallContext.Provider>
   )
