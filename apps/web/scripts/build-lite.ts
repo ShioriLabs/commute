@@ -42,20 +42,19 @@ const API_BASE_URL = process.env.LITE_API_BASE_URL ?? 'https://api.commute.shior
 /*
  * Branding.
  *
- * PLACEHOLDERS. How the deployment is identified - FDTJ's product, Commute
- * hosted by them, or co-branded - is still open, along with who operates and
- * pays for the API. The wrong guess ships in an install prompt and every link
- * preview, so these want a real answer before the handoff.
- *
- * Keep in step with the branding constants in app/lib/build-mode.ts, which
- * cover the client side of the same question.
+ * Commute's own, deliberately: FDTJ hosts this deployment, they do not rebrand
+ * it. Keep in step with the branding constants in app/lib/build-mode.ts, which
+ * cover the client-rendered half (title, OG tags).
  */
 const LITE_BRANDING = {
   name: 'Commute',
   shortName: 'Commute',
-  // Distinct from id.shiorilabs.commute so an install here is its own app
-  // rather than reading as an update to the full one.
+  // Distinct from id.shiorilabs.commute so an install from FDTJ's origin is its
+  // own app rather than reading as an update to the full one. Two origins would
+  // imply that anyway; the id is what the install prompt actually keys on.
   id: 'id.shiorilabs.commute.lite',
+  // Says what this bundle is rather than what Commute is, since the lite
+  // surface is the map and the fare page, not the whole app.
   description: 'Peta Integrasi Transportasi Jabodetabek'
 }
 

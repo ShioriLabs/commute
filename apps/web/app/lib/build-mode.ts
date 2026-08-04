@@ -27,13 +27,11 @@ export const FULL_APP_ORIGIN = 'https://commute.shiorilabs.id'
 // ---------------------------------------------------------------------------
 // Branding.
 //
-// The lite values are PLACEHOLDERS pending FDTJ's answer on how the deployment
-// is identified — their product, Commute hosted by them, or co-branded. That
-// question is still open along with who operates and pays for the API, and the
-// wrong guess ships in a PWA install prompt and every link preview.
-//
-// scripts/build-lite.ts patches the same names into manifest.json at package
-// time. Keep the two in step: these two blocks are the whole branding surface.
+// The lite deployment keeps Commute's name and identity deliberately: FDTJ
+// hosts it, they do not rebrand it. Only the origin differs, because OG tags
+// have to point at the site actually serving them. If that ever changes to
+// co-branding, this block and LITE_BRANDING in scripts/build-lite.ts (which
+// patches manifest.json) are the whole surface — keep the two in step.
 // ---------------------------------------------------------------------------
 
 /** Origin the lite bundle is served from. Bakes into OG/Twitter meta. */
@@ -41,11 +39,12 @@ export const SITE_ORIGIN = IS_LITE
   ? 'https://maps.transportforjakarta.or.id'
   : 'https://commute.shiorilabs.id'
 
-export const SITE_TITLE = IS_LITE ? 'Commute' : 'Commute'
+// Not branched on IS_LITE: both builds are Commute. Kept as named constants
+// anyway so root.tsx has one place to read identity from, and so a future
+// rebrand is an edit here rather than a hunt through JSX.
+export const SITE_TITLE = 'Commute'
 
-export const SITE_DESCRIPTION = IS_LITE
-  ? 'Aplikasi Jadwal Kereta Buat Anak Jakarta'
-  : 'Aplikasi Jadwal Kereta Buat Anak Jakarta'
+export const SITE_DESCRIPTION = 'Aplikasi Jadwal Kereta Buat Anak Jakarta'
 
 /**
  * The share card. The lite bundle keeps Commute's, since dropping public/img/og/
