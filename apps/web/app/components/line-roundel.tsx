@@ -1,12 +1,8 @@
 import clsx from 'clsx'
 import { getForegroundColor } from 'utils/colors'
+import { splitStationNumber } from 'utils/station-number'
 
-// 'C13' -> { prefix: 'C', num: '13' }; 'b23' -> { prefix: 'b', num: '23' }.
-export function splitStationNumber(stationNumber: string): { prefix: string, num: string } {
-  const match = stationNumber.match(/^([A-Za-z]+)(.*)$/)
-  if (!match || !match[2]) return { prefix: '', num: stationNumber }
-  return { prefix: match[1], num: match[2] }
-}
+export { splitStationNumber } from 'utils/station-number'
 
 // SM is the MD metrics at ~2/3, keeping the ring at ≈13.5% of the diameter.
 const SIZES = {

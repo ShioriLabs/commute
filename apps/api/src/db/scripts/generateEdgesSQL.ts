@@ -40,6 +40,10 @@ function distance(line: LineTopology, a: Stop, b: Stop, coords: Map<string, Coor
 // both directions. Asymmetric corridors (line.pathReverse present) use directed
 // emits so each direction carries its own true stop sequence rather than a mirror.
 function emit(line: LineTopology, a: Stop, b: Stop, coords: Map<string, Coord>, directed = false): void {
+  // Unbuilt stops are on the line for display only — emitting an edge here
+  // would let the router send people over track that isn't open yet (and with
+  // no coordinates the distance would silently come out as 0).
+  if (a.unbuilt || b.unbuilt) return
   const aId = `${line.operator}-${a.station}`
   const bId = `${line.operator}-${b.station}`
   if (!coords.has(aId)) missingCoords.add(aId)

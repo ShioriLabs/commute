@@ -1,5 +1,6 @@
 import type { Operator } from '@commute/constants'
 import { TJ_TOPOLOGY } from './topology.tj'
+import { withStationNumbers } from './topology.tj.numbers'
 import { TJ_TOPOLOGY_OVERRIDES } from './topology.tj.overrides'
 
 /*
@@ -30,6 +31,13 @@ export interface Stop {
   station: string // API station code; DB id = `${operator}-${station}`
   pos: string // official per-line code -> stationLines.stationNumber
   cumM?: number // cumulative METRES from origin (real track distance) where known
+  /*
+   * Announced but not yet open. Such stops belong to the line for display (the
+   * line page draws the full route), but must NOT become part of the graph:
+   * generateEdgesSQL skips any adjacency touching one, so the router can never
+   * route over track that doesn't exist. Drop the flag when service starts.
+   */
+  unbuilt?: boolean
 }
 
 export interface Branch {
@@ -87,11 +95,13 @@ export const ENDPOINT_RESTRICTIONS: { operator: Operator, station: string, lineC
 ]
 
 // TJ poster corrections (topology.tj.overrides.ts) replace the same-lineCode
-// GTFS-derived entries from topology.tj.ts, matched by lineCode.
+// GTFS-derived entries from topology.tj.ts, matched by lineCode. Official halte
+// numbers are stamped on last so they apply to generated and override corridors
+// alike — neither source file carries `pos`.
 const TJ_MERGED: LineTopology[] = (() => {
   const byCode = new Map(TJ_TOPOLOGY.map(t => [t.lineCode, t]))
   for (const o of TJ_TOPOLOGY_OVERRIDES) byCode.set(o.lineCode, o)
-  return [...byCode.values()]
+  return [...byCode.values()].map(withStationNumbers)
 })()
 
 export const TOPOLOGY: LineTopology[] = [
@@ -295,7 +305,16 @@ export const TOPOLOGY: LineTopology[] = [
       { station: 'BVS', pos: 'S03' },
       { station: 'PUM', pos: 'S04' },
       { station: 'EQS', pos: 'S05' },
-      { station: 'VEL', pos: 'S06' }
+      { station: 'VEL', pos: 'S06' },
+      // Phase 1B (Velodrome -> Manggarai), under construction. Seeded with
+      // searchable = 0 (lrtj_phase1b_stations_insert.sql) to stay out of the
+      // pickers; `unbuilt` keeps them out of the graph, since searchable only
+      // hides a station from search and leaves it routable.
+      { station: 'RWM', pos: 'S07', unbuilt: true },
+      { station: 'PKA', pos: 'S08', unbuilt: true },
+      { station: 'KYM', pos: 'S09', unbuilt: true },
+      { station: 'MAT', pos: 'S10', unbuilt: true },
+      { station: 'MGI', pos: 'S11', unbuilt: true }
     ]
   },
 
