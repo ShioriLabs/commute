@@ -1,6 +1,6 @@
 import type { FareResult } from '@commute/schemas'
 import type { StandardResponse } from '@schema/response'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
 import { useSearchables } from '~/hooks/use-searchables'
@@ -112,17 +112,26 @@ export function useFareQuery({
     setCriteriaReady(true)
   }, [])
 
-  const setCriteria = (next: FareCriteria) => {
+  /*
+   * The handlers below are memoized because FarePanel stays mounted (just
+   * hidden) behind the search sheet's mode toggle — so as plain declarations
+   * they handed it a brand-new prop surface on every keystroke typed in STATION
+   * mode, re-rendering a panel nobody was looking at.
+   *
+   * Deps are the values each one actually closes over; the two that only drive
+   * setters are genuinely stable.
+   */
+  const setCriteria = useCallback((next: FareCriteria) => {
     setCriteriaState(next)
     writeFareCriteria(next)
     onStateChange?.(origin?.id ?? null, destination?.id ?? null, next)
-  }
+  }, [onStateChange, origin?.id, destination?.id])
 
-  const openPickerFor = (target: 'origin' | 'destination') => {
+  const openPickerFor = useCallback((target: 'origin' | 'destination') => {
     setPickerTarget(target)
     setPickerOpen(true)
-  }
-  const closePicker = () => setPickerOpen(false)
+  }, [])
+  const closePicker = useCallback(() => setPickerOpen(false), [])
 
   // No filtering left to do here: the index is already Jabodetabek-only and
   // already excludes the topology-only stops (TJ feeder/non-BRT) that would
@@ -192,16 +201,16 @@ export function useFareQuery({
     : null
   const { data: fare, error, isLoading } = useSWR<StandardResponse<FareResult>>(fareUrl, fetcher, swrConfig)
 
-  const handleSwap = () => {
+  const handleSwap = useCallback(() => {
     setOrigin(destination)
     setDestination(origin)
 
     if (origin && destination) {
       onStateChange?.(destination.id, origin.id, criteria)
     }
-  }
+  }, [origin, destination, criteria, onStateChange])
 
-  const handleSelect = (station: PickableStation) => {
+  const handleSelect = useCallback((station: PickableStation) => {
     let newOrigin = origin
     let newDestination = destination
 
@@ -220,7 +229,7 @@ export function useFareQuery({
     if (newOrigin && newDestination) {
       onStateChange?.(newOrigin.id, newDestination.id, criteria)
     }
-  }
+  }, [origin, destination, pickerTarget, criteria, onStateChange])
 
   return {
     origin,

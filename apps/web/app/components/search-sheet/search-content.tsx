@@ -30,7 +30,10 @@ function HighlightedList({ title, items, searchables, className }: { title: stri
     return index
   }, [searchables])
 
-  const cards = items
+  // Memoized alongside `byId`: the idle state is gated on the live query, so
+  // these rails re-render on the keystroke that opens a search, and rebuilding
+  // a card object per item there is work done on the way out.
+  const cards = useMemo(() => items
     .map((item) => {
       // The index already carries the display name (directional suffix stripped),
       // the subtitle, and the lines — everything a card renders.
@@ -47,7 +50,7 @@ function HighlightedList({ title, items, searchables, className }: { title: stri
         operator: searchable.type === 'HUB' ? undefined : searchable.operator
       }
     })
-    .filter(card => card !== null)
+    .filter(card => card !== null), [items, byId])
 
   if (cards.length === 0) {
     return null
@@ -80,11 +83,23 @@ function HighlightedList({ title, items, searchables, className }: { title: stri
 
 const asStations = (ids: string[]): RecentEntry[] => ids.map(id => ({ type: 'STATION', id }))
 
+// Hoisted: these two rails are fixed editorial picks, so building them at module
+// scope keeps their identity stable and lets HighlightedList's memo hold across
+// keystrokes. Inline in JSX they were fresh arrays of fresh objects per render.
+const TRANSIT_STATIONS = asStations(['KCI-MRI', 'KCI-SUD', 'MRTJ-DKA', 'KCI-DU', 'KCI-THB'])
+const JAKSELCORE_STATIONS = asStations(['KCI-TEB', 'MRTJ-BLM', 'MRTJ-IST', 'KCI-SUD', 'MRTJ-DKA'])
+
 // All rail lines as colored chips linking to their line pages, grouped in a
 // single wrap. Fed by the index's LINE entries, which already exclude TJ (its
 // line-detail pages aren't built yet — no topology).
 function LineChipList({ searchables, className }: { searchables: Searchable[], className?: string }) {
-  const lines = searchables.filter(searchable => searchable.type === 'LINE')
+  // Memoized: this scans the whole index, and the idle state it belongs to is
+  // gated on the live query — so without this it re-filtered every entry on the
+  // keystroke that dismisses it.
+  const lines = useMemo(
+    () => searchables.filter(searchable => searchable.type === 'LINE'),
+    [searchables]
+  )
 
   if (lines.length === 0) return null
 
@@ -154,9 +169,22 @@ export default function SearchContent({ title, closeButton }: Props) {
     if (searchables.length === 0 || deferredQuery.length < 2) return []
     const query = deferredQuery.toLowerCase()
 
-    // Score first, spread later: only the (few) matches below the threshold get
-    // decorated into new objects — not the whole index on every keystroke.
-    const scoredStations = []
+    /*
+     * Score first, wrap later: only the (few) matches below the threshold get
+     * an object — not the whole index on every keystroke.
+     *
+     * The searchable is held by reference rather than spread into the wrapper.
+     * Spreading gave every match a fresh identity each keystroke, which meant
+     * SearchableItem's memo() could never bail out and its `dataset` memo
+     * (keyed on `searchable.data`) re-ran for every visible row. The identity
+     * is stable across keystrokes, so now they both hold.
+     */
+    const scoredStations: {
+      searchable: Searchable
+      score: number
+      matchScore: number
+      sortNudge: number
+    }[] = []
     for (const searchable of searchables) {
       let score = Infinity
       const keywords = searchable.keywords
@@ -180,7 +208,7 @@ export default function SearchContent({ title, closeButton }: Props) {
       const sortNudge = (isStation ? 0 : 0.4) + (isTJ ? 0.2 : 0)
 
       scoredStations.push({
-        ...searchable,
+        searchable,
         score: finalScore,
         matchScore: score,
         sortNudge
@@ -190,7 +218,8 @@ export default function SearchContent({ title, closeButton }: Props) {
     // Corrections are a fallback: exact matches hide typo matches, word-typo
     // matches hide window matches.
     return filterBestTier(scoredStations, station => station.matchScore)
-      .sort((a, b) => (a.score + a.sortNudge) - (b.score + b.sortNudge) || a.title.localeCompare(b.title))
+      .sort((a, b) => (a.score + a.sortNudge) - (b.score + b.sortNudge) || a.searchable.title.localeCompare(b.searchable.title))
+      .map(({ searchable }) => searchable)
   }, [deferredQuery, searchables])
 
   useEffect(() => {
@@ -304,8 +333,8 @@ export default function SearchContent({ title, closeButton }: Props) {
                 {savedStations.length > 0
                   ? <HighlightedList title="Stasiun Tersimpan" items={asStations(savedStations)} searchables={searchables} className="mt-2" />
                   : null}
-                <HighlightedList title="Stasiun Transit" items={asStations(['KCI-MRI', 'KCI-SUD', 'MRTJ-DKA', 'KCI-DU', 'KCI-THB'])} searchables={searchables} className="mt-2" />
-                <HighlightedList title="Jakselcore" items={asStations(['KCI-TEB', 'MRTJ-BLM', 'MRTJ-IST', 'KCI-SUD', 'MRTJ-DKA'])} searchables={searchables} className="mt-2" />
+                <HighlightedList title="Stasiun Transit" items={TRANSIT_STATIONS} searchables={searchables} className="mt-2" />
+                <HighlightedList title="Jakselcore" items={JAKSELCORE_STATIONS} searchables={searchables} className="mt-2" />
                 <LineChipList searchables={searchables} className="mt-6 pb-8" />
               </>
             )

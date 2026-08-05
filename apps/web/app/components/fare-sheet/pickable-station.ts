@@ -1,4 +1,5 @@
 import type { Line, OperatorCode, Searchable } from '@commute/schemas'
+import { sortLineKeysForDisplay } from '~/utils/lines'
 
 /*
  * A station as the fare picker needs it, derived from the prebuilt search index.
@@ -21,6 +22,16 @@ export interface PickableStation {
   operator: OperatorCode
   /** Lines serving the stop, already resolved against the index dictionary. */
   lines: Line[]
+  /**
+   * `lines` in display order, sorted once here rather than per row per render.
+   *
+   * The rows that show these are memoized, but any row that enters, leaves or
+   * reorders re-renders — and every row does on the first paint after the
+   * picker's `renderAll` flips. Sorting inside the row's JSX made that a Map
+   * build plus a sort per row; the order depends only on the station, so it
+   * belongs where the station is built (memoized on `searchables`).
+   */
+  sortedLines: Line[]
   /**
    * How busy the station is (0-100), for ordering the no-query list. Measured
    * ridership where operators publish it, estimated from service and network
@@ -74,6 +85,7 @@ export function toPickableStations(items: Searchable[]): PickableStation[] {
       // no cast needed. Only hubs omit it.
       operator: item.operator,
       lines: item.lines,
+      sortedLines: sortLinesForDisplay(item.lines, item.operator, sortLineKeysForDisplay),
       ...(item.score !== undefined ? { score: item.score } : {}),
       ...(siblings.length > 0 ? { siblingIds: siblings } : {}),
       keywords: item.keywords
