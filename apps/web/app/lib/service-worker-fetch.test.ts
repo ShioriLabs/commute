@@ -342,15 +342,34 @@ describe('hashed build assets', () => {
 
 describe('map tiles', () => {
   it('ignores the ?v= build stamp when matching', async () => {
-    await harness.seed('pwa-cache-v4', '/maps/fdtj/tile-0-0@2x.webp', new Response('cached tile'))
+    await harness.seed(harness.names.CACHE_NAME, '/maps/fdtj/tile-0-0@2x.webp', new Response('cached tile'))
 
     const dispatch = harness.dispatchFetch(
-      createRequest('/maps/fdtj/tile-0-0@2x.webp?v=20f1255a', { destination: 'image' })
+      createRequest(`/maps/fdtj/tile-0-0@2x.webp?v=${harness.names.TILE_BUILD}`, { destination: 'image' })
     )
     const response = await expectResponse(dispatch)
 
     expect(await response.text()).toBe('cached tile')
     expect(harness.calls).toHaveLength(0)
+  })
+
+  // A page holding a stale manifest.json stamps its requests with an old build.
+  // The worker must not forward that stamp: its own TILE_BUILD is the one that
+  // named the cache, and an old `?v=` could be answered from the year-long
+  // `immutable` HTTP entry the whole scheme exists to route around.
+  it('re-stamps a request carrying a stale build on a cache miss', async () => {
+    harness.route(/\/maps\/fdtj\//, () => new Response('tile'))
+
+    const dispatch = harness.dispatchFetch(
+      createRequest('/maps/fdtj/tile-1-2@1x.webp?v=0ldbu1ld', { destination: 'image' })
+    )
+    await expectResponse(dispatch)
+    await dispatch.drain()
+
+    expect(harness.calls).toEqual([{
+      url: `${ORIGIN}/maps/fdtj/tile-1-2@1x.webp?v=${harness.names.TILE_BUILD}`,
+      init: { cache: 'reload' }
+    }])
   })
 
   it('routes the tile manifest to the shell cache, not the tile cache', async () => {
@@ -362,7 +381,7 @@ describe('map tiles', () => {
 
     expect(await harness.cached('commute-shell-v1'))
       .toEqual([`${ORIGIN}/maps/fdtj/manifest.json`])
-    expect(await harness.cached('pwa-cache-v4')).toEqual([])
+    expect(await harness.cached(harness.names.CACHE_NAME)).toEqual([])
   })
 })
 
@@ -455,7 +474,48 @@ describe('requests the worker must not touch', () => {
 
   it('ignores same-origin files outside the managed paths', () => {
     expect(harness.dispatchFetch(createRequest('/manifest.json')).respondWithCalled).toBe(false)
-    expect(harness.dispatchFetch(createRequest('/img/og-image.png')).respondWithCalled).toBe(false)
+  })
+
+  it('caches an in-app illustration on first fetch', async () => {
+    harness.route('/img/station.webp', () => new Response('fresh art', { headers: { 'content-type': 'image/webp' } }))
+
+    const dispatch = harness.dispatchFetch(createRequest('/img/station.webp', { destination: 'image' }))
+    const response = await expectResponse(dispatch)
+    await dispatch.drain()
+
+    expect(await response.text()).toBe('fresh art')
+    expect(await harness.cached('commute-assets-v1')).toEqual([`${ORIGIN}/img/station.webp`])
+  })
+
+  it('serves a cached illustration immediately and revalidates behind it', async () => {
+    await harness.seed('commute-assets-v1', '/img/station.webp', new Response('stale art', { headers: { 'content-type': 'image/webp' } }))
+    harness.route('/img/station.webp', () => new Response('fresh art', { headers: { 'content-type': 'image/webp' } }))
+
+    const dispatch = harness.dispatchFetch(createRequest('/img/station.webp', { destination: 'image' }))
+    const response = await expectResponse(dispatch)
+    await dispatch.drain()
+
+    // Stale copy answers the page; the background refresh replaces it — these
+    // URLs aren't content-hashed, so cache-first-forever would pin an edited
+    // image indefinitely.
+    expect(await response.text()).toBe('stale art')
+    expect(harness.calls).toHaveLength(1)
+    const store = await harness.caches.open('commute-assets-v1')
+    const refreshed = await store.match(`${ORIGIN}/img/station.webp`)
+    expect(await refreshed?.text()).toBe('fresh art')
+  })
+
+  it('serves a cached illustration when offline', async () => {
+    await harness.seed('commute-assets-v1', '/img/station.webp', new Response('cached art', { headers: { 'content-type': 'image/webp' } }))
+    harness.route('/img/station.webp', () => {
+      throw new TypeError('Failed to fetch')
+    })
+
+    const dispatch = harness.dispatchFetch(createRequest('/img/station.webp', { destination: 'image' }))
+    const response = await expectResponse(dispatch)
+    await dispatch.drain()
+
+    expect(await response.text()).toBe('cached art')
   })
 
   it('still caches Google Fonts woff2 files', async () => {
@@ -471,13 +531,79 @@ describe('requests the worker must not touch', () => {
 })
 
 describe('lifecycle', () => {
+  // The bug this whole scheme exists to prevent, in one assertion.
+  //
+  // public/_headers serves the tiles `immutable, max-age=31536000`, so the
+  // browser's HTTP disk cache holds them for a year under their *unversioned*
+  // URL. DevTools "Clear site data" wipes CacheStorage and unregisters the
+  // worker but leaves that disk cache intact — so install ran again, refilled
+  // CacheStorage straight out of the year-old disk entries, and cacheFirst's
+  // ignoreSearch then served those bytes to every `?v=` request. The tile
+  // resurrected itself, and only "Empty cache and hard reload" broke the loop.
+  //
+  // The responder below stands in for that disk cache: it yields the stale copy
+  // to anything that could have been answered from it, and fresh bytes only to
+  // a request that defeats it on both axes.
+  it('pre-caches past a warm HTTP disk cache holding stale tiles', async () => {
+    const servedFromDiskCache = (url: string, init?: RequestInit) =>
+      init?.cache !== 'reload' || !url.includes('?v=')
+    harness.route(/\/maps\/fdtj\//, (url, init) =>
+      new Response(servedFromDiskCache(url, init) ? 'STALE' : 'fresh'))
+
+    await harness.dispatchInstall()
+
+    const tiles = await harness.caches.open(harness.names.CACHE_NAME)
+    const cached = await tiles.match('/maps/fdtj/tile-0-0@2x.webp')
+    expect(await cached?.text()).toBe('fresh')
+  })
+
   it('pre-caches the tile set on a fresh install', async () => {
     harness.route(/\/maps\/fdtj\//, () => new Response('tile'))
 
     await harness.dispatchInstall()
 
-    expect(await harness.cached('pwa-cache-v4')).toHaveLength(193)
+    expect(await harness.cached(harness.names.CACHE_NAME)).toHaveLength(193)
     expect(harness.skipWaitingCalls).toBe(1)
+  })
+
+  it('pre-caches versioned URLs with reload, but keys them bare', async () => {
+    harness.route(/\/maps\/fdtj\//, () => new Response('tile'))
+
+    await harness.dispatchInstall()
+
+    const stamped = `?v=${harness.names.TILE_BUILD}`
+    expect(harness.calls.every(call => call.url.endsWith(stamped))).toBe(true)
+    expect(harness.calls.every(call => call.init?.cache === 'reload')).toBe(true)
+    // Bare keys are what makes the ignoreSearch lookup in cacheFirst and the
+    // IMMUTABLE_MAP_ASSETS sweep in activate agree on one entry per asset.
+    const keys = await harness.cached(harness.names.CACHE_NAME)
+    expect(keys.some(key => key.includes('?'))).toBe(false)
+  })
+
+  // Stops anyone "simplifying" precacheTiles into a put-as-you-go loop: a
+  // half-filled cache looks complete to the `missing` diff and never heals,
+  // because install's catch swallows the error and lets the worker activate.
+  it('commits nothing when a single tile fails to fetch', async () => {
+    harness.route(/\/maps\/fdtj\//, () => new Response('tile'))
+    harness.route('/maps/fdtj/tile-4-2@1x.webp', () => new Response('nope', { status: 404 }))
+
+    await harness.dispatchInstall()
+
+    expect(await harness.cached(harness.names.CACHE_NAME)).toEqual([])
+    expect(harness.warnings).toHaveLength(1)
+    expect(harness.skipWaitingCalls).toBe(1)
+  })
+
+  it('fetches only the gap when the tile set is partly cached', async () => {
+    harness.route(/\/maps\/fdtj\//, () => new Response('tile'))
+    await harness.seed(harness.names.CACHE_NAME, '/maps/fdtj/preview.webp', new Response('have'))
+    await harness.seed(harness.names.CACHE_NAME, '/maps/fdtj/tile-0-0@1x.webp', new Response('have'))
+    await harness.seed(harness.names.CACHE_NAME, '/maps/fdtj/tile-7-7@2x.webp', new Response('have'))
+
+    await harness.dispatchInstall()
+
+    expect(harness.calls).toHaveLength(190)
+    expect(await harness.cached(harness.names.CACHE_NAME)).toHaveLength(193)
   })
 
   // The boot watchdog recovers by unregistering the worker, which forces a
@@ -491,21 +617,21 @@ describe('lifecycle', () => {
     await harness.dispatchInstall()
 
     expect(harness.calls).toHaveLength(afterFirstInstall)
-    expect(await harness.cached('pwa-cache-v4')).toHaveLength(193)
+    expect(await harness.cached(harness.names.CACHE_NAME)).toHaveLength(193)
   })
 
   it('prunes the tile cache without evicting the tiles', async () => {
-    await harness.seed('pwa-cache-v4', '/maps/fdtj/preview.webp', new Response('preview'))
-    await harness.seed('pwa-cache-v4', '/maps/fdtj/tile-0-0@2x.webp', new Response('tile'))
-    await harness.seed('pwa-cache-v4', '/maps/fdtj/tile-3-3.svg', new Response('svg'))
+    await harness.seed(harness.names.CACHE_NAME, '/maps/fdtj/preview.webp', new Response('preview'))
+    await harness.seed(harness.names.CACHE_NAME, '/maps/fdtj/tile-0-0@2x.webp', new Response('tile'))
+    await harness.seed(harness.names.CACHE_NAME, '/maps/fdtj/tile-3-3.svg', new Response('svg'))
     // The intruders the old single-cache scheme swept in.
-    await harness.seed('pwa-cache-v4', '/', html('<html>STALE SHELL</html>'))
-    await harness.seed('pwa-cache-v4', '/assets/root-OLDHASH.js', script('old chunk'))
-    await harness.seed('pwa-cache-v4', '/maps/fdtj/manifest.json', json({ build: 'old' }))
+    await harness.seed(harness.names.CACHE_NAME, '/', html('<html>STALE SHELL</html>'))
+    await harness.seed(harness.names.CACHE_NAME, '/assets/root-OLDHASH.js', script('old chunk'))
+    await harness.seed(harness.names.CACHE_NAME, '/maps/fdtj/manifest.json', json({ build: 'old' }))
 
     await harness.dispatchActivate()
 
-    expect(await harness.cached('pwa-cache-v4')).toEqual([
+    expect(await harness.cached(harness.names.CACHE_NAME)).toEqual([
       `${ORIGIN}/maps/fdtj/preview.webp`,
       `${ORIGIN}/maps/fdtj/tile-0-0@2x.webp`,
       `${ORIGIN}/maps/fdtj/tile-3-3.svg`
@@ -514,13 +640,17 @@ describe('lifecycle', () => {
   })
 
   it('deletes caches it does not manage but keeps the ones it does', async () => {
-    await harness.seed('pwa-cache-v3', '/maps/fdtj/preview.webp', new Response('old gen'))
+    // A previous generation of the tile cache: same scheme, superseded build.
+    // This is how a re-tile's predecessor gets collected now that CACHE_NAME
+    // carries the build hash — no hand-written migration, just the sweep.
+    const previousGeneration = 'pwa-cache-v5-deadbeef'
+    await harness.seed(previousGeneration, '/maps/fdtj/preview.webp', new Response('old gen'))
     await harness.seed('commute-shell-v1', '/', html('<html>shell</html>'))
     await harness.seed('commute-assets-v1', '/assets/root-ABC12345.js', script('chunk'))
 
     await harness.dispatchActivate()
 
-    expect(harness.caches.stores.has('pwa-cache-v3')).toBe(false)
+    expect(harness.caches.stores.has(previousGeneration)).toBe(false)
     expect(await harness.cached('commute-shell-v1')).toHaveLength(1)
     expect(await harness.cached('commute-assets-v1')).toHaveLength(1)
   })

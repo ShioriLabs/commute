@@ -1,7 +1,7 @@
 import { XIcon, ArrowSquareOutIcon } from '@phosphor-icons/react'
-import { Link } from 'react-router'
 import { HUB_KIND_LABEL } from '@commute/constants'
 import DetailSurface from './detail-surface'
+import ExitLink from './exit-link'
 import HubContent, { useHubHeader } from './hub-content'
 
 interface HubSheetProps {
@@ -52,13 +52,13 @@ function SheetHeader({ slug, onClose }: { slug: string, onClose: () => void }) {
               </>
             )}
       </div>
-      <Link
+      <ExitLink
         to={`/hubs/${slug}`}
         aria-label="Buka halaman stasiun terintegrasi lengkap"
         className="rounded-full flex items-center justify-center w-9 h-9 text-slate-700 hover:bg-slate-100"
       >
         <ArrowSquareOutIcon weight="bold" className="w-5 h-5" />
-      </Link>
+      </ExitLink>
       <button
         type="button"
         onClick={onClose}

@@ -1,0 +1,121 @@
+# Commute Lite - konfigurasi Apache / LiteSpeed
+#
+# File ini ikut di dalam paket dan harus berada di folder paling atas, sejajar
+# dengan index.html. Jangan diubah kecuali paham isinya - bagian SPA fallback
+# punya urutan yang tidak boleh ditukar.
+#
+# ---------------------------------------------------------------------------
+# EN, for whoever maintains this later:
+#
+# This replaces public/_headers, which is Cloudflare Pages syntax and is inert
+# on Apache/LiteSpeed. The cache policies below are transcribed from it; keep
+# the two in step if either changes.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# MIME types.
+#
+# Shared hosts vary in what they know about. Stating the ones that matter is
+# cheaper than debugging them: a .js served as text/plain is refused as a
+# module, and a .webp served as application/octet-stream downloads instead of
+# painting - which on this site means the map tiles never appear.
+# ---------------------------------------------------------------------------
+<IfModule mod_mime.c>
+  AddType text/javascript   .js .mjs
+  AddType application/json  .json
+  AddType image/webp        .webp
+  AddType image/svg+xml     .svg
+  AddType text/css          .css
+</IfModule>
+
+# ---------------------------------------------------------------------------
+# Compression.
+#
+# Text only. The map tiles are WebP and the icons are PNG - both already
+# compressed, so running deflate over them burns CPU to make them very slightly
+# larger.
+# ---------------------------------------------------------------------------
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/javascript application/javascript application/json image/svg+xml
+</IfModule>
+
+# ---------------------------------------------------------------------------
+# Cache policy.
+#
+# The tile rules say `immutable` for a year. That is only safe because the map
+# renderer requests every tile with `?v=<build hash>`, and that hash changes
+# whenever the tiles are regenerated. If a future version ever drops the stamp,
+# these URLs freeze in every visitor's browser cache for a year and nothing
+# short of "Empty cache and hard reload" clears them. Do not widen these rules.
+#
+# manifest.json is the pointer that reveals the current hash, so it must stay
+# short-lived - stamping or freezing it would be circular.
+#
+# index.html is no-cache because it names the hashed /assets/ files. A stale
+# copy points at files a newer upload no longer has, and the site fails to boot.
+# ---------------------------------------------------------------------------
+<IfModule mod_headers.c>
+  <IfModule mod_setenvif.c>
+    SetEnvIf Request_URI "^/assets/"                  COMMUTE_IMMUTABLE
+    SetEnvIf Request_URI "^/maps/fdtj/tile-"          COMMUTE_IMMUTABLE
+    SetEnvIf Request_URI "^/maps/fdtj/preview\.webp$" COMMUTE_IMMUTABLE
+    SetEnvIf Request_URI "^/maps/fdtj/manifest\.json$" COMMUTE_SHORTLIVED
+    SetEnvIf Request_URI "^/$"                        COMMUTE_NOCACHE
+    SetEnvIf Request_URI "^/index\.html$"             COMMUTE_NOCACHE
+
+    Header set Cache-Control "public, max-age=31536000, immutable" env=COMMUTE_IMMUTABLE
+    Header set Cache-Control "public, max-age=300, must-revalidate" env=COMMUTE_SHORTLIVED
+    Header set Cache-Control "no-cache"                             env=COMMUTE_NOCACHE
+  </IfModule>
+</IfModule>
+
+# ---------------------------------------------------------------------------
+# SPA fallback.
+#
+# This build is a single-page app: only index.html exists as a real page, and
+# the JavaScript router draws everything else. So any path that is not a real
+# file on disk has to serve index.html.
+#
+# The two RewriteCond lines are what stop that from breaking the site. Without
+# them, a request for /assets/app-abc123.js would also be answered with HTML,
+# and nothing would load at all.
+# ---------------------------------------------------------------------------
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  RewriteRule ^ index.html [L]
+</IfModule>
+
+# ---------------------------------------------------------------------------
+# Directory listing off. Without this, opening /maps/fdtj/ lists all 258 tiles.
+#
+# If the site returns "500 Internal Server Error" right after upload, this is
+# the most likely line: some shared hosts do not allow it. Delete just this
+# line, keep the rest.
+# ---------------------------------------------------------------------------
+Options -Indexes
+
+# ---------------------------------------------------------------------------
+# Keep this file from being served.
+#
+# Most hosts already block .ht* globally, but not all do, and the SPA rewrite
+# above deliberately serves anything that is not a real file - so a host without
+# the usual rule would hand this file's contents to whoever asks for it. It is
+# not a secret, but it does describe the site's layout, and there is no reason
+# to publish it.
+# ---------------------------------------------------------------------------
+<Files ".ht*">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    # Apache 2.2 fallback, for hosts still on the old authz directives.
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</Files>

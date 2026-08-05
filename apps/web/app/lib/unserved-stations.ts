@@ -11,7 +11,7 @@ export const UNSERVED_STATIONS: Record<string, UnservedStation> = {
   'KCI-GMR': {
     formattedName: 'Gambir',
     title: 'Belum Melayani Commuter Line',
-    message: 'Stasiun Gambir saat ini hanya melayani kereta api antarkota dan belum melayani KRL Commuter Line. Stasiun Commuter Line terdekat adalah Gondangdia dan Juanda.'
+    message: 'Stasiun Gambir saat ini hanya melayani kereta api antarkota dan belum melayani KRL Commuter Line. Stasiun Commuter Line terdekat adalah Gondangdia dan Juanda'
   }
 }
 

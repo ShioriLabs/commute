@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filterBestTier, keywordScore, SCORE_THRESHOLD, substringEditDistance } from './fuzzy-match'
+import { filterBestTier, keywordScore, popularityTerm, SCORE_THRESHOLD, substringEditDistance } from './fuzzy-match'
 
 // Brute-force reference: minimum plain levenshtein between the needle and
 // every substring of the haystack. The production Sellers DP must agree.
@@ -131,6 +131,16 @@ describe('keywordScore', () => {
     // survive the filter; min window tier must.
     expect(SCORE_THRESHOLD).toBe(5)
     expect(keywordScore('dukuh atas bni', 'atas bnj')).toBeLessThan(SCORE_THRESHOLD)
+  })
+
+  it('bounds the popularity term to [0, 1]', () => {
+    // The tier gap is only >= the popularity span while this holds, so an
+    // out-of-range score from the index must not widen it.
+    expect(popularityTerm(undefined)).toBe(0)
+    expect(popularityTerm(0)).toBe(0)
+    expect(popularityTerm(100)).toBe(1)
+    expect(popularityTerm(1000)).toBe(1)
+    expect(popularityTerm(-50)).toBe(0)
   })
 
   it('keeps 1-2 char keywords substring-only (line codes)', () => {

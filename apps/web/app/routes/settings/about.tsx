@@ -55,7 +55,7 @@ export default function AboutSettingsPage() {
         <img src={CommuteLogotype} className="h-12" alt="Commute" />
         <h2 className="text-lg mt-4 font-bold text-[#F55875]">Aplikasi Jadwal Kereta Buat Anak Jakarta</h2>
         <p className="mt-4">
-          Aplikasi Jadwal Kereta yang dibikin biar kita gak perlu buka 4 aplikasi cuma buat cek kereta berikutnya.<br />
+          Aplikasi Jadwal Kereta yang dibikin biar kita gak perlu buka 4 aplikasi cuma buat cek kereta berikutnya<br />
           Mudah, cepat, gratis, dan bisa offline (kalau udah di-save stasiunnya tapi)
         </p><br />
         <p>Dibuat dengan perasaan cinta, layaknya dapet kursi kosong di <i>rush hour</i> Sudirman, oleh <b className="text-[#F55875]">Shiori Labs</b></p><br />
@@ -82,7 +82,7 @@ export default function AboutSettingsPage() {
           )}
           {isUnlocked && (
             <span className="block mt-2 text-slate-400">
-              Peta integrasi aktif.{' '}
+              Peta integrasi aktif{' '}
               <button type="button" onClick={handleHideButtonClick} className="underline cursor-pointer">
                 Sembunyikan
               </button>

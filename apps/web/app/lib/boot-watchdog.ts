@@ -32,9 +32,11 @@
 // common event could disarm the rarer, more serious one.
 export const BOOT_RECOVERY_STORAGE_KEY = 'commute:boot-watchdog-recovery'
 
-// Caches the watchdog may clear. pwa-cache-v4 is deliberately absent: it holds
-// the ~9 MB map tile set, and a recovery that re-downloaded that would be worse
-// than the failure it is recovering from.
+// Caches the watchdog may clear. The tile cache (`pwa-cache-v5-<build>`, named
+// after the hash build-map-tiles.ts stamps into the worker) is deliberately
+// absent: it holds the 8.6 MiB raster set, and a recovery that re-downloaded
+// that would be worse than the failure it is recovering from. An allowlist
+// rather than a denylist, so a rotated tile cache name can never fall into it.
 export const RECOVERABLE_CACHES = ['commute-shell-v1', 'commute-assets-v1']
 
 // How long hydration gets before the watchdog assumes it is not coming. Only
@@ -54,9 +56,9 @@ export const BOOT_FALLBACK_RETRY_ID = 'boot-fallback-retry'
 
 // Indonesian, matching the app's register ("Memuat...", the offline banners).
 export const BOOT_FALLBACK_COPY = {
-  slow: 'Lama banget ya? Coba muat ulang.',
-  offline: 'Kamu lagi offline dan datanya belum tersimpan. Sambungin internet dulu, ya.',
-  failed: 'Gagal memuat aplikasi. Coba muat ulang.'
+  slow: 'Lama banget ya? Coba muat ulang',
+  offline: 'Kamu lagi offline dan datanya belum tersimpan. Sambungin internet dulu, ya',
+  failed: 'Gagal memuat aplikasi. Coba muat ulang'
 }
 
 export const BOOT_WATCHDOG_SOURCE = `

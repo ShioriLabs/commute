@@ -4,7 +4,7 @@ import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useSta
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react'
 import { CheckCircleIcon, MagnifyingGlassIcon, XIcon } from '@phosphor-icons/react'
 import { haptic } from 'utils/haptics'
-import { filterBestTier, keywordScore, SCORE_THRESHOLD } from 'utils/fuzzy-match'
+import { filterBestTier, keywordScore, popularityTerm, SCORE_THRESHOLD } from 'utils/fuzzy-match'
 import { LIST_STAGGER, LIST_STAGGER_MAX_INDEX, staggerDelay } from 'utils/stagger'
 import HighlightMatch from '~/components/highlight-match'
 import LineRoundel from '~/components/line-roundel'
@@ -152,7 +152,7 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
     const scored = stations
       .map((station) => {
         const matchScore = getStationScore(station, query)
-        return { station, matchScore, finalScore: matchScore + (1 - (station.score ?? 0) / 100) }
+        return { station, matchScore, finalScore: matchScore + (1 - popularityTerm(station.score)) }
       })
       .filter(({ finalScore }) => finalScore < SCORE_THRESHOLD)
     // Corrections are a fallback: exact matches hide typo matches, word-typo

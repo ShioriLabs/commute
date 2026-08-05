@@ -46,7 +46,7 @@ export const StationSchema = v.pipe(
     ),
     score: v.pipe(
       v.number(),
-      v.description('Seberapa ramai stasiunnya, dipakai buat mengurutkan hasil pencarian. Makin tinggi makin ramai.')
+      v.description('Seberapa ramai stasiunnya (0-100), dipakai buat mengurutkan hasil pencarian. Makin tinggi makin ramai. Buat stasiun yang datanya dirilis operator, angkanya dihitung dari jumlah penumpang beneran (gate in-out plus penumpang transit). Sisanya perkiraan dari frekuensi kereta dan bentuk jaringan, bukan hasil pengukuran. TransJakarta belum dihitung, jadi masih 0.')
     ),
     searchable: v.pipe(
       v.boolean(),

@@ -109,6 +109,17 @@ export function ringOffsetWorld(ringProgress: number): number {
 export interface TileStats {
   count: number
   bytes: number
+  // Tile loads queued but not yet started, and decoded bitmaps waiting for an
+  // upload slot. These are what MAX_CONCURRENT_TILE_LOADS and
+  // MAX_UPLOADS_PER_FRAME are tuned against: a queue that stays deep through a
+  // pinch means the pacing is too tight for the device, one that never fills
+  // means it isn't binding. Absent on the 2D renderer, which has no queue.
+  queued?: number
+  ready?: number
+  // Cumulative wall time spent in texImage2D + generateMipmap, in ms. The one
+  // main-thread cost the pacing exists to spread out, and the number that
+  // settles whether RGB565's halved residency is worth its upload conversion.
+  uploadMs?: number
 }
 
 // Escape hatch for forcing context loss on demand. Only the WebGL renderer has
@@ -231,6 +242,10 @@ export interface CreateRendererOptions {
   // taken away must not be handed the 2D renderer, which keeps the same tiles
   // as ImageBitmaps and would trade a GPU-memory problem for a CPU-memory one.
   allowCanvas2DFallback?: boolean
+  // Absolute cap on resident tile bytes for this device. The per-frame budget
+  // is derived from the visible working set and clamped to this; see
+  // tileBudgetBytes and the PHONE/DESKTOP ceilings below.
+  tileBudgetCeilingBytes?: number
 }
 
 export function createRenderer(
@@ -241,12 +256,30 @@ export function createRenderer(
   opts: CreateRendererOptions = {}
 ): Renderer {
   try {
-    return createWebGLRenderer(canvas, manifest, baseUrl, onDirty)
+    return createWebGLRenderer(canvas, manifest, baseUrl, onDirty, opts.tileBudgetCeilingBytes)
   } catch (e) {
     if (opts.allowCanvas2DFallback === false) throw e
     console.warn('WebGL2 unavailable, falling back to 2D canvas', e)
     return createCanvas2DRenderer(canvas, manifest, baseUrl, onDirty)
   }
+}
+
+// Ceiling on the device pixel ratio the map is rendered at.
+//
+// A 3x phone draws 2.25x the fragments of a 2x one for detail that the artwork
+// — flat fills and text, already antialiased into the tiles — does not carry.
+// The clamp also feeds pickTier, whose target is scale * dpr: at dpr 2 the band
+// scale 0.333-0.5 resolves to tier 1 instead of tier 2, which is a 4x drop in
+// per-tile memory (10.7 MB -> 2.67 MB) across a slice of the zoom range the map
+// actually sits in.
+//
+// Callers must clamp consistently: resize() sets the canvas backing size while
+// draw() computes gl.viewport() independently, and the two have to agree.
+export const MAX_RENDER_DPR = 2
+
+export function renderDpr(raw: number | undefined): number {
+  const dpr = typeof raw === 'number' && raw > 0 && Number.isFinite(raw) ? raw : 1
+  return Math.min(MAX_RENDER_DPR, dpr)
 }
 
 export function pickTier(scale: number, dpr: number, currentTier: Tier, maxTier: Tier = MAX_TIER): Tier {
@@ -266,3 +299,54 @@ export function pickTier(scale: number, dpr: number, currentTier: Tier, maxTier:
 export function tileKey(r: number, c: number): string {
   return `${r}-${c}`
 }
+
+// How much pan-back history to keep beyond what is currently on screen. One
+// extra screen: enough that reversing a pan is instant, far short of caching
+// the whole grid (which at tier 2 on an 8x8 map is ~683 MB and is what got a
+// context killed).
+const BUDGET_HEADROOM = 2
+
+export interface TileBudgetArgs {
+  // Tiles in the current frame's visible span.
+  visibleTiles: number
+  // GPU bytes one tile costs at the current tier, mipmaps included.
+  tileBytes: number
+  // Absolute cap for this device, from the caller's device policy.
+  ceilingBytes: number
+  // navigator.deviceMemory, in GB, where the browser reports it.
+  deviceMemoryGb?: number
+}
+
+// Resident-tile budget for the current frame.
+//
+// This replaced a flat constant whose justification described a 4x4 grid that
+// no longer exists. Deriving it from the visible set matters because eviction
+// refuses to drop on-screen tiles: a budget below the working set isn't a
+// tighter policy, it's a sweep that runs, finds nothing droppable and overshoots
+// silently. The floor makes the number agree with that invariant instead.
+export function tileBudgetBytes(args: TileBudgetArgs): number {
+  const workingSet = Math.max(0, args.visibleTiles) * Math.max(0, args.tileBytes)
+  let ceiling = args.ceilingBytes
+  // deviceMemory may only tighten. It is a weak signal — absent on iOS, capped
+  // at 8, quantised to a handful of values — so letting it *raise* the ceiling
+  // would be inventing headroom from a number that cannot support it.
+  if ((args.deviceMemoryGb ?? Infinity) <= 4) {
+    ceiling = Math.min(ceiling, LOW_MEMORY_CEILING_BYTES)
+  }
+  return Math.max(workingSet, Math.min(ceiling, workingSet * BUDGET_HEADROOM))
+}
+
+const MB = 1024 * 1024
+
+// Device ceilings, chosen against what each class can actually have on screen.
+//
+// A phone caps at tier 2, where the post-DPR-clamp worst case is ~6 visible
+// tiles at 10.7 MB — ~64 MB — so 128 MB is one to two screens of history.
+//
+// Desktop reaches tier 4, which is not pre-rasterized: those tiles come from
+// the runtime SVG path, keep their transparent background and so upload as
+// RGBA at ~85 MB each. Four of them visible is ~341 MB, which the old flat
+// 192 MB silently overshot rather than enforced.
+export const PHONE_TILE_BUDGET_CEILING_BYTES = 128 * MB
+export const DESKTOP_TILE_BUDGET_CEILING_BYTES = 640 * MB
+export const LOW_MEMORY_CEILING_BYTES = 128 * MB

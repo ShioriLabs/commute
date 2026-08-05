@@ -239,7 +239,10 @@ describe('boot watchdog', () => {
     harness.fireRejection()
     await harness.settle()
 
-    expect(harness.deletedCaches).not.toContain('pwa-cache-v4')
+    // Matched by prefix rather than by exact name: the tile cache is now
+    // `pwa-cache-v5-<build>` and rotates on every re-tile, so pinning one
+    // literal here would quietly go vacuous the first time the tiles changed.
+    expect(harness.deletedCaches.some(name => name.startsWith('pwa-cache'))).toBe(false)
   })
 
   it('recovers on a failed asset script element', async () => {

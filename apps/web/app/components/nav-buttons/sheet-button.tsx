@@ -118,10 +118,11 @@ export default function SheetButton({ url, ariaLabel, title, subtitle, icon, cla
   //
   // Measuring the panel itself is the whole point. Deriving its box from
   // window.innerWidth/innerHeight and assuming an origin of (0, 0) instead, as
-  // this used to, is wrong twice over: the panel is sized in vh, which tracks
-  // the *large* viewport, while innerHeight tracks the current visual one, so
-  // the two diverge for as long as the URL bar is showing; and `mt-auto` then
-  // pushes the panel down by whatever is left over.
+  // this used to, assumes a geometry nobody guarantees: `mt-auto` pushes the
+  // panel down by whatever space is left over, and the panel's own height is a
+  // CSS unit that can be retuned (it was 100vh, which tracks the *large*
+  // viewport and so diverged from innerHeight for as long as the URL bar was
+  // showing; it is dvh now). Measuring stays correct across all of that.
   //
   // Written straight to the element rather than through state: the custom
   // properties have to be in place before the closed state's first paint, and
@@ -351,7 +352,13 @@ export default function SheetButton({ url, ariaLabel, title, subtitle, icon, cla
             style={{ '--panel-ms': `${PANEL_MS}ms` } as CSSProperties}
             onTransitionEnd={handlePanelTransitionEnd}
             className={clsx(
-              'overflow-hidden relative w-screen h-screen mt-auto transform-gpu ease-out rounded-none origin-top-left',
+              // h-dvh, not h-screen: 100vh is the large viewport, so the bottom
+              // of a `h-full` scroller inside this panel (search-content,
+              // settings-sheet) sat under a bottom browser toolbar and could
+              // not be scrolled into view. Safe for the morph because it
+              // measures the panel's real box rather than assuming one — see
+              // applyMorph above.
+              'overflow-hidden relative w-screen h-dvh mt-auto transform-gpu ease-out rounded-none origin-top-left',
               // Named rather than transition-all: these three are the only
               // properties that ever animate here, and narrowing it keeps the
               // transitionend filter above unambiguous.
@@ -380,7 +387,7 @@ export default function SheetButton({ url, ariaLabel, title, subtitle, icon, cla
                   // the accent face be pink on the way out and white on the way in
                   // (see below) — with transition-all the colour would crossfade
                   // instead, which is the pink wash all over again.
-                  'block w-screen h-screen absolute top-0 opacity-0 pointer-events-none data-closed:opacity-100 transition-opacity duration-[var(--mask-ms)] data-enter:delay-50 data-enter:duration-100 data-leave:ease-[cubic-bezier(0,0.95,0.2,1)]',
+                  'block w-screen h-dvh absolute top-0 opacity-0 pointer-events-none data-closed:opacity-100 transition-opacity duration-[var(--mask-ms)] data-enter:delay-50 data-enter:duration-100 data-leave:ease-[cubic-bezier(0,0.95,0.2,1)]',
                   // The mask covers the panel for the whole morph, so it is
                   // exactly as large as the panel — up to the full viewport. That
                   // is fine while it is white (a white mask over a white sheet is

@@ -134,4 +134,6 @@ with `wrangler pages dev build/client`, load the app, rewrite
 `build/client/version.json` to a different value, dispatch a `visibilitychange`,
 and assert the banner appears and that tapping it loads the new build. Confirm
 in the same run that `/version.json` responds `no-store` and never appears in
-`caches.open('pwa-cache-v3')`.
+the tile cache — `caches.keys()` will show it as `pwa-cache-v5-<build>`, named
+after the hash `build:map-tiles` stamps into the worker, so don't hardcode the
+name when checking.

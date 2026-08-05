@@ -1,4 +1,3 @@
-import type { Line } from '@commute/schemas'
 import type { Searchable } from '@commute/schemas'
 import { memo, useMemo, type MouseEvent } from 'react'
 import { Link } from 'react-router'
@@ -8,6 +7,8 @@ import HighlightMatch from '~/components/highlight-match'
 import LineRoundel from '~/components/line-roundel'
 
 interface Props {
+  // The resolved union: useSearchables swaps each entry's line keys for the
+  // lines themselves before anything renders.
   searchable: Searchable
   onClick?: (e: MouseEvent<HTMLAnchorElement>) => void
   // Query text to highlight inside the title (substring hits only; pure-fuzzy
@@ -27,6 +28,11 @@ export default memo(function SearchableItem({ searchable, onClick, query, index 
       Object.entries(searchable.data).map(([key, value]) => [`data-${key}`, value.toString()])
     )
   }, [searchable.data])
+
+  // Narrowing proves the shape: a LINE carries exactly one line, a station or
+  // hub carries a list. Neither can be read as the other.
+  const lineBody = searchable.type === 'LINE' ? searchable.line : undefined
+  const lines = searchable.type === 'LINE' ? [] : searchable.lines
 
   // Unlike the fare picker, every row animates — this list is short enough that
   // rows past the cap sharing the maximum delay reads fine.
@@ -50,26 +56,27 @@ export default memo(function SearchableItem({ searchable, onClick, query, index 
               )
             : null}
         </b>
-        { (searchable.type === 'STATION' || searchable.type === 'HUB') && (searchable as Searchable<Line[]>).body?.length
+        { lines.length > 0
           ? (
               <ul className="flex flex-row gap-1 flex-wrap">
-                {(searchable as Searchable<Line[]>).body!.map(line => (
+                {lines.map(line => (
                   <li key={line.lineCode}>
-                    {/* Drives TJ roundel style. Absent on hubs, which span operators. */}
-                    <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={searchable.operator} />
+                    {/* Drives TJ roundel style. Read off the line itself, not
+                        the entry: a hub spans operators and carries none. */}
+                    <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={line.operator} />
                     <span className="sr-only">{line.name}</span>
                   </li>
                 ))}
               </ul>
             )
           : null}
-        { searchable.type === 'LINE' && (searchable as Searchable<Line>).body
+        { lineBody
           ? (
               <span
-                className={`w-fit text-sm font-semibold px-3 py-1 rounded-full ${getForegroundColor((searchable as Searchable<Line>).body!.colorCode) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`}
-                style={{ backgroundColor: (searchable as Searchable<Line>).body!.colorCode }}
+                className={`w-fit text-sm font-semibold px-3 py-1 rounded-full ${getForegroundColor(lineBody.colorCode) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`}
+                style={{ backgroundColor: lineBody.colorCode }}
               >
-                {(searchable as Searchable<Line>).body!.name.replace(/^Lin /, '')}
+                {lineBody.name.replace(/^Lin /, '')}
               </span>
             )
           : null}

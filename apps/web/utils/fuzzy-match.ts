@@ -1,3 +1,5 @@
+import { STATION_SCORE_MAX } from '@commute/constants'
+
 // Fuzzy keyword matching for the search surfaces (search sheet, fare picker).
 //
 // Approximate-substring matching (Sellers): the edit distance between the
@@ -17,6 +19,17 @@
 // match can't overtake an unpopular station's word match. Surfaces filter at
 // this threshold: max reachable score is 4 + popularity term < 5.
 export const SCORE_THRESHOLD = 5
+
+/**
+ * A station's popularity as a term in [0, 1], for the ranking above.
+ *
+ * Clamped, not just divided: the tier gap only holds while this stays bounded,
+ * so a score that arrives out of range from the index must not be able to
+ * reorder match tiers on the client.
+ */
+export function popularityTerm(score?: number): number {
+  return Math.min(1, Math.max(0, (score ?? 0) / STATION_SCORE_MAX))
+}
 
 // Fuzz budget by query length: short queries are within 1-2 edits of nearly
 // any window, so they stay exact-substring-only; longer queries carry enough

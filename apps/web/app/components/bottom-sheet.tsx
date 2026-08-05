@@ -141,23 +141,40 @@ export default function BottomSheet({ open, onClose, onDismissStart, ariaLabel, 
     onCloseRef.current = onClose
   }, [onClose])
 
-  // Animate height toward targetPx using rAF + exponential lerp. The loop is
-  // paused while the user is actively dragging so it doesn't fight the finger.
+  // Re-arms the lerp loop after it parks. Set by the rAF effect below; called
+  // from gesture release and wheel input, which move the sheet *without*
+  // changing `targetPx`/`snap` (a snap change re-runs the effect instead).
+  const lerpWakeRef = useRef<() => void>(() => {})
+
+  // Animate height toward targetPx using rAF + exponential lerp. The loop
+  // parks (stops rescheduling) while a pointer gesture owns the height and
+  // once the sheet has settled at its target, instead of spinning at 60fps
+  // for the whole time the sheet is open; every path that moves the sheet
+  // outside this loop wakes it again via lerpWakeRef.
   useEffect(() => {
     if (viewportH === 0) return
     let raf = 0
+    let scheduled = false
     let last = performance.now()
     const TAU = 80
+    const schedule = () => {
+      if (scheduled) return
+      scheduled = true
+      // Fresh clock on a wake from parked: the gap was rest, not a stall.
+      last = performance.now()
+      raf = requestAnimationFrame(tick)
+    }
     const tick = (now: number) => {
+      scheduled = false
       const dt = Math.min(64, now - last)
       last = now
       if (dragStartRef.current || scrollDragRef.current) {
         // Pointer gesture in progress (dragging the sheet OR passthrough-
-        // scrolling the body). The finger owns the height/scroll. Idle until
-        // release — and also after a sheet→scroll handoff, so the rAF closure
-        // (captured with the *old* targetPx) doesn't lerp the just-handed-off
-        // sheet back toward the pre-handoff snap before the effect re-runs.
-        raf = requestAnimationFrame(tick)
+        // scrolling the body). The finger owns the height/scroll. Park until
+        // release (handlePointerUp wakes the loop) — parking rather than
+        // idling also means the rAF closure (captured with the *old*
+        // targetPx) can't lerp a just-handed-off sheet back toward the
+        // pre-handoff snap before the effect re-runs.
         return
       }
       const current = heightRef.current
@@ -177,16 +194,20 @@ export default function BottomSheet({ open, onClose, onDismissStart, ariaLabel, 
           }
           return
         }
-        raf = requestAnimationFrame(tick)
+        // Settled at an open snap — park until something moves the sheet.
         return
       }
       const alpha = 1 - Math.exp(-dt / TAU)
       const next = current + delta * alpha
       applyHeight(next)
-      raf = requestAnimationFrame(tick)
+      schedule()
     }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
+    lerpWakeRef.current = schedule
+    schedule()
+    return () => {
+      lerpWakeRef.current = () => {}
+      cancelAnimationFrame(raf)
+    }
   }, [targetPx, snap, viewportH])
 
   // Track whether the current pointer interaction has committed to dragging
@@ -383,6 +404,10 @@ export default function BottomSheet({ open, onClose, onDismissStart, ariaLabel, 
     const wasScrolling = scrollDragRef.current !== null
     scrollDragRef.current = null
     const start = dragStartRef.current
+    // The gesture parked the lerp; re-arm it. The rAF fires after this handler
+    // finishes, so it sees the cleared drag refs (and the snap set below) and
+    // eases the sheet home even when the snap didn't change.
+    lerpWakeRef.current()
 
     // Release velocity (CSS px/ms); positive = finger moving down. Require >1
     // frame of movement so sub-pixel jitter on the final sample can't
@@ -446,6 +471,9 @@ export default function BottomSheet({ open, onClose, onDismissStart, ariaLabel, 
           if (heightRef.current >= fullPx - 0.5) setSnap('full')
           const remainder = dy - grow
           if (remainder > 0) body.scrollTop += remainder
+          // Wheel moved the sheet without a snap change — wake the (possibly
+          // parked) lerp so it keeps easing toward the committed snap.
+          lerpWakeRef.current()
         }
       } else if (dy < 0) {
         if (body.scrollTop > 0) return
@@ -455,6 +483,7 @@ export default function BottomSheet({ open, onClose, onDismissStart, ariaLabel, 
           const shrink = Math.min(-dy, shrinkable)
           applyHeight(heightRef.current - shrink)
           if (heightRef.current <= peekPx + 0.5) setSnap('peek')
+          lerpWakeRef.current()
         }
       }
     }

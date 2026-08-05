@@ -1,10 +1,9 @@
 import type { ReactNode } from 'react'
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
-import type { Line } from '@commute/schemas'
 import { getForegroundColor, getTintFromColor } from 'utils/colors'
 import LineRoundel from '~/components/line-roundel'
-import { filterBestTier, keywordScore, SCORE_THRESHOLD } from 'utils/fuzzy-match'
+import { filterBestTier, keywordScore, popularityTerm, SCORE_THRESHOLD } from 'utils/fuzzy-match'
 import type { Searchable } from '@commute/schemas'
 import { useSearchables } from '~/hooks/use-searchables'
 import { CaretRightIcon } from '@phosphor-icons/react'
@@ -20,10 +19,10 @@ import SearchModeToggle from './mode-toggle'
 // Horizontal card rail for the idle state. Resolves mixed station/hub entries
 // against the prebuilt index (already fetched by the parent, so SWR serves this
 // from cache), preserving the given order.
-function HighlightedList({ title, items, searchables, className }: { title: string, items: RecentEntry[], searchables: Searchable<Line[]>[], className?: string }) {
+function HighlightedList({ title, items, searchables, className }: { title: string, items: RecentEntry[], searchables: Searchable[], className?: string }) {
   // Ids live in `data` — 'station-id' or 'hub-id', matching RecentEntry.type.
   const byId = useMemo(() => {
-    const index = new Map<string, Searchable<Line[]>>()
+    const index = new Map<string, Searchable>()
     for (const searchable of searchables) {
       const id = searchable.data?.['station-id'] ?? searchable.data?.['hub-id']
       if (id) index.set(`${searchable.type}:${id}`, searchable)
@@ -42,8 +41,10 @@ function HighlightedList({ title, items, searchables, className }: { title: stri
         to: searchable.to,
         name: searchable.title,
         subtitle: searchable.subtitle,
-        line: searchable.body?.[0],
-        operator: searchable.operator
+        // Keyed by station-id/hub-id, so these are never LINE entries; the
+        // card shows the first line serving the stop.
+        line: searchable.type === 'LINE' ? searchable.line : searchable.lines[0],
+        operator: searchable.type === 'HUB' ? undefined : searchable.operator
       }
     })
     .filter(card => card !== null)
@@ -82,7 +83,7 @@ const asStations = (ids: string[]): RecentEntry[] => ids.map(id => ({ type: 'STA
 // All rail lines as colored chips linking to their line pages, grouped in a
 // single wrap. Fed by the index's LINE entries, which already exclude TJ (its
 // line-detail pages aren't built yet — no topology).
-function LineChipList({ searchables, className }: { searchables: Searchable<Line[]>[], className?: string }) {
+function LineChipList({ searchables, className }: { searchables: Searchable[], className?: string }) {
   const lines = searchables.filter(searchable => searchable.type === 'LINE')
 
   if (lines.length === 0) return null
@@ -92,8 +93,7 @@ function LineChipList({ searchables, className }: { searchables: Searchable<Line
       <h1 className="text-xl font-bold mx-8">Lin</h1>
       <ul className="mt-2 flex flex-row flex-wrap gap-2 px-8">
         {lines.map((searchable) => {
-          const line = searchable.body?.[0]
-          if (!line) return null
+          const line = searchable.line
           return (
             <li key={searchable.to}>
               <Link
@@ -154,7 +154,10 @@ export default function SearchContent({ title, closeButton }: Props) {
     if (searchables.length === 0 || deferredQuery.length < 2) return []
     const query = deferredQuery.toLowerCase()
 
-    const scoredStations = searchables.map((searchable) => {
+    // Score first, spread later: only the (few) matches below the threshold get
+    // decorated into new objects — not the whole index on every keystroke.
+    const scoredStations = []
+    for (const searchable of searchables) {
       let score = Infinity
       const keywords = searchable.keywords
       for (const keyword of keywords) {
@@ -164,8 +167,9 @@ export default function SearchContent({ title, closeButton }: Props) {
         if (keywordMatch < score) score = keywordMatch
       }
 
-      const popularityFactor = (searchable.score ?? 0) / 100
-      const finalScore = score + (1 - popularityFactor)
+      const finalScore = score + (1 - popularityTerm(searchable.score))
+      if (finalScore >= SCORE_THRESHOLD) continue
+
       // Sub-unit ranking nudge applied only at sort time (NOT folded into
       // finalScore, so it can't push a borderline result past SCORE_THRESHOLD and
       // hide it). Always < 1, so it only reorders otherwise-close matches — never
@@ -175,15 +179,13 @@ export default function SearchContent({ title, closeButton }: Props) {
       const isTJ = isStation && searchable.operator === 'TJ'
       const sortNudge = (isStation ? 0 : 0.4) + (isTJ ? 0.2 : 0)
 
-      return {
+      scoredStations.push({
         ...searchable,
         score: finalScore,
         matchScore: score,
         sortNudge
-      }
-    }).filter((station) => {
-      return station.score < SCORE_THRESHOLD
-    })
+      })
+    }
 
     // Corrections are a fallback: exact matches hide typo matches, word-typo
     // matches hide window matches.

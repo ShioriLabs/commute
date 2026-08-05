@@ -19,6 +19,7 @@ import {
   FDTJ_PREVIEW_H,
   FDTJ_PREVIEW_W
 } from 'utils/map-morph-camera'
+import { MAP_PREVIEW_URL } from '~/lib/map-assets'
 import { useMapCamera } from '~/hooks/map-camera'
 import { useReducedMotion } from '~/hooks/reduced-motion'
 import { MapSkeleton, prefetchMapSkeleton, type SkeletonDoc } from './map-skeleton'
@@ -140,7 +141,12 @@ export function MapPreviewBackdrop() {
     <div ref={wrapRef} className="absolute inset-0 overflow-hidden" aria-hidden>
       {camera && (
         <img
-          src="/maps/fdtj/preview.webp"
+          // Stamped, though with the service worker installed this changes
+          // nothing — cacheFirst intercepts on pathname and ignores the query.
+          // That is exactly why the bare URL hid for so long: it only poisons
+          // the paths where the worker is absent (dev, the first visit before
+          // install finishes, iOS after the worker is evicted).
+          src={MAP_PREVIEW_URL}
           alt=""
           draggable={false}
           width={FDTJ_PREVIEW_W}

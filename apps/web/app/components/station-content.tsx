@@ -28,6 +28,7 @@ import { directionalBaseName } from 'utils/directional-stations'
 import LineCard from '~/components/line-card'
 import LineRoundel from '~/components/line-roundel'
 import EmptyState from '~/components/empty-state'
+import ExitLink from '~/components/exit-link'
 import { fetcher } from 'utils/fetcher'
 import { normalizeGroupedTimetable } from 'utils/timetable-shim'
 import { sortLinesForDisplay } from '~/utils/lines'
@@ -35,6 +36,7 @@ import { useNetworkStatus } from '~/hooks/network'
 import { getUnservedStation } from '~/lib/unserved-stations'
 import { useLines } from '~/hooks/use-lines'
 import { buildFareDestinationPath } from 'utils/fare-url'
+import PaneLink from '~/components/pane-stack/pane-link'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -243,12 +245,12 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
                     </Link>
                   )
                 })()}
-                <Link
-                  to={`/stations/${operator}/${code}/timetable`}
+                <PaneLink
+                  pane={{ kind: 'timetable', operator, code }}
                   className="flex flex-row gap-2 justify-center bg-slate-200 text-[#F55875] font-bold p-4 rounded-xl text-center w-full text-sm"
                 >
                   Jadwal Lengkap
-                </Link>
+                </PaneLink>
               </div>
               <ul className="flex flex-col gap-2 mt-4">
                 {timetableData.map(line => (
@@ -339,13 +341,13 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
                               <li key={line.lineCode}>
                                 {linkable
                                   ? (
-                                      <Link
+                                      <ExitLink
                                         to={`/lines/${transferOperator}/${line.lineCode}`}
                                         className="block"
                                         aria-label={`Lihat rute ${line.name}`}
                                       >
                                         <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={transferOperator} />
-                                      </Link>
+                                      </ExitLink>
                                     )
                                   : (
                                       <>

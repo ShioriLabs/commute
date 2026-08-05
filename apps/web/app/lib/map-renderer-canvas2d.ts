@@ -129,8 +129,8 @@ export function createCanvas2DRenderer(
       // then hard-clear the capsule interior.
       scrimCtx.globalCompositeOperation = 'destination-out'
       const steps = 5
+      scrimCtx.fillStyle = `rgba(0, 0, 0, ${Math.min(1, (1 / steps) * 1.2)})`
       for (let i = steps; i >= 1; i--) {
-        scrimCtx.fillStyle = `rgba(0, 0, 0, ${Math.min(1, (1 / steps) * 1.2)})`
         drawShape(scrimCtx, sel.ax, sel.ay, sel.bx, sel.by, sel.r, sel.cr, SPOTLIGHT_FEATHER_WORLD * (i / steps))
         scrimCtx.fill()
       }
@@ -151,9 +151,10 @@ export function createCanvas2DRenderer(
       const r = Math.round(sel.color[0] * 255)
       const g = Math.round(sel.color[1] * 255)
       const b = Math.round(sel.color[2] * 255)
-      ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${sel.ringProgress})`
+      const ringColor = `rgba(${r}, ${g}, ${b}, ${sel.ringProgress})`
+      ctx.strokeStyle = ringColor
       ctx.lineWidth = RING_WIDTH_WORLD
-      ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${sel.ringProgress})`
+      ctx.shadowColor = ringColor
       ctx.shadowBlur = 12 * transform.scale
       drawShape(ctx, sel.ax, sel.ay, sel.bx, sel.by, sel.r, sel.cr, ringOffsetWorld(sel.ringProgress))
       ctx.stroke()

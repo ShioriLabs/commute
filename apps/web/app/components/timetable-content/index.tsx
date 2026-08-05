@@ -10,6 +10,7 @@ import { fetcher } from 'utils/fetcher'
 import { normalizeGroupedTimetable } from 'utils/timetable-shim'
 import { useNetworkStatus } from '~/hooks/network'
 import { codeOfLineKey, useLines } from '~/hooks/use-lines'
+import { useClock } from '~/hooks/clock'
 import { departureSortKey, isImmediateDeparture, parseMinute } from 'utils/schedules'
 import { formatPlatformCode, joinLabels } from 'utils/labels'
 
@@ -111,15 +112,8 @@ const TimetableContent = memo(function TimetableContent({ operator, code }: Prop
   const timetableData = useMemo(() => normalizeGroupedTimetable(timetable.data?.data), [timetable.data])
   const networkStatus = useNetworkStatus()
 
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
-
-  useEffect(() => {
-    setLastUpdated(new Date())
-    const interval = setInterval(() => {
-      setLastUpdated(new Date())
-    }, 10000)
-    return () => clearInterval(interval)
-  }, [])
+  const nowMs = useClock()
+  const lastUpdated = useMemo(() => new Date(nowMs), [nowMs])
 
   const lines: LineMeta[] = useMemo(() => {
     if (!timetableData) return []
@@ -144,10 +138,18 @@ const TimetableContent = memo(function TimetableContent({ operator, code }: Prop
     })
   }, [])
 
+  // buildSections reads the clock coarsely — parseMinute pins rows to today's
+  // date and departureSortKey branches on the late-night window (>= 21:00) —
+  // so key the rebuild on those boundaries, not the 10s tick that used to
+  // throw away and re-sort every section.
+  const dayKey = lastUpdated.toDateString()
+  const isLateNight = lastUpdated.getHours() >= 21
   const allSections = useMemo(() => {
     if (!timetableData) return []
-    return buildSections(timetableData, lastUpdated, resolveLine)
-  }, [timetableData, lastUpdated])
+    const coarseNow = new Date(dayKey)
+    coarseNow.setHours(isLateNight ? 21 : 12)
+    return buildSections(timetableData, coarseNow, resolveLine)
+  }, [timetableData, dayKey, isLateNight, resolveLine])
 
   const visibleSections = useMemo(() => {
     if (excludedLines.size === 0) return allSections
@@ -263,7 +265,11 @@ const TimetableContent = memo(function TimetableContent({ operator, code }: Prop
               return (
                 <section key={section.key} aria-label={`Keberangkatan ${section.lineName} menuju ${section.label.join(', ')}`}>
                   {/* Sticks below the page header (p-8/pb-4 + two text lines = 6rem). */}
-                  <header className="sticky top-24 z-[9] flex items-center gap-3 px-4 py-2.5 bg-white/90 backdrop-blur border-b border-slate-100">
+                  {/* 6rem clears the standalone page's sticky header. Inside a
+                      pushed pane the scroll container is the card body and
+                      there is nothing above these, so the pane sets the var to
+                      0. */}
+                  <header className="sticky top-[var(--timetable-sticky-top,6rem)] z-[9] flex items-center gap-3 px-4 py-2.5 bg-white/90 backdrop-blur border-b border-slate-100">
                     <LineRoundel code={section.lineCode} color={section.lineColor} operator={operator} />
                     <span className="flex-grow min-w-0 text-sm font-bold text-slate-900 truncate">
                       {'menuju '}

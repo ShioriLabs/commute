@@ -1,10 +1,11 @@
 import type { CompactLineTimetable, CompactSchedule } from '@commute/schemas'
-import { useState, useEffect, useMemo } from 'react'
-import { Link } from 'react-router'
+import { useMemo } from 'react'
 import { CaretRightIcon, NavigationArrowIcon } from '@phosphor-icons/react'
+import ExitLink from '~/components/exit-link'
 import { getForegroundColor, getTintFromColor } from 'utils/colors'
 import { departureSortKey, getRelativeDepartureLabel, isImminentDeparture, parseMinute } from 'utils/schedules'
 import { formatPlatformCode, joinLabels } from 'utils/labels'
+import { useClock } from '~/hooks/clock'
 import PidsChevrons from './pids-chevrons'
 import { codeOfLineKey, useLines } from '~/hooks/use-lines'
 
@@ -39,7 +40,10 @@ interface Props {
 }
 
 export default function LineCard({ line, operator }: Props) {
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
+  // Shared 10s clock — one timer for the whole feed instead of one per card.
+  const nowMs = useClock()
+  const lastUpdated = useMemo(() => new Date(nowMs), [nowMs])
+
   /*
    * The timetable carries a line key; its name and colour come from the
    * dictionary. Falls back to the bare code and a neutral grey while
@@ -48,16 +52,8 @@ export default function LineCard({ line, operator }: Props) {
   const { line: lookupLine } = useLines()
   const resolved = lookupLine(line.line)
   const lineCode = codeOfLineKey(line.line)
-  const lineName = resolved?.name ?? lineCode
+  const lineName = resolved?.name ?? (lineCode || 'Lin lain')
   const lineColor = resolved?.colorCode ?? '#94a3b8'
-
-  useEffect(() => {
-    setLastUpdated(new Date())
-    const interval = setInterval(() => {
-      setLastUpdated(new Date())
-    }, 10000)
-    return () => clearInterval(interval)
-  }, [])
 
   const upcomingGroups = useMemo(() => {
     return line.timetable
@@ -93,17 +89,19 @@ export default function LineCard({ line, operator }: Props) {
         style={{ borderBottomColor: getTintFromColor(lineColor, 0.3) }}
         aria-labelledby={`line-name-${lineName}`}
       >
-        {/* TJ has no line-detail (topology) page yet — render its cards unlinked. */}
-        {operator && operator !== 'TJ'
+        {/* TJ has no line-detail (topology) page yet — render its cards unlinked.
+            A card off a stale cache can arrive with no line key at all; without
+            a code there is no route to link to, so leave it unlinked too. */}
+        {operator && operator !== 'TJ' && lineCode
           ? (
-              <Link
+              <ExitLink
                 to={`/lines/${operator}/${lineCode}`}
                 className="flex items-center justify-between gap-2"
                 aria-label={`Lihat rute ${lineName}`}
               >
                 <h1 id={`line-name-${lineName}`} className="font-bold text-base">{lineName}</h1>
                 <CaretRightIcon weight="bold" className="w-4 h-4 text-slate-600" />
-              </Link>
+              </ExitLink>
             )
           : (
               <h1 id={`line-name-${lineName}`} className="font-bold text-base">{lineName}</h1>

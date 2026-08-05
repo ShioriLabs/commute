@@ -13,7 +13,7 @@ const COPY = {
   },
   ERROR: {
     title: 'Gagal Memuat Jadwal',
-    message: 'Terjadi kesalahan saat memuat data. Silakan coba lagi.'
+    message: 'Terjadi kesalahan saat memuat data. Silakan coba lagi'
   },
   NO_DATA: {
     title: 'Jadwal Tidak Tersedia',

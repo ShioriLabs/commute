@@ -38,9 +38,39 @@ export function sortLinesForDisplay(lines: readonly Line[], operator?: string): 
  * the line dictionary is in flight.
  */
 export function sortLineKeysForDisplay(keys: readonly string[], operator?: string): string[] {
-  if (operator !== 'TJ') return [...keys]
-  const codeOf = (key: string) => key.split(':')[1] ?? key
-  return keys
-    .filter(key => !HIDDEN_TJ_CODES.has(codeOf(key)))
-    .sort((a, b) => compareTJLineCode(codeOf(a), codeOf(b)))
+  const normalized = normalizeLineKeys(keys, operator)
+  if (operator !== 'TJ') return normalized
+  return normalized
+    .filter(key => !HIDDEN_TJ_CODES.has(codeOfKey(key)))
+    .sort((a, b) => compareTJLineCode(codeOfKey(a), codeOfKey(b)))
+}
+
+/*
+ * `/stations` used to carry whole Line objects and now carries bare keys
+ * (`TJ:6A`), so a stale service-worker cache can hand this list either shape —
+ * or, mid-deploy, an entry with no key at all. It is typed `string` per the
+ * current schema, so nothing warns at compile time and `.split` threw on both
+ * legacy shapes ("is not a function" on the object, "of undefined" on the gap).
+ *
+ * Re-key rather than merely tolerate: callers feed the result to the line
+ * dictionary, which is keyed by `OP:CODE`, so a passed-through Line object
+ * would sort safely and then silently resolve to nothing, blanking the
+ * roundels. Entries too broken to re-key are dropped.
+ */
+function normalizeLineKeys(keys: readonly string[], operator?: string): string[] {
+  return keys.flatMap((key) => {
+    const raw: unknown = key
+    if (typeof raw === 'string') return raw ? [raw] : []
+    if (!raw || typeof raw !== 'object' || !('lineCode' in raw)) return []
+    const code = String((raw as { lineCode: unknown }).lineCode)
+    if (!code) return []
+    // A legacy object may not name its operator; fall back to the list's.
+    const owner = 'operator' in raw ? String((raw as { operator: unknown }).operator) : operator
+    return [code.includes(':') || !owner ? code : `${owner}:${code}`]
+  })
+}
+
+/** `TJ:6A` -> `6A`. Assumes an already-normalized key. */
+function codeOfKey(key: string): string {
+  return key.split(':')[1] ?? key
 }
