@@ -14,6 +14,7 @@ import {
   orderSkeleton,
   orderStations,
   parsePath,
+  sameColour,
   type SkeletonStroke
 } from './map-skeleton-order'
 
@@ -116,6 +117,14 @@ describe('map-skeleton.json stays in sync with the map', () => {
     expect(skeleton.version).toBe(manifest.version)
   })
 
+  it('keeps the tap targets on the edition they were authored against', () => {
+    // points.json coordinates are only meaningful for the artwork they were read
+    // off. The 2026-08 rebuild moved Manggarai ~154 units, so a points.json left
+    // on the previous edition puts taps on the wrong markers — silently, since
+    // nothing else compares the two.
+    expect(points.version).toBe(manifest.version)
+  })
+
   it('contains enough lines to be worth animating', () => {
     // The floor that catches a future map edition silently defeating the build script's
     // colour/width predicate — the failure mode is a thin animation, not an error.
@@ -162,9 +171,13 @@ describe('per-line spawn points', () => {
     return { x: (p.ax + p.bx) / 2, y: (p.ay + p.by) / 2 }
   }
   const ordered = orderSkeleton(skeleton.strokes, FDTJ_ANCHOR_X, FDTJ_ANCHOR_Y, SPAN)
+  // Colours are matched with the same tolerance the production code uses: every
+  // FDTJ edition is re-rasterised, and colour-profile rounding nudges each line
+  // by a step (2026-06a #CA2B51 -> 2026-08 #CA2A51) with no design change. The
+  // literals below name a line; they are not exact-equality assertions.
   const startsNear = (colour: string, at: { x: number, y: number }) =>
     ordered
-      .filter(item => item.c === colour)
+      .filter(item => sameColour(item.c, colour))
       .map(item => parsePath(item.d)[0])
       .filter(head => distance(head, at.x, at.y) < 150)
 
@@ -175,7 +188,7 @@ describe('per-line spawn points', () => {
       ['LRTJBDB-DKA', '#1251A2'],
       ['KCI-JNG', '#00BDEF']
     ] as const) {
-      const spawn = FDTJ_SPAWNS.find(s => s.c === colour)!
+      const spawn = FDTJ_SPAWNS.find(s => sameColour(s.c, colour))!
       const station = spawnOf(id)
       expect(spawn.x).toBeCloseTo(station.x, 9)
       expect(spawn.y).toBeCloseTo(station.y, 9)
@@ -190,7 +203,7 @@ describe('per-line spawn points', () => {
     // The PDF splits MRT into three strokes meeting at Istora and Fatmawati. Chaining has
     // to fuse them, or the two the spawn does not touch sprout their own origins — the
     // line was visibly growing out of Istora and Bundaran HI at once.
-    const mrt = ordered.filter(item => item.c === '#CA2B51')
+    const mrt = ordered.filter(item => sameColour(item.c, '#CA2B51'))
     const istora = spawnOf('MRTJ-IST')
     const fatmawati = spawnOf('MRTJ-FTM')
     expect(startsNear('#CA2B51', istora)).toHaveLength(0)
@@ -221,7 +234,7 @@ describe('per-line spawn points', () => {
     // The arc must run Jatinegara -> Pasar Senen -> Kampung Bandan in that order, which is
     // the whole point of the override: drawn the other way it unzips away from the loop's
     // closing point instead of towards it.
-    const arc = ordered.find(item => item.c === '#00BDEF' && distance(parsePath(item.d)[0], jatinegara.x, jatinegara.y) < 150)!
+    const arc = ordered.find(item => sameColour(item.c, '#00BDEF') && distance(parsePath(item.d)[0], jatinegara.x, jatinegara.y) < 150)!
     const nearestIndex = (at: { x: number, y: number }) => {
       const path = parsePath(arc.d)
       let best = Infinity
@@ -241,15 +254,15 @@ describe('per-line spawn points', () => {
     // MRT is drawn as three strokes but only one ends at Bundaran HI, and the Cikarang
     // main line runs through Jatinegara without terminating there.
     const jatinegara = spawnOf('KCI-JNG')
-    const cikarang = ordered.filter(item => item.c === '#00BDEF')
+    const cikarang = ordered.filter(item => sameColour(item.c, '#00BDEF'))
     expect(cikarang.length).toBeGreaterThan(1)
     expect(cikarang.filter(item => distance(parsePath(item.d)[0], jatinegara.x, jatinegara.y) < 150)).toHaveLength(1)
   })
 
   it('leaves unmatched lines anchored on Manggarai', () => {
     const plain = orderSkeleton(skeleton.strokes, FDTJ_ANCHOR_X, FDTJ_ANCHOR_Y, SPAN, [])
-    const spawnColours = new Set(FDTJ_SPAWNS.map(s => s.c))
-    const key = (list: typeof plain) => list.filter(i => !spawnColours.has(i.c)).map(i => i.d).join('|')
+    const isSpawnLine = (c: string) => FDTJ_SPAWNS.some(s => sameColour(s.c, c))
+    const key = (list: typeof plain) => list.filter(i => !isSpawnLine(i.c)).map(i => i.d).join('|')
     expect(key(ordered)).toBe(key(plain))
   })
 })
@@ -271,14 +284,27 @@ describe('station markers', () => {
     // sits dead centre of the loading camera, so an interchange rendered as a single dot
     // (or, as it was, skipped entirely) is the most visible thing on the screen to get
     // wrong. Their positions come from the artwork, not from the tap-target capsule.
-    const here = skeleton.stations.filter(s => distance([s.x, s.y], 4867, 3863) < 80)
+    // Located via the anchor rather than a literal: the 2026-08 edition moved
+    // this cluster ~154 units when LRT Jakarta Phase 1B was drawn terminating
+    // here, and the anchor is defined as Manggarai's tap target, so the two
+    // cannot drift apart without the sync test above failing first.
+    const here = skeleton.stations
+      .filter(s => distance([s.x, s.y], FDTJ_ANCHOR_X, FDTJ_ANCHOR_Y) < 80)
     expect(here).toHaveLength(3)
-    expect(new Set(here.map(s => s.c))).toEqual(new Set(['#EF3637', '#00BDEF', '#282A65']))
+    expect(here.filter(s => sameColour(s.c, '#EF3637'))).toHaveLength(1) // Bogor
+    expect(here.filter(s => sameColour(s.c, '#00BDEF'))).toHaveLength(1) // Cikarang
+    expect(here.filter(s => sameColour(s.c, '#282A65'))).toHaveLength(1) // loop
   })
 
   it('finds every MRT Jakarta station', () => {
-    // 13 is the real count, so this catches the disc predicate drifting either way.
-    expect(skeleton.stations.filter(s => s.c === '#CA2B51')).toHaveLength(13)
+    // 13 real stations, so this catches the disc predicate drifting either way.
+    // The 2026-08 legend redraws its sample icons ("Stasiun Kereta Api",
+    // "…Awal/Akhir", "…Transit") in the MRT colour, which the extractor cannot
+    // tell from a station — hence the four extras in the column at x=8805.
+    // They are legend furniture and deliberately carry no tap target.
+    const discs = skeleton.stations.filter(s => sameColour(s.c, '#CA2B51'))
+    expect(discs.filter(s => s.x < 8000)).toHaveLength(13)
+    expect(discs.filter(s => s.x >= 8000)).toHaveLength(4)
   })
 
   it('carries markers sized as the tiles draw them', () => {
@@ -305,7 +331,7 @@ describe('station markers', () => {
   it('places a marker later the further along its line it sits', () => {
     // Bogor line: Cikini is north of Manggarai and the line is split at the anchor, so
     // both halves start there — a marker near the split must precede one at the far end.
-    const bogor = stations.filter(s => s.c === '#EF3637').sort((a, b) => a.delayMs - b.delayMs)
+    const bogor = stations.filter(s => sameColour(s.c, '#EF3637')).sort((a, b) => a.delayMs - b.delayMs)
     expect(bogor.length).toBeGreaterThan(2)
     expect(bogor[0].delayMs).toBeLessThan(bogor[bogor.length - 1].delayMs)
   })
