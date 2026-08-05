@@ -9,7 +9,7 @@ import type {
 } from '@commute/schemas'
 import type { StandardResponse } from '@schema/response'
 import { useMemo } from 'react'
-import useSWR from 'swr'
+import useSWR, { preload } from 'swr'
 import { fetcher } from 'utils/fetcher'
 
 /*
@@ -31,6 +31,28 @@ const swrConfig = {
   focusThrottleInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
   revalidateOnFocus: true,
   shouldRetryOnError: false
+}
+
+// One definition of the key, shared by the hook and the prefetch below — a
+// second literal here would silently prefetch into a different cache entry.
+const searchablesUrl = () =>
+  new URL('/_internal/searchables', import.meta.env.VITE_API_BASE_URL).href
+
+/**
+ * Warm the index before anything renders it.
+ *
+ * The search sheet is behind a card on the homepage, so this request used to
+ * start on the tap that opens it — measured landing ~250ms in, competing with
+ * the open commit for the main thread and leaving the sheet briefly empty.
+ * Nothing on the homepage reads the index, so it is fetched here instead,
+ * during idle time the page already has.
+ *
+ * `preload` populates the same SWR cache `useSearchables` reads, so the hook
+ * finds it resolved rather than firing a second request. Safe to call more than
+ * once: SWR dedupes on the key.
+ */
+export function prefetchSearchables(): void {
+  void preload(searchablesUrl(), fetcher)
 }
 
 export interface UseSearchablesResult {
@@ -66,7 +88,7 @@ export function migrateLegacy(item: RawSearchable | LegacySearchable): RawSearch
 
 export function useSearchables(): UseSearchablesResult {
   const { data, isLoading } = useSWR<StandardResponse<SearchableIndex>>(
-    new URL('/_internal/searchables', import.meta.env.VITE_API_BASE_URL).href,
+    searchablesUrl(),
     fetcher,
     swrConfig
   )

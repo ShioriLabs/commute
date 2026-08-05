@@ -27,6 +27,8 @@ describe('toPickableStations', () => {
       name: 'Ancol',
       operator: 'KCI',
       lines: [line('Tanjung Priuk')],
+      // Display order precomputed here so rows don't sort inside their JSX.
+      sortedLines: [line('Tanjung Priuk')],
       score: 42,
       keywords: ['ancol', 'ac']
     })

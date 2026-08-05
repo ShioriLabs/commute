@@ -8,8 +8,6 @@ import { filterBestTier, keywordScore, popularityTerm, SCORE_THRESHOLD } from 'u
 import { LIST_STAGGER, LIST_STAGGER_MAX_INDEX, staggerDelay } from 'utils/stagger'
 import HighlightMatch from '~/components/highlight-match'
 import LineRoundel from '~/components/line-roundel'
-import { sortLineKeysForDisplay } from '~/utils/lines'
-import { sortLinesForDisplay } from './pickable-station'
 
 /*
  * Best match across everything the station is known by.
@@ -44,6 +42,37 @@ const RECENT_PICKS_MAX = 4
 // never steals frames from anything visible.
 const INITIAL_ROWS = 20
 
+// How many stations the no-query list offers. Several screens' worth — enough
+// that scrolling still feels like a real list — without putting the entire
+// network in the DOM. See the comment in `shownStations`.
+const NO_QUERY_ROWS = 50
+
+/**
+ * The `limit` highest-scoring stations, popularity first then name.
+ *
+ * A partial selection rather than a full sort: the callers want a handful off
+ * the top, and sorting all ~360 (with a `localeCompare` tiebreak) to slice 4 or
+ * 50 off the front is work thrown away. Re-runs whenever the query drops back
+ * under two characters, so it sits on the typing path, not just on open.
+ */
+function topByPopularity(stations: PickableStation[], limit: number): PickableStation[] {
+  if (limit <= 0) return []
+
+  const isBetter = (a: PickableStation, b: PickableStation) =>
+    (b.score ?? 0) - (a.score ?? 0) || a.name.localeCompare(b.name)
+
+  const top: PickableStation[] = []
+  for (const station of stations) {
+    // Past capacity, the incumbent tail is the only thing worth beating.
+    if (top.length === limit && isBetter(top[top.length - 1], station) <= 0) continue
+    let at = top.length
+    while (at > 0 && isBetter(station, top[at - 1]) < 0) at--
+    top.splice(at, 0, station)
+    if (top.length > limit) top.pop()
+  }
+  return top
+}
+
 // Memoized: rendered from the deferred filter pass, so the urgent keystroke
 // render must bail out here — otherwise the whole list re-renders per
 // keystroke at urgent priority and blocks the input.
@@ -73,10 +102,10 @@ const StationRow = memo(function StationRow({ station, index, selected, query, o
             {'  '}
             <span className="text-sm font-semibold text-gray-600">{ OPERATORS[station.operator]?.name ?? station.operator }</span>
           </b>
-          {station.lines?.length
+          {station.sortedLines?.length
             ? (
                 <ul className="flex flex-row gap-1 flex-wrap">
-                  {sortLinesForDisplay(station.lines, station.operator, sortLineKeysForDisplay).map(line => (
+                  {station.sortedLines.map(line => (
                     <li key={line.lineCode}>
                       <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={station.operator} />
                       <span className="sr-only">{line.name}</span>
@@ -145,16 +174,29 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
 
   const shownStations = useMemo(() => {
     if (deferredQuery.length < 2) {
-      // No query: full list, most popular first, so common picks are one tap away.
-      return [...stations].sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.name.localeCompare(b.name))
+      // No query: the most popular stations, so common picks are one tap away.
+      //
+      // Capped rather than complete. This used to sort and return all ~360
+      // pickable stations, every one of which reached the DOM once `renderAll`
+      // flipped — content-visibility skips their paint but not their
+      // construction, reconciliation or layout. Nobody scrolls 360 rows to
+      // find a station: the field is focused for you at 350ms, and the
+      // quick-picks above already cover the frequent ones. Past the cap is a
+      // search away.
+      return topByPopularity(stations, NO_QUERY_ROWS)
     }
     const query = deferredQuery.toLowerCase()
-    const scored = stations
-      .map((station) => {
-        const matchScore = getStationScore(station, query)
-        return { station, matchScore, finalScore: matchScore + (1 - popularityTerm(station.score)) }
-      })
-      .filter(({ finalScore }) => finalScore < SCORE_THRESHOLD)
+    // Score first, push survivors only — the shape the search sheet already
+    // uses. Building a wrapper object per station and filtering afterwards
+    // allocated one for every station on every keystroke, then discarded
+    // nearly all of them.
+    const scored: { station: PickableStation, matchScore: number, finalScore: number }[] = []
+    for (const station of stations) {
+      const matchScore = getStationScore(station, query)
+      const finalScore = matchScore + (1 - popularityTerm(station.score))
+      if (finalScore >= SCORE_THRESHOLD) continue
+      scored.push({ station, matchScore, finalScore })
+    }
     // Corrections are a fallback: exact matches hide typo matches, word-typo
     // matches hide window matches.
     return filterBestTier(scored, ({ matchScore }) => matchScore)
@@ -172,7 +214,9 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
       if (station && !picks.some(pick => pick.id === station.id)) picks.push(station)
       if (picks.length === RECENT_PICKS_MAX) return picks
     }
-    const popular = [...stations].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+    // Enough headroom that the already-picked recents can all be skipped and
+    // this can still fill to RECENT_PICKS_MAX.
+    const popular = topByPopularity(stations, RECENT_PICKS_MAX + picks.length)
     for (const station of popular) {
       if (picks.some(pick => pick.id === station.id)) continue
       picks.push(station)
@@ -244,10 +288,10 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
                         onClick={() => handleSelect(station)}
                         className="shrink-0 rounded-full bg-rose-100 text-pink-800 pl-2 pr-3.5 py-1.5 flex items-center gap-2 text-sm font-semibold cursor-pointer"
                       >
-                        {station.lines?.length
+                        {station.sortedLines?.length
                           ? (
                               <span className="flex -space-x-1.5">
-                                {sortLinesForDisplay(station.lines, station.operator, sortLineKeysForDisplay).map(line => (
+                                {station.sortedLines.map(line => (
                                   <LineRoundel key={line.lineCode} size="SM" code={line.lineCode} color={line.colorCode} operator={station.operator} />
                                 ))}
                               </span>

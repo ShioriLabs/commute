@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { CloseButton, DialogTitle } from '@headlessui/react'
 import { XIcon, ShareNetworkIcon } from '@phosphor-icons/react'
 import { useSearchParams } from 'react-router'
@@ -30,7 +30,10 @@ export default function FareSheet() {
   // writing either on its own would wipe the other. Picking a station used to
   // rebuild the params from scratch, which would now silently drop a chosen
   // payment method.
-  const writeUrl = (fromId: string | null, toId: string | null, criteria: FareCriteria) => {
+  // Stable identity: this is `onStateChange`, which the fare handlers in
+  // useFareQuery close over — a fresh function each render would churn their
+  // dep arrays and undo their memoization. It reads only its arguments.
+  const writeUrl = useCallback((fromId: string | null, toId: string | null, criteria: FareCriteria) => {
     const params = new URLSearchParams()
     // Written independently, not only as a pair: a to-only deep link from the
     // station page must survive a criteria change made before the origin is
@@ -44,7 +47,7 @@ export default function FareSheet() {
       '',
       `${window.location.pathname}${search ? `?${search}` : ''}`
     )
-  }
+  }, [])
 
   const urlPaymentMethod = searchParams.get('paymentMethod')
   const query = useFareQuery({
