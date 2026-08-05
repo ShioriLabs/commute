@@ -52,7 +52,7 @@ export default function LineCard({ line, operator }: Props) {
   const { line: lookupLine } = useLines()
   const resolved = lookupLine(line.line)
   const lineCode = codeOfLineKey(line.line)
-  const lineName = resolved?.name ?? lineCode
+  const lineName = resolved?.name ?? (lineCode || 'Lin lain')
   const lineColor = resolved?.colorCode ?? '#94a3b8'
 
   const upcomingGroups = useMemo(() => {
@@ -89,8 +89,10 @@ export default function LineCard({ line, operator }: Props) {
         style={{ borderBottomColor: getTintFromColor(lineColor, 0.3) }}
         aria-labelledby={`line-name-${lineName}`}
       >
-        {/* TJ has no line-detail (topology) page yet — render its cards unlinked. */}
-        {operator && operator !== 'TJ'
+        {/* TJ has no line-detail (topology) page yet — render its cards unlinked.
+            A card off a stale cache can arrive with no line key at all; without
+            a code there is no route to link to, so leave it unlinked too. */}
+        {operator && operator !== 'TJ' && lineCode
           ? (
               <Link
                 to={`/lines/${operator}/${lineCode}`}

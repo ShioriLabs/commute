@@ -30,14 +30,25 @@ export interface LineLookup {
   isLoading: boolean
 }
 
+/*
+ * Both helpers take `string` per the schema, where `line` is required and
+ * non-nullable — so TypeScript never flags a missing key at a call site. It
+ * still arrives undefined at runtime: stale service-worker caches serve
+ * pre-direction-group payloads (see LegacyTimetableEntrySchema), and deploy
+ * skew briefly serves old shapes to new code. Both crashed on `.split`.
+ * Callers all have a `?? fallback` ready, so absorb it here rather than
+ * guarding at each of them.
+ */
+
 /** `KCI:C` -> `KCI`. Cheap enough to do inline; no dictionary needed. */
-export function operatorOfLineKey(key: string): string | undefined {
-  const [operator] = key.split(':')
+export function operatorOfLineKey(key: string | undefined): string | undefined {
+  const [operator] = key?.split(':') ?? []
   return operator || undefined
 }
 
 /** `KCI:C` -> `C`, the bare code a roundel displays. */
-export function codeOfLineKey(key: string): string {
+export function codeOfLineKey(key: string | undefined): string {
+  if (!key) return ''
   const [, code] = key.split(':')
   return code ?? key
 }
