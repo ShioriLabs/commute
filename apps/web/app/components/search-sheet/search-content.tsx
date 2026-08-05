@@ -232,6 +232,30 @@ export default function SearchContent({ title, closeButton }: Props) {
     }
   }, [])
 
+  /*
+   * The idle-state rails wait one frame before mounting.
+   *
+   * This sheet is opened by the homepage card's morph, and everything under it
+   * mounts in the single commit that opens the dialog — measured at ~173ms at
+   * 4x CPU, all of it landing before the transition even starts, which is where
+   * that open's dropped frames came from. The input and the mode toggle are
+   * what the tap was for; the rails below are not, and they carry the bulk of
+   * the nodes.
+   *
+   * rAF rather than a timer: it yields exactly once, so the rails land on the
+   * very next frame instead of at a guessed delay. Same idea as the fare
+   * picker's INITIAL_ROWS/renderAll staging, one step instead of two.
+   */
+  const [railsMounted, setRailsMounted] = useState(false)
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setRailsMounted(true))
+    return () => cancelAnimationFrame(raf)
+  }, [])
+
+  // The saved-station ids only change when storage does, so the RecentEntry
+  // objects the rail takes are built with them rather than inline in JSX.
+  const savedStationEntries = useMemo(() => asStations(savedStations), [savedStations])
+
   useEffect(() => {
     // Only in station mode: route mode renders no input, and the picker inside
     // FarePanel opens its own dialog — stealing focus back here 250ms later
@@ -324,14 +348,14 @@ export default function SearchContent({ title, closeButton }: Props) {
         hidden={mode !== 'STATION'}
         className={clsx(mode !== 'STATION' && 'hidden')}
       >
-        {searchQuery.length < 2
+        {searchQuery.length < 2 && railsMounted
           ? (
               <>
                 {recentlySearched.length > 0
                   ? <HighlightedList title="Stasiun Terakhir Dicari" items={recentlySearched} searchables={searchables} className="mt-4" />
                   : null}
                 {savedStations.length > 0
-                  ? <HighlightedList title="Stasiun Tersimpan" items={asStations(savedStations)} searchables={searchables} className="mt-2" />
+                  ? <HighlightedList title="Stasiun Tersimpan" items={savedStationEntries} searchables={searchables} className="mt-2" />
                   : null}
                 <HighlightedList title="Stasiun Transit" items={TRANSIT_STATIONS} searchables={searchables} className="mt-2" />
                 <HighlightedList title="Jakselcore" items={JAKSELCORE_STATIONS} searchables={searchables} className="mt-2" />
