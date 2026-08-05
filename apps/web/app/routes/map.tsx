@@ -12,6 +12,8 @@ import { hexToRgb01 } from 'utils/colors'
 import { haptic } from 'utils/haptics'
 import { staggerDelay, type StaggerOptions } from 'utils/stagger'
 import { buildFarePath } from 'utils/fare-url'
+import { IS_LITE } from '~/lib/build-mode'
+import { HOME_EXIT } from '~/lib/exit-links'
 import {
   createRenderer,
   DESKTOP_TILE_BUDGET_CEILING_BYTES,
@@ -125,6 +127,35 @@ const MAP_BUTTON_CLASS
 // a sequence — and a small offset so the chrome follows the map's first paint
 // instead of racing it.
 const MAP_CHROME_STAGGER: StaggerOptions = { step: 60, maxIndex: 4, offset: 60 }
+
+/**
+ * The way out of a map that failed to load — used by both the manifest-error
+ * and WebGL-fatal screens.
+ *
+ * Deliberately not an ExitLink: `/` is a hosted surface in every build, so the
+ * helper would keep it internal, and in lite that means reloading the broken
+ * page. HOME_EXIT asks the different question these screens need, which is
+ * "where is there a home page at all". The copy has to move with it — "Kembali
+ * ke Beranda" promises a return to somewhere the user has been, which is wrong
+ * when the map is the whole site and the link leaves it.
+ */
+function MapHomeEscape() {
+  const className = 'mt-3 px-4 py-2 text-sm text-slate-500'
+
+  if (HOME_EXIT.kind === 'external') {
+    return (
+      <a href={HOME_EXIT.href} className={className}>
+        Buka Commute
+      </a>
+    )
+  }
+
+  return (
+    <Link to={HOME_EXIT.to} className={className}>
+      Kembali ke Beranda
+    </Link>
+  )
+}
 
 // Ceiling on the tile resolution we're willing to hold in memory.
 //
@@ -254,7 +285,11 @@ export default function MapPage() {
   const navigationType = useNavigationType()
   const handleBackButton = useCallback(() => {
     if (navigationType === 'POP') {
-      navigate('/')
+      // No history behind us, so "back" has to mean "go home". In the lite
+      // build home is the full app on another origin, because here `/` is this
+      // very page — see HOME_EXIT.
+      if (HOME_EXIT.kind === 'internal') navigate(HOME_EXIT.to)
+      else window.location.assign(HOME_EXIT.href)
     } else {
       history.back()
     }
@@ -1383,9 +1418,7 @@ export default function MapPage() {
         >
           Coba Lagi
         </button>
-        <Link to="/" className="mt-3 px-4 py-2 text-sm text-slate-500">
-          Kembali ke Beranda
-        </Link>
+        <MapHomeEscape />
       </main>
     )
   }
@@ -1457,9 +1490,7 @@ export default function MapPage() {
           >
             Muat ulang peta
           </button>
-          <Link to="/" className="mt-3 px-4 py-2 text-sm text-slate-500">
-            Kembali ke Beranda
-          </Link>
+          <MapHomeEscape />
         </div>
       )}
 
@@ -1522,19 +1553,25 @@ export default function MapPage() {
           itself: `.map-chrome-enter` animates transform, and the recenter
           button below owns an opacity transition of its own. Keeping the two
           on separate elements stops them fighting. */}
-      <div
-        className="map-chrome-enter absolute top-4 right-4 z-20"
-        style={{ animationDelay: staggerDelay(1, MAP_CHROME_STAGGER) }}
-      >
-        <button
-          type="button"
-          onClick={handleBackButton}
-          aria-label="Tutup halaman peta"
-          className={MAP_BUTTON_CLASS}
+      {/* On the lite deployment the map is the entire site, so there is nothing
+          to close it back to — a close button there reads as broken rather than
+          as an exit. The escape hatches on the error screens below stay, since
+          those are the one case where leaving is the point. */}
+      {!IS_LITE && (
+        <div
+          className="map-chrome-enter absolute top-4 right-4 z-20"
+          style={{ animationDelay: staggerDelay(1, MAP_CHROME_STAGGER) }}
         >
-          <XIcon weight="bold" className="w-5 h-5 text-slate-700" />
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={handleBackButton}
+            aria-label="Tutup halaman peta"
+            className={MAP_BUTTON_CLASS}
+          >
+            <XIcon weight="bold" className="w-5 h-5 text-slate-700" />
+          </button>
+        </div>
+      )}
 
       <div
         className="map-chrome-enter absolute bottom-4 right-16 z-20"

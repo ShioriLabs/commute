@@ -1,5 +1,5 @@
-import { Link } from 'react-router'
 import type { LineDetailStation } from '@commute/schemas'
+import ExitLink from '~/components/exit-link'
 import { getForegroundColor } from 'utils/colors'
 import { useLines } from '~/hooks/use-lines'
 import { splitStationNumber } from '~/components/line-roundel'
@@ -67,14 +67,14 @@ export default function StationRow({
     <ul className={`relative z-10 flex flex-wrap gap-1 ${side === 'RIGHT' ? 'justify-end' : ''}`}>
       {otherLines.map(line => (
         <li key={line.lineCode}>
-          <Link
+          <ExitLink
             to={`/lines/${operator}/${line.lineCode}`}
             className={`block rounded-full font-semibold ${compact ? 'px-1.5 text-[10px]' : 'px-2.5 text-sm'} ${getForegroundColor(line.colorCode) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`}
             style={{ backgroundColor: line.colorCode }}
             aria-label={`Lihat ${line.name}`}
           >
             {compact ? line.lineCode : line.name.replace(/Lin /g, '')}
-          </Link>
+          </ExitLink>
         </li>
       ))}
     </ul>
@@ -92,7 +92,7 @@ export default function StationRow({
   )
 
   const stretchedLink = (
-    <Link
+    <ExitLink
       to={`/stations/${operator}/${station.code}`}
       className="absolute inset-0 z-0 rounded-lg"
       aria-label={station.name}

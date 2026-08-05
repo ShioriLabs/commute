@@ -1,7 +1,7 @@
 import type { CompactLineTimetable, CompactSchedule } from '@commute/schemas'
 import { useMemo } from 'react'
-import { Link } from 'react-router'
 import { CaretRightIcon, NavigationArrowIcon } from '@phosphor-icons/react'
+import ExitLink from '~/components/exit-link'
 import { getForegroundColor, getTintFromColor } from 'utils/colors'
 import { departureSortKey, getRelativeDepartureLabel, isImminentDeparture, parseMinute } from 'utils/schedules'
 import { formatPlatformCode, joinLabels } from 'utils/labels'
@@ -94,14 +94,14 @@ export default function LineCard({ line, operator }: Props) {
             a code there is no route to link to, so leave it unlinked too. */}
         {operator && operator !== 'TJ' && lineCode
           ? (
-              <Link
+              <ExitLink
                 to={`/lines/${operator}/${lineCode}`}
                 className="flex items-center justify-between gap-2"
                 aria-label={`Lihat rute ${lineName}`}
               >
                 <h1 id={`line-name-${lineName}`} className="font-bold text-base">{lineName}</h1>
                 <CaretRightIcon weight="bold" className="w-4 h-4 text-slate-600" />
-              </Link>
+              </ExitLink>
             )
           : (
               <h1 id={`line-name-${lineName}`} className="font-bold text-base">{lineName}</h1>

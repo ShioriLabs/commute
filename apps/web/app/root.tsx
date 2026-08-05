@@ -21,6 +21,7 @@ import {
   BOOT_WATCHDOG_SOURCE
 } from './lib/boot-watchdog'
 import { createBrowserDeps, registerServiceWorker } from './lib/register-service-worker'
+import { IS_LITE, OG_IMAGE_URL, SITE_DESCRIPTION, SITE_ORIGIN, SITE_TITLE } from './lib/build-mode'
 
 declare global {
   interface Window {
@@ -100,7 +101,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
     // watchdog to stand down.
     window.__commuteBoot?.ok()
 
-    registerServiceWorker(createBrowserDeps(import.meta.env.PROD))
+    // The lite bundle ships without a service worker, and skipping registration
+    // is the load-bearing half of that — deleting the file alone is not enough.
+    // A registration attempt would request /service-worker.js, the host's SPA
+    // fallback would answer with index.html, and the browser would be handed
+    // HTML as a worker script. That is the same shape as the cached-shell-under-
+    // a-JS-URL incident, arriving by a different route.
+    registerServiceWorker(createBrowserDeps(import.meta.env.PROD && !IS_LITE))
   }, [])
 
   useEffect(() => {
@@ -130,17 +137,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Commute</title>
-        <meta name="description" content="Aplikasi Jadwal Kereta Buat Anak Jakarta" />
+        {/* Site identity comes from app/lib/build-mode.ts so the lite bundle can
+            carry its own origin and title. The constants fold at build time, so
+            the production shell prerenders these exactly as it always has. */}
+        <title>{SITE_TITLE}</title>
+        <meta name="description" content={SITE_DESCRIPTION} />
         <meta name="keywords" content="commute, jadwal kereta, kereta api, krl, jakarta, indonesia, lrt, mrt, commuter line, lrt jabodebek, mrt jakarta, lrt jakarta" />
-        <meta property="og:title" content="Commute" />
-        <meta property="og:description" content="Aplikasi Jadwal Kereta Buat Anak Jakarta" />
-        <meta property="og:image" content="https://commute.shiorilabs.id/img/og-image.png" />
-        <meta name="twitter:title" content="Commute" />
-        <meta name="twitter:description" content="Aplikasi Jadwal Kereta Buat Anak Jakarta" />
-        <meta name="twitter:image" content="https://commute.shiorilabs.id/img/og-image.png" />
+        <meta property="og:title" content={SITE_TITLE} />
+        <meta property="og:description" content={SITE_DESCRIPTION} />
+        <meta property="og:image" content={OG_IMAGE_URL} />
+        <meta name="twitter:title" content={SITE_TITLE} />
+        <meta name="twitter:description" content={SITE_DESCRIPTION} />
+        <meta name="twitter:image" content={OG_IMAGE_URL} />
         <meta property="og:type" content="website" />
-        <meta property="og:url" content="https://commute.shiorilabs.id" />
+        <meta property="og:url" content={SITE_ORIGIN} />
         <meta name="twitter:card" content="summary_large_image" />
         <Meta />
         <Links />
