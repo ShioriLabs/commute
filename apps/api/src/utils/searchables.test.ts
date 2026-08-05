@@ -27,6 +27,9 @@ function station(
 const stationItems = (index: ReturnType<typeof buildSearchableIndex>) =>
   index.items.filter(item => item.type === 'STATION')
 
+const hubItems = (index: ReturnType<typeof buildSearchableIndex>) =>
+  index.items.filter(item => item.type === 'HUB')
+
 describe('directionalBaseName', () => {
   it('strips the "Arah …" suffix', () => {
     expect(directionalBaseName('Kali Grogol Arah Utara')).toBe('Kali Grogol')
@@ -72,7 +75,7 @@ describe('buildSearchableIndex — directional folding', () => {
 
   it('carries the UNION of both directions\' lines, deduped', () => {
     const [item] = stationItems(buildSearchableIndex(pair, []))
-    expect(item?.body?.slice().sort()).toEqual(['TJ:7R', 'TJ:7T', 'TJ:9'])
+    expect(item?.lineKeys?.slice().sort()).toEqual(['TJ:7R', 'TJ:7T', 'TJ:9'])
   })
 
   it('keeps both directions\' names and codes searchable', () => {
@@ -220,9 +223,9 @@ describe('buildSearchableIndex — hubs', () => {
   // codes would be ambiguous the moment two operators share one.
   it('qualifies each line by the operator of the member that serves it', () => {
     const index = buildSearchableIndex([], [hub])
-    const [item] = index.items
-    expect(item?.body).toEqual(['KCI:C', 'MRTJ:M'])
-    for (const key of item?.body ?? []) {
+    const [item] = hubItems(index)
+    expect(item?.lineKeys).toEqual(['KCI:C', 'MRTJ:M'])
+    for (const key of item?.lineKeys ?? []) {
       expect(index.lines[key]).toBeDefined()
     }
   })
@@ -235,7 +238,7 @@ describe('buildSearchableIndex — hubs', () => {
         { name: 'B', code: 'B', officialName: 'A', operator: 'KCI', lines: [key('KCI', 'C')] }
       ]
     }
-    expect(buildSearchableIndex([], [shared]).items[0]?.body).toEqual(['KCI:C'])
+    expect(hubItems(buildSearchableIndex([], [shared]))[0]?.lineKeys).toEqual(['KCI:C'])
   })
 })
 
@@ -277,10 +280,12 @@ describe('buildSearchableIndex — line dictionary', () => {
     const index = buildSearchableIndex(stations, [])
 
     // A dangling key renders a roundel with no colour, so this is the
-    // invariant that keeps the dictionary honest.
+    // invariant that keeps the dictionary honest. Both variants carry keys —
+    // a list on stations/hubs, a single one on lines.
     expect(index.items.length).toBeGreaterThan(0)
     for (const item of index.items) {
-      for (const key of item.body ?? []) {
+      const keys = item.type === 'LINE' ? [item.lineKey] : item.lineKeys
+      for (const key of keys) {
         expect(index.lines[key]).toBeDefined()
       }
     }

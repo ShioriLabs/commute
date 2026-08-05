@@ -1,18 +1,19 @@
-import type { Line, Searchable } from '@commute/schemas'
+import type { ResolvedSearchableHub, ResolvedSearchableLine, ResolvedSearchableStation, SearchableLine } from '@commute/schemas'
 import { describe, expect, it } from 'vitest'
 import { filterBestTier, keywordScore, SCORE_THRESHOLD } from '../../../utils/fuzzy-match'
 import { foldedSiblingIds, resolveStationId, toPickableStations, type PickableStation } from './pickable-station'
 
-const line = (name: string): Line => ({ name, lineCode: name, colorCode: '#000000' })
+const line = (name: string): SearchableLine =>
+  ({ name, lineCode: name, colorCode: '#000000', operator: 'KCI' })
 
-function item(overrides: Partial<Searchable<Line[]>> = {}): Searchable<Line[]> {
+function item(overrides: Partial<ResolvedSearchableStation> = {}): ResolvedSearchableStation {
   return {
     type: 'STATION',
     title: 'Ancol',
     to: '/stations/KCI/AC',
     keywords: ['ancol', 'ac'],
     operator: 'KCI',
-    body: [line('Tanjung Priuk')],
+    lines: [line('Tanjung Priuk')],
     data: { 'station-id': 'KCI-AC' },
     ...overrides
   }
@@ -34,12 +35,23 @@ describe('toPickableStations', () => {
   // The index is shared with the search sheet, which also indexes hubs and
   // lines. Neither can be an endpoint of a fare.
   it('drops hubs and lines', () => {
-    const items = [
-      item(),
-      item({ type: 'HUB', title: 'Dukuh Atas', data: { 'hub-id': 'dukuh-atas' } }),
-      item({ type: 'LINE', title: 'Lin Cikarang', data: {} })
-    ]
-    expect(toPickableStations(items).map(s => s.name)).toEqual(['Ancol'])
+    const hub: ResolvedSearchableHub = {
+      type: 'HUB',
+      title: 'Dukuh Atas',
+      to: '/hubs/dukuh-atas',
+      keywords: ['dukuh atas'],
+      lines: [line('Tanjung Priuk')],
+      data: { 'hub-id': 'dukuh-atas' }
+    }
+    const lineEntry: ResolvedSearchableLine = {
+      type: 'LINE',
+      title: 'Lin Cikarang',
+      to: '/lines/KCI/C',
+      keywords: ['lin cikarang'],
+      operator: 'KCI',
+      line: line('Cikarang')
+    }
+    expect(toPickableStations([item(), hub, lineEntry]).map(s => s.name)).toEqual(['Ancol'])
   })
 
   it('drops an entry with no station id rather than emitting a broken one', () => {

@@ -1,5 +1,12 @@
-import type { Line } from '@commute/schemas'
-import type { Searchable } from '@commute/schemas'
+import type {
+  RawSearchable,
+  RawSearchableHub,
+  RawSearchableLine,
+  RawSearchableStation,
+  Searchable,
+  SearchableIndex,
+  SearchableLine
+} from '@commute/schemas'
 import type { StandardResponse } from '@schema/response'
 import { useMemo } from 'react'
 import useSWR from 'swr'
@@ -15,27 +22,9 @@ import { fetcher } from 'utils/fetcher'
  * already folded.
  *
  * Line names and colours arrive once in a dictionary rather than repeated across
- * every entry, so `body` is rehydrated from keys here — the only client-side
- * shaping left.
+ * every entry, so the keys each entry carries are resolved here — the only
+ * client-side shaping left.
  */
-
-interface SearchableLine {
-  name: string
-  lineCode: string
-  colorCode: `#${string}`
-  operator: string
-}
-
-// On the wire `body` is a list of keys into `lines`; the client hands
-// components a Line[].
-interface RawSearchable extends Omit<Searchable, 'body'> {
-  body?: string[]
-}
-
-interface SearchableIndex {
-  lines: Record<string, SearchableLine>
-  items: RawSearchable[]
-}
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -45,8 +34,34 @@ const swrConfig = {
 }
 
 export interface UseSearchablesResult {
-  searchables: Searchable<Line[]>[]
+  searchables: Searchable[]
   isLoading: boolean
+}
+
+/*
+ * Entries as they were shaped before the discriminated union: one `body` field
+ * holding line keys, meaning "the lines here" on a station or hub and "the line
+ * this IS" (array-wrapped) on a line.
+ *
+ * Still reachable — a service-worker or SWR cache outlives a deploy — so the
+ * old shape is migrated on read rather than left to reach components that no
+ * longer expect it.
+ */
+type LegacySearchable =
+  | (Omit<RawSearchableStation, 'lineKeys'> & { body?: string[] })
+  | (Omit<RawSearchableHub, 'lineKeys'> & { body?: string[] })
+  | (Omit<RawSearchableLine, 'lineKey'> & { body?: string[] })
+
+export function migrateLegacy(item: RawSearchable | LegacySearchable): RawSearchable | null {
+  if (!('body' in item) || item.body === undefined) return item as RawSearchable
+
+  const { body, ...rest } = item
+  if (rest.type === 'LINE') {
+    const [lineKey] = body
+    // A line entry with no key can't be rendered — `line` is not optional.
+    return lineKey ? { ...rest, lineKey } : null
+  }
+  return { ...rest, lineKeys: body }
 }
 
 export function useSearchables(): UseSearchablesResult {
@@ -56,27 +71,41 @@ export function useSearchables(): UseSearchablesResult {
     swrConfig
   )
 
-  const searchables = useMemo<Searchable<Line[]>[]>(() => {
+  const searchables = useMemo<Searchable[]>(() => {
     const index = data?.data
     if (!index) return []
 
-    return index.items.map((item) => {
-      const lines: Line[] = []
-      for (const key of item.body ?? []) {
-        // Keys are operator-qualified ("KCI:C"), so a hub spanning operators
-        // resolves unambiguously. A miss would render a colourless roundel; the
-        // API guarantees against it, and an API test enforces that.
-        const entry = index.lines[key]
-        if (!entry) continue
-        lines.push({
-          name: entry.name,
-          lineCode: entry.lineCode,
-          colorCode: entry.colorCode
-        })
+    /*
+     * Keys are operator-qualified ("KCI:C"), so a hub spanning operators
+     * resolves unambiguously. A miss would render a colourless roundel; the
+     * API guarantees against it, and an API test enforces that.
+     */
+    const resolve = (key: string): SearchableLine | undefined => index.lines[key]
+
+    const resolved: Searchable[] = []
+    for (const raw of index.items) {
+      const item = migrateLegacy(raw)
+      if (!item) continue
+
+      if (item.type === 'LINE') {
+        const { lineKey, ...rest } = item
+        const line = resolve(lineKey)
+        // Dropped rather than half-built: every consumer may assume `line`.
+        if (!line) continue
+        resolved.push({ ...rest, line })
+        continue
       }
 
-      return { ...item, body: lines }
-    })
+      const { lineKeys, ...rest } = item
+      const lines: SearchableLine[] = []
+      for (const key of lineKeys) {
+        const line = resolve(key)
+        if (line) lines.push(line)
+      }
+      resolved.push({ ...rest, lines })
+    }
+
+    return resolved
   }, [data])
 
   return { searchables, isLoading }

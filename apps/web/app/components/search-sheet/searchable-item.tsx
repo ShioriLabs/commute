@@ -1,4 +1,3 @@
-import type { Line } from '@commute/schemas'
 import type { Searchable } from '@commute/schemas'
 import { memo, useMemo, type MouseEvent } from 'react'
 import { Link } from 'react-router'
@@ -8,29 +7,15 @@ import HighlightMatch from '~/components/highlight-match'
 import LineRoundel from '~/components/line-roundel'
 
 interface Props {
-  // Always the rehydrated shape: useSearchables resolves the wire's line keys
-  // into Line[] for every item type before anything renders.
-  searchable: Searchable<Line[]>
+  // The resolved union: useSearchables swaps each entry's line keys for the
+  // lines themselves before anything renders.
+  searchable: Searchable
   onClick?: (e: MouseEvent<HTMLAnchorElement>) => void
   // Query text to highlight inside the title (substring hits only; pure-fuzzy
   // matches render plain).
   query?: string
   // Position in the result list, drives the staggered entrance delay.
   index?: number
-}
-
-/*
- * The single Line a LINE result renders as a chip, or undefined for any other
- * type.
- *
- * `body` is a Line[] for EVERY type — useSearchables rehydrates the wire's line
- * keys into one before anything renders — and a LINE simply carries exactly
- * one. Reading `body.colorCode` directly (as this component used to, via a
- * `Searchable<Line>` cast) yields undefined and crashes getForegroundColor on
- * any query that surfaces a line, e.g. "si" -> "Lin Bekasi".
- */
-export function lineOf(searchable: Searchable<Line[]>): Line | undefined {
-  return searchable.type === 'LINE' ? searchable.body?.[0] : undefined
 }
 
 // Memoized: rendered from the deferred filter pass, so the urgent keystroke
@@ -44,7 +29,10 @@ export default memo(function SearchableItem({ searchable, onClick, query, index 
     )
   }, [searchable.data])
 
-  const lineBody = lineOf(searchable)
+  // Narrowing proves the shape: a LINE carries exactly one line, a station or
+  // hub carries a list. Neither can be read as the other.
+  const lineBody = searchable.type === 'LINE' ? searchable.line : undefined
+  const lines = searchable.type === 'LINE' ? [] : searchable.lines
 
   // Unlike the fare picker, every row animates — this list is short enough that
   // rows past the cap sharing the maximum delay reads fine.
@@ -68,13 +56,14 @@ export default memo(function SearchableItem({ searchable, onClick, query, index 
               )
             : null}
         </b>
-        { (searchable.type === 'STATION' || searchable.type === 'HUB') && searchable.body?.length
+        { lines.length > 0
           ? (
               <ul className="flex flex-row gap-1 flex-wrap">
-                {searchable.body.map(line => (
+                {lines.map(line => (
                   <li key={line.lineCode}>
-                    {/* Drives TJ roundel style. Absent on hubs, which span operators. */}
-                    <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={searchable.operator} />
+                    {/* Drives TJ roundel style. Read off the line itself, not
+                        the entry: a hub spans operators and carries none. */}
+                    <LineRoundel size="SM" code={line.lineCode} color={line.colorCode} operator={line.operator} />
                     <span className="sr-only">{line.name}</span>
                   </li>
                 ))}

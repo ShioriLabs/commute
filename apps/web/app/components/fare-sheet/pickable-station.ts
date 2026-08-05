@@ -50,7 +50,7 @@ export interface PickableStation {
  * boarding points though, so `station-ids` carries every member (primary first)
  * and this reads the rest back out.
  */
-export function foldedSiblingIds(item: Searchable<Line[]>): string[] {
+export function foldedSiblingIds(item: Searchable): string[] {
   const all = item.data?.['station-ids']
   if (!all) return []
   return all.split(',').slice(1).filter(Boolean)
@@ -60,7 +60,7 @@ export function foldedSiblingIds(item: Searchable<Line[]>): string[] {
  * Station entries only — the index also carries hubs and lines, and neither can
  * be an endpoint of a fare.
  */
-export function toPickableStations(items: Searchable<Line[]>[]): PickableStation[] {
+export function toPickableStations(items: Searchable[]): PickableStation[] {
   const stations: PickableStation[] = []
   for (const item of items) {
     if (item.type !== 'STATION') continue
@@ -70,10 +70,10 @@ export function toPickableStations(items: Searchable<Line[]>[]): PickableStation
     stations.push({
       id,
       name: item.title,
-      // Station entries always carry an operator; the field is optional on the
-      // schema only because hubs span several and omit it.
-      operator: item.operator as OperatorCode,
-      lines: item.body ?? [],
+      // Narrowed to STATION above, which carries an operator by definition —
+      // no cast needed. Only hubs omit it.
+      operator: item.operator,
+      lines: item.lines,
       ...(item.score !== undefined ? { score: item.score } : {}),
       ...(siblings.length > 0 ? { siblingIds: siblings } : {}),
       keywords: item.keywords

@@ -14,10 +14,13 @@ import { ALL_LINES } from 'utils/line'
  * so the whole builder is unit-testable without D1.
  */
 
-export type SearchableType = 'STATION' | 'LINE' | 'HUB' | 'OPERATOR'
+export type SearchableType = 'STATION' | 'LINE' | 'HUB'
 
-export interface Searchable {
-  type: SearchableType
+/*
+ * Fields every entry carries. What differs per type — which lines it shows,
+ * whether it has a single operator — lives on the variants below.
+ */
+interface SearchableBase {
   title: string
   to: string
   // Lowercased match targets. Built server-side because several are impossible
@@ -25,18 +28,41 @@ export interface Searchable {
   // directional halte pairs.
   keywords: string[]
   subtitle?: string
-  // Keys into the response's `lines` dictionary, operator-qualified ("KCI:C").
-  // Line names and colours are sent once there rather than repeated across ~375
-  // entries. Qualified because line codes are only unique per operator, and a
-  // hub's lines span several operators.
-  body?: string[]
   data?: Record<string, string>
-  // Operator code. Explicit so the client never has to parse it back out of
-  // `to`, which is what it used to do for TJ roundel styling and rank nudging.
-  operator?: Operator
   // Popularity. Omitted when 0 — the client already reads it as `?? 0`.
   score?: number
 }
+
+/*
+ * Line keys are operator-qualified ("KCI:C") into the response's `lines`
+ * dictionary: names and colours are sent once there rather than repeated across
+ * ~375 entries. Qualified because line codes are unique only per operator, and
+ * a hub's lines span several.
+ */
+export interface SearchableStation extends SearchableBase {
+  type: 'STATION'
+  // Explicit so the client never parses it back out of `to`, which is what it
+  // used to do for TJ roundel styling and rank nudging.
+  operator: Operator
+  lineKeys: string[]
+}
+
+export interface SearchableHub extends SearchableBase {
+  type: 'HUB'
+  // No `operator`: one hub can span several.
+  lineKeys: string[]
+}
+
+export interface SearchableLineEntry extends SearchableBase {
+  type: 'LINE'
+  operator: Operator
+  // Singular: a line entry IS one line. It used to be a one-element `body`
+  // array shared with the station/hub shape, which is what let a client read
+  // line fields off the array itself and crash the search sheet.
+  lineKey: string
+}
+
+export type Searchable = SearchableStation | SearchableHub | SearchableLineEntry
 
 export interface SearchableLine {
   name: string
@@ -154,7 +180,7 @@ function groupDirectionalStations(stations: IndexableStation[]): IndexableStatio
     .filter(group => group.length > 0)
 }
 
-function stationToSearchable(group: IndexableStation[]): Searchable | null {
+function stationToSearchable(group: IndexableStation[]): SearchableStation | null {
   // Lowest code wins, so the folded entry keeps a stable URL regardless of the
   // order D1 returned the rows in.
   const members = group.slice().sort((a, b) => a.code.localeCompare(b.code))
@@ -187,7 +213,7 @@ function stationToSearchable(group: IndexableStation[]): Searchable | null {
     subtitle: OPERATORS[primary.operator].name,
     to: `/stations/${primary.operator}/${primary.code}`,
     keywords,
-    body: lineKeys,
+    lineKeys,
     data: {
       'station-id': primary.id,
       /*
@@ -217,7 +243,7 @@ function stationToSearchable(group: IndexableStation[]): Searchable | null {
  * Keywords include every member's name & code so a search for any member
  * (e.g. "sudirman") surfaces the hub.
  */
-function hubToSearchable(hub: IndexableHub): Searchable {
+function hubToSearchable(hub: IndexableHub): SearchableHub {
   const keywords = lowercasedKeywords([
     hub.name,
     ...hub.members.flatMap(member => [member.name, member.officialName, member.code])
@@ -241,7 +267,7 @@ function hubToSearchable(hub: IndexableHub): Searchable {
     subtitle: HUB_KIND_LABEL[hub.kind],
     to: `/hubs/${hub.slug}`,
     keywords,
-    body: lineKeys,
+    lineKeys,
     data: { 'hub-id': hub.slug },
     ...(hub.score > 0 ? { score: hub.score } : {})
   }
@@ -251,7 +277,7 @@ function hubToSearchable(hub: IndexableHub): Searchable {
  * Score is always 0 (no popularity data), so lines rank below equally-matching
  * popular stations — the field is therefore omitted entirely.
  */
-function lineToSearchable(operator: { code: Operator, name: string }, line: Line): Searchable {
+function lineToSearchable(operator: { code: Operator, name: string }, line: Line): SearchableLineEntry {
   const name = line.name.toLowerCase()
 
   return {
@@ -265,7 +291,7 @@ function lineToSearchable(operator: { code: Operator, name: string }, line: Line
       name.startsWith('lin ') ? name.slice(4) : null,
       line.lineCode
     ]),
-    body: [lineKey(operator.code, line.lineCode)],
+    lineKey: lineKey(operator.code, line.lineCode),
     operator: operator.code
   }
 }
