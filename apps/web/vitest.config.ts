@@ -15,11 +15,14 @@ export default defineConfig({
     }
   },
   test: {
+    // .tsx too: logic worth testing sometimes lives beside a component (an
+    // exported selector, say), and a .ts-only glob silently skips those files
+    // rather than failing loudly.
     include: [
-      'utils/**/*.test.ts',
-      'app/**/*.test.ts',
-      'functions/**/*.test.ts',
-      'scripts/**/*.test.ts'
+      'utils/**/*.test.{ts,tsx}',
+      'app/**/*.test.{ts,tsx}',
+      'functions/**/*.test.{ts,tsx}',
+      'scripts/**/*.test.{ts,tsx}'
     ]
   }
 })

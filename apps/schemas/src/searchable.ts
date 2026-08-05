@@ -72,8 +72,14 @@ export type SearchableIndex = HexColored<v.InferOutput<typeof SearchableIndexSch
  * `body` is line keys on the wire, but the web app rehydrates it into Line[]
  * before rendering — hence the type parameter, which matches how the search
  * sheet has always consumed this.
+ *
+ * Constrained to an array because `body` is one in both shapes. It was
+ * unconstrained, so `Searchable<Line>` type-checked while the runtime value was
+ * still the array — a consumer then read `.colorCode` straight off it, got
+ * undefined, and crashed the search sheet. A LINE carries exactly one line, so
+ * reach for it with `body?.[0]`, not by re-typing the field.
  */
-export type Searchable<BodyType = unknown> =
+export type Searchable<BodyType extends readonly unknown[] = unknown[]> =
   Omit<v.InferOutput<typeof SearchableSchema>, 'body'> & { body?: BodyType }
 
 /** The wire shape, before the client resolves `body` against the dictionary. */
