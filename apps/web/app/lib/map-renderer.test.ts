@@ -272,19 +272,58 @@ describe('routeDrawItems', () => {
     expect(firstColor).toBeGreaterThan(lastCasing)
   })
 
-  it('paints pins last, as degenerate capsules on the pin centroid', () => {
+  it('paints pins last, as discs on the pin centroid', () => {
     const items = routeDrawItems(overlay)
-    const pinItems = items.filter(i => i.ax === i.bx && i.ay === i.by)
-    expect(pinItems.length).toBeGreaterThanOrEqual(4) // ≥ disc + inner per pin
-    const firstPin = items.indexOf(pinItems[0])
-    const lastSegment = lastIndexWhere(items, i => i.ax !== i.bx)
-    expect(firstPin).toBeGreaterThan(lastSegment)
-    expect(pinItems.every(i => i.ax === 0 || i.ax === 200)).toBe(true)
+    const discs = items.filter(i => i.ax === i.bx && i.ay === i.by)
+    expect(discs.length).toBeGreaterThanOrEqual(4) // ≥ disc + inner per pin
+    // Identified by the route's own half-width rather than by "not a disc":
+    // the arrow glyphs inside a pin are non-degenerate capsules too, and they
+    // legitimately come after everything here.
+    const lastSegment = lastIndexWhere(items, i => i.r === 7 || i.r === 7 + ROUTE_CASING_EXTRA_WORLD)
+    expect(items.indexOf(discs[0])).toBeGreaterThan(lastSegment)
+    expect(discs.every(i => i.ax === 0 || i.ax === 200)).toBe(true)
+  })
+
+  // The ends carry a direction glyph: up where the journey starts, down where
+  // it finishes. Screen y grows downward, so an up arrow's tip is the SMALLEST
+  // y in the glyph — the easy thing to get backwards.
+  it('points the origin arrow up and the destination arrow down', () => {
+    const items = routeDrawItems(overlay)
+    const glyphAt = (x: number) => items.filter(i => i.ax !== i.bx || i.ay !== i.by).filter(i => Math.abs(i.ax - x) <= 12 && Math.abs(i.bx - x) <= 12)
+
+    const originGlyph = glyphAt(0)
+    const destGlyph = glyphAt(200)
+    expect(originGlyph).toHaveLength(3) // shaft + two barbs
+    expect(destGlyph).toHaveLength(3)
+
+    // The shaft is the vertical stroke; the barbs meet at its tip.
+    const tipY = (glyph: typeof items, dir: 'up' | 'down') =>
+      dir === 'up' ? Math.min(...glyph.flatMap(i => [i.ay, i.by])) : Math.max(...glyph.flatMap(i => [i.ay, i.by]))
+    // Both barbs terminate at the tip, which is what makes it read as a point.
+    const originTip = tipY(originGlyph, 'up')
+    expect(originGlyph.filter(i => i.ay === originTip || i.by === originTip)).toHaveLength(3)
+    const destTip = tipY(destGlyph, 'down')
+    expect(destGlyph.filter(i => i.ay === destTip || i.by === destTip)).toHaveLength(3)
+
+    // And the two glyphs are mirror images, not the same arrow twice.
+    expect(originTip - 0).toBeLessThan(0)
+    expect(destTip - 0).toBeGreaterThan(0)
   })
 
   it('keeps the pin footprint inside the bbox margin the model promises', () => {
-    for (const item of routeDrawItems(overlay).filter(i => i.ax === i.bx && i.ay === i.by)) {
-      expect(item.r).toBeLessThanOrEqual(ROUTE_PIN_RADIUS_WORLD + ROUTE_CASING_EXTRA_WORLD)
+    // Every pin item, glyph strokes included: the model pads the bbox by the
+    // pin radius, so anything reaching past that would be clipped by a camera
+    // fit that framed the route exactly.
+    const margin = ROUTE_PIN_RADIUS_WORLD + ROUTE_CASING_EXTRA_WORLD
+    for (const item of routeDrawItems(overlay)) {
+      for (const [x, y] of [[item.ax, item.ay], [item.bx, item.by]] as const) {
+        const nearOrigin = Math.hypot(x - 0, y - 0) <= margin
+        const nearDest = Math.hypot(x - 200, y - 0) <= margin
+        // Segments run between the two, so only assert on pin-local geometry.
+        if (!nearOrigin && !nearDest) continue
+        const cx = nearOrigin ? 0 : 200
+        expect(Math.hypot(x - cx, y - 0) + item.r).toBeLessThanOrEqual(margin)
+      }
     }
   })
 })

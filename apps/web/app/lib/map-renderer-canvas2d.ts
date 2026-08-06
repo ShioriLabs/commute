@@ -196,6 +196,20 @@ export function createCanvas2DRenderer(
         }
       }
     }
+    /*
+     * Drain the map's colour while a route is drawn, so the route's own colours
+     * are the only saturated thing on screen. The WebGL path does this in the
+     * tile shader; here the filter is the only tool available, and it wraps both
+     * the underlay and the tile loop so the two never disagree mid-load.
+     *
+     * ctx.filter is the slow canvas2d path — an intermediate surface per
+     * drawImage. Acceptable because this renderer is the WebGL2 fallback and a
+     * shown route is a near-static camera. It is also unsupported on older
+     * Safari, where it no-ops into today's full-colour map rather than breaking.
+     */
+    const desat = route && route.alpha > 0 ? route.desaturate : 0
+    if (desat > 0) ctx.filter = `saturate(${1 - desat})`
+
     // Kept resident for the renderer's whole life — see the matching comment in
     // map-renderer-webgl.ts. releaseTiles() resets every tile to tier 0, and
     // this underlay is what covers the refill.
@@ -219,6 +233,12 @@ export function createCanvas2DRenderer(
         }
       }
     }
+
+    // Back to full colour before anything but map artwork is drawn. ctx.filter
+    // is sticky across draw calls, so without this the route, its pins and the
+    // selection spotlight would all be desaturated too — which would erase the
+    // one distinction the desaturation exists to create.
+    if (desat > 0) ctx.filter = 'none'
 
     if (route && route.alpha > 0 && routeItems.length > 0) {
       // Flat dim under the route — no punch-out; the route's opaque capsules

@@ -124,7 +124,12 @@ export interface RouteSegment {
 export interface RoutePin {
   x: number
   y: number
-  kind: 'origin' | 'destination'
+  kind: 'origin' | 'destination' | 'stop'
+  // Only for 'stop': the colour of the leg being ridden through it, so an
+  // intermediate station reads as a dot ON that line — Manggarai is blue when
+  // you are riding Cikarang through it. The ends are ink-coloured regardless,
+  // since they belong to the journey rather than to either line.
+  color?: [number, number, number]
 }
 
 export interface RouteOverlay {
@@ -137,11 +142,36 @@ export interface RouteOverlay {
 export interface RouteOverlayFrame {
   alpha: number // 0..1 whole-overlay fade
   scrimAlpha: number // 0..ROUTE_SCRIM_MAX_ALPHA flat dim under the route
+  // 0..ROUTE_DESATURATE_MAX colour drained from the map tiles. Applies to the
+  // artwork only — the route's own capsules and pins keep their colour, which is
+  // the whole point.
+  desaturate: number
 }
 
-// Lighter than the selection spotlight's SCRIM_MAX_ALPHA: the route dim is
-// ambient (it stays up while browsing), the spotlight is momentary.
-export const ROUTE_SCRIM_MAX_ALPHA = 0.2
+/*
+ * The route separates from the map by draining the map's colour, not by dimming
+ * it — see ROUTE_DESATURATE_MAX. So this is 0, and the scrim never draws.
+ *
+ * Kept rather than deleted because dim-vs-desaturate is a judgement that can only
+ * really be made on a device: the whole mechanism (both renderers' scrim passes,
+ * the shader, the buffers) survives behind one number, so revisiting it is an
+ * edit here rather than a resurrection across two renderers.
+ */
+export const ROUTE_SCRIM_MAX_ALPHA = 0
+
+/*
+ * How much colour to drain from the map while a route is drawn, 0..1.
+ *
+ * The schematic's information IS its line colours, so removing them is what
+ * makes every unrelated corridor recede at once — while leaving labels,
+ * stations and shapes perfectly legible, which a dark scrim does not. The
+ * route's own capsules keep their brand colour and become the only saturated
+ * thing on screen.
+ *
+ * Short of 1: a fully grey map reads as a rendering failure rather than a
+ * deliberate state.
+ */
+export const ROUTE_DESATURATE_MAX = 0.85
 // World units, like the spotlight constants, so the route stays glued to the
 // map across zoom instead of fattening as the view pulls out. The artwork's
 // own rail corridors are 25 world units wide (BRT 15), so the route line must
@@ -157,10 +187,36 @@ export const ROUTE_PIN_RADIUS_WORLD = 26
 // matches the spotlight scrim so the overlay reads as one system.
 const ROUTE_INK: [number, number, number] = [0.06, 0.09, 0.16]
 const ROUTE_WHITE: [number, number, number] = [1, 1, 1]
-// Origin is a ring (thick white center), destination is a filled dot with a
-// small white core — the classic "here → there" asymmetry without glyphs.
-const ROUTE_PIN_INNER_ORIGIN_WORLD = 16
-const ROUTE_PIN_INNER_DESTINATION_WORLD = 9
+
+/*
+ * The ends are the same marker as an intermediate stop — white casing, the
+ * ridden line's colour, white core — with an arrow struck through the core:
+ * up for where the journey starts, down for where it ends.
+ *
+ * Drawn a size up from a plain stop so the ends still dominate the line, and
+ * the glyph is built from capsules like everything else in the paint list, so
+ * both renderers draw it verbatim with no shape primitive of their own.
+ */
+const ROUTE_PIN_INNER_WORLD = 17
+// Half-height and half-width of the arrow's bounding box, world units. The
+// chevron sits on the upper half of the shaft, which is what reads as a
+// direction at a glance rather than as a plus sign.
+const ROUTE_ARROW_HALF_H = 11
+const ROUTE_ARROW_HALF_W = 8
+const ROUTE_ARROW_HALF_WIDTH_WORLD = 2.6
+
+/*
+ * Intermediate stops: a marker at every station the route calls at, built like
+ * the schematic's own — a white casing, the ridden line's colour, then a white
+ * core, so what reads is a coloured ring.
+ *
+ * The outer disc has to beat ROUTE_LINE_HALF_WIDTH_WORLD (16) or there is no
+ * coloured rim outside the line to see, and the marker collapses into a plain
+ * white hole punched through the route. Still well under the end pins' 26, so
+ * origin and destination stay the emphasis.
+ */
+export const ROUTE_STOP_RADIUS_WORLD = 20
+const ROUTE_STOP_INNER_WORLD = 10
 
 // One entry of the route overlay's paint list: an oriented capsule (degenerate
 // — a == b — for pin discs). Renderers draw these verbatim, in order, so the
@@ -184,15 +240,60 @@ export function routeDrawItems(route: RouteOverlay): RouteDrawItem[] {
   for (const s of route.segments) {
     items.push({ ax: s.ax, ay: s.ay, bx: s.bx, by: s.by, r: s.r, color: s.color })
   }
+  // Intermediate stops first, so an end pin landing on the same spot covers its
+  // dot rather than being punctured by it.
   for (const pin of route.pins) {
+    if (pin.kind !== 'stop') continue
+    const disc = (r: number, color: [number, number, number]) => {
+      items.push({ ax: pin.x, ay: pin.y, bx: pin.x, by: pin.y, r, color })
+    }
+    disc(ROUTE_STOP_RADIUS_WORLD + ROUTE_CASING_EXTRA_WORLD, ROUTE_WHITE)
+    disc(ROUTE_STOP_RADIUS_WORLD, pin.color ?? ROUTE_INK)
+    disc(ROUTE_STOP_INNER_WORLD, ROUTE_WHITE)
+  }
+  for (const pin of route.pins) {
+    if (pin.kind === 'stop') continue
     const disc = (r: number, color: [number, number, number]) => {
       items.push({ ax: pin.x, ay: pin.y, bx: pin.x, by: pin.y, r, color })
     }
     disc(ROUTE_PIN_RADIUS_WORLD + ROUTE_CASING_EXTRA_WORLD, ROUTE_WHITE)
-    disc(ROUTE_PIN_RADIUS_WORLD, ROUTE_INK)
-    disc(pin.kind === 'origin' ? ROUTE_PIN_INNER_ORIGIN_WORLD : ROUTE_PIN_INNER_DESTINATION_WORLD, ROUTE_WHITE)
+    disc(ROUTE_PIN_RADIUS_WORLD, pin.color ?? ROUTE_INK)
+    disc(ROUTE_PIN_INNER_WORLD, ROUTE_WHITE)
+    pushArrow(items, pin.x, pin.y, pin.kind === 'origin' ? 'up' : 'down', pin.color ?? ROUTE_INK)
   }
   return items
+}
+
+/*
+ * An arrow glyph as three capsules: a vertical shaft plus two chevron strokes.
+ *
+ * Capsules rather than a path because RouteDrawItem is the only vocabulary both
+ * renderers share — giving them a triangle or an SVG path would mean two new
+ * code paths that could drift. Rounded caps are what make the joint at the tip
+ * read as a point instead of a notch.
+ *
+ * Screen y grows downward, so 'up' puts the tip at -halfH.
+ */
+function pushArrow(
+  items: RouteDrawItem[],
+  cx: number,
+  cy: number,
+  direction: 'up' | 'down',
+  color: [number, number, number]
+): void {
+  // +1 draws the glyph pointing down, -1 flips it to point up.
+  const sign = direction === 'up' ? -1 : 1
+  const tipY = cy + sign * ROUTE_ARROW_HALF_H
+  const tailY = cy - sign * ROUTE_ARROW_HALF_H
+  const stroke = (ax: number, ay: number, bx: number, by: number) => {
+    items.push({ ax, ay, bx, by, r: ROUTE_ARROW_HALF_WIDTH_WORLD, color })
+  }
+  stroke(cx, tailY, cx, tipY)
+  // Barbs land short of the tip by the stroke's own half-width, so the three
+  // rounded caps overlap into one point rather than fanning past it.
+  const barbY = tipY - sign * ROUTE_ARROW_HALF_W
+  stroke(cx - ROUTE_ARROW_HALF_W, barbY, cx, tipY)
+  stroke(cx + ROUTE_ARROW_HALF_W, barbY, cx, tipY)
 }
 
 // Split a→b into dash sub-segments. The pattern is centered — equal margins at

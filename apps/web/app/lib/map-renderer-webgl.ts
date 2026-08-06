@@ -31,9 +31,19 @@ const FS = `#version 300 es
 precision highp float;
 in vec2 v_texcoord;
 uniform sampler2D u_texture;
+// 0 = the artwork's own colour, 1 = fully grey. Rec.709 luma, which is the
+// matrix CSS saturate() uses — the Canvas2D fallback desaturates with that
+// filter, so sharing the coefficients is what stops the two renderers drifting
+// apart in hue at intermediate values.
+uniform float u_desaturate;
 out vec4 outColor;
 void main() {
-  outColor = texture(u_texture, v_texcoord);
+  vec4 c = texture(u_texture, v_texcoord);
+  float luma = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+  // Textures are uploaded premultiplied, so the grey has to be weighted by alpha
+  // to stay in that space. A no-op for the opaque WebP tiers; it matters for the
+  // runtime-rasterized SVG tier, which would otherwise halo at tile edges.
+  outColor = vec4(mix(c.rgb, vec3(luma) * c.a, u_desaturate), c.a);
 }
 `
 
@@ -797,7 +807,7 @@ export function createWebGLRenderer(
   // frame-constant u_transform/u_tileSize once per frame stops the mat3 being
   // re-uploaded per tile.
   const transformMat = new Float32Array(9)
-  const frameUniforms = { u_transform: transformMat, u_tileSize: [0, 0] }
+  const frameUniforms = { u_transform: transformMat, u_tileSize: [0, 0], u_desaturate: 0 }
   const tileUniforms: { u_tileOffset: number[], u_texture: WebGLTexture | null } = {
     u_tileOffset: [0, 0],
     u_texture: null
@@ -835,6 +845,15 @@ export function createWebGLRenderer(
     gl.disable(gl.BLEND)
 
     const mat = buildTransformMat3(transform, cssW, cssH, transformMat)
+
+    /*
+     * How grey the map is this frame. Computed once here because it has to reach
+     * THREE separate setUniforms calls below — the preview-only return, the
+     * preview underlay, and the per-frame tile uniforms — each of which passes
+     * its own object, and twgl only sets the keys it is handed. A site left out
+     * doesn't read zero, it inherits whatever the last frame bound.
+     */
+    const desat = route && route.alpha > 0 ? route.desaturate : 0
 
     gl.useProgram(programInfo.program)
     twgl.setBuffersAndAttributes(twglGl, programInfo, quadVao)
@@ -877,7 +896,8 @@ export function createWebGLRenderer(
           u_tileOffset: [0, 0],
           u_tileSize: [mapW, mapH],
           u_transform: mat,
-          u_texture: previewTexture
+          u_texture: previewTexture,
+          u_desaturate: desat
         })
         twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
         drawOverlays(mat, transform, cssW, cssH, selection, route)
@@ -949,7 +969,8 @@ export function createWebGLRenderer(
           u_tileOffset: [0, 0],
           u_tileSize: [mapW, mapH],
           u_transform: mat,
-          u_texture: previewTexture
+          u_texture: previewTexture,
+          u_desaturate: desat
         })
         twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
       }
@@ -968,6 +989,7 @@ export function createWebGLRenderer(
     // Frame-constant uniforms once; only offset + texture change per tile.
     frameUniforms.u_tileSize[0] = tileW
     frameUniforms.u_tileSize[1] = tileH
+    frameUniforms.u_desaturate = desat
     twgl.setUniforms(programInfo, frameUniforms)
 
     for (let i = 0; i < visibleCount; i++) {

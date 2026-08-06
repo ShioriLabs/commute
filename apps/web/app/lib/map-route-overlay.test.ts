@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { FareResult, FareResultRideLeg, FareResultTransferLeg } from '@commute/schemas'
 import type { Point } from './map-renderer'
-import { ROUTE_PIN_RADIUS_WORLD } from './map-renderer'
+import { ROUTE_LINE_HALF_WIDTH_WORLD, ROUTE_PIN_RADIUS_WORLD, ROUTE_STOP_RADIUS_WORLD } from './map-renderer'
+import type { Corridor } from './map-corridors'
 import { buildRouteOverlayModel } from './map-route-overlay'
 
 // The overlay model is where fare legs (station id sequences) meet points.json
@@ -181,5 +182,157 @@ describe('buildRouteOverlayModel', () => {
     const exact = pt('TJ-H00037C', 100, 100)
     const model = buildRouteOverlayModel(null, pair('TJ-H00037C', null), [alias, exact], resolveLine)
     expect(model!.overlay.pins).toEqual([{ x: 100, y: 100, kind: 'origin' }])
+  })
+})
+
+// Every station the route calls at gets a dot in the colour of the line being
+// ridden through it, matching the schematic's own marker idiom.
+describe('buildRouteOverlayModel stop dots', () => {
+  it('marks each intermediate stop in the ridden line’s colour', () => {
+    const points = [pt('KCI-AAA', 0, 0), pt('KCI-MID', 100, 0), pt('KCI-BBB', 200, 0)]
+    const fare = fareResult([rideLeg(['KCI-AAA', 'KCI-MID', 'KCI-BBB'], '#FF0000')], 'KCI-AAA', 'KCI-BBB')
+    const model = buildRouteOverlayModel(fare, pair('KCI-AAA', 'KCI-BBB'), points, resolveLine)
+    const stops = model!.overlay.pins.filter(p => p.kind === 'stop')
+    expect(stops).toEqual([{ x: 100, y: 0, kind: 'stop', color: [1, 0, 0] }])
+  })
+
+  it('leaves the journey’s own ends to their pins', () => {
+    // A dot under an origin/destination pin is invisible geometry, and would
+    // also colour an end by whichever line happens to touch it.
+    const points = [pt('KCI-AAA', 0, 0), pt('KCI-BBB', 200, 0)]
+    const fare = fareResult([rideLeg(['KCI-AAA', 'KCI-BBB'])], 'KCI-AAA', 'KCI-BBB')
+    const model = buildRouteOverlayModel(fare, pair('KCI-AAA', 'KCI-BBB'), points, resolveLine)
+    expect(model!.overlay.pins.filter(p => p.kind === 'stop')).toEqual([])
+    expect(model!.overlay.pins.map(p => p.kind)).toEqual(['origin', 'destination'])
+  })
+
+  it('draws one dot at an interchange, not one per leg', () => {
+    // Both legs call at the interchange; two stacked dots in different colours
+    // would just be the second one winning.
+    const points = [pt('KCI-AAA', 0, 0), pt('KCI-XCH', 100, 0), pt('MRT-BBB', 200, 0)]
+    const fare = fareResult(
+      [rideLeg(['KCI-AAA', 'KCI-XCH'], '#FF0000'), rideLeg(['KCI-XCH', 'MRT-BBB'], '#0000FF')],
+      'KCI-AAA',
+      'MRT-BBB'
+    )
+    const model = buildRouteOverlayModel(fare, pair('KCI-AAA', 'MRT-BBB'), points, resolveLine)
+    const stops = model!.overlay.pins.filter(p => p.kind === 'stop')
+    expect(stops).toHaveLength(1)
+    // The arriving line owns it.
+    expect(stops[0].color).toEqual([1, 0, 0])
+  })
+
+  it('pads the bbox by the dot radius, not the pin radius', () => {
+    const points = [pt('KCI-AAA', 0, 0), pt('KCI-MID', 100, 500), pt('KCI-BBB', 200, 0)]
+    const fare = fareResult([rideLeg(['KCI-AAA', 'KCI-MID', 'KCI-BBB'])], 'KCI-AAA', 'KCI-BBB')
+    const model = buildRouteOverlayModel(fare, pair('KCI-AAA', 'KCI-BBB'), points, resolveLine)
+    // The mid stop is the southmost thing drawn; its dot is smaller than a pin,
+    // so over-padding here would widen the camera fit for every station between.
+    expect(model!.bbox.maxY).toBe(500 + ROUTE_STOP_RADIUS_WORLD)
+    expect(ROUTE_STOP_RADIUS_WORLD).toBeLessThan(ROUTE_PIN_RADIUS_WORLD)
+  })
+})
+
+/*
+ * Corridors make a ride leg follow the drawn line instead of chording between
+ * stations. They are optional everywhere — the file is fetched separately, so
+ * every one of these has a no-corridors counterpart above that must keep
+ * working unchanged.
+ */
+describe('buildRouteOverlayModel with corridors', () => {
+  // An L: stations at the two ends, with the corner between them. A chord would
+  // cut the diagonal; the corridor turns.
+  const lCorridor: Corridor[] = [{ w: 25, pts: [[0, 0], [200, 0], [200, 200]] }]
+  const endPoints = [pt('KCI-AAA', 0, 0), pt('KCI-BBB', 200, 200)]
+
+  it('draws the same chords as before when no corridors are supplied', () => {
+    const points = [pt('KCI-AAA', 0, 0), pt('KCI-MID', 100, 0), pt('KCI-BBB', 200, 0)]
+    const fare = fareResult([rideLeg(['KCI-AAA', 'KCI-MID', 'KCI-BBB'])], 'KCI-AAA', 'KCI-BBB')
+    const withUndefined = buildRouteOverlayModel(fare, pair('KCI-AAA', 'KCI-BBB'), points, resolveLine)
+    const withEmpty = buildRouteOverlayModel(fare, pair('KCI-AAA', 'KCI-BBB'), points, resolveLine, [])
+    expect(withEmpty!.overlay.segments).toEqual(withUndefined!.overlay.segments)
+    expect(withEmpty!.overlay.segments).toHaveLength(2)
+  })
+
+  it('follows the corridor around a corner instead of chording across it', () => {
+    const fare = fareResult([rideLeg(['KCI-AAA', 'KCI-BBB'], '#FF0000')], 'KCI-AAA', 'KCI-BBB')
+    const model = buildRouteOverlayModel(fare, pair('KCI-AAA', 'KCI-BBB'), endPoints, resolveLine, lCorridor)
+    const rides = model!.overlay.segments.filter(s => s.kind === 'ride')
+    // Two segments, not one: the corner is now a vertex on the route.
+    expect(rides).toHaveLength(2)
+    expect(rides[0]).toMatchObject({ ax: 0, ay: 0, bx: 200, by: 0 })
+    expect(rides[1]).toMatchObject({ ax: 200, ay: 0, bx: 200, by: 200 })
+    // Every piece keeps the leg's own colour and width.
+    for (const segment of rides) {
+      expect(segment.color).toEqual([1, 0, 0])
+      expect(segment.r).toBe(ROUTE_LINE_HALF_WIDTH_WORLD)
+    }
+  })
+
+  it('grows the bbox to cover a corridor that bulges past the chord', () => {
+    const fare = fareResult([rideLeg(['KCI-AAA', 'KCI-BBB'])], 'KCI-AAA', 'KCI-BBB')
+    const chorded = buildRouteOverlayModel(fare, pair('KCI-AAA', 'KCI-BBB'), endPoints, resolveLine)
+    const followed = buildRouteOverlayModel(fare, pair('KCI-AAA', 'KCI-BBB'), endPoints, resolveLine, lCorridor)
+    // The corner at (200, 0) is outside the chord's own extent in y.
+    expect(followed!.bbox.maxX).toBeGreaterThanOrEqual(chorded!.bbox.maxX)
+    expect(followed!.bbox.minY).toBeLessThanOrEqual(chorded!.bbox.minY)
+  })
+
+  it('leaves transfers as straight dashes', () => {
+    const points = [pt('KCI-AAA', 0, 0), pt('KCI-BBB', 100, 0), pt('MRT-CCC', 200, 0), pt('MRT-DDD', 300, 0)]
+    const fare = fareResult(
+      [rideLeg(['KCI-AAA', 'KCI-BBB']), transferLeg('KCI-BBB', 'MRT-CCC'), rideLeg(['MRT-CCC', 'MRT-DDD'])],
+      'KCI-AAA',
+      'MRT-DDD'
+    )
+    const corridors: Corridor[] = [{ w: 25, pts: [[0, 0], [300, 0]] }]
+    const without = buildRouteOverlayModel(fare, pair('KCI-AAA', 'MRT-DDD'), points, resolveLine)
+    const with_ = buildRouteOverlayModel(fare, pair('KCI-AAA', 'MRT-DDD'), points, resolveLine, corridors)
+    expect(with_!.overlay.segments.filter(s => s.kind === 'transfer'))
+      .toEqual(without!.overlay.segments.filter(s => s.kind === 'transfer'))
+  })
+
+  /*
+   * Interchange bars: Manggarai's tap target is one 81-unit bar spanning three
+   * parallel corridors ~40 units apart, so its centroid sits BETWEEN the lines
+   * rather than on any of them. Markers placed at the raw centroid float off
+   * the line the rider is actually on.
+   */
+  it('snaps markers onto the ridden corridor, not the interchange centroid', () => {
+    // The station's centroid is 40 units off the corridor its route uses —
+    // the real Manggarai offset.
+    const bar = pt('KCI-XCH', 100, 40)
+    const points = [pt('KCI-AAA', 0, 0), bar, pt('KCI-BBB', 200, 0)]
+    const corridors: Corridor[] = [{ w: 25, pts: [[0, 0], [200, 0]] }]
+    const fare = fareResult([rideLeg(['KCI-AAA', 'KCI-XCH', 'KCI-BBB'], '#FF0000')], 'KCI-AAA', 'KCI-BBB')
+    const model = buildRouteOverlayModel(fare, pair('KCI-AAA', 'KCI-BBB'), points, resolveLine, corridors)
+    const stops = model!.overlay.pins.filter(p => p.kind === 'stop')
+    expect(stops).toHaveLength(1)
+    // On the corridor (y = 0), not at the tap target's y = 40.
+    expect(stops[0].y).toBe(0)
+    expect(stops[0].x).toBeCloseTo(100, 0)
+  })
+
+  it('snaps the end pins too, so an arrow lands on its own line', () => {
+    // Origin is the off-corridor bar this time: its pin must move onto the line.
+    const points = [pt('KCI-XCH', 0, 40), pt('KCI-BBB', 200, 0)]
+    const corridors: Corridor[] = [{ w: 25, pts: [[0, 0], [200, 0]] }]
+    const fare = fareResult([rideLeg(['KCI-XCH', 'KCI-BBB'])], 'KCI-XCH', 'KCI-BBB')
+    const model = buildRouteOverlayModel(fare, pair('KCI-XCH', 'KCI-BBB'), points, resolveLine, corridors)
+    const origin = model!.overlay.pins.find(p => p.kind === 'origin')!
+    expect(origin.y).toBe(0)
+    // And it still picks up the ridden line's colour at its new position.
+    expect(origin.color).toEqual([1, 0, 0])
+  })
+
+  it('chords the pairs that do not match and follows the ones that do', () => {
+    // The corridor covers AAA→BBB only; BBB→CCC is nowhere near it.
+    const points = [pt('KCI-AAA', 0, 0), pt('KCI-BBB', 200, 200), pt('KCI-CCC', 5000, 5000)]
+    const fare = fareResult([rideLeg(['KCI-AAA', 'KCI-BBB', 'KCI-CCC'])], 'KCI-AAA', 'KCI-CCC')
+    const model = buildRouteOverlayModel(fare, pair('KCI-AAA', 'KCI-CCC'), points, resolveLine, lCorridor)
+    const rides = model!.overlay.segments.filter(s => s.kind === 'ride')
+    // 2 from the followed corner + 1 chord for the unmatched pair.
+    expect(rides).toHaveLength(3)
+    expect(rides[2]).toMatchObject({ ax: 200, ay: 200, bx: 5000, by: 5000 })
   })
 })

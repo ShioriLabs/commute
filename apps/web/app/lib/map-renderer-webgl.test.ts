@@ -35,7 +35,7 @@ interface FakeTexture {
 // itself goes through twgl. Hoisted so the mock factory — which vitest may
 // invoke before this module's top-level bindings initialise — can close over it.
 const { drawCalls } = vi.hoisted(() => ({
-  drawCalls: [] as Array<{ blend: boolean, texture: unknown }>
+  drawCalls: [] as Array<{ blend: boolean, texture: unknown, desaturate?: number }>
 }))
 
 interface UploadRecord {
@@ -181,6 +181,10 @@ vi.mock('./map-renderer-tile-source', () => ({
 // records the draw along with the blend state in force at that moment.
 vi.mock('twgl.js', () => {
   let lastTexture: unknown = null
+  // Mirrors how GL actually behaves: a uniform stays bound until something sets
+  // it again. That is what makes a missed call site observable here — the draw
+  // records whatever value was last bound, not a fresh zero.
+  let lastDesaturate: number | undefined
   return {
     createProgramInfo: () => ({ program: {}, uniformSetters: {}, attribSetters: {} }),
     createBufferInfoFromArrays: () => ({ attribs: {}, numElements: 4 }),
@@ -188,9 +192,14 @@ vi.mock('twgl.js', () => {
     setBuffersAndAttributes: () => {},
     setUniforms: (_programInfo: unknown, uniforms: Record<string, unknown>) => {
       if ('u_texture' in uniforms) lastTexture = uniforms.u_texture
+      if ('u_desaturate' in uniforms) lastDesaturate = uniforms.u_desaturate as number
     },
     drawBufferInfo: (gl: { __isEnabled?: (cap: number) => boolean }) => {
-      drawCalls.push({ blend: gl.__isEnabled?.(0x0be2) ?? false, texture: lastTexture })
+      drawCalls.push({
+        blend: gl.__isEnabled?.(0x0be2) ?? false,
+        texture: lastTexture,
+        desaturate: lastDesaturate
+      })
     }
   }
 })
@@ -685,7 +694,7 @@ describe('webgl route overlay', () => {
   it('draws one ranged call per color run when a route frame is passed', () => {
     const { renderer, drawElementsCalls } = setup()
     renderer.setRouteOverlay(overlay)
-    renderer.draw(wholeMapTransform(0.2), 360, 780, 3, 1, null, { alpha: 1, scrimAlpha: 0.2 })
+    renderer.draw(wholeMapTransform(0.2), 360, 780, 3, 1, null, { alpha: 1, scrimAlpha: 0.2, desaturate: 0 })
     // Paint list: casing (1 white run), red, blue, then per pin white/ink/white
     // with the two runs at the origin/destination boundary NOT merging (white
     // inner of pin 1 and white casing of pin 2 are adjacent) — so ≥ 5 runs.
@@ -696,7 +705,7 @@ describe('webgl route overlay', () => {
     const { renderer, drawElementsCalls } = setup()
     renderer.setRouteOverlay(overlay)
     renderer.setRouteOverlay(null)
-    renderer.draw(wholeMapTransform(0.2), 360, 780, 3, 1, null, { alpha: 1, scrimAlpha: 0.2 })
+    renderer.draw(wholeMapTransform(0.2), 360, 780, 3, 1, null, { alpha: 1, scrimAlpha: 0.2, desaturate: 0 })
     renderer.setRouteOverlay(overlay)
     renderer.draw(wholeMapTransform(0.2), 360, 780, 3, 1)
     expect(drawElementsCalls()).toBe(0)
@@ -706,5 +715,55 @@ describe('webgl route overlay', () => {
     const { renderer } = setup()
     renderer.setRouteOverlay(overlay)
     expect(() => renderer.dispose()).not.toThrow()
+  })
+
+  /*
+   * Desaturation reaches the tile shader through THREE separate setUniforms
+   * calls — the preview-only return, the preview underlay, and the per-frame
+   * tile uniforms — because each passes its own object and twgl sets only the
+   * keys it is handed.
+   *
+   * A missed site does not read zero; a GL uniform keeps whatever was last
+   * bound, so the bug is a stale value from an earlier frame, which is exactly
+   * the kind of thing eyeballing a screenshot fails to catch. The mock models
+   * that stickiness deliberately.
+   */
+  describe('tile desaturation', () => {
+    const drawnTiles = () => drawCalls.filter(c => c.texture !== null && c.texture !== undefined)
+
+    it('sets it on every textured draw while a route is up', async () => {
+      const { renderer } = setup()
+      renderer.draw(wholeMapTransform(0.2), 360, 780, 3, 1)
+      await flush()
+      drawCalls.length = 0
+      renderer.setRouteOverlay(overlay)
+      renderer.draw(wholeMapTransform(0.2), 360, 780, 3, 1, null, { alpha: 1, scrimAlpha: 0, desaturate: 0.85 })
+      expect(drawnTiles().length).toBeGreaterThan(0)
+      for (const call of drawnTiles()) expect(call.desaturate).toBe(0.85)
+    })
+
+    it('returns the map to full colour once the route is gone', async () => {
+      const { renderer } = setup()
+      renderer.draw(wholeMapTransform(0.2), 360, 780, 3, 1)
+      await flush()
+      renderer.setRouteOverlay(overlay)
+      renderer.draw(wholeMapTransform(0.2), 360, 780, 3, 1, null, { alpha: 1, scrimAlpha: 0, desaturate: 0.85 })
+      drawCalls.length = 0
+      renderer.draw(wholeMapTransform(0.2), 360, 780, 3, 1)
+      expect(drawnTiles().length).toBeGreaterThan(0)
+      for (const call of drawnTiles()) expect(call.desaturate).toBe(0)
+    })
+
+    it('leaves the map alone mid-fade-out once the overlay has faded to nothing', async () => {
+      const { renderer } = setup()
+      renderer.draw(wholeMapTransform(0.2), 360, 780, 3, 1)
+      await flush()
+      drawCalls.length = 0
+      renderer.setRouteOverlay(overlay)
+      // alpha 0 is the settled end of a fade-out: nothing is drawn, so nothing
+      // should be greyed either.
+      renderer.draw(wholeMapTransform(0.2), 360, 780, 3, 1, null, { alpha: 0, scrimAlpha: 0, desaturate: 0.85 })
+      for (const call of drawnTiles()) expect(call.desaturate).toBe(0)
+    })
   })
 })

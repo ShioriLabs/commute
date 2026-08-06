@@ -1,11 +1,13 @@
 import type { FareResult } from '@commute/schemas'
 import { hexToRgb01 } from 'utils/colors'
 import type { Point, RouteOverlay, RouteSegment } from './map-renderer'
+import { matchCorridorPath, prepareCorridors, type Corridor } from './map-corridors'
 import {
   dashSegment,
   pointStationId,
   ROUTE_LINE_HALF_WIDTH_WORLD,
   ROUTE_PIN_RADIUS_WORLD,
+  ROUTE_STOP_RADIUS_WORLD,
   ROUTE_TRANSFER_DASH_WORLD,
   ROUTE_TRANSFER_GAP_WORLD
 } from './map-renderer'
@@ -37,7 +39,12 @@ export function buildRouteOverlayModel(
   // Line colours live on /operators, not on the leg — a ride leg only names its
   // line key. Passed in rather than looked up here so this stays a pure
   // function the tests can drive without SWR.
-  resolveLine: (key: string | undefined) => { colorCode: string } | undefined
+  resolveLine: (key: string | undefined) => { colorCode: string } | undefined,
+  // The schematic's drawn corridors, so a ride leg traces the line instead of
+  // chording between stations. Optional throughout: the file is fetched
+  // separately and may not have landed yet, and every pair falls back to a
+  // chord without it.
+  corridors?: readonly Corridor[] | null
 ): RouteOverlayModel | null {
   // Falls back to the transfer grey rather than black: /operators may still be
   // in flight when a deep link paints its first overlay, and a neutral line
@@ -62,7 +69,15 @@ export function buildRouteOverlayModel(
     return { x: (p.ax + p.bx) / 2, y: (p.ay + p.by) / 2 }
   }
 
+  // Prepared once per build, not per pair: every pair re-scans every corridor,
+  // and the arc-length tables would otherwise be rebuilt for each one.
+  const prepared = corridors && corridors.length > 0 ? prepareCorridors(corridors) : null
+
   const segments: RouteSegment[] = []
+  const stops: RouteOverlay['pins'] = []
+  // Station centroid -> where the drawn route actually passes it. Only differs
+  // for stations whose tap target spans several corridors (interchange bars).
+  const snapped = new Map<string, { x: number, y: number }>()
   const pushDashes = (a: { x: number, y: number }, b: { x: number, y: number }) => {
     for (const d of dashSegment(a.x, a.y, b.x, b.y, ROUTE_TRANSFER_DASH_WORLD, ROUTE_TRANSFER_GAP_WORLD)) {
       segments.push({ ...d, r: ROUTE_LINE_HALF_WIDTH_WORLD, color: TRANSFER_COLOR, kind: 'transfer' })
@@ -79,14 +94,45 @@ export function buildRouteOverlayModel(
         .map(stop => centroid(stop.id))
         .filter((v): v is { x: number, y: number } => v !== null)
       if (vertices.length === 0) continue
-      if (cursor && (cursor.x !== vertices[0].x || cursor.y !== vertices[0].y)) {
-        pushDashes(cursor, vertices[0])
-      }
       const color = hexToRgb01(lineColor(leg.line))
+      /*
+       * Where the drawn route actually meets each station, which is not always
+       * the tap target's centroid.
+       *
+       * An interchange like Manggarai is authored as one bar spanning several
+       * parallel corridors ~40 units apart, so its centroid sits BETWEEN the
+       * lines — on none of them. A marker placed there floats off the line the
+       * rider is on. The matched corridor sub-path already ends exactly where
+       * the ridden line passes the station, so use that when there is one and
+       * fall back to the centroid when the pair chorded.
+       */
+      const marks = vertices.map(v => ({ x: v.x, y: v.y }))
       for (let i = 1; i < vertices.length; i++) {
         const a = vertices[i - 1]
         const b = vertices[i]
         if (a.x === b.x && a.y === b.y) continue
+        // Corridor first, chord as the fallback — a pair whose stops aren't both
+        // near one drawn corridor (or whose only candidate detours the long way)
+        // still gets a straight connector rather than nothing.
+        const path = prepared ? matchCorridorPath(a.x, a.y, b.x, b.y, prepared) : null
+        if (path) {
+          // The first pair to touch a station wins its position, matching how
+          // the dedup below hands an interchange to the line you arrive on.
+          marks[i - 1] = { x: path[0][0], y: path[0][1] }
+          marks[i] = { x: path[path.length - 1][0], y: path[path.length - 1][1] }
+          for (let k = 1; k < path.length; k++) {
+            segments.push({
+              ax: path[k - 1][0],
+              ay: path[k - 1][1],
+              bx: path[k][0],
+              by: path[k][1],
+              r: ROUTE_LINE_HALF_WIDTH_WORLD,
+              color,
+              kind: 'ride'
+            })
+          }
+          continue
+        }
         segments.push({
           ax: a.x,
           ay: a.y,
@@ -97,7 +143,26 @@ export function buildRouteOverlayModel(
           kind: 'ride'
         })
       }
-      cursor = vertices[vertices.length - 1]
+      // Bridge from the previous leg only now that this one's first mark is
+      // known: the dash has to reach where this leg is actually drawn, not the
+      // centroid it was matched from, or it stops short of its own marker.
+      if (cursor && (cursor.x !== marks[0].x || cursor.y !== marks[0].y)) {
+        pushDashes(cursor, marks[0])
+      }
+      // A dot at every station this leg calls at, in the ridden line's colour —
+      // the schematic's own marker idiom, so Manggarai reads as a Cikarang stop
+      // while you are on Cikarang. The journey's two ends are drawn separately
+      // as pins and would only be covered by a dot, so they are skipped there.
+      for (const mark of marks) {
+        stops.push({ x: mark.x, y: mark.y, kind: 'stop', color })
+      }
+      // Keyed by the station's own centroid, so the end pins can find where
+      // their marker was actually placed — see snapped below.
+      vertices.forEach((v, i) => {
+        const key = `${v.x}|${v.y}`
+        if (!snapped.has(key)) snapped.set(key, marks[i])
+      })
+      cursor = marks[marks.length - 1]
     } else {
       // TRANSFER: the dashes come from the cursor (last drawn vertex) to the
       // far end, so a leg endpoint that chorded away doesn't double-bridge.
@@ -109,11 +174,59 @@ export function buildRouteOverlayModel(
     }
   }
 
+  /*
+   * The ends take the colour of the leg that touches them — the line you board
+   * at the origin, the one you alight from at the destination — so the whole
+   * chain of markers belongs to the line it sits on.
+   *
+   * Falls back to ink when the fare hasn't resolved: a deep link paints its
+   * pins before it knows what line will serve them.
+   */
+  const colorAt = (x: number, y: number, which: 'first' | 'last') => {
+    const matches = stops.filter(stop => stop.x === x && stop.y === y)
+    return (which === 'first' ? matches[0] : matches[matches.length - 1])?.color
+  }
+  // An end pin belongs on the ridden line, exactly like the stop dots — an
+  // interchange bar's centroid sits between its corridors, so a raw centroid
+  // would float the arrow off the line it is supposed to mark.
+  const snap = (p: { x: number, y: number }) => snapped.get(`${p.x}|${p.y}`) ?? p
+
   const pins: RouteOverlay['pins'] = []
-  const origin = centroid(routePair.fromId)
-  if (origin) pins.push({ x: origin.x, y: origin.y, kind: 'origin' })
-  const destination = centroid(routePair.toId)
-  if (destination) pins.push({ x: destination.x, y: destination.y, kind: 'destination' })
+  const originCentroid = centroid(routePair.fromId)
+  // first vs last matters only when a station is served twice in one journey:
+  // you board the origin on the FIRST leg to touch it and alight at the
+  // destination from the LAST.
+  if (originCentroid) {
+    const origin = snap(originCentroid)
+    pins.push({ x: origin.x, y: origin.y, kind: 'origin', color: colorAt(origin.x, origin.y, 'first') })
+  }
+  const destinationCentroid = centroid(routePair.toId)
+  if (destinationCentroid) {
+    const destination = snap(destinationCentroid)
+    pins.push({
+      x: destination.x,
+      y: destination.y,
+      kind: 'destination',
+      color: colorAt(destination.x, destination.y, 'last')
+    })
+  }
+
+  /*
+   * Stop dots, minus the ones that would be drawn over anyway.
+   *
+   * Two sources of duplicates: the journey's own ends (an end pin covers the
+   * dot, so it is wasted geometry), and interchanges, where the arriving and
+   * departing legs both call at the station and would stack two dots in
+   * different colours — the second silently winning. Keeping the first means
+   * the line you ARRIVE on owns the dot.
+   */
+  const placed = new Set(pins.map(pin => `${pin.x}|${pin.y}`))
+  for (const stop of stops) {
+    const key = `${stop.x}|${stop.y}`
+    if (placed.has(key)) continue
+    placed.add(key)
+    pins.push(stop)
+  }
 
   if (missing.length > 0) {
     console.warn('route overlay: no map point for', missing.join(', '))
@@ -134,7 +247,12 @@ export function buildRouteOverlayModel(
     extend(s.ax, s.ay, s.r)
     extend(s.bx, s.by, s.r)
   }
-  for (const pin of pins) extend(pin.x, pin.y, ROUTE_PIN_RADIUS_WORLD)
+  // Each pin padded by its own footprint: a stop dot is half an end pin, and
+  // over-padding them would quietly widen the camera's fit for every station in
+  // between.
+  for (const pin of pins) {
+    extend(pin.x, pin.y, pin.kind === 'stop' ? ROUTE_STOP_RADIUS_WORLD : ROUTE_PIN_RADIUS_WORLD)
+  }
 
   return { overlay: { segments, pins }, bbox: { minX, minY, maxX, maxY } }
 }
