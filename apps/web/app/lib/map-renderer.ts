@@ -106,6 +106,250 @@ export function ringOffsetWorld(ringProgress: number): number {
   return RING_MAX_OFFSET_WORLD + (RING_REST_OFFSET_WORLD - RING_MAX_OFFSET_WORLD) * ringProgress
 }
 
+// Route overlay: the fare pair drawn on the map — a polyline through station
+// centroids per ride leg, dashed connectors for transfers, and origin/
+// destination pins. Same doctrine as the selection overlay: geometry is pushed
+// statefully via setRouteOverlay, while map.tsx animates the frame values and
+// passes them per draw.
+export interface RouteSegment {
+  ax: number
+  ay: number
+  bx: number
+  by: number
+  r: number // half-width, world units
+  color: [number, number, number] // 0..1 rgb
+  kind: 'ride' | 'transfer'
+}
+
+export interface RoutePin {
+  x: number
+  y: number
+  kind: 'origin' | 'destination' | 'stop'
+  // Only for 'stop': the colour of the leg being ridden through it, so an
+  // intermediate station reads as a dot ON that line — Manggarai is blue when
+  // you are riding Cikarang through it. The ends are ink-coloured regardless,
+  // since they belong to the journey rather than to either line.
+  color?: [number, number, number]
+  // Outer disc radius, world units. Set when the leg is drawn at a non-default
+  // width (BRT) so the marker stays in proportion to its line; defaults to the
+  // rail size.
+  r?: number
+}
+
+export interface RouteOverlay {
+  // Transfers arrive pre-dashed (dashSegment), so renderers draw every entry
+  // the same way and need no dash logic of their own.
+  segments: RouteSegment[]
+  pins: RoutePin[]
+}
+
+export interface RouteOverlayFrame {
+  alpha: number // 0..1 whole-overlay fade
+  scrimAlpha: number // 0..ROUTE_SCRIM_MAX_ALPHA flat dim under the route
+  // 0..ROUTE_DESATURATE_MAX colour drained from the map tiles. Applies to the
+  // artwork only — the route's own capsules and pins keep their colour, which is
+  // the whole point.
+  desaturate: number
+}
+
+/*
+ * The route separates from the map by draining the map's colour, not by dimming
+ * it — see ROUTE_DESATURATE_MAX. So this is 0, and the scrim never draws.
+ *
+ * Kept rather than deleted because dim-vs-desaturate is a judgement that can only
+ * really be made on a device: the whole mechanism (both renderers' scrim passes,
+ * the shader, the buffers) survives behind one number, so revisiting it is an
+ * edit here rather than a resurrection across two renderers.
+ */
+export const ROUTE_SCRIM_MAX_ALPHA = 0
+
+/*
+ * How much colour to drain from the map while a route is drawn, 0..1.
+ *
+ * The schematic's information IS its line colours, so removing them is what
+ * makes every unrelated corridor recede at once — while leaving labels,
+ * stations and shapes perfectly legible, which a dark scrim does not. The
+ * route's own capsules keep their brand colour and become the only saturated
+ * thing on screen.
+ *
+ * Short of 1: a fully grey map reads as a rendering failure rather than a
+ * deliberate state.
+ */
+export const ROUTE_DESATURATE_MAX = 0.85
+/*
+ * World units, like the spotlight constants, so the route stays glued to the
+ * map across zoom instead of fattening as the view pulls out. The artwork's own
+ * rail corridors are 25 world units wide, so the route line must beat 12.5
+ * half-width to read over them — and at a fitted zoom (~0.16 scale) anything
+ * much thinner dissolves into its own antialiasing feather.
+ */
+export const ROUTE_LINE_HALF_WIDTH_WORLD = 16
+/*
+ * BRT corridors are drawn at 15, not 25, so the rail width laid over one covers
+ * it twice over and the route stops reading as "this line" and starts reading as
+ * a highlighter smeared across the map.
+ *
+ * Scaled by the same 15/25 the artwork uses rather than picked by eye, so the
+ * two match the sheet's own proportion. Still comfortably over the corridor's
+ * own 7.5 half-width, which is what keeps it legible on top.
+ */
+export const ROUTE_LINE_HALF_WIDTH_BRT_WORLD = 10
+export const ROUTE_CASING_EXTRA_WORLD = 3
+export const ROUTE_TRANSFER_DASH_WORLD = 24
+export const ROUTE_TRANSFER_GAP_WORLD = 14
+export const ROUTE_PIN_RADIUS_WORLD = 26
+
+// Pin styling, shared by both renderers via routeDrawItems. The dark ink
+// matches the spotlight scrim so the overlay reads as one system.
+const ROUTE_INK: [number, number, number] = [0.06, 0.09, 0.16]
+const ROUTE_WHITE: [number, number, number] = [1, 1, 1]
+
+/*
+ * The ends are the same marker as an intermediate stop — white casing, the
+ * ridden line's colour, white core — with an arrow struck through the core:
+ * up for where the journey starts, down for where it ends.
+ *
+ * Drawn a size up from a plain stop so the ends still dominate the line, and
+ * the glyph is built from capsules like everything else in the paint list, so
+ * both renderers draw it verbatim with no shape primitive of their own.
+ */
+const ROUTE_PIN_INNER_WORLD = 17
+// Half-height and half-width of the arrow's bounding box, world units. The
+// chevron sits on the upper half of the shaft, which is what reads as a
+// direction at a glance rather than as a plus sign.
+const ROUTE_ARROW_HALF_H = 11
+const ROUTE_ARROW_HALF_W = 8
+const ROUTE_ARROW_HALF_WIDTH_WORLD = 2.6
+
+/*
+ * Intermediate stops: a marker at every station the route calls at, built like
+ * the schematic's own — a white casing, the ridden line's colour, then a white
+ * core, so what reads is a coloured ring.
+ *
+ * The outer disc has to beat ROUTE_LINE_HALF_WIDTH_WORLD (16) or there is no
+ * coloured rim outside the line to see, and the marker collapses into a plain
+ * white hole punched through the route. Still well under the end pins' 26, so
+ * origin and destination stay the emphasis.
+ */
+export const ROUTE_STOP_RADIUS_WORLD = 20
+// BRT's thinner line needs a proportionally smaller marker, or the dots stop
+// punctuating the route and start swallowing it. Same 15/25 ratio the widths use.
+export const ROUTE_STOP_RADIUS_BRT_WORLD = 13
+// Inner core as a fraction of the outer disc, so both sizes read as the same
+// marker rather than one looking like a ring and the other a dot.
+const ROUTE_STOP_INNER_RATIO = 0.5
+
+// One entry of the route overlay's paint list: an oriented capsule (degenerate
+// — a == b — for pin discs). Renderers draw these verbatim, in order, so the
+// WebGL and Canvas2D paths can't drift apart stylistically.
+export interface RouteDrawItem {
+  ax: number
+  ay: number
+  bx: number
+  by: number
+  r: number
+  color: [number, number, number]
+}
+
+// Flatten an overlay into paint order: white casing under every segment, then
+// the colored fills, then the pins on top.
+export function routeDrawItems(route: RouteOverlay): RouteDrawItem[] {
+  const items: RouteDrawItem[] = []
+  for (const s of route.segments) {
+    items.push({ ax: s.ax, ay: s.ay, bx: s.bx, by: s.by, r: s.r + ROUTE_CASING_EXTRA_WORLD, color: ROUTE_WHITE })
+  }
+  for (const s of route.segments) {
+    items.push({ ax: s.ax, ay: s.ay, bx: s.bx, by: s.by, r: s.r, color: s.color })
+  }
+  // Intermediate stops first, so an end pin landing on the same spot covers its
+  // dot rather than being punctured by it.
+  for (const pin of route.pins) {
+    if (pin.kind !== 'stop') continue
+    const disc = (r: number, color: [number, number, number]) => {
+      items.push({ ax: pin.x, ay: pin.y, bx: pin.x, by: pin.y, r, color })
+    }
+    const radius = pin.r ?? ROUTE_STOP_RADIUS_WORLD
+    disc(radius + ROUTE_CASING_EXTRA_WORLD, ROUTE_WHITE)
+    disc(radius, pin.color ?? ROUTE_INK)
+    disc(radius * ROUTE_STOP_INNER_RATIO, ROUTE_WHITE)
+  }
+  for (const pin of route.pins) {
+    if (pin.kind === 'stop') continue
+    const disc = (r: number, color: [number, number, number]) => {
+      items.push({ ax: pin.x, ay: pin.y, bx: pin.x, by: pin.y, r, color })
+    }
+    disc(ROUTE_PIN_RADIUS_WORLD + ROUTE_CASING_EXTRA_WORLD, ROUTE_WHITE)
+    disc(ROUTE_PIN_RADIUS_WORLD, pin.color ?? ROUTE_INK)
+    disc(ROUTE_PIN_INNER_WORLD, ROUTE_WHITE)
+    pushArrow(items, pin.x, pin.y, pin.kind === 'origin' ? 'up' : 'down', pin.color ?? ROUTE_INK)
+  }
+  return items
+}
+
+/*
+ * An arrow glyph as three capsules: a vertical shaft plus two chevron strokes.
+ *
+ * Capsules rather than a path because RouteDrawItem is the only vocabulary both
+ * renderers share — giving them a triangle or an SVG path would mean two new
+ * code paths that could drift. Rounded caps are what make the joint at the tip
+ * read as a point instead of a notch.
+ *
+ * Screen y grows downward, so 'up' puts the tip at -halfH.
+ */
+function pushArrow(
+  items: RouteDrawItem[],
+  cx: number,
+  cy: number,
+  direction: 'up' | 'down',
+  color: [number, number, number]
+): void {
+  // +1 draws the glyph pointing down, -1 flips it to point up.
+  const sign = direction === 'up' ? -1 : 1
+  const tipY = cy + sign * ROUTE_ARROW_HALF_H
+  const tailY = cy - sign * ROUTE_ARROW_HALF_H
+  const stroke = (ax: number, ay: number, bx: number, by: number) => {
+    items.push({ ax, ay, bx, by, r: ROUTE_ARROW_HALF_WIDTH_WORLD, color })
+  }
+  stroke(cx, tailY, cx, tipY)
+  // Barbs land short of the tip by the stroke's own half-width, so the three
+  // rounded caps overlap into one point rather than fanning past it.
+  const barbY = tipY - sign * ROUTE_ARROW_HALF_W
+  stroke(cx - ROUTE_ARROW_HALF_W, barbY, cx, tipY)
+  stroke(cx + ROUTE_ARROW_HALF_W, barbY, cx, tipY)
+}
+
+// Split a→b into dash sub-segments. The pattern is centered — equal margins at
+// both ends — and a segment shorter than one dash yields itself whole, so very
+// close stations still get a visible connector.
+export function dashSegment(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  dashLen: number,
+  gapLen: number
+): Array<{ ax: number, ay: number, bx: number, by: number }> {
+  const len = Math.hypot(bx - ax, by - ay)
+  if (len <= 0) return []
+  const dirX = (bx - ax) / len
+  const dirY = (by - ay) / len
+  const count = Math.max(1, Math.floor((len + gapLen) / (dashLen + gapLen)))
+  const patternLen = count * dashLen + (count - 1) * gapLen
+  const margin = (len - patternLen) / 2
+  const dashes: Array<{ ax: number, ay: number, bx: number, by: number }> = []
+  for (let i = 0; i < count; i++) {
+    const start = Math.max(0, margin + i * (dashLen + gapLen))
+    const end = Math.min(len, start + dashLen)
+    dashes.push({
+      ax: ax + dirX * start,
+      ay: ay + dirY * start,
+      bx: ax + dirX * end,
+      by: ay + dirY * end
+    })
+  }
+  return dashes
+}
+
 export interface TileStats {
   count: number
   bytes: number
@@ -132,10 +376,11 @@ export interface RendererDebug {
 
 export interface Renderer {
   kind: 'webgl2' | 'canvas2d'
-  draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null): void
+  draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null, route?: RouteOverlayFrame | null): void
   resize(cssW: number, cssH: number, dpr: number): void
   requestTier(r: number, c: number, tier: Tier): void
   setPoints(points: Point[]): void
+  setRouteOverlay(route: RouteOverlay | null): void
   setDebugHitboxes(enabled: boolean): void
   // True once the GPU has taken the drawing context away. Every GL call after
   // that point is a silent no-op, so callers must stop drawing and rebuild the

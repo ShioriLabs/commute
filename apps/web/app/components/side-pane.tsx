@@ -19,6 +19,9 @@ type Phase = 'entering' | 'open' | 'exiting'
 // it. Deliberately static — no drag, no snap points, no backdrop; the body
 // scrolls natively. Shares BottomSheet's props contract so the two are
 // interchangeable behind DetailSurface.
+// `initialSnap` is deliberately not destructured: this pane has exactly one
+// open state, and the props contract is shared with BottomSheet, so accepting
+// and ignoring the prop is the whole implementation.
 export default function SidePane({ open, onClose, onDismissStart, ariaLabel, header, children }: BottomSheetProps) {
   // Where this card sits in the deck. Defaults to the top of a stack of one, so
   // a pane rendered without a PaneStackProvider behaves exactly as it did before

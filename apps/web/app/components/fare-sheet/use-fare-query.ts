@@ -6,21 +6,14 @@ import { fetcher } from 'utils/fetcher'
 import { useSearchables } from '~/hooks/use-searchables'
 import {
   DEFAULT_FARE_CRITERIA,
-  fareQueryParams,
   readFareCriteria,
   writeFareCriteria,
   type FareCriteria
 } from 'utils/fare-criteria'
+import { FARE_SWR_CONFIG, fareApiUrl } from 'utils/fare-api'
 import { resolveStationId, toPickableStations, type PickableStation } from './pickable-station'
 import { operatorsPresent } from './criteria/labels'
 import type { OperatorCode } from '@commute/schemas'
-
-const swrConfig = {
-  dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
-  focusThrottleInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
-  revalidateOnFocus: false,
-  shouldRetryOnError: false
-}
 
 export interface FareQueryOptions {
   // Station ids to preselect, from a `/fare?from=&to=` deep link (or the
@@ -30,6 +23,19 @@ export interface FareQueryOptions {
   // to the router's search params, which would let unrelated param changes stomp
   // the user's selection.
   initialPair?: { fromId: string | null, toId: string | null }
+  /*
+   * Externally-owned pair. When present the hook stops holding the pair itself:
+   * origin/destination resolve from these ids, and a pick or a swap reports the
+   * new pair through onStateChange instead of setting local state.
+   *
+   * The map needs this because the pair has three writers there — this panel's
+   * picker, a station tap on the canvas, and the chip's clear — and because the
+   * map's copy has to outlive the fare sheet, which unmounts when it closes.
+   *
+   * Mutually exclusive with initialPair: an externally-owned pair is never a
+   * one-shot seed, so the deep-link latch below is skipped entirely.
+   */
+  controlledPair?: { fromId: string | null, toId: string | null }
   // Called whenever the pair or the criteria change, so the caller can mirror
   // both into the URL. Only /fare does this — the sheet leaves the address bar
   // alone. One callback rather than two because they share a query string:
@@ -46,6 +52,17 @@ export interface FareQueryOptions {
 export interface FareQuery {
   origin: PickableStation | null
   destination: PickableStation | null
+  /*
+   * The pair the fare is actually fetched for, as raw station ids.
+   *
+   * Not the same thing as `origin`/`destination` being set: those are resolved
+   * against the search index for display, and the index legitimately omits some
+   * stops (TJ topology-only halte). So an id can price correctly while its field
+   * still reads "Pilih stasiun" — gate anything about the *fare* on these, and
+   * only anything about the station's name on the resolved objects.
+   */
+  pairFromId: string | null
+  pairToId: string | null
   pickerTarget: 'origin' | 'destination'
   pickerOpen: boolean
   openPickerFor: (target: 'origin' | 'destination') => void
@@ -74,17 +91,22 @@ export interface FareQuery {
 // them.
 export function useFareQuery({
   initialPair,
+  controlledPair,
   onStateChange,
   initialCriteria,
   syncDocumentTitle = false
 }: FareQueryOptions = {}): FareQuery {
+  const controlled = controlledPair !== undefined
   // The prebuilt search index, shared with the search sheet through the same
   // SWR key — opening both surfaces now costs one fetch, not two overlapping
   // station lists. It also already carries everything the picker needs, so the
   // /stations call this used to make is gone: see pickable-station.ts.
   const { searchables } = useSearchables()
-  const [origin, setOrigin] = useState<PickableStation | null>(null)
-  const [destination, setDestination] = useState<PickableStation | null>(null)
+  // Only used when uncontrolled; a controlled caller owns the pair and these
+  // stay null. Resolution of the controlled ids happens below, once the station
+  // index has been built.
+  const [originState, setOriginState] = useState<PickableStation | null>(null)
+  const [destinationState, setDestinationState] = useState<PickableStation | null>(null)
   // Which field is being picked never resets on close, so the picker title
   // stays correct while the dialog animates out.
   const [pickerTarget, setPickerTarget] = useState<'origin' | 'destination'>('origin')
@@ -121,12 +143,6 @@ export function useFareQuery({
    * Deps are the values each one actually closes over; the two that only drive
    * setters are genuinely stable.
    */
-  const setCriteria = useCallback((next: FareCriteria) => {
-    setCriteriaState(next)
-    writeFareCriteria(next)
-    onStateChange?.(origin?.id ?? null, destination?.id ?? null, next)
-  }, [onStateChange, origin?.id, destination?.id])
-
   const openPickerFor = useCallback((target: 'origin' | 'destination') => {
     setPickerTarget(target)
     setPickerOpen(true)
@@ -157,6 +173,35 @@ export function useFareQuery({
     [allPickableStations, criteria.operator]
   )
 
+  /*
+   * Controlled ids resolved into stations for display. Against the UNFILTERED
+   * list, like the deep-link latch: a stored operator filter must never make an
+   * already-chosen endpoint vanish from its own field.
+   *
+   * A null here is not necessarily an error — the id can be real while the
+   * search index is still loading, or while it legitimately does not carry that
+   * stop. The fare fetch keys on the raw ids below for exactly that reason.
+   */
+  const controlledOrigin = useMemo(
+    () => (controlledPair?.fromId ? resolveStationId(allPickableStations, controlledPair.fromId) : null),
+    [allPickableStations, controlledPair?.fromId]
+  )
+  const controlledDestination = useMemo(
+    () => (controlledPair?.toId ? resolveStationId(allPickableStations, controlledPair.toId) : null),
+    [allPickableStations, controlledPair?.toId]
+  )
+  const origin = controlled ? controlledOrigin : originState
+  const destination = controlled ? controlledDestination : destinationState
+
+  // Declared after the pair is derived, not up with the other memoized handlers:
+  // it reports the current pair alongside the new criteria, and under the
+  // controlled-pair model that pair only exists once the ids above resolve.
+  const setCriteria = useCallback((next: FareCriteria) => {
+    setCriteriaState(next)
+    writeFareCriteria(next)
+    onStateChange?.(origin?.id ?? null, destination?.id ?? null, next)
+  }, [onStateChange, origin?.id, destination?.id])
+
   // Deep link applies once, not on every change of the incoming pair.
   // onPairChange rewrites the query string as the user picks stations, which
   // feeds back into initialPair on the /fare route — without the latch a pick
@@ -166,6 +211,8 @@ export function useFareQuery({
   const toId = initialPair?.toId ?? null
 
   useEffect(() => {
+    // A controlled pair is the caller's live state, not a seed to apply once.
+    if (controlled) return
     if (deepLinkApplied.current) return
     if ((!fromId && !toId) || allPickableStations.length === 0) return
 
@@ -177,9 +224,9 @@ export function useFareQuery({
     if (!fromStation && !toStation) return
 
     deepLinkApplied.current = true
-    if (fromStation) setOrigin(fromStation)
-    if (toStation) setDestination(toStation)
-  }, [allPickableStations, fromId, toId])
+    if (fromStation) setOriginState(fromStation)
+    if (toStation) setDestinationState(toStation)
+  }, [allPickableStations, fromId, toId, controlled])
 
   useEffect(() => {
     if (!syncDocumentTitle) return
@@ -192,23 +239,45 @@ export function useFareQuery({
     }
   }, [origin, destination, syncDocumentTitle])
 
-  const query = fareQueryParams(criteria).toString()
-  const fareUrl = criteriaReady && origin && destination && origin.id !== destination.id
-    ? new URL(
-      `/fares/${origin.id}/${destination.id}${query ? `?${query}` : ''}`,
-      import.meta.env.VITE_API_BASE_URL
-    ).href
-    : null
-  const { data: fare, error, isLoading } = useSWR<StandardResponse<FareResult>>(fareUrl, fetcher, swrConfig)
+  /*
+   * Built through the shared helper so this key is byte-identical to the map's
+   * — the two surfaces must share one SWR entry, or the chip and the sheet can
+   * show different prices for one route.
+   *
+   * Keyed on the controlled ids rather than the resolved stations: those ids can
+   * arrive before the search index does (a /map?from=&to= deep link), and the
+   * price must not wait on the picker's data.
+   */
+  const keyFromId = controlled ? controlledPair?.fromId ?? null : origin?.id ?? null
+  const keyToId = controlled ? controlledPair?.toId ?? null : destination?.id ?? null
+  const fareUrl = criteriaReady ? fareApiUrl(keyFromId, keyToId, criteria) : null
+  const { data: fare, error, isLoading } = useSWR<StandardResponse<FareResult>>(fareUrl, fetcher, FARE_SWR_CONFIG)
 
-  const handleSwap = useCallback(() => {
-    setOrigin(destination)
-    setDestination(origin)
-
-    if (origin && destination) {
-      onStateChange?.(destination.id, origin.id, criteria)
+  /*
+   * The one place the pair moves. Uncontrolled keeps the both-ends guard it has
+   * always had: /fare's writeUrl is the consumer, and a half pair there is a
+   * deep-link state rather than a pick. Controlled always reports, because the
+   * caller IS the store — a half pair has to reach it or a single-ended pin
+   * would never draw.
+   */
+  const commitPair = useCallback((
+    nextOrigin: PickableStation | null,
+    nextDestination: PickableStation | null
+  ) => {
+    if (!controlled) {
+      setOriginState(nextOrigin)
+      setDestinationState(nextDestination)
     }
-  }, [origin, destination, criteria, onStateChange])
+    const bothEnds = nextOrigin !== null && nextDestination !== null
+    if (controlled || bothEnds) {
+      onStateChange?.(nextOrigin?.id ?? null, nextDestination?.id ?? null, criteria)
+    }
+  }, [controlled, criteria, onStateChange])
+
+  const handleSwap = useCallback(
+    () => commitPair(destination, origin),
+    [commitPair, destination, origin]
+  )
 
   const handleSelect = useCallback((station: PickableStation) => {
     let newOrigin = origin
@@ -223,17 +292,14 @@ export function useFareQuery({
       newDestination = station
     }
 
-    setOrigin(newOrigin)
-    setDestination(newDestination)
-
-    if (newOrigin && newDestination) {
-      onStateChange?.(newOrigin.id, newDestination.id, criteria)
-    }
-  }, [origin, destination, pickerTarget, criteria, onStateChange])
+    commitPair(newOrigin, newDestination)
+  }, [origin, destination, pickerTarget, commitPair])
 
   return {
     origin,
     destination,
+    pairFromId: keyFromId,
+    pairToId: keyToId,
     pickerTarget,
     pickerOpen,
     openPickerFor,

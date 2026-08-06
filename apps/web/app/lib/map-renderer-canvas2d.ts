@@ -1,5 +1,5 @@
-import type { Manifest, Point, Renderer, SelectionOverlay, Tier, TileStats, Transform } from './map-renderer'
-import { RING_WIDTH_WORLD, SPOTLIGHT_FEATHER_WORLD, pointCornerRadius, ringOffsetWorld, tileKey } from './map-renderer'
+import type { Manifest, Point, Renderer, RouteDrawItem, RouteOverlay, RouteOverlayFrame, SelectionOverlay, Tier, TileStats, Transform } from './map-renderer'
+import { RING_WIDTH_WORLD, SPOTLIGHT_FEATHER_WORLD, pointCornerRadius, ringOffsetWorld, routeDrawItems, tileKey } from './map-renderer'
 import { createTileSource } from './map-renderer-tile-source'
 
 interface TileEntry {
@@ -29,6 +29,7 @@ export function createCanvas2DRenderer(
   let disposed = false
   let points: Point[] = []
   let debugHitboxes = false
+  let routeItems: RouteDrawItem[] = []
 
   // Preview bitmap painted under the tile grid whenever a visible tile has no
   // pixels yet. Held until dispose() — see the note in draw().
@@ -163,7 +164,7 @@ export function createCanvas2DRenderer(
     }
   }
 
-  function draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null) {
+  function draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null, route?: RouteOverlayFrame | null) {
     if (disposed) return
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.fillStyle = '#ffffff'
@@ -195,6 +196,20 @@ export function createCanvas2DRenderer(
         }
       }
     }
+    /*
+     * Drain the map's colour while a route is drawn, so the route's own colours
+     * are the only saturated thing on screen. The WebGL path does this in the
+     * tile shader; here the filter is the only tool available, and it wraps both
+     * the underlay and the tile loop so the two never disagree mid-load.
+     *
+     * ctx.filter is the slow canvas2d path — an intermediate surface per
+     * drawImage. Acceptable because this renderer is the WebGL2 fallback and a
+     * shown route is a near-static camera. It is also unsupported on older
+     * Safari, where it no-ops into today's full-colour map rather than breaking.
+     */
+    const desat = route && route.alpha > 0 ? route.desaturate : 0
+    if (desat > 0) ctx.filter = `saturate(${1 - desat})`
+
     // Kept resident for the renderer's whole life — see the matching comment in
     // map-renderer-webgl.ts. releaseTiles() resets every tile to tier 0, and
     // this underlay is what covers the refill.
@@ -219,6 +234,34 @@ export function createCanvas2DRenderer(
       }
     }
 
+    // Back to full colour before anything but map artwork is drawn. ctx.filter
+    // is sticky across draw calls, so without this the route, its pins and the
+    // selection spotlight would all be desaturated too — which would erase the
+    // one distinction the desaturation exists to create.
+    if (desat > 0) ctx.filter = 'none'
+
+    if (route && route.alpha > 0 && routeItems.length > 0) {
+      // Flat dim under the route — no punch-out; the route's opaque capsules
+      // sit on top and pop against it. Same slate as the selection scrim.
+      if (route.scrimAlpha > 0) {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+        ctx.fillStyle = `rgba(15, 23, 42, ${route.scrimAlpha})`
+        ctx.fillRect(0, 0, cssW, cssH)
+        ctx.translate(transform.tx, transform.ty)
+        ctx.scale(transform.scale, transform.scale)
+      }
+      for (const item of routeItems) {
+        const r = Math.round(item.color[0] * 255)
+        const g = Math.round(item.color[1] * 255)
+        const b = Math.round(item.color[2] * 255)
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${route.alpha})`
+        // cr = r degenerates the rounded rect to a capsule; pin items have
+        // coincident endpoints and come out as discs.
+        drawShape(ctx, item.ax, item.ay, item.bx, item.by, item.r, item.r)
+        ctx.fill()
+      }
+    }
+
     if (debugHitboxes && points.length > 0) {
       ctx.fillStyle = 'rgba(255, 0, 153, 0.3)'
       for (const p of points) {
@@ -234,6 +277,11 @@ export function createCanvas2DRenderer(
 
   function setPoints(next: Point[]) {
     points = next
+    onDirty()
+  }
+
+  function setRouteOverlay(route: RouteOverlay | null) {
+    routeItems = route ? routeDrawItems(route) : []
     onDirty()
   }
 
@@ -279,6 +327,7 @@ export function createCanvas2DRenderer(
     resize,
     requestTier: (r, c, tier) => { void requestTier(r, c, tier) },
     setPoints,
+    setRouteOverlay,
     setDebugHitboxes,
     // A 2D context is never "lost" in the WebGL sense — the browser silently
     // reallocates its backing store — so there is nothing to recover from.
