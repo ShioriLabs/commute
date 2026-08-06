@@ -2008,23 +2008,6 @@ export default function MapPage() {
           // sheet is closing because the user switched to a hub, whose
           // spotlight is already animating in.
           onDismissStart={() => { if (!selectedHubSlug) beginSpotlightExit() }}
-          routeActions={selectedStation
-            ? {
-                isOrigin: routePair.fromId === `${selectedStation.operator}-${selectedStation.code}`,
-                isDestination: routePair.toId === `${selectedStation.operator}-${selectedStation.code}`,
-                onSetOrigin: () => {
-                  haptic()
-                  setRouteEndpoint('from', `${selectedStation.operator}-${selectedStation.code}`)
-                  // Close the sheet: the fit flight and the chip take the stage.
-                  setSelectedStation(null)
-                },
-                onSetDestination: () => {
-                  haptic()
-                  setRouteEndpoint('to', `${selectedStation.operator}-${selectedStation.code}`)
-                  setSelectedStation(null)
-                }
-              }
-            : undefined}
         />
 
         {/* No onDismissStart: unlike the station and hub sheets this one owns no
