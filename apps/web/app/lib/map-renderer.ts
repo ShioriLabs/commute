@@ -130,6 +130,10 @@ export interface RoutePin {
   // you are riding Cikarang through it. The ends are ink-coloured regardless,
   // since they belong to the journey rather than to either line.
   color?: [number, number, number]
+  // Outer disc radius, world units. Set when the leg is drawn at a non-default
+  // width (BRT) so the marker stays in proportion to its line; defaults to the
+  // rail size.
+  r?: number
 }
 
 export interface RouteOverlay {
@@ -172,12 +176,24 @@ export const ROUTE_SCRIM_MAX_ALPHA = 0
  * deliberate state.
  */
 export const ROUTE_DESATURATE_MAX = 0.85
-// World units, like the spotlight constants, so the route stays glued to the
-// map across zoom instead of fattening as the view pulls out. The artwork's
-// own rail corridors are 25 world units wide (BRT 15), so the route line must
-// beat 12.5 half-width to read over them — and at a fitted zoom (~0.16 scale)
-// anything much thinner dissolves into its own antialiasing feather.
+/*
+ * World units, like the spotlight constants, so the route stays glued to the
+ * map across zoom instead of fattening as the view pulls out. The artwork's own
+ * rail corridors are 25 world units wide, so the route line must beat 12.5
+ * half-width to read over them — and at a fitted zoom (~0.16 scale) anything
+ * much thinner dissolves into its own antialiasing feather.
+ */
 export const ROUTE_LINE_HALF_WIDTH_WORLD = 16
+/*
+ * BRT corridors are drawn at 15, not 25, so the rail width laid over one covers
+ * it twice over and the route stops reading as "this line" and starts reading as
+ * a highlighter smeared across the map.
+ *
+ * Scaled by the same 15/25 the artwork uses rather than picked by eye, so the
+ * two match the sheet's own proportion. Still comfortably over the corridor's
+ * own 7.5 half-width, which is what keeps it legible on top.
+ */
+export const ROUTE_LINE_HALF_WIDTH_BRT_WORLD = 10
 export const ROUTE_CASING_EXTRA_WORLD = 3
 export const ROUTE_TRANSFER_DASH_WORLD = 24
 export const ROUTE_TRANSFER_GAP_WORLD = 14
@@ -216,7 +232,12 @@ const ROUTE_ARROW_HALF_WIDTH_WORLD = 2.6
  * origin and destination stay the emphasis.
  */
 export const ROUTE_STOP_RADIUS_WORLD = 20
-const ROUTE_STOP_INNER_WORLD = 10
+// BRT's thinner line needs a proportionally smaller marker, or the dots stop
+// punctuating the route and start swallowing it. Same 15/25 ratio the widths use.
+export const ROUTE_STOP_RADIUS_BRT_WORLD = 13
+// Inner core as a fraction of the outer disc, so both sizes read as the same
+// marker rather than one looking like a ring and the other a dot.
+const ROUTE_STOP_INNER_RATIO = 0.5
 
 // One entry of the route overlay's paint list: an oriented capsule (degenerate
 // — a == b — for pin discs). Renderers draw these verbatim, in order, so the
@@ -247,9 +268,10 @@ export function routeDrawItems(route: RouteOverlay): RouteDrawItem[] {
     const disc = (r: number, color: [number, number, number]) => {
       items.push({ ax: pin.x, ay: pin.y, bx: pin.x, by: pin.y, r, color })
     }
-    disc(ROUTE_STOP_RADIUS_WORLD + ROUTE_CASING_EXTRA_WORLD, ROUTE_WHITE)
-    disc(ROUTE_STOP_RADIUS_WORLD, pin.color ?? ROUTE_INK)
-    disc(ROUTE_STOP_INNER_WORLD, ROUTE_WHITE)
+    const radius = pin.r ?? ROUTE_STOP_RADIUS_WORLD
+    disc(radius + ROUTE_CASING_EXTRA_WORLD, ROUTE_WHITE)
+    disc(radius, pin.color ?? ROUTE_INK)
+    disc(radius * ROUTE_STOP_INNER_RATIO, ROUTE_WHITE)
   }
   for (const pin of route.pins) {
     if (pin.kind === 'stop') continue

@@ -193,7 +193,7 @@ describe('buildRouteOverlayModel stop dots', () => {
     const fare = fareResult([rideLeg(['KCI-AAA', 'KCI-MID', 'KCI-BBB'], '#FF0000')], 'KCI-AAA', 'KCI-BBB')
     const model = buildRouteOverlayModel(fare, pair('KCI-AAA', 'KCI-BBB'), points, resolveLine)
     const stops = model!.overlay.pins.filter(p => p.kind === 'stop')
-    expect(stops).toEqual([{ x: 100, y: 0, kind: 'stop', color: [1, 0, 0] }])
+    expect(stops).toEqual([{ x: 100, y: 0, kind: 'stop', color: [1, 0, 0], r: ROUTE_STOP_RADIUS_WORLD }])
   })
 
   it('leaves the journey’s own ends to their pins', () => {
@@ -323,6 +323,92 @@ describe('buildRouteOverlayModel with corridors', () => {
     expect(origin.y).toBe(0)
     // And it still picks up the ridden line's colour at its new position.
     expect(origin.color).toEqual([1, 0, 0])
+  })
+
+  /*
+   * An interlined band: parallel strokes ~22 units apart with the tap targets
+   * between them, on the artwork's straddling halte circles. The corridor
+   * sub-paths here are straight, so they add nothing but a parallel offset —
+   * the run must render as ONE straight line through its own markers, not ride
+   * either stroke (Koridor 3 Kalideres→Roxy, the "where's the flat" report).
+   */
+  it('renders a straight interlined run as one line through the stops', () => {
+    const corridors: Corridor[] = [
+      { w: 15, pts: [[0, 0], [600, 0]] },
+      { w: 15, pts: [[0, 22], [1000, 22]] }
+    ]
+    // Stops between the strokes, the second stroke a fraction nearer — and the
+    // first stroke ending mid-run, which used to force a jog.
+    const points = [pt('KCI-AAA', 100, 12), pt('KCI-BBB', 400, 12), pt('KCI-CCC', 700, 12), pt('KCI-DDD', 900, 12)]
+    const fare = fareResult([rideLeg(['KCI-AAA', 'KCI-BBB', 'KCI-CCC', 'KCI-DDD'])], 'KCI-AAA', 'KCI-DDD')
+    const model = buildRouteOverlayModel(fare, pair('KCI-AAA', 'KCI-DDD'), points, resolveLine, corridors)
+    const rides = model!.overlay.segments.filter(s => s.kind === 'ride')
+    // Dead flat ON the elected stroke (the second one serves all four stops),
+    // no stroke-hopping, no jog — and every dot on that same line.
+    for (const s of rides) {
+      expect(s.ay).toBe(22)
+      expect(s.by).toBe(22)
+    }
+    for (const p of model!.overlay.pins) expect(p.y).toBeCloseTo(22, 9)
+  })
+
+  /*
+   * The ruler test: Koridor 3's western haltes sit ON its own stroke while the
+   * interlined stretch straddles ~11 units off it, so per-pair chords kink
+   * where the band begins. A nearly-collinear leg must come out as literally
+   * ONE segment from first stop to last, every marker projected onto it.
+   */
+  it('draws a nearly-collinear leg as a single straight shot through its dots', () => {
+    const corridors: Corridor[] = [
+      { w: 15, pts: [[0, 12], [1400, 12]] }, // the leg's own stroke, ending mid-run
+      { w: 15, pts: [[380, -10], [1900, -10]] } // the interlined neighbour carrying on
+    ]
+    // First three stops ON the first stroke, the rest 11 below it — the real
+    // Kalideres→Roxy shape.
+    const points = [
+      pt('KCI-AAA', 0, 12), pt('KCI-BBB', 120, 12), pt('KCI-CCC', 250, 12),
+      pt('KCI-DDD', 380, 1), pt('KCI-EEE', 900, 1), pt('KCI-FFF', 1600, 1), pt('KCI-GGG', 1835, 1)
+    ]
+    const fare = fareResult(
+      [rideLeg(['KCI-AAA', 'KCI-BBB', 'KCI-CCC', 'KCI-DDD', 'KCI-EEE', 'KCI-FFF', 'KCI-GGG'])],
+      'KCI-AAA',
+      'KCI-GGG'
+    )
+    const model = buildRouteOverlayModel(fare, pair('KCI-AAA', 'KCI-GGG'), points, resolveLine, corridors)
+    const rides = model!.overlay.segments.filter(s => s.kind === 'ride')
+    // One segment, lying ON the elected stroke's line (y=12) and extended past
+    // its drawn end to cover the last stops — not a line through the centroids,
+    // which would slope between the levels.
+    expect(rides).toHaveLength(1)
+    expect(rides[0]).toMatchObject({ ax: 0, ay: 12, bx: 1835, by: 12 })
+    // Every pin sits exactly on that line — "the dots put in the line itself".
+    for (const p of model!.overlay.pins) expect(p.y).toBeCloseTo(12, 9)
+  })
+
+  /*
+   * A leg can still legitimately change strokes where the offsets are REAL —
+   * an interchange bar sitting ~25+ units off both corridors keeps the
+   * corridor geometry (and its snap), and the two sub-paths share no endpoint.
+   * The connector must make the leg ONE unbroken chain.
+   */
+  it('bridges the seam where a leg hands off between corridors', () => {
+    const corridors: Corridor[] = [
+      { w: 15, pts: [[0, 0], [400, 0]] },
+      { w: 15, pts: [[400, 50], [800, 50]] }
+    ]
+    // The middle stop is a bar centroid 32 units off BOTH strokes — past the
+    // band scale (25), so neither side may collapse to a chord.
+    const points = [pt('KCI-AAA', 100, 0), pt('KCI-BAR', 400, 32), pt('KCI-BBB', 700, 64)]
+    const fare = fareResult([rideLeg(['KCI-AAA', 'KCI-BAR', 'KCI-BBB'])], 'KCI-AAA', 'KCI-BBB')
+    const model = buildRouteOverlayModel(fare, pair('KCI-AAA', 'KCI-BBB'), points, resolveLine, corridors)
+    const rides = model!.overlay.segments.filter(s => s.kind === 'ride')
+    // Emitted in travel order, every segment starts where the previous ended —
+    // the seam between the strokes included.
+    for (let i = 1; i < rides.length; i++) {
+      expect({ x: rides[i].ax, y: rides[i].ay }).toEqual({ x: rides[i - 1].bx, y: rides[i - 1].by })
+    }
+    // And the bridge itself is there: a vertical jog across the 50-unit gap.
+    expect(rides.some(s => s.ax === s.bx && s.ay !== s.by)).toBe(true)
   })
 
   it('chords the pairs that do not match and follows the ones that do', () => {

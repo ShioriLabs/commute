@@ -43,12 +43,26 @@ export interface Projection {
 }
 
 /*
- * Candidate threshold, world units. A station's tap target sits ON its corridor
- * (measured: rail projects at ~0-2 units, BRT median 0.7), and the wrong-stroke
- * rejections are in the hundreds — so this is a wide moat around a tight
- * cluster, not a tuned edge.
+ * Candidate threshold, world units — how far a stop may sit from a corridor and
+ * still be considered to be served by it.
+ *
+ * A station's tap target usually sits ON its corridor (rail projects at ~0-2
+ * units, BRT median 0.7), so most of this is slack. It exists for the case that
+ * actually fails: the artwork breaks a BRT corridor at junctions, and where the
+ * connecting piece is missing, a stop's own stroke ends short of it. RSPAD sits
+ * 43.5 units from the corridor serving Senen Raya, so at 40 that leg had no
+ * candidate reaching BOTH stops and drew a chord across the map.
+ *
+ * 50 rather than 40 because it is measured, not guessed: swept over 213 real TJ
+ * stop pairs taken from router output, 40 traces 192 and 50 traces 198, and the
+ * worst detour ratio among accepted matches is 1.58 at BOTH — so the extra 6 are
+ * genuine corridors, not wrong ones sneaking in. It plateaus there; 70 buys 2
+ * more and 80 buys nothing.
+ *
+ * The Jatinegara trap below is unaffected: JNG's candidates are 0.7 and 1.6 units
+ * away and the wrong one is rejected at 704, so this moves nothing there.
  */
-export const CORRIDOR_MATCH_MAX_DIST_WORLD = 40
+export const CORRIDOR_MATCH_MAX_DIST_WORLD = 50
 
 /*
  * Detour rejection. A corridor that passes near both stops can still be the
@@ -138,8 +152,9 @@ export function extractSubPolyline(
 }
 
 // Interpolate the point at an arc-length parameter, clamped to the polyline's
-// own extent.
-function pointAtArcLength(corridor: PreparedCorridor, s: number): [number, number] {
+// own extent. Exported so the overlay can turn a Projection's `s` back into the
+// foot's coordinates — the leg-straightening axis is built from those feet.
+export function pointAtArcLength(corridor: PreparedCorridor, s: number): [number, number] {
   const { pts, cums } = corridor
   const total = cums[cums.length - 1]
   if (s <= 0) return [pts[0][0], pts[0][1]]
@@ -172,14 +187,67 @@ export function polylineLength(pts: ReadonlyArray<readonly [number, number]>): n
  * the wrong one. The partner stop is what breaks the tie — it sits 704 units
  * from the through line.
  */
+export interface CorridorMatch {
+  path: Array<[number, number]>
+  // Index into the corridors array the path came from.
+  index: number
+}
+
+/*
+ * Elect the corridor a whole leg belongs to: the one serving the MOST of its
+ * stops (within the distance gate), total distance breaking ties.
+ *
+ * This exists because pair-by-pair choice is unstable where the artwork draws
+ * a corridor's two directions as parallel strokes ~22 units apart: each pair
+ * picks whichever is a fraction closer and the drawn line staircases between
+ * them. Rolling stickiness (keep whatever the previous pair used) fixes the
+ * staircase but is DIRECTION-DEPENDENT — the same leg drawn Roxy→Kalideres
+ * glued itself to the neighbouring 2A stroke because that was the only one
+ * reachable from its first pair, while Kalideres→Roxy picked its own. Electing
+ * from the full stop set is symmetric by construction: same stops, same answer,
+ * whichever end the journey starts from.
+ *
+ * Returns undefined when no corridor reaches at least two stops — a preference
+ * needs a pair to act on.
+ */
+export function pickLegCorridor(
+  stops: ReadonlyArray<{ x: number, y: number }>,
+  corridors: readonly PreparedCorridor[],
+  opts?: { maxDistWorld?: number }
+): number | undefined {
+  const maxDist = opts?.maxDistWorld ?? CORRIDOR_MATCH_MAX_DIST_WORLD
+  let bestIndex: number | undefined
+  let bestServed = 0
+  let bestTotal = Infinity
+  for (let i = 0; i < corridors.length; i++) {
+    let served = 0
+    let total = 0
+    for (const stop of stops) {
+      const { dist } = projectOntoPolyline(stop.x, stop.y, corridors[i])
+      if (dist <= maxDist) {
+        served++
+        total += dist
+      }
+    }
+    // A single grazed stop is not a leg's corridor — a preference needs a pair.
+    if (served < 2) continue
+    if (served > bestServed || (served === bestServed && total < bestTotal)) {
+      bestIndex = i
+      bestServed = served
+      bestTotal = total
+    }
+  }
+  return bestIndex
+}
+
 export function matchCorridorPath(
   ax: number,
   ay: number,
   bx: number,
   by: number,
   corridors: readonly PreparedCorridor[],
-  opts?: { maxDistWorld?: number, maxDetourRatio?: number }
-): Array<[number, number]> | null {
+  opts?: { maxDistWorld?: number, maxDetourRatio?: number, preferIndex?: number }
+): CorridorMatch | null {
   const maxDist = opts?.maxDistWorld ?? CORRIDOR_MATCH_MAX_DIST_WORLD
   const maxDetour = opts?.maxDetourRatio ?? CORRIDOR_MATCH_MAX_DETOUR_RATIO
   const straight = Math.hypot(bx - ax, by - ay)
@@ -193,12 +261,30 @@ export function matchCorridorPath(
     const worst = Math.max(pa.dist, pb.dist)
     if (worst <= maxDist) candidates.push({ corridor, worst, sa: pa.s, sb: pb.s, index: i })
   }
-  // Best fit first, corridor order breaking ties. Array.prototype.sort is
-  // already stable, but the explicit index tiebreak is what keeps the choice
-  // deterministic where two strokes are drawn on top of each other (the LRT
-  // pair, the Cikarang pair) and score within floating-point noise of one
-  // another — otherwise a regenerated file could silently redraw a route.
-  candidates.sort((p, q) => (p.worst - q.worst) || (p.index - q.index))
+  /*
+   * The leg's elected corridor first, then best fit.
+   *
+   * `preferIndex` comes from pickLegCorridor — the corridor the whole leg
+   * belongs to — so a run of stops between two parallel strokes stays on one
+   * of them instead of staircasing to whichever is a fraction closer per pair.
+   *
+   * It is a tiebreak, not an override: the preferred corridor still has to
+   * pass the same distance and detour tests as every other candidate, so the
+   * stretch it genuinely does not reach falls through to best-fit normally.
+   *
+   * The explicit index tiebreak below keeps the remaining order deterministic
+   * where two strokes are drawn on top of each other and score within
+   * floating-point noise — otherwise a regenerated file could silently redraw a
+   * route.
+   */
+  candidates.sort((p, q) => {
+    if (opts?.preferIndex !== undefined) {
+      const pp = p.index === opts.preferIndex ? 0 : 1
+      const qp = q.index === opts.preferIndex ? 0 : 1
+      if (pp !== qp) return pp - qp
+    }
+    return (p.worst - q.worst) || (p.index - q.index)
+  })
 
   for (const candidate of candidates) {
     const path = extractSubPolyline(candidate.corridor, candidate.sa, candidate.sb)
@@ -207,7 +293,7 @@ export function matchCorridorPath(
     // way round a loop, or a parallel line. Try the next best rather than
     // giving up: the right corridor is often the runner-up.
     if (polylineLength(path) > maxDetour * straight) continue
-    return path
+    return { path, index: candidate.index }
   }
   return null
 }

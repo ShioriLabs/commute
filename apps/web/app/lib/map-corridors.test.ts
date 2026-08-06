@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import corridorsManifest from '../data/map-corridors.json'
 import {
+  CORRIDOR_MATCH_MAX_DIST_WORLD,
   extractSubPolyline,
   matchCorridorPath,
+  pickLegCorridor,
   polylineLength,
   prepareCorridor,
   prepareCorridors,
@@ -89,7 +91,7 @@ describe('polylineLength', () => {
 describe('matchCorridorPath', () => {
   it('follows the corridor between two stops on it', () => {
     const corridors = prepareCorridors([{ w: 25, pts: [[0, 0], [100, 0], [100, 100]] }])
-    const path = matchCorridorPath(0, 0, 100, 100, corridors)
+    const path = matchCorridorPath(0, 0, 100, 100, corridors)?.path
     expectPointsClose(path!, [[0, 0], [100, 0], [100, 100]])
   })
 
@@ -113,7 +115,7 @@ describe('matchCorridorPath', () => {
     const junction = { x: 0, y: 1 }
 
     it('takes the branch when the partner stop is down the branch', () => {
-      const path = matchCorridorPath(junction.x, junction.y, 0, -498, corridors)
+      const path = matchCorridorPath(junction.x, junction.y, 0, -498, corridors)?.path ?? null
       expect(path).not.toBeNull()
       // Ends at the partner, and turns the corner rather than running along y≈0.
       expect(path![path!.length - 1][1]).toBeCloseTo(-498, 0)
@@ -121,7 +123,7 @@ describe('matchCorridorPath', () => {
     })
 
     it('takes the through line when the partner stop is along it', () => {
-      const path = matchCorridorPath(junction.x, junction.y, 600, 0, corridors)
+      const path = matchCorridorPath(junction.x, junction.y, 600, 0, corridors)?.path ?? null
       expect(path).not.toBeNull()
       expect(path![path!.length - 1][0]).toBeCloseTo(600, 0)
       // Never dives down the branch.
@@ -146,7 +148,7 @@ describe('matchCorridorPath', () => {
       // second — proving the matcher tries the runner-up instead of giving up
       // the moment its first choice is rejected.
       const shortcut: Corridor = { w: 15, pts: [[0, 1], [10, 1]] }
-      const path = matchCorridorPath(0, 0, 10, 0, prepareCorridors([loop, shortcut]))
+      const path = matchCorridorPath(0, 0, 10, 0, prepareCorridors([loop, shortcut]))?.path ?? null
       expect(path).not.toBeNull()
       expect(polylineLength(path!)).toBeLessThan(20)
     })
@@ -154,8 +156,99 @@ describe('matchCorridorPath', () => {
 
   it('rejects a corridor that is near one stop but far from the other', () => {
     const corridors = prepareCorridors([{ w: 25, pts: [[0, 0], [1000, 0]] }])
-    // 45 units out on the second stop, past the 40-unit threshold.
-    expect(matchCorridorPath(100, 5, 200, 45, corridors)).toBeNull()
+    // Comfortably past CORRIDOR_MATCH_MAX_DIST_WORLD on the second stop. Written
+    // against the constant rather than a literal so a retune moves the fixture
+    // with it instead of silently turning this into a no-op.
+    const beyond = CORRIDOR_MATCH_MAX_DIST_WORLD + 5
+    expect(matchCorridorPath(100, 5, 200, beyond, corridors)).toBeNull()
+  })
+
+  it('accepts a stop sitting just inside the threshold', () => {
+    // The case the threshold exists for: BRT corridors break at junctions, so a
+    // stop can sit tens of units from the stroke that serves its partner.
+    const corridors = prepareCorridors([{ w: 15, pts: [[0, 0], [1000, 0]] }])
+    const inside = CORRIDOR_MATCH_MAX_DIST_WORLD - 5
+    expect(matchCorridorPath(100, 0, 200, inside, corridors)).not.toBeNull()
+  })
+
+  /*
+   * The artwork draws a BRT corridor's two directions as separate strokes ~22
+   * units apart. Judged independently, consecutive stops pick whichever is a
+   * fraction closer, and a flat run of haltes renders as a staircase.
+   */
+  describe('sticking to one corridor across a leg', () => {
+    // Two parallel strokes, 22 apart, both well inside the distance gate.
+    const north: Corridor = { w: 15, pts: [[0, 0], [1000, 0]] }
+    const south: Corridor = { w: 15, pts: [[0, 22], [1000, 22]] }
+    const corridors = prepareCorridors([north, south])
+
+    it('would otherwise hop between them as the nearest flips', () => {
+      // Stop A leans north, stop B leans south: without a preference each pair
+      // resolves to a different stroke.
+      expect(matchCorridorPath(100, 9, 200, 9, corridors)!.index).toBe(0)
+      expect(matchCorridorPath(200, 13, 300, 13, corridors)!.index).toBe(1)
+    })
+
+    it('keeps the corridor the leg elected', () => {
+      // Same second pair, now carrying the leg's elected corridor — it stays
+      // put rather than stepping across the 22-unit gap.
+      const match = matchCorridorPath(200, 13, 300, 13, corridors, { preferIndex: 0 })
+      expect(match!.index).toBe(0)
+      expect(match!.path.every(([, y]) => y === 0)).toBe(true)
+    })
+
+    it('still abandons a preferred corridor that no longer reaches the stops', () => {
+      // A real branch moves the stops clear of the old stroke: the preference is
+      // a tiebreak among valid candidates, never an override of the gate. The
+      // branch here runs far enough south that the north stroke fails maxDist.
+      const branch: Corridor = { w: 15, pts: [[0, 400], [1000, 400]] }
+      const branching = prepareCorridors([north, branch])
+      const match = matchCorridorPath(100, 400, 300, 400, branching, { preferIndex: 0 })
+      expect(match!.index).toBe(1)
+    })
+  })
+
+  /*
+   * The Koridor 3 case in miniature: its own stroke ends partway, a parallel
+   * 2A stroke continues past it, and the middle stops sit BETWEEN the two with
+   * the wrong one fractionally nearer. Which stroke the leg rides must depend
+   * on the leg's stops, never on which end the journey starts from — rolling
+   * per-pair stickiness failed exactly there.
+   */
+  describe('pickLegCorridor', () => {
+    // Own stroke: covers x 0..500. Neighbour: covers x 300..1000, and is 1 unit
+    // NEARER to the shared middle stops.
+    const own: Corridor = { w: 15, pts: [[0, 12], [500, 12]] }
+    const neighbour: Corridor = { w: 15, pts: [[300, 0], [1000, 0]] }
+    const corridors = prepareCorridors([own, neighbour])
+    // Five stops: three only `own` serves, two in the overlap leaning towards
+    // the neighbour (y=5: 7 from own, 5 from neighbour).
+    const stops = [
+      { x: 50, y: 12 }, { x: 150, y: 12 }, { x: 250, y: 12 },
+      { x: 350, y: 5 }, { x: 450, y: 5 }
+    ]
+
+    it('elects the corridor serving the most stops, not the locally nearest', () => {
+      expect(pickLegCorridor(stops, corridors)).toBe(0)
+    })
+
+    it('is direction-independent', () => {
+      // The same stops reversed — the journey drawn from the other end — must
+      // elect the same corridor. This is the property the rolling model broke.
+      expect(pickLegCorridor([...stops].reverse(), corridors)).toBe(pickLegCorridor(stops, corridors))
+    })
+
+    it('breaks a serve-count tie by total distance', () => {
+      // Both strokes serve both stops; the nearer one wins.
+      const pair = [{ x: 400, y: 5 }, { x: 480, y: 5 }]
+      expect(pickLegCorridor(pair, corridors)).toBe(1)
+    })
+
+    it('returns undefined when no corridor reaches two stops', () => {
+      // One grazed stop is not a leg's corridor — a preference needs a pair.
+      expect(pickLegCorridor([{ x: 50, y: 12 }, { x: 5000, y: 5000 }], corridors)).toBeUndefined()
+      expect(pickLegCorridor([], corridors)).toBeUndefined()
+    })
   })
 
   it('prefers the closest of two parallel corridors', () => {
@@ -163,7 +256,7 @@ describe('matchCorridorPath', () => {
       { w: 25, pts: [[0, 30], [1000, 30]] },
       { w: 25, pts: [[0, 0], [1000, 0]] }
     ])
-    const path = matchCorridorPath(100, 2, 300, 2, corridors)
+    const path = matchCorridorPath(100, 2, 300, 2, corridors)?.path ?? null
     expect(path!.every(([, y]) => y === 0)).toBe(true)
   })
 
