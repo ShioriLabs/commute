@@ -6,6 +6,7 @@ import { fetcher } from 'utils/fetcher'
 import { useSearchables } from '~/hooks/use-searchables'
 import {
   DEFAULT_FARE_CRITERIA,
+  criteriaToPersist,
   fareQueryParams,
   readFareCriteria,
   writeFareCriteria,
@@ -106,8 +107,10 @@ export function useFareQuery({
 
   useEffect(() => {
     // The URL wins over storage for this visit: following a shared fare link
-    // must show the sender's number. Deliberately not written back — reading
-    // someone else's link should not silently change your own default.
+    // must show the sender's number, and an ?operator= entry point must open
+    // already scoped. Deliberately not written back — reading someone else's
+    // link should not silently change your own default. setCriteria enforces
+    // the other half of that, via criteriaToPersist.
     setCriteriaState({ ...readFareCriteria(), ...criteriaFromUrl.current })
     setCriteriaReady(true)
   }, [])
@@ -123,7 +126,11 @@ export function useFareQuery({
    */
   const setCriteria = useCallback((next: FareCriteria) => {
     setCriteriaState(next)
-    writeFareCriteria(next)
+    // Persist what the rider chose, not what the URL handed them — otherwise
+    // the first criteria change on an ?operator= link would bake that scope
+    // into their own stored preference. criteriaFromUrl is a ref, so this stays
+    // out of the dep array and the callback keeps its stable identity.
+    writeFareCriteria(criteriaToPersist(next, criteriaFromUrl.current))
     onStateChange?.(origin?.id ?? null, destination?.id ?? null, next)
   }, [onStateChange, origin?.id, destination?.id])
 

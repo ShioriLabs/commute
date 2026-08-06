@@ -1,4 +1,4 @@
-import { PAYMENT_METHODS, type PaymentMethod } from '@commute/constants'
+import { OPERATORS, PAYMENT_METHODS, type PaymentMethod } from '@commute/constants'
 import type { OperatorCode } from '@commute/schemas'
 
 // The fare search's persistent settings — what the criteria bar under the
@@ -120,6 +120,35 @@ export function writeFareCriteria(criteria: FareCriteria) {
 }
 
 /**
+ * Strip the parts of `criteria` that came from the URL rather than from the
+ * rider, ready to persist.
+ *
+ * A `?operator=` link scopes the picker for that visit only: FDTJ sends riders
+ * to an operator-specific fare calculator, and arriving through it must not
+ * silently rewrite the filter they set for themselves. Without this, any later
+ * criteria change persists the whole object — so tweaking the payment method on
+ * an FDTJ link would leave TJ scoping stuck on their own next visit to /fare.
+ *
+ * Only the *inherited* value is dropped. Overriding the URL's operator by hand,
+ * or clearing it to "Semua", is the rider's own choice and persists like
+ * anything else — hence the comparison against what the URL supplied rather
+ * than a blanket refusal to store an operator.
+ *
+ * `paymentMethod` is deliberately not stripped: it is already never written
+ * back to the URL, and a rider who changes it has expressed a real preference.
+ */
+export function criteriaToPersist(
+  criteria: FareCriteria,
+  fromUrl: Partial<FareCriteria> | undefined
+): FareCriteria {
+  const inherited = fromUrl?.operator
+  if (inherited && criteria.operator === inherited) {
+    return { ...criteria, operator: DEFAULT_FARE_CRITERIA.operator }
+  }
+  return criteria
+}
+
+/**
  * The query string for `GET /fares/:from/:to`.
  *
  * Defaults are omitted rather than spelled out, which is load-bearing twice
@@ -139,4 +168,50 @@ export function fareQueryParams(criteria: FareCriteria): URLSearchParams {
   if (criteria.fareTime === 'peak') params.set('at', PEAK_SAMPLE)
   if (criteria.fareTime === 'offpeak') params.set('at', OFFPEAK_SAMPLE)
   return params
+}
+
+/**
+ * Criteria named by an incoming `/fare` URL, which beat stored preferences for
+ * that visit only. `undefined` when the URL says nothing, so storage keeps its
+ * say — an empty object would read as "the rider chose the defaults".
+ *
+ * Deliberately NOT the inverse of `fareQueryParams`, and the asymmetry is the
+ * point:
+ *
+ * - `paymentMethod` round-trips. It changes the number, so a shared link must
+ *   reproduce what the sender saw.
+ * - `operator` is read here but never written back. It scopes which stations
+ *   the picker offers, which is a property of where you *entered* the app, not
+ *   of the journey — FDTJ links riders straight to an operator-specific fare
+ *   calculator via `/fare?operator=TJ`. Because `fareQueryParams` omits it, the
+ *   param falls off the address bar as soon as the rider touches anything, and
+ *   their own shares go out unscoped. That is correct: inheriting a stranger's
+ *   filter would hide stations from them for no reason they could see.
+ * - `at` is not read back into a bucket. The instants above are samples, not
+ *   the rider's choice, so reversing them would invent a specificity the UI
+ *   does not offer.
+ *
+ * Unknown values fall through per-field rather than wholesale, mirroring
+ * `parseFareCriteria`. Unlike that function, a bogus operator is dropped rather
+ * than trusted: stored codes are the rider's own and may be temporarily absent,
+ * but a URL is typo- and stranger-facing, and scoping to a code no station
+ * carries leaves the picker empty with nothing to click.
+ */
+export function readCriteriaFromUrl(params: URLSearchParams): Partial<FareCriteria> | undefined {
+  const criteria: Partial<FareCriteria> = {}
+
+  const paymentMethod = params.get('paymentMethod')
+  if (paymentMethod && paymentMethod in PAYMENT_METHODS) {
+    criteria.paymentMethod = paymentMethod as PaymentMethod
+  }
+
+  // `NUL` is excluded for the same reason a typo is: it is an internal
+  // placeholder that never labels a real station, so scoping to it would empty
+  // the picker.
+  const operator = params.get('operator')
+  if (operator && operator !== 'NUL' && operator in OPERATORS) {
+    criteria.operator = operator as OperatorCode
+  }
+
+  return Object.keys(criteria).length > 0 ? criteria : undefined
 }
