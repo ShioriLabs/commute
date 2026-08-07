@@ -1,6 +1,8 @@
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react'
 import { CheckCircleIcon, XIcon } from '@phosphor-icons/react'
+import clsx from 'clsx'
 import { haptic } from 'utils/haptics'
+import { useIsEmbed } from '~/hooks/use-is-embed'
 
 export interface CriterionOption<T extends string> {
   value: T
@@ -42,6 +44,8 @@ export default function CriterionSheet<T extends string>({
   onSelect,
   onClose
 }: Props<T>) {
+  const isEmbed = useIsEmbed()
+
   const choose = (value: T) => {
     haptic()
     onSelect(value)
@@ -62,7 +66,12 @@ export default function CriterionSheet<T extends string>({
           // Content-sized, unlike the picker's full-height panel: this is a
           // short radio list, and a full-screen sheet for three rows would feel
           // like a navigation rather than a setting.
-          className="bg-white w-screen max-h-[85dvh] overflow-y-auto rounded-t-2xl will-change-transform transition duration-300 ease-ios-spring data-closed:translate-y-full"
+          //
+          // dvh vs vh: see fare.tsx / use-is-embed.ts.
+          className={clsx(
+            'bg-white w-screen overflow-y-auto rounded-t-2xl will-change-transform transition duration-300 ease-ios-spring data-closed:translate-y-full',
+            isEmbed ? 'max-h-[85vh]' : 'max-h-[85dvh]'
+          )}
         >
           <div className="p-8 pb-4 max-w-3xl mx-auto">
             <div className="flex gap-4 items-center justify-between">
