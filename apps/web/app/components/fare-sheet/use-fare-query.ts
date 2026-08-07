@@ -64,7 +64,13 @@ export interface FareQueryOptions {
   alternatives?: boolean
 }
 
-export interface FareQuery {
+/*
+ * `TResult` follows the endpoint: a caller that never asks for alternatives is
+ * talking to `/fares`, which cannot answer with a `journeys` array, so it should
+ * not have to narrow a union it can never receive. The map's overlay and chip
+ * rely on this — they consume the flat route fields directly.
+ */
+export interface FareQuery<TResult = FareResult | TripResult> {
   origin: PickableStation | null
   destination: PickableStation | null
   /*
@@ -97,7 +103,7 @@ export interface FareQuery {
   setCriteria: (criteria: FareCriteria) => void
   /* Either shape: `/fares` answers with one route, `/_internal/trips` with
    * several. FareResultCard normalises the two via journeysOf. */
-  fare: StandardResponse<FareResult | TripResult> | undefined
+  fare: StandardResponse<TResult> | undefined
   error: unknown
   isLoading: boolean
 }
@@ -106,6 +112,8 @@ export interface FareQuery {
 // route mode. Owns the station pair, the picker, and the fare fetch; renders
 // nothing. Both call sites go through the same useSWR key, so SWR dedupes across
 // them.
+export function useFareQuery(options?: FareQueryOptions & { alternatives?: false }): FareQuery<FareResult>
+export function useFareQuery(options: FareQueryOptions & { alternatives: boolean }): FareQuery<FareResult | TripResult>
 export function useFareQuery({
   initialPair,
   controlledPair,
