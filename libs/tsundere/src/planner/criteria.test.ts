@@ -5,6 +5,7 @@ const criteria = (over: Partial<Criteria> = {}): Criteria => ({
   boardings: 1,
   rideDistanceM: 5000,
   walkDistanceM: 200,
+  concourseWalkM: 0,
   waitS: 300,
   fare: 3500,
   ...over
@@ -61,8 +62,50 @@ describe('dominates', () => {
   })
 
   it('buckets waiting by the minute', () => {
-    expect(dominates(criteria({ waitS: 300 }), criteria({ waitS: 320 }))).toBe(false)
     expect(dominates(criteria({ waitS: 300 }), criteria({ waitS: 420 }))).toBe(true)
+    expect(dominates(criteria({ waitS: 300 }), criteria({ waitS: 320 }))).toBe(false)
+  })
+
+  /*
+   * Walking must be charged against the distance axis, not compared beside it.
+   *
+   * Real case, Tambun -> Cisauk: the Sudirman -> BNI City rail edge is 464m, the
+   * footpath between them 300m. Comparing in-vehicle metres on their own made
+   * "alight, walk, re-board the same line" *better* on that axis, so it could
+   * not be dominated — and the planner offered a rider two journeys that cost
+   * more, changed more, and walked further, for 164 fewer metres aboard.
+   */
+  it('dominates a walking shortcut that saves less riding than it adds walking', () => {
+    const direct = criteria({ boardings: 2, rideDistanceM: 55522, walkDistanceM: 0, waitS: 0, fare: 7000 })
+    const detour = criteria({ boardings: 3, rideDistanceM: 55058, walkDistanceM: 300, waitS: 0, fare: 8000 })
+    expect(dominates(direct, detour)).toBe(true)
+    expect(dominates(detour, direct)).toBe(false)
+  })
+
+  /*
+   * The other half of the same rule: a walk that buys a lot of riding is still a
+   * genuine choice. Guards against "fixing" the case above by making walking so
+   * expensive that shortcuts stop being offered at all.
+   */
+  it('leaves a walk that saves far more riding than it costs non-dominated', () => {
+    const longWayRound = criteria({ boardings: 1, rideDistanceM: 9000, walkDistanceM: 0 })
+    const shortcut = criteria({ boardings: 1, rideDistanceM: 3000, walkDistanceM: 600 })
+    expect(dominates(longWayRound, shortcut)).toBe(false)
+    expect(dominates(shortcut, longWayRound)).toBe(false)
+  })
+
+  /*
+   * Measured transfer distances are gate to gate. They omit platform -> gate at
+   * the start and gate -> platform at the end, which is most of what a rider
+   * actually walks changing trains, so the engine adds an allowance per walk
+   * transfer. It is an estimate, so it stays out of the reported walk figure —
+   * `concourseWalkM` is compared, `walkDistanceM` is displayed.
+   */
+  it('counts the in-station allowance against a journey', () => {
+    const measuredOnly = criteria({ walkDistanceM: 400, concourseWalkM: 0 })
+    const withConcourse = criteria({ walkDistanceM: 400, concourseWalkM: 250 })
+    expect(dominates(measuredOnly, withConcourse)).toBe(true)
+    expect(dominates(withConcourse, measuredOnly)).toBe(false)
   })
 
   describe('unknown fares', () => {

@@ -12,8 +12,24 @@ export interface Criteria {
   boardings: number
   /** In-vehicle metres. Real distance, never a routing weight. */
   rideDistanceM: number
-  /** Footpath metres, including transfers between stops. */
+  /**
+   * Footpath metres, including transfers between stops. Measured, and the figure
+   * a rider is shown.
+   *
+   * Understated on its own: transfer distances are recorded gate to gate, so
+   * they omit platform -> gate at one end and gate -> platform at the other. See
+   * `concourseWalkM`.
+   */
   walkDistanceM: number
+  /**
+   * Estimated in-station walking the measured transfers leave out.
+   *
+   * Separate from `walkDistanceM` because it is a modelled allowance, not
+   * something anyone surveyed: it belongs in every comparison the engine makes
+   * and in none of the numbers it reports. Same split as the graph's
+   * `routingCostM` against its `distanceM`.
+   */
+  concourseWalkM: number
   /**
    * Expected wait, summed over boardings. Derived from headways, not from a
    * timetable — this engine does not know when the next bus is, only how often
@@ -47,6 +63,42 @@ const WAIT_BUCKET_S = 60
 
 const bucket = (value: number, size: number) => Math.round(value / size)
 
+/*
+ * What a metre on foot costs against a metre aboard, for comparison purposes.
+ *
+ * Not a preference — WALKING_WEIGHTS below is the preference, and it only
+ * reorders results. This is the floor: walking a given distance takes several
+ * times longer than riding it, so a journey that swaps riding for at least as
+ * much walking is worse, full stop, and dominance has to be able to say so.
+ * Held at the AVERAGE preference so the two never disagree about direction.
+ */
+const WALK_DISTANCE_COST = 2
+
+/**
+ * Every metre this journey asks a rider to walk: surveyed footpath plus the
+ * in-station allowance.
+ *
+ * The single walking figure for comparisons. Reporting uses `walkDistanceM`.
+ */
+export function effectiveWalkM(criteria: Criteria): number {
+  return criteria.walkDistanceM + criteria.concourseWalkM
+}
+
+/*
+ * Riding and walking, in one comparable quantity.
+ *
+ * Comparing in-vehicle metres on their own is what let a journey alight, walk
+ * parallel to the line, and re-board it: shorter on the ride axis, longer on the
+ * walk axis, therefore non-dominated no matter how bad the trade. Charging the
+ * walk into the same axis makes a swap of riding for walking a loss unless the
+ * walk actually saves distance worth saving, which is the real-world rule.
+ *
+ * Walking still keeps its own axis as well, so a rider who wants to walk less
+ * than the shortest journey does can still be offered that.
+ */
+const travelCostM = (criteria: Criteria) =>
+  criteria.rideDistanceM + effectiveWalkM(criteria) * WALK_DISTANCE_COST
+
 /**
  * Does `a` dominate `b`?
  *
@@ -77,13 +129,13 @@ export function dominates(a: Criteria, b: Criteria): boolean {
   if (a.boardings > b.boardings) return false
   if (a.boardings < b.boardings) strictlyBetter = true
 
-  const aRide = bucket(a.rideDistanceM, DISTANCE_BUCKET_M)
-  const bRide = bucket(b.rideDistanceM, DISTANCE_BUCKET_M)
-  if (aRide > bRide) return false
-  if (aRide < bRide) strictlyBetter = true
+  const aTravel = bucket(travelCostM(a), DISTANCE_BUCKET_M)
+  const bTravel = bucket(travelCostM(b), DISTANCE_BUCKET_M)
+  if (aTravel > bTravel) return false
+  if (aTravel < bTravel) strictlyBetter = true
 
-  const aWalk = bucket(a.walkDistanceM, DISTANCE_BUCKET_M)
-  const bWalk = bucket(b.walkDistanceM, DISTANCE_BUCKET_M)
+  const aWalk = bucket(effectiveWalkM(a), DISTANCE_BUCKET_M)
+  const bWalk = bucket(effectiveWalkM(b), DISTANCE_BUCKET_M)
   if (aWalk > bWalk) return false
   if (aWalk < bWalk) strictlyBetter = true
 
@@ -134,7 +186,7 @@ export const DEFAULT_RANK_WEIGHTS: RankWeights = {
 /** Scalarised cost, for ranking and eviction only. */
 export function rankScore(criteria: Criteria, weights: RankWeights = DEFAULT_RANK_WEIGHTS): number {
   return criteria.rideDistanceM * weights.rideDistanceM
-    + criteria.walkDistanceM * weights.walkDistanceM
+    + effectiveWalkM(criteria) * weights.walkDistanceM
     + criteria.waitS * weights.waitS
     + criteria.boardings * weights.boardings
     + (criteria.fare ?? 0) * weights.fare

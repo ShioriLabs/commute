@@ -6,6 +6,7 @@ const criteria = (over: Partial<Criteria> = {}): Criteria => ({
   boardings: 1,
   rideDistanceM: 5000,
   walkDistanceM: 200,
+  concourseWalkM: 0,
   waitS: 300,
   fare: 3500,
   ...over

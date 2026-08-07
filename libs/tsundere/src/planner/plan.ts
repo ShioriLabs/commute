@@ -1,12 +1,34 @@
-import type { RouteGraph, RouteLeg } from '../router'
+import type { GraphEdge, RouteGraph, RouteLeg } from '../router'
 import { Bag, type Label } from './bag'
 import {
   DEFAULT_RANK_WEIGHTS,
+  effectiveWalkM,
   rankScore,
   type Criteria,
   type RankWeights
 } from './criteria'
 import { hopsToLegs, traceToHops, type Trace } from './materialise'
+
+/*
+ * In-station walking a transfer distance does not include.
+ *
+ * Transfers are surveyed gate to gate. The rider's walk starts at a train door
+ * and ends at another: along the platform, up to the concourse, out through the
+ * gate line, and the same again in reverse at the far end. On a KCI interchange
+ * that is comfortably the larger half of the trip, and leaving it out made short
+ * transfers look free next to riding the same distance.
+ *
+ * A flat allowance rather than anything per-station: the engine knows nothing
+ * about platform layouts, and inventing a number per station would imply a
+ * precision that does not exist. Two values, because the gate line is the part
+ * that varies — a noTap transfer stays inside the paid zone and skips it (see
+ * GraphEdge.noTap), so it pays for circulation only.
+ */
+export const GATED_TRANSFER_WALK_M = 250
+export const PAID_ZONE_TRANSFER_WALK_M = 100
+
+const concourseWalkFor = (edge: GraphEdge) =>
+  (edge.noTap ? PAID_ZONE_TRANSFER_WALK_M : GATED_TRANSFER_WALK_M)
 
 /**
  * Fare for a complete journey, or null when it cannot be priced.
@@ -126,7 +148,9 @@ function expectedWaitS(lineCode: string, headwaysS: Map<string, number> | undefi
  * Neither TRANSFER_PENALTY_M nor LINE_CHANGE_PENALTY_M applies here. Their own
  * comments say they proxy for the wait and hassle of changing vehicle, which
  * `boardings` and `waitS` now model outright — charging both would penalise a
- * transfer twice.
+ * transfer twice. The concourse allowance below is not a third copy of that: it
+ * is walking distance the survey did not measure, and it applies to a walk
+ * whether or not a vehicle change happens at either end of it.
  */
 export function plan(
   graph: RouteGraph,
@@ -165,7 +189,7 @@ export function plan(
   }
 
   const origin: Label<Trace | null> = {
-    criteria: { boardings: 0, rideDistanceM: 0, walkDistanceM: 0, waitS: 0, fare: null },
+    criteria: { boardings: 0, rideDistanceM: 0, walkDistanceM: 0, concourseWalkM: 0, waitS: 0, fare: null },
     incomingLine: null,
     trace: null
   }
@@ -220,6 +244,7 @@ export function plan(
             boardings: label.criteria.boardings + (boarding ? 1 : 0),
             rideDistanceM: label.criteria.rideDistanceM + (isWalk ? 0 : edge.distanceM),
             walkDistanceM: label.criteria.walkDistanceM + (isWalk ? edge.distanceM : 0),
+            concourseWalkM: label.criteria.concourseWalkM + (isWalk ? concourseWalkFor(edge) : 0),
             waitS: label.criteria.waitS + (boarding ? expectedWaitS(edge.lineCode!, headwaysS, defaultHeadwayS) : 0),
             fare: null
           }
@@ -377,7 +402,9 @@ function labelJourneys(journeys: Journey[]): Journey[] {
   }
 
   assign(winner(journeys.map(j => j.criteria.boardings)), 'FEWEST_CHANGES')
-  assign(winner(journeys.map(j => bucket(j.criteria.walkDistanceM, 100))), 'LEAST_WALKING')
+  // Effective walking, not the measured figure, so the badge agrees with what
+  // dominance decided — and with what the rider's legs will report.
+  assign(winner(journeys.map(j => bucket(effectiveWalkM(j.criteria), 100))), 'LEAST_WALKING')
   assign(winner(journeys.map(j => bucket(j.criteria.waitS, 60))), 'SHORTEST_WAIT')
   assign(winner(journeys.map(j => j.criteria.fare)), 'CHEAPEST')
 
