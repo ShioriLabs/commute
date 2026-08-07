@@ -4,8 +4,7 @@ import { XIcon } from '@phosphor-icons/react'
 import { useSearchParams } from 'react-router'
 import FarePanel from './fare-panel'
 import FareShareButton from './fare-share-button'
-import { PAYMENT_METHODS, type PaymentMethod } from '@commute/constants'
-import { fareQueryParams, type FareCriteria } from 'utils/fare-criteria'
+import { fareQueryParams, readCriteriaFromUrl, type FareCriteria } from 'utils/fare-criteria'
 import { useFareQuery } from './use-fare-query'
 
 // Rendered inside a headlessui Dialog in both contexts: the homepage
@@ -48,14 +47,14 @@ export default function FareSheet() {
     )
   }, [])
 
-  const urlPaymentMethod = searchParams.get('paymentMethod')
   const query = useFareQuery({
     initialPair: { fromId: searchParams.get('from'), toId: searchParams.get('to') },
-    // A shared link's payment method beats the recipient's stored preference,
-    // so the number they see is the number the sender saw.
-    initialCriteria: urlPaymentMethod && urlPaymentMethod in PAYMENT_METHODS
-      ? { paymentMethod: urlPaymentMethod as PaymentMethod }
-      : undefined,
+    // The URL beats the recipient's stored preferences for this visit: a shared
+    // link's payment method shows the number the sender saw, and `?operator=`
+    // lands an operator-specific entry point (FDTJ's fare calculator) on a
+    // picker already scoped to that operator. See readCriteriaFromUrl for why
+    // only one of the two is written back.
+    initialCriteria: readCriteriaFromUrl(searchParams),
     onStateChange: writeUrl,
     syncDocumentTitle: true
   })
