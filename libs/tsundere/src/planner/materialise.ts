@@ -5,6 +5,13 @@ export interface Hop {
   from: string
   to: string
   edge: GraphEdge
+  /*
+   * This hop continues on the same line but on a different vehicle — see
+   * ServiceBreak. Carried on the hop rather than re-derived here so leg assembly
+   * stays a pure function of the path, and so `findRoute`, which does not model
+   * breaks, is unaffected by their existence.
+   */
+  breaksService?: boolean
 }
 
 /*
@@ -15,7 +22,10 @@ export interface Hop {
  * against each other, and a difference caused by two copies of leg assembly
  * drifting apart would be indistinguishable from a real routing difference.
  *
- * Consecutive hops on one line merge into a single RIDE leg. `stationIds` must
+ * Consecutive hops on one line merge into a single RIDE leg, EXCEPT across a
+ * service break, where the line is the same but the train is not — merging
+ * there would render a journey the engine charged two boardings for as one
+ * uninterrupted ride, hiding the change from the rider. `stationIds` must
  * come out as the COMPLETE ordered stop list, not just the endpoints —
  * mergeInterlinedLegs in apps/api matches it as a contiguous run against
  * TOPOLOGY paths, so a gap there silently stops interlined legs from merging.
@@ -39,7 +49,7 @@ export function hopsToLegs(hops: readonly Hop[]): RouteLeg[] {
         distanceM: hop.edge.distanceM,
         noTap: hop.edge.noTap ?? false
       })
-    } else if (last && last.type === 'RIDE' && last.lineCode === hop.edge.lineCode) {
+    } else if (last && last.type === 'RIDE' && last.lineCode === hop.edge.lineCode && !hop.breaksService) {
       last.toStationId = hop.to
       last.stationIds.push(hop.to)
       last.distanceM += hop.edge.distanceM

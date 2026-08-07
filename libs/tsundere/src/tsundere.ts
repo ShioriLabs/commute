@@ -4,6 +4,7 @@ import {
   findRoute,
   type EdgeInput,
   type EndpointRestriction,
+  type ServiceBreak,
   type RouteGraph,
   type RouteLeg,
   type TransferInput
@@ -40,6 +41,12 @@ export interface LoadGraphInput {
    * of the network, so it belongs to the loaded graph rather than to a query.
    */
   restrictions?: EndpointRestriction[]
+  /**
+   * Turns that stay on one line but change vehicle, e.g. riding through the
+   * point where a loop closes onto its stick. Read by `findRoutes` only — see
+   * RouteGraph.serviceBreaks for why `findRoute` ignores them.
+   */
+  serviceBreaks?: ServiceBreak[]
 }
 
 export class Tsundere {
@@ -107,6 +114,6 @@ export class Tsundere {
  * through the engine buys nothing while the format holds for every operator in
  * the network.
  */
-export function loadGraph({ edges, transfers, restrictions, headwaysS }: LoadGraphInput): Tsundere {
-  return new Tsundere(buildGraph(edges, transfers, restrictions), headwaysS)
+export function loadGraph({ edges, transfers, restrictions, serviceBreaks, headwaysS }: LoadGraphInput): Tsundere {
+  return new Tsundere(buildGraph(edges, transfers, restrictions, serviceBreaks), headwaysS)
 }

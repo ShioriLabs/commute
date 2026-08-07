@@ -1,4 +1,4 @@
-import type { GraphEdge, RouteGraph, RouteLeg } from '../router'
+import { serviceBreakKey, type GraphEdge, type RouteGraph, type RouteLeg } from '../router'
 import { Bag, type Label } from './bag'
 import {
   DEFAULT_RANK_WEIGHTS,
@@ -168,7 +168,7 @@ export function plan(
     scoreFare
   } = options
 
-  const { adjacency, restrictions } = graph
+  const { adjacency, restrictions, serviceBreaks } = graph
   if (!adjacency.has(fromStationId) || !adjacency.has(toStationId)) return []
 
   // Same endpoint rules as findRoute: they constrain only this trip's own
@@ -238,7 +238,22 @@ export function plan(
           if (edge.to === toStationId && destRestriction && stop === destRestriction.forbiddenNeighborId) continue
 
           const isWalk = edge.lineCode === null
-          const boarding = !isWalk && edge.lineCode !== label.incomingLine
+          /*
+           * Staying on the line is normally free. It is not when the turn is a
+           * service break: same line code, different train, because the loop
+           * closes here (see ServiceBreak). Charging it a boarding is what stops
+           * a ride through the junction from dominating the real one-seat ride
+           * the long way round.
+           *
+           * The previous stop comes off the trace's last hop, which is already
+           * the hop into this stop — no extra state on the label.
+           */
+          const sameLine = !isWalk && edge.lineCode === label.incomingLine
+          const brokenTurn = sameLine
+            && serviceBreaks.size > 0
+            && label.trace !== null
+            && serviceBreaks.has(serviceBreakKey(edge.lineCode!, label.trace.hop.from, stop, edge.to))
+          const boarding = !isWalk && (!sameLine || brokenTurn)
           if (boarding && round === maxRounds) continue
 
           /*
@@ -287,7 +302,7 @@ export function plan(
             // A walk resets the boarded line, which is what makes boarding
             // after a transfer free — matching findRoute.
             incomingLine: isWalk ? null : edge.lineCode,
-            trace: { hop: { from: stop, to: edge.to, edge }, previous: label.trace }
+            trace: { hop: { from: stop, to: edge.to, edge, breaksService: brokenTurn }, previous: label.trace }
           }
 
           if (edge.to === toStationId) {

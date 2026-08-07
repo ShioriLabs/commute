@@ -283,3 +283,87 @@ describe('defaults', () => {
     expect(best!.criteria.boardings).toBe(3)
   })
 })
+
+/*
+ * A lollipop line, the shape KCI's Cikarang loop actually has: a stick running
+ * in to J, and a loop that leaves J and closes back onto it.
+ *
+ *   stick:  KCI-S — KCI-J
+ *   loop:   KCI-J — KCI-A — KCI-B — KCI-C — KCI-D — KCI-E — KCI-F — KCI-G — KCI-J
+ *
+ * Every edge is the same line, so a run of them looks like one vehicle to the
+ * engine. It is not: a service reaching J off the loop leaves down the stick, so
+ * riding G -> J -> A means changing trains at J even though the line code never
+ * changes. That is what SERVICE BREAKS express.
+ */
+const lollipop = (serviceBreaks: Parameters<typeof buildGraph>[3] = []) => buildGraph(
+  [
+    ...edge('L', 'KCI-S', 'KCI-J'),
+    ...edge('L', 'KCI-J', 'KCI-A'),
+    ...edge('L', 'KCI-A', 'KCI-B'),
+    ...edge('L', 'KCI-B', 'KCI-C'),
+    ...edge('L', 'KCI-C', 'KCI-D'),
+    ...edge('L', 'KCI-D', 'KCI-E'),
+    ...edge('L', 'KCI-E', 'KCI-F'),
+    ...edge('L', 'KCI-F', 'KCI-G'),
+    ...edge('L', 'KCI-G', 'KCI-J')
+  ],
+  [],
+  [],
+  serviceBreaks
+)
+
+// Riding the loop past the point where it closes onto the stick.
+const THROUGH_CLOSURE = [
+  { lineCode: 'L', viaStationId: 'KCI-J', fromStationId: 'KCI-G', toStationId: 'KCI-A' },
+  { lineCode: 'L', viaStationId: 'KCI-J', fromStationId: 'KCI-A', toStationId: 'KCI-G' }
+]
+
+describe('service breaks', () => {
+  it('without them, rides straight through the loop closure as one boarding', () => {
+    // The bug this exists to fix: G -> J -> A -> B is 3000m and scores a single
+    // boarding, so it dominates the 5000m way round and the real one-seat ride
+    // is never offered at all.
+    const journeys = plan(lollipop(), 'KCI-G', 'KCI-B')
+    expect(journeys).toHaveLength(1)
+    expect(journeys[0]!.criteria.boardings).toBe(1)
+    expect(journeys[0]!.criteria.rideDistanceM).toBe(3000)
+  })
+
+  it('charges a boarding for riding through the closure, and keeps both options', () => {
+    const journeys = plan(lollipop(THROUGH_CLOSURE), 'KCI-G', 'KCI-B')
+    expect(journeys).toHaveLength(2)
+
+    // The short way still exists — you can make that trip, you just change
+    // trains at J. Banning it would strand anyone travelling between the two
+    // ends of the loop.
+    const short = journeys.find(j => j.criteria.rideDistanceM === 3000)!
+    expect(short.criteria.boardings).toBe(2)
+    expect(short.legs.map(l => l.type)).toEqual(['RIDE', 'RIDE'])
+
+    // And the genuine one-seat ride, the long way round, is now offered.
+    const oneSeat = journeys.find(j => j.criteria.rideDistanceM === 5000)!
+    expect(oneSeat.criteria.boardings).toBe(1)
+    expect(oneSeat.labels).toContain('FEWEST_CHANGES')
+  })
+
+  it('leaves the stick-to-loop turn alone', () => {
+    // A service running in off the stick continues onto the loop as one train.
+    // Only the loop-to-loop turn through J is a change.
+    const journeys = plan(lollipop(THROUGH_CLOSURE), 'KCI-S', 'KCI-B')
+    expect(journeys[0]!.criteria.boardings).toBe(1)
+    expect(journeys[0]!.legs).toHaveLength(1)
+  })
+
+  it('splits the leg where the break falls', () => {
+    // Selected by shape, not position: the long way round ranks first here,
+    // because one fewer boarding also means one fewer expected wait.
+    const journeys = plan(lollipop(THROUGH_CLOSURE), 'KCI-G', 'KCI-A')
+    const journey = journeys.find(j => j.criteria.rideDistanceM === 2000)
+    expect(journey).toBeDefined()
+    const legs = journey!.legs.filter(l => l.type === 'RIDE')
+    expect(legs).toHaveLength(2)
+    expect(legs[0]!.type === 'RIDE' && legs[0]!.stationIds).toEqual(['KCI-G', 'KCI-J'])
+    expect(legs[1]!.type === 'RIDE' && legs[1]!.stationIds).toEqual(['KCI-J', 'KCI-A'])
+  })
+})

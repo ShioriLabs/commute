@@ -62,4 +62,4 @@ export type { RideLeg, RouteLeg, TransferLeg } from './router'
  * rows straight in, and these must never grow a field a database row would not
  * happen to have.
  */
-export type { EdgeInput, EndpointRestriction, TransferInput } from './router'
+export type { EdgeInput, EndpointRestriction, ServiceBreak, TransferInput } from './router'

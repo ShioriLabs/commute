@@ -82,6 +82,38 @@ export interface EndpointRestriction {
 }
 
 /*
+ * A turn that stays on one line but changes vehicle.
+ *
+ * A line code identifies a *route*, not a service, and on a loop the two come
+ * apart. KCI's Cikarang line is a lollipop — a stick running in to Jatinegara
+ * and a loop that leaves Jatinegara and closes back onto it — so a run of
+ * same-line edges through that junction describes a train going round the loop
+ * and immediately starting round it again. No service does that: one reaching
+ * the junction off the loop leaves down the stick. The rider changes trains
+ * while the line code never changes, and `boardings` cannot see it.
+ *
+ * Expressed as a turn (`from` -> `via` -> `to`) rather than a property of a
+ * stop or an edge, because that is what it is: the stick-to-loop turns through
+ * the same junction are ordinary through-running and must stay free.
+ *
+ * Not a ban. Riding through the break is a real journey — often the only
+ * sensible one between the two ends of a loop — it just costs a boarding. The
+ * Pareto front then carries both it and the long way round, and the rider
+ * chooses.
+ */
+export interface ServiceBreak {
+  lineCode: string
+  /** The junction the vehicle change happens at. */
+  viaStationId: string
+  fromStationId: string
+  toStationId: string
+}
+
+/** Lookup key for a turn. Directional — the reverse turn is a separate entry. */
+export const serviceBreakKey = (lineCode: string, from: string, via: string, to: string): string =>
+  `${lineCode}|${from}|${via}|${to}`
+
+/*
  * The routing graph plus the endpoint restrictions that apply to it. Restrictions
  * live on the graph (not passed per-query) since they're a static property of the
  * network; `findRoute` consults them only for the trip's own origin/destination.
@@ -89,6 +121,14 @@ export interface EndpointRestriction {
 export interface RouteGraph {
   adjacency: Map<string, GraphEdge[]>
   restrictions: Map<string, EndpointRestriction> // keyed by restricted stationId
+  /*
+   * Turns that cost a boarding, keyed by `serviceBreakKey`.
+   *
+   * Read by `plan` only. `findRoute` deliberately ignores them: it answers
+   * `/fares`, which is the shared URL, the OG card and the TransportForJakarta
+   * embed, so its output must not move until that is released on purpose.
+   */
+  serviceBreaks: Set<string>
 }
 
 export interface RideLeg {
@@ -117,7 +157,8 @@ export type RouteLeg = RideLeg | TransferLeg
 export function buildGraph(
   edges: EdgeInput[],
   transfers: TransferInput[],
-  restrictions: EndpointRestriction[] = []
+  restrictions: EndpointRestriction[] = [],
+  serviceBreaks: ServiceBreak[] = []
 ): RouteGraph {
   const adjacency = new Map<string, GraphEdge[]>()
   const push = (from: string, edge: GraphEdge) => {
@@ -201,7 +242,10 @@ export function buildGraph(
     push(to, { to: from, distanceM: t.distance, routingCostM: t.distance + back, lineCode: null, noTap })
   }
   const restrictionMap = new Map(restrictions.map(r => [r.stationId, r]))
-  return { adjacency, restrictions: restrictionMap }
+  const breakSet = new Set(serviceBreaks.map(
+    b => serviceBreakKey(b.lineCode, b.fromStationId, b.viaStationId, b.toStationId)
+  ))
+  return { adjacency, restrictions: restrictionMap, serviceBreaks: breakSet }
 }
 
 export function findRoute(graph: RouteGraph, fromStationId: string, toStationId: string): RouteLeg[] | null {

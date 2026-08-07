@@ -8,7 +8,7 @@ import { FareResult } from 'models/fare'
 import { fareTimeBucket } from 'utils/fare'
 import { assembleJourney, planJourney, stationNamer } from 'utils/fare-journey'
 import { Internal, NotFound, Ok } from 'utils/response'
-import { ENDPOINT_RESTRICTIONS } from 'db/data/topology'
+import { ENDPOINT_RESTRICTIONS, SERVICE_BREAKS } from 'db/data/topology'
 import { loadGraph, type Tsundere } from '@commute/tsundere'
 import { HEADWAYS_S } from 'db/data/headways'
 import { doc, pathParam, queryParam } from 'schemas/describe'
@@ -31,10 +31,18 @@ export async function getRouter(d1: D1Database): Promise<Tsundere> {
     stationId: `${r.operator}-${r.station}`,
     forbiddenNeighborId: `${r.operator}-${r.forbiddenNeighbor}`
   }))
+  const serviceBreaks = SERVICE_BREAKS.map(b => ({
+    lineCode: b.lineCode,
+    viaStationId: `${b.operator}-${b.via}`,
+    fromStationId: `${b.operator}-${b.from}`,
+    toStationId: `${b.operator}-${b.to}`
+  }))
   cachedRouter = loadGraph({
     edges,
     transfers,
     restrictions,
+    // Read by findRoutes only; /fares keeps the answer it has always given.
+    serviceBreaks,
     // Read by findRoutes to price the expected wait per boarding, which is what
     // separates journeys that are otherwise equal on distance and changes.
     headwaysS: new Map(Object.entries(HEADWAYS_S))
