@@ -220,8 +220,16 @@ export function plan(
     const queued = new Set(pending)
     const nextFrontier = new Set<string>()
 
-    while (pending.length > 0) {
-      const stop = pending.shift()!
+    /*
+     * Advanced with a cursor rather than `pending.shift()`, which is O(n) per
+     * pop and made draining a round quadratic in its own frontier — worst
+     * exactly where it hurts most, on the long ODs whose frontier is biggest.
+     * The array is only appended to, so entries behind `head` are spent rather
+     * than leaked; it is discarded at the end of the round either way.
+     */
+    let head = 0
+    while (head < pending.length) {
+      const stop = pending[head++]!
       queued.delete(stop)
 
       for (const label of [...getBag(stop, round).labels()]) {
