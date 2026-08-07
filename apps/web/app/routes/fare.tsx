@@ -1,7 +1,9 @@
+import clsx from 'clsx'
 import FareSheet from '~/components/fare-sheet'
 import { Dialog, DialogPanel } from '@headlessui/react'
 import { useNavigate } from 'react-router'
 import { readDismissContext, resolveDismiss } from '~/lib/sheet-route-dismiss'
+import { useIsEmbed } from '~/hooks/use-is-embed'
 
 export function meta() {
   return [
@@ -12,6 +14,7 @@ export function meta() {
 
 export default function FarePage() {
   const navigate = useNavigate()
+  const isEmbed = useIsEmbed()
 
   // `/fare` is a canonical URL, so closing must not assume it is a modal over
   // `/`. Headless UI fires onClose on focus loss and outside interaction, which
@@ -32,7 +35,17 @@ export default function FarePage() {
           // ~60px of this scroll container permanently underneath it — the end
           // of the fare breakdown was unreachable however far you scrolled.
           // dvh tracks the visible area instead. Matches routes/search.tsx.
-          className="overflow-hidden relative w-screen h-dvh mt-auto"
+          //
+          // Embedded (?embed=true, see use-is-embed.ts) falls back to
+          // h-screen: the host page gives the iframe a fixed-height
+          // container, not a real viewport, so the toolbar concern doesn't
+          // apply — and dvh doesn't reliably recompute when the iframe goes
+          // from a host-side display:none to visible without a real window
+          // resize, which left the TransportForJakarta embed blank.
+          className={clsx(
+            'overflow-hidden relative w-screen mt-auto',
+            isEmbed ? 'h-screen' : 'h-dvh'
+          )}
         >
           <FareSheet />
         </DialogPanel>

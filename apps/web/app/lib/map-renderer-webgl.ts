@@ -1,11 +1,12 @@
 import * as twgl from 'twgl.js'
-import type { Manifest, Point, Renderer, SelectionOverlay, Tier, TileStats, Transform } from './map-renderer'
+import type { Manifest, Point, Renderer, RouteDrawItem, RouteOverlay, RouteOverlayFrame, SelectionOverlay, Tier, TileStats, Transform } from './map-renderer'
 import {
   PHONE_TILE_BUDGET_CEILING_BYTES,
   RING_WIDTH_WORLD,
   SPOTLIGHT_FEATHER_WORLD,
   pointCornerRadius,
   ringOffsetWorld,
+  routeDrawItems,
   tileBudgetBytes,
   tileKey
 } from './map-renderer'
@@ -30,9 +31,19 @@ const FS = `#version 300 es
 precision highp float;
 in vec2 v_texcoord;
 uniform sampler2D u_texture;
+// 0 = the artwork's own colour, 1 = fully grey. Rec.709 luma, which is the
+// matrix CSS saturate() uses — the Canvas2D fallback desaturates with that
+// filter, so sharing the coefficients is what stops the two renderers drifting
+// apart in hue at intermediate values.
+uniform float u_desaturate;
 out vec4 outColor;
 void main() {
-  outColor = texture(u_texture, v_texcoord);
+  vec4 c = texture(u_texture, v_texcoord);
+  float luma = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+  // Textures are uploaded premultiplied, so the grey has to be weighted by alpha
+  // to stay in that space. A no-op for the opaque WebP tiers; it matters for the
+  // runtime-rasterized SVG tier, which would otherwise halo at tile edges.
+  outColor = vec4(mix(c.rgb, vec3(luma) * c.a, u_desaturate), c.a);
 }
 `
 
@@ -149,6 +160,29 @@ void main() {
   outColor = vec4(scrimRgb + u_ringColor * (ring + glow), a); // premultiplied
 }
 `
+
+// Flat dim drawn UNDER the route overlay. Unlike the selection spotlight there
+// is no punch-out: the route's full-opacity capsules sit on top of the dim, so
+// the route pops without an N-segment SDF loop in a fullscreen pass.
+const SCRIM_VS = `#version 300 es
+in vec2 a_position; // 0..1 fullscreen quad
+void main() {
+  gl_Position = vec4(a_position.x * 2.0 - 1.0, 1.0 - a_position.y * 2.0, 0.0, 1.0);
+}
+`
+
+const SCRIM_FS = `#version 300 es
+precision highp float;
+uniform vec4 u_color;
+out vec4 outColor;
+void main() {
+  outColor = vec4(u_color.rgb * u_color.a, u_color.a); // premultiplied
+}
+`
+
+// Same dark navy as the spotlight scrim (SPOT_FS), so the two dims read as one
+// system when the selection scrim takes over from the route scrim.
+const SCRIM_RGB = [0.06, 0.09, 0.16]
 
 interface TileEntry {
   texture: WebGLTexture
@@ -273,6 +307,11 @@ export function createWebGLRenderer(
   })
   const spotVao = twgl.createVertexArrayInfo(twglGl, spotProgramInfo, spotBufferInfo)
 
+  // Route scrim shares the spotlight's fullscreen-quad buffers; only the
+  // program (and its VAO binding) differs.
+  const scrimProgramInfo = twgl.createProgramInfo(twglGl, [SCRIM_VS, SCRIM_FS])
+  const scrimVao = twgl.createVertexArrayInfo(twglGl, scrimProgramInfo, spotBufferInfo)
+
   const loseCtxExt = gl.getExtension('WEBGL_lose_context')
 
   const { grid, tileSize } = manifest
@@ -297,14 +336,26 @@ export function createWebGLRenderer(
   let pillVao: twgl.VertexArrayInfo | null = null
   let debugHitboxes = false
 
+  // Route overlay geometry: capsule quads through the PILL program, one draw
+  // range per run of same-colored items (color is a uniform, not an attribute;
+  // a route has a handful of color runs, so this stays a few draw calls).
+  let routeItems: RouteDrawItem[] = []
+  let routeBufferInfo: twgl.BufferInfo | null = null
+  let routeVao: twgl.VertexArrayInfo | null = null
+  let routeRanges: Array<{ byteOffset: number, count: number, color: [number, number, number] }> = []
+
+  function deleteBufferInfo(info: twgl.BufferInfo) {
+    // twgl doesn't expose a delete helper for BufferInfo; free the raw buffers.
+    for (const k in info.attribs) {
+      const buf = info.attribs[k].buffer
+      if (buf) gl.deleteBuffer(buf)
+    }
+    if (info.indices) gl.deleteBuffer(info.indices)
+  }
+
   function rebuildPillBuffers() {
     if (pillBufferInfo) {
-      // twgl doesn't expose a delete helper for BufferInfo; recreate buffers fresh.
-      for (const k in pillBufferInfo.attribs) {
-        const buf = pillBufferInfo.attribs[k].buffer
-        if (buf) gl.deleteBuffer(buf)
-      }
-      if (pillBufferInfo.indices) gl.deleteBuffer(pillBufferInfo.indices)
+      deleteBufferInfo(pillBufferInfo)
       pillBufferInfo = null
     }
     if (pillVao && pillVao.vertexArrayObject) {
@@ -350,6 +401,68 @@ export function createWebGLRenderer(
       indices: { numComponents: 3, data: indices }
     })
     pillVao = twgl.createVertexArrayInfo(twglGl, pillProgramInfo, pillBufferInfo)
+  }
+
+  // Same quad scheme as the pills, but for the route's paint list. Every item
+  // is a capsule (cornerRadius = radius), including the pin discs, whose
+  // endpoints coincide.
+  function rebuildRouteBuffers() {
+    if (routeBufferInfo) {
+      deleteBufferInfo(routeBufferInfo)
+      routeBufferInfo = null
+    }
+    if (routeVao && routeVao.vertexArrayObject) {
+      gl.deleteVertexArray(routeVao.vertexArrayObject)
+      routeVao = null
+    }
+    routeRanges = []
+    if (routeItems.length === 0) return
+    const n = routeItems.length
+    const quadData = new Float32Array(n * 4 * 2)
+    const axisAData = new Float32Array(n * 4 * 2)
+    const axisBData = new Float32Array(n * 4 * 2)
+    const radiusData = new Float32Array(n * 4)
+    const cornerRadiusData = new Float32Array(n * 4)
+    const indices = new Uint16Array(n * 6)
+    const quadCorners = [-1, -1, 1, -1, -1, 1, 1, 1]
+    for (let i = 0; i < n; i++) {
+      const item = routeItems[i]
+      for (let v = 0; v < 4; v++) {
+        quadData[i * 8 + v * 2 + 0] = quadCorners[v * 2 + 0]
+        quadData[i * 8 + v * 2 + 1] = quadCorners[v * 2 + 1]
+        axisAData[i * 8 + v * 2 + 0] = item.ax
+        axisAData[i * 8 + v * 2 + 1] = item.ay
+        axisBData[i * 8 + v * 2 + 0] = item.bx
+        axisBData[i * 8 + v * 2 + 1] = item.by
+        radiusData[i * 4 + v] = item.r
+        cornerRadiusData[i * 4 + v] = item.r
+      }
+      const base = i * 4
+      indices[i * 6 + 0] = base + 0
+      indices[i * 6 + 1] = base + 1
+      indices[i * 6 + 2] = base + 2
+      indices[i * 6 + 3] = base + 2
+      indices[i * 6 + 4] = base + 1
+      indices[i * 6 + 5] = base + 3
+
+      const last = routeRanges[routeRanges.length - 1]
+      const [cr, cg, cb] = item.color
+      if (last && last.color[0] === cr && last.color[1] === cg && last.color[2] === cb) {
+        last.count += 6
+      } else {
+        // drawElements takes a BYTE offset; Uint16 indices are 2 bytes each.
+        routeRanges.push({ byteOffset: i * 6 * 2, count: 6, color: item.color })
+      }
+    }
+    routeBufferInfo = twgl.createBufferInfoFromArrays(twglGl, {
+      a_quad: { numComponents: 2, data: quadData },
+      a_axisA: { numComponents: 2, data: axisAData },
+      a_axisB: { numComponents: 2, data: axisBData },
+      a_radius: { numComponents: 1, data: radiusData },
+      a_cornerRadius: { numComponents: 1, data: cornerRadiusData },
+      indices: { numComponents: 3, data: indices }
+    })
+    routeVao = twgl.createVertexArrayInfo(twglGl, pillProgramInfo, routeBufferInfo)
   }
 
   const placeholder = createPlaceholderTexture(gl)
@@ -694,7 +807,7 @@ export function createWebGLRenderer(
   // frame-constant u_transform/u_tileSize once per frame stops the mat3 being
   // re-uploaded per tile.
   const transformMat = new Float32Array(9)
-  const frameUniforms = { u_transform: transformMat, u_tileSize: [0, 0] }
+  const frameUniforms = { u_transform: transformMat, u_tileSize: [0, 0], u_desaturate: 0 }
   const tileUniforms: { u_tileOffset: number[], u_texture: WebGLTexture | null } = {
     u_tileOffset: [0, 0],
     u_texture: null
@@ -710,7 +823,7 @@ export function createWebGLRenderer(
   const visibleCols = new Int32Array(gridCells)
   let visibleCount = 0
 
-  function draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null) {
+  function draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null, route?: RouteOverlayFrame | null) {
     if (disposed || gl.isContextLost()) return
     // Bump before any ensureTile() call so every tile touched this frame — the
     // visibility scan below included — carries the current stamp and is exempt
@@ -732,6 +845,15 @@ export function createWebGLRenderer(
     gl.disable(gl.BLEND)
 
     const mat = buildTransformMat3(transform, cssW, cssH, transformMat)
+
+    /*
+     * How grey the map is this frame. Computed once here because it has to reach
+     * THREE separate setUniforms calls below — the preview-only return, the
+     * preview underlay, and the per-frame tile uniforms — each of which passes
+     * its own object, and twgl only sets the keys it is handed. A site left out
+     * doesn't read zero, it inherits whatever the last frame bound.
+     */
+    const desat = route && route.alpha > 0 ? route.desaturate : 0
 
     gl.useProgram(programInfo.program)
     twgl.setBuffersAndAttributes(twglGl, programInfo, quadVao)
@@ -774,10 +896,11 @@ export function createWebGLRenderer(
           u_tileOffset: [0, 0],
           u_tileSize: [mapW, mapH],
           u_transform: mat,
-          u_texture: previewTexture
+          u_texture: previewTexture,
+          u_desaturate: desat
         })
         twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
-        drawOverlays(mat, transform, cssW, cssH, selection)
+        drawOverlays(mat, transform, cssW, cssH, selection, route)
         // Nothing here draws a tile, so every resident tile is dead weight —
         // release them outright rather than waiting for the budget sweep, which
         // would keep a full grid (~43 MB of tier-0.5 tiles) resident indefinitely because it sits
@@ -846,7 +969,8 @@ export function createWebGLRenderer(
           u_tileOffset: [0, 0],
           u_tileSize: [mapW, mapH],
           u_transform: mat,
-          u_texture: previewTexture
+          u_texture: previewTexture,
+          u_desaturate: desat
         })
         twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
       }
@@ -865,6 +989,7 @@ export function createWebGLRenderer(
     // Frame-constant uniforms once; only offset + texture change per tile.
     frameUniforms.u_tileSize[0] = tileW
     frameUniforms.u_tileSize[1] = tileH
+    frameUniforms.u_desaturate = desat
     twgl.setUniforms(programInfo, frameUniforms)
 
     for (let i = 0; i < visibleCount; i++) {
@@ -922,7 +1047,7 @@ export function createWebGLRenderer(
       deviceMemoryGb
     }))
 
-    drawOverlays(mat, transform, cssW, cssH, selection)
+    drawOverlays(mat, transform, cssW, cssH, selection, route)
 
     // Decoded tiles still waiting on a frame to upload them: ask for one. This
     // terminates because each frame drains at least one, unlike the redraw loop
@@ -938,14 +1063,40 @@ export function createWebGLRenderer(
     transform: Transform,
     cssW: number,
     cssH: number,
-    selection?: SelectionOverlay | null
+    selection?: SelectionOverlay | null,
+    route?: RouteOverlayFrame | null
   ) {
-    // Everything here is genuinely translucent — the debug pill fill, the
-    // spotlight scrim and its ring all composite over the map. draw() leaves
-    // blending off for the opaque tile pass, and this is called from two places
-    // (the tiled path and the preview-only early return), so own the state here
-    // rather than depending on what the caller happened to leave set.
+    // Everything here is genuinely translucent — the route overlay, the debug
+    // pill fill, the spotlight scrim and its ring all composite over the map.
+    // draw() leaves blending off for the opaque tile pass, and this is called
+    // from two places (the tiled path and the preview-only early return), so
+    // own the state here rather than depending on what the caller happened to
+    // leave set.
     gl.enable(gl.BLEND)
+
+    if (route && route.alpha > 0 && routeVao && routeRanges.length > 0) {
+      if (route.scrimAlpha > 0) {
+        gl.useProgram(scrimProgramInfo.program)
+        twgl.setBuffersAndAttributes(twglGl, scrimProgramInfo, scrimVao)
+        twgl.setUniforms(scrimProgramInfo, {
+          u_color: [...SCRIM_RGB, route.scrimAlpha]
+        })
+        twgl.drawBufferInfo(twglGl, scrimVao, gl.TRIANGLE_STRIP)
+      }
+
+      gl.useProgram(pillProgramInfo.program)
+      twgl.setBuffersAndAttributes(twglGl, pillProgramInfo, routeVao)
+      twgl.setUniforms(pillProgramInfo, {
+        u_transform: mat,
+        u_edgeSoftnessWorld: 1.0 / transform.scale
+      })
+      for (const range of routeRanges) {
+        twgl.setUniforms(pillProgramInfo, {
+          u_color: [range.color[0], range.color[1], range.color[2], route.alpha]
+        })
+        gl.drawElements(gl.TRIANGLES, range.count, gl.UNSIGNED_SHORT, range.byteOffset)
+      }
+    }
 
     if (debugHitboxes && pillVao && points.length > 0) {
       gl.useProgram(pillProgramInfo.program)
@@ -982,6 +1133,12 @@ export function createWebGLRenderer(
   function setPoints(next: Point[]) {
     points = next
     rebuildPillBuffers()
+    onDirty()
+  }
+
+  function setRouteOverlay(route: RouteOverlay | null) {
+    routeItems = route ? routeDrawItems(route) : []
+    rebuildRouteBuffers()
     onDirty()
   }
 
@@ -1034,16 +1191,23 @@ export function createWebGLRenderer(
     releasePreview()
     tiles.clear()
     if (pillBufferInfo) {
-      for (const k in pillBufferInfo.attribs) {
-        const buf = pillBufferInfo.attribs[k].buffer
-        if (buf) gl.deleteBuffer(buf)
-      }
-      if (pillBufferInfo.indices) gl.deleteBuffer(pillBufferInfo.indices)
+      deleteBufferInfo(pillBufferInfo)
       pillBufferInfo = null
     }
     if (pillVao && pillVao.vertexArrayObject) {
       gl.deleteVertexArray(pillVao.vertexArrayObject)
       pillVao = null
+    }
+    if (routeBufferInfo) {
+      deleteBufferInfo(routeBufferInfo)
+      routeBufferInfo = null
+    }
+    if (routeVao && routeVao.vertexArrayObject) {
+      gl.deleteVertexArray(routeVao.vertexArrayObject)
+      routeVao = null
+    }
+    if (scrimVao.vertexArrayObject) {
+      gl.deleteVertexArray(scrimVao.vertexArrayObject)
     }
     if (quadVao.vertexArrayObject) {
       gl.deleteVertexArray(quadVao.vertexArrayObject)
@@ -1086,6 +1250,7 @@ export function createWebGLRenderer(
       pumpQueue()
     },
     setPoints,
+    setRouteOverlay,
     setDebugHitboxes,
     isContextLost: () => gl.isContextLost(),
     releaseTiles,

@@ -33,6 +33,12 @@ export interface BottomSheetProps {
   // it is never followed by a re-open without `open` cycling.
   onDismissStart?: () => void
   ariaLabel: string
+  // Snap the sheet lands on when `open` flips true. Defaults to 'peek', which
+  // is what every caller wanted until the map's fare sheet: a cold open with
+  // empty fields has nothing to peek at. Read on the open transition only —
+  // changing it while open does not re-snap, and a drag always wins after.
+  // SidePane accepts and ignores it; it has no snap states.
+  initialSnap?: 'peek' | 'full'
   // Drag handle / header. Rendered inside the grabbable handle region. Receives
   // a `close` callback to animate the sheet shut (e.g. a header close button).
   // Interactive controls (here and in the body) stay tappable because pointer
@@ -44,7 +50,7 @@ export interface BottomSheetProps {
   children: (ready: boolean) => ReactNode
 }
 
-export default function BottomSheet({ open, onClose, onDismissStart, ariaLabel, header, children }: BottomSheetProps) {
+export default function BottomSheet({ open, onClose, onDismissStart, ariaLabel, initialSnap, header, children }: BottomSheetProps) {
   // Snap state controlled by parent open/close; persists open height across renders.
   const [snap, setSnap] = useState<SnapState>('closed')
   const [viewportH, setViewportH] = useState(0)
@@ -70,11 +76,21 @@ export default function BottomSheet({ open, onClose, onDismissStart, ariaLabel, 
   // mid-drag would paint with the state value while the ref had moved on).
   const heightRef = useRef(0)
 
-  // Open the sheet to peek whenever it becomes open; close otherwise.
+  // Ref-mirrored so the open effect below can keep `[open]` as its sole
+  // dependency. With initialSnap in the deps directly, a parent re-render that
+  // changed it would yank a sheet the user had already dragged somewhere else.
+  const initialSnapRef = useRef(initialSnap)
+  useEffect(() => {
+    initialSnapRef.current = initialSnap
+  })
+
+  // Open the sheet to its initial snap whenever it becomes open; close
+  // otherwise. Keyed on the open edge, so each re-open re-reads the snap the
+  // caller wants for *that* opening.
   useEffect(() => {
     if (open) {
       setContentReady(false)
-      setSnap('peek')
+      setSnap(initialSnapRef.current ?? 'peek')
     } else {
       setSnap('closed')
     }

@@ -208,6 +208,38 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
     )
   }
 
+  /*
+   * Planning a trip here has nothing to do with whether this station publishes
+   * a timetable — TransJakarta publishes none at all, and its haltes are
+   * exactly the ones a rider is most likely to be heading to. So this is built
+   * once and rendered beside the schedule when there is one, and on its own
+   * when there isn't.
+   *
+   * In the map sheet it primes departure picking on the map; on the full page
+   * it deep-links to /fare with this station as the destination. Built from the
+   * API id, not the route params — params are not case-normalised (see the
+   * Bekasi Timur fold above) and the id is canonical.
+   */
+  const otwButton = (() => {
+    const buttonClass = 'flex flex-row gap-2 justify-center bg-[#F55875] text-white font-bold p-4 rounded-xl text-center w-full text-sm cursor-pointer'
+    if (onSelectDeparture) {
+      return (
+        <button type="button" onClick={onSelectDeparture} className={buttonClass}>
+          <NavigationArrowIcon className="w-5 h-5" weight="bold" mirrored aria-hidden />
+          OTW Ke Sini
+        </button>
+      )
+    }
+    const farePath = buildFareDestinationPath(station.data?.data?.id)
+    if (!farePath) return null
+    return (
+      <Link to={farePath} className={buttonClass}>
+        <NavigationArrowIcon className="w-5 h-5" weight="bold" mirrored aria-hidden />
+        OTW Ke Sini
+      </Link>
+    )
+  })()
+
   return (
     <div className="flex flex-col max-w-3xl mx-auto pb-8 px-4 mt-4">
       {(() => {
@@ -221,30 +253,7 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
                 </div>
               )}
               <div className="flex flex-row gap-2">
-                {(() => {
-                  // In the map sheet the button primes departure picking on the
-                  // map; on the full page it deep-links to /fare with this
-                  // station as the destination. Built from the API id, not the
-                  // route params — params are not case-normalised (see the
-                  // Bekasi Timur fold above) and the id is canonical.
-                  const buttonClass = 'flex flex-row gap-2 justify-center bg-[#F55875] text-white font-bold p-4 rounded-xl text-center w-full text-sm cursor-pointer'
-                  if (onSelectDeparture) {
-                    return (
-                      <button type="button" onClick={onSelectDeparture} className={buttonClass}>
-                        <NavigationArrowIcon className="w-5 h-5" weight="bold" mirrored aria-hidden />
-                        OTW Ke Sini
-                      </button>
-                    )
-                  }
-                  const farePath = buildFareDestinationPath(station.data?.data?.id)
-                  if (!farePath) return null
-                  return (
-                    <Link to={farePath} className={buttonClass}>
-                      <NavigationArrowIcon className="w-5 h-5" weight="bold" mirrored aria-hidden />
-                      OTW Ke Sini
-                    </Link>
-                  )
-                })()}
+                {otwButton}
                 <PaneLink
                   pane={{ kind: 'timetable', operator, code }}
                   className="flex flex-row gap-2 justify-center bg-slate-200 text-[#F55875] font-bold p-4 rounded-xl text-center w-full text-sm"
@@ -262,9 +271,24 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
         }
 
         if (networkStatus === 'OFFLINE') return <EmptyState mode="OFFLINE" onRetry={() => timetable.mutate()} />
-        // TransJakarta publishes no timetable — surface the boarding-board hint,
-        // not a load error.
-        if (operator === 'TJ') return <EmptyState mode="NO_SCHEDULE" />
+        /*
+         * TransJakarta publishes no timetable — surface the boarding-board hint,
+         * not a load error. The station is fully routable, so it keeps the OTW
+         * button: a missing schedule is a fact about the operator, not a reason
+         * to withhold trip planning.
+         *
+         * Deliberately not extended to the OFFLINE/ERROR branches below. Those
+         * mean "we could not load this station", where the fare lookup the
+         * button leads to would likely fail the same way.
+         */
+        if (operator === 'TJ') {
+          return (
+            <>
+              <EmptyState mode="NO_SCHEDULE" />
+              {otwButton && <div className="flex flex-row gap-2 mt-4">{otwButton}</div>}
+            </>
+          )
+        }
         if (timetable.error) return <EmptyState mode="ERROR" onRetry={() => timetable.mutate()} />
         return <EmptyState mode="NO_DATA" />
       })()}

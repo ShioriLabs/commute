@@ -1,5 +1,6 @@
 import type { PickableStation } from './pickable-station'
 import { OPERATORS } from '@commute/constants'
+import clsx from 'clsx'
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react'
 import { CheckCircleIcon, MagnifyingGlassIcon, XIcon } from '@phosphor-icons/react'
@@ -8,6 +9,7 @@ import { filterBestTier, keywordScore, popularityTerm, SCORE_THRESHOLD } from 'u
 import { LIST_STAGGER, LIST_STAGGER_MAX_INDEX, staggerDelay } from 'utils/stagger'
 import HighlightMatch from '~/components/highlight-match'
 import LineRoundel from '~/components/line-roundel'
+import { useIsEmbed } from '~/hooks/use-is-embed'
 
 /*
  * Best match across everything the station is known by.
@@ -142,6 +144,7 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
   const [ready, setReady] = useState(false)
   const [renderAll, setRenderAll] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const isEmbed = useIsEmbed()
 
   useEffect(() => {
     if (!open) {
@@ -250,7 +253,12 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
           // map/home entrance animations: it front-loads the travel and settles,
           // which reads as weight rather than a polite decelerate. The scrim
           // above stays ease-out — see criteria/criterion-sheet.tsx.
-          className="bg-white w-screen h-[calc(100dvh-0.75rem)] overflow-y-auto [scrollbar-gutter:stable] rounded-t-2xl will-change-transform transition duration-300 ease-ios-spring data-closed:translate-y-full"
+          //
+          // dvh vs vh: see fare.tsx / use-is-embed.ts.
+          className={clsx(
+            'bg-white w-screen overflow-y-auto [scrollbar-gutter:stable] rounded-t-2xl will-change-transform transition duration-300 ease-ios-spring data-closed:translate-y-full',
+            isEmbed ? 'h-[calc(100vh-0.75rem)]' : 'h-[calc(100dvh-0.75rem)]'
+          )}
         >
           <div className="p-8 pb-4 sticky top-0 z-[1] max-w-3xl mx-auto bg-white rounded-t-2xl">
             <div className="flex gap-4 items-center justify-between">

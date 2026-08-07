@@ -1,6 +1,14 @@
 /*
- * Builds app/data/map-skeleton.json — the rail centrelines of the FDTJ map, used by
- * components/map-skeleton.tsx to draw the network while the real tiles load.
+ * Builds two files out of one extraction pass over the map artwork:
+ *
+ *   - app/data/map-skeleton.json — the rail centrelines, used by
+ *     components/map-skeleton.tsx to draw the network while the real tiles load.
+ *   - app/data/map-corridors.json — rail AND BRT centrelines, used by
+ *     app/lib/map-corridors.ts so a fare route traces the corridor it rides instead of
+ *     cutting a straight chord across the artwork.
+ *
+ * They stay separate files on purpose: the ~4 KB of duplicated rail geometry buys the
+ * guarantee that retuning corridors can never change the load animation.
  *
  * Source is the committed tile SVGs in public/maps/fdtj/, NOT the master SVG that
  * build-map-tiles.ts works from. Two reasons:
@@ -30,6 +38,7 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const WEB_ROOT = path.resolve(SCRIPT_DIR, '..')
 const TILE_DIR = path.join(WEB_ROOT, 'public', 'maps', 'fdtj')
 const OUT_PATH = path.join(WEB_ROOT, 'app', 'data', 'map-skeleton.json')
+const CORRIDORS_OUT_PATH = path.join(WEB_ROOT, 'app', 'data', 'map-corridors.json')
 
 // Line selection. The schematic's transit lines are the only saturated strokes on the
 // sheet: everything else is white casing/halo, near-gray furniture, or near-black label ink.
@@ -53,8 +62,20 @@ const MAX_LIGHTNESS = 0.92
 // that without reaching the nearest furniture weights on either side — 22.677 gray
 // route casing below, 34 white halo above.
 const WIDTH_CLASSES = [25]
+// The route overlay's corridors file wants BRT too: a TransJakarta leg has to trace its
+// own corridor, and the mesh that reads as noise under the loading camera is exactly the
+// geometry a drawn route needs. Extraction runs once over the union and the two outputs
+// partition it afterwards, so the skeleton is unaffected.
+const CORRIDOR_WIDTH_CLASSES = [25, 15]
 const WIDTH_TOLERANCE = 1.2
 // Below this a "stroke" is a station tick or an icon detail, not a corridor.
+//
+// Shared by both width classes. The corridors design doc expected BRT to need a lower
+// cutoff (its segments are shorter), but measuring said otherwise: dropping to 80 pulls
+// in ~34 more width-15 strokes — corner fillets and stubs — and matches exactly zero
+// additional stop pairs, because the long strokes already cover those corridors. All the
+// extra ones do is give the matcher's nearest-corridor tiebreak more chances to pick a
+// fillet over the line a route actually rides.
 const MIN_LENGTH = 320
 
 // Sampling step in world units. The schematic is straight runs plus small corner fillets,
@@ -73,6 +94,12 @@ const MIN_STROKES = 12
 const MAX_STROKES = 120
 const MAX_VERTICES = 12000
 const MAX_BYTES = 120 * 1024
+// Corridors guardrails, same purpose: a map edition that renames its stroke weights
+// should fail the build rather than ship a route overlay that silently draws every leg
+// as a straight chord again.
+const MIN_RAIL_CORRIDORS = 12
+const MIN_BRT_CORRIDORS = 20
+const MAX_CORRIDOR_BYTES = 64 * 1024
 
 // Station markers. Every station on this map — plain or interchange — is the same object:
 // a saturated disc with a white disc stacked on it, so the ring is the sliver of the lower
@@ -112,6 +139,20 @@ export interface SkeletonStroke {
   cx: number
   cy: number
   d: string
+}
+
+// One extracted corridor as it travels through this script: the shipped skeleton shape
+// plus the rounded points behind its `d`, so the corridors file can be emitted from the
+// same rounding pass instead of parsing the string back apart.
+interface ExtractedStroke extends SkeletonStroke {
+  pts: number[][]
+}
+
+// The corridors file's entry: geometry only. No colour (artwork hex, duplicated across
+// lines, and matching is geometric anyway) and no id (there is nothing to key one on).
+interface CorridorEntry {
+  w: number
+  pts: number[][]
 }
 
 export interface SkeletonStation {
@@ -244,7 +285,7 @@ async function extractStrokes(page: import('playwright').Page): Promise<RawStrok
     minSaturation: MIN_SATURATION,
     minLightness: MIN_LIGHTNESS,
     maxLightness: MAX_LIGHTNESS,
-    widthClasses: [...WIDTH_CLASSES],
+    widthClasses: [...CORRIDOR_WIDTH_CLASSES],
     widthTolerance: WIDTH_TOLERANCE,
     minLength: MIN_LENGTH,
     sampleStep: SAMPLE_STEP,
@@ -295,8 +336,12 @@ function simplify(points: number[][], epsilon: number): number[][] {
 /**
  * Integer world coordinates. One world unit is 0.5 CSS px at the initial camera, so
  * rounding is invisible, and it is by far the biggest lever on file size.
+ *
+ * Split from serialize() because both outputs consume it: the skeleton wants an SVG
+ * `d` string, the corridors file wants the raw pairs. Rounding once here is what stops
+ * the two files disagreeing about where a corridor is.
  */
-function serialize(points: number[][]): string {
+function roundPoints(points: number[][]): number[][] {
   const rounded: number[][] = []
   for (const [x, y] of points) {
     const rx = Math.round(x)
@@ -305,6 +350,10 @@ function serialize(points: number[][]): string {
     if (last && last[0] === rx && last[1] === ry) continue
     rounded.push([rx, ry])
   }
+  return rounded
+}
+
+function serialize(rounded: number[][]): string {
   if (rounded.length < 2) return ''
   return 'M' + rounded.map(([x, y]) => `${x} ${y}`).join('L')
 }
@@ -415,6 +464,37 @@ function collectStations(
   return out
 }
 
+/*
+ * The route overlay's corridor centrelines — see app/lib/map-corridors.ts.
+ *
+ * Deliberately a separate file from the skeleton rather than a widened one, even though
+ * the rail geometry is duplicated between them (~4 KB). The skeleton drives the load
+ * animation; keeping them apart means retuning corridors can never change what the app
+ * looks like while it boots.
+ */
+function writeCorridors(extracted: ExtractedStroke[], version: string): void {
+  const corridors: CorridorEntry[] = extracted
+    .filter(s => CORRIDOR_WIDTH_CLASSES.includes(s.w))
+    .map(s => ({ w: s.w, pts: s.pts }))
+
+  const rail = corridors.filter(c => c.w === 25).length
+  const brt = corridors.filter(c => c.w === 15).length
+  const vertices = corridors.reduce((n, c) => n + c.pts.length, 0)
+  log(`corridors: ${rail} rail + ${brt} BRT, ${vertices} vertices`)
+
+  if (rail < MIN_RAIL_CORRIDORS) {
+    throw new Error(`only ${rail} rail corridors (min ${MIN_RAIL_CORRIDORS}) — the width-25 predicate probably no longer matches this map edition`)
+  }
+  if (brt < MIN_BRT_CORRIDORS) {
+    throw new Error(`only ${brt} BRT corridors (min ${MIN_BRT_CORRIDORS}) — the width-15 predicate probably no longer matches this map edition`)
+  }
+
+  const json = JSON.stringify({ version, corridors }) + '\n'
+  if (json.length > MAX_CORRIDOR_BYTES) throw new Error(`${json.length} bytes exceeds ${MAX_CORRIDOR_BYTES}`)
+  writeFileSync(CORRIDORS_OUT_PATH, json)
+  log(`wrote ${path.relative(WEB_ROOT, CORRIDORS_OUT_PATH)} (${(json.length / 1024).toFixed(1)} KB)`)
+}
+
 async function main(): Promise<void> {
   const tiles = readdirSync(TILE_DIR).filter(f => /^tile-\d+-\d+\.svg$/.test(f)).sort()
   if (tiles.length === 0) throw new Error(`no tile SVGs in ${TILE_DIR}`)
@@ -434,9 +514,8 @@ async function main(): Promise<void> {
 
   // Insertion-ordered, so identical geometry from a later tile collapses onto the first
   // occurrence and the output stays deterministic across runs.
-  const strokes = new Map<string, SkeletonStroke>()
+  const strokes = new Map<string, ExtractedStroke>()
   const discs = new Map<string, RawDisc>()
-  let vertices = 0
 
   try {
     for (const tile of tiles) {
@@ -444,7 +523,8 @@ async function main(): Promise<void> {
       const raw = await extractStrokes(page)
 
       for (const stroke of raw) {
-        const d = serialize(simplify(stroke.points, SIMPLIFY_EPSILON))
+        const pts = roundPoints(simplify(stroke.points, SIMPLIFY_EPSILON))
+        const d = serialize(pts)
         if (!d) continue
         const key = `${stroke.color}|${stroke.width}|${d}`
         if (strokes.has(key)) continue
@@ -456,9 +536,9 @@ async function main(): Promise<void> {
           w: stroke.width,
           cx: Math.round((Math.min(...xs) + Math.max(...xs)) / 2),
           cy: Math.round((Math.min(...ys) + Math.max(...ys)) / 2),
-          d
+          d,
+          pts
         })
-        vertices += d.split('L').length
       }
 
       // Same seam duplication as the strokes: a disc near a tile edge is cloned into every
@@ -471,8 +551,25 @@ async function main(): Promise<void> {
     await browser.close()
   }
 
-  const list = [...strokes.values()]
-  log(`extracted ${list.length} unique strokes, ${vertices} vertices`)
+  const extracted = [...strokes.values()]
+  log(`extracted ${extracted.length} unique strokes across widths ${CORRIDOR_WIDTH_CLASSES.join('/')}`)
+
+  writeCorridors(extracted, manifest.version)
+
+  /*
+   * Everything below is the skeleton, which stays rail-only.
+   *
+   * The filter is load-bearing rather than cosmetic: collectStations() claims a disc for
+   * whichever stroke it sits on and whose colour it matches, so letting BRT strokes reach
+   * it would let a TJ halte disc attach itself to a rail line. Keeping the skeleton path
+   * on exactly the strokes it had before also means this file's output is unchanged by
+   * the corridors work — verify with `git diff app/data/map-skeleton.json`.
+   */
+  const list: SkeletonStroke[] = extracted
+    .filter(s => WIDTH_CLASSES.includes(s.w))
+    .map(({ c, w, cx, cy, d }) => ({ c, w, cx, cy, d }))
+  const vertices = list.reduce((n, s) => n + s.d.split('L').length, 0)
+  log(`skeleton: ${list.length} rail strokes, ${vertices} vertices`)
 
   const byLine = new Map<string, number>()
   for (const s of list) byLine.set(`${s.c}@${s.w}`, (byLine.get(`${s.c}@${s.w}`) ?? 0) + 1)
