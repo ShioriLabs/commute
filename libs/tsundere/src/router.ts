@@ -1,4 +1,5 @@
 import { hopsToLegs, type Hop } from './planner/materialise'
+import { MinHeap } from './heap'
 
 /*
  * Structural inputs to buildGraph.
@@ -262,19 +263,36 @@ export function findRoute(graph: RouteGraph, fromStationId: string, toStationId:
   const dist = new Map<string, number>([[fromStationId, 0]])
   const prev = new Map<string, { station: string, edge: GraphEdge }>()
   const visited = new Set<string>()
-  // The graph is ~180 nodes; a linear-scan priority pick is plenty.
+  /*
+   * A binary heap rather than a linear scan over `dist`.
+   *
+   * Worth only ~1.1x, and the reason is worth recording so nobody re-litigates
+   * it: the old comment here said "the graph is ~180 nodes" and was read as
+   * stale once the network reached 369. It was not. The scan ran over `dist`,
+   * which holds only DISCOVERED nodes, and the average reachable set from any
+   * node is 185 — so the pick was never paying the full O(V) it appeared to.
+   * The graph is sparse (avg degree 3.5) and the search exits at the target.
+   *
+   * Kept because the asymptotics are strictly better and the working set grows
+   * with the network, not because it made anything fast. Measured over all
+   * 135,792 ordered pairs: 75.2 -> 67.7 us/pair, with byte-identical routes.
+   * If routing time ever matters, the answer is upstream of this loop.
+   *
+   * No decrease-key: relaxing pushes the node again at its lower cost, and the
+   * `visited` check below discards the superseded entry when it surfaces. That
+   * is why the heap can hold a node more than once and why `best` is re-read
+   * from `dist` rather than taken from the pop — the popped priority may be a
+   * stale one, while `dist` always holds the current best.
+   */
+  const queue = new MinHeap<string>()
+  queue.push(fromStationId, 0)
   for (;;) {
-    let current: string | null = null
-    let best = Infinity
-    for (const [station, d] of dist) {
-      if (!visited.has(station) && d < best) {
-        best = d
-        current = station
-      }
-    }
-    if (current === null) return null
+    const current = queue.pop()
+    if (current === undefined) return null
+    if (visited.has(current)) continue
     if (current === toStationId) break
     visited.add(current)
+    const best = dist.get(current)!
     /*
      * KNOWN LIMITATION, deliberately left as-is.
      *
@@ -312,6 +330,7 @@ export function findRoute(graph: RouteGraph, fromStationId: string, toStationId:
       if (candidate < (dist.get(edge.to) ?? Infinity)) {
         dist.set(edge.to, candidate)
         prev.set(edge.to, { station: current, edge })
+        queue.push(edge.to, candidate)
       }
     }
   }
