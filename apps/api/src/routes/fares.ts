@@ -12,6 +12,7 @@ import { ENDPOINT_RESTRICTIONS, SERVICE_BREAKS } from 'db/data/topology'
 import { loadGraph, type Tsundere } from '@commute/tsundere'
 import { HEADWAYS_S } from 'db/data/headways'
 import { doc, pathParam, queryParam } from 'schemas/describe'
+import { ServerTiming } from 'utils/server-timing'
 import { FareResultSchema } from '@commute/schemas'
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -96,23 +97,37 @@ app.get(
 
     const context = parseFareContext(c.req.query('paymentMethod'), c.req.query('at'))
 
+    /*
+     * Phase timings, surfaced as Server-Timing on the response.
+     *
+     * The split is the point: routing is the part everyone assumes is
+     * expensive, and off-worker measurement put it at ~0.5 ms against a 17-51
+     * ms cold request. This is how that gets confirmed on workerd rather than
+     * inferred from a laptop benchmark.
+     */
+    const timing = new ServerTiming()
+
     const kvRepository = new KVRepository(c.env.KV)
     const kvKey = fareCacheKey(fromId, toId, context, c.env.API_VERSION)
 
-    const cached = await kvRepository.get<FareResult>(kvKey)
+    const cached = await timing.measure('kv', () => kvRepository.get<FareResult>(kvKey))
     if (cached) {
+      // A hit is the whole request, so `kv` alone already tells the story: no
+      // route was computed, and the absence of the other spans says so.
+      c.header('Server-Timing', timing.header())
       return c.json(Ok(cached), 200)
     }
 
     const stationRepository = new StationRepository(c.env.DB)
 
     try {
-      const endpoints = await stationRepository.getByIds([fromId, toId])
+      const endpoints = await timing.measure('endpoints', () => stationRepository.getByIds([fromId, toId]))
       if (endpoints.length < 2) {
         return c.json(NotFound('UNKNOWN_STATION', 'One or both stations do not exist.'), 404)
       }
 
-      const router = await getRouter(c.env.DB)
+      // Cached per isolate, so this is ~0 on every request after the first.
+      const router = await timing.measure('graph', () => getRouter(c.env.DB))
       /*
        * Still findRoute, singular, and deliberately so.
        *
@@ -128,17 +143,17 @@ app.get(
        * utils/fare-journey.ts, so they cannot drift apart in how they render a
        * journey — only in how many they return.
        */
-      const rawLegs = router.findRoute(fromId, toId)
+      const rawLegs = timing.measureSync('route', () => router.findRoute(fromId, toId))
       if (!rawLegs) {
         return c.json(NotFound('NO_ROUTE', 'No route between these stations.'), 404)
       }
 
       // No criteria and no labels: findRoute produces neither, and a single
       // answer has nothing to be labelled against anyway.
-      const plan = planJourney(rawLegs, null, [], context)
-      const stations = await stationRepository.getByIds(plan.stationIds)
+      const plan = timing.measureSync('plan', () => planJourney(rawLegs, null, [], context))
+      const stations = await timing.measure('hydrate', () => stationRepository.getByIds(plan.stationIds))
       const namer = stationNamer(stations)
-      const journey = assembleJourney(plan, namer, context)
+      const journey = timing.measureSync('assemble', () => assembleJourney(plan, namer, context))
 
       const result: FareResult = {
         from: namer.ref(fromId),
@@ -153,6 +168,7 @@ app.get(
 
       c.executionCtx.waitUntil(kvRepository.set(kvKey, result))
 
+      c.header('Server-Timing', timing.header())
       return c.json(Ok(result), 200)
     } catch (error) {
       console.error(error)

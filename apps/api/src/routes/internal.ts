@@ -10,6 +10,7 @@ import { fareTimeBucket } from 'utils/fare'
 import { assembleJourney, planJourney, stationNamer } from 'utils/fare-journey'
 import { summarizeFares } from 'utils/fare-summary'
 import { mergeInterlinedLegs } from 'utils/interlining'
+import { ServerTiming } from 'utils/server-timing'
 import { Internal, NotFound, Ok } from 'utils/response'
 import { buildSearchableIndex } from 'utils/searchables'
 
@@ -97,19 +98,29 @@ app.get('/trips/:from/:to', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
   const kvKey = tripCacheKey(fromId, toId, context, c.env.API_VERSION)
 
-  const cached = await kvRepository.get<TripResult>(kvKey)
-  if (cached) return c.json(Ok(cached), 200)
+  /*
+   * Same phase timings as /fares, and the more interesting of the two: this is
+   * the multi-criteria search, roughly ten times the work of findRoute. If
+   * routing is ever going to dominate a request, it is here rather than there.
+   */
+  const timing = new ServerTiming()
+
+  const cached = await timing.measure('kv', () => kvRepository.get<TripResult>(kvKey))
+  if (cached) {
+    c.header('Server-Timing', timing.header())
+    return c.json(Ok(cached), 200)
+  }
 
   const stationRepository = new StationRepository(c.env.DB)
 
   try {
-    const endpoints = await stationRepository.getByIds([fromId, toId])
+    const endpoints = await timing.measure('endpoints', () => stationRepository.getByIds([fromId, toId]))
     if (endpoints.length < 2) {
       return c.json(NotFound('UNKNOWN_STATION', 'One or both stations do not exist.'), 404)
     }
 
-    const router = await getRouter(c.env.DB)
-    const routed = router.findRoutes(fromId, toId, {
+    const router = await timing.measure('graph', () => getRouter(c.env.DB))
+    const routed = timing.measureSync('route', () => router.findRoutes(fromId, toId, {
       /*
        * Pricing the journeys is what makes the CHEAPEST label reachable at all —
        * without a scorer every journey's `fare` criterion is null and the axis
@@ -120,13 +131,13 @@ app.get('/trips/:from/:to', async (c) => {
        * over the same decomposition. Scoring raw legs would let them disagree.
        */
       scoreFare: legs => summarizeFares(mergeInterlinedLegs([...legs]), context).totalFare
-    })
+    }))
     // findRoutes reports "no route" as an empty front, where findRoute returns null.
     if (routed.length === 0) {
       return c.json(NotFound('NO_ROUTE', 'No route between these stations.'), 404)
     }
 
-    const plans = routed.map(journey => planJourney(journey.legs, journey.criteria, journey.labels, context))
+    const plans = timing.measureSync('plan', () => routed.map(journey => planJourney(journey.legs, journey.criteria, journey.labels, context)))
 
     /*
      * One batched lookup across every journey, which is why planJourney reports
@@ -135,17 +146,18 @@ app.get('/trips/:from/:to', async (c) => {
      * journey's set, and a query per journey would cost more than the search
      * that produced them.
      */
-    const stations = await stationRepository.getByIds([...new Set(plans.flatMap(p => p.stationIds))])
+    const stations = await timing.measure('hydrate', () => stationRepository.getByIds([...new Set(plans.flatMap(p => p.stationIds))]))
     const namer = stationNamer(stations)
 
-    const result: TripResult = {
+    const result: TripResult = timing.measureSync('assemble', () => ({
       from: namer.ref(fromId),
       to: namer.ref(toId),
       journeys: plans.map(plan => assembleJourney(plan, namer, context))
-    }
+    }))
 
     c.executionCtx.waitUntil(kvRepository.set(kvKey, result))
 
+    c.header('Server-Timing', timing.header())
     return c.json(Ok(result), 200)
   } catch (error) {
     console.error(error)

@@ -60,7 +60,13 @@ const app = new Hono<{ Bindings: Bindings }>()
  */
 app.use('*', cors({
   origin: '*',
-  allowMethods: ['GET', 'OPTIONS']
+  allowMethods: ['GET', 'OPTIONS'],
+  /*
+   * Without this the browser hides Server-Timing from any cross-origin caller,
+   * which is every caller we have — the web app is on its own domain. The
+   * network panel would show the header arriving and refuse to surface it.
+   */
+  exposeHeaders: ['Server-Timing']
 }))
 
 /*
