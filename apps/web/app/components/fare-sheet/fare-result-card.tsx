@@ -5,7 +5,7 @@ import { ArrowsDownUpIcon, CaretDownIcon, CaretRightIcon, PersonSimpleWalkIcon, 
 import { getForegroundColor } from 'utils/colors'
 import { joinLabels } from 'utils/labels'
 import LineRoundel from '~/components/line-roundel'
-import { FARE_GUTTER_CLASS, FARE_RAIL_CENTER_PX, LINE_COLOR_FALLBACK, RAIL_WIDTH_PX } from '~/components/transit-geometry'
+import { FARE_GUTTER_CLASS, FARE_RAIL_CENTER_PX, interlinedTrackFill, LINE_COLOR_FALLBACK, RAIL_WIDTH_PX } from '~/components/transit-geometry'
 import { codeOfLineKey, useLines } from '~/hooks/use-lines'
 import { JOURNEY_LABELS } from './journey-labels'
 import { journeysOf, sortJourneyLabels, walkDistanceOf } from './journeys'
@@ -89,9 +89,13 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
   const isInterlined = lines.length > 1
   const legColor = lines[0]?.color ?? LINE_COLOR_FALLBACK
   const directions = [...new Set(lines.map(line => line.headsign).filter((headsign): headsign is string => headsign !== null))]
-  const railStyle = isInterlined
-    ? { backgroundImage: `repeating-linear-gradient(to bottom, ${lines[0]!.color} 0 8px, ${lines[lines.length - 1]!.color} 8px 16px)` }
-    : { backgroundColor: legColor }
+  /*
+   * Interlined rails were repeating hard stops here while the route bar above
+   * blended, so one card drew the same thing two ways. Both now share
+   * interlinedTrackFill — which also means all the leg's colours show, where
+   * this only ever drew the first and last.
+   */
+  const railStyle = interlinedTrackFill(lines.map(line => line.color), 'to bottom')
 
   return (
     <li className="flex flex-col">

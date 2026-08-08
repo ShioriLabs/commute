@@ -1,6 +1,6 @@
 import { PersonSimpleWalkIcon } from '@phosphor-icons/react'
 import LineRoundel from '~/components/line-roundel'
-import { RAIL_WIDTH_PX, ROUTE_BAR_MIN_SEGMENT_PX } from '~/components/transit-geometry'
+import { interlinedTrackFill, RAIL_WIDTH_PX, ROUTE_BAR_MIN_SEGMENT_PX } from '~/components/transit-geometry'
 import type { RouteBarSegment } from './route-bar-segments'
 
 /*
@@ -63,10 +63,10 @@ export default function RouteBar({ segments }: { segments: RouteBarSegment[] }) 
         }
 
         const color = segment.colors[0]!
-        // More than one colour means interlined track: any of these services works.
-        const fill = segment.colors.length > 1
-          ? { backgroundImage: `linear-gradient(to right, ${color}, ${segment.colors[segment.colors.length - 1]})` }
-          : { backgroundColor: color }
+        // More than one colour means interlined track: any of these services
+        // works, so every colour gets a run of the segment. See
+        // interlinedTrackFill for why the blend is oklch and held at the ends.
+        const fill = interlinedTrackFill(segment.colors)
 
         return (
           <span
