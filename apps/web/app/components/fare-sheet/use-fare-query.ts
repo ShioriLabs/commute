@@ -1,4 +1,4 @@
-import type { FareResult } from '@commute/schemas'
+import type { FareResult, TripResult } from '@commute/schemas'
 import type { StandardResponse } from '@schema/response'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import useSWR from 'swr'
@@ -11,7 +11,7 @@ import {
   writeFareCriteria,
   type FareCriteria
 } from 'utils/fare-criteria'
-import { FARE_SWR_CONFIG, fareApiUrl } from 'utils/fare-api'
+import { FARE_SWR_CONFIG, fareApiUrl, tripApiUrl } from 'utils/fare-api'
 import { resolveStationId, toPickableStations, type PickableStation } from './pickable-station'
 import { operatorsPresent } from './criteria/labels'
 import type { OperatorCode } from '@commute/schemas'
@@ -45,12 +45,32 @@ export interface FareQueryOptions {
   // Criteria named by the incoming URL, which beat stored preferences for this
   // visit. Applied once, like initialPair.
   initialCriteria?: Partial<FareCriteria>
-  // Whether to drive document.title from the selection. On for /fare, where the
-  // title is the page's; off in the search sheet, which owns its own title.
+  // Whether to drive document.title from the selection. On for the standalone
+  // routes, where the title is the page's; off in the search sheet, which owns
+  // its own title.
   syncDocumentTitle?: boolean
+  /*
+   * Leading words of that title, e.g. "Cek Tarif Bekasi ke Blok A - Commute".
+   * Passed in rather than hard-coded because /fare and /trip render the same
+   * sheet under different names while both exist, and a tab reading "Cek Tarif"
+   * on /trip contradicts the heading right above it.
+   */
+  documentTitlePrefix?: string
+  /*
+   * Ask for every journey worth choosing between, from `/_internal/trips`,
+   * rather than the single route `/fares` returns. Only /trip does while the
+   * feature is unreleased — see the endpoint comment below.
+   */
+  alternatives?: boolean
 }
 
-export interface FareQuery {
+/*
+ * `TResult` follows the endpoint: a caller that never asks for alternatives is
+ * talking to `/fares`, which cannot answer with a `journeys` array, so it should
+ * not have to narrow a union it can never receive. The map's overlay and chip
+ * rely on this — they consume the flat route fields directly.
+ */
+export interface FareQuery<TResult = FareResult | TripResult> {
   origin: PickableStation | null
   destination: PickableStation | null
   /*
@@ -81,7 +101,9 @@ export interface FareQuery {
   operators: OperatorCode[]
   criteria: FareCriteria
   setCriteria: (criteria: FareCriteria) => void
-  fare: StandardResponse<FareResult> | undefined
+  /* Either shape: `/fares` answers with one route, `/_internal/trips` with
+   * several. FareResultCard normalises the two via journeysOf. */
+  fare: StandardResponse<TResult> | undefined
   error: unknown
   isLoading: boolean
 }
@@ -90,12 +112,16 @@ export interface FareQuery {
 // route mode. Owns the station pair, the picker, and the fare fetch; renders
 // nothing. Both call sites go through the same useSWR key, so SWR dedupes across
 // them.
+export function useFareQuery(options?: FareQueryOptions & { alternatives?: false }): FareQuery<FareResult>
+export function useFareQuery(options: FareQueryOptions & { alternatives: boolean }): FareQuery<FareResult | TripResult>
 export function useFareQuery({
   initialPair,
   controlledPair,
   onStateChange,
   initialCriteria,
-  syncDocumentTitle = false
+  syncDocumentTitle = false,
+  documentTitlePrefix = 'Cek Tarif',
+  alternatives = false
 }: FareQueryOptions = {}): FareQuery {
   const controlled = controlledPair !== undefined
   // The prebuilt search index, shared with the search sheet through the same
@@ -240,16 +266,17 @@ export function useFareQuery({
     if (origin && destination) {
       const fromName = origin.name
       const toName = destination.name
-      document.title = `Cek Tarif ${fromName} ke ${toName} - Commute`
+      document.title = `${documentTitlePrefix} ${fromName} ke ${toName} - Commute`
     } else {
-      document.title = 'Cek Tarif - Commute'
+      document.title = `${documentTitlePrefix} - Commute`
     }
-  }, [origin, destination, syncDocumentTitle])
+  }, [origin, destination, syncDocumentTitle, documentTitlePrefix])
 
   /*
-   * Built through the shared helper so this key is byte-identical to the map's
+   * Built through the shared helpers so this key is byte-identical to the map's
    * — the two surfaces must share one SWR entry, or the chip and the sheet can
-   * show different prices for one route.
+   * show different prices for one route. `alternatives` picks the endpoint, and
+   * with it the key: see tripApiUrl for why the two must not converge.
    *
    * Keyed on the controlled ids rather than the resolved stations: those ids can
    * arrive before the search index does (a /map?from=&to= deep link), and the
@@ -257,8 +284,10 @@ export function useFareQuery({
    */
   const keyFromId = controlled ? controlledPair?.fromId ?? null : origin?.id ?? null
   const keyToId = controlled ? controlledPair?.toId ?? null : destination?.id ?? null
-  const fareUrl = criteriaReady ? fareApiUrl(keyFromId, keyToId, criteria) : null
-  const { data: fare, error, isLoading } = useSWR<StandardResponse<FareResult>>(fareUrl, fetcher, FARE_SWR_CONFIG)
+  const journeyApiUrl = alternatives ? tripApiUrl : fareApiUrl
+  const fareUrl = criteriaReady ? journeyApiUrl(keyFromId, keyToId, criteria) : null
+  const { data: fare, error, isLoading }
+    = useSWR<StandardResponse<FareResult | TripResult>>(fareUrl, fetcher, FARE_SWR_CONFIG)
 
   /*
    * The one place the pair moves. Uncontrolled keeps the both-ends guard it has

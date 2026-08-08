@@ -1,0 +1,28 @@
+{
+  "name": "@commute/tsundere",
+  "version": "0.1.0",
+  "description": "Transit routing engine for Commute. Graph, Dijkstra, and (later) multi-criteria journey planning.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "eslint"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.9"
+  },
+  "license": "ISC"
+}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FareContext } from '@commute/constants'
 import { summarizeFares } from 'utils/fare-summary'
-import type { RouteLeg } from 'utils/router'
+import type { RouteLeg } from '@commute/tsundere'
 
 // Default single-tap context; step 1 fares don't depend on it, so a fixed value
 // keeps these assertions stable.

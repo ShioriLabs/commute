@@ -86,6 +86,36 @@ export const ENDPOINT_RESTRICTIONS: { operator: Operator, station: string, lineC
   { operator: 'KCI', station: 'PSE', lineCode: 'C', forbiddenNeighbor: 'GST' }
 ]
 
+/*
+ * Turns that stay on one line but change vehicle.
+ *
+ * The Cikarang line is a lollipop: a stick running in to Jatinegara, and a loop
+ * that leaves Jatinegara and closes back onto it (see the TOPOLOGY entry below,
+ * positions C01-C14 for the loop and C15-C26 for the stick). Line code alone
+ * cannot tell the two apart, so the planner happily rode MTR -> JNG -> POK as a
+ * single train — which would mean going round the loop and immediately starting
+ * round it again. A service reaching Jatinegara off the loop leaves down the
+ * stick instead, so the rider changes trains there.
+ *
+ * The effect was not a mislabelled leg but a missing option: Sudirman ->
+ * Kemayoran through Jatinegara is 12.2km and scored one boarding, so it
+ * dominated the genuine one-seat ride the other way round the loop (via Kampung
+ * Bandan, 14.3km) and that journey was never offered at all. 66 of the 210
+ * routable loop-internal pairs were affected.
+ *
+ * NOT a ban — riding through the break is a real trip, and between the two ends
+ * of the loop it is usually the only sensible one. It just costs a boarding, so
+ * both it and the long way round survive as a genuine choice.
+ *
+ * Only the loop-to-loop turn is a break. Stick-to-loop (KLD -> JNG -> POK) is
+ * ordinary through-running: a Cikarang train runs in and continues onto the
+ * loop as one service, and charging it a boarding would be its own bug.
+ */
+export const SERVICE_BREAKS: { operator: Operator, lineCode: string, via: string, from: string, to: string }[] = [
+  { operator: 'KCI', lineCode: 'C', via: 'JNG', from: 'MTR', to: 'POK' },
+  { operator: 'KCI', lineCode: 'C', via: 'JNG', from: 'POK', to: 'MTR' }
+]
+
 // TJ poster corrections (topology.tj.overrides.ts) replace the same-lineCode
 // GTFS-derived entries from topology.tj.ts, matched by lineCode.
 const TJ_MERGED: LineTopology[] = (() => {
