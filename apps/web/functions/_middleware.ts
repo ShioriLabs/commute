@@ -103,23 +103,18 @@ interface OgData {
  * resolves them fine; an older comment here claimed a Pages Function could not
  * import from the workspace, which is no longer true.)
  */
-type APILine = Pick<Line, 'name' | 'lineCode' | 'colorCode'>
+type APILine = Pick<Line, 'name' | 'lineCode' | 'colorCode' | 'searchable'>
 
-type APIStation = Pick<Station, 'id' | 'name' | 'lines'> & {
-  /** The operator's own spelling; kept as a search/SEO alias. */
-  officialName?: Station['officialName']
-  searchable?: Station['searchable']
-}
+/** `officialName` is the operator's own spelling; kept as a search/SEO alias. */
+type APIStation = Pick<Station, 'id' | 'name' | 'lines' | 'officialName' | 'searchable'>
 
-type APIHub = Pick<Hub, 'name' | 'heroImage'> & {
-  kind?: Hub['kind']
+type APIHub = Pick<Hub, 'name' | 'heroImage' | 'kind'> & {
   members: APIStation[]
 }
 
 // Inlined rather than imported from @commute/constants: HUB_KIND_LABEL is a
 // value, and keeping this file's runtime imports at zero keeps the crawler path
-// dependency-free. Defaults to the 'integrated' wording when the API predates
-// the `kind` column.
+// dependency-free.
 function hubKindLabel(hub: APIHub): string {
   return hub.kind === 'hub' ? 'Pumpunan Moda' : 'Stasiun Terintegrasi'
 }
@@ -430,11 +425,36 @@ async function fetchJson<T>(url: string): Promise<T | null> {
   }
 }
 
-// Build /sitemap.xml from live API data: core pages + every station, line, and
-// hub. Cached in the Cloudflare edge cache since it fans out to several API
-// calls and rarely changes.
-async function buildSitemap(env: Env): Promise<string> {
-  const base = env.API_BASE_URL
+/*
+ * Whether an item is worth putting in front of a crawler.
+ *
+ * Routing-only items — TJ feeder stops, and the feeder lines they sit on —
+ * carry `searchable: false`. Their pages resolve to nothing, so the SPA shell
+ * answers under a 200 with its generic title; because that shell is identical
+ * for every such path, a batch of them reads to Google as one page duplicated
+ * many times rather than as many missing pages. Sixty-eight TJ lines were
+ * indexed exactly that way.
+ *
+ * `=== false` rather than a truthiness check, because the flag is optional on
+ * Line: producers that trim it (SearchableLine) leave it undefined, and reading
+ * absent as unsearchable would drop those from the sitemap entirely. Stations
+ * always carry it.
+ */
+export function isCrawlablePage(item: { searchable?: boolean }): boolean {
+  return item.searchable !== false
+}
+
+/*
+ * The sitemap's URL list, given already-fetched API data.
+ *
+ * Split from the fetching so the selection rules are testable without a
+ * network: `stationLists` is positional, one entry per operator.
+ */
+export function sitemapUrls(
+  operators: APIOperator[],
+  stationLists: (APIStation[] | null)[],
+  hubs: { slug?: string, name?: string }[]
+): string[] {
   const urls = new Set<string>([
     `${SITE_ORIGIN}/`,
     `${SITE_ORIGIN}/search`,
@@ -442,6 +462,34 @@ async function buildSitemap(env: Env): Promise<string> {
     `${SITE_ORIGIN}/map`
   ])
 
+  operators.forEach((op, i) => {
+    for (const line of op.lines ?? []) {
+      if (!isCrawlablePage(line)) continue
+      urls.add(`${SITE_ORIGIN}/lines/${op.code}/${line.lineCode}`)
+    }
+    for (const station of stationLists[i] ?? []) {
+      if (!isCrawlablePage(station)) continue
+      // station.id is OPERATOR-CODE; the route path is /stations/:operator/:code.
+      // TJ halte codes contain hyphens, so only the first segment is dropped.
+      const code = station.id.split('-').slice(1).join('-')
+      urls.add(`${SITE_ORIGIN}/stations/${op.code}/${code}`)
+    }
+  })
+
+  for (const hub of hubs) {
+    if (hub.slug) urls.add(`${SITE_ORIGIN}/hubs/${encodeURIComponent(hub.slug)}`)
+  }
+
+  return [...urls]
+}
+
+// Build /sitemap.xml from live API data: core pages + every crawlable station,
+// line, and hub. Cached in the Cloudflare edge cache since it fans out to
+// several API calls and rarely changes.
+async function buildSitemap(env: Env): Promise<string> {
+  const base = env.API_BASE_URL
+
+  let urls: string[] = sitemapUrls([], [], [])
   if (base) {
     const operators = await fetchJson<APIOperator[]>(`${base}/operators`) ?? []
     // Stations per operator + lines from the operator payload + hubs, fetched in parallel.
@@ -451,27 +499,10 @@ async function buildSitemap(env: Env): Promise<string> {
       ),
       fetchJson<{ slug?: string, name?: string }[]>(`${base}/hubs`).then(h => h ?? [])
     ])
-    operators.forEach((op, i) => {
-      for (const line of op.lines ?? []) {
-        urls.add(`${SITE_ORIGIN}/lines/${op.code}/${line.lineCode}`)
-      }
-      for (const station of stationLists[i] ?? []) {
-        // Topology-only stops (TJ feeders) are hidden from search; keep them
-        // out of the sitemap too. `=== false` so an API payload without the
-        // field (older deploy) doesn't drop every station.
-        if (station.searchable === false) continue
-        // station.id is OPERATOR-CODE; the route path is /stations/:operator/:code.
-        const code = station.id.split('-').slice(1).join('-')
-        urls.add(`${SITE_ORIGIN}/stations/${op.code}/${code}`)
-      }
-    })
-
-    for (const hub of hubs) {
-      if (hub.slug) urls.add(`${SITE_ORIGIN}/hubs/${encodeURIComponent(hub.slug)}`)
-    }
+    urls = sitemapUrls(operators, stationLists, hubs)
   }
 
-  const body = [...urls]
+  const body = urls
     .map(u => `  <url><loc>${esc(u)}</loc></url>`)
     .join('\n')
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>\n`
