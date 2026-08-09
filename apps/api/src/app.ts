@@ -85,6 +85,23 @@ app.use('/hubs/*', rateLimit('DEFAULT'), cacheControl(MAX_AGE.TOPOLOGY))
 app.use('/lines/*', rateLimit('DEFAULT'), cacheControl(MAX_AGE.STATIC))
 app.use('/operators', rateLimit('DEFAULT'), cacheControl(MAX_AGE.STATIC))
 app.use('/fares/*', rateLimit('FARE'), cacheControl(MAX_AGE.FARE))
+/*
+ * `/_internal` is not public, but it is as reachable as everything else, and
+ * `/_internal/trips` runs findRoutes — strictly more work than the findRoute
+ * behind `/fares`. It went un-shaped only while nothing linked to it; the beta
+ * router switch on /fare is what changes that.
+ *
+ * The limiter is the weaker half here. Our own front ends are exempt by origin
+ * (see EXEMPT_ORIGINS in middleware/rate-limit.ts), and one of them is the
+ * TransportForJakarta embed — precisely the surface newly pointed at this
+ * endpoint. So the limiter shapes scrapers, and `cacheControl` is what actually
+ * spares the origin: 600s at the edge plus a 304 on revalidation.
+ *
+ * FARE on both counts covers `/_internal/searchables` too. That is fetched once
+ * per app boot and served from KV, so 120/min is far above any rider, and 600s
+ * is strictly better than the nothing it carried before.
+ */
+app.use('/_internal/*', rateLimit('FARE'), cacheControl(MAX_AGE.FARE))
 
 app.route('stations', stations)
 app.route('hubs', hubs)

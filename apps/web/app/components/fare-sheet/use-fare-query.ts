@@ -58,10 +58,22 @@ export interface FareQueryOptions {
   documentTitlePrefix?: string
   /*
    * Ask for every journey worth choosing between, from `/_internal/trips`,
-   * rather than the single route `/fares` returns. Only /trip does while the
-   * feature is unreleased — see the endpoint comment below.
+   * rather than the single route `/fares` returns. Driven by the router toggle
+   * on /fare and /trip — see the endpoint comment below.
    */
   alternatives?: boolean
+  /*
+   * Hold the fetch until the caller's own async state has landed. Defaults to
+   * true, so a caller with nothing to wait for is unaffected.
+   *
+   * /fare passes `routerReady` here. `alternatives` decides which endpoint is
+   * queried, and it is read from storage after mount like the criteria below —
+   * so without this gate a beta rider's first paint fires at /fares and the
+   * next render fires again at /_internal/trips. That is worse than the double
+   * request `criteriaReady` prevents: it warms a KV and edge entry on an
+   * endpoint the rider will never read from, on the more expensive of the two.
+   */
+  gate?: boolean
 }
 
 /*
@@ -121,7 +133,8 @@ export function useFareQuery({
   initialCriteria,
   syncDocumentTitle = false,
   documentTitlePrefix = 'Cek Tarif',
-  alternatives = false
+  alternatives = false,
+  gate = true
 }: FareQueryOptions = {}): FareQuery {
   const controlled = controlledPair !== undefined
   // The prebuilt search index, shared with the search sheet through the same
@@ -285,7 +298,7 @@ export function useFareQuery({
   const keyFromId = controlled ? controlledPair?.fromId ?? null : origin?.id ?? null
   const keyToId = controlled ? controlledPair?.toId ?? null : destination?.id ?? null
   const journeyApiUrl = alternatives ? tripApiUrl : fareApiUrl
-  const fareUrl = criteriaReady ? journeyApiUrl(keyFromId, keyToId, criteria) : null
+  const fareUrl = criteriaReady && gate ? journeyApiUrl(keyFromId, keyToId, criteria) : null
   const { data: fare, error, isLoading }
     = useSWR<StandardResponse<FareResult | TripResult>>(fareUrl, fetcher, FARE_SWR_CONFIG)
 

@@ -108,6 +108,23 @@ describe('the alternatives gate', () => {
     const [full] = journeysOf(twoOptions)
     expect({ ...gated, labels: full!.labels }).toEqual(full)
   })
+
+  /*
+   * The flip itself, which the router toggle made reachable.
+   *
+   * Switching to beta sets `alternatives` immediately, but SWR still holds the
+   * /fares body under its own key until the /_internal/trips request lands — so
+   * for a render or two the card is asked to offer alternatives from a response
+   * that has none. It must show the one journey it has, unbadged, rather than
+   * empty. Before the toggle this pairing could not happen: `alternatives` was
+   * fixed per surface, so the shape and the flag always agreed.
+   */
+  it('renders a single-route body asked for alternatives, unbadged', () => {
+    const shown = gate(legacy, true)
+    expect(shown).toHaveLength(1)
+    expect(shown[0]!.totalFare).toBe(14000)
+    expect(shown[0]!.labels).toEqual([])
+  })
 })
 
 describe('walkDistanceOf', () => {

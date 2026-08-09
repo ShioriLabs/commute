@@ -81,8 +81,13 @@ export const tripCacheKey = (fromId: string, toId: string, context: FareContext,
  * ride, so it picks a different primary on some pairs (Bogor -> Lebak Bulus
  * becomes a one-transfer Rp 20.000 route where /fares returns the
  * three-transfer Rp 17.500 one). /fares is the shared URL, the OG card and the
- * TransportForJakarta embed, so its answer must not move until that is
- * deliberately released.
+ * TransportForJakarta embed, so its answer does not move for anyone who has not
+ * asked for this one.
+ *
+ * Asking is now a rider-facing choice — the beta router toggle on /fare — rather
+ * than an unlisted route. That is why the split survives: a switch picks between
+ * two endpoints that each answer honestly, where a mode flag on /fares would
+ * have made one URL mean two different things.
  *
  * Rendering is identical either way: both go through utils/fare-journey.ts, so
  * a leg looks the same on both endpoints. Only the number of journeys differs.

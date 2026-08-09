@@ -475,14 +475,16 @@ export default function FareResultCard({ result, alternatives = false }: {
   /*
    * Whether to offer the other journeys the API returned.
    *
-   * Off by default, so /fare and the search sheet render exactly what they
+   * Off by default, so a surface that does not pass it renders exactly what it
    * rendered before alternatives existed: one result, no badges, no cards to
-   * choose between. Only /trip turns it on while the feature is unreleased.
+   * choose between. /fare and /trip set it from the rider's router toggle; the
+   * map's fare sheet and the search sheet never do.
    *
-   * Gating here rather than at the route is what makes the staging real. All
-   * three surfaces share FarePanel, so a route-level flag would have shipped
-   * the cards to every one of them — including the /fare page embedded in
-   * TransportForJakarta's site, which is the surface this is protecting.
+   * Still a prop rather than a route-level flag, and that still matters. All
+   * three surfaces share FarePanel, so a flag set per route would reach the map
+   * and the search sheet too — where the query is typed FareQuery<FareResult>
+   * and the consumers read the flat fare fields off the body. The toggle is
+   * offered where a TripResult can be rendered, and nowhere else.
    */
   alternatives?: boolean
 }) {

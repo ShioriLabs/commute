@@ -66,6 +66,17 @@ describe('buildFarePath', () => {
     const url = buildFareShareUrl('KCI-MRI', 'MRTJ-DKA', 'https://commute.shiorilabs.id')
     expect(url).toBe(`https://commute.shiorilabs.id${path}`)
   })
+
+  /*
+   * The router is a stored preference with no URL form, so neither an in-app
+   * link nor a share can carry a rider onto an engine they did not pick. Both
+   * ends of a "Buka halaman tarif" tap read the same storage instead.
+   */
+  it('never emits a router param', () => {
+    expect(buildFarePath('KCI-MRI', 'MRTJ-DKA', DEFAULT_FARE_CRITERIA)).not.toContain('router')
+    expect(buildFareShareUrl('KCI-MRI', 'MRTJ-DKA', 'https://commute.shiorilabs.id'))
+      .not.toContain('router')
+  })
 })
 
 describe('buildFareDestinationPath', () => {

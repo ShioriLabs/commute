@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router'
 import FarePanel from './fare-panel'
 import FareShareButton from './fare-share-button'
 import { fareQueryParams, readCriteriaFromUrl, type FareCriteria } from 'utils/fare-criteria'
+import { useFareRouter } from '~/hooks/use-fare-router'
 import { useFareQuery } from './use-fare-query'
 
 // Rendered inside a headlessui Dialog in both contexts: the homepage
@@ -21,16 +22,22 @@ interface Props {
    * is still the canonical URL; /trip passes its own while the two coexist.
    */
   title?: string
-  /*
-   * Offer the alternative journeys. Off for /fare, which must keep rendering
-   * exactly what it rendered before — it is the URL people have shared and the
-   * one embedded in TransportForJakarta's site. Only /trip turns it on.
-   */
-  alternatives?: boolean
 }
 
-export default function FareSheet({ title = 'Cek Tarif', alternatives = false }: Props) {
+export default function FareSheet({ title = 'Cek Tarif' }: Props) {
   const [searchParams] = useSearchParams()
+
+  /*
+   * Which router answers, and whether that has been read yet.
+   *
+   * Both /fare and /trip offer the toggle, so `alternatives` is no longer a
+   * per-surface constant a route passes down — it is a rider's setting, read
+   * from storage after mount. `routerReady` is handed to useFareQuery as its
+   * gate so no request goes out under the default before the stored answer
+   * lands; see useFareRouter.
+   */
+  const { router, routerReady, setRouter } = useFareRouter()
+  const alternatives = router === 'beta'
 
   // On the homepage the sheet lives behind a faked URL (SheetButton pushStates
   // '/fare' while the router still thinks it's on '/'), so setSearchParams
@@ -45,6 +52,10 @@ export default function FareSheet({ title = 'Cek Tarif', alternatives = false }:
   // Stable identity: this is `onStateChange`, which the fare handlers in
   // useFareQuery close over — a fresh function each render would churn their
   // dep arrays and undo their memoization. It reads only its arguments.
+  //
+  // The router is deliberately absent from what this writes. It lives in
+  // storage alone (see utils/fare-router.ts), so flipping the toggle changes
+  // the answer without changing the URL.
   const writeUrl = useCallback((fromId: string | null, toId: string | null, criteria: FareCriteria) => {
     const params = new URLSearchParams()
     // Written independently, not only as a pair: a to-only deep link from the
@@ -74,7 +85,11 @@ export default function FareSheet({ title = 'Cek Tarif', alternatives = false }:
     // Keep the tab and the heading saying the same thing on both routes.
     documentTitlePrefix: title,
     // Decides which endpoint is queried, not just what is rendered.
-    alternatives
+    alternatives,
+    // Nothing goes out until the stored router is known, or a beta rider's
+    // first paint would query /fares and the next render would query
+    // /_internal/trips. See useFareRouter.
+    gate: routerReady
   })
   const { origin, destination, criteria, openPickerFor } = query
 
@@ -110,7 +125,12 @@ export default function FareSheet({ title = 'Cek Tarif', alternatives = false }:
           </div>
         </div>
 
-        <FarePanel query={query} alternatives={alternatives} />
+        <FarePanel
+          query={query}
+          alternatives={alternatives}
+          router={router}
+          onRouterChange={setRouter}
+        />
       </div>
     </section>
   )
