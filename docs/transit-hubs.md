@@ -12,10 +12,18 @@ Dukuh Atas BNI (MRT) + Dukuh Atas (LRT) + BNI City (Airport rail).
 
 ## Hub vs multi-line station (the discriminator)
 
-- **Multi-line, one station** — Manggarai serves 3 lines but is a single `stations`
-  row. **Not a hub.** Already handled by `stationLines`.
+- **Multi-line, one station** — Duri serves 3 lines but is a single `stations`
+  row, with no co-located station from another operator. **Not a hub.** Already
+  handled by `stationLines`.
 - **Multi-station complex** — Dukuh Atas is 4 separate `stations` rows across
   operators, linked by **walking**. **This is a hub.**
+
+The test is *how many `stations` rows*, not how many lines. Manggarai used to be
+the example on the first bullet and has since moved to the second: it was one KRL
+row serving 3 lines, but LRT Jakarta Phase 1B added `LRTJ-MGI` and the two TJ
+haltes by the plaza are their own rows, so it became a genuine complex (`HUB-MRI`).
+A station can cross this line as the network is built out — the discriminator is a
+property of the data today, not a permanent label.
 
 What already links the members is the **`transfers`** table (bidirectional walking
 links). A hub is therefore a *named grouping layered on the transfer graph* — not a
@@ -288,6 +296,13 @@ reliable enough to drive UI.
 | `HUB-CW` | `cawang` | `hub` | 4 — KCI, LRTJBDB, **TJ ×2** (Cikoko both directions) | 218m |
 | `HUB-CSW` | `csw` | `hub` | 4 — MRTJ + **TJ ×3** (CSW 1, ASEAN, Kejaksaan Agung) | 201m |
 | `HUB-SEN` | `senen-sentral` | `hub` | 4 — KCI + **TJ ×3** (Jaga Jakarta, TOYOTA Rangga, Senen Raya) | 486m |
+| `HUB-MRI` | `manggarai` | `hub` | 4 — KCI + LRTJ (Phase 1B, unbuilt) + **TJ ×2** (Timur/Plaza St. Manggarai) | 134m¹ |
+
+¹ Across the three located members. `LRTJ-MGI` has no lat/lng yet and is
+`searchable=0` until Phase 1B commissions; it is carried in the hub now so no
+second edit is needed on opening day. Halte Manggarai Temporer 1/2
+(`TJ-B08301P`/`B08302P`) are excluded — a temporary corridor-4/4D pair 252–441m
+away, a separate cluster rather than part of the complex.
 
 ### "Pumpunan moda" — the official term
 
