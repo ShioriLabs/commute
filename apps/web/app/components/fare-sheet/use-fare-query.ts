@@ -16,6 +16,9 @@ import { resolveStationId, toPickableStations, type PickableStation } from './pi
 import { operatorsPresent } from './criteria/labels'
 import type { OperatorCode } from '@commute/schemas'
 
+/** Leading words of the tab title on the surfaces that own one. */
+const DOCUMENT_TITLE_PREFIX = 'Cek Tarif'
+
 export interface FareQueryOptions {
   // Station ids to preselect, from a `/fare?from=&to=` deep link (or the
   // station page's to-only `/fare?to=`). Applied once, the first time at least
@@ -50,16 +53,9 @@ export interface FareQueryOptions {
   // its own title.
   syncDocumentTitle?: boolean
   /*
-   * Leading words of that title, e.g. "Cek Tarif Bekasi ke Blok A - Commute".
-   * Passed in rather than hard-coded because /fare and /trip render the same
-   * sheet under different names while both exist, and a tab reading "Cek Tarif"
-   * on /trip contradicts the heading right above it.
-   */
-  documentTitlePrefix?: string
-  /*
    * Ask for every journey worth choosing between, from `/_internal/trips`,
    * rather than the single route `/fares` returns. Driven by the router toggle
-   * on /fare and /trip — see the endpoint comment below.
+   * on every surface that offers one — see the endpoint comment below.
    */
   alternatives?: boolean
   /*
@@ -132,7 +128,6 @@ export function useFareQuery({
   onStateChange,
   initialCriteria,
   syncDocumentTitle = false,
-  documentTitlePrefix = 'Cek Tarif',
   alternatives = false,
   gate = true
 }: FareQueryOptions = {}): FareQuery {
@@ -274,16 +269,16 @@ export function useFareQuery({
     if (toStation) setDestinationState(toStation)
   }, [allPickableStations, fromId, toId, controlled])
 
+  // "Cek Tarif Bekasi ke Blok A - Commute". Was a prop while /trip rendered
+  // this sheet under its own heading; /fare is the only titled surface now.
   useEffect(() => {
     if (!syncDocumentTitle) return
     if (origin && destination) {
-      const fromName = origin.name
-      const toName = destination.name
-      document.title = `${documentTitlePrefix} ${fromName} ke ${toName} - Commute`
+      document.title = `${DOCUMENT_TITLE_PREFIX} ${origin.name} ke ${destination.name} - Commute`
     } else {
-      document.title = `${documentTitlePrefix} - Commute`
+      document.title = `${DOCUMENT_TITLE_PREFIX} - Commute`
     }
-  }, [origin, destination, syncDocumentTitle, documentTitlePrefix])
+  }, [origin, destination, syncDocumentTitle])
 
   /*
    * Built through the shared helpers so this key is byte-identical to the map's

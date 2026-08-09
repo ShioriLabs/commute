@@ -18,8 +18,8 @@ interface Props {
   // Wrap the criteria chips instead of scrolling them. Set by the map's fare
   // sheet, where a horizontally-scrolling rail cannot work — see CriteriaBar.
   wrapCriteria?: boolean
-  // Offer the alternative journeys. Set from the router toggle on /fare and
-  // /trip; see FareResultCard.
+  // Offer the alternative journeys. Set from the router toggle wherever one is
+  // shown; see FareResultCard.
   alternatives?: boolean
   /*
    * The router toggle, rendered only when both of these are given.
@@ -111,9 +111,9 @@ export default function FarePanel({
 
       {/*
         * Traces the plate that is about to land: route bar, fare figure and
-        * marker, meta line. One plate even on /trip, where several may arrive —
-        * the panel cannot know how many until the answer does, and guessing
-        * three then landing one flashes worse than growing from one.
+        * marker, meta line. One plate even on the beta router, where several
+        * may arrive — the panel cannot know how many until the answer does, and
+        * guessing three then landing one flashes worse than growing from one.
         */}
       {isLoading
         ? (

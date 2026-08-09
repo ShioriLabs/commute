@@ -16,25 +16,22 @@ import { useFareQuery } from './use-fare-query'
 // SEO-decorates `/fare`, the OG image worker is keyed on it, and the sitemap
 // lists it. The search sheet renders the same FarePanel but never writes these
 // URLs — see use-fare-query.ts.
-interface Props {
-  /*
-   * Heading and close-button label. Defaults to the fare wording because /fare
-   * is still the canonical URL; /trip passes its own while the two coexist.
-   */
-  title?: string
-}
+// The heading, the close-button label and the document title all say the same
+// thing. Was a prop while /trip rendered this sheet under its own name; /fare
+// is the only caller now, so the wording lives here.
+const TITLE = 'Cek Tarif'
 
-export default function FareSheet({ title = 'Cek Tarif' }: Props) {
+export default function FareSheet() {
   const [searchParams] = useSearchParams()
 
   /*
    * Which router answers, and whether that has been read yet.
    *
-   * Both /fare and /trip offer the toggle, so `alternatives` is no longer a
-   * per-surface constant a route passes down — it is a rider's setting, read
-   * from storage after mount. `routerReady` is handed to useFareQuery as its
-   * gate so no request goes out under the default before the stored answer
-   * lands; see useFareRouter.
+   * `alternatives` is not a per-surface constant a route passes down — it is a
+   * rider's setting, read from storage after mount, and every surface offering
+   * the toggle derives it the same way. `routerReady` is handed to useFareQuery
+   * as its gate so no request goes out under the default before the stored
+   * answer lands; see useFareRouter.
    */
   const { router, routerReady, setRouter } = useFareRouter()
   const alternatives = router === 'beta'
@@ -82,8 +79,7 @@ export default function FareSheet({ title = 'Cek Tarif' }: Props) {
     initialCriteria: readCriteriaFromUrl(searchParams),
     onStateChange: writeUrl,
     syncDocumentTitle: true,
-    // Keep the tab and the heading saying the same thing on both routes.
-    documentTitlePrefix: title,
+    // documentTitlePrefix left at its default, which is this same wording.
     // Decides which endpoint is queried, not just what is rendered.
     alternatives,
     // Nothing goes out until the stored router is known, or a beta rider's
@@ -113,11 +109,11 @@ export default function FareSheet({ title = 'Cek Tarif' }: Props) {
     <section className="bg-white w-screen h-full overflow-y-auto [scrollbar-gutter:stable]">
       <div className="p-8 pb-4 max-w-3xl mx-auto">
         <div className="flex gap-4 items-center justify-between">
-          <DialogTitle className="font-bold text-2xl">{ title }</DialogTitle>
+          <DialogTitle className="font-bold text-2xl">{ TITLE }</DialogTitle>
           <div className="flex gap-4">
             <FareShareButton fromId={origin?.id} toId={destination?.id} criteria={criteria} />
             <CloseButton
-              aria-label={`Tutup halaman ${title.toLowerCase()}`}
+              aria-label={`Tutup halaman ${TITLE.toLowerCase()}`}
               className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
             >
               <XIcon weight="bold" className="w-6 h-6" />
