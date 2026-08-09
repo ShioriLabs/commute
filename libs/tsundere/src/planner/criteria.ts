@@ -57,10 +57,12 @@ export interface Criteria {
  * 100m is roughly a city block, and below a minute of waiting is not a
  * difference a rider can act on.
  */
-const DISTANCE_BUCKET_M = 100
-const WAIT_BUCKET_S = 60
+export const DISTANCE_BUCKET_M = 100
+export const WAIT_BUCKET_S = 60
 
-const bucket = (value: number, size: number) => Math.round(value / size)
+// Exported because labelJourneys quantises the same way dominates does — see
+// plan.ts. Re-typing the sizes there would let the two drift silently.
+export const bucket = (value: number, size: number) => Math.round(value / size)
 
 /*
  * What a metre on foot costs against a metre aboard, for comparison purposes.

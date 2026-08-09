@@ -1,7 +1,10 @@
-import { serviceBreakKey, type GraphEdge, type RouteGraph, type RouteLeg } from '../router'
+import { makeEndpointGuard, serviceBreakKey, type GraphEdge, type RouteGraph, type RouteLeg } from '../router'
 import { Bag, type Label } from './bag'
 import {
   DEFAULT_RANK_WEIGHTS,
+  DISTANCE_BUCKET_M,
+  WAIT_BUCKET_S,
+  bucket,
   effectiveWalkM,
   rankScore,
   type Criteria,
@@ -149,10 +152,10 @@ export function plan(
   const { adjacency, restrictions, serviceBreaks } = graph
   if (!adjacency.has(fromStationId) || !adjacency.has(toStationId)) return []
 
-  // Same endpoint rules as findRoute: they constrain only this trip's own
-  // origin and destination, never a stop passed through mid-journey.
-  const originRestriction = restrictions.get(fromStationId)
-  const destRestriction = restrictions.get(toStationId)
+  // Same endpoint rules as findRoute — literally the same guard, so the two
+  // engines cannot drift. They constrain only this trip's own origin and
+  // destination, never a stop passed through mid-journey.
+  const isForbiddenHop = makeEndpointGuard(restrictions, fromStationId, toStationId)
 
   const bagFor = new Map<string, Bag<Trace | null>>()
   const bagKey = (stop: string, round: number) => `${round}:${stop}`
@@ -212,8 +215,7 @@ export function plan(
 
       for (const label of [...getBag(stop, round).labels()]) {
         for (const edge of adjacency.get(stop) ?? []) {
-          if (stop === fromStationId && originRestriction && edge.to === originRestriction.forbiddenNeighborId) continue
-          if (edge.to === toStationId && destRestriction && stop === destRestriction.forbiddenNeighborId) continue
+          if (isForbiddenHop(stop, edge.to)) continue
 
           const isWalk = edge.lineCode === null
           /*
@@ -396,8 +398,6 @@ function labelJourneys(journeys: Journey[]): Journey[] {
     return tied ? -1 : bestIndex
   }
 
-  const bucket = (value: number, size: number) => Math.round(value / size)
-
   const assign = (index: number, label: JourneyLabel) => {
     if (index >= 0) journeys[index]!.labels.push(label)
   }
@@ -405,8 +405,8 @@ function labelJourneys(journeys: Journey[]): Journey[] {
   assign(winner(journeys.map(j => j.criteria.boardings)), 'FEWEST_CHANGES')
   // Effective walking, not the measured figure, so the badge agrees with what
   // dominance decided — and with what the rider's legs will report.
-  assign(winner(journeys.map(j => bucket(effectiveWalkM(j.criteria), 100))), 'LEAST_WALKING')
-  assign(winner(journeys.map(j => bucket(j.criteria.waitS, 60))), 'SHORTEST_WAIT')
+  assign(winner(journeys.map(j => bucket(effectiveWalkM(j.criteria), DISTANCE_BUCKET_M))), 'LEAST_WALKING')
+  assign(winner(journeys.map(j => bucket(j.criteria.waitS, WAIT_BUCKET_S))), 'SHORTEST_WAIT')
   assign(winner(journeys.map(j => j.criteria.fare)), 'CHEAPEST')
 
   return journeys

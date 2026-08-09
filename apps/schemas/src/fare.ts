@@ -101,6 +101,13 @@ export const FareJourneyLabelSchema = v.pipe(
   v.metadata({ ref: 'FareJourneyLabel' })
 )
 
+/*
+ * No waitS field, on purpose. It exists in the engine's Criteria and it decides
+ * SHORTEST_WAIT, but it is derived from average headways rather than a
+ * timetable. A number in seconds invites the UI to render "tunggu ±7 menit",
+ * which is a departure-time promise this engine cannot keep. The label carries
+ * the comparison; the figure would carry a lie.
+ */
 export const FareJourneySchema = v.pipe(
   v.object({
     legs: v.pipe(v.array(FareLegSchema), v.description('Perjalanan dari sisi penumpang: naik apa saja dan transfer di mana saja.')),

@@ -3,6 +3,7 @@ import { OPERATORS, type Operator } from '@commute/constants'
 import { type CSSProperties, useEffect, useState } from 'react'
 import { ArrowsDownUpIcon, CaretDownIcon, CaretRightIcon, PersonSimpleWalkIcon, TicketIcon } from '@phosphor-icons/react'
 import { getForegroundColor } from 'utils/colors'
+import { formatKm, formatRupiah } from 'utils/format'
 import { joinLabels } from 'utils/labels'
 import LineRoundel from '~/components/line-roundel'
 import { FARE_GUTTER_CLASS, FARE_RAIL_CENTER_PX, interlinedTrackFill, LINE_COLOR_FALLBACK, RAIL_WIDTH_PX } from '~/components/transit-geometry'
@@ -12,8 +13,6 @@ import { journeysOf, sortJourneyLabels, walkDistanceOf } from './journeys'
 import RouteBar from './route-bar'
 import { routeBarSegments } from './route-bar-segments'
 
-const rupiah = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })
-const formatKm = (distanceM: number) => `${(distanceM / 1000).toLocaleString('id-ID', { maximumFractionDigits: 1 })} km`
 const operatorName = (code: string) => (OPERATORS as Record<string, { name: string }>)[code as Operator]?.name ?? code
 
 /*
@@ -256,7 +255,7 @@ function JourneyTimeline({ legs }: { legs: FareResultLeg[] }) {
                   <span className="text-rose-700">
                     {leg.corridorLabel}
                     {' • '}
-                    <b>{rupiah.format(leg.fare)}</b>
+                    <b>{formatRupiah(leg.fare)}</b>
                   </span>
                   {leg.distanceM > 0 && (
                     <span className="text-slate-500">
@@ -340,7 +339,7 @@ function JourneyCardFace({ journey, selected, onSelect }: {
 
       <div className="mt-3 flex items-center gap-2 flex-wrap">
         <span className="figure text-xl font-bold tracking-tight shrink-0">
-          {journey.totalFare !== null ? rupiah.format(journey.totalFare) : 'Tarif tidak tersedia'}
+          {journey.totalFare !== null ? formatRupiah(journey.totalFare) : 'Tarif tidak tersedia'}
         </span>
         {labels.map(label => (
           <span key={label} className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 shrink-0">
@@ -442,7 +441,7 @@ function JourneyDetail({ journey }: { journey: FareJourney }) {
                         { segment.to.name }
                       </span>
                     </div>
-                    <b className="shrink-0 figure">{ segment.fare !== null ? rupiah.format(segment.fare) : 'N/A' }</b>
+                    <b className="shrink-0 figure">{ segment.fare !== null ? formatRupiah(segment.fare) : 'N/A' }</b>
                   </li>
                 ))}
                 {surchargedTransfers.map((leg, index) => (
@@ -455,7 +454,7 @@ function JourneyDetail({ journey }: { journey: FareJourney }) {
                         { leg.to.name }
                       </span>
                     </div>
-                    <b className="shrink-0 figure">{ rupiah.format(leg.fare) }</b>
+                    <b className="shrink-0 figure">{ formatRupiah(leg.fare) }</b>
                   </li>
                 ))}
               </ul>

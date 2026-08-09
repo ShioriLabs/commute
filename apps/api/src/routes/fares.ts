@@ -4,7 +4,6 @@ import { Bindings } from 'app'
 import { EdgeRepository } from 'db/repositories/edges'
 import { KVRepository } from 'db/repositories/kv'
 import { StationRepository } from 'db/repositories/stations'
-import { FareResult } from 'models/fare'
 import { fareTimeBucket } from 'utils/fare'
 import { assembleJourney, planJourney, stationNamer } from 'utils/fare-journey'
 import { Internal, NotFound, Ok } from 'utils/response'
@@ -13,7 +12,7 @@ import { loadGraph, type Tsundere } from '@commute/tsundere'
 import { HEADWAYS_S } from 'db/data/headways'
 import { doc, pathParam, queryParam } from 'schemas/describe'
 import { ServerTiming } from 'utils/server-timing'
-import { FareResultSchema } from '@commute/schemas'
+import { FareResultSchema, type FareResult } from '@commute/schemas'
 
 const app = new Hono<{ Bindings: Bindings }>()
 

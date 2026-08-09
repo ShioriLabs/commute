@@ -79,6 +79,33 @@ export interface EndpointRestriction {
 }
 
 /*
+ * The endpoint rule, shared by findRoute and the multi-criteria planner.
+ *
+ * Both engines must apply it identically — findRoute is the oracle the planner
+ * is diffed against (see planner/plan.ts), so a divergence here would surface as
+ * a routing bug rather than a copy-paste one.
+ *
+ * Returns true when the hop is forbidden. Build it ONCE outside the search loop:
+ * the returned closure runs per edge in the hot path, and both engines carry
+ * explicit keep-this-allocation-free notes.
+ */
+export function makeEndpointGuard(
+  restrictions: Map<string, EndpointRestriction>,
+  fromStationId: string,
+  toStationId: string
+): (at: string, to: string) => boolean {
+  const origin = restrictions.get(fromStationId)
+  const destination = restrictions.get(toStationId)
+  return (at, to) => {
+    // Can't BOARD the origin heading toward its forbidden neighbor.
+    if (at === fromStationId && origin && to === origin.forbiddenNeighborId) return true
+    // Can't ALIGHT at the destination having arrived from its forbidden neighbor.
+    if (to === toStationId && destination && at === destination.forbiddenNeighborId) return true
+    return false
+  }
+}
+
+/*
  * A turn that stays on one line but changes vehicle.
  *
  * A line code identifies a *route*, not a service, and on a loop the two come
@@ -253,8 +280,7 @@ export function findRoute(graph: RouteGraph, fromStationId: string, toStationId:
   // that's a served endpoint only one way, e.g. KCI-PSE). Mid-route pass-through
   // is never affected — these only constrain the first hop out of the origin and
   // the last hop into the destination.
-  const originRestriction = restrictions.get(fromStationId)
-  const destRestriction = restrictions.get(toStationId)
+  const isForbiddenHop = makeEndpointGuard(restrictions, fromStationId, toStationId)
 
   const dist = new Map<string, number>([[fromStationId, 0]])
   const prev = new Map<string, { station: string, edge: GraphEdge }>()
@@ -308,10 +334,7 @@ export function findRoute(graph: RouteGraph, fromStationId: string, toStationId:
      */
     const incomingLine = prev.get(current)?.edge.lineCode ?? null
     for (const edge of adjacency.get(current) ?? []) {
-      // Can't BOARD the origin heading toward its forbidden neighbor.
-      if (current === fromStationId && originRestriction && edge.to === originRestriction.forbiddenNeighborId) continue
-      // Can't ALIGHT at the destination having arrived from its forbidden neighbor.
-      if (edge.to === toStationId && destRestriction && current === destRestriction.forbiddenNeighborId) continue
+      if (isForbiddenHop(current, edge.to)) continue
       let penalty = 0
       if (edge.lineCode === null) {
         penalty = TRANSFER_PENALTY_M

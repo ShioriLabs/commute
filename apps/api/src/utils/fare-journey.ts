@@ -1,6 +1,6 @@
 import type { Operator, FareContext } from '@commute/constants'
 import type { Criteria, JourneyLabel, RouteLeg } from '@commute/tsundere'
-import type { FareJourney, FareJourneyLabel, FareResultLeg, FareResultLineRef, FareResultStation } from 'models/fare'
+import type { FareJourney, FareJourneyLabel, FareResultLeg, FareResultLineRef, FareResultStation, OperatorCode } from '@commute/schemas'
 import { calculateTransferFare, resolveCorridorMerges, type CorridorMerge } from 'utils/fare'
 import { summarizeFares, type FareSummary } from 'utils/fare-summary'
 import { computeHeadsignCode } from 'utils/headsign'
@@ -180,7 +180,12 @@ export function assembleJourney(plan: JourneyPlan, namer: StationNamer, context:
     return [{
       type: 'RIDE',
       line: primary.line,
-      operator: leg.operator,
+      // tsundere types this `string` on purpose — it derives the operator by
+      // splitting a station id and must not know Jakarta's operator codes. The
+      // ids it split came from our own graph, so the narrowing is sound here.
+      // OperatorCode rather than Operator: the public shape excludes the `NUL`
+      // unknown sentinel, and a leg that reached here has a real operator.
+      operator: leg.operator as OperatorCode,
       from: stationRef(leg.fromStationId),
       to: stationRef(leg.toStationId),
       stationCount: leg.stationIds.length,
@@ -207,7 +212,9 @@ export function assembleJourney(plan: JourneyPlan, namer: StationNamer, context:
     // instead of four flat fromStationId/fromName/toStationId/toName fields.
     // `distanceM` is dropped: only leg-level distance is ever rendered.
     segments: summary.segments.map(s => ({
-      operator: s.operator,
+      // Same narrowing as the ride legs above: summarizeFares carries the
+      // operator through as a bare string.
+      operator: s.operator as OperatorCode,
       from: stationRef(s.fromStationId),
       to: stationRef(s.toStationId),
       fare: s.fare
