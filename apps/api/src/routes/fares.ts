@@ -1,35 +1,54 @@
 import { Hono } from 'hono'
-import { FareContext, Operator, PAYMENT_METHODS, PaymentMethod } from '@commute/constants'
+import { FareContext, PAYMENT_METHODS, PaymentMethod } from '@commute/constants'
 import { Bindings } from 'app'
 import { EdgeRepository } from 'db/repositories/edges'
 import { KVRepository } from 'db/repositories/kv'
 import { StationRepository } from 'db/repositories/stations'
-import { FareResult, FareResultLeg, FareResultLineRef } from 'models/fare'
-import { calculateTransferFare, fareTimeBucket, resolveCorridorMerges } from 'utils/fare'
-import { summarizeFares } from 'utils/fare-summary'
-import { computeHeadsignCode } from 'utils/headsign'
-import { findInterliningLineCodes, mergeInterlinedLegs } from 'utils/interlining'
+import { FareResult } from 'models/fare'
+import { fareTimeBucket } from 'utils/fare'
+import { assembleJourney, planJourney, stationNamer } from 'utils/fare-journey'
 import { Internal, NotFound, Ok } from 'utils/response'
-import { ENDPOINT_RESTRICTIONS } from 'db/data/topology'
-import { buildGraph, findRoute, RouteGraph } from 'utils/router'
+import { ENDPOINT_RESTRICTIONS, SERVICE_BREAKS } from 'db/data/topology'
+import { loadGraph, type Tsundere } from '@commute/tsundere'
+import { HEADWAYS_S } from 'db/data/headways'
 import { doc, pathParam, queryParam } from 'schemas/describe'
+import { ServerTiming } from 'utils/server-timing'
 import { FareResultSchema } from '@commute/schemas'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
-// Graph inputs only change with deploys/reseeds; cache the built graph per isolate.
-let cachedGraph: RouteGraph | null = null
-async function getGraph(d1: D1Database): Promise<RouteGraph> {
-  if (cachedGraph) return cachedGraph
+// Graph inputs only change with deploys/reseeds; cache the loaded engine per
+// isolate. Rebuilding it per request would re-read every edge and transfer row.
+// Exported so /_internal/trips shares this instance rather than loading a second
+// copy of the same graph into the same isolate.
+let cachedRouter: Tsundere | null = null
+export async function getRouter(d1: D1Database): Promise<Tsundere> {
+  if (cachedRouter) return cachedRouter
   const { edges, transfers } = await new EdgeRepository(d1).getGraphInputs()
   // Topology restrictions are authored in (operator, station) codes; the graph
-  // works in `${operator}-${station}` DB ids.
+  // works in `${operator}-${station}` DB ids. tsundere treats node ids as
+  // opaque, so this mapping stays here rather than in the engine.
   const restrictions = ENDPOINT_RESTRICTIONS.map(r => ({
     stationId: `${r.operator}-${r.station}`,
     forbiddenNeighborId: `${r.operator}-${r.forbiddenNeighbor}`
   }))
-  cachedGraph = buildGraph(edges, transfers, restrictions)
-  return cachedGraph
+  const serviceBreaks = SERVICE_BREAKS.map(b => ({
+    lineCode: b.lineCode,
+    viaStationId: `${b.operator}-${b.via}`,
+    fromStationId: `${b.operator}-${b.from}`,
+    toStationId: `${b.operator}-${b.to}`
+  }))
+  cachedRouter = loadGraph({
+    edges,
+    transfers,
+    restrictions,
+    // Read by findRoutes only; /fares keeps the answer it has always given.
+    serviceBreaks,
+    // Read by findRoutes to price the expected wait per boarding, which is what
+    // separates journeys that are otherwise equal on distance and changes.
+    headwaysS: new Map(Object.entries(HEADWAYS_S))
+  })
+  return cachedRouter
 }
 
 // Resolve the fare context from optional query params, defaulting to today's
@@ -78,162 +97,78 @@ app.get(
 
     const context = parseFareContext(c.req.query('paymentMethod'), c.req.query('at'))
 
+    /*
+     * Phase timings, surfaced as Server-Timing on the response.
+     *
+     * The split is the point: routing is the part everyone assumes is
+     * expensive, and off-worker measurement put it at ~0.5 ms against a 17-51
+     * ms cold request. This is how that gets confirmed on workerd rather than
+     * inferred from a laptop benchmark.
+     */
+    const timing = new ServerTiming()
+
     const kvRepository = new KVRepository(c.env.KV)
     const kvKey = fareCacheKey(fromId, toId, context, c.env.API_VERSION)
 
-    const cached = await kvRepository.get<FareResult>(kvKey)
+    const cached = await timing.measure('kv', () => kvRepository.get<FareResult>(kvKey))
     if (cached) {
+      // A hit is the whole request, so `kv` alone already tells the story: no
+      // route was computed, and the absence of the other spans says so.
+      c.header('Server-Timing', timing.header())
       return c.json(Ok(cached), 200)
     }
 
     const stationRepository = new StationRepository(c.env.DB)
 
     try {
-      const endpoints = await stationRepository.getByIds([fromId, toId])
+      const endpoints = await timing.measure('endpoints', () => stationRepository.getByIds([fromId, toId]))
       if (endpoints.length < 2) {
         return c.json(NotFound('UNKNOWN_STATION', 'One or both stations do not exist.'), 404)
       }
 
-      const graph = await getGraph(c.env.DB)
-      const rawLegs = findRoute(graph, fromId, toId)
+      // Cached per isolate, so this is ~0 on every request after the first.
+      const router = await timing.measure('graph', () => getRouter(c.env.DB))
+      /*
+       * Still findRoute, singular, and deliberately so.
+       *
+       * findRoutes picks a different primary on some pairs — it weighs a saved
+       * boarding against a longer ride, so Bogor -> Lebak Bulus becomes a
+       * one-transfer Rp 20.000 route where this returns the three-transfer
+       * Rp 17.500 one. Neither is wrong, but this endpoint is the shared URL,
+       * the OG card and the TransportForJakarta embed, so its answer should not
+       * move until that change is deliberately released.
+       *
+       * The multi-journey answer lives at `/_internal/trips/:from/:to`, which
+       * carries no compatibility promise. Both call the same pipeline in
+       * utils/fare-journey.ts, so they cannot drift apart in how they render a
+       * journey — only in how many they return.
+       */
+      const rawLegs = timing.measureSync('route', () => router.findRoute(fromId, toId))
       if (!rawLegs) {
         return c.json(NotFound('NO_ROUTE', 'No route between these stations.'), 404)
       }
-      // Collapse phantom line changes at interlined trunk nodes into one-seat legs.
-      const legs = mergeInterlinedLegs(rawLegs)
 
-      const summary = summarizeFares(legs, context)
-
-      // Fold a surcharged corridor crossing + its chained free walk into one
-      // display leg (adds the uncounted internal-peron walk). Fares/segments are
-      // untouched — this is display + reported distance only.
-      const corridorMerges = resolveCorridorMerges(legs, context)
-
-      // Station ids are `${operator}-${topologyCode}`; the headsign walk works
-      // in topology codes, so strip/re-add the operator prefix around it.
-      type HeadsignRef = { terminusId: string, viaId: string | null }
-      const headsignRef = (operator: string, headsign: { code: string, viaCode: string | null } | null): HeadsignRef | null =>
-        headsign
-          ? { terminusId: `${operator}-${headsign.code}`, viaId: headsign.viaCode ? `${operator}-${headsign.viaCode}` : null }
-          : null
-
-      // Per RIDE leg, the service line(s) that run it, each with its own headsign.
-      // A leg on interlined track (the LRT Jabodebek DKA..CWG trunk) is served by
-      // several lines in topology order; an ordinary leg carries just its own line.
-      const legLines = legs.map((leg) => {
-        if (leg.type !== 'RIDE') return null
-        const operator = leg.operator as Operator
-        const codes = leg.stationIds.map(id => id.slice(operator.length + 1))
-        const interlining = findInterliningLineCodes(operator, codes)
-        const lineCodes = interlining.length >= 2 ? interlining : [leg.lineCode]
-        return {
-          interlined: interlining.length >= 2,
-          lines: lineCodes.map(lineCode => ({
-            lineCode,
-            headsign: headsignRef(operator, computeHeadsignCode(operator, lineCode, codes))
-          }))
-        }
-      })
-
-      const stationIds = [...new Set([
-        ...legs.flatMap(leg => leg.type === 'RIDE' ? leg.stationIds : [leg.fromStationId, leg.toStationId]),
-        ...legLines.flatMap(meta => meta
-          ? meta.lines.flatMap(l => l.headsign ? [l.headsign.terminusId, ...(l.headsign.viaId ? [l.headsign.viaId] : [])] : [])
-          : [])
-      ])]
-      const stations = await stationRepository.getByIds(stationIds)
-      const name = (id: string) => {
-        const station = stations.find(s => s.id === id)
-        return station ? station.name : id
-      }
-      const stationRef = (id: string) => ({ id, name: name(id) })
-      const known = (id: string | null): id is string => id !== null && stations.some(s => s.id === id)
-      // A terminus missing from the DB would echo its raw id; omit instead.
-      const headsignName = (h: HeadsignRef | null): string | null =>
-        h && known(h.terminusId)
-          ? (known(h.viaId) ? `${name(h.terminusId)} via ${name(h.viaId)}` : name(h.terminusId))
-          : null
-
-      const resultLegs: FareResultLeg[] = legs.flatMap((leg, index): FareResultLeg[] => {
-        if (leg.type === 'TRANSFER') {
-          const merge = corridorMerges.get(index)
-          if (merge?.kind === 'ABSORBED') return [] // folded into the anchor leg
-          if (merge?.kind === 'MERGE_ANCHOR') {
-            return [{
-              type: 'TRANSFER',
-              from: stationRef(merge.fromStationId),
-              to: stationRef(merge.toStationId),
-              distanceM: merge.distanceM,
-              fare: merge.fare,
-              corridorLabel: merge.corridor.label
-            }]
-          }
-          const surcharge = calculateTransferFare(leg.fromStationId, leg.toStationId, context, {
-            prev: legs[index - 1],
-            next: legs[index + 1]
-          })
-          return [{
-            type: 'TRANSFER',
-            from: stationRef(leg.fromStationId),
-            to: stationRef(leg.toStationId),
-            distanceM: leg.distanceM,
-            ...(surcharge ? { fare: surcharge.fare, corridorLabel: surcharge.corridor.label } : {})
-          }]
-        }
-        const meta = legLines[index]!
-        // Line keys; name and colour resolve against /operators like everywhere
-        // else, so the leg no longer carries three denormalised line fields.
-        const serviceLines: FareResultLineRef[] = meta.lines.map(l => ({
-          line: `${leg.operator}:${l.lineCode}`,
-          headsign: headsignName(l.headsign)
-        }))
-        // On interlined track the router's line pick is arbitrary; present the
-        // first topology-ordered service line as the primary for a stable badge.
-        const primary = serviceLines[0]!
-        return [{
-          type: 'RIDE',
-          line: primary.line,
-          operator: leg.operator,
-          from: stationRef(leg.fromStationId),
-          to: stationRef(leg.toStationId),
-          stationCount: leg.stationIds.length,
-          stops: leg.stationIds.map(stationRef),
-          headsign: primary.headsign,
-          distanceM: leg.distanceM,
-          ...(meta.interlined ? { serviceLines } : {})
-        }]
-      })
-
-      // summary.totalDistanceM already counts both raw legs of each merge; the only
-      // uncounted distance is the internal-peron walk baked into each anchor.
-      const internalWalkExtra = [...corridorMerges.values()].reduce(
-        (sum, m) => sum + (m.kind === 'MERGE_ANCHOR' ? (m.corridor.internalWalkM ?? 0) : 0),
-        0
-      )
-      // Each merge folds two transfers into one visible interchange, so the
-      // rider-facing count drops by one per absorbed leg.
-      const absorbedCount = [...corridorMerges.values()].filter(m => m.kind === 'ABSORBED').length
+      // No criteria and no labels: findRoute produces neither, and a single
+      // answer has nothing to be labelled against anyway.
+      const plan = timing.measureSync('plan', () => planJourney(rawLegs, null, [], context))
+      const stations = await timing.measure('hydrate', () => stationRepository.getByIds(plan.stationIds))
+      const namer = stationNamer(stations)
+      const journey = timing.measureSync('assemble', () => assembleJourney(plan, namer, context))
 
       const result: FareResult = {
-        from: stationRef(fromId),
-        to: stationRef(toId),
-        legs: resultLegs,
-        // Nested from/to, matching every other station reference in the API,
-        // instead of four flat fromStationId/fromName/toStationId/toName fields.
-        // `distanceM` is dropped: only leg-level distance is ever rendered.
-        segments: summary.segments.map(s => ({
-          operator: s.operator,
-          from: stationRef(s.fromStationId),
-          to: stationRef(s.toStationId),
-          fare: s.fare
-        })),
-        totalFare: summary.totalFare,
-        totalDistanceM: summary.totalDistanceM + internalWalkExtra,
-        transferCount: summary.transferCount - absorbedCount
+        from: namer.ref(fromId),
+        to: namer.ref(toId),
+        legs: journey.legs,
+        segments: journey.segments,
+        totalFare: journey.totalFare,
+        totalDistanceM: journey.totalDistanceM,
+        transferCount: journey.transferCount
+        // No `journeys`: this endpoint answers with one route, as it always has.
       }
 
       c.executionCtx.waitUntil(kvRepository.set(kvKey, result))
 
+      c.header('Server-Timing', timing.header())
       return c.json(Ok(result), 200)
     } catch (error) {
       console.error(error)

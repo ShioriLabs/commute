@@ -51,7 +51,13 @@ export interface RouteOverlayModel {
 // the pins still resolve straight from the pair, so the map answers a deep
 // link immediately.
 export function buildRouteOverlayModel(
-  fare: FareResult | null,
+  /*
+   * Only `legs` is read, so this takes the shape rather than either named type.
+   * A FareResult and one FareJourney out of a TripResult are both valid here —
+   * which is the point, since the map now draws whichever journey the rider
+   * selected rather than the only one on offer.
+   */
+  fare: Pick<FareResult, 'legs'> | null,
   routePair: { fromId: string | null, toId: string | null },
   points: Point[],
   // Line colours live on /operators, not on the leg — a ride leg only names its

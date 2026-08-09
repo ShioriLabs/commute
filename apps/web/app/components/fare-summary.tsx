@@ -3,7 +3,9 @@ import type { FareResult } from '@commute/schemas'
 const rupiah = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })
 
 interface FareSummaryProps {
-  fare: FareResult | null
+  // The two priced fields, so this reads a FareResult and a selected
+  // FareJourney alike. See buildRouteOverlayModel for the same reasoning.
+  fare: Pick<FareResult, 'totalFare' | 'transferCount'> | null
   hasError: boolean
   isLoading: boolean
 }

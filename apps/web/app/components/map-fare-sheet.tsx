@@ -5,6 +5,7 @@ import DetailSurface from './detail-surface'
 import FarePanel from './fare-sheet/fare-panel'
 import FareShareButton from './fare-sheet/fare-share-button'
 import type { FareQuery } from './fare-sheet/use-fare-query'
+import type { FareRouter } from 'utils/fare-router'
 
 interface MapFareSheetProps {
   open: boolean
@@ -22,6 +23,18 @@ interface MapFareSheetProps {
    * overlay and the chip, which is what keeps all three on one SWR entry.
    */
   query: FareQuery
+  /*
+   * Router choice and journey selection, both owned by the map route.
+   *
+   * This sheet is the only surface that does not own either: the map draws the
+   * selected journey on the canvas behind it and prices it in the chip, so the
+   * choice has to outlive a sheet that unmounts on close.
+   */
+  router: FareRouter
+  onRouterChange: (router: FareRouter) => void
+  alternatives: boolean
+  selectedIndex: number
+  onSelectIndex: (index: number) => void
   onClose: () => void
 }
 
@@ -37,7 +50,17 @@ interface MapFareSheetProps {
  * and CloseButton, neither of which works outside a Dialog. The header below is
  * the local equivalent, mirroring station-sheet.tsx's.
  */
-export default function MapFareSheet({ open, initialSnap, query, onClose }: MapFareSheetProps) {
+export default function MapFareSheet({
+  open,
+  initialSnap,
+  query,
+  router,
+  onRouterChange,
+  alternatives,
+  selectedIndex,
+  onSelectIndex,
+  onClose
+}: MapFareSheetProps) {
   const { pairFromId, pairToId, criteria } = query
   /*
    * Built from the fetched pair, not the resolved stations: the search index
@@ -77,6 +100,11 @@ export default function MapFareSheet({ open, initialSnap, query, onClose }: MapF
               <FarePanel
                 query={query}
                 wrapCriteria
+                alternatives={alternatives}
+                router={router}
+                onRouterChange={onRouterChange}
+                selectedIndex={selectedIndex}
+                onSelectIndex={onSelectIndex}
                 footer={farePath
                   ? (
                       <Link

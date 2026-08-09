@@ -26,10 +26,42 @@ export function fareApiUrl(
   toId: string | null | undefined,
   criteria?: FareCriteria
 ): string | null {
+  return journeyApiUrl('/fares', fromId, toId, criteria)
+}
+
+/*
+ * SWR key for the same pair on `/_internal/trips`, which answers with every
+ * journey worth choosing between rather than one route.
+ *
+ * A separate endpoint on purpose: findRoutes weighs a saved boarding against a
+ * longer ride, so it picks a different primary on some pairs, and `/fares` is
+ * the shared URL, the OG card and the TransportForJakarta embed. Its answer does
+ * not move for anyone who has not asked for the other one — which is what the
+ * router toggle asks, per rider, and why the two endpoints stay distinct rather
+ * than one growing a mode flag.
+ *
+ * Distinct paths also mean distinct SWR keys, so neither surface can render the
+ * other's cached body — including the flip itself, where both are warm for the
+ * same pair at once.
+ */
+export function tripApiUrl(
+  fromId: string | null | undefined,
+  toId: string | null | undefined,
+  criteria?: FareCriteria
+): string | null {
+  return journeyApiUrl('/_internal/trips', fromId, toId, criteria)
+}
+
+function journeyApiUrl(
+  path: string,
+  fromId: string | null | undefined,
+  toId: string | null | undefined,
+  criteria?: FareCriteria
+): string | null {
   if (!fromId || !toId || fromId === toId) return null
   const query = criteria ? fareQueryParams(criteria).toString() : ''
   return new URL(
-    `/fares/${fromId}/${toId}${query ? `?${query}` : ''}`,
+    `${path}/${fromId}/${toId}${query ? `?${query}` : ''}`,
     import.meta.env.VITE_API_BASE_URL
   ).href
 }

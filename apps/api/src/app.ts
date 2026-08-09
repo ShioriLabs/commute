@@ -32,35 +32,24 @@ export interface Bindings {
 const app = new Hono<{ Bindings: Bindings }>()
 
 /*
- * Open CORS, deliberately.
+ * Open CORS, deliberately. Every mounted route is read-only public data. See
+ * docs/api-cors-policy.md for why an allowlist was rejected.
  *
- * Every mounted route is read-only public data, and the docs say so in as many
- * words: "Datanya bebas dipakai dan diolah, asal sumbernya tetap dicantumkan."
- * An origin allowlist contradicts that — it is the one restriction that stops
- * *only* browser JavaScript, so it blocked hobbyists building a map in a page
- * while doing nothing about curl, servers, apps or scrapers, which could always
- * read this API freely. It also meant every new consumer (data.commute, the
- * TransportForJakarta embed, the Commute Lite build on their `maps.` subdomain)
- * needed a deploy here before it could make a single request.
+ * This is not access control — routes/sync.ts and routes/cache.ts are unmounted
+ * precisely because CORS would not have protected them. Abuse is bounded by
+ * rateLimit() below, which is origin-independent.
  *
- * What this is NOT: access control. That distinction is already stated where it
- * matters most — routes/sync.ts and routes/cache.ts are unmounted precisely
- * because CORS would not have protected them. Abuse is bounded by rateLimit()
- * below, which is origin-independent and therefore unaffected by this, and by
- * the cacheControl() TTLs plus KV read-through that keep repeat reads off D1.
- *
- * The cost this shifts is load, not risk: a popular site embedding the API puts
- * many client IPs on it at once, which per-IP limiting bounds only loosely. The
- * caching above is what absorbs that, and it is why this is safe to open now.
- *
- * `GET` and `OPTIONS` only. Nothing mounted mutates, so allowing `POST` would
- * advertise a capability that does not exist; if a mutating route is ever
- * mounted it must carry its own credentials rather than inherit trust from an
- * origin header a client controls.
+ * `GET` and `OPTIONS` only. Nothing mounted mutates. A mutating route added
+ * later must carry its own credentials rather than inherit trust from an origin
+ * header a client controls.
  */
 app.use('*', cors({
   origin: '*',
-  allowMethods: ['GET', 'OPTIONS']
+  allowMethods: ['GET', 'OPTIONS'],
+  // Without this the browser hides Server-Timing from every cross-origin
+  // caller, which is all of them. The network panel shows the header arriving
+  // and still refuses to surface it.
+  exposeHeaders: ['Server-Timing']
 }))
 
 /*
@@ -79,6 +68,23 @@ app.use('/hubs/*', rateLimit('DEFAULT'), cacheControl(MAX_AGE.TOPOLOGY))
 app.use('/lines/*', rateLimit('DEFAULT'), cacheControl(MAX_AGE.STATIC))
 app.use('/operators', rateLimit('DEFAULT'), cacheControl(MAX_AGE.STATIC))
 app.use('/fares/*', rateLimit('FARE'), cacheControl(MAX_AGE.FARE))
+/*
+ * `/_internal` is not public, but it is as reachable as everything else, and
+ * `/_internal/trips` runs findRoutes — strictly more work than the findRoute
+ * behind `/fares`. It went un-shaped only while nothing linked to it; the beta
+ * router switch on /fare is what changes that.
+ *
+ * The limiter is the weaker half here. Our own front ends are exempt by origin
+ * (see EXEMPT_ORIGINS in middleware/rate-limit.ts), and one of them is the
+ * TransportForJakarta embed — precisely the surface newly pointed at this
+ * endpoint. So the limiter shapes scrapers, and `cacheControl` is what actually
+ * spares the origin: 600s at the edge plus a 304 on revalidation.
+ *
+ * FARE on both counts covers `/_internal/searchables` too. That is fetched once
+ * per app boot and served from KV, so 120/min is far above any rider, and 600s
+ * is strictly better than the nothing it carried before.
+ */
+app.use('/_internal/*', rateLimit('FARE'), cacheControl(MAX_AGE.FARE))
 
 app.route('stations', stations)
 app.route('hubs', hubs)

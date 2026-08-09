@@ -191,9 +191,28 @@ export class StationRepository extends Repository {
     return station ? mapStationRow(station) : null
   }
 
+  /*
+   * Chunked, because each id is bound TWICE — once in the lines subquery and
+   * once in the outer filter — and D1 rejects a statement with too many bound
+   * variables. A single fare journey never came close; a fare answer carrying
+   * several alternative journeys unions ~55 stations and does, which surfaced
+   * as a 500 on long cross-network pairs (Bogor <-> Rangkasbitung).
+   *
+   * 40 leaves generous headroom under the limit even doubled. The chunks are
+   * issued together rather than in sequence, so this stays one round trip's
+   * worth of latency rather than N.
+   */
   async getByIds(ids: string[]) {
-    const stations = await this.stationsQuery(ids).where('id', 'in', ids).execute()
-    return stations.map(station => mapStationRow(station)).filter((station): station is NonNullable<typeof station> => station !== null)
+    const CHUNK = 40
+    const chunks: string[][] = []
+    for (let i = 0; i < ids.length; i += CHUNK) chunks.push(ids.slice(i, i + CHUNK))
+
+    const results = await Promise.all(
+      chunks.map(chunk => this.stationsQuery(chunk).where('id', 'in', chunk).execute())
+    )
+    return results.flat()
+      .map(station => mapStationRow(station))
+      .filter((station): station is NonNullable<typeof station> => station !== null)
   }
 
   async checkIfExists(id: string, operator?: Operator) {

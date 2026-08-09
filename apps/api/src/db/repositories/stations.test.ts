@@ -178,6 +178,31 @@ describe('StationRepository.getByIds', () => {
     const result = await repo().getByIds(['KCI-BOO', 'MRTJ-BHI'])
     expect(result.map(s => s.operator)).toEqual(['KCI', 'MRTJ'])
   })
+
+  /*
+   * Each id is bound twice (lines subquery + outer filter), so a long id list
+   * overruns D1's bound-variable limit. That was invisible until a fare answer
+   * started carrying several journeys and unioned ~55 stations, which 500'd on
+   * Bogor <-> Rangkasbitung. Splitting must not lose or reorder rows.
+   */
+  it('splits a long id list across queries and concatenates the rows', async () => {
+    const ids = Array.from({ length: 95 }, (_, i) => `KCI-S${i}`)
+    // 95 ids at a chunk size of 40 is three queries; the mock hands one queued
+    // result to each execute() call, so three pushes means three chunks.
+    for (const chunk of [ids.slice(0, 40), ids.slice(40, 80), ids.slice(80)]) {
+      terminalResults.push(chunk.map(id => ({ id, operator: 'KCI', lines: 'C', amenities: null, searchable: 1 })))
+    }
+    const result = await repo().getByIds(ids)
+    expect(result).toHaveLength(95)
+    expect(result.map(s => s.id)).toEqual(ids)
+  })
+
+  it('issues a single query when the list is short enough', async () => {
+    terminalResults.push([{ id: 'KCI-BOO', operator: 'KCI', lines: 'C', amenities: null, searchable: 1 }])
+    // A second queued result would be consumed by a second chunk; leaving the
+    // queue empty means an unexpected extra query yields no rows and fails here.
+    await expect(repo().getByIds(['KCI-BOO'])).resolves.toHaveLength(1)
+  })
 })
 
 describe('StationRepository.checkIfExists / checkIfLineExists', () => {

@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router'
 import FarePanel from './fare-panel'
 import FareShareButton from './fare-share-button'
 import { fareQueryParams, readCriteriaFromUrl, type FareCriteria } from 'utils/fare-criteria'
+import { useFareRouter } from '~/hooks/use-fare-router'
 import { useFareQuery } from './use-fare-query'
 
 // Rendered inside a headlessui Dialog in both contexts: the homepage
@@ -15,8 +16,23 @@ import { useFareQuery } from './use-fare-query'
 // SEO-decorates `/fare`, the OG image worker is keyed on it, and the sitemap
 // lists it. The search sheet renders the same FarePanel but never writes these
 // URLs — see use-fare-query.ts.
+// The heading, the close-button label and the document title all say this.
+const TITLE = 'Cek Tarif'
+
 export default function FareSheet() {
   const [searchParams] = useSearchParams()
+
+  /*
+   * Which router answers, and whether that has been read yet.
+   *
+   * `alternatives` is not a per-surface constant a route passes down — it is a
+   * rider's setting, read from storage after mount, and every surface offering
+   * the toggle derives it the same way. `routerReady` is handed to useFareQuery
+   * as its gate so no request goes out under the default before the stored
+   * answer lands; see useFareRouter.
+   */
+  const { router, routerReady, setRouter } = useFareRouter()
+  const alternatives = router === 'beta'
 
   // On the homepage the sheet lives behind a faked URL (SheetButton pushStates
   // '/fare' while the router still thinks it's on '/'), so setSearchParams
@@ -25,12 +41,15 @@ export default function FareSheet() {
   // and keeping history.state intact preserves SheetButton's modalOpen flag.
   //
   // One writer for the pair AND the criteria: they share a query string, so
-  // writing either on its own would wipe the other. Picking a station used to
-  // rebuild the params from scratch, which would now silently drop a chosen
-  // payment method.
+  // writing either on its own wipes the other. Never rebuild the params from
+  // scratch here — that silently drops a chosen payment method.
   // Stable identity: this is `onStateChange`, which the fare handlers in
   // useFareQuery close over — a fresh function each render would churn their
   // dep arrays and undo their memoization. It reads only its arguments.
+  //
+  // The router is deliberately absent from what this writes. It lives in
+  // storage alone (see utils/fare-router.ts), so flipping the toggle changes
+  // the answer without changing the URL.
   const writeUrl = useCallback((fromId: string | null, toId: string | null, criteria: FareCriteria) => {
     const params = new URLSearchParams()
     // Written independently, not only as a pair: a to-only deep link from the
@@ -56,7 +75,14 @@ export default function FareSheet() {
     // only one of the two is written back.
     initialCriteria: readCriteriaFromUrl(searchParams),
     onStateChange: writeUrl,
-    syncDocumentTitle: true
+    syncDocumentTitle: true,
+    // documentTitlePrefix left at its default, which is this same wording.
+    // Decides which endpoint is queried, not just what is rendered.
+    alternatives,
+    // Nothing goes out until the stored router is known, or a beta rider's
+    // first paint would query /fares and the next render would query
+    // /_internal/trips. See useFareRouter.
+    gate: routerReady
   })
   const { origin, destination, criteria, openPickerFor } = query
 
@@ -80,11 +106,11 @@ export default function FareSheet() {
     <section className="bg-white w-screen h-full overflow-y-auto [scrollbar-gutter:stable]">
       <div className="p-8 pb-4 max-w-3xl mx-auto">
         <div className="flex gap-4 items-center justify-between">
-          <DialogTitle className="font-bold text-2xl">Cek Tarif</DialogTitle>
+          <DialogTitle className="font-bold text-2xl">{ TITLE }</DialogTitle>
           <div className="flex gap-4">
             <FareShareButton fromId={origin?.id} toId={destination?.id} criteria={criteria} />
             <CloseButton
-              aria-label="Tutup halaman cek tarif"
+              aria-label={`Tutup halaman ${TITLE.toLowerCase()}`}
               className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
             >
               <XIcon weight="bold" className="w-6 h-6" />
@@ -92,7 +118,12 @@ export default function FareSheet() {
           </div>
         </div>
 
-        <FarePanel query={query} />
+        <FarePanel
+          query={query}
+          alternatives={alternatives}
+          router={router}
+          onRouterChange={setRouter}
+        />
       </div>
     </section>
   )

@@ -2,6 +2,7 @@ import type { Line, OperatorWithLines, StandardResponse } from '@commute/schemas
 import { useCallback, useMemo } from 'react'
 import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
+import { operatorOfLineKey } from './line-keys'
 
 /*
  * The line dictionary.
@@ -30,28 +31,10 @@ export interface LineLookup {
   isLoading: boolean
 }
 
-/*
- * Both helpers take `string` per the schema, where `line` is required and
- * non-nullable — so TypeScript never flags a missing key at a call site. It
- * still arrives undefined at runtime: stale service-worker caches serve
- * pre-direction-group payloads (see LegacyTimetableEntrySchema), and deploy
- * skew briefly serves old shapes to new code. Both crashed on `.split`.
- * Callers all have a `?? fallback` ready, so absorb it here rather than
- * guarding at each of them.
- */
-
-/** `KCI:C` -> `KCI`. Cheap enough to do inline; no dictionary needed. */
-export function operatorOfLineKey(key: string | undefined): string | undefined {
-  const [operator] = key?.split(':') ?? []
-  return operator || undefined
-}
-
-/** `KCI:C` -> `C`, the bare code a roundel displays. */
-export function codeOfLineKey(key: string | undefined): string {
-  if (!key) return ''
-  const [, code] = key.split(':')
-  return code ?? key
-}
+// Key parsing lives in ./line-keys so it can be unit-tested without dragging
+// SWR and utils/fetcher into the test environment. Re-exported here because
+// every call site already imports it from this module.
+export { codeOfLineKey, operatorOfLineKey } from './line-keys'
 
 export function useLines(): LineLookup {
   const { data, isLoading } = useSWR<StandardResponse<OperatorWithLines[]>>(

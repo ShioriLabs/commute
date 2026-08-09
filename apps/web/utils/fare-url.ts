@@ -41,6 +41,8 @@ export function buildFarePath(
   if (criteria) {
     for (const [key, value] of fareQueryParams(criteria)) params.set(key, value)
   }
+  // No router: it lives in storage alone, and both ends of an in-app link read
+  // the same storage. See utils/fare-router.ts.
   return `/fare?${params.toString()}`
 }
 

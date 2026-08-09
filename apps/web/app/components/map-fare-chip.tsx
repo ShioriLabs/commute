@@ -4,7 +4,9 @@ import type { FareResult } from '@commute/schemas'
 import FareSummary from './fare-summary'
 
 interface MapFareChipProps {
-  fare: FareResult | null
+  // The selected journey's total, not necessarily the response's — see
+  // FareSummary.
+  fare: Pick<FareResult, 'totalFare' | 'transferCount'> | null
   hasError: boolean
   isLoading: boolean
   onClear: () => void

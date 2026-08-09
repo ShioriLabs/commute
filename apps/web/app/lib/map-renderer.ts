@@ -531,9 +531,9 @@ export function pickTier(scale: number, dpr: number, currentTier: Tier, maxTier:
   const target = scale * dpr
   const cap = Math.min(MAX_TIER, maxTier)
   // Round the required texel:pixel ratio up to a power of two, then clamp into
-  // [MIN_TIER, cap]. Flooring at MIN_TIER rather than 1 is what admits the
-  // half-res tier: below the preview handoff `target` runs ~0.14-0.45, which
-  // used to be served by a full-size texture minified up to 7x.
+  // [MIN_TIER, cap]. Flooring at MIN_TIER rather than 1 admits the half-res
+  // tier: below the preview handoff `target` runs ~0.14-0.45, which a full-size
+  // texture would serve minified up to 7x.
   const raw = Math.min(cap, Math.max(MIN_TIER, 2 ** Math.ceil(Math.log2(Math.max(target, MIN_TIER)))))
   // Hysteresis: don't upgrade until comfortably past the boundary, so a pinch
   // that hovers on the threshold doesn't thrash between tiers.
@@ -564,11 +564,10 @@ export interface TileBudgetArgs {
 
 // Resident-tile budget for the current frame.
 //
-// This replaced a flat constant whose justification described a 4x4 grid that
-// no longer exists. Deriving it from the visible set matters because eviction
-// refuses to drop on-screen tiles: a budget below the working set isn't a
-// tighter policy, it's a sweep that runs, finds nothing droppable and overshoots
-// silently. The floor makes the number agree with that invariant instead.
+// Derive it from the visible set, never a flat constant. Eviction refuses to
+// drop on-screen tiles, so a budget below the working set is not a tighter
+// policy — it is a sweep that runs, finds nothing droppable and overshoots
+// silently. The floor keeps the number agreeing with that invariant.
 export function tileBudgetBytes(args: TileBudgetArgs): number {
   const workingSet = Math.max(0, args.visibleTiles) * Math.max(0, args.tileBytes)
   let ceiling = args.ceilingBytes
