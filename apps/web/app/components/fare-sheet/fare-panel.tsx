@@ -34,6 +34,13 @@ interface Props {
    */
   router?: FareRouter
   onRouterChange?: (router: FareRouter) => void
+  /*
+   * Journey selection, lifted. Only the map passes these — it draws the chosen
+   * journey on the canvas behind this sheet, so the choice has to live where
+   * both can see it. See FareResultCard.
+   */
+  selectedIndex?: number
+  onSelectIndex?: (index: number) => void
 }
 
 // The fare query body: the Dari/Ke pair, the swap control, and whichever of
@@ -45,7 +52,9 @@ export default function FarePanel({
   wrapCriteria = false,
   alternatives = false,
   router,
-  onRouterChange
+  onRouterChange,
+  selectedIndex,
+  onSelectIndex
 }: Props) {
   const {
     origin,
@@ -133,7 +142,16 @@ export default function FarePanel({
           )
         : null}
 
-      {fare?.data ? <FareResultCard result={fare.data} alternatives={alternatives} /> : null}
+      {fare?.data
+        ? (
+            <FareResultCard
+              result={fare.data}
+              alternatives={alternatives}
+              selectedIndex={selectedIndex}
+              onSelectIndex={onSelectIndex}
+            />
+          )
+        : null}
       {fare?.data ? footer : null}
 
       <StationPickerDialog

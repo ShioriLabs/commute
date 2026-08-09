@@ -103,6 +103,32 @@ describe('buildRouteOverlayModel', () => {
     })
   })
 
+  /*
+   * The map draws whichever journey the rider selected, which on the beta
+   * router is a FareJourney out of a TripResult rather than the whole response.
+   * It carries no `from`/`to` — only `legs`, which is all this reads.
+   */
+  it('draws a selected journey, not only a whole fare response', () => {
+    const points = [pt('KCI-AAA', 0, 0), pt('KCI-MID', 100, 0), pt('KCI-BBB', 200, 0)]
+    const journey = { legs: [rideLeg(['KCI-AAA', 'KCI-MID', 'KCI-BBB'], '#FF0000')] }
+    const model = buildRouteOverlayModel(journey, pair('KCI-AAA', 'KCI-BBB'), points, resolveLine)
+    expect(model!.overlay.segments).toHaveLength(2)
+  })
+
+  /*
+   * Selecting a different option must redraw, not merely re-price: two journeys
+   * between one pair are two different corridors on the canvas.
+   */
+  it('draws different geometry for a different journey of the same pair', () => {
+    const points = [pt('KCI-AAA', 0, 0), pt('KCI-MID', 100, 0), pt('KCI-BBB', 200, 0)]
+    const viaMid = { legs: [rideLeg(['KCI-AAA', 'KCI-MID', 'KCI-BBB'], '#FF0000')] }
+    const direct = { legs: [rideLeg(['KCI-AAA', 'KCI-BBB'], '#FF0000')] }
+    const a = buildRouteOverlayModel(viaMid, pair('KCI-AAA', 'KCI-BBB'), points, resolveLine)
+    const b = buildRouteOverlayModel(direct, pair('KCI-AAA', 'KCI-BBB'), points, resolveLine)
+    expect(a!.overlay.segments).toHaveLength(2)
+    expect(b!.overlay.segments).toHaveLength(1)
+  })
+
   it('turns a ride leg into solid segments through stop centroids', () => {
     const points = [pt('KCI-AAA', 0, 0), pt('KCI-MID', 100, 0), pt('KCI-BBB', 200, 0)]
     const fare = fareResult([rideLeg(['KCI-AAA', 'KCI-MID', 'KCI-BBB'], '#FF0000')], 'KCI-AAA', 'KCI-BBB')

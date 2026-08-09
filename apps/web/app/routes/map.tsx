@@ -39,6 +39,8 @@ import { surfaceInset } from '../lib/map-surface-inset'
 import MapFareChip from '../components/map-fare-chip'
 import MapFareSheet from '../components/map-fare-sheet'
 import { useFareQuery } from '../components/fare-sheet/use-fare-query'
+import { journeysOf } from '../components/fare-sheet/journeys'
+import { useFareRouter } from '../hooks/use-fare-router'
 import {
   createRecoveryController,
   MAX_RECOVERY_ATTEMPTS,
@@ -412,6 +414,18 @@ export default function MapPage() {
   }, [authorMode, workingPoints])
 
   /*
+   * The rider's router, and which of its journeys is open.
+   *
+   * Selection lives here rather than inside the fare sheet's result card
+   * because on this route it is not a detail of the card: the overlay draws the
+   * chosen journey's legs onto the canvas and the chip shows its total, both of
+   * which are on screen with the sheet closed. Owning it here is what keeps the
+   * corridor, the price and the open card describing one journey.
+   */
+  const { router: fareRouter, routerReady: fareRouterReady, setRouter: setFareRouter } = useFareRouter()
+  const [selectedJourney, setSelectedJourney] = useState(0)
+
+  /*
    * The one fare query on this route, feeding all three consumers — the overlay
    * geometry, the chip, and the fare sheet. One hook instance means one useSWR
    * call, so a shared cache entry is structural rather than something two URL
@@ -441,9 +455,33 @@ export default function MapPage() {
       syncRouteUrl(fromId, toId)
     },
     // The map owns document.title through its own meta() export.
-    syncDocumentTitle: false
+    syncDocumentTitle: false,
+    alternatives: fareRouter === 'beta',
+    // Nothing goes out until the stored router is known — see useFareRouter.
+    gate: fareRouterReady
   })
   const fareResponse = fareQuery.fare
+
+  /*
+   * The journey the map is currently about.
+   *
+   * journeysOf normalises both response shapes, so this is the primary route on
+   * `/fares` and the selected option on `/_internal/trips` — the overlay and the
+   * chip read it without either knowing which endpoint answered.
+   */
+  const journeys = useMemo(
+    () => (fareResponse?.data ? journeysOf(fareResponse.data) : []),
+    [fareResponse]
+  )
+  const activeJourney = journeys[selectedJourney] ?? journeys[0] ?? null
+
+  /*
+   * Reset on a new answer, for the same reason the card does: the index is an
+   * ordinal into a set recomputed per request, so option three of the old
+   * answer is not option three of the new one.
+   */
+  useEffect(() => setSelectedJourney(0), [fareResponse])
+
   const fareError = fareQuery.error
   const fareLoading = fareQuery.isLoading
 
@@ -453,13 +491,13 @@ export default function MapPage() {
     if (!routePair.fromId && !routePair.toId) return null
     if (workingPoints.length === 0) return null
     return buildRouteOverlayModel(
-      fareResponse?.data ?? null,
+      activeJourney,
       routePair,
       workingPoints,
       resolveLine,
       corridorsManifest?.corridors ?? null
     )
-  }, [fareResponse, routePair, workingPoints, resolveLine, corridorsManifest])
+  }, [activeJourney, routePair, workingPoints, resolveLine, corridorsManifest])
 
   const viewportRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -2018,7 +2056,9 @@ export default function MapPage() {
           sheet sits exactly where the chip does. */}
       {routePair.fromId && routePair.toId && !fareSheet && (
         <MapFareChip
-          fare={fareResponse?.data ?? null}
+          // The selected journey, so the chip agrees with the corridor drawn
+          // behind it rather than with whichever route the API listed first.
+          fare={activeJourney}
           hasError={!!fareError}
           isLoading={fareLoading}
           onClear={clearRoute}
@@ -2049,6 +2089,12 @@ export default function MapPage() {
           open={!!fareSheet}
           initialSnap={fareSheet?.snap}
           query={fareQuery}
+          router={fareRouter}
+          onRouterChange={setFareRouter}
+          alternatives={fareRouter === 'beta'}
+          // Selection is the map's, not the card's: see where it is declared.
+          selectedIndex={selectedJourney}
+          onSelectIndex={setSelectedJourney}
           onClose={() => setFareSheet(null)}
         />
 

@@ -470,23 +470,33 @@ function JourneyDetail({ journey }: { journey: FareJourney }) {
   )
 }
 
-export default function FareResultCard({ result, alternatives = false }: {
+export default function FareResultCard({
+  result,
+  alternatives = false,
+  selectedIndex,
+  onSelectIndex
+}: {
   result: FareResult | TripResult
   /*
    * Whether to offer the other journeys the API returned.
    *
    * Off by default, so a surface that does not pass it renders exactly what it
    * rendered before alternatives existed: one result, no badges, no cards to
-   * choose between. /fare and /trip set it from the rider's router toggle; the
-   * map's fare sheet and the search sheet never do.
-   *
-   * Still a prop rather than a route-level flag, and that still matters. All
-   * three surfaces share FarePanel, so a flag set per route would reach the map
-   * and the search sheet too — where the query is typed FareQuery<FareResult>
-   * and the consumers read the flat fare fields off the body. The toggle is
-   * offered where a TripResult can be rendered, and nowhere else.
+   * choose between. Set from the rider's router toggle on every surface that
+   * offers one.
    */
   alternatives?: boolean
+  /*
+   * Which option is open, lifted.
+   *
+   * Optional, and uncontrolled when omitted — every surface but the map keeps
+   * owning selection here, because nothing outside the card needs to know. The
+   * map does: its overlay draws the chosen journey's legs and its chip shows
+   * that journey's total, so a selection private to this component would leave
+   * the corridor on screen disagreeing with the card the rider just tapped.
+   */
+  selectedIndex?: number
+  onSelectIndex?: (index: number) => void
 }) {
   /*
    * Always the full list, so the hooks below never change shape; the primary is
@@ -499,14 +509,31 @@ export default function FareResultCard({ result, alternatives = false }: {
    */
   const all = journeysOf(result)
   const journeys = alternatives ? all : all.slice(0, 1).map(j => ({ ...j, labels: [] }))
-  const [selected, setSelected] = useState(0)
+
+  /*
+   * The uncontrolled half. Declared unconditionally — hooks cannot be skipped —
+   * and simply ignored when the caller controls selection.
+   */
+  const [ownSelected, setOwnSelected] = useState(0)
+  const controlled = selectedIndex !== undefined
+  const selected = controlled ? selectedIndex : ownSelected
 
   /*
    * Reset on a new answer. The index is an ordinal into a set recomputed per
    * request, not a stable identifier: change the payment method and the third
    * option may be a different route, or may not exist at all.
+   *
+   * A controlled caller resets its own — the map keys its state on the same
+   * response, so doing it here too would fight it.
    */
-  useEffect(() => setSelected(0), [result])
+  useEffect(() => {
+    if (!controlled) setOwnSelected(0)
+  }, [result, controlled])
+
+  const select = (index: number) => {
+    if (!controlled) setOwnSelected(index)
+    onSelectIndex?.(index)
+  }
 
   const journey = journeys[selected] ?? journeys[0]!
 
@@ -520,7 +547,7 @@ export default function FareResultCard({ result, alternatives = false }: {
                   key={index}
                   journey={option}
                   selected={index === selected}
-                  onSelect={() => setSelected(index)}
+                  onSelect={() => select(index)}
                 />
               ))}
             </div>
