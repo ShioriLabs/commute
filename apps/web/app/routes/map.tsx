@@ -136,8 +136,7 @@ export function meta() {
 const MAX_SCALE = 1.5
 const WHEEL_ZOOM_INTENSITY = 0.0015
 
-// One spec for all four floating buttons. 44px is the tap-target minimum;
-// recenter and attribution used to be 40.
+// One spec for all four floating buttons. 44px is the tap-target minimum.
 const MAP_BUTTON_CLASS
   = 'rounded-full bg-white/90 backdrop-blur shadow-lg w-11 h-11 flex items-center justify-center cursor-pointer'
 
@@ -403,7 +402,6 @@ export default function MapPage() {
     }
   }, [authorMode, pointsManifest])
 
-  // Author mode: persist every change.
   useEffect(() => {
     if (!authorMode || !authorHydratedRef.current) return
     try {
@@ -541,17 +539,16 @@ export default function MapPage() {
   const [selectedStation, setSelectedStation] = useState<{ operator: string, code: string } | null>(null)
   const [selectedHubSlug, setSelectedHubSlug] = useState<string | null>(null)
   /*
-   * The fare sheet, and the snap this opening asked for. One state object rather
-   * than a boolean plus a snap: the snap belongs to the opening, and a stale one
-   * left over from the last open would land the next one wrong.
+   * The fare sheet, and the snap this opening asked for. One state object, not
+   * a boolean plus a snap: the snap belongs to the opening, and a stale one
+   * lands the next open wrong.
    *
-   * `id` identifies the opening, and keys the component below. BottomSheet only
-   * re-snaps on an `open` false→true edge, but its own close button sets its
-   * internal snap without telling us — the parent does not learn until onClose
-   * lands. Re-opening inside that window would otherwise write {snap} over an
-   * already-truthy value, `open` would never transition, and the sheet would
-   * quietly finish closing instead of coming back. A fresh key makes it a new
-   * mount, which is exactly what a new opening is.
+   * `id` identifies the opening and keys the component below. BottomSheet only
+   * re-snaps on an `open` false→true edge, and its close button sets its
+   * internal snap without telling the parent until onClose lands. Re-opening
+   * inside that window writes {snap} over an already-truthy value, `open` never
+   * transitions, and the sheet finishes closing instead of coming back. A fresh
+   * key makes it a new mount.
    */
   const [fareSheet, setFareSheet] = useState<{ snap: 'peek' | 'full', id: number } | null>(null)
   const detailSurfaceOpen = !!(selectedStation || selectedHubSlug || fareSheet)
@@ -604,7 +601,6 @@ export default function MapPage() {
   const transformRef = targetRef
   const gestureActiveRef = useRef(false)
 
-  // Track pointer state without re-rendering.
   const pointersRef = useRef<Map<number, { x: number, y: number }>>(new Map())
   const pinchStartRef = useRef<{ dist: number, scale: number, centerX: number, centerY: number } | null>(null)
   // Per-pointer tap-tracking: captures pointerdown position and the maximum
@@ -777,7 +773,6 @@ export default function MapPage() {
     const anchorX = anchor ? (anchor.ax + anchor.bx) / 2 : mapW / 2
     const anchorY = anchor ? (anchor.ay + anchor.by) / 2 : mapH / 2
 
-    // Place (anchorX, anchorY) under the viewport center.
     const tx = viewportSize.w / 2 - anchorX * initialScale
     const ty = viewportSize.h / 2 - anchorY * initialScale
     const initial = clampTransform(
@@ -977,10 +972,10 @@ export default function MapPage() {
     rendererRef.current = renderer
     recovery.notifyAttemptSucceeded()
 
-    // preventDefault() is what tells the browser this page wants a context back;
-    // without it the loss is final, which is why the map used to stay dead. We
-    // rebuild on a fresh canvas rather than wait for webglcontextrestored, which
-    // the browser withholds while the page is hidden or the GPU is still down.
+    // preventDefault() tells the browser this page wants a context back.
+    // Without it the loss is final and the map stays dead. Rebuild on a fresh
+    // canvas rather than waiting for webglcontextrestored, which the browser
+    // withholds while the page is hidden or the GPU is still down.
     const onContextLost = (ev: Event) => {
       ev.preventDefault()
       console.warn('[map] WebGL context lost; scheduling recovery')

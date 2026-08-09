@@ -10,19 +10,16 @@ import {
 import { hopsToLegs, traceToHops, type Trace } from './materialise'
 
 /*
- * In-station walking a transfer distance does not include.
+ * In-station walking a transfer distance does not include. Transfers are
+ * surveyed gate to gate, but the rider walks door to door — along the platform,
+ * up to the concourse, through the gate line, and back down at the far end. On
+ * a KCI interchange that is the larger half of the trip, and omitting it made
+ * short transfers look free next to riding the same distance.
  *
- * Transfers are surveyed gate to gate. The rider's walk starts at a train door
- * and ends at another: along the platform, up to the concourse, out through the
- * gate line, and the same again in reverse at the far end. On a KCI interchange
- * that is comfortably the larger half of the trip, and leaving it out made short
- * transfers look free next to riding the same distance.
- *
- * A flat allowance rather than anything per-station: the engine knows nothing
- * about platform layouts, and inventing a number per station would imply a
- * precision that does not exist. Two values, because the gate line is the part
- * that varies — a noTap transfer stays inside the paid zone and skips it (see
- * GraphEdge.noTap), so it pays for circulation only.
+ * Flat rather than per-station: the engine knows nothing about platform
+ * layouts, so a number per station would imply precision that does not exist.
+ * Two values because only the gate line varies — a noTap transfer stays inside
+ * the paid zone and pays for circulation only.
  */
 export const GATED_TRANSFER_WALK_M = 250
 export const PAID_ZONE_TRANSFER_WALK_M = 100
@@ -79,34 +76,18 @@ export interface Journey {
 }
 
 /*
- * Measured on the real network (372 stops, 1293 edges, 116 transfers), Node 22,
- * steady state after warm-up, 8 representative ODs:
- *
- *   maxBagSize   median    max   journeys found
- *   4             2.0ms   6.2ms  1-4      <- default
- *
- * (Earlier, before the boardings bound below: bag4 was 4.2ms median / 6.7ms
- * max. The bound roughly halved it and cut the worst one-seat case — riding
- * LRT Jabodebek end to end — from 8.2ms to 2.0ms.)
- *
- * The budget is Cloudflare Workers' free tier: 10ms of CPU per request. bag4
- * sits comfortably inside it even at the worst OD, and returns up to four
- * distinct journeys — enough for "fastest / fewest changes / cheapest" to have
- * something to label. Past bag8 the extra width buys almost no new journeys,
- * because dedup collapses the near-identical ones anyway.
- *
- * These numbers are ~4x better than the first working version, from three
- * changes found by measuring rather than guessing: `dominates` built an array
- * of tuples per call (36.8% of samples, plus 19.3% in GC), Bag.insert rebuilt
- * its array with `filter` on every insert, and target pruning had no bound on
- * boardings so the search kept expanding long after the answer was known. The
- * algorithm never changed. If this needs to get faster again, profile first —
- * the shape of the cost has moved three times now, and each time the guess
- * would have been wrong.
+ * maxBagSize is bounded by Cloudflare Workers' free tier: 10ms of CPU per
+ * request. 4 sits inside it at the worst measured OD and still returns up to
+ * four distinct journeys, enough for the labels to have something to name. Past
+ * 8 the extra width buys almost no new journeys — dedup collapses the
+ * near-identical ones anyway.
  *
  * maxRounds stays at 4. Cutting it to 3 looks cheap but makes
  * MRTJ-LBB -> LRTJBDB-JTM unroutable entirely, because that journey genuinely
  * needs three boardings. Losing a route is worse than ranking one imperfectly.
+ *
+ * If this needs to get faster, profile first. The shape of the cost has moved
+ * three times, and each time the guess would have been wrong.
  */
 const DEFAULTS = {
   maxRounds: 4,
@@ -139,18 +120,15 @@ function expectedWaitS(lineCode: string, headwaysS: Map<string, number> | undefi
  * cost. Two things follow from that shape:
  *
  * 1. The line boarded is part of the label, so arriving at a stop on two
- *    different lines is two states. That is what findRoute could not express,
- *    and why its line-change penalty was applied against a predecessor a later
- *    relaxation might supersede.
+ *    different lines is two states.
  * 2. Journeys that trade one axis against another both survive, so the caller
  *    gets a genuine choice rather than one answer picked on the rider's behalf.
  *
- * Neither TRANSFER_PENALTY_M nor LINE_CHANGE_PENALTY_M applies here. Their own
- * comments say they proxy for the wait and hassle of changing vehicle, which
- * `boardings` and `waitS` now model outright — charging both would penalise a
- * transfer twice. The concourse allowance below is not a third copy of that: it
- * is walking distance the survey did not measure, and it applies to a walk
- * whether or not a vehicle change happens at either end of it.
+ * Neither TRANSFER_PENALTY_M nor LINE_CHANGE_PENALTY_M applies here. They proxy
+ * for the wait and hassle of changing vehicle, which `boardings` and `waitS`
+ * model outright — charging both penalises a transfer twice. The concourse
+ * allowance is not a third copy: it is walking distance the survey did not
+ * measure, and it applies whether or not a vehicle change happens.
  */
 export function plan(
   graph: RouteGraph,

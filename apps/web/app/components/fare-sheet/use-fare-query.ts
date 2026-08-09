@@ -20,30 +20,27 @@ import type { OperatorCode } from '@commute/schemas'
 const DOCUMENT_TITLE_PREFIX = 'Cek Tarif'
 
 export interface FareQueryOptions {
-  // Station ids to preselect, from a `/fare?from=&to=` deep link (or the
-  // station page's to-only `/fare?to=`). Applied once, the first time at least
-  // one side resolves against the station list — see deepLinkApplied.
-  // The search sheet passes nothing: it has no deep link and must not be coupled
-  // to the router's search params, which would let unrelated param changes stomp
-  // the user's selection.
+  // Station ids to preselect, from a `/fare?from=&to=` deep link. Applied once,
+  // the first time at least one side resolves — see deepLinkApplied. The search
+  // sheet passes nothing: coupling it to the router's search params would let
+  // unrelated param changes stomp the user's selection.
   initialPair?: { fromId: string | null, toId: string | null }
   /*
-   * Externally-owned pair. When present the hook stops holding the pair itself:
-   * origin/destination resolve from these ids, and a pick or a swap reports the
-   * new pair through onStateChange instead of setting local state.
+   * Externally-owned pair. The hook stops holding the pair itself: origin and
+   * destination resolve from these ids, and a pick or swap reports through
+   * onStateChange instead of setting local state.
    *
-   * The map needs this because the pair has three writers there — this panel's
-   * picker, a station tap on the canvas, and the chip's clear — and because the
-   * map's copy has to outlive the fare sheet, which unmounts when it closes.
+   * The map needs this because the pair has three writers there — the picker, a
+   * station tap on the canvas, and the chip's clear — and its copy must outlive
+   * the fare sheet, which unmounts on close.
    *
-   * Mutually exclusive with initialPair: an externally-owned pair is never a
-   * one-shot seed, so the deep-link latch below is skipped entirely.
+   * Mutually exclusive with initialPair: a controlled pair is never a one-shot
+   * seed, so the deep-link latch is skipped entirely.
    */
   controlledPair?: { fromId: string | null, toId: string | null }
-  // Called whenever the pair or the criteria change, so the caller can mirror
-  // both into the URL. Only /fare does this — the sheet leaves the address bar
-  // alone. One callback rather than two because they share a query string:
-  // writing either separately would clobber the other.
+  // Called whenever the pair or criteria change, so the caller can mirror both
+  // into the URL. Only /fare does this. One callback rather than two because
+  // they share a query string: writing either separately clobbers the other.
   onStateChange?: (fromId: string | null, toId: string | null, criteria: FareCriteria) => void
   // Criteria named by the incoming URL, which beat stored preferences for this
   // visit. Applied once, like initialPair.
@@ -52,22 +49,18 @@ export interface FareQueryOptions {
   // routes, where the title is the page's; off in the search sheet, which owns
   // its own title.
   syncDocumentTitle?: boolean
-  /*
-   * Ask for every journey worth choosing between, from `/_internal/trips`,
-   * rather than the single route `/fares` returns. Driven by the router toggle
-   * on every surface that offers one — see the endpoint comment below.
-   */
+  // Ask `/_internal/trips` for every journey worth choosing between, rather
+  // than the single route `/fares` returns. Driven by the router toggle.
   alternatives?: boolean
   /*
    * Hold the fetch until the caller's own async state has landed. Defaults to
    * true, so a caller with nothing to wait for is unaffected.
    *
-   * /fare passes `routerReady` here. `alternatives` decides which endpoint is
-   * queried, and it is read from storage after mount like the criteria below —
-   * so without this gate a beta rider's first paint fires at /fares and the
-   * next render fires again at /_internal/trips. That is worse than the double
-   * request `criteriaReady` prevents: it warms a KV and edge entry on an
-   * endpoint the rider will never read from, on the more expensive of the two.
+   * /fare passes `routerReady` here. `alternatives` picks the endpoint and is
+   * read from storage after mount, so without this gate a beta rider's first
+   * paint fires at /fares and the next render fires again at /_internal/trips —
+   * warming a KV and edge entry on an endpoint the rider never reads, on the
+   * more expensive of the two.
    */
   gate?: boolean
 }
@@ -133,9 +126,8 @@ export function useFareQuery({
 }: FareQueryOptions = {}): FareQuery {
   const controlled = controlledPair !== undefined
   // The prebuilt search index, shared with the search sheet through the same
-  // SWR key — opening both surfaces now costs one fetch, not two overlapping
-  // station lists. It also already carries everything the picker needs, so the
-  // /stations call this used to make is gone: see pickable-station.ts.
+  // SWR key, so opening both surfaces costs one fetch. It carries everything
+  // the picker needs — see pickable-station.ts.
   const { searchables } = useSearchables()
   // Only used when uncontrolled; a controlled caller owns the pair and these
   // stay null. Resolution of the controlled ids happens below, once the station
@@ -172,13 +164,10 @@ export function useFareQuery({
   }, [])
 
   /*
-   * The handlers below are memoized because FarePanel stays mounted (just
-   * hidden) behind the search sheet's mode toggle — so as plain declarations
-   * they handed it a brand-new prop surface on every keystroke typed in STATION
-   * mode, re-rendering a panel nobody was looking at.
-   *
-   * Deps are the values each one actually closes over; the two that only drive
-   * setters are genuinely stable.
+   * Keep the handlers below memoized. FarePanel stays mounted, just hidden,
+   * behind the search sheet's mode toggle, so plain declarations hand it a new
+   * prop surface on every keystroke typed in STATION mode and re-render a panel
+   * nobody is looking at.
    */
   const openPickerFor = useCallback((target: 'origin' | 'destination') => {
     setPickerTarget(target)
@@ -186,10 +175,9 @@ export function useFareQuery({
   }, [])
   const closePicker = useCallback(() => setPickerOpen(false), [])
 
-  // No filtering left to do here: the index is already Jabodetabek-only and
-  // already excludes the topology-only stops (TJ feeder/non-BRT) that would
-  // otherwise balloon the picker to ~2,300 rows. That used to be a client-side
-  // `regionCode === 'CGK' && searchable` pass over the full station list.
+  // No filtering needed: the index is already Jabodetabek-only and excludes the
+  // topology-only stops (TJ feeder/non-BRT) that would balloon the picker to
+  // ~2,300 rows.
   const allPickableStations = useMemo(
     () => toPickableStations(searchables),
     [searchables]
@@ -269,8 +257,7 @@ export function useFareQuery({
     if (toStation) setDestinationState(toStation)
   }, [allPickableStations, fromId, toId, controlled])
 
-  // "Cek Tarif Bekasi ke Blok A - Commute". Was a prop while /trip rendered
-  // this sheet under its own heading; /fare is the only titled surface now.
+  // "Cek Tarif Bekasi ke Blok A - Commute". /fare is the only titled surface.
   useEffect(() => {
     if (!syncDocumentTitle) return
     if (origin && destination) {

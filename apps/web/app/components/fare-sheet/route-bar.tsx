@@ -83,12 +83,12 @@ export default function RouteBar({ segments }: { segments: RouteBarSegment[] }) 
           >
             <span className="absolute inset-x-0 rounded-full" style={{ height: RAIL_WIDTH_PX, ...fill }} />
             {/*
-              * The boarding point, at the head of its leg. Unconditional: an
-              * earlier pass sized the badge to its segment and degraded it away
-              * below a threshold, which hid it exactly where it was needed most
-              * — a 634m hop between two long rides is the leg a rider is least
-              * able to guess and the one guaranteed to be too narrow to name
-              * itself. The segment's own minimum width keeps room for it now.
+              * The boarding point, at the head of its leg. Keep it
+              * unconditional: sizing the badge to its segment hides it exactly
+              * where it is needed most — a 634m hop between two long rides is
+              * the leg a rider is least able to guess and the one guaranteed to
+              * be too narrow to name itself. The segment's minimum width keeps
+              * room for it.
               *
               * Styled the way the operator signs itself — TJ corridors filled,
               * rail ringed — which is what LineRoundel infers from `operator`.

@@ -16,9 +16,7 @@ import { useFareQuery } from './use-fare-query'
 // SEO-decorates `/fare`, the OG image worker is keyed on it, and the sitemap
 // lists it. The search sheet renders the same FarePanel but never writes these
 // URLs — see use-fare-query.ts.
-// The heading, the close-button label and the document title all say the same
-// thing. Was a prop while /trip rendered this sheet under its own name; /fare
-// is the only caller now, so the wording lives here.
+// The heading, the close-button label and the document title all say this.
 const TITLE = 'Cek Tarif'
 
 export default function FareSheet() {
@@ -43,9 +41,8 @@ export default function FareSheet() {
   // and keeping history.state intact preserves SheetButton's modalOpen flag.
   //
   // One writer for the pair AND the criteria: they share a query string, so
-  // writing either on its own would wipe the other. Picking a station used to
-  // rebuild the params from scratch, which would now silently drop a chosen
-  // payment method.
+  // writing either on its own wipes the other. Never rebuild the params from
+  // scratch here — that silently drops a chosen payment method.
   // Stable identity: this is `onStateChange`, which the fare handlers in
   // useFareQuery close over — a fresh function each render would churn their
   // dep arrays and undo their memoization. It reads only its arguments.

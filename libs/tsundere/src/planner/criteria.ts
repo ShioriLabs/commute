@@ -1,11 +1,10 @@
 /*
- * The criteria a journey is judged on, and what it means for one journey to be
- * better than another.
+ * The criteria a journey is judged on, and what makes one journey better than
+ * another.
  *
- * Five axes rather than the single weighted scalar `findRoute` minimises. That
- * is the whole point: "shortest" and "fewest changes" and "least walking" are
- * genuinely different questions, and collapsing them into one number picks an
- * answer on the rider's behalf.
+ * Five axes rather than one weighted scalar. "Shortest", "fewest changes" and
+ * "least walking" are different questions, and collapsing them into one number
+ * picks an answer on the rider's behalf.
  */
 export interface Criteria {
   /** Vehicle boardings. Equals the round index, so it is free. */
@@ -87,14 +86,13 @@ export function effectiveWalkM(criteria: Criteria): number {
 /*
  * Riding and walking, in one comparable quantity.
  *
- * Comparing in-vehicle metres on their own is what let a journey alight, walk
- * parallel to the line, and re-board it: shorter on the ride axis, longer on the
- * walk axis, therefore non-dominated no matter how bad the trade. Charging the
- * walk into the same axis makes a swap of riding for walking a loss unless the
- * walk actually saves distance worth saving, which is the real-world rule.
+ * Comparing in-vehicle metres alone lets a journey alight, walk parallel to the
+ * line and re-board: shorter on the ride axis, longer on the walk axis, so
+ * non-dominated no matter how bad the trade. Charging the walk into the same
+ * axis makes that swap a loss unless the walk saves real distance.
  *
- * Walking still keeps its own axis as well, so a rider who wants to walk less
- * than the shortest journey does can still be offered that.
+ * Walking keeps its own axis too, so a rider who wants to walk less than the
+ * shortest journey does can still be offered that.
  */
 const travelCostM = (criteria: Criteria) =>
   criteria.rideDistanceM + effectiveWalkM(criteria) * WALK_DISTANCE_COST
@@ -112,13 +110,9 @@ const travelCostM = (criteria: Criteria) =>
  */
 export function dominates(a: Criteria, b: Criteria): boolean {
   /*
-   * Written out axis by axis rather than looped over an array of pairs.
-   *
-   * This is the hottest function in the engine — a profile at bag size 8 put
-   * 36.8% of samples here and another 19.3% in the garbage collector. The
-   * readable version allocated five tuples plus an array on every call and then
-   * destructured each one, which is millions of short-lived objects per query.
-   * Same logic, same result, no allocation.
+   * Written out axis by axis, not looped over an array of pairs. This is the
+   * hottest function in the engine, and the readable version allocated five
+   * tuples plus an array per call. Keep it allocation-free.
    *
    * Ordered cheapest-comparison-first: `boardings` is a bare integer and the
    * most discriminating axis, so it rejects most pairs before any bucketing
@@ -163,9 +157,7 @@ export function dominates(a: Criteria, b: Criteria): boolean {
  *
  * Metres are the base unit. Waiting is charged at roughly ten times riding per
  * second, since a bus covers ~10m in the second you spend waiting for it.
- * Walking is twice riding per metre. A boarding costs 600m, which lands in the
- * same range as the LINE_CHANGE_PENALTY_M the old router used for the same
- * instinct.
+ * Walking is twice riding per metre. A boarding costs 600m.
  */
 export interface RankWeights {
   rideDistanceM: number

@@ -110,13 +110,8 @@ export function routeBarSegments(legs: readonly FareResultLeg[], resolve: LineRe
 }
 
 /*
- * There is deliberately no fit test here.
- *
- * An earlier pass sized the roundel to its segment and degraded it — roundel,
- * bare code, then colour alone — as the leg got narrower. It measured
- * correctly and was exactly backwards: a 634m hop between two long rides is
- * 3% of the bar, so it rendered as an anonymous stub, and that short
- * unfamiliar leg is precisely the one a rider cannot guess. The roundel marks
- * a boarding point, and a point has no width, so it now overhangs a leg too
- * short to contain it instead of disappearing into it.
+ * Do not add a fit test here. Sizing the roundel to its segment hides it on
+ * exactly the short unfamiliar legs a rider cannot guess. The roundel marks a
+ * boarding point, and a point has no width, so it overhangs a leg too short to
+ * contain it. See route-bar.tsx.
  */

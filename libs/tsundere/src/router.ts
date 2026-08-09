@@ -2,14 +2,10 @@ import { hopsToLegs, type Hop } from './planner/materialise'
 import { MinHeap } from './heap'
 
 /*
- * Structural inputs to buildGraph.
- *
- * These used to be `Pick<Edge, …>` / `Pick<Transfer, …>` against the API's
- * Kysely row types, which is what tied a dependency-free routing engine to a
- * database schema. They were only ever consumed structurally, so declaring the
- * shape here severs that without changing a single call site: a real
- * `Selectable<EdgeSchema>` row still satisfies EdgeInput, and the test fixtures
- * that omit id/timestamps still typecheck.
+ * Structural inputs to buildGraph. Declared here rather than derived from the
+ * API's Kysely row types, which would tie this package to a database schema.
+ * Keep them structural: a real `Selectable<EdgeSchema>` row satisfies EdgeInput,
+ * and test fixtures that omit id/timestamps still typecheck.
  */
 export interface EdgeInput {
   lineCode: string

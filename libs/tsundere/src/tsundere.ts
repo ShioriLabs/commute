@@ -11,17 +11,12 @@ import {
 } from './router'
 
 /*
- * The loaded-network handle.
+ * The loaded-network handle. `loadGraph(...)` once, then query it.
  *
- * `loadGraph(...)` once, then query it. The alternative — exporting free
- * functions that each take a RouteGraph — means every caller threads the graph
- * through by hand, and every future capability (multi-criteria search, headway
- * lookups, the by-line index a round-based scan needs) either grows the
- * parameter list or grows RouteGraph into a bag of unrelated maps.
- *
- * Holding it here also gives derived indexes an obvious home: they are built
- * once at load, beside the data they index, rather than recomputed per query or
- * bolted onto the graph object after the fact.
+ * Add capabilities as methods here rather than as free functions taking a
+ * RouteGraph — those make every caller thread the graph through by hand, and
+ * each new one either grows the parameter list or grows RouteGraph into a bag
+ * of unrelated maps. Derived indexes belong here too, built once at load.
  */
 export interface LoadGraphInput {
   edges: EdgeInput[]
@@ -108,11 +103,8 @@ export class Tsundere {
  * because mapping them is the caller's job.
  *
  * Node ids are opaque here with exactly one exception: leg assembly splits on
- * '-' to fill `RideLeg.operator` (see planner/materialise.ts). That is a real
- * layering leak, kept because the field is load-bearing downstream — the API's
- * fare logic switches per-operator tariffs on it — and threading an id parser
- * through the engine buys nothing while the format holds for every operator in
- * the network.
+ * '-' to fill `RideLeg.operator`. See planner/materialise.ts, which documents
+ * why that leak is kept.
  */
 export function loadGraph({ edges, transfers, restrictions, serviceBreaks, headwaysS }: LoadGraphInput): Tsundere {
   return new Tsundere(buildGraph(edges, transfers, restrictions, serviceBreaks), headwaysS)

@@ -1,11 +1,8 @@
 import type { FareJourney, FareJourneyLabel, FareResult, TripResult } from '@commute/schemas'
 
-/*
- * Bridging a fare answer to the list of alternatives it may or may not carry.
- *
- * Lives in a `.ts` rather than the component so it can be tested: the vitest
- * config collects `.test.ts` only, so anything in a `.tsx` is uncoverable.
- */
+// Bridges a fare answer to the list of alternatives it may or may not carry.
+// Kept in a `.ts` so it is testable — vitest collects `.test.ts` only, so
+// anything in a `.tsx` is uncoverable.
 
 /**
  * The journeys to render, from either endpoint's answer.

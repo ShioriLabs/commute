@@ -1,18 +1,11 @@
-// Which router answers a fare query.
+// Which router answers a fare query. `standard` is /fares, one route. `beta`
+// is /_internal/trips, several journeys labelled against each other. These are
+// different answers, not one answer rendered twice.
 //
-// `standard` is /fares: one route, the answer this app has always given, and
-// the one the OG card and the TransportForJakarta embed are built around.
-// `beta` is /_internal/trips: several journeys, each labelled against the
-// others. They are genuinely different answers, not the same answer rendered
-// twice — findRoutes weighs a saved boarding against a longer ride, so on some
-// pairs it leads with a route /fares would rank second (Bogor -> Lebak Bulus
-// becomes a one-transfer Rp 20.000 route where /fares returns the
-// three-transfer Rp 17.500 one).
-//
-// Kept out of FareCriteria on purpose. Criteria are query params the API is
-// asked to price under; this picks which endpoint is asked at all. Folding it
-// in would send `?router=` to a server that ignores it while still splitting
-// the SWR key, the service worker's cache entry and the edge cache.
+// Kept out of FareCriteria on purpose. Criteria are query params the API prices
+// under; this picks which endpoint is asked at all. Folding it in would send
+// `?router=` to a server that ignores it while still splitting the SWR key, the
+// service worker cache entry and the edge cache.
 export type FareRouter = 'standard' | 'beta'
 
 export const FARE_ROUTER_KEY = 'fare-router'
@@ -45,16 +38,12 @@ export function writeFareRouter(router: FareRouter) {
 }
 
 /*
- * Deliberately no URL representation.
+ * Do not give this a URL representation. Storage is the only source, so there
+ * is one answer to "which router is this rider on" and nothing to reconcile.
+ * A `?router=` param makes a shared link a third opinion alongside storage and
+ * the toggle, and the rules it then needs — beta honoured but standard ignored,
+ * applied for a visit but not persisted — cost more than they buy.
  *
- * The router lives in storage and nowhere else, so there is exactly one answer
- * to "which router is this rider on" and no second source to reconcile it
- * against. A `?router=` param was tried and removed: it made a shared or
- * reported link a third opinion alongside storage and the toggle, and the
- * reconciliation rules it needed — beta honoured but standard ignored, applied
- * for a visit but not persisted — were more machinery than the diagnosis it
- * bought.
- *
- * The consequence to accept is that a URL alone does not say which router
- * produced an answer. Nothing about a fare URL changes when the toggle moves.
+ * Accept the consequence: a fare URL does not say which router produced it, and
+ * nothing about it changes when the toggle moves.
  */

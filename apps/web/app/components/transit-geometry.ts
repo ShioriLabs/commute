@@ -1,10 +1,7 @@
 /*
- * The rail vocabulary, shared by the line strip and the fare timeline.
- *
- * These live outside either component folder because two unrelated surfaces now
- * draw the same object at different gauges: the line strip's full-page rail and
- * the fare card's compact itinerary. Keeping the numbers in one place is what
- * stops the two drifting into subtly different diagrams of the same network.
+ * The rail vocabulary, shared by the line strip and the fare timeline. Two
+ * unrelated surfaces draw the same object at different gauges, so the numbers
+ * live here to stop the two drifting into different diagrams of one network.
  */
 
 /* The rail is a 6px bar whose centerline sits at RAIL_CENTER within the row's
@@ -23,15 +20,13 @@ export const FARE_RAIL_CENTER_PX = 14
 export const FARE_GUTTER_CLASS = 'grid-cols-[1.75rem_1fr]'
 
 /*
- * The narrowest a ride segment is allowed to be drawn: one SM roundel.
+ * The narrowest a ride segment may be drawn: one SM roundel.
  *
- * A leg's width is its share of the ground covered, but a 634m hop beside a
- * 14km run is 3% of the bar — narrower than the roundel marking where you board
- * it, so the badge overhung into the next leg and the two read as one clump.
- * Flooring every segment at the badge it carries costs strict proportionality:
- * a floored leg takes its width from the rest, so the long legs are drawn very
- * slightly short. Worth it — the bar is read as a sequence of services first and
- * a distance chart second, and legibility of the sequence is the whole job.
+ * A leg's width is its share of the ground covered, so a short hop beside a
+ * long run falls narrower than the roundel marking where you board it. Flooring
+ * each segment at its badge costs strict proportionality — a floored leg takes
+ * its width from the rest — and that trade is deliberate: the bar reads as a
+ * sequence of services first and a distance chart second.
  */
 export const ROUTE_BAR_MIN_SEGMENT_PX = 24
 
