@@ -2,16 +2,12 @@ import { Hono } from 'hono'
 import { FareContext, PAYMENT_METHODS, PaymentMethod } from '@commute/constants'
 import { Bindings } from 'app'
 import { EdgeRepository } from 'db/repositories/edges'
-import { KVRepository } from 'db/repositories/kv'
-import { StationRepository } from 'db/repositories/stations'
-import { fareTimeBucket } from 'utils/fare'
-import { assembleJourney, planJourney, stationNamer } from 'utils/fare-journey'
-import { Internal, NotFound, Ok } from 'utils/response'
+import { assembleJourney, planJourney } from 'utils/fare-journey'
+import { handleJourneyRequest, journeyCacheKey } from 'utils/journey-endpoint'
 import { ENDPOINT_RESTRICTIONS, SERVICE_BREAKS } from 'db/data/topology'
 import { loadGraph, type Tsundere } from '@commute/tsundere'
 import { HEADWAYS_S } from 'db/data/headways'
 import { doc, pathParam, queryParam } from 'schemas/describe'
-import { ServerTiming } from 'utils/server-timing'
 import { FareResultSchema, type FareResult } from '@commute/schemas'
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -66,7 +62,7 @@ export function parseFareContext(paymentMethodRaw?: string, atRaw?: string): Far
 // Fare depends on payment method + time bucket; key on both so peak/off-peak
 // and integrated fares (steps 2 & 4) can't be served a stale cached body.
 export function fareCacheKey(fromId: string, toId: string, context: FareContext, apiVersion: string): string {
-  return `fares:${fromId}:${toId}:${context.paymentMethod}:${fareTimeBucket(context.departureAt)}:${apiVersion}`
+  return journeyCacheKey('fares', fromId, toId, context, apiVersion)
 }
 
 app.get(
@@ -87,46 +83,9 @@ app.get(
       500: 'Perhitungan tarif gagal (`DATABASE_ERROR`).'
     }
   }),
-  async (c) => {
-    const fromId = c.req.param('from')
-    const toId = c.req.param('to')
-    if (fromId === toId) {
-      return c.json(NotFound('SAME_STATION', 'Origin and destination are the same station.'), 404)
-    }
-
-    const context = parseFareContext(c.req.query('paymentMethod'), c.req.query('at'))
-
-    /*
-     * Phase timings, surfaced as Server-Timing on the response.
-     *
-     * The split is the point: routing is the part everyone assumes is
-     * expensive, and off-worker measurement put it at ~0.5 ms against a 17-51
-     * ms cold request. This is how that gets confirmed on workerd rather than
-     * inferred from a laptop benchmark.
-     */
-    const timing = new ServerTiming()
-
-    const kvRepository = new KVRepository(c.env.KV)
-    const kvKey = fareCacheKey(fromId, toId, context, c.env.API_VERSION)
-
-    const cached = await timing.measure('kv', () => kvRepository.get<FareResult>(kvKey))
-    if (cached) {
-      // A hit is the whole request, so `kv` alone already tells the story: no
-      // route was computed, and the absence of the other spans says so.
-      c.header('Server-Timing', timing.header())
-      return c.json(Ok(cached), 200)
-    }
-
-    const stationRepository = new StationRepository(c.env.DB)
-
-    try {
-      const endpoints = await timing.measure('endpoints', () => stationRepository.getByIds([fromId, toId]))
-      if (endpoints.length < 2) {
-        return c.json(NotFound('UNKNOWN_STATION', 'One or both stations do not exist.'), 404)
-      }
-
-      // Cached per isolate, so this is ~0 on every request after the first.
-      const router = await timing.measure('graph', () => getRouter(c.env.DB))
+  async c => handleJourneyRequest<FareResult>(c, getRouter, parseFareContext, {
+    keyPrefix: 'fares',
+    build: async ({ router, timing, context, fromId, toId, hydrate }) => {
       /*
        * Still findRoute, singular, and deliberately so.
        *
@@ -143,18 +102,15 @@ app.get(
        * journey — only in how many they return.
        */
       const rawLegs = timing.measureSync('route', () => router.findRoute(fromId, toId))
-      if (!rawLegs) {
-        return c.json(NotFound('NO_ROUTE', 'No route between these stations.'), 404)
-      }
+      if (!rawLegs) return null
 
       // No criteria and no labels: findRoute produces neither, and a single
       // answer has nothing to be labelled against anyway.
       const plan = timing.measureSync('plan', () => planJourney(rawLegs, null, [], context))
-      const stations = await timing.measure('hydrate', () => stationRepository.getByIds(plan.stationIds))
-      const namer = stationNamer(stations)
+      const namer = await hydrate(plan.stationIds)
       const journey = timing.measureSync('assemble', () => assembleJourney(plan, namer, context))
 
-      const result: FareResult = {
+      return {
         from: namer.ref(fromId),
         to: namer.ref(toId),
         legs: journey.legs,
@@ -164,16 +120,8 @@ app.get(
         transferCount: journey.transferCount
         // No `journeys`: this endpoint answers with one route, as it always has.
       }
-
-      c.executionCtx.waitUntil(kvRepository.set(kvKey, result))
-
-      c.header('Server-Timing', timing.header())
-      return c.json(Ok(result), 200)
-    } catch (error) {
-      console.error(error)
-      return c.json(Internal('DATABASE_ERROR', 'Can\'t connect to database, please try again later.'), 500)
     }
-  }
+  })
 )
 
 export default app
