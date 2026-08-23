@@ -162,9 +162,13 @@ export const MRTJ_STATIONS_BY_SLUG: Record<string, { code: string, name: string 
  * NOTE: two of these codes diverge from the initials LRT Jakarta is submitting
  * for GAPEKA (which follow the AFC system): PGD is KPG there, and EQS is EQT.
  * Ours are kept as-is deliberately — the codes are load-bearing across
- * stations.id, edges, schedules and the curated map points, and renaming them
- * buys nothing until Phase 1B opens and renumbers these platforms anyway.
- * Revisit both together when Phase 1B is commissioned.
+ * stations.id, edges, schedules and the curated map points.
+ *
+ * Phase 1B opened 2026-08-26 without disturbing either: the platform signage
+ * renumbered the line S01..S11 but still names S01 Kelapa Gading and S05
+ * Equestrian, so both codes still read true. Phase 1B's own S09/S10 codes are
+ * the ones now out of step with their names — see the note in
+ * db/data/topology.ts.
  */
 export const LRTJ_STATION_CODES: Record<number, string> = {
   6: 'PGD',

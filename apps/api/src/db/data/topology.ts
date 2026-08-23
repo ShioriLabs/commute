@@ -337,10 +337,15 @@ export const TOPOLOGY: LineTopology[] = [
       { station: 'EQS', pos: 'S05' },
       { station: 'VEL', pos: 'S06' },
       // Phase 1B (Velodrome -> Manggarai), in revenue service 2026-08-26.
+      // KYM and MAT are misnomers: the names were reshuffled shortly before
+      // opening, so S09 is now Matraman and S10 is Proklamasi (Kayu Manis is
+      // not on the line). The codes stay because they key stations.id, edges,
+      // stationLines and the map points, and the stops themselves did not move.
+      // Read the name from the DB, never from the code here.
       { station: 'RWM', pos: 'S07' },
       { station: 'PKA', pos: 'S08' },
-      { station: 'KYM', pos: 'S09' },
-      { station: 'MAT', pos: 'S10' },
+      { station: 'KYM', pos: 'S09' }, // Matraman
+      { station: 'MAT', pos: 'S10' }, // Proklamasi
       { station: 'MGI', pos: 'S11' }
     ]
   },

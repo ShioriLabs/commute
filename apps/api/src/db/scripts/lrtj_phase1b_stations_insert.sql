@@ -18,8 +18,12 @@ INSERT OR IGNORE INTO stations
 VALUES
   ('LRTJ-RWM', 'Stasiun Rawamangun', 'RWM', 'Rawamangun', 'Jabodetabek', 'CGK', 'LRTJ', 0, 0, 0),
   ('LRTJ-PKA', 'Stasiun Pramuka',    'PKA', 'Pramuka',    'Jabodetabek', 'CGK', 'LRTJ', 0, 0, 0),
-  ('LRTJ-KYM', 'Stasiun Kayu Manis', 'KYM', 'Kayu Manis', 'Jabodetabek', 'CGK', 'LRTJ', 0, 0, 0),
-  ('LRTJ-MAT', 'Stasiun Matraman',   'MAT', 'Matraman',   'Jabodetabek', 'CGK', 'LRTJ', 0, 0, 0),
+  -- KYM/MAT keep their ids and codes: the stops are unchanged, only the names
+  -- were reshuffled before opening (S09 Kayu Manis -> Matraman, S10 Matraman ->
+  -- Proklamasi), and the codes are load-bearing across edges and stationLines.
+  -- Realign them with the official initials when FDTJ/Wikipedia publish them.
+  ('LRTJ-KYM', 'Stasiun Matraman',   'KYM', 'Matraman',   'Jabodetabek', 'CGK', 'LRTJ', 0, 0, 0),
+  ('LRTJ-MAT', 'Stasiun Proklamasi', 'MAT', 'Proklamasi', 'Jabodetabek', 'CGK', 'LRTJ', 0, 0, 0),
   ('LRTJ-MGI', 'Stasiun Manggarai',  'MGI', 'Manggarai',  'Jabodetabek', 'CGK', 'LRTJ', 0, 0, 0);
 
 -- Line membership with the official per-line codes, continuing S01..S06.
