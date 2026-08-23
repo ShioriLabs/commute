@@ -336,15 +336,12 @@ export const TOPOLOGY: LineTopology[] = [
       { station: 'PUM', pos: 'S04' },
       { station: 'EQS', pos: 'S05' },
       { station: 'VEL', pos: 'S06' },
-      // Phase 1B (Velodrome -> Manggarai), under construction. Seeded with
-      // searchable = 0 (lrtj_phase1b_stations_insert.sql) to stay out of the
-      // pickers; `unbuilt` keeps them out of the graph, since searchable only
-      // hides a station from search and leaves it routable.
-      { station: 'RWM', pos: 'S07', unbuilt: true },
-      { station: 'PKA', pos: 'S08', unbuilt: true },
-      { station: 'KYM', pos: 'S09', unbuilt: true },
-      { station: 'MAT', pos: 'S10', unbuilt: true },
-      { station: 'MGI', pos: 'S11', unbuilt: true }
+      // Phase 1B (Velodrome -> Manggarai), in revenue service 2026-08-26.
+      { station: 'RWM', pos: 'S07' },
+      { station: 'PKA', pos: 'S08' },
+      { station: 'KYM', pos: 'S09' },
+      { station: 'MAT', pos: 'S10' },
+      { station: 'MGI', pos: 'S11' }
     ]
   },
 

@@ -2,7 +2,7 @@
 import { useCallback, useState } from 'react'
 import { CaretLeftIcon } from '@phosphor-icons/react'
 import CommuteLogotype from 'public/img/logotype.svg'
-import { useMapUnlock } from '~/hooks/secret-features'
+import { useMapGlDebug } from '~/hooks/secret-features'
 
 export function meta() {
   return [
@@ -13,29 +13,29 @@ export function meta() {
 
 declare const __APP_VERSION__: string
 
-// Taps on the version line needed to reveal the unreleased map. Stays silent
-// for the first few so it can't be stumbled into by an idle tap; the counter
-// is component state, so leaving the page resets it.
+// Taps on the version line needed to turn on the map's renderer
+// instrumentation. Stays silent for the first few so it can't be stumbled into
+// by an idle tap; the counter is component state, so leaving the page resets it.
 const UNLOCK_TAP_COUNT = 7
 const TAPS_BEFORE_HINT = 4
 
 export default function AboutSettingsPage() {
-  const { isUnlocked, setUnlocked } = useMapUnlock()
+  const { isEnabled, setEnabled } = useMapGlDebug()
   const [tapCount, setTapCount] = useState(0)
 
   const handleVersionTap = useCallback(() => {
-    if (isUnlocked) return
+    if (isEnabled) return
     const next = tapCount + 1
     setTapCount(next)
-    if (next >= UNLOCK_TAP_COUNT) setUnlocked(true)
-  }, [isUnlocked, tapCount, setUnlocked])
+    if (next >= UNLOCK_TAP_COUNT) setEnabled(true)
+  }, [isEnabled, tapCount, setEnabled])
 
   const handleHideButtonClick = useCallback(() => {
-    setUnlocked(false)
+    setEnabled(false)
     setTapCount(0)
-  }, [setUnlocked])
+  }, [setEnabled])
 
-  const showTapHint = !isUnlocked && tapCount >= TAPS_BEFORE_HINT
+  const showTapHint = !isEnabled && tapCount >= TAPS_BEFORE_HINT
 
   return (
     <main className="bg-white w-full h-full overflow-y-auto pb-4 min-h-screen">
@@ -80,11 +80,11 @@ export default function AboutSettingsPage() {
               {UNLOCK_TAP_COUNT - tapCount} langkah lagi...
             </span>
           )}
-          {isUnlocked && (
+          {isEnabled && (
             <span className="block mt-2 text-slate-400">
-              Peta integrasi aktif{' '}
+              Mode debug peta aktif{' '}
               <button type="button" onClick={handleHideButtonClick} className="underline cursor-pointer">
-                Sembunyikan
+                Matikan
               </button>
             </span>
           )}

@@ -69,13 +69,15 @@ describe('TJ station numbers', () => {
 })
 
 describe('unbuilt stops', () => {
-  it('keeps LRT Jakarta Phase 1B on the line but flagged', () => {
+  it('carries LRT Jakarta Phase 1B as open track', () => {
+    // Phase 1B (S07-S11) entered revenue service 2026-08-26. The stops stay
+    // asserted here because the graph now depends on them: dropping one would
+    // silently sever Velodrome from Manggarai rather than fail loudly.
     const s = TOPOLOGY.find(l => l.operator === 'LRTJ' && l.lineCode === 'S')!
     expect(s.path.map(p => p.pos)).toEqual([
       'S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07', 'S08', 'S09', 'S10', 'S11'
     ])
-    expect(s.path.filter(p => p.unbuilt).map(p => p.station))
-      .toEqual(['RWM', 'PKA', 'KYM', 'MAT', 'MGI'])
+    expect(s.path.filter(p => p.unbuilt)).toEqual([])
   })
 
   it('never places an unbuilt stop between two open ones', () => {

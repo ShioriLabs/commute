@@ -149,7 +149,7 @@ export default function SearchContent({ title, closeButton }: Props) {
   const [savedStations, setSavedStations] = useState<string[]>([])
   // Station mode is the correct first paint on the server and for a first-time
   // visitor, so the stored preference is read after mount (see the same pattern
-  // in app/hooks/secret-features.ts useMapUnlock).
+  // in app/hooks/secret-features.ts useMapGlDebug).
   const [mode, setMode] = useState<SearchMode>('STATION')
   // The fare panel mounts on first entry to route mode and then stays mounted,
   // hidden — toggling away and back must not lose the chosen station pair.
