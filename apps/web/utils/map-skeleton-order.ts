@@ -114,6 +114,33 @@ function distanceSquared(p: Point, x: number, y: number): number {
   return (p[0] - x) ** 2 + (p[1] - y) ** 2
 }
 
+/*
+ * Line colours are compared with a tolerance because each FDTJ edition is
+ * re-rasterised from the source PDF, and colour-profile rounding moves channels
+ * by a step or two without any design change: the 2026-06a -> 2026-08 rebuild
+ * shifted every line (#00BDEF -> #00BDEE, #EF3637 -> #EE3637, …). Exact string
+ * equality made the spawn table silently stop matching, which shows up as lines
+ * drawing from the wrong end rather than as an error.
+ *
+ * 8 per channel is far tighter than the gap between any two FDTJ line colours
+ * (the closest pair differs by ~30), so this cannot merge distinct lines.
+ */
+const COLOUR_TOLERANCE = 8
+
+function channels(hex: string): [number, number, number] | null {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex)
+  if (!m) return null
+  return [parseInt(m[1]!, 16), parseInt(m[2]!, 16), parseInt(m[3]!, 16)]
+}
+
+export function sameColour(a: string, b: string): boolean {
+  if (a === b) return true
+  const ca = channels(a)
+  const cb = channels(b)
+  if (!ca || !cb) return false
+  return ca.every((v, i) => Math.abs(v - cb[i]!) <= COLOUR_TOLERANCE)
+}
+
 /**
  * Splits a polyline at its closest vertex to the anchor when that vertex is interior, so a
  * corridor passing through Manggarai grows away from it in both directions at once. Each
@@ -146,7 +173,7 @@ function findSpawn(
   points: readonly Point[],
   spawns: readonly SkeletonSpawn[]
 ): SkeletonSpawn | null {
-  return spawns.find(spawn => spawn.c === colour && touchesSpawn(points, spawn)) ?? null
+  return spawns.find(spawn => sameColour(spawn.c, colour) && touchesSpawn(points, spawn)) ?? null
 }
 
 /**
@@ -245,14 +272,14 @@ export function orderSkeleton(
   for (const spawn of spawns) {
     if (!spawn.chain) continue
     const headIndex = parsed.findIndex((stroke, index) =>
-      !claimed.has(index) && stroke.c === spawn.c && touchesSpawn(stroke.points, spawn))
+      !claimed.has(index) && sameColour(stroke.c, spawn.c) && touchesSpawn(stroke.points, spawn))
     if (headIndex === -1) continue
 
     const head = parsed[headIndex]
     claimed.add(headIndex)
     const pool = parsed
       .map((stroke, index) => ({ index, points: stroke.points, c: stroke.c, w: stroke.w }))
-      .filter(entry => !claimed.has(entry.index) && entry.c === head.c && entry.w === head.w)
+      .filter(entry => !claimed.has(entry.index) && sameColour(entry.c, head.c) && entry.w === head.w)
 
     const { points, used } = chainFrom(orient(head.points, spawn.x, spawn.y), pool)
     for (const index of used) claimed.add(index)

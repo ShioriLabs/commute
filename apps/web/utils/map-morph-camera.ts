@@ -24,9 +24,12 @@ export const FDTJ_PREVIEW_W = 1280
 export const FDTJ_PREVIEW_H = 905
 
 // Midpoint of the KCI-MRI (Manggarai) tap target in app/data/points.json —
-// the anchor map.tsx centers under the viewport on first load.
-export const FDTJ_ANCHOR_X = (4896.767099009742 + 4838.633581190369) / 2
-export const FDTJ_ANCHOR_Y = (3834.6362339024877 + 3891.7030770038155) / 2
+// the anchor map.tsx centers under the viewport on first load. Kept in step
+// with that file by the test; the 2026-08 edition redrew the Manggarai
+// interchange ~154 units north-west to make room for LRT Jakarta Phase 1B
+// terminating there, and this moved with it.
+export const FDTJ_ANCHOR_X = (4787 + 4730) / 2
+export const FDTJ_ANCHOR_Y = (3725 + 3784) / 2
 
 // map.tsx's initial camera: cover-fit scale floored at 0.5 (on any real screen
 // fitScale < 0.5, so this is 0.5), the anchor placed under the viewport

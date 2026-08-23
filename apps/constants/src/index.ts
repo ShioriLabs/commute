@@ -156,6 +156,16 @@ export const MRTJ_STATIONS_BY_SLUG: Record<string, { code: string, name: string 
   'bundaran-hi-bank-jakarta': { code: 'BHI', name: 'Bundaran HI' }
 }
 
+/*
+ * Platform number -> station code, for the Phase 1A stations only.
+ *
+ * NOTE: two of these codes diverge from the initials LRT Jakarta is submitting
+ * for GAPEKA (which follow the AFC system): PGD is KPG there, and EQS is EQT.
+ * Ours are kept as-is deliberately — the codes are load-bearing across
+ * stations.id, edges, schedules and the curated map points, and renaming them
+ * buys nothing until Phase 1B opens and renumbers these platforms anyway.
+ * Revisit both together when Phase 1B is commissioned.
+ */
 export const LRTJ_STATION_CODES: Record<number, string> = {
   6: 'PGD',
   5: 'BVU',

@@ -39,3 +39,25 @@ INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, u
 INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-SEN:TJ-H00213P', 'HUB-SEN', 'TJ-H00213P', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-SEN:TJ-H00212P', 'HUB-SEN', 'TJ-H00212P', 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-SEN:TJ-H00005P', 'HUB-SEN', 'TJ-H00005P', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- HUB-MRI — Manggarai (4 members: KRL + LRT + 2 TJ), ~134m across the three
+-- located members. Note docs/transit-hubs.md used to cite Manggarai as the
+-- counter-example of a NON-hub — true when KCI-MRI was the only row here, but
+-- LRT Jakarta Phase 1B added LRTJ-MGI and the TJ haltes are separate rows, so
+-- it is now a genuine multi-station complex. The doc has been updated to match.
+--
+-- LRTJ-MGI is included while still searchable=0/unbuilt (Phase 1B is under
+-- construction): HubRepository does not filter on searchable, so the member is
+-- carried now and simply starts resolving when the extension commissions — no
+-- second edit needed. It has no lat/lng yet, so the centroid below is the mean
+-- of the three located members only.
+--
+-- Halte Manggarai Temporer 1/2 (TJ-B08301P/B08302P) are deliberately EXCLUDED.
+-- They are a temporary corridor-4/4D halte 252-441m away — a separate cluster
+-- (the pair is 57m apart from each other, but 308m from the KRL station), not
+-- part of the station complex. Revisit if the permanent halte lands closer.
+INSERT OR REPLACE INTO hubs (id, slug, name, kind, description, heroImage, latitude, longitude, score, createdAt, updatedAt) VALUES ('HUB-MRI', 'manggarai', 'Manggarai', 'hub', NULL, NULL, -6.2100, 106.8505, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-MRI:KCI-MRI', 'HUB-MRI', 'KCI-MRI', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-MRI:LRTJ-MGI', 'HUB-MRI', 'LRTJ-MGI', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-MRI:TJ-H00272P', 'HUB-MRI', 'TJ-H00272P', 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-MRI:TJ-H00271P', 'HUB-MRI', 'TJ-H00271P', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
