@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FareContext } from '@commute/constants'
 import { calculateSegmentFare, calculateTransferFare, fareTimeBucket, LRTJBDB_FARE_CAP_OFFPEAK, LRTJBDB_FARE_CAP_PEAK, resolveCorridorMerges } from 'utils/fare'
-import type { RouteLeg } from 'utils/router'
+import type { RouteLeg } from '@commute/tsundere'
 
 const ctx: FareContext = { paymentMethod: 'STORED_VALUE', departureAt: new Date('2026-07-18T08:00:00+07:00') }
 // LRTJBDB cap depends on the time bucket, so pin explicit peak/off-peak contexts

@@ -35,6 +35,17 @@ body {
 }
 
 @layer utilities {
+  /* The data voice: every fare, distance and count is set in it.
+     Borrowed from the data platform's mono treatment, but on the sans face
+     rather than a mono one — the app loads only Plus Jakarta Sans, and pulling
+     in a second family for four numerals isn't worth the download. Fixed-pitch
+     figures are the part that carries: a fare ticking 10.500 -> 9.500 must not
+     reflow its row, and two stacked journey cards align down the column. */
+  .figure {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }

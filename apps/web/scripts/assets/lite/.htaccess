@@ -66,6 +66,21 @@
     Header set Cache-Control "public, max-age=31536000, immutable" env=COMMUTE_IMMUTABLE
     Header set Cache-Control "public, max-age=300, must-revalidate" env=COMMUTE_SHORTLIVED
     Header set Cache-Control "no-cache"                             env=COMMUTE_NOCACHE
+
+    # Never let a year-long immutable header ride on an HTML response.
+    #
+    # SetEnvIf matches the REQUESTED URI, so if a .webp request is ever answered
+    # with index.html the immutable header is still attached - and `immutable`
+    # means the browser will not revalidate it for a year. That is a cache
+    # poisoning: HTML permanently stored under an image URL, unfixable from the
+    # server side because the client never asks again. The ?v=<hash> stamp does
+    # not rescue it either, since a re-upload of the same build reuses the hash.
+    #
+    # This happened in production on 2026-08-09. The 404 rule above prevents it
+    # going forward; this is the belt to that braces, and it also covers any
+    # future rule that reintroduces an HTML fallback on an asset path.
+    Header unset Cache-Control "expr=%{CONTENT_TYPE} =~ m|^text/html|"
+    Header always set Cache-Control "no-store" "expr=%{CONTENT_TYPE} =~ m|^text/html| && -n reqenv('COMMUTE_IMMUTABLE')"
   </IfModule>
 </IfModule>
 
@@ -79,6 +94,13 @@
 # The two RewriteCond lines are what stop that from breaking the site. Without
 # them, a request for /assets/app-abc123.js would also be answered with HTML,
 # and nothing would load at all.
+#
+# ASSET PATHS ARE EXCLUDED - see the rule directly below this block. A missing
+# asset must 404, not fall through to HTML. Learned the hard way on
+# 2026-08-09: a partial upload left 203 of 256 map tiles absent, and every one
+# of them answered 200 text/html. The map drew blank squares, the console
+# showed no errors, and the cause read as a server-side name-pattern bug for
+# several rounds of debugging. A 404 would have said "missing file" instantly.
 # ---------------------------------------------------------------------------
 <IfModule mod_rewrite.c>
   RewriteEngine On
@@ -87,6 +109,12 @@
   RewriteCond %{REQUEST_FILENAME} -f [OR]
   RewriteCond %{REQUEST_FILENAME} -d
   RewriteRule ^ - [L]
+
+  # Real files are already served above, so reaching here means the asset does
+  # not exist. Answer honestly instead of handing back index.html: these paths
+  # are only ever fetched by <img>/<script>/fetch, never typed or routed, so
+  # there is no SPA route they could legitimately match.
+  RewriteRule ^(assets|maps|img)/ - [R=404,L]
 
   RewriteRule ^ index.html [L]
 </IfModule>

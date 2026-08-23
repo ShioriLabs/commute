@@ -158,7 +158,16 @@ export const LineSchema = v.pipe(
      * line dictionary from /operators always sets it (utils/line.ts fills it
      * from the operator), which is where a client should resolve modes anyway.
      */
-    mode: v.optional(TransitModeSchema)
+    mode: v.optional(TransitModeSchema),
+    /*
+     * Optional for the same reason as `mode`: trimmed producers of a Line
+     * (SearchableLine) have no use for it. The dictionary from /operators
+     * always sets it.
+     */
+    searchable: v.optional(v.pipe(
+      v.boolean(),
+      v.description('False kalau lin ini cuma dipakai buat routing dan sengaja disembunyikan dari pencarian dan sitemap. Lin seperti ini tetap ada di kamus lin, karena stasiun masih merujuk ke sana, tapi halaman detailnya belum tersedia.')
+    ))
   }),
   v.title('Line'),
   v.description('Satu lin, dengan kode dan warna yang dipakai di roundel-nya.'),

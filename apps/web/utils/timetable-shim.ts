@@ -11,11 +11,14 @@ import type {
 // ever handle tuples (tripNumber is unknown in the old shape -> null). Full-mode
 // Schedule rows, identified by lineCode, pass through untouched.
 //
-// The service worker used to be the source of these: it cached API responses
-// with no TTL at all. It now expires them after API_TTL_MS, but SWR's IndexedDB
-// provider (app/layouts/default.tsx) still persists payloads indefinitely, so a
-// long-dormant install can still hand the current bundle an old shape. This
-// stays load-bearing.
+// Both client caches can still hand the current bundle an old shape, so this
+// stays load-bearing:
+//   - SWR's IndexedDB provider (app/lib/idb-cache-provider.ts) has no version,
+//     no expiry and no pruning, and hydrates every stored key on boot.
+//   - The service worker's API_TTL_MS only decides whether the cache wins the
+//     race against the network; when the network fails it serves a cached entry
+//     of any age (service-worker.js, the `if (cached) return cached` fallback).
+// Neither is bounded by a deploy, so age alone can't retire this.
 function upgradeSchedule(schedule: unknown): unknown {
   if (Array.isArray(schedule)) return schedule
   const record = schedule as Record<string, unknown>

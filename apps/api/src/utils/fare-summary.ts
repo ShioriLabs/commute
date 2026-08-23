@@ -1,6 +1,6 @@
 import { JAKLINGKO_OPERATORS, type FareContext, type Operator } from '@commute/constants'
 import { calculateSegmentFare, calculateTransferFare, JAKLINGKO_JOURNEY_CAP } from 'utils/fare'
-import type { RideLeg, RouteLeg } from 'utils/router'
+import type { RideLeg, RouteLeg } from '@commute/tsundere'
 
 /*
  * Every TRANSFER leg is a tap-out, so each contiguous run of RIDE legs is one

@@ -94,6 +94,43 @@ export const FareSegmentSchema = v.pipe(
   v.metadata({ ref: 'FareSegment' })
 )
 
+export const FareJourneyLabelSchema = v.pipe(
+  v.picklist(['FEWEST_CHANGES', 'LEAST_WALKING', 'CHEAPEST', 'SHORTEST_WAIT']),
+  v.title('FareJourneyLabel'),
+  v.description('Kelebihan yang cuma dipunya satu pilihan rute: `FEWEST_CHANGES` paling jarang ganti kendaraan, `LEAST_WALKING` paling sedikit jalan kaki, `CHEAPEST` paling murah, `SHORTEST_WAIT` kendaraannya paling sering lewat. Kalau ada dua rute yang sama-sama unggul, dua-duanya tidak dapat label, biar labelnya benar-benar membedakan.'),
+  v.metadata({ ref: 'FareJourneyLabel' })
+)
+
+/*
+ * No waitS field, on purpose. It exists in the engine's Criteria and it decides
+ * SHORTEST_WAIT, but it is derived from average headways rather than a
+ * timetable. A number in seconds invites the UI to render "tunggu ±7 menit",
+ * which is a departure-time promise this engine cannot keep. The label carries
+ * the comparison; the figure would carry a lie.
+ */
+export const FareJourneySchema = v.pipe(
+  v.object({
+    legs: v.pipe(v.array(FareLegSchema), v.description('Perjalanan dari sisi penumpang: naik apa saja dan transfer di mana saja.')),
+    segments: v.pipe(v.array(FareSegmentSchema), v.description('Perjalanan dari sisi penagihan tarif.')),
+    totalFare: v.pipe(
+      v.nullable(v.number()),
+      v.description('Total dalam rupiah buat pilihan rute ini. Null kalau tarifnya tidak bisa dihitung.'),
+      v.metadata({ examples: [14000] })
+    ),
+    totalDistanceM: v.pipe(v.number(), v.description('Total jarak pilihan rute ini dalam meter.')),
+    transferCount: v.pipe(v.number(), v.description('Berapa kali harus pindah kendaraan, dihitung dari sisi penumpang.')),
+    labels: v.pipe(
+      v.array(FareJourneyLabelSchema),
+      v.description('Boleh kosong, dan itu wajar: rute yang tidak menang sendirian di kriteria mana pun memang tidak punya kelebihan khusus buat disebut.')
+    ),
+    boardings: v.pipe(v.number(), v.description('Berapa kali naik kendaraan. Beda tipis dari `transferCount`: ganti kereta di peron yang sama tetap dihitung naik, tapi tidak dihitung transit.')),
+    walkDistanceM: v.pipe(v.number(), v.description('Total jarak jalan kaki di pilihan rute ini dalam meter.'))
+  }),
+  v.title('FareJourney'),
+  v.description('Satu pilihan rute lengkap dengan tarifnya. Yang dibandingkan cuma jumlah naik kendaraan, jarak jalan kaki, rata-rata lama nunggu, dan tarif — bukan waktu tempuh, karena mesinnya memang tidak punya jadwal.'),
+  v.metadata({ ref: 'FareJourney' })
+)
+
 export const FareResultSchema = v.pipe(
   v.object({
     from: FareStationSchema,
@@ -113,13 +150,38 @@ export const FareResultSchema = v.pipe(
   v.metadata({ ref: 'FareResult' })
 )
 
+/*
+ * The multi-journey answer, served from `/_internal/trips/:from/:to`.
+ *
+ * Not part of the documented API: `/_internal` is shaped around the web app's
+ * screen and carries no compatibility promise. The schema lives here anyway so
+ * apps/web parses the same definition the API builds, and so the pieces are
+ * ready to promote if this ever becomes a public endpoint.
+ */
+export const TripResultSchema = v.pipe(
+  v.object({
+    from: FareStationSchema,
+    to: FareStationSchema,
+    journeys: v.pipe(
+      v.array(FareJourneySchema),
+      v.description('Pilihan rute buat pasangan stasiun ini, diurutkan dari yang paling masuk akal. Selalu ada isinya kalau rutenya ketemu.')
+    )
+  }),
+  v.title('TripResult'),
+  v.description('Beberapa pilihan rute sekaligus buat satu pasangan stasiun, masing-masing lengkap dengan tarifnya.'),
+  v.metadata({ ref: 'TripResult' })
+)
+
 export type FareStation = v.InferOutput<typeof FareStationSchema>
 export type FareLineRef = v.InferOutput<typeof LineRefSchema>
 export type FareRideLeg = v.InferOutput<typeof RideLegSchema>
 export type FareTransferLeg = v.InferOutput<typeof TransferLegSchema>
 export type FareLeg = v.InferOutput<typeof FareLegSchema>
 export type FareSegment = v.InferOutput<typeof FareSegmentSchema>
+export type FareJourneyLabel = v.InferOutput<typeof FareJourneyLabelSchema>
+export type FareJourney = v.InferOutput<typeof FareJourneySchema>
 export type FareResult = v.InferOutput<typeof FareResultSchema>
+export type TripResult = v.InferOutput<typeof TripResultSchema>
 
 /* Aliases matching the web app's long-standing names for these shapes. */
 export type FareResultStation = FareStation

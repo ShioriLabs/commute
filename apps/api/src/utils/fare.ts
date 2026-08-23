@@ -1,7 +1,7 @@
 import { FareContext, Operator, OPERATORS, SURCHARGED_CORRIDORS, SurchargedCorridor } from '@commute/constants'
 import { getMRTJFare } from 'operators/mrtj/fares'
 import { TJ_FLAT_FARE } from 'operators/tj/fares'
-import type { RouteLeg } from 'utils/router'
+import type { RouteLeg } from '@commute/tsundere'
 
 /*
  * Tariff rules per operator. All amounts in rupiah, all distances in metres.

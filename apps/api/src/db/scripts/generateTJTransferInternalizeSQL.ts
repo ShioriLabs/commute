@@ -39,6 +39,59 @@ const MEASURED_DISTANCE_M: Record<string, number> = {
   'T-MRTJ-BLM-XTJ1': 240 //    Blok M (MRT) -> Blok M (TJ)
 }
 
+/*
+ * Walk lengths for interchanges that are ALREADY internal (metres).
+ *
+ * Separate from MEASURED_DISTANCE_M above, which keys on transfer id and only
+ * covers rows this script converts from EXTERNAL. These are keyed on the
+ * station pair and emitted in both directions, because the DB stores each walk
+ * as two mirrored rows.
+ *
+ * Why this exists: 66 of 116 internal transfers stored `distance = 0`, which
+ * meant *unmeasured*, not zero-length. The old router masked it by charging a
+ * flat TRANSFER_PENALTY_M per walk; @commute/tsundere's planner drops that
+ * penalty on purpose (boardings and waiting are explicit criteria now), so a 0m
+ * transfer became free on every axis and the engine happily chained several.
+ * Cakung -> Karet Kuningan returned four journeys, two of them nonsense: an
+ * "0m walking" route through Jatinegara and a detour via MRT. With these
+ * applied it returns the two that are actually sensible.
+ *
+ * Measured 2026-08-03 along the real walked path, except where noted.
+ */
+const INTERCHANGE_WALK_M: [string, string, number, string][] = [
+  // Senen. Conservative: a shortcut through Senen Jaya mall may make the two
+  // PSE walks shorter, but it is unconfirmed, and over-estimating only makes
+  // the router mildly transfer-shy. Revise if the mall route is verified.
+  ['KCI-PSE', 'TJ-H00212P', 550, 'Pasar Senen -> Senen TOYOTA Rangga'],
+  ['KCI-PSE', 'TJ-H00213P', 650, 'Pasar Senen -> Jaga Jakarta (550 + 60 + 40)'],
+  ['TJ-H00212P', 'TJ-H00213P', 60, 'Toyota Rangga -> Jaga Jakarta (no tap)'],
+  // Senen, remainder: the road network there is too tangled to trace, so these
+  // are haversine x1.3 — the ratio the measured legs above run at.
+  ['KCI-PSE', 'TJ-H00005P', 630, 'Pasar Senen -> Senen Raya (estimated)'],
+  ['TJ-H00005P', 'TJ-H00213P', 385, 'Senen Raya -> Jaga Jakarta (estimated)'],
+  ['TJ-H00005P', 'TJ-H00212P', 430, 'Senen Raya -> Toyota Rangga (estimated)'],
+  // Jatinegara
+  ['KCI-JNG', 'TJ-H00225P', 110, 'Jatinegara -> Stasiun Jatinegara'],
+  ['TJ-H00225P', 'TJ-H00148P', 300, 'Stasiun Jatinegara -> Bali Mester'],
+  ['KCI-JNG', 'TJ-H00148P', 460, 'Jatinegara -> Bali Mester (110 + 300 + 50)'],
+  // Kebayoran
+  ['KCI-KBY', 'TJ-H00257P', 490, 'Kebayoran -> Velbak'],
+  ['KCI-KBY', 'TJ-H00149P', 250, 'Kebayoran -> Kebayoran (TJ)'],
+  ['TJ-H00149P', 'TJ-H00257P', 320, 'Kebayoran (TJ) -> Velbak'],
+  // ASEAN / CSW. The 200m legs are short on the map but four storeys of climb.
+  ['MRTJ-SSM', 'TJ-H00041P', 200, 'Stasiun ASEAN -> CSW 1'],
+  ['MRTJ-SSM', 'TJ-H00265P', 130, 'Stasiun ASEAN -> ASEAN'],
+  ['MRTJ-SSM', 'TJ-H00266P', 150, 'Stasiun ASEAN -> Kejaksaan Agung'],
+  ['TJ-H00266P', 'TJ-H00265P', 110, 'Kejaksaan Agung -> ASEAN'],
+  ['TJ-H00266P', 'TJ-H00041P', 200, 'Kejaksaan Agung -> CSW 1'],
+  ['TJ-H00265P', 'TJ-H00041P', 200, 'ASEAN -> CSW 1'],
+  // Singles
+  ['LRTJBDB-KAM', 'TJ-H00096P', 310, 'Kampung Rambutan; Maps 310m, FDTJ totem 200m'],
+  ['MRTJ-BHI', 'TJ-H00022P', 180, 'Bundaran HI'],
+  ['LRTJBDB-TMI', 'TJ-H00060P', 330, 'TMII -> Makasar, per FDTJ totem'],
+  ['KCI-JUA', 'TJ-H00092P', 150, 'Juanda']
+]
+
 interface Row { [k: string]: string | number | null }
 
 function d1(sql: string): Row[] {
@@ -155,6 +208,23 @@ for (const row of externals) {
   resolvedLog.push(`  ${transferId}  ${fromId} -> ${targetId} (${tjName}) via ${how}`)
 }
 
+/*
+ * Interchange walks, appended after the EXTERNAL -> INTERNAL conversions above.
+ * Both directions per pair, and only where the row already exists — a missing
+ * row means the topology changed and should be noticed, not silently created.
+ */
+let walkUpdates = 0
+for (const [a, b, metres, note] of INTERCHANGE_WALK_M) {
+  for (const [from, to] of [[a, b], [b, a]]) {
+    statements.push(
+      `UPDATE transfers SET distance = ${metres}, updatedAt = CURRENT_TIMESTAMP `
+      + `WHERE dataType = 'INTERNAL' AND fromStationId = '${esc(from!)}' AND toStationId = '${esc(to!)}';`
+    )
+    walkUpdates++
+  }
+  void note
+}
+
 fs.writeFileSync(OUTPUT_SQL_PATH, statements.join('\n') + (statements.length ? '\n' : ''))
 
 console.log(`Resolved ${resolvedLog.length} EXTERNAL -> INTERNAL transfer(s):`)
@@ -163,4 +233,5 @@ if (skippedLog.length) {
   console.log(`\nLeft EXTERNAL (${skippedLog.length}) — review:`)
   for (const l of skippedLog) console.log(l)
 }
+console.log(`\nInterchange walks: ${walkUpdates} UPDATE(s) from ${INTERCHANGE_WALK_M.length} measured pairs.`)
 console.log(`\nWrote ${statements.length} UPDATE(s) to "${OUTPUT_SQL_PATH}".`)

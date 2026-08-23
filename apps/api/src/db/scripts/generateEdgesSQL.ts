@@ -25,6 +25,12 @@ async function loadCoords(): Promise<Map<string, Coord>> {
 const out: string[] = []
 const missingCoords = new Set<string>()
 const srcCounts: Record<string, number> = {}
+// Adjacencies that priced out at 0m between two different stations. A distance
+// of 0 means UNMEASURED here, never "no gap", and the multi-criteria planner
+// drops its transfer penalty — so a 0m link is free on every axis and the
+// engine will happily chain routes nobody would ride. Collected rather than
+// thrown on so one run reports every offender.
+const zeroLength = new Set<string>()
 
 function distance(line: LineTopology, a: Stop, b: Stop, coords: Map<string, Coord>): { m: number, src: string } {
   if (a.cumM != null && b.cumM != null) {
@@ -40,12 +46,17 @@ function distance(line: LineTopology, a: Stop, b: Stop, coords: Map<string, Coor
 // both directions. Asymmetric corridors (line.pathReverse present) use directed
 // emits so each direction carries its own true stop sequence rather than a mirror.
 function emit(line: LineTopology, a: Stop, b: Stop, coords: Map<string, Coord>, directed = false): void {
+  // Unbuilt stops are on the line for display only — emitting an edge here
+  // would let the router send people over track that isn't open yet (and with
+  // no coordinates the distance would silently come out as 0).
+  if (a.unbuilt || b.unbuilt) return
   const aId = `${line.operator}-${a.station}`
   const bId = `${line.operator}-${b.station}`
   if (!coords.has(aId)) missingCoords.add(aId)
   if (!coords.has(bId)) missingCoords.add(bId)
   const { m, src } = distance(line, a, b, coords)
   srcCounts[src] = (srcCounts[src] ?? 0) + 1
+  if (m === 0 && aId !== bId) zeroLength.add(`${line.lineCode}: ${aId} <-> ${bId} (${src})`)
   const pairs = directed ? [[aId, bId]] as const : [[aId, bId], [bId, aId]] as const
   for (const [from, to] of pairs) {
     out.push(
@@ -93,6 +104,18 @@ async function main(): Promise<void> {
         if (close) emit(line, last, close, coords)
       }
     }
+  }
+
+  // Refuse before writing, so a bad run can't leave a poisoned edges.sql on
+  // disk for someone to apply later.
+  if (zeroLength.size > 0) {
+    throw new Error(
+      `${zeroLength.size} adjacency(ies) priced at 0m between distinct stations:\n`
+      + [...zeroLength].map(s => `  ${s}`).join('\n')
+      + '\n\nA 0m edge is free on every routing axis. Give these stops coordinates'
+      + ' (stations_lat_lng.csv, then `pnpm generate:stationcoords`) or cumM, or'
+      + ' mark them `unbuilt` until the track opens.'
+    )
   }
 
   fs.writeFileSync(OUTPUT_SQL_PATH, out.join('\n') + '\n')

@@ -1,0 +1,44 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    /* ESNext, not CommonJS like apps/constants: this package is bundled by
+       wrangler/esbuild for workerd and by vite for the web, both of which want
+       ESM. Nothing consumes it through a CJS require. */
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext"],
+    /* No DOM: a routing engine that reaches for `window` is a bug, and leaving
+       it out makes that a compile error rather than a runtime surprise. */
+
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+
+    /* Comments are kept deliberately. The penalty constants carry more domain
+       knowledge in their comments than in their values (see LINE_CHANGE_PENALTY_M),
+       and `declaration: true` puts them on hover for consumers. */
+    "removeComments": false,
+
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "alwaysStrict": true,
+    "allowUnreachableCode": false,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+
+    /* No baseUrl and no paths, unlike apps/api's `baseUrl: "src"`. Bare-root
+       imports are exactly what makes that code non-portable; a package meant to
+       be consumed from outside uses relative imports only. */
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "dist"]
+}

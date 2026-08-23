@@ -1,9 +1,10 @@
 import type { FareResult } from '@commute/schemas'
-
-const rupiah = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })
+import { formatRupiah } from 'utils/format'
 
 interface FareSummaryProps {
-  fare: FareResult | null
+  // The two priced fields, so this reads a FareResult and a selected
+  // FareJourney alike. See buildRouteOverlayModel for the same reasoning.
+  fare: Pick<FareResult, 'totalFare' | 'transferCount'> | null
   hasError: boolean
   isLoading: boolean
 }
@@ -32,7 +33,7 @@ export default function FareSummary({ fare, hasError, isLoading }: FareSummaryPr
 
   return (
     <span className="min-w-0 flex items-baseline gap-1.5 truncate">
-      <b className="text-base text-slate-800">{ rupiah.format(fare!.totalFare!) }</b>
+      <b className="text-base text-slate-800">{ formatRupiah(fare!.totalFare!) }</b>
       {transferCount > 0 && (
         <span className="text-xs text-slate-500 whitespace-nowrap">
           {transferCount}

@@ -12,7 +12,6 @@ import SettingsButton from '~/components/nav-buttons/settings'
 import MapButton from '~/components/nav-buttons/map'
 import { useNetworkStatus } from '~/hooks/network'
 import { useInstall } from '~/contexts/installable'
-import { useMapUnlock } from '~/hooks/secret-features'
 import { CARD_STAGGER, NAV_STAGGER, staggerDelay } from 'utils/stagger'
 import clsx from 'clsx'
 
@@ -237,16 +236,12 @@ export default function HomePage() {
       return false
     }
   })
-  const { isUnlocked: isMapUnlocked } = useMapUnlock()
-
   const canInstall = (isInstallable || showIOSInstructions) && !isStandalone
 
-  // Built as a list so the rail's entrance stagger indexes cleanly whether or
-  // not the map card is unlocked — otherwise Setelan's delay would jump when
-  // the card in front of it disappears.
+  // Built as a list so the rail's entrance stagger indexes cleanly off it.
   const navItems = [
     { key: 'search', railClassName: 'ml-4 lg:ml-2', node: <SearchStationsButton /> },
-    ...(isMapUnlocked ? [{ key: 'map', railClassName: '', node: <MapButton /> }] : []),
+    { key: 'map', railClassName: '', node: <MapButton /> },
     { key: 'settings', railClassName: canInstall ? '' : 'mr-4 lg:mr-2', node: <SettingsButton /> }
   ]
 

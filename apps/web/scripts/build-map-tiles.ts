@@ -27,8 +27,18 @@ import { stampServiceWorker } from './stamp-service-worker'
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const WEB_ROOT = path.resolve(SCRIPT_DIR, '..')
 const REPO_ROOT = path.resolve(WEB_ROOT, '..', '..')
-const PDF_PATH = path.join(REPO_ROOT, '2026-06a-Peta-Integrasi-Jakarta-FDTJ-Web.pdf')
-const VERSION = '2026-06a'
+/*
+ * Source artwork and the edition it represents. Overridable so a new FDTJ
+ * release can be rendered without editing this file, and so an unreleased
+ * edition can be built from a gitignored path:
+ *   MAP_PDF=scratch/fdtj/2026-08.pdf MAP_VERSION=2026-08 pnpm build:map-tiles
+ * VERSION is what the manifest and the tile URLs carry, so it must change
+ * whenever the artwork does — the rasters are served immutable.
+ */
+const PDF_PATH = process.env.MAP_PDF
+  ? path.resolve(REPO_ROOT, process.env.MAP_PDF)
+  : path.join(REPO_ROOT, '2026-06a-Peta-Integrasi-Jakarta-FDTJ-Web.pdf')
+const VERSION = process.env.MAP_VERSION ?? '2026-06a'
 const OUT_DIR = path.join(WEB_ROOT, 'public', 'maps', 'fdtj')
 const SW_PATH = path.join(WEB_ROOT, 'public', 'service-worker.js')
 // Grid granularity. This is the single biggest lever on GPU memory, though not

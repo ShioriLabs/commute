@@ -1,6 +1,7 @@
 import { OPERATORS } from '@commute/constants'
 import { describe, expect, it } from 'vitest'
 import { ALL_LINES, getLineByOperator, LINE_LOOKUP_TABLE } from 'utils/line'
+import { findTopology } from 'utils/topology'
 
 /*
  * `mode` is optional on Line so trimmed producers (SearchableLine) need not
@@ -28,6 +29,48 @@ describe('line modes', () => {
   it('does not mutate the source line definitions', async () => {
     const { LINES } = await import('operators/kci/lines')
     expect(LINES.every(line => !('mode' in line))).toBe(true)
+  })
+})
+
+/*
+ * `searchable` mirrors the station flag: false means the line exists in the
+ * dictionary (so `TJ:2C` on a station still resolves to a name and colour) but
+ * has no page worth crawling.
+ *
+ * The condition is topology, not a hand-kept list. /lines/:operator/:code 404s
+ * on a missing topology, so a line flagged searchable without one is a sitemap
+ * entry pointing at a soft 404 — which is exactly how 68 TJ feeder lines got
+ * indexed as duplicates of each other.
+ */
+describe('line searchability', () => {
+  it('marks a line searchable exactly when it has topology', () => {
+    for (const [code, lines] of Object.entries(ALL_LINES)) {
+      const operator = code as keyof typeof OPERATORS
+      for (const line of lines) {
+        expect(
+          line.searchable,
+          `${code}:${line.lineCode} searchable must match topology presence`
+        ).toBe(findTopology(operator, line.lineCode) !== null)
+      }
+    }
+  })
+
+  it('keeps every non-TJ line searchable', () => {
+    for (const [code, lines] of Object.entries(ALL_LINES)) {
+      if (code === 'TJ') continue
+      for (const line of lines) {
+        expect(line.searchable, `${code}:${line.lineCode}`).toBe(true)
+      }
+    }
+  })
+
+  it('splits TJ into searchable BRT corridors and hidden feeders', () => {
+    const tj = ALL_LINES.TJ
+    // The dictionary still carries all of them — only the flag differs.
+    expect(tj.length).toBe(100)
+    expect(tj.filter(l => l.searchable).length).toBe(31)
+    expect(getLineByOperator('TJ', '1')?.searchable).toBe(true)
+    expect(getLineByOperator('TJ', '2C')?.searchable).toBe(false)
   })
 })
 

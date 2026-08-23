@@ -121,7 +121,7 @@ export const ExternalTransferSchema = v.pipe(
 export const TransferSchema = v.pipe(
   v.variant('dataType', [InternalTransferSchema, ExternalTransferSchema]),
   v.title('Transfer'),
-  v.description('Dibedakan lewat `dataType`. Data yang ada sekarang semuanya INTERNAL. Bentuk EXTERNAL disiapkan buat sambungan ke luar jaringan.'),
+  v.description('Dibedakan lewat `dataType`. Kebanyakan INTERNAL, tapi EXTERNAL juga ada, jadi tangani dua-duanya.'),
   v.metadata({ ref: 'Transfer' })
 )
 

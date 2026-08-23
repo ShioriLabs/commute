@@ -13,6 +13,7 @@ import { buildFarePath } from 'utils/fare-url'
 import { readSearchMode, writeSearchMode, type SearchMode } from 'utils/search-mode'
 import FarePanel from '~/components/fare-sheet/fare-panel'
 import { useFareQuery } from '~/components/fare-sheet/use-fare-query'
+import { useFareRouter } from '~/hooks/use-fare-router'
 import SearchableItem from './searchable-item'
 import SearchModeToggle from './mode-toggle'
 
@@ -148,15 +149,26 @@ export default function SearchContent({ title, closeButton }: Props) {
   const [savedStations, setSavedStations] = useState<string[]>([])
   // Station mode is the correct first paint on the server and for a first-time
   // visitor, so the stored preference is read after mount (see the same pattern
-  // in app/hooks/secret-features.ts useMapUnlock).
+  // in app/hooks/secret-features.ts useMapGlDebug).
   const [mode, setMode] = useState<SearchMode>('STATION')
   // The fare panel mounts on first entry to route mode and then stays mounted,
   // hidden — toggling away and back must not lose the chosen station pair.
   const [fareMounted, setFareMounted] = useState(false)
   // No initialPair and no onPairChange: this surface never reads or writes
   // `?from=&to=`. Only /fare does, because only /fare is SEO-decorated.
-  const fareQuery = useFareQuery()
-  const fareSharePath = buildFarePath(fareQuery.origin?.id, fareQuery.destination?.id)
+  /*
+   * The rider's router applies here too: this is the same query against the
+   * same pair, and a preference that held on /fare but not in the sheet would
+   * be a setting that only sometimes means anything. Storage carries it, so the
+   * footer link below lands on a /fare that reads the same value.
+   */
+  const { router, routerReady, setRouter } = useFareRouter()
+  const fareQuery = useFareQuery({ alternatives: router === 'beta', gate: routerReady })
+  const fareSharePath = buildFarePath(
+    fareQuery.origin?.id,
+    fareQuery.destination?.id,
+    fareQuery.criteria
+  )
 
   const handleModeChange = (next: SearchMode) => {
     setMode(next)
@@ -325,6 +337,9 @@ export default function SearchContent({ title, closeButton }: Props) {
             >
               <FarePanel
                 query={fareQuery}
+                alternatives={router === 'beta'}
+                router={router}
+                onRouterChange={setRouter}
                 footer={fareSharePath
                   ? (
                       <Link

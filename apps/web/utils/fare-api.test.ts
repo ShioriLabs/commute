@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fareApiUrl } from './fare-api'
+import { fareApiUrl, tripApiUrl } from './fare-api'
 import { DEFAULT_FARE_CRITERIA, fareQueryParams, type FareCriteria } from './fare-criteria'
 
 /*
@@ -65,5 +65,31 @@ describe('fareApiUrl', () => {
       import.meta.env.VITE_API_BASE_URL
     ).href
     expect(fareApiUrl('KCI-SUD', 'MRTJ-BLA', criteria)).toBe(expected)
+  })
+})
+
+/*
+ * The router toggle means both endpoints are warm for the same pair at the same
+ * time — flipping it does not evict what the other one cached. These keys are
+ * what keep the two bodies apart in SWR, in IndexedDB and in the service
+ * worker, all three of which key on this exact string.
+ */
+describe('tripApiUrl beside fareApiUrl', () => {
+  it('keys the same pair differently per endpoint', () => {
+    const fare = fareApiUrl('KCI-SUD', 'MRTJ-BLA', DEFAULT_FARE_CRITERIA)
+    const trip = tripApiUrl('KCI-SUD', 'MRTJ-BLA', DEFAULT_FARE_CRITERIA)
+    expect(trip).not.toBe(fare)
+    expect(trip).toContain('/_internal/trips/KCI-SUD/MRTJ-BLA')
+  })
+
+  it('carries no router param on either endpoint', () => {
+    // The router picks the path; it is never a query param on the API call, or
+    // it would split the cache on a value the server does not read.
+    expect(fareApiUrl('KCI-SUD', 'MRTJ-BLA', DEFAULT_FARE_CRITERIA)).not.toContain('router')
+    expect(tripApiUrl('KCI-SUD', 'MRTJ-BLA', DEFAULT_FARE_CRITERIA)).not.toContain('router')
+  })
+
+  it('keeps the default-criteria silence on the trip endpoint too', () => {
+    expect(tripApiUrl('KCI-SUD', 'MRTJ-BLA', DEFAULT_FARE_CRITERIA)).not.toContain('?')
   })
 })

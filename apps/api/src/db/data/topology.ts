@@ -1,5 +1,6 @@
 import type { Operator } from '@commute/constants'
 import { TJ_TOPOLOGY } from './topology.tj'
+import { withStationNumbers } from './topology.tj.numbers'
 import { TJ_TOPOLOGY_OVERRIDES } from './topology.tj.overrides'
 
 /*
@@ -30,6 +31,13 @@ export interface Stop {
   station: string // API station code; DB id = `${operator}-${station}`
   pos: string // official per-line code -> stationLines.stationNumber
   cumM?: number // cumulative METRES from origin (real track distance) where known
+  /*
+   * Announced but not yet open. Such stops belong to the line for display (the
+   * line page draws the full route), but must NOT become part of the graph:
+   * generateEdgesSQL skips any adjacency touching one, so the router can never
+   * route over track that doesn't exist. Drop the flag when service starts.
+   */
+  unbuilt?: boolean
 }
 
 export interface Branch {
@@ -86,12 +94,44 @@ export const ENDPOINT_RESTRICTIONS: { operator: Operator, station: string, lineC
   { operator: 'KCI', station: 'PSE', lineCode: 'C', forbiddenNeighbor: 'GST' }
 ]
 
+/*
+ * Turns that stay on one line but change vehicle.
+ *
+ * The Cikarang line is a lollipop: a stick running in to Jatinegara, and a loop
+ * that leaves Jatinegara and closes back onto it (see the TOPOLOGY entry below,
+ * positions C01-C14 for the loop and C15-C26 for the stick). Line code alone
+ * cannot tell the two apart, so the planner happily rode MTR -> JNG -> POK as a
+ * single train — which would mean going round the loop and immediately starting
+ * round it again. A service reaching Jatinegara off the loop leaves down the
+ * stick instead, so the rider changes trains there.
+ *
+ * The effect was not a mislabelled leg but a missing option: Sudirman ->
+ * Kemayoran through Jatinegara is 12.2km and scored one boarding, so it
+ * dominated the genuine one-seat ride the other way round the loop (via Kampung
+ * Bandan, 14.3km) and that journey was never offered at all. 66 of the 210
+ * routable loop-internal pairs were affected.
+ *
+ * NOT a ban — riding through the break is a real trip, and between the two ends
+ * of the loop it is usually the only sensible one. It just costs a boarding, so
+ * both it and the long way round survive as a genuine choice.
+ *
+ * Only the loop-to-loop turn is a break. Stick-to-loop (KLD -> JNG -> POK) is
+ * ordinary through-running: a Cikarang train runs in and continues onto the
+ * loop as one service, and charging it a boarding would be its own bug.
+ */
+export const SERVICE_BREAKS: { operator: Operator, lineCode: string, via: string, from: string, to: string }[] = [
+  { operator: 'KCI', lineCode: 'C', via: 'JNG', from: 'MTR', to: 'POK' },
+  { operator: 'KCI', lineCode: 'C', via: 'JNG', from: 'POK', to: 'MTR' }
+]
+
 // TJ poster corrections (topology.tj.overrides.ts) replace the same-lineCode
-// GTFS-derived entries from topology.tj.ts, matched by lineCode.
+// GTFS-derived entries from topology.tj.ts, matched by lineCode. Official halte
+// numbers are stamped on last so they apply to generated and override corridors
+// alike — neither source file carries `pos`.
 const TJ_MERGED: LineTopology[] = (() => {
   const byCode = new Map(TJ_TOPOLOGY.map(t => [t.lineCode, t]))
   for (const o of TJ_TOPOLOGY_OVERRIDES) byCode.set(o.lineCode, o)
-  return [...byCode.values()]
+  return [...byCode.values()].map(withStationNumbers)
 })()
 
 export const TOPOLOGY: LineTopology[] = [
@@ -295,7 +335,18 @@ export const TOPOLOGY: LineTopology[] = [
       { station: 'BVS', pos: 'S03' },
       { station: 'PUM', pos: 'S04' },
       { station: 'EQS', pos: 'S05' },
-      { station: 'VEL', pos: 'S06' }
+      { station: 'VEL', pos: 'S06' },
+      // Phase 1B (Velodrome -> Manggarai), in revenue service 2026-08-26.
+      // KYM and MAT are misnomers: the names were reshuffled shortly before
+      // opening, so S09 is now Matraman and S10 is Proklamasi (Kayu Manis is
+      // not on the line). The codes stay because they key stations.id, edges,
+      // stationLines and the map points, and the stops themselves did not move.
+      // Read the name from the DB, never from the code here.
+      { station: 'RWM', pos: 'S07' },
+      { station: 'PKA', pos: 'S08' },
+      { station: 'KYM', pos: 'S09' }, // Matraman
+      { station: 'MAT', pos: 'S10' }, // Proklamasi
+      { station: 'MGI', pos: 'S11' }
     ]
   },
 

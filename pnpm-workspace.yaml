@@ -1,5 +1,6 @@
 packages:
   - apps/*
+  - libs/*
 allowBuilds:
   '@tailwindcss/oxide': true
   esbuild: true

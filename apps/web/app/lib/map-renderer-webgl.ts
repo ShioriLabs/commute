@@ -210,12 +210,12 @@ interface TileEntry {
 
 // Bound on tile loading in flight.
 //
-// draw() used to fire a request for every visible tile needing an upgrade, with
-// nothing in between. Crossing a tier boundary on a pinch is 6-8 tiles, and each
-// one lands a texImage2D of a multi-megapixel bitmap plus a generateMipmap on
-// the main thread, in whatever turn its promise happens to resolve — so they
-// pile into a single frame. The tiles are ~158 KB on the wire, so the network
-// was never the constraint; the GL work is.
+// Without a bound, draw() fires a request for every visible tile needing an
+// upgrade. Crossing a tier boundary on a pinch is 6-8 tiles, and each lands a
+// texImage2D of a multi-megapixel bitmap plus a generateMipmap on the main
+// thread, in whatever turn its promise resolves — so they pile into one frame.
+// The tiles are ~158 KB on the wire: the network is not the constraint, the GL
+// work is.
 //
 // Two concurrent loads keeps one fetch in flight while the other uploads, which
 // hides mobile round-trip latency without stacking GL work, and bounds the
@@ -499,10 +499,10 @@ export function createWebGLRenderer(
     return entry
   }
 
-  // Release off-screen tiles that are held at a finer tier than the current view
-  // would ever ask for. Zooming deep into one corner and then back out used to
-  // leave those tiles pinned at tier 2 (~10.7 MB each) forever, because nothing
-  // downgrades and the only tier transition in draw() is an upgrade.
+  // Release off-screen tiles held at a finer tier than the current view would
+  // ask for. Without this, zooming deep into one corner and back out pins those
+  // tiles at tier 2 (~10.7 MB each) forever: nothing downgrades, and the only
+  // tier transition in draw() is an upgrade.
   //
   // The pixels are dropped rather than re-uploaded at the coarser tier: the
   // tile is off-screen, so the cheapest correct thing is to let draw() re-request
@@ -881,7 +881,7 @@ export function createWebGLRenderer(
     // NOTE: unreachable on the FDTJ map as currently configured. map.tsx derives
     // minScale with max(viewport/map) — cover-fit — so the map never shrinks to
     // fit the screen; at minimum zoom it still spans ~2270 device px on a phone
-    // (MAX_RENDER_DPR caps what used to be ~3400), against a 1280px preview.
+    // (MAX_RENDER_DPR caps this), against a 1280px preview.
     // Satisfying this branch would need a ~2270px preview costing ~10 MB of
     // texture, which is worse than the ~20 MiB of tier-0.5 tiles it would
     // replace. Kept because it costs one comparison per
@@ -928,8 +928,7 @@ export function createWebGLRenderer(
     // One pass over the visible span, collecting everything the rest of the
     // frame needs: the entries themselves, whether any tile is still blank (the
     // preview underlay), and whether any carries real transparency (the blend
-    // state). This used to be two passes that each walked the same rectangle
-    // and called ensureTile() on every cell.
+    // state). Keep it to one pass — ensureTile() runs per cell.
     visibleCount = 0
     let anyVisibleMissing = false
     let anyVisibleNonOpaque = false
