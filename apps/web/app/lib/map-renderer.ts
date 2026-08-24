@@ -150,6 +150,9 @@ export interface RouteOverlayFrame {
   // artwork only — the route's own capsules and pins keep their colour, which is
   // the whole point.
   desaturate: number
+  // 0..ROUTE_FADE_MAX of the artwork blended toward page white. Same scope as
+  // `desaturate` — tiles only, never the route.
+  fade: number
 }
 
 /*
@@ -166,16 +169,31 @@ export const ROUTE_SCRIM_MAX_ALPHA = 0
 /*
  * How much colour to drain from the map while a route is drawn, 0..1.
  *
- * The schematic's information IS its line colours, so removing them is what
- * makes every unrelated corridor recede at once — while leaving labels,
- * stations and shapes perfectly legible, which a dark scrim does not. The
- * route's own capsules keep their brand colour and become the only saturated
- * thing on screen.
- *
- * Short of 1: a fully grey map reads as a rendering failure rather than a
- * deliberate state.
+ * Deliberately modest, because desaturation alone does NOT make a schematic
+ * recede: it removes the hue that tells corridors apart while leaving every
+ * stroke exactly as dark as it started, so the map goes from busy-and-coloured
+ * to busy-and-grey. It was 0.85 on its own and the route had to fight the
+ * artwork; the fade below is what actually clears the field, and this is now
+ * only here to stop the surviving colour competing with the route's own.
  */
-export const ROUTE_DESATURATE_MAX = 0.85
+export const ROUTE_DESATURATE_MAX = 0.25
+
+/*
+ * How far to blend the map toward page white while a route is drawn, 0..1.
+ *
+ * This is the lever that makes the artwork recede — dropping contrast, not hue.
+ * Paired with the light desaturation above, unrelated corridors go pastel and
+ * stop competing while keeping just enough colour to still read as this map,
+ * and the route's full-strength capsules become the only saturated thing on
+ * screen. Fade does the receding; desaturate stops what is left competing, so
+ * fade should stay the larger of the two.
+ *
+ * Short of 1 for the same reason as above: a blank page reads as a failed
+ * render rather than a deliberate state. Chosen against the artwork rather than
+ * by eye, but per the note on ROUTE_SCRIM_MAX_ALPHA this pair is still a
+ * judgement best confirmed on a device.
+ */
+export const ROUTE_FADE_MAX = 0.6
 /*
  * World units, like the spotlight constants, so the route stays glued to the
  * map across zoom instead of fattening as the view pulls out. The artwork's own

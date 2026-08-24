@@ -22,6 +22,7 @@ import {
   pointStationId,
   renderDpr,
   ROUTE_DESATURATE_MAX,
+  ROUTE_FADE_MAX,
   ROUTE_SCRIM_MAX_ALPHA,
   SCRIM_MAX_ALPHA,
   type Manifest,
@@ -1250,15 +1251,15 @@ export default function MapPage() {
       }
 
       /*
-       * Route overlay fade. The map separates from the route by desaturating,
-       * not dimming — see ROUTE_DESATURATE_MAX — so the scrim is retained at
-       * zero strength and its yield arithmetic below is vestigial, kept so the
-       * two can be rebalanced from the constants alone.
+       * Route overlay fade. The map separates from the route by fading toward
+       * page white and draining a little colour — see ROUTE_FADE_MAX — so the
+       * scrim is retained at zero strength and its yield arithmetic below is
+       * vestigial, kept so the three can be rebalanced from the constants alone.
        *
-       * Desaturation deliberately does NOT take that yield. The scrim yields
-       * because two dims multiply into an unreadable map; desaturation and
-       * dimming are orthogonal, and yielding would make the map visibly REGAIN
-       * colour as the spotlight faded in.
+       * Neither fade nor desaturation takes that yield. The scrim yields because
+       * two dims multiply into an unreadable map; these are orthogonal to it,
+       * and yielding would make the map visibly REGAIN colour and contrast as
+       * the spotlight faded in.
        */
       let routeFrame: RouteOverlayFrame | null = null
       {
@@ -1281,7 +1282,8 @@ export default function MapPage() {
             // Gated on the same flag as the scrim: a pins-only overlay (deep
             // link before the fare lands) leaves the map alone, since two lone
             // pins on a fully drained map read as a broken render.
-            desaturate: routeStateRef.current.scrim ? ROUTE_DESATURATE_MAX * alpha : 0
+            desaturate: routeStateRef.current.scrim ? ROUTE_DESATURATE_MAX * alpha : 0,
+            fade: routeStateRef.current.scrim ? ROUTE_FADE_MAX * alpha : 0
           }
         }
       }

@@ -208,7 +208,16 @@ export function createCanvas2DRenderer(
      * Safari, where it no-ops into today's full-colour map rather than breaking.
      */
     const desat = route && route.alpha > 0 ? route.desaturate : 0
-    if (desat > 0) ctx.filter = `saturate(${1 - desat})`
+    const fade = route && route.alpha > 0 ? route.fade : 0
+    /*
+     * `opacity()` rather than a white overlay: the tiles are drawn straight onto
+     * the already-white canvas, so thinning them toward it IS the blend the
+     * WebGL path does with mix(rgb, white, u_fade) — and it needs no extra fill
+     * pass that the route would then have to be drawn over.
+     */
+    if (desat > 0 || fade > 0) {
+      ctx.filter = `saturate(${1 - desat}) opacity(${1 - fade})`
+    }
 
     // Kept resident for the renderer's whole life — see the matching comment in
     // map-renderer-webgl.ts. releaseTiles() resets every tile to tier 0, and
@@ -234,11 +243,11 @@ export function createCanvas2DRenderer(
       }
     }
 
-    // Back to full colour before anything but map artwork is drawn. ctx.filter
+    // Back to full strength before anything but map artwork is drawn. ctx.filter
     // is sticky across draw calls, so without this the route, its pins and the
-    // selection spotlight would all be desaturated too — which would erase the
-    // one distinction the desaturation exists to create.
-    if (desat > 0) ctx.filter = 'none'
+    // selection spotlight would be faded and desaturated too — which would erase
+    // the one distinction the treatment exists to create.
+    if (desat > 0 || fade > 0) ctx.filter = 'none'
 
     if (route && route.alpha > 0 && routeItems.length > 0) {
       // Flat dim under the route — no punch-out; the route's opaque capsules

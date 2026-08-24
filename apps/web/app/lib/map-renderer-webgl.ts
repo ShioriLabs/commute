@@ -36,6 +36,10 @@ uniform sampler2D u_texture;
 // filter, so sharing the coefficients is what stops the two renderers drifting
 // apart in hue at intermediate values.
 uniform float u_desaturate;
+// 0 = the artwork at full strength, 1 = flat page white. Draining colour alone
+// leaves every stroke as dark as it started, so a desaturated schematic is just
+// as busy as a coloured one — this is what actually makes the map recede.
+uniform float u_fade;
 out vec4 outColor;
 void main() {
   vec4 c = texture(u_texture, v_texcoord);
@@ -43,7 +47,9 @@ void main() {
   // Textures are uploaded premultiplied, so the grey has to be weighted by alpha
   // to stay in that space. A no-op for the opaque WebP tiers; it matters for the
   // runtime-rasterized SVG tier, which would otherwise halo at tile edges.
-  outColor = vec4(mix(c.rgb, vec3(luma) * c.a, u_desaturate), c.a);
+  vec3 rgb = mix(c.rgb, vec3(luma) * c.a, u_desaturate);
+  // Same premultiplied reasoning as above: white is (1,1,1) * a in that space.
+  outColor = vec4(mix(rgb, vec3(c.a), u_fade), c.a);
 }
 `
 
@@ -807,7 +813,7 @@ export function createWebGLRenderer(
   // frame-constant u_transform/u_tileSize once per frame stops the mat3 being
   // re-uploaded per tile.
   const transformMat = new Float32Array(9)
-  const frameUniforms = { u_transform: transformMat, u_tileSize: [0, 0], u_desaturate: 0 }
+  const frameUniforms = { u_transform: transformMat, u_tileSize: [0, 0], u_desaturate: 0, u_fade: 0 }
   const tileUniforms: { u_tileOffset: number[], u_texture: WebGLTexture | null } = {
     u_tileOffset: [0, 0],
     u_texture: null
@@ -854,6 +860,7 @@ export function createWebGLRenderer(
      * doesn't read zero, it inherits whatever the last frame bound.
      */
     const desat = route && route.alpha > 0 ? route.desaturate : 0
+    const fade = route && route.alpha > 0 ? route.fade : 0
 
     gl.useProgram(programInfo.program)
     twgl.setBuffersAndAttributes(twglGl, programInfo, quadVao)
@@ -897,7 +904,8 @@ export function createWebGLRenderer(
           u_tileSize: [mapW, mapH],
           u_transform: mat,
           u_texture: previewTexture,
-          u_desaturate: desat
+          u_desaturate: desat,
+          u_fade: fade
         })
         twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
         drawOverlays(mat, transform, cssW, cssH, selection, route)
@@ -969,7 +977,8 @@ export function createWebGLRenderer(
           u_tileSize: [mapW, mapH],
           u_transform: mat,
           u_texture: previewTexture,
-          u_desaturate: desat
+          u_desaturate: desat,
+          u_fade: fade
         })
         twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
       }
@@ -989,6 +998,7 @@ export function createWebGLRenderer(
     frameUniforms.u_tileSize[0] = tileW
     frameUniforms.u_tileSize[1] = tileH
     frameUniforms.u_desaturate = desat
+    frameUniforms.u_fade = fade
     twgl.setUniforms(programInfo, frameUniforms)
 
     for (let i = 0; i < visibleCount; i++) {
