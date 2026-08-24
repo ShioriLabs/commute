@@ -53,16 +53,31 @@ export interface Projection {
  * 43.5 units from the corridor serving Senen Raya, so at 40 that leg had no
  * candidate reaching BOTH stops and drew a chord across the map.
  *
- * 50 rather than 40 because it is measured, not guessed: swept over 213 real TJ
- * stop pairs taken from router output, 40 traces 192 and 50 traces 198, and the
- * worst detour ratio among accepted matches is 1.58 at BOTH — so the extra 6 are
- * genuine corridors, not wrong ones sneaking in. It plateaus there; 70 buys 2
- * more and 80 buys nothing.
+ * 110, measured over every adjacent TJ pair in the topology (932 of them) rather
+ * than the 213 router-output pairs an earlier pass swept — that smaller sample is
+ * what made 50 look like a plateau. Across the full set: 50 traces 889, 110
+ * traces 916, and the worst detour ratio among accepted matches is 1.71 at BOTH
+ * ends of that range, so nothing wrong is sneaking in as it rises.
+ *
+ * The 27 legs this recovers were then checked against the artwork itself — every
+ * sampled point on all 27 lands within 11 units of drawn ink (the marker-disc
+ * radius, so a path crossing a station roundel still counts as on-corridor).
+ * They are real corridors the threshold was cutting off, not chords dressed up.
+ *
+ * Some of those legs trace SHORTER than their straight line (ratio 0.42-0.99).
+ * That is expected where a pin sits off its stroke: the traced span runs foot to
+ * foot along the corridor while the ratio's denominator is pin to pin.
+ *
+ * Why so much slack is needed at all: the artwork breaks a BRT corridor at
+ * junctions, and where the connecting piece is missing a stop's own stroke ends
+ * short of it. Puri Beta 2 sits 101 units from the nearest corridor at all — the
+ * single worst case, and the reason the ceiling is this high; RSPAD is 43.5 from
+ * the one serving Senen Raya.
  *
  * The Jatinegara trap below is unaffected: JNG's candidates are 0.7 and 1.6 units
  * away and the wrong one is rejected at 704, so this moves nothing there.
  */
-export const CORRIDOR_MATCH_MAX_DIST_WORLD = 50
+export const CORRIDOR_MATCH_MAX_DIST_WORLD = 110
 
 /*
  * Detour rejection. A corridor that passes near both stops can still be the
