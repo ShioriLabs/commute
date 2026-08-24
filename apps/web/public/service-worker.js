@@ -23,7 +23,7 @@
 // than merely asserted. It used to be neither: manifest.build rotated on every
 // re-tile while CACHE_NAME sat still, so `ignoreSearch` happily answered every
 // `?v=<new build>` request out of the previous build's bytes, forever.
-const TILE_BUILD = '170d6b8d'
+const TILE_BUILD = 'e297a597'
 // Two halves on purpose. `v5` is the *scheme* version — bump it by hand when
 // what is stored changes shape (a new pre-cache set, a new key convention).
 // TILE_BUILD is the *content* version and moves on its own. Either one moving
