@@ -12,6 +12,8 @@ import {
   ROUTE_PIN_RADIUS_WORLD,
   routeDrawItems,
   tileBudgetBytes,
+  hitTest,
+  type Point,
   type RouteOverlay,
   type Tier
 } from './map-renderer'
@@ -325,5 +327,61 @@ describe('routeDrawItems', () => {
         expect(Math.hypot(x - cx, y - 0) + item.r).toBeLessThanOrEqual(margin)
       }
     }
+  })
+})
+
+/*
+ * Tap resolution is tiered — station, then hub, then label — and a closer shape
+ * in a lower tier never wins. The shapes genuinely overlap on this map, so the
+ * order is what decides which one a tap opens.
+ */
+describe('hitTest', () => {
+  const dot = (id: string, x: number, y: number, r = 12): Point =>
+    ({ id, ax: x, ay: y, bx: x, by: y, r })
+
+  it('prefers a station pill over the hub region containing it', () => {
+    // A hub region and its member pills overlap by construction: a tap on a
+    // member must open that station, and only the gaps between members open
+    // the hub.
+    const hub: Point = { id: 'HUB-DKA', ax: 0, ay: 0, bx: 100, by: 0, r: 60 }
+    const station = dot('KCI-SUD', 50, 0)
+    const hit = hitTest(50, 0, [hub, station], 0)
+    expect(hit).toEqual({ kind: 'station', point: station })
+  })
+
+  it('still opens the hub in the gap between its members', () => {
+    const hub: Point = { id: 'HUB-DKA', ax: 0, ay: 0, bx: 100, by: 0, r: 60 }
+    const station = dot('KCI-SUD', 0, 0)
+    const hit = hitTest(95, 0, [hub, station], 0)
+    expect(hit).toEqual({ kind: 'hub', point: hub })
+  })
+
+  it('prefers a station pill over a label covering it', () => {
+    // The reason the label tier exists: a name is far the largest shape on the
+    // map and routinely covers markers belonging to other stations. Ranking by
+    // distance alone would let it swallow the pill drawn on top of it — here
+    // the tap is dead centre of the label and still opens the station.
+    const label: Point = { id: 'LBL-KCI-SUD', station: 'KCI-SUD', ax: 0, ay: 0, bx: 200, by: 0, r: 40 }
+    const other = dot('KCI-SUDB', 100, 0)
+    const hit = hitTest(100, 0, [label, other], 0)
+    expect(hit).toEqual({ kind: 'station', point: other })
+  })
+
+  it('prefers a hub region over a label covering it', () => {
+    const label: Point = { id: 'LBL-KCI-SUD', station: 'KCI-SUD', ax: 0, ay: 0, bx: 200, by: 0, r: 40 }
+    const hub: Point = { id: 'HUB-DKA', ax: 100, ay: 0, bx: 100, by: 0, r: 20 }
+    const hit = hitTest(100, 0, [label, hub], 0)
+    expect(hit).toEqual({ kind: 'hub', point: hub })
+  })
+
+  it('opens the label where nothing more precise is under the tap', () => {
+    const label: Point = { id: 'LBL-KCI-SUD', station: 'KCI-SUD', ax: 0, ay: 0, bx: 200, by: 0, r: 40 }
+    const far = dot('KCI-SUDB', 900, 900)
+    const hit = hitTest(20, 0, [label, far], 0)
+    expect(hit).toEqual({ kind: 'label', point: label })
+  })
+
+  it('returns null when the tap misses everything', () => {
+    expect(hitTest(900, 900, [dot('KCI-SUD', 0, 0)], 0)).toBeNull()
   })
 })

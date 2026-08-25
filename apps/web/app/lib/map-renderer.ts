@@ -59,6 +59,16 @@ export interface Point {
   by: number
   r: number
   cr?: number
+  /*
+   * Suppress the selection halo for this shape, keeping only the scrim.
+   *
+   * The ring is drawn as an offset outline that settles onto the pill's own
+   * edge, which reads as a highlight around a marker but as a box drawn around
+   * a word — the artwork already gives a station name no outline of its own, so
+   * ringing it looks like a rendering artefact rather than a selection. A
+   * scrim-only spotlight still isolates the tapped label perfectly well.
+   */
+  noRing?: boolean
 }
 
 // Effective corner radius: clamped to [0, r]; missing means fully rounded.
@@ -464,14 +474,34 @@ export function isHubPoint(p: Point): boolean {
   return p.id.startsWith('HUB-')
 }
 
+// Label tap targets are authored as points whose id is `LBL-` + the id of the
+// point they name, so the drawn station NAME is tappable as well as its marker.
+// Tested on `id` for the same reason as isHubPoint: this is what the shape IS,
+// not which station it opens — `station` carries that, exactly as for a halte
+// drawn twice.
+export function isLabelPoint(p: Point): boolean {
+  return p.id.startsWith('LBL-')
+}
+
 export type HitResult =
   | { kind: 'station', point: Point }
   | { kind: 'hub', point: Point }
+  | { kind: 'label', point: Point }
 
-// Runtime tap hit-test. A hub region and its member pills overlap; a tap on a
-// member pill must open that station, while a tap in the gap between members
-// (inside the authored hub region, outside every pill) opens the hub. So a
-// station hit ALWAYS beats a hub hit, even a geometrically closer one.
+/*
+ * Runtime tap hit-test, resolved in tiers: station, then hub, then label. A
+ * closer shape in a lower tier never wins.
+ *
+ * Station over hub: a hub region and its member pills overlap, so a tap on a
+ * member pill must open that station, while a tap in the gap between members
+ * (inside the authored hub region, outside every pill) opens the hub.
+ *
+ * Both over label: a label is much the largest shape on the map — a name is
+ * ~13x the area of its dot — and it routinely covers markers and hub regions
+ * belonging to OTHER stations. Ranking by distance alone would let a name
+ * swallow the very pills drawn on top of it, so the precise target wins
+ * wherever the two overlap and the name is what catches everything else.
+ */
 export function hitTest(
   worldX: number,
   worldY: number,
@@ -482,10 +512,17 @@ export function hitTest(
   let bestStationDist = Infinity
   let bestHub: Point | null = null
   let bestHubDist = Infinity
+  let bestLabel: Point | null = null
+  let bestLabelDist = Infinity
   for (const p of points) {
     const effective = pointToShapeDistance(worldX, worldY, p) - slopWorld
     if (effective > 0) continue
-    if (isHubPoint(p)) {
+    if (isLabelPoint(p)) {
+      if (effective < bestLabelDist) {
+        bestLabelDist = effective
+        bestLabel = p
+      }
+    } else if (isHubPoint(p)) {
       if (effective < bestHubDist) {
         bestHubDist = effective
         bestHub = p
@@ -497,6 +534,7 @@ export function hitTest(
   }
   if (bestStation) return { kind: 'station', point: bestStation }
   if (bestHub) return { kind: 'hub', point: bestHub }
+  if (bestLabel) return { kind: 'label', point: bestLabel }
   return null
 }
 
