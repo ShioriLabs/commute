@@ -13,6 +13,7 @@ import {
   routeDrawItems,
   tileBudgetBytes,
   hitTest,
+  labelAnchorPoint,
   type Point,
   type RouteOverlay,
   type Tier
@@ -383,5 +384,44 @@ describe('hitTest', () => {
 
   it('returns null when the tap misses everything', () => {
     expect(hitTest(900, 900, [dot('KCI-SUD', 0, 0)], 0)).toBeNull()
+  })
+})
+
+describe('labelAnchorPoint', () => {
+  const dot = (id: string, x: number, y: number, station?: string): Point =>
+    ({ id, station, ax: x, ay: y, bx: x, by: y, r: 12 })
+
+  const label = (station: string, x: number, y: number): Point =>
+    ({ id: `LBL-${station}`, station, ax: x - 60, ay: y, bx: x + 60, by: y, r: 20 })
+
+  it('resolves a label to the marker it names', () => {
+    // A name can sit hundreds of world units from its dot, so the spotlight and
+    // the camera have to follow the marker rather than the text.
+    const marker = dot('KCI-SUD', 500, 500)
+    const other = dot('KCI-SUDB', 10, 10)
+    expect(labelAnchorPoint(label('KCI-SUD', 0, 0), [marker, other])).toBe(marker)
+  })
+
+  it('picks the nearest marker when a halte is drawn twice', () => {
+    // Flyover Jatinegara and Tanjung Priok each have a second shape carrying
+    // the `-b` suffix; the label belongs to whichever it was extracted beside.
+    const near = dot('TJ-H00037C', 40, 0)
+    const far = dot('TJ-H00037C-b', 900, 0, 'TJ-H00037C')
+    expect(labelAnchorPoint(label('TJ-H00037C', 0, 0), [far, near])).toBe(near)
+  })
+
+  it('ignores hub regions and other labels', () => {
+    // A hub is not the station's marker, and another label is not a marker at
+    // all — either would put the halo somewhere the station is not.
+    const marker = dot('KCI-SUD', 300, 0)
+    const hub: Point = { id: 'HUB-DKA', station: 'KCI-SUD', ax: 0, ay: 0, bx: 0, by: 0, r: 50 }
+    const twin = label('KCI-SUD', 5, 0)
+    expect(labelAnchorPoint(label('KCI-SUD', 0, 0), [hub, twin, marker])).toBe(marker)
+  })
+
+  it('falls back to the label when its station has no marker', () => {
+    // Better a spotlight on the words than a tap that silently does nothing.
+    const lbl = label('KCI-SUD', 0, 0)
+    expect(labelAnchorPoint(lbl, [dot('KCI-OTHER', 10, 10)])).toBe(lbl)
   })
 })

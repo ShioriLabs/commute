@@ -16,6 +16,7 @@ import {
   createRenderer,
   DESKTOP_TILE_BUDGET_CEILING_BYTES,
   hitTest,
+  labelAnchorPoint,
   PHONE_TILE_BUDGET_CEILING_BYTES,
   pickTier,
   pointCornerRadius,
@@ -1703,9 +1704,14 @@ export default function MapPage() {
           setFareSheet(null)
           setSelectedStation({ operator, code })
           haptic()
+          // Spotlight the MARKER, not the shape that was tapped. For a station
+          // pill they are the same point; for a label they are not — the name
+          // can sit hundreds of world units from its dot, so haloing the words
+          // would fly the camera to the text and leave the station unmarked.
+          const anchor = hit.kind === 'label' ? labelAnchorPoint(hit.point, points) : hit.point
           // Halo starts neutral; re-tints when the station fetch resolves.
-          beginSpotlight(hit.point, SPOTLIGHT_NEUTRAL_COLOR)
-          flyToPoint(hit.point)
+          beginSpotlight(anchor, SPOTLIGHT_NEUTRAL_COLOR)
+          flyToPoint(anchor)
         } else {
           console.warn('Unrecognized point id format:', hit.point.id)
         }

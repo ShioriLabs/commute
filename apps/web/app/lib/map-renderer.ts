@@ -62,11 +62,13 @@ export interface Point {
   /*
    * Suppress the selection halo for this shape, keeping only the scrim.
    *
-   * The ring is drawn as an offset outline that settles onto the pill's own
-   * edge, which reads as a highlight around a marker but as a box drawn around
-   * a word — the artwork already gives a station name no outline of its own, so
-   * ringing it looks like a rendering artefact rather than a selection. A
-   * scrim-only spotlight still isolates the tapped label perfectly well.
+   * The ring is an offset outline that settles onto the pill's own edge, which
+   * reads as a highlight around a marker but as a box drawn around a word.
+   *
+   * Labels carry this, but it is a fallback rather than the normal path: a tap
+   * on a name spotlights the MARKER it names (labelAnchorPoint), so the halo
+   * lands on a dot and draws as usual. This only takes effect when no marker
+   * resolves and the label has to stand in for itself.
    */
   noRing?: boolean
 }
@@ -481,6 +483,39 @@ export function isHubPoint(p: Point): boolean {
 // drawn twice.
 export function isLabelPoint(p: Point): boolean {
   return p.id.startsWith('LBL-')
+}
+
+/*
+ * The marker a label stands in for: the drawn dot of the station it names.
+ *
+ * A tap on a name has to spotlight and fly to the MARKER, not the text. The
+ * station is where the dot is — a label can sit hundreds of world units away
+ * from it — so haloing the words would point the camera at the wrong place and
+ * leave the station itself unmarked.
+ *
+ * Nearest wins because a halte can be drawn twice (Flyover Jatinegara and
+ * Tanjung Priok each have a second shape carrying the `-b` suffix): the label
+ * belongs to whichever of them it was extracted beside.
+ *
+ * Returns the label itself if no marker resolves, so a tap still does
+ * something rather than silently dropping.
+ */
+export function labelAnchorPoint(label: Point, points: readonly Point[]): Point {
+  const station = pointStationId(label)
+  const lx = (label.ax + label.bx) / 2
+  const ly = (label.ay + label.by) / 2
+  let best: Point | null = null
+  let bestDist = Infinity
+  for (const p of points) {
+    if (isLabelPoint(p) || isHubPoint(p)) continue
+    if (pointStationId(p) !== station) continue
+    const dist = Math.hypot((p.ax + p.bx) / 2 - lx, (p.ay + p.by) / 2 - ly)
+    if (dist < bestDist) {
+      bestDist = dist
+      best = p
+    }
+  }
+  return best ?? label
 }
 
 export type HitResult =
