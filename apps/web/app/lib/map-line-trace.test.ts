@@ -42,6 +42,19 @@ describe('traceLine', () => {
     expect(gated.segments[0].edges).toHaveLength(0)
   })
 
+  it('picks its own stroke over a NEARER parallel one, per pair', () => {
+    // Tanah Abang to Karet in miniature: the wrong-coloured stroke is a hair
+    // closer, so matching first and vetting the winner throws the pair away even
+    // though the right corridor was in the candidate list. Filtering before the
+    // match asks the question the right way round.
+    const stops = [dot('A', 0, 6), dot('B', 200, 6)]
+    const traced = traceLine(
+      line({ kind: 'TRUNK', ids: ['A', 'B'] }),
+      stops, [BLUE, YELLOW], ['#2355A2', '#F8C434'], '#F8C434'
+    )
+    expect(traced.matchedPairs).toBe(1)
+  })
+
   it('elects its own stroke over a nearer one of another colour', () => {
     // The gate rescues as well as rejects: with both strokes present, filtering
     // before the election steers this onto the yellow it belongs to.
@@ -175,5 +188,59 @@ describe('traceLine joins branches to their trunk', () => {
       points, [spine], ['#F8C434'], '#F8C434'
     )
     expect(traced.segments[0].markers).toEqual(['KCI-J', 'KCI-B'])
+  })
+})
+
+/*
+ * The extractor splits a drawn line wherever the artwork breaks it, so a pair can
+ * straddle the join and no single corridor reaches both stops. Cikarang's Duri to
+ * Tanah Abang is exactly that: one continuous cyan stroke arriving as two
+ * corridors that meet at a shared endpoint.
+ */
+describe('traceLine chains across a split stroke', () => {
+  // Two halves of one line, meeting exactly at (0, 100).
+  const upper: Corridor = { w: 25, pts: [[0, 0], [0, 100]] }
+  const lower: Corridor = { w: 25, pts: [[0, 100], [0, 200]] }
+  const points = [dot('KCI-A', 0, 0), dot('KCI-B', 0, 200)]
+
+  it('traces a pair whose stops sit on different halves', () => {
+    const traced = traceLine(
+      line({ kind: 'TRUNK', ids: ['KCI-A', 'KCI-B'] }),
+      points, [upper, lower], ['#00BDEE', '#00BDEE'], '#25B8EB'
+    )
+    expect(traced.matchedPairs).toBe(1)
+    expect(traced.segments[0].edges.length).toBeGreaterThan(0)
+  })
+
+  it('still refuses when the halves are the wrong colour', () => {
+    // Chaining widens which GEOMETRY can be found, never which colours pass.
+    const traced = traceLine(
+      line({ kind: 'TRUNK', ids: ['KCI-A', 'KCI-B'] }),
+      points, [upper, lower], ['#282A65', '#282A65'], '#25B8EB'
+    )
+    expect(traced.matchedPairs).toBe(0)
+  })
+
+  it('does not chain across corridors that never meet', () => {
+    // One hop between TOUCHING strokes, not a path search free to wander the
+    // network to connect any two points. The second half is offset so it reaches
+    // the far stop but shares no endpoint with the first, and the two stops are
+    // far enough apart that neither corridor alone can serve both.
+    const far = [dot('KCI-A', 0, 0), dot('KCI-B', 600, 1000)]
+    const detached: Corridor = { w: 25, pts: [[600, 900], [600, 1000]] }
+    const traced = traceLine(
+      line({ kind: 'TRUNK', ids: ['KCI-A', 'KCI-B'] }),
+      far, [upper, detached], ['#00BDEE', '#00BDEE'], '#25B8EB'
+    )
+    expect(traced.matchedPairs).toBe(0)
+  })
+
+  it('chains onto a half whose colour is lent by a sharing line', () => {
+    const traced = traceLine(
+      line({ kind: 'TRUNK', ids: ['KCI-A', 'KCI-B'] }),
+      points, [upper, lower], ['#006838', '#006838'], '#21409A',
+      () => ['#006838']
+    )
+    expect(traced.matchedPairs).toBe(1)
   })
 })

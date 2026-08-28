@@ -17,18 +17,18 @@
  *
  * ── What the gate is worth, measured over all 10 non-BUS lines ─────────────
  *
- * Gated: 128 of 132 adjacent pairs traced (97%). Colour-blind: 130 traced, but
- * TEN of them onto a stroke of the wrong colour — LRTJBDB:CB alone puts 6 of its
- * 11 pairs on another line. So the gate costs 2 traced pairs and buys back 10
- * confidently wrong ones.
+ * Colour-blind matching lands TEN pairs on a stroke of the wrong colour —
+ * LRTJBDB:CB alone puts 6 of its 11 on another line. Gated, none of them do.
  *
- * It also rescues rather than only rejecting: KCI:T and LRTJBDB:BK trace 100%
- * *and* avoid a wrong stroke, because filtering the candidates before the
- * election steers them onto their own line instead of a nearer neighbour.
+ * The gate also rescues rather than only rejecting: filtering candidates before
+ * the election steers KCI:T and LRTJBDB:BK onto their own line instead of a
+ * nearer neighbour.
  *
- * The two pairs it gives up are real refusals, not near misses. KCI:A's first
- * pair matches a cyan corridor 155 channels from its navy brand; KCI:C hits one
- * at 142. Both would have lit a different line end to end.
+ * With the shared-track exception (see colourMatches) it traces 133 of 136. The
+ * three it still gives up are honest: two sit on a navy stroke near Duri and
+ * Tanah Abang that no line serving those stops is drawn in, so there is nothing
+ * to tell it apart from a neighbour, and refusing leaves a gap rather than
+ * lighting the wrong line.
  *
  * Pure and synchronous: takes already-fetched line detail and geometry so the
  * build script and the tests drive it the same way.
@@ -36,9 +36,11 @@
 
 import { colourMatches } from './map-corridor-colour'
 import {
+  CORRIDOR_MATCH_MAX_DIST_WORLD,
   matchCorridorPath,
   pickLegCorridor,
   prepareCorridors,
+  projectOntoPolyline,
   type Corridor,
   type PreparedCorridor
 } from './map-corridors'
@@ -87,6 +89,20 @@ export interface TraceableSegment {
 export interface TraceableLine {
   segments: TraceableSegment[]
 }
+
+/*
+ * Which other lines run a given pair of adjacent stops, as their brand colours.
+ *
+ * Shared track is normal here and the sheet draws it once, in one line's colour,
+ * so a strict colour gate refuses the whole shared run — see colourMatches. This
+ * is how the caller says "that stroke belongs to a line that really does share
+ * this stretch", which is what makes the exception narrow rather than a hole.
+ *
+ * Called per pair rather than per line because sharing is a property of the
+ * track, not of the whole route: Cikarang shares Manggarai to Sudirman with
+ * Soekarno-Hatta and nothing else.
+ */
+export type SharedTrackLookup = (fromId: string, toId: string) => readonly string[]
 
 // One drawn run of the line, in world units. Kept per segment rather than
 // flattened so "isolate one branch" stays cheap to add later: the artifact
@@ -169,6 +185,96 @@ function resolveJoinId(
   return null
 }
 
+/*
+ * A pair traced across TWO corridors that meet end to end.
+ *
+ * The extractor splits a drawn line wherever the artwork breaks it, so a station
+ * pair can straddle the join and no single corridor reaches both stops —
+ * matchCorridorPath needs one that does, and returns nothing. Cikarang's Duri to
+ * Tanah Abang is exactly this: its cyan stroke is drawn continuously but arrives
+ * as corridor 5 and corridor 24, meeting exactly at (2958, 2932).
+ *
+ * So when the direct match fails, look for a corridor reaching the first stop
+ * and another reaching the second whose endpoints coincide, and trace each half
+ * to the join. Deliberately one hop, not a graph search: two strokes is what the
+ * artwork's breaks actually produce, and a general path-finder over corridors
+ * would be free to wander the network to connect any two points.
+ *
+ * Both halves face the same colour gate as a direct match, so this widens which
+ * geometry can be found, never which colours are acceptable.
+ */
+const JOIN_EPSILON_WORLD = 2
+
+function corridorEndpoints(corridor: PreparedCorridor): [readonly [number, number], readonly [number, number]] {
+  return [corridor.pts[0], corridor.pts[corridor.pts.length - 1]]
+}
+
+function joinsEndToEnd(a: PreparedCorridor, b: PreparedCorridor): [number, number] | null {
+  for (const p of corridorEndpoints(a)) {
+    for (const q of corridorEndpoints(b)) {
+      if (Math.hypot(p[0] - q[0], p[1] - q[1]) <= JOIN_EPSILON_WORLD) return [p[0], p[1]]
+    }
+  }
+  return null
+}
+
+/*
+ * matchCorridorPath restricted to corridors this line could actually be drawn in.
+ *
+ * Indices are remapped rather than passing the full array with a predicate,
+ * because matchCorridorPath reports the index it chose and callers need that to
+ * refer to the real corridor list.
+ */
+function matchWithinEligible(
+  a: { x: number, y: number },
+  b: { x: number, y: number },
+  prepared: readonly PreparedCorridor[],
+  eligible: (index: number) => boolean,
+  preferIndex: number | undefined
+): { path: Array<[number, number]>, index: number } | null {
+  const indices: number[] = []
+  for (let i = 0; i < prepared.length; i++) {
+    if (eligible(i)) indices.push(i)
+  }
+  if (indices.length === 0) return null
+  const subset = indices.map(i => prepared[i])
+  const prefer = preferIndex !== undefined ? indices.indexOf(preferIndex) : -1
+  const match = matchCorridorPath(a.x, a.y, b.x, b.y, subset, {
+    preferIndex: prefer >= 0 ? prefer : undefined
+  })
+  return match ? { path: match.path, index: indices[match.index] } : null
+}
+
+function matchAcrossJoin(
+  a: { x: number, y: number },
+  b: { x: number, y: number },
+  prepared: readonly PreparedCorridor[],
+  eligible: (index: number) => boolean
+): Array<[number, number, number, number]> | null {
+  for (let i = 0; i < prepared.length; i++) {
+    if (!eligible(i)) continue
+    // Only a corridor that actually reaches the first stop can start the chain.
+    if (projectOntoPolyline(a.x, a.y, prepared[i]).dist > CORRIDOR_MATCH_MAX_DIST_WORLD) continue
+    for (let j = 0; j < prepared.length; j++) {
+      if (i === j || !eligible(j)) continue
+      if (projectOntoPolyline(b.x, b.y, prepared[j]).dist > CORRIDOR_MATCH_MAX_DIST_WORLD) continue
+      const join = joinsEndToEnd(prepared[i], prepared[j])
+      if (!join) continue
+      const first = matchCorridorPath(a.x, a.y, join[0], join[1], [prepared[i]])
+      const second = matchCorridorPath(join[0], join[1], b.x, b.y, [prepared[j]])
+      if (!first || !second) continue
+      const edges: Array<[number, number, number, number]> = []
+      for (const path of [first.path, second.path]) {
+        for (let k = 0; k < path.length - 1; k++) {
+          edges.push([path[k][0], path[k][1], path[k + 1][0], path[k + 1][1]])
+        }
+      }
+      if (edges.length > 0) return edges
+    }
+  }
+  return null
+}
+
 export function traceLine(
   line: TraceableLine,
   points: readonly TracePoint[],
@@ -178,7 +284,10 @@ export function traceLine(
   corridorColour: ReadonlyArray<string | null>,
   // The line's brand colour. Undefined disables the colour gate entirely, which
   // is the pre-existing colour-blind behaviour.
-  lineColour: string | undefined
+  lineColour: string | undefined,
+  // Optional; without it the colour gate stays strict, which is the behaviour
+  // every test that does not pass one is pinning.
+  sharedTrack?: SharedTrackLookup
 ): TracedLine {
   // First alias wins, but an exact id always beats an alias — the same rule the
   // route overlay uses, so a station drawn twice pins the same shape in both.
@@ -230,19 +339,60 @@ export function traceLine(
        * trunk's corridor through the branch and match nothing there. The Cikarang
        * loop is the same story from the other direction.
        */
+      /*
+       * The election stays strict on colour: it picks the stroke for the whole
+       * segment, and admitting a neighbour's colour there would let a shared
+       * stretch drag the entire run onto the wrong line. The per-pair check
+       * below is where sharing is allowed, because that is the scope sharing
+       * actually has.
+       */
       const preferIndex = electCorridor(resolved, prepared, corridorColour, lineColour)
       for (let i = 0; i < resolved.length - 1; i++) {
         const a = resolved[i]
         const b = resolved[i + 1]
-        const match = matchCorridorPath(a.x, a.y, b.x, b.y, prepared, { preferIndex })
-        // No chord fallback. An unmatched pair leaves a gap in the isolated line,
-        // which is the honest answer; a straight chord across the artwork would
-        // claim the line runs somewhere it does not.
-        if (!match) continue
-        // The elected corridor can still be the wrong colour where the election
-        // fell through to colour-blind matching, so re-check what was actually
-        // traced rather than trusting the preference.
-        if (!colourMatches(corridorColour[match.index] ?? null, lineColour)) continue
+        const shared = sharedTrack ? sharedTrack(a.id, b.id) : undefined
+        const eligible = (index: number) => colourMatches(corridorColour[index] ?? null, lineColour, shared)
+        /*
+         * Match against the eligible corridors only, rather than matching first
+         * and vetting the winner.
+         *
+         * matchCorridorPath ranks on distance and returns one answer, so where
+         * this line and another are drawn as parallel strokes the neighbour can
+         * win by a single world unit — Tanah Abang to Karet picks a navy stroke
+         * 40 units away over its own cyan at 41. Vetting afterwards then throws
+         * the pair away even though the right corridor was sitting in the
+         * candidate list. Filtering first puts the question the right way round:
+         * of the strokes that COULD be this line, which fits best.
+         */
+        /*
+         * Own colour first, shared-track colours only as a fallback.
+         *
+         * Sharing STOPS is not sharing TRACK. Soekarno-Hatta and Cikarang both
+         * call at Manggarai and Sudirman but are drawn as separate parallel
+         * strokes between them, so admitting the neighbour's colour up front
+         * traced Soekarno-Hatta down the cyan line. Trying strict first means
+         * the exception only applies where this line genuinely has no stroke of
+         * its own — which is what shared track actually looks like.
+         */
+        const strict = (index: number) => colourMatches(corridorColour[index] ?? null, lineColour)
+        const match = matchWithinEligible(a, b, prepared, strict, preferIndex)
+          ?? matchWithinEligible(a, b, prepared, eligible, preferIndex)
+        if (!match) {
+          // Nothing reaches both stops. Before giving up, try the one shape the
+          // artwork's own breaks produce: two corridors meeting end to end.
+          // Strict first here too, for the reason given above: the chain should
+          // not reach for a neighbour's colour while this line's own stroke is
+          // available on both halves.
+          const chained = matchAcrossJoin(a, b, prepared, strict)
+            ?? matchAcrossJoin(a, b, prepared, eligible)
+          if (chained) {
+            edges.push(...chained)
+            segMatched++
+          }
+          // Otherwise leave a gap. No chord fallback: a straight line across the
+          // artwork would claim the line runs somewhere it does not.
+          continue
+        }
         for (let j = 0; j < match.path.length - 1; j++) {
           const [ax, ay] = match.path[j]
           const [bx, by] = match.path[j + 1]

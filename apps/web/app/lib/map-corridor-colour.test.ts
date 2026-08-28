@@ -113,6 +113,20 @@ describe('colourMatches', () => {
     expect(colourMatches('#2355A2', '#F8C434')).toBe(false)
   })
 
+  it('accepts a stroke coloured as a line that shares this track', () => {
+    // The sheet draws shared track once, in one line's colour. LRT Jabodebek's
+    // Cibubur line runs the Dukuh Atas to Cawang trunk drawn in Bekasi's green;
+    // refusing it leaves a hole in the middle of the line being isolated.
+    expect(colourMatches('#036C3E', '#21409A', ['#006838'])).toBe(true)
+  })
+
+  it('still refuses a parallel stroke when no sharing line owns its colour', () => {
+    // The narrowing that keeps this an exception rather than a hole: a neighbour
+    // that goes somewhere else does not get to lend its colour.
+    expect(colourMatches('#2355A2', '#F8C434', ['#EE3D43'])).toBe(false)
+    expect(colourMatches('#2355A2', '#F8C434', [])).toBe(false)
+  })
+
   it('treats an unknown corridor colour as eligible', () => {
     expect(colourMatches(null, '#F8C434')).toBe(true)
   })

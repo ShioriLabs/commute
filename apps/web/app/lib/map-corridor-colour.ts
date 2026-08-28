@@ -166,9 +166,38 @@ export function channelDistance(a: string, b: string): number {
  */
 export const CORRIDOR_COLOUR_TOLERANCE = 72
 
-export function colourMatches(corridorColour: string | null, lineColour: string | undefined): boolean {
+export function colourMatches(
+  corridorColour: string | null,
+  lineColour: string | undefined,
+  /*
+   * Colours of the OTHER lines that run this same stretch of track.
+   *
+   * Shared track is normal on this network and the sheet can only draw it once,
+   * in one line's colour: LRT Jabodebek's Cibubur and Bekasi lines share the
+   * Dukuh Atas to Cawang trunk, and Cikarang shares Manggarai to Sudirman with
+   * Soekarno-Hatta. A strict colour gate refuses the whole shared run, which is
+   * the wrong answer twice over — the stretch really is part of this line, and
+   * leaving it faded reads as a hole in the middle of it.
+   *
+   * So a stroke also passes when its colour belongs to a line that demonstrably
+   * serves BOTH stops of the pair being matched. That is much narrower than
+   * dropping the gate: it admits the neighbour that shares this track, and still
+   * refuses a parallel stroke belonging to a line that goes somewhere else,
+   * which is the failure the gate exists for. Measured over the shipped network,
+   * 8 of the 10 refusals are shared track and 2 have no sharing line at all.
+   *
+   * Empty or omitted keeps the old strict behaviour.
+   */
+  sharedTrackColours?: readonly string[]
+): boolean {
   // Unknown either side is not a mismatch. A BRT corridor, an unjoined stroke and
   // a line with no brand colour all have to stay eligible.
   if (!corridorColour || !lineColour) return true
-  return channelDistance(corridorColour, lineColour) <= CORRIDOR_COLOUR_TOLERANCE
+  if (channelDistance(corridorColour, lineColour) <= CORRIDOR_COLOUR_TOLERANCE) return true
+  if (sharedTrackColours) {
+    for (const shared of sharedTrackColours) {
+      if (channelDistance(corridorColour, shared) <= CORRIDOR_COLOUR_TOLERANCE) return true
+    }
+  }
+  return false
 }

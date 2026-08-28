@@ -117,15 +117,50 @@ async function main(): Promise<void> {
   }
   log(`${wanted.length} non-BUS lines to trace`)
 
+  /*
+   * Every line's station set, so tracing can tell shared track from a parallel
+   * stroke that merely runs nearby.
+   *
+   * The sheet draws shared track once, in one line's colour — LRT Jabodebek's
+   * two lines share Dukuh Atas to Cawang, Cikarang shares Manggarai to Sudirman
+   * with Soekarno-Hatta — so a strict colour gate leaves a hole in the middle of
+   * the line that is being isolated. Fetched up front because the lookup has to
+   * answer for every line while tracing any one of them.
+   */
+  const detailByKey = new Map<string, { segments: Array<{ kind: string, joinsAtCode?: string | null, stations: Array<{ id: string }> }> }>()
+  for (const line of wanted) {
+    detailByKey.set(line.key, await getJson(`${API_BASE_URL}/lines/${line.operator}/${line.code}`))
+  }
+  const servedByKey = new Map<string, Set<string>>()
+  for (const [key, detail] of detailByKey) {
+    const served = new Set<string>()
+    for (const segment of detail.segments) {
+      for (const station of segment.stations) served.add(station.id)
+    }
+    servedByKey.set(key, served)
+  }
+
   const out: unknown[] = []
   let totalMatched = 0
   let totalPairs = 0
 
   for (const line of wanted) {
-    const detail = await getJson<{ segments: Array<{ kind: string, stations: Array<{ id: string }> }> }>(
-      `${API_BASE_URL}/lines/${line.operator}/${line.code}`
-    )
-    const traced = traceLine(detail, pointsManifest.points, corridorsManifest.corridors, colours, line.color)
+    const detail = detailByKey.get(line.key)!
+    /*
+     * The colours of other lines that serve BOTH stops of a pair. A stroke drawn
+     * in one of those is this line's track too, just painted as its neighbour.
+     * Anything else stays refused, which is what the gate is for.
+     */
+    const sharedTrack = (fromId: string, toId: string): string[] => {
+      const shared: string[] = []
+      for (const other of wanted) {
+        if (other.key === line.key) continue
+        const served = servedByKey.get(other.key)
+        if (served && served.has(fromId) && served.has(toId)) shared.push(other.color)
+      }
+      return shared
+    }
+    const traced = traceLine(detail, pointsManifest.points, corridorsManifest.corridors, colours, line.color, sharedTrack)
     totalMatched += traced.matchedPairs
     totalPairs += traced.totalPairs
 

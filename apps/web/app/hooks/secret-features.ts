@@ -6,6 +6,10 @@ import { useCallback, useEffect, useState } from 'react'
 // bar, so there's no way to type an unlisted route. On iOS a standalone PWA
 // also gets its own storage jar, so setting the flag in Safari would not carry
 // into the installed app, which is exactly where the instrumentation is needed.
+//
+// The same gesture now reveals the experimental line-isolation toggle. One
+// hidden door rather than two: a second gesture for every unfinished feature
+// gets forgotten, and this one is already documented where it is performed.
 const MAP_GL_DEBUG_KEY = 'map-gl-debug'
 
 function readFlag(key: string): boolean {
@@ -47,4 +51,18 @@ export function useMapGlDebug() {
   }, [])
 
   return { isEnabled, setEnabled }
+}
+
+/*
+ * Whether experimental settings should be listed at all.
+ *
+ * Shares the debug flag rather than owning one, so the 7-tap gesture in
+ * Settings → Tentang reveals everything unfinished at once. Note this only
+ * REVEALS the toggle; whether line isolation is actually on is its own stored
+ * choice (utils/line-isolate.ts), so turning the debug flag back off hides the
+ * control without silently changing what the map does.
+ */
+export function useExperimentalSettings() {
+  const { isEnabled } = useMapGlDebug()
+  return isEnabled
 }
