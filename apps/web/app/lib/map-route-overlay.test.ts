@@ -273,6 +273,72 @@ describe('buildRouteOverlayModel stop dots', () => {
  * leg's pairs — including Jelambar->Grogol->Roxy from the original report —
  * because it sat a world unit nearer at those stops.
  */
+/*
+ * A chorded pair still drawn on its corridor.
+ *
+ * A traced pair whose path is straight is deliberately downgraded to a chord,
+ * and a chord used to run between station CENTROIDS. An interchange halte is
+ * authored as a bar spanning several stacked strokes, so its centroid sits
+ * between them: Koridor 3's interlined haltes are 11 units off their own
+ * stroke, and the drawn line zig-zagged by that much against artwork that is
+ * perfectly straight.
+ */
+describe('route overlay chord snapping', () => {
+  const stroke: Corridor = { w: 15, c: '#F9C535', pts: [[0, 0], [400, 0], [520, 90], [640, 90]] }
+  // Two haltes ON the stroke, two authored as bars whose centroid sits 11 above.
+  const points: Point[] = [
+    { id: 'TJ-A', ax: 0, ay: 0, bx: 0, by: 0, r: 12 },
+    { id: 'TJ-B', ax: 130, ay: -22, bx: 130, by: 0, r: 12 },
+    { id: 'TJ-C', ax: 260, ay: -22, bx: 260, by: 0, r: 12 },
+    { id: 'TJ-D', ax: 400, ay: 0, bx: 400, by: 0, r: 12 },
+    // A stop past the bend, so this pair keeps corridor shape and the leg-level
+    // ruler stands down — which is what leaves the straight pairs as chords.
+    { id: 'TJ-E', ax: 640, ay: 90, bx: 640, by: 90, r: 12 }
+  ]
+  const fare = {
+    legs: [{
+      type: 'RIDE' as const,
+      line: 'TJ:3',
+      operator: 'TJ',
+      stops: [{ id: 'TJ-A' }, { id: 'TJ-B' }, { id: 'TJ-C' }, { id: 'TJ-D' }, { id: 'TJ-E' }]
+    }]
+  }
+  const resolveLine = () => ({ colorCode: '#FDCB1C' })
+
+  it('draws a straight line even where the tap targets sit off the stroke', () => {
+    const model = buildRouteOverlayModel(
+      fare as never, { fromId: 'TJ-A', toId: 'TJ-E' }, points, resolveLine, [stroke]
+    )
+    const rides = model!.overlay.segments.filter(s => s.kind === 'ride')
+    expect(rides.length).toBeGreaterThan(0)
+    /*
+     * The straight run before the bend belongs on the stroke at y=0, not at the
+     * -11 centroids. The bend itself legitimately climbs to 90, and is what
+     * stands the leg-level ruler down — without it every pair chords and the
+     * ruler already straightens them, so the bug cannot appear.
+     */
+    const beforeBend = rides.filter(s => s.ax < 400 && s.bx <= 400)
+    expect(beforeBend.length).toBeGreaterThan(0)
+    for (const segment of beforeBend) {
+      expect(Math.abs(segment.ay)).toBeLessThan(3)
+      expect(Math.abs(segment.by)).toBeLessThan(3)
+    }
+  })
+
+  it('puts the stop dots on the line as well', () => {
+    // The markers follow the drawn geometry; a dot left at the centroid floats
+    // between the band's parallel strokes.
+    const model = buildRouteOverlayModel(
+      fare as never, { fromId: 'TJ-A', toId: 'TJ-E' }, points, resolveLine, [stroke]
+    )
+    const beforeBend = model!.overlay.pins.filter(p => p.kind === 'stop' && p.x < 400)
+    expect(beforeBend.length).toBeGreaterThan(0)
+    for (const pin of beforeBend) {
+      expect(Math.abs(pin.y)).toBeLessThan(3)
+    }
+  })
+})
+
 describe('route overlay colour gate', () => {
   const YELLOW = '#F9C535'
   const BLUE = '#2455A3'

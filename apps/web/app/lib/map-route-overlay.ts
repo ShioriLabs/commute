@@ -227,7 +227,15 @@ export function buildRouteOverlayModel(
        * bar's centroid sits ~40 units off its corridor, and RSPAD reaches its
        * partner's stroke at 43 — so those stay corridor-drawn (and snapped).
        */
-      const plans: Array<{ a: { x: number, y: number }, b: { x: number, y: number }, i: number, path: Array<[number, number]> | null }> = []
+      const plans: Array<{
+        a: { x: number, y: number }
+        b: { x: number, y: number }
+        i: number
+        path: Array<[number, number]> | null
+        // Where the elected corridor passes this pair's two stops, kept even
+        // when `path` is discarded for being straight. Null when nothing matched.
+        feet: [[number, number], [number, number]] | null
+      }> = []
       for (let i = 1; i < vertices.length; i++) {
         const a = vertices[i - 1]
         const b = vertices[i]
@@ -251,7 +259,26 @@ export function buildRouteOverlayModel(
             || offA > STRAIGHT_SUBPATH_MAX_OFFSET_WORLD
             || offB > STRAIGHT_SUBPATH_MAX_OFFSET_WORLD
         }
-        plans.push({ a, b, i, path: match && path && corridorAddsShape ? path : null })
+        /*
+         * A pair downgraded to a chord still knows where its corridor runs, and
+         * that is worth keeping.
+         *
+         * The chord is drawn between station CENTROIDS, and an interchange halte
+         * is authored as a bar spanning several stacked strokes, so its centroid
+         * sits between them rather than on any one. Koridor 3's interlined
+         * stretch straddles its own stroke by 11 units that way, and chording
+         * through those centroids is what makes the drawn line zig-zag against
+         * an artwork stroke that is perfectly straight.
+         *
+         * `feet` is where the elected corridor actually passes each stop. The
+         * chord is drawn between those instead, which puts the line on the
+         * stroke without giving up the straightening that discarding the path
+         * was for.
+         */
+        const feet: [[number, number], [number, number]] | null = match && path
+          ? [[path[0][0], path[0][1]], [path[path.length - 1][0], path[path.length - 1][1]]]
+          : null
+        plans.push({ a, b, i, path: match && path && corridorAddsShape ? path : null, feet })
       }
 
       /*
@@ -357,17 +384,25 @@ export function buildRouteOverlayModel(
             prevEnd = { x: path[path.length - 1][0], y: path[path.length - 1][1] }
             continue
           }
-          bridgeTo(a.x, a.y)
+          // On the corridor where one was matched, on the centroids only when
+          // nothing was — a pair with no corridor at all has nothing better.
+          const from = plan.feet ? { x: plan.feet[0][0], y: plan.feet[0][1] } : a
+          const to = plan.feet ? { x: plan.feet[1][0], y: plan.feet[1][1] } : b
+          bridgeTo(from.x, from.y)
           segments.push({
-            ax: a.x,
-            ay: a.y,
-            bx: b.x,
-            by: b.y,
+            ax: from.x,
+            ay: from.y,
+            bx: to.x,
+            by: to.y,
             r: halfWidth,
             color,
             kind: 'ride'
           })
-          prevEnd = { x: b.x, y: b.y }
+          // The markers follow the line, so a stop's dot sits on the stroke
+          // rather than floating between the band's parallel strokes.
+          marks[i - 1] = from
+          marks[i] = to
+          prevEnd = { x: to.x, y: to.y }
         }
       }
       // Bridge from the previous leg only now that this one's first mark is
