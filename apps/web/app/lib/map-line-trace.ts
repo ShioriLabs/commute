@@ -141,12 +141,12 @@ export interface TracedLine {
 function electCorridor(
   stops: ReadonlyArray<{ x: number, y: number }>,
   prepared: readonly PreparedCorridor[],
-  colours: ReadonlyArray<string | null>,
+  colourAt: (index: number) => string | null,
   lineColour: string | undefined
 ): number | undefined {
   const eligible: number[] = []
   for (let i = 0; i < prepared.length; i++) {
-    if (colourMatches(colours[i] ?? null, lineColour)) eligible.push(i)
+    if (colourMatches(colourAt(i), lineColour)) eligible.push(i)
   }
 
   if (eligible.length > 0 && eligible.length < prepared.length) {
@@ -203,7 +203,21 @@ function resolveJoinId(
  * Both halves face the same colour gate as a direct match, so this widens which
  * geometry can be found, never which colours are acceptable.
  */
-const JOIN_EPSILON_WORLD = 2
+/*
+ * How far apart two corridor ends may sit and still be treated as one line.
+ *
+ * Most joins are exact — the extractor splits a path but both halves keep the
+ * shared vertex, so nearly every same-coloured pair meets at 0.0. This is not for
+ * those; it is for a break AT a station, where the marker disc is drawn over the
+ * line and the stroke resumes on its far side. A disc is 44-50 units across, so
+ * the surviving gap lands just under that: Sudirman Baru to Duri breaks at 47.
+ *
+ * 56 spans the widest disc and nothing else. It is a long way below the distance
+ * two unrelated strokes of the same colour would sit apart, and both halves still
+ * face the colour gate and the detour check, so widening it admits the missing
+ * half of a line rather than an unrelated stub.
+ */
+const JOIN_EPSILON_WORLD = 56
 
 function corridorEndpoints(corridor: PreparedCorridor): [readonly [number, number], readonly [number, number]] {
   return [corridor.pts[0], corridor.pts[corridor.pts.length - 1]]
@@ -279,9 +293,12 @@ export function traceLine(
   line: TraceableLine,
   points: readonly TracePoint[],
   corridors: readonly Corridor[],
-  // Artwork colour per corridor, aligned by index; see corridorColours(). Null
-  // entries are "unknown", never "excluded".
-  corridorColour: ReadonlyArray<string | null>,
+  /*
+   * Artwork colour per corridor, aligned by index. Optional: corridors carry
+   * their own colour now, so this only exists for tests that want to drive the
+   * gate directly. A null entry is "unknown", never "excluded".
+   */
+  corridorColour: ReadonlyArray<string | null> | undefined,
   // The line's brand colour. Undefined disables the colour gate entirely, which
   // is the pre-existing colour-blind behaviour.
   lineColour: string | undefined,
@@ -298,6 +315,9 @@ export function traceLine(
   }
 
   const prepared = corridors.length > 0 ? prepareCorridors(corridors) : []
+  // Prefer the colour the corridor carries; the override is for tests.
+  const colourAt = (index: number): string | null =>
+    corridorColour?.[index] ?? corridors[index]?.c ?? null
   const segments: TracedSegment[] = []
   let matchedPairs = 0
   let totalPairs = 0
@@ -346,12 +366,12 @@ export function traceLine(
        * below is where sharing is allowed, because that is the scope sharing
        * actually has.
        */
-      const preferIndex = electCorridor(resolved, prepared, corridorColour, lineColour)
+      const preferIndex = electCorridor(resolved, prepared, colourAt, lineColour)
       for (let i = 0; i < resolved.length - 1; i++) {
         const a = resolved[i]
         const b = resolved[i + 1]
         const shared = sharedTrack ? sharedTrack(a.id, b.id) : undefined
-        const eligible = (index: number) => colourMatches(corridorColour[index] ?? null, lineColour, shared)
+        const eligible = (index: number) => colourMatches(colourAt(index), lineColour, shared)
         /*
          * Match against the eligible corridors only, rather than matching first
          * and vetting the winner.
@@ -374,7 +394,7 @@ export function traceLine(
          * the exception only applies where this line genuinely has no stroke of
          * its own — which is what shared track actually looks like.
          */
-        const strict = (index: number) => colourMatches(corridorColour[index] ?? null, lineColour)
+        const strict = (index: number) => colourMatches(colourAt(index), lineColour)
         const match = matchWithinEligible(a, b, prepared, strict, preferIndex)
           ?? matchWithinEligible(a, b, prepared, eligible, preferIndex)
         if (!match) {

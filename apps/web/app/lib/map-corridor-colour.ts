@@ -1,122 +1,17 @@
 /*
- * The artwork colour of a corridor, recovered by joining it to the skeleton.
+ * Comparing a corridor's artwork colour to a line's brand colour.
  *
- * Corridors deliberately carry no colour: `map-corridors.ts` explains that the
- * artwork hex is duplicated across lines and that leg matching is geometric. That
- * holds, and nothing here changes it. What it costs is a discriminator, and the
- * absence of one is a confirmed bug — where several strokes are drawn stacked and
- * parallel, `matchCorridorPath` can elect a corridor of an entirely different
- * colour, because it sorts on distance alone and both are within tolerance.
+ * Corridors carry their artwork hex directly now, straight from the SVG stroke each
+ * was extracted from (see CorridorEntry in scripts/build-map-skeleton.ts). This
+ * module used to recover that colour by joining corridors to map-skeleton.json on
+ * their endpoints — a workaround that only ever covered rail, since the skeleton
+ * holds no BRT strokes, and that needed both files regenerated in lockstep. The
+ * value was in the source all along; the corridor writer was dropping it.
  *
- * That is survivable for the route overlay, which draws its own coloured line on
- * top of whatever it traced. It is not survivable for line isolation, where the
- * traced stroke IS the output: picking the neighbour means holding the wrong line
- * at full strength while the tapped one fades.
- *
- * ── Why this joins rather than regenerating ────────────────────────────────
- *
- * `build-map-skeleton.ts` writes both files from ONE extraction pass, and it
- * already parses the stroke colour — `ExtractedStroke extends SkeletonStroke`,
- * which carries `c`. The corridor writer drops it on the way out. So the colour
- * is not missing from the artwork, only from one of the two files derived from it.
- *
- * The skeleton keeps it, and the skeleton is rail-only (`w: 25`) by construction.
- * Rail corridors and skeleton strokes therefore come from the same strokes in the
- * same order: 16 and 16 today, joining 16/16 on endpoints with zero ambiguity.
- * Recovering the colour is a lookup, not a rebuild.
- *
- * The honest alternative is adding `c` to `CorridorEntry` and re-running the
- * Playwright extraction. That is the right fix and BRT will require it, since the
- * skeleton has no BRT strokes to join against. It is deliberately not the fix
- * taken first: it regenerates a committed artifact that three other things read,
- * to obtain a value already sitting in a file beside it.
- *
- * ── Rail only, and it fails loudly rather than quietly ─────────────────────
- *
- * A BRT corridor has nothing to join to and comes back null. Callers must treat
- * null as "no colour information", never as "no match" — a corridor whose colour
- * is unknown has to stay eligible, or deferring BRT would silently become
- * excluding it.
+ * What is left here is the comparison, which is the part that carries judgement:
+ * the artwork palette and the brand palette are related but not identical, so
+ * "is this stroke this line's" is a tolerance question rather than an equality.
  */
-
-import type { SkeletonStroke } from 'utils/map-skeleton-order'
-import type { Corridor } from './map-corridors'
-
-/*
- * How close two endpoints must sit to be the same stroke, world units.
- *
- * Both files are written from the same sampled-and-simplified polyline, so a
- * match is exact up to the rounding each applies on the way out (the skeleton
- * writes integers into a path string; corridors keep numbers). A whole world
- * unit is far tighter than the gap between any two distinct strokes — the
- * closest parallel pair on the sheet is ~22 units apart — and far looser than
- * rounding, so this separates cleanly from both sides.
- */
-const ENDPOINT_EPSILON_WORLD = 1.5
-
-// Leading `M`/`L` commands and their coordinate pairs. The skeleton's `d` is
-// machine-written by build-map-skeleton.ts and only ever uses these two, so this
-// deliberately does not try to be a general SVG path parser.
-const PATH_POINT = /(-?[\d.]+) (-?[\d.]+)/g
-
-function pathEndpoints(d: string): { first: [number, number], last: [number, number] } | null {
-  let first: [number, number] | null = null
-  let last: [number, number] | null = null
-  for (const match of d.matchAll(PATH_POINT)) {
-    const point: [number, number] = [Number(match[1]), Number(match[2])]
-    if (!Number.isFinite(point[0]) || !Number.isFinite(point[1])) continue
-    if (!first) first = point
-    last = point
-  }
-  return first && last ? { first, last } : null
-}
-
-function samePoint(a: readonly [number, number], b: readonly [number, number]): boolean {
-  return Math.abs(a[0] - b[0]) <= ENDPOINT_EPSILON_WORLD
-    && Math.abs(a[1] - b[1]) <= ENDPOINT_EPSILON_WORLD
-}
-
-/*
- * Colour per corridor, by index, aligned with the array passed in.
- *
- * Null where no colour is known: every BRT corridor, and any rail corridor whose
- * stroke did not join. Both mean the same thing to a caller — do not filter on
- * colour here — which is why they are not distinguished.
- *
- * Matched on both endpoints rather than one. A single endpoint is shared by every
- * stroke meeting at a junction, so it would join a corridor to whichever
- * neighbour happened to be listed first, which is the exact class of error this
- * exists to prevent. Direction is not assumed: the two files agree today, but a
- * reversed polyline is a plausible regeneration artefact and silently colouring a
- * corridor from the wrong stroke is worse than any cost of checking.
- */
-export function corridorColours(
-  corridors: readonly Corridor[],
-  strokes: readonly SkeletonStroke[]
-): Array<string | null> {
-  const prepared = strokes
-    .map(stroke => ({ c: stroke.c, ends: pathEndpoints(stroke.d) }))
-    .filter((s): s is { c: string, ends: NonNullable<ReturnType<typeof pathEndpoints>> } => s.ends !== null)
-
-  return corridors.map((corridor) => {
-    const first = corridor.pts[0]
-    const last = corridor.pts[corridor.pts.length - 1]
-    if (!first || !last) return null
-
-    let found: string | null = null
-    for (const stroke of prepared) {
-      const forward = samePoint(stroke.ends.first, first) && samePoint(stroke.ends.last, last)
-      const reversed = samePoint(stroke.ends.first, last) && samePoint(stroke.ends.last, first)
-      if (!forward && !reversed) continue
-      // Two strokes answering to one corridor means the endpoint join is no
-      // longer the identity it is relied on to be. Refuse rather than take the
-      // first: an ambiguous colour is what would put the wrong line on screen.
-      if (found !== null && found !== stroke.c) return null
-      found = stroke.c
-    }
-    return found
-  })
-}
 
 /*
  * Worst per-channel difference between two `#rrggbb` strings, 0..255.

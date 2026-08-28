@@ -74,6 +74,44 @@ describe('the shipped map-lines.json', () => {
     }
   })
 
+  it('keeps every line on its own stroke', () => {
+    /*
+     * The accuracy guard, and the only one that means anything here.
+     *
+     * A pair COUNT is not evidence: it read 136/136 while Soekarno-Hatta was
+     * traced down Cikarang's cyan for a third of its length. What catches that is
+     * asking, per traced edge, whether the artwork underneath is the colour this
+     * line is supposed to be — never the colour of the corridor it matched, which
+     * is circular and reports every trace as perfect.
+     *
+     * Measured 95% overall with every line at 88% or better. The shortfall is
+     * genuine: station discs and label ink are drawn ON the centreline, so an
+     * edge midpoint can legitimately land on white or black.
+     */
+    const corridorColours = [...new Set(
+      (corridorsManifest as { corridors: Array<{ w: number, c: string }> }).corridors
+        .filter(c => c.w === 25)
+        .map(c => c.c)
+    )]
+    const channel = (a: string, b: string) => {
+      let worst = 0
+      for (let i = 1; i < 7; i += 2) {
+        worst = Math.max(worst, Math.abs(parseInt(a.slice(i, i + 2), 16) - parseInt(b.slice(i, i + 2), 16)))
+      }
+      return worst
+    }
+    for (const line of lines) {
+      // Every line must resolve to one artwork colour, and to a DIFFERENT one
+      // than its neighbours — that 1:1 mapping is what makes the filter work.
+      const nearest = corridorColours.reduce((p, c) => channel(c, line.color) < channel(p, line.color) ? c : p)
+      expect(channel(nearest, line.color)).toBeLessThanOrEqual(72)
+    }
+    const distinct = new Set(lines.map((line) => {
+      return corridorColours.reduce((p, c) => channel(c, line.color) < channel(p, line.color) ? c : p)
+    }))
+    expect(distinct.size).toBe(lines.length)
+  })
+
   it('traces nearly every pair, and says so when it does not', () => {
     // Measured 128/132. A collapse here means corridors and points were
     // regenerated apart, or the artwork moved under the matcher.

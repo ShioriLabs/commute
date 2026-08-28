@@ -346,6 +346,16 @@ export default function MapPage() {
 
   const [searchParams] = useSearchParams()
   const debugHitboxes = import.meta.env.DEV && searchParams.get('debug') === 'hitboxes'
+  /*
+   * Draw every extracted corridor in its own artwork colour, over the artwork.
+   *
+   * The corridors file is generated, and a wrong transform or a mis-parsed path
+   * produces geometry that is confidently wrong rather than obviously broken —
+   * the matcher downstream would happily trace along it. Plotting each corridor
+   * in the colour it claims makes that checkable by eye: a capsule has to lie on
+   * the stroke of the same colour underneath it.
+   */
+  const debugCorridors = import.meta.env.DEV && searchParams.get('debug') === 'corridors'
   const authorMode = import.meta.env.DEV && searchParams.get('author') === '1'
 
   // Fare pair shown on the map. React state is the source of truth; the URL is
@@ -543,6 +553,36 @@ export default function MapPage() {
   // Drawable overlay geometry. Null fare is fine — pins resolve straight from
   // the pair, so a deep link shows its endpoints before the fare lands.
   const routeModel = useMemo<RouteOverlayModel | null>(() => {
+    if (debugCorridors) {
+      // Reuses the route overlay purely as a drawing surface: it already renders
+      // arbitrary coloured capsules through routeDrawItems, so plotting needs no
+      // renderer changes of its own.
+      const segments = (corridorsManifest?.corridors ?? []).flatMap(corridor =>
+        corridor.pts.slice(0, -1).map((from, i) => ({
+          ax: from[0],
+          ay: from[1],
+          bx: corridor.pts[i + 1][0],
+          by: corridor.pts[i + 1][1],
+          r: corridor.w / 2,
+          color: hexToRgb01(corridor.c),
+          kind: 'ride' as const
+        }))
+      )
+      let minX = Infinity
+      let minY = Infinity
+      let maxX = -Infinity
+      let maxY = -Infinity
+      for (const segment of segments) {
+        minX = Math.min(minX, segment.ax, segment.bx)
+        maxX = Math.max(maxX, segment.ax, segment.bx)
+        minY = Math.min(minY, segment.ay, segment.by)
+        maxY = Math.max(maxY, segment.ay, segment.by)
+      }
+      return {
+        overlay: { segments, pins: [] },
+        bbox: segments.length > 0 ? { minX, minY, maxX, maxY } : { minX: 0, minY: 0, maxX: 0, maxY: 0 }
+      }
+    }
     if (!routePair.fromId && !routePair.toId) return null
     if (workingPoints.length === 0) return null
     return buildRouteOverlayModel(
@@ -552,7 +592,7 @@ export default function MapPage() {
       resolveLine,
       corridorsManifest?.corridors ?? null
     )
-  }, [activeJourney, routePair, workingPoints, resolveLine, corridorsManifest])
+  }, [debugCorridors, activeJourney, routePair, workingPoints, resolveLine, corridorsManifest])
 
   const viewportRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)

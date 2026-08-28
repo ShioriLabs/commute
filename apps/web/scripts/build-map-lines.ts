@@ -15,16 +15,14 @@
  *
  * ── Rail only, for now ─────────────────────────────────────────────────────
  *
- * BUS lines are skipped. Not because tracing them fails outright, but because
- * the colour discriminator that makes tracing trustworthy is rail-only: it comes
- * from map-skeleton.json, which carries just the width-25 strokes. See
- * app/lib/map-corridor-colour.ts. Without it, a BRT line traces onto whichever
- * of several stacked parallel strokes happens to be a world unit nearer, which
- * is a confirmed bug rather than a theoretical one.
+ * BUS lines are skipped, but no longer for want of a discriminator: corridors now
+ * carry their artwork colour for BRT as well as rail. What is still missing is
+ * IDENTITY. The sheet draws ~17 BRT colours for 100 TJ lines, grouped by koridor
+ * family, so a colour narrows a stroke to a family and never to one line.
  *
- * Extending to BRT means adding `c` to CorridorEntry in build-map-skeleton.ts —
- * the value is already on ExtractedStroke there, just dropped on the way out —
- * and regenerating. Then drop the BUS filter here.
+ * That is enough to stop a leg riding another koridor's stroke — the confirmed
+ * Koridor 3 bug — which is why the route overlay gets the filter. It is not
+ * enough to isolate one BRT line, which is why isolation stays rail-only.
  *
  * Run: pnpm build:map-lines   (API_BASE_URL overrides the origin)
  */
@@ -33,10 +31,8 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { corridorColours } from '../app/lib/map-corridor-colour'
 import { traceLine, type TracePoint } from '../app/lib/map-line-trace'
 import type { Corridor } from '../app/lib/map-corridors'
-import type { SkeletonStroke } from '../utils/map-skeleton-order'
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const WEB_ROOT = path.resolve(SCRIPT_DIR, '..')
@@ -91,12 +87,16 @@ function readData<T>(name: string): T {
 
 async function main(): Promise<void> {
   const corridorsManifest = readData<{ version: string, corridors: Corridor[] }>('map-corridors.json')
-  const skeleton = readData<{ strokes: SkeletonStroke[] }>('map-skeleton.json')
   const pointsManifest = readData<{ version: string, points: TracePoint[] }>('points.json')
 
-  const colours = corridorColours(corridorsManifest.corridors, skeleton.strokes)
-  const coloured = colours.filter(c => c !== null).length
-  log(`${corridorsManifest.corridors.length} corridors, ${coloured} with a joined artwork colour`)
+  /*
+   * The artwork colour now rides on each corridor, straight from the SVG stroke it
+   * was extracted from. This used to be recovered by joining corridors to the
+   * skeleton on their endpoints, which only ever worked for rail — the skeleton has
+   * no BRT strokes — and needed the two files to stay in lockstep.
+   */
+  const coloured = corridorsManifest.corridors.filter(c => c.c).length
+  log(`${corridorsManifest.corridors.length} corridors, ${coloured} carrying an artwork colour`)
 
   const operators = await getJson<ApiOperator[]>(`${API_BASE_URL}/operators`)
   const wanted: Array<{ key: string, operator: string, code: string, name: string, color: string }> = []
@@ -160,7 +160,7 @@ async function main(): Promise<void> {
       }
       return shared
     }
-    const traced = traceLine(detail, pointsManifest.points, corridorsManifest.corridors, colours, line.color, sharedTrack)
+    const traced = traceLine(detail, pointsManifest.points, corridorsManifest.corridors, undefined, line.color, sharedTrack)
     totalMatched += traced.matchedPairs
     totalPairs += traced.totalPairs
 

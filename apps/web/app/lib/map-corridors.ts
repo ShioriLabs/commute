@@ -7,17 +7,25 @@
  * importing nothing from the app so it can be unit-tested without fare or
  * point fixtures.
  *
- * Corridors carry no line identity — the generated file has no id and its
- * artwork colours are duplicated across lines — so a leg is matched to a
- * corridor GEOMETRICALLY, per adjacent stop pair. That is what lets branches,
- * the Cikarang loop and interlined trunks work without any line↔stroke table.
+ * Corridors carry no line IDENTITY — the generated file has no id, and several
+ * lines are drawn in one hex — so a leg is matched to a corridor GEOMETRICALLY,
+ * per adjacent stop pair. That is what lets branches, the Cikarang loop and
+ * interlined trunks work without any line↔stroke table.
+ *
+ * They do carry the artwork colour, which is a weaker thing than identity and
+ * exactly the thing geometry alone cannot supply. Where two strokes are drawn on
+ * the same alignment, distance picks whichever is a world unit nearer, and the
+ * drawn route then runs along another line's colour — Koridor 3's yellow legs
+ * traced onto a blue stub. A hex shared by five lines still tells yellow from
+ * blue, so it filters candidates; it never names one.
  */
 
 // One drawn corridor: `w` is the artwork stroke width (25 rail, 15 BRT), kept
-// only as a coarse class hint for debugging. Points are pre-flattened by the
-// build script, so there are no curves to evaluate here.
+// only as a coarse class hint for debugging, and `c` the artwork hex. Points are
+// pre-flattened by the build script, so there are no curves to evaluate here.
 export interface Corridor {
   w: number
+  c: string
   pts: ReadonlyArray<readonly [number, number]>
 }
 
@@ -33,6 +41,9 @@ export interface CorridorsManifest {
 export interface PreparedCorridor {
   pts: ReadonlyArray<readonly [number, number]>
   cums: Float64Array
+  // The artwork hex, carried through so a match can be filtered on it. See the
+  // note on Corridor: a discriminator, not an identity.
+  c: string
 }
 
 // Where a point lands on a polyline: perpendicular distance to the closest
@@ -99,7 +110,7 @@ export function prepareCorridor(corridor: Corridor): PreparedCorridor {
   for (let i = 1; i < pts.length; i++) {
     cums[i] = cums[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])
   }
-  return { pts, cums }
+  return { pts, cums, c: corridor.c }
 }
 
 export function prepareCorridors(corridors: readonly Corridor[]): PreparedCorridor[] {
@@ -261,7 +272,22 @@ export function matchCorridorPath(
   bx: number,
   by: number,
   corridors: readonly PreparedCorridor[],
-  opts?: { maxDistWorld?: number, maxDetourRatio?: number, preferIndex?: number }
+  opts?: {
+    maxDistWorld?: number
+    maxDetourRatio?: number
+    preferIndex?: number
+    /*
+     * Which corridors this leg is allowed to ride, by index.
+     *
+     * Applied BEFORE the distance sort rather than to the winner afterwards.
+     * The two are not the same: vetting afterwards throws the pair away when the
+     * nearest stroke is the wrong one, even though the right corridor was in the
+     * candidate list a place further down. Where a line and its neighbour run
+     * parallel the wrong one can win by a single world unit, so that difference
+     * is the whole outcome.
+     */
+    eligible?: (index: number) => boolean
+  }
 ): CorridorMatch | null {
   const maxDist = opts?.maxDistWorld ?? CORRIDOR_MATCH_MAX_DIST_WORLD
   const maxDetour = opts?.maxDetourRatio ?? CORRIDOR_MATCH_MAX_DETOUR_RATIO
@@ -275,6 +301,11 @@ export function matchCorridorPath(
     const pb = projectOntoPolyline(bx, by, corridor)
     const worst = Math.max(pa.dist, pb.dist)
     if (worst <= maxDist) candidates.push({ corridor, worst, sa: pa.s, sb: pb.s, index: i })
+  }
+  if (opts?.eligible) {
+    for (let i = candidates.length - 1; i >= 0; i--) {
+      if (!opts.eligible(candidates[i].index)) candidates.splice(i, 1)
+    }
   }
   /*
    * The leg's elected corridor first, then best fit.

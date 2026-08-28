@@ -268,7 +268,7 @@ describe('buildRouteOverlayModel stop dots', () => {
 describe('buildRouteOverlayModel with corridors', () => {
   // An L: stations at the two ends, with the corner between them. A chord would
   // cut the diagonal; the corridor turns.
-  const lCorridor: Corridor[] = [{ w: 25, pts: [[0, 0], [200, 0], [200, 200]] }]
+  const lCorridor: Corridor[] = [{ w: 25, c: '#00BDEE', pts: [[0, 0], [200, 0], [200, 200]] }]
   const endPoints = [pt('KCI-AAA', 0, 0), pt('KCI-BBB', 200, 200)]
 
   it('draws the same chords as before when no corridors are supplied', () => {
@@ -311,7 +311,7 @@ describe('buildRouteOverlayModel with corridors', () => {
       'KCI-AAA',
       'MRT-DDD'
     )
-    const corridors: Corridor[] = [{ w: 25, pts: [[0, 0], [300, 0]] }]
+    const corridors: Corridor[] = [{ w: 25, c: '#00BDEE', pts: [[0, 0], [300, 0]] }]
     const without = buildRouteOverlayModel(fare, pair('KCI-AAA', 'MRT-DDD'), points, resolveLine)
     const with_ = buildRouteOverlayModel(fare, pair('KCI-AAA', 'MRT-DDD'), points, resolveLine, corridors)
     expect(with_!.overlay.segments.filter(s => s.kind === 'transfer'))
@@ -329,7 +329,7 @@ describe('buildRouteOverlayModel with corridors', () => {
     // the real Manggarai offset.
     const bar = pt('KCI-XCH', 100, 40)
     const points = [pt('KCI-AAA', 0, 0), bar, pt('KCI-BBB', 200, 0)]
-    const corridors: Corridor[] = [{ w: 25, pts: [[0, 0], [200, 0]] }]
+    const corridors: Corridor[] = [{ w: 25, c: '#00BDEE', pts: [[0, 0], [200, 0]] }]
     const fare = fareResult([rideLeg(['KCI-AAA', 'KCI-XCH', 'KCI-BBB'], '#FF0000')], 'KCI-AAA', 'KCI-BBB')
     const model = buildRouteOverlayModel(fare, pair('KCI-AAA', 'KCI-BBB'), points, resolveLine, corridors)
     const stops = model!.overlay.pins.filter(p => p.kind === 'stop')
@@ -342,7 +342,7 @@ describe('buildRouteOverlayModel with corridors', () => {
   it('snaps the end pins too, so an arrow lands on its own line', () => {
     // Origin is the off-corridor bar this time: its pin must move onto the line.
     const points = [pt('KCI-XCH', 0, 40), pt('KCI-BBB', 200, 0)]
-    const corridors: Corridor[] = [{ w: 25, pts: [[0, 0], [200, 0]] }]
+    const corridors: Corridor[] = [{ w: 25, c: '#00BDEE', pts: [[0, 0], [200, 0]] }]
     const fare = fareResult([rideLeg(['KCI-XCH', 'KCI-BBB'])], 'KCI-XCH', 'KCI-BBB')
     const model = buildRouteOverlayModel(fare, pair('KCI-XCH', 'KCI-BBB'), points, resolveLine, corridors)
     const origin = model!.overlay.pins.find(p => p.kind === 'origin')!
@@ -360,8 +360,8 @@ describe('buildRouteOverlayModel with corridors', () => {
    */
   it('renders a straight interlined run as one line through the stops', () => {
     const corridors: Corridor[] = [
-      { w: 15, pts: [[0, 0], [600, 0]] },
-      { w: 15, pts: [[0, 22], [1000, 22]] }
+      { w: 15, c: '#00BDEE', pts: [[0, 0], [600, 0]] },
+      { w: 15, c: '#00BDEE', pts: [[0, 22], [1000, 22]] }
     ]
     // Stops between the strokes, the second stroke a fraction nearer — and the
     // first stroke ending mid-run, which used to force a jog.
@@ -386,8 +386,8 @@ describe('buildRouteOverlayModel with corridors', () => {
    */
   it('draws a nearly-collinear leg as a single straight shot through its dots', () => {
     const corridors: Corridor[] = [
-      { w: 15, pts: [[0, 12], [1400, 12]] }, // the leg's own stroke, ending mid-run
-      { w: 15, pts: [[380, -10], [1900, -10]] } // the interlined neighbour carrying on
+      { w: 15, c: '#00BDEE', pts: [[0, 12], [1400, 12]] }, // the leg's own stroke, ending mid-run
+      { w: 15, c: '#00BDEE', pts: [[380, -10], [1900, -10]] } // the interlined neighbour carrying on
     ]
     // First three stops ON the first stroke, the rest 11 below it — the real
     // Kalideres→Roxy shape.
@@ -419,8 +419,8 @@ describe('buildRouteOverlayModel with corridors', () => {
    */
   it('bridges the seam where a leg hands off between corridors', () => {
     const corridors: Corridor[] = [
-      { w: 15, pts: [[0, 0], [400, 0]] },
-      { w: 15, pts: [[400, 50], [800, 50]] }
+      { w: 15, c: '#00BDEE', pts: [[0, 0], [400, 0]] },
+      { w: 15, c: '#00BDEE', pts: [[400, 50], [800, 50]] }
     ]
     // The middle stop is a bar centroid 32 units off BOTH strokes — past the
     // band scale (25), so neither side may collapse to a chord.

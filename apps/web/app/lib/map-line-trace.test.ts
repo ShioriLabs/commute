@@ -17,8 +17,8 @@ const line = (...segments: Array<{ kind: string, ids: string[], joinsAtCode?: st
 
 // Two strokes on the same alignment, the shape that causes the real bug: a
 // stacked pair where distance alone cannot tell them apart.
-const YELLOW: Corridor = { w: 25, pts: [[0, 0], [100, 0], [200, 0]] }
-const BLUE: Corridor = { w: 25, pts: [[0, 12], [200, 12]] }
+const YELLOW: Corridor = { w: 25, c: '#F8C434', pts: [[0, 0], [100, 0], [200, 0]] }
+const BLUE: Corridor = { w: 25, c: '#F8C434', pts: [[0, 12], [200, 12]] }
 
 describe('traceLine', () => {
   const points = [dot('A', 0, 0), dot('B', 100, 0), dot('C', 200, 0)]
@@ -85,7 +85,7 @@ describe('traceLine', () => {
   it('elects per segment, so a branch is not held to the trunk stroke', () => {
     // One election across the whole line would keep the trunk's corridor through
     // the branch and match nothing there.
-    const branch: Corridor = { w: 25, pts: [[200, 0], [200, 200]] }
+    const branch: Corridor = { w: 25, c: '#F8C434', pts: [[200, 0], [200, 200]] }
     const stops = [...points, dot('D', 200, 100), dot('E', 200, 200)]
     const traced = traceLine(
       line({ kind: 'TRUNK', ids: ['A', 'B', 'C'] }, { kind: 'RAMP', ids: ['C', 'D', 'E'] }),
@@ -132,7 +132,7 @@ describe('traceLine', () => {
  * the stretch that closes it.
  */
 describe('traceLine joins branches to their trunk', () => {
-  const spine: Corridor = { w: 25, pts: [[0, 0], [100, 0], [200, 0], [300, 0]] }
+  const spine: Corridor = { w: 25, c: '#F8C434', pts: [[0, 0], [100, 0], [200, 0], [300, 0]] }
   const points = [
     dot('KCI-A', 0, 0), dot('KCI-J', 100, 0), dot('KCI-B', 200, 0), dot('KCI-C', 300, 0)
   ]
@@ -199,8 +199,8 @@ describe('traceLine joins branches to their trunk', () => {
  */
 describe('traceLine chains across a split stroke', () => {
   // Two halves of one line, meeting exactly at (0, 100).
-  const upper: Corridor = { w: 25, pts: [[0, 0], [0, 100]] }
-  const lower: Corridor = { w: 25, pts: [[0, 100], [0, 200]] }
+  const upper: Corridor = { w: 25, c: '#F8C434', pts: [[0, 0], [0, 100]] }
+  const lower: Corridor = { w: 25, c: '#F8C434', pts: [[0, 100], [0, 200]] }
   const points = [dot('KCI-A', 0, 0), dot('KCI-B', 0, 200)]
 
   it('traces a pair whose stops sit on different halves', () => {
@@ -221,13 +221,28 @@ describe('traceLine chains across a split stroke', () => {
     expect(traced.matchedPairs).toBe(0)
   })
 
+  it('chains across a break at a station disc', () => {
+    // The artwork draws the marker over the line, so the stroke resumes on its
+    // far side ~47 units later. Soekarno-Hatta breaks exactly this way between
+    // Sudirman Baru and Duri, and refusing the join sent it down Cikarang's cyan
+    // for a third of its length.
+    const upperHalf: Corridor = { w: 25, c: '#282A65', pts: [[0, 0], [0, 100]] }
+    const lowerHalf: Corridor = { w: 25, c: '#282A65', pts: [[0, 147], [0, 250]] }
+    const stops = [dot('KCI-A', 0, 0), dot('KCI-B', 0, 250)]
+    const traced = traceLine(
+      line({ kind: 'TRUNK', ids: ['KCI-A', 'KCI-B'] }),
+      stops, [upperHalf, lowerHalf], undefined, '#262262'
+    )
+    expect(traced.matchedPairs).toBe(1)
+  })
+
   it('does not chain across corridors that never meet', () => {
     // One hop between TOUCHING strokes, not a path search free to wander the
     // network to connect any two points. The second half is offset so it reaches
     // the far stop but shares no endpoint with the first, and the two stops are
     // far enough apart that neither corridor alone can serve both.
     const far = [dot('KCI-A', 0, 0), dot('KCI-B', 600, 1000)]
-    const detached: Corridor = { w: 25, pts: [[600, 900], [600, 1000]] }
+    const detached: Corridor = { w: 25, c: '#F8C434', pts: [[600, 900], [600, 1000]] }
     const traced = traceLine(
       line({ kind: 'TRUNK', ids: ['KCI-A', 'KCI-B'] }),
       far, [upper, detached], ['#00BDEE', '#00BDEE'], '#25B8EB'
