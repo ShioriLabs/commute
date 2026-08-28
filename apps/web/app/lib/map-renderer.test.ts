@@ -15,6 +15,7 @@ import {
   hitTest,
   labelAnchorPoint,
   mapTreatment,
+  markerLabelPoint,
   pointToShapeDistance,
   ringOffsetWorld,
   ROUTE_DESATURATE_MAX,
@@ -560,5 +561,89 @@ describe('ringOffsetWorld', () => {
     expect(ringOffsetWorld(1)).toBe(RING_REST_OFFSET_WORLD)
     expect(ringOffsetWorld(0.5)).toBeLessThan(RING_MAX_OFFSET_WORLD)
     expect(ringOffsetWorld(0.5)).toBeGreaterThan(RING_REST_OFFSET_WORLD)
+  })
+})
+
+/*
+ * The station's name, cleared alongside its dot. The mirror of
+ * labelAnchorPoint, and it has to agree with it: a tap on a name resolves to
+ * the marker, and that marker must resolve back to the same name.
+ */
+describe('markerLabelPoint', () => {
+  const dot = (id: string, x: number, y: number, station?: string): Point =>
+    ({ id, station, ax: x, ay: y, bx: x, by: y, r: 12 })
+  const label = (station: string, x: number, y: number, id?: string): Point =>
+    ({ id: id ?? `LBL-${station}`, station, ax: x, ay: y, bx: x + 60, by: y, r: 20, noRing: true })
+
+  it('finds the label naming a marker', () => {
+    const marker = dot('KCI-SUD', 0, 0)
+    const lbl = label('KCI-SUD', 100, 0)
+    expect(markerLabelPoint(marker, [marker, lbl])).toBe(lbl)
+  })
+
+  it('returns null when the station has no name drawn', () => {
+    // Five points have none — four display-only hubs and KCI-BST. The cutout is
+    // then just the marker, which is the pre-existing behaviour.
+    const marker = dot('KCI-BST', 0, 0)
+    expect(markerLabelPoint(marker, [marker, label('KCI-SUD', 100, 0)])).toBeNull()
+  })
+
+  it('picks the nearest label when a station carries two', () => {
+    const marker = dot('KCI-SUD', 0, 0)
+    const near = label('KCI-SUD', 80, 0, 'LBL-KCI-SUD')
+    const far = label('KCI-SUD', 900, 0, 'LBL-KCI-SUD-b')
+    expect(markerLabelPoint(marker, [far, near, marker])).toBe(near)
+  })
+
+  it('resolves the twin drawn beside a duplicated halte', () => {
+    // A halte drawn twice carries a `-b` marker; each should take the label it
+    // was extracted beside, not the other one's.
+    const a = dot('TJ-H00037C', 0, 0)
+    const b = dot('TJ-H00037C-b', 900, 0, 'TJ-H00037C')
+    const la = label('TJ-H00037C', 60, 0, 'LBL-TJ-H00037C')
+    const lb = label('TJ-H00037C', 960, 0, 'LBL-TJ-H00037C-b')
+    expect(markerLabelPoint(a, [a, b, la, lb])).toBe(la)
+    expect(markerLabelPoint(b, [a, b, la, lb])).toBe(lb)
+  })
+
+  it('never returns a label for a label', () => {
+    // Guards the fallback path: a label standing in for itself must not then
+    // resolve a second cutout onto its own words.
+    const lbl = label('KCI-SUD', 0, 0)
+    expect(markerLabelPoint(lbl, [lbl])).toBeNull()
+  })
+
+  it('round-trips with labelAnchorPoint', () => {
+    // The two must agree, or a tap on a name would clear a different name.
+    const marker = dot('KCI-SUD', 0, 0)
+    const lbl = label('KCI-SUD', 120, 0)
+    const points = [marker, lbl]
+    expect(labelAnchorPoint(lbl, points)).toBe(marker)
+    expect(markerLabelPoint(marker, points)).toBe(lbl)
+  })
+})
+
+// The label rides through mapTreatment as a SECOND hole, never merged into the
+// marker's — a single shape spanning both would clear the map between them.
+describe('mapTreatment label cutout', () => {
+  const withLabel = (label: SelectionOverlay['label']): SelectionOverlay => ({
+    ax: 0, ay: 0, bx: 0, by: 0, r: 12, cr: 12,
+    color: [1, 0, 0], fadeAlpha: SELECTION_FADE_MAX, ringProgress: 1, label
+  })
+
+  it('carries the label as its own shape', () => {
+    const t = mapTreatment(withLabel({ ax: 200, ay: 0, bx: 260, by: 0, r: 20, cr: 6 }), null)
+    expect(t.cutLabel).toEqual({ ax: 200, ay: 0, bx: 260, by: 0, r: 20, cr: 6 })
+    // The marker's own cutout is untouched by the label's presence.
+    expect(t.cut.r).toBe(12)
+  })
+
+  it('has no label cutout when the station has no name drawn', () => {
+    expect(mapTreatment(withLabel(null), null).cutLabel).toBeNull()
+  })
+
+  it('drops the label cutout once the selection has faded out', () => {
+    const sel = withLabel({ ax: 200, ay: 0, bx: 260, by: 0, r: 20, cr: 6 })
+    expect(mapTreatment({ ...sel, fadeAlpha: 0 }, null).cutLabel).toBeNull()
   })
 })

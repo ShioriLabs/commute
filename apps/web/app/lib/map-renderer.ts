@@ -124,6 +124,20 @@ export interface SelectionOverlay {
   // toward page white. Current animated value.
   fadeAlpha: number
   ringProgress: number // 0..1: drives ring offset (settle-in) and alpha
+  /*
+   * The station's drawn NAME, cleared alongside its marker.
+   *
+   * A second shape rather than one enlarged one: a label sits a median 129
+   * world units from the dot it names (up to 314), so a single hole spanning
+   * both would clear a swathe of unrelated map between them. The two are
+   * unioned in the shader instead, leaving the gap faded.
+   *
+   * Null when the station has no name drawn on the map — five points, four
+   * display-only hubs and KCI-BST — in which case the cutout is the marker
+   * alone. It carries no ring: see noRing, a halo around a word reads as a box
+   * drawn around text.
+   */
+  label?: { ax: number, ay: number, bx: number, by: number, r: number, cr: number } | null
 }
 
 /*
@@ -169,12 +183,31 @@ export const RING_REST_OFFSET_WORLD = 8
  * Lives here rather than in either renderer so the WebGL shader and the
  * Canvas2D fallback cannot drift on a judgement neither of them owns.
  */
+export interface CutShape {
+  ax: number
+  ay: number
+  bx: number
+  by: number
+  r: number
+  cr: number
+}
+
 export interface MapTreatment {
   fade: number
   desaturate: number
   // The selection cutout, in world units. `feather` is 0 when nothing is
   // selected, which is what disables the cutout in both renderers.
-  cut: { ax: number, ay: number, bx: number, by: number, r: number, cr: number, feather: number }
+  cut: CutShape & { feather: number }
+  /*
+   * The station's name, cleared as a SECOND hole rather than folded into the
+   * first — see SelectionOverlay.label for why one shape spanning both would
+   * clear too much. Null when the station has no name drawn, or nothing is
+   * selected.
+   *
+   * Renderers union it with `cut`: min() of the two distances in the shader,
+   * a second clipped pass in the Canvas2D fallback.
+   */
+  cutLabel: CutShape | null
 }
 
 const NO_CUT = { ax: 0, ay: 0, bx: 0, by: 0, r: 0, cr: 0, feather: 0 }
@@ -208,7 +241,14 @@ export function mapTreatment(
           r: selection.r, cr: selection.cr,
           feather: SPOTLIGHT_FEATHER_WORLD
         }
-      : NO_CUT
+      : NO_CUT,
+    cutLabel: selection != null && selFade > 0 && selection.label != null
+      ? {
+          ax: selection.label.ax, ay: selection.label.ay,
+          bx: selection.label.bx, by: selection.label.by,
+          r: selection.label.r, cr: selection.label.cr
+        }
+      : null
   }
 }
 
@@ -615,6 +655,40 @@ export function labelAnchorPoint(label: Point, points: readonly Point[]): Point 
     }
   }
   return best ?? label
+}
+
+/*
+ * The label naming a marker: the mirror of labelAnchorPoint.
+ *
+ * The selection cutout clears the station's NAME alongside its dot, because a
+ * node held at full strength while the words naming it go pale is half a
+ * selection — the name is how a rider confirms they tapped the right thing.
+ *
+ * Nearest wins for the same two reasons as labelAnchorPoint, from the other
+ * side: a halte can be drawn twice (the `-b` shapes), and two stations carry
+ * more than one label, so identity alone does not pick a single shape.
+ *
+ * Returns null rather than a fallback, unlike labelAnchorPoint: a missing name
+ * means the cutout is just the marker, which is the pre-existing behaviour and
+ * perfectly fine. Five points have no label drawn on the map at all.
+ */
+export function markerLabelPoint(marker: Point, points: readonly Point[]): Point | null {
+  if (isLabelPoint(marker)) return null
+  const station = pointStationId(marker)
+  const mx = (marker.ax + marker.bx) / 2
+  const my = (marker.ay + marker.by) / 2
+  let best: Point | null = null
+  let bestDist = Infinity
+  for (const p of points) {
+    if (!isLabelPoint(p)) continue
+    if (pointStationId(p) !== station) continue
+    const dist = Math.hypot((p.ax + p.bx) / 2 - mx, (p.ay + p.by) / 2 - my)
+    if (dist < bestDist) {
+      bestDist = dist
+      best = p
+    }
+  }
+  return best
 }
 
 export type HitResult =

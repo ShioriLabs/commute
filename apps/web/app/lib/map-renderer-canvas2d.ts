@@ -1,4 +1,4 @@
-import type { Manifest, Point, Renderer, RouteDrawItem, RouteOverlay, RouteOverlayFrame, SelectionOverlay, Tier, TileStats, Transform } from './map-renderer'
+import type { CutShape, Manifest, Point, Renderer, RouteDrawItem, RouteOverlay, RouteOverlayFrame, SelectionOverlay, Tier, TileStats, Transform } from './map-renderer'
 import { RING_WIDTH_WORLD, mapTreatment, pointCornerRadius, ringOffsetWorld, routeDrawItems, tileKey } from './map-renderer'
 import { createTileSource } from './map-renderer-tile-source'
 
@@ -229,15 +229,50 @@ export function createCanvas2DRenderer(
     if (desat > 0 || fade > 0) ctx.filter = 'none'
 
     /*
-     * The selection cutout: the tapped station's own pixels, put back at full
-     * strength on top of the faded pass above.
+     * One hole in the fade: `shape`'s own pixels, put back at full strength on
+     * top of the faded pass above.
+     */
+    function punchCutout(shape: CutShape, feather: number) {
+      const minX = Math.min(shape.ax, shape.bx) - shape.r - feather
+      const maxX = Math.max(shape.ax, shape.bx) + shape.r + feather
+      const minY = Math.min(shape.ay, shape.by) - shape.r - feather
+      const maxY = Math.max(shape.ay, shape.by) + shape.r + feather
+      // Skip entirely when the shape is off screen: the clip would draw
+      // nothing, but the tile fetches it triggers are not free.
+      if (maxX < worldMinX || minX > worldMaxX || maxY < worldMinY || minY > worldMaxY) return
+      const steps = 4
+      for (let i = steps; i >= 0; i--) {
+        // Ring i sits at i/steps of the way out through the feather, and is
+        // drawn at the fade strength that ring should end up showing.
+        const t = i / steps
+        const ringDesat = desat * t
+        const ringFade = fade * t
+        ctx.save()
+        drawShape(ctx, shape.ax, shape.ay, shape.bx, shape.by, shape.r, shape.cr, feather * t)
+        ctx.clip()
+        ctx.filter = ringDesat > 0 || ringFade > 0
+          ? `saturate(${1 - ringDesat}) opacity(${1 - ringFade})`
+          : 'none'
+        drawTiles(
+          Math.max(worldMinX, minX), Math.max(worldMinY, minY),
+          Math.min(worldMaxX, maxX), Math.min(worldMaxY, maxY),
+          currentTier, false
+        )
+        ctx.filter = 'none'
+        ctx.restore()
+      }
+    }
+
+    /*
+     * The selection cutout: the tapped station's own pixels — its marker and the
+     * name that labels it — put back at full strength on top of the faded pass.
      *
      * The WebGL path masks the fade inside the tile shader, one pass. Here
      * ctx.filter applies to a whole drawImage and cannot be masked within it, so
      * the only equivalent is to draw the affected tiles a second time unfiltered
-     * behind a clip. Bounded to the tiles the shape actually touches — a point
-     * is at most ~212 world units end to end, so this is one to four tiles, not
-     * the grid.
+     * behind a clip. Bounded to the tiles each shape actually touches — a marker
+     * is at most ~212 world units end to end and a label ~440 — so this is a
+     * handful of tiles per hole, not the grid.
      *
      * The clip is hard-edged where the shader's is feathered, so the fade is
      * stepped back over a few shrinking rings to approximate it. That is the
@@ -245,36 +280,11 @@ export function createCanvas2DRenderer(
      * reason: canvas2d has no smoothstep.
      */
     if (cut.feather > 0 && (desat > 0 || fade > 0)) {
-      const pad = cut.feather
-      const minX = Math.min(cut.ax, cut.bx) - cut.r - pad
-      const maxX = Math.max(cut.ax, cut.bx) + cut.r + pad
-      const minY = Math.min(cut.ay, cut.by) - cut.r - pad
-      const maxY = Math.max(cut.ay, cut.by) + cut.r + pad
-      // Skip entirely when the selection is off screen: the clip would draw
-      // nothing, but the tile fetches it triggers are not free.
-      if (maxX >= worldMinX && minX <= worldMaxX && maxY >= worldMinY && minY <= worldMaxY) {
-        const steps = 4
-        for (let i = steps; i >= 0; i--) {
-          // Ring i sits at i/steps of the way out through the feather, and is
-          // drawn at the fade strength that ring should end up showing.
-          const t = i / steps
-          const ringDesat = desat * t
-          const ringFade = fade * t
-          ctx.save()
-          drawShape(ctx, cut.ax, cut.ay, cut.bx, cut.by, cut.r, cut.cr, pad * t)
-          ctx.clip()
-          ctx.filter = ringDesat > 0 || ringFade > 0
-            ? `saturate(${1 - ringDesat}) opacity(${1 - ringFade})`
-            : 'none'
-          drawTiles(
-            Math.max(worldMinX, minX), Math.max(worldMinY, minY),
-            Math.min(worldMaxX, maxX), Math.min(worldMaxY, maxY),
-            currentTier, false
-          )
-          ctx.filter = 'none'
-          ctx.restore()
-        }
-      }
+      // The marker, then its name: two independent holes, so the map between
+      // them keeps the fade. The WebGL path unions them in one shader pass;
+      // here each is simply its own clipped redraw.
+      punchCutout(cut, cut.feather)
+      if (treatment.cutLabel) punchCutout(treatment.cutLabel, cut.feather)
     }
 
     if (route && route.alpha > 0 && routeItems.length > 0) {

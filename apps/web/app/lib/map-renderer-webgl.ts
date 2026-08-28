@@ -83,6 +83,21 @@ uniform vec2 u_cutB;
 uniform float u_cutR;
 uniform float u_cutCr;
 uniform float u_cutFeather; // world units
+/*
+ * The station's NAME, cleared as a second hole alongside its marker.
+ *
+ * Unioned with min() rather than merged into one shape: a label sits a median
+ * 129 world units from its dot and up to 314, so a single capsule spanning both
+ * would clear a swathe of unrelated map between them. Two holes, gap left faded.
+ *
+ * u_cutLabelOn == 0.0 means the station has no name drawn (five points), in
+ * which case the marker alone is the cutout.
+ */
+uniform vec2 u_cutLabelA;
+uniform vec2 u_cutLabelB;
+uniform float u_cutLabelR;
+uniform float u_cutLabelCr;
+uniform float u_cutLabelOn;
 in vec2 v_world;
 out vec4 outColor;
 ${SHAPE_SDF_GLSL}
@@ -92,9 +107,15 @@ void main() {
   // smoothstep-over-shapeDistance the spotlight ring is built on, so the cutout
   // and the halo sit on one boundary by construction rather than by two
   // constants that have to be kept in step by hand.
-  float keep = u_cutFeather > 0.0
-    ? smoothstep(0.0, u_cutFeather, shapeDistance(v_world, u_cutA, u_cutB, u_cutR, u_cutCr))
-    : 1.0;
+  float keep = 1.0;
+  if (u_cutFeather > 0.0) {
+    float d = shapeDistance(v_world, u_cutA, u_cutB, u_cutR, u_cutCr);
+    if (u_cutLabelOn > 0.0) {
+      // Union of the two shapes: nearer edge wins, so each clears its own hole.
+      d = min(d, shapeDistance(v_world, u_cutLabelA, u_cutLabelB, u_cutLabelR, u_cutLabelCr));
+    }
+    keep = smoothstep(0.0, u_cutFeather, d);
+  }
   float desaturate = u_desaturate * keep;
   float fade = u_fade * keep;
   float luma = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
@@ -862,7 +883,12 @@ export function createWebGLRenderer(
     u_cutB: [0, 0],
     u_cutR: 0,
     u_cutCr: 0,
-    u_cutFeather: 0
+    u_cutFeather: 0,
+    u_cutLabelA: [0, 0],
+    u_cutLabelB: [0, 0],
+    u_cutLabelR: 0,
+    u_cutLabelCr: 0,
+    u_cutLabelOn: 0
   }
   const tileUniforms: { u_tileOffset: number[], u_texture: WebGLTexture | null } = {
     u_tileOffset: [0, 0],
@@ -924,7 +950,12 @@ export function createWebGLRenderer(
       u_cutB: [treatment.cut.bx, treatment.cut.by],
       u_cutR: treatment.cut.r,
       u_cutCr: treatment.cut.cr,
-      u_cutFeather: treatment.cut.feather
+      u_cutFeather: treatment.cut.feather,
+      u_cutLabelA: [treatment.cutLabel?.ax ?? 0, treatment.cutLabel?.ay ?? 0],
+      u_cutLabelB: [treatment.cutLabel?.bx ?? 0, treatment.cutLabel?.by ?? 0],
+      u_cutLabelR: treatment.cutLabel?.r ?? 0,
+      u_cutLabelCr: treatment.cutLabel?.cr ?? 0,
+      u_cutLabelOn: treatment.cutLabel ? 1 : 0
     }
 
     gl.useProgram(programInfo.program)

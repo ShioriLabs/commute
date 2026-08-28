@@ -17,6 +17,7 @@ import {
   DESKTOP_TILE_BUDGET_CEILING_BYTES,
   hitTest,
   labelAnchorPoint,
+  markerLabelPoint,
   PHONE_TILE_BUDGET_CEILING_BYTES,
   pickTier,
   pointCornerRadius,
@@ -659,6 +660,8 @@ export default function MapPage() {
   // visual state instead of jumping.
   const spotlightRef = useRef<{
     point: Point
+    // The label naming `point`, or null when none is drawn. See beginSpotlight.
+    label: Point | null
     color: [number, number, number]
     phase: 'in' | 'hold' | 'out'
     phaseStart: number
@@ -1374,11 +1377,19 @@ export default function MapPage() {
           spot.lastFade = spotFade
           spot.lastRing = spotRing
           const pt = spot.point
+          const lbl = spot.label
           overlay = {
             ax: pt.ax, ay: pt.ay, bx: pt.bx, by: pt.by, r: pt.r,
             cr: pointCornerRadius(pt),
             color: spot.color,
             fadeAlpha: spotFade,
+            // Cleared alongside the marker, unringed — see SelectionOverlay.label.
+            label: lbl
+              ? {
+                  ax: lbl.ax, ay: lbl.ay, bx: lbl.bx, by: lbl.by,
+                  r: lbl.r, cr: pointCornerRadius(lbl)
+                }
+              : null,
             // Zeroed here rather than in the phase animation above so the
             // spotlight's own bookkeeping (ringFrom on a selection switch,
             // lastRing) stays uniform across point kinds — only the drawn
@@ -1502,19 +1513,26 @@ export default function MapPage() {
     flyTo(to, 450)
   }
 
-  // Begin (or move) the spotlight. On a selection switch the scrim is already
+  // Begin (or move) the spotlight. On a selection switch the fade is already
   // up — seed it from the last drawn value so it doesn't dip; the ring always
   // re-animates its settle-in on the new pill.
   const beginSpotlight = (point: Point, color: [number, number, number]) => {
-    const prevScrim = spotlightRef.current?.lastFade ?? 0
+    const prevFade = spotlightRef.current?.lastFade ?? 0
     spotlightRef.current = {
       point,
+      // The station's drawn name, cleared alongside its marker so the pair
+      // reads as one selection. Resolved once here rather than per frame: it
+      // depends only on the point, and hitPoints is 757 entries.
+      //
+      // Null for a hub (no label names one) and for the five points with no
+      // name drawn, which leaves the marker as the whole cutout.
+      label: markerLabelPoint(point, hitPoints),
       color,
       phase: 'in',
       phaseStart: performance.now(),
-      fadeFrom: prevScrim,
+      fadeFrom: prevFade,
       ringFrom: 0,
-      lastFade: prevScrim,
+      lastFade: prevFade,
       lastRing: 0
     }
     markDirty()
