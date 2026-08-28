@@ -460,16 +460,18 @@ describe('mapTreatment', () => {
     expect(t.fade).toBe(0)
     expect(t.desaturate).toBe(0)
     // feather 0 is what disables the cutout in both renderers.
-    expect(t.cut.feather).toBe(0)
+    expect(t.feather).toBe(0)
+    expect(t.cuts).toHaveLength(0)
   })
 
   it('fades for a selection alone, and punches a cutout at its shape', () => {
     const t = mapTreatment(sel(SELECTION_FADE_MAX), null)
     expect(t.fade).toBe(SELECTION_FADE_MAX)
     expect(t.desaturate).toBeCloseTo(SELECTION_DESATURATE_MAX)
-    expect(t.cut.feather).toBe(SPOTLIGHT_FEATHER_WORLD)
-    expect(t.cut.ax).toBe(100)
-    expect(t.cut.r).toBe(20)
+    expect(t.feather).toBe(SPOTLIGHT_FEATHER_WORLD)
+    expect(t.cuts).toHaveLength(1)
+    expect(t.cuts[0].ax).toBe(100)
+    expect(t.cuts[0].r).toBe(20)
   })
 
   it('keeps fade and desaturate in proportion mid-animation', () => {
@@ -491,7 +493,8 @@ describe('mapTreatment', () => {
 
   it('still cuts a hole for the selection while a route is drawn', () => {
     const t = mapTreatment(sel(SELECTION_FADE_MAX), routeFrame(ROUTE_FADE_MAX, ROUTE_DESATURATE_MAX))
-    expect(t.cut.feather).toBe(SPOTLIGHT_FEATHER_WORLD)
+    expect(t.feather).toBe(SPOTLIGHT_FEATHER_WORLD)
+    expect(t.cuts).toHaveLength(1)
   })
 
   it('cuts no hole for a route on its own', () => {
@@ -499,14 +502,16 @@ describe('mapTreatment', () => {
     // strength on top, so there is nothing to protect underneath.
     const t = mapTreatment(null, routeFrame(ROUTE_FADE_MAX, ROUTE_DESATURATE_MAX))
     expect(t.fade).toBe(ROUTE_FADE_MAX)
-    expect(t.cut.feather).toBe(0)
+    expect(t.feather).toBe(0)
+    expect(t.cuts).toHaveLength(0)
   })
 
   it('drops the cutout once the selection has faded out', () => {
     // A spotlight mid-exit at fadeAlpha 0 must not leave a hole punched in a
     // route's fade after the station is gone.
     const t = mapTreatment(sel(0), routeFrame(ROUTE_FADE_MAX, ROUTE_DESATURATE_MAX))
-    expect(t.cut.feather).toBe(0)
+    expect(t.feather).toBe(0)
+    expect(t.cuts).toHaveLength(0)
   })
 
   it('ignores a route whose overlay has not faded in yet', () => {
@@ -633,17 +638,18 @@ describe('mapTreatment label cutout', () => {
 
   it('carries the label as its own shape', () => {
     const t = mapTreatment(withLabel({ ax: 200, ay: 0, bx: 260, by: 0, r: 20, cr: 6 }), null)
-    expect(t.cutLabel).toEqual({ ax: 200, ay: 0, bx: 260, by: 0, r: 20, cr: 6 })
+    expect(t.cuts).toHaveLength(2)
+    expect(t.cuts).toContainEqual({ ax: 200, ay: 0, bx: 260, by: 0, r: 20, cr: 6 })
     // The marker's own cutout is untouched by the label's presence.
-    expect(t.cut.r).toBe(12)
+    expect(t.cuts.find(c => c.r === 12)).toBeDefined()
   })
 
   it('has no label cutout when the station has no name drawn', () => {
-    expect(mapTreatment(withLabel(null), null).cutLabel).toBeNull()
+    expect(mapTreatment(withLabel(null), null).cuts).toHaveLength(1)
   })
 
   it('drops the label cutout once the selection has faded out', () => {
     const sel = withLabel({ ax: 200, ay: 0, bx: 260, by: 0, r: 20, cr: 6 })
-    expect(mapTreatment({ ...sel, fadeAlpha: 0 }, null).cutLabel).toBeNull()
+    expect(mapTreatment({ ...sel, fadeAlpha: 0 }, null).cuts).toHaveLength(0)
   })
 })

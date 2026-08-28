@@ -1,6 +1,10 @@
-import type { CutShape, Manifest, Point, Renderer, RouteDrawItem, RouteOverlay, RouteOverlayFrame, SelectionOverlay, Tier, TileStats, Transform } from './map-renderer'
+import type { CutShape, LineIsolateOverlay, Manifest, Point, Renderer, RouteDrawItem, RouteOverlay, RouteOverlayFrame, SelectionOverlay, Tier, TileStats, Transform } from './map-renderer'
 import { RING_WIDTH_WORLD, mapTreatment, pointCornerRadius, ringOffsetWorld, routeDrawItems, tileKey } from './map-renderer'
 import { createTileSource } from './map-renderer-tile-source'
+
+// Above this many visible cutout shapes the feather is dropped; see punchCutouts.
+// A station selection is two, so this only ever catches an isolated line.
+const LARGE_CUTOUT_SHAPES = 24
 
 interface TileEntry {
   bitmap: ImageBitmap | null
@@ -120,6 +124,7 @@ export function createCanvas2DRenderer(
     ctx.lineWidth = RING_WIDTH_WORLD
     ctx.shadowColor = ringColor
     ctx.shadowBlur = 12 * transform.scale
+    ctx.beginPath()
     drawShape(ctx, sel.ax, sel.ay, sel.bx, sel.by, sel.r, sel.cr, ringOffsetWorld(sel.ringProgress))
     ctx.stroke()
     ctx.shadowColor = 'transparent'
@@ -155,7 +160,7 @@ export function createCanvas2DRenderer(
     }
   }
 
-  function draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null, route?: RouteOverlayFrame | null) {
+  function draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null, route?: RouteOverlayFrame | null, isolate?: LineIsolateOverlay | null) {
     if (disposed) return
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.fillStyle = '#ffffff'
@@ -198,10 +203,10 @@ export function createCanvas2DRenderer(
      * shown route is a near-static camera. It is also unsupported on older
      * Safari, where it no-ops into today's full-colour map rather than breaking.
      */
-    const treatment = mapTreatment(selection, route)
+    const treatment = mapTreatment(selection, route, isolate)
     const desat = treatment.desaturate
     const fade = treatment.fade
-    const cut = treatment.cut
+    const cuts = treatment.cuts
     /*
      * `opacity()` rather than a white overlay: the tiles are drawn straight onto
      * the already-white canvas, so thinning them toward it IS the blend the
@@ -229,26 +234,67 @@ export function createCanvas2DRenderer(
     if (desat > 0 || fade > 0) ctx.filter = 'none'
 
     /*
-     * One hole in the fade: `shape`'s own pixels, put back at full strength on
-     * top of the faded pass above.
+     * Every hole in the fade, punched in ONE clipped redraw per feather ring.
+     *
+     * A ring per shape was the obvious shape of this and does not survive
+     * contact with an isolated line. Canvas2D's ctx.filter forces an
+     * intermediate surface per drawImage, so at a few hundred shapes that is
+     * thousands of filtered blits a frame. Canvas2D's clip already unions
+     * sub-paths under nonzero fill, so all the shapes go into a single path and
+     * the cost stops depending on how many there are: five redraws whether the
+     * cutout is one station or a whole line.
+     *
+     * Off-screen shapes are dropped before they reach the path. At any zoomed-in
+     * camera most of a line's capsules are outside the viewport, which is what
+     * keeps the path small in the case that matters.
      */
-    function punchCutout(shape: CutShape, feather: number) {
-      const minX = Math.min(shape.ax, shape.bx) - shape.r - feather
-      const maxX = Math.max(shape.ax, shape.bx) + shape.r + feather
-      const minY = Math.min(shape.ay, shape.by) - shape.r - feather
-      const maxY = Math.max(shape.ay, shape.by) + shape.r + feather
-      // Skip entirely when the shape is off screen: the clip would draw
-      // nothing, but the tile fetches it triggers are not free.
-      if (maxX < worldMinX || minX > worldMaxX || maxY < worldMinY || minY > worldMaxY) return
-      const steps = 4
+    function punchCutouts(shapes: readonly CutShape[], feather: number) {
+      let minX = Infinity
+      let minY = Infinity
+      let maxX = -Infinity
+      let maxY = -Infinity
+      const visible: CutShape[] = []
+      for (const shape of shapes) {
+        const sMinX = Math.min(shape.ax, shape.bx) - shape.r - feather
+        const sMaxX = Math.max(shape.ax, shape.bx) + shape.r + feather
+        const sMinY = Math.min(shape.ay, shape.by) - shape.r - feather
+        const sMaxY = Math.max(shape.ay, shape.by) + shape.r + feather
+        if (sMaxX < worldMinX || sMinX > worldMaxX || sMaxY < worldMinY || sMinY > worldMaxY) continue
+        visible.push(shape)
+        minX = Math.min(minX, sMinX)
+        maxX = Math.max(maxX, sMaxX)
+        minY = Math.min(minY, sMinY)
+        maxY = Math.max(maxY, sMaxY)
+      }
+      if (visible.length === 0) return
+
+      /*
+       * How many rings approximate the shader's smoothstep. Measured on this
+       * fallback: the cutout costs ~533ms p95 at two shapes and ~1266ms at a
+       * whole line's ~150, so the union is holding — the cost scales with the
+       * REDRAWS, not the shape count — but ctx.filter's intermediate surface is
+       * expensive per redraw regardless.
+       *
+       * So a large cutout drops to a single hard-edged ring. It loses the
+       * feathered falloff, which is a real visual difference from the WebGL
+       * path, and it is the right trade here: this renderer only runs where
+       * WebGL2 is unavailable, and a hard edge is much easier to accept than a
+       * map that stops tracking the camera.
+       */
+      const steps = visible.length > LARGE_CUTOUT_SHAPES ? 1 : 4
       for (let i = steps; i >= 0; i--) {
         // Ring i sits at i/steps of the way out through the feather, and is
-        // drawn at the fade strength that ring should end up showing.
+        // drawn at the fade strength that ring should end up showing. The clip
+        // is hard-edged where the shader's smoothstep is not, so this steps the
+        // falloff rather than reproducing it.
         const t = i / steps
         const ringDesat = desat * t
         const ringFade = fade * t
         ctx.save()
-        drawShape(ctx, shape.ax, shape.ay, shape.bx, shape.by, shape.r, shape.cr, feather * t)
+        ctx.beginPath()
+        for (const shape of visible) {
+          drawShape(ctx, shape.ax, shape.ay, shape.bx, shape.by, shape.r, shape.cr, feather * t)
+        }
         ctx.clip()
         ctx.filter = ringDesat > 0 || ringFade > 0
           ? `saturate(${1 - ringDesat}) opacity(${1 - ringFade})`
@@ -279,12 +325,8 @@ export function createCanvas2DRenderer(
      * same trick the destination-out punch-out used before this, for the same
      * reason: canvas2d has no smoothstep.
      */
-    if (cut.feather > 0 && (desat > 0 || fade > 0)) {
-      // The marker, then its name: two independent holes, so the map between
-      // them keeps the fade. The WebGL path unions them in one shader pass;
-      // here each is simply its own clipped redraw.
-      punchCutout(cut, cut.feather)
-      if (treatment.cutLabel) punchCutout(treatment.cutLabel, cut.feather)
+    if (treatment.feather > 0 && cuts.length > 0 && (desat > 0 || fade > 0)) {
+      punchCutouts(cuts, treatment.feather)
     }
 
     if (route && route.alpha > 0 && routeItems.length > 0) {
@@ -304,6 +346,7 @@ export function createCanvas2DRenderer(
         ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${route.alpha})`
         // cr = r degenerates the rounded rect to a capsule; pin items have
         // coincident endpoints and come out as discs.
+        ctx.beginPath()
         drawShape(ctx, item.ax, item.ay, item.bx, item.by, item.r, item.r)
         ctx.fill()
       }
@@ -312,6 +355,7 @@ export function createCanvas2DRenderer(
     if (debugHitboxes && points.length > 0) {
       ctx.fillStyle = 'rgba(255, 0, 153, 0.3)'
       for (const p of points) {
+        ctx.beginPath()
         drawShape(ctx, p.ax, p.ay, p.bx, p.by, p.r, pointCornerRadius(p))
         ctx.fill()
       }
@@ -412,7 +456,6 @@ function drawShape(
   ctx.save()
   ctx.translate((ax + bx) / 2, (ay + by) / 2)
   ctx.rotate(angle)
-  ctx.beginPath()
   ctx.moveTo(-hw + rad, -hh)
   ctx.lineTo(hw - rad, -hh)
   ctx.arcTo(hw, -hh, hw, -hh + rad, rad)

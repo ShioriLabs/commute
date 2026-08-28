@@ -14,6 +14,7 @@
     "build:lite": "tsx scripts/build-lite.ts",
     "build:map-tiles": "tsx scripts/build-map-tiles.ts",
     "build:map-skeleton": "tsx scripts/build-map-skeleton.ts",
+    "build:map-lines": "tsx scripts/build-map-lines.ts",
     "build:og": "tsx scripts/build-og-images.ts"
   },
   "dependencies": {

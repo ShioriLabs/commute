@@ -195,60 +195,98 @@ export interface CutShape {
 export interface MapTreatment {
   fade: number
   desaturate: number
-  // The selection cutout, in world units. `feather` is 0 when nothing is
-  // selected, which is what disables the cutout in both renderers.
-  cut: CutShape & { feather: number }
   /*
-   * The station's name, cleared as a SECOND hole rather than folded into the
-   * first — see SelectionOverlay.label for why one shape spanning both would
-   * clear too much. Null when the station has no name drawn, or nothing is
-   * selected.
+   * Every hole punched in the fade this frame, world units. Empty means no
+   * cutout, which is what `feather === 0` used to say on its own.
    *
-   * Renderers union it with `cut`: min() of the two distances in the shader,
-   * a second clipped pass in the Canvas2D fallback.
+   * A list rather than the fixed pair this started as. A station selection is
+   * two shapes (its marker and its name); isolating a line is its traced edges
+   * plus every marker and name along it, which runs to a few hundred. They are
+   * kept SEPARATE rather than merged into one spanning shape for the same
+   * reason the station's two are: a hole big enough to cover both ends would
+   * clear all the unrelated map in between.
+   *
+   * Renderers union them — one mask pass in WebGL, one clipped path in the
+   * Canvas2D fallback — so order here carries no meaning.
    */
-  cutLabel: CutShape | null
+  cuts: CutShape[]
+  /*
+   * How far the fade ramps back in around each hole, world units. Shared by
+   * every shape: the feather is a property of the treatment, not of a shape, and
+   * per-shape feathers would make overlapping holes visibly seam.
+   *
+   * Zero when there is nothing selected, which is still what disables the cutout
+   * in both renderers.
+   */
+  feather: number
 }
 
-const NO_CUT = { ax: 0, ay: 0, bx: 0, by: 0, r: 0, cr: 0, feather: 0 }
+/*
+ * An isolated line: its drawn geometry, held at full strength while the rest of
+ * the network fades.
+ *
+ * Geometry arrives already assembled (see map-line-isolate.ts) because it is
+ * baked at build time and only has to be looked up, not traced. `fadeAlpha` is
+ * animated by map.tsx exactly like the selection's, so the renderers stay
+ * stateless with respect to time.
+ */
+export interface LineIsolateOverlay {
+  shapes: CutShape[]
+  fadeAlpha: number
+}
 
 export function mapTreatment(
   selection: SelectionOverlay | null | undefined,
-  route: RouteOverlayFrame | null | undefined
+  route: RouteOverlayFrame | null | undefined,
+  isolate?: LineIsolateOverlay | null
 ): MapTreatment {
   const routeOn = route != null && route.alpha > 0
   const routeFade = routeOn ? route.fade : 0
   const routeDesat = routeOn ? route.desaturate : 0
 
   const selFade = selection != null ? selection.fadeAlpha : 0
+  const isolateFade = isolate != null && isolate.shapes.length > 0 ? isolate.fadeAlpha : 0
   // Scaled off the fade's own progress rather than animated separately, so the
   // pair stays in the SELECTION_FADE_MAX : SELECTION_DESATURATE_MAX proportion
-  // through the whole in/out animation instead of only at rest.
-  const selDesat = SELECTION_FADE_MAX > 0
-    ? (selFade / SELECTION_FADE_MAX) * SELECTION_DESATURATE_MAX
-    : 0
+  // through the whole in/out animation instead of only at rest. Both fades share
+  // the constant, so a selected station and an isolated line set the artwork
+  // back by the same amount and read as one system.
+  const fade = Math.max(routeFade, selFade, isolateFade)
+  const desat = SELECTION_FADE_MAX > 0
+    ? Math.max(routeDesat, (Math.max(selFade, isolateFade) / SELECTION_FADE_MAX) * SELECTION_DESATURATE_MAX)
+    : routeDesat
+
+  /*
+   * Only a selection or an isolate punches holes. A route deliberately fades the
+   * whole map: its own capsules are drawn at full strength on top, so it has
+   * nothing to protect underneath.
+   *
+   * The two concatenate rather than competing. Tapping a station on an isolated
+   * line is a strict superset — its marker and name are already among the line's
+   * shapes — so the halo simply locates it within what is already lit.
+   */
+  const cuts: CutShape[] = []
+  if (isolate != null && isolateFade > 0) cuts.push(...isolate.shapes)
+  if (selection != null && selFade > 0) {
+    cuts.push({
+      ax: selection.ax, ay: selection.ay,
+      bx: selection.bx, by: selection.by,
+      r: selection.r, cr: selection.cr
+    })
+    if (selection.label != null) {
+      cuts.push({
+        ax: selection.label.ax, ay: selection.label.ay,
+        bx: selection.label.bx, by: selection.label.by,
+        r: selection.label.r, cr: selection.label.cr
+      })
+    }
+  }
 
   return {
-    fade: Math.max(routeFade, selFade),
-    desaturate: Math.max(routeDesat, selDesat),
-    // Only a selection punches a hole. A route deliberately fades the whole
-    // map: its own capsules are drawn at full strength on top, so it has
-    // nothing to protect underneath.
-    cut: selection != null && selFade > 0
-      ? {
-          ax: selection.ax, ay: selection.ay,
-          bx: selection.bx, by: selection.by,
-          r: selection.r, cr: selection.cr,
-          feather: SPOTLIGHT_FEATHER_WORLD
-        }
-      : NO_CUT,
-    cutLabel: selection != null && selFade > 0 && selection.label != null
-      ? {
-          ax: selection.label.ax, ay: selection.label.ay,
-          bx: selection.label.bx, by: selection.label.by,
-          r: selection.label.r, cr: selection.label.cr
-        }
-      : null
+    fade,
+    desaturate: desat,
+    cuts,
+    feather: cuts.length > 0 ? SPOTLIGHT_FEATHER_WORLD : 0
   }
 }
 
@@ -545,7 +583,7 @@ export interface RendererDebug {
 
 export interface Renderer {
   kind: 'webgl2' | 'canvas2d'
-  draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null, route?: RouteOverlayFrame | null): void
+  draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null, route?: RouteOverlayFrame | null, isolate?: LineIsolateOverlay | null): void
   resize(cssW: number, cssH: number, dpr: number): void
   requestTier(r: number, c: number, tier: Tier): void
   setPoints(points: Point[]): void

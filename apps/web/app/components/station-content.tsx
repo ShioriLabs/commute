@@ -113,6 +113,9 @@ interface StationContentProps {
   // linking to /fare. Supplied by StationSheet; the full station page leaves it
   // unset. Must be referentially stable — it participates in the memo compare.
   onSelectDeparture?: () => void
+  // Map-only, and only when line isolation is switched on: isolate this line on
+  // the map. Same stability requirement as onSelectDeparture above.
+  onIsolateLine?: (key: string) => void
 }
 
 export interface StationHeader {
@@ -166,7 +169,7 @@ export function useStationHeader(operator: string, code: string): UseStationData
   }
 }
 
-const StationContent = memo(function StationContent({ operator, code, onSelectDeparture }: StationContentProps) {
+const StationContent = memo(function StationContent({ operator, code, onSelectDeparture, onIsolateLine }: StationContentProps) {
   const unserved = getUnservedStation(operator, code)
   // Route params are not case-normalised anywhere, so fold case here rather
   // than let a lowercase URL silently drop the memorial.
@@ -263,7 +266,7 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
               </div>
               <ul className="flex flex-col gap-2 mt-4">
                 {timetableData.map(line => (
-                  <LineCard key={line.line} line={line} operator={operator} />
+                  <LineCard key={line.line} line={line} operator={operator} onIsolateLine={onIsolateLine} />
                 ))}
               </ul>
             </>

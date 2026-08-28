@@ -31,6 +31,11 @@ interface FakeTexture {
   deleted: boolean
 }
 
+interface FakeFramebuffer {
+  id: number
+  deleted: boolean
+}
+
 // Recorded by the twgl mock rather than the fake context, because the draw call
 // itself goes through twgl. Hoisted so the mock factory — which vitest may
 // invoke before this module's top-level bindings initialise — can close over it.
@@ -55,7 +60,10 @@ interface UploadRecord {
 function createFakeGl() {
   let nextId = 1
   const textures: FakeTexture[] = []
+  const framebuffers: FakeFramebuffer[] = []
+  const blendEquations: number[] = []
   let bound: FakeTexture | null = null
+  let boundFramebuffer: FakeFramebuffer | null = null
   const enabled = new Set<number>()
   const uploads: UploadRecord[] = []
   let drawElementsCalls = 0
@@ -68,6 +76,9 @@ function createFakeGl() {
     LINEAR: 0x2601, LINEAR_MIPMAP_LINEAR: 0x2703, CLAMP_TO_EDGE: 0x812f,
     COLOR_BUFFER_BIT: 0x4000, BLEND: 0x0be2, ONE: 1, ONE_MINUS_SRC_ALPHA: 0x0303,
     TRIANGLE_STRIP: 5, TRIANGLES: 4, UNPACK_PREMULTIPLY_ALPHA_WEBGL: 0x9241,
+    // The cutout mask target: an R8 colour attachment the tile shader samples.
+    FRAMEBUFFER: 0x8d40, COLOR_ATTACHMENT0: 0x8ce0, FRAMEBUFFER_COMPLETE: 0x8cd5,
+    R8: 0x8229, RED: 0x1903, MAX: 0x8008, FUNC_ADD: 0x8006,
 
     createTexture() {
       const t: FakeTexture = { id: nextId++, deleted: false }
@@ -112,12 +123,32 @@ function createFakeGl() {
     enable(cap: number) { enabled.add(cap) },
     disable(cap: number) { enabled.delete(cap) },
     blendFunc() {}, useProgram() {},
+    // Mask framebuffer. blendEquation is recorded rather than ignored: it is
+    // sticky context state, and leaving it on MAX would silently corrupt every
+    // later blended pass.
+    createFramebuffer() {
+      const f: FakeFramebuffer = { id: nextId++, deleted: false }
+      framebuffers.push(f)
+      return f as unknown as WebGLFramebuffer
+    },
+    deleteFramebuffer(f: WebGLFramebuffer | null) {
+      if (f) (f as unknown as FakeFramebuffer).deleted = true
+    },
+    bindFramebuffer(_target: number, f: WebGLFramebuffer | null) {
+      boundFramebuffer = f as unknown as FakeFramebuffer | null
+    },
+    framebufferTexture2D() {},
+    checkFramebufferStatus: () => 0x8cd5,
+    blendEquation(mode: number) { blendEquations.push(mode) },
     createBuffer: () => ({}), deleteBuffer() {},
     createVertexArray: () => ({}), deleteVertexArray() {}, bindVertexArray() {},
     drawElements() { drawElementsCalls++ },
     // Read by the twgl drawBufferInfo mock, which is handed this object as its
     // first argument, so a recorded draw carries the blend state in force.
-    __isEnabled: (cap: number) => enabled.has(cap)
+    __isEnabled: (cap: number) => enabled.has(cap),
+    __framebuffers: () => framebuffers,
+    __blendEquations: () => blendEquations,
+    __boundFramebuffer: () => boundFramebuffer
   }
 
   return {
@@ -128,7 +159,9 @@ function createFakeGl() {
     // assertion here is about tile pixels.
     tileUploads: () => uploads.filter(u => u.width > 1 || u.height > 1),
     isEnabled: (cap: number) => enabled.has(cap),
-    drawElementsCalls: () => drawElementsCalls
+    drawElementsCalls: () => drawElementsCalls,
+    liveFramebuffers: () => framebuffers.filter(f => !f.deleted).length,
+    blendEquations: () => blendEquations
   }
 }
 
@@ -777,5 +810,87 @@ describe('webgl route overlay', () => {
         expect(call.fade).toBe(0)
       }
     })
+  })
+})
+
+/*
+ * The cutout mask is this renderer's first framebuffer, which makes it the first
+ * thing that can leak on context loss or outlive a release. These cover the
+ * lifecycle rather than the pixels, which the fake context cannot produce.
+ */
+describe('webgl cutout mask', () => {
+  const vw = 360
+  const vh = 780
+  const station = {
+    ax: 0, ay: 0, bx: 10, by: 10, r: 5, cr: 5,
+    color: [1, 0, 0] as [number, number, number],
+    fadeAlpha: 0.6,
+    ringProgress: 1
+  }
+
+  it('allocates nothing while there is no cutout', async () => {
+    const { renderer, liveFramebuffers } = setup()
+    const t = transformOverTile(1, 1, 0.34, vw, vh)
+    renderer.draw(t, vw, vh, 2, 2)
+    await flush()
+    // A map with nothing selected must not pay for the target at all.
+    expect(liveFramebuffers()).toBe(0)
+  })
+
+  it('allocates once a cutout appears, and reuses it', async () => {
+    const { renderer, liveFramebuffers } = setup()
+    const t = transformOverTile(1, 1, 0.34, vw, vh)
+    renderer.draw(t, vw, vh, 2, 2, station)
+    await flush()
+    expect(liveFramebuffers()).toBe(1)
+    // A held selection re-renders the same geometry; it must not reallocate.
+    renderer.draw(t, vw, vh, 2, 2, station)
+    await flush()
+    expect(liveFramebuffers()).toBe(1)
+  })
+
+  it('restores the blend equation after the mask pass', async () => {
+    const { renderer, blendEquations } = setup()
+    const t = transformOverTile(1, 1, 0.34, vw, vh)
+    renderer.draw(t, vw, vh, 2, 2, station)
+    await flush()
+    // MAX unions the shapes, but it is sticky context state: leaving it set
+    // would silently corrupt every later blended pass.
+    const seen = blendEquations()
+    expect(seen.length).toBeGreaterThan(0)
+    expect(seen[seen.length - 1]).toBe(0x8006) // FUNC_ADD
+  })
+
+  it('hands the target back with the tiles', async () => {
+    const { renderer, liveFramebuffers } = setup()
+    const t = transformOverTile(1, 1, 0.34, vw, vh)
+    renderer.draw(t, vw, vh, 2, 2, station)
+    await flush()
+    expect(liveFramebuffers()).toBe(1)
+    // releaseTiles exists to hand GPU memory back, and this is the largest
+    // single allocation after the tiles themselves.
+    renderer.releaseTiles()
+    expect(liveFramebuffers()).toBe(0)
+  })
+
+  it('frees the target on dispose', async () => {
+    const { renderer, liveFramebuffers } = setup()
+    const t = transformOverTile(1, 1, 0.34, vw, vh)
+    renderer.draw(t, vw, vh, 2, 2, station)
+    await flush()
+    renderer.dispose()
+    expect(liveFramebuffers()).toBe(0)
+  })
+
+  it('isolating a line draws its shapes without allocating per shape', async () => {
+    const { renderer, liveFramebuffers } = setup()
+    const t = transformOverTile(1, 1, 0.34, vw, vh)
+    const shapes = Array.from({ length: 120 }, (_, i) => ({
+      ax: i * 10, ay: 0, bx: i * 10 + 8, by: 0, r: 12.5, cr: 12.5
+    }))
+    renderer.draw(t, vw, vh, 2, 2, null, null, { shapes, fadeAlpha: 0.6 })
+    await flush()
+    // One target regardless of shape count: the whole point of the mask.
+    expect(liveFramebuffers()).toBe(1)
   })
 })

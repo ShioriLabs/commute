@@ -15,9 +15,12 @@ interface StationSheetProps {
   // Map-only: primes the map's pick-a-departure mode. Passed through to
   // StationContent's "Petunjuk Arah" button, composed with an animated close.
   onSelectDeparture?: () => void
+  // Map-only: isolate a line on the map. Closes the sheet on the way, like the
+  // departure action, so the isolate it just produced is actually visible.
+  onIsolateLine?: (key: string) => void
 }
 
-export default function StationSheet({ operator, code, onClose, onDismissStart, onSelectDeparture }: StationSheetProps) {
+export default function StationSheet({ operator, code, onClose, onDismissStart, onSelectDeparture, onIsolateLine }: StationSheetProps) {
   const open = !!(operator && code)
 
   // The surface unmounts the instant `open` flips false, so closing via the
@@ -34,6 +37,14 @@ export default function StationSheet({ operator, code, onClose, onDismissStart, 
       }
     : undefined), [onSelectDeparture])
 
+  // Same memo reasoning as above: StationContent compares this shallowly.
+  const handleIsolateLine = useMemo(() => (onIsolateLine
+    ? (key: string) => {
+        onIsolateLine(key)
+        animatedCloseRef.current()
+      }
+    : undefined), [onIsolateLine])
+
   return (
     <DetailSurface
       open={open}
@@ -48,7 +59,14 @@ export default function StationSheet({ operator, code, onClose, onDismissStart, 
       }}
     >
       {ready => (ready && operator && code
-        ? <StationContent operator={operator} code={code} onSelectDeparture={handleSelectDeparture} />
+        ? (
+            <StationContent
+              operator={operator}
+              code={code}
+              onSelectDeparture={handleSelectDeparture}
+              onIsolateLine={handleIsolateLine}
+            />
+          )
         : (
             <div className="px-4 pt-4 flex flex-col gap-2 max-w-3xl mx-auto">
               <div className="animate-pulse w-full h-32 bg-slate-200 rounded-lg" />

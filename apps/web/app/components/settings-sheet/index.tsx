@@ -1,11 +1,13 @@
 import { CloseButton, DialogTitle } from '@headlessui/react'
-import { PushPinSimpleIcon, ArchiveIcon, FilesIcon, InfoIcon, XIcon, DownloadSimpleIcon, GearIcon, DatabaseIcon } from '@phosphor-icons/react'
+import { PushPinSimpleIcon, ArchiveIcon, FilesIcon, InfoIcon, XIcon, DownloadSimpleIcon, GearIcon, DatabaseIcon, FlaskIcon } from '@phosphor-icons/react'
 import SettingsItem from './settings-item'
+import { useLineIsolate } from '~/hooks/use-line-isolate'
 import { useInstall } from '~/contexts/installable'
 
 declare const __APP_VERSION__: string
 
 export default function SettingsSheet() {
+  const lineIsolate = useLineIsolate()
   const { isInstallable, showIOSInstructions } = useInstall()
 
   return (
@@ -58,6 +60,23 @@ export default function SettingsSheet() {
             <DatabaseIcon weight="fill" className="w-6 h-6" />
             Commute Data Platform
           </SettingsItem>
+          <li>
+            <label className="px-8 py-6 text-lg font-semibold w-full flex items-center gap-3 cursor-pointer">
+              <FlaskIcon weight="fill" className="w-6 h-6" />
+              <span className="flex flex-col">
+                Sorot Lin di Peta
+                <span className="text-sm font-normal text-slate-600">
+                  Eksperimen. Ketuk lin di peta buat nyorot lin itu doang, baru jalan buat lin rel
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                className="ml-auto w-6 h-6 shrink-0 accent-[#F55875]"
+                checked={lineIsolate.enabled}
+                onChange={e => lineIsolate.setIsolate(e.target.checked ? 'on' : 'off')}
+              />
+            </label>
+          </li>
           <SettingsItem to="/settings/about">
             <InfoIcon weight="fill" className="w-6 h-6" />
             Tentang Commute
