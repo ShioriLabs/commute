@@ -1,6 +1,7 @@
 import type { FareResult } from '@commute/schemas'
 import { hexToRgb01 } from 'utils/colors'
 import type { Point, RouteOverlay, RouteSegment } from './map-renderer'
+import { colourMatches } from './map-corridor-colour'
 import { CORRIDOR_MATCH_MAX_DIST_WORLD, matchCorridorPath, pickLegCorridor, pointAtArcLength, polylineLength, prepareCorridors, projectOntoPolyline, type Corridor } from './map-corridors'
 import {
   dashSegment,
@@ -50,6 +51,26 @@ export interface RouteOverlayModel {
 // chords across the gap. `fare` may be null (loading, error, single endpoint):
 // the pins still resolve straight from the pair, so the map answers a deep
 // link immediately.
+/*
+ * pickLegCorridor restricted to the strokes this leg could be drawn in.
+ *
+ * Indices are remapped rather than passing a predicate, because pickLegCorridor
+ * reports a position in the array it was handed and the caller needs an index
+ * into the real corridor list.
+ */
+function electLegCorridor(
+  vertices: ReadonlyArray<{ x: number, y: number }>,
+  prepared: readonly ReturnType<typeof prepareCorridors>[number][],
+  eligible: ((index: number) => boolean) | undefined
+): number | undefined {
+  if (!eligible) return pickLegCorridor(vertices, prepared)
+  const indices: number[] = []
+  for (let i = 0; i < prepared.length; i++) if (eligible(i)) indices.push(i)
+  if (indices.length === 0) return pickLegCorridor(vertices, prepared)
+  const picked = pickLegCorridor(vertices, indices.map(i => prepared[i]))
+  return picked !== undefined ? indices[picked] : pickLegCorridor(vertices, prepared)
+}
+
 export function buildRouteOverlayModel(
   /*
    * Only `legs` is read, so this takes the shape rather than either named type.
@@ -144,7 +165,37 @@ export function buildRouteOverlayModel(
        * two parallel strokes its first pair happened to reach — Roxy→Kalideres
        * rode the neighbouring 2A stroke that Kalideres→Roxy did not.
        */
-      const preferIndex = prepared ? pickLegCorridor(vertices, prepared) : undefined
+      /*
+       * Which corridors this leg is allowed to ride, by artwork colour.
+       *
+       * Distance alone cannot separate two strokes drawn on one alignment, and
+       * where it guesses wrong the route is drawn along a DIFFERENT line's
+       * colour: Koridor 3's yellow legs traced onto a blue stub 213 channels
+       * away, because the stub happened to sit a world unit nearer. Filtering
+       * before the election, rather than vetting the winner after it, is what
+       * keeps the right stroke in the running when a neighbour is marginally
+       * closer.
+       *
+       * A hex is shared by several lines here — 17 BRT colours cover 100 TJ
+       * lines, grouped by koridor family — so this narrows a stroke to a family
+       * and never to one line. That is enough to stop a leg riding another
+       * koridor's stroke, which is the whole failure.
+       *
+       * Falls back to colour-blind when nothing survives, so a stretch drawn in
+       * a colour we cannot account for still draws rather than vanishing.
+       */
+      const legColourHex = lineColor(leg.line)
+      // Read the colour off the PREPARED corridor, not the raw array: preparing
+      // drops any corridor with fewer than two points, so the two are not index-
+      // aligned and indexing the raw one would gate on a neighbour's colour.
+      const eligible = prepared
+        ? (index: number) => colourMatches(prepared[index]?.c ?? null, legColourHex)
+        : undefined
+      const anyEligible = prepared
+        ? prepared.some((_, index) => eligible!(index))
+        : false
+      const legEligible = anyEligible ? eligible : undefined
+      const preferIndex = prepared ? electLegCorridor(vertices, prepared, legEligible) : undefined
       /*
        * Where the previous pair's drawn geometry ended. Consecutive pairs can
        * legitimately land on different strokes — the elected corridor ends and
@@ -184,7 +235,9 @@ export function buildRouteOverlayModel(
         // Corridor first, chord as the fallback — a pair whose stops aren't both
         // near one drawn corridor (or whose only candidate detours the long way)
         // still gets a straight connector rather than nothing.
-        const match = prepared ? matchCorridorPath(a.x, a.y, b.x, b.y, prepared, { preferIndex }) : null
+        const match = prepared
+          ? matchCorridorPath(a.x, a.y, b.x, b.y, prepared, { preferIndex, eligible: legEligible })
+          : null
         const path = match?.path
         let corridorAddsShape = false
         if (match && path) {

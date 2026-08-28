@@ -265,6 +265,57 @@ describe('buildRouteOverlayModel stop dots', () => {
  * every one of these has a no-corridors counterpart above that must keep
  * working unchanged.
  */
+/*
+ * The confirmed wrong-line bug: a leg drawn along a NEIGHBOUR's stroke.
+ *
+ * Kalideres to Monumen Nasional rides Koridor 3, whose yellow is drawn with a
+ * blue stub on the same alignment. Distance alone picked the blue for six of the
+ * leg's pairs — including Jelambar->Grogol->Roxy from the original report —
+ * because it sat a world unit nearer at those stops.
+ */
+describe('route overlay colour gate', () => {
+  const YELLOW = '#F9C535'
+  const BLUE = '#2455A3'
+  // Two strokes on one alignment; the wrong-coloured one is marginally nearer.
+  const yellowStroke: Corridor = { w: 15, c: YELLOW, pts: [[0, 0], [200, 0]] }
+  const blueStub: Corridor = { w: 15, c: BLUE, pts: [[0, 8], [200, 8]] }
+
+  const points: Point[] = [
+    { id: 'TJ-A', ax: 0, ay: 6, bx: 0, by: 6, r: 12 },
+    { id: 'TJ-B', ax: 200, ay: 6, bx: 200, by: 6, r: 12 }
+  ]
+  const fare = {
+    legs: [{
+      type: 'RIDE' as const,
+      line: 'TJ:3',
+      operator: 'TJ',
+      stops: [{ id: 'TJ-A' }, { id: 'TJ-B' }]
+    }]
+  }
+  // TJ:3's brand yellow: 25 channels from its artwork stroke, 217 from the blue.
+  const resolveLine = () => ({ colorCode: '#FDCB1C' })
+
+  it('rides its own stroke, not the nearer one of another colour', () => {
+    const model = buildRouteOverlayModel(
+      fare as never, { fromId: 'TJ-A', toId: 'TJ-B' }, points, resolveLine, [blueStub, yellowStroke]
+    )
+    const rides = model!.overlay.segments.filter(s => s.kind === 'ride')
+    expect(rides.length).toBeGreaterThan(0)
+    // The yellow stroke sits at y=0, the blue at y=8. Traced geometry follows
+    // whichever it elected, so the drawn y says which one won.
+    for (const segment of rides) expect(Math.abs(segment.ay)).toBeLessThan(4)
+  })
+
+  it('still draws when no stroke matches the line colour', () => {
+    // A stretch drawn in a colour we cannot account for has to fall back to
+    // colour-blind matching rather than vanishing from the route.
+    const model = buildRouteOverlayModel(
+      fare as never, { fromId: 'TJ-A', toId: 'TJ-B' }, points, resolveLine, [blueStub]
+    )
+    expect(model!.overlay.segments.filter(s => s.kind === 'ride').length).toBeGreaterThan(0)
+  })
+})
+
 describe('buildRouteOverlayModel with corridors', () => {
   // An L: stations at the two ends, with the corner between them. A chord would
   // cut the diagonal; the corridor turns.
