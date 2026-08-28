@@ -515,13 +515,13 @@ describe('webgl draw pass', () => {
       r: 5,
       cr: 5,
       color: [1, 0, 0],
-      scrimAlpha: 0.5,
+      fadeAlpha: 0.5,
       ringProgress: 1
     })
 
-    // The scrim composites over the map; drawn without blending it would be an
-    // opaque slab. draw() turns blending off for the tile pass, so drawOverlays
-    // has to own this itself.
+    // The halo composites over the map; drawn without blending its glow would
+    // be an opaque slab. draw() turns blending off for the tile pass, so
+    // drawOverlays has to own this itself.
     const last = drawCalls[drawCalls.length - 1]
     expect(last.blend).toBe(true)
   })

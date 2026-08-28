@@ -14,8 +14,19 @@ import {
   tileBudgetBytes,
   hitTest,
   labelAnchorPoint,
+  mapTreatment,
+  pointToShapeDistance,
+  ringOffsetWorld,
+  ROUTE_DESATURATE_MAX,
+  ROUTE_FADE_MAX,
+  SELECTION_DESATURATE_MAX,
+  SELECTION_FADE_MAX,
+  SPOTLIGHT_FEATHER_WORLD,
+  RING_MAX_OFFSET_WORLD,
+  RING_REST_OFFSET_WORLD,
   type Point,
   type RouteOverlay,
+  type SelectionOverlay,
   type Tier
 } from './map-renderer'
 
@@ -423,5 +434,131 @@ describe('labelAnchorPoint', () => {
     // Better a spotlight on the words than a tap that silently does nothing.
     const lbl = label('KCI-SUD', 0, 0)
     expect(labelAnchorPoint(lbl, [dot('KCI-OTHER', 10, 10)])).toBe(lbl)
+  })
+})
+
+/*
+ * The selection treatment: the map fades toward white everywhere except a
+ * cutout around the tapped node.
+ *
+ * These pin the two things that are easy to break by "simplifying" later — that
+ * a route and a selection combine by max() rather than summing, and that the
+ * cutout rides the same feather the halo is drawn against.
+ */
+describe('mapTreatment', () => {
+  const sel = (fadeAlpha: number): SelectionOverlay => ({
+    ax: 100, ay: 100, bx: 100, by: 100, r: 20, cr: 20,
+    color: [1, 0, 0], fadeAlpha, ringProgress: 1
+  })
+  const routeFrame = (fade: number, desaturate: number) => ({
+    alpha: 1, scrimAlpha: 0, desaturate, fade
+  })
+
+  it('leaves the map alone with neither a selection nor a route', () => {
+    const t = mapTreatment(null, null)
+    expect(t.fade).toBe(0)
+    expect(t.desaturate).toBe(0)
+    // feather 0 is what disables the cutout in both renderers.
+    expect(t.cut.feather).toBe(0)
+  })
+
+  it('fades for a selection alone, and punches a cutout at its shape', () => {
+    const t = mapTreatment(sel(SELECTION_FADE_MAX), null)
+    expect(t.fade).toBe(SELECTION_FADE_MAX)
+    expect(t.desaturate).toBeCloseTo(SELECTION_DESATURATE_MAX)
+    expect(t.cut.feather).toBe(SPOTLIGHT_FEATHER_WORLD)
+    expect(t.cut.ax).toBe(100)
+    expect(t.cut.r).toBe(20)
+  })
+
+  it('keeps fade and desaturate in proportion mid-animation', () => {
+    // Scaled off the fade's progress rather than animated separately, so the
+    // map does not briefly go grey before it goes pale.
+    const t = mapTreatment(sel(SELECTION_FADE_MAX / 2), null)
+    expect(t.desaturate).toBeCloseTo(SELECTION_DESATURATE_MAX / 2)
+  })
+
+  it('fades once, not twice, when a selection lands on a shown route', () => {
+    // The trap this exists to stop: two fades toward white summing into a blank
+    // page. max() also keeps the map from visibly REGAINING contrast as the
+    // spotlight fades in over an already-faded route.
+    const t = mapTreatment(sel(SELECTION_FADE_MAX), routeFrame(ROUTE_FADE_MAX, ROUTE_DESATURATE_MAX))
+    expect(t.fade).toBe(Math.max(ROUTE_FADE_MAX, SELECTION_FADE_MAX))
+    expect(t.fade).toBeLessThanOrEqual(1)
+    expect(t.desaturate).toBeLessThanOrEqual(1)
+  })
+
+  it('still cuts a hole for the selection while a route is drawn', () => {
+    const t = mapTreatment(sel(SELECTION_FADE_MAX), routeFrame(ROUTE_FADE_MAX, ROUTE_DESATURATE_MAX))
+    expect(t.cut.feather).toBe(SPOTLIGHT_FEATHER_WORLD)
+  })
+
+  it('cuts no hole for a route on its own', () => {
+    // A route deliberately fades the whole map: its capsules are drawn at full
+    // strength on top, so there is nothing to protect underneath.
+    const t = mapTreatment(null, routeFrame(ROUTE_FADE_MAX, ROUTE_DESATURATE_MAX))
+    expect(t.fade).toBe(ROUTE_FADE_MAX)
+    expect(t.cut.feather).toBe(0)
+  })
+
+  it('drops the cutout once the selection has faded out', () => {
+    // A spotlight mid-exit at fadeAlpha 0 must not leave a hole punched in a
+    // route's fade after the station is gone.
+    const t = mapTreatment(sel(0), routeFrame(ROUTE_FADE_MAX, ROUTE_DESATURATE_MAX))
+    expect(t.cut.feather).toBe(0)
+  })
+
+  it('ignores a route whose overlay has not faded in yet', () => {
+    const t = mapTreatment(null, { alpha: 0, scrimAlpha: 0, desaturate: 0.9, fade: 0.9 })
+    expect(t.fade).toBe(0)
+  })
+})
+
+/*
+ * The cutout mask and the halo are drawn from one boundary — the GLSL shader
+ * and pointToShapeDistance are the same rounded-rect SDF. These assert the mask
+ * the shader computes over that distance, so a change to the feather cannot
+ * silently move the node's edge away from the ring drawn around it.
+ */
+describe('selection cutout mask', () => {
+  const p: Point = { id: 'KCI-SUD', ax: 100, ay: 100, bx: 100, by: 100, r: 20 }
+  // The smoothstep(0, feather, d) the tile shader applies: 0 keeps the artwork
+  // at full strength, 1 lets the fade through.
+  const keep = (x: number, y: number) => {
+    const d = pointToShapeDistance(x, y, p)
+    const t = Math.max(0, Math.min(1, d / SPOTLIGHT_FEATHER_WORLD))
+    return t * t * (3 - 2 * t)
+  }
+
+  it('holds the node at full strength at its centre', () => {
+    expect(keep(100, 100)).toBe(0)
+  })
+
+  it('still holds it at the shape edge', () => {
+    // Inside the shape the distance is negative, so the node never picks up any
+    // of the fade regardless of how far in it is.
+    expect(keep(119, 100)).toBe(0)
+  })
+
+  it('lets the fade through fully past the feather', () => {
+    expect(keep(100 + 20 + SPOTLIGHT_FEATHER_WORLD + 1, 100)).toBe(1)
+  })
+
+  it('ramps rather than stepping across the feather', () => {
+    const mid = keep(100 + 20 + SPOTLIGHT_FEATHER_WORLD / 2, 100)
+    expect(mid).toBeGreaterThan(0)
+    expect(mid).toBeLessThan(1)
+  })
+})
+
+// The halo settles from outside the shape onto its edge. Pinned because the
+// cutout work sits on the same constants and a collateral edit here would
+// detach the ring from the node it marks.
+describe('ringOffsetWorld', () => {
+  it('starts wide and settles in', () => {
+    expect(ringOffsetWorld(0)).toBe(RING_MAX_OFFSET_WORLD)
+    expect(ringOffsetWorld(1)).toBe(RING_REST_OFFSET_WORLD)
+    expect(ringOffsetWorld(0.5)).toBeLessThan(RING_MAX_OFFSET_WORLD)
+    expect(ringOffsetWorld(0.5)).toBeGreaterThan(RING_REST_OFFSET_WORLD)
   })
 })

@@ -3,7 +3,7 @@ import type { Manifest, Point, Renderer, RouteDrawItem, RouteOverlay, RouteOverl
 import {
   PHONE_TILE_BUDGET_CEILING_BYTES,
   RING_WIDTH_WORLD,
-  SPOTLIGHT_FEATHER_WORLD,
+  mapTreatment,
   pointCornerRadius,
   ringOffsetWorld,
   routeDrawItems,
@@ -19,11 +19,35 @@ uniform vec2 u_tileOffset;
 uniform vec2 u_tileSize;
 uniform mat3 u_transform;
 out vec2 v_texcoord;
+// World position of this fragment, so the tile shader can evaluate the
+// selection cutout's SDF. The vertex shader already computed it; it just never
+// had a reason to hand it downstream before.
+out vec2 v_world;
 void main() {
   vec2 world = u_tileOffset + a_position * u_tileSize;
   vec3 clip = u_transform * vec3(world, 1.0);
   gl_Position = vec4(clip.xy, 0.0, 1.0);
   v_texcoord = a_texcoord;
+  v_world = world;
+}
+`
+
+// Shared rounded-rect SDF (world units, negative inside). Injected into every
+// fragment shader that needs a boundary — tile cutout, pill fills, hitbox
+// debug and the spotlight ring — so all four agree on the exact same edge.
+//
+// Declared above the tile shader rather than beside the pill shaders because
+// the tile shader interpolates it too, and a `const` referenced before its
+// declaration inside a template literal throws at module init.
+const SHAPE_SDF_GLSL = `
+float shapeDistance(vec2 p, vec2 a, vec2 b, float r, float cr) {
+  vec2 ab = b - a;
+  float len = length(ab);
+  vec2 dir = len > 0.0 ? ab / len : vec2(1.0, 0.0);
+  vec2 rel = p - (a + b) * 0.5;
+  vec2 lp = abs(vec2(dot(rel, dir), dot(rel, vec2(-dir.y, dir.x))));
+  vec2 q = lp - vec2(len * 0.5 + r - cr, r - cr);
+  return length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - cr;
 }
 `
 
@@ -40,16 +64,46 @@ uniform float u_desaturate;
 // leaves every stroke as dark as it started, so a desaturated schematic is just
 // as busy as a coloured one — this is what actually makes the map recede.
 uniform float u_fade;
+/*
+ * The selection cutout: the tapped station's shape, held at full strength while
+ * everything around it fades.
+ *
+ * This lives in the TILE shader, which looks like the wrong place until you try
+ * the obvious alternative. The fade is applied to the tile's own pixels here, so
+ * by the time any overlay draws, the contrast is already gone — punching a hole
+ * in an overlay can only reveal the map at whatever strength the tiles were
+ * drawn, never restore what this shader destroyed. So the mask has to be applied
+ * at the same moment as the fade it cancels. Resist folding it back into the
+ * spotlight pass.
+ *
+ * u_cutFeather == 0.0 disables it, which is the no-selection case.
+ */
+uniform vec2 u_cutA;
+uniform vec2 u_cutB;
+uniform float u_cutR;
+uniform float u_cutCr;
+uniform float u_cutFeather; // world units
+in vec2 v_world;
 out vec4 outColor;
+${SHAPE_SDF_GLSL}
 void main() {
   vec4 c = texture(u_texture, v_texcoord);
+  // 0 inside the selected shape, rising to 1 past the feather. The same
+  // smoothstep-over-shapeDistance the spotlight ring is built on, so the cutout
+  // and the halo sit on one boundary by construction rather than by two
+  // constants that have to be kept in step by hand.
+  float keep = u_cutFeather > 0.0
+    ? smoothstep(0.0, u_cutFeather, shapeDistance(v_world, u_cutA, u_cutB, u_cutR, u_cutCr))
+    : 1.0;
+  float desaturate = u_desaturate * keep;
+  float fade = u_fade * keep;
   float luma = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
   // Textures are uploaded premultiplied, so the grey has to be weighted by alpha
   // to stay in that space. A no-op for the opaque WebP tiers; it matters for the
   // runtime-rasterized SVG tier, which would otherwise halo at tile edges.
-  vec3 rgb = mix(c.rgb, vec3(luma) * c.a, u_desaturate);
+  vec3 rgb = mix(c.rgb, vec3(luma) * c.a, desaturate);
   // Same premultiplied reasoning as above: white is (1,1,1) * a in that space.
-  outColor = vec4(mix(rgb, vec3(c.a), u_fade), c.a);
+  outColor = vec4(mix(rgb, vec3(c.a), fade), c.a);
 }
 `
 
@@ -88,21 +142,6 @@ void main() {
 }
 `
 
-// Shared rounded-rect SDF (world units, negative inside). Injected into both
-// fragment shaders so pill fills, hitbox debug, and the spotlight all agree
-// on the exact same boundary.
-const SHAPE_SDF_GLSL = `
-float shapeDistance(vec2 p, vec2 a, vec2 b, float r, float cr) {
-  vec2 ab = b - a;
-  float len = length(ab);
-  vec2 dir = len > 0.0 ? ab / len : vec2(1.0, 0.0);
-  vec2 rel = p - (a + b) * 0.5;
-  vec2 lp = abs(vec2(dot(rel, dir), dot(rel, vec2(-dir.y, dir.x))));
-  vec2 q = lp - vec2(len * 0.5 + r - cr, r - cr);
-  return length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - cr;
-}
-`
-
 const PILL_FS = `#version 300 es
 precision highp float;
 in vec2 v_local;
@@ -123,9 +162,14 @@ void main() {
 }
 `
 
-// Selection spotlight: one fullscreen pass drawn last, combining a dimming
-// scrim (feathered punch-out around the selected capsule) and a glowing halo
-// ring. The capsule arrives via uniforms — no per-selection buffers.
+// Selection spotlight: one fullscreen pass drawn last, drawing the glowing halo
+// ring around the selected capsule. The capsule arrives via uniforms — no
+// per-selection buffers.
+//
+// The dim this pass used to carry is gone: isolating the selection is now the
+// tile shader's job (see u_cutFeather in FS), because a fade has to be cancelled
+// where it is applied. What is left here is purely additive light, which is why
+// the pass runs on ringProgress alone.
 const SPOT_VS = `#version 300 es
 in vec2 a_position; // 0..1 fullscreen quad
 uniform vec2 u_viewport; // css px
@@ -144,8 +188,6 @@ in vec2 v_world;
 uniform vec2 u_selA;
 uniform vec2 u_selB;
 uniform float u_selR;
-uniform float u_scrimAlpha;
-uniform float u_feather; // world units
 uniform vec3 u_ringColor;
 uniform float u_ringOffset;
 uniform float u_ringWidth;
@@ -155,15 +197,12 @@ out vec4 outColor;
 ${SHAPE_SDF_GLSL}
 void main() {
   float d = shapeDistance(v_world, u_selA, u_selB, u_selR, u_selCr); // signed dist to shape edge
-  // Scrim with a feathered punch-out: 0 inside the capsule, full past feather.
-  float scrim = u_scrimAlpha * smoothstep(0.0, u_feather, d);
   // Glowing ring centered u_ringOffset outside the capsule edge.
   float ring = (1.0 - smoothstep(0.0, u_ringWidth, abs(d - u_ringOffset))) * u_ringAlpha;
   // Soft outer glow hugging the ring.
   float glow = exp(-max(d - u_ringOffset, 0.0) / (u_ringWidth * 2.5)) * 0.35 * u_ringAlpha;
-  vec3 scrimRgb = vec3(0.06, 0.09, 0.16) * scrim;
-  float a = scrim + (ring + glow) * (1.0 - scrim);
-  outColor = vec4(scrimRgb + u_ringColor * (ring + glow), a); // premultiplied
+  float a = ring + glow;
+  outColor = vec4(u_ringColor * a, a); // premultiplied
 }
 `
 
@@ -186,8 +225,9 @@ void main() {
 }
 `
 
-// Same dark navy as the spotlight scrim (SPOT_FS), so the two dims read as one
-// system when the selection scrim takes over from the route scrim.
+// The route scrim's navy. Retained at zero strength (ROUTE_SCRIM_MAX_ALPHA), so
+// this never actually draws — see the note on that constant for why the whole
+// mechanism survives behind one number. Shared with the route's pin ink.
 const SCRIM_RGB = [0.06, 0.09, 0.16]
 
 interface TileEntry {
@@ -813,7 +853,17 @@ export function createWebGLRenderer(
   // frame-constant u_transform/u_tileSize once per frame stops the mat3 being
   // re-uploaded per tile.
   const transformMat = new Float32Array(9)
-  const frameUniforms = { u_transform: transformMat, u_tileSize: [0, 0], u_desaturate: 0, u_fade: 0 }
+  const frameUniforms: Record<string, unknown> = {
+    u_transform: transformMat,
+    u_tileSize: [0, 0],
+    u_desaturate: 0,
+    u_fade: 0,
+    u_cutA: [0, 0],
+    u_cutB: [0, 0],
+    u_cutR: 0,
+    u_cutCr: 0,
+    u_cutFeather: 0
+  }
   const tileUniforms: { u_tileOffset: number[], u_texture: WebGLTexture | null } = {
     u_tileOffset: [0, 0],
     u_texture: null
@@ -853,14 +903,29 @@ export function createWebGLRenderer(
     const mat = buildTransformMat3(transform, cssW, cssH, transformMat)
 
     /*
-     * How grey the map is this frame. Computed once here because it has to reach
-     * THREE separate setUniforms calls below — the preview-only return, the
-     * preview underlay, and the per-frame tile uniforms — each of which passes
-     * its own object, and twgl only sets the keys it is handed. A site left out
-     * doesn't read zero, it inherits whatever the last frame bound.
+     * How the artwork is treated this frame, and where the selection punches a
+     * hole in that treatment. Computed once here because it has to reach THREE
+     * separate setUniforms calls below — the preview-only return, the preview
+     * underlay, and the per-frame tile uniforms — each of which passes its own
+     * object, and twgl only sets the keys it is handed. A site left out doesn't
+     * read zero, it inherits whatever the last frame bound.
+     *
+     * That hazard is why the cut uniforms are spread from one `tileTreatment`
+     * object rather than listed per site: a new field reaches all three by
+     * construction instead of by remembering.
      */
-    const desat = route && route.alpha > 0 ? route.desaturate : 0
-    const fade = route && route.alpha > 0 ? route.fade : 0
+    const treatment = mapTreatment(selection, route)
+    const desat = treatment.desaturate
+    const fade = treatment.fade
+    const tileTreatment = {
+      u_desaturate: desat,
+      u_fade: fade,
+      u_cutA: [treatment.cut.ax, treatment.cut.ay],
+      u_cutB: [treatment.cut.bx, treatment.cut.by],
+      u_cutR: treatment.cut.r,
+      u_cutCr: treatment.cut.cr,
+      u_cutFeather: treatment.cut.feather
+    }
 
     gl.useProgram(programInfo.program)
     twgl.setBuffersAndAttributes(twglGl, programInfo, quadVao)
@@ -904,8 +969,7 @@ export function createWebGLRenderer(
           u_tileSize: [mapW, mapH],
           u_transform: mat,
           u_texture: previewTexture,
-          u_desaturate: desat,
-          u_fade: fade
+          ...tileTreatment
         })
         twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
         drawOverlays(mat, transform, cssW, cssH, selection, route)
@@ -977,8 +1041,7 @@ export function createWebGLRenderer(
           u_tileSize: [mapW, mapH],
           u_transform: mat,
           u_texture: previewTexture,
-          u_desaturate: desat,
-          u_fade: fade
+          ...tileTreatment
         })
         twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
       }
@@ -995,10 +1058,10 @@ export function createWebGLRenderer(
     else gl.disable(gl.BLEND)
 
     // Frame-constant uniforms once; only offset + texture change per tile.
-    frameUniforms.u_tileSize[0] = tileW
-    frameUniforms.u_tileSize[1] = tileH
-    frameUniforms.u_desaturate = desat
-    frameUniforms.u_fade = fade
+    const frameTileSize = frameUniforms.u_tileSize as number[]
+    frameTileSize[0] = tileW
+    frameTileSize[1] = tileH
+    Object.assign(frameUniforms, tileTreatment)
     twgl.setUniforms(programInfo, frameUniforms)
 
     for (let i = 0; i < visibleCount; i++) {
@@ -1118,7 +1181,10 @@ export function createWebGLRenderer(
       twgl.drawBufferInfo(twglGl, pillVao, gl.TRIANGLES)
     }
 
-    if (selection && (selection.scrimAlpha > 0 || selection.ringProgress > 0)) {
+    // Ring only: the isolating fade this pass used to carry now happens in the
+    // tile shader, so a selection with no ring (a label fallback, noRing) has
+    // nothing left to draw here.
+    if (selection && selection.ringProgress > 0) {
       gl.useProgram(spotProgramInfo.program)
       twgl.setBuffersAndAttributes(twglGl, spotProgramInfo, spotVao)
       twgl.setUniforms(spotProgramInfo, {
@@ -1128,8 +1194,6 @@ export function createWebGLRenderer(
         u_selB: [selection.bx, selection.by],
         u_selR: selection.r,
         u_selCr: selection.cr,
-        u_scrimAlpha: selection.scrimAlpha,
-        u_feather: SPOTLIGHT_FEATHER_WORLD,
         u_ringColor: selection.color,
         u_ringOffset: ringOffsetWorld(selection.ringProgress),
         u_ringWidth: RING_WIDTH_WORLD,

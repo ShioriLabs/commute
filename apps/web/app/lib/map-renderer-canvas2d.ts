@@ -1,5 +1,5 @@
 import type { Manifest, Point, Renderer, RouteDrawItem, RouteOverlay, RouteOverlayFrame, SelectionOverlay, Tier, TileStats, Transform } from './map-renderer'
-import { RING_WIDTH_WORLD, SPOTLIGHT_FEATHER_WORLD, pointCornerRadius, ringOffsetWorld, routeDrawItems, tileKey } from './map-renderer'
+import { RING_WIDTH_WORLD, mapTreatment, pointCornerRadius, ringOffsetWorld, routeDrawItems, tileKey } from './map-renderer'
 import { createTileSource } from './map-renderer-tile-source'
 
 interface TileEntry {
@@ -35,12 +35,6 @@ export function createCanvas2DRenderer(
   // pixels yet. Held until dispose() — see the note in draw().
   let preview: ImageBitmap | null = null
   let previewLoading = false
-
-  // Offscreen canvas for the selection scrim. The punch-out uses
-  // destination-out compositing, which would erase the map if done on the
-  // main canvas — so the scrim is composed here and drawn over in one blit.
-  const scrimCanvas = document.createElement('canvas')
-  const scrimCtx = scrimCanvas.getContext('2d')
 
   function ensureTile(r: number, c: number): TileEntry {
     const key = tileKey(r, c)
@@ -111,56 +105,53 @@ export function createCanvas2DRenderer(
     const h = Math.max(1, Math.round(cssH * dpr))
     if (canvas.width !== w) canvas.width = w
     if (canvas.height !== h) canvas.height = h
-    if (scrimCanvas.width !== w) scrimCanvas.width = w
-    if (scrimCanvas.height !== h) scrimCanvas.height = h
   }
 
-  function drawSelection(sel: SelectionOverlay, transform: Transform, cssW: number, cssH: number, dpr: number) {
-    if (sel.scrimAlpha > 0 && scrimCtx) {
-      if (scrimCanvas.width !== canvas.width) scrimCanvas.width = canvas.width
-      if (scrimCanvas.height !== canvas.height) scrimCanvas.height = canvas.height
-      scrimCtx.setTransform(1, 0, 0, 1, 0, 0)
-      scrimCtx.clearRect(0, 0, scrimCanvas.width, scrimCanvas.height)
-      scrimCtx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      scrimCtx.fillStyle = `rgba(15, 23, 42, ${sel.scrimAlpha})`
-      scrimCtx.fillRect(0, 0, cssW, cssH)
-      scrimCtx.translate(transform.tx, transform.ty)
-      scrimCtx.scale(transform.scale, transform.scale)
-      // Feathered punch-out: accumulate partial erases over shrinking radii,
-      // then hard-clear the capsule interior.
-      scrimCtx.globalCompositeOperation = 'destination-out'
-      const steps = 5
-      scrimCtx.fillStyle = `rgba(0, 0, 0, ${Math.min(1, (1 / steps) * 1.2)})`
-      for (let i = steps; i >= 1; i--) {
-        drawShape(scrimCtx, sel.ax, sel.ay, sel.bx, sel.by, sel.r, sel.cr, SPOTLIGHT_FEATHER_WORLD * (i / steps))
-        scrimCtx.fill()
+  // The halo, and only the halo. Isolating the selection is the tile pass's job
+  // now (see drawTiles) — a fade has to be cancelled where it is applied, and
+  // the offscreen destination-out canvas this used to need went with the scrim.
+  function drawSelection(sel: SelectionOverlay, transform: Transform) {
+    if (sel.ringProgress <= 0) return
+    const r = Math.round(sel.color[0] * 255)
+    const g = Math.round(sel.color[1] * 255)
+    const b = Math.round(sel.color[2] * 255)
+    const ringColor = `rgba(${r}, ${g}, ${b}, ${sel.ringProgress})`
+    ctx.strokeStyle = ringColor
+    ctx.lineWidth = RING_WIDTH_WORLD
+    ctx.shadowColor = ringColor
+    ctx.shadowBlur = 12 * transform.scale
+    drawShape(ctx, sel.ax, sel.ay, sel.bx, sel.by, sel.r, sel.cr, ringOffsetWorld(sel.ringProgress))
+    ctx.stroke()
+    ctx.shadowColor = 'transparent'
+    ctx.shadowBlur = 0
+  }
+
+  /*
+   * The visible tiles, drawn under whatever ctx.filter is currently set.
+   *
+   * Extracted because the cutout has to draw the same tiles a second time at a
+   * different filter strength. `requestUpgrades` is false on those repeat passes:
+   * the first pass over the same region already asked for any tier upgrade, and
+   * re-asking per feather ring would fire the same fetch several times a frame.
+   */
+  function drawTiles(
+    worldMinX: number, worldMinY: number, worldMaxX: number, worldMaxY: number,
+    currentTier: Tier, requestUpgrades: boolean
+  ) {
+    for (let r = 0; r < grid.rows; r++) {
+      const tileY = r * tileH
+      if (tileY + tileH < worldMinY || tileY > worldMaxY) continue
+      for (let c = 0; c < grid.cols; c++) {
+        const tileX = c * tileW
+        if (tileX + tileW < worldMinX || tileX > worldMaxX) continue
+        const entry = ensureTile(r, c)
+        if (entry.bitmap) {
+          ctx.drawImage(entry.bitmap, tileX, tileY, tileW, tileH)
+        }
+        if (requestUpgrades && entry.tier < currentTier && entry.pendingTier !== currentTier) {
+          void requestTier(r, c, currentTier)
+        }
       }
-      scrimCtx.fillStyle = 'rgba(0, 0, 0, 1)'
-      drawShape(scrimCtx, sel.ax, sel.ay, sel.bx, sel.by, sel.r, sel.cr)
-      scrimCtx.fill()
-      scrimCtx.globalCompositeOperation = 'source-over'
-
-      ctx.setTransform(1, 0, 0, 1, 0, 0)
-      ctx.drawImage(scrimCanvas, 0, 0)
-      // Restore world transform for the halo below.
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      ctx.translate(transform.tx, transform.ty)
-      ctx.scale(transform.scale, transform.scale)
-    }
-
-    if (sel.ringProgress > 0) {
-      const r = Math.round(sel.color[0] * 255)
-      const g = Math.round(sel.color[1] * 255)
-      const b = Math.round(sel.color[2] * 255)
-      const ringColor = `rgba(${r}, ${g}, ${b}, ${sel.ringProgress})`
-      ctx.strokeStyle = ringColor
-      ctx.lineWidth = RING_WIDTH_WORLD
-      ctx.shadowColor = ringColor
-      ctx.shadowBlur = 12 * transform.scale
-      drawShape(ctx, sel.ax, sel.ay, sel.bx, sel.by, sel.r, sel.cr, ringOffsetWorld(sel.ringProgress))
-      ctx.stroke()
-      ctx.shadowColor = 'transparent'
-      ctx.shadowBlur = 0
     }
   }
 
@@ -207,8 +198,10 @@ export function createCanvas2DRenderer(
      * shown route is a near-static camera. It is also unsupported on older
      * Safari, where it no-ops into today's full-colour map rather than breaking.
      */
-    const desat = route && route.alpha > 0 ? route.desaturate : 0
-    const fade = route && route.alpha > 0 ? route.fade : 0
+    const treatment = mapTreatment(selection, route)
+    const desat = treatment.desaturate
+    const fade = treatment.fade
+    const cut = treatment.cut
     /*
      * `opacity()` rather than a white overlay: the tiles are drawn straight onto
      * the already-white canvas, so thinning them toward it IS the blend the
@@ -227,27 +220,62 @@ export function createCanvas2DRenderer(
       if (preview) ctx.drawImage(preview, 0, 0, mapW, mapH)
     }
 
-    for (let r = 0; r < grid.rows; r++) {
-      const tileY = r * tileH
-      if (tileY + tileH < worldMinY || tileY > worldMaxY) continue
-      for (let c = 0; c < grid.cols; c++) {
-        const tileX = c * tileW
-        if (tileX + tileW < worldMinX || tileX > worldMaxX) continue
-        const entry = ensureTile(r, c)
-        if (entry.bitmap) {
-          ctx.drawImage(entry.bitmap, tileX, tileY, tileW, tileH)
-        }
-        if (entry.tier < currentTier && entry.pendingTier !== currentTier) {
-          void requestTier(r, c, currentTier)
-        }
-      }
-    }
+    drawTiles(worldMinX, worldMinY, worldMaxX, worldMaxY, currentTier, true)
 
     // Back to full strength before anything but map artwork is drawn. ctx.filter
     // is sticky across draw calls, so without this the route, its pins and the
     // selection spotlight would be faded and desaturated too — which would erase
     // the one distinction the treatment exists to create.
     if (desat > 0 || fade > 0) ctx.filter = 'none'
+
+    /*
+     * The selection cutout: the tapped station's own pixels, put back at full
+     * strength on top of the faded pass above.
+     *
+     * The WebGL path masks the fade inside the tile shader, one pass. Here
+     * ctx.filter applies to a whole drawImage and cannot be masked within it, so
+     * the only equivalent is to draw the affected tiles a second time unfiltered
+     * behind a clip. Bounded to the tiles the shape actually touches — a point
+     * is at most ~212 world units end to end, so this is one to four tiles, not
+     * the grid.
+     *
+     * The clip is hard-edged where the shader's is feathered, so the fade is
+     * stepped back over a few shrinking rings to approximate it. That is the
+     * same trick the destination-out punch-out used before this, for the same
+     * reason: canvas2d has no smoothstep.
+     */
+    if (cut.feather > 0 && (desat > 0 || fade > 0)) {
+      const pad = cut.feather
+      const minX = Math.min(cut.ax, cut.bx) - cut.r - pad
+      const maxX = Math.max(cut.ax, cut.bx) + cut.r + pad
+      const minY = Math.min(cut.ay, cut.by) - cut.r - pad
+      const maxY = Math.max(cut.ay, cut.by) + cut.r + pad
+      // Skip entirely when the selection is off screen: the clip would draw
+      // nothing, but the tile fetches it triggers are not free.
+      if (maxX >= worldMinX && minX <= worldMaxX && maxY >= worldMinY && minY <= worldMaxY) {
+        const steps = 4
+        for (let i = steps; i >= 0; i--) {
+          // Ring i sits at i/steps of the way out through the feather, and is
+          // drawn at the fade strength that ring should end up showing.
+          const t = i / steps
+          const ringDesat = desat * t
+          const ringFade = fade * t
+          ctx.save()
+          drawShape(ctx, cut.ax, cut.ay, cut.bx, cut.by, cut.r, cut.cr, pad * t)
+          ctx.clip()
+          ctx.filter = ringDesat > 0 || ringFade > 0
+            ? `saturate(${1 - ringDesat}) opacity(${1 - ringFade})`
+            : 'none'
+          drawTiles(
+            Math.max(worldMinX, minX), Math.max(worldMinY, minY),
+            Math.min(worldMaxX, maxX), Math.min(worldMaxY, maxY),
+            currentTier, false
+          )
+          ctx.filter = 'none'
+          ctx.restore()
+        }
+      }
+    }
 
     if (route && route.alpha > 0 && routeItems.length > 0) {
       // Flat dim under the route — no punch-out; the route's opaque capsules
@@ -279,8 +307,8 @@ export function createCanvas2DRenderer(
       }
     }
 
-    if (selection && (selection.scrimAlpha > 0 || selection.ringProgress > 0)) {
-      drawSelection(selection, transform, cssW, cssH, dpr)
+    if (selection && selection.ringProgress > 0) {
+      drawSelection(selection, transform)
     }
   }
 

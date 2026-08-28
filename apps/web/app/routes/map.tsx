@@ -25,7 +25,7 @@ import {
   ROUTE_DESATURATE_MAX,
   ROUTE_FADE_MAX,
   ROUTE_SCRIM_MAX_ALPHA,
-  SCRIM_MAX_ALPHA,
+  SELECTION_FADE_MAX,
   type Manifest,
   type Point,
   type PointsManifest,
@@ -654,7 +654,7 @@ export default function MapPage() {
   const lastFrameTimeRef = useRef<number>(0)
 
   // Selection spotlight: scrim + halo around the selected pill, animated in
-  // the rAF tick. `lastScrim`/`lastRing` mirror the values drawn on the most
+  // the rAF tick. `lastFade`/`lastRing` mirror the values drawn on the most
   // recent frame so phase changes (switch, exit) can start from the current
   // visual state instead of jumping.
   const spotlightRef = useRef<{
@@ -662,9 +662,9 @@ export default function MapPage() {
     color: [number, number, number]
     phase: 'in' | 'hold' | 'out'
     phaseStart: number
-    scrimFrom: number
+    fadeFrom: number
     ringFrom: number
-    lastScrim: number
+    lastFade: number
     lastRing: number
   } | null>(null)
   // Eased camera flight (selection centering, double-tap zoom, recenter).
@@ -726,7 +726,7 @@ export default function MapPage() {
     if (!spot || spot.phase === 'out') return
     spot.phase = 'out'
     spot.phaseStart = performance.now()
-    spot.scrimFrom = spot.lastScrim
+    spot.fadeFrom = spot.lastFade
     spot.ringFrom = spot.lastRing
     markDirty()
   }, [markDirty])
@@ -1260,23 +1260,23 @@ export default function MapPage() {
       // they run); in the steady `hold` phase the overlay is drawn on any
       // dirty frame — tracking pan/zoom — without forcing continuous redraws.
       const spot = spotlightRef.current
-      let spotScrim = 0
+      let spotFade = 0
       let spotRing = 0
       if (spot) {
         const elapsed = now - spot.phaseStart
         if (spot.phase === 'in') {
           const p = Math.min(1, elapsed / SPOTLIGHT_IN_MS)
           const e = 1 - Math.pow(1 - p, 3) // easeOutCubic
-          spotScrim = spot.scrimFrom + (SCRIM_MAX_ALPHA - spot.scrimFrom) * e
+          spotFade = spot.fadeFrom + (SELECTION_FADE_MAX - spot.fadeFrom) * e
           spotRing = spot.ringFrom + (1 - spot.ringFrom) * e
           if (p >= 1) spot.phase = 'hold'
           else dirtyRef.current = true
         } else if (spot.phase === 'hold') {
-          spotScrim = SCRIM_MAX_ALPHA
+          spotFade = SELECTION_FADE_MAX
           spotRing = 1
         } else {
           const p = Math.min(1, elapsed / SPOTLIGHT_OUT_MS)
-          spotScrim = spot.scrimFrom * (1 - p)
+          spotFade = spot.fadeFrom * (1 - p)
           spotRing = spot.ringFrom * (1 - p)
           if (p >= 1) spotlightRef.current = null
           dirtyRef.current = true
@@ -1286,13 +1286,14 @@ export default function MapPage() {
       /*
        * Route overlay fade. The map separates from the route by fading toward
        * page white and draining a little colour — see ROUTE_FADE_MAX — so the
-       * scrim is retained at zero strength and its yield arithmetic below is
-       * vestigial, kept so the three can be rebalanced from the constants alone.
+       * scrim is retained at zero strength, kept so the three can be rebalanced
+       * from the constants alone.
        *
-       * Neither fade nor desaturation takes that yield. The scrim yields because
-       * two dims multiply into an unreadable map; these are orthogonal to it,
-       * and yielding would make the map visibly REGAIN colour and contrast as
-       * the spotlight faded in.
+       * A selection now fades the map the same way, so the two treatments have
+       * to be reconciled rather than simply added. That is mapTreatment()'s job,
+       * in map-renderer.ts, where both renderers can read the one answer: the
+       * yield arithmetic that used to live here is gone with the scrim it
+       * balanced.
        */
       let routeFrame: RouteOverlayFrame | null = null
       {
@@ -1305,13 +1306,9 @@ export default function MapPage() {
         anim.lastAlpha = alpha
         if (alpha > 0) {
           const scrimTarget = routeStateRef.current.scrim ? ROUTE_SCRIM_MAX_ALPHA : 0
-          // Reads spotScrim rather than the overlay object: that object is now
-          // built lazily further down, inside the branch that actually draws,
-          // and it carries this very value.
-          const spotShare = spotScrim / SCRIM_MAX_ALPHA
           routeFrame = {
             alpha,
-            scrimAlpha: scrimTarget * alpha * (1 - spotShare),
+            scrimAlpha: scrimTarget * alpha,
             // Gated on the same flag as the scrim: a pins-only overlay (deep
             // link before the fare lands) leaves the map alone, since two lone
             // pins on a fully drained map read as a broken render.
@@ -1374,19 +1371,20 @@ export default function MapPage() {
         // over an otherwise idle map allocates nothing.
         let overlay: SelectionOverlay | null = null
         if (spot) {
-          spot.lastScrim = spotScrim
+          spot.lastFade = spotFade
           spot.lastRing = spotRing
           const pt = spot.point
           overlay = {
             ax: pt.ax, ay: pt.ay, bx: pt.bx, by: pt.by, r: pt.r,
             cr: pointCornerRadius(pt),
             color: spot.color,
-            scrimAlpha: spotScrim,
+            fadeAlpha: spotFade,
             // Zeroed here rather than in the phase animation above so the
             // spotlight's own bookkeeping (ringFrom on a selection switch,
             // lastRing) stays uniform across point kinds — only the drawn
             // result differs. ringProgress drives both the ring and its glow,
-            // so 0 removes the halo outright and leaves the scrim.
+            // so 0 removes the halo outright and leaves the fade, which is
+            // carried by fadeAlpha and so is untouched by this.
             ringProgress: pt.noRing ? 0 : spotRing
           }
         }
@@ -1508,15 +1506,15 @@ export default function MapPage() {
   // up — seed it from the last drawn value so it doesn't dip; the ring always
   // re-animates its settle-in on the new pill.
   const beginSpotlight = (point: Point, color: [number, number, number]) => {
-    const prevScrim = spotlightRef.current?.lastScrim ?? 0
+    const prevScrim = spotlightRef.current?.lastFade ?? 0
     spotlightRef.current = {
       point,
       color,
       phase: 'in',
       phaseStart: performance.now(),
-      scrimFrom: prevScrim,
+      fadeFrom: prevScrim,
       ringFrom: 0,
-      lastScrim: prevScrim,
+      lastFade: prevScrim,
       lastRing: 0
     }
     markDirty()

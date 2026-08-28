@@ -60,7 +60,7 @@ export interface Point {
   r: number
   cr?: number
   /*
-   * Suppress the selection halo for this shape, keeping only the scrim.
+   * Suppress the selection halo for this shape, keeping only the fade.
    *
    * The ring is an offset outline that settles onto the pill's own edge, which
    * reads as a highlight around a marker but as a box drawn around a word.
@@ -90,10 +90,28 @@ export interface PointsManifest {
   points: Point[]
 }
 
-// Spotlight overlay for the currently selected station/hub: a dimming scrim
-// with a feathered punch-out around the capsule, plus a glowing halo ring in
-// the selection's line color. The renderers are stateless with respect to
-// time — map.tsx animates scrimAlpha/ringProgress and passes current values.
+/*
+ * Spotlight overlay for the currently selected station/hub: the map faded
+ * toward page white everywhere EXCEPT a feathered cutout around the capsule,
+ * plus a glowing halo ring in the selection's line color.
+ *
+ * This used to be a dark scrim laid over the map. It is a fade for the same
+ * reason the route overlay is one — see ROUTE_FADE_MAX: dimming leaves every
+ * stroke exactly as dark as it started, so a dimmed schematic is just as busy
+ * as a bright one, while fading drops contrast and actually makes the artwork
+ * recede. Both selections and routes now speak that one language.
+ *
+ * The consequence is structural rather than cosmetic, and is the thing to
+ * understand before touching this: the fade is applied by the TILE pass, to
+ * the tile's own pixels, so the cutout has to be applied there too. An overlay
+ * drawn on top cannot punch a hole back to full strength — it can only reveal
+ * the map at whatever strength the tiles were already drawn. Hence the cut*
+ * geometry reaching the tile shader (WebGL) and a second clipped tile pass
+ * (Canvas2D), rather than the far more obvious hole-in-an-overlay.
+ *
+ * The renderers are stateless with respect to time — map.tsx animates
+ * fadeAlpha/ringProgress and passes current values.
+ */
 export interface SelectionOverlay {
   ax: number
   ay: number
@@ -102,17 +120,97 @@ export interface SelectionOverlay {
   r: number
   cr: number // effective corner radius (see pointCornerRadius)
   color: [number, number, number] // 0..1 rgb
-  scrimAlpha: number // 0..SCRIM_MAX_ALPHA, current animated value
+  // 0..SELECTION_FADE_MAX: how far the map OUTSIDE the cutout is blended
+  // toward page white. Current animated value.
+  fadeAlpha: number
   ringProgress: number // 0..1: drives ring offset (settle-in) and alpha
 }
 
-export const SCRIM_MAX_ALPHA = 0.32
+/*
+ * How far to blend the map toward page white while a station is selected, and
+ * how much colour to drain from it, 0..1.
+ *
+ * Deliberately the same pair as the route's (ROUTE_FADE_MAX /
+ * ROUTE_DESATURATE_MAX), so a selected station and a drawn route sit the
+ * artwork back by the same amount and read as one system rather than two
+ * treatments that happen to share a map. Fade stays the larger of the two for
+ * the reason given on the route constants: fade does the receding, desaturate
+ * only stops what survives from competing.
+ *
+ * These are the numbers most likely to want a nudge on a device. A station
+ * node is mostly white core with a thin coloured rim — measured mean ink runs
+ * 0.18-0.31 over the disc, and 199 of 377 markers are only 12 world units
+ * across — so an unfaded node is a weaker signal against a whitened field than
+ * it looks on paper. That is why the halo ring stays: the ring locates, the
+ * fade isolates. Raise the fade too far and the node has nothing left to
+ * contrast against.
+ */
+export const SELECTION_FADE_MAX = 0.6
+export const SELECTION_DESATURATE_MAX = 0.25
 // World units so the spotlight stays "attached to the map" across zoom.
 export const SPOTLIGHT_FEATHER_WORLD = 26
 export const RING_WIDTH_WORLD = 5
 // Ring animates from MAX offset (outside) down to REST as ringProgress → 1.
 export const RING_MAX_OFFSET_WORLD = 30
 export const RING_REST_OFFSET_WORLD = 8
+
+/*
+ * How the artwork is treated this frame, and where the hole in that treatment
+ * is: the single answer both renderers work from.
+ *
+ * A route and a selection can be on screen at once, and both want the map set
+ * back. They are combined with max() rather than summed because two fades
+ * toward white multiply into a blank page — the same reason the dark scrim used
+ * to yield to the spotlight, transposed onto the treatment that replaced it.
+ * max() also keeps the map from visibly REGAINING contrast as a spotlight fades
+ * in over an already-faded route, which is the artefact the old yield
+ * arithmetic existed to prevent.
+ *
+ * Lives here rather than in either renderer so the WebGL shader and the
+ * Canvas2D fallback cannot drift on a judgement neither of them owns.
+ */
+export interface MapTreatment {
+  fade: number
+  desaturate: number
+  // The selection cutout, in world units. `feather` is 0 when nothing is
+  // selected, which is what disables the cutout in both renderers.
+  cut: { ax: number, ay: number, bx: number, by: number, r: number, cr: number, feather: number }
+}
+
+const NO_CUT = { ax: 0, ay: 0, bx: 0, by: 0, r: 0, cr: 0, feather: 0 }
+
+export function mapTreatment(
+  selection: SelectionOverlay | null | undefined,
+  route: RouteOverlayFrame | null | undefined
+): MapTreatment {
+  const routeOn = route != null && route.alpha > 0
+  const routeFade = routeOn ? route.fade : 0
+  const routeDesat = routeOn ? route.desaturate : 0
+
+  const selFade = selection != null ? selection.fadeAlpha : 0
+  // Scaled off the fade's own progress rather than animated separately, so the
+  // pair stays in the SELECTION_FADE_MAX : SELECTION_DESATURATE_MAX proportion
+  // through the whole in/out animation instead of only at rest.
+  const selDesat = SELECTION_FADE_MAX > 0
+    ? (selFade / SELECTION_FADE_MAX) * SELECTION_DESATURATE_MAX
+    : 0
+
+  return {
+    fade: Math.max(routeFade, selFade),
+    desaturate: Math.max(routeDesat, selDesat),
+    // Only a selection punches a hole. A route deliberately fades the whole
+    // map: its own capsules are drawn at full strength on top, so it has
+    // nothing to protect underneath.
+    cut: selection != null && selFade > 0
+      ? {
+          ax: selection.ax, ay: selection.ay,
+          bx: selection.bx, by: selection.by,
+          r: selection.r, cr: selection.cr,
+          feather: SPOTLIGHT_FEATHER_WORLD
+        }
+      : NO_CUT
+  }
+}
 
 export function ringOffsetWorld(ringProgress: number): number {
   return RING_MAX_OFFSET_WORLD + (RING_REST_OFFSET_WORLD - RING_MAX_OFFSET_WORLD) * ringProgress
@@ -229,8 +327,9 @@ export const ROUTE_TRANSFER_DASH_WORLD = 24
 export const ROUTE_TRANSFER_GAP_WORLD = 14
 export const ROUTE_PIN_RADIUS_WORLD = 26
 
-// Pin styling, shared by both renderers via routeDrawItems. The dark ink
-// matches the spotlight scrim so the overlay reads as one system.
+// Pin styling, shared by both renderers via routeDrawItems. The dark ink is the
+// same navy the route scrim carries (SCRIM_RGB), which is what keeps the pins
+// reading as part of the overlay rather than as ink borrowed from the artwork.
 const ROUTE_INK: [number, number, number] = [0.06, 0.09, 0.16]
 const ROUTE_WHITE: [number, number, number] = [1, 1, 1]
 
