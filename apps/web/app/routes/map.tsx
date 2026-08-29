@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import LineRoundel from '~/components/line-roundel'
 import LineSheet from '~/components/line-sheet'
 import { findLine, lineCutShapes, linesNear, type LinesManifest } from '~/lib/map-line-isolate'
+import { openSurface, isSurfaceOpen, type OpenSurface } from '~/lib/map-detail-surface'
 import clsx from 'clsx'
 import type { StandardResponse } from '@schema/response'
 import type { Hub, Station } from '@commute/schemas'
@@ -656,11 +657,6 @@ export default function MapPage() {
    * key makes it a new mount.
    */
   const [fareSheet, setFareSheet] = useState<{ snap: 'peek' | 'full', id: number } | null>(null)
-  const detailSurfaceOpen = !!(selectedStation || selectedHubSlug || fareSheet)
-  // Desktop only: an open detail pane sits over the top-left corner the title
-  // pill lives in, so it hides for as long as one is open.
-  const paneCoversChrome = isDesktop && detailSurfaceOpen
-  const pillVisible = chromeVisible && !paneCoversChrome
   /*
    * The line whose sheet is open, `operator:code`.
    *
@@ -670,6 +666,16 @@ export default function MapPage() {
    * fade-out by a few hundred ms, and the sheet should not.
    */
   const [openLineKey, setOpenLineKey] = useState<string | null>(null)
+  const detailSurfaceOpen = isSurfaceOpen({
+    station: selectedStation,
+    hubSlug: selectedHubSlug,
+    lineKey: openLineKey,
+    fare: fareSheet
+  })
+  // Desktop only: an open detail pane sits over the top-left corner the title
+  // pill lives in, so it hides for as long as one is open.
+  const paneCoversChrome = isDesktop && detailSurfaceOpen
+  const pillVisible = chromeVisible && !paneCoversChrome
   /*
    * Bumped to ask the line sheet to play its own exit.
    *
@@ -715,15 +721,27 @@ export default function MapPage() {
   const [pickingOrigin, setPickingOrigin] = useState(false)
 
   /*
-   * Exactly one detail surface at a time. All three are DetailSurfaces at z-detail-surface —
-   * two open at once would stack two cards on desktop, or two independently
-   * draggable sheets on a phone.
+   * Exactly one detail surface at a time. All four are DetailSurfaces on
+   * z-detail-surface — two open at once would stack two cards on desktop, or
+   * two independently draggable sheets on a phone.
+   *
+   * Every opening goes through here rather than each tap handler nulling the
+   * siblings it remembers. That hand-written version is what let the line sheet
+   * stay open underneath a station: it was added as a fourth surface, and three
+   * of the clears never learned about it. openSurface decides the whole next
+   * state, so a surface cannot be half-added again.
    */
-  const openFareSheet = (snap: 'peek' | 'full') => {
-    setSelectedStation(null)
-    setSelectedHubSlug(null)
-    setFareSheet(prev => ({ snap, id: (prev?.id ?? 0) + 1 }))
+  const openDetailSurface = (open: OpenSurface) => {
+    const next = openSurface(
+      { station: selectedStation, hubSlug: selectedHubSlug, lineKey: openLineKey, fare: fareSheet },
+      open
+    )
+    setSelectedStation(next.station)
+    setSelectedHubSlug(next.hubSlug)
+    setOpenLineKey(next.lineKey)
+    setFareSheet(next.fare)
   }
+  const openFareSheet = (snap: 'peek' | 'full') => openDetailSurface({ kind: 'fare', snap })
   /*
    * Isolate a line from the station sheet's line-card header. Undefined unless
    * the geometry has landed, which is what keeps the plain link on the
@@ -747,9 +765,10 @@ export default function MapPage() {
     setIsolateOrigin(selectedStation)
     // The sheet is closing behind this, so drop the station spotlight with it:
     // the line is the answer now, and a halo left on one stop reads as a second
-    // selection competing with it.
+    // selection competing with it. Closing the station sheet itself is already
+    // done: beginIsolate opened the line as a detail surface, which clears its
+    // siblings. Only the spotlight is left to stand down here.
     beginSpotlightExit()
-    setSelectedStation(null)
   // Deps are the manifests beginIsolate closes over, plus the origin we capture
   // and the deck gate that decides whether the station stays open behind.
   }, [linesManifest, workingPoints, labelPointsManifest, selectedStation, isDesktop])
@@ -1755,8 +1774,9 @@ export default function MapPage() {
       lastFade: prevFade
     }
     markDirty()
-    // The line's own detail, in the same surface a station or hub opens in.
-    if (ownSheet) setOpenLineKey(key)
+    // The line's own detail, in the same surface a station or hub opens in —
+    // so it closes whatever was there, exactly as those two do.
+    if (ownSheet) openDetailSurface({ kind: 'line', lineKey: key })
     return true
   }
 
@@ -1935,9 +1955,7 @@ export default function MapPage() {
         // Hub region tapped (no member pill won). Resolve `HUB-…` id → slug.
         const slug = hubSlugById.get(hit.point.id)
         if (slug) {
-          setSelectedStation(null)
-          setFareSheet(null)
-          setSelectedHubSlug(slug)
+          openDetailSurface({ kind: 'hub', hubSlug: slug })
           haptic()
           beginSpotlight(hit.point, hubColorById.get(hit.point.id) ?? SPOTLIGHT_NEUTRAL_COLOR)
           flyToPoint(hit.point)
@@ -1974,9 +1992,7 @@ export default function MapPage() {
             // owns the camera from here.
             return false
           }
-          setSelectedHubSlug(null)
-          setFareSheet(null)
-          setSelectedStation({ operator, code })
+          openDetailSurface({ kind: 'station', station: { operator, code } })
           haptic()
           // Spotlight the MARKER, not the shape that was tapped. For a station
           // pill they are the same point; for a label they are not — the name
