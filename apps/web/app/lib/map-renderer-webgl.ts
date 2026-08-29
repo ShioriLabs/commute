@@ -1,9 +1,9 @@
 import * as twgl from 'twgl.js'
-import type { Manifest, Point, Renderer, RouteDrawItem, RouteOverlay, RouteOverlayFrame, SelectionOverlay, Tier, TileStats, Transform } from './map-renderer'
+import type { CutShape, LineIsolateOverlay, Manifest, Point, Renderer, RouteDrawItem, RouteOverlay, RouteOverlayFrame, SelectionOverlay, Tier, TileStats, Transform } from './map-renderer'
 import {
   PHONE_TILE_BUDGET_CEILING_BYTES,
   RING_WIDTH_WORLD,
-  SPOTLIGHT_FEATHER_WORLD,
+  mapTreatment,
   pointCornerRadius,
   ringOffsetWorld,
   routeDrawItems,
@@ -19,11 +19,35 @@ uniform vec2 u_tileOffset;
 uniform vec2 u_tileSize;
 uniform mat3 u_transform;
 out vec2 v_texcoord;
+// World position of this fragment, so the tile shader can evaluate the
+// selection cutout's SDF. The vertex shader already computed it; it just never
+// had a reason to hand it downstream before.
+out vec2 v_world;
 void main() {
   vec2 world = u_tileOffset + a_position * u_tileSize;
   vec3 clip = u_transform * vec3(world, 1.0);
   gl_Position = vec4(clip.xy, 0.0, 1.0);
   v_texcoord = a_texcoord;
+  v_world = world;
+}
+`
+
+// Shared rounded-rect SDF (world units, negative inside). Injected into every
+// fragment shader that needs a boundary — tile cutout, pill fills, hitbox
+// debug and the spotlight ring — so all four agree on the exact same edge.
+//
+// Declared above the tile shader rather than beside the pill shaders because
+// the tile shader interpolates it too, and a `const` referenced before its
+// declaration inside a template literal throws at module init.
+const SHAPE_SDF_GLSL = `
+float shapeDistance(vec2 p, vec2 a, vec2 b, float r, float cr) {
+  vec2 ab = b - a;
+  float len = length(ab);
+  vec2 dir = len > 0.0 ? ab / len : vec2(1.0, 0.0);
+  vec2 rel = p - (a + b) * 0.5;
+  vec2 lp = abs(vec2(dot(rel, dir), dot(rel, vec2(-dir.y, dir.x))));
+  vec2 q = lp - vec2(len * 0.5 + r - cr, r - cr);
+  return length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - cr;
 }
 `
 
@@ -36,14 +60,52 @@ uniform sampler2D u_texture;
 // filter, so sharing the coefficients is what stops the two renderers drifting
 // apart in hue at intermediate values.
 uniform float u_desaturate;
+// 0 = the artwork at full strength, 1 = flat page white. Draining colour alone
+// leaves every stroke as dark as it started, so a desaturated schematic is just
+// as busy as a coloured one — this is what actually makes the map recede.
+uniform float u_fade;
+/*
+ * The cutout mask: where the fade is cancelled, in screen space.
+ *
+ * This lives in the TILE shader, which looks like the wrong place until you try
+ * the obvious alternative. The fade is applied to the tile's own pixels here, so
+ * by the time any overlay draws, the contrast is already gone — punching a hole
+ * in an overlay can only reveal the map at whatever strength the tiles were
+ * drawn, never restore what this shader destroyed. So the mask has to be applied
+ * at the same moment as the fade it cancels. Resist folding it back into the
+ * spotlight pass.
+ *
+ * A sampled mask rather than the two inline SDFs this started as. Isolating a
+ * line is a few hundred shapes, and evaluating that many distance functions per
+ * fragment across the whole viewport is not affordable. Drawing them once into
+ * an R8 target and reading one texel here is, and it stays exact at every zoom
+ * because the mask is rendered through the same transform as the tiles.
+ *
+ * u_cutMaskOn == 0.0 disables it, which is the nothing-selected case.
+ */
+uniform sampler2D u_cutMask;
+uniform float u_cutMaskOn;
+uniform vec2 u_viewportPx;
+in vec2 v_world;
 out vec4 outColor;
+${SHAPE_SDF_GLSL}
 void main() {
   vec4 c = texture(u_texture, v_texcoord);
+  // 1 where the artwork keeps its full strength, 0 where the fade applies. The
+  // mask is drawn at exactly the drawing-buffer size, so this is a 1:1 lookup.
+  float keep = 1.0;
+  if (u_cutMaskOn > 0.0) {
+    keep = 1.0 - texture(u_cutMask, gl_FragCoord.xy / u_viewportPx).r;
+  }
+  float desaturate = u_desaturate * keep;
+  float fade = u_fade * keep;
   float luma = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
   // Textures are uploaded premultiplied, so the grey has to be weighted by alpha
   // to stay in that space. A no-op for the opaque WebP tiers; it matters for the
   // runtime-rasterized SVG tier, which would otherwise halo at tile edges.
-  outColor = vec4(mix(c.rgb, vec3(luma) * c.a, u_desaturate), c.a);
+  vec3 rgb = mix(c.rgb, vec3(luma) * c.a, desaturate);
+  // Same premultiplied reasoning as above: white is (1,1,1) * a in that space.
+  outColor = vec4(mix(rgb, vec3(c.a), fade), c.a);
 }
 `
 
@@ -82,21 +144,6 @@ void main() {
 }
 `
 
-// Shared rounded-rect SDF (world units, negative inside). Injected into both
-// fragment shaders so pill fills, hitbox debug, and the spotlight all agree
-// on the exact same boundary.
-const SHAPE_SDF_GLSL = `
-float shapeDistance(vec2 p, vec2 a, vec2 b, float r, float cr) {
-  vec2 ab = b - a;
-  float len = length(ab);
-  vec2 dir = len > 0.0 ? ab / len : vec2(1.0, 0.0);
-  vec2 rel = p - (a + b) * 0.5;
-  vec2 lp = abs(vec2(dot(rel, dir), dot(rel, vec2(-dir.y, dir.x))));
-  vec2 q = lp - vec2(len * 0.5 + r - cr, r - cr);
-  return length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - cr;
-}
-`
-
 const PILL_FS = `#version 300 es
 precision highp float;
 in vec2 v_local;
@@ -117,9 +164,79 @@ void main() {
 }
 `
 
-// Selection spotlight: one fullscreen pass drawn last, combining a dimming
-// scrim (feathered punch-out around the selected capsule) and a glowing halo
-// ring. The capsule arrives via uniforms — no per-selection buffers.
+/*
+ * The cutout mask pass: coverage for every hole punched in the fade.
+ *
+ * Reuses PILL_VS's per-instance capsule attributes, but expands the quad by the
+ * feather — PILL_VS sizes its quad to the shape's own bounds, which would clip
+ * the feathered falloff off at the edge — while still measuring distance to the
+ * unexpanded shape.
+ *
+ * Writes coverage rather than distance because the shapes are unioned by
+ * BLENDING with gl.MAX, and a max of coverage is a union. Distance would want
+ * gl.MIN against a clear of +infinity, which R8 cannot represent.
+ */
+const MASK_VS = `#version 300 es
+in vec2 a_quad; // -1..1 unit quad
+in vec2 a_axisA;
+in vec2 a_axisB;
+in float a_radius;
+in float a_cornerRadius;
+uniform mat3 u_transform;
+uniform float u_feather; // world units
+out vec2 v_local;
+out vec2 v_axisA;
+out vec2 v_axisB;
+out float v_radius;
+out float v_cornerRadius;
+void main() {
+  vec2 axis = a_axisB - a_axisA;
+  float len = length(axis);
+  vec2 dir = len > 0.0 ? axis / len : vec2(1.0, 0.0);
+  vec2 perp = vec2(-dir.y, dir.x);
+  vec2 center = (a_axisA + a_axisB) * 0.5;
+  // Minkowski-expanded by the feather so the falloff has somewhere to be drawn.
+  float halfLen = len * 0.5 + a_radius + u_feather;
+  vec2 world = center + dir * (a_quad.x * halfLen) + perp * (a_quad.y * (a_radius + u_feather));
+  vec3 clip = u_transform * vec3(world, 1.0);
+  gl_Position = vec4(clip.xy, 0.0, 1.0);
+  v_local = world;
+  v_axisA = a_axisA;
+  v_axisB = a_axisB;
+  v_radius = a_radius;
+  v_cornerRadius = a_cornerRadius;
+}
+`
+
+const MASK_FS = `#version 300 es
+precision highp float;
+in vec2 v_local;
+in vec2 v_axisA;
+in vec2 v_axisB;
+in float v_radius;
+in float v_cornerRadius;
+uniform float u_feather;
+out vec4 outColor;
+${SHAPE_SDF_GLSL}
+void main() {
+  float d = shapeDistance(v_local, v_axisA, v_axisB, v_radius, v_cornerRadius);
+  // 1 inside the shape, falling to 0 across the feather — the exact complement
+  // of the smoothstep the tile shader used to compute inline, so the boundary is
+  // unchanged from the two-shape version.
+  float cover = 1.0 - smoothstep(0.0, u_feather, d);
+  if (cover <= 0.0) discard;
+  outColor = vec4(cover, 0.0, 0.0, 1.0);
+}
+`
+
+// Selection spotlight: one fullscreen pass drawn last, drawing the glowing halo
+// ring around the selected capsule. The capsule arrives via uniforms — no
+// per-selection buffers.
+//
+// The dim this pass used to carry is gone: isolating the selection is now the
+// tile shader's job (see u_cutFeather in FS), because a fade has to be cancelled
+// where it is applied. What is left here is purely additive light, which is why
+// the pass runs on ringProgress alone.
 const SPOT_VS = `#version 300 es
 in vec2 a_position; // 0..1 fullscreen quad
 uniform vec2 u_viewport; // css px
@@ -138,8 +255,6 @@ in vec2 v_world;
 uniform vec2 u_selA;
 uniform vec2 u_selB;
 uniform float u_selR;
-uniform float u_scrimAlpha;
-uniform float u_feather; // world units
 uniform vec3 u_ringColor;
 uniform float u_ringOffset;
 uniform float u_ringWidth;
@@ -149,15 +264,12 @@ out vec4 outColor;
 ${SHAPE_SDF_GLSL}
 void main() {
   float d = shapeDistance(v_world, u_selA, u_selB, u_selR, u_selCr); // signed dist to shape edge
-  // Scrim with a feathered punch-out: 0 inside the capsule, full past feather.
-  float scrim = u_scrimAlpha * smoothstep(0.0, u_feather, d);
   // Glowing ring centered u_ringOffset outside the capsule edge.
   float ring = (1.0 - smoothstep(0.0, u_ringWidth, abs(d - u_ringOffset))) * u_ringAlpha;
   // Soft outer glow hugging the ring.
   float glow = exp(-max(d - u_ringOffset, 0.0) / (u_ringWidth * 2.5)) * 0.35 * u_ringAlpha;
-  vec3 scrimRgb = vec3(0.06, 0.09, 0.16) * scrim;
-  float a = scrim + (ring + glow) * (1.0 - scrim);
-  outColor = vec4(scrimRgb + u_ringColor * (ring + glow), a); // premultiplied
+  float a = ring + glow;
+  outColor = vec4(u_ringColor * a, a); // premultiplied
 }
 `
 
@@ -180,8 +292,9 @@ void main() {
 }
 `
 
-// Same dark navy as the spotlight scrim (SPOT_FS), so the two dims read as one
-// system when the selection scrim takes over from the route scrim.
+// The route scrim's navy. Retained at zero strength (ROUTE_SCRIM_MAX_ALPHA), so
+// this never actually draws — see the note on that constant for why the whole
+// mechanism survives behind one number. Shared with the route's pin ink.
 const SCRIM_RGB = [0.06, 0.09, 0.16]
 
 interface TileEntry {
@@ -302,6 +415,22 @@ export function createWebGLRenderer(
   const pillProgramInfo = twgl.createProgramInfo(twglGl, [PILL_VS, PILL_FS])
 
   const spotProgramInfo = twgl.createProgramInfo(twglGl, [SPOT_VS, SPOT_FS])
+  const maskProgramInfo = twgl.createProgramInfo(twglGl, [MASK_VS, MASK_FS])
+
+  /*
+   * The cutout mask target. Allocated lazily on the first frame that actually
+   * has a cutout, so a map with nothing selected never pays for it, and released
+   * alongside the tiles because it is exactly the kind of GPU memory that path
+   * exists to hand back.
+   */
+  let maskTexture: WebGLTexture | null = null
+  let maskFramebuffer: WebGLFramebuffer | null = null
+  let maskWidth = 0
+  let maskHeight = 0
+  let maskBufferInfo: twgl.BufferInfo | null = null
+  let maskVao: twgl.VertexArrayInfo | null = null
+  let maskShapes: CutShape[] = []
+  let maskShapesDirty = false
   const spotBufferInfo = twgl.createBufferInfoFromArrays(twglGl, {
     a_position: { numComponents: 2, data: [0, 0, 1, 0, 0, 1, 1, 1] }
   })
@@ -406,6 +535,160 @@ export function createWebGLRenderer(
   // Same quad scheme as the pills, but for the route's paint list. Every item
   // is a capsule (cornerRadius = radius), including the pin discs, whose
   // endpoints coincide.
+  /*
+   * Quads for the cutout shapes. Rebuilt only when the shape list changes, not
+   * per frame: a held selection or a standing isolate re-renders the same
+   * geometry every frame and there is nothing to re-upload.
+   */
+  // Whether the cutout geometry actually changed. A held selection or a standing
+  // isolate hands over an equal list every frame, and rebuilding buffers for that
+  // would re-upload identical geometry at 60 Hz.
+  function sameShapes(a: readonly CutShape[], b: readonly CutShape[]): boolean {
+    if (a.length !== b.length) return false
+    for (let i = 0; i < a.length; i++) {
+      const p = a[i]
+      const q = b[i]
+      if (p === q) continue
+      if (p.ax !== q.ax || p.ay !== q.ay || p.bx !== q.bx || p.by !== q.by || p.r !== q.r || p.cr !== q.cr) return false
+    }
+    return true
+  }
+
+  function rebuildMaskBuffers() {
+    if (maskBufferInfo) {
+      deleteBufferInfo(maskBufferInfo)
+      maskBufferInfo = null
+    }
+    if (maskVao && maskVao.vertexArrayObject) {
+      gl.deleteVertexArray(maskVao.vertexArrayObject)
+      maskVao = null
+    }
+    maskShapesDirty = false
+    const n = maskShapes.length
+    if (n === 0) return
+    const quadData = new Float32Array(n * 4 * 2)
+    const axisAData = new Float32Array(n * 4 * 2)
+    const axisBData = new Float32Array(n * 4 * 2)
+    const radiusData = new Float32Array(n * 4)
+    const cornerRadiusData = new Float32Array(n * 4)
+    const indices = new Uint16Array(n * 6)
+    const quadCorners = [-1, -1, 1, -1, -1, 1, 1, 1]
+    for (let i = 0; i < n; i++) {
+      const shape = maskShapes[i]
+      for (let v = 0; v < 4; v++) {
+        quadData[i * 8 + v * 2 + 0] = quadCorners[v * 2 + 0]
+        quadData[i * 8 + v * 2 + 1] = quadCorners[v * 2 + 1]
+        axisAData[i * 8 + v * 2 + 0] = shape.ax
+        axisAData[i * 8 + v * 2 + 1] = shape.ay
+        axisBData[i * 8 + v * 2 + 0] = shape.bx
+        axisBData[i * 8 + v * 2 + 1] = shape.by
+        radiusData[i * 4 + v] = shape.r
+        cornerRadiusData[i * 4 + v] = shape.cr
+      }
+      const base = i * 4
+      indices[i * 6 + 0] = base + 0
+      indices[i * 6 + 1] = base + 1
+      indices[i * 6 + 2] = base + 2
+      indices[i * 6 + 3] = base + 2
+      indices[i * 6 + 4] = base + 1
+      indices[i * 6 + 5] = base + 3
+    }
+    maskBufferInfo = twgl.createBufferInfoFromArrays(twglGl, {
+      a_quad: { numComponents: 2, data: quadData },
+      a_axisA: { numComponents: 2, data: axisAData },
+      a_axisB: { numComponents: 2, data: axisBData },
+      a_radius: { numComponents: 1, data: radiusData },
+      a_cornerRadius: { numComponents: 1, data: cornerRadiusData },
+      indices: { numComponents: 3, data: indices }
+    })
+    maskVao = twgl.createVertexArrayInfo(twglGl, maskProgramInfo, maskBufferInfo)
+  }
+
+  function releaseMaskTarget() {
+    if (maskFramebuffer) {
+      gl.deleteFramebuffer(maskFramebuffer)
+      maskFramebuffer = null
+    }
+    if (maskTexture) {
+      gl.deleteTexture(maskTexture)
+      maskTexture = null
+    }
+    maskWidth = 0
+    maskHeight = 0
+  }
+
+  // Sized to the drawing buffer so the tile shader's lookup is 1:1 with
+  // gl_FragCoord. Reallocated when the canvas resizes; R8 because coverage is
+  // one channel and this is the largest thing the feature allocates.
+  function ensureMaskTarget(w: number, h: number): boolean {
+    if (gl.isContextLost()) return false
+    if (maskFramebuffer && maskWidth === w && maskHeight === h) return true
+    releaseMaskTarget()
+    const texture = gl.createTexture()
+    if (!texture) return false
+    gl.bindTexture(gl.TEXTURE_2D, texture)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, w, h, 0, gl.RED, gl.UNSIGNED_BYTE, null)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    const framebuffer = gl.createFramebuffer()
+    if (!framebuffer) {
+      gl.deleteTexture(texture)
+      return false
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer)
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0)
+    const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    if (!ok) {
+      gl.deleteFramebuffer(framebuffer)
+      gl.deleteTexture(texture)
+      return false
+    }
+    maskTexture = texture
+    maskFramebuffer = framebuffer
+    maskWidth = w
+    maskHeight = h
+    return true
+  }
+
+  /*
+   * Draw every cutout shape into the mask, unioned.
+   *
+   * Union comes from gl.MAX blending rather than from a min() of distances:
+   * overlapping shapes must not accumulate, and a max of coverage is exactly the
+   * union regardless of draw order. blendEquation is sticky context state, so it
+   * is restored before returning — the same hazard the blendFunc note above
+   * warns about.
+   *
+   * Returns false when the mask could not be produced, which makes the tile pass
+   * fall back to fading everything rather than to a half-drawn cutout.
+   */
+  function renderMask(mat: twgl.m4.Mat4 | number[], drawW: number, drawH: number, feather: number): boolean {
+    if (maskShapesDirty) rebuildMaskBuffers()
+    if (!maskVao || maskShapes.length === 0) return false
+    if (!ensureMaskTarget(drawW, drawH)) return false
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, maskFramebuffer)
+    gl.viewport(0, 0, drawW, drawH)
+    gl.clearColor(0, 0, 0, 1)
+    gl.clear(gl.COLOR_BUFFER_BIT)
+    gl.enable(gl.BLEND)
+    gl.blendEquation(gl.MAX)
+    gl.useProgram(maskProgramInfo.program)
+    twgl.setBuffersAndAttributes(twglGl, maskProgramInfo, maskVao)
+    twgl.setUniforms(maskProgramInfo, {
+      u_transform: mat,
+      u_feather: feather
+    })
+    twgl.drawBufferInfo(twglGl, maskVao, gl.TRIANGLES)
+    gl.blendEquation(gl.FUNC_ADD)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    gl.viewport(0, 0, drawW, drawH)
+    return true
+  }
+
   function rebuildRouteBuffers() {
     if (routeBufferInfo) {
       deleteBufferInfo(routeBufferInfo)
@@ -807,7 +1090,15 @@ export function createWebGLRenderer(
   // frame-constant u_transform/u_tileSize once per frame stops the mat3 being
   // re-uploaded per tile.
   const transformMat = new Float32Array(9)
-  const frameUniforms = { u_transform: transformMat, u_tileSize: [0, 0], u_desaturate: 0 }
+  const frameUniforms: Record<string, unknown> = {
+    u_transform: transformMat,
+    u_tileSize: [0, 0],
+    u_desaturate: 0,
+    u_fade: 0,
+    u_cutMask: null,
+    u_cutMaskOn: 0,
+    u_viewportPx: [0, 0]
+  }
   const tileUniforms: { u_tileOffset: number[], u_texture: WebGLTexture | null } = {
     u_tileOffset: [0, 0],
     u_texture: null
@@ -823,7 +1114,7 @@ export function createWebGLRenderer(
   const visibleCols = new Int32Array(gridCells)
   let visibleCount = 0
 
-  function draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null, route?: RouteOverlayFrame | null) {
+  function draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null, route?: RouteOverlayFrame | null, isolate?: LineIsolateOverlay | null) {
     if (disposed || gl.isContextLost()) return
     // Bump before any ensureTile() call so every tile touched this frame — the
     // visibility scan below included — carries the current stamp and is exempt
@@ -832,7 +1123,9 @@ export function createWebGLRenderer(
     // Land at most one decoded tile before drawing, so a burst of arrivals is
     // spread across frames instead of stalling one.
     drainUploads()
-    gl.viewport(0, 0, Math.round(cssW * dpr), Math.round(cssH * dpr))
+    const drawW = Math.round(cssW * dpr)
+    const drawH = Math.round(cssH * dpr)
+    gl.viewport(0, 0, drawW, drawH)
     gl.clearColor(1, 1, 1, 1)
     gl.clear(gl.COLOR_BUFFER_BIT)
 
@@ -847,13 +1140,44 @@ export function createWebGLRenderer(
     const mat = buildTransformMat3(transform, cssW, cssH, transformMat)
 
     /*
-     * How grey the map is this frame. Computed once here because it has to reach
-     * THREE separate setUniforms calls below — the preview-only return, the
-     * preview underlay, and the per-frame tile uniforms — each of which passes
-     * its own object, and twgl only sets the keys it is handed. A site left out
-     * doesn't read zero, it inherits whatever the last frame bound.
+     * How the artwork is treated this frame, and where the selection punches a
+     * hole in that treatment. Computed once here because it has to reach THREE
+     * separate setUniforms calls below — the preview-only return, the preview
+     * underlay, and the per-frame tile uniforms — each of which passes its own
+     * object, and twgl only sets the keys it is handed. A site left out doesn't
+     * read zero, it inherits whatever the last frame bound.
+     *
+     * That hazard is why the cut uniforms are spread from one `tileTreatment`
+     * object rather than listed per site: a new field reaches all three by
+     * construction instead of by remembering.
      */
-    const desat = route && route.alpha > 0 ? route.desaturate : 0
+    const treatment = mapTreatment(selection, route, isolate)
+    const desat = treatment.desaturate
+    const fade = treatment.fade
+
+    /*
+     * The cutout mask, rendered before anything samples it — the preview-only
+     * early return below draws tiles too, so this cannot wait for the tile loop.
+     *
+     * Shapes are pushed here rather than through a setter because they change
+     * with the selection, not with the geometry the renderer holds statefully;
+     * the buffer rebuild is gated on the list actually differing.
+     */
+    if (!sameShapes(maskShapes, treatment.cuts)) {
+      maskShapes = treatment.cuts
+      maskShapesDirty = true
+    }
+    const maskOn = treatment.cuts.length > 0 && (desat > 0 || fade > 0)
+      ? renderMask(mat, drawW, drawH, treatment.feather)
+      : false
+
+    const tileTreatment = {
+      u_desaturate: desat,
+      u_fade: fade,
+      u_cutMask: maskOn ? maskTexture : null,
+      u_cutMaskOn: maskOn ? 1 : 0,
+      u_viewportPx: [drawW, drawH]
+    }
 
     gl.useProgram(programInfo.program)
     twgl.setBuffersAndAttributes(twglGl, programInfo, quadVao)
@@ -897,7 +1221,7 @@ export function createWebGLRenderer(
           u_tileSize: [mapW, mapH],
           u_transform: mat,
           u_texture: previewTexture,
-          u_desaturate: desat
+          ...tileTreatment
         })
         twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
         drawOverlays(mat, transform, cssW, cssH, selection, route)
@@ -969,7 +1293,7 @@ export function createWebGLRenderer(
           u_tileSize: [mapW, mapH],
           u_transform: mat,
           u_texture: previewTexture,
-          u_desaturate: desat
+          ...tileTreatment
         })
         twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
       }
@@ -986,9 +1310,10 @@ export function createWebGLRenderer(
     else gl.disable(gl.BLEND)
 
     // Frame-constant uniforms once; only offset + texture change per tile.
-    frameUniforms.u_tileSize[0] = tileW
-    frameUniforms.u_tileSize[1] = tileH
-    frameUniforms.u_desaturate = desat
+    const frameTileSize = frameUniforms.u_tileSize as number[]
+    frameTileSize[0] = tileW
+    frameTileSize[1] = tileH
+    Object.assign(frameUniforms, tileTreatment)
     twgl.setUniforms(programInfo, frameUniforms)
 
     for (let i = 0; i < visibleCount; i++) {
@@ -1108,7 +1433,10 @@ export function createWebGLRenderer(
       twgl.drawBufferInfo(twglGl, pillVao, gl.TRIANGLES)
     }
 
-    if (selection && (selection.scrimAlpha > 0 || selection.ringProgress > 0)) {
+    // Ring only: the isolating fade this pass used to carry now happens in the
+    // tile shader, so a selection with no ring (a label fallback, noRing) has
+    // nothing left to draw here.
+    if (selection && selection.ringProgress > 0) {
       gl.useProgram(spotProgramInfo.program)
       twgl.setBuffersAndAttributes(twglGl, spotProgramInfo, spotVao)
       twgl.setUniforms(spotProgramInfo, {
@@ -1118,8 +1446,6 @@ export function createWebGLRenderer(
         u_selB: [selection.bx, selection.by],
         u_selR: selection.r,
         u_selCr: selection.cr,
-        u_scrimAlpha: selection.scrimAlpha,
-        u_feather: SPOTLIGHT_FEATHER_WORLD,
         u_ringColor: selection.color,
         u_ringOffset: ringOffsetWorld(selection.ringProgress),
         u_ringWidth: RING_WIDTH_WORLD,
@@ -1150,6 +1476,10 @@ export function createWebGLRenderer(
   // — those are kilobytes, the tiles are hundreds of megabytes. draw() re-requests
   // whatever is on screen and the preview underlay covers the gap meanwhile.
   function releaseTiles() {
+    // The mask target is the largest single allocation this renderer makes after
+    // the tiles themselves, and it is trivially rebuilt on the next frame that
+    // needs one.
+    releaseMaskTarget()
     if (disposed) return
     for (const entry of tiles.values()) gl.deleteTexture(entry.texture)
     tiles.clear()
@@ -1188,6 +1518,19 @@ export function createWebGLRenderer(
     for (const entry of tiles.values()) gl.deleteTexture(entry.texture)
     gl.deleteTexture(placeholder)
     releasePreview()
+    // The mask target and its geometry. releaseTiles() drops the target on its
+    // own because it is rebuildable; here the buffers go too, since nothing is
+    // coming back.
+    releaseMaskTarget()
+    if (maskBufferInfo) {
+      deleteBufferInfo(maskBufferInfo)
+      maskBufferInfo = null
+    }
+    if (maskVao && maskVao.vertexArrayObject) {
+      gl.deleteVertexArray(maskVao.vertexArrayObject)
+      maskVao = null
+    }
+    maskShapes = []
     tiles.clear()
     if (pillBufferInfo) {
       deleteBufferInfo(pillBufferInfo)

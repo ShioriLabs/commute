@@ -16,7 +16,10 @@ import {
 // geometry — corridors carry no line identity — so these tests are the only
 // thing standing between a curved route and a confidently wrong one.
 
-const prep = (pts: Array<[number, number]>, w = 25) => prepareCorridor({ w, pts })
+// Colour defaults to a rail hex: these fixtures predate corridors carrying one and
+// exercise geometry, not the colour filter, so a single arbitrary value keeps them
+// about what they were written to test.
+const prep = (pts: Array<[number, number]>, w = 25, c = '#00BDEE') => prepareCorridor({ w, c, pts })
 
 // Coordinates come out of interpolation, so compare with a tolerance rather
 // than on exact floats.
@@ -90,7 +93,7 @@ describe('polylineLength', () => {
 
 describe('matchCorridorPath', () => {
   it('follows the corridor between two stops on it', () => {
-    const corridors = prepareCorridors([{ w: 25, pts: [[0, 0], [100, 0], [100, 100]] }])
+    const corridors = prepareCorridors([{ w: 25, c: '#00BDEE', pts: [[0, 0], [100, 0], [100, 100]] }])
     const path = matchCorridorPath(0, 0, 100, 100, corridors)?.path
     expectPointsClose(path!, [[0, 0], [100, 0], [100, 100]])
   })
@@ -107,8 +110,8 @@ describe('matchCorridorPath', () => {
    * this a trap test rather than two unrelated assertions.
    */
   describe('the Jatinegara through-line trap', () => {
-    const throughLine: Corridor = { w: 25, pts: [[-1000, 0], [1000, 0]] }
-    const branch: Corridor = { w: 25, pts: [[0, 0], [0, -500], [400, -500]] }
+    const throughLine: Corridor = { w: 25, c: '#00BDEE', pts: [[-1000, 0], [1000, 0]] }
+    const branch: Corridor = { w: 25, c: '#00BDEE', pts: [[0, 0], [0, -500], [400, -500]] }
     const corridors = prepareCorridors([throughLine, branch])
     // 1 unit off the through line, 1 unit off the branch — nearest-stroke is a
     // coin flip here, and on the real map it lands on the wrong side.
@@ -137,7 +140,7 @@ describe('matchCorridorPath', () => {
    * draw the entire loop to connect two adjacent stops.
    */
   describe('detour rejection', () => {
-    const loop: Corridor = { w: 25, pts: [[0, 0], [0, 400], [400, 400], [400, 0], [10, 0]] }
+    const loop: Corridor = { w: 25, c: '#00BDEE', pts: [[0, 0], [0, 400], [400, 400], [400, 0], [10, 0]] }
 
     it('rejects the long way round and falls back to a chord', () => {
       expect(matchCorridorPath(0, 0, 10, 0, prepareCorridors([loop]))).toBeNull()
@@ -147,7 +150,7 @@ describe('matchCorridorPath', () => {
       // The short connector fits slightly worse (offset 1 unit), so it sorts
       // second — proving the matcher tries the runner-up instead of giving up
       // the moment its first choice is rejected.
-      const shortcut: Corridor = { w: 15, pts: [[0, 1], [10, 1]] }
+      const shortcut: Corridor = { w: 15, c: '#00BDEE', pts: [[0, 1], [10, 1]] }
       const path = matchCorridorPath(0, 0, 10, 0, prepareCorridors([loop, shortcut]))?.path ?? null
       expect(path).not.toBeNull()
       expect(polylineLength(path!)).toBeLessThan(20)
@@ -155,7 +158,7 @@ describe('matchCorridorPath', () => {
   })
 
   it('rejects a corridor that is near one stop but far from the other', () => {
-    const corridors = prepareCorridors([{ w: 25, pts: [[0, 0], [1000, 0]] }])
+    const corridors = prepareCorridors([{ w: 25, c: '#00BDEE', pts: [[0, 0], [1000, 0]] }])
     // Comfortably past CORRIDOR_MATCH_MAX_DIST_WORLD on the second stop. Written
     // against the constant rather than a literal so a retune moves the fixture
     // with it instead of silently turning this into a no-op.
@@ -166,7 +169,7 @@ describe('matchCorridorPath', () => {
   it('accepts a stop sitting just inside the threshold', () => {
     // The case the threshold exists for: BRT corridors break at junctions, so a
     // stop can sit tens of units from the stroke that serves its partner.
-    const corridors = prepareCorridors([{ w: 15, pts: [[0, 0], [1000, 0]] }])
+    const corridors = prepareCorridors([{ w: 15, c: '#00BDEE', pts: [[0, 0], [1000, 0]] }])
     const inside = CORRIDOR_MATCH_MAX_DIST_WORLD - 5
     expect(matchCorridorPath(100, 0, 200, inside, corridors)).not.toBeNull()
   })
@@ -178,8 +181,8 @@ describe('matchCorridorPath', () => {
    */
   describe('sticking to one corridor across a leg', () => {
     // Two parallel strokes, 22 apart, both well inside the distance gate.
-    const north: Corridor = { w: 15, pts: [[0, 0], [1000, 0]] }
-    const south: Corridor = { w: 15, pts: [[0, 22], [1000, 22]] }
+    const north: Corridor = { w: 15, c: '#00BDEE', pts: [[0, 0], [1000, 0]] }
+    const south: Corridor = { w: 15, c: '#00BDEE', pts: [[0, 22], [1000, 22]] }
     const corridors = prepareCorridors([north, south])
 
     it('would otherwise hop between them as the nearest flips', () => {
@@ -201,7 +204,7 @@ describe('matchCorridorPath', () => {
       // A real branch moves the stops clear of the old stroke: the preference is
       // a tiebreak among valid candidates, never an override of the gate. The
       // branch here runs far enough south that the north stroke fails maxDist.
-      const branch: Corridor = { w: 15, pts: [[0, 400], [1000, 400]] }
+      const branch: Corridor = { w: 15, c: '#00BDEE', pts: [[0, 400], [1000, 400]] }
       const branching = prepareCorridors([north, branch])
       const match = matchCorridorPath(100, 400, 300, 400, branching, { preferIndex: 0 })
       expect(match!.index).toBe(1)
@@ -218,8 +221,8 @@ describe('matchCorridorPath', () => {
   describe('pickLegCorridor', () => {
     // Own stroke: covers x 0..500. Neighbour: covers x 300..1000, and is 1 unit
     // NEARER to the shared middle stops.
-    const own: Corridor = { w: 15, pts: [[0, 12], [500, 12]] }
-    const neighbour: Corridor = { w: 15, pts: [[300, 0], [1000, 0]] }
+    const own: Corridor = { w: 15, c: '#00BDEE', pts: [[0, 12], [500, 12]] }
+    const neighbour: Corridor = { w: 15, c: '#00BDEE', pts: [[300, 0], [1000, 0]] }
     const corridors = prepareCorridors([own, neighbour])
     // Five stops: three only `own` serves, two in the overlap leaning towards
     // the neighbour (y=5: 7 from own, 5 from neighbour).
@@ -253,8 +256,8 @@ describe('matchCorridorPath', () => {
 
   it('prefers the closest of two parallel corridors', () => {
     const corridors = prepareCorridors([
-      { w: 25, pts: [[0, 30], [1000, 30]] },
-      { w: 25, pts: [[0, 0], [1000, 0]] }
+      { w: 25, c: '#00BDEE', pts: [[0, 30], [1000, 30]] },
+      { w: 25, c: '#00BDEE', pts: [[0, 0], [1000, 0]] }
     ])
     const path = matchCorridorPath(100, 2, 300, 2, corridors)?.path ?? null
     expect(path!.every(([, y]) => y === 0)).toBe(true)
@@ -265,7 +268,7 @@ describe('matchCorridorPath', () => {
   })
 
   it('chords when both stops resolve to the same place', () => {
-    const corridors = prepareCorridors([{ w: 25, pts: [[0, 0], [100, 0]] }])
+    const corridors = prepareCorridors([{ w: 25, c: '#00BDEE', pts: [[0, 0], [100, 0]] }])
     expect(matchCorridorPath(50, 0, 50, 0, corridors)).toBeNull()
   })
 })

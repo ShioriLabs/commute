@@ -12,7 +12,22 @@ import {
   ROUTE_PIN_RADIUS_WORLD,
   routeDrawItems,
   tileBudgetBytes,
+  hitTest,
+  labelAnchorPoint,
+  mapTreatment,
+  markerLabelPoint,
+  pointToShapeDistance,
+  ringOffsetWorld,
+  ROUTE_DESATURATE_MAX,
+  ROUTE_FADE_MAX,
+  SELECTION_DESATURATE_MAX,
+  SELECTION_FADE_MAX,
+  SPOTLIGHT_FEATHER_WORLD,
+  RING_MAX_OFFSET_WORLD,
+  RING_REST_OFFSET_WORLD,
+  type Point,
   type RouteOverlay,
+  type SelectionOverlay,
   type Tier
 } from './map-renderer'
 
@@ -325,5 +340,316 @@ describe('routeDrawItems', () => {
         expect(Math.hypot(x - cx, y - 0) + item.r).toBeLessThanOrEqual(margin)
       }
     }
+  })
+})
+
+/*
+ * Tap resolution is tiered — station, then hub, then label — and a closer shape
+ * in a lower tier never wins. The shapes genuinely overlap on this map, so the
+ * order is what decides which one a tap opens.
+ */
+describe('hitTest', () => {
+  const dot = (id: string, x: number, y: number, r = 12): Point =>
+    ({ id, ax: x, ay: y, bx: x, by: y, r })
+
+  it('prefers a station pill over the hub region containing it', () => {
+    // A hub region and its member pills overlap by construction: a tap on a
+    // member must open that station, and only the gaps between members open
+    // the hub.
+    const hub: Point = { id: 'HUB-DKA', ax: 0, ay: 0, bx: 100, by: 0, r: 60 }
+    const station = dot('KCI-SUD', 50, 0)
+    const hit = hitTest(50, 0, [hub, station], 0)
+    expect(hit).toEqual({ kind: 'station', point: station })
+  })
+
+  it('still opens the hub in the gap between its members', () => {
+    const hub: Point = { id: 'HUB-DKA', ax: 0, ay: 0, bx: 100, by: 0, r: 60 }
+    const station = dot('KCI-SUD', 0, 0)
+    const hit = hitTest(95, 0, [hub, station], 0)
+    expect(hit).toEqual({ kind: 'hub', point: hub })
+  })
+
+  it('prefers a station pill over a label covering it', () => {
+    // The reason the label tier exists: a name is far the largest shape on the
+    // map and routinely covers markers belonging to other stations. Ranking by
+    // distance alone would let it swallow the pill drawn on top of it — here
+    // the tap is dead centre of the label and still opens the station.
+    const label: Point = { id: 'LBL-KCI-SUD', station: 'KCI-SUD', ax: 0, ay: 0, bx: 200, by: 0, r: 40 }
+    const other = dot('KCI-SUDB', 100, 0)
+    const hit = hitTest(100, 0, [label, other], 0)
+    expect(hit).toEqual({ kind: 'station', point: other })
+  })
+
+  it('prefers a hub region over a label covering it', () => {
+    const label: Point = { id: 'LBL-KCI-SUD', station: 'KCI-SUD', ax: 0, ay: 0, bx: 200, by: 0, r: 40 }
+    const hub: Point = { id: 'HUB-DKA', ax: 100, ay: 0, bx: 100, by: 0, r: 20 }
+    const hit = hitTest(100, 0, [label, hub], 0)
+    expect(hit).toEqual({ kind: 'hub', point: hub })
+  })
+
+  it('opens the label where nothing more precise is under the tap', () => {
+    const label: Point = { id: 'LBL-KCI-SUD', station: 'KCI-SUD', ax: 0, ay: 0, bx: 200, by: 0, r: 40 }
+    const far = dot('KCI-SUDB', 900, 900)
+    const hit = hitTest(20, 0, [label, far], 0)
+    expect(hit).toEqual({ kind: 'label', point: label })
+  })
+
+  it('returns null when the tap misses everything', () => {
+    expect(hitTest(900, 900, [dot('KCI-SUD', 0, 0)], 0)).toBeNull()
+  })
+})
+
+describe('labelAnchorPoint', () => {
+  const dot = (id: string, x: number, y: number, station?: string): Point =>
+    ({ id, station, ax: x, ay: y, bx: x, by: y, r: 12 })
+
+  const label = (station: string, x: number, y: number): Point =>
+    ({ id: `LBL-${station}`, station, ax: x - 60, ay: y, bx: x + 60, by: y, r: 20 })
+
+  it('resolves a label to the marker it names', () => {
+    // A name can sit hundreds of world units from its dot, so the spotlight and
+    // the camera have to follow the marker rather than the text.
+    const marker = dot('KCI-SUD', 500, 500)
+    const other = dot('KCI-SUDB', 10, 10)
+    expect(labelAnchorPoint(label('KCI-SUD', 0, 0), [marker, other])).toBe(marker)
+  })
+
+  it('picks the nearest marker when a halte is drawn twice', () => {
+    // Flyover Jatinegara and Tanjung Priok each have a second shape carrying
+    // the `-b` suffix; the label belongs to whichever it was extracted beside.
+    const near = dot('TJ-H00037C', 40, 0)
+    const far = dot('TJ-H00037C-b', 900, 0, 'TJ-H00037C')
+    expect(labelAnchorPoint(label('TJ-H00037C', 0, 0), [far, near])).toBe(near)
+  })
+
+  it('ignores hub regions and other labels', () => {
+    // A hub is not the station's marker, and another label is not a marker at
+    // all — either would put the halo somewhere the station is not.
+    const marker = dot('KCI-SUD', 300, 0)
+    const hub: Point = { id: 'HUB-DKA', station: 'KCI-SUD', ax: 0, ay: 0, bx: 0, by: 0, r: 50 }
+    const twin = label('KCI-SUD', 5, 0)
+    expect(labelAnchorPoint(label('KCI-SUD', 0, 0), [hub, twin, marker])).toBe(marker)
+  })
+
+  it('falls back to the label when its station has no marker', () => {
+    // Better a spotlight on the words than a tap that silently does nothing.
+    const lbl = label('KCI-SUD', 0, 0)
+    expect(labelAnchorPoint(lbl, [dot('KCI-OTHER', 10, 10)])).toBe(lbl)
+  })
+})
+
+/*
+ * The selection treatment: the map fades toward white everywhere except a
+ * cutout around the tapped node.
+ *
+ * These pin the two things that are easy to break by "simplifying" later — that
+ * a route and a selection combine by max() rather than summing, and that the
+ * cutout rides the same feather the halo is drawn against.
+ */
+describe('mapTreatment', () => {
+  const sel = (fadeAlpha: number): SelectionOverlay => ({
+    ax: 100, ay: 100, bx: 100, by: 100, r: 20, cr: 20,
+    color: [1, 0, 0], fadeAlpha, ringProgress: 1
+  })
+  const routeFrame = (fade: number, desaturate: number) => ({
+    alpha: 1, scrimAlpha: 0, desaturate, fade
+  })
+
+  it('leaves the map alone with neither a selection nor a route', () => {
+    const t = mapTreatment(null, null)
+    expect(t.fade).toBe(0)
+    expect(t.desaturate).toBe(0)
+    // feather 0 is what disables the cutout in both renderers.
+    expect(t.feather).toBe(0)
+    expect(t.cuts).toHaveLength(0)
+  })
+
+  it('fades for a selection alone, and punches a cutout at its shape', () => {
+    const t = mapTreatment(sel(SELECTION_FADE_MAX), null)
+    expect(t.fade).toBe(SELECTION_FADE_MAX)
+    expect(t.desaturate).toBeCloseTo(SELECTION_DESATURATE_MAX)
+    expect(t.feather).toBe(SPOTLIGHT_FEATHER_WORLD)
+    expect(t.cuts).toHaveLength(1)
+    expect(t.cuts[0].ax).toBe(100)
+    expect(t.cuts[0].r).toBe(20)
+  })
+
+  it('keeps fade and desaturate in proportion mid-animation', () => {
+    // Scaled off the fade's progress rather than animated separately, so the
+    // map does not briefly go grey before it goes pale.
+    const t = mapTreatment(sel(SELECTION_FADE_MAX / 2), null)
+    expect(t.desaturate).toBeCloseTo(SELECTION_DESATURATE_MAX / 2)
+  })
+
+  it('fades once, not twice, when a selection lands on a shown route', () => {
+    // The trap this exists to stop: two fades toward white summing into a blank
+    // page. max() also keeps the map from visibly REGAINING contrast as the
+    // spotlight fades in over an already-faded route.
+    const t = mapTreatment(sel(SELECTION_FADE_MAX), routeFrame(ROUTE_FADE_MAX, ROUTE_DESATURATE_MAX))
+    expect(t.fade).toBe(Math.max(ROUTE_FADE_MAX, SELECTION_FADE_MAX))
+    expect(t.fade).toBeLessThanOrEqual(1)
+    expect(t.desaturate).toBeLessThanOrEqual(1)
+  })
+
+  it('still cuts a hole for the selection while a route is drawn', () => {
+    const t = mapTreatment(sel(SELECTION_FADE_MAX), routeFrame(ROUTE_FADE_MAX, ROUTE_DESATURATE_MAX))
+    expect(t.feather).toBe(SPOTLIGHT_FEATHER_WORLD)
+    expect(t.cuts).toHaveLength(1)
+  })
+
+  it('cuts no hole for a route on its own', () => {
+    // A route deliberately fades the whole map: its capsules are drawn at full
+    // strength on top, so there is nothing to protect underneath.
+    const t = mapTreatment(null, routeFrame(ROUTE_FADE_MAX, ROUTE_DESATURATE_MAX))
+    expect(t.fade).toBe(ROUTE_FADE_MAX)
+    expect(t.feather).toBe(0)
+    expect(t.cuts).toHaveLength(0)
+  })
+
+  it('drops the cutout once the selection has faded out', () => {
+    // A spotlight mid-exit at fadeAlpha 0 must not leave a hole punched in a
+    // route's fade after the station is gone.
+    const t = mapTreatment(sel(0), routeFrame(ROUTE_FADE_MAX, ROUTE_DESATURATE_MAX))
+    expect(t.feather).toBe(0)
+    expect(t.cuts).toHaveLength(0)
+  })
+
+  it('ignores a route whose overlay has not faded in yet', () => {
+    const t = mapTreatment(null, { alpha: 0, scrimAlpha: 0, desaturate: 0.9, fade: 0.9 })
+    expect(t.fade).toBe(0)
+  })
+})
+
+/*
+ * The cutout mask and the halo are drawn from one boundary — the GLSL shader
+ * and pointToShapeDistance are the same rounded-rect SDF. These assert the mask
+ * the shader computes over that distance, so a change to the feather cannot
+ * silently move the node's edge away from the ring drawn around it.
+ */
+describe('selection cutout mask', () => {
+  const p: Point = { id: 'KCI-SUD', ax: 100, ay: 100, bx: 100, by: 100, r: 20 }
+  // The smoothstep(0, feather, d) the tile shader applies: 0 keeps the artwork
+  // at full strength, 1 lets the fade through.
+  const keep = (x: number, y: number) => {
+    const d = pointToShapeDistance(x, y, p)
+    const t = Math.max(0, Math.min(1, d / SPOTLIGHT_FEATHER_WORLD))
+    return t * t * (3 - 2 * t)
+  }
+
+  it('holds the node at full strength at its centre', () => {
+    expect(keep(100, 100)).toBe(0)
+  })
+
+  it('still holds it at the shape edge', () => {
+    // Inside the shape the distance is negative, so the node never picks up any
+    // of the fade regardless of how far in it is.
+    expect(keep(119, 100)).toBe(0)
+  })
+
+  it('lets the fade through fully past the feather', () => {
+    expect(keep(100 + 20 + SPOTLIGHT_FEATHER_WORLD + 1, 100)).toBe(1)
+  })
+
+  it('ramps rather than stepping across the feather', () => {
+    const mid = keep(100 + 20 + SPOTLIGHT_FEATHER_WORLD / 2, 100)
+    expect(mid).toBeGreaterThan(0)
+    expect(mid).toBeLessThan(1)
+  })
+})
+
+// The halo settles from outside the shape onto its edge. Pinned because the
+// cutout work sits on the same constants and a collateral edit here would
+// detach the ring from the node it marks.
+describe('ringOffsetWorld', () => {
+  it('starts wide and settles in', () => {
+    expect(ringOffsetWorld(0)).toBe(RING_MAX_OFFSET_WORLD)
+    expect(ringOffsetWorld(1)).toBe(RING_REST_OFFSET_WORLD)
+    expect(ringOffsetWorld(0.5)).toBeLessThan(RING_MAX_OFFSET_WORLD)
+    expect(ringOffsetWorld(0.5)).toBeGreaterThan(RING_REST_OFFSET_WORLD)
+  })
+})
+
+/*
+ * The station's name, cleared alongside its dot. The mirror of
+ * labelAnchorPoint, and it has to agree with it: a tap on a name resolves to
+ * the marker, and that marker must resolve back to the same name.
+ */
+describe('markerLabelPoint', () => {
+  const dot = (id: string, x: number, y: number, station?: string): Point =>
+    ({ id, station, ax: x, ay: y, bx: x, by: y, r: 12 })
+  const label = (station: string, x: number, y: number, id?: string): Point =>
+    ({ id: id ?? `LBL-${station}`, station, ax: x, ay: y, bx: x + 60, by: y, r: 20, noRing: true })
+
+  it('finds the label naming a marker', () => {
+    const marker = dot('KCI-SUD', 0, 0)
+    const lbl = label('KCI-SUD', 100, 0)
+    expect(markerLabelPoint(marker, [marker, lbl])).toBe(lbl)
+  })
+
+  it('returns null when the station has no name drawn', () => {
+    // Five points have none — four display-only hubs and KCI-BST. The cutout is
+    // then just the marker, which is the pre-existing behaviour.
+    const marker = dot('KCI-BST', 0, 0)
+    expect(markerLabelPoint(marker, [marker, label('KCI-SUD', 100, 0)])).toBeNull()
+  })
+
+  it('picks the nearest label when a station carries two', () => {
+    const marker = dot('KCI-SUD', 0, 0)
+    const near = label('KCI-SUD', 80, 0, 'LBL-KCI-SUD')
+    const far = label('KCI-SUD', 900, 0, 'LBL-KCI-SUD-b')
+    expect(markerLabelPoint(marker, [far, near, marker])).toBe(near)
+  })
+
+  it('resolves the twin drawn beside a duplicated halte', () => {
+    // A halte drawn twice carries a `-b` marker; each should take the label it
+    // was extracted beside, not the other one's.
+    const a = dot('TJ-H00037C', 0, 0)
+    const b = dot('TJ-H00037C-b', 900, 0, 'TJ-H00037C')
+    const la = label('TJ-H00037C', 60, 0, 'LBL-TJ-H00037C')
+    const lb = label('TJ-H00037C', 960, 0, 'LBL-TJ-H00037C-b')
+    expect(markerLabelPoint(a, [a, b, la, lb])).toBe(la)
+    expect(markerLabelPoint(b, [a, b, la, lb])).toBe(lb)
+  })
+
+  it('never returns a label for a label', () => {
+    // Guards the fallback path: a label standing in for itself must not then
+    // resolve a second cutout onto its own words.
+    const lbl = label('KCI-SUD', 0, 0)
+    expect(markerLabelPoint(lbl, [lbl])).toBeNull()
+  })
+
+  it('round-trips with labelAnchorPoint', () => {
+    // The two must agree, or a tap on a name would clear a different name.
+    const marker = dot('KCI-SUD', 0, 0)
+    const lbl = label('KCI-SUD', 120, 0)
+    const points = [marker, lbl]
+    expect(labelAnchorPoint(lbl, points)).toBe(marker)
+    expect(markerLabelPoint(marker, points)).toBe(lbl)
+  })
+})
+
+// The label rides through mapTreatment as a SECOND hole, never merged into the
+// marker's — a single shape spanning both would clear the map between them.
+describe('mapTreatment label cutout', () => {
+  const withLabel = (label: SelectionOverlay['label']): SelectionOverlay => ({
+    ax: 0, ay: 0, bx: 0, by: 0, r: 12, cr: 12,
+    color: [1, 0, 0], fadeAlpha: SELECTION_FADE_MAX, ringProgress: 1, label
+  })
+
+  it('carries the label as its own shape', () => {
+    const t = mapTreatment(withLabel({ ax: 200, ay: 0, bx: 260, by: 0, r: 20, cr: 6 }), null)
+    expect(t.cuts).toHaveLength(2)
+    expect(t.cuts).toContainEqual({ ax: 200, ay: 0, bx: 260, by: 0, r: 20, cr: 6 })
+    // The marker's own cutout is untouched by the label's presence.
+    expect(t.cuts.find(c => c.r === 12)).toBeDefined()
+  })
+
+  it('has no label cutout when the station has no name drawn', () => {
+    expect(mapTreatment(withLabel(null), null).cuts).toHaveLength(1)
+  })
+
+  it('drops the label cutout once the selection has faded out', () => {
+    const sel = withLabel({ ax: 200, ay: 0, bx: 260, by: 0, r: 20, cr: 6 })
+    expect(mapTreatment({ ...sel, fadeAlpha: 0 }, null).cuts).toHaveLength(0)
   })
 })

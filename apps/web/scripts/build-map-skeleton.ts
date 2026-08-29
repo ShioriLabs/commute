@@ -77,6 +77,23 @@ const WIDTH_TOLERANCE = 1.2
 // extra ones do is give the matcher's nearest-corridor tiebreak more chances to pick a
 // fillet over the line a route actually rides.
 const MIN_LENGTH = 320
+/*
+ * The length floor applied while EXTRACTING, as opposed to MIN_LENGTH above which now
+ * only filters what reaches the skeleton.
+ *
+ * 320 was a proxy for "is this stroke a transit line", and a lossy one: the artwork draws
+ * short connector pieces that are unmistakably line — right width, right colour — and are
+ * exactly the geometry a route needs where two long strokes stop short of each other. Four
+ * rail connectors were being dropped, one of them the cyan piece running to within 38 units
+ * of Jatinegara, which route tracing then had to reinvent as a hand-authored bridge.
+ *
+ * Width and colour already answer the question the length was standing in for, so this only
+ * has to reject specks: a stroke shorter than a station marker is wide (44) cannot be a
+ * corridor anyone rides.
+ */
+const MIN_EXTRACT_LENGTH = 40
+// How many tiles one browser page handles before it is replaced. See the loop in main().
+const PAGE_RECYCLE_TILES = 8
 
 // Sampling step in world units. The schematic is straight runs plus small corner fillets,
 // so flattening curves at this resolution is visually exact once RDP collapses the runs.
@@ -148,10 +165,23 @@ interface ExtractedStroke extends SkeletonStroke {
   pts: number[][]
 }
 
-// The corridors file's entry: geometry only. No colour (artwork hex, duplicated across
-// lines, and matching is geometric anyway) and no id (there is nothing to key one on).
+/*
+ * The corridors file's entry. No id — there is nothing to key one on — but it does carry
+ * the artwork colour.
+ *
+ * That colour used to be dropped here, on the grounds that the hex is duplicated across
+ * lines and matching is geometric anyway. The first half is still true; the second is what
+ * this corrects. Distance alone cannot separate two strokes drawn on the same alignment, and
+ * where it guesses wrong the route is drawn along a different line's colour — Koridor 3's
+ * yellow legs traced onto a blue stub 213 channels away. Duplicated hexes do not stop a
+ * colour telling yellow from blue.
+ *
+ * Still not an identity: several lines share one hex, so this is a discriminator to filter
+ * candidates with, never a key to look one up by.
+ */
 interface CorridorEntry {
   w: number
+  c: string
   pts: number[][]
 }
 
@@ -287,7 +317,7 @@ async function extractStrokes(page: import('playwright').Page): Promise<RawStrok
     maxLightness: MAX_LIGHTNESS,
     widthClasses: [...CORRIDOR_WIDTH_CLASSES],
     widthTolerance: WIDTH_TOLERANCE,
-    minLength: MIN_LENGTH,
+    minLength: MIN_EXTRACT_LENGTH,
     sampleStep: SAMPLE_STEP,
     maxSamples: MAX_SAMPLES
   })
@@ -341,6 +371,17 @@ function simplify(points: number[][], epsilon: number): number[][] {
  * `d` string, the corridors file wants the raw pairs. Rounding once here is what stops
  * the two files disagreeing about where a corridor is.
  */
+// Polyline length in world units. Used to re-apply MIN_LENGTH to the skeleton after
+// extraction stopped enforcing it, so the corridors file can keep short connectors while
+// the loading animation keeps the long radials it was tuned on.
+function strokeLength(points: number[][]): number {
+  let total = 0
+  for (let i = 0; i < points.length - 1; i++) {
+    total += Math.hypot(points[i + 1][0] - points[i][0], points[i + 1][1] - points[i][1])
+  }
+  return total
+}
+
 function roundPoints(points: number[][]): number[][] {
   const rounded: number[][] = []
   for (const [x, y] of points) {
@@ -475,7 +516,7 @@ function collectStations(
 function writeCorridors(extracted: ExtractedStroke[], version: string): void {
   const corridors: CorridorEntry[] = extracted
     .filter(s => CORRIDOR_WIDTH_CLASSES.includes(s.w))
-    .map(s => ({ w: s.w, pts: s.pts }))
+    .map(s => ({ w: s.w, c: s.c, pts: s.pts }))
 
   const rail = corridors.filter(c => c.w === 25).length
   const brt = corridors.filter(c => c.w === 15).length
@@ -504,13 +545,22 @@ async function main(): Promise<void> {
   const viewBox: number[] = manifest.viewBox
 
   const browser = await chromium.launch()
-  const page = await browser.newPage()
-  // tsx (via esbuild keepNames) emits __name() calls inside the function we ship to
-  // page.evaluate. The browser context lacks that helper, so shim it as a no-op.
-  await page.addInitScript(() => {
-    // @ts-expect-error - shim for esbuild keepNames helper
-    globalThis.__name = (fn: unknown) => fn
-  })
+  /*
+   * tsx (via esbuild keepNames) emits __name() calls inside the function we ship to
+   * page.evaluate. The browser context lacks that helper, so shim it as a no-op.
+   *
+   * Wrapped in the page factory because the loop replaces the page periodically, and a
+   * replacement without the shim fails on its first evaluate.
+   */
+  const newPage = async () => {
+    const p = await browser.newPage()
+    await p.addInitScript(() => {
+      // @ts-expect-error - shim for esbuild keepNames helper
+      globalThis.__name = (fn: unknown) => fn
+    })
+    return p
+  }
+  let page = await newPage()
 
   // Insertion-ordered, so identical geometry from a later tile collapses onto the first
   // occurrence and the output stays deterministic across runs.
@@ -518,7 +568,21 @@ async function main(): Promise<void> {
   const discs = new Map<string, RawDisc>()
 
   try {
-    for (const tile of tiles) {
+    for (let i = 0; i < tiles.length; i++) {
+      const tile = tiles[i]
+      /*
+       * A fresh page every so often.
+       *
+       * One page walked through all 64 tiles accumulates enough retained DOM to be
+       * killed part-way — each tile is a ~1 MB document with thousands of glyph paths in
+       * <defs>, and the crash lands on a different tile each run, which is what makes it
+       * read as flaky rather than as a bug in a particular tile. Recycling bounds the
+       * live set; the extraction itself is per-tile and stateless, so nothing is lost.
+       */
+      if (i > 0 && i % PAGE_RECYCLE_TILES === 0) {
+        await page.close()
+        page = await newPage()
+      }
       await page.goto('file://' + path.join(TILE_DIR, tile))
       const raw = await extractStrokes(page)
 
@@ -567,6 +631,11 @@ async function main(): Promise<void> {
    */
   const list: SkeletonStroke[] = extracted
     .filter(s => WIDTH_CLASSES.includes(s.w))
+    // Re-applied here rather than at extraction, which now admits short connectors for the
+    // corridors file. The animation wants long radials that read as lines; a 67-unit stub
+    // adds nothing to it. Keeping this filter is what holds map-skeleton.json byte-identical
+    // across the corridors change.
+    .filter(s => strokeLength(s.pts) >= MIN_LENGTH)
     .map(({ c, w, cx, cy, d }) => ({ c, w, cx, cy, d }))
   const vertices = list.reduce((n, s) => n + s.d.split('L').length, 0)
   log(`skeleton: ${list.length} rail strokes, ${vertices} vertices`)

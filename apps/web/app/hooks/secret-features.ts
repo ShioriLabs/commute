@@ -6,6 +6,10 @@ import { useCallback, useEffect, useState } from 'react'
 // bar, so there's no way to type an unlisted route. On iOS a standalone PWA
 // also gets its own storage jar, so setting the flag in Safari would not carry
 // into the installed app, which is exactly where the instrumentation is needed.
+//
+// The same gesture now reveals the experimental line-isolation toggle. One
+// hidden door rather than two: a second gesture for every unfinished feature
+// gets forgotten, and this one is already documented where it is performed.
 const MAP_GL_DEBUG_KEY = 'map-gl-debug'
 
 function readFlag(key: string): boolean {

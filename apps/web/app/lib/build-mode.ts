@@ -16,6 +16,22 @@
 export const IS_LITE: boolean = import.meta.env.VITE_LITE === '1'
 
 /**
+ * Which host serves this lite bundle: 'apache' for the self-hosted zip, 'pages'
+ * for the Cloudflare deployment. Meaningless unless IS_LITE.
+ *
+ * Mirrors LITE_HOST in scripts/lite-flag.ts, which is the Node-side half — the
+ * two must agree, so both key off the same name and the same comparison. Folded
+ * to a constant here for the same reason IS_LITE is: so a branch on it costs
+ * nothing in the bundles where it is not taken.
+ *
+ * Nothing in app/ reads this yet. It exists because the host axis is real at
+ * build time (see vite.config.ts) and app code will need it the moment the
+ * service worker comes back for Pages — at which point the gate in root.tsx
+ * belongs on this, not on IS_LITE.
+ */
+export const LITE_HOST: 'apache' | 'pages' = import.meta.env.VITE_LITE_HOST === 'pages' ? 'pages' : 'apache'
+
+/**
  * Where the lite bundle sends links that leave its surface.
  *
  * The lite map is a funnel: a station tap opens the sheet in place, but "the

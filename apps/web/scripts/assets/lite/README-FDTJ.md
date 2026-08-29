@@ -4,6 +4,10 @@ Peta integrasi transportasi Jabodetabek, versi statis yang bisa di-host sendiri.
 Isinya halaman peta dan halaman cek tarif. Selebihnya (jadwal lengkap, detail
 stasiun, halaman rute) tetap mengarah ke Commute versi penuh.
 
+> **Catatan.** Paket ZIP ini opsi cadangan, buat kalau petanya mau di-host
+> sendiri. Normalnya peta sudah jalan otomatis dan ikut update tiap ada rilis
+> baru, jadi tidak perlu pasang manual
+
 ---
 
 ## Cara pasang

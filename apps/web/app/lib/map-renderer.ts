@@ -59,6 +59,18 @@ export interface Point {
   by: number
   r: number
   cr?: number
+  /*
+   * Suppress the selection halo for this shape, keeping only the fade.
+   *
+   * The ring is an offset outline that settles onto the pill's own edge, which
+   * reads as a highlight around a marker but as a box drawn around a word.
+   *
+   * Labels carry this, but it is a fallback rather than the normal path: a tap
+   * on a name spotlights the MARKER it names (labelAnchorPoint), so the halo
+   * lands on a dot and draws as usual. This only takes effect when no marker
+   * resolves and the label has to stand in for itself.
+   */
+  noRing?: boolean
 }
 
 // Effective corner radius: clamped to [0, r]; missing means fully rounded.
@@ -78,10 +90,28 @@ export interface PointsManifest {
   points: Point[]
 }
 
-// Spotlight overlay for the currently selected station/hub: a dimming scrim
-// with a feathered punch-out around the capsule, plus a glowing halo ring in
-// the selection's line color. The renderers are stateless with respect to
-// time — map.tsx animates scrimAlpha/ringProgress and passes current values.
+/*
+ * Spotlight overlay for the currently selected station/hub: the map faded
+ * toward page white everywhere EXCEPT a feathered cutout around the capsule,
+ * plus a glowing halo ring in the selection's line color.
+ *
+ * This used to be a dark scrim laid over the map. It is a fade for the same
+ * reason the route overlay is one — see ROUTE_FADE_MAX: dimming leaves every
+ * stroke exactly as dark as it started, so a dimmed schematic is just as busy
+ * as a bright one, while fading drops contrast and actually makes the artwork
+ * recede. Both selections and routes now speak that one language.
+ *
+ * The consequence is structural rather than cosmetic, and is the thing to
+ * understand before touching this: the fade is applied by the TILE pass, to
+ * the tile's own pixels, so the cutout has to be applied there too. An overlay
+ * drawn on top cannot punch a hole back to full strength — it can only reveal
+ * the map at whatever strength the tiles were already drawn. Hence the cut*
+ * geometry reaching the tile shader (WebGL) and a second clipped tile pass
+ * (Canvas2D), rather than the far more obvious hole-in-an-overlay.
+ *
+ * The renderers are stateless with respect to time — map.tsx animates
+ * fadeAlpha/ringProgress and passes current values.
+ */
 export interface SelectionOverlay {
   ax: number
   ay: number
@@ -90,17 +120,175 @@ export interface SelectionOverlay {
   r: number
   cr: number // effective corner radius (see pointCornerRadius)
   color: [number, number, number] // 0..1 rgb
-  scrimAlpha: number // 0..SCRIM_MAX_ALPHA, current animated value
+  // 0..SELECTION_FADE_MAX: how far the map OUTSIDE the cutout is blended
+  // toward page white. Current animated value.
+  fadeAlpha: number
   ringProgress: number // 0..1: drives ring offset (settle-in) and alpha
+  /*
+   * The station's drawn NAME, cleared alongside its marker.
+   *
+   * A second shape rather than one enlarged one: a label sits a median 129
+   * world units from the dot it names (up to 314), so a single hole spanning
+   * both would clear a swathe of unrelated map between them. The two are
+   * unioned in the shader instead, leaving the gap faded.
+   *
+   * Null when the station has no name drawn on the map — five points, four
+   * display-only hubs and KCI-BST — in which case the cutout is the marker
+   * alone. It carries no ring: see noRing, a halo around a word reads as a box
+   * drawn around text.
+   */
+  label?: { ax: number, ay: number, bx: number, by: number, r: number, cr: number } | null
 }
 
-export const SCRIM_MAX_ALPHA = 0.32
+/*
+ * How far to blend the map toward page white while a station is selected, and
+ * how much colour to drain from it, 0..1.
+ *
+ * Deliberately the same pair as the route's (ROUTE_FADE_MAX /
+ * ROUTE_DESATURATE_MAX), so a selected station and a drawn route sit the
+ * artwork back by the same amount and read as one system rather than two
+ * treatments that happen to share a map. Fade stays the larger of the two for
+ * the reason given on the route constants: fade does the receding, desaturate
+ * only stops what survives from competing.
+ *
+ * These are the numbers most likely to want a nudge on a device. A station
+ * node is mostly white core with a thin coloured rim — measured mean ink runs
+ * 0.18-0.31 over the disc, and 199 of 377 markers are only 12 world units
+ * across — so an unfaded node is a weaker signal against a whitened field than
+ * it looks on paper. That is why the halo ring stays: the ring locates, the
+ * fade isolates. Raise the fade too far and the node has nothing left to
+ * contrast against.
+ */
+export const SELECTION_FADE_MAX = 0.6
+export const SELECTION_DESATURATE_MAX = 0.25
 // World units so the spotlight stays "attached to the map" across zoom.
 export const SPOTLIGHT_FEATHER_WORLD = 26
 export const RING_WIDTH_WORLD = 5
 // Ring animates from MAX offset (outside) down to REST as ringProgress → 1.
 export const RING_MAX_OFFSET_WORLD = 30
 export const RING_REST_OFFSET_WORLD = 8
+
+/*
+ * How the artwork is treated this frame, and where the hole in that treatment
+ * is: the single answer both renderers work from.
+ *
+ * A route and a selection can be on screen at once, and both want the map set
+ * back. They are combined with max() rather than summed because two fades
+ * toward white multiply into a blank page — the same reason the dark scrim used
+ * to yield to the spotlight, transposed onto the treatment that replaced it.
+ * max() also keeps the map from visibly REGAINING contrast as a spotlight fades
+ * in over an already-faded route, which is the artefact the old yield
+ * arithmetic existed to prevent.
+ *
+ * Lives here rather than in either renderer so the WebGL shader and the
+ * Canvas2D fallback cannot drift on a judgement neither of them owns.
+ */
+export interface CutShape {
+  ax: number
+  ay: number
+  bx: number
+  by: number
+  r: number
+  cr: number
+}
+
+export interface MapTreatment {
+  fade: number
+  desaturate: number
+  /*
+   * Every hole punched in the fade this frame, world units. Empty means no
+   * cutout, which is what `feather === 0` used to say on its own.
+   *
+   * A list rather than the fixed pair this started as. A station selection is
+   * two shapes (its marker and its name); isolating a line is its traced edges
+   * plus every marker and name along it, which runs to a few hundred. They are
+   * kept SEPARATE rather than merged into one spanning shape for the same
+   * reason the station's two are: a hole big enough to cover both ends would
+   * clear all the unrelated map in between.
+   *
+   * Renderers union them — one mask pass in WebGL, one clipped path in the
+   * Canvas2D fallback — so order here carries no meaning.
+   */
+  cuts: CutShape[]
+  /*
+   * How far the fade ramps back in around each hole, world units. Shared by
+   * every shape: the feather is a property of the treatment, not of a shape, and
+   * per-shape feathers would make overlapping holes visibly seam.
+   *
+   * Zero when there is nothing selected, which is still what disables the cutout
+   * in both renderers.
+   */
+  feather: number
+}
+
+/*
+ * An isolated line: its drawn geometry, held at full strength while the rest of
+ * the network fades.
+ *
+ * Geometry arrives already assembled (see map-line-isolate.ts) because it is
+ * baked at build time and only has to be looked up, not traced. `fadeAlpha` is
+ * animated by map.tsx exactly like the selection's, so the renderers stay
+ * stateless with respect to time.
+ */
+export interface LineIsolateOverlay {
+  shapes: CutShape[]
+  fadeAlpha: number
+}
+
+export function mapTreatment(
+  selection: SelectionOverlay | null | undefined,
+  route: RouteOverlayFrame | null | undefined,
+  isolate?: LineIsolateOverlay | null
+): MapTreatment {
+  const routeOn = route != null && route.alpha > 0
+  const routeFade = routeOn ? route.fade : 0
+  const routeDesat = routeOn ? route.desaturate : 0
+
+  const selFade = selection != null ? selection.fadeAlpha : 0
+  const isolateFade = isolate != null && isolate.shapes.length > 0 ? isolate.fadeAlpha : 0
+  // Scaled off the fade's own progress rather than animated separately, so the
+  // pair stays in the SELECTION_FADE_MAX : SELECTION_DESATURATE_MAX proportion
+  // through the whole in/out animation instead of only at rest. Both fades share
+  // the constant, so a selected station and an isolated line set the artwork
+  // back by the same amount and read as one system.
+  const fade = Math.max(routeFade, selFade, isolateFade)
+  const desat = SELECTION_FADE_MAX > 0
+    ? Math.max(routeDesat, (Math.max(selFade, isolateFade) / SELECTION_FADE_MAX) * SELECTION_DESATURATE_MAX)
+    : routeDesat
+
+  /*
+   * Only a selection or an isolate punches holes. A route deliberately fades the
+   * whole map: its own capsules are drawn at full strength on top, so it has
+   * nothing to protect underneath.
+   *
+   * The two concatenate rather than competing. Tapping a station on an isolated
+   * line is a strict superset — its marker and name are already among the line's
+   * shapes — so the halo simply locates it within what is already lit.
+   */
+  const cuts: CutShape[] = []
+  if (isolate != null && isolateFade > 0) cuts.push(...isolate.shapes)
+  if (selection != null && selFade > 0) {
+    cuts.push({
+      ax: selection.ax, ay: selection.ay,
+      bx: selection.bx, by: selection.by,
+      r: selection.r, cr: selection.cr
+    })
+    if (selection.label != null) {
+      cuts.push({
+        ax: selection.label.ax, ay: selection.label.ay,
+        bx: selection.label.bx, by: selection.label.by,
+        r: selection.label.r, cr: selection.label.cr
+      })
+    }
+  }
+
+  return {
+    fade,
+    desaturate: desat,
+    cuts,
+    feather: cuts.length > 0 ? SPOTLIGHT_FEATHER_WORLD : 0
+  }
+}
 
 export function ringOffsetWorld(ringProgress: number): number {
   return RING_MAX_OFFSET_WORLD + (RING_REST_OFFSET_WORLD - RING_MAX_OFFSET_WORLD) * ringProgress
@@ -150,6 +338,9 @@ export interface RouteOverlayFrame {
   // artwork only — the route's own capsules and pins keep their colour, which is
   // the whole point.
   desaturate: number
+  // 0..ROUTE_FADE_MAX of the artwork blended toward page white. Same scope as
+  // `desaturate` — tiles only, never the route.
+  fade: number
 }
 
 /*
@@ -166,16 +357,31 @@ export const ROUTE_SCRIM_MAX_ALPHA = 0
 /*
  * How much colour to drain from the map while a route is drawn, 0..1.
  *
- * The schematic's information IS its line colours, so removing them is what
- * makes every unrelated corridor recede at once — while leaving labels,
- * stations and shapes perfectly legible, which a dark scrim does not. The
- * route's own capsules keep their brand colour and become the only saturated
- * thing on screen.
- *
- * Short of 1: a fully grey map reads as a rendering failure rather than a
- * deliberate state.
+ * Deliberately modest, because desaturation alone does NOT make a schematic
+ * recede: it removes the hue that tells corridors apart while leaving every
+ * stroke exactly as dark as it started, so the map goes from busy-and-coloured
+ * to busy-and-grey. It was 0.85 on its own and the route had to fight the
+ * artwork; the fade below is what actually clears the field, and this is now
+ * only here to stop the surviving colour competing with the route's own.
  */
-export const ROUTE_DESATURATE_MAX = 0.85
+export const ROUTE_DESATURATE_MAX = 0.25
+
+/*
+ * How far to blend the map toward page white while a route is drawn, 0..1.
+ *
+ * This is the lever that makes the artwork recede — dropping contrast, not hue.
+ * Paired with the light desaturation above, unrelated corridors go pastel and
+ * stop competing while keeping just enough colour to still read as this map,
+ * and the route's full-strength capsules become the only saturated thing on
+ * screen. Fade does the receding; desaturate stops what is left competing, so
+ * fade should stay the larger of the two.
+ *
+ * Short of 1 for the same reason as above: a blank page reads as a failed
+ * render rather than a deliberate state. Chosen against the artwork rather than
+ * by eye, but per the note on ROUTE_SCRIM_MAX_ALPHA this pair is still a
+ * judgement best confirmed on a device.
+ */
+export const ROUTE_FADE_MAX = 0.6
 /*
  * World units, like the spotlight constants, so the route stays glued to the
  * map across zoom instead of fattening as the view pulls out. The artwork's own
@@ -199,8 +405,9 @@ export const ROUTE_TRANSFER_DASH_WORLD = 24
 export const ROUTE_TRANSFER_GAP_WORLD = 14
 export const ROUTE_PIN_RADIUS_WORLD = 26
 
-// Pin styling, shared by both renderers via routeDrawItems. The dark ink
-// matches the spotlight scrim so the overlay reads as one system.
+// Pin styling, shared by both renderers via routeDrawItems. The dark ink is the
+// same navy the route scrim carries (SCRIM_RGB), which is what keeps the pins
+// reading as part of the overlay rather than as ink borrowed from the artwork.
 const ROUTE_INK: [number, number, number] = [0.06, 0.09, 0.16]
 const ROUTE_WHITE: [number, number, number] = [1, 1, 1]
 
@@ -376,7 +583,7 @@ export interface RendererDebug {
 
 export interface Renderer {
   kind: 'webgl2' | 'canvas2d'
-  draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null, route?: RouteOverlayFrame | null): void
+  draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null, route?: RouteOverlayFrame | null, isolate?: LineIsolateOverlay | null): void
   resize(cssW: number, cssH: number, dpr: number): void
   requestTier(r: number, c: number, tier: Tier): void
   setPoints(points: Point[]): void
@@ -446,14 +653,101 @@ export function isHubPoint(p: Point): boolean {
   return p.id.startsWith('HUB-')
 }
 
+// Label tap targets are authored as points whose id is `LBL-` + the id of the
+// point they name, so the drawn station NAME is tappable as well as its marker.
+// Tested on `id` for the same reason as isHubPoint: this is what the shape IS,
+// not which station it opens — `station` carries that, exactly as for a halte
+// drawn twice.
+export function isLabelPoint(p: Point): boolean {
+  return p.id.startsWith('LBL-')
+}
+
+/*
+ * The marker a label stands in for: the drawn dot of the station it names.
+ *
+ * A tap on a name has to spotlight and fly to the MARKER, not the text. The
+ * station is where the dot is — a label can sit hundreds of world units away
+ * from it — so haloing the words would point the camera at the wrong place and
+ * leave the station itself unmarked.
+ *
+ * Nearest wins because a halte can be drawn twice (Flyover Jatinegara and
+ * Tanjung Priok each have a second shape carrying the `-b` suffix): the label
+ * belongs to whichever of them it was extracted beside.
+ *
+ * Returns the label itself if no marker resolves, so a tap still does
+ * something rather than silently dropping.
+ */
+export function labelAnchorPoint(label: Point, points: readonly Point[]): Point {
+  const station = pointStationId(label)
+  const lx = (label.ax + label.bx) / 2
+  const ly = (label.ay + label.by) / 2
+  let best: Point | null = null
+  let bestDist = Infinity
+  for (const p of points) {
+    if (isLabelPoint(p) || isHubPoint(p)) continue
+    if (pointStationId(p) !== station) continue
+    const dist = Math.hypot((p.ax + p.bx) / 2 - lx, (p.ay + p.by) / 2 - ly)
+    if (dist < bestDist) {
+      bestDist = dist
+      best = p
+    }
+  }
+  return best ?? label
+}
+
+/*
+ * The label naming a marker: the mirror of labelAnchorPoint.
+ *
+ * The selection cutout clears the station's NAME alongside its dot, because a
+ * node held at full strength while the words naming it go pale is half a
+ * selection — the name is how a rider confirms they tapped the right thing.
+ *
+ * Nearest wins for the same two reasons as labelAnchorPoint, from the other
+ * side: a halte can be drawn twice (the `-b` shapes), and two stations carry
+ * more than one label, so identity alone does not pick a single shape.
+ *
+ * Returns null rather than a fallback, unlike labelAnchorPoint: a missing name
+ * means the cutout is just the marker, which is the pre-existing behaviour and
+ * perfectly fine. Five points have no label drawn on the map at all.
+ */
+export function markerLabelPoint(marker: Point, points: readonly Point[]): Point | null {
+  if (isLabelPoint(marker)) return null
+  const station = pointStationId(marker)
+  const mx = (marker.ax + marker.bx) / 2
+  const my = (marker.ay + marker.by) / 2
+  let best: Point | null = null
+  let bestDist = Infinity
+  for (const p of points) {
+    if (!isLabelPoint(p)) continue
+    if (pointStationId(p) !== station) continue
+    const dist = Math.hypot((p.ax + p.bx) / 2 - mx, (p.ay + p.by) / 2 - my)
+    if (dist < bestDist) {
+      bestDist = dist
+      best = p
+    }
+  }
+  return best
+}
+
 export type HitResult =
   | { kind: 'station', point: Point }
   | { kind: 'hub', point: Point }
+  | { kind: 'label', point: Point }
 
-// Runtime tap hit-test. A hub region and its member pills overlap; a tap on a
-// member pill must open that station, while a tap in the gap between members
-// (inside the authored hub region, outside every pill) opens the hub. So a
-// station hit ALWAYS beats a hub hit, even a geometrically closer one.
+/*
+ * Runtime tap hit-test, resolved in tiers: station, then hub, then label. A
+ * closer shape in a lower tier never wins.
+ *
+ * Station over hub: a hub region and its member pills overlap, so a tap on a
+ * member pill must open that station, while a tap in the gap between members
+ * (inside the authored hub region, outside every pill) opens the hub.
+ *
+ * Both over label: a label is much the largest shape on the map — a name is
+ * ~13x the area of its dot — and it routinely covers markers and hub regions
+ * belonging to OTHER stations. Ranking by distance alone would let a name
+ * swallow the very pills drawn on top of it, so the precise target wins
+ * wherever the two overlap and the name is what catches everything else.
+ */
 export function hitTest(
   worldX: number,
   worldY: number,
@@ -464,10 +758,17 @@ export function hitTest(
   let bestStationDist = Infinity
   let bestHub: Point | null = null
   let bestHubDist = Infinity
+  let bestLabel: Point | null = null
+  let bestLabelDist = Infinity
   for (const p of points) {
     const effective = pointToShapeDistance(worldX, worldY, p) - slopWorld
     if (effective > 0) continue
-    if (isHubPoint(p)) {
+    if (isLabelPoint(p)) {
+      if (effective < bestLabelDist) {
+        bestLabelDist = effective
+        bestLabel = p
+      }
+    } else if (isHubPoint(p)) {
       if (effective < bestHubDist) {
         bestHubDist = effective
         bestHub = p
@@ -479,6 +780,7 @@ export function hitTest(
   }
   if (bestStation) return { kind: 'station', point: bestStation }
   if (bestHub) return { kind: 'hub', point: bestHub }
+  if (bestLabel) return { kind: 'label', point: bestLabel }
   return null
 }
 

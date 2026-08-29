@@ -1,6 +1,7 @@
 import type { FareResult } from '@commute/schemas'
 import { hexToRgb01 } from 'utils/colors'
 import type { Point, RouteOverlay, RouteSegment } from './map-renderer'
+import { colourMatches } from './map-corridor-colour'
 import { CORRIDOR_MATCH_MAX_DIST_WORLD, matchCorridorPath, pickLegCorridor, pointAtArcLength, polylineLength, prepareCorridors, projectOntoPolyline, type Corridor } from './map-corridors'
 import {
   dashSegment,
@@ -50,6 +51,26 @@ export interface RouteOverlayModel {
 // chords across the gap. `fare` may be null (loading, error, single endpoint):
 // the pins still resolve straight from the pair, so the map answers a deep
 // link immediately.
+/*
+ * pickLegCorridor restricted to the strokes this leg could be drawn in.
+ *
+ * Indices are remapped rather than passing a predicate, because pickLegCorridor
+ * reports a position in the array it was handed and the caller needs an index
+ * into the real corridor list.
+ */
+function electLegCorridor(
+  vertices: ReadonlyArray<{ x: number, y: number }>,
+  prepared: readonly ReturnType<typeof prepareCorridors>[number][],
+  eligible: ((index: number) => boolean) | undefined
+): number | undefined {
+  if (!eligible) return pickLegCorridor(vertices, prepared)
+  const indices: number[] = []
+  for (let i = 0; i < prepared.length; i++) if (eligible(i)) indices.push(i)
+  if (indices.length === 0) return pickLegCorridor(vertices, prepared)
+  const picked = pickLegCorridor(vertices, indices.map(i => prepared[i]))
+  return picked !== undefined ? indices[picked] : pickLegCorridor(vertices, prepared)
+}
+
 export function buildRouteOverlayModel(
   /*
    * Only `legs` is read, so this takes the shape rather than either named type.
@@ -144,7 +165,37 @@ export function buildRouteOverlayModel(
        * two parallel strokes its first pair happened to reach — Roxy→Kalideres
        * rode the neighbouring 2A stroke that Kalideres→Roxy did not.
        */
-      const preferIndex = prepared ? pickLegCorridor(vertices, prepared) : undefined
+      /*
+       * Which corridors this leg is allowed to ride, by artwork colour.
+       *
+       * Distance alone cannot separate two strokes drawn on one alignment, and
+       * where it guesses wrong the route is drawn along a DIFFERENT line's
+       * colour: Koridor 3's yellow legs traced onto a blue stub 213 channels
+       * away, because the stub happened to sit a world unit nearer. Filtering
+       * before the election, rather than vetting the winner after it, is what
+       * keeps the right stroke in the running when a neighbour is marginally
+       * closer.
+       *
+       * A hex is shared by several lines here — 17 BRT colours cover 100 TJ
+       * lines, grouped by koridor family — so this narrows a stroke to a family
+       * and never to one line. That is enough to stop a leg riding another
+       * koridor's stroke, which is the whole failure.
+       *
+       * Falls back to colour-blind when nothing survives, so a stretch drawn in
+       * a colour we cannot account for still draws rather than vanishing.
+       */
+      const legColourHex = lineColor(leg.line)
+      // Read the colour off the PREPARED corridor, not the raw array: preparing
+      // drops any corridor with fewer than two points, so the two are not index-
+      // aligned and indexing the raw one would gate on a neighbour's colour.
+      const eligible = prepared
+        ? (index: number) => colourMatches(prepared[index]?.c ?? null, legColourHex)
+        : undefined
+      const anyEligible = prepared
+        ? prepared.some((_, index) => eligible!(index))
+        : false
+      const legEligible = anyEligible ? eligible : undefined
+      const preferIndex = prepared ? electLegCorridor(vertices, prepared, legEligible) : undefined
       /*
        * Where the previous pair's drawn geometry ended. Consecutive pairs can
        * legitimately land on different strokes — the elected corridor ends and
@@ -176,7 +227,15 @@ export function buildRouteOverlayModel(
        * bar's centroid sits ~40 units off its corridor, and RSPAD reaches its
        * partner's stroke at 43 — so those stay corridor-drawn (and snapped).
        */
-      const plans: Array<{ a: { x: number, y: number }, b: { x: number, y: number }, i: number, path: Array<[number, number]> | null }> = []
+      const plans: Array<{
+        a: { x: number, y: number }
+        b: { x: number, y: number }
+        i: number
+        path: Array<[number, number]> | null
+        // Where the elected corridor passes this pair's two stops, kept even
+        // when `path` is discarded for being straight. Null when nothing matched.
+        feet: [[number, number], [number, number]] | null
+      }> = []
       for (let i = 1; i < vertices.length; i++) {
         const a = vertices[i - 1]
         const b = vertices[i]
@@ -184,7 +243,9 @@ export function buildRouteOverlayModel(
         // Corridor first, chord as the fallback — a pair whose stops aren't both
         // near one drawn corridor (or whose only candidate detours the long way)
         // still gets a straight connector rather than nothing.
-        const match = prepared ? matchCorridorPath(a.x, a.y, b.x, b.y, prepared, { preferIndex }) : null
+        const match = prepared
+          ? matchCorridorPath(a.x, a.y, b.x, b.y, prepared, { preferIndex, eligible: legEligible })
+          : null
         const path = match?.path
         let corridorAddsShape = false
         if (match && path) {
@@ -198,7 +259,26 @@ export function buildRouteOverlayModel(
             || offA > STRAIGHT_SUBPATH_MAX_OFFSET_WORLD
             || offB > STRAIGHT_SUBPATH_MAX_OFFSET_WORLD
         }
-        plans.push({ a, b, i, path: match && path && corridorAddsShape ? path : null })
+        /*
+         * A pair downgraded to a chord still knows where its corridor runs, and
+         * that is worth keeping.
+         *
+         * The chord is drawn between station CENTROIDS, and an interchange halte
+         * is authored as a bar spanning several stacked strokes, so its centroid
+         * sits between them rather than on any one. Koridor 3's interlined
+         * stretch straddles its own stroke by 11 units that way, and chording
+         * through those centroids is what makes the drawn line zig-zag against
+         * an artwork stroke that is perfectly straight.
+         *
+         * `feet` is where the elected corridor actually passes each stop. The
+         * chord is drawn between those instead, which puts the line on the
+         * stroke without giving up the straightening that discarding the path
+         * was for.
+         */
+        const feet: [[number, number], [number, number]] | null = match && path
+          ? [[path[0][0], path[0][1]], [path[path.length - 1][0], path[path.length - 1][1]]]
+          : null
+        plans.push({ a, b, i, path: match && path && corridorAddsShape ? path : null, feet })
       }
 
       /*
@@ -304,17 +384,25 @@ export function buildRouteOverlayModel(
             prevEnd = { x: path[path.length - 1][0], y: path[path.length - 1][1] }
             continue
           }
-          bridgeTo(a.x, a.y)
+          // On the corridor where one was matched, on the centroids only when
+          // nothing was — a pair with no corridor at all has nothing better.
+          const from = plan.feet ? { x: plan.feet[0][0], y: plan.feet[0][1] } : a
+          const to = plan.feet ? { x: plan.feet[1][0], y: plan.feet[1][1] } : b
+          bridgeTo(from.x, from.y)
           segments.push({
-            ax: a.x,
-            ay: a.y,
-            bx: b.x,
-            by: b.y,
+            ax: from.x,
+            ay: from.y,
+            bx: to.x,
+            by: to.y,
             r: halfWidth,
             color,
             kind: 'ride'
           })
-          prevEnd = { x: b.x, y: b.y }
+          // The markers follow the line, so a stop's dot sits on the stroke
+          // rather than floating between the band's parallel strokes.
+          marks[i - 1] = from
+          marks[i] = to
+          prevEnd = { x: to.x, y: to.y }
         }
       }
       // Bridge from the previous leg only now that this one's first mark is

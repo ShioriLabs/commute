@@ -1,6 +1,10 @@
-import type { Manifest, Point, Renderer, RouteDrawItem, RouteOverlay, RouteOverlayFrame, SelectionOverlay, Tier, TileStats, Transform } from './map-renderer'
-import { RING_WIDTH_WORLD, SPOTLIGHT_FEATHER_WORLD, pointCornerRadius, ringOffsetWorld, routeDrawItems, tileKey } from './map-renderer'
+import type { CutShape, LineIsolateOverlay, Manifest, Point, Renderer, RouteDrawItem, RouteOverlay, RouteOverlayFrame, SelectionOverlay, Tier, TileStats, Transform } from './map-renderer'
+import { RING_WIDTH_WORLD, mapTreatment, pointCornerRadius, ringOffsetWorld, routeDrawItems, tileKey } from './map-renderer'
 import { createTileSource } from './map-renderer-tile-source'
+
+// Above this many visible cutout shapes the feather is dropped; see punchCutouts.
+// A station selection is two, so this only ever catches an isolated line.
+const LARGE_CUTOUT_SHAPES = 24
 
 interface TileEntry {
   bitmap: ImageBitmap | null
@@ -35,12 +39,6 @@ export function createCanvas2DRenderer(
   // pixels yet. Held until dispose() — see the note in draw().
   let preview: ImageBitmap | null = null
   let previewLoading = false
-
-  // Offscreen canvas for the selection scrim. The punch-out uses
-  // destination-out compositing, which would erase the map if done on the
-  // main canvas — so the scrim is composed here and drawn over in one blit.
-  const scrimCanvas = document.createElement('canvas')
-  const scrimCtx = scrimCanvas.getContext('2d')
 
   function ensureTile(r: number, c: number): TileEntry {
     const key = tileKey(r, c)
@@ -111,60 +109,58 @@ export function createCanvas2DRenderer(
     const h = Math.max(1, Math.round(cssH * dpr))
     if (canvas.width !== w) canvas.width = w
     if (canvas.height !== h) canvas.height = h
-    if (scrimCanvas.width !== w) scrimCanvas.width = w
-    if (scrimCanvas.height !== h) scrimCanvas.height = h
   }
 
-  function drawSelection(sel: SelectionOverlay, transform: Transform, cssW: number, cssH: number, dpr: number) {
-    if (sel.scrimAlpha > 0 && scrimCtx) {
-      if (scrimCanvas.width !== canvas.width) scrimCanvas.width = canvas.width
-      if (scrimCanvas.height !== canvas.height) scrimCanvas.height = canvas.height
-      scrimCtx.setTransform(1, 0, 0, 1, 0, 0)
-      scrimCtx.clearRect(0, 0, scrimCanvas.width, scrimCanvas.height)
-      scrimCtx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      scrimCtx.fillStyle = `rgba(15, 23, 42, ${sel.scrimAlpha})`
-      scrimCtx.fillRect(0, 0, cssW, cssH)
-      scrimCtx.translate(transform.tx, transform.ty)
-      scrimCtx.scale(transform.scale, transform.scale)
-      // Feathered punch-out: accumulate partial erases over shrinking radii,
-      // then hard-clear the capsule interior.
-      scrimCtx.globalCompositeOperation = 'destination-out'
-      const steps = 5
-      scrimCtx.fillStyle = `rgba(0, 0, 0, ${Math.min(1, (1 / steps) * 1.2)})`
-      for (let i = steps; i >= 1; i--) {
-        drawShape(scrimCtx, sel.ax, sel.ay, sel.bx, sel.by, sel.r, sel.cr, SPOTLIGHT_FEATHER_WORLD * (i / steps))
-        scrimCtx.fill()
+  // The halo, and only the halo. Isolating the selection is the tile pass's job
+  // now (see drawTiles) — a fade has to be cancelled where it is applied, and
+  // the offscreen destination-out canvas this used to need went with the scrim.
+  function drawSelection(sel: SelectionOverlay, transform: Transform) {
+    if (sel.ringProgress <= 0) return
+    const r = Math.round(sel.color[0] * 255)
+    const g = Math.round(sel.color[1] * 255)
+    const b = Math.round(sel.color[2] * 255)
+    const ringColor = `rgba(${r}, ${g}, ${b}, ${sel.ringProgress})`
+    ctx.strokeStyle = ringColor
+    ctx.lineWidth = RING_WIDTH_WORLD
+    ctx.shadowColor = ringColor
+    ctx.shadowBlur = 12 * transform.scale
+    ctx.beginPath()
+    drawShape(ctx, sel.ax, sel.ay, sel.bx, sel.by, sel.r, sel.cr, ringOffsetWorld(sel.ringProgress))
+    ctx.stroke()
+    ctx.shadowColor = 'transparent'
+    ctx.shadowBlur = 0
+  }
+
+  /*
+   * The visible tiles, drawn under whatever ctx.filter is currently set.
+   *
+   * Extracted because the cutout has to draw the same tiles a second time at a
+   * different filter strength. `requestUpgrades` is false on those repeat passes:
+   * the first pass over the same region already asked for any tier upgrade, and
+   * re-asking per feather ring would fire the same fetch several times a frame.
+   */
+  function drawTiles(
+    worldMinX: number, worldMinY: number, worldMaxX: number, worldMaxY: number,
+    currentTier: Tier, requestUpgrades: boolean
+  ) {
+    for (let r = 0; r < grid.rows; r++) {
+      const tileY = r * tileH
+      if (tileY + tileH < worldMinY || tileY > worldMaxY) continue
+      for (let c = 0; c < grid.cols; c++) {
+        const tileX = c * tileW
+        if (tileX + tileW < worldMinX || tileX > worldMaxX) continue
+        const entry = ensureTile(r, c)
+        if (entry.bitmap) {
+          ctx.drawImage(entry.bitmap, tileX, tileY, tileW, tileH)
+        }
+        if (requestUpgrades && entry.tier < currentTier && entry.pendingTier !== currentTier) {
+          void requestTier(r, c, currentTier)
+        }
       }
-      scrimCtx.fillStyle = 'rgba(0, 0, 0, 1)'
-      drawShape(scrimCtx, sel.ax, sel.ay, sel.bx, sel.by, sel.r, sel.cr)
-      scrimCtx.fill()
-      scrimCtx.globalCompositeOperation = 'source-over'
-
-      ctx.setTransform(1, 0, 0, 1, 0, 0)
-      ctx.drawImage(scrimCanvas, 0, 0)
-      // Restore world transform for the halo below.
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      ctx.translate(transform.tx, transform.ty)
-      ctx.scale(transform.scale, transform.scale)
-    }
-
-    if (sel.ringProgress > 0) {
-      const r = Math.round(sel.color[0] * 255)
-      const g = Math.round(sel.color[1] * 255)
-      const b = Math.round(sel.color[2] * 255)
-      const ringColor = `rgba(${r}, ${g}, ${b}, ${sel.ringProgress})`
-      ctx.strokeStyle = ringColor
-      ctx.lineWidth = RING_WIDTH_WORLD
-      ctx.shadowColor = ringColor
-      ctx.shadowBlur = 12 * transform.scale
-      drawShape(ctx, sel.ax, sel.ay, sel.bx, sel.by, sel.r, sel.cr, ringOffsetWorld(sel.ringProgress))
-      ctx.stroke()
-      ctx.shadowColor = 'transparent'
-      ctx.shadowBlur = 0
     }
   }
 
-  function draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null, route?: RouteOverlayFrame | null) {
+  function draw(transform: Transform, cssW: number, cssH: number, dpr: number, currentTier: Tier, selection?: SelectionOverlay | null, route?: RouteOverlayFrame | null, isolate?: LineIsolateOverlay | null) {
     if (disposed) return
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.fillStyle = '#ffffff'
@@ -207,8 +203,19 @@ export function createCanvas2DRenderer(
      * shown route is a near-static camera. It is also unsupported on older
      * Safari, where it no-ops into today's full-colour map rather than breaking.
      */
-    const desat = route && route.alpha > 0 ? route.desaturate : 0
-    if (desat > 0) ctx.filter = `saturate(${1 - desat})`
+    const treatment = mapTreatment(selection, route, isolate)
+    const desat = treatment.desaturate
+    const fade = treatment.fade
+    const cuts = treatment.cuts
+    /*
+     * `opacity()` rather than a white overlay: the tiles are drawn straight onto
+     * the already-white canvas, so thinning them toward it IS the blend the
+     * WebGL path does with mix(rgb, white, u_fade) — and it needs no extra fill
+     * pass that the route would then have to be drawn over.
+     */
+    if (desat > 0 || fade > 0) {
+      ctx.filter = `saturate(${1 - desat}) opacity(${1 - fade})`
+    }
 
     // Kept resident for the renderer's whole life — see the matching comment in
     // map-renderer-webgl.ts. releaseTiles() resets every tile to tier 0, and
@@ -218,27 +225,109 @@ export function createCanvas2DRenderer(
       if (preview) ctx.drawImage(preview, 0, 0, mapW, mapH)
     }
 
-    for (let r = 0; r < grid.rows; r++) {
-      const tileY = r * tileH
-      if (tileY + tileH < worldMinY || tileY > worldMaxY) continue
-      for (let c = 0; c < grid.cols; c++) {
-        const tileX = c * tileW
-        if (tileX + tileW < worldMinX || tileX > worldMaxX) continue
-        const entry = ensureTile(r, c)
-        if (entry.bitmap) {
-          ctx.drawImage(entry.bitmap, tileX, tileY, tileW, tileH)
+    drawTiles(worldMinX, worldMinY, worldMaxX, worldMaxY, currentTier, true)
+
+    // Back to full strength before anything but map artwork is drawn. ctx.filter
+    // is sticky across draw calls, so without this the route, its pins and the
+    // selection spotlight would be faded and desaturated too — which would erase
+    // the one distinction the treatment exists to create.
+    if (desat > 0 || fade > 0) ctx.filter = 'none'
+
+    /*
+     * Every hole in the fade, punched in ONE clipped redraw per feather ring.
+     *
+     * A ring per shape was the obvious shape of this and does not survive
+     * contact with an isolated line. Canvas2D's ctx.filter forces an
+     * intermediate surface per drawImage, so at a few hundred shapes that is
+     * thousands of filtered blits a frame. Canvas2D's clip already unions
+     * sub-paths under nonzero fill, so all the shapes go into a single path and
+     * the cost stops depending on how many there are: five redraws whether the
+     * cutout is one station or a whole line.
+     *
+     * Off-screen shapes are dropped before they reach the path. At any zoomed-in
+     * camera most of a line's capsules are outside the viewport, which is what
+     * keeps the path small in the case that matters.
+     */
+    function punchCutouts(shapes: readonly CutShape[], feather: number) {
+      let minX = Infinity
+      let minY = Infinity
+      let maxX = -Infinity
+      let maxY = -Infinity
+      const visible: CutShape[] = []
+      for (const shape of shapes) {
+        const sMinX = Math.min(shape.ax, shape.bx) - shape.r - feather
+        const sMaxX = Math.max(shape.ax, shape.bx) + shape.r + feather
+        const sMinY = Math.min(shape.ay, shape.by) - shape.r - feather
+        const sMaxY = Math.max(shape.ay, shape.by) + shape.r + feather
+        if (sMaxX < worldMinX || sMinX > worldMaxX || sMaxY < worldMinY || sMinY > worldMaxY) continue
+        visible.push(shape)
+        minX = Math.min(minX, sMinX)
+        maxX = Math.max(maxX, sMaxX)
+        minY = Math.min(minY, sMinY)
+        maxY = Math.max(maxY, sMaxY)
+      }
+      if (visible.length === 0) return
+
+      /*
+       * How many rings approximate the shader's smoothstep. Measured on this
+       * fallback: the cutout costs ~533ms p95 at two shapes and ~1266ms at a
+       * whole line's ~150, so the union is holding — the cost scales with the
+       * REDRAWS, not the shape count — but ctx.filter's intermediate surface is
+       * expensive per redraw regardless.
+       *
+       * So a large cutout drops to a single hard-edged ring. It loses the
+       * feathered falloff, which is a real visual difference from the WebGL
+       * path, and it is the right trade here: this renderer only runs where
+       * WebGL2 is unavailable, and a hard edge is much easier to accept than a
+       * map that stops tracking the camera.
+       */
+      const steps = visible.length > LARGE_CUTOUT_SHAPES ? 1 : 4
+      for (let i = steps; i >= 0; i--) {
+        // Ring i sits at i/steps of the way out through the feather, and is
+        // drawn at the fade strength that ring should end up showing. The clip
+        // is hard-edged where the shader's smoothstep is not, so this steps the
+        // falloff rather than reproducing it.
+        const t = i / steps
+        const ringDesat = desat * t
+        const ringFade = fade * t
+        ctx.save()
+        ctx.beginPath()
+        for (const shape of visible) {
+          drawShape(ctx, shape.ax, shape.ay, shape.bx, shape.by, shape.r, shape.cr, feather * t)
         }
-        if (entry.tier < currentTier && entry.pendingTier !== currentTier) {
-          void requestTier(r, c, currentTier)
-        }
+        ctx.clip()
+        ctx.filter = ringDesat > 0 || ringFade > 0
+          ? `saturate(${1 - ringDesat}) opacity(${1 - ringFade})`
+          : 'none'
+        drawTiles(
+          Math.max(worldMinX, minX), Math.max(worldMinY, minY),
+          Math.min(worldMaxX, maxX), Math.min(worldMaxY, maxY),
+          currentTier, false
+        )
+        ctx.filter = 'none'
+        ctx.restore()
       }
     }
 
-    // Back to full colour before anything but map artwork is drawn. ctx.filter
-    // is sticky across draw calls, so without this the route, its pins and the
-    // selection spotlight would all be desaturated too — which would erase the
-    // one distinction the desaturation exists to create.
-    if (desat > 0) ctx.filter = 'none'
+    /*
+     * The selection cutout: the tapped station's own pixels — its marker and the
+     * name that labels it — put back at full strength on top of the faded pass.
+     *
+     * The WebGL path masks the fade inside the tile shader, one pass. Here
+     * ctx.filter applies to a whole drawImage and cannot be masked within it, so
+     * the only equivalent is to draw the affected tiles a second time unfiltered
+     * behind a clip. Bounded to the tiles each shape actually touches — a marker
+     * is at most ~212 world units end to end and a label ~440 — so this is a
+     * handful of tiles per hole, not the grid.
+     *
+     * The clip is hard-edged where the shader's is feathered, so the fade is
+     * stepped back over a few shrinking rings to approximate it. That is the
+     * same trick the destination-out punch-out used before this, for the same
+     * reason: canvas2d has no smoothstep.
+     */
+    if (treatment.feather > 0 && cuts.length > 0 && (desat > 0 || fade > 0)) {
+      punchCutouts(cuts, treatment.feather)
+    }
 
     if (route && route.alpha > 0 && routeItems.length > 0) {
       // Flat dim under the route — no punch-out; the route's opaque capsules
@@ -257,6 +346,7 @@ export function createCanvas2DRenderer(
         ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${route.alpha})`
         // cr = r degenerates the rounded rect to a capsule; pin items have
         // coincident endpoints and come out as discs.
+        ctx.beginPath()
         drawShape(ctx, item.ax, item.ay, item.bx, item.by, item.r, item.r)
         ctx.fill()
       }
@@ -265,13 +355,14 @@ export function createCanvas2DRenderer(
     if (debugHitboxes && points.length > 0) {
       ctx.fillStyle = 'rgba(255, 0, 153, 0.3)'
       for (const p of points) {
+        ctx.beginPath()
         drawShape(ctx, p.ax, p.ay, p.bx, p.by, p.r, pointCornerRadius(p))
         ctx.fill()
       }
     }
 
-    if (selection && (selection.scrimAlpha > 0 || selection.ringProgress > 0)) {
-      drawSelection(selection, transform, cssW, cssH, dpr)
+    if (selection && selection.ringProgress > 0) {
+      drawSelection(selection, transform)
     }
   }
 
@@ -365,7 +456,6 @@ function drawShape(
   ctx.save()
   ctx.translate((ax + bx) / 2, (ay + by) / 2)
   ctx.rotate(angle)
-  ctx.beginPath()
   ctx.moveTo(-hw + rad, -hh)
   ctx.lineTo(hw - rad, -hh)
   ctx.arcTo(hw, -hh, hw, -hh + rad, rad)

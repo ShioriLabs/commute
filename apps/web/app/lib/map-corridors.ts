@@ -7,17 +7,25 @@
  * importing nothing from the app so it can be unit-tested without fare or
  * point fixtures.
  *
- * Corridors carry no line identity — the generated file has no id and its
- * artwork colours are duplicated across lines — so a leg is matched to a
- * corridor GEOMETRICALLY, per adjacent stop pair. That is what lets branches,
- * the Cikarang loop and interlined trunks work without any line↔stroke table.
+ * Corridors carry no line IDENTITY — the generated file has no id, and several
+ * lines are drawn in one hex — so a leg is matched to a corridor GEOMETRICALLY,
+ * per adjacent stop pair. That is what lets branches, the Cikarang loop and
+ * interlined trunks work without any line↔stroke table.
+ *
+ * They do carry the artwork colour, which is a weaker thing than identity and
+ * exactly the thing geometry alone cannot supply. Where two strokes are drawn on
+ * the same alignment, distance picks whichever is a world unit nearer, and the
+ * drawn route then runs along another line's colour — Koridor 3's yellow legs
+ * traced onto a blue stub. A hex shared by five lines still tells yellow from
+ * blue, so it filters candidates; it never names one.
  */
 
 // One drawn corridor: `w` is the artwork stroke width (25 rail, 15 BRT), kept
-// only as a coarse class hint for debugging. Points are pre-flattened by the
-// build script, so there are no curves to evaluate here.
+// only as a coarse class hint for debugging, and `c` the artwork hex. Points are
+// pre-flattened by the build script, so there are no curves to evaluate here.
 export interface Corridor {
   w: number
+  c: string
   pts: ReadonlyArray<readonly [number, number]>
 }
 
@@ -33,6 +41,9 @@ export interface CorridorsManifest {
 export interface PreparedCorridor {
   pts: ReadonlyArray<readonly [number, number]>
   cums: Float64Array
+  // The artwork hex, carried through so a match can be filtered on it. See the
+  // note on Corridor: a discriminator, not an identity.
+  c: string
 }
 
 // Where a point lands on a polyline: perpendicular distance to the closest
@@ -53,16 +64,31 @@ export interface Projection {
  * 43.5 units from the corridor serving Senen Raya, so at 40 that leg had no
  * candidate reaching BOTH stops and drew a chord across the map.
  *
- * 50 rather than 40 because it is measured, not guessed: swept over 213 real TJ
- * stop pairs taken from router output, 40 traces 192 and 50 traces 198, and the
- * worst detour ratio among accepted matches is 1.58 at BOTH — so the extra 6 are
- * genuine corridors, not wrong ones sneaking in. It plateaus there; 70 buys 2
- * more and 80 buys nothing.
+ * 110, measured over every adjacent TJ pair in the topology (932 of them) rather
+ * than the 213 router-output pairs an earlier pass swept — that smaller sample is
+ * what made 50 look like a plateau. Across the full set: 50 traces 889, 110
+ * traces 916, and the worst detour ratio among accepted matches is 1.71 at BOTH
+ * ends of that range, so nothing wrong is sneaking in as it rises.
+ *
+ * The 27 legs this recovers were then checked against the artwork itself — every
+ * sampled point on all 27 lands within 11 units of drawn ink (the marker-disc
+ * radius, so a path crossing a station roundel still counts as on-corridor).
+ * They are real corridors the threshold was cutting off, not chords dressed up.
+ *
+ * Some of those legs trace SHORTER than their straight line (ratio 0.42-0.99).
+ * That is expected where a pin sits off its stroke: the traced span runs foot to
+ * foot along the corridor while the ratio's denominator is pin to pin.
+ *
+ * Why so much slack is needed at all: the artwork breaks a BRT corridor at
+ * junctions, and where the connecting piece is missing a stop's own stroke ends
+ * short of it. Puri Beta 2 sits 101 units from the nearest corridor at all — the
+ * single worst case, and the reason the ceiling is this high; RSPAD is 43.5 from
+ * the one serving Senen Raya.
  *
  * The Jatinegara trap below is unaffected: JNG's candidates are 0.7 and 1.6 units
  * away and the wrong one is rejected at 704, so this moves nothing there.
  */
-export const CORRIDOR_MATCH_MAX_DIST_WORLD = 50
+export const CORRIDOR_MATCH_MAX_DIST_WORLD = 110
 
 /*
  * Detour rejection. A corridor that passes near both stops can still be the
@@ -84,7 +110,7 @@ export function prepareCorridor(corridor: Corridor): PreparedCorridor {
   for (let i = 1; i < pts.length; i++) {
     cums[i] = cums[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])
   }
-  return { pts, cums }
+  return { pts, cums, c: corridor.c }
 }
 
 export function prepareCorridors(corridors: readonly Corridor[]): PreparedCorridor[] {
@@ -246,7 +272,22 @@ export function matchCorridorPath(
   bx: number,
   by: number,
   corridors: readonly PreparedCorridor[],
-  opts?: { maxDistWorld?: number, maxDetourRatio?: number, preferIndex?: number }
+  opts?: {
+    maxDistWorld?: number
+    maxDetourRatio?: number
+    preferIndex?: number
+    /*
+     * Which corridors this leg is allowed to ride, by index.
+     *
+     * Applied BEFORE the distance sort rather than to the winner afterwards.
+     * The two are not the same: vetting afterwards throws the pair away when the
+     * nearest stroke is the wrong one, even though the right corridor was in the
+     * candidate list a place further down. Where a line and its neighbour run
+     * parallel the wrong one can win by a single world unit, so that difference
+     * is the whole outcome.
+     */
+    eligible?: (index: number) => boolean
+  }
 ): CorridorMatch | null {
   const maxDist = opts?.maxDistWorld ?? CORRIDOR_MATCH_MAX_DIST_WORLD
   const maxDetour = opts?.maxDetourRatio ?? CORRIDOR_MATCH_MAX_DETOUR_RATIO
@@ -260,6 +301,11 @@ export function matchCorridorPath(
     const pb = projectOntoPolyline(bx, by, corridor)
     const worst = Math.max(pa.dist, pb.dist)
     if (worst <= maxDist) candidates.push({ corridor, worst, sa: pa.s, sb: pb.s, index: i })
+  }
+  if (opts?.eligible) {
+    for (let i = candidates.length - 1; i >= 0; i--) {
+      if (!opts.eligible(candidates[i].index)) candidates.splice(i, 1)
+    }
   }
   /*
    * The leg's elected corridor first, then best fit.

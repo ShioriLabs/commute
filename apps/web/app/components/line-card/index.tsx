@@ -37,9 +37,19 @@ interface Props {
   line: CompactLineTimetable
   // When set, the card header links to the line's page (/lines/{operator}/{lineCode}).
   operator?: string
+  /*
+   * Map-only: isolate this line on the map, holding it at full strength while
+   * the rest of the network fades. Supplied by StationSheet; the standalone
+   * station page leaves it unset and no button renders.
+   *
+   * Separate from the header link rather than replacing it — that link goes to a
+   * real page and works on its own. Must be referentially stable, like
+   * onSelectDeparture beside it.
+   */
+  onIsolateLine?: (key: string) => void
 }
 
-export default function LineCard({ line, operator }: Props) {
+export default function LineCard({ line, operator, onIsolateLine }: Props) {
   // Shared 10s clock — one timer for the whole feed instead of one per card.
   const nowMs = useClock()
   const lastUpdated = useMemo(() => new Date(nowMs), [nowMs])
@@ -92,6 +102,15 @@ export default function LineCard({ line, operator }: Props) {
         {/* TJ has no line-detail (topology) page yet — render its cards unlinked.
             A card off a stale cache can arrive with no line key at all; without
             a code there is no route to link to, so leave it unlinked too. */}
+        {onIsolateLine && operator && lineCode && (
+          <button
+            type="button"
+            className="text-xs font-semibold text-slate-600 px-2 py-1 rounded-lg bg-slate-100 mb-1"
+            onClick={() => onIsolateLine(`${operator}:${lineCode}`)}
+          >
+            Lihat di peta
+          </button>
+        )}
         {operator && operator !== 'TJ' && lineCode
           ? (
               <ExitLink
