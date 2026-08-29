@@ -140,3 +140,28 @@ function pointToSegmentDistance(px: number, py: number, ax: number, ay: number, 
   const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lengthSquared))
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy))
 }
+
+/**
+ * Where a starting fade should pick up from.
+ *
+ * A fade that begins at zero while the map is ALREADY dimmed reads as a dip:
+ * the outgoing treatment falls faster than the incoming one rises, the two are
+ * reconciled with a max(), and the map briefly brightens in the middle of one
+ * gesture. Seeding from whatever is currently drawn removes that.
+ *
+ * beginIsolate already did this for a previous isolate, so line-to-line was
+ * smooth. It did not account for a station spotlight, which is why isolating a
+ * line from an open station sheet dipped: the spotlight drops over 220ms while
+ * the isolate climbs over 350ms, so max() sagged to about 0.41 of a 0.6 fade
+ * around the 110ms mark before recovering.
+ *
+ * Takes the fades already drawn and returns the highest, because that is the
+ * one the rider can currently see.
+ */
+export function seedFadeFrom(...drawn: readonly (number | null | undefined)[]): number {
+  let seed = 0
+  for (const fade of drawn) {
+    if (fade != null && fade > seed) seed = fade
+  }
+  return seed
+}

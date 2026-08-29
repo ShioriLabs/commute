@@ -4,7 +4,7 @@ import { XIcon, InfoIcon, CornersInIcon, ReceiptIcon } from '@phosphor-icons/rea
 import useSWR from 'swr'
 import LineRoundel from '~/components/line-roundel'
 import LineSheet from '~/components/line-sheet'
-import { findLine, lineCutShapes, linesNear, type LinesManifest } from '~/lib/map-line-isolate'
+import { findLine, lineCutShapes, linesNear, seedFadeFrom, type LinesManifest } from '~/lib/map-line-isolate'
 import { openSurface, isSurfaceOpen, type OpenSurface } from '~/lib/map-detail-surface'
 import clsx from 'clsx'
 import type { StandardResponse } from '@schema/response'
@@ -865,7 +865,24 @@ export default function MapPage() {
     phase: 'in' | 'hold' | 'out'
     phaseStart: number
     fadeFrom: number
+    /** Open progress the current phase started from, so an exit that
+     *  interrupts an entrance closes from where it got to rather than
+     *  snapping to full size first. */
+    openFrom: number
     lastFade: number
+    /** Mirrors the open progress drawn on the most recent frame, so a switch
+     *  can hand the outgoing line off from where it actually got to. */
+    lastOpen: number
+    /*
+     * The line just switched away from, still shrinking. Switching used to
+     * replace `shapes` outright, so the old corridor vanished on the frame the
+     * new one appeared; keeping it here lets the two cross instead.
+     *
+     * `from` is how open it was when the switch happened, so a line swapped
+     * mid-open closes from where it actually got to rather than snapping to
+     * full size first.
+     */
+    closing: { shapes: CutShape[], from: number } | null
   } | null>(null)
 
   // Eased camera flight (selection centering, double-tap zoom, recenter).
@@ -1463,6 +1480,13 @@ export default function MapPage() {
       const spot = spotlightRef.current
       let spotFade = 0
       let spotRing = 0
+      /*
+       * How far the halo has opened, tracked apart from both the fade and the
+       * ring. The fade is seeded from whatever was already drawn, and the ring
+       * is forced to zero on points drawn without one — neither can stand in
+       * for the cutout's own progress.
+       */
+      let spotOpen = 0
       if (spot) {
         const elapsed = now - spot.phaseStart
         if (spot.phase === 'in') {
@@ -1470,15 +1494,22 @@ export default function MapPage() {
           const e = 1 - Math.pow(1 - p, 3) // easeOutCubic
           spotFade = spot.fadeFrom + (SELECTION_FADE_MAX - spot.fadeFrom) * e
           spotRing = spot.ringFrom + (1 - spot.ringFrom) * e
+          spotOpen = e
+          // Dirty on the settling frame too — see the isolate's 'in' phase
+          // below. The park test stands down the moment the phase is 'hold',
+          // so skipping this draw leaves the halo a frame short of its final
+          // size until something else wakes the loop.
+          dirtyRef.current = true
           if (p >= 1) spot.phase = 'hold'
-          else dirtyRef.current = true
         } else if (spot.phase === 'hold') {
           spotFade = SELECTION_FADE_MAX
           spotRing = 1
+          spotOpen = 1
         } else {
           const p = Math.min(1, elapsed / SPOTLIGHT_OUT_MS)
           spotFade = spot.fadeFrom * (1 - p)
           spotRing = spot.ringFrom * (1 - p)
+          spotOpen = 1 - p
           if (p >= 1) spotlightRef.current = null
           dirtyRef.current = true
         }
@@ -1490,23 +1521,74 @@ export default function MapPage() {
        */
       const iso = isolateRef.current
       let isolateFade = 0
+      /*
+       * How far the corridor's holes have opened, tracked apart from the fade.
+       * fadeFrom is seeded from whatever was already drawn, so on the station
+       * path the fade starts at full strength and says nothing about the
+       * geometry — which still has to open from nothing.
+       */
+      let isolateOpen = 0
+      /*
+       * The outgoing line on a switch, fading out on the same clock the
+       * incoming one fades in. Runs to zero over the in-duration, so the
+       * crossing is one motion rather than two with different lengths.
+       */
+      let isolateClosing: { shapes: CutShape[], openProgress: number } | null = null
       if (iso) {
         const elapsed = now - iso.phaseStart
         if (iso.phase === 'in') {
           const p = Math.min(1, elapsed / SPOTLIGHT_IN_MS)
           const e = 1 - Math.pow(1 - p, 3)
           isolateFade = iso.fadeFrom + (SELECTION_FADE_MAX - iso.fadeFrom) * e
+          isolateOpen = e
+          if (iso.closing) {
+            const shrink = iso.closing.from * (1 - e)
+            if (shrink > 0) isolateClosing = { shapes: iso.closing.shapes, openProgress: shrink }
+            else iso.closing = null
+          }
+          /*
+           * Dirty on the settling frame too, not just while easing.
+           *
+           * The frame that reaches p >= 1 is the one that drops the outgoing
+           * line and seats the incoming one at full size, and the park test
+           * below stands down as soon as the phase is 'hold'. Setting the flag
+           * only in the else branch skipped that last draw and parked on the
+           * previous frame, leaving the line being switched away from on screen
+           * until an unrelated event happened to redraw the map.
+           */
+          dirtyRef.current = true
           if (p >= 1) iso.phase = 'hold'
-          else dirtyRef.current = true
         } else if (iso.phase === 'hold') {
           isolateFade = SELECTION_FADE_MAX
+          isolateOpen = 1
+          // The switch is over; nothing left to close.
+          iso.closing = null
         } else {
           const p = Math.min(1, elapsed / SPOTLIGHT_OUT_MS)
           isolateFade = iso.fadeFrom * (1 - p)
+          /*
+           * Fade the holes out rather than leaving them at full strength until
+           * the dimming lands under them.
+           *
+           * From openFrom, not from 1: dismissing a line that was still fading
+           * in would otherwise jump it to full strength before fading away.
+           */
+          isolateOpen = iso.openFrom * (1 - p)
+          // A switch interrupted by a dismissal: the line that was on its way
+          // out still has to finish leaving, or it pops while the incoming one
+          // fades away around it.
+          if (iso.closing) {
+            const out = iso.closing.from * (1 - p)
+            if (out > 0) isolateClosing = { shapes: iso.closing.shapes, openProgress: out }
+            else iso.closing = null
+          }
           if (p >= 1) isolateRef.current = null
           dirtyRef.current = true
         }
-        if (isolateRef.current) isolateRef.current.lastFade = isolateFade
+        if (isolateRef.current) {
+          isolateRef.current.lastFade = isolateFade
+          isolateRef.current.lastOpen = isolateOpen
+        }
       }
 
       /*
@@ -1619,7 +1701,11 @@ export default function MapPage() {
             // result differs. ringProgress drives both the ring and its glow,
             // so 0 removes the halo outright and leaves the fade, which is
             // carried by fadeAlpha and so is untouched by this.
-            ringProgress: pt.noRing ? 0 : spotRing
+            ringProgress: pt.noRing ? 0 : spotRing,
+            // Unlike ringProgress this is NOT zeroed for ringless points: a
+            // label's cutout still has to open, it just does so without a halo
+            // drawn around it.
+            openProgress: spotOpen
           }
         }
         const dpr = renderDpr(window.devicePixelRatio)
@@ -1637,7 +1723,7 @@ export default function MapPage() {
         // the blurry preview until an unrelated event happened to wake it.
         dirtyRef.current = false
         const isolateOverlay: LineIsolateOverlay | null = iso && isolateFade > 0
-          ? { shapes: iso.shapes, fadeAlpha: isolateFade }
+          ? { shapes: iso.shapes, fadeAlpha: isolateFade, openProgress: isolateOpen, closing: isolateClosing ?? undefined }
           : null
         renderer.draw(r, viewportSize.w, viewportSize.h, dpr, targetTier, overlay, routeFrame, isolateOverlay)
         if (import.meta.env.DEV && authorMode) setRenderTick(n => n + 1)
@@ -1764,14 +1850,33 @@ export default function MapPage() {
      * in those two callers means a new isolate can never inherit a stale one.
      */
     setIsolateOrigin(null)
-    const prevFade = isolateRef.current?.lastFade ?? 0
+    /*
+     * Seed from the spotlight too, not just a previous isolate. Isolating from
+     * an open station sheet starts with the map already dimmed for that
+     * station: beginning at zero made the fade dip through brighter and back
+     * as the spotlight fell away faster than the isolate rose.
+     */
+    const prevFade = seedFadeFrom(isolateRef.current?.lastFade, spotlightRef.current?.lastFade)
+    /*
+     * Hand the outgoing line off rather than dropping it, so switching lines
+     * crosses the two corridors instead of cutting between them. Only when it
+     * is a DIFFERENT line: re-isolating the one already shown would otherwise
+     * close a copy of it underneath itself.
+     */
+    const previous = isolateRef.current
+    const closing = previous && previous.key !== key && previous.lastOpen > 0
+      ? { shapes: previous.shapes, from: previous.lastOpen }
+      : null
     isolateRef.current = {
       key,
       shapes,
       phase: 'in',
       phaseStart: performance.now(),
       fadeFrom: prevFade,
-      lastFade: prevFade
+      openFrom: 0,
+      lastFade: prevFade,
+      lastOpen: 0,
+      closing
     }
     markDirty()
     // The line's own detail, in the same surface a station or hub opens in —
@@ -1788,14 +1893,19 @@ export default function MapPage() {
     iso.phase = 'out'
     iso.phaseStart = performance.now()
     iso.fadeFrom = iso.lastFade
+    iso.openFrom = iso.lastOpen
     markDirty()
   }
 
   // Begin (or move) the spotlight. On a selection switch the fade is already
   // up — seed it from the last drawn value so it doesn't dip; the ring always
   // re-animates its settle-in on the new pill.
+  //
+  // The isolate counts as a drawn value too: selecting a station while a line
+  // is isolated is the mirror of isolating from a station sheet, and seeding
+  // from only the previous spotlight dipped the map through brighter and back.
   const beginSpotlight = (point: Point, color: [number, number, number]) => {
-    const prevFade = spotlightRef.current?.lastFade ?? 0
+    const prevFade = seedFadeFrom(spotlightRef.current?.lastFade, isolateRef.current?.lastFade)
     spotlightRef.current = {
       point,
       // The station's drawn name, cleared alongside its marker so the pair

@@ -282,30 +282,54 @@ export function createCanvas2DRenderer(
        * map that stops tracking the camera.
        */
       const steps = visible.length > LARGE_CUTOUT_SHAPES ? 1 : 4
-      for (let i = steps; i >= 0; i--) {
-        // Ring i sits at i/steps of the way out through the feather, and is
-        // drawn at the fade strength that ring should end up showing. The clip
-        // is hard-edged where the shader's smoothstep is not, so this steps the
-        // falloff rather than reproducing it.
-        const t = i / steps
-        const ringDesat = desat * t
-        const ringFade = fade * t
-        ctx.save()
-        ctx.beginPath()
-        for (const shape of visible) {
-          drawShape(ctx, shape.ax, shape.ay, shape.bx, shape.by, shape.r, shape.cr, feather * t)
+
+      /*
+       * Grouped by alpha so a fading cutout is punched at its own strength.
+       *
+       * The clip is all-or-nothing per path, so a partly-faded hole cannot ride
+       * in the same pass as a solid one — it needs its own clip drawn at its own
+       * strength. Shapes almost always share an alpha (a whole line arrives
+       * together), so this is one group in the steady state and two only while
+       * one line is crossing another.
+       */
+      const byAlpha = new Map<number, CutShape[]>()
+      for (const shape of visible) {
+        const a = shape.alpha ?? 1
+        if (a <= 0) continue
+        const group = byAlpha.get(a)
+        if (group) group.push(shape)
+        else byAlpha.set(a, [shape])
+      }
+
+      for (const [alpha, group] of byAlpha) {
+        for (let i = steps; i >= 0; i--) {
+          // Ring i sits at i/steps of the way out through the feather, and is
+          // drawn at the fade strength that ring should end up showing. The clip
+          // is hard-edged where the shader's smoothstep is not, so this steps the
+          // falloff rather than reproducing it.
+          //
+          // Scaled by the shape's alpha: a hole at half strength restores half
+          // the difference between the faded map and the true artwork.
+          const t = i / steps
+          const ringDesat = desat * (1 - (1 - t) * alpha)
+          const ringFade = fade * (1 - (1 - t) * alpha)
+          ctx.save()
+          ctx.beginPath()
+          for (const shape of group) {
+            drawShape(ctx, shape.ax, shape.ay, shape.bx, shape.by, shape.r, shape.cr, feather * t)
+          }
+          ctx.clip()
+          ctx.filter = ringDesat > 0 || ringFade > 0
+            ? `saturate(${1 - ringDesat}) opacity(${1 - ringFade})`
+            : 'none'
+          drawTiles(
+            Math.max(worldMinX, minX), Math.max(worldMinY, minY),
+            Math.min(worldMaxX, maxX), Math.min(worldMaxY, maxY),
+            currentTier, false
+          )
+          ctx.filter = 'none'
+          ctx.restore()
         }
-        ctx.clip()
-        ctx.filter = ringDesat > 0 || ringFade > 0
-          ? `saturate(${1 - ringDesat}) opacity(${1 - ringFade})`
-          : 'none'
-        drawTiles(
-          Math.max(worldMinX, minX), Math.max(worldMinY, minY),
-          Math.min(worldMaxX, maxX), Math.min(worldMaxY, maxY),
-          currentTier, false
-        )
-        ctx.filter = 'none'
-        ctx.restore()
       }
     }
 

@@ -125,6 +125,19 @@ export interface SelectionOverlay {
   fadeAlpha: number
   ringProgress: number // 0..1: drives ring offset (settle-in) and alpha
   /*
+   * 0..1, how far this selection's holes have opened. Same split as the
+   * isolate's: fadeAlpha is seeded from whatever is already drawn, so selecting
+   * a station while a line is isolated starts the fade at full strength and it
+   * cannot double as the geometry's progress.
+   *
+   * Deliberately not ringProgress, which means the ring's settle-in and is
+   * forced to 0 for points drawn without a ring (labels, hubs) — those cutouts
+   * still have to open.
+   *
+   * Optional: a caller that omits it gets the full shape, as before.
+   */
+  openProgress?: number
+  /*
    * The station's drawn NAME, cleared alongside its marker.
    *
    * A second shape rather than one enlarged one: a label sits a median 129
@@ -190,6 +203,17 @@ export interface CutShape {
   by: number
   r: number
   cr: number
+  /*
+   * 0..1, how strongly this hole is punched. Undefined means fully opaque,
+   * which is what every caller wanted before cutouts could animate.
+   *
+   * Scales the mask's coverage rather than the geometry: a corridor shape is a
+   * capsule whose radius IS the stroke's half-width, so animating `r` narrows
+   * the line to a hairline instead of fading it. The masks blend with MAX, so
+   * two shapes overlapping at a shared stop take the stronger of the two rather
+   * than accumulating.
+   */
+  alpha?: number
 }
 
 export interface MapTreatment {
@@ -233,6 +257,31 @@ export interface MapTreatment {
 export interface LineIsolateOverlay {
   shapes: CutShape[]
   fadeAlpha: number
+  /*
+   * 0..1, how far the corridor's holes have opened. Separate from fadeAlpha on
+   * purpose: the fade is seeded from whatever treatment is already drawn, so
+   * isolating a line over a station spotlight starts it at full strength and it
+   * cannot double as the geometry's progress. This always runs from 0.
+   *
+   * Optional so a caller that only wants the fade keeps the old behaviour.
+   */
+  openProgress?: number
+  /*
+   * The line being switched away from, still closing.
+   *
+   * Switching lines replaces the isolate outright, which left the old corridor
+   * to vanish on the same frame the new one appeared. Carrying it here lets the
+   * two cross: the outgoing holes shrink as the incoming ones grow, over one
+   * shared fade that never changes. Absent for a plain isolate.
+   *
+   * No fade of its own — both sets are holes in the SAME dimmed map, and the
+   * mask unions them, so a stop on both lines simply stays lit throughout.
+   */
+  closing?: {
+    shapes: CutShape[]
+    /** 0..1, shrinking. Reaches 0 as the outgoing line finishes closing. */
+    openProgress: number
+  }
 }
 
 export function mapTreatment(
@@ -266,18 +315,52 @@ export function mapTreatment(
    * shapes — so the halo simply locates it within what is already lit.
    */
   const cuts: CutShape[] = []
-  if (isolate != null && isolateFade > 0) cuts.push(...isolate.shapes)
+  if (isolate != null && isolateFade > 0) {
+    /*
+     * Grown from the fade's own progress rather than pushed in whole.
+     *
+     * Inclusion used to be a plain `isolateFade > 0` gate, which meant the
+     * corridor's holes arrived at full extent on the first frame of a 350ms
+     * fade. Isolating from the map hid that — the fade behind them was ramping
+     * from nothing, so there was something to watch — but isolating from an
+     * open station sheet did not: the map was already dimmed for that station,
+     * so the only thing left to animate was the geometry, and it snapped.
+     *
+     * Only the radii scale. The endpoints are the line's real shape, and
+     * interpolating those would slide the hole in from a point rather than open
+     * it along the corridor.
+     *
+     * Driven by openProgress rather than the fade: the fade is seeded from
+     * whatever is already drawn, so on the station path it starts at full
+     * strength and would report the holes as open from the first frame.
+     */
+    const alpha = isolate.openProgress ?? 1
+    for (const shape of isolate.shapes) {
+      cuts.push({ ...shape, alpha })
+    }
+    // The line being switched away from, fading out as the new one comes up.
+    const closing = isolate.closing
+    if (closing != null && closing.openProgress > 0) {
+      for (const shape of closing.shapes) {
+        cuts.push({ ...shape, alpha: closing.openProgress })
+      }
+    }
+  }
   if (selection != null && selFade > 0) {
+    // Faded the same way the isolate's are, and for the same reason: coming
+    // from an isolated line the dimming is already up, so a halo appearing at
+    // full strength against it is the whole of what the rider sees.
+    const alpha = selection.openProgress ?? 1
     cuts.push({
       ax: selection.ax, ay: selection.ay,
       bx: selection.bx, by: selection.by,
-      r: selection.r, cr: selection.cr
+      r: selection.r, cr: selection.cr, alpha
     })
     if (selection.label != null) {
       cuts.push({
         ax: selection.label.ax, ay: selection.label.ay,
         bx: selection.label.bx, by: selection.label.by,
-        r: selection.label.r, cr: selection.label.cr
+        r: selection.label.r, cr: selection.label.cr, alpha
       })
     }
   }
