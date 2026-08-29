@@ -521,15 +521,23 @@ export default function BottomSheet({ open, onClose, onDismissStart, ariaLabel, 
           React state. */}
       <div
         ref={backdropRef}
-        className="fixed inset-0 z-30 bg-black"
-        style={{ pointerEvents: isFull ? 'auto' : 'none' }}
+        className="fixed inset-0 bg-black"
+        style={{
+          // One below the sheet rather than sharing its layer. The two were
+          // both bare `z-30`, so which covered which came down to their order
+          // in this JSX — same silent dependency the deck's cards used to have.
+          // The backdrop belongs under the sheet as a fact, not as a
+          // consequence of being written first.
+          zIndex: 'calc(var(--z-index-detail-surface) - 1)',
+          pointerEvents: isFull ? 'auto' : 'none'
+        }}
         onClick={handleClose}
         aria-hidden
       />
 
       <div
         ref={sheetRef}
-        className="fixed inset-x-0 bottom-0 z-30 bg-white rounded-t-2xl shadow-2xl flex flex-col"
+        className="fixed inset-x-0 bottom-0 z-detail-surface bg-white rounded-t-2xl shadow-2xl flex flex-col"
         style={{
           // Sheet is always sized to its `full` height; we translate it down
           // off-screen and only show the requested portion. This avoids

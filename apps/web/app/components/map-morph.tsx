@@ -424,10 +424,10 @@ export function MapMorphProvider({ children }: { children: ReactNode }) {
           aria-hidden
           data-map-morph
           className={clsx(
-            // z-40 sits below the boot splash (z-[45]) on purpose: a direct
+            // z-map-morph sits below the boot splash on purpose: a direct
             // /map entry mounts this overlay while the splash is still up, and
             // the splash fades out over the drawing rather than being cut off.
-            'map-morph-overlay fixed inset-0 z-40 overflow-hidden origin-top-left transform-gpu bg-[#FFF8F8] pointer-events-none',
+            'map-morph-overlay fixed inset-0 z-map-morph overflow-hidden origin-top-left transform-gpu bg-[#FFF8F8] pointer-events-none',
             open && 'map-morph-open',
             phase === 'fading' && 'map-morph-fading'
           )}

@@ -27,7 +27,7 @@ interface Props<T extends string> {
  * One generic single-select sheet for every criterion.
  *
  * Headless UI Dialog rather than components/bottom-sheet.tsx, deliberately.
- * BottomSheet is hardcoded z-30 against this Dialog's z-50, it is non-modal on
+ * BottomSheet sits on z-detail-surface, below this Dialog's z-modal; it is non-modal on
  * purpose (the map stays interactive beneath it), and it drives scrollTop by
  * hand under touch-action: none, which would fight the search sheet's own
  * overflow-y-auto. StationPickerDialog already proves this Dialog idiom nests
@@ -53,7 +53,7 @@ export default function CriterionSheet<T extends string>({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} className="relative z-50">
+    <Dialog open={open} onClose={onClose} className="relative z-modal">
       {/* Matches the station picker's dark scrim so the two sheets read as the
           same surface rather than two different affordances. The scrim keeps
           ease-out while the panel springs: a fade has no travel to give weight

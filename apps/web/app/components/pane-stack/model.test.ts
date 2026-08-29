@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   canPush,
   deckGeometry,
+  deckZ,
   MAX_PANE_STACK_DEPTH,
   paneKey,
   paneUrl,
@@ -83,6 +84,38 @@ describe('deckGeometry', () => {
 
   it('clamps a negative depth to the top slot', () => {
     expect(deckGeometry(-1)).toEqual(deckGeometry(0))
+  })
+})
+
+describe('deckZ', () => {
+  it('paints a covering card over the one it covers', () => {
+    // The whole point of the function: this used to be DOM order alone, so a
+    // reorder in the provider silently put the base card on top.
+    expect(deckZ(0)).toBeGreaterThan(deckZ(1))
+  })
+
+  it('orders every reachable depth, nearest to front', () => {
+    const zs = Array.from({ length: MAX_PANE_STACK_DEPTH + 1 }, (_, i) => deckZ(i))
+    for (let i = 1; i < zs.length; i++) {
+      expect(zs[i]).toBeLessThan(zs[i - 1])
+    }
+  })
+
+  it('keeps the whole deck inside its own layer', () => {
+    // Offsets are added to --z-index-detail-surface (30), and the next layer up
+    // is --z-index-map-morph (40). A deck that outgrew that gap would start
+    // painting over the morph overlay instead of under it.
+    const LAYER_GAP = 10
+    expect(deckZ(0)).toBeLessThan(LAYER_GAP)
+    expect(deckZ(MAX_PANE_STACK_DEPTH)).toBeGreaterThanOrEqual(0)
+  })
+
+  it('clamps past the depth cap rather than sinking below the layer', () => {
+    expect(deckZ(MAX_PANE_STACK_DEPTH + 5)).toBe(deckZ(MAX_PANE_STACK_DEPTH))
+  })
+
+  it('clamps a negative depth to the top card', () => {
+    expect(deckZ(-1)).toBe(deckZ(0))
   })
 })
 

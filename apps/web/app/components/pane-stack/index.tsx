@@ -272,8 +272,9 @@ export default function PaneStackProvider({ baseKey, onEntriesChange, children }
 
   return (
     <PaneStackContext.Provider value={api}>
-      {/* Base card first: all cards are `fixed z-30` siblings, so DOM order is
-          what paints one over another. Do not reorder. */}
+      {/* Base card first, which is the order these read in — but nothing depends
+          on it any more: each card derives its z-index from its deck depth (see
+          deckZ), so paint order survives a reorder here. */}
       <DeckSlotContext.Provider value={baseSlot}>
         {children}
       </DeckSlotContext.Provider>

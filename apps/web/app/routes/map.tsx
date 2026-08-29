@@ -715,7 +715,7 @@ export default function MapPage() {
   const [pickingOrigin, setPickingOrigin] = useState(false)
 
   /*
-   * Exactly one detail surface at a time. All three are DetailSurfaces at z-30 —
+   * Exactly one detail surface at a time. All three are DetailSurfaces at z-detail-surface —
    * two open at once would stack two cards on desktop, or two independently
    * draggable sheets on a phone.
    */
@@ -2158,6 +2158,15 @@ export default function MapPage() {
   }
 
   return (
+    /* Must not become a stacking context. Every detail surface here is a
+       `fixed` child of this element that has to compete on the ROOT stacking
+       context — the side pane and bottom sheet against the map morph overlay
+       and the boot splash, both of which are mounted outside this route. Adding
+       a transform, filter, backdrop-blur, will-change, opacity below 1, contain
+       or isolate to this one element would trap all of them underneath the
+       overlay, and would additionally re-root their `position: fixed` against
+       this box rather than the viewport. Nothing fails loudly if that happens;
+       the surfaces just quietly paint in the wrong place. */
     <main className="fixed inset-0 bg-white overflow-hidden">
       <div
         ref={viewportRef}
@@ -2193,7 +2202,7 @@ export default function MapPage() {
       {recoveryState === 'fatal' && (
         <div
           role="alert"
-          className="absolute inset-0 z-30 bg-[#FFF8F8] flex flex-col items-center justify-center p-4"
+          className="absolute inset-0 z-detail-surface bg-[#FFF8F8] flex flex-col items-center justify-center p-4"
         >
           <p className="text-center text-lg font-semibold text-slate-800">Peta terputus</p>
           <p className="mt-1 text-center text-sm text-slate-500">
@@ -2253,7 +2262,7 @@ export default function MapPage() {
           ignores `chromeVisible` — the user must always see the map is in a
           different state and have a way out of it. */}
       {pickingOrigin && (
-        <div className="map-chrome-enter absolute inset-x-4 top-16 z-20 flex justify-center pointer-events-none">
+        <div className="map-chrome-enter absolute inset-x-4 top-16 z-map-chrome flex justify-center pointer-events-none">
           <div className="pointer-events-auto rounded-full bg-white/90 backdrop-blur shadow-lg pl-4 pr-1.5 py-1.5 flex items-center gap-2">
             <span className="font-bold text-sm text-slate-800 truncate">Pilih stasiun keberangkatan</span>
             <button
@@ -2280,7 +2289,7 @@ export default function MapPage() {
           those are the one case where leaving is the point. */}
       {!IS_LITE && (
         <div
-          className="map-chrome-enter absolute top-4 right-4 z-20"
+          className="map-chrome-enter absolute top-4 right-4 z-map-chrome"
           style={{ animationDelay: staggerDelay(1, MAP_CHROME_STAGGER) }}
         >
           <button
@@ -2295,7 +2304,7 @@ export default function MapPage() {
       )}
 
       <div
-        className="map-chrome-enter absolute bottom-4 right-16 z-20"
+        className="map-chrome-enter absolute bottom-4 right-16 z-map-chrome"
         style={{ animationDelay: staggerDelay(2, MAP_CHROME_STAGGER) }}
       >
         <button
@@ -2319,7 +2328,7 @@ export default function MapPage() {
           close button top-right, recenter and attribution the bottom-right pair,
           and the fare chip the bottom centre. */}
       <div
-        className="map-chrome-enter absolute bottom-4 left-4 z-20"
+        className="map-chrome-enter absolute bottom-4 left-4 z-map-chrome"
         style={{ animationDelay: staggerDelay(4, MAP_CHROME_STAGGER) }}
       >
         <button
@@ -2342,7 +2351,7 @@ export default function MapPage() {
       </div>
 
       <div
-        className="map-chrome-enter absolute bottom-4 right-4 z-20"
+        className="map-chrome-enter absolute bottom-4 right-4 z-map-chrome"
         style={{ animationDelay: staggerDelay(3, MAP_CHROME_STAGGER) }}
       >
         <button
@@ -2360,7 +2369,7 @@ export default function MapPage() {
         <div
           role="dialog"
           aria-label="Pilih lin"
-          className="map-popover-enter absolute bottom-24 left-1/2 -translate-x-1/2 z-20 bg-white rounded-xl shadow-xl border border-slate-200 p-3 max-w-xs"
+          className="map-popover-enter absolute bottom-24 left-1/2 -translate-x-1/2 z-map-chrome bg-white rounded-xl shadow-xl border border-slate-200 p-3 max-w-xs"
           onPointerDown={e => e.stopPropagation()}
         >
           <div className="text-xs text-slate-600 mb-2">Ada beberapa lin di sini</div>
@@ -2398,7 +2407,7 @@ export default function MapPage() {
         <div
           role="dialog"
           aria-label="Atribusi peta"
-          className="map-popover-enter absolute bottom-16 right-4 z-20 bg-white rounded-xl shadow-xl border border-slate-200 p-4 max-w-xs text-sm text-slate-700 origin-bottom-right"
+          className="map-popover-enter absolute bottom-16 right-4 z-map-chrome bg-white rounded-xl shadow-xl border border-slate-200 p-4 max-w-xs text-sm text-slate-700 origin-bottom-right"
           onPointerDown={e => e.stopPropagation()}
         >
           <div className="font-semibold mb-1">Peta Integrasi Jakarta</div>

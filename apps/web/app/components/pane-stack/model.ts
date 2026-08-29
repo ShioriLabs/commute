@@ -83,6 +83,25 @@ export function deckGeometry(above: number): DeckGeometry {
   return { x: slot.x, scale: slot.scale }
 }
 
+/**
+ * Where this card paints within the detail-surface layer: the top card (above
+ * 0) scores highest and covers the ones beneath it.
+ *
+ * This used to be decided by DOM order alone — every card was a bare
+ * `fixed z-30` sibling, so the provider's JSX order was the only thing keeping
+ * a pushed card above the base, enforced by a "Do not reorder" comment and
+ * nothing else. Reordering those children is an easy, silent mistake: nothing
+ * throws, the wrong card just paints on top. Deriving the offset from the depth
+ * the deck already tracks makes the rule structural instead.
+ *
+ * The returned value is an offset ADDED to --z-index-detail-surface, never a
+ * z-index in its own right. It stays inside the gap to the next layer so the
+ * whole deck still sits below the map morph overlay however deep it goes.
+ */
+export function deckZ(above: number): number {
+  return MAX_PANE_STACK_DEPTH - Math.min(Math.max(above, 0), MAX_PANE_STACK_DEPTH)
+}
+
 /** Minimum an entry has to expose for {@link canPush} to judge it. */
 export interface StackedPane {
   key: string

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useReducedMotion } from '~/hooks/reduced-motion'
 import type { BottomSheetProps } from './bottom-sheet'
 import { useDeckSlot } from './pane-stack/context'
-import { deckGeometry } from './pane-stack/model'
+import { deckGeometry, deckZ } from './pane-stack/model'
 
 // Horizontal band the pane takes out of the viewport: left margin + card width
 // + an equal gap on its right. Exported so the map's fly-to can center a
@@ -147,11 +147,16 @@ export default function SidePane({ open, onClose, onDismissStart, ariaLabel, hea
 
   return (
     <div
-      className="fixed left-4 top-4 bottom-4 z-30 w-[25rem] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+      className="fixed left-4 top-4 bottom-4 z-detail-surface w-[25rem] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
       // Covered by another card: out of the tab order and out of the
       // accessibility tree, so exactly one dialog is reachable at any depth.
       inert={slot.above > 0}
       style={{
+        // Paint order comes from the deck depth rather than from DOM order —
+        // see deckZ. This overrides the z-detail-surface class above, which is
+        // kept because it is what makes the card's layer legible at a glance;
+        // the two cannot disagree, since both resolve the same token.
+        zIndex: `calc(var(--z-index-detail-surface) + ${deckZ(slot.above)})`,
         // Inline rather than Tailwind translate utilities: v4 emits those as
         // the `translate` property, which would need a different transition
         // property name than the `transform` this reads as. Same reason the

@@ -80,7 +80,7 @@ export function MapGlDebugPanel({ api }: PanelProps) {
     : stats.recovery
 
   return (
-    <div className="absolute bottom-20 left-4 z-30 rounded-lg bg-slate-900/85 text-white text-xs font-mono p-3 backdrop-blur pointer-events-auto select-none">
+    <div className="absolute bottom-20 left-4 z-detail-surface rounded-lg bg-slate-900/85 text-white text-xs font-mono p-3 backdrop-blur pointer-events-auto select-none">
       <div className="flex gap-3">
         <span>{stats.kind ?? '—'}</span>
         <span>{`${stats.count} tiles`}</span>
