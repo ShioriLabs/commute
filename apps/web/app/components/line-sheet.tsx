@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { XIcon, ArrowSquareOutIcon, ArrowLeftIcon } from '@phosphor-icons/react'
 import DetailSurface from './detail-surface'
 import ExitLink from './exit-link'
@@ -17,11 +18,31 @@ interface LineSheetProps {
   lineKey: string | null
   onClose: () => void
   onDismissStart?: () => void
+  /*
+   * Ask the sheet to close ITSELF, so it plays its exit rather than vanishing.
+   *
+   * A line is dismissed from the map more often than from its own X — an
+   * empty-space tap, or a route being drawn — and clearing the key from outside
+   * flips `open` off, which DetailSurface reports as a close without animating.
+   * The map bumps this instead and lets the surface run the same slide-out the
+   * button does.
+   */
+  closeSignal?: number
 }
 
-export default function LineSheet({ lineKey, onClose, onDismissStart }: LineSheetProps) {
+export default function LineSheet({ lineKey, onClose, onDismissStart, closeSignal }: LineSheetProps) {
   const [operator, code] = lineKey ? lineKey.split(':') : [null, null]
   const open = !!(operator && code)
+
+  // Same capture the station sheet uses for its departure action: the animated
+  // close is only handed to the header render prop, so hold onto it.
+  const animatedCloseRef = useRef<() => void>(() => {})
+  const seenSignal = useRef(closeSignal)
+  useEffect(() => {
+    if (closeSignal === seenSignal.current) return
+    seenSignal.current = closeSignal
+    if (open) animatedCloseRef.current()
+  }, [closeSignal, open])
 
   return (
     <DetailSurface
@@ -29,9 +50,12 @@ export default function LineSheet({ lineKey, onClose, onDismissStart }: LineShee
       onClose={onClose}
       onDismissStart={onDismissStart}
       ariaLabel="Detail lin"
-      header={close => (operator && code
-        ? <LinePaneHeader operator={operator} code={code} onClose={close} />
-        : null)}
+      header={(close) => {
+        animatedCloseRef.current = close
+        return operator && code
+          ? <LinePaneHeader operator={operator} code={code} onClose={close} />
+          : null
+      }}
     >
       {ready => (ready && operator && code
         ? <LineContent operator={operator} code={code} />

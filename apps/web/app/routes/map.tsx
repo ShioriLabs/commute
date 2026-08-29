@@ -659,6 +659,15 @@ export default function MapPage() {
    * fade-out by a few hundred ms, and the sheet should not.
    */
   const [openLineKey, setOpenLineKey] = useState<string | null>(null)
+  /*
+   * Bumped to ask the line sheet to play its own exit.
+   *
+   * Clearing openLineKey directly flips the surface's `open` off, which it
+   * reports as a close WITHOUT animating — the pane vanishes instead of sliding
+   * out. A line is dismissed from the map far more often than from its own X
+   * (an empty-space tap, a route being drawn), so that was the common path.
+   */
+  const [lineCloseSignal, setLineCloseSignal] = useState(0)
 
   // Identity of whatever the detail surface is currently showing. The pane stack
   // watches this to know when the card it stacked onto has been replaced or
@@ -1701,7 +1710,8 @@ export default function MapPage() {
   }
 
   const endIsolate = () => {
-    setOpenLineKey(null)
+    // Ask the sheet to close itself; it clears openLineKey when its exit lands.
+    setLineCloseSignal(n => n + 1)
     const iso = isolateRef.current
     if (!iso || iso.phase === 'out') return
     iso.phase = 'out'
@@ -2437,6 +2447,7 @@ export default function MapPage() {
             would strand the rider in a state they cannot see out of. */}
         <LineSheet
           lineKey={openLineKey}
+          closeSignal={lineCloseSignal}
           onClose={() => setOpenLineKey(null)}
           onDismissStart={endIsolate}
         />
