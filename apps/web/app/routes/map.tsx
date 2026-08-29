@@ -3,7 +3,7 @@ import { Link, useNavigate, useNavigationType, useSearchParams } from 'react-rou
 import { XIcon, InfoIcon, CornersInIcon, ReceiptIcon } from '@phosphor-icons/react'
 import useSWR from 'swr'
 import LineRoundel from '~/components/line-roundel'
-import { useLineIsolate } from '~/hooks/use-line-isolate'
+import { useMapGlDebug } from '~/hooks/secret-features'
 import { findLine, lineCutShapes, linesNear, type LinesManifest } from '~/lib/map-line-isolate'
 import clsx from 'clsx'
 import type { StandardResponse } from '@schema/response'
@@ -277,9 +277,17 @@ export default function MapPage() {
   useEffect(() => {
     morph.startDirect()
   }, [morph])
-  // Experimental, off by default, storage-only. `ready` gates the fetch below so
-  // an untouched map never pays for the geometry.
-  const { enabled: lineIsolateEnabled, ready: lineIsolateReady } = useLineIsolate()
+  /*
+   * Line isolation rides the same hidden flag as the renderer instrumentation —
+   * the 7-tap on the version line in Settings → Tentang.
+   *
+   * It had a switch of its own in Settings, revealed by that same gesture, which
+   * meant two things to find before the feature did anything. One door is
+   * enough for something unfinished: the gesture is already the way in, and
+   * `isEnabled` is read after mount so an untouched map never fetches the
+   * geometry.
+   */
+  const { isEnabled: lineIsolateEnabled } = useMapGlDebug()
   const { data: pointsManifest } = useSWR<PointsManifest>(
     pointsUrl,
     (url: string) => fetch(url).then(r => r.json())
@@ -317,7 +325,7 @@ export default function MapPage() {
    * isolate this".
    */
   const { data: linesManifest } = useSWR<LinesManifest>(
-    lineIsolateReady && lineIsolateEnabled ? linesUrl : null,
+    lineIsolateEnabled ? linesUrl : null,
     (url: string) => fetch(url).then(r => r.json())
   )
   // Hubs power the map's hub tap targets: a `HUB-…` point id resolves to a hub

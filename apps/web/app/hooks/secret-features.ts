@@ -52,17 +52,3 @@ export function useMapGlDebug() {
 
   return { isEnabled, setEnabled }
 }
-
-/*
- * Whether experimental settings should be listed at all.
- *
- * Shares the debug flag rather than owning one, so the 7-tap gesture in
- * Settings → Tentang reveals everything unfinished at once. Note this only
- * REVEALS the toggle; whether line isolation is actually on is its own stored
- * choice (utils/line-isolate.ts), so turning the debug flag back off hides the
- * control without silently changing what the map does.
- */
-export function useExperimentalSettings() {
-  const { isEnabled } = useMapGlDebug()
-  return isEnabled
-}
