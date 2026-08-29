@@ -13,6 +13,12 @@ interface ImportMetaEnv {
    * Vite injects, and app/lib/build-mode.ts is the one place allowed to read it.
    */
   readonly VITE_LITE?: string
+  /**
+   * 'pages' when the lite bundle is built for Cloudflare Pages; undefined or
+   * 'apache' for the self-hosted zip. Only meaningful alongside VITE_LITE, and
+   * read only by app/lib/build-mode.ts.
+   */
+  readonly VITE_LITE_HOST?: string
 }
 
 interface ImportMeta {

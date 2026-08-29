@@ -1,26 +1,41 @@
 /*
- * Packages the self-hosted "Commute Lite" bundle.
+ * Builds the "Commute Lite" bundle - the map/fare surface, for a host that
+ * isn't commute.shiorilabs.id.
  *
- * The output is a zip that FDTJ extracts into a subdomain document root on
- * shared hosting - no Node, no Cloudflare, no build step on their side. Entry
- * point is the map; links off the map/fare surface leave for the full app.
+ * Two hosts, selected by --host:
+ *
+ *   apache (default)  A zip FDTJ extracts into a subdomain document root on
+ *                     shared hosting - no Node, no Cloudflare, no build step on
+ *                     their side. This is the fallback path, kept so they can
+ *                     self-host if they ever want to.
+ *   pages             A directory deployed to Cloudflare Pages, which is where
+ *                     the deployment actually lives. Same infrastructure as the
+ *                     main app, so the _headers caching rules apply and updates
+ *                     ride the same release as everything else.
+ *
+ * The surface is identical either way - that half is VITE_LITE, and it does not
+ * care what serves it. What differs is host plumbing: Apache needs the
+ * .htaccess and none of the Cloudflare files, Pages needs the Cloudflare files
+ * and none of the .htaccess. See LITE_HOST in scripts/lite-flag.ts.
  *
  * Pipeline:
  *   1. Guard the API URL. A bundle silently pointed at localhost is the single
- *      most likely packaging mistake and the one they cannot diagnose.
- *   2. Run `react-router build` with VITE_LITE=1. That flag drops the
- *      Cloudflare plugin (vite.config.ts), empties the prerender list
- *      (react-router.config.ts), swaps the index route to the map
- *      (app/routes.ts), and skips service worker registration (app/root.tsx).
- *   3. Stage build/client into build/lite, then prune what only Cloudflare or
- *      the crawler middleware needs.
- *   4. Patch manifest.json branding, inject .htaccess and the README.
- *   5. Assert the post-conditions, then zip.
+ *      most likely packaging mistake and the one FDTJ cannot diagnose.
+ *   2. Run `react-router build` with VITE_LITE=1. That flag empties the
+ *      prerender list (react-router.config.ts), swaps the index route to the
+ *      map (app/routes.ts), and skips service worker registration
+ *      (app/root.tsx). With --host=apache it also drops the Cloudflare plugin
+ *      (vite.config.ts).
+ *   3. Stage build/client into build/lite, then prune per host.
+ *   4. Patch manifest.json branding; for Apache, inject .htaccess and README.
+ *   5. Assert the post-conditions. For Apache, zip.
  *
  * NOTE this overwrites build/client, so any production build sitting there is
  * clobbered. Run `pnpm build` afterwards if you need it back.
  *
- * Run: pnpm build:lite   (LITE_API_BASE_URL overrides the API origin)
+ * Run: pnpm build:lite         (the zip)
+ *      pnpm build:lite:pages   (the Pages directory)
+ *      LITE_API_BASE_URL overrides the API origin for either.
  */
 
 import { execFileSync } from 'node:child_process'
@@ -58,21 +73,47 @@ const LITE_BRANDING = {
   description: 'Peta Integrasi Transportasi Jabodetabek'
 }
 
-// Cloudflare deploy config and crawler-middleware assets. None of it does
-// anything on Apache, and leaving it in the archive invites someone to edit a
-// file that is never read.
-const PRUNE_PATHS = [
-  'wrangler.json',
-  '_headers',
-  '.assetsignore',
+type LiteHost = 'apache' | 'pages'
+
+// Pruned from every lite bundle, whatever serves it.
+const PRUNE_ALWAYS = [
   // Shipped without a service worker: registration is compiled out in the lite
   // build (app/root.tsx), so the file would be dead weight that a stray
-  // registration could still find.
+  // registration could still find. True on Pages too for now - see the plan's
+  // deferred follow-up; when the SW comes back for Pages this moves into
+  // PRUNE_APACHE and the root.tsx gate moves onto the host axis.
   'service-worker.js',
-  // ~5 MB of prerendered per-station OG cards, read only by the Cloudflare
-  // Pages crawler middleware. Nothing in app/ references them.
+  // ~5 MB of prerendered per-station OG cards, read only by the crawler
+  // middleware, which no lite bundle runs. Nothing in app/ references them.
   path.join('img', 'og')
 ]
+
+// Cloudflare deploy config. Inert on Apache, and leaving it in the archive
+// invites someone to edit a file that is never read. On Pages it is exactly
+// what makes the deployment work, so it stays.
+const PRUNE_APACHE = [
+  'wrangler.json',
+  '_headers',
+  '.assetsignore'
+]
+
+const prunePathsFor = (host: LiteHost) =>
+  host === 'apache' ? [...PRUNE_ALWAYS, ...PRUNE_APACHE] : PRUNE_ALWAYS
+
+/**
+ * `--host=pages` | `--host=apache`, defaulting to apache.
+ *
+ * Rejects anything else rather than falling back: a typo'd host silently
+ * producing the wrong bundle shape is the mistake this whole script exists to
+ * prevent.
+ */
+function parseHost(argv: string[]): LiteHost {
+  const flag = argv.find(arg => arg.startsWith('--host'))
+  if (!flag) return 'apache'
+  const value = flag.includes('=') ? flag.split('=')[1] : argv[argv.indexOf(flag) + 1]
+  if (value === 'pages' || value === 'apache') return value
+  fail(`Unknown --host ${value ?? '(missing)'}. Expected 'pages' or 'apache'.`)
+}
 
 function fail(message: string): never {
   console.error(`\n  ${message}\n`)
@@ -106,21 +147,30 @@ function guardApiUrl(): void {
   }
 }
 
-function runBuild(): void {
-  console.log(`Building lite bundle against ${API_BASE_URL} ...`)
+function runBuild(host: LiteHost): void {
+  console.log(`Building lite bundle for ${host} against ${API_BASE_URL} ...`)
   execFileSync('pnpm', ['exec', 'react-router', 'build'], {
     cwd: WEB_ROOT,
     stdio: 'inherit',
-    env: { ...process.env, VITE_LITE: '1', VITE_API_BASE_URL: API_BASE_URL }
+    // LITE_HOST is read by scripts/lite-flag.ts (configs, Node side);
+    // VITE_LITE_HOST is the same value bundled for app/lib/build-mode.ts. Both
+    // are set here so the two halves cannot disagree.
+    env: {
+      ...process.env,
+      VITE_LITE: '1',
+      VITE_LITE_HOST: host,
+      LITE_HOST: host,
+      VITE_API_BASE_URL: API_BASE_URL
+    }
   })
 }
 
-function stage(): void {
+function stage(host: LiteHost): void {
   rmSync(STAGE_DIR, { recursive: true, force: true })
   mkdirSync(STAGE_DIR, { recursive: true })
   cpSync(CLIENT_DIR, STAGE_DIR, { recursive: true })
 
-  for (const relative of PRUNE_PATHS) {
+  for (const relative of prunePathsFor(host)) {
     const target = path.join(STAGE_DIR, relative)
     if (existsSync(target)) {
       rmSync(target, { recursive: true, force: true })
@@ -152,30 +202,56 @@ function patchManifest(): void {
   writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
 }
 
-function injectHostFiles(): void {
+/**
+ * What built this bundle. Stamped so a problem reported months from now is
+ * diagnosable rather than guessable: which build, which map, which API.
+ */
+function provenance(): { packaged: string, app: string, tiles: string, api: string } {
+  return {
+    packaged: new Date().toISOString().slice(0, 10),
+    app: JSON.parse(readFileSync(path.join(WEB_ROOT, 'package.json'), 'utf8')).version,
+    tiles: JSON.parse(
+      readFileSync(path.join(STAGE_DIR, 'maps', 'fdtj', 'manifest.json'), 'utf8')
+    ).build,
+    api: API_BASE_URL
+  }
+}
+
+/**
+ * Files the host needs that the build does not emit.
+ *
+ * Apache gets the .htaccess (its whole cache/rewrite policy, since _headers is
+ * inert there) and the install README. Pages needs neither: _headers and
+ * wrangler.json survive the prune and do the same job.
+ */
+function injectHostFiles(host: LiteHost): void {
+  const stamp = provenance()
+
+  if (host === 'pages') {
+    // No README to carry the stamp on this path, so it gets its own file.
+    // Served as a real URL, which makes "what is actually deployed right now"
+    // answerable with curl rather than a dashboard.
+    writeFileSync(
+      path.join(STAGE_DIR, 'build-info.json'),
+      `${JSON.stringify(stamp, null, 2)}\n`
+    )
+    return
+  }
+
   cpSync(path.join(ASSET_DIR, '.htaccess'), path.join(STAGE_DIR, '.htaccess'))
 
-  const tileBuild = JSON.parse(
-    readFileSync(path.join(STAGE_DIR, 'maps', 'fdtj', 'manifest.json'), 'utf8')
-  ).build
-  const version = JSON.parse(
-    readFileSync(path.join(WEB_ROOT, 'package.json'), 'utf8')
-  ).version
-
-  // Stamped so a problem reported months from now is diagnosable rather than
-  // guessable: which build, which map, which API.
-  const provenance = [
+  const block = [
     '<!--',
     'Build provenance',
-    `  packaged:  ${new Date().toISOString().slice(0, 10)}`,
-    `  app:       v${version}`,
-    `  map tiles: ${tileBuild}`,
-    `  API:       ${API_BASE_URL}`,
+    `  packaged:  ${stamp.packaged}`,
+    `  app:       v${stamp.app}`,
+    `  map tiles: ${stamp.tiles}`,
+    `  API:       ${stamp.api}`,
     '-->'
   ].join('\n')
 
   const readme = readFileSync(path.join(ASSET_DIR, 'README-FDTJ.md'), 'utf8')
-    .replace('<!-- BUILD_PROVENANCE -->', provenance)
+    .replace('<!-- BUILD_PROVENANCE -->', block)
   writeFileSync(path.join(STAGE_DIR, 'README-FDTJ.md'), readme)
 }
 
@@ -186,7 +262,7 @@ function injectHostFiles(): void {
  * feedback loop of anything here - the next reader is a volunteer on shared
  * hosting with no way to debug it. So the checks are assertions, not logs.
  */
-function verify(): void {
+function verify(host: LiteHost): void {
   const problems: string[] = []
   const absent = (relative: string) => {
     if (existsSync(path.join(STAGE_DIR, relative))) problems.push(`should have been pruned: ${relative}`)
@@ -195,12 +271,24 @@ function verify(): void {
     if (!existsSync(path.join(STAGE_DIR, relative))) problems.push(`missing: ${relative}`)
   }
 
-  for (const relative of PRUNE_PATHS) absent(relative)
-  present('.htaccess')
-  present('README-FDTJ.md')
+  for (const relative of prunePathsFor(host)) absent(relative)
   present('index.html')
   present('manifest.json')
   present(path.join('maps', 'fdtj', 'manifest.json'))
+
+  if (host === 'apache') {
+    present('.htaccess')
+    present('README-FDTJ.md')
+  } else {
+    // The two files that make a Pages deployment behave: _headers carries the
+    // tile caching policy, wrangler.json the SPA fallback. Silently shipping
+    // without them looks fine until every tile is refetched and every deep link
+    // 404s.
+    present('_headers')
+    present('wrangler.json')
+    present('build-info.json')
+    absent('.htaccess')
+  }
 
   // Prerendering is off in lite, so no settings/**/index.html should exist to
   // collide with the SPA rewrite.
@@ -235,13 +323,16 @@ function verify(): void {
   console.log('  post-conditions OK')
 }
 
-function archive(): string {
+/** Extracted so main() can size the archive without recomputing the name. */
+function zipName(): string {
   const version = JSON.parse(
     readFileSync(path.join(WEB_ROOT, 'package.json'), 'utf8')
   ).version
-  const stamp = new Date().toISOString().slice(0, 10)
-  const zipName = `commute-lite-v${version}-${stamp}.zip`
-  const zipPath = path.join(WEB_ROOT, 'build', zipName)
+  return `commute-lite-v${version}-${new Date().toISOString().slice(0, 10)}.zip`
+}
+
+function archive(): string {
+  const zipPath = path.join(WEB_ROOT, 'build', zipName())
 
   rmSync(zipPath, { force: true })
   // Written in-process rather than shelling out to `zip`: that binary is absent
@@ -254,21 +345,37 @@ function archive(): string {
 }
 
 function main(): void {
-  guardApiUrl()
-  runBuild()
-  stage()
-  patchManifest()
-  injectHostFiles()
-  verify()
+  const host = parseHost(process.argv.slice(2))
 
-  const zipPath = archive()
-  console.log([
+  guardApiUrl()
+  runBuild(host)
+  stage(host)
+  patchManifest()
+  injectHostFiles(host)
+  verify(host)
+
+  const summary = [
     '',
-    `  ${path.relative(WEB_ROOT, zipPath)}`,
-    `  ${countFiles(STAGE_DIR)} files, ${mib(directorySize(STAGE_DIR))} unpacked, ${mib(statSync(zipPath).size)} zipped`,
-    `  API: ${API_BASE_URL}`,
-    ''
-  ].join('\n'))
+    // Pages deploys the staged directory itself, so there is nothing to zip.
+    host === 'pages'
+      ? `  ${path.relative(WEB_ROOT, STAGE_DIR)}`
+      : `  ${path.relative(WEB_ROOT, archive())}`
+  ]
+
+  if (host === 'pages') {
+    summary.push(`  ${countFiles(STAGE_DIR)} files, ${mib(directorySize(STAGE_DIR))}`)
+    summary.push(`  API: ${API_BASE_URL}`)
+    summary.push('')
+    summary.push(`  Deploy: pnpm dlx wrangler pages deploy ${path.relative(WEB_ROOT, STAGE_DIR)}`)
+  } else {
+    const zipPath = path.join(WEB_ROOT, 'build', zipName())
+    summary.push(
+      `  ${countFiles(STAGE_DIR)} files, ${mib(directorySize(STAGE_DIR))} unpacked, ${mib(statSync(zipPath).size)} zipped`
+    )
+    summary.push(`  API: ${API_BASE_URL}`)
+  }
+  summary.push('')
+  console.log(summary.join('\n'))
 }
 
 main()
