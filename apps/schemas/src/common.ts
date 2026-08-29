@@ -85,13 +85,13 @@ export const AmenitySchema = v.pipe(
 
 /*
  * Mode of transport, named after the GTFS `route_type` it corresponds to:
- * RAIL = 2, SUBWAY = 1, TRAM = 0, BUS = 3. The name is carried rather than the
- * integer because it survives being read by a human.
+ * RAIL = 2, SUBWAY = 1, TRAM = 0, BUS = 3, MONORAIL = 12. The name is carried
+ * rather than the integer because it survives being read by a human.
  */
 export const TransitModeSchema = v.pipe(
-  v.picklist(['RAIL', 'SUBWAY', 'TRAM', 'BUS']),
+  v.picklist(['RAIL', 'SUBWAY', 'TRAM', 'BUS', 'MONORAIL']),
   v.title('TransitMode'),
-  v.description('Moda transportasinya, mengikuti `route_type` di GTFS: `RAIL` (2), `SUBWAY` (1), `TRAM` (0), `BUS` (3).'),
+  v.description('Moda transportasinya, mengikuti `route_type` di GTFS: `RAIL` (2), `SUBWAY` (1), `TRAM` (0), `BUS` (3), `MONORAIL` (12).'),
   v.metadata({ examples: ['RAIL'], ref: 'TransitMode' })
 )
 

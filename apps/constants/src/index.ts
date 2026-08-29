@@ -15,19 +15,25 @@ export type RegionCode = keyof (typeof REGIONS)
  *
  * GTFS spells the mode as an integer on each route; we carry the name and keep
  * the number beside it, because `RAIL` survives a schema change and `2` does
- * not. The four here are the ones Jabodetabek actually runs — GTFS defines
+ * not. The five here are the ones Jabodetabek actually runs — GTFS defines
  * others (ferry, cable tram, funicular) that no operator in this dataset uses,
  * so they are left out rather than declared and never referenced.
  *
  * The distinction that matters to a rider is SUBWAY vs RAIL: both are trains,
  * but Commuter Line is a commuter railway sharing national track while MRT
  * Jakarta is a metro. GTFS draws the same line.
+ *
+ * MONORAIL is the airport Kalayang, an automated people-mover circulating
+ * inside Soekarno-Hatta. It is not a tram: it shares no street, runs driverless
+ * on its own elevated guideway, and is free. GTFS 12 is the closest honest
+ * route_type, and the one Google Maps renders it with.
  */
 export const TRANSIT_MODES = {
   RAIL: { name: 'RAIL', gtfsRouteType: 2, label: 'Kereta' },
   SUBWAY: { name: 'SUBWAY', gtfsRouteType: 1, label: 'MRT' },
   TRAM: { name: 'TRAM', gtfsRouteType: 0, label: 'LRT' },
-  BUS: { name: 'BUS', gtfsRouteType: 3, label: 'Bus' }
+  BUS: { name: 'BUS', gtfsRouteType: 3, label: 'Bus' },
+  MONORAIL: { name: 'MONORAIL', gtfsRouteType: 12, label: 'Kalayang' }
 } as const
 
 export type TransitMode = keyof typeof TRANSIT_MODES
@@ -98,6 +104,22 @@ export const OPERATORS = {
     timezone: 'Asia/Jakarta',
     lang: 'id',
     mode: 'BUS'
+  },
+  /*
+   * The Soekarno-Hatta airport people-mover (Kalayang), run by the airport
+   * operator rather than a transit agency. `APCGK` is Angkasa Pura + the
+   * airport's IATA code: InJourney Airports is Angkasa Pura rebranded, so the
+   * code outlives the branding and extends to their other airports if those
+   * ever appear. The CGK here names the AIRPORT, not REGIONS.CGK (Jabodetabek)
+   * — same three letters, unrelated namespaces.
+   */
+  APCGK: {
+    code: 'APCGK',
+    name: 'Kalayang Bandara',
+    url: 'https://soekarnohatta.injourneyairports.id/',
+    timezone: 'Asia/Jakarta',
+    lang: 'id',
+    mode: 'MONORAIL'
   },
   /*
    * Not a real operator and never served: `getOperatorByCode` returns it for an
@@ -732,22 +754,18 @@ export interface OffTopologyProxy {
 export const OFF_TOPOLOGY_TERMINUS_PROXIES: Record<string, OffTopologyProxy> = {
   // Late-night Cikarang-line workings divert beyond Kampung Bandan to Jakarta
   // Kota; Jakarta Kota is deliberately outside the routable C topology.
-  'KCI:C:JAKK': { walkToward: 'KPB', viaFromTripPrefix: { prefix: '6', via: 'PSE', elseVia: 'MRI' } },
-  // The airport station is absent from the stations DB; Batu Ceper is the
-  // last in-topology stop of the Basoetta line.
-  'KCI:A:BST': { walkToward: 'BPR' }
+  'KCI:C:JAKK': { walkToward: 'KPB', viaFromTripPrefix: { prefix: '6', via: 'PSE', elseVia: 'MRI' } }
 }
 
 /**
  * boundFor display names that don't resolve against station names.
  * Key: normalized boundFor (lowercase, alphanumerics only) -> station code.
- * Covers KCI feed quirks still present in synced data (no-space names, the
- * literal "undefined " prefix bug) and the DB-less airport station.
+ * Covers KCI feed quirks still present in synced data: no-space names and the
+ * literal "undefined " prefix bug.
  */
 export const BOUND_FOR_STATION_ALIASES: Record<string, string> = {
   jakartakota: 'JAKK',
   tanahabang: 'THB',
   tanjungpriuk: 'TPK',
-  bandarasoekarnohatta: 'BST',
   undefinedparungpanjang: 'PRP'
 }

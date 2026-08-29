@@ -5,6 +5,7 @@ import { LINES as MRTJ_LINES } from 'operators/mrtj/lines'
 import { LINES as LRTJ_LINES } from 'operators/lrtj/lines'
 import { LINES as LRTJBDB_LINES } from 'operators/lrtjbdb/lines'
 import { LINES as TJ_LINES } from 'operators/tj/lines'
+import { LINES as APCGK_LINES } from 'operators/apcgk/lines'
 import { Line } from 'models/line'
 
 /*
@@ -58,6 +59,7 @@ export const ALL_LINES: Record<Operator, readonly Line[]> = {
   [OPERATORS.MRTJ.code]: describe('MRTJ', MRTJ_LINES),
   [OPERATORS.LRTJ.code]: describe('LRTJ', LRTJ_LINES),
   [OPERATORS.LRTJBDB.code]: describe('LRTJBDB', LRTJBDB_LINES),
+  [OPERATORS.APCGK.code]: describe('APCGK', APCGK_LINES),
   [OPERATORS.TJ.code]: describe('TJ', TJ_LINES),
   [OPERATORS.NUL.code]: []
 } as const

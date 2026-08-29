@@ -16,6 +16,8 @@ import type { RouteLeg } from '@commute/tsundere'
  *  - TJ (TransJakarta): flat 3500 (TJ_FLAT_FARE). JakLingko integration caps the
  *    whole journey at JAKLINGKO_JOURNEY_CAP — handled at the journey level in
  *    summarizeFares, not here.
+ *  - APCGK (Kalayang Bandara): free. Outside JakLingko entirely — it is not
+ *    capped alongside the integrated operators, it simply costs nothing.
  */
 export const KCI_BASE_FARE = 3000
 export const LRTJBDB_FARE_CAP_PEAK = 20000
@@ -70,6 +72,18 @@ export function calculateSegmentFare(segment: FareSegmentInput, context: FareCon
       return getMRTJFare(segment.fromStationCode, segment.toStationCode)
     case OPERATORS.TJ.code:
       return TJ_FLAT_FARE
+    /*
+     * The airport Kalayang is free — every segment on FDTJ's poster is labelled
+     * `0K`. Genuinely 0, not the Rp1 sentinel that marks a gate crossing on a
+     * surcharged corridor: nobody taps and nothing is charged.
+     *
+     * This case is load-bearing rather than decorative. `default` below returns
+     * null, and an unknown segment fare poisons the whole journey total (see
+     * fare-summary.ts), so without it every trip through the airport would come
+     * back unpriced.
+     */
+    case OPERATORS.APCGK.code:
+      return 0
     default:
       return null
   }

@@ -97,6 +97,11 @@ UPDATE stationLines SET stationNumber = 'A02', updatedAt = CURRENT_TIMESTAMP WHE
 UPDATE stationLines SET stationNumber = 'A03', updatedAt = CURRENT_TIMESTAMP WHERE stationId = 'KCI-DU' AND lineCode = 'A';
 UPDATE stationLines SET stationNumber = 'A04', updatedAt = CURRENT_TIMESTAMP WHERE stationId = 'KCI-RW' AND lineCode = 'A';
 UPDATE stationLines SET stationNumber = 'A05', updatedAt = CURRENT_TIMESTAMP WHERE stationId = 'KCI-BPR' AND lineCode = 'A';
+UPDATE stationLines SET stationNumber = 'A06', updatedAt = CURRENT_TIMESTAMP WHERE stationId = 'KCI-BST' AND lineCode = 'A';
+UPDATE stationLines SET stationNumber = 'K01', updatedAt = CURRENT_TIMESTAMP WHERE stationId = 'APCGK-T1' AND lineCode = 'KLB';
+UPDATE stationLines SET stationNumber = 'K02', updatedAt = CURRENT_TIMESTAMP WHERE stationId = 'APCGK-SHIA' AND lineCode = 'KLB';
+UPDATE stationLines SET stationNumber = 'K03', updatedAt = CURRENT_TIMESTAMP WHERE stationId = 'APCGK-T2' AND lineCode = 'KLB';
+UPDATE stationLines SET stationNumber = 'K04', updatedAt = CURRENT_TIMESTAMP WHERE stationId = 'APCGK-T3' AND lineCode = 'KLB';
 UPDATE stationLines SET stationNumber = 'M01', updatedAt = CURRENT_TIMESTAMP WHERE stationId = 'MRTJ-LBB' AND lineCode = 'M';
 UPDATE stationLines SET stationNumber = 'M02', updatedAt = CURRENT_TIMESTAMP WHERE stationId = 'MRTJ-FTM' AND lineCode = 'M';
 UPDATE stationLines SET stationNumber = 'M03', updatedAt = CURRENT_TIMESTAMP WHERE stationId = 'MRTJ-CPR' AND lineCode = 'M';
@@ -116,6 +121,11 @@ UPDATE stationLines SET stationNumber = 'S03', updatedAt = CURRENT_TIMESTAMP WHE
 UPDATE stationLines SET stationNumber = 'S04', updatedAt = CURRENT_TIMESTAMP WHERE stationId = 'LRTJ-PUM' AND lineCode = 'S';
 UPDATE stationLines SET stationNumber = 'S05', updatedAt = CURRENT_TIMESTAMP WHERE stationId = 'LRTJ-EQS' AND lineCode = 'S';
 UPDATE stationLines SET stationNumber = 'S06', updatedAt = CURRENT_TIMESTAMP WHERE stationId = 'LRTJ-VEL' AND lineCode = 'S';
+UPDATE stationLines SET stationNumber = 'S07', updatedAt = CURRENT_TIMESTAMP WHERE stationId = 'LRTJ-RWM' AND lineCode = 'S';
+UPDATE stationLines SET stationNumber = 'S08', updatedAt = CURRENT_TIMESTAMP WHERE stationId = 'LRTJ-PKA' AND lineCode = 'S';
+UPDATE stationLines SET stationNumber = 'S09', updatedAt = CURRENT_TIMESTAMP WHERE stationId = 'LRTJ-KYM' AND lineCode = 'S';
+UPDATE stationLines SET stationNumber = 'S10', updatedAt = CURRENT_TIMESTAMP WHERE stationId = 'LRTJ-MAT' AND lineCode = 'S';
+UPDATE stationLines SET stationNumber = 'S11', updatedAt = CURRENT_TIMESTAMP WHERE stationId = 'LRTJ-MGI' AND lineCode = 'S';
 UPDATE stationLines SET stationNumber = 'BK01', updatedAt = CURRENT_TIMESTAMP WHERE stationId = 'LRTJBDB-DKA' AND lineCode = 'BK';
 UPDATE stationLines SET stationNumber = 'BK02', updatedAt = CURRENT_TIMESTAMP WHERE stationId = 'LRTJBDB-SET' AND lineCode = 'BK';
 UPDATE stationLines SET stationNumber = 'BK03', updatedAt = CURRENT_TIMESTAMP WHERE stationId = 'LRTJBDB-RAS' AND lineCode = 'BK';

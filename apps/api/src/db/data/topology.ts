@@ -23,8 +23,8 @@ import { TJ_TOPOLOGY_OVERRIDES } from './topology.tj.overrides'
  *   - Cikarang (C) is a lollipop: a stick (Cikarang->Jatinegara) plus a loop branch
  *     from Jatinegara that closes back to it (`closeTo`).
  *   - Bogor (B) forks at Citayam into the Bogor and Nambo branches.
- *   - Soekarno-Hatta (A) is skip-stop: only its service stops are listed (SHIA is
- *     not yet in the DB, so 5 here); consecutive pairs already span the skipped track.
+ *   - Soekarno-Hatta (A) is skip-stop: only its service stops are listed;
+ *     consecutive pairs already span the skipped track.
  */
 
 export interface Stop {
@@ -291,7 +291,7 @@ export const TOPOLOGY: LineTopology[] = [
     ]
   },
 
-  // ── KCI Soekarno-Hatta (skip-stop; SHIA/A06 not yet in DB) ───────────────
+  // ── KCI Soekarno-Hatta (skip-stop) ───────────────────────────────────────
   {
     operator: 'KCI',
     lineCode: 'A',
@@ -300,7 +300,34 @@ export const TOPOLOGY: LineTopology[] = [
       { station: 'SUDB', pos: 'A02' },
       { station: 'DU', pos: 'A03' },
       { station: 'RW', pos: 'A04' },
-      { station: 'BPR', pos: 'A05' }
+      { station: 'BPR', pos: 'A05' },
+      // Hand-added: absent from the kci.id station feed, see
+      // db/scripts/kci_bst_station_insert.sql.
+      { station: 'BST', pos: 'A06' }
+    ]
+  },
+
+  /*
+   * ── Kalayang Bandara (Soekarno-Hatta airport people-mover) ───────────────
+   *
+   * Transcribed from the FDTJ artwork sent to InJourney (skytrain/, dated
+   * 19 Feb 25). Runs T1 -> Stasiun KA Bandara -> T2 -> T3 and back, free, on a
+   * 13-minute headway.
+   *
+   * APCGK-SHIA is NOT the same stop as KCI-BST: SHIA is the skytrain's own
+   * platform and BST is where the KA Bandara train berths. They sit in one
+   * building but are ~500 m of walking apart, joined by a transfer — which is
+   * what the old "SHIA/A06 not yet in DB" note in this file was really
+   * describing. SHIA is a station on THIS line, not a sixth stop on KCI's A.
+   */
+  {
+    operator: 'APCGK',
+    lineCode: 'KLB',
+    path: [
+      { station: 'T1', pos: 'K01' },
+      { station: 'SHIA', pos: 'K02' },
+      { station: 'T2', pos: 'K03' },
+      { station: 'T3', pos: 'K04' }
     ]
   },
 

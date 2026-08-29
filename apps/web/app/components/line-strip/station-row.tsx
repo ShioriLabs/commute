@@ -3,6 +3,7 @@ import ExitLink from '~/components/exit-link'
 import PaneLink from '~/components/pane-stack/pane-link'
 import { getForegroundColor } from 'utils/colors'
 import { useLines } from '~/hooks/use-lines'
+import { AirplaneIcon } from '@phosphor-icons/react'
 import { splitStationNumber } from '~/components/line-roundel'
 import { GUTTER_CLASS, RAIL_CENTER_PX, RAIL_WIDTH_PX } from '~/components/transit-geometry'
 
@@ -34,13 +35,17 @@ export { GUTTER_CLASS, RAIL_CENTER_PX, RAIL_WIDTH_PX } from '~/components/transi
 // stacked over the station number. Outlined (white core, colored ring) for
 // regular/interchange stops; filled with the line color for the structural
 // anchors (termini and branch junctions).
-function Node({ kind, color, stationNumber, compact }: {
+function Node({ kind, color, stationNumber, operator, compact }: {
   kind: NodeKind
   color: string
   stationNumber: string
+  operator?: string
   compact?: boolean
 }) {
   const { prefix, num } = splitStationNumber(stationNumber)
+  // The Kalayang stacks an aircraft over the stop position instead of a letter,
+  // matching its roundel and FDTJ's artwork — K01 reads as an aeroplane over 01.
+  const planePrefix = operator === 'APCGK'
   const filled = kind === 'TERMINUS' || kind === 'JUNCTION'
   const size = 'w-8 h-8'
   const text = filled && getForegroundColor(color) === 'LIGHT' ? 'text-white' : 'text-slate-900'
@@ -49,7 +54,9 @@ function Node({ kind, color, stationNumber, compact }: {
       className={`flex flex-col items-center justify-center rounded-full font-bold tabular-nums leading-none ${size} ${text} ${filled ? 'shadow-sm' : `bg-white border-4 ${kind === 'INTERCHANGE' ? 'shadow-sm' : ''}`}`}
       style={filled ? { backgroundColor: color } : { borderColor: color }}
     >
-      {prefix && <span className={compact ? 'text-[7px]' : 'text-[8px]'}>{prefix}</span>}
+      {planePrefix
+        ? <AirplaneIcon weight="fill" className={compact ? 'w-[8px] h-[8px]' : 'w-[9px] h-[9px]'} />
+        : prefix && <span className={compact ? 'text-[7px]' : 'text-[8px]'}>{prefix}</span>}
       <span className={compact ? 'text-[10px]' : 'text-[11px]'}>{num}</span>
     </span>
   )
@@ -124,7 +131,7 @@ export default function StationRow({
       <div className={`relative ${side === 'LEFT' ? 'pl-7 pr-1' : 'pr-7 pl-1'}`}>
         {stretchedLink}
         <span className="absolute z-10" style={nodeStyle}>
-          <Node kind={nodeKind} color={color} stationNumber={station.stationNumber} compact={compact} />
+          <Node kind={nodeKind} color={color} stationNumber={station.stationNumber} operator={operator} compact={compact} />
         </span>
         {content}
       </div>
@@ -154,7 +161,7 @@ export default function StationRow({
           className="absolute z-10"
           style={{ left: RAIL_CENTER_PX, top: '50%', transform: 'translate(-50%, -50%)' }}
         >
-          <Node kind={nodeKind} color={color} stationNumber={station.stationNumber} compact={compact} />
+          <Node kind={nodeKind} color={color} stationNumber={station.stationNumber} operator={operator} compact={compact} />
         </span>
       </div>
       {content}

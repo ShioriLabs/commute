@@ -7,6 +7,9 @@ KCI-BKST,-6.2468,107.0181
 KCI-BOI,-6.1600,106.7363
 KCI-BOO,-6.5956,106.7904
 KCI-BPR,-6.1721,106.6648
+# Hand-added: absent from the kci.id station feed (fg_enable), so syncStations
+# never creates it. See db/scripts/kci_bst_station_insert.sql.
+KCI-BST,-6.1273,106.6525
 KCI-BUA,-6.2154,106.9232
 KCI-CBN,-6.4640,106.8526
 KCI-CC,-6.3295,106.6186
@@ -137,3 +140,11 @@ LRTJ-PKA,-6.1919,106.8706
 LRTJ-KYM,-6.1950,106.8599
 LRTJ-MAT,-6.202,106.8502
 LRTJ-MGI,-6.2086,106.8457
+
+# Kalayang Bandara (APCGK) — the Soekarno-Hatta airport people-mover.
+# Airside/landside positions inside the airport; SHIA sits ~50 m in a straight
+# line from KCI-BST (same building), though the walk between them is ~500 m.
+APCGK-T1,-6.1302,106.6558
+APCGK-SHIA,-6.1271,106.6529
+APCGK-T2,-6.1231,106.6530
+APCGK-T3,-6.1199,106.6649

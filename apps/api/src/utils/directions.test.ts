@@ -21,6 +21,7 @@ const DISPLAY: Record<string, string> = {
   SUD: 'Sudirman', MRI: 'Manggarai', MTR: 'Matraman',
   JAKK: 'Jakarta Kota', BOO: 'Bogor', NMO: 'Nambo', DP: 'Depok', CTA: 'Citayam',
   TNG: 'Tangerang', BPR: 'Batu Ceper', RW: 'Rawa Buaya',
+  BST: 'Bandara Soekarno-Hatta',
   RK: 'Rangkasbitung'
 }
 
@@ -193,7 +194,9 @@ describe('groupDirections', () => {
     expect(groups.map(g => g.key).sort()).toEqual(['MTR:', 'SUD:'])
   })
 
-  it('replaces the spine end with the real terminus for proxied off-topology walks (airport)', () => {
+  it('walks the full spine to the airport terminus', () => {
+    // BST is a real A06 stop, so this is an ordinary in-topology walk: the label
+    // names every station out to the terminus, not a proxied stand-in.
     const groups = group({
       lineCode: 'A',
       stationCode: 'DU',
@@ -203,21 +206,23 @@ describe('groupDirections', () => {
       ]
     })
     const airport = groups.find(g => g.nextHopCode === 'RW')!
-    expect(airport.label).toEqual(['Rawa Buaya', 'Bandara Soekarno-Hatta'])
+    expect(airport.label).toEqual(['Rawa Buaya', 'Batu Ceper', 'Bandara Soekarno-Hatta'])
   })
 
-  it('falls back to a synthetic group when the proxy target is the station itself', () => {
+  it('groups the airport terminus by its real next hop from the last stop before it', () => {
     const batuCeper = group({
       lineCode: 'A',
       stationCode: 'BPR',
       entries: [entry('Bandara Soekarno-Hatta', 32)]
     })
     expect(batuCeper[0]).toMatchObject({
-      key: 'SYN:Bandara Soekarno-Hatta:',
+      key: 'BST:',
       label: ['Bandara Soekarno-Hatta'],
-      nextHopCode: null
+      nextHopCode: 'BST'
     })
+  })
 
+  it('falls back to a synthetic group for a terminus outside the routable topology', () => {
     const kampungBandan = group({
       lineCode: 'C',
       stationCode: 'KPB',

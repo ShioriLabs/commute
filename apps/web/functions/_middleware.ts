@@ -74,7 +74,8 @@ const OPERATOR_VOCAB: Record<string, OperatorVocab> = {
   MRTJ: { mode: 'MRT', vehicle: 'kereta', stop: 'Stasiun' },
   LRTJ: { mode: 'LRT', vehicle: 'kereta', stop: 'Stasiun' },
   LRTJBDB: { mode: 'LRT', vehicle: 'kereta', stop: 'Stasiun' },
-  TJ: { mode: 'TransJakarta', vehicle: 'bus', stop: 'Halte' }
+  TJ: { mode: 'TransJakarta', vehicle: 'bus', stop: 'Halte' },
+  APCGK: { mode: 'Kalayang', vehicle: 'kereta', stop: 'Stasiun' }
 }
 const GENERIC_VOCAB: OperatorVocab = { mode: 'kereta', vehicle: 'kereta', stop: 'Stasiun' }
 function vocabFor(operator: string): OperatorVocab {
