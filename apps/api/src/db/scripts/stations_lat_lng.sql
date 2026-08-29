@@ -133,3 +133,7 @@ UPDATE stations SET latitude = -6.1919, longitude = 106.8706, updatedAt = CURREN
 UPDATE stations SET latitude = -6.1950, longitude = 106.8599, updatedAt = CURRENT_TIMESTAMP where id = 'LRTJ-KYM';
 UPDATE stations SET latitude = -6.202, longitude = 106.8502, updatedAt = CURRENT_TIMESTAMP where id = 'LRTJ-MAT';
 UPDATE stations SET latitude = -6.2086, longitude = 106.8457, updatedAt = CURRENT_TIMESTAMP where id = 'LRTJ-MGI';
+UPDATE stations SET latitude = -6.1302, longitude = 106.6558, updatedAt = CURRENT_TIMESTAMP where id = 'APCGK-T1';
+UPDATE stations SET latitude = -6.1271, longitude = 106.6529, updatedAt = CURRENT_TIMESTAMP where id = 'APCGK-SHIA';
+UPDATE stations SET latitude = -6.1231, longitude = 106.6530, updatedAt = CURRENT_TIMESTAMP where id = 'APCGK-T2';
+UPDATE stations SET latitude = -6.1199, longitude = 106.6649, updatedAt = CURRENT_TIMESTAMP where id = 'APCGK-T3';

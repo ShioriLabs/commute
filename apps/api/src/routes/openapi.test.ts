@@ -195,7 +195,7 @@ describe('schema integrity', () => {
 
   it('derives the operator enum from constants, so a new operator cannot drift out', () => {
     const json = JSON.stringify(spec)
-    for (const code of ['KCI', 'MRTJ', 'LRTJ', 'LRTJBDB', 'TJ']) {
+    for (const code of ['KCI', 'MRTJ', 'LRTJ', 'LRTJBDB', 'TJ', 'APCGK']) {
       expect(json, `operator ${code} missing from the spec`).toContain(`"${code}"`)
     }
     // NUL is an internal placeholder and must not be offered to consumers.

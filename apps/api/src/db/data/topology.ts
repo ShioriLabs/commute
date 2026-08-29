@@ -307,6 +307,30 @@ export const TOPOLOGY: LineTopology[] = [
     ]
   },
 
+  /*
+   * ── Kalayang Bandara (Soekarno-Hatta airport people-mover) ───────────────
+   *
+   * Transcribed from the FDTJ artwork sent to InJourney (skytrain/, dated
+   * 19 Feb 25). Runs T1 -> Stasiun KA Bandara -> T2 -> T3 and back, free, on a
+   * 13-minute headway.
+   *
+   * APCGK-SHIA is NOT the same stop as KCI-BST: SHIA is the skytrain's own
+   * platform and BST is where the KA Bandara train berths. They sit in one
+   * building but are ~500 m of walking apart, joined by a transfer — which is
+   * what the old "SHIA/A06 not yet in DB" note in this file was really
+   * describing. SHIA is a station on THIS line, not a sixth stop on KCI's A.
+   */
+  {
+    operator: 'APCGK',
+    lineCode: 'KLB',
+    path: [
+      { station: 'T1', pos: 'K01' },
+      { station: 'SHIA', pos: 'K02' },
+      { station: 'T2', pos: 'K03' },
+      { station: 'T3', pos: 'K04' }
+    ]
+  },
+
   // ── MRT Jakarta North-South ──────────────────────────────────────────────
   {
     operator: 'MRTJ',
