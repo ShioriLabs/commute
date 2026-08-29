@@ -23,8 +23,8 @@ import { TJ_TOPOLOGY_OVERRIDES } from './topology.tj.overrides'
  *   - Cikarang (C) is a lollipop: a stick (Cikarang->Jatinegara) plus a loop branch
  *     from Jatinegara that closes back to it (`closeTo`).
  *   - Bogor (B) forks at Citayam into the Bogor and Nambo branches.
- *   - Soekarno-Hatta (A) is skip-stop: only its service stops are listed (SHIA is
- *     not yet in the DB, so 5 here); consecutive pairs already span the skipped track.
+ *   - Soekarno-Hatta (A) is skip-stop: only its service stops are listed;
+ *     consecutive pairs already span the skipped track.
  */
 
 export interface Stop {
@@ -291,7 +291,7 @@ export const TOPOLOGY: LineTopology[] = [
     ]
   },
 
-  // ── KCI Soekarno-Hatta (skip-stop; SHIA/A06 not yet in DB) ───────────────
+  // ── KCI Soekarno-Hatta (skip-stop) ───────────────────────────────────────
   {
     operator: 'KCI',
     lineCode: 'A',
@@ -300,7 +300,10 @@ export const TOPOLOGY: LineTopology[] = [
       { station: 'SUDB', pos: 'A02' },
       { station: 'DU', pos: 'A03' },
       { station: 'RW', pos: 'A04' },
-      { station: 'BPR', pos: 'A05' }
+      { station: 'BPR', pos: 'A05' },
+      // Hand-added: absent from the kci.id station feed, see
+      // db/scripts/kci_bst_station_insert.sql.
+      { station: 'BST', pos: 'A06' }
     ]
   },
 

@@ -7,6 +7,9 @@ KCI-BKST,-6.2468,107.0181
 KCI-BOI,-6.1600,106.7363
 KCI-BOO,-6.5956,106.7904
 KCI-BPR,-6.1721,106.6648
+# Hand-added: absent from the kci.id station feed (fg_enable), so syncStations
+# never creates it. See db/scripts/kci_bst_station_insert.sql.
+KCI-BST,-6.1273,106.6525
 KCI-BUA,-6.2154,106.9232
 KCI-CBN,-6.4640,106.8526
 KCI-CC,-6.3295,106.6186

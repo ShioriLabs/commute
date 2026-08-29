@@ -6,6 +6,7 @@ UPDATE stations SET latitude = -6.2468, longitude = 107.0181, updatedAt = CURREN
 UPDATE stations SET latitude = -6.1600, longitude = 106.7363, updatedAt = CURRENT_TIMESTAMP where id = 'KCI-BOI';
 UPDATE stations SET latitude = -6.5956, longitude = 106.7904, updatedAt = CURRENT_TIMESTAMP where id = 'KCI-BOO';
 UPDATE stations SET latitude = -6.1721, longitude = 106.6648, updatedAt = CURRENT_TIMESTAMP where id = 'KCI-BPR';
+UPDATE stations SET latitude = -6.1273, longitude = 106.6525, updatedAt = CURRENT_TIMESTAMP where id = 'KCI-BST';
 UPDATE stations SET latitude = -6.2154, longitude = 106.9232, updatedAt = CURRENT_TIMESTAMP where id = 'KCI-BUA';
 UPDATE stations SET latitude = -6.4640, longitude = 106.8526, updatedAt = CURRENT_TIMESTAMP where id = 'KCI-CBN';
 UPDATE stations SET latitude = -6.3295, longitude = 106.6186, updatedAt = CURRENT_TIMESTAMP where id = 'KCI-CC';

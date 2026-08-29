@@ -732,22 +732,18 @@ export interface OffTopologyProxy {
 export const OFF_TOPOLOGY_TERMINUS_PROXIES: Record<string, OffTopologyProxy> = {
   // Late-night Cikarang-line workings divert beyond Kampung Bandan to Jakarta
   // Kota; Jakarta Kota is deliberately outside the routable C topology.
-  'KCI:C:JAKK': { walkToward: 'KPB', viaFromTripPrefix: { prefix: '6', via: 'PSE', elseVia: 'MRI' } },
-  // The airport station is absent from the stations DB; Batu Ceper is the
-  // last in-topology stop of the Basoetta line.
-  'KCI:A:BST': { walkToward: 'BPR' }
+  'KCI:C:JAKK': { walkToward: 'KPB', viaFromTripPrefix: { prefix: '6', via: 'PSE', elseVia: 'MRI' } }
 }
 
 /**
  * boundFor display names that don't resolve against station names.
  * Key: normalized boundFor (lowercase, alphanumerics only) -> station code.
- * Covers KCI feed quirks still present in synced data (no-space names, the
- * literal "undefined " prefix bug) and the DB-less airport station.
+ * Covers KCI feed quirks still present in synced data: no-space names and the
+ * literal "undefined " prefix bug.
  */
 export const BOUND_FOR_STATION_ALIASES: Record<string, string> = {
   jakartakota: 'JAKK',
   tanahabang: 'THB',
   tanjungpriuk: 'TPK',
-  bandarasoekarnohatta: 'BST',
   undefinedparungpanjang: 'PRP'
 }
