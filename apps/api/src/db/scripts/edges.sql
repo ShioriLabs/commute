@@ -178,6 +178,8 @@ INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance
 INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('A:KCI-RW->KCI-DU', 'A', 'KCI-RW', 'KCI-DU', 8640, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('A:KCI-RW->KCI-BPR', 'A', 'KCI-RW', 'KCI-BPR', 6575, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('A:KCI-BPR->KCI-RW', 'A', 'KCI-BPR', 'KCI-RW', 6575, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('A:KCI-BPR->KCI-BST', 'A', 'KCI-BPR', 'KCI-BST', 5164, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('A:KCI-BST->KCI-BPR', 'A', 'KCI-BST', 'KCI-BPR', 5164, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('M:MRTJ-LBB->MRTJ-FTM', 'M', 'MRTJ-LBB', 'MRTJ-FTM', 1967, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('M:MRTJ-FTM->MRTJ-LBB', 'M', 'MRTJ-FTM', 'MRTJ-LBB', 1967, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('M:MRTJ-FTM->MRTJ-CPR', 'M', 'MRTJ-FTM', 'MRTJ-CPR', 1669, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
