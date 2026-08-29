@@ -662,13 +662,28 @@ export default function MapPage() {
   // pill lives in, so it hides for as long as one is open.
   const paneCoversChrome = isDesktop && detailSurfaceOpen
   const pillVisible = chromeVisible && !paneCoversChrome
+  /*
+   * The line whose sheet is open, `operator:code`.
+   *
+   * Separate from isolateRef because that is animation state driven by the rAF
+   * tick, while this drives React. They are kept in step by beginIsolate and
+   * endIsolate rather than derived from each other: the isolate outlives its
+   * fade-out by a few hundred ms, and the sheet should not.
+   */
+  const [openLineKey, setOpenLineKey] = useState<string | null>(null)
+
   // Identity of whatever the detail surface is currently showing. The pane stack
   // watches this to know when the card it stacked onto has been replaced or
   // dismissed; the two selections are mutually exclusive, so one string covers
   // both.
   const baseSelectionKey = selectedStation
     ? `station:${selectedStation.operator}/${selectedStation.code}`
-    : selectedHubSlug && `hub:${selectedHubSlug}`
+    : selectedHubSlug
+      ? `hub:${selectedHubSlug}`
+      // A line is a base card like the other two: without it here the deck has
+      // nothing to stack onto, and tapping a stop in the line sheet navigates
+      // off the map instead of pushing that station over it.
+      : openLineKey && `line:${openLineKey}`
   // Pick-an-origin mode, primed by the station sheet's "OTW Ke Sini". A plain
   /*
    * A drawn route stands the isolate down.
@@ -788,16 +803,6 @@ export default function MapPage() {
    * asks rather than guessing.
    */
   const [lineChoices, setLineChoices] = useState<string[] | null>(null)
-
-  /*
-   * The line whose sheet is open, `operator:code`.
-   *
-   * Separate from isolateRef because that is animation state driven by the rAF
-   * tick, while this drives React. They are kept in step by beginIsolate and
-   * endIsolate rather than derived from each other: the isolate outlives its
-   * fade-out by a few hundred ms, and the sheet should not.
-   */
-  const [openLineKey, setOpenLineKey] = useState<string | null>(null)
 
   const isolateRef = useRef<{
     key: string

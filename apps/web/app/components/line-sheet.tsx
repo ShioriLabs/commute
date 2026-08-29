@@ -1,4 +1,4 @@
-import { XIcon, ArrowSquareOutIcon } from '@phosphor-icons/react'
+import { XIcon, ArrowSquareOutIcon, ArrowLeftIcon } from '@phosphor-icons/react'
 import DetailSurface from './detail-surface'
 import ExitLink from './exit-link'
 import LineRoundel from './line-roundel'
@@ -30,7 +30,7 @@ export default function LineSheet({ lineKey, onClose, onDismissStart }: LineShee
       onDismissStart={onDismissStart}
       ariaLabel="Detail lin"
       header={close => (operator && code
-        ? <SheetHeader operator={operator} code={code} onClose={close} />
+        ? <LinePaneHeader operator={operator} code={code} onClose={close} />
         : null)}
     >
       {ready => (ready && operator && code
@@ -44,11 +44,34 @@ export default function LineSheet({ lineKey, onClose, onDismissStart }: LineShee
   )
 }
 
-function SheetHeader({ operator, code, onClose }: { operator: string, code: string, onClose: () => void }) {
+interface LinePaneHeaderProps {
+  operator: string
+  code: string
+  onClose: () => void
+  /** Present when this line is a card pushed over another one: shows a back
+   * affordance, and `onClose` then means "dismiss the whole deck". */
+  onBack?: () => void
+}
+
+// Exported for the same reason StationPaneHeader is: a line pushed onto the pane
+// stack gets this header rather than a near-copy of it.
+export function LinePaneHeader({ operator, code, onClose, onBack }: LinePaneHeaderProps) {
   const { header } = useLineHeader(operator, code)
   return (
     <div className="flex items-center justify-between gap-3">
-      <div className="flex-1 min-w-0 flex items-center gap-2">
+      {onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Kembali"
+          className="shrink-0 -ml-2 rounded-full flex items-center justify-center w-9 h-9 text-slate-700 hover:bg-slate-100 cursor-pointer"
+        >
+          <ArrowLeftIcon weight="bold" className="w-5 h-5" />
+        </button>
+      )}
+      {/* Roundel above the name, stacked, exactly as a station's lines sit above
+          its name — a line card and a station card read the same way. */}
+      <div className="flex-1 min-w-0 flex flex-col gap-1">
         {header.isLoading
           ? (
               <div className="animate-pulse w-48 h-6 bg-slate-200 rounded-lg" />
@@ -56,12 +79,17 @@ function SheetHeader({ operator, code, onClose }: { operator: string, code: stri
           : (
               <>
                 {header.colorCode && (
-                  <LineRoundel
-                    size="SM"
-                    code={header.lineCode ?? code}
-                    color={header.colorCode as `#${string}`}
-                    operator={header.operator ?? operator}
-                  />
+                  <ul className="flex flex-row gap-1 flex-wrap">
+                    <li>
+                      <LineRoundel
+                        size="SM"
+                        code={header.lineCode ?? code}
+                        color={header.colorCode as `#${string}`}
+                        operator={header.operator ?? operator}
+                      />
+                      <span className="sr-only">{header.name}</span>
+                    </li>
+                  </ul>
                 )}
                 <h2 className="font-bold text-xl truncate">{header.name}</h2>
               </>

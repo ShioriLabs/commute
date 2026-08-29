@@ -1,5 +1,6 @@
 import type { LineDetailStation } from '@commute/schemas'
 import ExitLink from '~/components/exit-link'
+import PaneLink from '~/components/pane-stack/pane-link'
 import { getForegroundColor } from 'utils/colors'
 import { useLines } from '~/hooks/use-lines'
 import { splitStationNumber } from '~/components/line-roundel'
@@ -94,9 +95,18 @@ export default function StationRow({
     </div>
   )
 
+  /*
+   * PaneLink, not ExitLink: inside the map's deck a station opens as a card
+   * pushed over the line, the way the station sheet already pushes its own
+   * targets. Tapping a stop used to navigate off the map entirely, which threw
+   * away the isolate the rider had just made.
+   *
+   * It degrades to a plain link wherever there is no deck — the standalone line
+   * page and phones — so this changes nothing outside the map.
+   */
   const stretchedLink = (
-    <ExitLink
-      to={`/stations/${operator}/${station.code}`}
+    <PaneLink
+      pane={{ kind: 'station', operator, code: station.code }}
       className="absolute inset-0 z-0 rounded-lg"
       aria-label={station.name}
     />
