@@ -175,6 +175,14 @@ describe('per-line spawn points', () => {
   // FDTJ edition is re-rasterised, and colour-profile rounding nudges each line
   // by a step (2026-06a #CA2B51 -> 2026-08 #CA2A51) with no design change. The
   // literals below name a line; they are not exact-equality assertions.
+  //
+  // 2026-08c is the exception that the tolerance cannot absorb: the edition was
+  // exported from a different colour profile and every line moved far more than a
+  // step (#CA2A51 -> #CF0E33, #00BDEE -> #51BAD5 — up to 81 on a channel). The
+  // literals here and in FDTJ_SPAWNS were re-read off the new skeleton, pairing
+  // strokes by centroid so each old colour maps to exactly one new one. The
+  // geometry was byte-identical for 15 of 16 strokes, confirming a re-export
+  // rather than a redraw.
   const startsNear = (colour: string, at: { x: number, y: number }) =>
     ordered
       .filter(item => sameColour(item.c, colour))
@@ -183,10 +191,10 @@ describe('per-line spawn points', () => {
 
   it('keeps the hardcoded coordinates in sync with points.json', () => {
     for (const [id, colour] of [
-      ['MRTJ-BHI', '#CA2B51'],
-      ['LRTJBDB-DKA', '#026C3E'],
-      ['LRTJBDB-DKA', '#1251A2'],
-      ['KCI-JNG', '#00BDEF']
+      ['MRTJ-BHI', '#CF0E33'],
+      ['LRTJBDB-DKA', '#154D22'],
+      ['LRTJBDB-DKA', '#17258B'],
+      ['KCI-JNG', '#51BAD5']
     ] as const) {
       const spawn = FDTJ_SPAWNS.find(s => sameColour(s.c, colour))!
       const station = spawnOf(id)
@@ -196,18 +204,18 @@ describe('per-line spawn points', () => {
   })
 
   it('starts MRT Jakarta at Bundaran HI', () => {
-    expect(startsNear('#CA2B51', spawnOf('MRTJ-BHI'))).toHaveLength(1)
+    expect(startsNear('#CF0E33', spawnOf('MRTJ-BHI'))).toHaveLength(1)
   })
 
   it('draws MRT Jakarta as one line, not one per source stroke', () => {
     // The PDF splits MRT into three strokes meeting at Istora and Fatmawati. Chaining has
     // to fuse them, or the two the spawn does not touch sprout their own origins — the
     // line was visibly growing out of Istora and Bundaran HI at once.
-    const mrt = ordered.filter(item => sameColour(item.c, '#CA2B51'))
+    const mrt = ordered.filter(item => sameColour(item.c, '#CF0E33'))
     const istora = spawnOf('MRTJ-IST')
     const fatmawati = spawnOf('MRTJ-FTM')
-    expect(startsNear('#CA2B51', istora)).toHaveLength(0)
-    expect(startsNear('#CA2B51', fatmawati)).toHaveLength(0)
+    expect(startsNear('#CF0E33', istora)).toHaveLength(0)
+    expect(startsNear('#CF0E33', fatmawati)).toHaveLength(0)
 
     // And the surviving line has to actually span the route, Bundaran HI through to
     // Lebak Bulus, rather than having merely dropped the pieces it could not place.
@@ -222,19 +230,19 @@ describe('per-line spawn points', () => {
 
   it('starts both LRT Jabodebek branches at Dukuh Atas', () => {
     const dukuhAtas = spawnOf('LRTJBDB-DKA')
-    expect(startsNear('#026C3E', dukuhAtas)).toHaveLength(1)
-    expect(startsNear('#1251A2', dukuhAtas)).toHaveLength(1)
+    expect(startsNear('#154D22', dukuhAtas)).toHaveLength(1)
+    expect(startsNear('#17258B', dukuhAtas)).toHaveLength(1)
   })
 
   it('starts the Cikarang loop Pasar Senen arc at Jatinegara, heading for Kampung Bandan', () => {
     const jatinegara = spawnOf('KCI-JNG')
-    const heads = startsNear('#00BDEF', jatinegara)
+    const heads = startsNear('#51BAD5', jatinegara)
     expect(heads).toHaveLength(1)
 
     // The arc must run Jatinegara -> Pasar Senen -> Kampung Bandan in that order, which is
     // the whole point of the override: drawn the other way it unzips away from the loop's
     // closing point instead of towards it.
-    const arc = ordered.find(item => sameColour(item.c, '#00BDEF') && distance(parsePath(item.d)[0], jatinegara.x, jatinegara.y) < 150)!
+    const arc = ordered.find(item => sameColour(item.c, '#51BAD5') && distance(parsePath(item.d)[0], jatinegara.x, jatinegara.y) < 150)!
     const nearestIndex = (at: { x: number, y: number }) => {
       const path = parsePath(arc.d)
       let best = Infinity
@@ -254,7 +262,7 @@ describe('per-line spawn points', () => {
     // MRT is drawn as three strokes but only one ends at Bundaran HI, and the Cikarang
     // main line runs through Jatinegara without terminating there.
     const jatinegara = spawnOf('KCI-JNG')
-    const cikarang = ordered.filter(item => sameColour(item.c, '#00BDEF'))
+    const cikarang = ordered.filter(item => sameColour(item.c, '#51BAD5'))
     expect(cikarang.length).toBeGreaterThan(1)
     expect(cikarang.filter(item => distance(parsePath(item.d)[0], jatinegara.x, jatinegara.y) < 150)).toHaveLength(1)
   })
@@ -291,9 +299,9 @@ describe('station markers', () => {
     const here = skeleton.stations
       .filter(s => distance([s.x, s.y], FDTJ_ANCHOR_X, FDTJ_ANCHOR_Y) < 80)
     expect(here).toHaveLength(3)
-    expect(here.filter(s => sameColour(s.c, '#EF3637'))).toHaveLength(1) // Bogor
-    expect(here.filter(s => sameColour(s.c, '#00BDEF'))).toHaveLength(1) // Cikarang
-    expect(here.filter(s => sameColour(s.c, '#282A65'))).toHaveLength(1) // loop
+    expect(here.filter(s => sameColour(s.c, '#FD1516'))).toHaveLength(1) // Bogor
+    expect(here.filter(s => sameColour(s.c, '#51BAD5'))).toHaveLength(1) // Cikarang
+    expect(here.filter(s => sameColour(s.c, '#0B0548'))).toHaveLength(1) // loop
   })
 
   it('finds every MRT Jakarta station', () => {
@@ -302,7 +310,7 @@ describe('station markers', () => {
     // "…Awal/Akhir", "…Transit") in the MRT colour, which the extractor cannot
     // tell from a station — hence the four extras in the column at x=8805.
     // They are legend furniture and deliberately carry no tap target.
-    const discs = skeleton.stations.filter(s => sameColour(s.c, '#CA2B51'))
+    const discs = skeleton.stations.filter(s => sameColour(s.c, '#CF0E33'))
     expect(discs.filter(s => s.x < 8000)).toHaveLength(13)
     expect(discs.filter(s => s.x >= 8000)).toHaveLength(4)
   })
@@ -331,7 +339,7 @@ describe('station markers', () => {
   it('places a marker later the further along its line it sits', () => {
     // Bogor line: Cikini is north of Manggarai and the line is split at the anchor, so
     // both halves start there — a marker near the split must precede one at the far end.
-    const bogor = stations.filter(s => sameColour(s.c, '#EF3637')).sort((a, b) => a.delayMs - b.delayMs)
+    const bogor = stations.filter(s => sameColour(s.c, '#FD1516')).sort((a, b) => a.delayMs - b.delayMs)
     expect(bogor.length).toBeGreaterThan(2)
     expect(bogor[0].delayMs).toBeLessThan(bogor[bogor.length - 1].delayMs)
   })

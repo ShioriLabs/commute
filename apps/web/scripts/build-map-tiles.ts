@@ -37,8 +37,8 @@ const REPO_ROOT = path.resolve(WEB_ROOT, '..', '..')
  */
 const PDF_PATH = process.env.MAP_PDF
   ? path.resolve(REPO_ROOT, process.env.MAP_PDF)
-  : path.join(REPO_ROOT, '2026-06a-Peta-Integrasi-Jakarta-FDTJ-Web.pdf')
-const VERSION = process.env.MAP_VERSION ?? '2026-06a'
+  : path.join(REPO_ROOT, '2026-08c Peta Integrasi Jakarta FDTJ Web.pdf')
+const VERSION = process.env.MAP_VERSION ?? '2026-08c'
 const OUT_DIR = path.join(WEB_ROOT, 'public', 'maps', 'fdtj')
 const SW_PATH = path.join(WEB_ROOT, 'public', 'service-worker.js')
 // Grid granularity. This is the single biggest lever on GPU memory, though not

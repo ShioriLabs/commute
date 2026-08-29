@@ -69,19 +69,19 @@ export const FDTJ_SPAWNS: readonly SkeletonSpawn[] = [
   // Chained: the PDF splits MRT into three strokes meeting at Istora and Fatmawati, and
   // without this the two the spawn does not touch start on their own, so the line visibly
   // sprouts from Istora at the same moment it sprouts from Bundaran HI.
-  { c: '#CA2B51', x: 3635.36081619927, y: 3493.8723452556296, chain: true },
+  { c: '#CF0E33', x: 3635.36081619927, y: 3493.8723452556296, chain: true },
   // LRTJBDB-DKA, Dukuh Atas — both LRT Jabodebek branches start here and fan out. One
   // stroke each today; chained so a future edition splitting them cannot reintroduce the
   // MRT problem silently.
-  { c: '#026C3E', x: 3835.3879440387554, y: 3871.541068789468, chain: true },
-  { c: '#1251A2', x: 3835.3879440387554, y: 3871.541068789468, chain: true },
+  { c: '#154D22', x: 3835.3879440387554, y: 3871.541068789468, chain: true },
+  { c: '#17258B', x: 3835.3879440387554, y: 3871.541068789468, chain: true },
   // KCI-JNG, Jatinegara — head of the Cikarang loop's Pasar Senen arc, so it runs towards
   // Kampung Bandan and closes the loop there rather than unzipping away from it.
   //
   // Deliberately NOT chained. This arc is contiguous with the Cikarang main line, so
   // chaining would swallow the whole line into one sweep out of Jatinegara — and the main
   // line's western branch is precisely what the arc is supposed to meet at Kampung Bandan.
-  { c: '#00BDEF', x: 5985.446268073702, y: 4119.887766850177 }
+  { c: '#51BAD5', x: 5985.446268073702, y: 4119.887766850177 }
 ]
 
 // A spawn claims a stroke only when it sits at one of its *endpoints*, never merely near
