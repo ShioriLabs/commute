@@ -45,6 +45,8 @@ import {
 import { buildRouteOverlayModel, type RouteOverlayModel } from '../lib/map-route-overlay'
 import type { CorridorsManifest } from '../lib/map-corridors'
 import { surfaceInset } from '../lib/map-surface-inset'
+import { MAX_SCALE, clampTransform, minScaleFor } from '../lib/map-clamp-transform'
+import { useReducedMotion } from '~/hooks/reduced-motion'
 import MapFareChip from '../components/map-fare-chip'
 import MapFareSheet from '../components/map-fare-sheet'
 import { useFareQuery } from '../components/fare-sheet/use-fare-query'
@@ -145,8 +147,11 @@ export function meta() {
   ]
 }
 
-const MAX_SCALE = 1.5
 const WHEEL_ZOOM_INTENSITY = 0.0015
+
+// Camera re-settle when the desktop pane opens or closes. Matches SidePane's
+// own DURATION so the map and the card finish together.
+const SIDE_PANE_SETTLE_MS = 250
 
 // One spec for all four floating buttons. 44px is the tap-target minimum.
 const MAP_BUTTON_CLASS
@@ -231,28 +236,6 @@ function frameP95(): number {
   // ring's ordering and corrupt every later sample.
   const sorted = Array.from(frameSamples.subarray(0, frameSamplesFilled)).sort((a, b) => a - b)
   return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))]
-}
-
-function clampTransform(
-  t: Transform,
-  viewportW: number,
-  viewportH: number,
-  mapW: number,
-  mapH: number,
-  minScale: number
-): Transform {
-  const scale = Math.max(minScale, Math.min(MAX_SCALE, t.scale))
-  const scaledW = mapW * scale
-  const scaledH = mapH * scale
-  // If the map is smaller than the viewport on an axis, center it; otherwise
-  // clamp so the map edge can't be dragged inside the viewport.
-  const tx = scaledW <= viewportW
-    ? (viewportW - scaledW) / 2
-    : Math.min(0, Math.max(viewportW - scaledW, t.tx))
-  const ty = scaledH <= viewportH
-    ? (viewportH - scaledH) / 2
-    : Math.min(0, Math.max(viewportH - scaledH, t.ty))
-  return { tx, ty, scale }
 }
 
 export default function MapPage() {
@@ -625,6 +608,7 @@ export default function MapPage() {
   // Detail surfaces sit below the map on phones and beside it on desktop, which
   // moves where a selected pill has to land and whether the title pill has room.
   const isDesktop = useIsDesktop()
+  const prefersReducedMotion = useReducedMotion()
 
   // Chrome (top bar) auto-hides during map interaction and reappears when the
   // user taps empty space. Author mode toolbar / edit panel are unaffected.
@@ -672,6 +656,22 @@ export default function MapPage() {
     lineKey: openLineKey,
     fare: fareSheet
   })
+  /*
+   * A surface has begun its exit animation but its selection has not cleared
+   * yet. The pane reports the dismiss up front and only calls onClose once the
+   * 250ms slide has finished, so `detailSurfaceOpen` stays true for the whole
+   * exit — which is too late for anything that should move WITH the card
+   * rather than after it. The spotlight scrim already hangs off the same
+   * signal; the camera settle below is the second case.
+   */
+  const [surfaceDismissing, setSurfaceDismissing] = useState(false)
+  // Any surface being open again cancels it — reopening, or switching straight
+  // from one card to another, must not leave the flag stuck on.
+  useEffect(() => {
+    if (detailSurfaceOpen) setSurfaceDismissing(false)
+  }, [detailSurfaceOpen])
+  const beginSurfaceDismiss = useCallback(() => setSurfaceDismissing(true), [])
+
   // Desktop only: an open detail pane sits over the top-left corner the title
   // pill lives in, so it hides for as long as one is open.
   const paneCoversChrome = isDesktop && detailSurfaceOpen
@@ -989,12 +989,7 @@ export default function MapPage() {
   // Compute the minimum scale that fits the whole map into the viewport (with a small bleed).
   const mapW = manifest?.viewBox[2] ?? 0
   const mapH = manifest?.viewBox[3] ?? 0
-  // Use max(viewport/map) so the map's shorter dimension fills the viewport
-  // at minimum zoom. The longer dimension overflows and is pannable, but no
-  // letterbox bars appear.
-  const minScale = (viewportSize.w && viewportSize.h && mapW && mapH)
-    ? Math.max(viewportSize.w / mapW, viewportSize.h / mapH)
-    : 0.01
+  const minScale = minScaleFor(viewportSize.w, viewportSize.h, mapW, mapH)
 
   // On first measurement, center the map at 50% zoom on the KCI-MRI station.
   // If points.json hasn't loaded yet, a *provisional* fit-to-viewport center
@@ -1296,18 +1291,35 @@ export default function MapPage() {
     peekFraction: PEEK_FRACTION,
     chipPx: CHIP_CLEARANCE_PX
   }))
+  /*
+   * Derived in render rather than straight into the ref because the clamp needs
+   * it too, and the clamp runs on the render path (updateTransform, flyToPoint)
+   * as well as inside the tick. One computation, mirrored into the ref below,
+   * so the two paths cannot disagree about where the chrome is.
+   */
+  const surfaceInsetValue = useMemo(() => surfaceInset({
+    isDesktop,
+    // Released the moment the card starts leaving, not when it lands, so the
+    // map travels alongside the pane instead of queueing behind it.
+    surfaceOpen: detailSurfaceOpen && !surfaceDismissing,
+    hasPair: !!(routePair.fromId && routePair.toId),
+    viewportH: viewportSize.h,
+    panePx: SIDE_PANE_OCCUPIED_PX,
+    peekFraction: PEEK_FRACTION,
+    chipPx: CHIP_CLEARANCE_PX
+  }), [isDesktop, detailSurfaceOpen, surfaceDismissing, routePair, viewportSize.h])
+  /*
+   * Screen the desktop pane takes off the left, and the only inset the camera
+   * clamp cares about: it is what lets the map's left edge slide out from under
+   * the pane so the western end of the network (Tangerang, Rangkasbitung) can
+   * be reached at all. The bottom inset stays a fit-bounds concern — a peeked
+   * sheet is draggable, so the map underneath is never unreachable.
+   */
+  const clampInsetL = surfaceInsetValue.left
   useEffect(() => {
-    surfaceInsetRef.current = surfaceInset({
-      isDesktop,
-      surfaceOpen: detailSurfaceOpen,
-      hasPair: !!(routePair.fromId && routePair.toId),
-      viewportH: window.innerHeight,
-      panePx: SIDE_PANE_OCCUPIED_PX,
-      peekFraction: PEEK_FRACTION,
-      chipPx: CHIP_CLEARANCE_PX
-    })
+    surfaceInsetRef.current = surfaceInsetValue
     dirtyRef.current = true
-  }, [isDesktop, detailSurfaceOpen, routePair])
+  }, [surfaceInsetValue])
 
   // Drive the fade + scrim mirrors, and queue the one-per-pair fit flight.
   useEffect(() => {
@@ -1442,7 +1454,7 @@ export default function MapPage() {
         const avgVy = inertia.vy * (1 + decay) / 2
         targetRef.current = clampTransform(
           { tx: target.tx + avgVx * dt, ty: target.ty + avgVy * dt, scale: target.scale },
-          viewportSize.w, viewportSize.h, mapW, mapH, minScale
+          viewportSize.w, viewportSize.h, mapW, mapH, minScale, surfaceInsetRef.current.left
         )
         inertia.vx *= decay
         inertia.vy *= decay
@@ -1650,7 +1662,7 @@ export default function MapPage() {
               ty: (viewportSize.h - insetB) / 2 - cy * scale,
               scale
             },
-            viewportSize.w, viewportSize.h, mapW, mapH, minScale
+            viewportSize.w, viewportSize.h, mapW, mapH, minScale, insetL
           )
         } else {
           // Single pin: just bring it into view at the current zoom.
@@ -1661,7 +1673,7 @@ export default function MapPage() {
               ty: (viewportSize.h - insetB) / 2 - cy * s,
               scale: s
             },
-            viewportSize.w, viewportSize.h, mapW, mapH, minScale
+            viewportSize.w, viewportSize.h, mapW, mapH, minScale, insetL
           )
         }
         inertiaRef.current = null
@@ -1772,7 +1784,7 @@ export default function MapPage() {
   }, [viewportSize.w, viewportSize.h, mapW, mapH, minScale, authorMode, recovery, morph])
 
   const updateTransform = (next: Transform) => {
-    targetRef.current = clampTransform(next, viewportSize.w, viewportSize.h, mapW, mapH, minScale)
+    targetRef.current = clampTransform(next, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL)
     markDirty()
   }
 
@@ -1804,24 +1816,66 @@ export default function MapPage() {
     markDirty()
   }
 
-  // Center a selected pill in the area the detail surface leaves visible: above
-  // the peeked sheet on phones, right of the pane on desktop.
+  /*
+   * Re-settle the camera when the pane band appears or disappears.
+   *
+   * Opening only relaxes the clamp, so the view almost always stays exactly
+   * where it was. Closing tightens it again, and a camera parked in the freed
+   * band would otherwise be silently out of bounds until the next gesture
+   * snapped it back — so it is walked home deliberately, at the pane's own
+   * 250ms, and the two move together.
+   *
+   * Skipped entirely when the clamp returns what is already targeted, which is
+   * the common case: no flight is started, and a rider mid-drag is left alone.
+   */
+  const prevClampInsetRef = useRef(clampInsetL)
+  useEffect(() => {
+    const prev = prevClampInsetRef.current
+    prevClampInsetRef.current = clampInsetL
+    if (prev === clampInsetL) return
+    if (!viewportSize.w || !viewportSize.h || !mapW || !mapH) return
+    if (gestureActiveRef.current) return
+
+    const target = targetRef.current
+    const settled = clampTransform(
+      target, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL
+    )
+    if (settled.tx === target.tx && settled.ty === target.ty && settled.scale === target.scale) return
+    targetRef.current = settled
+    flyTo(settled, prefersReducedMotion ? 0 : SIDE_PANE_SETTLE_MS)
+  })
+
+  /*
+   * Center a selected pill in the area the detail surface leaves visible: above
+   * the peeked sheet on phones, right of the pane on desktop.
+   *
+   * `paneEdge` is taken as open rather than read from surfaceInsetValue: this
+   * runs on the tap that opens the surface, one commit before the state saying
+   * so has landed. The peek height is the sheet's own, for the same reason.
+   */
   const flyToPoint = (p: Point) => {
     const cx = (p.ax + p.bx) / 2
     const cy = (p.ay + p.by) / 2
     const s = targetRef.current.scale
-    const paneEdge = isDesktop ? SIDE_PANE_OCCUPIED_PX : 0
-    const peekPx = isDesktop ? 0 : Math.round(window.innerHeight * PEEK_FRACTION)
+    const { left: paneEdge, bottom: peekPx } = surfaceInset({
+      isDesktop,
+      surfaceOpen: true,
+      hasPair: false,
+      viewportH: viewportSize.h,
+      panePx: SIDE_PANE_OCCUPIED_PX,
+      peekFraction: PEEK_FRACTION,
+      chipPx: CHIP_CLEARANCE_PX
+    })
     const to = clampTransform(
       {
         tx: paneEdge + (viewportSize.w - paneEdge) / 2 - cx * s,
         ty: (viewportSize.h - peekPx) / 2 - cy * s,
         scale: s
       },
-      // Still clamped to the map's own edges, which know nothing about the
-      // surface — near a corner the selection can end up under it, same as the
-      // sheet has always done.
-      viewportSize.w, viewportSize.h, mapW, mapH, minScale
+      // The clamp now knows about the pane band, so a selection near the west
+      // edge lands beside the pane instead of underneath it. The sheet keeps
+      // the old behaviour: it is draggable, so nothing under it is stranded.
+      viewportSize.w, viewportSize.h, mapW, mapH, minScale, paneEdge
     )
     flyTo(to, 450)
   }
@@ -1931,7 +1985,7 @@ export default function MapPage() {
     let to: Transform
     if (t.scale >= MAX_SCALE * 0.98) {
       // At max zoom: toggle back to fit (clampTransform centers it).
-      to = clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale)
+      to = clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL)
     } else {
       // Zoom a 2x step toward the tap point (world point under it stays put).
       const rect = getViewportRect()!
@@ -1942,7 +1996,7 @@ export default function MapPage() {
       const worldY = (py - t.ty) / t.scale
       to = clampTransform(
         { tx: px - worldX * nextScale, ty: py - worldY * nextScale, scale: nextScale },
-        viewportSize.w, viewportSize.h, mapW, mapH, minScale
+        viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL
       )
     }
     haptic()
@@ -2438,7 +2492,7 @@ export default function MapPage() {
           onClick={() => {
             haptic()
             flyTo(
-              clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale),
+              clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL),
               450
             )
           }}
@@ -2611,7 +2665,10 @@ export default function MapPage() {
           // Start the spotlight exit as soon as the dismiss begins — unless the
           // sheet is closing because the user switched to a hub, whose
           // spotlight is already animating in.
-          onDismissStart={() => { if (!selectedHubSlug) beginSpotlightExit() }}
+          onDismissStart={() => {
+            beginSurfaceDismiss()
+            if (!selectedHubSlug) beginSpotlightExit()
+          }}
         />
 
         {/* No onDismissStart: unlike the station and hub sheets this one owns no
@@ -2633,7 +2690,10 @@ export default function MapPage() {
         <HubSheet
           slug={selectedHubSlug}
           onClose={() => setSelectedHubSlug(null)}
-          onDismissStart={() => { if (!selectedStation) beginSpotlightExit() }}
+          onDismissStart={() => {
+            beginSurfaceDismiss()
+            if (!selectedStation) beginSpotlightExit()
+          }}
         />
 
         {/* Closing the sheet drops the isolate with it: the fade exists to make
@@ -2643,7 +2703,10 @@ export default function MapPage() {
           lineKey={openLineKey}
           closeSignal={lineCloseSignal}
           onClose={() => setOpenLineKey(null)}
-          onDismissStart={endIsolate}
+          onDismissStart={() => {
+            beginSurfaceDismiss()
+            endIsolate()
+          }}
           // Back reopens the station the line card was tapped from. The sheet
           // runs its own exit first, and endIsolate fires from onDismissStart,
           // so the fade lifts as the station sheet comes back.
