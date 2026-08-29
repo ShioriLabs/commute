@@ -3,6 +3,7 @@ import { Link, useNavigate, useNavigationType, useSearchParams } from 'react-rou
 import { XIcon, InfoIcon, CornersInIcon, ReceiptIcon } from '@phosphor-icons/react'
 import useSWR from 'swr'
 import LineRoundel from '~/components/line-roundel'
+import LineSheet from '~/components/line-sheet'
 import { useMapGlDebug } from '~/hooks/secret-features'
 import { findLine, lineCutShapes, linesNear, type LinesManifest } from '~/lib/map-line-isolate'
 import clsx from 'clsx'
@@ -682,7 +683,7 @@ export default function MapPage() {
       endIsolate()
       setLineChoices(null)
     }
-  // Only the pair matters here; endIsolate reads a ref and holds no state.
+  // Only the pair matters here; endIsolate is stable across renders.
   }, [routePair.fromId, routePair.toId])
 
   // flag, not the destination id: the destination is pinned into routePair the
@@ -787,6 +788,16 @@ export default function MapPage() {
    * asks rather than guessing.
    */
   const [lineChoices, setLineChoices] = useState<string[] | null>(null)
+
+  /*
+   * The line whose sheet is open, `operator:code`.
+   *
+   * Separate from isolateRef because that is animation state driven by the rAF
+   * tick, while this drives React. They are kept in step by beginIsolate and
+   * endIsolate rather than derived from each other: the isolate outlives its
+   * fade-out by a few hundred ms, and the sheet should not.
+   */
+  const [openLineKey, setOpenLineKey] = useState<string | null>(null)
 
   const isolateRef = useRef<{
     key: string
@@ -1691,10 +1702,13 @@ export default function MapPage() {
       lastFade: prevFade
     }
     markDirty()
+    // The line's own detail, in the same surface a station or hub opens in.
+    setOpenLineKey(key)
     return true
   }
 
   const endIsolate = () => {
+    setOpenLineKey(null)
     const iso = isolateRef.current
     if (!iso || iso.phase === 'out') return
     iso.phase = 'out'
@@ -2423,6 +2437,15 @@ export default function MapPage() {
           slug={selectedHubSlug}
           onClose={() => setSelectedHubSlug(null)}
           onDismissStart={() => { if (!selectedStation) beginSpotlightExit() }}
+        />
+
+        {/* Closing the sheet drops the isolate with it: the fade exists to make
+            this line readable, so leaving the map faded with nothing to read
+            would strand the rider in a state they cannot see out of. */}
+        <LineSheet
+          lineKey={openLineKey}
+          onClose={() => setOpenLineKey(null)}
+          onDismissStart={endIsolate}
         />
       </PaneStackProvider>
     </main>
