@@ -4,7 +4,6 @@ import { XIcon, InfoIcon, CornersInIcon, ReceiptIcon } from '@phosphor-icons/rea
 import useSWR from 'swr'
 import LineRoundel from '~/components/line-roundel'
 import LineSheet from '~/components/line-sheet'
-import { useMapGlDebug } from '~/hooks/secret-features'
 import { findLine, lineCutShapes, linesNear, type LinesManifest } from '~/lib/map-line-isolate'
 import clsx from 'clsx'
 import type { StandardResponse } from '@schema/response'
@@ -278,17 +277,6 @@ export default function MapPage() {
   useEffect(() => {
     morph.startDirect()
   }, [morph])
-  /*
-   * Line isolation rides the same hidden flag as the renderer instrumentation —
-   * the 7-tap on the version line in Settings → Tentang.
-   *
-   * It had a switch of its own in Settings, revealed by that same gesture, which
-   * meant two things to find before the feature did anything. One door is
-   * enough for something unfinished: the gesture is already the way in, and
-   * `isEnabled` is read after mount so an untouched map never fetches the
-   * geometry.
-   */
-  const { isEnabled: lineIsolateEnabled } = useMapGlDebug()
   const { data: pointsManifest } = useSWR<PointsManifest>(
     pointsUrl,
     (url: string) => fetch(url).then(r => r.json())
@@ -317,16 +305,16 @@ export default function MapPage() {
     (url: string) => fetch(url).then(r => r.json())
   )
   /*
-   * Baked line geometry, for isolating a line. Fetched only once the rider has
-   * switched the feature on: it is experimental and off by default, so an
-   * untouched map should not pay 16 KB for it.
+   * Baked line geometry, for isolating a line. 17 KB, fetched alongside the
+   * other manifests now that tapping a line is a normal thing the map does.
    *
    * Rail only — see scripts/build-map-lines.ts. A BRT line simply has no entry,
    * which findLine returns undefined for and every caller treats as "cannot
-   * isolate this".
+   * isolate this", so a tap on a busway falls through to the chrome toggle
+   * exactly as a tap on empty space does.
    */
   const { data: linesManifest } = useSWR<LinesManifest>(
-    lineIsolateEnabled ? linesUrl : null,
+    linesUrl,
     (url: string) => fetch(url).then(r => r.json())
   )
   // Hubs power the map's hub tap targets: a `HUB-…` point id resolves to a hub
@@ -1954,7 +1942,7 @@ export default function MapPage() {
      * artwork's two direction-strokes both key to the same line, so they
      * collapse to one candidate and no chooser appears.
      */
-    if (lineIsolateEnabled && linesManifest) {
+    if (linesManifest) {
       const near = linesNear(linesManifest, worldX, worldY, slopWorld)
       if (near.length === 1) {
         if (beginIsolate(near[0])) {
