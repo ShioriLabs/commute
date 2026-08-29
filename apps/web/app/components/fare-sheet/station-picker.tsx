@@ -242,7 +242,7 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
   }, [onSelect, onClose])
 
   return (
-    <Dialog open={open} onClose={onClose} className="relative z-50">
+    <Dialog open={open} onClose={onClose} className="relative z-modal">
       {/* Dark scrim (not white like elsewhere) so the sheet edge and slide-up
           read against the fare page peeking behind it. */}
       <DialogBackdrop transition className="fixed inset-0 bg-slate-950/25 duration-300 ease-out data-closed:opacity-0" />

@@ -182,6 +182,7 @@ in vec2 a_axisA;
 in vec2 a_axisB;
 in float a_radius;
 in float a_cornerRadius;
+in float a_alpha;
 uniform mat3 u_transform;
 uniform float u_feather; // world units
 out vec2 v_local;
@@ -189,6 +190,7 @@ out vec2 v_axisA;
 out vec2 v_axisB;
 out float v_radius;
 out float v_cornerRadius;
+out float v_alpha;
 void main() {
   vec2 axis = a_axisB - a_axisA;
   float len = length(axis);
@@ -205,6 +207,7 @@ void main() {
   v_axisB = a_axisB;
   v_radius = a_radius;
   v_cornerRadius = a_cornerRadius;
+  v_alpha = a_alpha;
 }
 `
 
@@ -215,6 +218,7 @@ in vec2 v_axisA;
 in vec2 v_axisB;
 in float v_radius;
 in float v_cornerRadius;
+in float v_alpha;
 uniform float u_feather;
 out vec4 outColor;
 ${SHAPE_SDF_GLSL}
@@ -223,7 +227,10 @@ void main() {
   // 1 inside the shape, falling to 0 across the feather — the exact complement
   // of the smoothstep the tile shader used to compute inline, so the boundary is
   // unchanged from the two-shape version.
-  float cover = 1.0 - smoothstep(0.0, u_feather, d);
+  // Scaled by the shape's own alpha so a cutout can fade in and out. The
+  // geometry never changes: a corridor capsule's radius IS the stroke's
+  // half-width, so animating that would thin the line rather than fade it.
+  float cover = (1.0 - smoothstep(0.0, u_feather, d)) * v_alpha;
   if (cover <= 0.0) discard;
   outColor = vec4(cover, 0.0, 0.0, 1.0);
 }
@@ -550,6 +557,10 @@ export function createWebGLRenderer(
       const q = b[i]
       if (p === q) continue
       if (p.ax !== q.ax || p.ay !== q.ay || p.bx !== q.bx || p.by !== q.by || p.r !== q.r || p.cr !== q.cr) return false
+      // Alpha too: it is the only thing that changes while a cutout fades, so
+      // omitting it here would report every frame of the fade as unchanged and
+      // the buffers would never be rebuilt — the fade would simply not happen.
+      if ((p.alpha ?? 1) !== (q.alpha ?? 1)) return false
     }
     return true
   }
@@ -571,6 +582,7 @@ export function createWebGLRenderer(
     const axisBData = new Float32Array(n * 4 * 2)
     const radiusData = new Float32Array(n * 4)
     const cornerRadiusData = new Float32Array(n * 4)
+    const alphaData = new Float32Array(n * 4)
     const indices = new Uint16Array(n * 6)
     const quadCorners = [-1, -1, 1, -1, -1, 1, 1, 1]
     for (let i = 0; i < n; i++) {
@@ -584,6 +596,8 @@ export function createWebGLRenderer(
         axisBData[i * 8 + v * 2 + 1] = shape.by
         radiusData[i * 4 + v] = shape.r
         cornerRadiusData[i * 4 + v] = shape.cr
+        // Undefined means a plain, fully-punched hole.
+        alphaData[i * 4 + v] = shape.alpha ?? 1
       }
       const base = i * 4
       indices[i * 6 + 0] = base + 0
@@ -599,6 +613,7 @@ export function createWebGLRenderer(
       a_axisB: { numComponents: 2, data: axisBData },
       a_radius: { numComponents: 1, data: radiusData },
       a_cornerRadius: { numComponents: 1, data: cornerRadiusData },
+      a_alpha: { numComponents: 1, data: alphaData },
       indices: { numComponents: 3, data: indices }
     })
     maskVao = twgl.createVertexArrayInfo(twglGl, maskProgramInfo, maskBufferInfo)

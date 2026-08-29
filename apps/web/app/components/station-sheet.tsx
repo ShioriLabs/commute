@@ -1,4 +1,5 @@
 import { useMemo, useRef } from 'react'
+import { usePaneStack } from './pane-stack/context'
 import { XIcon, ArrowSquareOutIcon, ArrowLeftIcon } from '@phosphor-icons/react'
 import DetailSurface from './detail-surface'
 import ExitLink from './exit-link'
@@ -15,9 +16,9 @@ interface StationSheetProps {
   // Map-only: primes the map's pick-a-departure mode. Passed through to
   // StationContent's "Petunjuk Arah" button, composed with an animated close.
   onSelectDeparture?: () => void
+  onIsolateLine?: (key: string) => void
   // Map-only: isolate a line on the map. Closes the sheet on the way, like the
   // departure action, so the isolate it just produced is actually visible.
-  onIsolateLine?: (key: string) => void
 }
 
 export default function StationSheet({ operator, code, onClose, onDismissStart, onSelectDeparture, onIsolateLine }: StationSheetProps) {
@@ -28,6 +29,7 @@ export default function StationSheet({ operator, code, onClose, onDismissStart, 
   // only surfaced to the header render prop — capture it so the departure
   // action can lerp the sheet away like the X button does.
   const animatedCloseRef = useRef<() => void>(() => {})
+  const stack = usePaneStack()
   // useMemo, not an inline arrow: StationContent is memoized against snap-drag
   // re-renders and this prop participates in its shallow compare.
   const handleSelectDeparture = useMemo(() => (onSelectDeparture
@@ -37,13 +39,25 @@ export default function StationSheet({ operator, code, onClose, onDismissStart, 
       }
     : undefined), [onSelectDeparture])
 
-  // Same memo reasoning as above: StationContent compares this shallowly.
+  /*
+   * Same memo reasoning as above: StationContent compares this shallowly.
+   *
+   * Only closes the sheet when the line REPLACES it, which is the no-deck case.
+   * With a deck the line is pushed OVER this station: closing would clear the
+   * map's selection, which changes the deck's baseKey and collapses the very
+   * card that was just pushed — no stack, and the line card disappears as fast
+   * as it arrived.
+   *
+   * The animated close still has to run on the replacing path: the map clears
+   * `selectedStation`, and a state change from outside flips `open` off, which
+   * DetailSurface reports as a close without animating.
+   */
   const handleIsolateLine = useMemo(() => (onIsolateLine
     ? (key: string) => {
         onIsolateLine(key)
-        animatedCloseRef.current()
+        if (!stack?.canPush) animatedCloseRef.current()
       }
-    : undefined), [onIsolateLine])
+    : undefined), [onIsolateLine, stack?.canPush])
 
   return (
     <DetailSurface

@@ -518,6 +518,173 @@ describe('mapTreatment', () => {
     const t = mapTreatment(null, { alpha: 0, scrimAlpha: 0, desaturate: 0.9, fade: 0.9 })
     expect(t.fade).toBe(0)
   })
+
+  /*
+   * Isolating a line from an open station sheet used to snap: the corridor's
+   * holes were gated on `isolateFade > 0`, so they arrived at full extent on
+   * the first frame of a 350ms fade. The radii now track the fade's own
+   * progress, which is what makes the lit region open along the line instead
+   * of appearing whole.
+   */
+  const isoShape = { ax: 0, ay: 0, bx: 400, by: 0, r: 20, cr: 6 }
+  const iso = (fadeAlpha: number, openProgress = 1) => ({
+    shapes: [isoShape], fadeAlpha, openProgress
+  })
+
+  it('fades the isolate cutout in rather than showing it whole', () => {
+    // openProgress is what the holes track, NOT fadeAlpha. The two are separate
+    // because the fade is seeded from whatever is already drawn (so isolating
+    // over a station spotlight does not dip), which would otherwise report the
+    // geometry as fully arrived on its first frame.
+    const early = mapTreatment(null, null, iso(SELECTION_FADE_MAX, 0.01))
+    expect(early.cuts).toHaveLength(1)
+    expect(early.cuts[0].alpha).toBeCloseTo(0.01)
+  })
+
+  it('never scales the geometry — a corridor fades, it does not thin', () => {
+    // Scaling r would narrow the stroke to a hairline, which reads as the line
+    // shrinking rather than fading. The shape is always its true size.
+    for (const pr of [0.01, 0.5, 1]) {
+      const c = mapTreatment(null, null, iso(SELECTION_FADE_MAX, pr)).cuts[0]
+      expect(c.r).toBe(isoShape.r)
+      expect(c.cr).toBe(isoShape.cr)
+    }
+  })
+
+  it('raises the isolate alpha monotonically with its open progress', () => {
+    const alphas = [0.2, 0.5, 0.8, 1].map(
+      pr => mapTreatment(null, null, iso(SELECTION_FADE_MAX, pr)).cuts[0].alpha ?? 1
+    )
+    for (let i = 1; i < alphas.length; i++) {
+      expect(alphas[i]).toBeGreaterThan(alphas[i - 1])
+    }
+  })
+
+  it('starts transparent even when the fade starts at full strength', () => {
+    // The exact station -> line case: the map is already dimmed for the
+    // station, so the isolate inherits that fade and only the alpha moves.
+    const t = mapTreatment(sel(SELECTION_FADE_MAX), null, iso(SELECTION_FADE_MAX, 0))
+    const line = t.cuts.find(c => c.bx === 400)
+    expect(line?.alpha).toBe(0)
+  })
+
+  it('reaches full strength once the isolate is fully in', () => {
+    const t = mapTreatment(null, null, iso(SELECTION_FADE_MAX, 1))
+    expect(t.cuts[0].alpha).toBeCloseTo(1)
+    expect(t.cuts[0].ax).toBe(isoShape.ax)
+    expect(t.cuts[0].bx).toBe(isoShape.bx)
+  })
+
+  it('still drops the isolate entirely at zero fade', () => {
+    expect(mapTreatment(null, null, iso(0)).cuts).toHaveLength(0)
+  })
+
+  /*
+   * Switching lines: the outgoing corridor closes while the incoming one opens,
+   * so the two cross rather than the first vanishing on the frame the second
+   * appears. Both ride in the same overlay because the cut mask unions
+   * overlapping shapes — a stop on both lines stays lit throughout.
+   */
+  const outShape = { ax: 0, ay: 200, bx: 400, by: 200, r: 20, cr: 6 }
+
+  it('draws the outgoing line alongside the incoming one', () => {
+    const t = mapTreatment(null, null, {
+      shapes: [isoShape], fadeAlpha: SELECTION_FADE_MAX, openProgress: 0.3,
+      closing: { shapes: [outShape], openProgress: 0.7 }
+    })
+    expect(t.cuts).toHaveLength(2)
+  })
+
+  it('fades the outgoing line down as the incoming one comes up', () => {
+    const at = (openProgress: number, closingProgress: number) => mapTreatment(null, null, {
+      shapes: [isoShape], fadeAlpha: SELECTION_FADE_MAX, openProgress,
+      closing: { shapes: [outShape], openProgress: closingProgress }
+    })
+    const early = at(0.2, 0.8)
+    const late = at(0.8, 0.2)
+    const incoming = (t: ReturnType<typeof at>) => t.cuts.find(c => c.ay === 0)!.alpha ?? 1
+    const outgoing = (t: ReturnType<typeof at>) => t.cuts.find(c => c.ay === 200)!.alpha ?? 1
+    expect(incoming(late)).toBeGreaterThan(incoming(early))
+    expect(outgoing(late)).toBeLessThan(outgoing(early))
+    // Both keep their true width the whole way across.
+    expect(late.cuts.every(c => c.r === 20)).toBe(true)
+  })
+
+  it('drops the outgoing line once it has closed', () => {
+    const t = mapTreatment(null, null, {
+      shapes: [isoShape], fadeAlpha: SELECTION_FADE_MAX, openProgress: 1,
+      closing: { shapes: [outShape], openProgress: 0 }
+    })
+    expect(t.cuts).toHaveLength(1)
+    expect(t.cuts[0].ay).toBe(0)
+  })
+
+  it('needs no closing set for a plain isolate', () => {
+    expect(mapTreatment(null, null, iso(SELECTION_FADE_MAX, 1)).cuts).toHaveLength(1)
+  })
+
+  it('keeps a selection cutout at full size while an isolate grows', () => {
+    // The station halo is already at rest; only the line is arriving. Scaling
+    // both would shrink the halo the rider is looking at.
+    const t = mapTreatment(sel(SELECTION_FADE_MAX), null, iso(SELECTION_FADE_MAX, 0.1))
+    const halo = t.cuts.find(c => c.ax === 100 && c.ay === 100)
+    expect(halo?.r).toBe(20)
+  })
+
+  /*
+   * The mirror of the isolate case. Selecting a station while a line is
+   * isolated inherits that fade, so the halo has to open on its own progress
+   * or it appears at full size against dimming that never changes.
+   */
+  it('fades the selection cutout in rather than showing it whole', () => {
+    const early = mapTreatment(
+      { ...sel(SELECTION_FADE_MAX), openProgress: 0.01 }, null
+    )
+    expect(early.cuts).toHaveLength(1)
+    expect(early.cuts[0].alpha).toBeCloseTo(0.01)
+    // Full size throughout — a halo that grew would read as the marker
+    // inflating rather than the highlight arriving.
+    expect(early.cuts[0].r).toBe(20)
+  })
+
+  it('raises the selection alpha monotonically with its open progress', () => {
+    const alphas = [0.2, 0.5, 0.8, 1].map(
+      pr => mapTreatment({ ...sel(SELECTION_FADE_MAX), openProgress: pr }, null).cuts[0].alpha ?? 1
+    )
+    for (let i = 1; i < alphas.length; i++) {
+      expect(alphas[i]).toBeGreaterThan(alphas[i - 1])
+    }
+  })
+
+  it('starts the selection transparent even when the fade is already up', () => {
+    // The exact line -> station case: the map is already dimmed for the line.
+    const t = mapTreatment(
+      { ...sel(SELECTION_FADE_MAX), openProgress: 0 }, null,
+      iso(SELECTION_FADE_MAX, 1)
+    )
+    const halo = t.cuts.find(c => c.ax === 100 && c.ay === 100)
+    expect(halo?.alpha).toBe(0)
+  })
+
+  it('fades a selection label alongside its marker', () => {
+    const withLabelAt = (openProgress: number) => mapTreatment({
+      ...sel(SELECTION_FADE_MAX),
+      openProgress,
+      label: { ax: 300, ay: 0, bx: 360, by: 0, r: 12, cr: 4 }
+    }, null)
+    const half = withLabelAt(0.5).cuts.find(c => c.ax === 300)
+    expect(half?.alpha).toBeCloseTo(0.5)
+    expect(half?.r).toBe(12)
+    const done = withLabelAt(1).cuts.find(c => c.ax === 300)
+    expect(done?.alpha).toBeCloseTo(1)
+  })
+
+  it('defaults a selection with no openProgress to fully opaque', () => {
+    // Back-compat: a caller that never sets it keeps the old behaviour.
+    const c = mapTreatment(sel(SELECTION_FADE_MAX), null).cuts[0]
+    expect(c.alpha ?? 1).toBe(1)
+    expect(c.r).toBe(20)
+  })
 })
 
 /*
@@ -639,7 +806,11 @@ describe('mapTreatment label cutout', () => {
   it('carries the label as its own shape', () => {
     const t = mapTreatment(withLabel({ ax: 200, ay: 0, bx: 260, by: 0, r: 20, cr: 6 }), null)
     expect(t.cuts).toHaveLength(2)
-    expect(t.cuts).toContainEqual({ ax: 200, ay: 0, bx: 260, by: 0, r: 20, cr: 6 })
+    // Geometry matched field by field rather than as a whole object: cuts also
+    // carry an alpha now, and this assertion is about the label's shape.
+    expect(t.cuts).toContainEqual(
+      expect.objectContaining({ ax: 200, ay: 0, bx: 260, by: 0, r: 20, cr: 6 })
+    )
     // The marker's own cutout is untouched by the label's presence.
     expect(t.cuts.find(c => c.r === 12)).toBeDefined()
   })

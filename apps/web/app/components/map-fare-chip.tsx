@@ -26,7 +26,7 @@ export default function MapFareChip({ fare, hasError, isLoading, onClear }: MapF
   return (
     <div
       className={clsx(
-        'map-chrome-enter absolute bottom-4 left-1/2 -translate-x-1/2 z-20',
+        'map-chrome-enter absolute bottom-4 left-1/2 -translate-x-1/2 z-map-chrome',
         'max-w-[calc(100%-9rem)] rounded-full bg-white/90 backdrop-blur shadow-lg',
         'flex items-center'
       )}

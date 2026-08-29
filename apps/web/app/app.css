@@ -10,6 +10,27 @@
      two in sync. Declared here rather than as a plain custom property so
      Tailwind also emits an `ease-ios-spring` utility for transitions. */
   --ease-ios-spring: cubic-bezier(0.36, 0.66, 0.04, 1);
+
+  /* The map page's layer scale, bottom to top. Every full-viewport surface on
+     /map competes on the root stacking context, so the order between them is a
+     single global fact — but it used to live only as bare `z-30`/`z-40` numbers
+     spread across a dozen files, with the reasoning stranded in comments beside
+     them. Naming the layers puts the ordering in one place and lets each call
+     site say which layer it belongs to rather than restate a number.
+
+     Values keep the numbers they already had, so introducing these changed
+     nothing on screen. The gaps are deliberate: a new layer can land between
+     two existing ones without renumbering the scale.
+
+     Only the map's own full-viewport layers belong here. Local `z-10`/`z-[1]`
+     stacking *inside* a component (the line strip's nodes, a sticky page
+     header) is not part of this scale and must not be tokenised — doing so
+     would imply a relationship to these that does not exist. */
+  --z-index-map-chrome: 20;
+  --z-index-detail-surface: 30;
+  --z-index-map-morph: 40;
+  --z-index-boot-splash: 45;
+  --z-index-modal: 50;
 }
 
 /* Classic scrollbars (Windows/Linux) steal ~15px of viewport when they appear,

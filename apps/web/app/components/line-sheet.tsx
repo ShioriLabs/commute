@@ -19,6 +19,13 @@ interface LineSheetProps {
   onClose: () => void
   onDismissStart?: () => void
   /*
+   * Present when this line was opened from a station's line card: shows a back
+   * affordance that returns to that station, and `onClose` still means "dismiss
+   * the whole thing". Absent when the line was isolated straight from the map,
+   * where there is nothing behind it to go back to.
+   */
+  onBack?: () => void
+  /*
    * Ask the sheet to close ITSELF, so it plays its exit rather than vanishing.
    *
    * A line is dismissed from the map more often than from its own X — an
@@ -30,7 +37,7 @@ interface LineSheetProps {
   closeSignal?: number
 }
 
-export default function LineSheet({ lineKey, onClose, onDismissStart, closeSignal }: LineSheetProps) {
+export default function LineSheet({ lineKey, onClose, onDismissStart, onBack, closeSignal }: LineSheetProps) {
   const [operator, code] = lineKey ? lineKey.split(':') : [null, null]
   const open = !!(operator && code)
 
@@ -53,7 +60,19 @@ export default function LineSheet({ lineKey, onClose, onDismissStart, closeSigna
       header={(close) => {
         animatedCloseRef.current = close
         return operator && code
-          ? <LinePaneHeader operator={operator} code={code} onClose={close} />
+          ? (
+              <LinePaneHeader
+                operator={operator}
+                code={code}
+                onClose={close}
+                // Run the same animated close on the way back, so the line
+                // slides out instead of vanishing under the station sheet.
+                onBack={onBack && (() => {
+                  close()
+                  onBack()
+                })}
+              />
+            )
           : null
       }}
     >

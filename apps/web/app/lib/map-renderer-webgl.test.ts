@@ -209,9 +209,16 @@ vi.mock('./map-renderer-tile-source', () => ({
 
 // twgl does real program compilation and attribute introspection, neither of
 // which a fake context can satisfy. Every twgl entry point the renderer uses is
-// stubbed to an inert value, except the two that carry observable intent:
-// setUniforms remembers the texture a draw is about to use, and drawBufferInfo
-// records the draw along with the blend state in force at that moment.
+// stubbed to an inert value, except the three that carry observable intent:
+// setUniforms remembers the texture a draw is about to use, drawBufferInfo
+// records the draw along with the blend state in force at that moment, and
+// createBufferInfoFromArrays records the a_alpha it was handed — the mask's
+// buffers are rebuilt only when the shape list actually differs, so that array
+// is how a cutout's fade becomes visible to a test.
+// Every a_alpha array handed to a mask buffer rebuild, in order. Module scope
+// because the mock is hoisted above the tests that read it.
+const maskAlphaBuilds: number[][] = []
+
 vi.mock('twgl.js', () => {
   let lastTexture: unknown = null
   // Mirrors how GL actually behaves: a uniform stays bound until something sets
@@ -221,7 +228,10 @@ vi.mock('twgl.js', () => {
   let lastFade: number | undefined
   return {
     createProgramInfo: () => ({ program: {}, uniformSetters: {}, attribSetters: {} }),
-    createBufferInfoFromArrays: () => ({ attribs: {}, numElements: 4 }),
+    createBufferInfoFromArrays: (_gl: unknown, arrays: Record<string, { data?: ArrayLike<number> }>) => {
+      if (arrays.a_alpha?.data) maskAlphaBuilds.push(Array.from(arrays.a_alpha.data))
+      return { attribs: {}, numElements: 4 }
+    },
     createVertexArrayInfo: () => ({ vertexArrayObject: {}, numElements: 4 }),
     setBuffersAndAttributes: () => {},
     setUniforms: (_programInfo: unknown, uniforms: Record<string, unknown>) => {
@@ -847,6 +857,60 @@ describe('webgl cutout mask', () => {
     renderer.draw(t, vw, vh, 2, 2, station)
     await flush()
     expect(liveFramebuffers()).toBe(1)
+  })
+
+  /*
+   * A fading cutout changes nothing but its alpha, and the mask's buffers are
+   * rebuilt only when the shape list differs. If that comparison ignores alpha,
+   * every frame of a fade reports "unchanged", the buffers keep the first
+   * frame's values, and the fade silently never happens — with no unit test
+   * anywhere near mapTreatment able to see it.
+   */
+  it('rebuilds the mask when only a cutout alpha has changed', async () => {
+    maskAlphaBuilds.length = 0
+    const { renderer } = setup()
+    const t = transformOverTile(1, 1, 0.34, vw, vh)
+    // openProgress is the knob; mapTreatment turns it into each cut's alpha.
+    const isolate = (openProgress: number) => ({
+      shapes: [{ ax: 0, ay: 0, bx: 400, by: 0, r: 20, cr: 6 }],
+      fadeAlpha: 0.6,
+      openProgress
+    })
+    renderer.draw(t, vw, vh, 2, 2, undefined, undefined, isolate(0.2))
+    await flush()
+    renderer.draw(t, vw, vh, 2, 2, undefined, undefined, isolate(0.8))
+    await flush()
+    // Two rebuilds, carrying the two different alphas. Compared loosely: the
+    // buffer is a Float32Array, so 0.2 comes back as 0.20000000298023224.
+    const alphas = maskAlphaBuilds.map(a => a[0])
+    expect(alphas.some(a => Math.abs(a - 0.2) < 1e-6)).toBe(true)
+    expect(alphas.some(a => Math.abs(a - 0.8) < 1e-6)).toBe(true)
+  })
+
+  it('reuses the mask when nothing about the cutout changed', async () => {
+    maskAlphaBuilds.length = 0
+    const { renderer } = setup()
+    const t = transformOverTile(1, 1, 0.34, vw, vh)
+    const isolate = {
+      shapes: [{ ax: 0, ay: 0, bx: 400, by: 0, r: 20, cr: 6 }],
+      fadeAlpha: 0.6,
+      openProgress: 0.5
+    }
+    renderer.draw(t, vw, vh, 2, 2, undefined, undefined, isolate)
+    await flush()
+    const after = maskAlphaBuilds.length
+    renderer.draw(t, vw, vh, 2, 2, undefined, undefined, isolate)
+    await flush()
+    expect(maskAlphaBuilds.length).toBe(after)
+  })
+
+  it('defaults a cutout with no alpha to fully punched', async () => {
+    maskAlphaBuilds.length = 0
+    const { renderer } = setup()
+    const t = transformOverTile(1, 1, 0.34, vw, vh)
+    renderer.draw(t, vw, vh, 2, 2, station)
+    await flush()
+    expect(maskAlphaBuilds.at(-1)?.every(a => a === 1)).toBe(true)
   })
 
   it('restores the blend equation after the mask pass', async () => {

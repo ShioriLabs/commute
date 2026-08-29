@@ -343,7 +343,7 @@ export default function SheetButton({ url, ariaLabel, title, subtitle, icon, cla
           </TransitionChild>
         </Transition>
       </button>
-      <Dialog open={isOpen} onClose={handleClose} className="relative z-50">
+      <Dialog open={isOpen} onClose={handleClose} className="relative z-modal">
         <DialogBackdrop transition className="fixed inset-0 bg-white/90 duration-200 ease-out data-closed:opacity-0" />
         <div className="fixed inset-0 flex w-screen">
           <DialogPanel

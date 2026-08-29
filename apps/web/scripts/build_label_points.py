@@ -420,6 +420,37 @@ def fit_to_ink(page, entry):
     }
 
 
+# Labels whose second line is drawn as VECTOR OUTLINES rather than text.
+#
+# Everything else here is measured from the PDF's text layer, which is what
+# makes the wrap detection in wraps_onto possible at all. A label converted to
+# outlines never reaches that code: PyMuPDF reports no text for it, so the block
+# is built from its first line alone and the box stops at that line's baseline —
+# the subtitle stays outside the cutout and is left dimmed when the label is
+# isolated.
+#
+# Detecting outlined glyphs generally is a much larger job (they are
+# indistinguishable from any other small filled path; a sweep of this edition
+# found 409 such paths and exactly one real run among them), and the payoff is
+# this single station. So the box is measured by hand and pinned here instead.
+#
+# Measured on 2026-08c: the title's text bbox is y 2568.2..2630.1 and the
+# outlined "Summarecon Mall" glyphs span y 2626.5..2656.4, giving the union
+# below. The radius wraps that ink exactly, which is what fit_to_ink does for
+# every label that reaches it. build_block's own *0.80 shrink is deliberately
+# NOT applied: that slack is harmless on one line, but here it cuts through
+# the descenders of "Summarecon Mall" — checked by overlaying both boxes on a
+# render of the page.
+#
+# Re-measure on the next edition. If FDTJ ever ships this subtitle as real text,
+# delete the entry: wraps_onto already accepts the pair on its own (the measured
+# gap is -3.6, well inside its -0.60..0 of font size band).
+OUTLINED_SUBTITLES = {
+    # Boulevard Utara / Summarecon Mall (LRTJ S02).
+    'LRTJ-BVU': {'ax': 7149.9, 'ay': 2612.3, 'bx': 7385.0, 'by': 2612.3, 'r': 44.1},
+}
+
+
 def main():
     pdf_env = os.environ.get('MAP_PDF')
     if not pdf_env:
@@ -452,6 +483,9 @@ def main():
         shape = fit_to_ink(page, entry) or {
             k: round(entry['block'][k], 1) for k in ('ax', 'ay', 'bx', 'by', 'r')
         }
+        override = OUTLINED_SUBTITLES.get(entry['point']['id'])
+        if override:
+            shape = dict(override)
         out.append({
             'id': f"LBL-{entry['point']['id']}",
             'station': entry['station'],

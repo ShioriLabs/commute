@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findLine, lineCutShapes, linesNear, type LinesManifest } from './map-line-isolate'
+import { findLine, lineCutShapes, linesNear, seedFadeFrom, type LinesManifest } from './map-line-isolate'
 import type { Point } from './map-renderer'
 
 const manifest: LinesManifest = {
@@ -109,5 +109,27 @@ describe('findLine', () => {
 
   it('is undefined for a line with no baked geometry, such as any BRT line', () => {
     expect(findLine(manifest, 'TJ:1')).toBeUndefined()
+  })
+})
+
+describe('seedFadeFrom', () => {
+  it('starts from nothing when the map is undimmed', () => {
+    expect(seedFadeFrom(0, 0)).toBe(0)
+    expect(seedFadeFrom(null, undefined)).toBe(0)
+  })
+
+  it('picks up from a holding station spotlight', () => {
+    // The reported dip: isolating a line from an open station sheet started the
+    // isolate at 0 while the spotlight was still drawn at 0.6.
+    expect(seedFadeFrom(0, 0.6)).toBe(0.6)
+  })
+
+  it('picks up from a previous isolate, as it always did', () => {
+    expect(seedFadeFrom(0.6, 0)).toBe(0.6)
+  })
+
+  it('takes the higher when both are drawn', () => {
+    expect(seedFadeFrom(0.25, 0.5)).toBe(0.5)
+    expect(seedFadeFrom(0.5, 0.25)).toBe(0.5)
   })
 })

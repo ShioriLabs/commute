@@ -4,7 +4,8 @@ import { XIcon, InfoIcon, CornersInIcon, ReceiptIcon } from '@phosphor-icons/rea
 import useSWR from 'swr'
 import LineRoundel from '~/components/line-roundel'
 import LineSheet from '~/components/line-sheet'
-import { findLine, lineCutShapes, linesNear, type LinesManifest } from '~/lib/map-line-isolate'
+import { findLine, lineCutShapes, linesNear, seedFadeFrom, type LinesManifest } from '~/lib/map-line-isolate'
+import { openSurface, isSurfaceOpen, type OpenSurface } from '~/lib/map-detail-surface'
 import clsx from 'clsx'
 import type { StandardResponse } from '@schema/response'
 import type { Hub, Station } from '@commute/schemas'
@@ -44,6 +45,8 @@ import {
 import { buildRouteOverlayModel, type RouteOverlayModel } from '../lib/map-route-overlay'
 import type { CorridorsManifest } from '../lib/map-corridors'
 import { surfaceInset } from '../lib/map-surface-inset'
+import { MAX_SCALE, clampTransform, minScaleFor } from '../lib/map-clamp-transform'
+import { useReducedMotion } from '~/hooks/reduced-motion'
 import MapFareChip from '../components/map-fare-chip'
 import MapFareSheet from '../components/map-fare-sheet'
 import { useFareQuery } from '../components/fare-sheet/use-fare-query'
@@ -66,6 +69,7 @@ import { isMapGlDebugEnabled } from '../hooks/secret-features'
 import StationSheet from '../components/station-sheet'
 import HubSheet from '../components/hub-sheet'
 import PaneStackProvider from '../components/pane-stack'
+import type { PaneDescriptor } from '../components/pane-stack/model'
 import { MapPreviewBackdrop, useMapMorph } from '../components/map-morph'
 import { prefetchMapSkeleton } from '../components/map-skeleton'
 import { PEEK_FRACTION } from '../components/bottom-sheet'
@@ -143,8 +147,11 @@ export function meta() {
   ]
 }
 
-const MAX_SCALE = 1.5
 const WHEEL_ZOOM_INTENSITY = 0.0015
+
+// Camera re-settle when the desktop pane opens or closes. Matches SidePane's
+// own DURATION so the map and the card finish together.
+const SIDE_PANE_SETTLE_MS = 250
 
 // One spec for all four floating buttons. 44px is the tap-target minimum.
 const MAP_BUTTON_CLASS
@@ -229,28 +236,6 @@ function frameP95(): number {
   // ring's ordering and corrupt every later sample.
   const sorted = Array.from(frameSamples.subarray(0, frameSamplesFilled)).sort((a, b) => a - b)
   return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))]
-}
-
-function clampTransform(
-  t: Transform,
-  viewportW: number,
-  viewportH: number,
-  mapW: number,
-  mapH: number,
-  minScale: number
-): Transform {
-  const scale = Math.max(minScale, Math.min(MAX_SCALE, t.scale))
-  const scaledW = mapW * scale
-  const scaledH = mapH * scale
-  // If the map is smaller than the viewport on an axis, center it; otherwise
-  // clamp so the map edge can't be dragged inside the viewport.
-  const tx = scaledW <= viewportW
-    ? (viewportW - scaledW) / 2
-    : Math.min(0, Math.max(viewportW - scaledW, t.tx))
-  const ty = scaledH <= viewportH
-    ? (viewportH - scaledH) / 2
-    : Math.min(0, Math.max(viewportH - scaledH, t.ty))
-  return { tx, ty, scale }
 }
 
 export default function MapPage() {
@@ -623,6 +608,7 @@ export default function MapPage() {
   // Detail surfaces sit below the map on phones and beside it on desktop, which
   // moves where a selected pill has to land and whether the title pill has room.
   const isDesktop = useIsDesktop()
+  const prefersReducedMotion = useReducedMotion()
 
   // Chrome (top bar) auto-hides during map interaction and reappears when the
   // user taps empty space. Author mode toolbar / edit panel are unaffected.
@@ -632,6 +618,16 @@ export default function MapPage() {
   // `OPERATOR-CODE` (e.g. KCI-MRI); split on first hyphen.
   const [selectedStation, setSelectedStation] = useState<{ operator: string, code: string } | null>(null)
   const [selectedHubSlug, setSelectedHubSlug] = useState<string | null>(null)
+  /*
+   * The station whose line-card header opened the current isolate, if any.
+   *
+   * Isolating from a station sheet replaces that sheet, so the line is a card
+   * pushed over it and gets a back affordance — the same deal the station sheet
+   * offers when one station is pushed over another. Isolating by tapping the
+   * artwork or picking from the chooser starts from nothing, so it stays null
+   * and the sheet shows only its close button.
+   */
+  const [isolateOrigin, setIsolateOrigin] = useState<{ operator: string, code: string } | null>(null)
   /*
    * The fare sheet, and the snap this opening asked for. One state object, not
    * a boolean plus a snap: the snap belongs to the opening, and a stale one
@@ -645,11 +641,6 @@ export default function MapPage() {
    * key makes it a new mount.
    */
   const [fareSheet, setFareSheet] = useState<{ snap: 'peek' | 'full', id: number } | null>(null)
-  const detailSurfaceOpen = !!(selectedStation || selectedHubSlug || fareSheet)
-  // Desktop only: an open detail pane sits over the top-left corner the title
-  // pill lives in, so it hides for as long as one is open.
-  const paneCoversChrome = isDesktop && detailSurfaceOpen
-  const pillVisible = chromeVisible && !paneCoversChrome
   /*
    * The line whose sheet is open, `operator:code`.
    *
@@ -659,6 +650,32 @@ export default function MapPage() {
    * fade-out by a few hundred ms, and the sheet should not.
    */
   const [openLineKey, setOpenLineKey] = useState<string | null>(null)
+  const detailSurfaceOpen = isSurfaceOpen({
+    station: selectedStation,
+    hubSlug: selectedHubSlug,
+    lineKey: openLineKey,
+    fare: fareSheet
+  })
+  /*
+   * A surface has begun its exit animation but its selection has not cleared
+   * yet. The pane reports the dismiss up front and only calls onClose once the
+   * 250ms slide has finished, so `detailSurfaceOpen` stays true for the whole
+   * exit — which is too late for anything that should move WITH the card
+   * rather than after it. The spotlight scrim already hangs off the same
+   * signal; the camera settle below is the second case.
+   */
+  const [surfaceDismissing, setSurfaceDismissing] = useState(false)
+  // Any surface being open again cancels it — reopening, or switching straight
+  // from one card to another, must not leave the flag stuck on.
+  useEffect(() => {
+    if (detailSurfaceOpen) setSurfaceDismissing(false)
+  }, [detailSurfaceOpen])
+  const beginSurfaceDismiss = useCallback(() => setSurfaceDismissing(true), [])
+
+  // Desktop only: an open detail pane sits over the top-left corner the title
+  // pill lives in, so it hides for as long as one is open.
+  const paneCoversChrome = isDesktop && detailSurfaceOpen
+  const pillVisible = chromeVisible && !paneCoversChrome
   /*
    * Bumped to ask the line sheet to play its own exit.
    *
@@ -704,34 +721,75 @@ export default function MapPage() {
   const [pickingOrigin, setPickingOrigin] = useState(false)
 
   /*
-   * Exactly one detail surface at a time. All three are DetailSurfaces at z-30 —
-   * two open at once would stack two cards on desktop, or two independently
-   * draggable sheets on a phone.
+   * Exactly one detail surface at a time. All four are DetailSurfaces on
+   * z-detail-surface — two open at once would stack two cards on desktop, or
+   * two independently draggable sheets on a phone.
+   *
+   * Every opening goes through here rather than each tap handler nulling the
+   * siblings it remembers. That hand-written version is what let the line sheet
+   * stay open underneath a station: it was added as a fourth surface, and three
+   * of the clears never learned about it. openSurface decides the whole next
+   * state, so a surface cannot be half-added again.
    */
-  const openFareSheet = (snap: 'peek' | 'full') => {
-    setSelectedStation(null)
-    setSelectedHubSlug(null)
-    setFareSheet(prev => ({ snap, id: (prev?.id ?? 0) + 1 }))
+  const openDetailSurface = (open: OpenSurface) => {
+    const next = openSurface(
+      { station: selectedStation, hubSlug: selectedHubSlug, lineKey: openLineKey, fare: fareSheet },
+      open
+    )
+    setSelectedStation(next.station)
+    setSelectedHubSlug(next.hubSlug)
+    setOpenLineKey(next.lineKey)
+    setFareSheet(next.fare)
   }
-  // useCallback keeps the sheet→content prop chain referentially stable:
-  // StationContent is memoized and this participates in its shallow compare.
+  const openFareSheet = (snap: 'peek' | 'full') => openDetailSurface({ kind: 'fare', snap })
   /*
-   * Isolate a line from the station sheet. Undefined unless the rider has the
-   * feature on AND the geometry has landed, which is what keeps the button off
-   * the standalone station page and off a BRT-only sheet.
+   * Isolate a line from the station sheet's line-card header. Undefined unless
+   * the geometry has landed, which is what keeps the plain link on the
+   * standalone station page and on a BRT-only sheet.
    *
    * useCallback because StationContent is memoized and this participates in its
    * shallow compare.
    */
   const handleIsolateLine = useCallback((key: string) => {
-    if (!beginIsolate(key)) return
+    // On the deck PaneLink renders the line card, so don't open LineSheet too.
+    if (!beginIsolate(key, { ownSheet: !isDesktop })) return
+    /*
+     * On a desktop deck the card is PUSHED over the station rather than
+     * replacing it, so the station stays open behind and keeps its spotlight —
+     * tearing either down would pull the ground out from under the card the
+     * rider can still see. Only the sheet path (phones, no deck) swaps one for
+     * the other, and only that path needs somewhere to go back to.
+     */
+    if (isDesktop) return
+
+    setIsolateOrigin(selectedStation)
     // The sheet is closing behind this, so drop the station spotlight with it:
     // the line is the answer now, and a halo left on one stop reads as a second
-    // selection competing with it.
+    // selection competing with it. Closing the station sheet itself is already
+    // done: beginIsolate opened the line as a detail surface, which clears its
+    // siblings. Only the spotlight is left to stand down here.
     beginSpotlightExit()
-    setSelectedStation(null)
-  // Deps are the manifests beginIsolate closes over.
-  }, [linesManifest, workingPoints, labelPointsManifest])
+  // Deps are the manifests beginIsolate closes over, plus the origin we capture
+  // and the deck gate that decides whether the station stays open behind.
+  }, [linesManifest, workingPoints, labelPointsManifest, selectedStation, isDesktop])
+
+  /*
+   * A pushed line card owns the isolate drawn under it, so the fade lifts when
+   * that card leaves the deck — by pop, close-all or browser Back.
+   *
+   * Edge-triggered on the card DISAPPEARING, never on the deck merely being
+   * empty: this fires on mount and on every station/timetable push and pop too,
+   * and endIsolate is not inert — it always bumps lineCloseSignal, which would
+   * dismiss a line sheet the deck had nothing to do with (one opened by tapping
+   * the artwork, on a phone or a narrow window).
+   */
+  const hadLinePaneRef = useRef(false)
+  const handleDeckPanes = useCallback((panes: readonly PaneDescriptor[]) => {
+    const hasLinePane = panes.some(pane => pane.kind === 'line')
+    const lost = hadLinePaneRef.current && !hasLinePane
+    hadLinePaneRef.current = hasLinePane
+    if (lost) endIsolate()
+  }, [])
 
   const handleSelectDeparture = useCallback(() => {
     if (!selectedStation) return
@@ -807,7 +865,24 @@ export default function MapPage() {
     phase: 'in' | 'hold' | 'out'
     phaseStart: number
     fadeFrom: number
+    /** Open progress the current phase started from, so an exit that
+     *  interrupts an entrance closes from where it got to rather than
+     *  snapping to full size first. */
+    openFrom: number
     lastFade: number
+    /** Mirrors the open progress drawn on the most recent frame, so a switch
+     *  can hand the outgoing line off from where it actually got to. */
+    lastOpen: number
+    /*
+     * The line just switched away from, still shrinking. Switching used to
+     * replace `shapes` outright, so the old corridor vanished on the frame the
+     * new one appeared; keeping it here lets the two cross instead.
+     *
+     * `from` is how open it was when the switch happened, so a line swapped
+     * mid-open closes from where it actually got to rather than snapping to
+     * full size first.
+     */
+    closing: { shapes: CutShape[], from: number } | null
   } | null>(null)
 
   // Eased camera flight (selection centering, double-tap zoom, recenter).
@@ -914,12 +989,7 @@ export default function MapPage() {
   // Compute the minimum scale that fits the whole map into the viewport (with a small bleed).
   const mapW = manifest?.viewBox[2] ?? 0
   const mapH = manifest?.viewBox[3] ?? 0
-  // Use max(viewport/map) so the map's shorter dimension fills the viewport
-  // at minimum zoom. The longer dimension overflows and is pannable, but no
-  // letterbox bars appear.
-  const minScale = (viewportSize.w && viewportSize.h && mapW && mapH)
-    ? Math.max(viewportSize.w / mapW, viewportSize.h / mapH)
-    : 0.01
+  const minScale = minScaleFor(viewportSize.w, viewportSize.h, mapW, mapH)
 
   // On first measurement, center the map at 50% zoom on the KCI-MRI station.
   // If points.json hasn't loaded yet, a *provisional* fit-to-viewport center
@@ -1221,18 +1291,35 @@ export default function MapPage() {
     peekFraction: PEEK_FRACTION,
     chipPx: CHIP_CLEARANCE_PX
   }))
+  /*
+   * Derived in render rather than straight into the ref because the clamp needs
+   * it too, and the clamp runs on the render path (updateTransform, flyToPoint)
+   * as well as inside the tick. One computation, mirrored into the ref below,
+   * so the two paths cannot disagree about where the chrome is.
+   */
+  const surfaceInsetValue = useMemo(() => surfaceInset({
+    isDesktop,
+    // Released the moment the card starts leaving, not when it lands, so the
+    // map travels alongside the pane instead of queueing behind it.
+    surfaceOpen: detailSurfaceOpen && !surfaceDismissing,
+    hasPair: !!(routePair.fromId && routePair.toId),
+    viewportH: viewportSize.h,
+    panePx: SIDE_PANE_OCCUPIED_PX,
+    peekFraction: PEEK_FRACTION,
+    chipPx: CHIP_CLEARANCE_PX
+  }), [isDesktop, detailSurfaceOpen, surfaceDismissing, routePair, viewportSize.h])
+  /*
+   * Screen the desktop pane takes off the left, and the only inset the camera
+   * clamp cares about: it is what lets the map's left edge slide out from under
+   * the pane so the western end of the network (Tangerang, Rangkasbitung) can
+   * be reached at all. The bottom inset stays a fit-bounds concern — a peeked
+   * sheet is draggable, so the map underneath is never unreachable.
+   */
+  const clampInsetL = surfaceInsetValue.left
   useEffect(() => {
-    surfaceInsetRef.current = surfaceInset({
-      isDesktop,
-      surfaceOpen: detailSurfaceOpen,
-      hasPair: !!(routePair.fromId && routePair.toId),
-      viewportH: window.innerHeight,
-      panePx: SIDE_PANE_OCCUPIED_PX,
-      peekFraction: PEEK_FRACTION,
-      chipPx: CHIP_CLEARANCE_PX
-    })
+    surfaceInsetRef.current = surfaceInsetValue
     dirtyRef.current = true
-  }, [isDesktop, detailSurfaceOpen, routePair])
+  }, [surfaceInsetValue])
 
   // Drive the fade + scrim mirrors, and queue the one-per-pair fit flight.
   useEffect(() => {
@@ -1367,7 +1454,7 @@ export default function MapPage() {
         const avgVy = inertia.vy * (1 + decay) / 2
         targetRef.current = clampTransform(
           { tx: target.tx + avgVx * dt, ty: target.ty + avgVy * dt, scale: target.scale },
-          viewportSize.w, viewportSize.h, mapW, mapH, minScale
+          viewportSize.w, viewportSize.h, mapW, mapH, minScale, surfaceInsetRef.current.left
         )
         inertia.vx *= decay
         inertia.vy *= decay
@@ -1405,6 +1492,13 @@ export default function MapPage() {
       const spot = spotlightRef.current
       let spotFade = 0
       let spotRing = 0
+      /*
+       * How far the halo has opened, tracked apart from both the fade and the
+       * ring. The fade is seeded from whatever was already drawn, and the ring
+       * is forced to zero on points drawn without one — neither can stand in
+       * for the cutout's own progress.
+       */
+      let spotOpen = 0
       if (spot) {
         const elapsed = now - spot.phaseStart
         if (spot.phase === 'in') {
@@ -1412,15 +1506,22 @@ export default function MapPage() {
           const e = 1 - Math.pow(1 - p, 3) // easeOutCubic
           spotFade = spot.fadeFrom + (SELECTION_FADE_MAX - spot.fadeFrom) * e
           spotRing = spot.ringFrom + (1 - spot.ringFrom) * e
+          spotOpen = e
+          // Dirty on the settling frame too — see the isolate's 'in' phase
+          // below. The park test stands down the moment the phase is 'hold',
+          // so skipping this draw leaves the halo a frame short of its final
+          // size until something else wakes the loop.
+          dirtyRef.current = true
           if (p >= 1) spot.phase = 'hold'
-          else dirtyRef.current = true
         } else if (spot.phase === 'hold') {
           spotFade = SELECTION_FADE_MAX
           spotRing = 1
+          spotOpen = 1
         } else {
           const p = Math.min(1, elapsed / SPOTLIGHT_OUT_MS)
           spotFade = spot.fadeFrom * (1 - p)
           spotRing = spot.ringFrom * (1 - p)
+          spotOpen = 1 - p
           if (p >= 1) spotlightRef.current = null
           dirtyRef.current = true
         }
@@ -1432,23 +1533,74 @@ export default function MapPage() {
        */
       const iso = isolateRef.current
       let isolateFade = 0
+      /*
+       * How far the corridor's holes have opened, tracked apart from the fade.
+       * fadeFrom is seeded from whatever was already drawn, so on the station
+       * path the fade starts at full strength and says nothing about the
+       * geometry — which still has to open from nothing.
+       */
+      let isolateOpen = 0
+      /*
+       * The outgoing line on a switch, fading out on the same clock the
+       * incoming one fades in. Runs to zero over the in-duration, so the
+       * crossing is one motion rather than two with different lengths.
+       */
+      let isolateClosing: { shapes: CutShape[], openProgress: number } | null = null
       if (iso) {
         const elapsed = now - iso.phaseStart
         if (iso.phase === 'in') {
           const p = Math.min(1, elapsed / SPOTLIGHT_IN_MS)
           const e = 1 - Math.pow(1 - p, 3)
           isolateFade = iso.fadeFrom + (SELECTION_FADE_MAX - iso.fadeFrom) * e
+          isolateOpen = e
+          if (iso.closing) {
+            const shrink = iso.closing.from * (1 - e)
+            if (shrink > 0) isolateClosing = { shapes: iso.closing.shapes, openProgress: shrink }
+            else iso.closing = null
+          }
+          /*
+           * Dirty on the settling frame too, not just while easing.
+           *
+           * The frame that reaches p >= 1 is the one that drops the outgoing
+           * line and seats the incoming one at full size, and the park test
+           * below stands down as soon as the phase is 'hold'. Setting the flag
+           * only in the else branch skipped that last draw and parked on the
+           * previous frame, leaving the line being switched away from on screen
+           * until an unrelated event happened to redraw the map.
+           */
+          dirtyRef.current = true
           if (p >= 1) iso.phase = 'hold'
-          else dirtyRef.current = true
         } else if (iso.phase === 'hold') {
           isolateFade = SELECTION_FADE_MAX
+          isolateOpen = 1
+          // The switch is over; nothing left to close.
+          iso.closing = null
         } else {
           const p = Math.min(1, elapsed / SPOTLIGHT_OUT_MS)
           isolateFade = iso.fadeFrom * (1 - p)
+          /*
+           * Fade the holes out rather than leaving them at full strength until
+           * the dimming lands under them.
+           *
+           * From openFrom, not from 1: dismissing a line that was still fading
+           * in would otherwise jump it to full strength before fading away.
+           */
+          isolateOpen = iso.openFrom * (1 - p)
+          // A switch interrupted by a dismissal: the line that was on its way
+          // out still has to finish leaving, or it pops while the incoming one
+          // fades away around it.
+          if (iso.closing) {
+            const out = iso.closing.from * (1 - p)
+            if (out > 0) isolateClosing = { shapes: iso.closing.shapes, openProgress: out }
+            else iso.closing = null
+          }
           if (p >= 1) isolateRef.current = null
           dirtyRef.current = true
         }
-        if (isolateRef.current) isolateRef.current.lastFade = isolateFade
+        if (isolateRef.current) {
+          isolateRef.current.lastFade = isolateFade
+          isolateRef.current.lastOpen = isolateOpen
+        }
       }
 
       /*
@@ -1510,7 +1662,7 @@ export default function MapPage() {
               ty: (viewportSize.h - insetB) / 2 - cy * scale,
               scale
             },
-            viewportSize.w, viewportSize.h, mapW, mapH, minScale
+            viewportSize.w, viewportSize.h, mapW, mapH, minScale, insetL
           )
         } else {
           // Single pin: just bring it into view at the current zoom.
@@ -1521,7 +1673,7 @@ export default function MapPage() {
               ty: (viewportSize.h - insetB) / 2 - cy * s,
               scale: s
             },
-            viewportSize.w, viewportSize.h, mapW, mapH, minScale
+            viewportSize.w, viewportSize.h, mapW, mapH, minScale, insetL
           )
         }
         inertiaRef.current = null
@@ -1561,7 +1713,11 @@ export default function MapPage() {
             // result differs. ringProgress drives both the ring and its glow,
             // so 0 removes the halo outright and leaves the fade, which is
             // carried by fadeAlpha and so is untouched by this.
-            ringProgress: pt.noRing ? 0 : spotRing
+            ringProgress: pt.noRing ? 0 : spotRing,
+            // Unlike ringProgress this is NOT zeroed for ringless points: a
+            // label's cutout still has to open, it just does so without a halo
+            // drawn around it.
+            openProgress: spotOpen
           }
         }
         const dpr = renderDpr(window.devicePixelRatio)
@@ -1579,7 +1735,7 @@ export default function MapPage() {
         // the blurry preview until an unrelated event happened to wake it.
         dirtyRef.current = false
         const isolateOverlay: LineIsolateOverlay | null = iso && isolateFade > 0
-          ? { shapes: iso.shapes, fadeAlpha: isolateFade }
+          ? { shapes: iso.shapes, fadeAlpha: isolateFade, openProgress: isolateOpen, closing: isolateClosing ?? undefined }
           : null
         renderer.draw(r, viewportSize.w, viewportSize.h, dpr, targetTier, overlay, routeFrame, isolateOverlay)
         if (import.meta.env.DEV && authorMode) setRenderTick(n => n + 1)
@@ -1628,7 +1784,7 @@ export default function MapPage() {
   }, [viewportSize.w, viewportSize.h, mapW, mapH, minScale, authorMode, recovery, morph])
 
   const updateTransform = (next: Transform) => {
-    targetRef.current = clampTransform(next, viewportSize.w, viewportSize.h, mapW, mapH, minScale)
+    targetRef.current = clampTransform(next, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL)
     markDirty()
   }
 
@@ -1660,24 +1816,66 @@ export default function MapPage() {
     markDirty()
   }
 
-  // Center a selected pill in the area the detail surface leaves visible: above
-  // the peeked sheet on phones, right of the pane on desktop.
+  /*
+   * Re-settle the camera when the pane band appears or disappears.
+   *
+   * Opening only relaxes the clamp, so the view almost always stays exactly
+   * where it was. Closing tightens it again, and a camera parked in the freed
+   * band would otherwise be silently out of bounds until the next gesture
+   * snapped it back — so it is walked home deliberately, at the pane's own
+   * 250ms, and the two move together.
+   *
+   * Skipped entirely when the clamp returns what is already targeted, which is
+   * the common case: no flight is started, and a rider mid-drag is left alone.
+   */
+  const prevClampInsetRef = useRef(clampInsetL)
+  useEffect(() => {
+    const prev = prevClampInsetRef.current
+    prevClampInsetRef.current = clampInsetL
+    if (prev === clampInsetL) return
+    if (!viewportSize.w || !viewportSize.h || !mapW || !mapH) return
+    if (gestureActiveRef.current) return
+
+    const target = targetRef.current
+    const settled = clampTransform(
+      target, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL
+    )
+    if (settled.tx === target.tx && settled.ty === target.ty && settled.scale === target.scale) return
+    targetRef.current = settled
+    flyTo(settled, prefersReducedMotion ? 0 : SIDE_PANE_SETTLE_MS)
+  })
+
+  /*
+   * Center a selected pill in the area the detail surface leaves visible: above
+   * the peeked sheet on phones, right of the pane on desktop.
+   *
+   * `paneEdge` is taken as open rather than read from surfaceInsetValue: this
+   * runs on the tap that opens the surface, one commit before the state saying
+   * so has landed. The peek height is the sheet's own, for the same reason.
+   */
   const flyToPoint = (p: Point) => {
     const cx = (p.ax + p.bx) / 2
     const cy = (p.ay + p.by) / 2
     const s = targetRef.current.scale
-    const paneEdge = isDesktop ? SIDE_PANE_OCCUPIED_PX : 0
-    const peekPx = isDesktop ? 0 : Math.round(window.innerHeight * PEEK_FRACTION)
+    const { left: paneEdge, bottom: peekPx } = surfaceInset({
+      isDesktop,
+      surfaceOpen: true,
+      hasPair: false,
+      viewportH: viewportSize.h,
+      panePx: SIDE_PANE_OCCUPIED_PX,
+      peekFraction: PEEK_FRACTION,
+      chipPx: CHIP_CLEARANCE_PX
+    })
     const to = clampTransform(
       {
         tx: paneEdge + (viewportSize.w - paneEdge) / 2 - cx * s,
         ty: (viewportSize.h - peekPx) / 2 - cy * s,
         scale: s
       },
-      // Still clamped to the map's own edges, which know nothing about the
-      // surface — near a corner the selection can end up under it, same as the
-      // sheet has always done.
-      viewportSize.w, viewportSize.h, mapW, mapH, minScale
+      // The clamp now knows about the pane band, so a selection near the west
+      // edge lands beside the pane instead of underneath it. The sheet keeps
+      // the old behaviour: it is draggable, so nothing under it is stranded.
+      viewportSize.w, viewportSize.h, mapW, mapH, minScale, paneEdge
     )
     flyTo(to, 450)
   }
@@ -1689,23 +1887,55 @@ export default function MapPage() {
    * Returns false when the line has no baked geometry, which is every BRT line
    * today: the caller should leave the map alone rather than pretending.
    */
-  const beginIsolate = (key: string): boolean => {
+  /*
+   * `ownSheet: false` when the caller is pushing the line onto the pane deck
+   * instead — the deck renders the card, so opening LineSheet as well would put
+   * two of the same view on screen.
+   */
+  const beginIsolate = (key: string, { ownSheet = true }: { ownSheet?: boolean } = {}): boolean => {
     const line = findLine(linesManifest, key)
     if (!line) return false
     const shapes = lineCutShapes(line, workingPoints, labelPointsManifest?.points ?? [])
     if (shapes.length === 0) return false
-    const prevFade = isolateRef.current?.lastFade ?? 0
+    /*
+     * Default to no back affordance. Isolating from the artwork or the chooser
+     * starts from nothing, and only handleIsolateLine (the station sheet's line
+     * card) sets an origin — right after this returns. Clearing here rather than
+     * in those two callers means a new isolate can never inherit a stale one.
+     */
+    setIsolateOrigin(null)
+    /*
+     * Seed from the spotlight too, not just a previous isolate. Isolating from
+     * an open station sheet starts with the map already dimmed for that
+     * station: beginning at zero made the fade dip through brighter and back
+     * as the spotlight fell away faster than the isolate rose.
+     */
+    const prevFade = seedFadeFrom(isolateRef.current?.lastFade, spotlightRef.current?.lastFade)
+    /*
+     * Hand the outgoing line off rather than dropping it, so switching lines
+     * crosses the two corridors instead of cutting between them. Only when it
+     * is a DIFFERENT line: re-isolating the one already shown would otherwise
+     * close a copy of it underneath itself.
+     */
+    const previous = isolateRef.current
+    const closing = previous && previous.key !== key && previous.lastOpen > 0
+      ? { shapes: previous.shapes, from: previous.lastOpen }
+      : null
     isolateRef.current = {
       key,
       shapes,
       phase: 'in',
       phaseStart: performance.now(),
       fadeFrom: prevFade,
-      lastFade: prevFade
+      openFrom: 0,
+      lastFade: prevFade,
+      lastOpen: 0,
+      closing
     }
     markDirty()
-    // The line's own detail, in the same surface a station or hub opens in.
-    setOpenLineKey(key)
+    // The line's own detail, in the same surface a station or hub opens in —
+    // so it closes whatever was there, exactly as those two do.
+    if (ownSheet) openDetailSurface({ kind: 'line', lineKey: key })
     return true
   }
 
@@ -1717,14 +1947,19 @@ export default function MapPage() {
     iso.phase = 'out'
     iso.phaseStart = performance.now()
     iso.fadeFrom = iso.lastFade
+    iso.openFrom = iso.lastOpen
     markDirty()
   }
 
   // Begin (or move) the spotlight. On a selection switch the fade is already
   // up — seed it from the last drawn value so it doesn't dip; the ring always
   // re-animates its settle-in on the new pill.
+  //
+  // The isolate counts as a drawn value too: selecting a station while a line
+  // is isolated is the mirror of isolating from a station sheet, and seeding
+  // from only the previous spotlight dipped the map through brighter and back.
   const beginSpotlight = (point: Point, color: [number, number, number]) => {
-    const prevFade = spotlightRef.current?.lastFade ?? 0
+    const prevFade = seedFadeFrom(spotlightRef.current?.lastFade, isolateRef.current?.lastFade)
     spotlightRef.current = {
       point,
       // The station's drawn name, cleared alongside its marker so the pair
@@ -1750,7 +1985,7 @@ export default function MapPage() {
     let to: Transform
     if (t.scale >= MAX_SCALE * 0.98) {
       // At max zoom: toggle back to fit (clampTransform centers it).
-      to = clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale)
+      to = clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL)
     } else {
       // Zoom a 2x step toward the tap point (world point under it stays put).
       const rect = getViewportRect()!
@@ -1761,7 +1996,7 @@ export default function MapPage() {
       const worldY = (py - t.ty) / t.scale
       to = clampTransform(
         { tx: px - worldX * nextScale, ty: py - worldY * nextScale, scale: nextScale },
-        viewportSize.w, viewportSize.h, mapW, mapH, minScale
+        viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL
       )
     }
     haptic()
@@ -1884,9 +2119,7 @@ export default function MapPage() {
         // Hub region tapped (no member pill won). Resolve `HUB-…` id → slug.
         const slug = hubSlugById.get(hit.point.id)
         if (slug) {
-          setSelectedStation(null)
-          setFareSheet(null)
-          setSelectedHubSlug(slug)
+          openDetailSurface({ kind: 'hub', hubSlug: slug })
           haptic()
           beginSpotlight(hit.point, hubColorById.get(hit.point.id) ?? SPOTLIGHT_NEUTRAL_COLOR)
           flyToPoint(hit.point)
@@ -1923,9 +2156,7 @@ export default function MapPage() {
             // owns the camera from here.
             return false
           }
-          setSelectedHubSlug(null)
-          setFareSheet(null)
-          setSelectedStation({ operator, code })
+          openDetailSurface({ kind: 'station', station: { operator, code } })
           haptic()
           // Spotlight the MARKER, not the shape that was tapped. For a station
           // pill they are the same point; for a label they are not — the name
@@ -2107,6 +2338,15 @@ export default function MapPage() {
   }
 
   return (
+    /* Must not become a stacking context. Every detail surface here is a
+       `fixed` child of this element that has to compete on the ROOT stacking
+       context — the side pane and bottom sheet against the map morph overlay
+       and the boot splash, both of which are mounted outside this route. Adding
+       a transform, filter, backdrop-blur, will-change, opacity below 1, contain
+       or isolate to this one element would trap all of them underneath the
+       overlay, and would additionally re-root their `position: fixed` against
+       this box rather than the viewport. Nothing fails loudly if that happens;
+       the surfaces just quietly paint in the wrong place. */
     <main className="fixed inset-0 bg-white overflow-hidden">
       <div
         ref={viewportRef}
@@ -2142,7 +2382,7 @@ export default function MapPage() {
       {recoveryState === 'fatal' && (
         <div
           role="alert"
-          className="absolute inset-0 z-30 bg-[#FFF8F8] flex flex-col items-center justify-center p-4"
+          className="absolute inset-0 z-detail-surface bg-[#FFF8F8] flex flex-col items-center justify-center p-4"
         >
           <p className="text-center text-lg font-semibold text-slate-800">Peta terputus</p>
           <p className="mt-1 text-center text-sm text-slate-500">
@@ -2202,7 +2442,7 @@ export default function MapPage() {
           ignores `chromeVisible` — the user must always see the map is in a
           different state and have a way out of it. */}
       {pickingOrigin && (
-        <div className="map-chrome-enter absolute inset-x-4 top-16 z-20 flex justify-center pointer-events-none">
+        <div className="map-chrome-enter absolute inset-x-4 top-16 z-map-chrome flex justify-center pointer-events-none">
           <div className="pointer-events-auto rounded-full bg-white/90 backdrop-blur shadow-lg pl-4 pr-1.5 py-1.5 flex items-center gap-2">
             <span className="font-bold text-sm text-slate-800 truncate">Pilih stasiun keberangkatan</span>
             <button
@@ -2229,7 +2469,7 @@ export default function MapPage() {
           those are the one case where leaving is the point. */}
       {!IS_LITE && (
         <div
-          className="map-chrome-enter absolute top-4 right-4 z-20"
+          className="map-chrome-enter absolute top-4 right-4 z-map-chrome"
           style={{ animationDelay: staggerDelay(1, MAP_CHROME_STAGGER) }}
         >
           <button
@@ -2244,7 +2484,7 @@ export default function MapPage() {
       )}
 
       <div
-        className="map-chrome-enter absolute bottom-4 right-16 z-20"
+        className="map-chrome-enter absolute bottom-4 right-16 z-map-chrome"
         style={{ animationDelay: staggerDelay(2, MAP_CHROME_STAGGER) }}
       >
         <button
@@ -2252,7 +2492,7 @@ export default function MapPage() {
           onClick={() => {
             haptic()
             flyTo(
-              clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale),
+              clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL),
               450
             )
           }}
@@ -2268,7 +2508,7 @@ export default function MapPage() {
           close button top-right, recenter and attribution the bottom-right pair,
           and the fare chip the bottom centre. */}
       <div
-        className="map-chrome-enter absolute bottom-4 left-4 z-20"
+        className="map-chrome-enter absolute bottom-4 left-4 z-map-chrome"
         style={{ animationDelay: staggerDelay(4, MAP_CHROME_STAGGER) }}
       >
         <button
@@ -2291,7 +2531,7 @@ export default function MapPage() {
       </div>
 
       <div
-        className="map-chrome-enter absolute bottom-4 right-4 z-20"
+        className="map-chrome-enter absolute bottom-4 right-4 z-map-chrome"
         style={{ animationDelay: staggerDelay(3, MAP_CHROME_STAGGER) }}
       >
         <button
@@ -2309,7 +2549,7 @@ export default function MapPage() {
         <div
           role="dialog"
           aria-label="Pilih lin"
-          className="map-popover-enter absolute bottom-24 left-1/2 -translate-x-1/2 z-20 bg-white rounded-xl shadow-xl border border-slate-200 p-3 max-w-xs"
+          className="map-popover-enter absolute bottom-24 left-1/2 -translate-x-1/2 z-map-chrome bg-white rounded-xl shadow-xl border border-slate-200 p-3 max-w-xs"
           onPointerDown={e => e.stopPropagation()}
         >
           <div className="text-xs text-slate-600 mb-2">Ada beberapa lin di sini</div>
@@ -2347,7 +2587,7 @@ export default function MapPage() {
         <div
           role="dialog"
           aria-label="Atribusi peta"
-          className="map-popover-enter absolute bottom-16 right-4 z-20 bg-white rounded-xl shadow-xl border border-slate-200 p-4 max-w-xs text-sm text-slate-700 origin-bottom-right"
+          className="map-popover-enter absolute bottom-16 right-4 z-map-chrome bg-white rounded-xl shadow-xl border border-slate-200 p-4 max-w-xs text-sm text-slate-700 origin-bottom-right"
           onPointerDown={e => e.stopPropagation()}
         >
           <div className="font-semibold mb-1">Peta Integrasi Jakarta</div>
@@ -2407,7 +2647,15 @@ export default function MapPage() {
           needs: any change to it means the selection the deck was built on is
           gone, so the deck collapses — which covers both dismissing the surface
           and tapping a different point on the map. */}
-      <PaneStackProvider baseKey={baseSelectionKey}>
+      <PaneStackProvider
+        baseKey={baseSelectionKey}
+        /*
+         * A pushed line card owns the isolate drawn under it. Lift the fade when
+         * it leaves the deck — by pop, close-all or browser Back — so the map
+         * can never be left dimmed with nothing on screen explaining why.
+         */
+        onEntriesChange={handleDeckPanes}
+      >
         <StationSheet
           operator={selectedStation?.operator ?? null}
           code={selectedStation?.code ?? null}
@@ -2417,7 +2665,10 @@ export default function MapPage() {
           // Start the spotlight exit as soon as the dismiss begins — unless the
           // sheet is closing because the user switched to a hub, whose
           // spotlight is already animating in.
-          onDismissStart={() => { if (!selectedHubSlug) beginSpotlightExit() }}
+          onDismissStart={() => {
+            beginSurfaceDismiss()
+            if (!selectedHubSlug) beginSpotlightExit()
+          }}
         />
 
         {/* No onDismissStart: unlike the station and hub sheets this one owns no
@@ -2439,7 +2690,10 @@ export default function MapPage() {
         <HubSheet
           slug={selectedHubSlug}
           onClose={() => setSelectedHubSlug(null)}
-          onDismissStart={() => { if (!selectedStation) beginSpotlightExit() }}
+          onDismissStart={() => {
+            beginSurfaceDismiss()
+            if (!selectedStation) beginSpotlightExit()
+          }}
         />
 
         {/* Closing the sheet drops the isolate with it: the fade exists to make
@@ -2449,7 +2703,20 @@ export default function MapPage() {
           lineKey={openLineKey}
           closeSignal={lineCloseSignal}
           onClose={() => setOpenLineKey(null)}
-          onDismissStart={endIsolate}
+          onDismissStart={() => {
+            beginSurfaceDismiss()
+            endIsolate()
+          }}
+          // Back reopens the station the line card was tapped from. The sheet
+          // runs its own exit first, and endIsolate fires from onDismissStart,
+          // so the fade lifts as the station sheet comes back.
+          onBack={isolateOrigin
+            ? () => {
+                setOpenLineKey(null)
+                setSelectedStation(isolateOrigin)
+                setIsolateOrigin(null)
+              }
+            : undefined}
         />
       </PaneStackProvider>
     </main>

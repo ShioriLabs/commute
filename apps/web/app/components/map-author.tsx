@@ -138,7 +138,7 @@ export function AuthorOverlay({
 
   return (
     <>
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-white/95 backdrop-blur rounded-lg shadow-lg px-3 py-2 flex gap-2 items-center text-sm">
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-map-chrome bg-white/95 backdrop-blur rounded-lg shadow-lg px-3 py-2 flex gap-2 items-center text-sm">
         <span className="font-mono text-slate-700">
           {points.length}
           {' pills'}
@@ -165,7 +165,7 @@ export function AuthorOverlay({
       {editing && panelPosition && (
         <div
           ref={panelRef}
-          className="absolute z-20 bg-white rounded-lg shadow-xl border border-slate-200 p-3 flex flex-col gap-2 min-w-[220px]"
+          className="absolute z-map-chrome bg-white rounded-lg shadow-xl border border-slate-200 p-3 flex flex-col gap-2 min-w-[220px]"
           style={{ left: panelPosition.left, top: panelPosition.top }}
           onPointerDown={e => e.stopPropagation()}
         >
