@@ -69,30 +69,31 @@ export function LinePaneHeader({ operator, code, onClose, onBack }: LinePaneHead
           <ArrowLeftIcon weight="bold" className="w-5 h-5" />
         </button>
       )}
-      {/* Roundel above the name, stacked, exactly as a station's lines sit above
-          its name — a line card and a station card read the same way. */}
-      <div className="flex-1 min-w-0 flex flex-col gap-1">
+      {/* Roundel beside the name with the operator under it, the way the line's
+          own page heads itself — a line reads the same whichever surface it is
+          opened in. A station stacks its roundels ABOVE its name instead, but a
+          station has several and a line has one. */}
+      <div className="flex-1 min-w-0">
         {header.isLoading
           ? (
               <div className="animate-pulse w-48 h-6 bg-slate-200 rounded-lg" />
             )
           : (
-              <>
+              <div className="flex items-start gap-2 min-w-0">
                 {header.colorCode && (
-                  <ul className="flex flex-row gap-1 flex-wrap">
-                    <li>
-                      <LineRoundel
-                        size="SM"
-                        code={header.lineCode ?? code}
-                        color={header.colorCode as `#${string}`}
-                        operator={header.operator ?? operator}
-                      />
-                      <span className="sr-only">{header.name}</span>
-                    </li>
-                  </ul>
+                  <LineRoundel
+                    code={header.lineCode ?? code}
+                    color={header.colorCode as `#${string}`}
+                    operator={header.operator ?? operator}
+                  />
                 )}
-                <h2 className="font-bold text-xl truncate">{header.name}</h2>
-              </>
+                <div className="flex flex-col items-start min-w-0">
+                  <h2 className="font-bold text-xl truncate">{header.name}</h2>
+                  {header.operatorName && (
+                    <span className="text-sm font-semibold text-gray-600 truncate">{header.operatorName}</span>
+                  )}
+                </div>
+              </div>
             )}
       </div>
       {/*

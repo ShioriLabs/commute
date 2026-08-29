@@ -31,6 +31,8 @@ export interface LineHeader {
   colorCode: string | null
   lineCode: string | null
   operator: string | null
+  /** The operator's display name, shown under the line's as on its own page. */
+  operatorName: string | null
 }
 
 /*
@@ -51,7 +53,8 @@ export function useLineHeader(operator: string, code: string): { header: LineHea
       name: detail?.line.name ?? null,
       colorCode: detail?.line.colorCode ?? null,
       lineCode: detail?.line.lineCode ?? null,
-      operator: detail?.operator.code ?? null
+      operator: detail?.operator.code ?? null,
+      operatorName: detail?.operator.name ?? null
     }
   }
 }
@@ -84,9 +87,19 @@ const LineContent = memo(function LineContent({ operator, code }: LineContentPro
     )
   }
 
-  // Keyed per line so the branch view resets when the sheet swaps lines rather
-  // than carrying the previous line's active tail across.
-  return <LineStrip key={`${operator}-${code}`} detail={detail} />
+  /*
+   * The same wrapper routes/line.tsx puts around the strip. Without it the rails
+   * and station rows run to the edges of the surface, which reads as a rendering
+   * fault rather than a list — a sheet has no page margin of its own to borrow.
+   *
+   * Keyed per line so the branch view resets when the sheet swaps lines rather
+   * than carrying the previous line's active tail across.
+   */
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-6 pb-12">
+      <LineStrip key={`${operator}-${code}`} detail={detail} />
+    </div>
+  )
 })
 
 export default LineContent
