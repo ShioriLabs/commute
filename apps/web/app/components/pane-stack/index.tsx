@@ -32,6 +32,13 @@ interface PaneStackProviderProps {
    * covers both "base card dismissed" and "a different marker was tapped".
    */
   baseKey: string | null
+  /*
+   * The live (non-exiting) deck contents, reported whenever they change. The map
+   * uses it to keep effects that outlive a card in step with it — a pushed line
+   * card owns the isolate fade drawn underneath it, and that has to lift when
+   * the card goes, however it went (pop, close-all, browser Back).
+   */
+  onEntriesChange?: (panes: readonly PaneDescriptor[]) => void
   children: ReactNode
 }
 
@@ -42,7 +49,7 @@ interface PaneStackProviderProps {
  * `selectedStation` / `selectedHubSlug` state, so the spotlight, fly-to and
  * chrome logic in map.tsx are untouched. This owns only what sits above it.
  */
-export default function PaneStackProvider({ baseKey, children }: PaneStackProviderProps) {
+export default function PaneStackProvider({ baseKey, onEntriesChange, children }: PaneStackProviderProps) {
   const isDesktop = useIsDesktop()
   const [entries, setEntries] = useState<PaneEntry[]>([])
 
@@ -238,6 +245,16 @@ export default function PaneStackProvider({ baseKey, children }: PaneStackProvid
   }, [])
 
   const liveCount = entries.filter(entry => !entry.exiting).length
+
+  const livePanes = useMemo(
+    () => entries.filter(entry => !entry.exiting).map(entry => entry.pane),
+    [entries]
+  )
+  const notifyEntries = useRef(onEntriesChange)
+  notifyEntries.current = onEntriesChange
+  useEffect(() => {
+    notifyEntries.current?.(livePanes)
+  }, [livePanes])
 
   const api = useMemo<PaneStackApi>(() => ({
     canPush: isDesktop,

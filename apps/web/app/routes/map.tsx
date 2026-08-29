@@ -66,6 +66,7 @@ import { isMapGlDebugEnabled } from '../hooks/secret-features'
 import StationSheet from '../components/station-sheet'
 import HubSheet from '../components/hub-sheet'
 import PaneStackProvider from '../components/pane-stack'
+import type { PaneDescriptor } from '../components/pane-stack/model'
 import { MapPreviewBackdrop, useMapMorph } from '../components/map-morph'
 import { prefetchMapSkeleton } from '../components/map-skeleton'
 import { PEEK_FRACTION } from '../components/bottom-sheet'
@@ -633,6 +634,16 @@ export default function MapPage() {
   const [selectedStation, setSelectedStation] = useState<{ operator: string, code: string } | null>(null)
   const [selectedHubSlug, setSelectedHubSlug] = useState<string | null>(null)
   /*
+   * The station whose line-card header opened the current isolate, if any.
+   *
+   * Isolating from a station sheet replaces that sheet, so the line is a card
+   * pushed over it and gets a back affordance — the same deal the station sheet
+   * offers when one station is pushed over another. Isolating by tapping the
+   * artwork or picking from the chooser starts from nothing, so it stays null
+   * and the sheet shows only its close button.
+   */
+  const [isolateOrigin, setIsolateOrigin] = useState<{ operator: string, code: string } | null>(null)
+  /*
    * The fare sheet, and the snap this opening asked for. One state object, not
    * a boolean plus a snap: the snap belongs to the opening, and a stale one
    * lands the next open wrong.
@@ -713,25 +724,53 @@ export default function MapPage() {
     setSelectedHubSlug(null)
     setFareSheet(prev => ({ snap, id: (prev?.id ?? 0) + 1 }))
   }
-  // useCallback keeps the sheet→content prop chain referentially stable:
-  // StationContent is memoized and this participates in its shallow compare.
   /*
-   * Isolate a line from the station sheet. Undefined unless the rider has the
-   * feature on AND the geometry has landed, which is what keeps the button off
-   * the standalone station page and off a BRT-only sheet.
+   * Isolate a line from the station sheet's line-card header. Undefined unless
+   * the geometry has landed, which is what keeps the plain link on the
+   * standalone station page and on a BRT-only sheet.
    *
    * useCallback because StationContent is memoized and this participates in its
    * shallow compare.
    */
   const handleIsolateLine = useCallback((key: string) => {
-    if (!beginIsolate(key)) return
+    // On the deck PaneLink renders the line card, so don't open LineSheet too.
+    if (!beginIsolate(key, { ownSheet: !isDesktop })) return
+    /*
+     * On a desktop deck the card is PUSHED over the station rather than
+     * replacing it, so the station stays open behind and keeps its spotlight —
+     * tearing either down would pull the ground out from under the card the
+     * rider can still see. Only the sheet path (phones, no deck) swaps one for
+     * the other, and only that path needs somewhere to go back to.
+     */
+    if (isDesktop) return
+
+    setIsolateOrigin(selectedStation)
     // The sheet is closing behind this, so drop the station spotlight with it:
     // the line is the answer now, and a halo left on one stop reads as a second
     // selection competing with it.
     beginSpotlightExit()
     setSelectedStation(null)
-  // Deps are the manifests beginIsolate closes over.
-  }, [linesManifest, workingPoints, labelPointsManifest])
+  // Deps are the manifests beginIsolate closes over, plus the origin we capture
+  // and the deck gate that decides whether the station stays open behind.
+  }, [linesManifest, workingPoints, labelPointsManifest, selectedStation, isDesktop])
+
+  /*
+   * A pushed line card owns the isolate drawn under it, so the fade lifts when
+   * that card leaves the deck — by pop, close-all or browser Back.
+   *
+   * Edge-triggered on the card DISAPPEARING, never on the deck merely being
+   * empty: this fires on mount and on every station/timetable push and pop too,
+   * and endIsolate is not inert — it always bumps lineCloseSignal, which would
+   * dismiss a line sheet the deck had nothing to do with (one opened by tapping
+   * the artwork, on a phone or a narrow window).
+   */
+  const hadLinePaneRef = useRef(false)
+  const handleDeckPanes = useCallback((panes: readonly PaneDescriptor[]) => {
+    const hasLinePane = panes.some(pane => pane.kind === 'line')
+    const lost = hadLinePaneRef.current && !hasLinePane
+    hadLinePaneRef.current = hasLinePane
+    if (lost) endIsolate()
+  }, [])
 
   const handleSelectDeparture = useCallback(() => {
     if (!selectedStation) return
@@ -1689,11 +1728,23 @@ export default function MapPage() {
    * Returns false when the line has no baked geometry, which is every BRT line
    * today: the caller should leave the map alone rather than pretending.
    */
-  const beginIsolate = (key: string): boolean => {
+  /*
+   * `ownSheet: false` when the caller is pushing the line onto the pane deck
+   * instead — the deck renders the card, so opening LineSheet as well would put
+   * two of the same view on screen.
+   */
+  const beginIsolate = (key: string, { ownSheet = true }: { ownSheet?: boolean } = {}): boolean => {
     const line = findLine(linesManifest, key)
     if (!line) return false
     const shapes = lineCutShapes(line, workingPoints, labelPointsManifest?.points ?? [])
     if (shapes.length === 0) return false
+    /*
+     * Default to no back affordance. Isolating from the artwork or the chooser
+     * starts from nothing, and only handleIsolateLine (the station sheet's line
+     * card) sets an origin — right after this returns. Clearing here rather than
+     * in those two callers means a new isolate can never inherit a stale one.
+     */
+    setIsolateOrigin(null)
     const prevFade = isolateRef.current?.lastFade ?? 0
     isolateRef.current = {
       key,
@@ -1705,7 +1756,7 @@ export default function MapPage() {
     }
     markDirty()
     // The line's own detail, in the same surface a station or hub opens in.
-    setOpenLineKey(key)
+    if (ownSheet) setOpenLineKey(key)
     return true
   }
 
@@ -2407,7 +2458,15 @@ export default function MapPage() {
           needs: any change to it means the selection the deck was built on is
           gone, so the deck collapses — which covers both dismissing the surface
           and tapping a different point on the map. */}
-      <PaneStackProvider baseKey={baseSelectionKey}>
+      <PaneStackProvider
+        baseKey={baseSelectionKey}
+        /*
+         * A pushed line card owns the isolate drawn under it. Lift the fade when
+         * it leaves the deck — by pop, close-all or browser Back — so the map
+         * can never be left dimmed with nothing on screen explaining why.
+         */
+        onEntriesChange={handleDeckPanes}
+      >
         <StationSheet
           operator={selectedStation?.operator ?? null}
           code={selectedStation?.code ?? null}
@@ -2450,6 +2509,16 @@ export default function MapPage() {
           closeSignal={lineCloseSignal}
           onClose={() => setOpenLineKey(null)}
           onDismissStart={endIsolate}
+          // Back reopens the station the line card was tapped from. The sheet
+          // runs its own exit first, and endIsolate fires from onDismissStart,
+          // so the fade lifts as the station sheet comes back.
+          onBack={isolateOrigin
+            ? () => {
+                setOpenLineKey(null)
+                setSelectedStation(isolateOrigin)
+                setIsolateOrigin(null)
+              }
+            : undefined}
         />
       </PaneStackProvider>
     </main>

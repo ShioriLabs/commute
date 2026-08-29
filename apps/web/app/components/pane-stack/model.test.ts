@@ -11,6 +11,7 @@ import {
 
 const station: PaneDescriptor = { kind: 'station', operator: 'KCI', code: 'MRI' }
 const timetable: PaneDescriptor = { kind: 'timetable', operator: 'KCI', code: 'MRI' }
+const lineDetail: PaneDescriptor = { kind: 'line', operator: 'KCI', code: 'C' }
 
 function stacked(pane: PaneDescriptor, exiting = false): StackedPane {
   return { key: paneKey(pane), exiting }
@@ -23,6 +24,10 @@ describe('paneUrl', () => {
 
   it('maps a timetable onto the station route plus /timetable', () => {
     expect(paneUrl(timetable)).toBe('/stations/KCI/MRI/timetable')
+  })
+
+  it('maps a line onto its own route, not a station one', () => {
+    expect(paneUrl(lineDetail)).toBe('/lines/KCI/C')
   })
 
   it('passes operator and code through untouched', () => {
@@ -39,6 +44,14 @@ describe('paneKey', () => {
 
   it('separates two stations of the same kind', () => {
     expect(paneKey(station)).not.toBe(paneKey({ kind: 'station', operator: 'KCI', code: 'THB' }))
+  })
+
+  it('separates a line from a station that shares its code', () => {
+    // Line codes and station codes live in different namespaces and DO collide:
+    // KCI has both a 'C' line and stations whose codes are single letters. The
+    // kind prefix is what keeps a push of one from being read as a duplicate of
+    // the other.
+    expect(paneKey(lineDetail)).not.toBe(paneKey({ kind: 'station', operator: 'KCI', code: 'C' }))
   })
 })
 

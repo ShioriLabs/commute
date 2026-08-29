@@ -113,8 +113,8 @@ interface StationContentProps {
   // linking to /fare. Supplied by StationSheet; the full station page leaves it
   // unset. Must be referentially stable — it participates in the memo compare.
   onSelectDeparture?: () => void
-  // Map-only, and only when line isolation is switched on: isolate this line on
-  // the map. Same stability requirement as onSelectDeparture above.
+  // Map-only: makes each line card's header isolate that line instead of
+  // navigating to its page. Same stability requirement as onSelectDeparture.
   onIsolateLine?: (key: string) => void
 }
 

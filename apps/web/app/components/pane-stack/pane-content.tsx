@@ -3,6 +3,8 @@ import SidePane from '../side-pane'
 import StationContent, { useStationHeader } from '../station-content'
 import { StationPaneHeader } from '../station-sheet'
 import TimetableContent from '../timetable-content'
+import LineContent from '../line-content'
+import { LinePaneHeader } from '../line-sheet'
 import { useDeckSlot } from './context'
 import type { PaneDescriptor } from './model'
 
@@ -30,9 +32,10 @@ export default function PaneCard({ pane, onClose }: PaneCardProps) {
     <SidePane
       open
       onClose={onClose}
-      ariaLabel={pane.kind === 'timetable' ? 'Jadwal lengkap' : 'Detail stasiun'}
-      header={() => (pane.kind === 'timetable'
-        ? (
+      ariaLabel={PANE_LABEL[pane.kind]}
+      header={() => {
+        if (pane.kind === 'timetable') {
+          return (
             <TimetablePaneHeader
               operator={pane.operator}
               code={pane.code}
@@ -40,14 +43,26 @@ export default function PaneCard({ pane, onClose }: PaneCardProps) {
               onCloseAll={slot.onCloseAll}
             />
           )
-        : (
-            <StationPaneHeader
+        }
+        if (pane.kind === 'line') {
+          return (
+            <LinePaneHeader
               operator={pane.operator}
               code={pane.code}
               onBack={slot.onBack}
               onClose={slot.onCloseAll ?? onClose}
             />
-          ))}
+          )
+        }
+        return (
+          <StationPaneHeader
+            operator={pane.operator}
+            code={pane.code}
+            onBack={slot.onBack}
+            onClose={slot.onCloseAll ?? onClose}
+          />
+        )
+      }}
     >
       {ready => (ready
         ? <PaneBody pane={pane} />
@@ -60,7 +75,16 @@ export default function PaneCard({ pane, onClose }: PaneCardProps) {
   )
 }
 
+const PANE_LABEL: Record<PaneDescriptor['kind'], string> = {
+  station: 'Detail stasiun',
+  timetable: 'Jadwal lengkap',
+  line: 'Detail lin'
+}
+
 function PaneBody({ pane }: { pane: PaneDescriptor }) {
+  if (pane.kind === 'line') {
+    return <LineContent operator={pane.operator} code={pane.code} />
+  }
   if (pane.kind === 'timetable') {
     return (
       // TimetableContent's section headers stick at `top-24`, the offset of the

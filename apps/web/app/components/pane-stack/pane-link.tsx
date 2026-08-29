@@ -5,6 +5,16 @@ import { resolveExit } from '~/lib/exit-links'
 
 interface PaneLinkProps extends Omit<LinkProps, 'to'> {
   pane: PaneDescriptor
+  /*
+   * Runs only when the push is actually accepted — not on a refusal, and not on
+   * a modified click that the user meant as a real navigation.
+   *
+   * `onClick` fires for every one of those, so a side effect that belongs to the
+   * card (the map isolating the line the card describes) has to hang here
+   * instead, or it would fire while the rider opens a new tab and leave the map
+   * changed with nothing on screen accounting for it.
+   */
+  onPushed?: (pane: PaneDescriptor) => void
 }
 
 /**
@@ -23,7 +33,7 @@ interface PaneLinkProps extends Omit<LinkProps, 'to'> {
  * anchors to the full app instead, which is what ExitLink does everywhere else.
  * Rollup folds the check away in the normal build.
  */
-export default function PaneLink({ pane, onClick, children, ...rest }: PaneLinkProps) {
+export default function PaneLink({ pane, onClick, onPushed, children, ...rest }: PaneLinkProps) {
   const stack = usePaneStack()
   const exit = resolveExit(paneUrl(pane))
 
@@ -48,7 +58,10 @@ export default function PaneLink({ pane, onClick, children, ...rest }: PaneLinkP
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
         // A refused push (deck full, exit in flight, duplicate) falls through to
         // the navigation, so this is never a dead click.
-        if (stack.push(pane, event.currentTarget)) event.preventDefault()
+        if (stack.push(pane, event.currentTarget)) {
+          event.preventDefault()
+          onPushed?.(pane)
+        }
       }}
       {...rest}
     >

@@ -10,6 +10,8 @@
 export type PaneDescriptor =
   | { kind: 'station', operator: string, code: string }
   | { kind: 'timetable', operator: string, code: string }
+  // `code` is the LINE code (e.g. 'C'), not a station's.
+  | { kind: 'line', operator: string, code: string }
 
 /**
  * The canonical route a descriptor stands for. Single source of truth: call
@@ -23,6 +25,8 @@ export function paneUrl(pane: PaneDescriptor): string {
       return `/stations/${pane.operator}/${pane.code}`
     case 'timetable':
       return `/stations/${pane.operator}/${pane.code}/timetable`
+    case 'line':
+      return `/lines/${pane.operator}/${pane.code}`
   }
 }
 
@@ -43,9 +47,9 @@ export function paneKey(pane: PaneDescriptor): string {
 // is the exact thing the deck exists to avoid. React Router has no intercepting
 // -route primitive to opt out of that.
 //
-// The chains this leaves are station → timetable and hub → station, which are
-// the ones that matter. A third level is refused and falls back to a normal
-// navigation, i.e. exactly what happens today.
+// The chains this leaves are station → timetable, hub → station and
+// station → line, which are the ones that matter. A third level is refused and
+// falls back to a normal navigation, i.e. exactly what happens today.
 export const MAX_PANE_STACK_DEPTH = 1
 
 // Where a card sits once `above` cards are stacked on top of it. Index is

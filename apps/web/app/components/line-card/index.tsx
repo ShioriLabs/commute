@@ -2,6 +2,8 @@ import type { CompactLineTimetable, CompactSchedule } from '@commute/schemas'
 import { useMemo } from 'react'
 import { CaretRightIcon, NavigationArrowIcon } from '@phosphor-icons/react'
 import ExitLink from '~/components/exit-link'
+import PaneLink from '~/components/pane-stack/pane-link'
+import { usePaneStack } from '~/components/pane-stack/context'
 import { getForegroundColor, getTintFromColor } from 'utils/colors'
 import { departureSortKey, getRelativeDepartureLabel, isImminentDeparture, parseMinute } from 'utils/schedules'
 import { formatPlatformCode, joinLabels } from 'utils/labels'
@@ -38,18 +40,20 @@ interface Props {
   // When set, the card header links to the line's page (/lines/{operator}/{lineCode}).
   operator?: string
   /*
-   * Map-only: isolate this line on the map, holding it at full strength while
-   * the rest of the network fades. Supplied by StationSheet; the standalone
-   * station page leaves it unset and no button renders.
+   * Map-only: isolate this line on the map instead of navigating, holding it at
+   * full strength while the rest of the network fades. Supplied by StationSheet;
+   * the standalone station page leaves it unset and the header stays a link to
+   * the line page.
    *
-   * Separate from the header link rather than replacing it — that link goes to a
-   * real page and works on its own. Must be referentially stable, like
-   * onSelectDeparture beside it.
+   * Isolating is not a lesser action than the link it replaces: it opens the
+   * line sheet too, so the rider gets the detail AND sees the shape on the map.
+   * Must be referentially stable, like onSelectDeparture beside it.
    */
   onIsolateLine?: (key: string) => void
 }
 
 export default function LineCard({ line, operator, onIsolateLine }: Props) {
+  const stack = usePaneStack()
   // Shared 10s clock — one timer for the whole feed instead of one per card.
   const nowMs = useClock()
   const lastUpdated = useMemo(() => new Date(nowMs), [nowMs])
@@ -88,6 +92,72 @@ export default function LineCard({ line, operator, onIsolateLine }: Props) {
 
   if (upcomingGroups.length === 0) return null
 
+  const title = <h1 id={`line-name-${lineName}`} className="font-bold text-base">{lineName}</h1>
+  const chevron = <CaretRightIcon weight="bold" className="w-4 h-4 text-slate-600" />
+
+  /*
+   * Three headers, in order of what the tap can usefully do.
+   *
+   * On the map the header ISOLATES rather than navigates: the rider is already
+   * looking at the network, so drawing the line in place beats sending them to a
+   * page about it — and beginIsolate opens the line sheet too, so no detail is
+   * lost. Off the map there is nothing to isolate, so it stays a link.
+   *
+   * TJ has no line-detail (topology) page yet, and a card off a stale cache can
+   * arrive with no line key at all; neither has anywhere to go, so both render
+   * as plain text.
+   */
+  const actionable = operator && operator !== 'TJ' && lineCode
+  /*
+   * On a desktop map the header pushes the line onto the deck, so the line sits
+   * beside the station it was opened from instead of replacing it. The push and
+   * the isolate are one gesture: PaneLink owns the card, onIsolateLine draws the
+   * line on the map underneath it.
+   *
+   * Where there is no deck (a phone, or the standalone station page) PaneLink
+   * falls through to a normal navigation, so the isolate-only button stays the
+   * behaviour there.
+   */
+  const heading = !actionable
+    ? title
+    : onIsolateLine
+      ? stack?.canPush
+        ? (
+            <PaneLink
+              pane={{ kind: 'line', operator, code: lineCode }}
+              className="flex items-center justify-between gap-2"
+              aria-label={`Lihat rute ${lineName}`}
+              // onPushed, not onClick: the isolate belongs to the card, so it
+              // must not fire on a ⌘-click opening a new tab or on a refused
+              // push that falls through to a normal navigation.
+              onPushed={() => onIsolateLine(`${operator}:${lineCode}`)}
+            >
+              {title}
+              {chevron}
+            </PaneLink>
+          )
+        : (
+            <button
+              type="button"
+              className="flex items-center justify-between gap-2 w-full text-left"
+              onClick={() => onIsolateLine(`${operator}:${lineCode}`)}
+              aria-label={`Sorot ${lineName} di peta`}
+            >
+              {title}
+              {chevron}
+            </button>
+          )
+      : (
+          <ExitLink
+            to={`/lines/${operator}/${lineCode}`}
+            className="flex items-center justify-between gap-2"
+            aria-label={`Lihat rute ${lineName}`}
+          >
+            {title}
+            {chevron}
+          </ExitLink>
+        )
+
   return (
     <li
       className="rounded-xl w-full min-h-8 shadow-lg border-t-[16px] border-gray-100"
@@ -99,32 +169,7 @@ export default function LineCard({ line, operator, onIsolateLine }: Props) {
         style={{ borderBottomColor: getTintFromColor(lineColor, 0.3) }}
         aria-labelledby={`line-name-${lineName}`}
       >
-        {/* TJ has no line-detail (topology) page yet — render its cards unlinked.
-            A card off a stale cache can arrive with no line key at all; without
-            a code there is no route to link to, so leave it unlinked too. */}
-        {onIsolateLine && operator && lineCode && (
-          <button
-            type="button"
-            className="text-xs font-semibold text-slate-600 px-2 py-1 rounded-lg bg-slate-100 mb-1"
-            onClick={() => onIsolateLine(`${operator}:${lineCode}`)}
-          >
-            Lihat di peta
-          </button>
-        )}
-        {operator && operator !== 'TJ' && lineCode
-          ? (
-              <ExitLink
-                to={`/lines/${operator}/${lineCode}`}
-                className="flex items-center justify-between gap-2"
-                aria-label={`Lihat rute ${lineName}`}
-              >
-                <h1 id={`line-name-${lineName}`} className="font-bold text-base">{lineName}</h1>
-                <CaretRightIcon weight="bold" className="w-4 h-4 text-slate-600" />
-              </ExitLink>
-            )
-          : (
-              <h1 id={`line-name-${lineName}`} className="font-bold text-base">{lineName}</h1>
-            )}
+        {heading}
       </article>
       <ul>
         {upcomingGroups.map((group) => {
