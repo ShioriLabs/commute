@@ -189,10 +189,12 @@ const MAP_BUTTON_CLASS
 const MAP_GROUP_BUTTON_CLASS
   = 'w-11 h-11 flex items-center justify-center cursor-pointer hover:bg-slate-100/70 transition-colors duration-150'
 
-// Chrome entrance stagger: title pill, then the four buttons. A short step —
-// small elements that should read as one gesture arriving rather than as a
-// sequence — and a small offset so the chrome follows the map's first paint
-// instead of racing it.
+// Chrome entrance stagger: title pill, then the buttons, fare before
+// attribution — the primary action should not arrive last, which is the slot it
+// held while it was one of four identical circles. A short step — small
+// elements that should read as one gesture arriving rather than as a sequence —
+// and a small offset so the chrome follows the map's first paint instead of
+// racing it.
 const MAP_CHROME_STAGGER: StaggerOptions = { step: 60, maxIndex: 4, offset: 60 }
 
 /**
@@ -2740,7 +2742,11 @@ export default function MapPage() {
         *
         * Phones: the four corners are the only free space, so each takes one
         * button — close top-right, recenter and attribution the bottom-right
-        * pair, fare bottom-left, title pill top-left, fare chip bottom centre.
+        * pair, fare bottom-left, title pill top-left.
+        *
+        * Bottom-left holds one thing at a time: the fare pill until a pair is
+        * drawn, then the chip summarising it. Same corner on purpose — the
+        * summary appears where the control that produced it was.
         *
         * Desktop: the rail owns the left column (pill, then pane), the wordmark
         * sits bottom centre, and recenter and attribution join into one
@@ -2810,32 +2816,55 @@ export default function MapPage() {
                 </button>
               </div>
 
-              <div
-                className="map-chrome-enter absolute bottom-4 left-4 z-map-chrome"
-                style={{ animationDelay: staggerDelay(4, MAP_CHROME_STAGGER) }}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    haptic()
-                    // Cancel a half-finished origin pick: the sheet is a second way to
-                    // set the same pair, and leaving the mode armed behind it would make
-                    // the next station tap do something the rider no longer expects.
-                    setPickingEndpoint(null)
-                    // Full, not peek: both fields may be empty, so there is nothing to
-                    // peek at and the next act is picking a station.
-                    openFareSheet('full')
-                  }}
-                  aria-label="Cek tarif perjalanan"
-                  className={MAP_BUTTON_CLASS}
+              {/*
+                * The map's primary action, and the only piece of phone chrome that
+                * is not a white circle.
+                *
+                * It used to wear MAP_BUTTON_CLASS like the other three, which made
+                * the reason the page exists look exactly like the attribution
+                * button — an unlabelled glyph a rider had to tap to identify. The
+                * accent fill is the same argument SheetButton's `accent` prop makes
+                * for the home rail: the one action most people came for has to be
+                * visibly the primary one rather than one of several identical
+                * surfaces. The label is desktop's, so both form factors name the
+                * job in the same words.
+                *
+                * Opaque, so no backdrop-blur: there is nothing to see through.
+                *
+                * Hidden once a pair is drawn — MapFareChip takes the bottom edge
+                * from there, the way the desktop rail pill becomes the route's
+                * summary rather than sitting beside it.
+                */}
+              {!(routePair.fromId && routePair.toId) && (
+                <div
+                  className="map-chrome-enter absolute bottom-4 left-4 z-map-chrome"
+                  style={{ animationDelay: staggerDelay(3, MAP_CHROME_STAGGER) }}
                 >
-                  <ReceiptIcon weight="bold" className="w-5 h-5 text-slate-700" />
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      haptic()
+                      // Cancel a half-finished origin pick: the sheet is a second way to
+                      // set the same pair, and leaving the mode armed behind it would make
+                      // the next station tap do something the rider no longer expects.
+                      setPickingEndpoint(null)
+                      // Full, not peek: both fields may be empty, so there is nothing to
+                      // peek at and the next act is picking a station.
+                      openFareSheet('full')
+                    }}
+                    // h-11 without a matching w-11: the label sets the width, but the
+                    // 44px tap-target minimum the circles document still holds.
+                    className="rounded-full bg-[#F55875] text-white shadow-lg h-11 pl-4 pr-5 flex items-center gap-2 cursor-pointer font-bold text-sm transition-transform duration-150 ease-out active:scale-[0.98]"
+                  >
+                    <ReceiptIcon weight="bold" className="w-5 h-5" />
+                    <span>Cek rute dan tarif</span>
+                  </button>
+                </div>
+              )}
 
               <div
                 className="map-chrome-enter absolute bottom-4 right-4 z-map-chrome"
-                style={{ animationDelay: staggerDelay(3, MAP_CHROME_STAGGER) }}
+                style={{ animationDelay: staggerDelay(4, MAP_CHROME_STAGGER) }}
               >
                 <button
                   type="button"
@@ -2941,11 +2970,20 @@ export default function MapPage() {
           the column the rider's eye is already on. */}
       {!isDesktop && routePair.fromId && routePair.toId && !fareSheet && (
         <MapFareChip
+          // The same resolved pair the desktop rail card names, so both form
+          // factors read the endpoints out of one place.
+          endpoints={railEndpoints}
           // The selected journey, so the chip agrees with the corridor drawn
           // behind it rather than with whichever route the API listed first.
           fare={activeJourney}
           hasError={!!fareError}
           isLoading={fareLoading}
+          // Peek, not full: a pair is already drawn, so there is a result to
+          // peek at — the same snap a route resolving in place asks for.
+          onOpen={() => {
+            haptic()
+            openFareSheet('peek')
+          }}
           onClear={clearRoute}
         />
       )}
