@@ -10,10 +10,15 @@
  * means holding a different line at full strength while the tapped one fades —
  * a confidently wrong answer, which is worse than no answer.
  *
- * That is why this adds a colour gate the route overlay does not have (see
- * map-corridor-colour.ts) and why an unmatched pair contributes NOTHING rather
- * than falling back to a chord. A gap in the isolated line is honest; a chord
- * across the map, or a neighbouring line lit up, is not.
+ * That is why an unmatched pair contributes NOTHING here rather than falling
+ * back to a chord. A gap in the isolated line is honest; a chord across the map,
+ * or a neighbouring line lit up, is not.
+ *
+ * Two gates narrow the candidates before geometry decides: artwork colour (see
+ * map-corridor-colour.ts) and drawn stroke width, which is the only signal that
+ * separates rail from BRT — the two palettes overlap, so a red rail line and a
+ * red BRT koridor are the same colour to the first gate. The route overlay
+ * applies both as well; what stays specific to isolation is refusing to chord.
  *
  * ── What the gate is worth, measured over all 10 non-BUS lines ─────────────
  *
@@ -24,11 +29,13 @@
  * the election steers KCI:T and LRTJBDB:BK onto their own line instead of a
  * nearer neighbour.
  *
- * With the shared-track exception (see colourMatches) it traces 133 of 136. The
- * three it still gives up are honest: two sit on a navy stroke near Duri and
- * Tanah Abang that no line serving those stops is drawn in, so there is nothing
- * to tell it apart from a neighbour, and refusing leaves a gap rather than
- * lighting the wrong line.
+ * With the shared-track exception (see colourMatches) it traces 137 of 140, all
+ * ten rail lines at 100%. The three it gives up belong to APCGK:KLB, which has
+ * no stroke on the sheet at all. Adding the width gate changed none of this: the
+ * regenerated artifact is byte-identical, because where a line's own stroke is
+ * drawn the election already preferred it on distance. The gate matters in the
+ * fallback, where colour has nothing left to reject and the old code would drop
+ * to matching any stroke at all.
  *
  * Pure and synchronous: takes already-fetched line detail and geometry so the
  * build script and the tests drive it the same way.
@@ -38,6 +45,7 @@ import { colourMatches } from './map-corridor-colour'
 import {
   CORRIDOR_MATCH_MAX_DIST_WORLD,
   matchCorridorPath,
+  modeMatches,
   pickLegCorridor,
   prepareCorridors,
   projectOntoPolyline,
@@ -142,17 +150,30 @@ function electCorridor(
   stops: ReadonlyArray<{ x: number, y: number }>,
   prepared: readonly PreparedCorridor[],
   colourAt: (index: number) => string | null,
-  lineColour: string | undefined
+  lineColour: string | undefined,
+  modeOk: (index: number) => boolean
 ): number | undefined {
   const eligible: number[] = []
   for (let i = 0; i < prepared.length; i++) {
-    if (colourMatches(colourAt(i), lineColour)) eligible.push(i)
+    if (modeOk(i) && colourMatches(colourAt(i), lineColour)) eligible.push(i)
   }
 
   if (eligible.length > 0 && eligible.length < prepared.length) {
     const subset = eligible.map(i => prepared[i])
     const picked = pickLegCorridor(stops, subset)
     if (picked !== undefined) return eligible[picked]
+  }
+  /*
+   * The colour-blind fallback stays mode-gated. Electing across every stroke on
+   * the sheet is what lets a rail line hold a BRT corridor for a whole segment,
+   * and the two palettes overlap closely enough that colour alone cannot catch
+   * it — see the note in map-corridors.ts.
+   */
+  const modeOnly: number[] = []
+  for (let i = 0; i < prepared.length; i++) if (modeOk(i)) modeOnly.push(i)
+  if (modeOnly.length > 0 && modeOnly.length < prepared.length) {
+    const picked = pickLegCorridor(stops, modeOnly.map(i => prepared[i]))
+    if (picked !== undefined) return modeOnly[picked]
   }
   return pickLegCorridor(stops, prepared)
 }
@@ -304,7 +325,18 @@ export function traceLine(
   lineColour: string | undefined,
   // Optional; without it the colour gate stays strict, which is the behaviour
   // every test that does not pass one is pinning.
-  sharedTrack?: SharedTrackLookup
+  sharedTrack?: SharedTrackLookup,
+  /*
+   * Whether this line is drawn as BRT rather than rail, which restricts it to
+   * the artwork's matching stroke width.
+   *
+   * Optional, and omitting it disables the mode gate entirely rather than
+   * assuming rail — the tests build corridors at a single width and would all
+   * start failing the gate on a default. Callers with an operator to hand should
+   * always pass it: it is the only signal that separates a red rail line from a
+   * red BRT koridor drawn on the same alignment.
+   */
+  isBrt?: boolean
 ): TracedLine {
   // First alias wins, but an exact id always beats an alias — the same rule the
   // route overlay uses, so a station drawn twice pins the same shape in both.
@@ -318,6 +350,12 @@ export function traceLine(
   // Prefer the colour the corridor carries; the override is for tests.
   const colourAt = (index: number): string | null =>
     corridorColour?.[index] ?? corridors[index]?.c ?? null
+  // Undefined isBrt leaves every corridor mode-eligible, per the parameter note.
+  const modeOk = (index: number): boolean => {
+    if (isBrt === undefined) return true
+    const corridor = prepared[index]
+    return corridor ? modeMatches(corridor, isBrt) : false
+  }
   const segments: TracedSegment[] = []
   let matchedPairs = 0
   let totalPairs = 0
@@ -366,12 +404,14 @@ export function traceLine(
        * below is where sharing is allowed, because that is the scope sharing
        * actually has.
        */
-      const preferIndex = electCorridor(resolved, prepared, colourAt, lineColour)
+      const preferIndex = electCorridor(resolved, prepared, colourAt, lineColour, modeOk)
       for (let i = 0; i < resolved.length - 1; i++) {
         const a = resolved[i]
         const b = resolved[i + 1]
         const shared = sharedTrack ? sharedTrack(a.id, b.id) : undefined
-        const eligible = (index: number) => colourMatches(colourAt(index), lineColour, shared)
+        // Mode first in both predicates: a stroke of the wrong width is never
+        // this line's, whatever its colour or who shares its track.
+        const eligible = (index: number) => modeOk(index) && colourMatches(colourAt(index), lineColour, shared)
         /*
          * Match against the eligible corridors only, rather than matching first
          * and vetting the winner.
@@ -394,7 +434,7 @@ export function traceLine(
          * the exception only applies where this line genuinely has no stroke of
          * its own — which is what shared track actually looks like.
          */
-        const strict = (index: number) => colourMatches(colourAt(index), lineColour)
+        const strict = (index: number) => modeOk(index) && colourMatches(colourAt(index), lineColour)
         const match = matchWithinEligible(a, b, prepared, strict, preferIndex)
           ?? matchWithinEligible(a, b, prepared, eligible, preferIndex)
         if (!match) {

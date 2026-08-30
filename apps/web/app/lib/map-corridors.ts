@@ -20,9 +20,17 @@
  * blue, so it filters candidates; it never names one.
  */
 
-// One drawn corridor: `w` is the artwork stroke width (25 rail, 15 BRT), kept
-// only as a coarse class hint for debugging, and `c` the artwork hex. Points are
-// pre-flattened by the build script, so there are no curves to evaluate here.
+// One drawn corridor: `w` is the artwork stroke width (25 rail, 15 BRT) and `c`
+// the artwork hex. Points are pre-flattened by the build script, so there are no
+// curves to evaluate here.
+//
+// The width is a real discriminator, not just a debugging hint. Over the shipped
+// sheet it is strictly binary — 74 corridors at 15, 20 at 25, nothing between —
+// and it splits exactly along mode: every identified width-15 stroke carries TJ
+// stops, every width-25 one carries KCI/MRTJ/LRTJ/LRTJBDB. That is the one thing
+// colour cannot do here, because the palettes overlap across modes: MRT's brand
+// red sits 64 channels from Koridor 1's, inside the 72 tolerance, so a rail leg
+// at Dukuh Atas could elect the BRT stroke running the same alignment.
 export interface Corridor {
   w: number
   c: string
@@ -44,6 +52,9 @@ export interface PreparedCorridor {
   // The artwork hex, carried through so a match can be filtered on it. See the
   // note on Corridor: a discriminator, not an identity.
   c: string
+  // The artwork stroke width, carried through for the same reason. Unlike the
+  // hex this separates rail from BRT outright — see the note on Corridor.
+  w: number
 }
 
 // Where a point lands on a polyline: perpendicular distance to the closest
@@ -110,7 +121,40 @@ export function prepareCorridor(corridor: Corridor): PreparedCorridor {
   for (let i = 1; i < pts.length; i++) {
     cums[i] = cums[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])
   }
-  return { pts, cums, c: corridor.c }
+  return { pts, cums, c: corridor.c, w: corridor.w }
+}
+
+/*
+ * Where the artwork's two stroke widths split, for classifying a corridor as BRT
+ * or rail.
+ *
+ * The shipped sheet draws exactly two widths, 15 and 25, with nothing in
+ * between, so any threshold in that gap classifies identically. 20 sits at the
+ * midpoint, which is the most tolerant place to put it if a re-tile nudges
+ * either width the way the 2026-08c palette shifted its colours.
+ */
+const BRT_STROKE_MAX_WIDTH = 20
+
+/*
+ * Whether a corridor is drawn as BRT rather than rail.
+ *
+ * Width is the only mode-reliable signal the artwork carries. Colour is not:
+ * the BRT and rail palettes overlap, so a red rail line and a red BRT koridor
+ * are indistinguishable to the colour gate.
+ */
+export function isBrtCorridor(corridor: { w: number }): boolean {
+  return corridor.w <= BRT_STROKE_MAX_WIDTH
+}
+
+/*
+ * Whether a corridor's drawn mode matches the mode of the line being traced.
+ *
+ * Kept beside isBrtCorridor rather than at either call site because the route
+ * overlay and the line tracer both need exactly this test, and a rule that
+ * drifts between them would let one of the two regress silently.
+ */
+export function modeMatches(corridor: { w: number }, legIsBrt: boolean): boolean {
+  return isBrtCorridor(corridor) === legIsBrt
 }
 
 export function prepareCorridors(corridors: readonly Corridor[]): PreparedCorridor[] {

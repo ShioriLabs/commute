@@ -99,7 +99,10 @@ async function main(): Promise<void> {
   log(`${corridorsManifest.corridors.length} corridors, ${coloured} carrying an artwork colour`)
 
   const operators = await getJson<ApiOperator[]>(`${API_BASE_URL}/operators`)
-  const wanted: Array<{ key: string, operator: string, code: string, name: string, color: string }> = []
+  // `mode` is optional on both the line and its operator, so it stays optional
+  // here: an absent mode is "not known to be BUS", which is what the trace gate
+  // below treats it as.
+  const wanted: Array<{ key: string, operator: string, code: string, name: string, color: string, mode?: string }> = []
   for (const operator of operators) {
     for (const line of operator.lines ?? []) {
       // Mode lives on the line when it differs from its operator's, which is
@@ -111,7 +114,8 @@ async function main(): Promise<void> {
         operator: operator.code,
         code: line.lineCode,
         name: line.name,
-        color: line.colorCode
+        color: line.colorCode,
+        mode
       })
     }
   }
@@ -160,7 +164,14 @@ async function main(): Promise<void> {
       }
       return shared
     }
-    const traced = traceLine(detail, pointsManifest.points, corridorsManifest.corridors, undefined, line.color, sharedTrack)
+    /*
+     * BUS lines are filtered out above, so today this is always false and the
+     * gate only ever keeps rail off the BRT strokes. It is derived from the mode
+     * rather than hard-coded so that re-enabling BRT tracing — the dormant
+     * feeder work — gates itself correctly instead of silently matching rail.
+     */
+    const isBrt = line.mode === 'BUS'
+    const traced = traceLine(detail, pointsManifest.points, corridorsManifest.corridors, undefined, line.color, sharedTrack, isBrt)
     totalMatched += traced.matchedPairs
     totalPairs += traced.totalPairs
 

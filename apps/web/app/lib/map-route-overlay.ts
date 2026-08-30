@@ -2,7 +2,7 @@ import type { FareResult } from '@commute/schemas'
 import { hexToRgb01 } from 'utils/colors'
 import type { Point, RouteOverlay, RouteSegment } from './map-renderer'
 import { colourMatches } from './map-corridor-colour'
-import { CORRIDOR_MATCH_MAX_DIST_WORLD, matchCorridorPath, pickLegCorridor, pointAtArcLength, polylineLength, prepareCorridors, projectOntoPolyline, type Corridor } from './map-corridors'
+import { CORRIDOR_MATCH_MAX_DIST_WORLD, matchCorridorPath, modeMatches, pickLegCorridor, pointAtArcLength, polylineLength, prepareCorridors, projectOntoPolyline, type Corridor } from './map-corridors'
 import {
   dashSegment,
   pointStationId,
@@ -183,18 +183,42 @@ export function buildRouteOverlayModel(
        *
        * Falls back to colour-blind when nothing survives, so a stretch drawn in
        * a colour we cannot account for still draws rather than vanishing.
+       *
+       * Colour cannot do the whole job, because the BRT and rail palettes
+       * overlap: MRT's `#ca2a51` sits 64 channels from Koridor 1's `#DC0D11`,
+       * inside the 72 tolerance, and the two are drawn on one alignment through
+       * Dukuh Atas. A northbound MRT leg would elect the BRT stroke and follow
+       * it far past Bundaran HI, since MRT's own stroke ends there while K1
+       * carries on to Kota. So the mode gate below runs FIRST and, unlike
+       * colour, is never relaxed — see the note on the fallback.
        */
       const legColourHex = lineColor(leg.line)
       // Read the colour off the PREPARED corridor, not the raw array: preparing
       // drops any corridor with fewer than two points, so the two are not index-
       // aligned and indexing the raw one would gate on a neighbour's colour.
+      const modeOk = prepared
+        ? (index: number) => {
+            const corridor = prepared[index]
+            return corridor ? modeMatches(corridor, isBrt) : false
+          }
+        : undefined
       const eligible = prepared
-        ? (index: number) => colourMatches(prepared[index]?.c ?? null, legColourHex)
+        ? (index: number) => modeOk!(index) && colourMatches(prepared[index]?.c ?? null, legColourHex)
         : undefined
       const anyEligible = prepared
         ? prepared.some((_, index) => eligible!(index))
         : false
-      const legEligible = anyEligible ? eligible : undefined
+      /*
+       * The colour gate relaxes when nothing survives it; the mode gate does not.
+       *
+       * Dropping to fully colour-blind matching would put every BRT stroke back
+       * in front of a rail leg, which is the failure this exists to stop — and
+       * it is worse than drawing nothing, because a route confidently drawn down
+       * another mode's line reads as correct. Falling back to mode-only keeps the
+       * original intent (an unaccountable colour still draws) while holding the
+       * one distinction the artwork makes reliably.
+       */
+      const legEligible = anyEligible ? eligible : modeOk
       const preferIndex = prepared ? electLegCorridor(vertices, prepared, legEligible) : undefined
       /*
        * Where the previous pair's drawn geometry ended. Consecutive pairs can
