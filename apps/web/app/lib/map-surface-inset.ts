@@ -47,8 +47,15 @@ export function surfaceInset({
   chipPx
 }: SurfaceInsetInput): SurfaceInset {
   if (isDesktop) {
-    // The desktop pane is a left band and never covers the bottom, so the chip
-    // needs no clearance there.
+    /*
+     * Keyed on the pane, not on the rail's pill above it. The pill is a single
+     * control at the top of the column, so the map stays legible under it and
+     * reserving the whole band for it would give up a quarter of the viewport
+     * to hold one pill clear.
+     *
+     * The pane is a left band and never covers the bottom, so the chip needs no
+     * clearance there.
+     */
     return { left: surfaceOpen ? panePx : 0, bottom: 0 }
   }
   if (surfaceOpen) return { left: 0, bottom: Math.round(viewportH * peekFraction) }

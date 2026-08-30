@@ -27,8 +27,14 @@ describe('surfaceInset', () => {
   })
 
   it('takes nothing on desktop with no surface open', () => {
+    // The rail's pill sits in this column too, but it is one control with the
+    // map legible underneath it — not a reason to give up the band.
     expect(surfaceInset({ ...base, isDesktop: true, surfaceOpen: false, hasPair: true }))
       .toEqual({ left: 0, bottom: 0 })
+  })
+
+  it('never reserves chip clearance on desktop, where the chip does not render', () => {
+    expect(surfaceInset({ ...base, isDesktop: true, hasPair: true }).bottom).toBe(0)
   })
 
   it('takes the peek height off the bottom for an open sheet on a phone', () => {

@@ -27,12 +27,21 @@ const LETTER_PATHS = [
 
 interface Props {
   className?: string
+  /*
+   * Render the mark without its entrance or its breathing.
+   *
+   * Both exist for the boot splash, where the reveal is a one-time moment and
+   * the breathing stands in for a spinner. As permanent chrome neither applies:
+   * a logo that re-reveals on every visit and then never stops moving is motion
+   * the rider sees constantly and did not ask for.
+   */
+  still?: boolean
 }
 
 // Letters rise in one at a time, then the whole mark breathes while the bundle
 // finishes downloading. The reveal is a one-time moment; the breathing is what
 // carries the "still working" signal a spinner would otherwise provide.
-export default function Wordmark({ className }: Props) {
+export default function Wordmark({ className, still = false }: Props) {
   return (
     <svg
       viewBox="0 0 275 47"
@@ -40,14 +49,16 @@ export default function Wordmark({ className }: Props) {
       role="img"
       aria-label="Commute"
     >
-      <g className="wordmark-breathe">
+      <g className={still ? undefined : 'wordmark-breathe'}>
         {LETTER_PATHS.map((d, index) => (
           <path
             key={index}
             d={d}
             fill="#F55875"
-            className="wordmark-letter"
-            style={{ animationDelay: `${WORDMARK_REVEAL_DELAY_MS + index * WORDMARK_LETTER_STAGGER_MS}ms` }}
+            className={still ? undefined : 'wordmark-letter'}
+            style={still
+              ? undefined
+              : { animationDelay: `${WORDMARK_REVEAL_DELAY_MS + index * WORDMARK_LETTER_STAGGER_MS}ms` }}
           />
         ))}
       </g>

@@ -48,6 +48,8 @@ import { surfaceInset } from '../lib/map-surface-inset'
 import { MAX_SCALE, clampTransform, minScaleFor } from '../lib/map-clamp-transform'
 import { useReducedMotion } from '~/hooks/reduced-motion'
 import MapFareChip from '../components/map-fare-chip'
+import MapRailPill from '../components/map-rail-pill'
+import Wordmark from '../components/wordmark'
 import MapFareSheet from '../components/map-fare-sheet'
 import { useFareQuery } from '../components/fare-sheet/use-fare-query'
 import { journeysOf } from '../components/fare-sheet/journeys'
@@ -156,6 +158,12 @@ const SIDE_PANE_SETTLE_MS = 250
 // One spec for all four floating buttons. 44px is the tap-target minimum.
 const MAP_BUTTON_CLASS
   = 'rounded-full bg-white/90 backdrop-blur shadow-lg w-11 h-11 flex items-center justify-center cursor-pointer'
+
+// The same button inside the desktop bottom-right group, where the surface and
+// shadow belong to the container: only the target size and the press feedback
+// are the button's own.
+const MAP_GROUP_BUTTON_CLASS
+  = 'w-11 h-11 flex items-center justify-center cursor-pointer hover:bg-slate-100/70 transition-colors duration-150'
 
 // Chrome entrance stagger: title pill, then the four buttons. A short step —
 // small elements that should read as one gesture arriving rather than as a
@@ -529,6 +537,23 @@ export default function MapPage() {
    */
   useEffect(() => setSelectedJourney(0), [fareResponse])
 
+  /*
+   * The two stops the rail card names, each with the lines serving it.
+   *
+   * From the fare query rather than the points manifest: points.json is pure
+   * geometry (`id` plus coordinates), and its optional `station` field is a
+   * label shape's back-reference to the id it annotates, not a display name.
+   * useFareQuery already resolves both ends against the station index, which is
+   * where the names and lines the rider should see actually live.
+   *
+   * Null until that resolve lands, which the card renders as a placeholder —
+   * see MapRailPill.
+   */
+  const railEndpoints = {
+    from: fareQuery.origin,
+    to: fareQuery.destination
+  }
+
   const fareError = fareQuery.error
   const fareLoading = fareQuery.isLoading
 
@@ -674,6 +699,12 @@ export default function MapPage() {
 
   // Desktop only: an open detail pane sits over the top-left corner the title
   // pill lives in, so it hides for as long as one is open.
+  //
+  // Only reachable on a phone now that the title pill is phone-only — desktop
+  // shows the rail pill there instead, which docks ABOVE the pane rather than
+  // hiding behind it. Kept as written because it still describes the rule, and
+  // `isDesktop` still belongs in it: a viewport that crosses the breakpoint
+  // with a pane open must not leave the phone pill stranded under one.
   const paneCoversChrome = isDesktop && detailSurfaceOpen
   const pillVisible = chromeVisible && !paneCoversChrome
   /*
@@ -2412,31 +2443,86 @@ export default function MapPage() {
           precisely while the user is zoomed in and moving. They share a visual
           language, not a visibility rule.
 
-          On desktop the side pane occupies this corner, so the pill fades out
-          for as long as one is open. Shifting it right instead would leave it
-          stranded mid-map and jumping on every open and close, and the pane's
+          Phones only. Desktop gives this corner to the rail pill, which is a
+          control and so cannot fade behind a pane the way a label can; the
+          wordmark bottom-centre carries the page's identity there instead.
+
+          On a phone the sheet still covers this corner while open, so the pill
+          fades for as long as one is. Shifting it right instead would leave it
+          stranded mid-map and jumping on every open and close, and the sheet's
           own header already names what is selected.
 
           The entrance and the fade live on different elements on purpose.
           `map-chrome-enter` fills forwards, and a filling animation outranks a
           plain class, so an `opacity-0` utility on the same element is simply
           ignored once the entrance has landed — the pill would never hide. */}
-      <div
-        className={clsx(
-          'map-chrome-enter absolute top-4 left-4 z-10 max-w-[calc(100%-8rem)]',
-          !pillVisible && 'pointer-events-none'
-        )}
-        style={{ animationDelay: staggerDelay(0, MAP_CHROME_STAGGER) }}
-      >
-        <h1
+      {!isDesktop && (
+        <div
           className={clsx(
-            'rounded-full bg-white/90 backdrop-blur shadow-lg px-4 py-2.5 font-bold text-base text-slate-800 truncate transition-opacity duration-200',
-            pillVisible ? 'opacity-100' : 'opacity-0'
+            'map-chrome-enter absolute top-4 left-4 z-map-chrome max-w-[calc(100%-8rem)]',
+            !pillVisible && 'pointer-events-none'
           )}
+          style={{ animationDelay: staggerDelay(0, MAP_CHROME_STAGGER) }}
         >
-          Peta Integrasi
-        </h1>
-      </div>
+          <h1
+            className={clsx(
+              'rounded-full bg-white/90 backdrop-blur shadow-lg px-4 py-2.5 font-bold text-base text-slate-800 truncate transition-opacity duration-200',
+              pillVisible ? 'opacity-100' : 'opacity-0'
+            )}
+          >
+            Peta Integrasi
+          </h1>
+        </div>
+      )}
+
+      {/*
+        * The desktop rail's head. Sized to the pane's own width so pill and card
+        * form one column, and positioned with the same left/top margins the pane
+        * uses — RAIL_PILL_RESERVED_PX is what the pane docks below.
+        *
+        * Outside `chromeVisible`: this is the map's primary action and a drawn
+        * route's only summary, so unlike the phone title pill it must not
+        * disappear on a pan.
+        */}
+      {isDesktop && (
+        <div
+          className="map-chrome-enter absolute top-3 left-4 w-[25rem] z-map-chrome"
+          style={{ animationDelay: staggerDelay(0, MAP_CHROME_STAGGER) }}
+        >
+          <MapRailPill
+            endpoints={railEndpoints}
+            hasPair={!!(routePair.fromId && routePair.toId)}
+            // The selected journey, so the card agrees with the corridor drawn
+            // behind it rather than with whichever route the API listed first.
+            fare={activeJourney}
+            hasError={!!fareError}
+            isLoading={fareLoading}
+            onOpenFare={() => {
+              haptic()
+              // Cancel a half-finished origin pick: the sheet is a second way to
+              // set the same pair, and leaving the mode armed behind it would
+              // make the next station tap do something the rider no longer
+              // expects.
+              setPickingOrigin(false)
+              openFareSheet('full')
+            }}
+            onClear={clearRoute}
+          />
+        </div>
+      )}
+
+      {/*
+        * Page identity, in place of the title pill desktop gives up to the rail.
+        * Inert: it is a mark, not a control, and must never eat a map drag.
+        */}
+      {isDesktop && (
+        <div
+          className="map-chrome-enter absolute bottom-5 left-1/2 -translate-x-1/2 z-map-chrome pointer-events-none"
+          style={{ animationDelay: staggerDelay(4, MAP_CHROME_STAGGER) }}
+        >
+          <Wordmark className="h-4 w-auto opacity-60" still />
+        </div>
+      )}
 
       {/* Departure-pick prompt. A mode indicator, so like the close button it
           ignores `chromeVisible` — the user must always see the map is in a
@@ -2483,67 +2569,120 @@ export default function MapPage() {
         </div>
       )}
 
-      <div
-        className="map-chrome-enter absolute bottom-4 right-16 z-map-chrome"
-        style={{ animationDelay: staggerDelay(2, MAP_CHROME_STAGGER) }}
-      >
-        <button
-          type="button"
-          onClick={() => {
-            haptic()
-            flyTo(
-              clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL),
-              450
-            )
-          }}
-          aria-label="Kembali ke tampilan penuh"
-          tabIndex={isZoomedIn ? 0 : -1}
-          className={`${MAP_BUTTON_CLASS} transition-opacity duration-200 ${isZoomedIn ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-        >
-          <CornersInIcon weight="bold" className="w-5 h-5 text-slate-700" />
-        </button>
-      </div>
+      {/*
+        * Corner allocation differs by form factor.
+        *
+        * Phones: the four corners are the only free space, so each takes one
+        * button — close top-right, recenter and attribution the bottom-right
+        * pair, fare bottom-left, title pill top-left, fare chip bottom centre.
+        *
+        * Desktop: the rail owns the left column (pill, then pane), the wordmark
+        * sits bottom centre, and recenter and attribution join into one
+        * bottom-right group. Close keeps its own corner on both — it is the
+        * page's way out and must never be buried under lesser controls.
+        */}
+      {isDesktop
+        ? (
+            <div
+              className="map-chrome-enter absolute bottom-4 right-4 z-map-chrome flex flex-col rounded-2xl bg-white/90 backdrop-blur shadow-lg overflow-hidden"
+              style={{ animationDelay: staggerDelay(2, MAP_CHROME_STAGGER) }}
+            >
+              {/*
+                * Unmounted rather than faded when the map is already at full
+                * extent, so the group shrinks to the single remaining button
+                * instead of keeping a dead slot above it. The phone build fades
+                * in place because there the button holds a corner of its own,
+                * with nothing below to slide.
+                */}
+              {isZoomedIn && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    haptic()
+                    flyTo(
+                      clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL),
+                      450
+                    )
+                  }}
+                  aria-label="Kembali ke tampilan penuh"
+                  className={`${MAP_GROUP_BUTTON_CLASS} border-b border-slate-200/70`}
+                >
+                  <CornersInIcon weight="bold" className="w-5 h-5 text-slate-700" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setAttributionOpen(o => !o)}
+                aria-label="Lihat atribusi peta"
+                aria-expanded={attributionOpen}
+                className={MAP_GROUP_BUTTON_CLASS}
+              >
+                <InfoIcon weight="bold" className="w-5 h-5 text-slate-700" />
+              </button>
+            </div>
+          )
+        : (
+            <>
+              <div
+                className="map-chrome-enter absolute bottom-4 right-16 z-map-chrome"
+                style={{ animationDelay: staggerDelay(2, MAP_CHROME_STAGGER) }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    haptic()
+                    flyTo(
+                      clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL),
+                      450
+                    )
+                  }}
+                  aria-label="Kembali ke tampilan penuh"
+                  tabIndex={isZoomedIn ? 0 : -1}
+                  className={`${MAP_BUTTON_CLASS} transition-opacity duration-200 ${isZoomedIn ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                >
+                  <CornersInIcon weight="bold" className="w-5 h-5 text-slate-700" />
+                </button>
+              </div>
 
-      {/* Bottom-left is the only free corner: the title pill owns top-left, the
-          close button top-right, recenter and attribution the bottom-right pair,
-          and the fare chip the bottom centre. */}
-      <div
-        className="map-chrome-enter absolute bottom-4 left-4 z-map-chrome"
-        style={{ animationDelay: staggerDelay(4, MAP_CHROME_STAGGER) }}
-      >
-        <button
-          type="button"
-          onClick={() => {
-            haptic()
-            // Cancel a half-finished origin pick: the sheet is a second way to
-            // set the same pair, and leaving the mode armed behind it would make
-            // the next station tap do something the rider no longer expects.
-            setPickingOrigin(false)
-            // Full, not peek: both fields may be empty, so there is nothing to
-            // peek at and the next act is picking a station.
-            openFareSheet('full')
-          }}
-          aria-label="Cek tarif perjalanan"
-          className={MAP_BUTTON_CLASS}
-        >
-          <ReceiptIcon weight="bold" className="w-5 h-5 text-slate-700" />
-        </button>
-      </div>
+              <div
+                className="map-chrome-enter absolute bottom-4 left-4 z-map-chrome"
+                style={{ animationDelay: staggerDelay(4, MAP_CHROME_STAGGER) }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    haptic()
+                    // Cancel a half-finished origin pick: the sheet is a second way to
+                    // set the same pair, and leaving the mode armed behind it would make
+                    // the next station tap do something the rider no longer expects.
+                    setPickingOrigin(false)
+                    // Full, not peek: both fields may be empty, so there is nothing to
+                    // peek at and the next act is picking a station.
+                    openFareSheet('full')
+                  }}
+                  aria-label="Cek tarif perjalanan"
+                  className={MAP_BUTTON_CLASS}
+                >
+                  <ReceiptIcon weight="bold" className="w-5 h-5 text-slate-700" />
+                </button>
+              </div>
 
-      <div
-        className="map-chrome-enter absolute bottom-4 right-4 z-map-chrome"
-        style={{ animationDelay: staggerDelay(3, MAP_CHROME_STAGGER) }}
-      >
-        <button
-          type="button"
-          onClick={() => setAttributionOpen(o => !o)}
-          aria-label="Lihat atribusi peta"
-          aria-expanded={attributionOpen}
-          className={MAP_BUTTON_CLASS}
-        >
-          <InfoIcon weight="bold" className="w-5 h-5 text-slate-700" />
-        </button>
-      </div>
+              <div
+                className="map-chrome-enter absolute bottom-4 right-4 z-map-chrome"
+                style={{ animationDelay: staggerDelay(3, MAP_CHROME_STAGGER) }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setAttributionOpen(o => !o)}
+                  aria-label="Lihat atribusi peta"
+                  aria-expanded={attributionOpen}
+                  className={MAP_BUTTON_CLASS}
+                >
+                  <InfoIcon weight="bold" className="w-5 h-5 text-slate-700" />
+                </button>
+              </div>
+            </>
+          )}
 
       {lineChoices && lineChoices.length > 0 && (
         <div
@@ -2630,8 +2769,11 @@ export default function MapPage() {
       )}
 
       {/* Closed-only: the sheet header carries the same total, and at peek the
-          sheet sits exactly where the chip does. */}
-      {routePair.fromId && routePair.toId && !fareSheet && (
+          sheet sits exactly where the chip does.
+
+          Phones only — on desktop the rail pill grows into the same summary, in
+          the column the rider's eye is already on. */}
+      {!isDesktop && routePair.fromId && routePair.toId && !fareSheet && (
         <MapFareChip
           // The selected journey, so the chip agrees with the corridor drawn
           // behind it rather than with whichever route the API listed first.
@@ -2671,8 +2813,14 @@ export default function MapPage() {
           }}
         />
 
-        {/* No onDismissStart: unlike the station and hub sheets this one owns no
-            spotlight, and the route overlay outlives it deliberately. */}
+        {/* Only the camera half of onDismissStart: unlike the station and hub
+            sheets this one owns no spotlight to stand down, and the route
+            overlay outlives it deliberately.
+
+            It still has to report the dismiss, though. The pane calls onClose
+            only once its 250ms slide has finished, so a sheet that stays silent
+            until then holds the camera inset for the whole exit and the map
+            slides back AFTER the card has gone instead of travelling with it. */}
         <MapFareSheet
           key={fareSheet?.id ?? 'closed'}
           open={!!fareSheet}
@@ -2684,6 +2832,7 @@ export default function MapPage() {
           // Selection is the map's, not the card's: see where it is declared.
           selectedIndex={selectedJourney}
           onSelectIndex={setSelectedJourney}
+          onDismissStart={beginSurfaceDismiss}
           onClose={() => setFareSheet(null)}
         />
 

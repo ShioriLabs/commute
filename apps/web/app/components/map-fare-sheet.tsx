@@ -35,6 +35,13 @@ interface MapFareSheetProps {
   alternatives: boolean
   selectedIndex: number
   onSelectIndex: (index: number) => void
+  /*
+   * Fires when the exit begins, where onClose fires only once it has finished.
+   * The map moves its camera off this: the surface stays mounted for the whole
+   * 250ms slide, so waiting for onClose would inset the map until after the
+   * card had already left.
+   */
+  onDismissStart?: () => void
   onClose: () => void
 }
 
@@ -59,6 +66,7 @@ export default function MapFareSheet({
   alternatives,
   selectedIndex,
   onSelectIndex,
+  onDismissStart,
   onClose
 }: MapFareSheetProps) {
   const { pairFromId, pairToId, criteria } = query
@@ -73,6 +81,7 @@ export default function MapFareSheet({
     <DetailSurface
       open={open}
       initialSnap={initialSnap}
+      onDismissStart={onDismissStart}
       onClose={onClose}
       ariaLabel="Cek tarif"
       header={close => (
