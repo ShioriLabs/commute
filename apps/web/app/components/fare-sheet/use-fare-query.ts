@@ -88,6 +88,8 @@ export interface FareQuery<TResult = FareResult | TripResult> {
   pickerTarget: 'origin' | 'destination'
   pickerOpen: boolean
   openPickerFor: (target: 'origin' | 'destination') => void
+  // Set the target without raising the dialog — see the implementation.
+  aimPickerAt: (target: 'origin' | 'destination') => void
   closePicker: () => void
   handleSelect: (station: PickableStation) => void
   handleSwap: () => void
@@ -172,6 +174,17 @@ export function useFareQuery({
   const openPickerFor = useCallback((target: 'origin' | 'destination') => {
     setPickerTarget(target)
     setPickerOpen(true)
+  }, [])
+  /*
+   * Aim the picker without opening the dialog.
+   *
+   * The map's desktop rail searches inline, so it needs the target — which is
+   * what handleSelect reads to decide which end a station fills — without the
+   * full-screen sheet that openPickerFor also raises. Opening that over a rail
+   * on a desktop map would cover the map the rider is picking from.
+   */
+  const aimPickerAt = useCallback((target: 'origin' | 'destination') => {
+    setPickerTarget(target)
   }, [])
   const closePicker = useCallback(() => setPickerOpen(false), [])
 
@@ -334,6 +347,7 @@ export function useFareQuery({
     pickerTarget,
     pickerOpen,
     openPickerFor,
+    aimPickerAt,
     closePicker,
     handleSelect,
     handleSwap,

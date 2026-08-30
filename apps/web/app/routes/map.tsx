@@ -746,10 +746,22 @@ export default function MapPage() {
   // Only the pair matters here; endIsolate is stable across renders.
   }, [routePair.fromId, routePair.toId])
 
-  // flag, not the destination id: the destination is pinned into routePair the
-  // moment the mode is primed, so holding it here too would be a second source
-  // of truth for one fact. While set, the next station tap becomes the origin.
-  const [pickingOrigin, setPickingOrigin] = useState(false)
+  /*
+   * Which end of the pair the next station tap fills, or null when a tap means
+   * "open this station" as usual.
+   *
+   * The END, not the station id: the other end is already in routePair, so
+   * holding it here too would be a second source of truth for one fact.
+   *
+   * Started life as a boolean for `OTW Ke Sini`, which only ever fills the
+   * origin. The rail's O/D card arms the same mechanism for either field, and
+   * the two are the same act — arm the map, let the next tap answer — so this
+   * widened rather than growing a second mode beside it.
+   */
+  const [pickingEndpoint, setPickingEndpoint] = useState<'from' | 'to' | null>(null)
+  // Reads as it always did at the call sites that only care THAT a pick is
+  // armed, not which end it fills.
+  const pickingOrigin = pickingEndpoint !== null
 
   /*
    * Exactly one detail surface at a time. All four are DetailSurfaces on
@@ -827,7 +839,7 @@ export default function MapPage() {
     // Pin the destination straight away so the map answers the tap with a pin
     // instead of an empty prompt, and cancelling leaves that pin behind.
     setRouteEndpoint('to', `${selectedStation.operator}-${selectedStation.code}`)
-    setPickingOrigin(true)
+    setPickingEndpoint('from')
   }, [selectedStation, setRouteEndpoint])
 
   // Two transforms: `target` is where we want to be; `rendered` is what we
@@ -2173,13 +2185,14 @@ export default function MapPage() {
         if (dash > 0) {
           const operator = stationId.slice(0, dash)
           const code = stationId.slice(dash + 1)
-          if (pickingOrigin) {
-            // Origin pick: this tap completes the pair. The destination itself
-            // and unserved stations (no fare coverage) are not pickable.
-            if (stationId === routePair.toId || getUnservedStation(operator, code)) return false
-            setPickingOrigin(false)
+          if (pickingEndpoint) {
+            // This tap fills the armed end. The station already at the OTHER
+            // end, and unserved stations (no fare coverage), are not pickable.
+            const otherId = pickingEndpoint === 'from' ? routePair.toId : routePair.fromId
+            if (stationId === otherId || getUnservedStation(operator, code)) return false
+            setPickingEndpoint(null)
             haptic()
-            setRouteEndpoint('from', stationId)
+            setRouteEndpoint(pickingEndpoint, stationId)
             // Peek, not full: the route this prices has just been drawn, so the
             // sheet answers with the total while leaving the map behind it.
             openFareSheet('peek')
@@ -2497,13 +2510,44 @@ export default function MapPage() {
             fare={activeJourney}
             hasError={!!fareError}
             isLoading={fareLoading}
+            picking={pickingEndpoint}
+            /*
+             * Arming a field arms the MAP with it: the inline list and a tap on
+             * a station are two ways to answer the same question, so opening one
+             * must not leave the other pointing somewhere else.
+             *
+             * aimPickerAt, not openPickerFor: the rail searches inline, and the
+             * latter would also raise the phone's full-screen picker over the
+             * map behind this card.
+             */
+            onPick={(field) => {
+              haptic()
+              fareQuery.aimPickerAt(field === 'from' ? 'origin' : 'destination')
+              setPickingEndpoint(field)
+            }}
+            onCancelPick={() => setPickingEndpoint(null)}
+            stations={fareQuery.pickableStations}
+            onSelectStation={(field, station) => {
+              // The target was set when the field was armed, so this is the same
+              // path a tap on the map takes — swap-on-same-station included.
+              fareQuery.handleSelect(station)
+              /*
+               * Straight on to the other end if it is still empty: filling one
+               * half of a pair is never the whole errand, and making the rider
+               * click the second row to carry on is a step that answers nothing.
+               * Both filled, the card rests and prices what it has.
+               */
+              const otherEmpty = field === 'from' ? !routePair.toId : !routePair.fromId
+              setPickingEndpoint(otherEmpty ? (field === 'from' ? 'to' : 'from') : null)
+              if (otherEmpty) fareQuery.aimPickerAt(field === 'from' ? 'destination' : 'origin')
+            }}
             onOpenFare={() => {
               haptic()
               // Cancel a half-finished origin pick: the sheet is a second way to
               // set the same pair, and leaving the mode armed behind it would
               // make the next station tap do something the rider no longer
               // expects.
-              setPickingOrigin(false)
+              setPickingEndpoint(null)
               openFareSheet('full')
             }}
             onClear={clearRoute}
@@ -2524,19 +2568,26 @@ export default function MapPage() {
         </div>
       )}
 
-      {/* Departure-pick prompt. A mode indicator, so like the close button it
+      {/* Endpoint-pick prompt. A mode indicator, so like the close button it
           ignores `chromeVisible` — the user must always see the map is in a
-          different state and have a way out of it. */}
-      {pickingOrigin && (
+          different state and have a way out of it.
+
+          Phones only. On desktop the rail's armed field is the indicator: it
+          says which end is being filled, in the place the rider is already
+          looking, and a second banner floating over the map would be the same
+          sentence twice. */}
+      {!isDesktop && pickingEndpoint && (
         <div className="map-chrome-enter absolute inset-x-4 top-16 z-map-chrome flex justify-center pointer-events-none">
           <div className="pointer-events-auto rounded-full bg-white/90 backdrop-blur shadow-lg pl-4 pr-1.5 py-1.5 flex items-center gap-2">
-            <span className="font-bold text-sm text-slate-800 truncate">Pilih stasiun keberangkatan</span>
+            <span className="font-bold text-sm text-slate-800 truncate">
+              {pickingEndpoint === 'from' ? 'Pilih stasiun keberangkatan' : 'Pilih stasiun tujuan'}
+            </span>
             <button
               type="button"
               // Cancels the mode only — the destination stays pinned, so the
               // rider keeps their pick and can set an origin another way.
-              onClick={() => setPickingOrigin(false)}
-              aria-label="Batalkan pemilihan stasiun keberangkatan"
+              onClick={() => setPickingEndpoint(null)}
+              aria-label="Batalkan pemilihan stasiun"
               className="rounded-full w-8 h-8 flex items-center justify-center hover:bg-slate-100 cursor-pointer"
             >
               <XIcon weight="bold" className="w-4 h-4 text-slate-700" />
@@ -2655,7 +2706,7 @@ export default function MapPage() {
                     // Cancel a half-finished origin pick: the sheet is a second way to
                     // set the same pair, and leaving the mode armed behind it would make
                     // the next station tap do something the rider no longer expects.
-                    setPickingOrigin(false)
+                    setPickingEndpoint(null)
                     // Full, not peek: both fields may be empty, so there is nothing to
                     // peek at and the next act is picking a station.
                     openFareSheet('full')
