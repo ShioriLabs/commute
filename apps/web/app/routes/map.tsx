@@ -6,6 +6,7 @@ import LineRoundel from '~/components/line-roundel'
 import LineSheet from '~/components/line-sheet'
 import { findLine, lineCutShapes, linesNear, seedFadeFrom, type LinesManifest } from '~/lib/map-line-isolate'
 import { openSurface, isSurfaceOpen, type OpenSurface } from '~/lib/map-detail-surface'
+import { easeCameraFlight } from '~/lib/map-easing'
 import clsx from 'clsx'
 import type { StandardResponse } from '@schema/response'
 import type { Hub, Station } from '@commute/schemas'
@@ -153,6 +154,23 @@ const WHEEL_ZOOM_INTENSITY = 0.0015
 
 // Camera re-settle when the desktop pane opens or closes. Matches SidePane's
 // own DURATION so the map and the card finish together.
+/*
+ * Camera flight durations.
+ *
+ * Both sit above the ~200ms an entrance would get, because a flight is travel
+ * rather than an appearance: the rider is reading where the camera moved FROM,
+ * and cutting that short reads as a jump-cut instead of a pan. They are as
+ * short as that reading allows, not as short as the curve permits.
+ *
+ * Held at the original values through the easing rework. A shorter flight was
+ * tried alongside the curve swap and read as sudden — the camera arriving
+ * before the eye had followed it. Duration and curve are one decision here:
+ * easeCameraFlight spends real time ramping in, and clipping the flight clips
+ * that ramp, which is the part doing the work.
+ */
+const FLY_POINT_MS = 450
+const FLY_ZOOM_STEP_MS = 350
+
 const SIDE_PANE_SETTLE_MS = 250
 // The same, for the phone's bottom sheet. BottomSheet has no fixed duration to
 // match — it is an exponential lerp with TAU = 80, so it is ~95% home by 3*TAU.
@@ -1518,8 +1536,8 @@ export default function MapPage() {
       // wheel (like inertia), so it never fights a gesture.
       const fly = flyToRef.current
       if (fly && !gestureActiveRef.current) {
-        const p = Math.min(1, (now - fly.start) / fly.duration)
-        const e = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2 // easeInOutCubic
+        const p = fly.duration > 0 ? Math.min(1, (now - fly.start) / fly.duration) : 1
+        const e = easeCameraFlight(p)
         const mixed = {
           tx: fly.from.tx + (fly.to.tx - fly.from.tx) * e,
           ty: fly.from.ty + (fly.to.ty - fly.from.ty) * e,
@@ -1997,7 +2015,7 @@ export default function MapPage() {
       // which is exactly the band the clamp wants.
       viewportSize.w, viewportSize.h, mapW, mapH, minScale, paneEdge, peekPx
     )
-    flyTo(to, 450)
+    flyTo(to, FLY_POINT_MS)
   }
 
   /*
@@ -2120,7 +2138,7 @@ export default function MapPage() {
       )
     }
     haptic()
-    flyTo(to, 350)
+    flyTo(to, FLY_ZOOM_STEP_MS)
   }
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -2749,7 +2767,7 @@ export default function MapPage() {
                     haptic()
                     flyTo(
                       clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL, clampInsetB),
-                      450
+                      FLY_POINT_MS
                     )
                   }}
                   aria-label="Kembali ke tampilan penuh"
@@ -2781,7 +2799,7 @@ export default function MapPage() {
                     haptic()
                     flyTo(
                       clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL, clampInsetB),
-                      450
+                      FLY_POINT_MS
                     )
                   }}
                   aria-label="Kembali ke tampilan penuh"
