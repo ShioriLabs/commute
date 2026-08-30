@@ -1,8 +1,8 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
-import { MagnifyingGlassIcon } from '@phosphor-icons/react'
 import clsx from 'clsx'
 import { OPERATORS } from '@commute/constants'
 import { haptic } from 'utils/haptics'
+import { LIST_STAGGER, LIST_STAGGER_MAX_INDEX, staggerDelay } from 'utils/stagger'
 import HighlightMatch from '~/components/highlight-match'
 import LineRoundel from '~/components/line-roundel'
 import type { PickableStation } from './pickable-station'
@@ -19,13 +19,29 @@ const INITIAL_ROWS = 12
 
 interface Props {
   stations: PickableStation[]
-  // The field being filled, for the input's label and placeholder.
-  label: string
-  // Already chosen for this field, if anything — shown pre-filled so editing an
-  // endpoint starts from what it currently says.
+  /*
+   * The live query, owned by the card above.
+   *
+   * There is no input here: the endpoint row being filled IS the input, the way
+   * Google Maps turns its "Choose starting point" row into the search field.
+   * A second box below the rows would ask the same question twice and cost a
+   * duplicated row's height.
+   */
+  query: string
+  /*
+   * Which endpoint is being filled. Used only to reset the scroll position: a
+   * list still scrolled to the origin's match is the wrong place to start
+   * picking a destination.
+   *
+   * A prop rather than a `key` on this component. Remounting would also reset
+   * the staged row cap, and replaying that on every field switch made the list
+   * jump from twelve rows to full — the jitter this replaced.
+   */
+  field: 'from' | 'to'
+  // Already chosen for this field, if anything — marked in the list so editing
+  // an endpoint shows what it currently says.
   current: PickableStation | null
   onSelect: (station: PickableStation) => void
-  onCancel: () => void
 }
 
 /*
@@ -55,8 +71,7 @@ interface Props {
  * jsxDEV runtime alone doubles script time here (243ms vs 110ms), which is
  * enough to hide what the change is actually worth.
  */
-export default function StationSearchList({ stations, label, current, onSelect, onCancel }: Props) {
-  const [query, setQuery] = useState('')
+export default function StationSearchList({ stations, query, field, current, onSelect }: Props) {
   /*
    * The input stays instant while the fuzzy scan runs against a deferred value.
    * Load-bearing, not a nicety: the scan walks a few thousand searchables, and
@@ -70,7 +85,20 @@ export default function StationSearchList({ stations, label, current, onSelect, 
    * frame, and the rows below the fold are ones nobody is looking at yet.
    */
   const [renderAll, setRenderAll] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
+  /*
+   * Whether this is still the list's entrance.
+   *
+   * The stagger belongs to the list ARRIVING. Once the rider is typing, the
+   * rows are a filter settling and re-staggering them on every keystroke both
+   * looks wrong and costs frames — measured at 6x CPU, replaying it per
+   * keystroke dropped 12 frames with a 150ms worst frame.
+   */
+  const entering = query.length === 0
+  const listRef = useRef<HTMLUListElement>(null)
+  // Back to the top for the new field, without tearing the list down.
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = 0
+  }, [field])
 
   useEffect(() => {
     try {
@@ -79,9 +107,6 @@ export default function StationSearchList({ stations, label, current, onSelect, 
     } catch {
       // Corrupt entry: fall back to popularity-only picks.
     }
-    // Focus immediately. The dialog waits 350ms because focusing mid-slide pops
-    // the phone keyboard and stutters the transform; nothing here is moving.
-    inputRef.current?.focus()
     // Just past the card's 200ms open, so the tail commits on a free frame.
     const timer = setTimeout(() => setRenderAll(true), 220)
     return () => clearTimeout(timer)
@@ -121,29 +146,9 @@ export default function StationSearchList({ stations, label, current, onSelect, 
 
   return (
     <div className="flex flex-col min-h-0">
-      <div className="relative px-3 pt-2 pb-1">
-        <MagnifyingGlassIcon
-          weight="bold"
-          className="w-4 h-4 absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-        />
-        <input
-          ref={inputRef}
-          type="text"
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          // Escape backs out of the field rather than clearing it: the rider is
-          // one key from where they were, and an emptied field they did not ask
-          // for reads as the app losing their work.
-          onKeyDown={e => e.key === 'Escape' && onCancel()}
-          aria-label={label}
-          placeholder={current ? current.name : 'Ketik atau tap stasiun di peta'}
-          className="w-full rounded-xl bg-slate-100 pl-9 pr-3 py-2 text-sm placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-[#F55875]/40"
-        />
-      </div>
-
       {!searching && (
         <div className="px-4 pt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          {recentIds.length > 0 ? 'Terakhir dipakai' : 'Sering dipakai'}
+          {recentIds.length > 0 ? 'Terakhir digunakan' : 'Sering digunakan'}
         </div>
       )}
 
@@ -151,15 +156,56 @@ export default function StationSearchList({ stations, label, current, onSelect, 
         * Capped and scrollable. The rail is a column with a pane docked under
         * it, so an uncapped list would grow straight over that pane; this keeps
         * the card a predictable height whatever the query matches.
+        *
+        * 13rem is about five rows — enough that the list reads as a list and
+        * the best match is never the only thing visible, while leaving the
+        * whole card short enough to sit above the pane rather than across it.
         */}
-      <ul className="overflow-y-auto overscroll-contain max-h-64 py-1">
-        {shown.map(station => (
-          <li key={station.id}>
+      {/*
+        * The scrollbar appears only once the rider is searching.
+        *
+        * On a platform with classic overlay-free scrollbars (Windows) the bar
+        * takes real layout width, so one appearing as the list crosses the
+        * scroll threshold shifts every row sideways. On first open that is pure
+        * jitter: the quick picks are a fixed handful nobody needs to scroll.
+        * Once results are coming back the list is long and worth scrolling, and
+        * the bar is the only thing that says so — so it is shown, and the
+        * shift happens once, on a list that has just changed anyway.
+        */}
+      <ul
+        ref={listRef}
+        className={clsx(
+          'overflow-y-auto overscroll-contain max-h-52 py-1',
+          searching ? '[scrollbar-gutter:stable]' : 'no-scrollbar'
+        )}
+      >
+        {shown.map((station, index) => (
+          /*
+           * Staggered entrance, the same 30ms step and .search-result-enter the
+           * phone picker's rows use — rows that arrive together but not all at
+           * once. Only the first screenful is staggered; past LIST_STAGGER's cap
+           * the delay would outlast the interaction, and rows that far down are
+           * scrolled to rather than watched arriving.
+           *
+           * Keyed on the station alone, and only staggered while `entering`.
+           * Keying on the query was tried so a re-rank would replay the
+           * entrance: it dropped 12 frames with a 150ms worst frame at 6x CPU,
+           * and re-ranking is a filter settling rather than a list arriving.
+           */
+          <li
+            key={station.id}
+            className={entering && index <= LIST_STAGGER_MAX_INDEX ? 'search-result-enter' : undefined}
+            style={entering && index <= LIST_STAGGER_MAX_INDEX
+              ? { animationDelay: staggerDelay(index, LIST_STAGGER) }
+              : undefined}
+          >
             <button
               type="button"
               onClick={() => pick(station)}
               className={clsx(
-                'px-4 py-2 flex items-center gap-3 w-full text-left cursor-pointer',
+                'px-4 py-1.5 flex items-center gap-3 w-full text-left cursor-pointer',
+                // `ease` for the hover settle; see the endpoint rows.
+                'transition-colors duration-150 ease',
                 station.id === current?.id ? 'bg-rose-50' : 'hover:bg-rose-50/60'
               )}
             >

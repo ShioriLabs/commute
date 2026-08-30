@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowDownIcon, MagnifyingGlassIcon, XIcon } from '@phosphor-icons/react'
 import clsx from 'clsx'
 import type { FareResult } from '@commute/schemas'
@@ -62,6 +62,16 @@ const SEARCH_SURFACE_CLASS = 'rounded-2xl bg-white shadow-lg'
 const ROUNDEL_COL = 'w-6 shrink-0'
 
 /*
+ * One endpoint row's height, shared by both of its forms.
+ *
+ * A single constant because the row swaps between a button and an input when it
+ * is armed, and the two drifted: an h-8 input against an h-7 button moved the
+ * whole card 4px the moment a field took focus. Nothing below a focus ring
+ * should change size.
+ */
+const ROW_H = 'h-8'
+
+/*
  * One end of the drawn pair.
  *
  * Signed with the line's roundel rather than the station's own number: the fare
@@ -76,29 +86,97 @@ const ROUNDEL_COL = 'w-6 shrink-0'
  * the stop, because the row names one station and a row of roundels would
  * compete with the name for the width.
  */
-function EndpointRow({ station, placeholder, emphasis = false, armed, enabled, onClick }: {
+function EndpointRow({
+  station,
+  placeholder,
+  emphasis = false,
+  armed,
+  enabled,
+  onClick,
+  query,
+  onQueryChange,
+  onCancel,
+  label
+}: {
   station: PickableStation | null
   placeholder: string
   emphasis?: boolean
-  // This field is the one being filled: it reads as selected, and the map is
-  // armed to answer a tap with it.
+  // This field is the one being filled: it becomes the text input, and the map
+  // is armed to answer a tap with it.
   armed: boolean
   // The card is open. Rows stay mounted while it is closed so the collapse can
   // animate, and a control inside a zero-height box must not be reachable.
   enabled: boolean
   onClick: () => void
+  query: string
+  onQueryChange: (value: string) => void
+  onCancel: () => void
+  label: string
 }) {
   const line = station?.sortedLines[0]
+  const inputRef = useRef<HTMLInputElement>(null)
+  // Focus on arming, not on mount: the row is mounted the whole time, and it is
+  // becoming the input that should take the caret.
+  useEffect(() => {
+    if (armed) inputRef.current?.focus()
+  }, [armed])
+
+  /*
+   * Armed, the row IS the search field.
+   *
+   * A separate input below the rows would ask the same question twice — the row
+   * already names the endpoint being changed — and cost a duplicated row's
+   * height in a column that has a pane docked under it.
+   */
+  if (armed) {
+    return (
+      <li className={clsx('flex items-center gap-2 min-w-0', ROW_H)}>
+        <span className={clsx(ROUNDEL_COL, 'flex justify-center')}>
+          {line
+            ? (
+                <LineRoundel
+                  size="SM"
+                  operator={station.operator}
+                  code={line.lineCode}
+                  color={line.colorCode as `#${string}`}
+                />
+              )
+            : <span className="w-2 h-2 rounded-full bg-slate-300" aria-hidden />}
+        </span>
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={e => onQueryChange(e.target.value)}
+          // Escape backs out of the field rather than clearing it: the rider is
+          // one key from where they were, and an emptied field they did not ask
+          // for reads as the app losing their work.
+          onKeyDown={e => e.key === 'Escape' && onCancel()}
+          aria-label={label}
+          /*
+           * Armed and empty, the hint is that the map is live — the row's own
+           * name already said which end this is, and "tap a station" is the
+           * part a rider would not otherwise guess.
+           */
+          placeholder={station ? station.name : 'Ketik atau tap stasiun di peta'}
+          className="flex-1 min-w-0 bg-transparent text-sm outline-none placeholder:text-slate-400"
+        />
+      </li>
+    )
+  }
+
   return (
     <li>
       <button
         type="button"
         onClick={onClick}
         tabIndex={enabled ? 0 : -1}
-        aria-current={armed}
         className={clsx(
-          'flex items-center gap-2 min-w-0 h-7 w-full text-left rounded-lg -mx-1 px-1 cursor-pointer',
-          armed ? 'bg-rose-50' : 'hover:bg-slate-50'
+          'flex items-center gap-2 min-w-0 w-full text-left rounded-lg -mx-1 px-1 cursor-pointer',
+          ROW_H,
+          // `ease`, not the ease-out the entrances use: a hover is a state
+          // settling, not something arriving.
+          'transition-colors duration-150 ease hover:bg-slate-50'
         )}
       >
         <span className={clsx(ROUNDEL_COL, 'flex justify-center')}>
@@ -182,6 +260,15 @@ export default function MapRailPill({
    * as results come back and as a long station name wraps, and only the element
    * knows when it has stopped moving.
    */
+  /*
+   * The search query, owned here because two children need it: the armed row
+   * renders it (the row IS the input) and the list below ranks against it.
+   */
+  const [query, setQuery] = useState('')
+  // Fresh per field. Carrying a query from the origin into the destination
+  // would open the second field already filtered by the first one's answer.
+  useEffect(() => setQuery(''), [picking])
+
   const bodyRef = useRef<HTMLDivElement>(null)
   const [bodyHeight, setBodyHeight] = useState(0)
   useLayoutEffect(() => {
@@ -213,27 +300,53 @@ export default function MapRailPill({
           open ? 'rounded-t-2xl' : 'rounded-2xl'
         )}
       >
-        {picking
-          ? (
-              <button
-                type="button"
-                /*
-                 * The way out of search for anyone not reaching for Escape.
-                 *
-                 * Backs out of the FIELD only — whatever is already picked
-                 * stays. Clearing the route is the fare row's X, a different
-                 * verb that deserves its own control; one X meaning both would
-                 * make an accidental tap while editing a destination throw away
-                 * the origin too.
-                 */
-                onClick={onCancelPick}
-                aria-label="Tutup pencarian stasiun"
-                className="-ml-1.5 w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-100 cursor-pointer transition-transform duration-150 ease-out active:scale-95"
-              >
-                <XIcon weight="bold" className="w-5 h-5" />
-              </button>
-            )
-          : <MagnifyingGlassIcon weight="bold" className="w-5 h-5 text-slate-400 shrink-0" />}
+        {/*
+          * One fixed slot for both icons, so the title beside it never moves.
+          *
+          * The two used to swap as siblings of different widths — a w-5 glyph
+          * for a w-8 button — which shifted the label sideways the instant a
+          * field was armed. They now stack in the same box and cross-fade: the
+          * magnifier is decoration and the X is a control, but the rider should
+          * only ever see one thing become the other in place.
+          */}
+        <span className="relative w-8 h-8 -ml-1.5 shrink-0">
+          <button
+            type="button"
+            /*
+             * The way out of search for anyone not reaching for Escape.
+             *
+             * Backs out of the FIELD only — whatever is already picked stays.
+             * Clearing the route is the fare row's X, a different verb that
+             * deserves its own control; one X meaning both would make an
+             * accidental tap while editing a destination throw away the origin
+             * too.
+             */
+            onClick={onCancelPick}
+            aria-label="Tutup pencarian stasiun"
+            // Untabbable and inert when there is no search to close, so the
+            // slot is a plain icon the rest of the time.
+            tabIndex={picking ? 0 : -1}
+            aria-hidden={!picking}
+            className={clsx(
+              'absolute inset-0 rounded-full flex items-center justify-center text-slate-500',
+              'transition-[opacity,transform,background-color] duration-150 ease-out',
+              picking
+                ? 'opacity-100 hover:bg-slate-100 cursor-pointer active:scale-95'
+                : 'opacity-0 pointer-events-none scale-90'
+            )}
+          >
+            <XIcon weight="bold" className="w-5 h-5" />
+          </button>
+          <MagnifyingGlassIcon
+            weight="bold"
+            aria-hidden
+            className={clsx(
+              'absolute inset-0 m-auto w-5 h-5 text-slate-400 pointer-events-none',
+              'transition-[opacity,transform] duration-150 ease-out',
+              picking ? 'opacity-0 scale-90' : 'opacity-100'
+            )}
+          />
+        </span>
 
         <button
           type="button"
@@ -249,7 +362,7 @@ export default function MapRailPill({
            */
           onClick={() => (hasPair ? onOpenFare() : onPick('from'))}
           disabled={picking !== null}
-          aria-label={hasPair ? 'Buka rincian tarif' : 'Cek tarif perjalanan'}
+          aria-label={hasPair ? 'Buka rincian tarif' : 'Cek rute dan tarif'}
           className={clsx(
             'flex-1 min-w-0 h-full flex items-center text-left',
             picking
@@ -258,7 +371,7 @@ export default function MapRailPill({
           )}
         >
           <span className="font-bold text-base text-slate-800 truncate">
-            {hasPair ? 'Ubah rute' : 'Cek tarif'}
+            {hasPair ? 'Ubah rute' : 'Cek rute dan tarif'}
           </span>
         </button>
       </div>
@@ -308,10 +421,14 @@ export default function MapRailPill({
             <ol className="flex flex-col py-1">
               <EndpointRow
                 station={endpoints.from}
-                placeholder="Pilih keberangkatan"
+                placeholder="Dari mana?"
                 armed={picking === 'from'}
                 enabled={open}
                 onClick={() => onPick('from')}
+                query={query}
+                onQueryChange={setQuery}
+                onCancel={onCancelPick}
+                label="Cari stasiun keberangkatan"
               />
               {/*
                 * Centred on the roundel column rather than nudged with padding:
@@ -325,11 +442,15 @@ export default function MapRailPill({
               </li>
               <EndpointRow
                 station={endpoints.to}
-                placeholder="Pilih tujuan"
+                placeholder="Mau ke mana?"
                 emphasis
                 armed={picking === 'to'}
                 enabled={open}
                 onClick={() => onPick('to')}
+                query={query}
+                onQueryChange={setQuery}
+                onCancel={onCancelPick}
+                label="Cari stasiun tujuan"
               />
             </ol>
 
@@ -343,16 +464,17 @@ export default function MapRailPill({
               ? (
                   <div className="-mx-4 border-t border-slate-100">
                     <StationSearchList
-                      // Remount per field so the query, the focus and the
-                      // scroll position all start fresh — a list still scrolled
-                      // to the origin's match is the wrong place to begin
-                      // picking a destination.
-                      key={picking}
+                      /*
+                       * NOT keyed on `picking`. Remounting per field reset the
+                       * staged mount, so switching fields replayed the 12-row
+                       * cap and the list visibly snapped to full height. The
+                       * list resets its own scroll on the field instead.
+                       */
+                      field={picking}
                       stations={stations}
-                      label={picking === 'from' ? 'Cari stasiun keberangkatan' : 'Cari stasiun tujuan'}
+                      query={query}
                       current={picking === 'from' ? endpoints.from : endpoints.to}
                       onSelect={station => onSelectStation(picking, station)}
-                      onCancel={onCancelPick}
                     />
                   </div>
                 )
@@ -369,7 +491,7 @@ export default function MapRailPill({
                       // DOM so they can animate, and a hidden control in the tab
                       // order is a focus trap the rider cannot see.
                       tabIndex={hasPair ? 0 : -1}
-                      className="rounded-full flex items-center justify-center w-9 h-9 -mr-1.5 text-slate-700 hover:bg-slate-100 cursor-pointer shrink-0"
+                      className="rounded-full flex items-center justify-center w-9 h-9 -mr-1.5 text-slate-700 cursor-pointer shrink-0 transition-[background-color,transform] duration-150 ease hover:bg-slate-100 active:scale-95"
                     >
                       <XIcon weight="bold" className="w-4 h-4" />
                     </button>
