@@ -2190,12 +2190,31 @@ export default function MapPage() {
             // end, and unserved stations (no fare coverage), are not pickable.
             const otherId = pickingEndpoint === 'from' ? routePair.toId : routePair.fromId
             if (stationId === otherId || getUnservedStation(operator, code)) return false
-            setPickingEndpoint(null)
             haptic()
             setRouteEndpoint(pickingEndpoint, stationId)
-            // Peek, not full: the route this prices has just been drawn, so the
-            // sheet answers with the total while leaving the map behind it.
-            openFareSheet('peek')
+            /*
+             * Where the answer goes differs by form factor, because the two
+             * have different places to put it.
+             *
+             * Desktop has the rail card, which is already showing this pair and
+             * will price it in place — opening the fare pane on top would cover
+             * the map the rider just picked from to repeat what the card says.
+             * So the card keeps the answer, and an empty other end simply arms
+             * itself next, exactly as picking from the inline list does.
+             *
+             * Phones have no rail, so the sheet IS the answer. Peek, not full:
+             * the route has just been drawn, so it reports the total while
+             * leaving the map visible behind it.
+             */
+            if (isDesktop) {
+              const otherEmpty = pickingEndpoint === 'from' ? !routePair.toId : !routePair.fromId
+              const next = pickingEndpoint === 'from' ? 'to' : 'from'
+              setPickingEndpoint(otherEmpty ? next : null)
+              if (otherEmpty) fareQuery.aimPickerAt(next === 'from' ? 'origin' : 'destination')
+            } else {
+              setPickingEndpoint(null)
+              openFareSheet('peek')
+            }
             // No station sheet, no spotlight, no flyTo — the route's fit flight
             // owns the camera from here.
             return false
