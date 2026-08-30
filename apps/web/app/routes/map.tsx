@@ -75,7 +75,7 @@ import type { PaneDescriptor } from '../components/pane-stack/model'
 import { MapPreviewBackdrop, useMapMorph } from '../components/map-morph'
 import { prefetchMapSkeleton } from '../components/map-skeleton'
 import { PEEK_FRACTION } from '../components/bottom-sheet'
-import { SIDE_PANE_OCCUPIED_PX } from '../components/side-pane'
+import { RAIL_PILL_RESERVED_PX, SIDE_PANE_OCCUPIED_PX } from '../components/side-pane'
 import { useIsDesktop } from '~/hooks/is-desktop'
 // Imported as a URL (not as data) so Vite content-hashes it into /assets/. The
 // file deliberately lives outside public/: assets under public/ are copied
@@ -1325,6 +1325,14 @@ export default function MapPage() {
    * sets the pair and opens the sheet together, and the flight has to know the
    * sheet is there.
    */
+  /*
+   * What the desktop rail's card currently covers, reported by the card itself.
+   *
+   * Only the grown card matters: a fitted route reads fine under a bare pill,
+   * so the card reports its full height and surfaceInset decides what is worth
+   * reserving.
+   */
+  const [railCardPx, setRailCardPx] = useState(0)
   const surfaceInsetRef = useRef(surfaceInset({
     isDesktop: false,
     surfaceOpen: false,
@@ -1349,8 +1357,10 @@ export default function MapPage() {
     viewportH: viewportSize.h,
     panePx: SIDE_PANE_OCCUPIED_PX,
     peekFraction: PEEK_FRACTION,
-    chipPx: CHIP_CLEARANCE_PX
-  }), [isDesktop, detailSurfaceOpen, surfaceDismissing, routePair, viewportSize.h])
+    chipPx: CHIP_CLEARANCE_PX,
+    // Only once it has actually grown past a pill — see RAIL_PILL_RESERVED_PX.
+    railCardPx: railCardPx > RAIL_PILL_RESERVED_PX ? railCardPx : 0
+  }), [isDesktop, detailSurfaceOpen, surfaceDismissing, routePair, viewportSize.h, railCardPx])
   /*
    * Screen the desktop pane takes off the left, and the only inset the camera
    * clamp cares about: it is what lets the map's left edge slide out from under
@@ -1691,18 +1701,23 @@ export default function MapPage() {
         const cy = (bbox.minY + bbox.maxY) / 2
         // Whatever a detail surface or the fare chip is covering right now, so
         // the route lands in the part of the map the rider can actually see.
-        const { left: insetL, bottom: insetB } = surfaceInsetRef.current
+        const { left: insetL, top: insetT, bottom: insetB } = surfaceInsetRef.current
+        // Centre of the strip actually visible: the full viewport minus what
+        // the rail's card covers at the top and a pane or sheet at the sides
+        // and bottom. Without the top term a fitted route centres behind the
+        // card and its northern leg lands underneath it.
+        const centreY = insetT + (viewportSize.h - insetT - insetB) / 2
         let to: Transform
         if (hasPolyline) {
           const w = Math.max(1, bbox.maxX - bbox.minX)
           const h = Math.max(1, bbox.maxY - bbox.minY)
           const availW = Math.max(1, viewportSize.w - insetL - FIT_BOUNDS_PAD_CSS_PX * 2)
-          const availH = Math.max(1, viewportSize.h - insetB - FIT_BOUNDS_PAD_CSS_PX * 2)
+          const availH = Math.max(1, viewportSize.h - insetT - insetB - FIT_BOUNDS_PAD_CSS_PX * 2)
           const scale = Math.max(minScale, Math.min(MAX_SCALE, Math.min(availW / w, availH / h)))
           to = clampTransform(
             {
               tx: insetL + (viewportSize.w - insetL) / 2 - cx * scale,
-              ty: (viewportSize.h - insetB) / 2 - cy * scale,
+              ty: centreY - cy * scale,
               scale
             },
             viewportSize.w, viewportSize.h, mapW, mapH, minScale, insetL
@@ -1713,7 +1728,7 @@ export default function MapPage() {
           to = clampTransform(
             {
               tx: insetL + (viewportSize.w - insetL) / 2 - cx * s,
-              ty: (viewportSize.h - insetB) / 2 - cy * s,
+              ty: centreY - cy * s,
               scale: s
             },
             viewportSize.w, viewportSize.h, mapW, mapH, minScale, insetL
@@ -2570,6 +2585,7 @@ export default function MapPage() {
               openFareSheet('full')
             }}
             onClear={clearRoute}
+            onHeightChange={setRailCardPx}
           />
         </div>
       )}

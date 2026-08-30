@@ -37,6 +37,15 @@ interface MapRailPillProps {
   onSelectStation: (field: 'from' | 'to', station: PickableStation) => void
   onOpenFare: () => void
   onClear: () => void
+  /*
+   * The head's current height, reported as it changes.
+   *
+   * The map takes this off the top when fitting a route: a fit centred in the
+   * whole viewport puts the route's northern leg under the card. Reported
+   * rather than derived because the height depends on what the card is showing
+   * — a pill, two station rows, or a search list.
+   */
+  onHeightChange?: (px: number) => void
 }
 
 // The collapsed head's own height. The margins around it live in the rail's
@@ -234,7 +243,8 @@ export default function MapRailPill({
   stations,
   onSelectStation,
   onOpenFare,
-  onClear
+  onClear,
+  onHeightChange
 }: MapRailPillProps) {
   const reduced = useReducedMotion()
   /*
@@ -280,8 +290,34 @@ export default function MapRailPill({
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
+
+  /*
+   * Report what the card covers, which is the OUTER box — the body's height
+   * plus the head above it, and zero while the body is collapsed.
+   *
+   * A ref for the callback so a parent passing an inline arrow does not
+   * re-subscribe the observer on every render.
+   */
+  const cardRef = useRef<HTMLDivElement>(null)
+  const onHeightChangeRef = useRef(onHeightChange)
+  useEffect(() => {
+    onHeightChangeRef.current = onHeightChange
+  })
+  useLayoutEffect(() => {
+    const el = cardRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const report = () => onHeightChangeRef.current?.(Math.round(el.getBoundingClientRect().height))
+    report()
+    const ro = new ResizeObserver(report)
+    ro.observe(el)
+    return () => {
+      ro.disconnect()
+      // The card is gone; stop reserving screen for it.
+      onHeightChangeRef.current?.(0)
+    }
+  }, [])
   return (
-    <div className={clsx('w-full overflow-hidden', picking ? SEARCH_SURFACE_CLASS : SURFACE_CLASS)}>
+    <div ref={cardRef} className={clsx('w-full overflow-hidden', picking ? SEARCH_SURFACE_CLASS : SURFACE_CLASS)}>
       {/*
         * The idle row keeps its height in both states and turns into the card's
         * header, so nothing jumps as the rows below it open.

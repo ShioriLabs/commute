@@ -21,10 +21,26 @@ export interface SurfaceInsetInput {
   peekFraction: number
   // Vertical room the floating fare chip needs when no surface is open.
   chipPx: number
+  /*
+   * Height the desktop rail's head currently occupies, measured by the card
+   * itself. Zero while it is a bare pill — a route fitted under a pill is still
+   * readable, so only the grown card is worth moving the map for.
+   */
+  railCardPx?: number
 }
 
 export interface SurfaceInset {
   left: number
+  /*
+   * Screen the desktop rail's card takes off the TOP.
+   *
+   * Its own height rather than the pane's full band width: the card is a short
+   * object in the top-left, so reserving the whole column for it would give up
+   * a quarter of the viewport to clear something that only covers the first
+   * couple of hundred pixels. Zero on phones and whenever the card is a bare
+   * pill, which the map stays perfectly legible under.
+   */
+  top: number
   bottom: number
 }
 
@@ -44,7 +60,8 @@ export function surfaceInset({
   viewportH,
   panePx,
   peekFraction,
-  chipPx
+  chipPx,
+  railCardPx = 0
 }: SurfaceInsetInput): SurfaceInset {
   if (isDesktop) {
     /*
@@ -55,9 +72,14 @@ export function surfaceInset({
      *
      * The pane is a left band and never covers the bottom, so the chip needs no
      * clearance there.
+     *
+     * The card above it is a different shape and gets a different answer: it is
+     * short and wide-ish, so it takes a TOP inset of its own height. Without
+     * that, a fitted route centres in the whole viewport and the card lands on
+     * top of its northern leg.
      */
-    return { left: surfaceOpen ? panePx : 0, bottom: 0 }
+    return { left: surfaceOpen ? panePx : 0, top: railCardPx, bottom: 0 }
   }
-  if (surfaceOpen) return { left: 0, bottom: Math.round(viewportH * peekFraction) }
-  return { left: 0, bottom: hasPair ? chipPx : 0 }
+  if (surfaceOpen) return { left: 0, top: 0, bottom: Math.round(viewportH * peekFraction) }
+  return { left: 0, top: 0, bottom: hasPair ? chipPx : 0 }
 }
