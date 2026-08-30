@@ -103,6 +103,20 @@ const MAX_SAMPLES = 4000
 // world units is 1.25 CSS px — below the threshold of visibility, and enough to collapse
 // an 8-unit-sampled straight run back to its two endpoints.
 const SIMPLIFY_EPSILON = 2.5
+/*
+ * The corridors file's own Douglas-Peucker tolerance, world units.
+ *
+ * Far tighter than SIMPLIFY_EPSILON because the two outputs are viewed at different
+ * scales. The skeleton is drawn once, at scale 0.5, and never zoomed; corridors are drawn
+ * under the map camera, which reaches scale ~8 on a corner. At that scale the skeleton's
+ * 2.5 units is 20 CSS px of chord error, which is what makes a drawn route read as blocky
+ * where the artwork curves.
+ *
+ * 0.35 keeps a 90-degree fillet's arc under a quarter-pixel of error at the deepest zoom
+ * while still collapsing the long straight runs — which are most of the network — back to
+ * their endpoints. The cost is vertices, and the guardrail below is what bounds it.
+ */
+const CORRIDOR_SIMPLIFY_EPSILON = 0.35
 
 // Guardrails. MIN_STROKES is the one that matters: it is what turns "a future map edition
 // changed its stroke widths and the predicate now matches nothing" from a silently empty
@@ -159,10 +173,18 @@ export interface SkeletonStroke {
 }
 
 // One extracted corridor as it travels through this script: the shipped skeleton shape
-// plus the rounded points behind its `d`, so the corridors file can be emitted from the
-// same rounding pass instead of parsing the string back apart.
+// plus the rounded points behind its `d`.
+//
+// `corridorPts` is a SECOND, finer reduction of the same raw samples rather than a reuse
+// of `pts`. The skeleton draws the network at scale 0.5 for a loading animation, where
+// 2.5-unit error and integer coordinates are both invisible; the route overlay draws the
+// same geometry under a camera the user can zoom into a corner, where they are not. The
+// artwork's corner fillets are quarter-arcs a few tens of units across, so the skeleton's
+// tolerance keeps about three vertices through a 90-degree turn and the overlay's capsules
+// then render that turn as three flat facets.
 interface ExtractedStroke extends SkeletonStroke {
   pts: number[][]
+  corridorPts: number[][]
 }
 
 /*
@@ -394,6 +416,28 @@ function roundPoints(points: number[][]): number[][] {
   return rounded
 }
 
+/*
+ * The corridors file's rounding: one decimal rather than roundPoints' integers.
+ *
+ * Integer coordinates put a vertex on a 1-unit lattice, so a fillet's vertices are
+ * displaced by up to half a unit in a direction unrelated to the curve. Under the loading
+ * camera that is a fifth of a pixel and irrelevant; zoomed in on a corner it is a visible
+ * kink, and it lands precisely on the few vertices that describe the curve. One decimal
+ * costs ~2 bytes a vertex and puts the quantisation an order of magnitude below the
+ * simplification tolerance, where it stops being the thing you can see.
+ */
+function roundCorridorPoints(points: number[][]): number[][] {
+  const rounded: number[][] = []
+  for (const [x, y] of points) {
+    const rx = Math.round(x * 10) / 10
+    const ry = Math.round(y * 10) / 10
+    const last = rounded[rounded.length - 1]
+    if (last && last[0] === rx && last[1] === ry) continue
+    rounded.push([rx, ry])
+  }
+  return rounded
+}
+
 function serialize(rounded: number[][]): string {
   if (rounded.length < 2) return ''
   return 'M' + rounded.map(([x, y]) => `${x} ${y}`).join('L')
@@ -516,7 +560,7 @@ function collectStations(
 function writeCorridors(extracted: ExtractedStroke[], version: string): void {
   const corridors: CorridorEntry[] = extracted
     .filter(s => CORRIDOR_WIDTH_CLASSES.includes(s.w))
-    .map(s => ({ w: s.w, c: s.c, pts: s.pts }))
+    .map(s => ({ w: s.w, c: s.c, pts: s.corridorPts }))
 
   const rail = corridors.filter(c => c.w === 25).length
   const brt = corridors.filter(c => c.w === 15).length
@@ -601,7 +645,10 @@ async function main(): Promise<void> {
           cx: Math.round((Math.min(...xs) + Math.max(...xs)) / 2),
           cy: Math.round((Math.min(...ys) + Math.max(...ys)) / 2),
           d,
-          pts
+          pts,
+          // Reduced from the same raw samples, not from `pts` — simplifying an
+          // already-simplified polyline can only compound the error it is meant to avoid.
+          corridorPts: roundCorridorPoints(simplify(stroke.points, CORRIDOR_SIMPLIFY_EPSILON))
         })
       }
 
