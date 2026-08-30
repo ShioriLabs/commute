@@ -174,7 +174,6 @@ export const TOPOLOGY: LineTopology[] = [
           { station: 'AK', pos: 'C08' },
           { station: 'DU', pos: 'C09' },
           { station: 'THB', pos: 'C10' },
-          { station: 'KAT', pos: 'C11a' },
           { station: 'SUDB', pos: 'C11' },
           { station: 'SUD', pos: 'C12' },
           { station: 'MRI', pos: 'C13' },
