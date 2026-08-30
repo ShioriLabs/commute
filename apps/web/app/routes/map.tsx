@@ -154,6 +154,12 @@ const WHEEL_ZOOM_INTENSITY = 0.0015
 // Camera re-settle when the desktop pane opens or closes. Matches SidePane's
 // own DURATION so the map and the card finish together.
 const SIDE_PANE_SETTLE_MS = 250
+// The same, for the phone's bottom sheet. BottomSheet has no fixed duration to
+// match — it is an exponential lerp with TAU = 80, so it is ~95% home by 3*TAU.
+// That is this number. Deliberately not SIDE_PANE_SETTLE_MS: the sheet does not
+// share the pane's DURATION, and tying it to one would be a coincidence a later
+// change to either could silently break.
+const SHEET_SETTLE_MS = 240
 
 // One spec for all four floating buttons. 44px is the tap-target minimum.
 const MAP_BUTTON_CLASS
@@ -1362,17 +1368,45 @@ export default function MapPage() {
     railCardPx: railCardPx > RAIL_PILL_RESERVED_PX ? railCardPx : 0
   }), [isDesktop, detailSurfaceOpen, surfaceDismissing, routePair, viewportSize.h, railCardPx])
   /*
-   * Screen the desktop pane takes off the left, and the only inset the camera
-   * clamp cares about: it is what lets the map's left edge slide out from under
-   * the pane so the western end of the network (Tangerang, Rangkasbitung) can
-   * be reached at all. The bottom inset stays a fit-bounds concern — a peeked
-   * sheet is draggable, so the map underneath is never unreachable.
+   * Screen the desktop pane takes off the left: what lets the map's left edge
+   * slide out from under the pane so the western end of the network (Tangerang,
+   * Rangkasbitung) can be reached at all.
    */
   const clampInsetL = surfaceInsetValue.left
+  /*
+   * Screen the phone's sheet takes off the bottom, and the vertical half of the
+   * same job. On a portrait phone the HEIGHT is the binding axis, so at minimum
+   * zoom the scaled map fills the viewport exactly and there is no vertical pan
+   * slack at all — roughly a third of the network sits under a peeked sheet
+   * with no gesture able to bring it out. Being draggable moves the sheet, not
+   * the camera, and the camera was what the bound was stuck on.
+   *
+   * Deliberately NOT surfaceInsetValue.bottom, which also counts the floating
+   * fare chip's clearance. The chip is one pill in a corner with the live map
+   * visible around and under it — nothing is stranded beneath it, the same
+   * judgement that denies the desktop rail's pill a left band. And `hasPair`
+   * holds for as long as a route is drawn, so feeding it here would letterbox
+   * every phone showing a route to clear something that never blocked anything.
+   *
+   * Peek height regardless of the sheet's real snap, matching surfaceInset's
+   * own assumption: BottomSheet does not report its snap upward, and at `full`
+   * the backdrop takes pointer events so the map is not pannable anyway.
+   */
+  const clampInsetB = !isDesktop && detailSurfaceOpen && !surfaceDismissing
+    ? Math.round(viewportSize.h * PEEK_FRACTION)
+    : 0
+  /*
+   * The clamp's own view of the chrome, mirrored for the rAF tick. Separate
+   * from surfaceInsetRef because that one is the fit-bounds view and counts the
+   * chip; these two must never disagree by a frame, so both are written in the
+   * one effect below.
+   */
+  const clampInsetRef = useRef({ l: 0, b: 0 })
   useEffect(() => {
     surfaceInsetRef.current = surfaceInsetValue
+    clampInsetRef.current = { l: clampInsetL, b: clampInsetB }
     dirtyRef.current = true
-  }, [surfaceInsetValue])
+  }, [surfaceInsetValue, clampInsetL, clampInsetB])
 
   // Drive the fade + scrim mirrors, and queue the one-per-pair fit flight.
   useEffect(() => {
@@ -1507,7 +1541,8 @@ export default function MapPage() {
         const avgVy = inertia.vy * (1 + decay) / 2
         targetRef.current = clampTransform(
           { tx: target.tx + avgVx * dt, ty: target.ty + avgVy * dt, scale: target.scale },
-          viewportSize.w, viewportSize.h, mapW, mapH, minScale, surfaceInsetRef.current.left
+          viewportSize.w, viewportSize.h, mapW, mapH, minScale,
+          clampInsetRef.current.l, clampInsetRef.current.b
         )
         inertia.vx *= decay
         inertia.vy *= decay
@@ -1706,6 +1741,14 @@ export default function MapPage() {
         // the rail's card covers at the top and a pane or sheet at the sides
         // and bottom. Without the top term a fitted route centres behind the
         // card and its northern leg lands underneath it.
+        //
+        // This is where the flight AIMS, and it counts the fare chip. Where it
+        // is BOUNDED is clampInsetRef, which does not — see clampInsetB. The
+        // two differ on purpose: aiming high to clear a see-through pill is a
+        // soft preference worth having, while giving up the pan range to it
+        // permanently is not. When only the chip is up the clamp may pull the
+        // flight back down at minimum zoom, which is exactly what it did
+        // before this and is not the case anything was stranded in.
         const centreY = insetT + (viewportSize.h - insetT - insetB) / 2
         let to: Transform
         if (hasPolyline) {
@@ -1720,7 +1763,8 @@ export default function MapPage() {
               ty: centreY - cy * scale,
               scale
             },
-            viewportSize.w, viewportSize.h, mapW, mapH, minScale, insetL
+            viewportSize.w, viewportSize.h, mapW, mapH, minScale,
+            insetL, clampInsetRef.current.b
           )
         } else {
           // Single pin: just bring it into view at the current zoom.
@@ -1731,7 +1775,8 @@ export default function MapPage() {
               ty: centreY - cy * s,
               scale: s
             },
-            viewportSize.w, viewportSize.h, mapW, mapH, minScale, insetL
+            viewportSize.w, viewportSize.h, mapW, mapH, minScale,
+            insetL, clampInsetRef.current.b
           )
         }
         inertiaRef.current = null
@@ -1842,7 +1887,7 @@ export default function MapPage() {
   }, [viewportSize.w, viewportSize.h, mapW, mapH, minScale, authorMode, recovery, morph])
 
   const updateTransform = (next: Transform) => {
-    targetRef.current = clampTransform(next, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL)
+    targetRef.current = clampTransform(next, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL, clampInsetB)
     markDirty()
   }
 
@@ -1875,32 +1920,46 @@ export default function MapPage() {
   }
 
   /*
-   * Re-settle the camera when the pane band appears or disappears.
+   * Re-settle the camera when either band appears or disappears.
    *
    * Opening only relaxes the clamp, so the view almost always stays exactly
    * where it was. Closing tightens it again, and a camera parked in the freed
    * band would otherwise be silently out of bounds until the next gesture
-   * snapped it back — so it is walked home deliberately, at the pane's own
-   * 250ms, and the two move together.
+   * snapped it back — so it is walked home deliberately, at the surface's own
+   * pace, and the two move together.
+   *
+   * Both bands share one effect rather than getting one each. Crossing the
+   * breakpoint with a surface open changes them in the SAME commit — the pane
+   * band appears as the sheet band vanishes — and two effects would launch two
+   * flights, the second capturing a `from` mid-ease of the first and visibly
+   * jerking the camera. The clamp is one function of both insets, so there is
+   * only ever one place to settle to.
    *
    * Skipped entirely when the clamp returns what is already targeted, which is
    * the common case: no flight is started, and a rider mid-drag is left alone.
+   * That guard matters more on a phone, where the finger is far likelier to be
+   * on the map when the band changes, since tapping a station is what opens the
+   * sheet. A skipped settle is not lost: the next updateTransform re-clamps.
    */
-  const prevClampInsetRef = useRef(clampInsetL)
+  const prevClampInsetRef = useRef({ l: clampInsetL, b: clampInsetB })
   useEffect(() => {
     const prev = prevClampInsetRef.current
-    prevClampInsetRef.current = clampInsetL
-    if (prev === clampInsetL) return
+    const changedL = prev.l !== clampInsetL
+    prevClampInsetRef.current = { l: clampInsetL, b: clampInsetB }
+    if (!changedL && prev.b === clampInsetB) return
     if (!viewportSize.w || !viewportSize.h || !mapW || !mapH) return
     if (gestureActiveRef.current) return
 
     const target = targetRef.current
     const settled = clampTransform(
-      target, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL
+      target, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL, clampInsetB
     )
     if (settled.tx === target.tx && settled.ty === target.ty && settled.scale === target.scale) return
     targetRef.current = settled
-    flyTo(settled, prefersReducedMotion ? 0 : SIDE_PANE_SETTLE_MS)
+    // Whichever surface is moving owns the timing. The pane wins a tie, which
+    // is the breakpoint crossing — the sheet is unmounting there anyway.
+    const settleMs = changedL ? SIDE_PANE_SETTLE_MS : SHEET_SETTLE_MS
+    flyTo(settled, prefersReducedMotion ? 0 : settleMs)
   })
 
   /*
@@ -1930,10 +1989,13 @@ export default function MapPage() {
         ty: (viewportSize.h - peekPx) / 2 - cy * s,
         scale: s
       },
-      // The clamp now knows about the pane band, so a selection near the west
-      // edge lands beside the pane instead of underneath it. The sheet keeps
-      // the old behaviour: it is draggable, so nothing under it is stranded.
-      viewportSize.w, viewportSize.h, mapW, mapH, minScale, paneEdge
+      // The clamp knows about both bands, so a selection near the west edge
+      // lands beside the pane and one near the south edge lands above the
+      // sheet. The sheet needed this as much as the pane did — being draggable
+      // moves the sheet, not the camera, and the camera was what the bound was
+      // stuck on. `peekPx` is chip-free by construction here (hasPair: false),
+      // which is exactly the band the clamp wants.
+      viewportSize.w, viewportSize.h, mapW, mapH, minScale, paneEdge, peekPx
     )
     flyTo(to, 450)
   }
@@ -2043,7 +2105,7 @@ export default function MapPage() {
     let to: Transform
     if (t.scale >= MAX_SCALE * 0.98) {
       // At max zoom: toggle back to fit (clampTransform centers it).
-      to = clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL)
+      to = clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL, clampInsetB)
     } else {
       // Zoom a 2x step toward the tap point (world point under it stays put).
       const rect = getViewportRect()!
@@ -2054,7 +2116,7 @@ export default function MapPage() {
       const worldY = (py - t.ty) / t.scale
       to = clampTransform(
         { tx: px - worldX * nextScale, ty: py - worldY * nextScale, scale: nextScale },
-        viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL
+        viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL, clampInsetB
       )
     }
     haptic()
@@ -2686,7 +2748,7 @@ export default function MapPage() {
                   onClick={() => {
                     haptic()
                     flyTo(
-                      clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL),
+                      clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL, clampInsetB),
                       450
                     )
                   }}
@@ -2718,7 +2780,7 @@ export default function MapPage() {
                   onClick={() => {
                     haptic()
                     flyTo(
-                      clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL),
+                      clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL, clampInsetB),
                       450
                     )
                   }}
