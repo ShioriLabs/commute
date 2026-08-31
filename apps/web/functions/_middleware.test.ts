@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isCrawlablePage, sitemapUrls } from './_middleware'
+import { crawlerOgCacheKey, crawlerOgMaxAge, isCrawlablePage, sitemapUrls } from './_middleware'
 
 /*
  * The sitemap advertises what Google should crawl, so a URL in it that answers
@@ -108,5 +108,47 @@ describe('sitemapUrls', () => {
   it('does not repeat a url', () => {
     const urls = sitemapUrls(operator('KCI', [line('C'), line('C')]), [[]], [])
     expect(urls.filter(u => u === `${ORIGIN}/lines/KCI/C`)).toHaveLength(1)
+  })
+})
+
+// Repeat crawls of the same page must not re-hit the API/KV. These two
+// helpers are what onRequest uses to key and expire that edge cache; the
+// handler itself needs caches.default/HTMLRewriter and is only exercisable
+// under wrangler pages dev, so this is the layer worth pinning here.
+describe('crawlerOgCacheKey', () => {
+  it('is stable for the same path and query', () => {
+    const a = crawlerOgCacheKey('/stations/KCI/BOO', '')
+    const b = crawlerOgCacheKey('/stations/KCI/BOO', '')
+    expect(a.url).toBe(b.url)
+  })
+
+  it('differs by path', () => {
+    const a = crawlerOgCacheKey('/stations/KCI/BOO', '')
+    const b = crawlerOgCacheKey('/stations/KCI/JAKK', '')
+    expect(a.url).not.toBe(b.url)
+  })
+
+  it('differs by query, so /fare?from=&to= pairs get distinct entries', () => {
+    const a = crawlerOgCacheKey('/fare', '?from=KCI-BOO&to=KCI-JAKK')
+    const b = crawlerOgCacheKey('/fare', '?from=KCI-JAKK&to=KCI-BOO')
+    expect(a.url).not.toBe(b.url)
+  })
+
+  it('is namespaced away from a plain URL, so it cannot collide with an unrelated cache entry for the same page', () => {
+    const key = crawlerOgCacheKey('/stations/KCI/BOO', '')
+    expect(key.url).not.toBe('https://commute.shiorilabs.id/stations/KCI/BOO')
+    expect(key.url).toContain('/__crawler-og/stations/KCI/BOO')
+  })
+})
+
+describe('crawlerOgMaxAge', () => {
+  it('gives /fare the tighter fare TTL, since it depends on a peak/off-peak time bucket', () => {
+    expect(crawlerOgMaxAge('/fare')).toBe(600)
+  })
+
+  it('gives station/line/hub pages the longer topology TTL', () => {
+    expect(crawlerOgMaxAge('/stations/KCI/BOO')).toBe(3600)
+    expect(crawlerOgMaxAge('/lines/KCI/C')).toBe(3600)
+    expect(crawlerOgMaxAge('/hubs/dukuh-atas')).toBe(3600)
   })
 })

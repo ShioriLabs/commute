@@ -539,6 +539,20 @@ export function isFallbackForAsset(pathname: string, contentType: string | null)
   return HASHED_ASSET_PATH.test(pathname) && HTML_CONTENT_TYPE.test(contentType ?? '')
 }
 
+// Exported for functions/_middleware.test.ts, same reasoning as above: the
+// handler itself needs caches.default/HTMLRewriter (wrangler pages dev only),
+// but the cache key and TTL it picks are plain functions worth pinning.
+
+/** caches.default key for a crawler page's rewritten HTML, namespaced so it can never collide with a shell cached under the same URL. */
+export function crawlerOgCacheKey(pathname: string, search: string): Request {
+  return new Request(`${SITE_ORIGIN}/__crawler-og${pathname}${search}`)
+}
+
+/** Edge-cache TTL (seconds) for a crawler page, mirroring the API's own freshness classes (middleware/cache-control.ts MAX_AGE). */
+export function crawlerOgMaxAge(pathname: string): number {
+  return pathname === '/fare' ? 600 : 3600
+}
+
 /*
  * A 404 with `no-store`, in place of the SPA fallback's cacheable 200 HTML.
  *
@@ -619,6 +633,25 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
     return next()
   }
 
+  /*
+   * Crawler responses are edge-cached on the final rewritten HTML, keyed on
+   * the URL. Without this, every crawl of the same station/line/hub/fare page
+   * re-runs resolveOg()'s fetch()es into the API worker - and unlike a human's
+   * one-off page load, a crawler re-hits the same URLs constantly, so this was
+   * the actual source of a KV read spike (the API has no cache ahead of its
+   * own KV reads; see middleware/cache-control.ts on the API side, which only
+   * shapes *downstream* caching, not this worker-to-worker call). Same
+   * caches.default read-through pattern as /sitemap.xml above.
+   *
+   * Keyed on the crawler-og namespace rather than the bare request so this can
+   * never collide with any other cache entry keyed on the same URL (e.g. a
+   * human-facing cache of the plain SPA shell, if one is ever added).
+   */
+  const ogCache = caches.default
+  const ogCacheKey = crawlerOgCacheKey(url.pathname, url.search)
+  const cachedOg = await ogCache.match(ogCacheKey)
+  if (cachedOg) return cachedOg
+
   const og = await resolveOg(url.pathname, url.searchParams, env)
 
   // Not a handled path, or the lookup failed - serve defaults, no rewrite.
@@ -643,5 +676,16 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
     rewriter = rewriter.on('body', new HtmlAppender(og.bodyHtml))
   }
 
-  return rewriter.transform(res)
+  const rewritten = rewriter.transform(res)
+
+  const maxAge = crawlerOgMaxAge(url.pathname)
+  const cachedRes = new Response(await rewritten.clone().arrayBuffer(), {
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': `public, max-age=${maxAge}`
+    }
+  })
+  ctx.waitUntil(ogCache.put(ogCacheKey, cachedRes))
+
+  return rewritten
 }
