@@ -38,6 +38,7 @@ import {
   type PointsManifest,
   type Renderer,
   type RouteOverlayFrame,
+  type RouteSegment,
   type CutShape,
   type LineIsolateOverlay,
   type SelectionOverlay,
@@ -45,7 +46,7 @@ import {
   type Transform
 } from '../lib/map-renderer'
 import { buildRouteOverlayModel, type RouteOverlayModel } from '../lib/map-route-overlay'
-import type { CorridorsManifest } from '../lib/map-corridors'
+import { isBrtCorridor, type CorridorsManifest } from '../lib/map-corridors'
 import { surfaceInset } from '../lib/map-surface-inset'
 import { MAX_SCALE, clampTransform, minScaleFor } from '../lib/map-clamp-transform'
 import { useReducedMotion } from '~/hooks/reduced-motion'
@@ -273,6 +274,26 @@ function frameP95(): number {
   return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))]
 }
 
+// Wraps a flat segment list into a RouteOverlayModel, purely as a drawing
+// surface — shared by the two debug trace modes below, which both plot raw
+// geometry rather than an actual fare route.
+function debugSegmentsToModel(segments: RouteSegment[]): RouteOverlayModel {
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const segment of segments) {
+    minX = Math.min(minX, segment.ax, segment.bx)
+    maxX = Math.max(maxX, segment.ax, segment.bx)
+    minY = Math.min(minY, segment.ay, segment.by)
+    maxY = Math.max(maxY, segment.ay, segment.by)
+  }
+  return {
+    overlay: { segments, pins: [] },
+    bbox: segments.length > 0 ? { minX, minY, maxX, maxY } : { minX: 0, minY: 0, maxX: 0, maxY: 0 }
+  }
+}
+
 export default function MapPage() {
   const { line: resolveLine } = useLines()
   const { data: manifest, error, mutate: mutateManifest } = useSWR<Manifest>(
@@ -373,6 +394,28 @@ export default function MapPage() {
    * the stroke of the same colour underneath it.
    */
   const debugCorridors = import.meta.env.DEV && searchParams.get('debug') === 'corridors'
+  // Plots the identified per-line geometry (map-lines.json — the one source
+  // that carries operator/code identity, unlike the raw corridor trace above)
+  // with base tiles and station pins hidden (surface togglable back on for
+  // A/B comparison) so only the traced lines themselves are on screen.
+  const debugTrace = import.meta.env.DEV && searchParams.get('debug') === 'trace'
+  const [surfaceVisible, setSurfaceVisible] = useState(!debugTrace)
+  // Line keys (e.g. "KCI:C") hidden from the trace plot. Empty = show every
+  // line; the toggle panel below only renders in trace mode.
+  const [traceHiddenLines, setTraceHiddenLines] = useState<Set<string>>(() => new Set())
+  /*
+   * TJ (TransJakarta) corridor strokes, hidden by artwork colour rather than
+   * line identity. map-lines.json is rail-only on purpose (see
+   * scripts/build-map-lines.ts): the sheet draws ~17 BRT stroke colours for
+   * TransJakarta's ~100 actual routes, and none of those 17 colours land
+   * within the codebase's own colour-match tolerance of any single route's
+   * GTFS colour (checked directly — closest matches are 24-65 channels off,
+   * against the 72-channel tolerance already tuned for confusable rail
+   * pairs), so a koridor NAME here would be a guess dressed up as data. The
+   * colour itself is real, straight off the drawn stroke, so toggling by it
+   * is honest even without a label.
+   */
+  const [traceHiddenTjColors, setTraceHiddenTjColors] = useState<Set<string>>(() => new Set())
   const authorMode = import.meta.env.DEV && searchParams.get('author') === '1'
 
   // Fare pair shown on the map. React state is the source of truth; the URL is
@@ -587,11 +630,46 @@ export default function MapPage() {
   // Drawable overlay geometry. Null fare is fine — pins resolve straight from
   // the pair, so a deep link shows its endpoints before the fare lands.
   const routeModel = useMemo<RouteOverlayModel | null>(() => {
+    if (debugTrace) {
+      // Rail: the identified per-line geometry (map-lines.json), which carries
+      // operator/code identity — the line toggle panel filters on `key`.
+      const railSegments: RouteSegment[] = (linesManifest?.lines ?? [])
+        .filter(line => !traceHiddenLines.has(line.key))
+        .flatMap(line =>
+          line.segments.flatMap(segment =>
+            segment.edges.map(([ax, ay, bx, by]) => ({
+              ax,
+              ay,
+              bx,
+              by,
+              r: line.r,
+              color: hexToRgb01(line.color),
+              kind: 'ride' as const
+            }))
+          )
+        )
+      // TJ: raw corridor strokes, toggled by artwork colour rather than route
+      // identity — see the note on traceHiddenTjColors for why.
+      const tjSegments: RouteSegment[] = (corridorsManifest?.corridors ?? [])
+        .filter(corridor => isBrtCorridor(corridor) && !traceHiddenTjColors.has(corridor.c.toLowerCase()))
+        .flatMap(corridor =>
+          corridor.pts.slice(0, -1).map((from, i) => ({
+            ax: from[0],
+            ay: from[1],
+            bx: corridor.pts[i + 1][0],
+            by: corridor.pts[i + 1][1],
+            r: corridor.w / 2,
+            color: hexToRgb01(corridor.c),
+            kind: 'ride' as const
+          }))
+        )
+      return debugSegmentsToModel([...railSegments, ...tjSegments])
+    }
     if (debugCorridors) {
       // Reuses the route overlay purely as a drawing surface: it already renders
       // arbitrary coloured capsules through routeDrawItems, so plotting needs no
       // renderer changes of its own.
-      const segments = (corridorsManifest?.corridors ?? []).flatMap(corridor =>
+      const segments: RouteSegment[] = (corridorsManifest?.corridors ?? []).flatMap(corridor =>
         corridor.pts.slice(0, -1).map((from, i) => ({
           ax: from[0],
           ay: from[1],
@@ -602,20 +680,7 @@ export default function MapPage() {
           kind: 'ride' as const
         }))
       )
-      let minX = Infinity
-      let minY = Infinity
-      let maxX = -Infinity
-      let maxY = -Infinity
-      for (const segment of segments) {
-        minX = Math.min(minX, segment.ax, segment.bx)
-        maxX = Math.max(maxX, segment.ax, segment.bx)
-        minY = Math.min(minY, segment.ay, segment.by)
-        maxY = Math.max(maxY, segment.ay, segment.by)
-      }
-      return {
-        overlay: { segments, pins: [] },
-        bbox: segments.length > 0 ? { minX, minY, maxX, maxY } : { minX: 0, minY: 0, maxX: 0, maxY: 0 }
-      }
+      return debugSegmentsToModel(segments)
     }
     if (!routePair.fromId && !routePair.toId) return null
     if (workingPoints.length === 0) return null
@@ -626,7 +691,23 @@ export default function MapPage() {
       resolveLine,
       corridorsManifest?.corridors ?? null
     )
-  }, [debugCorridors, activeJourney, routePair, workingPoints, resolveLine, corridorsManifest])
+  }, [debugCorridors, debugTrace, traceHiddenLines, traceHiddenTjColors, linesManifest, activeJourney, routePair, workingPoints, resolveLine, corridorsManifest])
+
+  // Distinct BRT stroke colours, for the trace panel's TJ swatches — see the
+  // note on traceHiddenTjColors for why these are colours rather than names.
+  const traceTjColors = useMemo(() => {
+    if (!debugTrace) return []
+    const seen = new Set<string>()
+    const ordered: string[] = []
+    for (const corridor of corridorsManifest?.corridors ?? []) {
+      if (!isBrtCorridor(corridor)) continue
+      const hex = corridor.c.toLowerCase()
+      if (seen.has(hex)) continue
+      seen.add(hex)
+      ordered.push(hex)
+    }
+    return ordered.sort()
+  }, [debugTrace, corridorsManifest])
 
   const viewportRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -1342,10 +1423,12 @@ export default function MapPage() {
   // which would otherwise come back with no points at all.
   useEffect(() => {
     if (!rendererRef.current) return
-    rendererRef.current.setPoints(hitPoints)
+    // Trace mode isolates the traced lines — station pins are noise there.
+    rendererRef.current.setPoints(debugTrace ? [] : hitPoints)
     // In author mode, always show hitboxes so the placed pills are visible.
     rendererRef.current.setDebugHitboxes(debugHitboxes || authorMode)
-  }, [hitPoints, debugHitboxes, authorMode, manifest, contextEpoch])
+    rendererRef.current.setSurfaceVisible(surfaceVisible)
+  }, [hitPoints, debugHitboxes, authorMode, debugTrace, surfaceVisible, manifest, contextEpoch])
 
   // Push the route overlay geometry. Same dep shape as the points push, so a
   // recovered renderer gets the overlay back. On clear, the geometry is kept
@@ -3044,6 +3127,84 @@ export default function MapPage() {
             }
           }}
         />
+      )}
+
+      {/* Below the close button rather than sharing its corner — both are
+          top-4 right-4 candidates, but the close button is the page's way out
+          and this is a dev-only debug toggle. */}
+      {debugTrace && (
+        <div className="absolute top-16 right-4 z-map-chrome bg-white/95 backdrop-blur rounded-lg shadow-lg px-3 py-2 flex flex-col gap-2 text-sm max-w-[16rem]">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-slate-700">trace</span>
+            <button
+              type="button"
+              onClick={() => setSurfaceVisible(v => !v)}
+              className="px-3 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700"
+            >
+              {surfaceVisible ? 'Surface: on' : 'Surface: off'}
+            </button>
+          </div>
+          {/* One chip per line (map-lines.json), keyed by "operator:code" —
+              e.g. only "C" and "B" toggled on isolates the two KCI lines
+              sharing that pair of stroke colours. Hiding a line removes it
+              from the plotted segments entirely, not just its opacity. */}
+          {linesManifest && linesManifest.lines.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {linesManifest.lines.map((line) => {
+                const hidden = traceHiddenLines.has(line.key)
+                return (
+                  <button
+                    key={line.key}
+                    type="button"
+                    title={line.name}
+                    onClick={() => setTraceHiddenLines((prev) => {
+                      const next = new Set(prev)
+                      if (next.has(line.key)) next.delete(line.key)
+                      else next.add(line.key)
+                      return next
+                    })}
+                    className={clsx(
+                      'px-2 py-1 rounded font-mono text-xs border',
+                      hidden ? 'border-slate-200 text-slate-400 bg-white' : 'border-transparent text-white'
+                    )}
+                    style={hidden ? undefined : { backgroundColor: line.color }}
+                  >
+                    {line.code}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          {/* TJ: swatch-only, no label — see the note on traceHiddenTjColors.
+              These are the raw drawn stroke colours, not route/koridor
+              identity, so a chip means "this colour" and nothing more. */}
+          {traceTjColors.length > 0 && (
+            <div className="flex flex-wrap gap-1 pt-1 border-t border-slate-200">
+              {traceTjColors.map((hex) => {
+                const hidden = traceHiddenTjColors.has(hex)
+                return (
+                  <button
+                    key={hex}
+                    type="button"
+                    title={hex}
+                    aria-label={`Toggle TJ stroke colour ${hex}`}
+                    onClick={() => setTraceHiddenTjColors((prev) => {
+                      const next = new Set(prev)
+                      if (next.has(hex)) next.delete(hex)
+                      else next.add(hex)
+                      return next
+                    })}
+                    className={clsx(
+                      'w-6 h-6 rounded border',
+                      hidden ? 'border-slate-300' : 'border-transparent'
+                    )}
+                    style={{ backgroundColor: hidden ? 'transparent' : hex }}
+                  />
+                )
+              })}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Closed-only: the sheet header carries the same total, and at peek the

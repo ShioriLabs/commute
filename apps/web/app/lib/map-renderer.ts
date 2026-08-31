@@ -684,6 +684,10 @@ export interface Renderer {
   setPoints(points: Point[]): void
   setRouteOverlay(route: RouteOverlay | null): void
   setDebugHitboxes(enabled: boolean): void
+  // Hide the base tile pass entirely, leaving overlays (route/corridor
+  // geometry, selection, hitboxes) drawing over a blank canvas. Used by
+  // `?debug=trace` to isolate traced line geometry from the artwork.
+  setSurfaceVisible(visible: boolean): void
   // True once the GPU has taken the drawing context away. Every GL call after
   // that point is a silent no-op, so callers must stop drawing and rebuild the
   // renderer rather than carry on against a dead context.
