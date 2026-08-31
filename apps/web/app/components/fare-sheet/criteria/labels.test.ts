@@ -4,8 +4,6 @@ import {
   FARE_TIME_DESCRIPTIONS,
   FARE_TIME_LABELS,
   OFFERED_PAYMENT_METHODS,
-  operatorLabel,
-  operatorsPresent,
   PAYMENT_METHOD_DESCRIPTIONS,
   PAYMENT_METHOD_LABELS
 } from './labels'
@@ -43,32 +41,5 @@ describe('criteria labels', () => {
       expect(FARE_TIME_LABELS[bucket]).toBeTruthy()
       expect(FARE_TIME_DESCRIPTIONS[bucket]).toBeTruthy()
     }
-  })
-
-  it('calls a missing operator filter "Semua"', () => {
-    expect(operatorLabel(null)).toBe('Semua')
-  })
-
-  it('resolves a known operator to its display name', () => {
-    expect(operatorLabel('KCI')).toBe('Commuter Line')
-  })
-})
-
-describe('operatorsPresent', () => {
-  it('lists only operators the stations actually contain', () => {
-    const stations = [{ operator: 'TJ' as const }, { operator: 'KCI' as const }, { operator: 'TJ' as const }]
-    expect(operatorsPresent(stations)).toEqual(['KCI', 'TJ'])
-  })
-
-  // Canonical order, not first-seen order, so the sheet does not reshuffle as
-  // the operator filter narrows the list it was derived from.
-  it('uses canonical operator order regardless of input order', () => {
-    const forwards = operatorsPresent([{ operator: 'KCI' as const }, { operator: 'MRTJ' as const }])
-    const backwards = operatorsPresent([{ operator: 'MRTJ' as const }, { operator: 'KCI' as const }])
-    expect(forwards).toEqual(backwards)
-  })
-
-  it('returns nothing for an empty list', () => {
-    expect(operatorsPresent([])).toEqual([])
   })
 })

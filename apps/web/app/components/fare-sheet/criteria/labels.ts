@@ -1,6 +1,4 @@
-import { OPERATORS } from '@commute/constants'
 import type { PaymentMethod } from '@commute/constants'
-import type { OperatorCode } from '@commute/schemas'
 import type { FareCriteria } from 'utils/fare-criteria'
 
 /*
@@ -51,21 +49,4 @@ export const FARE_TIME_DESCRIPTIONS: Record<FareCriteria['fareTime'], string> = 
   // not affect them rather than wonder why nothing moved.
   peak: 'Senin sampai Jumat, 07.00 sampai 09.00 dan 16.00 sampai 19.00. Batas tarif LRT Jabodebek naik jadi Rp 20.000',
   offpeak: 'Di luar jam sibuk dan akhir pekan. Batas tarif LRT Jabodebek Rp 10.000'
-}
-
-/**
- * Operators present in a station list, in canonical OPERATORS order.
- *
- * Lives here rather than in criteria-bar.tsx so it is testable: the vitest
- * config collects `.test.ts` only, so logic in a `.tsx` cannot be covered.
- */
-export function operatorsPresent(stations: { operator: OperatorCode }[]): OperatorCode[] {
-  const present = new Set(stations.map(station => station.operator))
-  return (Object.keys(OPERATORS) as OperatorCode[]).filter(code => present.has(code))
-}
-
-/** `null` means the picker offers every operator. */
-export function operatorLabel(code: OperatorCode | null): string {
-  if (!code) return 'Semua'
-  return OPERATORS[code]?.name ?? code
 }

@@ -13,8 +13,6 @@ import {
 } from 'utils/fare-criteria'
 import { FARE_SWR_CONFIG, fareApiUrl, tripApiUrl } from 'utils/fare-api'
 import { resolveStationId, toPickableStations, type PickableStation } from './pickable-station'
-import { operatorsPresent } from './criteria/labels'
-import type { OperatorCode } from '@commute/schemas'
 
 /** Leading words of the tab title on the surfaces that own one. */
 const DOCUMENT_TITLE_PREFIX = 'Cek Tarif'
@@ -94,14 +92,6 @@ export interface FareQuery<TResult = FareResult | TripResult> {
   handleSelect: (station: PickableStation) => void
   handleSwap: () => void
   pickableStations: PickableStation[]
-  /**
-   * Operators available to filter by, derived from the UNFILTERED set.
-   *
-   * Deriving these from the filtered list would strand the rider: pick TJ, and
-   * the only operator left in the list is TJ, so the sheet could never offer a
-   * way back out.
-   */
-  operators: OperatorCode[]
   criteria: FareCriteria
   setCriteria: (criteria: FareCriteria) => void
   /* Either shape: `/fares` answers with one route, `/_internal/trips` with
@@ -199,11 +189,6 @@ export function useFareQuery({
   // The operator criterion narrows what the picker offers. Deep links resolve
   // against the UNFILTERED list below, so a stored filter can never make a
   // shared link fail to open.
-  const operators = useMemo(
-    () => operatorsPresent(allPickableStations),
-    [allPickableStations]
-  )
-
   const pickableStations = useMemo(
     () => (criteria.operator
       ? allPickableStations.filter(station => station.operator === criteria.operator)
@@ -352,7 +337,6 @@ export function useFareQuery({
     handleSelect,
     handleSwap,
     pickableStations,
-    operators,
     criteria,
     setCriteria,
     fare,

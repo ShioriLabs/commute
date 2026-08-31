@@ -1,4 +1,3 @@
-import type { OperatorCode } from '@commute/schemas'
 import { useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { haptic } from 'utils/haptics'
@@ -8,7 +7,6 @@ import {
   FARE_TIME_DESCRIPTIONS,
   FARE_TIME_LABELS,
   OFFERED_PAYMENT_METHODS,
-  operatorLabel,
   PAYMENT_METHOD_DESCRIPTIONS,
   PAYMENT_METHOD_LABELS
 } from './labels'
@@ -16,8 +14,6 @@ import {
 interface Props {
   criteria: FareCriteria
   onChange: (criteria: FareCriteria) => void
-  /** Operators present in the pickable set, so the sheet offers only real ones. */
-  operators: OperatorCode[]
   /*
    * Wrap the chips onto multiple lines instead of scrolling them horizontally.
    *
@@ -33,7 +29,7 @@ interface Props {
   wrap?: boolean
 }
 
-type OpenCriterion = 'payment' | 'time' | 'operator' | null
+type OpenCriterion = 'payment' | 'time' | null
 
 /*
  * The persistent settings rail under the Dari/Ke fields.
@@ -49,7 +45,7 @@ type OpenCriterion = 'payment' | 'time' | 'operator' | null
  * one system. The -mx-8 px-8 bleed assumes 8-unit parent padding, which /fare
  * (p-8) and the search sheet (px-8) both provide.
  */
-export default function CriteriaBar({ criteria, onChange, operators, wrap = false }: Props) {
+export default function CriteriaBar({ criteria, onChange, wrap = false }: Props) {
   const [open, setOpen] = useState<OpenCriterion>(null)
 
   const paymentOptions = useMemo<CriterionOption<FareCriteria['paymentMethod']>[]>(
@@ -68,16 +64,6 @@ export default function CriteriaBar({ criteria, onChange, operators, wrap = fals
       description: FARE_TIME_DESCRIPTIONS[bucket]
     })),
     []
-  )
-
-  // 'ALL' rather than null: CriterionSheet keys on a string, and null would
-  // collapse into "nothing selected" instead of an explicit "every operator".
-  const operatorOptions = useMemo<CriterionOption<string>[]>(
-    () => [
-      { value: 'ALL', label: 'Semua', description: 'Tampilkan stasiun dari semua operator' },
-      ...operators.map(code => ({ value: code, label: operatorLabel(code) }))
-    ],
-    [operators]
   )
 
   const chip = (
@@ -126,9 +112,6 @@ export default function CriteriaBar({ criteria, onChange, operators, wrap = fals
           FARE_TIME_LABELS[criteria.fareTime],
           criteria.fareTime !== DEFAULT_FARE_CRITERIA.fareTime
         )}
-        {operators.length > 1
-          ? chip('operator', 'Operator', operatorLabel(criteria.operator), criteria.operator !== null)
-          : null}
       </div>
 
       <CriterionSheet
@@ -145,17 +128,6 @@ export default function CriteriaBar({ criteria, onChange, operators, wrap = fals
         options={timeOptions}
         selected={criteria.fareTime}
         onSelect={fareTime => onChange({ ...criteria, fareTime })}
-        onClose={() => setOpen(null)}
-      />
-      <CriterionSheet
-        open={open === 'operator'}
-        title="Operator"
-        options={operatorOptions}
-        selected={criteria.operator ?? 'ALL'}
-        onSelect={value => onChange({
-          ...criteria,
-          operator: value === 'ALL' ? null : value as OperatorCode
-        })}
         onClose={() => setOpen(null)}
       />
     </>
