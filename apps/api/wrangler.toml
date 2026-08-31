@@ -3,6 +3,14 @@ main = "src/app.ts"
 dev.port = 3000
 compatibility_date = "2025-10-18"
 
+# 0.8 rather than 1: near-complete visibility into hottest route / hottest
+# client / timings (see middleware/request-log.ts) while trimming volume a
+# touch under a crawl spike. Dashboard: Workers & Pages > commute-api >
+# Observability > Logs.
+[observability]
+enabled = true
+head_sampling_rate = 0.8
+
 [[d1_databases]]
 binding = "DB" # available in your Worker on env.DB
 database_name = "commute"

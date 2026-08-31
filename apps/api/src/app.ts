@@ -10,6 +10,7 @@ import operatorRoutes from './routes/operators'
 import internalRoutes from './routes/internal'
 import { cacheControl, MAX_AGE } from './middleware/cache-control'
 import { rateLimit } from './middleware/rate-limit'
+import { requestLog } from './middleware/request-log'
 
 /**
  * Cloudflare's rate limiting binding. Optional because local `wrangler dev` and
@@ -30,6 +31,12 @@ export interface Bindings {
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
+
+/*
+ * First, ahead of everything else, so its timing covers the whole request
+ * including a 429 from rateLimit() below. See middleware/request-log.ts.
+ */
+app.use('*', requestLog())
 
 /*
  * Open CORS, deliberately. Every mounted route is read-only public data. See
