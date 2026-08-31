@@ -6,6 +6,8 @@ import LineRoundel from '~/components/line-roundel'
 import LineSheet from '~/components/line-sheet'
 import { findLine, lineCutShapes, linesNear, seedFadeFrom, type LinesManifest } from '~/lib/map-line-isolate'
 import { openSurface, isSurfaceOpen, type OpenSurface } from '~/lib/map-detail-surface'
+import { easeCameraFlight } from '~/lib/map-easing'
+import { clamp01, easeOut } from '~/lib/map-phase-tick'
 import clsx from 'clsx'
 import type { StandardResponse } from '@schema/response'
 import type { Hub, Station } from '@commute/schemas'
@@ -48,6 +50,8 @@ import { surfaceInset } from '../lib/map-surface-inset'
 import { MAX_SCALE, clampTransform, minScaleFor } from '../lib/map-clamp-transform'
 import { useReducedMotion } from '~/hooks/reduced-motion'
 import MapFareChip from '../components/map-fare-chip'
+import MapRailPill from '../components/map-rail-pill'
+import Wordmark from '../components/wordmark'
 import MapFareSheet from '../components/map-fare-sheet'
 import { useFareQuery } from '../components/fare-sheet/use-fare-query'
 import { journeysOf } from '../components/fare-sheet/journeys'
@@ -73,7 +77,7 @@ import type { PaneDescriptor } from '../components/pane-stack/model'
 import { MapPreviewBackdrop, useMapMorph } from '../components/map-morph'
 import { prefetchMapSkeleton } from '../components/map-skeleton'
 import { PEEK_FRACTION } from '../components/bottom-sheet'
-import { SIDE_PANE_OCCUPIED_PX } from '../components/side-pane'
+import { RAIL_PILL_RESERVED_PX, SIDE_PANE_OCCUPIED_PX } from '../components/side-pane'
 import { useIsDesktop } from '~/hooks/is-desktop'
 // Imported as a URL (not as data) so Vite content-hashes it into /assets/. The
 // file deliberately lives outside public/: assets under public/ are copied
@@ -151,16 +155,47 @@ const WHEEL_ZOOM_INTENSITY = 0.0015
 
 // Camera re-settle when the desktop pane opens or closes. Matches SidePane's
 // own DURATION so the map and the card finish together.
+/*
+ * Camera flight durations.
+ *
+ * Both sit above the ~200ms an entrance would get, because a flight is travel
+ * rather than an appearance: the rider is reading where the camera moved FROM,
+ * and cutting that short reads as a jump-cut instead of a pan. They are as
+ * short as that reading allows, not as short as the curve permits.
+ *
+ * Held at the original values through the easing rework. A shorter flight was
+ * tried alongside the curve swap and read as sudden — the camera arriving
+ * before the eye had followed it. Duration and curve are one decision here:
+ * easeCameraFlight spends real time ramping in, and clipping the flight clips
+ * that ramp, which is the part doing the work.
+ */
+const FLY_POINT_MS = 450
+const FLY_ZOOM_STEP_MS = 350
+
 const SIDE_PANE_SETTLE_MS = 250
+// The same, for the phone's bottom sheet. BottomSheet has no fixed duration to
+// match — it is an exponential lerp with TAU = 80, so it is ~95% home by 3*TAU.
+// That is this number. Deliberately not SIDE_PANE_SETTLE_MS: the sheet does not
+// share the pane's DURATION, and tying it to one would be a coincidence a later
+// change to either could silently break.
+const SHEET_SETTLE_MS = 240
 
 // One spec for all four floating buttons. 44px is the tap-target minimum.
 const MAP_BUTTON_CLASS
   = 'rounded-full bg-white/90 backdrop-blur shadow-lg w-11 h-11 flex items-center justify-center cursor-pointer'
 
-// Chrome entrance stagger: title pill, then the four buttons. A short step —
-// small elements that should read as one gesture arriving rather than as a
-// sequence — and a small offset so the chrome follows the map's first paint
-// instead of racing it.
+// The same button inside the desktop bottom-right group, where the surface and
+// shadow belong to the container: only the target size and the press feedback
+// are the button's own.
+const MAP_GROUP_BUTTON_CLASS
+  = 'w-11 h-11 flex items-center justify-center cursor-pointer hover:bg-slate-100/70 transition-colors duration-150'
+
+// Chrome entrance stagger: title pill, then the buttons, fare before
+// attribution — the primary action should not arrive last, which is the slot it
+// held while it was one of four identical circles. A short step — small
+// elements that should read as one gesture arriving rather than as a sequence —
+// and a small offset so the chrome follows the map's first paint instead of
+// racing it.
 const MAP_CHROME_STAGGER: StaggerOptions = { step: 60, maxIndex: 4, offset: 60 }
 
 /**
@@ -529,6 +564,23 @@ export default function MapPage() {
    */
   useEffect(() => setSelectedJourney(0), [fareResponse])
 
+  /*
+   * The two stops the rail card names, each with the lines serving it.
+   *
+   * From the fare query rather than the points manifest: points.json is pure
+   * geometry (`id` plus coordinates), and its optional `station` field is a
+   * label shape's back-reference to the id it annotates, not a display name.
+   * useFareQuery already resolves both ends against the station index, which is
+   * where the names and lines the rider should see actually live.
+   *
+   * Null until that resolve lands, which the card renders as a placeholder —
+   * see MapRailPill.
+   */
+  const railEndpoints = {
+    from: fareQuery.origin,
+    to: fareQuery.destination
+  }
+
   const fareError = fareQuery.error
   const fareLoading = fareQuery.isLoading
 
@@ -674,6 +726,12 @@ export default function MapPage() {
 
   // Desktop only: an open detail pane sits over the top-left corner the title
   // pill lives in, so it hides for as long as one is open.
+  //
+  // Only reachable on a phone now that the title pill is phone-only — desktop
+  // shows the rail pill there instead, which docks ABOVE the pane rather than
+  // hiding behind it. Kept as written because it still describes the rule, and
+  // `isDesktop` still belongs in it: a viewport that crosses the breakpoint
+  // with a pane open must not leave the phone pill stranded under one.
   const paneCoversChrome = isDesktop && detailSurfaceOpen
   const pillVisible = chromeVisible && !paneCoversChrome
   /*
@@ -715,10 +773,22 @@ export default function MapPage() {
   // Only the pair matters here; endIsolate is stable across renders.
   }, [routePair.fromId, routePair.toId])
 
-  // flag, not the destination id: the destination is pinned into routePair the
-  // moment the mode is primed, so holding it here too would be a second source
-  // of truth for one fact. While set, the next station tap becomes the origin.
-  const [pickingOrigin, setPickingOrigin] = useState(false)
+  /*
+   * Which end of the pair the next station tap fills, or null when a tap means
+   * "open this station" as usual.
+   *
+   * The END, not the station id: the other end is already in routePair, so
+   * holding it here too would be a second source of truth for one fact.
+   *
+   * Started life as a boolean for `OTW Ke Sini`, which only ever fills the
+   * origin. The rail's O/D card arms the same mechanism for either field, and
+   * the two are the same act — arm the map, let the next tap answer — so this
+   * widened rather than growing a second mode beside it.
+   */
+  const [pickingEndpoint, setPickingEndpoint] = useState<'from' | 'to' | null>(null)
+  // Reads as it always did at the call sites that only care THAT a pick is
+  // armed, not which end it fills.
+  const pickingOrigin = pickingEndpoint !== null
 
   /*
    * Exactly one detail surface at a time. All four are DetailSurfaces on
@@ -796,7 +866,7 @@ export default function MapPage() {
     // Pin the destination straight away so the map answers the tap with a pin
     // instead of an empty prompt, and cancelling leaves that pin behind.
     setRouteEndpoint('to', `${selectedStation.operator}-${selectedStation.code}`)
-    setPickingOrigin(true)
+    setPickingEndpoint('from')
   }, [selectedStation, setRouteEndpoint])
 
   // Two transforms: `target` is where we want to be; `rendered` is what we
@@ -896,10 +966,30 @@ export default function MapPage() {
     alphaFrom: 0,
     lastAlpha: 0
   })
-  // Mirror of the current model for the tick (which only reads refs): whether
-  // anything is drawable, and whether a polyline exists (pins-only overlays
-  // get no scrim).
-  const routeStateRef = useRef<{ show: boolean, scrim: boolean }>({ show: false, scrim: false })
+  /*
+   * The map-wide half of the route treatment: the dim toward page white, the
+   * colour drain, and the scrim. Animated APART from routeAnimRef above, which
+   * carries only the route's own capsules and pins.
+   *
+   * Two ramps rather than one because the two answer different questions. The
+   * overlay is drawable as soon as there is a pair — a deep link resolves its
+   * pins before the fare lands — but the map is only dimmed once there is a
+   * POLYLINE to dim it for, since two lone pins on a drained map read as a
+   * broken render. Those two moments are frequently not the same frame.
+   *
+   * This used to be a boolean gate multiplied by the overlay's alpha, which
+   * snapped at both ends: clearing a pair dropped the dim on the next frame
+   * while the polyline spent its full fade over an already-bright map, and a
+   * late-arriving polyline raised the dim in one frame because the alpha it was
+   * multiplied by had long since reached 1. A fade is a fade — see the
+   * spotlight and the isolate, which have always animated theirs.
+   */
+  const routeScrimAnimRef = useRef<{ visible: boolean, phaseStart: number, alphaFrom: number, lastAlpha: number }>({
+    visible: false,
+    phaseStart: 0,
+    alphaFrom: 0,
+    lastAlpha: 0
+  })
   // Fit-bounds flight waiting for the morph handoff. Executed by the tick once
   // the first real frame has been presented; canceled by any gesture.
   const pendingFitRef = useRef<{ bbox: RouteOverlayModel['bbox'], hasPolyline: boolean } | null>(null)
@@ -1282,6 +1372,14 @@ export default function MapPage() {
    * sets the pair and opens the sheet together, and the flight has to know the
    * sheet is there.
    */
+  /*
+   * What the desktop rail's card currently covers, reported by the card itself.
+   *
+   * Only the grown card matters: a fitted route reads fine under a bare pill,
+   * so the card reports its full height and surfaceInset decides what is worth
+   * reserving.
+   */
+  const [railCardPx, setRailCardPx] = useState(0)
   const surfaceInsetRef = useRef(surfaceInset({
     isDesktop: false,
     surfaceOpen: false,
@@ -1306,33 +1404,87 @@ export default function MapPage() {
     viewportH: viewportSize.h,
     panePx: SIDE_PANE_OCCUPIED_PX,
     peekFraction: PEEK_FRACTION,
-    chipPx: CHIP_CLEARANCE_PX
-  }), [isDesktop, detailSurfaceOpen, surfaceDismissing, routePair, viewportSize.h])
+    chipPx: CHIP_CLEARANCE_PX,
+    // Only once it has actually grown past a pill — see RAIL_PILL_RESERVED_PX.
+    railCardPx: railCardPx > RAIL_PILL_RESERVED_PX ? railCardPx : 0
+  }), [isDesktop, detailSurfaceOpen, surfaceDismissing, routePair, viewportSize.h, railCardPx])
   /*
-   * Screen the desktop pane takes off the left, and the only inset the camera
-   * clamp cares about: it is what lets the map's left edge slide out from under
-   * the pane so the western end of the network (Tangerang, Rangkasbitung) can
-   * be reached at all. The bottom inset stays a fit-bounds concern — a peeked
-   * sheet is draggable, so the map underneath is never unreachable.
+   * Screen the desktop pane takes off the left: what lets the map's left edge
+   * slide out from under the pane so the western end of the network (Tangerang,
+   * Rangkasbitung) can be reached at all.
    */
   const clampInsetL = surfaceInsetValue.left
+  /*
+   * Screen the phone's sheet takes off the bottom, and the vertical half of the
+   * same job. On a portrait phone the HEIGHT is the binding axis, so at minimum
+   * zoom the scaled map fills the viewport exactly and there is no vertical pan
+   * slack at all — roughly a third of the network sits under a peeked sheet
+   * with no gesture able to bring it out. Being draggable moves the sheet, not
+   * the camera, and the camera was what the bound was stuck on.
+   *
+   * Deliberately NOT surfaceInsetValue.bottom, which also counts the floating
+   * fare chip's clearance. The chip is one pill in a corner with the live map
+   * visible around and under it — nothing is stranded beneath it, the same
+   * judgement that denies the desktop rail's pill a left band. And `hasPair`
+   * holds for as long as a route is drawn, so feeding it here would letterbox
+   * every phone showing a route to clear something that never blocked anything.
+   *
+   * Peek height regardless of the sheet's real snap, matching surfaceInset's
+   * own assumption: BottomSheet does not report its snap upward, and at `full`
+   * the backdrop takes pointer events so the map is not pannable anyway.
+   */
+  const clampInsetB = !isDesktop && detailSurfaceOpen && !surfaceDismissing
+    ? Math.round(viewportSize.h * PEEK_FRACTION)
+    : 0
+  /*
+   * The clamp's own view of the chrome, mirrored for the rAF tick. Separate
+   * from surfaceInsetRef because that one is the fit-bounds view and counts the
+   * chip; these two must never disagree by a frame, so both are written in the
+   * one effect below.
+   */
+  const clampInsetRef = useRef({ l: 0, b: 0 })
   useEffect(() => {
     surfaceInsetRef.current = surfaceInsetValue
+    clampInsetRef.current = { l: clampInsetL, b: clampInsetB }
     dirtyRef.current = true
-  }, [surfaceInsetValue])
+  }, [surfaceInsetValue, clampInsetL, clampInsetB])
 
-  // Drive the fade + scrim mirrors, and queue the one-per-pair fit flight.
+  // Start both route ramps, and queue the one-per-pair fit flight.
   useEffect(() => {
     const show = routeModel !== null
     const hasPolyline = routeModel !== null && routeModel.overlay.segments.length > 0
+    const now = performance.now()
     const anim = routeAnimRef.current
     if (show !== anim.visible) {
       anim.visible = show
-      anim.phaseStart = performance.now()
+      anim.phaseStart = now
       anim.alphaFrom = anim.lastAlpha
     }
-    routeStateRef.current = { show, scrim: hasPolyline }
-    dirtyRef.current = true
+    /*
+     * The map-wide treatment turns on the POLYLINE, not the pair — see
+     * routeScrimAnimRef. Seeded from what is currently drawn for the same
+     * reason seedFadeFrom exists: reversing mid-fade (clearing a route and
+     * immediately picking another) has to pick up from the value on screen,
+     * or the two ramps cross and the map brightens through the middle of one
+     * gesture.
+     */
+    const scrimAnim = routeScrimAnimRef.current
+    if (hasPolyline !== scrimAnim.visible) {
+      scrimAnim.visible = hasPolyline
+      scrimAnim.phaseStart = now
+      scrimAnim.alphaFrom = scrimAnim.lastAlpha
+    }
+    /*
+     * markDirty, not a bare dirtyRef write: this runs OUTSIDE the loop, and a
+     * settled route parks it (no flight, no inertia, no selection, both ramps
+     * at rest). Raising the flag alone leaves nothing to read it, so the exit
+     * ramp never gets a second frame — whatever eventually wakes the map draws
+     * the fade at its end state and the colour snaps back in one step.
+     *
+     * The old boolean gate hid this: the dim was gone the instant the flag
+     * flipped, so a stalled loop and a running one looked the same.
+     */
+    markDirty()
 
     if (routeModel) {
       const pairKey = `${routePair.fromId}|${routePair.toId}`
@@ -1347,7 +1499,7 @@ export default function MapPage() {
       pendingFitRef.current = null
       fittedPairRef.current = null
     }
-  }, [routeModel, routePair])
+  }, [routeModel, routePair, markDirty])
 
   // Resize the renderer's backing store when the viewport changes.
   useEffect(() => {
@@ -1431,8 +1583,8 @@ export default function MapPage() {
       // wheel (like inertia), so it never fights a gesture.
       const fly = flyToRef.current
       if (fly && !gestureActiveRef.current) {
-        const p = Math.min(1, (now - fly.start) / fly.duration)
-        const e = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2 // easeInOutCubic
+        const p = fly.duration > 0 ? Math.min(1, (now - fly.start) / fly.duration) : 1
+        const e = easeCameraFlight(p)
         const mixed = {
           tx: fly.from.tx + (fly.to.tx - fly.from.tx) * e,
           ty: fly.from.ty + (fly.to.ty - fly.from.ty) * e,
@@ -1454,7 +1606,8 @@ export default function MapPage() {
         const avgVy = inertia.vy * (1 + decay) / 2
         targetRef.current = clampTransform(
           { tx: target.tx + avgVx * dt, ty: target.ty + avgVy * dt, scale: target.scale },
-          viewportSize.w, viewportSize.h, mapW, mapH, minScale, surfaceInsetRef.current.left
+          viewportSize.w, viewportSize.h, mapW, mapH, minScale,
+          clampInsetRef.current.l, clampInsetRef.current.b
         )
         inertia.vx *= decay
         inertia.vy *= decay
@@ -1619,21 +1772,41 @@ export default function MapPage() {
       {
         const anim = routeAnimRef.current
         const targetAlpha = anim.visible ? 1 : 0
-        const p = Math.min(1, (now - anim.phaseStart) / ROUTE_FADE_MS)
-        const e = 1 - Math.pow(1 - p, 3) // easeOutCubic
-        const alpha = anim.alphaFrom + (targetAlpha - anim.alphaFrom) * e
+        /*
+         * Clamped at BOTH ends. `now` is the rAF timestamp, which marks the
+         * start of this frame and can predate a phaseStart sampled from
+         * performance.now() inside the event handler that began the ramp. A
+         * negative p runs easeOut backwards past its origin (p -0.035 gives
+         * 1.108), so the fade would overshoot full strength before falling.
+         */
+        const p = clamp01((now - anim.phaseStart) / ROUTE_FADE_MS)
+        const alpha = anim.alphaFrom + (targetAlpha - anim.alphaFrom) * easeOut(p)
         if (p < 1) dirtyRef.current = true
         anim.lastAlpha = alpha
-        if (alpha > 0) {
-          const scrimTarget = routeStateRef.current.scrim ? ROUTE_SCRIM_MAX_ALPHA : 0
+
+        /*
+         * The map-wide treatment, on its own clock. A pins-only overlay (deep
+         * link before the fare lands) leaves the map alone, since two lone pins
+         * on a fully drained map read as a broken render — but it now RAMPS to
+         * that decision in both directions instead of switching.
+         */
+        const scrimAnim = routeScrimAnimRef.current
+        const scrimTarget = scrimAnim.visible ? 1 : 0
+        const scrimP = clamp01((now - scrimAnim.phaseStart) / ROUTE_FADE_MS)
+        const scrim = scrimAnim.alphaFrom + (scrimTarget - scrimAnim.alphaFrom) * easeOut(scrimP)
+        if (scrimP < 1) dirtyRef.current = true
+        scrimAnim.lastAlpha = scrim
+
+        // Either ramp still having something to say is enough to build a frame:
+        // on a clear the capsules and the dim land together, but nothing here
+        // depends on that, and the dim outliving the geometry by a frame would
+        // otherwise be dropped silently.
+        if (alpha > 0 || scrim > 0) {
           routeFrame = {
             alpha,
-            scrimAlpha: scrimTarget * alpha,
-            // Gated on the same flag as the scrim: a pins-only overlay (deep
-            // link before the fare lands) leaves the map alone, since two lone
-            // pins on a fully drained map read as a broken render.
-            desaturate: routeStateRef.current.scrim ? ROUTE_DESATURATE_MAX * alpha : 0,
-            fade: routeStateRef.current.scrim ? ROUTE_FADE_MAX * alpha : 0
+            scrimAlpha: ROUTE_SCRIM_MAX_ALPHA * scrim,
+            desaturate: ROUTE_DESATURATE_MAX * scrim,
+            fade: ROUTE_FADE_MAX * scrim
           }
         }
       }
@@ -1648,21 +1821,35 @@ export default function MapPage() {
         const cy = (bbox.minY + bbox.maxY) / 2
         // Whatever a detail surface or the fare chip is covering right now, so
         // the route lands in the part of the map the rider can actually see.
-        const { left: insetL, bottom: insetB } = surfaceInsetRef.current
+        const { left: insetL, top: insetT, bottom: insetB } = surfaceInsetRef.current
+        // Centre of the strip actually visible: the full viewport minus what
+        // the rail's card covers at the top and a pane or sheet at the sides
+        // and bottom. Without the top term a fitted route centres behind the
+        // card and its northern leg lands underneath it.
+        //
+        // This is where the flight AIMS, and it counts the fare chip. Where it
+        // is BOUNDED is clampInsetRef, which does not — see clampInsetB. The
+        // two differ on purpose: aiming high to clear a see-through pill is a
+        // soft preference worth having, while giving up the pan range to it
+        // permanently is not. When only the chip is up the clamp may pull the
+        // flight back down at minimum zoom, which is exactly what it did
+        // before this and is not the case anything was stranded in.
+        const centreY = insetT + (viewportSize.h - insetT - insetB) / 2
         let to: Transform
         if (hasPolyline) {
           const w = Math.max(1, bbox.maxX - bbox.minX)
           const h = Math.max(1, bbox.maxY - bbox.minY)
           const availW = Math.max(1, viewportSize.w - insetL - FIT_BOUNDS_PAD_CSS_PX * 2)
-          const availH = Math.max(1, viewportSize.h - insetB - FIT_BOUNDS_PAD_CSS_PX * 2)
+          const availH = Math.max(1, viewportSize.h - insetT - insetB - FIT_BOUNDS_PAD_CSS_PX * 2)
           const scale = Math.max(minScale, Math.min(MAX_SCALE, Math.min(availW / w, availH / h)))
           to = clampTransform(
             {
               tx: insetL + (viewportSize.w - insetL) / 2 - cx * scale,
-              ty: (viewportSize.h - insetB) / 2 - cy * scale,
+              ty: centreY - cy * scale,
               scale
             },
-            viewportSize.w, viewportSize.h, mapW, mapH, minScale, insetL
+            viewportSize.w, viewportSize.h, mapW, mapH, minScale,
+            insetL, clampInsetRef.current.b
           )
         } else {
           // Single pin: just bring it into view at the current zoom.
@@ -1670,10 +1857,11 @@ export default function MapPage() {
           to = clampTransform(
             {
               tx: insetL + (viewportSize.w - insetL) / 2 - cx * s,
-              ty: (viewportSize.h - insetB) / 2 - cy * s,
+              ty: centreY - cy * s,
               scale: s
             },
-            viewportSize.w, viewportSize.h, mapW, mapH, minScale, insetL
+            viewportSize.w, viewportSize.h, mapW, mapH, minScale,
+            insetL, clampInsetRef.current.b
           )
         }
         inertiaRef.current = null
@@ -1763,10 +1951,28 @@ export default function MapPage() {
       // Park when idle. `dirtyRef` can be true here only when something set it
       // after the draw branch cleared it (in-loop animations); everything
       // outside the loop re-arms via markDirty().
+      /*
+       * The route's two ramps have to be named here the way the spotlight and
+       * the isolate name their phases.
+       *
+       * dirtyRef cannot carry them: it is a DRAW REQUEST, consumed just before
+       * draw() (see the note there), so a ramp that raises it during the tick
+       * has had it cleared again by the time this runs. The other treatments
+       * survive that because a running phase is `!== 'hold'` here; the route
+       * had no equivalent, so it drew exactly one frame and parked — the fade
+       * then jumped to its end state whenever something next woke the map.
+       *
+       * Invisible until the exit became a real ramp: the old boolean gate
+       * changed the dim in whichever single frame happened to draw, so one
+       * frame was all it ever needed.
+       */
+      const routeRamping = routeAnimRef.current.lastAlpha !== (routeAnimRef.current.visible ? 1 : 0)
+        || routeScrimAnimRef.current.lastAlpha !== (routeScrimAnimRef.current.visible ? 1 : 0)
       const animating = flyToRef.current !== null
         || inertiaRef.current !== null
         || (spotlightRef.current !== null && spotlightRef.current.phase !== 'hold')
         || (isolateRef.current !== null && isolateRef.current.phase !== 'hold')
+        || routeRamping
       if (animating || moved || dirtyRef.current) {
         schedule()
       } else {
@@ -1784,7 +1990,7 @@ export default function MapPage() {
   }, [viewportSize.w, viewportSize.h, mapW, mapH, minScale, authorMode, recovery, morph])
 
   const updateTransform = (next: Transform) => {
-    targetRef.current = clampTransform(next, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL)
+    targetRef.current = clampTransform(next, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL, clampInsetB)
     markDirty()
   }
 
@@ -1817,32 +2023,46 @@ export default function MapPage() {
   }
 
   /*
-   * Re-settle the camera when the pane band appears or disappears.
+   * Re-settle the camera when either band appears or disappears.
    *
    * Opening only relaxes the clamp, so the view almost always stays exactly
    * where it was. Closing tightens it again, and a camera parked in the freed
    * band would otherwise be silently out of bounds until the next gesture
-   * snapped it back — so it is walked home deliberately, at the pane's own
-   * 250ms, and the two move together.
+   * snapped it back — so it is walked home deliberately, at the surface's own
+   * pace, and the two move together.
+   *
+   * Both bands share one effect rather than getting one each. Crossing the
+   * breakpoint with a surface open changes them in the SAME commit — the pane
+   * band appears as the sheet band vanishes — and two effects would launch two
+   * flights, the second capturing a `from` mid-ease of the first and visibly
+   * jerking the camera. The clamp is one function of both insets, so there is
+   * only ever one place to settle to.
    *
    * Skipped entirely when the clamp returns what is already targeted, which is
    * the common case: no flight is started, and a rider mid-drag is left alone.
+   * That guard matters more on a phone, where the finger is far likelier to be
+   * on the map when the band changes, since tapping a station is what opens the
+   * sheet. A skipped settle is not lost: the next updateTransform re-clamps.
    */
-  const prevClampInsetRef = useRef(clampInsetL)
+  const prevClampInsetRef = useRef({ l: clampInsetL, b: clampInsetB })
   useEffect(() => {
     const prev = prevClampInsetRef.current
-    prevClampInsetRef.current = clampInsetL
-    if (prev === clampInsetL) return
+    const changedL = prev.l !== clampInsetL
+    prevClampInsetRef.current = { l: clampInsetL, b: clampInsetB }
+    if (!changedL && prev.b === clampInsetB) return
     if (!viewportSize.w || !viewportSize.h || !mapW || !mapH) return
     if (gestureActiveRef.current) return
 
     const target = targetRef.current
     const settled = clampTransform(
-      target, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL
+      target, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL, clampInsetB
     )
     if (settled.tx === target.tx && settled.ty === target.ty && settled.scale === target.scale) return
     targetRef.current = settled
-    flyTo(settled, prefersReducedMotion ? 0 : SIDE_PANE_SETTLE_MS)
+    // Whichever surface is moving owns the timing. The pane wins a tie, which
+    // is the breakpoint crossing — the sheet is unmounting there anyway.
+    const settleMs = changedL ? SIDE_PANE_SETTLE_MS : SHEET_SETTLE_MS
+    flyTo(settled, prefersReducedMotion ? 0 : settleMs)
   })
 
   /*
@@ -1872,12 +2092,15 @@ export default function MapPage() {
         ty: (viewportSize.h - peekPx) / 2 - cy * s,
         scale: s
       },
-      // The clamp now knows about the pane band, so a selection near the west
-      // edge lands beside the pane instead of underneath it. The sheet keeps
-      // the old behaviour: it is draggable, so nothing under it is stranded.
-      viewportSize.w, viewportSize.h, mapW, mapH, minScale, paneEdge
+      // The clamp knows about both bands, so a selection near the west edge
+      // lands beside the pane and one near the south edge lands above the
+      // sheet. The sheet needed this as much as the pane did — being draggable
+      // moves the sheet, not the camera, and the camera was what the bound was
+      // stuck on. `peekPx` is chip-free by construction here (hasPair: false),
+      // which is exactly the band the clamp wants.
+      viewportSize.w, viewportSize.h, mapW, mapH, minScale, paneEdge, peekPx
     )
-    flyTo(to, 450)
+    flyTo(to, FLY_POINT_MS)
   }
 
   /*
@@ -1985,7 +2208,7 @@ export default function MapPage() {
     let to: Transform
     if (t.scale >= MAX_SCALE * 0.98) {
       // At max zoom: toggle back to fit (clampTransform centers it).
-      to = clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL)
+      to = clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL, clampInsetB)
     } else {
       // Zoom a 2x step toward the tap point (world point under it stays put).
       const rect = getViewportRect()!
@@ -1996,11 +2219,11 @@ export default function MapPage() {
       const worldY = (py - t.ty) / t.scale
       to = clampTransform(
         { tx: px - worldX * nextScale, ty: py - worldY * nextScale, scale: nextScale },
-        viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL
+        viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL, clampInsetB
       )
     }
     haptic()
-    flyTo(to, 350)
+    flyTo(to, FLY_ZOOM_STEP_MS)
   }
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -2142,16 +2365,36 @@ export default function MapPage() {
         if (dash > 0) {
           const operator = stationId.slice(0, dash)
           const code = stationId.slice(dash + 1)
-          if (pickingOrigin) {
-            // Origin pick: this tap completes the pair. The destination itself
-            // and unserved stations (no fare coverage) are not pickable.
-            if (stationId === routePair.toId || getUnservedStation(operator, code)) return false
-            setPickingOrigin(false)
+          if (pickingEndpoint) {
+            // This tap fills the armed end. The station already at the OTHER
+            // end, and unserved stations (no fare coverage), are not pickable.
+            const otherId = pickingEndpoint === 'from' ? routePair.toId : routePair.fromId
+            if (stationId === otherId || getUnservedStation(operator, code)) return false
             haptic()
-            setRouteEndpoint('from', stationId)
-            // Peek, not full: the route this prices has just been drawn, so the
-            // sheet answers with the total while leaving the map behind it.
-            openFareSheet('peek')
+            setRouteEndpoint(pickingEndpoint, stationId)
+            /*
+             * Where the answer goes differs by form factor, because the two
+             * have different places to put it.
+             *
+             * Desktop has the rail card, which is already showing this pair and
+             * will price it in place — opening the fare pane on top would cover
+             * the map the rider just picked from to repeat what the card says.
+             * So the card keeps the answer, and an empty other end simply arms
+             * itself next, exactly as picking from the inline list does.
+             *
+             * Phones have no rail, so the sheet IS the answer. Peek, not full:
+             * the route has just been drawn, so it reports the total while
+             * leaving the map visible behind it.
+             */
+            if (isDesktop) {
+              const otherEmpty = pickingEndpoint === 'from' ? !routePair.toId : !routePair.fromId
+              const next = pickingEndpoint === 'from' ? 'to' : 'from'
+              setPickingEndpoint(otherEmpty ? next : null)
+              if (otherEmpty) fareQuery.aimPickerAt(next === 'from' ? 'origin' : 'destination')
+            } else {
+              setPickingEndpoint(null)
+              openFareSheet('peek')
+            }
             // No station sheet, no spotlight, no flyTo — the route's fit flight
             // owns the camera from here.
             return false
@@ -2412,45 +2655,139 @@ export default function MapPage() {
           precisely while the user is zoomed in and moving. They share a visual
           language, not a visibility rule.
 
-          On desktop the side pane occupies this corner, so the pill fades out
-          for as long as one is open. Shifting it right instead would leave it
-          stranded mid-map and jumping on every open and close, and the pane's
+          Phones only. Desktop gives this corner to the rail pill, which is a
+          control and so cannot fade behind a pane the way a label can; the
+          wordmark bottom-centre carries the page's identity there instead.
+
+          On a phone the sheet still covers this corner while open, so the pill
+          fades for as long as one is. Shifting it right instead would leave it
+          stranded mid-map and jumping on every open and close, and the sheet's
           own header already names what is selected.
 
           The entrance and the fade live on different elements on purpose.
           `map-chrome-enter` fills forwards, and a filling animation outranks a
           plain class, so an `opacity-0` utility on the same element is simply
           ignored once the entrance has landed — the pill would never hide. */}
-      <div
-        className={clsx(
-          'map-chrome-enter absolute top-4 left-4 z-10 max-w-[calc(100%-8rem)]',
-          !pillVisible && 'pointer-events-none'
-        )}
-        style={{ animationDelay: staggerDelay(0, MAP_CHROME_STAGGER) }}
-      >
-        <h1
+      {!isDesktop && (
+        <div
           className={clsx(
-            'rounded-full bg-white/90 backdrop-blur shadow-lg px-4 py-2.5 font-bold text-base text-slate-800 truncate transition-opacity duration-200',
-            pillVisible ? 'opacity-100' : 'opacity-0'
+            'map-chrome-enter absolute top-4 left-4 z-map-chrome max-w-[calc(100%-8rem)]',
+            !pillVisible && 'pointer-events-none'
           )}
+          style={{ animationDelay: staggerDelay(0, MAP_CHROME_STAGGER) }}
         >
-          Peta Integrasi
-        </h1>
-      </div>
+          <h1
+            className={clsx(
+              'rounded-full bg-white/90 backdrop-blur shadow-lg px-4 py-2.5 font-bold text-base text-slate-800 truncate transition-opacity duration-200',
+              pillVisible ? 'opacity-100' : 'opacity-0'
+            )}
+          >
+            Peta Integrasi
+          </h1>
+        </div>
+      )}
 
-      {/* Departure-pick prompt. A mode indicator, so like the close button it
+      {/*
+        * The desktop rail's head. Sized to the pane's own width so pill and card
+        * form one column, and positioned with the same left/top margins the pane
+        * uses — RAIL_PILL_RESERVED_PX is what the pane docks below.
+        *
+        * Outside `chromeVisible`: this is the map's primary action and a drawn
+        * route's only summary, so unlike the phone title pill it must not
+        * disappear on a pan.
+        */}
+      {isDesktop && (
+        <div
+          className="map-chrome-enter absolute top-3 left-4 w-[25rem] z-map-chrome"
+          style={{ animationDelay: staggerDelay(0, MAP_CHROME_STAGGER) }}
+        >
+          <MapRailPill
+            endpoints={railEndpoints}
+            hasPair={!!(routePair.fromId && routePair.toId)}
+            // The selected journey, so the card agrees with the corridor drawn
+            // behind it rather than with whichever route the API listed first.
+            fare={activeJourney}
+            hasError={!!fareError}
+            isLoading={fareLoading}
+            picking={pickingEndpoint}
+            /*
+             * Arming a field arms the MAP with it: the inline list and a tap on
+             * a station are two ways to answer the same question, so opening one
+             * must not leave the other pointing somewhere else.
+             *
+             * aimPickerAt, not openPickerFor: the rail searches inline, and the
+             * latter would also raise the phone's full-screen picker over the
+             * map behind this card.
+             */
+            onPick={(field) => {
+              haptic()
+              fareQuery.aimPickerAt(field === 'from' ? 'origin' : 'destination')
+              setPickingEndpoint(field)
+            }}
+            onCancelPick={() => setPickingEndpoint(null)}
+            stations={fareQuery.pickableStations}
+            onSelectStation={(field, station) => {
+              // The target was set when the field was armed, so this is the same
+              // path a tap on the map takes — swap-on-same-station included.
+              fareQuery.handleSelect(station)
+              /*
+               * Straight on to the other end if it is still empty: filling one
+               * half of a pair is never the whole errand, and making the rider
+               * click the second row to carry on is a step that answers nothing.
+               * Both filled, the card rests and prices what it has.
+               */
+              const otherEmpty = field === 'from' ? !routePair.toId : !routePair.fromId
+              setPickingEndpoint(otherEmpty ? (field === 'from' ? 'to' : 'from') : null)
+              if (otherEmpty) fareQuery.aimPickerAt(field === 'from' ? 'destination' : 'origin')
+            }}
+            onOpenFare={() => {
+              haptic()
+              // Cancel a half-finished origin pick: the sheet is a second way to
+              // set the same pair, and leaving the mode armed behind it would
+              // make the next station tap do something the rider no longer
+              // expects.
+              setPickingEndpoint(null)
+              openFareSheet('full')
+            }}
+            onClear={clearRoute}
+            onHeightChange={setRailCardPx}
+          />
+        </div>
+      )}
+
+      {/*
+        * Page identity, in place of the title pill desktop gives up to the rail.
+        * Inert: it is a mark, not a control, and must never eat a map drag.
+        */}
+      {isDesktop && (
+        <div
+          className="map-chrome-enter absolute bottom-5 left-1/2 -translate-x-1/2 z-map-chrome pointer-events-none"
+          style={{ animationDelay: staggerDelay(4, MAP_CHROME_STAGGER) }}
+        >
+          <Wordmark className="h-4 w-auto opacity-60" still />
+        </div>
+      )}
+
+      {/* Endpoint-pick prompt. A mode indicator, so like the close button it
           ignores `chromeVisible` — the user must always see the map is in a
-          different state and have a way out of it. */}
-      {pickingOrigin && (
+          different state and have a way out of it.
+
+          Phones only. On desktop the rail's armed field is the indicator: it
+          says which end is being filled, in the place the rider is already
+          looking, and a second banner floating over the map would be the same
+          sentence twice. */}
+      {!isDesktop && pickingEndpoint && (
         <div className="map-chrome-enter absolute inset-x-4 top-16 z-map-chrome flex justify-center pointer-events-none">
           <div className="pointer-events-auto rounded-full bg-white/90 backdrop-blur shadow-lg pl-4 pr-1.5 py-1.5 flex items-center gap-2">
-            <span className="font-bold text-sm text-slate-800 truncate">Pilih stasiun keberangkatan</span>
+            <span className="font-bold text-sm text-slate-800 truncate">
+              {pickingEndpoint === 'from' ? 'Pilih stasiun keberangkatan' : 'Pilih stasiun tujuan'}
+            </span>
             <button
               type="button"
               // Cancels the mode only — the destination stays pinned, so the
               // rider keeps their pick and can set an origin another way.
-              onClick={() => setPickingOrigin(false)}
-              aria-label="Batalkan pemilihan stasiun keberangkatan"
+              onClick={() => setPickingEndpoint(null)}
+              aria-label="Batalkan pemilihan stasiun"
               className="rounded-full w-8 h-8 flex items-center justify-center hover:bg-slate-100 cursor-pointer"
             >
               <XIcon weight="bold" className="w-4 h-4 text-slate-700" />
@@ -2483,67 +2820,147 @@ export default function MapPage() {
         </div>
       )}
 
-      <div
-        className="map-chrome-enter absolute bottom-4 right-16 z-map-chrome"
-        style={{ animationDelay: staggerDelay(2, MAP_CHROME_STAGGER) }}
-      >
-        <button
-          type="button"
-          onClick={() => {
-            haptic()
-            flyTo(
-              clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL),
-              450
-            )
-          }}
-          aria-label="Kembali ke tampilan penuh"
-          tabIndex={isZoomedIn ? 0 : -1}
-          className={`${MAP_BUTTON_CLASS} transition-opacity duration-200 ${isZoomedIn ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-        >
-          <CornersInIcon weight="bold" className="w-5 h-5 text-slate-700" />
-        </button>
-      </div>
+      {/*
+        * Corner allocation differs by form factor.
+        *
+        * Phones: the four corners are the only free space, so each takes one
+        * button — close top-right, recenter and attribution the bottom-right
+        * pair, fare bottom-left, title pill top-left.
+        *
+        * Bottom-left holds one thing at a time: the fare pill until a pair is
+        * drawn, then the chip summarising it. Same corner on purpose — the
+        * summary appears where the control that produced it was.
+        *
+        * Desktop: the rail owns the left column (pill, then pane), the wordmark
+        * sits bottom centre, and recenter and attribution join into one
+        * bottom-right group. Close keeps its own corner on both — it is the
+        * page's way out and must never be buried under lesser controls.
+        */}
+      {isDesktop
+        ? (
+            <div
+              className="map-chrome-enter absolute bottom-4 right-4 z-map-chrome flex flex-col rounded-2xl bg-white/90 backdrop-blur shadow-lg overflow-hidden"
+              style={{ animationDelay: staggerDelay(2, MAP_CHROME_STAGGER) }}
+            >
+              {/*
+                * Unmounted rather than faded when the map is already at full
+                * extent, so the group shrinks to the single remaining button
+                * instead of keeping a dead slot above it. The phone build fades
+                * in place because there the button holds a corner of its own,
+                * with nothing below to slide.
+                */}
+              {isZoomedIn && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    haptic()
+                    flyTo(
+                      clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL, clampInsetB),
+                      FLY_POINT_MS
+                    )
+                  }}
+                  aria-label="Kembali ke tampilan penuh"
+                  className={`${MAP_GROUP_BUTTON_CLASS} border-b border-slate-200/70`}
+                >
+                  <CornersInIcon weight="bold" className="w-5 h-5 text-slate-700" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setAttributionOpen(o => !o)}
+                aria-label="Lihat atribusi peta"
+                aria-expanded={attributionOpen}
+                className={MAP_GROUP_BUTTON_CLASS}
+              >
+                <InfoIcon weight="bold" className="w-5 h-5 text-slate-700" />
+              </button>
+            </div>
+          )
+        : (
+            <>
+              <div
+                className="map-chrome-enter absolute bottom-4 right-16 z-map-chrome"
+                style={{ animationDelay: staggerDelay(2, MAP_CHROME_STAGGER) }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    haptic()
+                    flyTo(
+                      clampTransform({ tx: 0, ty: 0, scale: minScale }, viewportSize.w, viewportSize.h, mapW, mapH, minScale, clampInsetL, clampInsetB),
+                      FLY_POINT_MS
+                    )
+                  }}
+                  aria-label="Kembali ke tampilan penuh"
+                  tabIndex={isZoomedIn ? 0 : -1}
+                  className={`${MAP_BUTTON_CLASS} transition-opacity duration-200 ${isZoomedIn ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                >
+                  <CornersInIcon weight="bold" className="w-5 h-5 text-slate-700" />
+                </button>
+              </div>
 
-      {/* Bottom-left is the only free corner: the title pill owns top-left, the
-          close button top-right, recenter and attribution the bottom-right pair,
-          and the fare chip the bottom centre. */}
-      <div
-        className="map-chrome-enter absolute bottom-4 left-4 z-map-chrome"
-        style={{ animationDelay: staggerDelay(4, MAP_CHROME_STAGGER) }}
-      >
-        <button
-          type="button"
-          onClick={() => {
-            haptic()
-            // Cancel a half-finished origin pick: the sheet is a second way to
-            // set the same pair, and leaving the mode armed behind it would make
-            // the next station tap do something the rider no longer expects.
-            setPickingOrigin(false)
-            // Full, not peek: both fields may be empty, so there is nothing to
-            // peek at and the next act is picking a station.
-            openFareSheet('full')
-          }}
-          aria-label="Cek tarif perjalanan"
-          className={MAP_BUTTON_CLASS}
-        >
-          <ReceiptIcon weight="bold" className="w-5 h-5 text-slate-700" />
-        </button>
-      </div>
+              {/*
+                * The map's primary action, and the only piece of phone chrome that
+                * is not a white circle.
+                *
+                * It used to wear MAP_BUTTON_CLASS like the other three, which made
+                * the reason the page exists look exactly like the attribution
+                * button — an unlabelled glyph a rider had to tap to identify. The
+                * accent fill is the same argument SheetButton's `accent` prop makes
+                * for the home rail: the one action most people came for has to be
+                * visibly the primary one rather than one of several identical
+                * surfaces. The label is desktop's, so both form factors name the
+                * job in the same words.
+                *
+                * Opaque, so no backdrop-blur: there is nothing to see through.
+                *
+                * Hidden once a pair is drawn — MapFareChip takes the bottom edge
+                * from there, the way the desktop rail pill becomes the route's
+                * summary rather than sitting beside it.
+                */}
+              {!(routePair.fromId && routePair.toId) && (
+                <div
+                  className="map-chrome-enter absolute bottom-4 left-4 z-map-chrome"
+                  style={{ animationDelay: staggerDelay(3, MAP_CHROME_STAGGER) }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      haptic()
+                      // Cancel a half-finished origin pick: the sheet is a second way to
+                      // set the same pair, and leaving the mode armed behind it would make
+                      // the next station tap do something the rider no longer expects.
+                      setPickingEndpoint(null)
+                      // Full, not peek: both fields may be empty, so there is nothing to
+                      // peek at and the next act is picking a station.
+                      openFareSheet('full')
+                    }}
+                    // h-11 without a matching w-11: the label sets the width, but the
+                    // 44px tap-target minimum the circles document still holds.
+                    className="rounded-full bg-[#F55875] text-white shadow-lg h-11 pl-4 pr-5 flex items-center gap-2 cursor-pointer font-bold text-sm transition-transform duration-150 ease-out active:scale-[0.98]"
+                  >
+                    <ReceiptIcon weight="bold" className="w-5 h-5" />
+                    <span>Cek rute dan tarif</span>
+                  </button>
+                </div>
+              )}
 
-      <div
-        className="map-chrome-enter absolute bottom-4 right-4 z-map-chrome"
-        style={{ animationDelay: staggerDelay(3, MAP_CHROME_STAGGER) }}
-      >
-        <button
-          type="button"
-          onClick={() => setAttributionOpen(o => !o)}
-          aria-label="Lihat atribusi peta"
-          aria-expanded={attributionOpen}
-          className={MAP_BUTTON_CLASS}
-        >
-          <InfoIcon weight="bold" className="w-5 h-5 text-slate-700" />
-        </button>
-      </div>
+              <div
+                className="map-chrome-enter absolute bottom-4 right-4 z-map-chrome"
+                style={{ animationDelay: staggerDelay(4, MAP_CHROME_STAGGER) }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setAttributionOpen(o => !o)}
+                  aria-label="Lihat atribusi peta"
+                  aria-expanded={attributionOpen}
+                  className={MAP_BUTTON_CLASS}
+                >
+                  <InfoIcon weight="bold" className="w-5 h-5 text-slate-700" />
+                </button>
+              </div>
+            </>
+          )}
 
       {lineChoices && lineChoices.length > 0 && (
         <div
@@ -2630,14 +3047,26 @@ export default function MapPage() {
       )}
 
       {/* Closed-only: the sheet header carries the same total, and at peek the
-          sheet sits exactly where the chip does. */}
-      {routePair.fromId && routePair.toId && !fareSheet && (
+          sheet sits exactly where the chip does.
+
+          Phones only — on desktop the rail pill grows into the same summary, in
+          the column the rider's eye is already on. */}
+      {!isDesktop && routePair.fromId && routePair.toId && !fareSheet && (
         <MapFareChip
+          // The same resolved pair the desktop rail card names, so both form
+          // factors read the endpoints out of one place.
+          endpoints={railEndpoints}
           // The selected journey, so the chip agrees with the corridor drawn
           // behind it rather than with whichever route the API listed first.
           fare={activeJourney}
           hasError={!!fareError}
           isLoading={fareLoading}
+          // Peek, not full: a pair is already drawn, so there is a result to
+          // peek at — the same snap a route resolving in place asks for.
+          onOpen={() => {
+            haptic()
+            openFareSheet('peek')
+          }}
           onClear={clearRoute}
         />
       )}
@@ -2671,8 +3100,14 @@ export default function MapPage() {
           }}
         />
 
-        {/* No onDismissStart: unlike the station and hub sheets this one owns no
-            spotlight, and the route overlay outlives it deliberately. */}
+        {/* Only the camera half of onDismissStart: unlike the station and hub
+            sheets this one owns no spotlight to stand down, and the route
+            overlay outlives it deliberately.
+
+            It still has to report the dismiss, though. The pane calls onClose
+            only once its 250ms slide has finished, so a sheet that stays silent
+            until then holds the camera inset for the whole exit and the map
+            slides back AFTER the card has gone instead of travelling with it. */}
         <MapFareSheet
           key={fareSheet?.id ?? 'closed'}
           open={!!fareSheet}
@@ -2684,6 +3119,7 @@ export default function MapPage() {
           // Selection is the map's, not the card's: see where it is declared.
           selectedIndex={selectedJourney}
           onSelectIndex={setSelectedJourney}
+          onDismissStart={beginSurfaceDismiss}
           onClose={() => setFareSheet(null)}
         />
 

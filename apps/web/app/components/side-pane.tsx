@@ -9,6 +9,29 @@ import { deckGeometry, deckZ } from './pane-stack/model'
 // selection in the area left visible beside the pane, the way PEEK_FRACTION
 // does for the sheet.
 export const SIDE_PANE_OCCUPIED_PX = 432
+/*
+ * Vertical space the rail's fare pill claims above the pane: the pill's own
+ * height plus the top margin above it and the gap below it.
+ *
+ * The pane starts here rather than at the top margin so the pill and the card
+ * read as one column. Covering the pill instead would take the map's primary
+ * action away at exactly the moment a station is selected — the old title pill
+ * could fade behind a pane because it was a label, but a control cannot.
+ */
+/*
+ * Vertical space the rail's pill claims above the pane: the pill's own height
+ * plus the top margin above it and the gap below it.
+ *
+ * The pane starts here rather than at the top margin so the pill and the card
+ * read as one column. Covering the pill instead would take the map's primary
+ * action away at exactly the moment a station is selected — the old title pill
+ * could fade behind a pane because it was a label, but a control cannot.
+ *
+ * Sized to the COLLAPSED pill on purpose. With a route drawn the rail's head
+ * grows into a taller card that overlaps the pane, and pushing the pane clear
+ * of that would break the column apart every time a route was set.
+ */
+export const RAIL_PILL_RESERVED_PX = 76
 // Slide duration, ms. Longer than a sheet snap because the travel is longer.
 const DURATION = 250
 
@@ -147,11 +170,13 @@ export default function SidePane({ open, onClose, onDismissStart, ariaLabel, hea
 
   return (
     <div
-      className="fixed left-4 top-4 bottom-4 z-detail-surface w-[25rem] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+      className="fixed left-4 bottom-4 z-detail-surface w-[25rem] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
       // Covered by another card: out of the tab order and out of the
       // accessibility tree, so exactly one dialog is reachable at any depth.
       inert={slot.above > 0}
       style={{
+        // Docks below the rail's collapsed pill.
+        top: RAIL_PILL_RESERVED_PX,
         // Paint order comes from the deck depth rather than from DOM order —
         // see deckZ. This overrides the z-detail-surface class above, which is
         // kept because it is what makes the card's layer legible at a glance;

@@ -477,8 +477,8 @@ describe('buildRouteOverlayModel with corridors', () => {
    */
   it('renders a straight interlined run as one line through the stops', () => {
     const corridors: Corridor[] = [
-      { w: 15, c: '#00BDEE', pts: [[0, 0], [600, 0]] },
-      { w: 15, c: '#00BDEE', pts: [[0, 22], [1000, 22]] }
+      { w: 25, c: '#00BDEE', pts: [[0, 0], [600, 0]] },
+      { w: 25, c: '#00BDEE', pts: [[0, 22], [1000, 22]] }
     ]
     // Stops between the strokes, the second stroke a fraction nearer — and the
     // first stroke ending mid-run, which used to force a jog.
@@ -503,8 +503,8 @@ describe('buildRouteOverlayModel with corridors', () => {
    */
   it('draws a nearly-collinear leg as a single straight shot through its dots', () => {
     const corridors: Corridor[] = [
-      { w: 15, c: '#00BDEE', pts: [[0, 12], [1400, 12]] }, // the leg's own stroke, ending mid-run
-      { w: 15, c: '#00BDEE', pts: [[380, -10], [1900, -10]] } // the interlined neighbour carrying on
+      { w: 25, c: '#00BDEE', pts: [[0, 12], [1400, 12]] }, // the leg's own stroke, ending mid-run
+      { w: 25, c: '#00BDEE', pts: [[380, -10], [1900, -10]] } // the interlined neighbour carrying on
     ]
     // First three stops ON the first stroke, the rest 11 below it — the real
     // Kalideres→Roxy shape.
@@ -536,8 +536,8 @@ describe('buildRouteOverlayModel with corridors', () => {
    */
   it('bridges the seam where a leg hands off between corridors', () => {
     const corridors: Corridor[] = [
-      { w: 15, c: '#00BDEE', pts: [[0, 0], [400, 0]] },
-      { w: 15, c: '#00BDEE', pts: [[400, 50], [800, 50]] }
+      { w: 25, c: '#00BDEE', pts: [[0, 0], [400, 0]] },
+      { w: 25, c: '#00BDEE', pts: [[400, 50], [800, 50]] }
     ]
     // The middle stop is a bar centroid 32 units off BOTH strokes — past the
     // band scale (25), so neither side may collapse to a chord.
@@ -563,5 +563,63 @@ describe('buildRouteOverlayModel with corridors', () => {
     // 2 from the followed corner + 1 chord for the unmatched pair.
     expect(rides).toHaveLength(3)
     expect(rides[2]).toMatchObject({ ax: 200, ay: 200, bx: 5000, by: 5000 })
+  })
+})
+
+/*
+ * A rail leg must not ride a BRT stroke, even when it is the only one on offer.
+ *
+ * MRT and TransJakarta Koridor 1 share the Sudirman axis and are both drawn red:
+ * `#ca2a51` against `#DC0D11` is 64 on the worst channel, inside
+ * CORRIDOR_COLOUR_TOLERANCE, so the colour gate passes the BRT stroke. Where the
+ * rail stroke is present the election already prefers it on distance, so the
+ * failure only surfaces once colour alone has nothing left to reject — and the
+ * old code then dropped to fully colour-blind matching and rode K1, whose stroke
+ * runs on well past the rider's own stations.
+ *
+ * Width is what separates the two: BRT is drawn at 15, rail at 25, with nothing
+ * between them and no mode crossing over.
+ */
+describe('mode gate', () => {
+  const points = [pt('MRTJ-STB', 3595, 4052), pt('MRTJ-DKA', 3632, 3596), pt('MRTJ-BHI', 3635, 3494)]
+  const fare = {
+    legs: [{
+      type: 'RIDE' as const,
+      line: 'MRTJ:M',
+      operator: 'MRTJ',
+      stops: [{ id: 'MRTJ-STB' }, { id: 'MRTJ-DKA' }, { id: 'MRTJ-BHI' }]
+    }]
+  }
+  const resolveLine = () => ({ colorCode: '#ca2a51' })
+  /*
+   * K1's stroke, bending east below Setiabudi the way the artwork does. The bend
+   * is the point: riding it drags the drawn route out to x≈3700 and down past
+   * y=4052, neither of which is anywhere the MRT rider goes.
+   */
+  const brtStroke: Corridor = { w: 15, c: '#DC0D11', pts: [[3696, 1620], [3660, 3500], [3640, 4100], [3700, 4600], [3264, 5039]] }
+
+  it('chords rather than riding a BRT stroke when no rail stroke is drawn', () => {
+    const model = buildRouteOverlayModel(
+      fare as never, { fromId: 'MRTJ-STB', toId: 'MRTJ-BHI' }, points, resolveLine, [brtStroke]
+    )
+    const rides = model!.overlay.segments.filter(s => s.kind === 'ride')
+    // Chords between the stops, so nothing is drawn south of Setiabudi or east
+    // of the stations — following K1 would do both.
+    for (const s of rides) {
+      expect(Math.max(s.ay, s.by)).toBeLessThanOrEqual(4053)
+      expect(Math.max(s.ax, s.bx)).toBeLessThanOrEqual(3640)
+    }
+  })
+
+  it('still rides the rail stroke when one is drawn', () => {
+    const railStroke: Corridor = { w: 25, c: '#CF0E33', pts: [[3306, 4348], [3595, 4052], [3632, 3596], [3636, 3492]] }
+    const model = buildRouteOverlayModel(
+      fare as never, { fromId: 'MRTJ-STB', toId: 'MRTJ-BHI' }, points, resolveLine, [brtStroke, railStroke]
+    )
+    const rides = model!.overlay.segments.filter(s => s.kind === 'ride')
+    expect(rides.length).toBeGreaterThan(0)
+    for (const s of rides) {
+      expect(Math.max(s.ax, s.bx)).toBeLessThanOrEqual(3640)
+    }
   })
 })

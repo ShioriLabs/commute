@@ -514,9 +514,39 @@ describe('mapTreatment', () => {
     expect(t.cuts).toHaveLength(0)
   })
 
-  it('ignores a route whose overlay has not faded in yet', () => {
-    const t = mapTreatment(null, { alpha: 0, scrimAlpha: 0, desaturate: 0.9, fade: 0.9 })
-    expect(t.fade).toBe(0)
+  /*
+   * The route animates two things on separate clocks: `alpha` carries its own
+   * capsules and pins, `fade`/`desaturate` carry the map-wide treatment. They
+   * turn on at different moments — a deep link draws its pins before the fare
+   * lands, and the map is not dimmed until there is a polyline to dim it for.
+   *
+   * So the map-wide terms are read straight off the frame. Gating them on
+   * `alpha` is what made the treatment snap: it tied the dim to the wrong ramp
+   * at both ends.
+   */
+  it('takes the map-wide fade from the frame, not from the overlay alpha', () => {
+    // Pins drawn (alpha 1) with no polyline yet: the map is left alone because
+    // the frame says so, not because alpha does.
+    const pinsOnly = mapTreatment(null, { alpha: 1, scrimAlpha: 0, desaturate: 0, fade: 0 })
+    expect(pinsOnly.fade).toBe(0)
+    expect(pinsOnly.desaturate).toBe(0)
+
+    // And the mirror: a dim still ramping out after the capsules have gone is
+    // honoured rather than dropped on the frame alpha reaches 0.
+    const dimOutliving = mapTreatment(null, {
+      alpha: 0, scrimAlpha: 0,
+      desaturate: ROUTE_DESATURATE_MAX / 2, fade: ROUTE_FADE_MAX / 2
+    })
+    expect(dimOutliving.fade).toBeCloseTo(ROUTE_FADE_MAX / 2)
+    expect(dimOutliving.desaturate).toBeCloseTo(ROUTE_DESATURATE_MAX / 2)
+  })
+
+  it('carries a route fade mid-ramp rather than rounding it to on or off', () => {
+    // The whole point of the scrim having its own progress: partial values have
+    // to survive to the renderers, or the treatment is a boolean again.
+    const t = mapTreatment(null, routeFrame(ROUTE_FADE_MAX * 0.25, ROUTE_DESATURATE_MAX * 0.25))
+    expect(t.fade).toBeCloseTo(ROUTE_FADE_MAX * 0.25)
+    expect(t.desaturate).toBeCloseTo(ROUTE_DESATURATE_MAX * 0.25)
   })
 
   /*

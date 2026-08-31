@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { phaseStep, easeOut } from './map-phase-tick'
+import { phaseStep, easeOut, clamp01 } from './map-phase-tick'
 
 const IN = 350
 
@@ -51,5 +51,31 @@ describe('phaseStep', () => {
     expect(step.progress).toBe(1)
     expect(step.phase).toBe('hold')
     expect(step.dirty).toBe(true)
+  })
+})
+
+/*
+ * The rAF timestamp marks the START of a frame, so it can predate a phaseStart
+ * sampled from performance.now() inside the handler that began the ramp. That
+ * really happens: clearing a fare route measured p = -0.035 on the first exit
+ * frame, and easeOut ran the curve backwards to 1.108 — the fade overshot full
+ * strength before it began to fall.
+ */
+describe('clamp01', () => {
+  it('holds a phase at its origin when the frame predates its start', () => {
+    expect(clamp01(-0.035)).toBe(0)
+    expect(easeOut(clamp01(-0.035))).toBe(0)
+  })
+
+  it('never lets easeOut exceed full strength', () => {
+    for (const p of [-1, -0.035, 0, 0.5, 1, 1.5]) {
+      const eased = easeOut(clamp01(p))
+      expect(eased).toBeGreaterThanOrEqual(0)
+      expect(eased).toBeLessThanOrEqual(1)
+    }
+  })
+
+  it('leaves ordinary progress alone', () => {
+    expect(clamp01(0.25)).toBe(0.25)
   })
 })

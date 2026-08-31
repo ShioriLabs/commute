@@ -806,15 +806,38 @@ describe('webgl route overlay', () => {
       }
     })
 
-    it('leaves the map alone mid-fade-out once the overlay has faded to nothing', async () => {
+    /*
+     * The map-wide treatment rides its own ramp, not the overlay's alpha.
+     *
+     * The route turns its capsules on with the PAIR and its dim on with the
+     * POLYLINE, and those are routinely different frames — a deep link draws
+     * pins while the fare is still in flight. So a frame carrying one without
+     * the other is normal traffic, not a contradiction, and the tile pass has
+     * to honour whichever the frame actually asks for.
+     */
+    it('greys the map for a dim still ramping out after the capsules have gone', async () => {
       const { renderer } = setup()
       renderer.draw(wholeMapTransform(0.2), 360, 780, 3, 1)
       await flush()
       drawCalls.length = 0
       renderer.setRouteOverlay(overlay)
-      // alpha 0 is the settled end of a fade-out: nothing is drawn, so nothing
-      // should be greyed either.
-      renderer.draw(wholeMapTransform(0.2), 360, 780, 3, 1, null, { alpha: 0, scrimAlpha: 0, desaturate: 0.85, fade: 0.6 })
+      renderer.draw(wholeMapTransform(0.2), 360, 780, 3, 1, null, { alpha: 0, scrimAlpha: 0, desaturate: 0.4, fade: 0.3 })
+      expect(drawnTiles().length).toBeGreaterThan(0)
+      for (const call of drawnTiles()) {
+        expect(call.desaturate).toBeCloseTo(0.4)
+        expect(call.fade).toBeCloseTo(0.3)
+      }
+    })
+
+    it('leaves the map alone for a pins-only overlay that asks for no dim', async () => {
+      const { renderer } = setup()
+      renderer.draw(wholeMapTransform(0.2), 360, 780, 3, 1)
+      await flush()
+      drawCalls.length = 0
+      renderer.setRouteOverlay(overlay)
+      // Pins drawn at full strength, no polyline yet, so no dim is requested.
+      renderer.draw(wholeMapTransform(0.2), 360, 780, 3, 1, null, { alpha: 1, scrimAlpha: 0, desaturate: 0, fade: 0 })
+      expect(drawnTiles().length).toBeGreaterThan(0)
       for (const call of drawnTiles()) {
         expect(call.desaturate).toBe(0)
         expect(call.fade).toBe(0)

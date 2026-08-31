@@ -25,6 +25,19 @@ export interface PhaseStep {
   done: boolean
 }
 
+/**
+ * Progress clamped to 0..1.
+ *
+ * The low end is not paranoia. Phases start from `performance.now()` inside an
+ * event handler, while the tick eases against the rAF timestamp, which marks
+ * the START of the frame and can therefore predate it. Feeding that negative
+ * ratio to easeOut runs the curve backwards past its origin — -0.035 returns
+ * 1.108 — so a fade overshoots full strength before it starts falling.
+ */
+export function clamp01(p: number): number {
+  return Math.max(0, Math.min(1, p))
+}
+
 /** easeOutCubic, the curve every fade on the map shares. */
 export function easeOut(p: number): number {
   return 1 - Math.pow(1 - p, 3)
@@ -41,7 +54,7 @@ export function phaseStep(phase: TickPhase, elapsed: number, durationMs: number)
   if (phase === 'hold') {
     return { progress: 1, phase: 'hold', dirty: false, done: false }
   }
-  const p = durationMs > 0 ? Math.min(1, elapsed / durationMs) : 1
+  const p = durationMs > 0 ? clamp01(elapsed / durationMs) : 1
   if (phase === 'in') {
     return { progress: easeOut(p), phase: p >= 1 ? 'hold' : 'in', dirty: true, done: false }
   }

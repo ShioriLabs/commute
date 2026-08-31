@@ -289,9 +289,21 @@ export function mapTreatment(
   route: RouteOverlayFrame | null | undefined,
   isolate?: LineIsolateOverlay | null
 ): MapTreatment {
-  const routeOn = route != null && route.alpha > 0
-  const routeFade = routeOn ? route.fade : 0
-  const routeDesat = routeOn ? route.desaturate : 0
+  /*
+   * Read straight off the frame rather than gated on route.alpha.
+   *
+   * The route animates two things independently: alpha carries its own capsules
+   * and pins, while fade/desaturate carry the map-wide treatment and turn on the
+   * POLYLINE rather than the pair — a deep link draws its pins before the fare
+   * lands, and the map is left alone until there is a line to dim it for. Gating
+   * these on alpha coupled them to the wrong ramp, and would drop the dim the
+   * instant the capsules finished even with the dim still on its way out.
+   *
+   * They are already zero whenever the treatment is off, so the gate bought
+   * nothing it does not carry itself.
+   */
+  const routeFade = route != null ? route.fade : 0
+  const routeDesat = route != null ? route.desaturate : 0
 
   const selFade = selection != null ? selection.fadeAlpha : 0
   const isolateFade = isolate != null && isolate.shapes.length > 0 ? isolate.fadeAlpha : 0
