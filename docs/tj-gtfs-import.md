@@ -1,10 +1,13 @@
 # TransJakarta GTFS import
 
-**Status:** groundwork landed (July 2026) — the `TJ` operator, empty
-`apps/api/src/operators/tj/` stubs, and the `searchable` station flag
-(`0011_add_station_searchable.sql`) are in; the importer itself is not yet
-built. Companion to `transit-hubs.md` (TJ haltes will join hubs) and the
-fare feature (shipped).
+**Status:** *implemented* (July 2026) — the importer
+(`db/scripts/generateTJSQL.ts` + `generateTJTopology.ts` +
+`generateTJTransferInternalizeSQL.ts`) is built and has run; TJ stations,
+lines, edges and transfers are live. `operators/tj/lines.ts` is
+generated (110 corridor lines); `operators/tj/fares.ts` is still a stub
+(flat `TJ_FLAT_FARE = 3500`, no chain-collapse yet — decision 3 below).
+Companion to `transit-hubs.md` (TJ haltes join hubs) and the fare feature
+(shipped).
 
 ## Goal
 
@@ -123,20 +126,19 @@ The importer follows the `db/scripts/generate*SQL.ts` pattern: a re-runnable
 script that downloads the zip, filters to scope, normalises, and emits SQL
 seeds. TJ routes churn often enough that one-off hand-massaging would rot.
 
-## Open decisions
+## Decisions
 
-1. **Roadside stops as full `stations` rows?** ~1,945 rows with no
-   codes/amenities would swamp station search. Options: full rows + a
-   type flag; a lighter separate table; or haltes-only in v1 (capping
-   Integrasi trip planning at halte-to-halte).
-2. **Line granularity.** 100 TJ `lineCode`s dwarfs the current rail-line
-   count. Fine for the router; the lines page likely wants corridor grouping
-   or a TJ-specific presentation.
-3. **Fare source of truth.** Trust the feed's fares-v1 (route→fare_id, data-
-   driven) vs hardcoding like other operators. Feed data is fresh and correct
-   today; constants are simpler and match the existing pattern.
-4. **Pattern variants.** Routes carry AMARI (night) and express variants as
-   separate trips. Keep as distinct patterns, or merge per route+direction?
-5. **JakLingko integration cap** (Rp 10k / 3 h across TJ+MRT+LRT) — belongs in
-   fare-summary once multi-operator TJ journeys exist; out of scope for the
-   importer itself.
+1. **Roadside stops as full `stations` rows? — Resolved: full rows + a type
+   flag.** Roadside stops are real `stations` rows with `searchable = false`
+   (`0011_add_station_searchable.sql`); the importer logs the
+   searchable/hidden split at generation time.
+2. **Line granularity.** Still flat: `operators/tj/lines.ts` has one entry per
+   `lineCode` (= `route_short_name`), no corridor grouping. Open for the lines
+   page presentation.
+3. **Fare source of truth. — Resolved: hardcoded constant**, matching the
+   other operators, not feed-driven `route→fare_id`. See `operators/tj/fares.ts`.
+4. **Pattern variants.** Still open — not verified against the shipped
+   importer.
+5. **JakLingko integration cap** (Rp 10k / 3 h across TJ+MRT+LRT) — still
+   belongs in fare-summary once multi-operator TJ journeys exist; out of
+   scope for the importer.

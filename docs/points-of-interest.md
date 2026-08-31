@@ -18,10 +18,11 @@ stations** — which is *exactly* the shape of a `transfers` row (`fromStationId
 `toStationId`, `distance`). So a POI is a **virtual graph node whose only edges are
 walk transfers**, and the router already knows what to do with those.
 
-`findRoute` (`apps/api/src/utils/router.ts`) is plain Dijkstra over "ride edges +
-walk transfers" and does **not** care whether a node is a real station. So
-`findRoute(graph, 'POI-GBK', dest)` yields `walk → ride → … → dest` with **zero
-router changes**. And fares are computed only on **RIDE** runs
+`findRoute` (`@commute/tsundere`, a method on the `Tsundere` handle returned by
+`loadGraph`) is plain Dijkstra over "ride edges + walk transfers" and does **not**
+care whether a node is a real station. So `router.findRoute('POI-GBK', dest)`
+yields `walk → ride → … → dest` with **zero router changes**. And fares are
+computed only on **RIDE** runs
 (`summarizeFares`, `apps/api/src/utils/fare-summary.ts`), so a leading/trailing
 access walk adds no fare — a POI origin cannot distort the tariff.
 
@@ -176,9 +177,9 @@ Sketch:
 
 ```ts
 // fares.ts — endpoints may now be POIs
-const graph = await getGraph(c.env.DB)            // station-only, cached
-const withPoi = injectPoiEndpoints(graph, [fromId, toId], poiAdjacency)  // per-request clone
-const legs = findRoute(withPoi, fromId, toId)
+const router = await getRouter(c.env.DB)          // station-only, cached Tsundere handle
+const withPoi = injectPoiEndpoints(router, [fromId, toId], poiAdjacency)  // per-request clone
+const legs = withPoi.findRoute(fromId, toId)
 ```
 
 ## Fare-summary semantics — the one real gotcha

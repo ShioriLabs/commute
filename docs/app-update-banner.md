@@ -6,16 +6,19 @@ and `fdtj-map-points.md`).
 
 ## Why
 
-The app never tells anyone a new version exists. `root.tsx` registers the
-service worker and does nothing else with the registration — no
-`registration.update()`, no `updatefound` listener, no `controllerchange`
-handler. The worker calls `skipWaiting()` + `clients.claim()`, so a new one
-takes over on the load *after* the one that discovered it.
+The app never tells the *user* a new version exists, even though it already
+recovers silently under the hood: `app/lib/register-service-worker.ts` calls
+`registration.update()` on a throttled `visibilitychange`, and its
+`controllerchange` handler auto-reloads the page once a new worker takes
+control (bounded by `MAX_RELOADS_PER_SESSION`, guarded against reloading on
+the very first `clients.claim()`).
 
 For asset freshness this no longer matters much: `index.html` is short-TTL,
 hashed chunks are immutable-and-honest, and `points.json` ships as a hashed
-`/assets/` file. What's missing is the user-facing half — someone with the PWA
-open for days has no idea a release happened, and no prompt to pick it up.
+`/assets/` file. What's missing is specifically the user-facing half — the
+auto-reload is silent, so someone with the PWA open for days sees the app
+jump to a new version with no explanation and no chance to finish what they
+were doing first.
 
 ## What triggers it
 
