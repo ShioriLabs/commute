@@ -1,0 +1,51 @@
+-- Stasiun Karet retirement, September 2026.
+--
+-- KAI Commuter announced that from September 2026 all operations at Stasiun
+-- Karet move to Stasiun Sudirman Baru/BNI City, as part of an integration
+-- upgrade at both stations. Karet is NOT demolished -- it becomes a concourse
+-- for BNI City -- but no train calls there any more.
+--
+-- The station row, its page, AND its searchability are deliberately KEPT.
+-- Deleting the row would 404 every existing deep link to /stations/KCI/KAT and
+-- leave dangling ids in the `saved-stations` localStorage riders already have.
+--
+-- searchable stays 1 ON PURPOSE. Karet is a place people still know by name and
+-- will keep typing into the search box for years; hiding it would answer that
+-- search with silence, which reads as "we don't have it" rather than "it moved".
+-- Leaving it findable means the search lands on the station page, which tells
+-- them the trains now stop at Sudirman Baru/BNI City. That page is a signpost,
+-- not a stub, so it also stays in the sitemap (isCrawlablePage in
+-- apps/web/functions/_middleware.ts keys off this same flag).
+--
+-- What actually makes it unroutable is its absence from TOPOLOGY and the edge
+-- deletion below, NOT the search flag. The two are independent, which is why a
+-- station can be findable and unroutable at the same time.
+--
+-- The `edges` DELETE is load-bearing and cannot be skipped: edges.sql is
+-- INSERT OR REPLACE, so re-applying it will never remove rows that already
+-- exist in the database. Without this, Karet stays routable in production even
+-- though it is gone from TOPOLOGY.
+--
+-- The `stationLines` DELETE is what removes Karet from the C-line stop
+-- sequence on /lines/KCI/C. Note that station-codes.sql:27 still carries a
+-- 'C11a' stationNumber backfill for KCI-KAT. It is inert once the row below is
+-- gone, but do NOT re-apply that file wholesale afterwards or it will
+-- resurrect the row.
+--
+-- APPLY ORDER MATTERS. This file only DELETES Karet's edges; the replacement
+-- direct edge (C:KCI-THB<->KCI-SUDB, 2014m) lives in edges.sql. Between the two
+-- the Cikarang line is severed between Tanah Abang and BNI City, so apply both
+-- in one sitting, this file FIRST:
+--
+--   wrangler d1 execute commute --local  --file=src/db/scripts/kci_karet_retire.sql
+--   wrangler d1 execute commute --local  --file=src/db/scripts/edges.sql
+--
+--   wrangler d1 execute commute --remote --file=src/db/scripts/kci_karet_retire.sql
+--   wrangler d1 execute commute --remote --file=src/db/scripts/edges.sql
+--
+-- Remember to bump API_VERSION in wrangler.toml afterwards, or the old station
+-- list keeps being served from the `searchables:` KV cache.
+
+DELETE FROM stationLines WHERE stationId = 'KCI-KAT' AND lineCode = 'C';
+
+DELETE FROM edges WHERE fromStationId = 'KCI-KAT' OR toStationId = 'KCI-KAT';

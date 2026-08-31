@@ -608,11 +608,11 @@ export const PLATFORM_CODES: Record<string, string> = {
   'KCI-RJW:C:KPB': '2',
 
   // Lin Cikarang, western arc.
-  // NOTE Karet is scheduled to close on 28 Sep 2026 and become a concourse for
-  // BNI City; drop its two entries when that happens.
-  'KCI-KAT:C:THB': '1', // Karet — jalur 1 towards Tanah Abang/Angke
-  'KCI-KAT:C:SUDB': '2',
-  'KCI-SUDB:C:KAT': '1', // BNI City — jalur 1 towards Angke
+  // Karet closed in September 2026: KAI Commuter moved all of its operations to
+  // Sudirman Baru/BNI City, which absorbs it as a concourse. Its two entries are
+  // gone and BNI City's jalur 1 now points at Tanah Abang, the new next hop.
+  // The stop is also out of TOPOLOGY, so the C line runs THB -> SUDB direct.
+  'KCI-SUDB:C:THB': '1', // BNI City — jalur 1 towards Angke
   'KCI-SUDB:C:SUD': '2',
 
   // Depok — four tracks, but only the outer pair is directional: jalur 1 is the
@@ -677,7 +677,8 @@ export const PLATFORM_CODES: Record<string, string> = {
    * because of anything we do: c-access shows trip 1676C badged "Commuter Line
    * Rangkasbitung" while routing it Tanah Abang -> Karet -> Sudirman Baru ->
    * Sudirman -> Manggarai (10:17-10:28), which is Cikarang alignment
-   * throughout. Do not "fix" this in the importer — a feed refresh would undo
+   * throughout. (That trace predates Karet's September 2026 closure, hence the
+   * stop; the mislabelling it evidences is unaffected.) Do not "fix" this in the importer — a feed refresh would undo
    * it. An override keyed on trip number is the durable shape if these ever
    * need to display on the right line, since lineCode also drives colour and
    * roundel.

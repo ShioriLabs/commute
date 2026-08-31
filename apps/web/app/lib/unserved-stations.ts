@@ -1,6 +1,12 @@
 // Stations that exist on the map but are not (yet) served by any operator we
 // cover, so the API has no record for them. The station page and map sheet
 // special-case these instead of showing a generic fetch error.
+//
+// NOT the place for a station that was retired after we already had a record
+// for it: listing one here suppresses its API fetches and replaces the whole
+// page with an empty state, throwing away the name, lines and facilities we
+// still hold. Those get a RETIRED_STATIONS banner instead (see
+// ~/lib/retired-stations), which keeps the page and puts a notice on top.
 export interface UnservedStation {
   formattedName: string
   title: string

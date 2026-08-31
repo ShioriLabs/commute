@@ -34,6 +34,7 @@ import { normalizeGroupedTimetable } from 'utils/timetable-shim'
 import { sortLinesForDisplay } from '~/utils/lines'
 import { useNetworkStatus } from '~/hooks/network'
 import { getUnservedStation } from '~/lib/unserved-stations'
+import { getRetiredStation } from '~/lib/retired-stations'
 import { useLines } from '~/hooks/use-lines'
 import { buildFareDestinationPath } from 'utils/fare-url'
 import PaneLink from '~/components/pane-stack/pane-link'
@@ -171,6 +172,7 @@ export function useStationHeader(operator: string, code: string): UseStationData
 
 const StationContent = memo(function StationContent({ operator, code, onSelectDeparture, onIsolateLine }: StationContentProps) {
   const unserved = getUnservedStation(operator, code)
+  const retired = getRetiredStation(operator, code)
   // Route params are not case-normalised anywhere, so fold case here rather
   // than let a lowercase URL silently drop the memorial.
   const isBekasiTimur = operator.toUpperCase() === 'KCI' && code.toUpperCase() === 'BKST'
@@ -245,6 +247,29 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
 
   return (
     <div className="flex flex-col max-w-3xl mx-auto pb-8 px-4 mt-4">
+      {/*
+        * Retired-station notice. Sits above everything because it reframes the
+        * whole page: the name, lines and facilities below are all still true of
+        * the building, but no train calls there. Same amber treatment as the
+        * offline banner, which is the established "this page needs a caveat"
+        * shape here.
+        */}
+      {retired && (
+        <div className="text-amber-950 bg-amber-100 flex flex-col gap-2 rounded-xl p-4 mb-4">
+          <div className="flex flex-row gap-2 font-semibold">
+            <WarningIcon weight="duotone" className="w-6 h-6 shrink-0" />
+            <span>{retired.message}</span>
+          </div>
+          {retired.redirect && (
+            <Link
+              to={retired.redirect.to}
+              className="font-bold underline underline-offset-2 self-start ml-8"
+            >
+              {retired.redirect.label}
+            </Link>
+          )}
+        </div>
+      )}
       {(() => {
         if (timetableData?.length) {
           return (
@@ -293,6 +318,10 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
           )
         }
         if (timetable.error) return <EmptyState mode="ERROR" onRetry={() => timetable.mutate()} />
+        // A retired station has no schedule BY DEFINITION, and the banner above
+        // has already said so in plain words. "Jadwal Tidak Tersedia" under it
+        // would read as a load failure and invite a pointless retry.
+        if (retired) return null
         return <EmptyState mode="NO_DATA" />
       })()}
       {isBekasiTimur && <BekasiTimurMemorial />}
