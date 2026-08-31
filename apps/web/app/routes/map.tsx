@@ -7,6 +7,7 @@ import LineSheet from '~/components/line-sheet'
 import { findLine, lineCutShapes, linesNear, seedFadeFrom, type LinesManifest } from '~/lib/map-line-isolate'
 import { openSurface, isSurfaceOpen, type OpenSurface } from '~/lib/map-detail-surface'
 import { easeCameraFlight } from '~/lib/map-easing'
+import { clamp01, easeOut } from '~/lib/map-phase-tick'
 import clsx from 'clsx'
 import type { StandardResponse } from '@schema/response'
 import type { Hub, Station } from '@commute/schemas'
@@ -965,10 +966,30 @@ export default function MapPage() {
     alphaFrom: 0,
     lastAlpha: 0
   })
-  // Mirror of the current model for the tick (which only reads refs): whether
-  // anything is drawable, and whether a polyline exists (pins-only overlays
-  // get no scrim).
-  const routeStateRef = useRef<{ show: boolean, scrim: boolean }>({ show: false, scrim: false })
+  /*
+   * The map-wide half of the route treatment: the dim toward page white, the
+   * colour drain, and the scrim. Animated APART from routeAnimRef above, which
+   * carries only the route's own capsules and pins.
+   *
+   * Two ramps rather than one because the two answer different questions. The
+   * overlay is drawable as soon as there is a pair — a deep link resolves its
+   * pins before the fare lands — but the map is only dimmed once there is a
+   * POLYLINE to dim it for, since two lone pins on a drained map read as a
+   * broken render. Those two moments are frequently not the same frame.
+   *
+   * This used to be a boolean gate multiplied by the overlay's alpha, which
+   * snapped at both ends: clearing a pair dropped the dim on the next frame
+   * while the polyline spent its full fade over an already-bright map, and a
+   * late-arriving polyline raised the dim in one frame because the alpha it was
+   * multiplied by had long since reached 1. A fade is a fade — see the
+   * spotlight and the isolate, which have always animated theirs.
+   */
+  const routeScrimAnimRef = useRef<{ visible: boolean, phaseStart: number, alphaFrom: number, lastAlpha: number }>({
+    visible: false,
+    phaseStart: 0,
+    alphaFrom: 0,
+    lastAlpha: 0
+  })
   // Fit-bounds flight waiting for the morph handoff. Executed by the tick once
   // the first real frame has been presented; canceled by any gesture.
   const pendingFitRef = useRef<{ bbox: RouteOverlayModel['bbox'], hasPolyline: boolean } | null>(null)
@@ -1428,18 +1449,42 @@ export default function MapPage() {
     dirtyRef.current = true
   }, [surfaceInsetValue, clampInsetL, clampInsetB])
 
-  // Drive the fade + scrim mirrors, and queue the one-per-pair fit flight.
+  // Start both route ramps, and queue the one-per-pair fit flight.
   useEffect(() => {
     const show = routeModel !== null
     const hasPolyline = routeModel !== null && routeModel.overlay.segments.length > 0
+    const now = performance.now()
     const anim = routeAnimRef.current
     if (show !== anim.visible) {
       anim.visible = show
-      anim.phaseStart = performance.now()
+      anim.phaseStart = now
       anim.alphaFrom = anim.lastAlpha
     }
-    routeStateRef.current = { show, scrim: hasPolyline }
-    dirtyRef.current = true
+    /*
+     * The map-wide treatment turns on the POLYLINE, not the pair — see
+     * routeScrimAnimRef. Seeded from what is currently drawn for the same
+     * reason seedFadeFrom exists: reversing mid-fade (clearing a route and
+     * immediately picking another) has to pick up from the value on screen,
+     * or the two ramps cross and the map brightens through the middle of one
+     * gesture.
+     */
+    const scrimAnim = routeScrimAnimRef.current
+    if (hasPolyline !== scrimAnim.visible) {
+      scrimAnim.visible = hasPolyline
+      scrimAnim.phaseStart = now
+      scrimAnim.alphaFrom = scrimAnim.lastAlpha
+    }
+    /*
+     * markDirty, not a bare dirtyRef write: this runs OUTSIDE the loop, and a
+     * settled route parks it (no flight, no inertia, no selection, both ramps
+     * at rest). Raising the flag alone leaves nothing to read it, so the exit
+     * ramp never gets a second frame — whatever eventually wakes the map draws
+     * the fade at its end state and the colour snaps back in one step.
+     *
+     * The old boolean gate hid this: the dim was gone the instant the flag
+     * flipped, so a stalled loop and a running one looked the same.
+     */
+    markDirty()
 
     if (routeModel) {
       const pairKey = `${routePair.fromId}|${routePair.toId}`
@@ -1454,7 +1499,7 @@ export default function MapPage() {
       pendingFitRef.current = null
       fittedPairRef.current = null
     }
-  }, [routeModel, routePair])
+  }, [routeModel, routePair, markDirty])
 
   // Resize the renderer's backing store when the viewport changes.
   useEffect(() => {
@@ -1727,21 +1772,41 @@ export default function MapPage() {
       {
         const anim = routeAnimRef.current
         const targetAlpha = anim.visible ? 1 : 0
-        const p = Math.min(1, (now - anim.phaseStart) / ROUTE_FADE_MS)
-        const e = 1 - Math.pow(1 - p, 3) // easeOutCubic
-        const alpha = anim.alphaFrom + (targetAlpha - anim.alphaFrom) * e
+        /*
+         * Clamped at BOTH ends. `now` is the rAF timestamp, which marks the
+         * start of this frame and can predate a phaseStart sampled from
+         * performance.now() inside the event handler that began the ramp. A
+         * negative p runs easeOut backwards past its origin (p -0.035 gives
+         * 1.108), so the fade would overshoot full strength before falling.
+         */
+        const p = clamp01((now - anim.phaseStart) / ROUTE_FADE_MS)
+        const alpha = anim.alphaFrom + (targetAlpha - anim.alphaFrom) * easeOut(p)
         if (p < 1) dirtyRef.current = true
         anim.lastAlpha = alpha
-        if (alpha > 0) {
-          const scrimTarget = routeStateRef.current.scrim ? ROUTE_SCRIM_MAX_ALPHA : 0
+
+        /*
+         * The map-wide treatment, on its own clock. A pins-only overlay (deep
+         * link before the fare lands) leaves the map alone, since two lone pins
+         * on a fully drained map read as a broken render — but it now RAMPS to
+         * that decision in both directions instead of switching.
+         */
+        const scrimAnim = routeScrimAnimRef.current
+        const scrimTarget = scrimAnim.visible ? 1 : 0
+        const scrimP = clamp01((now - scrimAnim.phaseStart) / ROUTE_FADE_MS)
+        const scrim = scrimAnim.alphaFrom + (scrimTarget - scrimAnim.alphaFrom) * easeOut(scrimP)
+        if (scrimP < 1) dirtyRef.current = true
+        scrimAnim.lastAlpha = scrim
+
+        // Either ramp still having something to say is enough to build a frame:
+        // on a clear the capsules and the dim land together, but nothing here
+        // depends on that, and the dim outliving the geometry by a frame would
+        // otherwise be dropped silently.
+        if (alpha > 0 || scrim > 0) {
           routeFrame = {
             alpha,
-            scrimAlpha: scrimTarget * alpha,
-            // Gated on the same flag as the scrim: a pins-only overlay (deep
-            // link before the fare lands) leaves the map alone, since two lone
-            // pins on a fully drained map read as a broken render.
-            desaturate: routeStateRef.current.scrim ? ROUTE_DESATURATE_MAX * alpha : 0,
-            fade: routeStateRef.current.scrim ? ROUTE_FADE_MAX * alpha : 0
+            scrimAlpha: ROUTE_SCRIM_MAX_ALPHA * scrim,
+            desaturate: ROUTE_DESATURATE_MAX * scrim,
+            fade: ROUTE_FADE_MAX * scrim
           }
         }
       }
@@ -1886,10 +1951,28 @@ export default function MapPage() {
       // Park when idle. `dirtyRef` can be true here only when something set it
       // after the draw branch cleared it (in-loop animations); everything
       // outside the loop re-arms via markDirty().
+      /*
+       * The route's two ramps have to be named here the way the spotlight and
+       * the isolate name their phases.
+       *
+       * dirtyRef cannot carry them: it is a DRAW REQUEST, consumed just before
+       * draw() (see the note there), so a ramp that raises it during the tick
+       * has had it cleared again by the time this runs. The other treatments
+       * survive that because a running phase is `!== 'hold'` here; the route
+       * had no equivalent, so it drew exactly one frame and parked — the fade
+       * then jumped to its end state whenever something next woke the map.
+       *
+       * Invisible until the exit became a real ramp: the old boolean gate
+       * changed the dim in whichever single frame happened to draw, so one
+       * frame was all it ever needed.
+       */
+      const routeRamping = routeAnimRef.current.lastAlpha !== (routeAnimRef.current.visible ? 1 : 0)
+        || routeScrimAnimRef.current.lastAlpha !== (routeScrimAnimRef.current.visible ? 1 : 0)
       const animating = flyToRef.current !== null
         || inertiaRef.current !== null
         || (spotlightRef.current !== null && spotlightRef.current.phase !== 'hold')
         || (isolateRef.current !== null && isolateRef.current.phase !== 'hold')
+        || routeRamping
       if (animating || moved || dirtyRef.current) {
         schedule()
       } else {
