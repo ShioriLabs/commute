@@ -33,6 +33,66 @@ const STATION_ID = /^[A-Z0-9]+-[A-Z0-9-]+$/
 
 const app = new Hono<{ Bindings: Bindings }>()
 
+// Same substrings as CRAWLER_UA in apps/web/functions/_middleware.ts / the
+// classifier in apps/api/src/middleware/request-log.ts, kept inline rather
+// than shared: one route in this worker, not worth a cross-app dependency.
+// This worker exists purely to serve OG images to link-preview bots, so which
+// bot it is matters more here than almost anywhere else in the system.
+const UA_CLASSES: [label: string, needle: string][] = [
+  ['facebook', 'facebookexternalhit'],
+  ['twitter', 'twitterbot'],
+  ['slack', 'slackbot'],
+  ['discord', 'discordbot'],
+  ['whatsapp', 'whatsapp'],
+  ['telegram', 'telegrambot'],
+  ['googlebot', 'googlebot'],
+  ['bingbot', 'bingbot'],
+  ['linkedin', 'linkedinbot'],
+  ['pinterest', 'pinterest'],
+  ['reddit', 'redditbot'],
+  ['embedly', 'embedly'],
+  ['skype', 'skypeuripreview'],
+  ['applebot', 'applebot'],
+  ['yandex', 'yandex']
+]
+
+function classifyUa(ua: string | undefined): string {
+  if (!ua) return 'none'
+  const lower = ua.toLowerCase()
+  for (const [label, needle] of UA_CLASSES) {
+    if (lower.includes(needle)) return label
+  }
+  return lower.includes('mozilla/') ? 'browser' : 'other'
+}
+
+/*
+ * One structured log line per request: path, status, timing, and who sent it.
+ * Same reasoning as apps/api/src/middleware/request-log.ts (written after a
+ * KV read spike turned out to be crawler traffic hitting a chain with no
+ * cache in front of it) - this worker sits downstream of the same crawlers,
+ * so it gets the same treatment.
+ */
+app.use('*', async (c, next) => {
+  const start = performance.now()
+  await next()
+  try {
+    const ua = c.req.header('User-Agent')
+    const cf = c.req.raw.cf as IncomingRequestCfProperties | undefined
+    console.log(JSON.stringify({
+      path: c.req.path,
+      status: c.res.status,
+      ua: ua ?? null,
+      uaClass: classifyUa(ua),
+      referer: c.req.header('Referer') ?? null,
+      colo: cf?.colo ?? null,
+      country: cf?.country ?? null,
+      ms: Math.round((performance.now() - start) * 100) / 100
+    }))
+  } catch {
+    // Logging must never affect the response.
+  }
+})
+
 app.use('*', cors({
   origin(origin) {
     if (

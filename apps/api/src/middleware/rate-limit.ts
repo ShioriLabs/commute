@@ -70,8 +70,11 @@ export type RateLimitClass = keyof typeof RATE_LIMITS
  * by a non-browser client, which is fine: this is not a security boundary, and
  * anyone willing to forge a header was never going to be stopped by a limit
  * keyed on a shared IP either.
+ *
+ * Exported so middleware/request-log.ts can classify a request's Referer
+ * against the same boundaries, rather than redeclaring them.
  */
-const EXEMPT_ORIGINS = new Set([
+export const EXEMPT_ORIGINS = new Set([
   'http://localhost:3000',
   'http://localhost:5173',
   'http://localhost:5174',

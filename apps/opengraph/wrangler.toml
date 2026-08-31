@@ -4,6 +4,11 @@ dev.port = 3001
 compatibility_date = "2025-10-18"
 compatibility_flags = ["nodejs_compat"]
 
+# See apps/api/wrangler.toml for the 0.8 rationale — same tradeoff here.
+[observability]
+enabled = true
+head_sampling_rate = 0.8
+
 # Bundle .wasm imports (the resvg-wasm module) as WebAssembly.Module.
 [[rules]]
 type = "CompiledWasm"
