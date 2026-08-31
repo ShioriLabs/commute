@@ -33,6 +33,7 @@ export function createCanvas2DRenderer(
   let disposed = false
   let points: Point[] = []
   let debugHitboxes = false
+  let surfaceVisible = true
   let routeItems: RouteDrawItem[] = []
 
   // Preview bitmap painted under the tile grid whenever a visible tile has no
@@ -176,22 +177,6 @@ export function createCanvas2DRenderer(
     const worldMaxX = (cssW - transform.tx) * invScale
     const worldMaxY = (cssH - transform.ty) * invScale
 
-    // Underlay preview if any visible tile is missing. Cheap full-map draw
-    // covers blank areas while real tiles load in.
-    let anyVisibleMissing = false
-    for (let r = 0; r < grid.rows && !anyVisibleMissing; r++) {
-      const tileY = r * tileH
-      if (tileY + tileH < worldMinY || tileY > worldMaxY) continue
-      for (let c = 0; c < grid.cols; c++) {
-        const tileX = c * tileW
-        if (tileX + tileW < worldMinX || tileX > worldMaxX) continue
-        const entry = ensureTile(r, c)
-        if (entry.tier === 0) {
-          anyVisibleMissing = true
-          break
-        }
-      }
-    }
     /*
      * Drain the map's colour while a route is drawn, so the route's own colours
      * are the only saturated thing on screen. The WebGL path does this in the
@@ -207,31 +192,53 @@ export function createCanvas2DRenderer(
     const desat = treatment.desaturate
     const fade = treatment.fade
     const cuts = treatment.cuts
-    /*
-     * `opacity()` rather than a white overlay: the tiles are drawn straight onto
-     * the already-white canvas, so thinning them toward it IS the blend the
-     * WebGL path does with mix(rgb, white, u_fade) — and it needs no extra fill
-     * pass that the route would then have to be drawn over.
-     */
-    if (desat > 0 || fade > 0) {
-      ctx.filter = `saturate(${1 - desat}) opacity(${1 - fade})`
+
+    // Skipped entirely when the base surface is hidden (`?debug=trace`'s
+    // "surface off" state) — overlays below still draw over the blank fill.
+    if (surfaceVisible) {
+      // Underlay preview if any visible tile is missing. Cheap full-map draw
+      // covers blank areas while real tiles load in.
+      let anyVisibleMissing = false
+      for (let r = 0; r < grid.rows && !anyVisibleMissing; r++) {
+        const tileY = r * tileH
+        if (tileY + tileH < worldMinY || tileY > worldMaxY) continue
+        for (let c = 0; c < grid.cols; c++) {
+          const tileX = c * tileW
+          if (tileX + tileW < worldMinX || tileX > worldMaxX) continue
+          const entry = ensureTile(r, c)
+          if (entry.tier === 0) {
+            anyVisibleMissing = true
+            break
+          }
+        }
+      }
+
+      /*
+       * `opacity()` rather than a white overlay: the tiles are drawn straight onto
+       * the already-white canvas, so thinning them toward it IS the blend the
+       * WebGL path does with mix(rgb, white, u_fade) — and it needs no extra fill
+       * pass that the route would then have to be drawn over.
+       */
+      if (desat > 0 || fade > 0) {
+        ctx.filter = `saturate(${1 - desat}) opacity(${1 - fade})`
+      }
+
+      // Kept resident for the renderer's whole life — see the matching comment in
+      // map-renderer-webgl.ts. releaseTiles() resets every tile to tier 0, and
+      // this underlay is what covers the refill.
+      if (anyVisibleMissing) {
+        if (!preview) ensurePreview()
+        if (preview) ctx.drawImage(preview, 0, 0, mapW, mapH)
+      }
+
+      drawTiles(worldMinX, worldMinY, worldMaxX, worldMaxY, currentTier, true)
+
+      // Back to full strength before anything but map artwork is drawn. ctx.filter
+      // is sticky across draw calls, so without this the route, its pins and the
+      // selection spotlight would be faded and desaturated too — which would erase
+      // the one distinction the treatment exists to create.
+      if (desat > 0 || fade > 0) ctx.filter = 'none'
     }
-
-    // Kept resident for the renderer's whole life — see the matching comment in
-    // map-renderer-webgl.ts. releaseTiles() resets every tile to tier 0, and
-    // this underlay is what covers the refill.
-    if (anyVisibleMissing) {
-      if (!preview) ensurePreview()
-      if (preview) ctx.drawImage(preview, 0, 0, mapW, mapH)
-    }
-
-    drawTiles(worldMinX, worldMinY, worldMaxX, worldMaxY, currentTier, true)
-
-    // Back to full strength before anything but map artwork is drawn. ctx.filter
-    // is sticky across draw calls, so without this the route, its pins and the
-    // selection spotlight would be faded and desaturated too — which would erase
-    // the one distinction the treatment exists to create.
-    if (desat > 0 || fade > 0) ctx.filter = 'none'
 
     /*
      * Every hole in the fade, punched in ONE clipped redraw per feather ring.
@@ -405,6 +412,11 @@ export function createCanvas2DRenderer(
     onDirty()
   }
 
+  function setSurfaceVisible(visible: boolean) {
+    surfaceVisible = visible
+    onDirty()
+  }
+
   // Mirrors the WebGL renderer: drop the tile pixels, keep the renderer usable.
   // ImageBitmaps are often GPU-backed too, so this is worth doing here as well.
   function releaseTiles() {
@@ -444,6 +456,7 @@ export function createCanvas2DRenderer(
     setPoints,
     setRouteOverlay,
     setDebugHitboxes,
+    setSurfaceVisible,
     // A 2D context is never "lost" in the WebGL sense — the browser silently
     // reallocates its backing store — so there is nothing to recover from.
     isContextLost: () => false,

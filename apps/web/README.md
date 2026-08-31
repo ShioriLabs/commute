@@ -1,100 +1,46 @@
-# Welcome to React Router!
+# @commute/web
 
-A modern, production-ready template for building full-stack React applications using React Router.
-
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/remix-run/react-router-templates/tree/main/default)
-
-## Features
-
-- 🚀 Server-side rendering
-- ⚡️ Hot Module Replacement (HMR)
-- 📦 Asset bundling and optimization
-- 🔄 Data loading and mutations
-- 🔒 TypeScript by default
-- 🎉 TailwindCSS for styling
-- 📖 [React Router docs](https://reactrouter.com/)
+The Commute web app: React Router 7, running as a Cloudflare Worker via
+`@cloudflare/vite-plugin`.
 
 ## Getting Started
 
-### Installation
-
-Install the dependencies:
-
-```bash
-npm install
-```
+This is a package in a pnpm workspace, so install and run commands from the
+repo root (or use `pnpm --filter @commute/web <script>` from anywhere).
 
 ### Development
 
-Start the development server with HMR:
-
 ```bash
-npm run dev
+pnpm install
+pnpm --filter @commute/web dev
 ```
 
-Your application will be available at `http://localhost:5173`.
+The app is available at `http://localhost:5173`.
+
+### Typecheck & lint
+
+```bash
+pnpm --filter @commute/web typecheck
+pnpm --filter @commute/web lint
+```
 
 ## Building for Production
 
-Create a production build:
-
 ```bash
-npm run build
+pnpm --filter @commute/web build
 ```
 
-## Deployment
+This produces a Worker bundle plus static assets, deployed via `wrangler`
+(see `wrangler.toml`). There's no Node server to run in production — routing
+for the SPA is handled by Workers' `assets.not_found_handling`.
 
-### Docker Deployment
+## Lite build
 
-This template includes three Dockerfiles optimized for different package managers:
-
-- `Dockerfile` - for npm
-- `Dockerfile.pnpm` - for pnpm
-- `Dockerfile.bun` - for bun
-
-To build and run using Docker:
-
-```bash
-# For npm
-docker build -t my-app .
-
-# For pnpm
-docker build -f Dockerfile.pnpm -t my-app .
-
-# For bun
-docker build -f Dockerfile.bun -t my-app .
-
-# Run the container
-docker run -p 3000:3000 my-app
-```
-
-The containerized application can be deployed to any platform that supports Docker, including:
-
-- AWS ECS
-- Google Cloud Run
-- Azure Container Apps
-- Digital Ocean App Platform
-- Fly.io
-- Railway
-
-### DIY Deployment
-
-If you're familiar with deploying Node applications, the built-in app server is production-ready.
-
-Make sure to deploy the output of `npm run build`
-
-```
-├── package.json
-├── package-lock.json (or pnpm-lock.yaml, or bun.lockb)
-├── build/
-│   ├── client/    # Static assets
-│   └── server/    # Server-side code
-```
+`build:lite` / `build:lite:pages` produce a static, API-only bundle of the
+map + fare pages for self-hosting outside Cloudflare (e.g. on plain Apache
+hosting). See `scripts/assets/lite/README-FDTJ.md` for the end-user install
+doc that ships inside that package.
 
 ## Styling
 
-This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever CSS framework you prefer.
-
----
-
-Built with ❤️ using React Router.
+Tailwind CSS (v4).

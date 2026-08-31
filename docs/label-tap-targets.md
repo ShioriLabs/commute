@@ -1,8 +1,9 @@
-# Label tap-targets — feasibility prototype
+# Label tap-targets
 
-**Status: extracted and audited, not wired into the app.** Output is
+**Status: wired into the map.** Output is
 `apps/web/app/data/label-points.json` — 376 rects in `points.json`'s own shape.
-Nothing imports it yet.
+`apps/web/app/routes/map.tsx` fetches it via SWR and merges it into
+`workingPoints` for hit-testing/rendering alongside the regular tap points.
 
 ## Commands
 

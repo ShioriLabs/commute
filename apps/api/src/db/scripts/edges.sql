@@ -40,10 +40,8 @@ INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance
 INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('C:KCI-DU->KCI-AK', 'C', 'KCI-DU', 'KCI-AK', 1180, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('C:KCI-DU->KCI-THB', 'C', 'KCI-DU', 'KCI-THB', 3547, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('C:KCI-THB->KCI-DU', 'C', 'KCI-THB', 'KCI-DU', 3547, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('C:KCI-THB->KCI-KAT', 'C', 'KCI-THB', 'KCI-KAT', 1764, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('C:KCI-KAT->KCI-THB', 'C', 'KCI-KAT', 'KCI-THB', 1764, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('C:KCI-KAT->KCI-SUDB', 'C', 'KCI-KAT', 'KCI-SUDB', 419, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('C:KCI-SUDB->KCI-KAT', 'C', 'KCI-SUDB', 'KCI-KAT', 419, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('C:KCI-THB->KCI-SUDB', 'C', 'KCI-THB', 'KCI-SUDB', 2014, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('C:KCI-SUDB->KCI-THB', 'C', 'KCI-SUDB', 'KCI-THB', 2014, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('C:KCI-SUDB->KCI-SUD', 'C', 'KCI-SUDB', 'KCI-SUD', 464, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('C:KCI-SUD->KCI-SUDB', 'C', 'KCI-SUD', 'KCI-SUDB', 464, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt) VALUES ('C:KCI-SUD->KCI-MRI', 'C', 'KCI-SUD', 'KCI-MRI', 3006, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);

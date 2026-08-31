@@ -1,10 +1,12 @@
 # Authoring FDTJ map tap-targets (`points.json`)
 
 **Status:** Rail (`KCI-`/`MRTJ-`/`LRTJBDB-`/`LRTJ-`/`HUB-`) and **all TransJakarta
-BRT corridors** are done and verified — 374 points total, and **every GTFS halte
-code is reachable from a tap**. The 15 directional `Arah …` pairs share one drawn
-marker each: the partner code rides along as `<code>-b` with a `station` field
-(see *One halte drawn twice*). Non-BRT TJ services: TODO.
+BRT corridors** are done and verified — 385 points as of 2026-08 (this count
+keeps growing with retiling/hub/APCGK additions; check `points.json` directly
+if precision matters), and **every GTFS halte code is reachable from a tap**.
+The 15 directional `Arah …` pairs share one drawn marker each: the partner code
+rides along as `<code>-b` with a `station` field (see *One halte drawn twice*).
+Non-BRT TJ services: TODO.
 
 `apps/web/app/data/points.json` holds tap-target shapes, consumed by
 `app/routes/map.tsx` → `app/lib/map-renderer.ts`. The map is a **schematic**

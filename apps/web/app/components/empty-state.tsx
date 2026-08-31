@@ -9,7 +9,7 @@ interface Props {
 const COPY = {
   OFFLINE: {
     title: 'Jaringan Tidak Tersedia',
-    message: 'Silakan coba lagi beberapa saat lagi saat jaringan Anda tersambung'
+    message: 'Silakan coba lagi beberapa saat lagi saat jaringan Kamu tersambung'
   },
   ERROR: {
     title: 'Gagal Memuat Jadwal',

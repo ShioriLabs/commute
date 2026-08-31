@@ -66,7 +66,6 @@ export default function FarePanel({
     handleSelect,
     handleSwap,
     pickableStations,
-    operators,
     criteria,
     setCriteria,
     fare,
@@ -76,7 +75,7 @@ export default function FarePanel({
 
   return (
     <>
-      <div className="mt-4 relative flex flex-col gap-2">
+      <div className="mt-4 relative flex flex-col rounded-xl border-2 border-stone-200/40 divide-y divide-stone-200/60 overflow-hidden">
         <StationField label="Dari" station={origin} onClick={() => openPickerFor('origin')} />
         <StationField label="Ke" station={destination} onClick={() => openPickerFor('destination')} />
         <button
@@ -92,7 +91,6 @@ export default function FarePanel({
       <CriteriaBar
         criteria={criteria}
         onChange={setCriteria}
-        operators={operators}
         wrap={wrapCriteria}
       />
 

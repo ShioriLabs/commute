@@ -471,6 +471,7 @@ export function createWebGLRenderer(
   let pillBufferInfo: twgl.BufferInfo | null = null
   let pillVao: twgl.VertexArrayInfo | null = null
   let debugHitboxes = false
+  let surfaceVisible = true
 
   // Route overlay geometry: capsule quads through the PILL program, one draw
   // range per run of same-colored items (color is a uniform, not an attribute;
@@ -1194,197 +1195,201 @@ export function createWebGLRenderer(
       u_viewportPx: [drawW, drawH]
     }
 
-    gl.useProgram(programInfo.program)
-    twgl.setBuffersAndAttributes(twglGl, programInfo, quadVao)
+    // Skipped entirely when the base surface is hidden (`?debug=trace`'s
+    // "surface off" state) — overlays below still draw over the blank clear.
+    if (surfaceVisible) {
+      gl.useProgram(programInfo.program)
+      twgl.setBuffersAndAttributes(twglGl, programInfo, quadVao)
 
-    const invScale = 1 / transform.scale
-    const worldMinX = -transform.tx * invScale
-    const worldMinY = -transform.ty * invScale
-    const worldMaxX = (cssW - transform.tx) * invScale
-    const worldMaxY = (cssH - transform.ty) * invScale
-    const viewCx = (worldMinX + worldMaxX) / 2
-    const viewCy = (worldMinY + worldMaxY) / 2
+      const invScale = 1 / transform.scale
+      const worldMinX = -transform.tx * invScale
+      const worldMinY = -transform.ty * invScale
+      const worldMaxX = (cssW - transform.tx) * invScale
+      const worldMaxY = (cssH - transform.ty) * invScale
+      const viewCx = (worldMinX + worldMaxX) / 2
+      const viewCy = (worldMinY + worldMaxY) / 2
 
-    // Visible row/column span, derived arithmetically rather than by testing
-    // every tile in the grid. At 4x4 the scan was 16 iterations and not worth
-    // avoiding; on the finer grid the tile count grows with the square of the
-    // divisions, and this runs twice per frame.
-    const firstCol = Math.max(0, Math.floor(worldMinX / tileW))
-    const lastCol = Math.min(grid.cols - 1, Math.floor(worldMaxX / tileW))
-    const firstRow = Math.max(0, Math.floor(worldMinY / tileH))
-    const lastRow = Math.min(grid.rows - 1, Math.floor(worldMaxY / tileH))
+      // Visible row/column span, derived arithmetically rather than by testing
+      // every tile in the grid. At 4x4 the scan was 16 iterations and not worth
+      // avoiding; on the finer grid the tile count grows with the square of the
+      // divisions, and this runs twice per frame.
+      const firstCol = Math.max(0, Math.floor(worldMinX / tileW))
+      const lastCol = Math.min(grid.cols - 1, Math.floor(worldMaxX / tileW))
+      const firstRow = Math.max(0, Math.floor(worldMinY / tileH))
+      const lastRow = Math.min(grid.rows - 1, Math.floor(worldMaxY / tileH))
 
-    // Zoomed far enough out that the preview carries as much detail as the tiles
-    // would: draw it alone and load no tiles at all.
-    //
-    // NOTE: unreachable on the FDTJ map as currently configured. map.tsx derives
-    // minScale with max(viewport/map) — cover-fit — so the map never shrinks to
-    // fit the screen; at minimum zoom it still spans ~2270 device px on a phone
-    // (MAX_RENDER_DPR caps this), against a 1280px preview.
-    // Satisfying this branch would need a ~2270px preview costing ~10 MB of
-    // texture, which is worse than the ~20 MiB of tier-0.5 tiles it would
-    // replace. Kept because it costs one comparison per
-    // frame and becomes correct the moment the map uses contain-fit; do not
-    // widen the preview to try to activate it without redoing that arithmetic.
-    const previewOnly = manifest.preview !== undefined
-      && transform.scale * dpr * mapW <= manifest.preview.w * PREVIEW_SUFFICIENCY
-    if (previewOnly) {
-      if (!previewTexture) ensurePreview()
-      if (previewTexture) {
-        twgl.setUniforms(programInfo, {
-          u_tileOffset: [0, 0],
-          u_tileSize: [mapW, mapH],
-          u_transform: mat,
-          u_texture: previewTexture,
-          ...tileTreatment
-        })
-        twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
-        drawOverlays(mat, transform, cssW, cssH, selection, route)
-        // Nothing here draws a tile, so every resident tile is dead weight —
-        // release them outright rather than waiting for the budget sweep, which
-        // would keep a full grid (~43 MB of tier-0.5 tiles) resident indefinitely because it sits
-        // just under the cap. This is also the path that cleans up after the
-        // first frame: the preview loads asynchronously, so frame 1 falls
-        // through below and requests tiles before the texture exists.
-        //
-        // Deliberately not releaseTiles(): that signals onDirty(), which would
-        // schedule another frame, which would release again — a redraw loop for
-        // as long as the map sits zoomed out. Nothing needs repainting here;
-        // the tiles being freed are ones this frame didn't draw.
-        if (tiles.size > 0) {
-          for (const entry of tiles.values()) gl.deleteTexture(entry.texture)
-          tiles.clear()
+      // Zoomed far enough out that the preview carries as much detail as the tiles
+      // would: draw it alone and load no tiles at all.
+      //
+      // NOTE: unreachable on the FDTJ map as currently configured. map.tsx derives
+      // minScale with max(viewport/map) — cover-fit — so the map never shrinks to
+      // fit the screen; at minimum zoom it still spans ~2270 device px on a phone
+      // (MAX_RENDER_DPR caps this), against a 1280px preview.
+      // Satisfying this branch would need a ~2270px preview costing ~10 MB of
+      // texture, which is worse than the ~20 MiB of tier-0.5 tiles it would
+      // replace. Kept because it costs one comparison per
+      // frame and becomes correct the moment the map uses contain-fit; do not
+      // widen the preview to try to activate it without redoing that arithmetic.
+      const previewOnly = manifest.preview !== undefined
+        && transform.scale * dpr * mapW <= manifest.preview.w * PREVIEW_SUFFICIENCY
+      if (previewOnly) {
+        if (!previewTexture) ensurePreview()
+        if (previewTexture) {
+          twgl.setUniforms(programInfo, {
+            u_tileOffset: [0, 0],
+            u_tileSize: [mapW, mapH],
+            u_transform: mat,
+            u_texture: previewTexture,
+            ...tileTreatment
+          })
+          twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
+          drawOverlays(mat, transform, cssW, cssH, selection, route)
+          // Nothing here draws a tile, so every resident tile is dead weight —
+          // release them outright rather than waiting for the budget sweep, which
+          // would keep a full grid (~43 MB of tier-0.5 tiles) resident indefinitely because it sits
+          // just under the cap. This is also the path that cleans up after the
+          // first frame: the preview loads asynchronously, so frame 1 falls
+          // through below and requests tiles before the texture exists.
+          //
+          // Deliberately not releaseTiles(): that signals onDirty(), which would
+          // schedule another frame, which would release again — a redraw loop for
+          // as long as the map sits zoomed out. Nothing needs repainting here;
+          // the tiles being freed are ones this frame didn't draw.
+          if (tiles.size > 0) {
+            for (const entry of tiles.values()) gl.deleteTexture(entry.texture)
+            tiles.clear()
+          }
+          // Same reasoning as the textures: anything queued or already decoded is
+          // for a tile this path will never draw.
+          discardPendingLoads()
+          return
         }
-        // Same reasoning as the textures: anything queued or already decoded is
-        // for a tile this path will never draw.
-        discardPendingLoads()
-        return
+        // No preview yet — fall through and draw tiles as usual rather than
+        // showing a blank map while it loads.
       }
-      // No preview yet — fall through and draw tiles as usual rather than
-      // showing a blank map while it loads.
-    }
 
-    // One pass over the visible span, collecting everything the rest of the
-    // frame needs: the entries themselves, whether any tile is still blank (the
-    // preview underlay), and whether any carries real transparency (the blend
-    // state). Keep it to one pass — ensureTile() runs per cell.
-    visibleCount = 0
-    let anyVisibleMissing = false
-    let anyVisibleNonOpaque = false
-    for (let r = firstRow; r <= lastRow; r++) {
-      for (let c = firstCol; c <= lastCol; c++) {
-        const entry = ensureTile(r, c)
-        if (!entry) {
-          // Texture allocation failed — context lost mid-frame. Nothing to draw
-          // for this cell, so the preview is the only honest thing to put here.
-          anyVisibleMissing = true
-          continue
+      // One pass over the visible span, collecting everything the rest of the
+      // frame needs: the entries themselves, whether any tile is still blank (the
+      // preview underlay), and whether any carries real transparency (the blend
+      // state). Keep it to one pass — ensureTile() runs per cell.
+      visibleCount = 0
+      let anyVisibleMissing = false
+      let anyVisibleNonOpaque = false
+      for (let r = firstRow; r <= lastRow; r++) {
+        for (let c = firstCol; c <= lastCol; c++) {
+          const entry = ensureTile(r, c)
+          if (!entry) {
+            // Texture allocation failed — context lost mid-frame. Nothing to draw
+            // for this cell, so the preview is the only honest thing to put here.
+            anyVisibleMissing = true
+            continue
+          }
+          if (entry.tier === 0) anyVisibleMissing = true
+          else if (!entry.opaque) anyVisibleNonOpaque = true
+          visibleRows[visibleCount] = r
+          visibleCols[visibleCount] = c
+          visibleEntries[visibleCount] = entry
+          visibleCount++
         }
-        if (entry.tier === 0) anyVisibleMissing = true
-        else if (!entry.opaque) anyVisibleNonOpaque = true
-        visibleRows[visibleCount] = r
-        visibleCols[visibleCount] = c
-        visibleEntries[visibleCount] = entry
-        visibleCount++
       }
+
+      // Every visible tile now carries this frame's stamp, so the queue can tell
+      // which of its pending requests the view has moved away from.
+      prunePendingLoads(currentTier)
+
+      // The preview stays resident for the renderer's whole life rather than being
+      // freed once the tiles land. At 1280x905 it costs 2.3 MB as RGB565 — nothing
+      // against ~10.7 MB per tier-2 tile — and keeping it means every path that
+      // resets tiles to tier 0 (context recovery, release-on-hide) redraws through
+      // a correct low-res map instead of blank placeholders. ensurePreview() is
+      // idempotent, so calling it here also covers a renderer whose first load
+      // failed.
+      if (anyVisibleMissing) {
+        if (!previewTexture) ensurePreview()
+        if (previewTexture) {
+          twgl.setUniforms(programInfo, {
+            u_tileOffset: [0, 0],
+            u_tileSize: [mapW, mapH],
+            u_transform: mat,
+            u_texture: previewTexture,
+            ...tileTreatment
+          })
+          twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
+        }
+      }
+
+      // Blending costs a framebuffer read per fragment for a result that, on an
+      // alpha-free source, is always just the source. The pre-rasterized WebPs
+      // have no alpha channel at all, so the tile pass only needs blending when a
+      // visible tile is a runtime-rasterized SVG — those have a genuinely
+      // transparent background and must composite over the preview underlay.
+      // The debug placeholder is a translucent tint, so it needs it too.
+      const tilePassNeedsBlend = anyVisibleNonOpaque || (debugHitboxes && anyVisibleMissing)
+      if (tilePassNeedsBlend) gl.enable(gl.BLEND)
+      else gl.disable(gl.BLEND)
+
+      // Frame-constant uniforms once; only offset + texture change per tile.
+      const frameTileSize = frameUniforms.u_tileSize as number[]
+      frameTileSize[0] = tileW
+      frameTileSize[1] = tileH
+      Object.assign(frameUniforms, tileTreatment)
+      twgl.setUniforms(programInfo, frameUniforms)
+
+      for (let i = 0; i < visibleCount; i++) {
+        const entry = visibleEntries[i]!
+        const r = visibleRows[i]
+        const c = visibleCols[i]
+
+        // A tile with no pixels yet draws nothing at all. The frame is cleared to
+        // opaque white and the preview underlay above has already covered this
+        // rect with real map — drawing the placeholder over it would replace a
+        // correct low-res map with a white hole, which is exactly what it did:
+        // PLACEHOLDER_PIXEL is opaque white in prod, so every unloaded tile
+        // painted straight over the preview that had just been drawn for it.
+        const texture = entry.tier > 0 ? entry.texture : (debugHitboxes ? placeholder : null)
+        if (texture) {
+          tileUniforms.u_tileOffset[0] = c * tileW
+          tileUniforms.u_tileOffset[1] = r * tileH
+          tileUniforms.u_texture = texture
+          twgl.setUniforms(programInfo, tileUniforms)
+          twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
+        }
+
+        // Don't start tile fetches the preview is about to make redundant. This
+        // is the zoomed-out first frame, before ensurePreview() has resolved:
+        // without this the renderer requests the whole grid and then frees it
+        // a frame later, spending real bandwidth on textures never drawn.
+        if (previewOnly) continue
+
+        if (entry.tier < currentTier && entry.pendingTier !== currentTier) {
+          // Nearest the centre of what the user is looking at goes first. Both
+          // axes are normalised by tile size, so a tall-thin phone viewport
+          // doesn't systematically favour rows over columns.
+          const dx = ((c + 0.5) * tileW - viewCx) / tileW
+          const dy = ((r + 0.5) * tileH - viewCy) / tileH
+          enqueueTier(r, c, currentTier, entry, dx * dx + dy * dy)
+        }
+      }
+
+      pumpQueue()
+
+      // Every visible tile now carries this frame's stamp, so anything older is
+      // off-screen and safe to reclaim. The budget is derived from what this
+      // frame actually shows: a tier-0.5 view and a tier-4 one differ by 128x per
+      // tile, so one flat number could only ever be right for one of them.
+      downgradeOverResolvedTiles(currentTier)
+      evictTiles(tileBudgetBytes({
+        visibleTiles: visibleCount,
+        tileBytes: textureBytes(
+          Math.round(tileW * currentTier),
+          Math.round(tileH * currentTier),
+          true,
+          anyVisibleNonOpaque ? 4 : 2
+        ),
+        ceilingBytes: budgetCeilingBytes,
+        deviceMemoryGb
+      }))
     }
-
-    // Every visible tile now carries this frame's stamp, so the queue can tell
-    // which of its pending requests the view has moved away from.
-    prunePendingLoads(currentTier)
-
-    // The preview stays resident for the renderer's whole life rather than being
-    // freed once the tiles land. At 1280x905 it costs 2.3 MB as RGB565 — nothing
-    // against ~10.7 MB per tier-2 tile — and keeping it means every path that
-    // resets tiles to tier 0 (context recovery, release-on-hide) redraws through
-    // a correct low-res map instead of blank placeholders. ensurePreview() is
-    // idempotent, so calling it here also covers a renderer whose first load
-    // failed.
-    if (anyVisibleMissing) {
-      if (!previewTexture) ensurePreview()
-      if (previewTexture) {
-        twgl.setUniforms(programInfo, {
-          u_tileOffset: [0, 0],
-          u_tileSize: [mapW, mapH],
-          u_transform: mat,
-          u_texture: previewTexture,
-          ...tileTreatment
-        })
-        twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
-      }
-    }
-
-    // Blending costs a framebuffer read per fragment for a result that, on an
-    // alpha-free source, is always just the source. The pre-rasterized WebPs
-    // have no alpha channel at all, so the tile pass only needs blending when a
-    // visible tile is a runtime-rasterized SVG — those have a genuinely
-    // transparent background and must composite over the preview underlay.
-    // The debug placeholder is a translucent tint, so it needs it too.
-    const tilePassNeedsBlend = anyVisibleNonOpaque || (debugHitboxes && anyVisibleMissing)
-    if (tilePassNeedsBlend) gl.enable(gl.BLEND)
-    else gl.disable(gl.BLEND)
-
-    // Frame-constant uniforms once; only offset + texture change per tile.
-    const frameTileSize = frameUniforms.u_tileSize as number[]
-    frameTileSize[0] = tileW
-    frameTileSize[1] = tileH
-    Object.assign(frameUniforms, tileTreatment)
-    twgl.setUniforms(programInfo, frameUniforms)
-
-    for (let i = 0; i < visibleCount; i++) {
-      const entry = visibleEntries[i]!
-      const r = visibleRows[i]
-      const c = visibleCols[i]
-
-      // A tile with no pixels yet draws nothing at all. The frame is cleared to
-      // opaque white and the preview underlay above has already covered this
-      // rect with real map — drawing the placeholder over it would replace a
-      // correct low-res map with a white hole, which is exactly what it did:
-      // PLACEHOLDER_PIXEL is opaque white in prod, so every unloaded tile
-      // painted straight over the preview that had just been drawn for it.
-      const texture = entry.tier > 0 ? entry.texture : (debugHitboxes ? placeholder : null)
-      if (texture) {
-        tileUniforms.u_tileOffset[0] = c * tileW
-        tileUniforms.u_tileOffset[1] = r * tileH
-        tileUniforms.u_texture = texture
-        twgl.setUniforms(programInfo, tileUniforms)
-        twgl.drawBufferInfo(twglGl, quadVao, gl.TRIANGLE_STRIP)
-      }
-
-      // Don't start tile fetches the preview is about to make redundant. This
-      // is the zoomed-out first frame, before ensurePreview() has resolved:
-      // without this the renderer requests the whole grid and then frees it
-      // a frame later, spending real bandwidth on textures never drawn.
-      if (previewOnly) continue
-
-      if (entry.tier < currentTier && entry.pendingTier !== currentTier) {
-        // Nearest the centre of what the user is looking at goes first. Both
-        // axes are normalised by tile size, so a tall-thin phone viewport
-        // doesn't systematically favour rows over columns.
-        const dx = ((c + 0.5) * tileW - viewCx) / tileW
-        const dy = ((r + 0.5) * tileH - viewCy) / tileH
-        enqueueTier(r, c, currentTier, entry, dx * dx + dy * dy)
-      }
-    }
-
-    pumpQueue()
-
-    // Every visible tile now carries this frame's stamp, so anything older is
-    // off-screen and safe to reclaim. The budget is derived from what this
-    // frame actually shows: a tier-0.5 view and a tier-4 one differ by 128x per
-    // tile, so one flat number could only ever be right for one of them.
-    downgradeOverResolvedTiles(currentTier)
-    evictTiles(tileBudgetBytes({
-      visibleTiles: visibleCount,
-      tileBytes: textureBytes(
-        Math.round(tileW * currentTier),
-        Math.round(tileH * currentTier),
-        true,
-        anyVisibleNonOpaque ? 4 : 2
-      ),
-      ceilingBytes: budgetCeilingBytes,
-      deviceMemoryGb
-    }))
 
     drawOverlays(mat, transform, cssW, cssH, selection, route)
 
@@ -1484,6 +1489,11 @@ export function createWebGLRenderer(
 
   function setDebugHitboxes(enabled: boolean) {
     debugHitboxes = enabled
+    onDirty()
+  }
+
+  function setSurfaceVisible(visible: boolean) {
+    surfaceVisible = visible
     onDirty()
   }
 
@@ -1609,6 +1619,7 @@ export function createWebGLRenderer(
     setPoints,
     setRouteOverlay,
     setDebugHitboxes,
+    setSurfaceVisible,
     isContextLost: () => gl.isContextLost(),
     releaseTiles,
     isPreviewReady: () => previewTexture !== null,

@@ -117,7 +117,7 @@ export const NETWORK: Network = {
       "name": "Cakung",
       "lng": 106.9523,
       "lat": -6.2189,
-      "sx": 7594.2472941764845,
+      "sx": 7623.2472941764845,
       "sy": 4119.74632959331,
       "col": 103,
       "row": 38,
@@ -128,7 +128,7 @@ export const NETWORK: Network = {
       "name": "Klender Baru",
       "lng": 106.9401,
       "lat": -6.2176,
-      "sx": 7475.980358885888,
+      "sx": 7513.980358885888,
       "sy": 4120.74632959331,
       "col": 101,
       "row": 38,
@@ -173,7 +173,7 @@ export const NETWORK: Network = {
       "lng": 106.8623,
       "lat": -6.2091,
       "sx": 5847.203633721686,
-      "sy": 3859.684357016286,
+      "sy": 3886.684357016286,
       "col": 82,
       "row": 35,
       "interchange": false
@@ -183,10 +183,10 @@ export const NETWORK: Network = {
       "name": "Kramat",
       "lng": 106.8565,
       "lat": -6.1936,
-      "sx": 5710.2970150840965,
-      "sy": 3547.4622929992474,
+      "sx": 5728.2970150840965,
+      "sy": 3565.4622929992474,
       "col": 80,
-      "row": 30,
+      "row": 31,
       "interchange": false
     },
     {
@@ -209,7 +209,7 @@ export const NETWORK: Network = {
       "sy": 3081.9823636256324,
       "col": 74,
       "row": 24,
-      "interchange": false
+      "interchange": true
     },
     {
       "id": "KCI-KMO",
@@ -278,19 +278,8 @@ export const NETWORK: Network = {
       "interchange": true
     },
     {
-      "id": "KCI-KAT",
-      "name": "Karet",
-      "lng": 106.8159,
-      "lat": -6.2007,
-      "sx": 3225.1179441597874,
-      "sy": 3667.6168821005904,
-      "col": 45,
-      "row": 32,
-      "interchange": false
-    },
-    {
       "id": "KCI-SUDB",
-      "name": "Sudirman Baru",
+      "name": "BNI City",
       "lng": 106.8196,
       "lat": -6.2015,
       "sx": 3584.6166900140834,
@@ -315,10 +304,10 @@ export const NETWORK: Network = {
       "name": "Manggarai",
       "lng": 106.8498,
       "lat": -6.21,
-      "sx": 4867.700340100056,
-      "sy": 3863.169655453152,
-      "col": 68,
-      "row": 35,
+      "sx": 4758.5,
+      "sy": 3754.5,
+      "col": 67,
+      "row": 33,
       "interchange": true
     },
     {
@@ -488,7 +477,7 @@ export const NETWORK: Network = {
     },
     {
       "id": "KCI-UP",
-      "name": "Univ. Pancasila",
+      "name": "Universitas Pancasila",
       "lng": 106.8343,
       "lat": -6.3389,
       "sx": 5280.396974307193,
@@ -499,7 +488,7 @@ export const NETWORK: Network = {
     },
     {
       "id": "KCI-UI",
-      "name": "Univ. Indonesia",
+      "name": "Universitas Indonesia",
       "lng": 106.8317,
       "lat": -6.3607,
       "sx": 5279.825068933635,
@@ -898,7 +887,7 @@ export const NETWORK: Network = {
       "name": "Poris",
       "lng": 106.681,
       "lat": -6.1697,
-      "sx": 896.7112047161678,
+      "sx": 881.7112047161678,
       "sy": 2871.1745049467213,
       "col": 11,
       "row": 21,
@@ -972,7 +961,7 @@ export const NETWORK: Network = {
     },
     {
       "id": "MRTJ-LBB",
-      "name": "Lebak Bulus",
+      "name": "Lebak Bulus Bank Syariah Indonesia",
       "lng": 106.7749,
       "lat": -6.2892,
       "sx": 2544.5534481340537,
@@ -994,7 +983,7 @@ export const NETWORK: Network = {
     },
     {
       "id": "MRTJ-CPR",
-      "name": "Cipete Raya",
+      "name": "Cipete Raya TUKU",
       "lng": 106.7973,
       "lat": -6.2782,
       "sx": 3169.555615010054,
@@ -1016,7 +1005,7 @@ export const NETWORK: Network = {
     },
     {
       "id": "MRTJ-BLA",
-      "name": "Blok A",
+      "name": "Blok A Visa",
       "lng": 106.797,
       "lat": -6.2557,
       "sx": 3169.8069162250767,
@@ -1038,14 +1027,14 @@ export const NETWORK: Network = {
     },
     {
       "id": "MRTJ-SSM",
-      "name": "Asean",
+      "name": "ASEAN Headquarter",
       "lng": 106.7983,
       "lat": -6.2387,
       "sx": 3169.9988171085447,
       "sy": 4878.886767727487,
       "col": 44,
       "row": 49,
-      "interchange": false
+      "interchange": true
     },
     {
       "id": "MRTJ-SNY",
@@ -1104,7 +1093,7 @@ export const NETWORK: Network = {
     },
     {
       "id": "MRTJ-BHI",
-      "name": "Bundaran HI Bank DKI",
+      "name": "Bundaran HI Bank Jakarta",
       "lng": 106.8229,
       "lat": -6.1918,
       "sx": 3635.36081619927,
@@ -1115,7 +1104,7 @@ export const NETWORK: Network = {
     },
     {
       "id": "LRTJ-PGD",
-      "name": "Pegangsaan Dua",
+      "name": "Kelapa Gading",
       "lng": 106.9141,
       "lat": -6.156,
       "sx": 7276.252539584679,
@@ -1180,8 +1169,63 @@ export const NETWORK: Network = {
       "interchange": false
     },
     {
+      "id": "LRTJ-RWM",
+      "name": "Rawamangun",
+      "lng": 106.8826,
+      "lat": -6.193,
+      "sx": 6710,
+      "sy": 3734,
+      "col": 94,
+      "row": 33,
+      "interchange": false
+    },
+    {
+      "id": "LRTJ-PKA",
+      "name": "Pramuka",
+      "lng": 106.8706,
+      "lat": -6.1919,
+      "sx": 6230,
+      "sy": 3734,
+      "col": 88,
+      "row": 33,
+      "interchange": false
+    },
+    {
+      "id": "LRTJ-KYM",
+      "name": "Matraman",
+      "lng": 106.8599,
+      "lat": -6.195,
+      "sx": 5918,
+      "sy": 3734,
+      "col": 83,
+      "row": 33,
+      "interchange": false
+    },
+    {
+      "id": "LRTJ-MAT",
+      "name": "Proklamasi",
+      "lng": 106.8502,
+      "lat": -6.202,
+      "sx": 5147,
+      "sy": 3734,
+      "col": 72,
+      "row": 33,
+      "interchange": false
+    },
+    {
+      "id": "LRTJ-MGI",
+      "name": "Manggarai",
+      "lng": 106.8457,
+      "lat": -6.2086,
+      "sx": 4763,
+      "sy": 3928,
+      "col": 67,
+      "row": 36,
+      "interchange": true
+    },
+    {
       "id": "LRTJBDB-DKA",
-      "name": "Dukuh Atas",
+      "name": "Dukuh Atas Bank Syariah Indonesia",
       "lng": 106.8256,
       "lat": -6.2047,
       "sx": 3835.3879440387554,
@@ -1437,7 +1481,6 @@ export const NETWORK: Network = {
           "KCI-AK",
           "KCI-DU",
           "KCI-THB",
-          "KCI-KAT",
           "KCI-SUDB",
           "KCI-SUD",
           "KCI-MRI",
@@ -1593,7 +1636,12 @@ export const NETWORK: Network = {
           "LRTJ-BVS",
           "LRTJ-PUM",
           "LRTJ-EQS",
-          "LRTJ-VEL"
+          "LRTJ-VEL",
+          "LRTJ-RWM",
+          "LRTJ-PKA",
+          "LRTJ-KYM",
+          "LRTJ-MAT",
+          "LRTJ-MGI"
         ]
       ]
     },
