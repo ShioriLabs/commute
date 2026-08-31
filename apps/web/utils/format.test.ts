@@ -21,6 +21,10 @@ describe('formatRupiah', () => {
     // Guards the maximumFractionDigits: 0 setting: 2500.6 must not read 2.500.
     expect(formatRupiah(2500.6)).toContain('2.501')
   })
+
+  it('has no space between the currency marker and the amount', () => {
+    expect(formatRupiah(14000)).toBe('Rp14.000')
+  })
 })
 
 describe('formatKm', () => {

@@ -47,6 +47,6 @@ export const FARE_TIME_DESCRIPTIONS: Record<FareCriteria['fareTime'], string> = 
   // Naming the operator matters: this is the only place the bucket changes the
   // number, so a rider who never touches LRT Jabodebek should see that it will
   // not affect them rather than wonder why nothing moved.
-  peak: 'Senin sampai Jumat, 07.00 sampai 09.00 dan 16.00 sampai 19.00. Batas tarif LRT Jabodebek naik jadi Rp 20.000',
-  offpeak: 'Di luar jam sibuk dan akhir pekan. Batas tarif LRT Jabodebek Rp 10.000'
+  peak: 'Senin sampai Jumat, 07.00 sampai 09.00 dan 16.00 sampai 19.00. Batas tarif LRT Jabodebek naik jadi Rp20.000',
+  offpeak: 'Di luar jam sibuk dan akhir pekan. Batas tarif LRT Jabodebek Rp10.000'
 }
