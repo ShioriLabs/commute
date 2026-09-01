@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ArrowDownIcon, MagnifyingGlassIcon, XIcon } from '@phosphor-icons/react'
+import { ArrowDownIcon, CaretDownIcon, MagnifyingGlassIcon, XIcon } from '@phosphor-icons/react'
 import clsx from 'clsx'
 import type { FareResult } from '@commute/schemas'
 import { useReducedMotion } from '~/hooks/reduced-motion'
@@ -7,6 +7,14 @@ import LineRoundel from './line-roundel'
 import StationSearchList from './fare-sheet/station-search-list'
 import type { PickableStation } from './fare-sheet/pickable-station'
 import FareSummary from './fare-summary'
+import { Link } from 'react-router'
+import { ArrowSquareOutIcon } from '@phosphor-icons/react'
+import { buildFarePath } from 'utils/fare-url'
+import FareShareButton from './fare-sheet/fare-share-button'
+import CriteriaBar from './fare-sheet/criteria/criteria-bar'
+import RouterToggle from './fare-sheet/router-toggle'
+import type { FareCriteria } from 'utils/fare-criteria'
+import type { FareRouter } from 'utils/fare-router'
 
 interface MapRailPillProps {
   /*
@@ -35,17 +43,38 @@ interface MapRailPillProps {
   // The searchable set the inline list ranks. Empty until the index arrives.
   stations: PickableStation[]
   onSelectStation: (field: 'from' | 'to', station: PickableStation) => void
-  onOpenFare: () => void
   onClear: () => void
   /*
-   * The head's current height, reported as it changes.
+   * Reopens the trip card docked below, and whether it is currently collapsed.
    *
-   * The map takes this off the top when fitting a route: a fit centred in the
-   * whole viewport puts the route's northern leg under the card. Reported
-   * rather than derived because the height depends on what the card is showing
-   * — a pill, two station rows, or a search list.
+   * The control lives here rather than in the trip card because a collapsed
+   * card has nowhere to put it: this row is the only thing still on screen.
+   * Undefined on a build with no trip card, which renders nothing.
    */
-  onHeightChange?: (px: number) => void
+  tripCollapsed?: boolean
+  onExpandTrip?: () => void
+  /*
+   * The query's own settings, shown here rather than behind the fare pane.
+   *
+   * They belong beside the route they price: changing a payment method used to
+   * mean opening a pane over the map, changing it, and closing the pane to see
+   * the corridor redraw. Both stay visible before a pair resolves, because they
+   * are standing settings and not a property of an answer.
+   */
+  criteria: FareCriteria
+  onCriteriaChange: (criteria: FareCriteria) => void
+  router: FareRouter
+  onRouterChange: (router: FareRouter) => void
+  /*
+   * The fetched pair's ids, for sharing and for the /fare link.
+   *
+   * The ids rather than the resolved stations: the search index omits TJ
+   * topology-only halte, so a pair that prices perfectly well can leave
+   * `endpoints` null. Same reasoning map-fare-sheet.tsx used when it built the
+   * fare path from the query rather than from what the rows display.
+   */
+  pairFromId: string | null | undefined
+  pairToId: string | null | undefined
 }
 
 // The collapsed head's own height. The margins around it live in the rail's
@@ -242,9 +271,15 @@ export default function MapRailPill({
   onCancelPick,
   stations,
   onSelectStation,
-  onOpenFare,
   onClear,
-  onHeightChange
+  tripCollapsed,
+  onExpandTrip,
+  criteria,
+  onCriteriaChange,
+  router,
+  onRouterChange,
+  pairFromId,
+  pairToId
 }: MapRailPillProps) {
   const reduced = useReducedMotion()
   /*
@@ -279,6 +314,8 @@ export default function MapRailPill({
   // would open the second field already filtered by the first one's answer.
   useEffect(() => setQuery(''), [picking])
 
+  const farePath = buildFarePath(pairFromId, pairToId, criteria)
+
   const bodyRef = useRef<HTMLDivElement>(null)
   const [bodyHeight, setBodyHeight] = useState(0)
   useLayoutEffect(() => {
@@ -291,33 +328,8 @@ export default function MapRailPill({
     return () => ro.disconnect()
   }, [])
 
-  /*
-   * Report what the card covers, which is the OUTER box — the body's height
-   * plus the head above it, and zero while the body is collapsed.
-   *
-   * A ref for the callback so a parent passing an inline arrow does not
-   * re-subscribe the observer on every render.
-   */
-  const cardRef = useRef<HTMLDivElement>(null)
-  const onHeightChangeRef = useRef(onHeightChange)
-  useEffect(() => {
-    onHeightChangeRef.current = onHeightChange
-  })
-  useLayoutEffect(() => {
-    const el = cardRef.current
-    if (!el || typeof ResizeObserver === 'undefined') return
-    const report = () => onHeightChangeRef.current?.(Math.round(el.getBoundingClientRect().height))
-    report()
-    const ro = new ResizeObserver(report)
-    ro.observe(el)
-    return () => {
-      ro.disconnect()
-      // The card is gone; stop reserving screen for it.
-      onHeightChangeRef.current?.(0)
-    }
-  }, [])
   return (
-    <div ref={cardRef} className={clsx('w-full overflow-hidden', picking ? SEARCH_SURFACE_CLASS : SURFACE_CLASS)}>
+    <div className={clsx('w-full overflow-hidden', picking ? SEARCH_SURFACE_CLASS : SURFACE_CLASS)}>
       {/*
         * The idle row keeps its height in both states and turns into the card's
         * header, so nothing jumps as the rows below it open.
@@ -387,18 +399,24 @@ export default function MapRailPill({
         <button
           type="button"
           /*
-           * Idle, this opens the form on the origin — the first thing a rider
-           * has to answer. Once a pair is drawn it opens the fare pane instead,
-           * where the criteria, the alternatives and the share live; the rows
-           * below are how the pair itself gets edited from here.
+           * Arms the origin, drawn pair or not.
+           *
+           * It used to open the fare pane once a pair existed, under the label
+           * "Ubah rute" — which was never true: the rows directly below are how
+           * a route gets changed. Now that the criteria, the router, the
+           * options, the share and the /fare link all live in this column, the
+           * pane has nothing of its own left to show on desktop, so there is
+           * nothing for this to open. Starting a new search is what a rider
+           * reaching for the card's title actually wants, and it is what the
+           * magnifier beside it has always promised.
            *
            * Inert while picking: the search below is already the answer to
            * "what do you want to change", and re-arming the origin from here
            * would yank a rider mid-way through choosing a destination.
            */
-          onClick={() => (hasPair ? onOpenFare() : onPick('from'))}
+          onClick={() => onPick('from')}
           disabled={picking !== null}
-          aria-label={hasPair ? 'Buka rincian tarif' : 'Cek rute dan tarif'}
+          aria-label="Cari rute lain"
           className={clsx(
             'flex-1 min-w-0 h-full flex items-center text-left',
             picking
@@ -407,7 +425,7 @@ export default function MapRailPill({
           )}
         >
           <span className="font-bold text-base text-slate-800 truncate">
-            {hasPair ? 'Ubah rute' : 'Cek rute dan tarif'}
+            {hasPair ? 'Cari rute lain' : 'Cek rute dan tarif'}
           </span>
         </button>
       </div>
@@ -515,23 +533,98 @@ export default function MapRailPill({
                   </div>
                 )
               : (
-                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
-                    <div className="flex items-center min-w-0">
-                      <FareSummary fare={fare} hasError={hasError} isLoading={isLoading} />
+                  <>
+                    {/*
+                    * The query's settings, above the answer they produce.
+                    *
+                    * `wrap` is not optional here: unwrapped, CriteriaBar bleeds
+                    * -mx-8 px-8 for a scrolling rail and assumes 8-unit parent
+                    * padding, which this px-4 card does not give it. Wrapped it
+                    * is two chips on one line, which fits the column.
+                    */}
+                    <CriteriaBar criteria={criteria} onChange={onCriteriaChange} wrap />
+                    <RouterToggle router={router} onChange={onRouterChange} />
+
+                    {/*
+                      * The answer, and the two things a rider does with it.
+                      *
+                      * Last in the card rather than first: the rows above ask
+                      * where you are going and how you are paying, and this is
+                      * what they add up to — so it sits at the foot of the card,
+                      * directly above the trip card that breaks it down. That
+                      * also puts the clear and the expand at the column's waist,
+                      * where the two cards meet, instead of stranding them
+                      * mid-way up with settings below them.
+                      */}
+                    <div className="mt-3 flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                      <div className="flex items-center min-w-0">
+                        <FareSummary fare={fare} hasError={hasError} isLoading={isLoading} />
+                      </div>
+                      <div className="flex items-center shrink-0 -mr-1.5">
+                        {/*
+                          * Renders nothing without a pair, so it costs no width
+                          * on the empty card — see FareShareButton.
+                          */}
+                        <span className="flex items-center justify-center w-9 h-9 text-slate-700 [&>button]:w-9 [&>button]:h-9 [&_svg]:w-4 [&_svg]:h-4">
+                          <FareShareButton fromId={pairFromId} toId={pairToId} criteria={criteria} />
+                        </span>
+                        {/*
+                          * Brings the trip card back, and is here only while it
+                          * is away — expanded, that card's own chevron is the
+                          * control, and two carets pointing at each other is a
+                          * toggle the rider has to decode rather than an
+                          * affordance.
+                          */}
+                        {tripCollapsed && onExpandTrip
+                          ? (
+                              <button
+                                type="button"
+                                onClick={onExpandTrip}
+                                aria-label="Tampilkan panel rute"
+                                aria-expanded={false}
+                                tabIndex={hasPair ? 0 : -1}
+                                className="rounded-full flex items-center justify-center w-9 h-9 text-slate-700 cursor-pointer shrink-0 transition-[background-color,transform] duration-150 ease hover:bg-slate-100 active:scale-95"
+                              >
+                                <CaretDownIcon weight="bold" className="w-4 h-4" />
+                              </button>
+                            )
+                          : null}
+                        <button
+                          type="button"
+                          onClick={onClear}
+                          aria-label="Hapus rute dari peta"
+                          // Untabbable while collapsed: the rows are still in the
+                          // DOM so they can animate, and a hidden control in the
+                          // tab order is a focus trap the rider cannot see.
+                          tabIndex={hasPair ? 0 : -1}
+                          className="rounded-full flex items-center justify-center w-9 h-9 text-slate-700 cursor-pointer shrink-0 transition-[background-color,transform] duration-150 ease hover:bg-slate-100 active:scale-95"
+                        >
+                          <XIcon weight="bold" className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={onClear}
-                      aria-label="Hapus rute dari peta"
-                      // Untabbable while collapsed: the rows are still in the
-                      // DOM so they can animate, and a hidden control in the tab
-                      // order is a focus trap the rider cannot see.
-                      tabIndex={hasPair ? 0 : -1}
-                      className="rounded-full flex items-center justify-center w-9 h-9 -mr-1.5 text-slate-700 cursor-pointer shrink-0 transition-[background-color,transform] duration-150 ease hover:bg-slate-100 active:scale-95"
-                    >
-                      <XIcon weight="bold" className="w-4 h-4" />
-                    </button>
-                  </div>
+
+                    {/*
+                      * Out to the fare page proper.
+                      *
+                      * /fare owns the canonical URL — it is the one that is
+                      * SEO-decorated, OG-imaged and sitemapped — so this card
+                      * has to offer a way there rather than being a dead end.
+                      * It was the last thing the desktop pane still carried
+                      * alone; with it here the pane has nothing of its own.
+                      */}
+                    {farePath
+                      ? (
+                          <Link
+                            to={farePath}
+                            className="mt-2 flex items-center justify-center gap-1.5 text-xs font-semibold text-slate-500 cursor-pointer transition-colors duration-150 ease hover:text-slate-700"
+                          >
+                            Buka halaman tarif
+                            <ArrowSquareOutIcon weight="bold" className="w-3.5 h-3.5" />
+                          </Link>
+                        )
+                      : null}
+                  </>
                 )}
           </div>
         </div>
