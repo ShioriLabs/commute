@@ -316,6 +316,23 @@ export default function MapRailPill({
 
   const farePath = buildFarePath(pairFromId, pairToId, criteria)
 
+  /*
+   * Replay the body's fade when it swaps between the search list and the fare
+   * row.
+   *
+   * By hand rather than with a `key`: both arms render into the same slot, so
+   * React reconciles them as one element and a CSS animation on it never
+   * restarts. Rewinding the running animation is what does it. Empty under
+   * reduced motion, where app.css sets `animation: none`.
+   */
+  const bodyFadeRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    for (const animation of bodyFadeRef.current?.getAnimations() ?? []) {
+      animation.currentTime = 0
+      animation.play()
+    }
+  }, [picking])
+
   const bodyRef = useRef<HTMLDivElement>(null)
   const [bodyHeight, setBodyHeight] = useState(0)
   useLayoutEffect(() => {
@@ -379,7 +396,7 @@ export default function MapRailPill({
               'absolute inset-0 rounded-full flex items-center justify-center text-slate-500',
               'transition-[opacity,transform,background-color] duration-150 ease-out',
               picking
-                ? 'opacity-100 hover:bg-slate-100 cursor-pointer active:scale-95'
+                ? 'opacity-100 hover:bg-slate-100 cursor-pointer active:scale-[0.97]'
                 : 'opacity-0 pointer-events-none scale-90'
             )}
           >
@@ -514,118 +531,126 @@ export default function MapRailPill({
               * a question nobody asked, and the column has to stay short enough
               * not to bury the pane docked below.
               */}
-            {picking
-              ? (
-                  <div className="-mx-4 border-t border-slate-100">
-                    <StationSearchList
-                      /*
-                       * NOT keyed on `picking`. Remounting per field reset the
-                       * staged mount, so switching fields replayed the 12-row
-                       * cap and the list visibly snapped to full height. The
-                       * list resets its own scroll on the field instead.
-                       */
-                      field={picking}
-                      stations={stations}
-                      query={query}
-                      current={picking === 'from' ? endpoints.from : endpoints.to}
-                      onSelect={station => onSelectStation(picking, station)}
-                    />
-                  </div>
-                )
-              : (
-                  <>
-                    {/*
-                    * The query's settings, above the answer they produce.
-                    *
-                    * `wrap` is not optional here: unwrapped, CriteriaBar bleeds
-                    * -mx-8 px-8 for a scrolling rail and assumes 8-unit parent
-                    * padding, which this px-4 card does not give it. Wrapped it
-                    * is two chips on one line, which fits the column.
-                    */}
-                    <CriteriaBar criteria={criteria} onChange={onCriteriaChange} wrap />
-                    <RouterToggle router={router} onChange={onRouterChange} />
-
-                    {/*
-                      * The answer, and the two things a rider does with it.
-                      *
-                      * Last in the card rather than first: the rows above ask
-                      * where you are going and how you are paying, and this is
-                      * what they add up to — so it sits at the foot of the card,
-                      * directly above the trip card that breaks it down. That
-                      * also puts the clear and the expand at the column's waist,
-                      * where the two cards meet, instead of stranding them
-                      * mid-way up with settings below them.
-                      */}
-                    <div className="mt-3 flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
-                      <div className="flex items-center min-w-0">
-                        <FareSummary fare={fare} hasError={hasError} isLoading={isLoading} />
-                      </div>
-                      <div className="flex items-center shrink-0 -mr-1.5">
-                        {/*
-                          * Renders nothing without a pair, so it costs no width
-                          * on the empty card — see FareShareButton.
-                          */}
-                        <span className="flex items-center justify-center w-9 h-9 text-slate-700 [&>button]:w-9 [&>button]:h-9 [&_svg]:w-4 [&_svg]:h-4">
-                          <FareShareButton fromId={pairFromId} toId={pairToId} criteria={criteria} />
-                        </span>
-                        {/*
-                          * Brings the trip card back, and is here only while it
-                          * is away — expanded, that card's own chevron is the
-                          * control, and two carets pointing at each other is a
-                          * toggle the rider has to decode rather than an
-                          * affordance.
-                          */}
-                        {tripCollapsed && onExpandTrip
-                          ? (
-                              <button
-                                type="button"
-                                onClick={onExpandTrip}
-                                aria-label="Tampilkan panel rute"
-                                aria-expanded={false}
-                                tabIndex={hasPair ? 0 : -1}
-                                className="rounded-full flex items-center justify-center w-9 h-9 text-slate-700 cursor-pointer shrink-0 transition-[background-color,transform] duration-150 ease hover:bg-slate-100 active:scale-95"
-                              >
-                                <CaretDownIcon weight="bold" className="w-4 h-4" />
-                              </button>
-                            )
-                          : null}
-                        <button
-                          type="button"
-                          onClick={onClear}
-                          aria-label="Hapus rute dari peta"
-                          // Untabbable while collapsed: the rows are still in the
-                          // DOM so they can animate, and a hidden control in the
-                          // tab order is a focus trap the rider cannot see.
-                          tabIndex={hasPair ? 0 : -1}
-                          className="rounded-full flex items-center justify-center w-9 h-9 text-slate-700 cursor-pointer shrink-0 transition-[background-color,transform] duration-150 ease hover:bg-slate-100 active:scale-95"
-                        >
-                          <XIcon weight="bold" className="w-4 h-4" />
-                        </button>
-                      </div>
+            {/*
+              * Faded on every swap. Same reasoning as the trip card below: this
+              * body sits inside an animating height, and without the fade the
+              * box glided while a whole search list appeared instantly inside
+              * it. Restarted by hand for the same reason — see bodyFadeRef.
+              */}
+            <div ref={bodyFadeRef} className="content-fade">
+              {picking
+                ? (
+                    <div className="-mx-4 border-t border-slate-100">
+                      <StationSearchList
+                        /*
+                         * NOT keyed on `picking`. Remounting per field reset the
+                         * staged mount, so switching fields replayed the 12-row
+                         * cap and the list visibly snapped to full height. The
+                         * list resets its own scroll on the field instead.
+                         */
+                        field={picking}
+                        stations={stations}
+                        query={query}
+                        current={picking === 'from' ? endpoints.from : endpoints.to}
+                        onSelect={station => onSelectStation(picking, station)}
+                      />
                     </div>
-
-                    {/*
-                      * Out to the fare page proper.
+                  )
+                : (
+                    <>
+                      {/*
+                      * The query's settings, above the answer they produce.
                       *
-                      * /fare owns the canonical URL — it is the one that is
-                      * SEO-decorated, OG-imaged and sitemapped — so this card
-                      * has to offer a way there rather than being a dead end.
-                      * It was the last thing the desktop pane still carried
-                      * alone; with it here the pane has nothing of its own.
+                      * `wrap` is not optional here: unwrapped, CriteriaBar bleeds
+                      * -mx-8 px-8 for a scrolling rail and assumes 8-unit parent
+                      * padding, which this px-4 card does not give it. Wrapped it
+                      * is two chips on one line, which fits the column.
                       */}
-                    {farePath
-                      ? (
-                          <Link
-                            to={farePath}
-                            className="mt-2 flex items-center justify-center gap-1.5 text-xs font-semibold text-slate-500 cursor-pointer transition-colors duration-150 ease hover:text-slate-700"
+                      <CriteriaBar criteria={criteria} onChange={onCriteriaChange} wrap />
+                      <RouterToggle router={router} onChange={onRouterChange} />
+
+                      {/*
+                        * The answer, and the two things a rider does with it.
+                        *
+                        * Last in the card rather than first: the rows above ask
+                        * where you are going and how you are paying, and this is
+                        * what they add up to — so it sits at the foot of the card,
+                        * directly above the trip card that breaks it down. That
+                        * also puts the clear and the expand at the column's waist,
+                        * where the two cards meet, instead of stranding them
+                        * mid-way up with settings below them.
+                        */}
+                      <div className="mt-3 flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                        <div className="flex items-center min-w-0">
+                          <FareSummary fare={fare} hasError={hasError} isLoading={isLoading} />
+                        </div>
+                        <div className="flex items-center shrink-0 -mr-1.5">
+                          {/*
+                            * Renders nothing without a pair, so it costs no width
+                            * on the empty card — see FareShareButton.
+                            */}
+                          <span className="flex items-center justify-center w-9 h-9 text-slate-700 [&>button]:w-9 [&>button]:h-9 [&_svg]:w-4 [&_svg]:h-4">
+                            <FareShareButton fromId={pairFromId} toId={pairToId} criteria={criteria} />
+                          </span>
+                          {/*
+                            * Brings the trip card back, and is here only while it
+                            * is away — expanded, that card's own chevron is the
+                            * control, and two carets pointing at each other is a
+                            * toggle the rider has to decode rather than an
+                            * affordance.
+                            */}
+                          {tripCollapsed && onExpandTrip
+                            ? (
+                                <button
+                                  type="button"
+                                  onClick={onExpandTrip}
+                                  aria-label="Tampilkan panel rute"
+                                  aria-expanded={false}
+                                  tabIndex={hasPair ? 0 : -1}
+                                  className="rounded-full flex items-center justify-center w-9 h-9 text-slate-700 cursor-pointer shrink-0 transition-[background-color,transform] duration-150 ease hover:bg-slate-100 active:scale-[0.97]"
+                                >
+                                  <CaretDownIcon weight="bold" className="w-4 h-4" />
+                                </button>
+                              )
+                            : null}
+                          <button
+                            type="button"
+                            onClick={onClear}
+                            aria-label="Hapus rute dari peta"
+                            // Untabbable while collapsed: the rows are still in the
+                            // DOM so they can animate, and a hidden control in the
+                            // tab order is a focus trap the rider cannot see.
+                            tabIndex={hasPair ? 0 : -1}
+                            className="rounded-full flex items-center justify-center w-9 h-9 text-slate-700 cursor-pointer shrink-0 transition-[background-color,transform] duration-150 ease hover:bg-slate-100 active:scale-[0.97]"
                           >
-                            Buka halaman tarif
-                            <ArrowSquareOutIcon weight="bold" className="w-3.5 h-3.5" />
-                          </Link>
-                        )
-                      : null}
-                  </>
-                )}
+                            <XIcon weight="bold" className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/*
+                        * Out to the fare page proper.
+                        *
+                        * /fare owns the canonical URL — it is the one that is
+                        * SEO-decorated, OG-imaged and sitemapped — so this card
+                        * has to offer a way there rather than being a dead end.
+                        * It was the last thing the desktop pane still carried
+                        * alone; with it here the pane has nothing of its own.
+                        */}
+                      {farePath
+                        ? (
+                            <Link
+                              to={farePath}
+                              className="mt-2 flex items-center justify-center gap-1.5 text-xs font-semibold text-slate-500 cursor-pointer transition-colors duration-150 ease hover:text-slate-700"
+                            >
+                              Buka halaman tarif
+                              <ArrowSquareOutIcon weight="bold" className="w-3.5 h-3.5" />
+                            </Link>
+                          )
+                        : null}
+                    </>
+                  )}
+            </div>
           </div>
         </div>
       </div>

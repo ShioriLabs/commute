@@ -108,6 +108,23 @@ export default function MapTripCard({
   useLayoutEffect(() => setPage('options'), [journeys])
 
   /*
+   * Replay the body's fade whenever the page changes.
+   *
+   * Rewinding the running animation is what actually restarts it; toggling the
+   * class off and on would need a forced reflow between the two writes to have
+   * any effect at all. getAnimations() is empty under reduced motion, where
+   * app.css sets `animation: none`, so this quietly does nothing there — which
+   * is the behaviour that block asks for.
+   */
+  const pageFadeRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    for (const animation of pageFadeRef.current?.getAnimations() ?? []) {
+      animation.currentTime = 0
+      animation.play()
+    }
+  }, [showing])
+
+  /*
    * The card's own natural height, measured rather than transitioned.
    *
    * The whole card is what moves here, header included — it slides up under the
@@ -257,58 +274,75 @@ export default function MapTripCard({
             onClick={onCollapse}
             aria-label="Sembunyikan panel rute"
             aria-expanded={open}
-            className="rounded-full flex items-center justify-center w-9 h-9 -mr-1.5 text-slate-700 cursor-pointer shrink-0 transition-[background-color,transform] duration-150 ease hover:bg-slate-100 active:scale-95"
+            className="rounded-full flex items-center justify-center w-9 h-9 -mr-1.5 text-slate-700 cursor-pointer shrink-0 transition-[background-color,transform] duration-150 ease hover:bg-slate-100 active:scale-[0.97]"
           >
             <CaretUpIcon weight="bold" className="w-4 h-4" />
           </button>
         </div>
 
-        {showing === 'options'
-          ? (
-              /*
-               * Opaque, where the detail page is glass.
-               *
-               * The plates publish --plate-ground so the route bar's roundels
-               * can halo against the surface they sit on, and route-bar.tsx
-               * calls that ring the only thing keeping a filled TJ roundel
-               * legible on track of its own colour. Over the card's translucent
-               * white the ring would be a keyline of map artwork, exactly where
-               * the rider is looking, so the options page gives the plates the
-               * solid ground their halos assume.
-               */
-              <div
-                className="bg-white px-4 pb-4 border-t border-slate-100 overflow-y-auto overscroll-contain"
-                style={{ maxHeight: bodyMaxH ?? undefined }}
-              >
-                <ul className="mt-3 flex flex-col gap-2">
-                  {journeys.map((option, index) => (
-                    <li key={index}>
-                      <JourneyCardFace
-                        journey={option}
-                        selected={index === selectedIndex}
-                        onSelect={() => {
-                          onSelectIndex(index)
-                          // Straight back to the detail: picking an option is
-                          // asking to see it, not to stay in the list.
-                          setPage('detail')
-                        }}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )
-          : (
-              /* The timeline opens with its own mt-6, which is the spacing it
-                 wants against a heading. Here the head above is already a
-                 heading, so the gap is pulled back to sit under the rule. */
-              <div
-                className="px-4 pb-4 border-t border-slate-100 overflow-y-auto overscroll-contain [&>ol]:mt-4"
-                style={{ maxHeight: bodyMaxH ?? undefined }}
-              >
-                <JourneyTimeline legs={journey.legs} />
-              </div>
-            )}
+        {/*
+          * The swapped body, faded in on every swap.
+          *
+          * The card animates its own height around this, and without the fade
+          * the box glided while the contents hard-cut — movement and content
+          * disagreeing at the one moment the rider is watching. Opacity only:
+          * the height transition is already carrying the movement, and a
+          * second transform here would read as the content correcting itself.
+          *
+          * A `key` alone does not do it. Both arms render a plain div in the
+          * same slot, so React reconciles them as one node, the element is
+          * never remounted and the CSS animation never restarts — measured:
+          * the same DOM node survived the swap with its animation already at
+          * its 180ms end. pageFadeRef restarts it by hand instead.
+          */}
+        <div ref={pageFadeRef} className="content-fade">
+          {showing === 'options'
+            ? (
+                /*
+                 * Opaque, where the detail page is glass.
+                 *
+                 * The plates publish --plate-ground so the route bar's roundels
+                 * can halo against the surface they sit on, and route-bar.tsx
+                 * calls that ring the only thing keeping a filled TJ roundel
+                 * legible on track of its own colour. Over the card's translucent
+                 * white the ring would be a keyline of map artwork, exactly where
+                 * the rider is looking, so the options page gives the plates the
+                 * solid ground their halos assume.
+                 */
+                <div
+                  className="bg-white px-4 pb-4 border-t border-slate-100 overflow-y-auto overscroll-contain"
+                  style={{ maxHeight: bodyMaxH ?? undefined }}
+                >
+                  <ul className="mt-3 flex flex-col gap-2">
+                    {journeys.map((option, index) => (
+                      <li key={index}>
+                        <JourneyCardFace
+                          journey={option}
+                          selected={index === selectedIndex}
+                          onSelect={() => {
+                            onSelectIndex(index)
+                            // Straight back to the detail: picking an option is
+                            // asking to see it, not to stay in the list.
+                            setPage('detail')
+                          }}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )
+            : (
+                /* The timeline opens with its own mt-6, which is the spacing it
+                   wants against a heading. Here the head above is already a
+                   heading, so the gap is pulled back to sit under the rule. */
+                <div
+                  className="px-4 pb-4 border-t border-slate-100 overflow-y-auto overscroll-contain [&>ol]:mt-4"
+                  style={{ maxHeight: bodyMaxH ?? undefined }}
+                >
+                  <JourneyTimeline legs={journey.legs} />
+                </div>
+              )}
+        </div>
       </div>
     </div>
   )
