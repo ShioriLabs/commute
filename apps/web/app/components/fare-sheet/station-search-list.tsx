@@ -175,7 +175,7 @@ export default function StationSearchList({ stations, query, field, current, onS
       <ul
         ref={listRef}
         className={clsx(
-          'overflow-y-auto overscroll-contain max-h-52 py-1',
+          'overflow-y-auto overscroll-contain max-h-56 py-1',
           searching ? '[scrollbar-gutter:stable]' : 'no-scrollbar'
         )}
       >
@@ -210,10 +210,10 @@ export default function StationSearchList({ stations, query, field, current, onS
               )}
             >
               <span className="flex flex-col flex-1 min-w-0">
-                <span className="text-sm truncate">
+                <span className="truncate text-sm font-bold">
                   <HighlightMatch text={station.name} query={searching ? deferredQuery : undefined} />
                 </span>
-                <span className="text-[11px] text-slate-500 truncate">
+                <span className="text-sm text-slate-500 truncate">
                   {OPERATORS[station.operator]?.name ?? station.operator}
                 </span>
               </span>
