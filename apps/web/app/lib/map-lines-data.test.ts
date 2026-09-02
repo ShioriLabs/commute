@@ -190,6 +190,51 @@ describe('the shipped map-lines.json', () => {
     expect(offenders).toEqual([])
   })
 
+  it('turns through curves, never a mitre or a sidestep', () => {
+    /*
+     * The schematic's own drawing rule: a run going horizontal cannot change its
+     * Y, and one going vertical cannot change its X, without a curved section
+     * between. Every corner on the sheet is a fillet.
+     *
+     * So a hard turn between two long edges that meet exactly means the trace
+     * cut a corner the artwork draws round, and a short edge cutting across both
+     * its neighbours means it stepped sideways onto a parallel stroke — the
+     * staircase that appears where a line and its neighbour run 12-24 units
+     * apart. Neither shape exists in the source, so neither may appear here.
+     *
+     * Only real joints are checked: where consecutive edges do not meet, the
+     * pair between them was refused, and the angle across that hole is not a
+     * corner the trace drew.
+     */
+    const MIN_LEG_WORLD = 25
+    const MAX_TURN_DEG = 60
+    const bearing = (ax: number, ay: number, bx: number, by: number): number => {
+      const angle = Math.atan2(by - ay, bx - ax) * 180 / Math.PI
+      return ((angle % 180) + 180) % 180
+    }
+    const turn = (p: number, q: number): number => {
+      const d = Math.abs(p - q) % 180
+      return d > 90 ? 180 - d : d
+    }
+    const corners: string[] = []
+    for (const line of lines) {
+      for (const segment of line.segments) {
+        const edges = segment.edges
+        for (let i = 0; i < edges.length - 1; i++) {
+          const [ax, ay, axEnd, ayEnd] = edges[i]
+          const [bx, by, bxEnd, byEnd] = edges[i + 1]
+          if (Math.hypot(bx - axEnd, by - ayEnd) > 1) continue
+          const lenA = Math.hypot(axEnd - ax, ayEnd - ay)
+          const lenB = Math.hypot(bxEnd - bx, byEnd - by)
+          if (lenA < MIN_LEG_WORLD || lenB < MIN_LEG_WORLD) continue
+          const angle = turn(bearing(ax, ay, axEnd, ayEnd), bearing(bx, by, bxEnd, byEnd))
+          if (angle >= MAX_TURN_DEG) corners.push(`${line.key} ${Math.round(angle)}deg`)
+        }
+      }
+    }
+    expect(corners).toEqual([])
+  })
+
   it('only lets a line leave its brand colour where the sheet demands it', () => {
     /*
      * The companion to the audit above, and the reason it can be strict.
@@ -204,11 +249,15 @@ describe('the shipped map-lines.json', () => {
      */
     const EXPECTED_REDRAWN: Record<string, string> = {
       // Branded a pale tint of the orange it is drawn in.
-      'TJ:14': '#FA7116',
-      // Branded brown, drawn crimson — and the brown-ish stubs they cross would
-      // pass a brand-gated match, so this is the pair the election exists for.
-      'TJ:7': '#F71752',
-      'TJ:7F': '#F71752'
+      'TJ:14': '#FA7116'
+      /*
+       * TJ:7 and TJ:7F used to be here: the GTFS feed gives them brown #914900
+       * while TransJakarta's own roundel and the poster draw them pink, so the
+       * election had to recover the pink from the artwork. The brand is now
+       * corrected at source (apps/api/src/operators/tj/lines.ts), so there is
+       * nothing left to re-elect — which is the better fix, because the brown
+       * also sat closer to koridor 5's stroke than to their real colour.
+       */
     }
     const redrawn = lines.filter(line =>
       channelDistance(drawnColour(line), line.color) > CORRIDOR_COLOUR_TOLERANCE

@@ -6,13 +6,89 @@ export function findTopology(operator: Operator, lineCode: string): LineTopology
   return TOPOLOGY.find(t => t.operator === operator && t.lineCode === lineCode) ?? null
 }
 
-// Every stop on the line (trunk + branches) as DB station ids.
+// Every stop on the line (both directions + branches) as DB station ids.
 export function collectStationIds(topology: LineTopology): string[] {
   const toId = (stop: Stop) => `${topology.operator}-${stop.station}`
   return [
     ...topology.path.map(toId),
+    // An asymmetric corridor serves stops in one direction only, and those are
+    // real haltes the line calls at — omitting them here left them unfetched and
+    // so invisible to the line detail below.
+    ...(topology.pathReverse ?? []).map(toId),
     ...(topology.branches ?? []).flatMap(branch => branch.path.map(toId))
   ]
+}
+
+/*
+ * The stretches only the reverse direction serves, each hanging off the trunk
+ * at the stop where it leaves it.
+ *
+ * `path` alone under-reports an asymmetric corridor, and 24 of the 29 lines
+ * carrying a `pathReverse` lose stops that way — 86 haltes across the network.
+ * TJ:7F is the clearest: it reaches Juanda via Pasar Baru and returns via
+ * Pecenongan, Monas and Balai Kota, so the forward path drops that whole arm.
+ *
+ * Reverse-only stops do NOT form one run. On 7F they fall in three groups: a
+ * directional twin (Tanah Merdeka's other side), two stops the forward direction
+ * skips mid-route, and the Monas loop arm. Each is emitted separately, attached
+ * to the last stop both directions still share before it — treating them as one
+ * span would join unrelated places.
+ *
+ * A stretch is a LOOP only when the reverse direction comes back to the stop it
+ * left from — 7F reaches Kwitang, runs the Monas circuit, and returns through
+ * Kwitang, so that junction really is visited twice and the tracer closes the
+ * ring. A stretch that rejoins the trunk somewhere ELSE is a detour, not a
+ * circuit: Cempaka Putih and Cempaka Mas sit between Pulo Mas Bypass and Sumur
+ * Batu on a straight westward run, and closing them into a ring drew 2000 units
+ * back out along koridor 2's stroke. Those are emitted as RAMP, which the
+ * tracer attaches at one end only.
+ */
+function reverseOnlyBranches(
+  topology: LineTopology
+): Array<{ fromStation: string, path: Stop[], kind: LineSegmentKind }> {
+  const reverse = topology.pathReverse
+  if (!reverse) return []
+
+  const forward = new Set(topology.path.map(stop => stop.station))
+  const out: Array<{ fromStation: string, path: Stop[], kind: LineSegmentKind }> = []
+  let run: Stop[] = []
+  // The last shared stop seen, which is where the current run leaves the trunk.
+  let anchor: string | null = null
+
+  /*
+   * A circuit closes across BOTH directions, not within one.
+   *
+   * 7F's reverse path ends at Juanda having run Kwitang -> Balai Kota -> Monas
+   * -> Pecenongan; the return leg (Juanda -> Pasar Baru -> Kwitang) lives in the
+   * forward path. So a stretch is a LOOP when it runs to the line's terminus and
+   * the forward direction comes back through the same junction — never when it
+   * simply rejoins the trunk further along, which is a detour.
+   */
+  const forwardOrder = topology.path.map(stop => stop.station)
+  const terminus = forwardOrder[0]
+  const close = (rejoin: string | null): void => {
+    if (run.length === 0 || !anchor) return
+    /*
+     * The run reaches the terminus, and the forward direction comes back through
+     * the junction it left from: that is the circuit. On 7F the run ends at
+     * Juanda (the terminus) having left from Kwitang, and the forward path runs
+     * Juanda -> Pasar Baru -> Kwitang, closing the ring.
+     */
+    const closesRing = rejoin === terminus && forwardOrder.indexOf(anchor) > 0
+    out.push({ fromStation: anchor, path: run, kind: closesRing ? 'LOOP' : 'RAMP' })
+    run = []
+  }
+
+  for (const stop of reverse) {
+    if (forward.has(stop.station)) {
+      close(stop.station)
+      anchor = stop.station
+      continue
+    }
+    run.push(stop)
+  }
+  close(null)
+  return out
 }
 
 // Minimal shape needed from StationRepository.getByIds results.
@@ -72,6 +148,14 @@ export function buildLineDetail(
     joinsAtCode: null,
     stations: mapStops(topology.path)
   }]
+
+  for (const stretch of reverseOnlyBranches(topology)) {
+    segments.push({
+      kind: stretch.kind,
+      joinsAtCode: stretch.fromStation,
+      stations: mapStops(stretch.path)
+    })
+  }
 
   let seenNonLoop = false
   for (const branch of topology.branches ?? []) {

@@ -403,13 +403,137 @@ const MIN_ELECTED_STOPS_TO_JUDGE = 6
  */
 function bridgeFromPrevious(
   edges: Array<[number, number, number, number]>,
-  head: readonly [number, number] | undefined
-): void {
+  path: ReadonlyArray<readonly [number, number]>
+): boolean {
   const previous = edges[edges.length - 1]
-  if (!previous || !head) return
+  const head = path[0]
+  if (!previous || !head) return true
+  /*
+   * Never bridge a sidestep. Doing it here rather than at each call site means
+   * the chained and loop-closing paths are covered too — the LOOP segment is
+   * where 7F's last two staircases came from.
+   */
+  if (isSidestep(previous, path)) return false
   const step = Math.hypot(head[0] - previous[2], head[1] - previous[3])
-  if (step <= MIN_BRIDGE_LENGTH_WORLD || step > MAX_STATION_BRIDGE_WORLD) return
+  if (step <= MIN_BRIDGE_LENGTH_WORLD || step > MAX_STATION_BRIDGE_WORLD) return true
+  /*
+   * A bridge may close a gap; it may not replace a corner.
+   *
+   * The schematic turns through a fillet, never a mitre: a run going horizontal
+   * cannot change its Y, and one going vertical cannot change its X, without
+   * curved section between. So a straight connector that turns hard against the
+   * edge before it is cutting the corner the artwork actually draws — TJ:9A had
+   * an 83-unit chord across a curve whose vertices step (6149,4915),
+   * (6148,4908), (6146,4900), (6141,4894).
+   *
+   * Refusing leaves the two runs unjoined, which is honest: the corner is drawn,
+   * this pair simply did not match it.
+   */
+  const bearing = (ax: number, ay: number, bx: number, by: number): number => {
+    const angle = Math.atan2(by - ay, bx - ax) * 180 / Math.PI
+    return ((angle % 180) + 180) % 180
+  }
+  const turn = (p: number, q: number): number => {
+    const d = Math.abs(p - q) % 180
+    return d > 90 ? 180 - d : d
+  }
+  const incoming = bearing(previous[0], previous[1], previous[2], previous[3])
+  const across = bearing(previous[2], previous[3], head[0], head[1])
+  if (turn(across, incoming) > BRIDGE_MAX_TURN_DEG) return false
   edges.push([previous[2], previous[3], head[0], head[1]])
+  return true
+}
+
+// A chain's edges as a point path, for the sidestep test.
+function chainHead(
+  chainEdges: ReadonlyArray<readonly [number, number, number, number]>
+): Array<readonly [number, number]> {
+  const first = chainEdges[0]
+  if (!first) return []
+  return [[first[0], first[1]], [first[2], first[3]]]
+}
+
+/*
+ * Whether joining these two would step sideways off the line's own stroke.
+ *
+ * The signature is a short connector running across both the edge before it and
+ * the edge after — the sideways tread of a staircase. A genuine corner turns
+ * once and keeps going; a sidestep turns, crosses, and turns back onto the same
+ * bearing it left.
+ */
+function isSidestep(
+  previous: readonly [number, number, number, number],
+  path: ReadonlyArray<readonly [number, number]>
+): boolean {
+  if (path.length < 2) return false
+  const step = Math.hypot(path[0][0] - previous[2], path[0][1] - previous[3])
+  if (step < MIN_BRIDGE_LENGTH_WORLD || step > MAX_SIDESTEP_WORLD) return false
+  const bearing = (ax: number, ay: number, bx: number, by: number): number => {
+    const angle = Math.atan2(by - ay, bx - ax) * 180 / Math.PI
+    return ((angle % 180) + 180) % 180
+  }
+  const between = (p: number, q: number): number => {
+    const d = Math.abs(p - q) % 180
+    return d > 90 ? 180 - d : d
+  }
+  const before = bearing(previous[0], previous[1], previous[2], previous[3])
+  const across = bearing(previous[2], previous[3], path[0][0], path[0][1])
+  const after = bearing(path[0][0], path[0][1], path[1][0], path[1][1])
+  // Crosses both neighbours, which themselves keep the same heading.
+  return between(across, before) > SIDESTEP_MIN_TURN_DEG
+    && between(across, after) > SIDESTEP_MIN_TURN_DEG
+    && between(before, after) < SIDESTEP_MAX_DRIFT_DEG
+}
+
+/*
+ * Whether every corridor a chain rides is drawn in the line's own hex.
+ *
+ * Sampled from the chained edges rather than tracked through the search: the
+ * chain reports geometry, not which corridors produced it, and a midpoint on a
+ * stroke is an exact test when the question is only "is this the same ink".
+ */
+function chainCorridorInk(
+  chained: { edges: Array<[number, number, number, number]> },
+  prepared: readonly PreparedCorridor[],
+  colourAt: (index: number) => string | null,
+  tracedColour: string | undefined
+): boolean {
+  if (!tracedColour) return false
+  for (const [ax, ay, bx, by] of chained.edges) {
+    const mx = (ax + bx) / 2
+    const my = (ay + by) / 2
+    let nearest = Infinity
+    let ink: string | null = null
+    for (let i = 0; i < prepared.length; i++) {
+      const dist = projectOntoPolyline(mx, my, prepared[i]).dist
+      if (dist < nearest) {
+        nearest = dist
+        ink = colourAt(i)
+      }
+    }
+    if (nearest > ON_INK_WORLD) continue
+    if (!ink || channelDistance(ink, tracedColour) !== 0) return false
+  }
+  return true
+}
+
+// How close a sampled midpoint must be to count as sitting on a stroke.
+const ON_INK_WORLD = 12.5
+
+/*
+ * Below this a corridor is a fragment, not a route.
+ *
+ * Measured over the sheet, corridors reaching a single stop run 128-309 world
+ * units while every corridor reaching several is 1726 or longer, so 600 sits in
+ * a wide empty gap. A fragment's stop count carries no information about which
+ * line it belongs to, so the ownership test stands down for it.
+ */
+const SHORT_CORRIDOR_WORLD = 600
+
+// A prepared corridor's total drawn length.
+function corridorLength(corridor: PreparedCorridor | undefined): number {
+  if (!corridor) return 0
+  return corridor.cums[corridor.cums.length - 1] ?? 0
 }
 
 // The worse of a pair's two projection distances onto one corridor.
@@ -456,6 +580,39 @@ const MIN_BRIDGE_LENGTH_WORLD = 0.5
  * hundred units that separate genuinely different places.
  */
 const MAX_STATION_BRIDGE_WORLD = 100
+
+/*
+ * Longest connector that can still be a sidestep rather than a real leg.
+ *
+ * Parallel strokes on this sheet sit 12-24 units apart, so a tread longer than
+ * this is the line genuinely going somewhere, not hopping tracks.
+ */
+/*
+ * How much of a line its own exact ink must cover before near-miss colours stop
+ * being candidates.
+ *
+ * Measured over the network: the three lines that have exact ink at all cover
+ * 100%, 100% and 87% of their stops with it, while every other line covers 0%.
+ * Two thirds sits well inside that gap, so the rule cannot half-apply to a line
+ * whose stroke is only partly drawn in its own hex.
+ */
+const EXACT_INK_COVERAGE = 2 / 3
+
+const MAX_SIDESTEP_WORLD = 60
+
+// How sharply the tread must cut across its neighbours, and how nearly parallel
+// those neighbours must stay, for the three to read as a staircase.
+const SIDESTEP_MIN_TURN_DEG = 60
+const SIDESTEP_MAX_DRIFT_DEG = 20
+
+/*
+ * How far a bridge may turn off the run it continues.
+ *
+ * Beyond this it is cutting a drawn corner rather than closing a gap along the
+ * line's own heading. Generous enough for the slight kink where two pieces of
+ * one stroke meet at an angle, tight enough to refuse a mitre across a fillet.
+ */
+const BRIDGE_MAX_TURN_DEG = 35
 
 function joinsEndToEnd(a: PreparedCorridor, b: PreparedCorridor): [number, number] | null {
   for (const p of corridorEndpoints(a)) {
@@ -695,7 +852,71 @@ export function traceLine(
     })
   }
   const allStops = resolvedBySegment.flat()
+
   const tracedColour = electArtworkColour(allStops, modeEligible, lineColour)
+
+  /*
+   * How many of the LINE's stops each corridor reaches, cached once.
+   *
+   * Counted over the whole line rather than the segment being traced: a corridor
+   * either carries this line or it does not, and a five-stop loop cannot answer
+   * that on its own. 7F's Monas loop is the case — koridor 5's stroke happens to
+   * pass all five of the loop's stops, so per-segment counting saw nothing wrong,
+   * while over the full line it carries 2 of 23 against 7F's own 13.
+   */
+  const lineServesCache = new Map<number, number>()
+  const lineServes = (index: number): number => {
+    const hit = lineServesCache.get(index)
+    if (hit !== undefined) return hit
+    const corridor = prepared[index]
+    let count = 0
+    if (corridor) {
+      for (const stop of allStops) {
+        if (projectOntoPolyline(stop.x, stop.y, corridor).dist <= NEAR_STROKE_WORLD) count++
+      }
+    }
+    lineServesCache.set(index, count)
+    return count
+  }
+  // The best any corridor manages, which is what a candidate is measured against.
+  let bestLineServes = 0
+  for (let i = 0; i < prepared.length; i++) {
+    if (modeOk(i) && colourMatches(colourAt(i), tracedColour)) {
+      bestLineServes = Math.max(bestLineServes, lineServes(i))
+    }
+  }
+
+  /*
+   * Whether the line's EXACT ink already covers most of it.
+   *
+   * The colour gate is a tolerance, so it admits a family: 7F's pink sits 65
+   * channels from koridor 5's #CD4411, inside the 72 gate, and koridor 5's
+   * stroke runs the Monas block that 7F loops through. Distance then hands 7F
+   * that stroke and it is drawn along koridor 5 for a quarter of its length.
+   *
+   * But where a line's own hex is drawn on the sheet, it is drawn for the WHOLE
+   * line — 7F's #F71752 appears as four separate corridors covering 20 of its 23
+   * stops. There is no reason to reach for a near-miss colour at all, so those
+   * are dropped from the candidate set.
+   *
+   * Only lines whose brand matches the artwork exactly qualify: measured, that
+   * is TJ:7, TJ:7F and TJ:14 and no others, because every other line's brand
+   * differs slightly from its drawn hex and has no exact corridor to prefer.
+   * For them nothing changes.
+   */
+  const exactInkStops = new Set<number>()
+  for (let i = 0; i < prepared.length; i++) {
+    if (!modeOk(i)) continue
+    const ink = colourAt(i)
+    if (!ink || !tracedColour || channelDistance(ink, tracedColour) !== 0) continue
+    allStops.forEach((stop, index) => {
+      if (projectOntoPolyline(stop.x, stop.y, prepared[i]).dist <= NEAR_STROKE_WORLD) {
+        exactInkStops.add(index)
+      }
+    })
+  }
+  const hasOwnInk = allStops.length > 0
+    && exactInkStops.size >= allStops.length * EXACT_INK_COVERAGE
 
   for (let segmentIndex = 0; segmentIndex < line.segments.length; segmentIndex++) {
     const segment = line.segments[segmentIndex]
@@ -703,6 +924,8 @@ export function traceLine(
 
     const edges: Array<[number, number, number, number]> = []
     let segMatched = 0
+    // The corridor the previous pair rode, so a run stays on one stroke.
+    let lastCorridor: number | undefined
     const segTotal = Math.max(0, resolved.length - 1)
 
     if (resolved.length >= 2 && prepared.length > 0) {
@@ -746,7 +969,9 @@ export function traceLine(
         const shared = sharedTrack ? sharedTrack(a.id, b.id) : undefined
         // Mode first in both predicates: a stroke of the wrong width is never
         // this line's, whatever its colour or who shares its track.
-        const eligible = (index: number) => modeOk(index) && carriesLine(index) && colourMatches(colourAt(index), tracedColour, shared)
+        const eligible = (index: number) => modeOk(index)
+          && carriesLine(index, shared)
+          && colourMatches(colourAt(index), tracedColour, shared)
         /*
          * Match against the eligible corridors only, rather than matching first
          * and vetting the winner.
@@ -783,25 +1008,74 @@ export function traceLine(
          * rail corridors are drawn as long single strokes where a low stop count
          * means the piece genuinely is not the line's.
          */
-        const carriesLine = (index: number): boolean => {
+        const carriesLine = (index: number, sharedColours?: readonly string[]): boolean => {
           if (isBrt !== true || preferIndex === undefined) return true
+          /*
+           * A line drawn in its own hex has no business on a near-miss one.
+           * See hasOwnInk: this is what keeps 7F off koridor 5's stroke.
+           *
+           * Shared track is the exception, and only where the caller can name it:
+           * `sharedColours` holds the brand colours of lines serving BOTH stops
+           * of this pair, so a stroke drawn in one of those is this line's track
+           * painted as its neighbour. 7F runs Kwitang to Senen with koridor 2 and
+           * 2A on one navy stroke, and there is no pink there to prefer.
+           */
+          if (hasOwnInk) {
+            const ink = colourAt(index)
+            if (!ink || !tracedColour) return false
+            if (channelDistance(ink, tracedColour) === 0) return true
+            if (sharedColours) {
+              for (const other of sharedColours) {
+                if (channelDistance(ink, other) <= CORRIDOR_COLOUR_TOLERANCE) return true
+              }
+            }
+            return false
+          }
+          /*
+           * Judge against the whole line, not this segment. A stroke carrying a
+           * couple of the line's stops is a neighbour it happens to run beside,
+           * however many stops of one short loop it passes.
+           */
+          /*
+           * A SHORT corridor is exempt: it cannot reach many stops whoever it
+           * belongs to, so its stop count says nothing about ownership. The
+           * artwork breaks a stroke into many such pieces — Puri Beta 2's branch
+           * stub is 137 units and reaches exactly one stop, and refusing it left
+           * three lines starting 101 units from the station they terminate at.
+           * Measured on this sheet, corridors serving one stop run 128-309 units
+           * while every multi-stop one is 1726 or longer.
+           */
+          if (corridorLength(prepared[index]) > SHORT_CORRIDOR_WORLD
+            && bestLineServes >= MIN_ELECTED_STOPS_TO_JUDGE
+            && lineServes(index) * MINOR_CORRIDOR_STOP_RATIO < bestLineServes
+            // Except a piece drawn in the line's OWN hex: the artwork breaks a
+            // stroke into many pieces and most carry only a stop or two, so a
+            // stop count cannot judge them. Compared against the ink the line is
+            // drawn in, not the segment's election — a short loop elects
+            // whatever passes it.
+            && !(tracedColour && colourAt(index) && channelDistance(colourAt(index)!, tracedColour) === 0)) {
+            return false
+          }
           if (electedServes < MIN_ELECTED_STOPS_TO_JUDGE) return true
           /*
            * A piece drawn in the elected corridor's OWN FAMILY is this line's
            * stroke, however short — the artwork breaks a corridor into many
            * pieces and most carry only a stop or two.
            *
-           * Compared within CORRIDOR_COLOUR_TOLERANCE rather than for an exact
-           * hex match: the sheet draws one koridor in several near-identical
-           * shades (TJ:7F's own stroke appears as #F71752 and #89070E, 65 apart),
-           * and demanding equality refused the line its own ink — which then fell
-           * through to the shared-track relaxation and took koridor 2's navy, 216
-           * away. Only a stroke from a DIFFERENT family has to earn its place by
-           * carrying the line.
+           * Compared for an EXACT hex match, not within the colour tolerance.
+           *
+           * The tolerance is a family test, and a family here spans several
+           * koridors: TJ:7F's crimson sits 65 channels from koridor 5's #CD4411,
+           * inside the 72 gate. Exempting on tolerance therefore handed 7F a
+           * stroke carrying 15 of koridor 5's stops and 1 of its own, and it drew
+           * along koridor 5 through Kwitang. An exact match is the only version
+           * of "this is the same stroke, drawn in pieces" that the sheet supports
+           * — measured, every legitimate fragment matches its elected corridor's
+           * hex exactly, and every offender differs by 40 or more.
            */
           const electedInk = colourAt(preferIndex)
           const ink = colourAt(index)
-          if (electedInk && ink && channelDistance(ink, electedInk) <= CORRIDOR_COLOUR_TOLERANCE) return true
+          if (electedInk && ink && channelDistance(ink, electedInk) === 0) return true
           return servesCount(index) * MINOR_CORRIDOR_STOP_RATIO >= electedServes
         }
         // Whether this corridor is drawn in the colour of a line that serves both
@@ -818,17 +1092,50 @@ export function traceLine(
          * Trying the chain only after the fallback meant TJ:6 was drawn along
          * koridor 4's line for that whole stretch.
          */
-        const own = matchWithinEligible(a, b, prepared, strict, preferIndex)
+        /*
+         * Prefer the corridor the previous pair actually used.
+         *
+         * Where a line and a neighbour are drawn as parallel strokes 12-24 units
+         * apart, consecutive pairs pick whichever is a fraction nearer and the
+         * drawn line steps sideways between them — a staircase the schematic
+         * never draws, because a stroke does not jump to a parallel one
+         * mid-block. 7F showed three, at Senen, Balai Kota and Monas.
+         *
+         * Narrower than `preferIndex`, which is elected once for the whole
+         * segment: this is the LAST corridor, so it also holds a run together
+         * through a stretch the election did not win. It stays a preference —
+         * matchCorridorPath applies the same distance and detour tests to it as
+         * to any other candidate, so a pair the previous corridor genuinely does
+         * not reach still falls through to best fit.
+         */
+        /*
+         * Stickiness must not outrank the line's own ink.
+         *
+         * `lastCorridor` holds a run on one stroke, which is what stops the
+         * staircase — but if the previous pair had to borrow a shared stroke, it
+         * would then drag the rest of the run onto it. 7F's Monas loop did this:
+         * the first pair is detour-rejected on the pink, takes koridor 2's navy,
+         * and stickiness carried the navy round a loop where three of the four
+         * pairs can ride the pink.
+         *
+         * So the preference is dropped when it points at a stroke that is not
+         * this line's own colour; the segment's election takes over, and the
+         * distance test decides as usual.
+         */
+        const stickyInk = lastCorridor !== undefined ? colourAt(lastCorridor) : null
+        const stickyIsOwn = !!stickyInk && !!tracedColour && channelDistance(stickyInk, tracedColour) === 0
+        const sticky = stickyIsOwn ? lastCorridor : preferIndex
+        const own = matchWithinEligible(a, b, prepared, strict, sticky)
         const ownChain = own ? null : matchAcrossJoin(a, b, prepared, strict)
         if (!own && ownChain) {
           if (ownChain.edges.length > 0) {
-            bridgeFromPrevious(edges, [ownChain.edges[0][0], ownChain.edges[0][1]])
+            if (!bridgeFromPrevious(edges, chainHead(ownChain.edges))) continue
           }
           edges.push(...ownChain.edges)
           segMatched++
           continue
         }
-        const match = own ?? matchWithinEligible(a, b, prepared, eligible, preferIndex)
+        const match = own ?? matchWithinEligible(a, b, prepared, eligible, sticky)
         /*
          * A match that leaves a stop far off its stroke is worse than a chain.
          *
@@ -845,6 +1152,19 @@ export function traceLine(
          * whenever no better-fitting chain exists, which is every ordinary pair.
          */
         const directFit = match ? worstEndpointDistance(a, b, prepared[match.index]) : Infinity
+        /*
+         * A chain never displaces a match already on the line's own ink.
+         *
+         * The preference below exists for a stop stranded by a break in the
+         * artwork, where any chain that reaches it beats a distant single
+         * stroke. It must not fire when the direct match is already the line's
+         * own colour: 7F's Monas arm fits its pink at 48 units, and a navy chain
+         * fits at 24.8, so the fit test alone handed two pairs of the loop to
+         * koridor 2's stroke even though the pink was right there.
+         */
+        const matchIsOwnInk = match !== null
+          && !!tracedColour
+          && channelDistance(colourAt(match.index) ?? '', tracedColour) === 0
         if (directFit > NEAR_STROKE_WORLD) {
           const chained = matchAcrossJoin(a, b, prepared, strict)
             ?? matchAcrossJoin(a, b, prepared, eligible)
@@ -859,14 +1179,30 @@ export function traceLine(
            * artwork break (KCI:A's Sudimara and Batu Ceper) has a nearer chain
            * available that nonetheless glues the wrong two strokes together.
            */
+          /*
+           * ...but only if the chain is not moving the line off its own colour.
+           * Where the direct match already rides the line's ink, a better-fitting
+           * chain in someone else's is the wrong trade — see the note above.
+           * A chain on the SAME ink still wins, which is what recovers the branch
+           * stub at Puri Beta 2.
+           */
+          /*
+           * Only lines that HAVE their own exact ink can insist a chain use it.
+           * Every other line is drawn in a hex its brand does not match exactly
+           * (13B/13E/L13E are branded #7A357B and drawn #5F136C), so demanding
+           * exactness there would refuse them their own branch stubs.
+           */
+          const chainIsOwnInk = chained !== null
+            && (!hasOwnInk || chainCorridorInk(chained, prepared, colourAt, tracedColour))
           if (
             chained
+            && (!matchIsOwnInk || chainIsOwnInk)
             && (isBrt === true
               ? chained.fit <= CHAIN_MAX_FIT_WORLD_BRT && chained.fit < directFit
               : chained.fit * CHAIN_PREFERENCE_MARGIN_RAIL < directFit)
           ) {
             if (chained.edges.length > 0) {
-              bridgeFromPrevious(edges, [chained.edges[0][0], chained.edges[0][1]])
+              if (!bridgeFromPrevious(edges, chainHead(chained.edges))) continue
             }
             edges.push(...chained.edges)
             segMatched++
@@ -883,7 +1219,7 @@ export function traceLine(
             ?? matchAcrossJoin(a, b, prepared, eligible)
           if (chained) {
             if (chained.edges.length > 0) {
-              bridgeFromPrevious(edges, [chained.edges[0][0], chained.edges[0][1]])
+              if (!bridgeFromPrevious(edges, chainHead(chained.edges))) continue
             }
             edges.push(...chained.edges)
             segMatched++
@@ -907,7 +1243,26 @@ export function traceLine(
          * connector would be inventing track, which is what the no-chord rule
          * exists to prevent.
          */
-        bridgeFromPrevious(edges, match.path[0])
+        /*
+         * Refuse a pair that can only be drawn by stepping onto a parallel
+         * stroke.
+         *
+         * The schematic never steps a line sideways mid-block: a stroke runs
+         * where it runs. So when this pair's corridor sits alongside the last
+         * one rather than continuing it, joining them draws a staircase that is
+         * not in the artwork — 7F did this three times where its crimson and
+         * koridor 2's navy run 12-24 units apart, because the pair between them
+         * is detour-rejected on 7F's own stroke and has nowhere else to go.
+         *
+         * A gap is the honest answer, exactly as it is for a pair that matches
+         * nothing: the line is not drawn there, and saying so beats inventing a
+         * jog between two lines' strokes.
+         */
+        if (!bridgeFromPrevious(edges, match.path)) {
+          lastCorridor = undefined
+          continue
+        }
+        lastCorridor = match.index
         for (let j = 0; j < match.path.length - 1; j++) {
           const [ax, ay] = match.path[j]
           const [bx, by] = match.path[j + 1]

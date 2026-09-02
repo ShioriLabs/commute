@@ -378,12 +378,127 @@ export function matchCorridorPath(
 
   for (const candidate of candidates) {
     const path = extractSubPolyline(candidate.corridor, candidate.sa, candidate.sb)
-    if (path.length < 2) continue
-    // A corridor can pass near both stops and still be the wrong one — the long
-    // way round a loop, or a parallel line. Try the next best rather than
-    // giving up: the right corridor is often the runner-up.
-    if (polylineLength(path) > maxDetour * straight) continue
-    return { path, index: candidate.index }
+    if (path.length >= 2 && polylineLength(path) <= maxDetour * straight) {
+      return { path, index: candidate.index }
+    }
+    /*
+     * The nearest feet can be the wrong PASS of the same stroke.
+     *
+     * A corridor that doubles back — TJ:7F is drawn as one stroke that runs west
+     * past Kwitang, loops around Monas and returns beside itself — offers two
+     * feet for a stop in the overlap. projectOntoPolyline returns the nearer,
+     * and at Kwitang that is the loop's return (22.4 units) rather than the
+     * westward run (29.4), so the two feet of a pair land on opposite passes and
+     * the sub-path between them travels 3588 units for a 703-unit hop.
+     *
+     * So before giving the corridor up, look for other feet: any projection onto
+     * a segment that is within the distance gate, not merely the closest. The
+     * detour test still decides — this only widens what it may choose from.
+     */
+    for (const [sa, sb] of alternativeFeet(candidate.corridor, ax, ay, bx, by, maxDist)) {
+      const alt = extractSubPolyline(candidate.corridor, sa, sb)
+      if (alt.length < 2) continue
+      if (polylineLength(alt) > maxDetour * straight) continue
+      /*
+       * The alternative feet must still be the ones nearest their stops.
+       *
+       * A different foot can sit past a bend: TJ:14's stop at (5541, 2626) has a
+       * foot on the horizontal approach and another around the corner on the
+       * vertical, and taking the far one drew a straight leg that cut the fillet
+       * at 81 degrees. So an alternative is only worth having when each foot is
+       * no worse than the nearest by more than a stroke's width — enough to pick
+       * the other PASS of a doubling-back stroke, where the two feet are within
+       * a few units of each other, and not enough to skip a corner.
+       */
+      const daAlt = Math.hypot(alt[0][0] - ax, alt[0][1] - ay)
+      const dbAlt = Math.hypot(alt[alt.length - 1][0] - bx, alt[alt.length - 1][1] - by)
+      const nearestA = projectOntoPolyline(ax, ay, candidate.corridor).dist
+      const nearestB = projectOntoPolyline(bx, by, candidate.corridor).dist
+      if (daAlt > nearestA + ALTERNATIVE_FOOT_SLACK_WORLD) continue
+      if (dbAlt > nearestB + ALTERNATIVE_FOOT_SLACK_WORLD) continue
+      return { path: alt, index: candidate.index }
+    }
   }
   return null
 }
+
+/*
+ * Every pair of feet within the distance gate, closest-total first.
+ *
+ * Walks the corridor's segments rather than trusting the single nearest
+ * projection, so a stroke that passes a stop twice offers both. Capped at a few
+ * feet per stop: more than that is a stroke weaving past a stop repeatedly, and
+ * the extra pairs cost more than they can find.
+ */
+function alternativeFeet(
+  corridor: PreparedCorridor,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  maxDist: number
+): Array<[number, number]> {
+  const feetA = footCandidates(corridor, ax, ay, maxDist)
+  const feetB = footCandidates(corridor, bx, by, maxDist)
+  const pairs: Array<{ sa: number, sb: number, cost: number }> = []
+  for (const a of feetA) {
+    for (const b of feetB) {
+      pairs.push({ sa: a.s, sb: b.s, cost: a.dist + b.dist })
+    }
+  }
+  pairs.sort((p, q) => p.cost - q.cost)
+  return pairs.map(pair => [pair.sa, pair.sb])
+}
+
+/*
+ * Local minima of the distance from a point to the polyline, one per pass.
+ *
+ * A run of segments that gets closer then further again is one approach, so the
+ * turning point is that pass's foot; the next approach is a separate pass.
+ */
+function footCandidates(
+  corridor: PreparedCorridor,
+  x: number,
+  y: number,
+  maxDist: number
+): Array<{ s: number, dist: number }> {
+  const { pts, cums } = corridor
+  const out: Array<{ s: number, dist: number }> = []
+  let best: { s: number, dist: number } | null = null
+  let rising = false
+  for (let i = 0; i < pts.length - 1; i++) {
+    const axSeg = pts[i][0]
+    const aySeg = pts[i][1]
+    const dx = pts[i + 1][0] - axSeg
+    const dy = pts[i + 1][1] - aySeg
+    const lenSq = dx * dx + dy * dy
+    const t = lenSq > 0 ? Math.max(0, Math.min(1, ((x - axSeg) * dx + (y - aySeg) * dy) / lenSq)) : 0
+    const dist = Math.hypot(x - (axSeg + t * dx), y - (aySeg + t * dy))
+    const s = cums[i] + t * Math.sqrt(lenSq)
+    if (best === null || dist < best.dist) {
+      best = { s, dist }
+      rising = false
+    } else if (dist > best.dist) {
+      // Was approaching, now receding: the previous minimum is this pass's foot.
+      if (!rising && best.dist <= maxDist) out.push(best)
+      rising = true
+      best = { s, dist }
+    }
+  }
+  if (best !== null && !rising && best.dist <= maxDist) out.push(best)
+  out.sort((p, q) => p.dist - q.dist)
+  return out.slice(0, MAX_FEET_PER_STOP)
+}
+
+// How many passes of one stroke past a stop are worth considering.
+const MAX_FEET_PER_STOP = 4
+
+/*
+ * How much further than the nearest an alternative foot may sit.
+ *
+ * Half a stroke width. The case this exists for — the two passes of a stroke
+ * that doubles back beside itself — puts the feet within a few units of each
+ * other (Kwitang sees 22.4 and 29.4 on TJ:7F's stroke), while a foot around a
+ * corner is tens of units further and is what cut TJ:14's fillet.
+ */
+const ALTERNATIVE_FOOT_SLACK_WORLD = 12.5

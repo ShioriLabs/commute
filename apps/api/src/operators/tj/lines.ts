@@ -75,13 +75,26 @@ export const LINES: readonly Line[] = [
   { name: 'Blok M - Pasar Minggu', lineCode: '6U', colorCode: '#4CAC67' },
   { name: 'Ragunan - Senayan Bank Jakarta', lineCode: '6V', colorCode: '#1BAC47' },
   { name: 'Duren Tiga - Blok M via Bangka Raya', lineCode: '6W', colorCode: '#4CAC67' },
-  { name: 'Kampung Rambutan - Kampung Melayu', lineCode: '7', colorCode: '#914900' },
+  /*
+   * Koridor 7 is PINK, not the brown the GTFS feed gives it.
+   *
+   * routes.txt has 914900 for both 7 and 7F, but TransJakarta's own roundel and
+   * the poster both draw them #F71752, and the schematic inks all 27 of their
+   * plotted stops in it. The feed is the name->code dictionary here; the map is
+   * authoritative for how a koridor looks (docs/fdtj-map-points.md).
+   *
+   * Leaving the brown in place made the map tracer elect the pink from the
+   * artwork and then draw the line brown over it, and pushed koridor 5's
+   * #CD4411 — only 60 channels from the brown, against the pink's 102 — inside
+   * the colour gate, so 7F was traced along koridor 5 through the Monas loop.
+   */
+  { name: 'Kampung Rambutan - Kampung Melayu', lineCode: '7', colorCode: '#F71752' },
   { name: 'Kampung Rambutan - Lebak Bulus', lineCode: '7A', colorCode: '#916131' },
   { name: 'Kampung Rambutan - Blok M', lineCode: '7B', colorCode: '#916131' },
   { name: 'Cibubur - Cawang Cililitan', lineCode: '7C', colorCode: '#916131' },
   { name: 'TMII - Pancoran', lineCode: '7D', colorCode: '#916131' },
   { name: 'Kampung Rambutan - Ragunan', lineCode: '7E', colorCode: '#916131' },
-  { name: 'Kampung Rambutan - Juanda via Cempaka Putih', lineCode: '7F', colorCode: '#914900' },
+  { name: 'Kampung Rambutan - Juanda via Cempaka Putih', lineCode: '7F', colorCode: '#F71752' },
   { name: 'Pondok Kelapa - Cawang Cililitan', lineCode: '7P', colorCode: '#916131' },
   { name: 'Blok M - Cawang Cililitan', lineCode: '7Q', colorCode: '#916131' },
   { name: 'Cibubur - Pluit', lineCode: '7R', colorCode: '#916131' },
