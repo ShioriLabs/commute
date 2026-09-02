@@ -3,7 +3,8 @@ import corridorsManifest from '../data/map-corridors.json'
 import {
   CORRIDOR_COLOUR_TOLERANCE,
   channelDistance,
-  colourMatches
+  colourMatches,
+  electArtworkColour
 } from './map-corridor-colour'
 
 // The colour comparison is what stops a leg riding a neighbouring line's stroke.
@@ -116,5 +117,96 @@ describe('the shipped map-corridors.json', () => {
     // Koridor 3 traced onto the blue stub beside it.
     expect(colourMatches('#2355A2', '#F8C434')).toBe(false)
     for (const corridor of corridors) expect(colourMatches(corridor.c, corridor.c)).toBe(true)
+  })
+})
+
+/*
+ * The ink election is what supplies a BRT line's identity, so these pin the two
+ * ways it can go wrong: failing to correct a brand that lies about the artwork,
+ * and correcting one it should have left alone.
+ *
+ * Synthetic geometry is legitimate here because the election is pure tallying —
+ * unlike the tracer tests, which need real corridors to be non-vacuous.
+ */
+describe('electArtworkColour', () => {
+  // A stop votes for every distinct ink within reach; `at` places one stop on a
+  // named stroke by giving that stroke distance 0 and all others a long way off.
+  const ballot = (rows: Array<{ c: string, on: number[] }>): ReadonlyArray<{ c: string, project: (x: number, y: number) => number }> =>
+    rows.map(row => ({
+      c: row.c,
+      project: (x: number) => (row.on.includes(x) ? 0 : 999)
+    }))
+  const stops = (n: number) => Array.from({ length: n }, (_, i) => ({ x: i, y: 0 }))
+
+  it('elects the dominant ink over a minority stroke that matches the brand', () => {
+    /*
+     * TJ:7F in miniature, the case the whole mechanism exists for: the line is
+     * DRAWN in crimson but BRANDED brown, and the brown-ish stub it merely
+     * crosses is what the brand gate would accept. Six stops on the crimson,
+     * two on the stub.
+     */
+    const corridors = ballot([
+      { c: '#F71752', on: [0, 1, 2, 3, 4, 5] },
+      { c: '#CD4411', on: [6, 7] }
+    ])
+    expect(electArtworkColour(stops(8), corridors, '#914900')).toBe('#F71752')
+  })
+
+  it('keeps the brand colour when no ink leads', () => {
+    // Genuinely shared infrastructure: two inks tie, so there is nothing to
+    // learn and the brand stands.
+    const corridors = ballot([
+      { c: '#F71752', on: [0, 1, 2] },
+      { c: '#CD4411', on: [3, 4, 5] }
+    ])
+    expect(electArtworkColour(stops(6), corridors, '#914900')).toBe('#914900')
+  })
+
+  it('keeps the brand colour below the vote floor', () => {
+    // Two stops is a coincidence, not a corridor.
+    const corridors = ballot([{ c: '#F71752', on: [0, 1] }])
+    expect(electArtworkColour(stops(2), corridors, '#914900')).toBe('#914900')
+  })
+
+  it('counts one vote per stop, not per stroke', () => {
+    /*
+     * Three strokes of one hex drawn on top of each other must not outvote four
+     * stops on another, or a single interchange would rename the line.
+     */
+    const corridors = ballot([
+      { c: '#1F2B8D', on: [0] },
+      { c: '#1F2B8D', on: [0] },
+      { c: '#1F2B8D', on: [0] },
+      { c: '#3AA43C', on: [1, 2, 3, 4] }
+    ])
+    expect(electArtworkColour(stops(5), corridors, '#3AA43C')).toBe('#3AA43C')
+  })
+
+  it('refuses to overrule the brand on a thin ballot', () => {
+    /*
+     * The election must not be able to rubber-stamp the one stroke a short line
+     * happens to sit near: that would hand the colour gate the very stroke it
+     * exists to refuse. Three stops clears the ordinary floor but not the higher
+     * bar for contradicting the brand outright.
+     */
+    const corridors = ballot([{ c: '#2355A2', on: [0, 1, 2] }])
+    expect(electArtworkColour(stops(3), corridors, '#F8C434')).toBe('#F8C434')
+  })
+
+  it('overrules the brand when most of a long line agrees', () => {
+    // The same shape as TJ:14, which is drawn in an orange its brand never names.
+    const corridors = ballot([{ c: '#FA7116', on: [0, 1, 2, 3, 4, 5, 6] }])
+    expect(electArtworkColour(stops(8), corridors, '#F5AB6E')).toBe('#FA7116')
+  })
+
+  it('returns the brand colour when there are no corridors', () => {
+    expect(electArtworkColour(stops(5), [], '#914900')).toBe('#914900')
+  })
+
+  it('keeps the colour-blind path colour-blind', () => {
+    // An undefined brand disables the gate entirely; the election must not
+    // quietly switch it back on.
+    const corridors = ballot([{ c: '#F71752', on: [0, 1, 2, 3, 4, 5] }])
+    expect(electArtworkColour(stops(6), corridors, undefined)).toBe('#F71752')
   })
 })

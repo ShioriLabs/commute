@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import corridorsManifest from '../data/map-corridors.json'
 import linesManifest from '../data/map-lines.json'
 import pointsManifest from '../data/points.json'
+import { channelDistance, CORRIDOR_COLOUR_TOLERANCE } from './map-corridor-colour'
+import { isBrtCorridor, prepareCorridors, projectOntoPolyline, type Corridor } from './map-corridors'
 
 /*
  * The shipped map-lines.json, which is generated (pnpm build:map-lines) rather
@@ -37,14 +39,21 @@ const manifest = linesManifest as {
 describe('the shipped map-lines.json', () => {
   const { lines } = manifest
 
-  it('covers the rail network', () => {
-    // 10 non-BUS lines today. BRT is deliberately absent: the colour
-    // discriminator that makes tracing trustworthy is rail-only.
-    expect(lines.length).toBeGreaterThanOrEqual(8)
+  it('covers the rail network and the BRT trunk', () => {
+    /*
+     * 41 lines today: 10 rail plus 31 BRT. BRT used to be excluded for want of a
+     * per-line discriminator — a colour names a koridor FAMILY, not a line — and
+     * is included now that the line's own stations supply that identity.
+     *
+     * The floor is well under 41 because the dormant TJ feeders legitimately come
+     * and go as topology lands; what it has to catch is a collapse back to
+     * rail-only, which would be 10.
+     */
+    expect(lines.length).toBeGreaterThanOrEqual(32)
     const operators = new Set(lines.map(l => l.operator))
     expect(operators.has('KCI')).toBe(true)
     expect(operators.has('MRTJ')).toBe(true)
-    expect(lines.every(l => l.operator !== 'TJ')).toBe(true)
+    expect(operators.has('TJ')).toBe(true)
   })
 
   it('was baked from the geometry that ships beside it', () => {
@@ -74,6 +83,11 @@ describe('the shipped map-lines.json', () => {
     }
   })
 
+  // The artwork ink a line was traced against: its brand colour, unless the build
+  // recorded that the sheet draws it in something else.
+  const drawnColour = (line: { color: string, inkColor?: string }): string =>
+    line.inkColor ?? line.color
+
   it('keeps every line on its own stroke', () => {
     /*
      * The accuracy guard, and the only one that means anything here.
@@ -81,43 +95,96 @@ describe('the shipped map-lines.json', () => {
      * A pair COUNT is not evidence: it read 136/136 while Soekarno-Hatta was
      * traced down Cikarang's cyan for a third of its length. What catches that is
      * asking, per traced edge, whether the artwork underneath is the colour this
-     * line is supposed to be — never the colour of the corridor it matched, which
-     * is circular and reports every trace as perfect.
+     * line is drawn in — never the colour of the corridor it matched, which is
+     * circular and reports every trace as perfect.
      *
-     * Measured 95% overall with every line at 88% or better. The shortfall is
-     * genuine: station discs and label ink are drawn ON the centreline, so an
-     * edge midpoint can legitimately land on white or black.
+     * This used to assert instead that every line's brand colour resolved to a
+     * DISTINCT artwork colour, which was a proxy for the same idea and is now
+     * false by construction: 41 lines share 27 artwork colours, because the sheet
+     * draws a whole koridor family in one hex. Identity comes from the stations
+     * now, not from a 1:1 colour mapping, so the guard measures the ink directly.
+     *
+     * Weighted by LENGTH, not edge count, so one long wrong stretch cannot hide
+     * behind many short right ones. Measured 1.24%; the ceiling has room for the
+     * artwork to shift without going slack. The residue is genuine: a corridor
+     * crossing another, and station discs drawn over the centreline. Measured
+     * 0.92% against a 2% ceiling.
+     *
+     * Judged against the ink each line is DRAWN in, which for three lines is not
+     * its brand hex — TJ:7, TJ:7F and TJ:14 are branded colours the sheet never
+     * uses for them. Auditing those against the brand would score them ~100%
+     * off-colour while they are in fact traced perfectly, and a ceiling loose
+     * enough to absorb that would stop catching real breakage. The brand-to-ink
+     * gap is asserted on its own below, where it can be seen rather than
+     * averaged away.
      */
-    const corridorColours = [...new Set(
-      (corridorsManifest as { corridors: Array<{ w: number, c: string }> }).corridors
-        .filter(c => c.w === 25)
-        .map(c => c.c)
-    )]
-    const channel = (a: string, b: string) => {
-      let worst = 0
-      for (let i = 1; i < 7; i += 2) {
-        worst = Math.max(worst, Math.abs(parseInt(a.slice(i, i + 2), 16) - parseInt(b.slice(i, i + 2), 16)))
-      }
-      return worst
-    }
+    const corridors = prepareCorridors(
+      (corridorsManifest as unknown as { corridors: Corridor[] }).corridors
+    )
+    let onColour = 0
+    let offColour = 0
     for (const line of lines) {
-      // Every line must resolve to one artwork colour, and to a DIFFERENT one
-      // than its neighbours — that 1:1 mapping is what makes the filter work.
-      const nearest = corridorColours.reduce((p, c) => channel(c, line.color) < channel(p, line.color) ? c : p)
-      expect(channel(nearest, line.color)).toBeLessThanOrEqual(72)
+      const isBrt = line.operator === 'TJ'
+      for (const segment of line.segments) {
+        for (const [ax, ay, bx, by] of segment.edges) {
+          const mx = (ax + bx) / 2
+          const my = (ay + by) / 2
+          let nearest = Infinity
+          let ink: string | null = null
+          for (const corridor of corridors) {
+            // Same-mode strokes only: a rail edge crossing a busway must not be
+            // judged against the BRT stroke it passes over.
+            if (isBrtCorridor(corridor) !== isBrt) continue
+            const { dist } = projectOntoPolyline(mx, my, corridor)
+            if (dist < nearest) {
+              nearest = dist
+              ink = corridor.c
+            }
+          }
+          // Beyond half a stroke the edge is over blank paper — a station disc
+          // or a label — and the audit abstains rather than guessing.
+          if (!ink || nearest > 12.5) continue
+          const length = Math.hypot(bx - ax, by - ay)
+          if (channelDistance(ink, drawnColour(line)) > CORRIDOR_COLOUR_TOLERANCE) offColour += length
+          else onColour += length
+        }
+      }
     }
-    const distinct = new Set(lines.map((line) => {
-      return corridorColours.reduce((p, c) => channel(c, line.color) < channel(p, line.color) ? c : p)
-    }))
-    expect(distinct.size).toBe(lines.length)
+    expect(offColour / (onColour + offColour)).toBeLessThan(0.02)
+  })
+
+  it('only lets a line leave its brand colour where the sheet demands it', () => {
+    /*
+     * The companion to the audit above, and the reason it can be strict.
+     *
+     * A line is traced against the ink its own stations elect, which is normally
+     * its brand colour in the artwork's spelling — a shift of at most a few tens
+     * of channels. Three lines are genuinely drawn in a colour their brand never
+     * names, and those are listed here by hand: if a fourth appears, or one of
+     * these three quietly stops needing the exception, that is a real change in
+     * either the artwork or the brand table and should be looked at rather than
+     * absorbed.
+     */
+    const EXPECTED_REDRAWN: Record<string, string> = {
+      // Branded a pale tint of the orange it is drawn in.
+      'TJ:14': '#FA7116',
+      // Branded brown, drawn crimson — and the brown-ish stubs they cross would
+      // pass a brand-gated match, so this is the pair the election exists for.
+      'TJ:7': '#F71752',
+      'TJ:7F': '#F71752'
+    }
+    const redrawn = lines.filter(line =>
+      channelDistance(drawnColour(line), line.color) > CORRIDOR_COLOUR_TOLERANCE
+    )
+    expect(Object.fromEntries(redrawn.map(l => [l.key, drawnColour(l)]))).toEqual(EXPECTED_REDRAWN)
   })
 
   it('traces nearly every pair, and says so when it does not', () => {
-    // Measured 128/132. A collapse here means corridors and points were
+    // Measured 636/655. A collapse here means corridors and points were
     // regenerated apart, or the artwork moved under the matcher.
     const matched = lines.reduce((n, l) => n + l.matchedPairs, 0)
     const total = lines.reduce((n, l) => n + l.totalPairs, 0)
-    expect(matched / total).toBeGreaterThan(0.85)
+    expect(matched / total).toBeGreaterThan(0.93)
     // Honest bookkeeping: a line never claims more matches than it had pairs.
     for (const line of lines) {
       expect(line.matchedPairs).toBeLessThanOrEqual(line.totalPairs)

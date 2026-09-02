@@ -722,6 +722,22 @@ export default function MapPage() {
     return ordered.sort()
   }, [debugTrace, corridorsManifest])
 
+  /*
+   * Whether the panel's two chip groups are currently hiding everything, which
+   * is what makes the button read "Show all" rather than "Hide all".
+   *
+   * Derived rather than tracked as its own flag: the individual chips write to
+   * the same two sets, so a separate boolean would drift the moment one chip is
+   * clicked back on. Empty groups count as hidden so the label cannot claim
+   * there is something left to hide when there is not.
+   */
+  const traceAllHidden = useMemo(() => {
+    const lines = linesManifest?.lines ?? []
+    const linesHidden = lines.every(line => traceHiddenLines.has(line.key))
+    const coloursHidden = traceTjColors.every(hex => traceHiddenTjColors.has(hex))
+    return linesHidden && coloursHidden
+  }, [linesManifest, traceTjColors, traceHiddenLines, traceHiddenTjColors])
+
   const viewportRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rendererRef = useRef<Renderer | null>(null)
@@ -3217,7 +3233,7 @@ export default function MapPage() {
           and this is a dev-only debug toggle. */}
       {debugTrace && (
         <div className="absolute top-16 right-4 z-map-chrome bg-white/95 backdrop-blur rounded-lg shadow-lg px-3 py-2 flex flex-col gap-2 text-sm max-w-[16rem]">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 whitespace-nowrap">
             <span className="font-mono text-slate-700">trace</span>
             <button
               type="button"
@@ -3225,6 +3241,26 @@ export default function MapPage() {
               className="px-3 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700"
             >
               {surfaceVisible ? 'Surface: on' : 'Surface: off'}
+            </button>
+            {/* Hide/show everything at once. With 41 lines and 17 TJ colours,
+                isolating one stroke otherwise means clicking every other chip —
+                which is the usual reason to open this panel at all. Acts on both
+                groups together because "hide all" that left the TJ swatches
+                drawn would not actually clear the map. */}
+            <button
+              type="button"
+              onClick={() => {
+                if (traceAllHidden) {
+                  setTraceHiddenLines(new Set())
+                  setTraceHiddenTjColors(new Set())
+                } else {
+                  setTraceHiddenLines(new Set(linesManifest?.lines.map(line => line.key) ?? []))
+                  setTraceHiddenTjColors(new Set(traceTjColors))
+                }
+              }}
+              className="px-3 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700"
+            >
+              {traceAllHidden ? 'Show all' : 'Hide all'}
             </button>
           </div>
           {/* One chip per line (map-lines.json), keyed by "operator:code" —
