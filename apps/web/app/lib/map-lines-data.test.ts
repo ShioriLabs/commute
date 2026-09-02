@@ -153,6 +153,43 @@ describe('the shipped map-lines.json', () => {
     expect(offColour / (onColour + offColour)).toBeLessThan(0.02)
   })
 
+  it('draws each line as a continuous run, not a string of disconnected pieces', () => {
+    /*
+     * The gap guard, and the one the ink audit above structurally cannot provide.
+     *
+     * When a pair matches a corridor that is not this line's, the drawn line
+     * jumps to that stroke and back, leaving a visible break at each end. The
+     * colour audit misses it whenever the intruding stroke is a near-enough hue:
+     * koridor 9's teal sits 56 channels from koridor 6's green, INSIDE the 72
+     * tolerance, so TJ:6V read as 0% off-colour while visibly split in two.
+     *
+     * Consecutive edges are emitted head-to-tail within a pair, so a gap between
+     * them means the two pairs landed on different strokes. The tolerance is the
+     * widest station disc: the artwork genuinely breaks a corridor where a marker
+     * is drawn over it, and those breaks are real ink, not tracing errors.
+     *
+     * Only lines that traced EVERY pair are checked. A refused pair is meant to
+     * leave a hole — that is the whole no-chord rule — so a line carrying one is
+     * expected to be discontinuous and says so in matchedPairs. Checking those
+     * too would pin the refusals rather than the jumps this exists to catch.
+     */
+    const MAX_GAP_WORLD = 92
+    const offenders: string[] = []
+    for (const line of lines) {
+      if (line.matchedPairs < line.totalPairs) continue
+      for (const segment of line.segments) {
+        let worst = 0
+        for (let i = 1; i < segment.edges.length; i++) {
+          const [, , px, py] = segment.edges[i - 1]
+          const [qx, qy] = segment.edges[i]
+          worst = Math.max(worst, Math.hypot(qx - px, qy - py))
+        }
+        if (worst > MAX_GAP_WORLD) offenders.push(`${line.key} ${Math.round(worst)}`)
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+
   it('only lets a line leave its brand colour where the sheet demands it', () => {
     /*
      * The companion to the audit above, and the reason it can be strict.
