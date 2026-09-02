@@ -515,6 +515,22 @@ function bridgeFromPrevious(
   const incoming = bearing(previous[0], previous[1], previous[2], previous[3])
   const across = bearing(previous[2], previous[3], head[0], head[1])
   if (turn(across, incoming) > BRIDGE_MAX_TURN_DEG) return false
+  /*
+   * ...and the same test against what the bridge leads INTO.
+   *
+   * A connector can leave along the incoming heading and still arrive across the
+   * run it joins, which is the corner cut from the other end. TJ:14's ramp did
+   * exactly that: it left the vertical run at (5456,2561) heading south, and met
+   * a horizontal stub at (5464,2613) at 81 degrees — a mitre across the fillet
+   * the trunk traces through fifteen vertices.
+   *
+   * Only when the bridge has a direction of its own to judge: a zero-length
+   * connector has no bearing, and the incoming test above already covers it.
+   */
+  if (path.length >= 2) {
+    const outgoing = bearing(head[0], head[1], path[1][0], path[1][1])
+    if (turn(across, outgoing) > BRIDGE_MAX_TURN_DEG) return false
+  }
   edges.push([previous[2], previous[3], head[0], head[1]])
   return true
 }

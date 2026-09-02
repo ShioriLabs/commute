@@ -66,7 +66,7 @@ function reverseOnlyBranches(
    */
   const forwardOrder = topology.path.map(stop => stop.station)
   const terminus = forwardOrder[0]
-  const close = (rejoin: string | null): void => {
+  const close = (rejoin: string | null, rejoinStop: Stop | null): void => {
     if (run.length === 0 || !anchor) return
     /*
      * The run reaches the terminus, and the forward direction comes back through
@@ -75,19 +75,40 @@ function reverseOnlyBranches(
      * Juanda -> Pasar Baru -> Kwitang, closing the ring.
      */
     const closesRing = rejoin === terminus && forwardOrder.indexOf(anchor) > 0
+    /*
+     * Carry the stop the run REJOINS the trunk at, so its exit is drawn.
+     *
+     * `joinsAtCode` attaches a run to the trunk at the stop it LEFT from, which
+     * covers the entry. The exit has no such hook: the last reverse-only stop
+     * and the trunk stop after it are adjacent in the reverse direction only, so
+     * that pair sits in no segment and the run is drawn stopping in mid-air.
+     *
+     * TJ:5C is the visible case. Its reverse path runs Juanda -> Lapangan
+     * Banteng -> Pal Putih; only Lapangan Banteng is reverse-only, so the run
+     * was a single stop hanging off Juanda and the leg closing the Monas circuit
+     * was never drawn — the loop read as open on the map. Appending Pal Putih
+     * closes it.
+     *
+     * Not needed for a LOOP: the tracer already prepends AND appends the
+     * junction there, so the ring closes on the anchor itself.
+     */
+    if (!closesRing && rejoinStop) run.push(rejoinStop)
     out.push({ fromStation: anchor, path: run, kind: closesRing ? 'LOOP' : 'RAMP' })
     run = []
   }
 
   for (const stop of reverse) {
     if (forward.has(stop.station)) {
-      close(stop.station)
+      close(stop.station, stop)
       anchor = stop.station
       continue
     }
     run.push(stop)
   }
-  close(null)
+  // A run that never rejoins ends at the line's own terminus, so it has no exit
+  // pair to draw.
+  close(null, null)
+
   return out
 }
 
