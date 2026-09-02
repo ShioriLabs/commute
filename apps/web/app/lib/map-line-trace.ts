@@ -694,6 +694,27 @@ const MAX_STATION_BRIDGE_WORLD = 100
  */
 const EXACT_INK_COVERAGE = 2 / 3
 
+/*
+ * How far a corridor's hex may sit from the line's own and still BE that ink.
+ *
+ * Not the 72 family gate, which spans several koridors and is what the stop-count
+ * test exists to disambiguate. This is the much narrower question of whether two
+ * hexes are the same stroke recorded twice — the sheet's own yellow reaches TJ:3H
+ * as #FAC418 against a brand of #FDCB1C, 7 channels apart and plainly one colour.
+ *
+ * Measured over the network the two populations do not overlap: a line's real ink
+ * lands 0-24 channels from its brand (TJ:10's #89070E at 24 is the widest), while
+ * the nearest DIFFERENT koridor admitted by the family gate is 56 away. 30 sits
+ * in that gap.
+ *
+ * It matters because the stop-count gate is otherwise free to reject a stroke the
+ * line is drawn on: TJ:3H's yellow reaches only 2 of its 13 stops (the rest of the
+ * run is drawn as other pieces), so it was refused at 0.1 units while koridor 9's
+ * navy — 222 channels away — passed on stop count and drew a 22-unit kink between
+ * Damai and Jelambar.
+ */
+const OWN_HEX_TOLERANCE = 30
+
 const MAX_SIDESTEP_WORLD = 60
 
 // How sharply the tread must cut across its neighbours, and how nearly parallel
@@ -1098,6 +1119,13 @@ export function traceLine(
   }
 
   /*
+   * Whether a corridor is drawn in this line's OWN ink, as opposed to merely a
+   * colour the family gate tolerates. See OWN_HEX_TOLERANCE.
+   */
+  const isOwnHex = (ink: string | null): boolean =>
+    !!ink && !!tracedColour && channelDistance(ink, tracedColour) <= OWN_HEX_TOLERANCE
+
+  /*
    * How many of the LINE's stops each corridor reaches, cached once.
    *
    * Counted over the whole line rather than the segment being traced: a corridor
@@ -1265,7 +1293,7 @@ export function traceLine(
           if (hasOwnInk) {
             const ink = colourAt(index)
             if (!ink || !tracedColour) return false
-            if (channelDistance(ink, tracedColour) === 0) return true
+            if (isOwnHex(ink)) return true
             if (sharedColours) {
               for (const other of sharedColours) {
                 if (channelDistance(ink, other) <= CORRIDOR_COLOUR_TOLERANCE) return true
@@ -1295,7 +1323,7 @@ export function traceLine(
             // stop count cannot judge them. Compared against the ink the line is
             // drawn in, not the segment's election — a short loop elects
             // whatever passes it.
-            && !(tracedColour && colourAt(index) && channelDistance(colourAt(index)!, tracedColour) === 0)) {
+            && !isOwnHex(colourAt(index))) {
             return false
           }
           if (electedServes < MIN_ELECTED_STOPS_TO_JUDGE) return true
@@ -1318,6 +1346,23 @@ export function traceLine(
           const electedInk = colourAt(preferIndex)
           const ink = colourAt(index)
           if (electedInk && ink && channelDistance(ink, electedInk) === 0) return true
+          /*
+           * ...and a piece drawn in the LINE's own ink, on the same reasoning
+           * from the other direction.
+           *
+           * The test above asks whether this stroke matches the one the segment
+           * elected, which fails whenever the election itself landed on a
+           * neighbour. TJ:3H is that case: its yellow is drawn in pieces, none
+           * reaching more than 2 of the segment's stops, so the election went to
+           * koridor 9's navy and every yellow fragment then read as a minority
+           * stroke — including the one passing 0.1 units from both Damai and
+           * Jelambar, which was refused while the navy 22 units away was kept.
+           *
+           * Judged at OWN_HEX_TOLERANCE rather than the family gate, so this
+           * stays "the same colour recorded twice" and cannot re-admit the
+           * neighbouring koridor the stop count is there to reject.
+           */
+          if (isOwnHex(ink)) return true
           return servesCount(index) * MINOR_CORRIDOR_STOP_RATIO >= electedServes
         }
         // Whether this corridor is drawn in the colour of a line that serves both
