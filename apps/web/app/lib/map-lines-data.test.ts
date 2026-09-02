@@ -190,6 +190,63 @@ describe('the shipped map-lines.json', () => {
     expect(offenders).toEqual([])
   })
 
+  it('leaves a gap only where the sheet draws no stroke to follow', () => {
+    /*
+     * The gap test above only looks at lines that traced EVERY pair, because a
+     * refused pair is meant to leave a hole. That exemption is too generous: it
+     * also excuses a line that refused a pair the artwork plainly does draw.
+     *
+     * The honest distinction is not "did the line trace every pair" but "is
+     * there ink to follow across the hole". TJ:4 and TJ:4D break across blank
+     * paper — measured, no corridor of any colour lies within 60 units of the
+     * midpoint of their 884-unit gap, so no tracer can draw them and the gap is
+     * correct. TJ:9A's 542-unit break, by contrast, had its own #49947F on BOTH
+     * sides and the two strokes joined 45.6 units apart: ink the whole way, and
+     * a gap that was a tracing failure rather than a data limit.
+     *
+     * So every gap must be over paper the sheet left empty. Lines whose data is
+     * known not to match the artwork are named rather than pattern-matched, so
+     * adding one is a deliberate act with a reason attached.
+     */
+    /*
+     * Lines whose stop list and the drawn sheet disagree, so a gap is the sheet
+     * telling the truth rather than the tracer failing.
+     *
+     * TJ:4/4D: the GTFS sequence runs through stations the artwork does not
+     * connect — no corridor of ANY colour lies within 60 units of the midpoint
+     * of their 884-unit gap.
+     */
+    const KNOWN_DATA_MISMATCH = new Set(['TJ:4', 'TJ:4D'])
+    const MAX_GAP_WORLD = 92
+    const INK_REACH_WORLD = 60
+
+    const brt = prepareCorridors(
+      (corridorsManifest as unknown as { corridors: Corridor[] }).corridors
+    ).filter(c => isBrtCorridor(c))
+
+    const offenders: string[] = []
+    for (const line of lines) {
+      if (KNOWN_DATA_MISMATCH.has(line.key)) continue
+      for (const segment of line.segments) {
+        for (let i = 1; i < segment.edges.length; i++) {
+          const [, , px, py] = segment.edges[i - 1]
+          const [qx, qy] = segment.edges[i]
+          const gap = Math.hypot(qx - px, qy - py)
+          if (gap <= MAX_GAP_WORLD) continue
+          // Is there ink across the hole? Sample the midpoint of the break.
+          const mx = (px + qx) / 2
+          const my = (py + qy) / 2
+          let nearest = Infinity
+          for (const c of brt) nearest = Math.min(nearest, projectOntoPolyline(mx, my, c).dist)
+          if (nearest <= INK_REACH_WORLD) {
+            offenders.push(`${line.key} ${Math.round(gap)}u over ink at ${Math.round(nearest)}u`)
+          }
+        }
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+
   it('turns through curves, never a mitre or a sidestep', () => {
     /*
      * The schematic's own drawing rule: a run going horizontal cannot change its

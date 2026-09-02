@@ -217,6 +217,73 @@ function resolveJoinId(
 }
 
 /*
+ * A stop as the tracer uses it: its midpoint, plus the tap bar it came from.
+ *
+ * The midpoint stays the stop's POSITION — every match, election and detour test
+ * is built on it and rail geometry is pinned to it. The bar comes along only for
+ * the fit test, which asks a different question: not "where is this stop" but
+ * "is it ON this stroke".
+ */
+interface ResolvedStop {
+  id: string
+  x: number
+  y: number
+  ax: number
+  ay: number
+  bx: number
+  by: number
+}
+
+/*
+ * How far a stop sits from a corridor, measured from its DRAWN TAP BAR rather
+ * than from the single point that represents it.
+ *
+ * A tap target is a bar, not a dot: 12 of the 248 TJ points are over 60 world
+ * units long, and the sheet draws their stroke through one END of the bar rather
+ * than its middle. Cawang is the case that mattered — its bar runs x=6148.2 to
+ * x=6240.4 and koridor 9's stroke passes the left end at 0.5 units, while the
+ * midpoint the matcher uses is 45.6 away.
+ *
+ * That is not the stop being off its line; it is a bar being measured from the
+ * wrong place. Asked from the midpoint, TJ:9A's chain across Cawang fits at 45.3
+ * and is refused by CHAIN_MAX_FIT_WORLD_BRT (30), leaving 542 units of a line
+ * undrawn along ink that runs the whole way. Asked from the bar, it fits at 0.5.
+ *
+ * Used ONLY where the question is whether a stop lies on a stroke. Everything
+ * that decides WHERE to draw still works from the midpoint, so rail geometry —
+ * whose bars are points — is untouched.
+ */
+function barDistance(stop: ResolvedStop, corridor: PreparedCorridor): number {
+  const span = Math.hypot(stop.bx - stop.ax, stop.by - stop.ay)
+  const mid = projectOntoPolyline(stop.x, stop.y, corridor).dist
+  // A bar this short IS its midpoint; sampling it would cost time to learn that.
+  if (span < BAR_SAMPLE_MIN_SPAN_WORLD) return mid
+  let best = mid
+  for (let i = 0; i <= BAR_SAMPLE_STEPS; i++) {
+    const t = i / BAR_SAMPLE_STEPS
+    const d = projectOntoPolyline(
+      stop.ax + (stop.bx - stop.ax) * t,
+      stop.ay + (stop.by - stop.ay) * t,
+      corridor
+    ).dist
+    if (d < best) best = d
+  }
+  return best
+}
+
+/*
+ * Below this a tap bar is effectively a point. Rail markers are drawn as dots
+ * (zero span) and most BRT ones are barely wider than their disc, so this keeps
+ * the sampling to the dozen bars long enough for the ends to differ from the
+ * middle.
+ */
+const BAR_SAMPLE_MIN_SPAN_WORLD = 20
+
+// Enough to find the near end of a 97-unit bar to within ~5 units, which is far
+// finer than the thresholds this feeds.
+const BAR_SAMPLE_STEPS = 20
+
+/*
  * A segment's stations as drawn points, in line order.
  *
  * Extracted from the trace loop because the ink election needs every segment's
@@ -229,7 +296,7 @@ function resolveJoinId(
 function resolveStops(
   segment: TraceableSegment,
   byStation: ReadonlyMap<string, TracePoint>
-): Array<{ id: string, x: number, y: number }> {
+): ResolvedStop[] {
   const ids = segment.stations.map(station => station.id)
 
   /*
@@ -249,11 +316,19 @@ function resolveStops(
     if (segment.kind === 'LOOP' && ids[ids.length - 1] !== joinId) ids.push(joinId)
   }
 
-  const resolved: Array<{ id: string, x: number, y: number }> = []
+  const resolved: ResolvedStop[] = []
   for (const id of ids) {
     const point = byStation.get(id)
     if (!point) continue
-    resolved.push({ id, x: (point.ax + point.bx) / 2, y: (point.ay + point.by) / 2 })
+    resolved.push({
+      id,
+      x: (point.ax + point.bx) / 2,
+      y: (point.ay + point.by) / 2,
+      ax: point.ax,
+      ay: point.ay,
+      bx: point.bx,
+      by: point.by
+    })
   }
   return resolved
 }
@@ -521,6 +596,17 @@ function chainCorridorInk(
 const ON_INK_WORLD = 12.5
 
 /*
+ * Within this, two chains fit a pair equally well and the midpoint decides.
+ *
+ * A long tap bar makes every chain that touches it anywhere score near zero, so
+ * the bar distance alone cannot rank them — Cawang's 92-unit bar had two chains
+ * at 0.77 and 1.0, and taking the arithmetically smaller one ended TJ:9 at the
+ * wrong end of the bar. A stroke's own width is the point below which "closer"
+ * stops meaning anything.
+ */
+const FIT_TIE_WORLD = 15
+
+/*
  * Below this a corridor is a fragment, not a route.
  *
  * Measured over the sheet, corridors reaching a single stop run 128-309 world
@@ -536,7 +622,17 @@ function corridorLength(corridor: PreparedCorridor | undefined): number {
   return corridor.cums[corridor.cums.length - 1] ?? 0
 }
 
-// The worse of a pair's two projection distances onto one corridor.
+/*
+ * The worse of a pair's two projection distances onto one corridor.
+ *
+ * Deliberately from the stop's MIDPOINT, not its tap bar. This value decides
+ * whether to go looking for a chain at all, so measuring it from the bar makes
+ * every stop look better served than it is and suppresses the search — TJ:9 and
+ * TJ:9C lost the Cawang fillet that way, stopping mid-curve at (6228, 4909).
+ *
+ * The bar belongs in the chain's own fit test, which asks whether a candidate
+ * lands ON the stroke; this one asks how well the pair is already served.
+ */
 function worstEndpointDistance(
   a: { x: number, y: number },
   b: { x: number, y: number },
@@ -675,13 +771,14 @@ function matchWithinEligible(
 }
 
 function matchAcrossJoin(
-  a: { x: number, y: number },
-  b: { x: number, y: number },
+  a: ResolvedStop,
+  b: ResolvedStop,
   prepared: readonly PreparedCorridor[],
   eligible: (index: number) => boolean
 ): { edges: Array<[number, number, number, number]>, fit: number } | null {
   let best: Array<[number, number, number, number]> | null = null
   let bestFit = Infinity
+  let bestMidFit = Infinity
   for (let i = 0; i < prepared.length; i++) {
     if (!eligible(i)) continue
     // Only a corridor that actually reaches the first stop can start the chain.
@@ -751,7 +848,26 @@ function matchAcrossJoin(
         for (const [ex, ey, fx, fy] of edges) chained += Math.hypot(fx - ex, fy - ey)
         if (chained > CORRIDOR_MATCH_MAX_DETOUR_RATIO * straight) continue
       }
-      const fit = Math.max(
+      /*
+       * How well this chain serves the pair.
+       *
+       * Measured from each stop's drawn tap bar, because a bar is where the stop
+       * IS: 12 of the 248 TJ points are over 60 world units long and the sheet
+       * runs their stroke through one END rather than the middle. Cawang's bar
+       * spans x=6148.2 to x=6240.4 and koridor 9's stroke passes the left end at
+       * 0.5 units while the midpoint sits 45.6 away, so a midpoint ruler refused
+       * TJ:9A's chain at CHAIN_MAX_FIT_WORLD_BRT and left 542 units undrawn.
+       *
+       * Tie-broken by the MIDPOINT distance, which is what keeps the bar from
+       * choosing between chains. Several chains reach one long bar equally well
+       * — every one that touches it anywhere scores near zero — and picking
+       * among them by bar alone let TJ:9 stop at the far end of Cawang's bar
+       * instead of carrying on round the fillet, losing 655 units of correct
+       * geometry. The bar says whether a chain reaches the stop; the midpoint
+       * still says which of them reaches it best.
+       */
+      const fit = Math.max(barDistance(a, prepared[i]), barDistance(b, prepared[j]))
+      const midFit = Math.max(
         projectOntoPolyline(a.x, a.y, prepared[i]).dist,
         projectOntoPolyline(b.x, b.y, prepared[j]).dist
       )
@@ -766,8 +882,9 @@ function matchAcrossJoin(
        * halves keeps chaining to what it is for — a line drawn in pieces — and
        * out of gaps where the line is not drawn.
        */
-      if (fit < bestFit) {
-        bestFit = fit
+      if (fit < bestFit - FIT_TIE_WORLD || (fit < bestFit + FIT_TIE_WORLD && midFit < bestMidFit)) {
+        bestFit = Math.min(fit, bestFit)
+        bestMidFit = midFit
         best = edges
       }
     }
@@ -809,6 +926,30 @@ export function traceLine(
   for (const p of points) {
     const stationId = stationIdOf(p)
     if (p.id === stationId || !byStation.has(stationId)) byStation.set(stationId, p)
+  }
+
+  /*
+   * Every shape drawn for a station, not just the one that won above.
+   *
+   * Where two koridors meet at an interchange the sheet draws the station TWICE,
+   * once on each line's own stroke, so that each can call at a dot it actually
+   * runs through. Flyover Jatinegara is the case the label spells out —
+   * "11-13 10-15 Flyover Jatinegara" against two dots: TJ-H00037C at (6390,4200)
+   * sits 0.7 units from koridor 11's #181284, and TJ-H00037C-b at (6216,4309)
+   * sits 0.5 from koridor 10's own #89070E.
+   *
+   * "Exact id beats alias" then picks koridor 11's dot for BOTH lines, leaving
+   * koridor 10 calling at a stop 123.5 units off its own stroke — outside the
+   * 110 gate, so the pair matched nothing and 396 units went undrawn. The right
+   * dot is not the one whose id has no suffix; it is the one on the line's own
+   * ink, which is what chooseDrawnPoint picks below.
+   */
+  const shapesByStation = new Map<string, TracePoint[]>()
+  for (const p of points) {
+    const stationId = stationIdOf(p)
+    const list = shapesByStation.get(stationId)
+    if (list) list.push(p)
+    else shapesByStation.set(stationId, [p])
   }
 
   const prepared = corridors.length > 0 ? prepareCorridors(corridors) : []
@@ -854,6 +995,107 @@ export function traceLine(
   const allStops = resolvedBySegment.flat()
 
   const tracedColour = electArtworkColour(allStops, modeEligible, lineColour)
+
+  /*
+   * Second pass: re-resolve the stations the sheet draws more than once, now
+   * that the line's own ink is known.
+   *
+   * Two passes rather than one because the two questions depend on each other —
+   * the ink is elected from the stops, and which dot is the right stop depends
+   * on the ink. The election is safe to run on the first pass's choice: only two
+   * stations on the whole sheet are drawn twice, so the ballot moves by at most
+   * two votes out of a line's whole stop list, far below CORRIDOR_INK_MIN_LEAD.
+   */
+  const ambiguous = new Set<string>()
+  for (const stop of allStops) {
+    if ((shapesByStation.get(stop.id)?.length ?? 0) > 1) ambiguous.add(stop.id)
+  }
+  if (ambiguous.size > 0 && tracedColour) {
+    /*
+     * Of the shapes drawn for this station, the one sitting on the line's OWN
+     * ink. Falls back to the first-alias choice when none of them does, so a
+     * station whose duplicate belongs to neither line behaves as it always has.
+     */
+    const chooseDrawnPoint = (stationId: string): TracePoint | undefined => {
+      const shapes = shapesByStation.get(stationId)
+      if (!shapes || shapes.length < 2) return byStation.get(stationId)
+      /*
+       * The dot nearest a stroke this line could be drawn in, by the SAME colour
+       * gate the matcher uses.
+       *
+       * Not an exact hex: only three lines' brands match their artwork to the
+       * channel, and for everything else the elected colour IS the brand, which
+       * no corridor matches exactly — TJ:10's #9b1f21 sits 24 from the #89070E
+       * it is drawn in, so exactness left no candidate and kept the wrong dot.
+       *
+       * The gate stays a FAMILY test, which is safe here only because the
+       * winner must also be ON its stroke (see below). Letting it pick the
+       * merely-nearest tolerated stroke instead cost TJ:10D 782 units drawn on
+       * koridor 7F's #F71752 while its pair count rose 14->16 — the exact trade
+       * the ink audit exists to catch.
+       */
+      const first = byStation.get(stationId)
+      let best: TracePoint | undefined
+      let bestDist = Infinity
+      for (const shape of shapes) {
+        const x = (shape.ax + shape.bx) / 2
+        const y = (shape.ay + shape.by) / 2
+        let onInk = Infinity
+        for (let i = 0; i < prepared.length; i++) {
+          if (!modeOk(i)) continue
+          const ink = colourAt(i)
+          if (!ink || !colourMatches(ink, tracedColour)) continue
+          onInk = Math.min(onInk, projectOntoPolyline(x, y, prepared[i]).dist)
+        }
+        if (onInk < bestDist) {
+          bestDist = onInk
+          best = shape
+        }
+      }
+      /*
+       * Only move off the first-alias choice when the winner is decisively
+       * better. Where both dots sit on tolerated ink the pick is a coin toss the
+       * colour gate cannot settle, and changing it for a fraction of a unit
+       * would make the trace depend on point order rather than on the artwork.
+       */
+      if (first && best && best !== first) {
+        const fx = (first.ax + first.bx) / 2
+        const fy = (first.ay + first.by) / 2
+        let firstOnInk = Infinity
+        for (let i = 0; i < prepared.length; i++) {
+          if (!modeOk(i)) continue
+          const ink = colourAt(i)
+          if (!ink || !colourMatches(ink, tracedColour)) continue
+          firstOnInk = Math.min(firstOnInk, projectOntoPolyline(fx, fy, prepared[i]).dist)
+        }
+        if (firstOnInk <= ON_INK_WORLD) return first
+      }
+      /*
+       * Only when the winner is plainly ON its stroke. Where neither dot is, the
+       * station is not drawn for this line at all and the first-alias choice is
+       * as good an answer as any — reaching for the nearer of two distant dots
+       * would be guessing.
+       */
+      return bestDist <= ON_INK_WORLD ? best : byStation.get(stationId)
+    }
+    const chosen = new Map<string, TracePoint>()
+    for (const stationId of ambiguous) {
+      const point = chooseDrawnPoint(stationId)
+      if (point) chosen.set(stationId, point)
+    }
+    for (const resolved of resolvedBySegment) {
+      for (const stop of resolved) {
+        const point = chosen.get(stop.id)
+        if (!point) continue
+        stop.x = (point.ax + point.bx) / 2
+        stop.y = (point.ay + point.by) / 2
+        stop.ax = point.ax
+        stop.ay = point.ay
+        stop.bx = point.bx
+        stop.by = point.by
+      }
+    }
+  }
 
   /*
    * How many of the LINE's stops each corridor reaches, cached once.
