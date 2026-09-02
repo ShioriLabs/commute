@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { FareJourney, FareResult, TripResult } from '@commute/schemas'
+import type { FareJourney, FareResult, FareResultRideLeg, FareResultTransferLeg, TripResult } from '@commute/schemas'
 import { JOURNEY_LABELS, JOURNEY_LABEL_DESCRIPTIONS } from './journey-labels'
-import { journeysOf, sortJourneyLabels, walkDistanceOf } from './journeys'
+import { boardingLineKeys, journeysOf, sortJourneyLabels, walkDistanceOf } from './journeys'
 
 const legacy: FareResult = {
   from: { id: 'KCI-SUD', name: 'Sudirman' },
@@ -176,5 +176,59 @@ describe('journey label copy', () => {
     for (const [key, text] of Object.entries({ ...JOURNEY_LABELS, ...JOURNEY_LABEL_DESCRIPTIONS })) {
       expect(text, `${key}: "${text}"`).not.toMatch(forbidden)
     }
+  })
+})
+
+describe('boardingLineKeys', () => {
+  const ride = (line: string, over: Partial<FareResultRideLeg> = {}): FareResultRideLeg => ({
+    type: 'RIDE',
+    line,
+    operator: line.split(':')[0] as FareResultRideLeg['operator'],
+    from: { id: 'A', name: 'A' },
+    to: { id: 'B', name: 'B' },
+    stationCount: 2,
+    stops: [],
+    headsign: null,
+    distanceM: 1000,
+    ...over
+  })
+  const walk = (): FareResultTransferLeg => ({
+    type: 'TRANSFER',
+    from: { id: 'B', name: 'B' },
+    to: { id: 'C', name: 'C' },
+    distanceM: 120
+  })
+
+  it('names the line boarded first and the line alighted from last', () => {
+    const keys = boardingLineKeys(journey({ legs: [ride('KCI:C'), walk(), ride('MRTJ:M')] }))
+    expect(keys).toEqual({ from: 'KCI:C', to: 'MRTJ:M' })
+  })
+
+  /*
+   * The regression this exists for. Manggarai serves KCI:A, KCI:B and KCI:C,
+   * and display order leads with KCI:A — so signing the origin from the station
+   * rather than the journey showed a Soekarno-Hatta roundel over a Cikarang
+   * ride. The whole point is that this reads the leg.
+   */
+  it('ignores the other lines serving the boarding station', () => {
+    expect(boardingLineKeys(journey({ legs: [ride('KCI:C')] })).from).toBe('KCI:C')
+  })
+
+  it('gives both ends the same line on a single-ride journey', () => {
+    expect(boardingLineKeys(journey({ legs: [ride('KCI:B')] }))).toEqual({ from: 'KCI:B', to: 'KCI:B' })
+  })
+
+  // A leading or trailing walk is not a boarding; the ride on either side of it
+  // is what the rider gets on.
+  it('looks past walking legs at both ends', () => {
+    const keys = boardingLineKeys(journey({ legs: [walk(), ride('TJ:1'), walk()] }))
+    expect(keys).toEqual({ from: 'TJ:1', to: 'TJ:1' })
+  })
+
+  // Null, not a guess: the caller falls back to the station's own lines, which
+  // is the best it can say before an answer arrives.
+  it('says nothing when there is no journey or no ride in it', () => {
+    expect(boardingLineKeys(null)).toEqual({ from: null, to: null })
+    expect(boardingLineKeys(journey({ legs: [walk()] }))).toEqual({ from: null, to: null })
   })
 })

@@ -1,7 +1,7 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowDownIcon, CaretDownIcon, MagnifyingGlassIcon, XIcon } from '@phosphor-icons/react'
 import clsx from 'clsx'
-import type { FareResult } from '@commute/schemas'
+import type { FareJourney, FareResult, Line } from '@commute/schemas'
 import { useReducedMotion } from '~/hooks/reduced-motion'
 import LineRoundel from './line-roundel'
 import StationSearchList from './fare-sheet/station-search-list'
@@ -15,6 +15,8 @@ import CriteriaBar from './fare-sheet/criteria/criteria-bar'
 import RouterToggle from './fare-sheet/router-toggle'
 import type { FareCriteria } from 'utils/fare-criteria'
 import type { FareRouter } from 'utils/fare-router'
+import { operatorOfLineKey, useLines } from '~/hooks/use-lines'
+import { boardingLineKeys } from './fare-sheet/journeys'
 
 interface MapRailPillProps {
   /*
@@ -29,6 +31,14 @@ interface MapRailPillProps {
   // The selected journey's total, not necessarily the response's — see
   // FareSummary.
   fare: Pick<FareResult, 'totalFare' | 'transferCount'> | null
+  /*
+   * The journey the card is about, for signing each end with the line actually
+   * ridden there rather than whichever line the stop happens to list first.
+   *
+   * The journey rather than two resolved lines, because the card is the thing
+   * that knows a half-filled pair has no journey at all — see boardingLineKeys.
+   */
+  journey: FareJourney | null
   hasError: boolean
   isLoading: boolean
   /*
@@ -120,12 +130,16 @@ const ROW_H = 'h-8'
  * a second vocabulary. A true M07-style station roundel needs the API to send
  * the number first.
  *
- * An interchange carries several lines; the first in display order stands for
- * the stop, because the row names one station and a row of roundels would
- * compete with the name for the width.
+ * An interchange carries several lines, and which one belongs on the row is a
+ * property of the JOURNEY, not of the stop: Manggarai serves Lin
+ * Soekarno-Hatta, Lin Bogor and Lin Cikarang, so signing it from the station's
+ * own display order put an airport roundel over a Cikarang ride. `line` is the
+ * line actually boarded there, and the stop's first line stands in only before
+ * an answer exists to say otherwise.
  */
 function EndpointRow({
   station,
+  line: ridden,
   placeholder,
   emphasis = false,
   armed,
@@ -137,6 +151,16 @@ function EndpointRow({
   label
 }: {
   station: PickableStation | null
+  /*
+   * The line this end is boarded on or alighted from, and the operator running
+   * it, when a journey has said. Null before one has, which falls back to the
+   * stop's own first line.
+   *
+   * The operator travels with the line because a journey can leave the stop's
+   * own operator behind — a KCI entry whose ride is a TJ corridor would
+   * otherwise draw a filled corridor roundel in the ringed rail style.
+   */
+  line: { line: Line, operator: string } | null
   placeholder: string
   emphasis?: boolean
   // This field is the one being filled: it becomes the text input, and the map
@@ -151,7 +175,9 @@ function EndpointRow({
   onCancel: () => void
   label: string
 }) {
-  const line = station?.sortedLines[0]
+  const line = ridden?.line ?? station?.sortedLines[0]
+  // The ridden line's own operator when there is one; the stop's otherwise.
+  const operator = ridden?.operator ?? station?.operator
   const inputRef = useRef<HTMLInputElement>(null)
   // Focus on arming, not on mount: the row is mounted the whole time, and it is
   // becoming the input that should take the caret.
@@ -174,7 +200,7 @@ function EndpointRow({
             ? (
                 <LineRoundel
                   size="SM"
-                  operator={station.operator}
+                  operator={operator}
                   code={line.lineCode}
                   color={line.colorCode as `#${string}`}
                 />
@@ -222,10 +248,10 @@ function EndpointRow({
             ? (
                 <LineRoundel
                   size="SM"
-                  // The station's operator, not the line's: the resolved line
-                  // carries `mode` (how it runs), while the roundel's filled-vs-
-                  // ringed style keys off who runs it.
-                  operator={station.operator}
+                  // The operator, not the line's `mode`: the resolved line
+                  // carries how it runs, while the roundel's filled-vs-ringed
+                  // style keys off who runs it.
+                  operator={operator}
                   code={line.lineCode}
                   color={line.colorCode as `#${string}`}
                 />
@@ -264,6 +290,7 @@ export default function MapRailPill({
   endpoints,
   hasPair,
   fare,
+  journey,
   hasError,
   isLoading,
   picking,
@@ -282,6 +309,28 @@ export default function MapRailPill({
   pairToId
 }: MapRailPillProps) {
   const reduced = useReducedMotion()
+  /*
+   * Each end's roundel, resolved from the journey rather than from the stop.
+   *
+   * The dictionary lookup happens here, once, rather than in each row: both
+   * rows read the same `/operators` cache, and the rows are the wrong place to
+   * learn that a line key is not a line.
+   */
+  const { line: lookupLine } = useLines()
+  const boarding = boardingLineKeys(journey)
+  /*
+   * A key resolves to a roundel only when the dictionary knows it. Mid-deploy,
+   * or against a service-worker cache holding a line the answer predates, the
+   * lookup misses — and a key with no colour is not something to draw, so the
+   * row falls back to the stop's own line rather than a blank circle.
+   */
+  const riddenOf = useCallback((key: string | null) => {
+    const line = lookupLine(key ?? undefined)
+    const operator = operatorOfLineKey(key)
+    return line && operator ? { line, operator } : null
+  }, [lookupLine])
+  const riddenFrom = riddenOf(boarding.from)
+  const riddenTo = riddenOf(boarding.to)
   /*
    * The card is open while there is anything to show: a complete pair, one end
    * of one, or a field being filled.
@@ -492,6 +541,7 @@ export default function MapRailPill({
             <ol className="flex flex-col py-1">
               <EndpointRow
                 station={endpoints.from}
+                line={riddenFrom}
                 placeholder="Dari mana?"
                 armed={picking === 'from'}
                 enabled={open}
@@ -513,6 +563,7 @@ export default function MapRailPill({
               </li>
               <EndpointRow
                 station={endpoints.to}
+                line={riddenTo}
                 placeholder="Mau ke mana?"
                 emphasis
                 armed={picking === 'to'}

@@ -59,3 +59,27 @@ const LABEL_ORDER: FareJourneyLabel[] = ['CHEAPEST', 'FEWEST_CHANGES', 'LEAST_WA
 export function sortJourneyLabels(labels: readonly FareJourneyLabel[]): FareJourneyLabel[] {
   return LABEL_ORDER.filter(label => labels.includes(label))
 }
+
+/**
+ * The line a journey is boarded on and the line it is alighted from.
+ *
+ * A stop's own line list cannot answer this. Manggarai serves Lin
+ * Soekarno-Hatta, Lin Bogor and Lin Cikarang, and display order leads with the
+ * first — so a summary signed from the station showed an airport roundel over a
+ * Cikarang ride. The journey knows which one the rider actually gets on, and
+ * this is the only thing that does.
+ *
+ * Walking legs are skipped at both ends: a journey that opens with a transfer
+ * has still been boarded, just one leg later.
+ *
+ * Null on either end means there is nothing to say yet — no answer, or an
+ * answer with no ride in it — and the caller should fall back to the stop's own
+ * lines rather than render a blank.
+ */
+export function boardingLineKeys(journey: FareJourney | null): { from: string | null, to: string | null } {
+  const rides = journey?.legs.filter(leg => leg.type === 'RIDE') ?? []
+  return {
+    from: rides[0]?.line ?? null,
+    to: rides[rides.length - 1]?.line ?? null
+  }
+}

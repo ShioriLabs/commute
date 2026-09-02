@@ -2832,7 +2832,9 @@ export default function MapPage() {
               hasPair={!!(routePair.fromId && routePair.toId)}
               // The selected journey, so the card agrees with the corridor drawn
               // behind it rather than with whichever route the API listed first.
+              // It also signs each endpoint row with the line ridden there.
               fare={activeJourney}
+              journey={activeJourney}
               hasError={!!fareError}
               isLoading={fareLoading}
               picking={pickingEndpoint}
