@@ -41,7 +41,7 @@
  * build script and the tests drive it the same way.
  */
 
-import { channelDistance, colourMatches, electArtworkColour } from './map-corridor-colour'
+import { channelDistance, colourMatches, CORRIDOR_COLOUR_TOLERANCE, electArtworkColour } from './map-corridor-colour'
 import {
   CORRIDOR_MATCH_MAX_DETOUR_RATIO,
   CORRIDOR_MATCH_MAX_DIST_WORLD,
@@ -388,6 +388,30 @@ const MINOR_CORRIDOR_STOP_RATIO = 3
  */
 const MIN_ELECTED_STOPS_TO_JUDGE = 6
 
+/*
+ * Join whatever was drawn last to where this pair starts.
+ *
+ * A pair is drawn between the FEET its stops project to, not between the stops
+ * themselves. Where consecutive pairs match different pieces of the artwork, the
+ * station between them has two different feet and the space between is left
+ * undrawn — 98 units on TJ:7F at Senen, 91 on MRTJ:M at Istora, 83 on TJ:9A at
+ * Cawang. The line then reads as broken at a station it plainly runs through.
+ *
+ * Bounded by MAX_STATION_BRIDGE_WORLD: beyond that the two pairs are not
+ * describing one continuous run, and a connector would be inventing track —
+ * exactly what the refusal to chord exists to prevent.
+ */
+function bridgeFromPrevious(
+  edges: Array<[number, number, number, number]>,
+  head: readonly [number, number] | undefined
+): void {
+  const previous = edges[edges.length - 1]
+  if (!previous || !head) return
+  const step = Math.hypot(head[0] - previous[2], head[1] - previous[3])
+  if (step <= MIN_BRIDGE_LENGTH_WORLD || step > MAX_STATION_BRIDGE_WORLD) return
+  edges.push([previous[2], previous[3], head[0], head[1]])
+}
+
 // The worse of a pair's two projection distances onto one corridor.
 function worstEndpointDistance(
   a: { x: number, y: number },
@@ -420,6 +444,18 @@ const JOIN_COLLINEAR_EPSILON_WORLD = 90
 
 // How far off-axis two ends may sit and still count as the same straight run.
 const JOIN_COLLINEAR_TOLERANCE_WORLD = 3
+
+// Below this the two halves already meet and need no connector.
+const MIN_BRIDGE_LENGTH_WORLD = 0.5
+
+/*
+ * How far apart two consecutive pairs' feet may sit and still be bridged.
+ *
+ * Measured over the sheet, the real foot-to-foot steps at a shared station run
+ * 22 to 98 units. 100 covers them without letting a bridge span the several
+ * hundred units that separate genuinely different places.
+ */
+const MAX_STATION_BRIDGE_WORLD = 100
 
 function joinsEndToEnd(a: PreparedCorridor, b: PreparedCorridor): [number, number] | null {
   for (const p of corridorEndpoints(a)) {
@@ -503,6 +539,28 @@ function matchAcrossJoin(
       if (!first || !second) continue
       const edges: Array<[number, number, number, number]> = []
       for (const path of [first.path, second.path]) {
+        /*
+         * Bridge the two halves.
+         *
+         * Each half is extracted from its OWN corridor, so the first ends where
+         * that stroke ends and the second begins where the next one begins —
+         * which are only the same point when the artwork shares a vertex. Where
+         * the join is approximate (a break at a station disc, or one stroke
+         * meeting another's side) the two feet sit tens of units apart and
+         * concatenating the paths leaves that space undrawn. It is the same
+         * seam three koridors showed at Cawang, 41.5 units wide on a stroke that
+         * runs continuously underneath.
+         */
+        const tail = edges[edges.length - 1]
+        if (tail && path.length > 0) {
+          const [hx, hy] = path[0]
+          // Only when the two halves genuinely do not meet. Where the artwork
+          // shares a vertex they already do, and a zero-length edge there is
+          // noise in the artifact rather than a connector.
+          if (Math.hypot(hx - tail[2], hy - tail[3]) > MIN_BRIDGE_LENGTH_WORLD) {
+            edges.push([tail[2], tail[3], hx, hy])
+          }
+        }
         for (let k = 0; k < path.length - 1; k++) {
           edges.push([path[k][0], path[k][1], path[k + 1][0], path[k + 1][1]])
         }
@@ -728,15 +786,25 @@ export function traceLine(
         const carriesLine = (index: number): boolean => {
           if (isBrt !== true || preferIndex === undefined) return true
           if (electedServes < MIN_ELECTED_STOPS_TO_JUDGE) return true
-          // A piece drawn in the elected corridor's own hex is this line's own
-          // stroke, however short — the artwork breaks a corridor into many
-          // pieces and most carry only a stop or two. Only a DIFFERENT hex has
-          // to earn its place by carrying the line.
+          /*
+           * A piece drawn in the elected corridor's OWN FAMILY is this line's
+           * stroke, however short — the artwork breaks a corridor into many
+           * pieces and most carry only a stop or two.
+           *
+           * Compared within CORRIDOR_COLOUR_TOLERANCE rather than for an exact
+           * hex match: the sheet draws one koridor in several near-identical
+           * shades (TJ:7F's own stroke appears as #F71752 and #89070E, 65 apart),
+           * and demanding equality refused the line its own ink — which then fell
+           * through to the shared-track relaxation and took koridor 2's navy, 216
+           * away. Only a stroke from a DIFFERENT family has to earn its place by
+           * carrying the line.
+           */
           const electedInk = colourAt(preferIndex)
           const ink = colourAt(index)
-          if (electedInk && ink && channelDistance(ink, electedInk) === 0) return true
+          if (electedInk && ink && channelDistance(ink, electedInk) <= CORRIDOR_COLOUR_TOLERANCE) return true
           return servesCount(index) * MINOR_CORRIDOR_STOP_RATIO >= electedServes
         }
+        // Whether this corridor is drawn in the colour of a line that serves both
         const strict = (index: number) => modeOk(index) && carriesLine(index) && colourMatches(colourAt(index), tracedColour)
         /*
          * This line's OWN colour first, in both shapes — a single stroke, then a
@@ -753,6 +821,9 @@ export function traceLine(
         const own = matchWithinEligible(a, b, prepared, strict, preferIndex)
         const ownChain = own ? null : matchAcrossJoin(a, b, prepared, strict)
         if (!own && ownChain) {
+          if (ownChain.edges.length > 0) {
+            bridgeFromPrevious(edges, [ownChain.edges[0][0], ownChain.edges[0][1]])
+          }
           edges.push(...ownChain.edges)
           segMatched++
           continue
@@ -794,6 +865,9 @@ export function traceLine(
               ? chained.fit <= CHAIN_MAX_FIT_WORLD_BRT && chained.fit < directFit
               : chained.fit * CHAIN_PREFERENCE_MARGIN_RAIL < directFit)
           ) {
+            if (chained.edges.length > 0) {
+              bridgeFromPrevious(edges, [chained.edges[0][0], chained.edges[0][1]])
+            }
             edges.push(...chained.edges)
             segMatched++
             continue
@@ -808,6 +882,9 @@ export function traceLine(
           const chained = matchAcrossJoin(a, b, prepared, strict)
             ?? matchAcrossJoin(a, b, prepared, eligible)
           if (chained) {
+            if (chained.edges.length > 0) {
+              bridgeFromPrevious(edges, [chained.edges[0][0], chained.edges[0][1]])
+            }
             edges.push(...chained.edges)
             segMatched++
           }
@@ -815,6 +892,22 @@ export function traceLine(
           // artwork would claim the line runs somewhere it does not.
           continue
         }
+        /*
+         * Join this pair to the previous one at the station they share.
+         *
+         * A pair is drawn between the FEET its two stops project to, not between
+         * the stops themselves. Where consecutive pairs match different pieces of
+         * the artwork, the station between them has two different feet, and the
+         * space between is left undrawn — 98 units on TJ:7F at Senen, 91 on
+         * MRTJ:M at Istora, 59 on TJ:6V, 72 on TJ:5C. The line reads as broken at
+         * a station it plainly runs through.
+         *
+         * Bounded by the same distance a stop may sit from its corridor: beyond
+         * that the two pairs are not describing one continuous run and a
+         * connector would be inventing track, which is what the no-chord rule
+         * exists to prevent.
+         */
+        bridgeFromPrevious(edges, match.path[0])
         for (let j = 0; j < match.path.length - 1; j++) {
           const [ax, ay] = match.path[j]
           const [bx, by] = match.path[j + 1]
