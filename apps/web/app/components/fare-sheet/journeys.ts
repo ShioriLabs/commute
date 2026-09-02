@@ -1,4 +1,4 @@
-import type { FareJourney, FareJourneyLabel, FareResult, TripResult } from '@commute/schemas'
+import type { FareJourney, FareJourneyLabel, FareResult, Line, TripResult } from '@commute/schemas'
 
 // Bridges a fare answer to the list of alternatives it may or may not carry.
 // Kept in a `.ts` so it is testable — vitest collects `.test.ts` only, so
@@ -82,4 +82,44 @@ export function boardingLineKeys(journey: FareJourney | null): { from: string | 
     from: rides[0]?.line ?? null,
     to: rides[rides.length - 1]?.line ?? null
   }
+}
+
+/**
+ * How many of a stop's own lines an endpoint row will stack.
+ *
+ * Juanda serves eleven; three is where a stack stops being informative. Only
+ * the anchor's code is readable — the ones behind it are a deck, saying "this
+ * stop serves others" rather than enumerating them — and each is drawn smaller
+ * than the last, so a fourth is a sliver too small to resolve as its own mark.
+ * It would add width without adding a fact. The stack also grows leftward out
+ * of the mark column into the card's padding, and three is what that headroom
+ * holds.
+ */
+export const ENDPOINT_ROUNDEL_MAX = 3
+
+/**
+ * The roundels signing one end of the pair.
+ *
+ * Two different questions, depending on whether a route exists yet:
+ *
+ * Routed, this is "which line do you ride from here" and the answer is exactly
+ * one — the journey named it, and the stop's other lines are not part of this
+ * trip. Unrouted, there is no such answer to give, so the row says what the
+ * STOP is instead: an interchange shows the lines it serves rather than
+ * silently promoting whichever one sorts first, which is what made the single
+ * roundel read as a claim about a route that had not been chosen.
+ *
+ * Each entry carries its own operator because the two cases disagree about it:
+ * a ridden line takes the operator running it, which a cross-operator journey
+ * can move away from the stop's own, while a stacked line is by definition the
+ * stop's.
+ */
+export function endpointRoundelLines(
+  station: { operator: string, sortedLines: Line[] } | null,
+  ridden: { line: Line, operator: string } | null
+): { line: Line, operator: string }[] {
+  if (ridden) return [ridden]
+  return (station?.sortedLines ?? [])
+    .slice(0, ENDPOINT_ROUNDEL_MAX)
+    .map(line => ({ line, operator: station!.operator }))
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { FareJourney, FareResult, FareResultRideLeg, FareResultTransferLeg, TripResult } from '@commute/schemas'
+import type { FareJourney, FareResult, FareResultRideLeg, FareResultTransferLeg, Line, TripResult } from '@commute/schemas'
 import { JOURNEY_LABELS, JOURNEY_LABEL_DESCRIPTIONS } from './journey-labels'
-import { boardingLineKeys, journeysOf, sortJourneyLabels, walkDistanceOf } from './journeys'
+import { boardingLineKeys, endpointRoundelLines, journeysOf, sortJourneyLabels, walkDistanceOf } from './journeys'
 
 const legacy: FareResult = {
   from: { id: 'KCI-SUD', name: 'Sudirman' },
@@ -230,5 +230,53 @@ describe('boardingLineKeys', () => {
   it('says nothing when there is no journey or no ride in it', () => {
     expect(boardingLineKeys(null)).toEqual({ from: null, to: null })
     expect(boardingLineKeys(journey({ legs: [walk()] }))).toEqual({ from: null, to: null })
+  })
+})
+
+describe('endpointRoundelLines', () => {
+  const line = (lineCode: string): Line => ({ name: `Lin ${lineCode}`, lineCode, colorCode: '#25B8EB' })
+  const station = (...codes: string[]) => ({ operator: 'KCI' as const, sortedLines: codes.map(line) })
+
+  /*
+   * Routed: the journey has named the line, so the stack collapses to it. The
+   * other lines serving the stop are not part of this trip, and saying which
+   * one is ridden is the whole point of the roundel — see boardingLineKeys.
+   */
+  it('shows the ridden line alone once a route exists', () => {
+    const ridden = { line: line('C'), operator: 'KCI' }
+    expect(endpointRoundelLines(station('A', 'B', 'C'), ridden)).toEqual([ridden])
+  })
+
+  // Unrouted: nothing has picked a line yet, so the row says what the stop is
+  // rather than implying one of its lines was chosen.
+  it('stacks the stop\'s own lines when nothing is routed', () => {
+    const stacked = endpointRoundelLines(station('A', 'B'), null)
+    expect(stacked.map(l => l.line.lineCode)).toEqual(['A', 'B'])
+  })
+
+  /*
+   * Juanda serves 11. Past three the discs behind the anchor stop resolving as
+   * separate marks, so a fourth adds width without adding a fact — see
+   * ENDPOINT_ROUNDEL_MAX.
+   */
+  it('caps the stack at three', () => {
+    expect(endpointRoundelLines(station('1', '2', '3', '4', '5'), null)).toHaveLength(3)
+  })
+
+  it('keeps display order when it stacks', () => {
+    const stacked = endpointRoundelLines(station('7T', '10', '13'), null)
+    expect(stacked.map(l => l.line.lineCode)).toEqual(['7T', '10', '13'])
+  })
+
+  // Every roundel in a stack is the stop's own, so they all take its operator.
+  it('signs a stacked roundel with the stop\'s operator', () => {
+    expect(endpointRoundelLines(station('A'), null)[0]!.operator).toBe('KCI')
+  })
+
+  // The row draws its placeholder dot off an empty stack; it must never get a
+  // list of undefineds to map over.
+  it('says nothing when there is no station and no route', () => {
+    expect(endpointRoundelLines(null, null)).toEqual([])
+    expect(endpointRoundelLines(station(), null)).toEqual([])
   })
 })
