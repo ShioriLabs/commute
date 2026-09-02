@@ -2,17 +2,6 @@ import type { PickableStation } from './pickable-station'
 import EndpointMark from './endpoint-mark'
 import { endpointRoundelLines } from './journeys'
 
-/*
- * How deep this field stacks a stop's lines.
- *
- * Two, where the map rail takes three: the stack grows leftward out of the mark
- * column, and this field has only its card's `px-4` to grow into before the
- * wrapper's `overflow-hidden` slices the third roundel against a rounded corner
- * — which reads as a rendering fault rather than as a deck. The rail sits in a
- * card with room to spare, so it keeps the deeper stack.
- */
-const FIELD_ROUNDEL_MAX = 2
-
 interface Props {
   label: string
   station: PickableStation | null
@@ -36,7 +25,13 @@ interface Props {
  * before a station has been picked at all.
  */
 export default function StationField({ label, station, onClick }: Props) {
-  const marks = endpointRoundelLines(station, null, FIELD_ROUNDEL_MAX)
+  /*
+   * Two deep, where the map rail takes three: the stack grows leftward out of
+   * the mark column, and this field has only its card's `px-4` to grow into
+   * before the wrapper's `overflow-hidden` slices the third roundel against a
+   * rounded corner — which reads as a rendering fault rather than as a deck.
+   */
+  const marks = endpointRoundelLines(station, null, 2)
 
   return (
     <button

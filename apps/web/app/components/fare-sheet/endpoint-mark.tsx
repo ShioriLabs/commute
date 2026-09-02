@@ -29,16 +29,6 @@ import LineRoundel from '~/components/line-roundel'
 export const ROUNDEL_COL = 'w-6 shrink-0'
 
 /*
- * Taken out of the normal flow rather than laid out in it. In flow the group is
- * wider than the column, and `justify-center` then splits the overflow evenly:
- * measured, that pushed the anchor 18px right into the station name and hung
- * the last roundel 2px past the card's left edge. Absolute, with its right edge
- * pinned to the column, the stack can only grow the one direction there is room
- * for — leftward, into the padding.
- */
-const ROUNDEL_STACK_CLASS = 'absolute right-0 top-1/2 -translate-y-1/2 flex flex-row-reverse'
-
-/*
  * How far a stacked roundel sits under the one before it: 16px of a 24px mark,
  * applied per roundel rather than via `space-x`, which reverses awkwardly.
  *
@@ -89,8 +79,15 @@ export default function EndpointMark({ marks }: { marks: { line: Line, operator:
              * the one to its right. Rendered in reverse too, so display order
              * still reads left-to-right on screen. Which one is on TOP is set
              * explicitly below — source order would stack them upside down.
+             *
+             * Absolute rather than in flow, with its right edge pinned to the
+             * column: in flow the group is wider than the column and
+             * `justify-center` splits that overflow evenly, which pushed the
+             * anchor 18px right into the station name and hung the last roundel
+             * 2px past the card's left edge. Pinned, the stack can only grow the
+             * one direction there is room for — leftward, into the padding.
              */
-            <span className={ROUNDEL_STACK_CLASS}>
+            <span className="absolute right-0 top-1/2 -translate-y-1/2 flex flex-row-reverse">
               {[...marks].reverse().map((mark, index) => (
                 /*
                  * The offset rides a wrapper rather than the roundel:
