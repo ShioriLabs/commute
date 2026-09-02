@@ -26,10 +26,11 @@ describe('surfaceInset', () => {
       .toEqual({ left: 432, top: 0, bottom: 0 })
   })
 
-  it('takes nothing on desktop with no surface open', () => {
-    // The rail's pill sits in this column too, but it is one control with the
-    // map legible underneath it — not a reason to give up the band.
-    expect(surfaceInset({ ...base, isDesktop: true, surfaceOpen: false, hasPair: true }))
+  it('takes nothing on desktop with no surface open and no route drawn', () => {
+    // The rail's pill sits in this column too, but with no pair it is one
+    // control with the map legible underneath it — not a reason to give up the
+    // band. A pair is what turns the column into one; see below.
+    expect(surfaceInset({ ...base, isDesktop: true, surfaceOpen: false, hasPair: false }))
       .toEqual({ left: 0, top: 0, bottom: 0 })
   })
 
@@ -37,11 +38,35 @@ describe('surfaceInset', () => {
     expect(surfaceInset({ ...base, isDesktop: true, hasPair: true }).bottom).toBe(0)
   })
 
-  it('reserves the rail card height off the top on desktop', () => {
+  it('reserves the rail column off the top while no route is drawn', () => {
     // A fitted route centred in the whole viewport puts its northern leg under
-    // the card; the card's own height is what moves it clear.
+    // the card; the column's own height is what moves it clear. This is the
+    // half-filled form — one endpoint chosen, no pair yet.
     expect(surfaceInset({ ...base, isDesktop: true, railCardPx: 198 }))
       .toEqual({ left: 0, top: 198, bottom: 0 })
+  })
+
+  it('takes a left band for the rail column once a route is drawn', () => {
+    /*
+     * With a pair the column carries the endpoints, the criteria, the router,
+     * the fare and a trip card, for the very route being fitted. It occupies
+     * the left edge the way the pane does, so it gets the pane's answer.
+     */
+    expect(surfaceInset({ ...base, isDesktop: true, hasPair: true, railCardPx: 720 }))
+      .toEqual({ left: 432, top: 0, bottom: 0 })
+  })
+
+  it('keeps the left band while the column is short, if a pair is drawn', () => {
+    // A collapsed trip card or a refetch mid-flight is still the surface
+    // describing this route; the map must not shuffle sideways as it resizes.
+    expect(surfaceInset({ ...base, isDesktop: true, hasPair: true, railCardPx: 120 }))
+      .toEqual({ left: 432, top: 0, bottom: 0 })
+  })
+
+  it('does not stack the band twice when a pane is open behind the column', () => {
+    // They occupy the same left band, so the map clears it once.
+    expect(surfaceInset({ ...base, isDesktop: true, surfaceOpen: true, hasPair: true, railCardPx: 720 }))
+      .toEqual({ left: 432, top: 0, bottom: 0 })
   })
 
   it('reserves nothing at the top for a bare pill', () => {
@@ -57,6 +82,10 @@ describe('surfaceInset', () => {
 
   it('ignores the rail card on a phone, which has no rail', () => {
     expect(surfaceInset({ ...base, railCardPx: 198 }).top).toBe(0)
+  })
+
+  it('ignores a tall rail column on a phone too', () => {
+    expect(surfaceInset({ ...base, railCardPx: 720 })).toEqual({ left: 0, top: 0, bottom: 0 })
   })
 
   it('takes the peek height off the bottom for an open sheet on a phone', () => {

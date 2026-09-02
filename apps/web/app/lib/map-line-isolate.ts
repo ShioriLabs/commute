@@ -22,6 +22,13 @@ export interface LineGeometry {
   code: string
   name: string
   color: string
+  /*
+   * The artwork ink the line was traced against, present only where the sheet
+   * draws it in a colour its brand does not name. Nothing here reads it — the
+   * overlay and the cut-outs use the brand colour — but it ships so the
+   * shipped-data audit can judge a trace against the ink it was matched on.
+   */
+  inkColor?: string
   r: number
   segments: LineSegmentGeometry[]
   bbox: number[]

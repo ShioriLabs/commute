@@ -41,7 +41,7 @@
  * build script and the tests drive it the same way.
  */
 
-import { colourMatches } from './map-corridor-colour'
+import { colourMatches, electArtworkColour } from './map-corridor-colour'
 import {
   CORRIDOR_MATCH_MAX_DIST_WORLD,
   matchCorridorPath,
@@ -129,6 +129,15 @@ export interface TracedLine {
   segments: TracedSegment[]
   matchedPairs: number
   totalPairs: number
+  /*
+   * The artwork colour the line's own stops elected, which is what every gate
+   * below was actually run against. Carried out so the build log can print it:
+   * an election that goes wrong is otherwise invisible, and a line silently
+   * re-coloured is exactly the failure this whole mechanism exists to avoid.
+   *
+   * Equal to the brand colour whenever the election was not decisive.
+   */
+  tracedColour?: string
 }
 
 /*
@@ -207,6 +216,48 @@ function resolveJoinId(
 }
 
 /*
+ * A segment's stations as drawn points, in line order.
+ *
+ * Extracted from the trace loop because the ink election needs every segment's
+ * stops before any segment is traced, and resolving them twice would let the
+ * election and the matcher disagree about which stops the line even has.
+ *
+ * A station with no drawn point is skipped rather than faulted: points.json
+ * covers only what the schematic draws, and TJ topology-only stops are not on it.
+ */
+function resolveStops(
+  segment: TraceableSegment,
+  byStation: ReadonlyMap<string, TracePoint>
+): Array<{ id: string, x: number, y: number }> {
+  const ids = segment.stations.map(station => station.id)
+
+  /*
+   * Close the segment onto the station it branches from.
+   *
+   * A LOOP's two ends both meet the junction, so it is prepended AND appended;
+   * a CONTINUATION or RAMP only leaves from it, so it is prepended alone.
+   * Without this the Cikarang loop is drawn open, missing the very stretch
+   * that makes it a loop.
+   *
+   * The join is expressed as a bare code, so it is resolved against the ids
+   * already in hand rather than assuming an operator prefix.
+   */
+  const joinId = segment.joinsAtCode ? resolveJoinId(segment.joinsAtCode, ids, byStation) : null
+  if (joinId && ids[0] !== joinId) {
+    ids.unshift(joinId)
+    if (segment.kind === 'LOOP' && ids[ids.length - 1] !== joinId) ids.push(joinId)
+  }
+
+  const resolved: Array<{ id: string, x: number, y: number }> = []
+  for (const id of ids) {
+    const point = byStation.get(id)
+    if (!point) continue
+    resolved.push({ id, x: (point.ax + point.bx) / 2, y: (point.ay + point.by) / 2 })
+  }
+  return resolved
+}
+
+/*
  * A pair traced across TWO corridors that meet end to end.
  *
  * The extractor splits a drawn line wherever the artwork breaks it, so a station
@@ -244,11 +295,77 @@ function corridorEndpoints(corridor: PreparedCorridor): [readonly [number, numbe
   return [corridor.pts[0], corridor.pts[corridor.pts.length - 1]]
 }
 
+/*
+ * Where a corridor's END meets another corridor's BODY, rather than its end.
+ *
+ * A branch stub does not politely finish where the trunk finishes: it runs into
+ * the SIDE of the trunk somewhere along its length. Puri Beta 2's stub is the
+ * clearest case — its far end sits 0.0 units from the trunk's body, but 61.4
+ * from the trunk's nearest ENDPOINT, so an end-to-end test cannot see a join
+ * that the artwork draws as a solid connection.
+ *
+ * That mattered for three lines at once (13B, 13E and L13E all start at Puri
+ * Beta 2). Left unjoined, the pair falls back to matching the trunk alone, where
+ * the station projects 101 units away — inside the 110 gate, so it is accepted
+ * and the branch is simply not drawn.
+ *
+ * Tested at the tighter END_ON_BODY epsilon rather than JOIN_EPSILON_WORLD: an
+ * end landing ON a stroke is a much stronger claim than two ends being near each
+ * other, so it does not need the marker-disc slack that the end-to-end case does.
+ */
+const JOIN_END_ON_BODY_WORLD = 6
+
+/*
+ * How close a stop has to sit to a corridor for that corridor to be a good fit
+ * rather than merely an admissible one.
+ *
+ * Stops are drawn ON their stroke: measured across the network, rail projects at
+ * ~0-2 units and BRT at a median of 0.7. Anything past a stroke's own width is
+ * not "on the line" in any visual sense, so 40 is generous — it is a trigger for
+ * looking harder, not a rejection, and every pair it flags still keeps its direct
+ * match unless a chain genuinely fits better.
+ */
+const NEAR_STROKE_WORLD = 40
+
+/*
+ * How much better a chain has to fit before it displaces a direct match.
+ *
+ * A single drawn stroke is the safer answer, so a chain has to beat it clearly
+ * rather than narrowly. Measured: the branch cases this exists for win by 50x or
+ * more (Puri Beta 2's stub is 1.8 units from the stop against the trunk's 101),
+ * while the rail pairs that must NOT change win by only 15-20x and are wrong —
+ * KCI:A's stranded stops have a nearer chain that glues two unrelated strokes.
+ * 25 sits in the gap between the two populations.
+ */
+const CHAIN_PREFERENCE_MARGIN = 25
+
+// The worse of a pair's two projection distances onto one corridor.
+function worstEndpointDistance(
+  a: { x: number, y: number },
+  b: { x: number, y: number },
+  corridor: PreparedCorridor
+): number {
+  return Math.max(
+    projectOntoPolyline(a.x, a.y, corridor).dist,
+    projectOntoPolyline(b.x, b.y, corridor).dist
+  )
+}
+
 function joinsEndToEnd(a: PreparedCorridor, b: PreparedCorridor): [number, number] | null {
   for (const p of corridorEndpoints(a)) {
     for (const q of corridorEndpoints(b)) {
       if (Math.hypot(p[0] - q[0], p[1] - q[1]) <= JOIN_EPSILON_WORLD) return [p[0], p[1]]
     }
+  }
+  /*
+   * Then the T-junction: either corridor's end lying on the other's body. The
+   * join point is the end itself, so the two halves still meet exactly.
+   */
+  for (const p of corridorEndpoints(a)) {
+    if (projectOntoPolyline(p[0], p[1], b).dist <= JOIN_END_ON_BODY_WORLD) return [p[0], p[1]]
+  }
+  for (const q of corridorEndpoints(b)) {
+    if (projectOntoPolyline(q[0], q[1], a).dist <= JOIN_END_ON_BODY_WORLD) return [q[0], q[1]]
   }
   return null
 }
@@ -285,7 +402,9 @@ function matchAcrossJoin(
   b: { x: number, y: number },
   prepared: readonly PreparedCorridor[],
   eligible: (index: number) => boolean
-): Array<[number, number, number, number]> | null {
+): { edges: Array<[number, number, number, number]>, fit: number } | null {
+  let best: Array<[number, number, number, number]> | null = null
+  let bestFit = Infinity
   for (let i = 0; i < prepared.length; i++) {
     if (!eligible(i)) continue
     // Only a corridor that actually reaches the first stop can start the chain.
@@ -304,10 +423,29 @@ function matchAcrossJoin(
           edges.push([path[k][0], path[k][1], path[k + 1][0], path[k + 1][1]])
         }
       }
-      if (edges.length > 0) return edges
+      if (edges.length === 0) continue
+      /*
+       * Keep the chain whose halves sit CLOSEST to the two stops, rather than
+       * the first one index order happens to produce.
+       *
+       * Several chains usually qualify, because the trunk is drawn in pieces
+       * that all join each other: at Puri Beta 2, corridors 63, 64 and 66 chain
+       * among themselves while only 65 is the station's own branch stub. Taking
+       * the first found returned a trunk-to-trunk chain that begins 101 units
+       * from the stop, and the branch — the whole reason to chain here — was
+       * never drawn.
+       */
+      const fit = Math.max(
+        projectOntoPolyline(a.x, a.y, prepared[i]).dist,
+        projectOntoPolyline(b.x, b.y, prepared[j]).dist
+      )
+      if (fit < bestFit) {
+        bestFit = fit
+        best = edges
+      }
     }
   }
-  return null
+  return best ? { edges: best, fit: bestFit } : null
 }
 
 export function traceLine(
@@ -360,31 +498,38 @@ export function traceLine(
   let matchedPairs = 0
   let totalPairs = 0
 
-  for (const segment of line.segments) {
-    const ids = segment.stations.map(station => station.id)
-    /*
-     * Close the segment onto the station it branches from.
-     *
-     * A LOOP's two ends both meet the junction, so it is prepended AND appended;
-     * a CONTINUATION or RAMP only leaves from it, so it is prepended alone.
-     * Without this the Cikarang loop is drawn open, missing the very stretch
-     * that makes it a loop.
-     *
-     * The join is expressed as a bare code, so it is resolved against the ids
-     * already in hand rather than assuming an operator prefix.
-     */
-    const joinId = segment.joinsAtCode ? resolveJoinId(segment.joinsAtCode, ids, byStation) : null
-    if (joinId && ids[0] !== joinId) {
-      ids.unshift(joinId)
-      if (segment.kind === 'LOOP' && ids[ids.length - 1] !== joinId) ids.push(joinId)
-    }
+  /*
+   * Resolve every segment's stops up front, because the ink election needs the
+   * WHOLE line's stops before any segment is traced. Resolving inside the loop
+   * as well would do the same work twice and risk the two copies drifting.
+   */
+  const resolvedBySegment = line.segments.map(segment => resolveStops(segment, byStation))
 
-    const resolved: Array<{ id: string, x: number, y: number }> = []
-    for (const id of ids) {
-      const p = byStation.get(id)
-      if (!p) continue
-      resolved.push({ id, x: (p.ax + p.bx) / 2, y: (p.ay + p.by) / 2 })
-    }
+  /*
+   * Which artwork colour this line is actually drawn in, decided by its own
+   * stops rather than taken from the brand palette. See electArtworkColour: for
+   * three BRT lines the brand hex is 88-102 channels from their real ink, and in
+   * two of those the wrong stroke passes the gate while the right one does not.
+   *
+   * Mode-eligible corridors only. A rail line electing a BRT stroke's colour
+   * would defeat the one gate that never relaxes, so the width filter runs
+   * first here exactly as it does in every predicate below.
+   */
+  const modeEligible: Array<{ c: string, project: (x: number, y: number) => number }> = []
+  for (let i = 0; i < prepared.length; i++) {
+    if (!modeOk(i)) continue
+    const corridor = prepared[i]
+    modeEligible.push({
+      c: colourAt(i) ?? '',
+      project: (x, y) => projectOntoPolyline(x, y, corridor).dist
+    })
+  }
+  const allStops = resolvedBySegment.flat()
+  const tracedColour = electArtworkColour(allStops, modeEligible, lineColour)
+
+  for (let segmentIndex = 0; segmentIndex < line.segments.length; segmentIndex++) {
+    const segment = line.segments[segmentIndex]
+    const resolved = resolvedBySegment[segmentIndex]
 
     const edges: Array<[number, number, number, number]> = []
     let segMatched = 0
@@ -404,14 +549,14 @@ export function traceLine(
        * below is where sharing is allowed, because that is the scope sharing
        * actually has.
        */
-      const preferIndex = electCorridor(resolved, prepared, colourAt, lineColour, modeOk)
+      const preferIndex = electCorridor(resolved, prepared, colourAt, tracedColour, modeOk)
       for (let i = 0; i < resolved.length - 1; i++) {
         const a = resolved[i]
         const b = resolved[i + 1]
         const shared = sharedTrack ? sharedTrack(a.id, b.id) : undefined
         // Mode first in both predicates: a stroke of the wrong width is never
         // this line's, whatever its colour or who shares its track.
-        const eligible = (index: number) => modeOk(index) && colourMatches(colourAt(index), lineColour, shared)
+        const eligible = (index: number) => modeOk(index) && colourMatches(colourAt(index), tracedColour, shared)
         /*
          * Match against the eligible corridors only, rather than matching first
          * and vetting the winner.
@@ -434,9 +579,63 @@ export function traceLine(
          * the exception only applies where this line genuinely has no stroke of
          * its own — which is what shared track actually looks like.
          */
-        const strict = (index: number) => modeOk(index) && colourMatches(colourAt(index), lineColour)
-        const match = matchWithinEligible(a, b, prepared, strict, preferIndex)
-          ?? matchWithinEligible(a, b, prepared, eligible, preferIndex)
+        const strict = (index: number) => modeOk(index) && colourMatches(colourAt(index), tracedColour)
+        /*
+         * This line's OWN colour first, in both shapes — a single stroke, then a
+         * chain of two — before any of the shared-track fallback.
+         *
+         * Sharing stops is not sharing track, and the fallback cannot tell the
+         * difference: TJ:4 also calls at Halimun and Galunggung, so its purple is
+         * offered as shared track, and the purple stroke between them is nearer
+         * than TJ:6's own green. The green is there, just drawn in two pieces —
+         * corridor 50 reaches Halimun, 53 reaches Galunggung and they meet.
+         * Trying the chain only after the fallback meant TJ:6 was drawn along
+         * koridor 4's line for that whole stretch.
+         */
+        const own = matchWithinEligible(a, b, prepared, strict, preferIndex)
+        const ownChain = own ? null : matchAcrossJoin(a, b, prepared, strict)
+        if (!own && ownChain) {
+          edges.push(...ownChain.edges)
+          segMatched++
+          continue
+        }
+        const match = own ?? matchWithinEligible(a, b, prepared, eligible, preferIndex)
+        /*
+         * A match that leaves a stop far off its stroke is worse than a chain.
+         *
+         * CORRIDOR_MATCH_MAX_DIST_WORLD is deliberately loose (110) so a stop
+         * stranded by a break in the artwork still finds its corridor. That slack
+         * has a cost where a line BRANCHES: the trunk it is leaving usually still
+         * passes within the gate, so the trunk match succeeds and the branch is
+         * never drawn. Puri Beta 2 is the case — it sits 101 units from the trunk
+         * that matched and 1.8 from its own stub, so 13B, 13E and L13E all ran
+         * straight past the station they start at.
+         *
+         * So when the winner fits one end this poorly, look for a chain and
+         * prefer it when it genuinely sits closer. The direct match still stands
+         * whenever no better-fitting chain exists, which is every ordinary pair.
+         */
+        const directFit = match ? worstEndpointDistance(a, b, prepared[match.index]) : Infinity
+        if (directFit > NEAR_STROKE_WORLD) {
+          const chained = matchAcrossJoin(a, b, prepared, strict)
+            ?? matchAcrossJoin(a, b, prepared, eligible)
+          /*
+           * Only when the chain is a decisive improvement, not merely different.
+           *
+           * The direct match is the safer answer by default: it is one drawn
+           * stroke rather than two glued together. A chain earns the pair only by
+           * sitting an order of magnitude closer to the stops — at Puri Beta 2 it
+           * is 1.8 units against the trunk's 101. Requiring a wide margin is what
+           * keeps this off the rail network, where a stop stranded by a genuine
+           * artwork break (KCI:A's Sudimara and Batu Ceper) has a nearer chain
+           * available that nonetheless glues the wrong two strokes together.
+           */
+          if (chained && chained.fit * CHAIN_PREFERENCE_MARGIN < directFit) {
+            edges.push(...chained.edges)
+            segMatched++
+            continue
+          }
+        }
         if (!match) {
           // Nothing reaches both stops. Before giving up, try the one shape the
           // artwork's own breaks produce: two corridors meeting end to end.
@@ -446,7 +645,7 @@ export function traceLine(
           const chained = matchAcrossJoin(a, b, prepared, strict)
             ?? matchAcrossJoin(a, b, prepared, eligible)
           if (chained) {
-            edges.push(...chained)
+            edges.push(...chained.edges)
             segMatched++
           }
           // Otherwise leave a gap. No chord fallback: a straight line across the
@@ -473,5 +672,5 @@ export function traceLine(
     })
   }
 
-  return { segments, matchedPairs, totalPairs }
+  return { segments, matchedPairs, totalPairs, tracedColour }
 }

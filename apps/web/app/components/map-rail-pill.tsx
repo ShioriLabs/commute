@@ -1,12 +1,22 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ArrowDownIcon, MagnifyingGlassIcon, XIcon } from '@phosphor-icons/react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { ArrowDownIcon, ArrowsDownUpIcon, CaretDownIcon, MagnifyingGlassIcon, XIcon } from '@phosphor-icons/react'
 import clsx from 'clsx'
-import type { FareResult } from '@commute/schemas'
+import type { FareJourney, FareResult, Line } from '@commute/schemas'
 import { useReducedMotion } from '~/hooks/reduced-motion'
-import LineRoundel from './line-roundel'
+import EndpointMark, { ROUNDEL_COL } from './fare-sheet/endpoint-mark'
 import StationSearchList from './fare-sheet/station-search-list'
 import type { PickableStation } from './fare-sheet/pickable-station'
 import FareSummary from './fare-summary'
+import { Link } from 'react-router'
+import { ArrowSquareOutIcon } from '@phosphor-icons/react'
+import { buildFarePath } from 'utils/fare-url'
+import FareShareButton from './fare-sheet/fare-share-button'
+import CriteriaBar from './fare-sheet/criteria/criteria-bar'
+import RouterToggle from './fare-sheet/router-toggle'
+import type { FareCriteria } from 'utils/fare-criteria'
+import type { FareRouter } from 'utils/fare-router'
+import { operatorOfLineKey, useLines } from '~/hooks/use-lines'
+import { boardingLineKeys, endpointRoundelLines } from './fare-sheet/journeys'
 
 interface MapRailPillProps {
   /*
@@ -21,6 +31,14 @@ interface MapRailPillProps {
   // The selected journey's total, not necessarily the response's — see
   // FareSummary.
   fare: Pick<FareResult, 'totalFare' | 'transferCount'> | null
+  /*
+   * The journey the card is about, for signing each end with the line actually
+   * ridden there rather than whichever line the stop happens to list first.
+   *
+   * The journey rather than two resolved lines, because the card is the thing
+   * that knows a half-filled pair has no journey at all — see boardingLineKeys.
+   */
+  journey: FareJourney | null
   hasError: boolean
   isLoading: boolean
   /*
@@ -30,22 +48,54 @@ interface MapRailPillProps {
    * one question, so they cannot be two pieces of state.
    */
   picking: 'from' | 'to' | null
+  /*
+   * Reverse the drawn pair, and whether there is a pair to reverse.
+   *
+   * Gated on the RESOLVED stations rather than the fetched ids: handleSwap
+   * commits the two resolved endpoints, and in the map's controlled mode that
+   * write goes through even when one is null — so swapping a pair whose stop is
+   * missing from the search index would silently drop that end. The card cannot
+   * name such a stop either, so an inert control is the honest answer.
+   */
+  onSwap: () => void
+  canSwap: boolean
   onPick: (field: 'from' | 'to') => void
   onCancelPick: () => void
   // The searchable set the inline list ranks. Empty until the index arrives.
   stations: PickableStation[]
   onSelectStation: (field: 'from' | 'to', station: PickableStation) => void
-  onOpenFare: () => void
   onClear: () => void
   /*
-   * The head's current height, reported as it changes.
+   * Reopens the trip card docked below, and whether it is currently collapsed.
    *
-   * The map takes this off the top when fitting a route: a fit centred in the
-   * whole viewport puts the route's northern leg under the card. Reported
-   * rather than derived because the height depends on what the card is showing
-   * — a pill, two station rows, or a search list.
+   * The control lives here rather than in the trip card because a collapsed
+   * card has nowhere to put it: this row is the only thing still on screen.
+   * Undefined on a build with no trip card, which renders nothing.
    */
-  onHeightChange?: (px: number) => void
+  tripCollapsed?: boolean
+  onExpandTrip?: () => void
+  /*
+   * The query's own settings, shown here rather than behind the fare pane.
+   *
+   * They belong beside the route they price: changing a payment method used to
+   * mean opening a pane over the map, changing it, and closing the pane to see
+   * the corridor redraw. Both stay visible before a pair resolves, because they
+   * are standing settings and not a property of an answer.
+   */
+  criteria: FareCriteria
+  onCriteriaChange: (criteria: FareCriteria) => void
+  router: FareRouter
+  onRouterChange: (router: FareRouter) => void
+  /*
+   * The fetched pair's ids, for sharing and for the /fare link.
+   *
+   * The ids rather than the resolved stations: the search index omits TJ
+   * topology-only halte, so a pair that prices perfectly well can leave
+   * `endpoints` null. Same reasoning map-fare-sheet.tsx used when it built the
+   * fare path from the query rather than from what the rows display.
+   */
+  pairFromId: string | null | undefined
+  pairToId: string | null | undefined
 }
 
 // The collapsed head's own height. The margins around it live in the rail's
@@ -64,11 +114,6 @@ const PILL_HEIGHT_PX = 52
  */
 const SURFACE_CLASS = 'rounded-2xl bg-white/90 backdrop-blur shadow-lg'
 const SEARCH_SURFACE_CLASS = 'rounded-2xl bg-white shadow-lg'
-
-// The mark column both stops and the arrow between them share. Fixed rather
-// than intrinsic so the two names start on the same x whether a row shows a
-// roundel or the placeholder dot, and so the arrow can centre on it.
-const ROUNDEL_COL = 'w-6 shrink-0'
 
 /*
  * One endpoint row's height, shared by both of its forms.
@@ -91,12 +136,18 @@ const ROW_H = 'h-8'
  * a second vocabulary. A true M07-style station roundel needs the API to send
  * the number first.
  *
- * An interchange carries several lines; the first in display order stands for
- * the stop, because the row names one station and a row of roundels would
- * compete with the name for the width.
+ * What an interchange shows depends on whether a route exists. Routed, the row
+ * signs the one line the journey rides — which is a property of the JOURNEY,
+ * not of the stop: Manggarai serves Lin Soekarno-Hatta, Lin Bogor and Lin
+ * Cikarang, and signing it from the station's own display order put an airport
+ * roundel over a Cikarang ride. Unrouted there is no such line to name, so the
+ * row stacks the stop's own instead, because promoting whichever sorts first
+ * reads as a claim about a route nobody has chosen yet. See
+ * endpointRoundelLines.
  */
 function EndpointRow({
   station,
+  line: ridden,
   placeholder,
   emphasis = false,
   armed,
@@ -108,6 +159,16 @@ function EndpointRow({
   label
 }: {
   station: PickableStation | null
+  /*
+   * The line this end is boarded on or alighted from, and the operator running
+   * it, when a journey has said. Null before one has, which stacks the stop's
+   * own lines instead.
+   *
+   * The operator travels with the line because a journey can leave the stop's
+   * own operator behind — a KCI entry whose ride is a TJ corridor would
+   * otherwise draw a filled corridor roundel in the ringed rail style.
+   */
+  line: { line: Line, operator: string } | null
   placeholder: string
   emphasis?: boolean
   // This field is the one being filled: it becomes the text input, and the map
@@ -122,7 +183,7 @@ function EndpointRow({
   onCancel: () => void
   label: string
 }) {
-  const line = station?.sortedLines[0]
+  const marks = endpointRoundelLines(station, ridden)
   const inputRef = useRef<HTMLInputElement>(null)
   // Focus on arming, not on mount: the row is mounted the whole time, and it is
   // becoming the input that should take the caret.
@@ -140,18 +201,7 @@ function EndpointRow({
   if (armed) {
     return (
       <li className={clsx('flex items-center gap-2 min-w-0', ROW_H)}>
-        <span className={clsx(ROUNDEL_COL, 'flex justify-center')}>
-          {line
-            ? (
-                <LineRoundel
-                  size="SM"
-                  operator={station.operator}
-                  code={line.lineCode}
-                  color={line.colorCode as `#${string}`}
-                />
-              )
-            : <span className="w-2 h-2 rounded-full bg-slate-300" aria-hidden />}
-        </span>
+        <EndpointMark marks={marks} />
         <input
           ref={inputRef}
           type="text"
@@ -188,23 +238,7 @@ function EndpointRow({
           'transition-colors duration-150 ease hover:bg-slate-50'
         )}
       >
-        <span className={clsx(ROUNDEL_COL, 'flex justify-center')}>
-          {line
-            ? (
-                <LineRoundel
-                  size="SM"
-                  // The station's operator, not the line's: the resolved line
-                  // carries `mode` (how it runs), while the roundel's filled-vs-
-                  // ringed style keys off who runs it.
-                  operator={station.operator}
-                  code={line.lineCode}
-                  color={line.colorCode as `#${string}`}
-                />
-              )
-            // No lines resolved yet: a neutral dot holds the column so the name
-            // does not shift left when the roundel arrives.
-            : <span className="w-2 h-2 rounded-full bg-slate-300" aria-hidden />}
-        </span>
+        <EndpointMark marks={marks} />
         <span className={clsx(
           'text-sm truncate',
           emphasis ? 'font-semibold text-slate-800' : 'text-slate-700',
@@ -235,18 +269,49 @@ export default function MapRailPill({
   endpoints,
   hasPair,
   fare,
+  journey,
   hasError,
   isLoading,
   picking,
+  onSwap,
+  canSwap,
   onPick,
   onCancelPick,
   stations,
   onSelectStation,
-  onOpenFare,
   onClear,
-  onHeightChange
+  tripCollapsed,
+  onExpandTrip,
+  criteria,
+  onCriteriaChange,
+  router,
+  onRouterChange,
+  pairFromId,
+  pairToId
 }: MapRailPillProps) {
   const reduced = useReducedMotion()
+  /*
+   * Each end's roundel, resolved from the journey rather than from the stop.
+   *
+   * The dictionary lookup happens here, once, rather than in each row: both
+   * rows read the same `/operators` cache, and the rows are the wrong place to
+   * learn that a line key is not a line.
+   */
+  const { line: lookupLine } = useLines()
+  const boarding = boardingLineKeys(journey)
+  /*
+   * A key resolves to a roundel only when the dictionary knows it. Mid-deploy,
+   * or against a service-worker cache holding a line the answer predates, the
+   * lookup misses — and a key with no colour is not something to draw, so the
+   * row falls back to the stop's own line rather than a blank circle.
+   */
+  const riddenOf = useCallback((key: string | null) => {
+    const line = lookupLine(key ?? undefined)
+    const operator = operatorOfLineKey(key)
+    return line && operator ? { line, operator } : null
+  }, [lookupLine])
+  const riddenFrom = riddenOf(boarding.from)
+  const riddenTo = riddenOf(boarding.to)
   /*
    * The card is open while there is anything to show: a complete pair, one end
    * of one, or a field being filled.
@@ -279,6 +344,25 @@ export default function MapRailPill({
   // would open the second field already filtered by the first one's answer.
   useEffect(() => setQuery(''), [picking])
 
+  const farePath = buildFarePath(pairFromId, pairToId, criteria)
+
+  /*
+   * Replay the body's fade when it swaps between the search list and the fare
+   * row.
+   *
+   * By hand rather than with a `key`: both arms render into the same slot, so
+   * React reconciles them as one element and a CSS animation on it never
+   * restarts. Rewinding the running animation is what does it. Empty under
+   * reduced motion, where app.css sets `animation: none`.
+   */
+  const bodyFadeRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    for (const animation of bodyFadeRef.current?.getAnimations() ?? []) {
+      animation.currentTime = 0
+      animation.play()
+    }
+  }, [picking])
+
   const bodyRef = useRef<HTMLDivElement>(null)
   const [bodyHeight, setBodyHeight] = useState(0)
   useLayoutEffect(() => {
@@ -291,33 +375,8 @@ export default function MapRailPill({
     return () => ro.disconnect()
   }, [])
 
-  /*
-   * Report what the card covers, which is the OUTER box — the body's height
-   * plus the head above it, and zero while the body is collapsed.
-   *
-   * A ref for the callback so a parent passing an inline arrow does not
-   * re-subscribe the observer on every render.
-   */
-  const cardRef = useRef<HTMLDivElement>(null)
-  const onHeightChangeRef = useRef(onHeightChange)
-  useEffect(() => {
-    onHeightChangeRef.current = onHeightChange
-  })
-  useLayoutEffect(() => {
-    const el = cardRef.current
-    if (!el || typeof ResizeObserver === 'undefined') return
-    const report = () => onHeightChangeRef.current?.(Math.round(el.getBoundingClientRect().height))
-    report()
-    const ro = new ResizeObserver(report)
-    ro.observe(el)
-    return () => {
-      ro.disconnect()
-      // The card is gone; stop reserving screen for it.
-      onHeightChangeRef.current?.(0)
-    }
-  }, [])
   return (
-    <div ref={cardRef} className={clsx('w-full overflow-hidden', picking ? SEARCH_SURFACE_CLASS : SURFACE_CLASS)}>
+    <div className={clsx('w-full overflow-hidden', picking ? SEARCH_SURFACE_CLASS : SURFACE_CLASS)}>
       {/*
         * The idle row keeps its height in both states and turns into the card's
         * header, so nothing jumps as the rows below it open.
@@ -367,7 +426,7 @@ export default function MapRailPill({
               'absolute inset-0 rounded-full flex items-center justify-center text-slate-500',
               'transition-[opacity,transform,background-color] duration-150 ease-out',
               picking
-                ? 'opacity-100 hover:bg-slate-100 cursor-pointer active:scale-95'
+                ? 'opacity-100 hover:bg-slate-100 cursor-pointer active:scale-[0.97]'
                 : 'opacity-0 pointer-events-none scale-90'
             )}
           >
@@ -387,18 +446,24 @@ export default function MapRailPill({
         <button
           type="button"
           /*
-           * Idle, this opens the form on the origin — the first thing a rider
-           * has to answer. Once a pair is drawn it opens the fare pane instead,
-           * where the criteria, the alternatives and the share live; the rows
-           * below are how the pair itself gets edited from here.
+           * Arms the origin, drawn pair or not.
+           *
+           * It used to open the fare pane once a pair existed, under the label
+           * "Ubah rute" — which was never true: the rows directly below are how
+           * a route gets changed. Now that the criteria, the router, the
+           * options, the share and the /fare link all live in this column, the
+           * pane has nothing of its own left to show on desktop, so there is
+           * nothing for this to open. Starting a new search is what a rider
+           * reaching for the card's title actually wants, and it is what the
+           * magnifier beside it has always promised.
            *
            * Inert while picking: the search below is already the answer to
            * "what do you want to change", and re-arming the origin from here
            * would yank a rider mid-way through choosing a destination.
            */
-          onClick={() => (hasPair ? onOpenFare() : onPick('from'))}
+          onClick={() => onPick('from')}
           disabled={picking !== null}
-          aria-label={hasPair ? 'Buka rincian tarif' : 'Cek rute dan tarif'}
+          aria-label="Cari rute lain"
           className={clsx(
             'flex-1 min-w-0 h-full flex items-center text-left',
             picking
@@ -407,7 +472,7 @@ export default function MapRailPill({
           )}
         >
           <span className="font-bold text-base text-slate-800 truncate">
-            {hasPair ? 'Ubah rute' : 'Cek rute dan tarif'}
+            {hasPair ? 'Cari rute lain' : 'Cek rute dan tarif'}
           </span>
         </button>
       </div>
@@ -454,41 +519,80 @@ export default function MapRailPill({
               tighter top padding the first one's ring was shaved by the card's
               own overflow-hidden. */}
           <div className="px-4 pb-3 pt-3 border-t border-slate-100">
-            <ol className="flex flex-col py-1">
-              <EndpointRow
-                station={endpoints.from}
-                placeholder="Dari mana?"
-                armed={picking === 'from'}
-                enabled={open}
-                onClick={() => onPick('from')}
-                query={query}
-                onQueryChange={setQuery}
-                onCancel={onCancelPick}
-                label="Cari stasiun keberangkatan"
-              />
-              {/*
+            {/*
+              * The rows and the control that reverses them, in one positioned
+              * box. The button sits at the right edge straddling both rows —
+              * the same place the fare panel puts its own swap, so the two
+              * surfaces name the action the same way — rather than on the
+              * connector line, where an up-down arrow described a round trip
+              * instead of an action.
+              */}
+            <div className="relative">
+              <ol className="flex flex-col py-1 pr-9">
+                <EndpointRow
+                  station={endpoints.from}
+                  line={riddenFrom}
+                  placeholder="Dari mana?"
+                  armed={picking === 'from'}
+                  enabled={open}
+                  onClick={() => onPick('from')}
+                  query={query}
+                  onQueryChange={setQuery}
+                  onCancel={onCancelPick}
+                  label="Cari stasiun keberangkatan"
+                />
+                {/*
                 * Centred on the roundel column rather than nudged with padding:
                 * the arrow marks the line between the two stops, so it has to
                 * sit under the mark it joins whatever width that mark is.
+                *
+                * It stays a plain one-way arrow, and swapping lives out at the
+                * card's edge instead. An up-and-down glyph on the line BETWEEN
+                * the two stops reads as the trip itself being a round trip —
+                * this row's job is to say which way the journey runs.
                 */}
-              <li aria-hidden className="flex items-center h-3">
-                <span className={clsx(ROUNDEL_COL, 'flex justify-center')}>
-                  <ArrowDownIcon weight="bold" className="w-3 h-3 text-slate-300" />
-                </span>
-              </li>
-              <EndpointRow
-                station={endpoints.to}
-                placeholder="Mau ke mana?"
-                emphasis
-                armed={picking === 'to'}
-                enabled={open}
-                onClick={() => onPick('to')}
-                query={query}
-                onQueryChange={setQuery}
-                onCancel={onCancelPick}
-                label="Cari stasiun tujuan"
-              />
-            </ol>
+                <li aria-hidden className="flex items-center h-3">
+                  <span className={clsx(ROUNDEL_COL, 'flex justify-center')}>
+                    <ArrowDownIcon weight="bold" className="w-3 h-3 text-slate-300" />
+                  </span>
+                </li>
+                <EndpointRow
+                  station={endpoints.to}
+                  line={riddenTo}
+                  placeholder="Mau ke mana?"
+                  emphasis
+                  armed={picking === 'to'}
+                  enabled={open}
+                  onClick={() => onPick('to')}
+                  query={query}
+                  onQueryChange={setQuery}
+                  onCancel={onCancelPick}
+                  label="Cari stasiun tujuan"
+                />
+              </ol>
+              <button
+                type="button"
+                onClick={onSwap}
+                aria-label="Tukar stasiun asal dan tujuan"
+                /*
+                 * Inert rather than absent while there is nothing to swap. A
+                 * control that appeared as the pair completed would pop in at
+                 * exactly the moment the rider's eye is on the fare landing.
+                 */
+                disabled={!canSwap}
+                tabIndex={open && canSwap ? 0 : -1}
+                className={clsx(
+                  'absolute right-0 top-1/2 -translate-y-1/2',
+                  'w-8 h-8 rounded-full flex items-center justify-center',
+                  'transition-[background-color,transform,color] duration-150 ease',
+                  canSwap
+                    ? 'text-slate-500 cursor-pointer hover:bg-slate-100 active:scale-90'
+                    : 'text-slate-300 cursor-default'
+                )}
+              >
+                <ArrowsDownUpIcon weight="bold" className="w-4 h-4" />
+              </button>
+            </div>
 
             {/*
               * Search replaces the fare line rather than stacking under it: a
@@ -496,43 +600,126 @@ export default function MapRailPill({
               * a question nobody asked, and the column has to stay short enough
               * not to bury the pane docked below.
               */}
-            {picking
-              ? (
-                  <div className="-mx-4 border-t border-slate-100">
-                    <StationSearchList
-                      /*
-                       * NOT keyed on `picking`. Remounting per field reset the
-                       * staged mount, so switching fields replayed the 12-row
-                       * cap and the list visibly snapped to full height. The
-                       * list resets its own scroll on the field instead.
-                       */
-                      field={picking}
-                      stations={stations}
-                      query={query}
-                      current={picking === 'from' ? endpoints.from : endpoints.to}
-                      onSelect={station => onSelectStation(picking, station)}
-                    />
-                  </div>
-                )
-              : (
-                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
-                    <div className="flex items-center min-w-0">
-                      <FareSummary fare={fare} hasError={hasError} isLoading={isLoading} />
+            {/*
+              * Faded on every swap. Same reasoning as the trip card below: this
+              * body sits inside an animating height, and without the fade the
+              * box glided while a whole search list appeared instantly inside
+              * it. Restarted by hand for the same reason — see bodyFadeRef.
+              */}
+            <div ref={bodyFadeRef} className="content-fade">
+              {picking
+                ? (
+                    <div className="-mx-4 border-t border-slate-100">
+                      <StationSearchList
+                        /*
+                         * NOT keyed on `picking`. Remounting per field reset the
+                         * staged mount, so switching fields replayed the 12-row
+                         * cap and the list visibly snapped to full height. The
+                         * list resets its own scroll on the field instead.
+                         */
+                        field={picking}
+                        stations={stations}
+                        query={query}
+                        current={picking === 'from' ? endpoints.from : endpoints.to}
+                        onSelect={station => onSelectStation(picking, station)}
+                      />
                     </div>
-                    <button
-                      type="button"
-                      onClick={onClear}
-                      aria-label="Hapus rute dari peta"
-                      // Untabbable while collapsed: the rows are still in the
-                      // DOM so they can animate, and a hidden control in the tab
-                      // order is a focus trap the rider cannot see.
-                      tabIndex={hasPair ? 0 : -1}
-                      className="rounded-full flex items-center justify-center w-9 h-9 -mr-1.5 text-slate-700 cursor-pointer shrink-0 transition-[background-color,transform] duration-150 ease hover:bg-slate-100 active:scale-95"
-                    >
-                      <XIcon weight="bold" className="w-4 h-4" />
-                    </button>
-                  </div>
-                )}
+                  )
+                : (
+                    <>
+                      {/*
+                      * The query's settings, above the answer they produce.
+                      *
+                      * `wrap` is not optional here: unwrapped, CriteriaBar bleeds
+                      * -mx-8 px-8 for a scrolling rail and assumes 8-unit parent
+                      * padding, which this px-4 card does not give it. Wrapped it
+                      * is two chips on one line, which fits the column.
+                      */}
+                      <CriteriaBar criteria={criteria} onChange={onCriteriaChange} wrap />
+                      <RouterToggle router={router} onChange={onRouterChange} />
+
+                      {/*
+                        * The answer, and the two things a rider does with it.
+                        *
+                        * Last in the card rather than first: the rows above ask
+                        * where you are going and how you are paying, and this is
+                        * what they add up to — so it sits at the foot of the card,
+                        * directly above the trip card that breaks it down. That
+                        * also puts the clear and the expand at the column's waist,
+                        * where the two cards meet, instead of stranding them
+                        * mid-way up with settings below them.
+                        */}
+                      <div className="mt-3 flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                        <div className="flex items-center min-w-0">
+                          <FareSummary fare={fare} hasError={hasError} isLoading={isLoading} />
+                        </div>
+                        <div className="flex items-center shrink-0 -mr-1.5">
+                          {/*
+                            * Renders nothing without a pair, so it costs no width
+                            * on the empty card — see FareShareButton.
+                            */}
+                          <span className="flex items-center justify-center w-9 h-9 text-slate-700 [&>button]:w-9 [&>button]:h-9 [&_svg]:w-4 [&_svg]:h-4">
+                            <FareShareButton fromId={pairFromId} toId={pairToId} criteria={criteria} />
+                          </span>
+                          {/*
+                            * Brings the trip card back, and is here only while it
+                            * is away — expanded, that card's own chevron is the
+                            * control, and two carets pointing at each other is a
+                            * toggle the rider has to decode rather than an
+                            * affordance.
+                            */}
+                          {tripCollapsed && onExpandTrip
+                            ? (
+                                <button
+                                  type="button"
+                                  onClick={onExpandTrip}
+                                  aria-label="Tampilkan panel rute"
+                                  aria-expanded={false}
+                                  tabIndex={hasPair ? 0 : -1}
+                                  className="rounded-full flex items-center justify-center w-9 h-9 text-slate-700 cursor-pointer shrink-0 transition-[background-color,transform] duration-150 ease hover:bg-slate-100 active:scale-[0.97]"
+                                >
+                                  <CaretDownIcon weight="bold" className="w-4 h-4" />
+                                </button>
+                              )
+                            : null}
+                          <button
+                            type="button"
+                            onClick={onClear}
+                            aria-label="Hapus rute dari peta"
+                            // Untabbable while collapsed: the rows are still in the
+                            // DOM so they can animate, and a hidden control in the
+                            // tab order is a focus trap the rider cannot see.
+                            tabIndex={hasPair ? 0 : -1}
+                            className="rounded-full flex items-center justify-center w-9 h-9 text-slate-700 cursor-pointer shrink-0 transition-[background-color,transform] duration-150 ease hover:bg-slate-100 active:scale-[0.97]"
+                          >
+                            <XIcon weight="bold" className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/*
+                        * Out to the fare page proper.
+                        *
+                        * /fare owns the canonical URL — it is the one that is
+                        * SEO-decorated, OG-imaged and sitemapped — so this card
+                        * has to offer a way there rather than being a dead end.
+                        * It was the last thing the desktop pane still carried
+                        * alone; with it here the pane has nothing of its own.
+                        */}
+                      {farePath
+                        ? (
+                            <Link
+                              to={farePath}
+                              className="mt-2 flex items-center justify-center gap-1.5 text-xs font-semibold text-slate-500 cursor-pointer transition-colors duration-150 ease hover:text-slate-700"
+                            >
+                              Buka halaman tarif
+                              <ArrowSquareOutIcon weight="bold" className="w-3.5 h-3.5" />
+                            </Link>
+                          )
+                        : null}
+                    </>
+                  )}
+            </div>
           </div>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { FareJourney, FareResult, TripResult } from '@commute/schemas'
+import type { FareJourney, FareResult, FareResultRideLeg, FareResultTransferLeg, Line, TripResult } from '@commute/schemas'
 import { JOURNEY_LABELS, JOURNEY_LABEL_DESCRIPTIONS } from './journey-labels'
-import { journeysOf, sortJourneyLabels, walkDistanceOf } from './journeys'
+import { boardingLineKeys, ENDPOINT_ROUNDEL_MAX, endpointRoundelLines, journeysOf, sortJourneyLabels, walkDistanceOf } from './journeys'
 
 const legacy: FareResult = {
   from: { id: 'KCI-SUD', name: 'Sudirman' },
@@ -176,5 +176,146 @@ describe('journey label copy', () => {
     for (const [key, text] of Object.entries({ ...JOURNEY_LABELS, ...JOURNEY_LABEL_DESCRIPTIONS })) {
       expect(text, `${key}: "${text}"`).not.toMatch(forbidden)
     }
+  })
+})
+
+describe('boardingLineKeys', () => {
+  const ride = (line: string, over: Partial<FareResultRideLeg> = {}): FareResultRideLeg => ({
+    type: 'RIDE',
+    line,
+    operator: line.split(':')[0] as FareResultRideLeg['operator'],
+    from: { id: 'A', name: 'A' },
+    to: { id: 'B', name: 'B' },
+    stationCount: 2,
+    stops: [],
+    headsign: null,
+    distanceM: 1000,
+    ...over
+  })
+  const walk = (): FareResultTransferLeg => ({
+    type: 'TRANSFER',
+    from: { id: 'B', name: 'B' },
+    to: { id: 'C', name: 'C' },
+    distanceM: 120
+  })
+
+  it('names the line boarded first and the line alighted from last', () => {
+    const keys = boardingLineKeys(journey({ legs: [ride('KCI:C'), walk(), ride('MRTJ:M')] }))
+    expect(keys).toEqual({ from: 'KCI:C', to: 'MRTJ:M' })
+  })
+
+  /*
+   * The regression this exists for. Manggarai serves KCI:A, KCI:B and KCI:C,
+   * and display order leads with KCI:A — so signing the origin from the station
+   * rather than the journey showed a Soekarno-Hatta roundel over a Cikarang
+   * ride. The whole point is that this reads the leg.
+   */
+  it('ignores the other lines serving the boarding station', () => {
+    expect(boardingLineKeys(journey({ legs: [ride('KCI:C')] })).from).toBe('KCI:C')
+  })
+
+  it('gives both ends the same line on a single-ride journey', () => {
+    expect(boardingLineKeys(journey({ legs: [ride('KCI:B')] }))).toEqual({ from: 'KCI:B', to: 'KCI:B' })
+  })
+
+  // A leading or trailing walk is not a boarding; the ride on either side of it
+  // is what the rider gets on.
+  it('looks past walking legs at both ends', () => {
+    const keys = boardingLineKeys(journey({ legs: [walk(), ride('TJ:1'), walk()] }))
+    expect(keys).toEqual({ from: 'TJ:1', to: 'TJ:1' })
+  })
+
+  // Null, not a guess: the caller falls back to the station's own lines, which
+  // is the best it can say before an answer arrives.
+  it('says nothing when there is no journey or no ride in it', () => {
+    expect(boardingLineKeys(null)).toEqual({ from: null, to: null })
+    expect(boardingLineKeys(journey({ legs: [walk()] }))).toEqual({ from: null, to: null })
+  })
+})
+
+describe('endpointRoundelLines', () => {
+  const line = (lineCode: string): Line => ({ name: `Lin ${lineCode}`, lineCode, colorCode: '#25B8EB' })
+  const station = (...codes: string[]) => ({ operator: 'KCI' as const, sortedLines: codes.map(line) })
+
+  /*
+   * Routed: the journey has named the line, so the stack collapses to it. The
+   * other lines serving the stop are not part of this trip, and saying which
+   * one is ridden is the whole point of the roundel — see boardingLineKeys.
+   */
+  it('shows the ridden line alone once a route exists', () => {
+    const ridden = { line: line('C'), operator: 'KCI' }
+    expect(endpointRoundelLines(station('A', 'B', 'C'), ridden)).toEqual([ridden])
+  })
+
+  // Unrouted: nothing has picked a line yet, so the row says what the stop is
+  // rather than implying one of its lines was chosen.
+  it('stacks the stop\'s own lines when nothing is routed', () => {
+    const stacked = endpointRoundelLines(station('A', 'B'), null)
+    expect(stacked.map(l => l.line.lineCode)).toEqual(['A', 'B'])
+  })
+
+  /*
+   * Juanda serves 11. Past three the discs behind the anchor stop resolving as
+   * separate marks, so a fourth adds width without adding a fact — see
+   * ENDPOINT_ROUNDEL_MAX.
+   */
+  it('caps the stack at three', () => {
+    expect(endpointRoundelLines(station('1', '2', '3', '4', '5'), null)).toHaveLength(3)
+  })
+
+  it('keeps display order when it stacks', () => {
+    const stacked = endpointRoundelLines(station('7T', '10', '13'), null)
+    expect(stacked.map(l => l.line.lineCode)).toEqual(['7T', '10', '13'])
+  })
+
+  // Every roundel in a stack is the stop's own, so they all take its operator.
+  it('signs a stacked roundel with the stop\'s operator', () => {
+    expect(endpointRoundelLines(station('A'), null)[0]!.operator).toBe('KCI')
+  })
+
+  // The row draws its placeholder dot off an empty stack; it must never get a
+  // list of undefineds to map over.
+  it('says nothing when there is no station and no route', () => {
+    expect(endpointRoundelLines(null, null)).toEqual([])
+    expect(endpointRoundelLines(station(), null)).toEqual([])
+  })
+})
+
+describe('endpointRoundelLines cap', () => {
+  const line = (lineCode: string): Line => ({ name: `Lin ${lineCode}`, lineCode, colorCode: '#25B8EB' })
+  const station = (...codes: string[]) => ({ operator: 'KCI' as const, sortedLines: codes.map(line) })
+
+  /*
+   * The fare panel's fields have less room to grow into than the map rail's
+   * rows, so they ask for a shallower stack. The default stays the rail's.
+   */
+  it('takes a caller-supplied cap', () => {
+    expect(endpointRoundelLines(station('1', '2', '3', '4'), null, 2)).toHaveLength(2)
+    expect(endpointRoundelLines(station('1', '2', '3', '4'), null)).toHaveLength(ENDPOINT_ROUNDEL_MAX)
+  })
+
+  /*
+   * The ANCHOR is the last entry — the one drawn on top, and the only one whose
+   * code can be read. Capping off the front keeps it, so a stop signs itself the
+   * same way in the panel as on the map rail; capping off the back would promote
+   * a different line to the readable slot and make the two surfaces disagree
+   * about the same station.
+   */
+  it('keeps the anchor when it caps', () => {
+    const capped = endpointRoundelLines(station('7T', '10', '13'), null, 2)
+    expect(capped.map(l => l.line.lineCode)).toEqual(['10', '13'])
+  })
+
+  it('anchors on the same line whatever the cap', () => {
+    const anchorOf = (max?: number) =>
+      endpointRoundelLines(station('A', 'B', 'C'), null, max).at(-1)!.line.lineCode
+    expect(anchorOf(2)).toBe(anchorOf())
+  })
+
+  // A routed end is one line whatever the cap says: the cap is about how many of
+  // a STOP's lines to show, and a ride has already answered that with one.
+  it('does not apply the cap to a ridden line', () => {
+    const ridden = { line: line('C'), operator: 'KCI' }
+    expect(endpointRoundelLines(station('A', 'B', 'C'), ridden, 2)).toEqual([ridden])
   })
 })

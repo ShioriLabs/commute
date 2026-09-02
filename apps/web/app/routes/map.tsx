@@ -52,6 +52,7 @@ import { MAX_SCALE, clampTransform, minScaleFor } from '../lib/map-clamp-transfo
 import { useReducedMotion } from '~/hooks/reduced-motion'
 import MapFareChip from '../components/map-fare-chip'
 import MapRailPill from '../components/map-rail-pill'
+import MapTripCard from '../components/map-trip-card'
 import Wordmark from '../components/wordmark'
 import MapFareSheet from '../components/map-fare-sheet'
 import { useFareQuery } from '../components/fare-sheet/use-fare-query'
@@ -608,6 +609,18 @@ export default function MapPage() {
   useEffect(() => setSelectedJourney(0), [fareResponse])
 
   /*
+   * Whether the rider has put the trip card away.
+   *
+   * Reset alongside the journey selection, and for the same reason: a collapse
+   * is an opinion about the route currently drawn, so carrying it into the next
+   * one would answer a question this rider never asked — they would draw a
+   * route and be shown no legs, with the control that brings them back sitting
+   * in a card they have no reason to be looking at.
+   */
+  const [tripCollapsed, setTripCollapsed] = useState(false)
+  useEffect(() => setTripCollapsed(false), [routePair])
+
+  /*
    * The two stops the rail card names, each with the lines serving it.
    *
    * From the fare query rather than the points manifest: points.json is pure
@@ -708,6 +721,22 @@ export default function MapPage() {
     }
     return ordered.sort()
   }, [debugTrace, corridorsManifest])
+
+  /*
+   * Whether the panel's two chip groups are currently hiding everything, which
+   * is what makes the button read "Show all" rather than "Hide all".
+   *
+   * Derived rather than tracked as its own flag: the individual chips write to
+   * the same two sets, so a separate boolean would drift the moment one chip is
+   * clicked back on. Empty groups count as hidden so the label cannot claim
+   * there is something left to hide when there is not.
+   */
+  const traceAllHidden = useMemo(() => {
+    const lines = linesManifest?.lines ?? []
+    const linesHidden = lines.every(line => traceHiddenLines.has(line.key))
+    const coloursHidden = traceTjColors.every(hex => traceHiddenTjColors.has(hex))
+    return linesHidden && coloursHidden
+  }, [linesManifest, traceTjColors, traceHiddenLines, traceHiddenTjColors])
 
   const viewportRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -1456,13 +1485,35 @@ export default function MapPage() {
    * sheet is there.
    */
   /*
-   * What the desktop rail's card currently covers, reported by the card itself.
+   * What the desktop rail's column currently covers: the route card, the trip
+   * card docked under it, and the gap between them.
    *
-   * Only the grown card matters: a fitted route reads fine under a bare pill,
-   * so the card reports its full height and surfaceInset decides what is worth
+   * Measured on the wrapper rather than reported by each card, because what the
+   * map has to fit a route clear of is the whole column — summing two reported
+   * heights would also have to know the gap, which only the layout knows.
+   *
+   * Only a grown column matters: a fitted route reads fine under a bare pill,
+   * so the full height is reported and surfaceInset decides what is worth
    * reserving.
    */
+  const railColumnRef = useRef<HTMLDivElement>(null)
   const [railCardPx, setRailCardPx] = useState(0)
+  useLayoutEffect(() => {
+    const el = railColumnRef.current
+    if (!el || typeof ResizeObserver === 'undefined') {
+      // No column mounted (phones) — nothing is covered.
+      setRailCardPx(0)
+      return
+    }
+    const measure = () => setRailCardPx(Math.round(el.getBoundingClientRect().height))
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => {
+      ro.disconnect()
+      setRailCardPx(0)
+    }
+  }, [isDesktop])
   const surfaceInsetRef = useRef(surfaceInset({
     isDesktop: false,
     surfaceOpen: false,
@@ -2781,60 +2832,108 @@ export default function MapPage() {
         */}
       {isDesktop && (
         <div
-          className="map-chrome-enter absolute top-3 left-4 w-[25rem] z-map-chrome"
+          ref={railColumnRef}
+          className="map-chrome-enter absolute top-3 left-4 w-[25rem] z-map-chrome flex flex-col"
           style={{ animationDelay: staggerDelay(0, MAP_CHROME_STAGGER) }}
         >
-          <MapRailPill
-            endpoints={railEndpoints}
-            hasPair={!!(routePair.fromId && routePair.toId)}
-            // The selected journey, so the card agrees with the corridor drawn
-            // behind it rather than with whichever route the API listed first.
-            fare={activeJourney}
-            hasError={!!fareError}
-            isLoading={fareLoading}
-            picking={pickingEndpoint}
-            /*
-             * Arming a field arms the MAP with it: the inline list and a tap on
-             * a station are two ways to answer the same question, so opening one
-             * must not leave the other pointing somewhere else.
-             *
-             * aimPickerAt, not openPickerFor: the rail searches inline, and the
-             * latter would also raise the phone's full-screen picker over the
-             * map behind this card.
-             */
-            onPick={(field) => {
-              haptic()
-              fareQuery.aimPickerAt(field === 'from' ? 'origin' : 'destination')
-              setPickingEndpoint(field)
-            }}
-            onCancelPick={() => setPickingEndpoint(null)}
-            stations={fareQuery.pickableStations}
-            onSelectStation={(field, station) => {
-              // The target was set when the field was armed, so this is the same
-              // path a tap on the map takes — swap-on-same-station included.
-              fareQuery.handleSelect(station)
+          {/*
+            * Raised above the trip card below, which slides up behind this one
+            * when it collapses. Without a stacking level of its own the later
+            * sibling would paint on top and the card would travel over the
+            * route rows instead of tucking under them.
+            */}
+          <div className="relative z-10">
+            <MapRailPill
+              endpoints={railEndpoints}
+              hasPair={!!(routePair.fromId && routePair.toId)}
+              // The selected journey, so the card agrees with the corridor drawn
+              // behind it rather than with whichever route the API listed first.
+              // It also signs each endpoint row with the line ridden there.
+              fare={activeJourney}
+              journey={activeJourney}
+              hasError={!!fareError}
+              isLoading={fareLoading}
+              picking={pickingEndpoint}
               /*
-               * Straight on to the other end if it is still empty: filling one
-               * half of a pair is never the whole errand, and making the rider
-               * click the second row to carry on is a step that answers nothing.
-               * Both filled, the card rests and prices what it has.
+               * Gated on the resolved stations, not routePair's raw ids:
+               * handleSwap commits the two RESOLVED endpoints, so a pair whose
+               * stop is missing from the search index would swap in a null and
+               * silently drop that end. Also inert mid-pick, where the list
+               * below is already answering which end is being filled.
                */
-              const otherEmpty = field === 'from' ? !routePair.toId : !routePair.fromId
-              setPickingEndpoint(otherEmpty ? (field === 'from' ? 'to' : 'from') : null)
-              if (otherEmpty) fareQuery.aimPickerAt(field === 'from' ? 'destination' : 'origin')
-            }}
-            onOpenFare={() => {
-              haptic()
-              // Cancel a half-finished origin pick: the sheet is a second way to
-              // set the same pair, and leaving the mode armed behind it would
-              // make the next station tap do something the rider no longer
-              // expects.
-              setPickingEndpoint(null)
-              openFareSheet('full')
-            }}
-            onClear={clearRoute}
-            onHeightChange={setRailCardPx}
-          />
+              canSwap={!!(fareQuery.origin && fareQuery.destination) && pickingEndpoint === null}
+              onSwap={() => {
+                haptic()
+                fareQuery.handleSwap()
+              }}
+              /*
+               * Arming a field arms the MAP with it: the inline list and a tap on
+               * a station are two ways to answer the same question, so opening one
+               * must not leave the other pointing somewhere else.
+               *
+               * aimPickerAt, not openPickerFor: the rail searches inline, and the
+               * latter would also raise the phone's full-screen picker over the
+               * map behind this card.
+               */
+              onPick={(field) => {
+                haptic()
+                fareQuery.aimPickerAt(field === 'from' ? 'origin' : 'destination')
+                setPickingEndpoint(field)
+              }}
+              onCancelPick={() => setPickingEndpoint(null)}
+              stations={fareQuery.pickableStations}
+              onSelectStation={(field, station) => {
+                // The target was set when the field was armed, so this is the same
+                // path a tap on the map takes — swap-on-same-station included.
+                fareQuery.handleSelect(station)
+                /*
+                 * Straight on to the other end if it is still empty: filling one
+                 * half of a pair is never the whole errand, and making the rider
+                 * click the second row to carry on is a step that answers nothing.
+                 * Both filled, the card rests and prices what it has.
+                 */
+                const otherEmpty = field === 'from' ? !routePair.toId : !routePair.fromId
+                setPickingEndpoint(otherEmpty ? (field === 'from' ? 'to' : 'from') : null)
+                if (otherEmpty) fareQuery.aimPickerAt(field === 'from' ? 'destination' : 'origin')
+              }}
+              onClear={clearRoute}
+              tripCollapsed={tripCollapsed}
+              onExpandTrip={() => {
+                haptic()
+                setTripCollapsed(false)
+              }}
+              criteria={fareQuery.criteria}
+              onCriteriaChange={fareQuery.setCriteria}
+              router={fareRouter}
+              onRouterChange={setFareRouter}
+              pairFromId={fareQuery.pairFromId}
+              pairToId={fareQuery.pairToId}
+            />
+          </div>
+          {/*
+            * The drawn route's legs, under the card that names its ends.
+            *
+            * Hidden while a field is armed: the rail has become a search list
+            * by then, and detailing a pair the rider is halfway through
+            * replacing is the same question nobody asked that the rail's own
+            * fare row steps aside for.
+            *
+            * Held through a refetch on the last journey rather than unmounted,
+            * so editing criteria does not blink the legs out and drop the
+            * column's height — the overlay behind it keeps drawing too.
+            */}
+          {activeJourney && !pickingEndpoint && (
+            <MapTripCard
+              journeys={journeys}
+              selectedIndex={selectedJourney}
+              onSelectIndex={setSelectedJourney}
+              open={!tripCollapsed}
+              onCollapse={() => {
+                haptic()
+                setTripCollapsed(true)
+              }}
+            />
+          )}
         </div>
       )}
 
@@ -3134,7 +3233,7 @@ export default function MapPage() {
           and this is a dev-only debug toggle. */}
       {debugTrace && (
         <div className="absolute top-16 right-4 z-map-chrome bg-white/95 backdrop-blur rounded-lg shadow-lg px-3 py-2 flex flex-col gap-2 text-sm max-w-[16rem]">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 whitespace-nowrap">
             <span className="font-mono text-slate-700">trace</span>
             <button
               type="button"
@@ -3142,6 +3241,26 @@ export default function MapPage() {
               className="px-3 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700"
             >
               {surfaceVisible ? 'Surface: on' : 'Surface: off'}
+            </button>
+            {/* Hide/show everything at once. With 41 lines and 17 TJ colours,
+                isolating one stroke otherwise means clicking every other chip —
+                which is the usual reason to open this panel at all. Acts on both
+                groups together because "hide all" that left the TJ swatches
+                drawn would not actually clear the map. */}
+            <button
+              type="button"
+              onClick={() => {
+                if (traceAllHidden) {
+                  setTraceHiddenLines(new Set())
+                  setTraceHiddenTjColors(new Set())
+                } else {
+                  setTraceHiddenLines(new Set(linesManifest?.lines.map(line => line.key) ?? []))
+                  setTraceHiddenTjColors(new Set(traceTjColors))
+                }
+              }}
+              className="px-3 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700"
+            >
+              {traceAllHidden ? 'Show all' : 'Hide all'}
             </button>
           </div>
           {/* One chip per line (map-lines.json), keyed by "operator:code" —
@@ -3274,6 +3393,13 @@ export default function MapPage() {
           open={!!fareSheet}
           initialSnap={fareSheet?.snap}
           query={fareQuery}
+          /*
+           * Phones only, now — every remaining opener is behind a !isDesktop
+           * branch, because desktop's rail column carries the criteria, the
+           * router, the options, the share and the /fare link itself. The sheet
+           * is still the whole fare surface here, where there is no rail to move
+           * any of it to.
+           */
           router={fareRouter}
           onRouterChange={setFareRouter}
           alternatives={fareRouter === 'beta'}

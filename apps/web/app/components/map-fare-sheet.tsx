@@ -30,8 +30,16 @@ interface MapFareSheetProps {
    * selected journey on the canvas behind it and prices it in the chip, so the
    * choice has to outlive a sheet that unmounts on close.
    */
-  router: FareRouter
-  onRouterChange: (router: FareRouter) => void
+  /*
+   * Optional, and both-or-neither — the same gate FarePanel documents.
+   *
+   * Desktop passes neither: the rail column owns the router toggle and the
+   * options list there, and this one sheet instance serves both form factors,
+   * so the props are what decide which surface carries them rather than two
+   * separate components.
+   */
+  router?: FareRouter
+  onRouterChange?: (router: FareRouter) => void
   alternatives: boolean
   selectedIndex: number
   onSelectIndex: (index: number) => void

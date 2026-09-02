@@ -8,9 +8,9 @@ import LineRoundel from '~/components/line-roundel'
 import type { PickableStation } from './pickable-station'
 import {
   quickPickStations,
-  RECENT_PICKS_KEY,
-  RECENT_PICKS_MAX,
-  rankStations
+  rankStations,
+  readRecentPicks,
+  recordRecentPick
 } from './station-ranking'
 
 // Rows mounted alongside the card's open animation: a comfortable screenful of
@@ -101,12 +101,9 @@ export default function StationSearchList({ stations, query, field, current, onS
   }, [field])
 
   useEffect(() => {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(RECENT_PICKS_KEY) ?? '[]') as unknown
-      if (parsed instanceof Array) setRecentIds(parsed as string[])
-    } catch {
-      // Corrupt entry: fall back to popularity-only picks.
-    }
+    // Once on mount is enough: this list is mounted fresh each time a field is
+    // armed, where the phone's dialog outlives its openings and re-reads.
+    setRecentIds(readRecentPicks())
     // Just past the card's 200ms open, so the tail commits on a free frame.
     const timer = setTimeout(() => setRenderAll(true), 220)
     return () => clearTimeout(timer)
@@ -131,24 +128,23 @@ export default function StationSearchList({ stations, query, field, current, onS
 
   const pick = (station: PickableStation) => {
     haptic()
-    setRecentIds((currentIds) => {
-      const next = [station.id, ...currentIds.filter(id => id !== station.id)].slice(0, RECENT_PICKS_MAX)
-      try {
-        localStorage.setItem(RECENT_PICKS_KEY, JSON.stringify(next))
-      } catch {
-        // Private mode or a full quota: the pick still stands, it just is not
-        // remembered for next time.
-      }
-      return next
-    })
+    setRecentIds(current => recordRecentPick(station.id, current))
     onSelect(station)
   }
 
   return (
     <div className="flex flex-col min-h-0">
+      {/*
+        * One heading, not one per source. This used to read "Terakhir
+        * digunakan" the moment a single recent existed, which the list does not
+        * deliver: quickPickStations PADS recents with popular stops, so one
+        * recent produced one recent and three popular under a heading claiming
+        * all four were the rider's. "Sering dipilih" is true of both halves and
+        * is what the phone's picker already says.
+        */}
       {!searching && (
-        <div className="px-4 pt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          {recentIds.length > 0 ? 'Terakhir digunakan' : 'Sering digunakan'}
+        <div className="px-4 pt-1 text-xs font-bold uppercase tracking-wide text-slate-400">
+          Sering dipilih
         </div>
       )}
 
@@ -175,7 +171,7 @@ export default function StationSearchList({ stations, query, field, current, onS
       <ul
         ref={listRef}
         className={clsx(
-          'overflow-y-auto overscroll-contain max-h-52 py-1',
+          'overflow-y-auto overscroll-contain max-h-56 py-1',
           searching ? '[scrollbar-gutter:stable]' : 'no-scrollbar'
         )}
       >
@@ -210,10 +206,10 @@ export default function StationSearchList({ stations, query, field, current, onS
               )}
             >
               <span className="flex flex-col flex-1 min-w-0">
-                <span className="text-sm truncate">
+                <span className="truncate text-sm font-bold">
                   <HighlightMatch text={station.name} query={searching ? deferredQuery : undefined} />
                 </span>
-                <span className="text-[11px] text-slate-500 truncate">
+                <span className="text-sm text-slate-500 truncate">
                   {OPERATORS[station.operator]?.name ?? station.operator}
                 </span>
               </span>

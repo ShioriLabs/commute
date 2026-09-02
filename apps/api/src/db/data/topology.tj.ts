@@ -33,7 +33,24 @@ export const TJ_TOPOLOGY: LineTopology[] = [
       { station: 'H00281P', pos: '', cumM: 3002 },
       { station: 'H00280P', pos: '', cumM: 3485 },
       { station: 'H00278P', pos: '', cumM: 4104 },
-      { station: 'H00170P', pos: '', cumM: 6163 },
+      /*
+       * Monas, not Petojo.
+       *
+       * The GTFS feed routes koridor 1 northbound via Petojo `H00170P`, but the
+       * poster draws K1 straight down past Monas `H00131P` — and the map is
+       * authoritative for where a halte sits (docs/fdtj-map-points.md). Petojo
+       * lies 224 units WEST of the Harmoni→Kebon Sirih alignment and belongs to
+       * koridors 2A and 3, which is why a K1 trace through it jumped onto their
+       * yellow stroke, and why routing Masjid Agung→Glodok detoured through it.
+       *
+       * `pathReverse` below already used Monas, so the two directions of one
+       * corridor disagreed: southbound was right, northbound was not.
+       *
+       * cumM interpolated between Harmoni (4104) and Kebon Sirih (9182) at the
+       * same fraction the reverse path puts Monas at between its own two
+       * neighbours, so the edge distances stay consistent in both directions.
+       */
+      { station: 'H00131P', pos: '', cumM: 5730 },
       { station: 'H00268S', pos: '', cumM: 9182 },
       { station: 'H00207P', pos: '', cumM: 9636 },
       { station: 'H00022P', pos: '', cumM: 10229 },

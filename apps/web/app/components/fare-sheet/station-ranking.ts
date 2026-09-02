@@ -42,6 +42,53 @@ export function getStationScore(station: PickableStation, query: string) {
 export const RECENT_PICKS_KEY = 'fare-recent-stations'
 export const RECENT_PICKS_MAX = 4
 
+/**
+ * The remembered picks, or an empty list when there is nothing to remember.
+ *
+ * Both fare pickers read this — the phone's dialog on every open, the rail's
+ * inline list once on mount — because both write it, so a station picked in one
+ * has to surface in the other. The two used to keep their own copy of this and
+ * had already drifted apart; see recordRecentPick.
+ *
+ * Never throws. A corrupt entry, a browser refusing storage and a first-ever
+ * visit are all the same answer here, which is "popularity only" once
+ * quickPickStations pads the empty list.
+ *
+ * Filtered rather than merely cast: callers look these up by id, and a stored
+ * `42` would otherwise reach that lookup as a key that cannot match.
+ */
+export function readRecentPicks(): string[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(RECENT_PICKS_KEY) ?? '[]')
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((id): id is string => typeof id === 'string')
+  } catch {
+    return []
+  }
+}
+
+/**
+ * `id` remembered first, the list de-duplicated and capped.
+ *
+ * Returns the new list as well as writing it, so a caller can drive its own
+ * state from the same value without a second read — which is what lets this sit
+ * inside a `setState` updater.
+ *
+ * The write can fail (private mode, a full quota) and that is not something the
+ * rider should hear about: the pick still stands, it just is not remembered. The
+ * phone's picker used to call `setItem` here unguarded, which threw inside a
+ * React state updater rather than anywhere it could be handled.
+ */
+export function recordRecentPick(id: string, current: readonly string[]): string[] {
+  const next = [id, ...current.filter(existing => existing !== id)].slice(0, RECENT_PICKS_MAX)
+  try {
+    localStorage.setItem(RECENT_PICKS_KEY, JSON.stringify(next))
+  } catch {
+    // See above.
+  }
+  return next
+}
+
 // How many stations the no-query list offers. Several screens' worth — enough
 // that scrolling still feels like a real list — without putting the entire
 // network in the DOM. See the comment in `shownStations`.

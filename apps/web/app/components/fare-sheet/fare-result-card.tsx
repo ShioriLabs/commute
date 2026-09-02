@@ -226,7 +226,7 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
 // Itinerary timeline: ringed nodes at board/alight stations, line-colored
 // connectors carrying the service card, walks as full-width cards that break
 // the rail (TfL Go-style).
-function JourneyTimeline({ legs }: { legs: FareResultLeg[] }) {
+export function JourneyTimeline({ legs }: { legs: FareResultLeg[] }) {
   return (
     <ol className="mt-6 flex flex-col">
       {legs.map((leg, index) => {
@@ -308,7 +308,7 @@ function JourneyTimeline({ legs }: { legs: FareResultLeg[] }) {
  * journey renders the identical block inert, because a press affordance on the
  * only answer invites a rider to look for an alternative that does not exist.
  */
-function JourneyCardFace({ journey, selected, onSelect }: {
+export function JourneyCardFace({ journey, selected, onSelect }: {
   journey: FareJourney
   selected: boolean
   onSelect?: () => void
