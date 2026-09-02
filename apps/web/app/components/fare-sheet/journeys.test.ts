@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FareJourney, FareResult, FareResultRideLeg, FareResultTransferLeg, Line, TripResult } from '@commute/schemas'
 import { JOURNEY_LABELS, JOURNEY_LABEL_DESCRIPTIONS } from './journey-labels'
-import { boardingLineKeys, endpointRoundelLines, journeysOf, sortJourneyLabels, walkDistanceOf } from './journeys'
+import { boardingLineKeys, ENDPOINT_ROUNDEL_MAX, endpointRoundelLines, journeysOf, sortJourneyLabels, walkDistanceOf } from './journeys'
 
 const legacy: FareResult = {
   from: { id: 'KCI-SUD', name: 'Sudirman' },
@@ -278,5 +278,44 @@ describe('endpointRoundelLines', () => {
   it('says nothing when there is no station and no route', () => {
     expect(endpointRoundelLines(null, null)).toEqual([])
     expect(endpointRoundelLines(station(), null)).toEqual([])
+  })
+})
+
+describe('endpointRoundelLines cap', () => {
+  const line = (lineCode: string): Line => ({ name: `Lin ${lineCode}`, lineCode, colorCode: '#25B8EB' })
+  const station = (...codes: string[]) => ({ operator: 'KCI' as const, sortedLines: codes.map(line) })
+
+  /*
+   * The fare panel's fields have less room to grow into than the map rail's
+   * rows, so they ask for a shallower stack. The default stays the rail's.
+   */
+  it('takes a caller-supplied cap', () => {
+    expect(endpointRoundelLines(station('1', '2', '3', '4'), null, 2)).toHaveLength(2)
+    expect(endpointRoundelLines(station('1', '2', '3', '4'), null)).toHaveLength(ENDPOINT_ROUNDEL_MAX)
+  })
+
+  /*
+   * The ANCHOR is the last entry — the one drawn on top, and the only one whose
+   * code can be read. Capping off the front keeps it, so a stop signs itself the
+   * same way in the panel as on the map rail; capping off the back would promote
+   * a different line to the readable slot and make the two surfaces disagree
+   * about the same station.
+   */
+  it('keeps the anchor when it caps', () => {
+    const capped = endpointRoundelLines(station('7T', '10', '13'), null, 2)
+    expect(capped.map(l => l.line.lineCode)).toEqual(['10', '13'])
+  })
+
+  it('anchors on the same line whatever the cap', () => {
+    const anchorOf = (max?: number) =>
+      endpointRoundelLines(station('A', 'B', 'C'), null, max).at(-1)!.line.lineCode
+    expect(anchorOf(2)).toBe(anchorOf())
+  })
+
+  // A routed end is one line whatever the cap says: the cap is about how many of
+  // a STOP's lines to show, and a ride has already answered that with one.
+  it('does not apply the cap to a ridden line', () => {
+    const ridden = { line: line('C'), operator: 'KCI' }
+    expect(endpointRoundelLines(station('A', 'B', 'C'), ridden, 2)).toEqual([ridden])
   })
 })

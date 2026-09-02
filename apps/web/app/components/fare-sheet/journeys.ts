@@ -116,10 +116,28 @@ export const ENDPOINT_ROUNDEL_MAX = 3
  */
 export function endpointRoundelLines(
   station: { operator: string, sortedLines: Line[] } | null,
-  ridden: { line: Line, operator: string } | null
+  ridden: { line: Line, operator: string } | null,
+  /*
+   * How deep the stack may go, for a caller with less room than the map rail.
+   * The fare panel's fields are clipped by their card, so they ask for two where
+   * the rail takes three — see ENDPOINT_ROUNDEL_MAX for what sets the default.
+   */
+  max: number = ENDPOINT_ROUNDEL_MAX
 ): { line: Line, operator: string }[] {
+  // A ride has already answered "which line", so the cap does not apply: it
+  // governs how many of a STOP's lines to show when nothing has.
   if (ridden) return [ridden]
-  return (station?.sortedLines ?? [])
-    .slice(0, ENDPOINT_ROUNDEL_MAX)
+  const lines = station?.sortedLines ?? []
+  /*
+   * Capped off the FRONT, keeping the tail.
+   *
+   * The last entry is the anchor — drawn on top, and the only one whose code can
+   * be read. Dropping from the back would hand that readable slot to a different
+   * line as the cap tightened, so Manggarai signed itself "C" on the map rail and
+   * "B" in the fare panel: one stop, two answers, on surfaces a rider moves
+   * between.
+   */
+  return lines
+    .slice(Math.max(0, lines.length - max))
     .map(line => ({ line, operator: station!.operator }))
 }

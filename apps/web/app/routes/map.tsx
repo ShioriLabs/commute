@@ -2839,6 +2839,18 @@ export default function MapPage() {
               isLoading={fareLoading}
               picking={pickingEndpoint}
               /*
+               * Gated on the resolved stations, not routePair's raw ids:
+               * handleSwap commits the two RESOLVED endpoints, so a pair whose
+               * stop is missing from the search index would swap in a null and
+               * silently drop that end. Also inert mid-pick, where the list
+               * below is already answering which end is being filled.
+               */
+              canSwap={!!(fareQuery.origin && fareQuery.destination) && pickingEndpoint === null}
+              onSwap={() => {
+                haptic()
+                fareQuery.handleSwap()
+              }}
+              /*
                * Arming a field arms the MAP with it: the inline list and a tap on
                * a station are two ways to answer the same question, so opening one
                * must not leave the other pointing somewhere else.

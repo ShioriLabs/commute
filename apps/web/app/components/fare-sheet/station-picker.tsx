@@ -8,9 +8,9 @@ import { haptic } from 'utils/haptics'
 import { LIST_STAGGER, LIST_STAGGER_MAX_INDEX, staggerDelay } from 'utils/stagger'
 import {
   quickPickStations,
-  RECENT_PICKS_KEY,
-  RECENT_PICKS_MAX,
-  rankStations
+  rankStations,
+  readRecentPicks,
+  recordRecentPick
 } from './station-ranking'
 import HighlightMatch from '~/components/highlight-match'
 import LineRoundel from '~/components/line-roundel'
@@ -99,12 +99,9 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
     // this one (and resetting here, not on select, keeps the list stable
     // while the panel slides out).
     setQuery('')
-    try {
-      const parsed = JSON.parse(localStorage.getItem(RECENT_PICKS_KEY) ?? '[]') as unknown
-      if (parsed instanceof Array) setRecentIds(parsed as string[])
-    } catch {
-      // Corrupt entry: fall back to popularity-only chips.
-    }
+    // Re-read on every open, not once on mount: this dialog outlives its
+    // openings, and the rail's list writes the same store while it is closed.
+    setRecentIds(readRecentPicks())
     const readyTimer = setTimeout(() => setReady(true), 300)
     // Focus after the slide settles: popping the keyboard mid-animation
     // resizes the viewport and stutters the transform.
@@ -132,11 +129,7 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
   // don't re-render while typing.
   const handleSelect = useCallback((station: PickableStation) => {
     haptic()
-    setRecentIds((current) => {
-      const newRecents = [station.id, ...current.filter(id => id !== station.id)].slice(0, RECENT_PICKS_MAX)
-      localStorage.setItem(RECENT_PICKS_KEY, JSON.stringify(newRecents))
-      return newRecents
-    })
+    setRecentIds(current => recordRecentPick(station.id, current))
     onSelect(station)
     onClose()
   }, [onSelect, onClose])
@@ -177,7 +170,7 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
                 ref={searchInputRef}
                 className="w-full pl-11 pr-4 py-2.5 rounded-xl bg-stone-100/80 border-2 border-stone-200/40 focus:outline-2 focus:outline-[#F55875]/60"
                 type="text"
-                placeholder="Masukkan nama stasiun atau kode stasiun"
+                placeholder="Cari nama atau kode stasiun"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 aria-label="Cari stasiun berdasarkan nama atau kode"
@@ -226,7 +219,7 @@ export default function StationPickerDialog({ open, title, stations, selectedId,
               />
             ))}
             {ready && shownStations.length === 0
-              ? <li className="px-8 py-10 text-center text-slate-400">Tidak ada stasiun yang cocok</li>
+              ? <li className="px-8 py-10 text-center text-slate-400">Stasiun tidak ditemukan</li>
               : null}
           </ul>
         </DialogPanel>

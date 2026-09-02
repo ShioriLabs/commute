@@ -1,9 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PickableStation } from './pickable-station'
 import {
   NO_QUERY_ROWS,
   quickPickStations,
+  readRecentPicks,
+  RECENT_PICKS_KEY,
   RECENT_PICKS_MAX,
+  recordRecentPick,
   rankStations,
   topByPopularity
 } from './station-ranking'
@@ -128,5 +131,85 @@ describe('quickPickStations', () => {
 
   it('caps at RECENT_PICKS_MAX even with many recents', () => {
     expect(quickPickStations(stations, stations.map(s => s.id))).toHaveLength(RECENT_PICKS_MAX)
+  })
+})
+
+/*
+ * The recents store, shared by both pickers because both write it: a station
+ * picked in the rail has to surface in the phone's dialog.
+ *
+ * localStorage does not exist in this node-only suite, so it is stubbed. That is
+ * the point rather than a workaround — every branch here exists for a browser
+ * that refuses storage (private mode, full quota) or hands back something that
+ * is not what was written, and those are exactly the cases a real browser makes
+ * hard to reach on purpose.
+ */
+describe('recent picks storage', () => {
+  const withStore = (initial?: string) => {
+    const store = new Map<string, string>()
+    if (initial !== undefined) store.set(RECENT_PICKS_KEY, initial)
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v)
+    })
+    return store
+  }
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('reads back what was written', () => {
+    withStore(JSON.stringify(['KCI-MRI', 'MRTJ-BLA']))
+    expect(readRecentPicks()).toEqual(['KCI-MRI', 'MRTJ-BLA'])
+  })
+
+  it('is empty on a first visit', () => {
+    withStore()
+    expect(readRecentPicks()).toEqual([])
+  })
+
+  it('survives a corrupt entry', () => {
+    withStore('{not json')
+    expect(readRecentPicks()).toEqual([])
+  })
+
+  // Whatever is in there, `quickPickStations` is going to look these up by id.
+  it('drops anything that is not a station id', () => {
+    withStore(JSON.stringify(['KCI-MRI', 42, null, { id: 'x' }]))
+    expect(readRecentPicks()).toEqual(['KCI-MRI'])
+  })
+
+  it('ignores a stored value that is not a list', () => {
+    withStore(JSON.stringify({ 'KCI-MRI': true }))
+    expect(readRecentPicks()).toEqual([])
+  })
+
+  it('puts the newest pick first and writes it through', () => {
+    const store = withStore(JSON.stringify(['KCI-MRI']))
+    expect(recordRecentPick('MRTJ-BLA', ['KCI-MRI'])).toEqual(['MRTJ-BLA', 'KCI-MRI'])
+    expect(JSON.parse(store.get(RECENT_PICKS_KEY)!)).toEqual(['MRTJ-BLA', 'KCI-MRI'])
+  })
+
+  // Re-picking a station moves it to the front rather than listing it twice.
+  it('does not repeat a station already remembered', () => {
+    expect(recordRecentPick('KCI-MRI', ['MRTJ-BLA', 'KCI-MRI'])).toEqual(['KCI-MRI', 'MRTJ-BLA'])
+  })
+
+  it('keeps the list capped', () => {
+    const full = Array.from({ length: RECENT_PICKS_MAX }, (_, i) => `S-${i}`)
+    expect(recordRecentPick('NEW', full)).toHaveLength(RECENT_PICKS_MAX)
+    expect(recordRecentPick('NEW', full)[0]).toBe('NEW')
+  })
+
+  /*
+   * The pick still stands, it just is not remembered. This is the branch the
+   * phone's picker was missing: it called setItem inside a state updater with no
+   * guard, so Safari private mode threw mid-render.
+   */
+  it('still answers when the browser refuses to store', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => null,
+      setItem: () => { throw new Error('QuotaExceededError') }
+    })
+    expect(recordRecentPick('KCI-MRI', [])).toEqual(['KCI-MRI'])
   })
 })
