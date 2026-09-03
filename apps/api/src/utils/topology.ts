@@ -46,7 +46,7 @@ export function collectStationIds(topology: LineTopology): string[] {
 function reverseOnlyBranches(
   topology: LineTopology
 ): Array<{ fromStation: string, path: Stop[], kind: LineSegmentKind }> {
-  const reverse = topology.pathReverse
+  let reverse = topology.pathReverse
   if (!reverse) return []
 
   const forward = new Set(topology.path.map(stop => stop.station))
@@ -95,6 +95,36 @@ function reverseOnlyBranches(
     if (!closesRing && rejoinStop) run.push(rejoinStop)
     out.push({ fromStation: anchor, path: run, kind: closesRing ? 'LOOP' : 'RAMP' })
     run = []
+  }
+
+  /*
+   * A reverse-only stop at the very HEAD of the reverse path is a spur off the
+   * stop that follows it, not a run leading into one.
+   *
+   * The walk below anchors a run to the last shared stop it has SEEN, so a run
+   * that starts before any shared stop has no anchor and is dropped — and if the
+   * next shared stop then anchors a fresh run, the spur's stop is silently
+   * attached to the wrong junction. TJ:14 is that case: its reverse path begins
+   * Senen Raya -> Senen TOYOTA Rangga, an out-and-back spur to a single stop,
+   * and the RAMP came out as Senen Raya -> Tanah Tinggi, which the artwork does
+   * not draw at all.
+   *
+   * Anchoring to the following shared stop instead makes it what it is: a spur
+   * the line runs out to and returns from.
+   */
+  if (reverse.length > 1 && !forward.has(reverse[0].station)) {
+    let i = 0
+    while (i < reverse.length && !forward.has(reverse[i].station)) i++
+    const junction = reverse[i]
+    if (junction) {
+      out.push({
+        fromStation: junction.station,
+        path: reverse.slice(0, i).reverse(),
+        kind: 'RAMP'
+      })
+    }
+    // Consumed: the walk starts from the junction so the spur is not re-emitted.
+    reverse = reverse.slice(i)
   }
 
   for (const stop of reverse) {

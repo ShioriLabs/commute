@@ -633,6 +633,68 @@ const FIT_TIE_WORLD = 15
  */
 const SHORT_CORRIDOR_WORLD = 600
 
+/*
+ * The arc a terminal spur takes back to its junction, when the sheet draws the
+ * return as a separate arm rather than reusing the outbound stroke.
+ *
+ * Returns null for ordinary track, which is everything but TJ:14's Senen spur:
+ * the corridor has to close on its own body, reach both stops, and leave a real
+ * arc between the far stop and that closure. See the call site for why the
+ * seventeen lines with the same TOPOLOGY do not reach this.
+ */
+function terminalReturnArc(
+  a: ResolvedStop,
+  b: ResolvedStop,
+  corridor: PreparedCorridor | undefined
+): Array<[number, number]> | null {
+  if (!corridor) return null
+  const total = corridorLength(corridor)
+  if (total <= 0) return null
+  const tip = corridor.pts[corridor.pts.length - 1]
+  // Where the stroke's end lands back on its own body, if it does.
+  let closure: { s: number, dist: number } | null = null
+  for (let i = 0; i < corridor.pts.length - 1; i++) {
+    if (total - corridor.cums[i + 1] < RING_CLOSURE_MIN_SEPARATION_WORLD) break
+    const ax = corridor.pts[i][0]
+    const ay = corridor.pts[i][1]
+    const dx = corridor.pts[i + 1][0] - ax
+    const dy = corridor.pts[i + 1][1] - ay
+    const lenSq = dx * dx + dy * dy
+    const t = lenSq > 0 ? Math.max(0, Math.min(1, ((tip[0] - ax) * dx + (tip[1] - ay) * dy) / lenSq)) : 0
+    const dist = Math.hypot(tip[0] - (ax + t * dx), tip[1] - (ay + t * dy))
+    if (!closure || dist < closure.dist) {
+      closure = { s: corridor.cums[i] + t * Math.sqrt(lenSq), dist }
+    }
+  }
+  if (!closure || closure.dist > RING_CLOSURE_WORLD) return null
+
+  const pa = projectOntoPolyline(a.x, a.y, corridor)
+  const pb = projectOntoPolyline(b.x, b.y, corridor)
+  // The junction must be where the ring closes: that is what makes this a spur
+  // off the trunk rather than a stretch of ordinary loop.
+  if (Math.abs(pa.s - closure.s) > RING_CLOSURE_JUNCTION_WORLD) return null
+  // ...and the far stop must lie between it and the stroke's end.
+  if (pb.s <= pa.s) return null
+  const arc = extractSubPolyline(corridor, pb.s, total)
+  return arc.length >= 2 ? arc : null
+}
+
+// How near a stroke's end must come to its own body to have closed a ring.
+const RING_CLOSURE_WORLD = 6
+
+// How far back along the stroke to look, so an end does not match the segment
+// it sits on.
+const RING_CLOSURE_MIN_SEPARATION_WORLD = 200
+
+/*
+ * How near the spur's junction must sit to the closure point.
+ *
+ * The ring closes AT the junction by construction — TJ:14's is 1 unit — so this
+ * only absorbs projection noise. Keeping it tight is what stops an ordinary pair
+ * that happens to lie on a self-closing corridor from growing a return arc.
+ */
+const RING_CLOSURE_JUNCTION_WORLD = 15
+
 // A prepared corridor's total drawn length.
 function corridorLength(corridor: PreparedCorridor | undefined): number {
   if (!corridor) return 0
@@ -1517,9 +1579,19 @@ export function traceLine(
         const ownChain = own && !own.loopArc ? null : matchAcrossJoin(a, b, prepared, strict)
         /*
          * A chain also beats a loop-arc match, which is a last resort by
-         * construction — see where ownChain is computed.
+         * construction — but only when it actually fits the stops better.
+         *
+         * The arc is admitted only because nothing cleared the detour ratio, so
+         * on koridor 1 the chain through the corner fillet was the better answer
+         * at any fit. Not so where the arc IS the route: TJ:14's Kemayoran
+         * circle fits its stops at 13.3 units while the chain that would replace
+         * it sits at 51.8, drawing a straight hop across the loop the sheet
+         * plainly draws. So the chain has to earn it on fit as well.
          */
-        if ((!own || own.loopArc) && ownChain) {
+        const chainBeatsArc = own?.loopArc === true
+          && ownChain !== null
+          && ownChain.fit < worstEndpointDistance(a, b, prepared[own.index])
+        if ((!own || chainBeatsArc) && ownChain) {
           if (ownChain.edges.length > 0) {
             if (!bridgeFromPrevious(edges, chainHead(ownChain.edges))) continue
           }
@@ -1659,6 +1731,35 @@ export function traceLine(
           const [ax, ay] = match.path[j]
           const [bx, by] = match.path[j + 1]
           edges.push([ax, ay, bx, by])
+        }
+        /*
+         * A terminal spur whose RETURN is drawn as a separate arm.
+         *
+         * Where both directions share one stroke, matching the pair once draws
+         * the whole leg. Where the sheet draws the return separately, matching
+         * it once draws only half — and the line reads as running straight
+         * through its terminus and out.
+         *
+         * TJ:14's Senen spur is the case, and the only one on the sheet:
+         * koridor 14's own stroke runs 258 units west from Senen TOYOTA Rangga
+         * to Senen Raya, continues past it, turns, and comes back 672 units to
+         * rejoin itself at the junction it left. The topology has one pair for
+         * that round trip, so without this the return arm is never drawn.
+         *
+         * Recognised entirely from the artwork — a corridor that closes on its
+         * own body, carrying both stops, with an untraced arc between the far
+         * stop and the closure. Measured across every candidate terminus on the
+         * sheet, seventeen lines have the out-and-back topology and exactly one
+         * has this geometry, so nothing else can pick it up by accident.
+         */
+        const returnArc = terminalReturnArc(a, b, prepared[match.index])
+        if (returnArc) {
+          for (let j = 0; j < returnArc.length - 1; j++) {
+            const [ax, ay] = returnArc[j]
+            const [bx, by] = returnArc[j + 1]
+            if (Math.hypot(bx - ax, by - ay) < MIN_BRIDGE_LENGTH_WORLD) continue
+            edges.push([ax, ay, bx, by])
+          }
         }
         segMatched++
       }
