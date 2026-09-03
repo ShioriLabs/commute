@@ -45,6 +45,7 @@ import { channelDistance, colourMatches, CORRIDOR_COLOUR_TOLERANCE, electArtwork
 import {
   CORRIDOR_MATCH_MAX_DETOUR_RATIO,
   CORRIDOR_MATCH_MAX_DIST_WORLD,
+  extractSubPolyline,
   matchCorridorPath,
   modeMatches,
   pickLegCorridor,
@@ -793,7 +794,7 @@ function matchWithinEligible(
   prepared: readonly PreparedCorridor[],
   eligible: (index: number) => boolean,
   preferIndex: number | undefined
-): { path: Array<[number, number]>, index: number } | null {
+): { path: Array<[number, number]>, index: number, loopArc?: boolean } | null {
   const indices: number[] = []
   for (let i = 0; i < prepared.length; i++) {
     if (eligible(i)) indices.push(i)
@@ -804,7 +805,7 @@ function matchWithinEligible(
   const match = matchCorridorPath(a.x, a.y, b.x, b.y, subset, {
     preferIndex: prefer >= 0 ? prefer : undefined
   })
-  return match ? { path: match.path, index: indices[match.index] } : null
+  return match ? { path: match.path, index: indices[match.index], loopArc: match.loopArc } : null
 }
 
 function matchAcrossJoin(
@@ -926,8 +927,83 @@ function matchAcrossJoin(
       }
     }
   }
+  if (best) return { edges: best, fit: bestFit }
+
+  /*
+   * A ring that closes through a short connecting fillet, back onto the SAME
+   * stroke.
+   *
+   * The two-corridor chain above cannot express this: both halves are the same
+   * corridor, and the piece between them is a third. Koridor 1's Kota Tua ring
+   * is drawn exactly so — idx4 runs the bottom, left, top and right sides, and a
+   * 42-unit fillet touches its two ends at s=48 and s=1171, closing the loop.
+   *
+   * Glodok to Kali Besar therefore needs idx4 -> fillet -> idx4: 521 units at
+   * ratio 1.41. Without it the pair walks 1122 units the WRONG way round the
+   * ring, retracing the northbound leg it has just drawn — which is what left
+   * every koridor's Kota Tua circuit looking broken.
+   *
+   * Kept deliberately narrow: the connector must be short, must join the ring at
+   * both ends, and the whole path still faces the detour test. A long corridor
+   * bridging two far-apart parts of one stroke is what the no-chord rule exists
+   * to refuse, and it still is refused.
+   */
+  for (let i = 0; i < prepared.length; i++) {
+    if (!eligible(i)) continue
+    const ring = prepared[i]
+    if (projectOntoPolyline(a.x, a.y, ring).dist > CORRIDOR_MATCH_MAX_DIST_WORLD) continue
+    if (projectOntoPolyline(b.x, b.y, ring).dist > CORRIDOR_MATCH_MAX_DIST_WORLD) continue
+    for (let k = 0; k < prepared.length; k++) {
+      if (k === i || !eligible(k)) continue
+      const link = prepared[k]
+      if (corridorLength(link) > RING_LINK_MAX_WORLD) continue
+      const head = link.pts[0]
+      const tail = link.pts[link.pts.length - 1]
+      const onA = projectOntoPolyline(head[0], head[1], ring)
+      const onB = projectOntoPolyline(tail[0], tail[1], ring)
+      if (onA.dist > JOIN_END_ON_BODY_WORLD || onB.dist > JOIN_END_ON_BODY_WORLD) continue
+      // Run out to whichever end of the link this pair reaches first, across it,
+      // and on to the stop from where the far end rejoins.
+      for (const [near, far] of [[onA, onB], [onB, onA]] as const) {
+        const first = matchCorridorPath(a.x, a.y, ring.pts[0][0], ring.pts[0][1], [ring])
+        if (!first) continue
+        const out = extractSubPolyline(ring, projectOntoPolyline(a.x, a.y, ring).s, near.s)
+        const rest = extractSubPolyline(ring, far.s, projectOntoPolyline(b.x, b.y, ring).s)
+        if (out.length < 2 || rest.length < 2) continue
+        const crossing = near === onA ? link.pts : [...link.pts].reverse()
+        const path = [...out, ...crossing, ...rest]
+        let total = 0
+        for (let n = 1; n < path.length; n++) {
+          total += Math.hypot(path[n][0] - path[n - 1][0], path[n][1] - path[n - 1][1])
+        }
+        const straight = Math.hypot(b.x - a.x, b.y - a.y)
+        if (straight <= 0 || total > CORRIDOR_MATCH_MAX_DETOUR_RATIO * straight) continue
+        const edges: Array<[number, number, number, number]> = []
+        for (let n = 0; n < path.length - 1; n++) {
+          if (Math.hypot(path[n + 1][0] - path[n][0], path[n + 1][1] - path[n][1]) < MIN_BRIDGE_LENGTH_WORLD) continue
+          edges.push([path[n][0], path[n][1], path[n + 1][0], path[n + 1][1]])
+        }
+        if (edges.length === 0) continue
+        const fit = Math.max(barDistance(a, ring), barDistance(b, ring))
+        if (fit < bestFit) {
+          bestFit = fit
+          best = edges
+        }
+      }
+    }
+  }
+
   return best ? { edges: best, fit: bestFit } : null
 }
+
+/*
+ * Longest connector that can close a ring back onto its own stroke.
+ *
+ * The artwork draws these as corner fillets — koridor 1's is 42 units. Anything
+ * longer is a corridor in its own right, and letting one bridge two distant
+ * parts of a stroke is exactly the chord this whole module refuses to draw.
+ */
+const RING_LINK_MAX_WORLD = 120
 
 export function traceLine(
   line: TraceableLine,
@@ -1429,8 +1505,21 @@ export function traceLine(
         const stickyIsOwn = !!stickyInk && !!tracedColour && channelDistance(stickyInk, tracedColour) === 0
         const sticky = stickyIsOwn ? lastCorridor : preferIndex
         const own = matchWithinEligible(a, b, prepared, strict, sticky)
-        const ownChain = own ? null : matchAcrossJoin(a, b, prepared, strict)
-        if (!own && ownChain) {
+        /*
+         * A loop-arc match is a last resort, so try the chain first anyway.
+         *
+         * The arc is admitted only because nothing fitted within the ordinary
+         * detour ratio, which on a ring means walking the long way round. Where
+         * the artwork provides a connecting fillet, chaining through it is the
+         * route the sheet actually draws: koridor 1's Glodok to Kali Besar is
+         * 521 units through the corner piece against 1122 the wrong way round.
+         */
+        const ownChain = own && !own.loopArc ? null : matchAcrossJoin(a, b, prepared, strict)
+        /*
+         * A chain also beats a loop-arc match, which is a last resort by
+         * construction — see where ownChain is computed.
+         */
+        if ((!own || own.loopArc) && ownChain) {
           if (ownChain.edges.length > 0) {
             if (!bridgeFromPrevious(edges, chainHead(ownChain.edges))) continue
           }

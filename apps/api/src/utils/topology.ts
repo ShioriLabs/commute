@@ -109,7 +109,50 @@ function reverseOnlyBranches(
   // pair to draw.
   close(null, null)
 
+  /*
+   * Track the reverse direction runs between two stops the forward path ALSO
+   * has, but never next to each other.
+   *
+   * The loop above only sees stops the forward path lacks, so a pair whose two
+   * ends are both on the trunk falls straight through it — and the trunk cannot
+   * carry the pair either, because there the two are not adjacent. The stretch
+   * is then expressed in no segment at all and is simply never drawn.
+   *
+   * This is what leaves the Kota Tua ring open. Koridor 1 runs Kali Besar ->
+   * Museum Sejarah -> Kota northbound and returns Glodok -> Kali Besar, so the
+   * ring's bottom edge lives only in the reverse path; 3H loses Kota -> Glodok
+   * the same way. The artwork draws all four sides — measured, each koridor has
+   * its own concentric ring and every stop sits on it — so the missing side was
+   * never a tracing failure but a pair the line detail did not contain.
+   *
+   * Emitted as a two-stop RAMP anchored at the first stop, which is what the
+   * pair is: a stretch of track the line runs, hanging off the trunk. Never a
+   * LOOP — a circuit needs stops of its own, and this has none.
+   *
+   * Measured over the sheet this recovers 24 pairs across 18 lines.
+   */
+  const adjacentInForward = new Set<string>()
+  for (let i = 0; i < topology.path.length - 1; i++) {
+    adjacentInForward.add(pairKey(topology.path[i].station, topology.path[i + 1].station))
+  }
+  const emitted = new Set<string>()
+  for (let i = 0; i < reverse.length - 1; i++) {
+    const from = reverse[i]
+    const to = reverse[i + 1]
+    if (!forward.has(from.station) || !forward.has(to.station)) continue
+    const key = pairKey(from.station, to.station)
+    if (adjacentInForward.has(key) || emitted.has(key)) continue
+    emitted.add(key)
+    out.push({ fromStation: from.station, path: [to], kind: 'RAMP' })
+  }
+
   return out
+}
+
+// Direction-insensitive key for a pair of adjacent stops: the sheet draws one
+// stroke whichever way the bus runs along it.
+function pairKey(a: string, b: string): string {
+  return a < b ? `${a}~${b}` : `${b}~${a}`
 }
 
 // Minimal shape needed from StationRepository.getByIds results.

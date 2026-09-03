@@ -59,9 +59,16 @@ const API_BASE_URL = process.env.API_BASE_URL ?? 'http://127.0.0.1:3000'
  * crossings of other corridors rather than whole wrong arms, and an edge count
  * would let one long wrong stretch hide behind many short right ones.
  *
- * Measured 0.70% over the shipped network. 2% leaves room for the artwork to
- * shift without going slack enough to admit a line riding the wrong stroke —
- * TJ:6 alone was 16% of its own length when it was drawn along koridor 4.
+ * Measured 1.13% over the shipped network, and ALL of it is three lines whose
+ * data the sheet no longer matches: TJ:4/4D (the GTFS stop sequence runs through
+ * stations the artwork does not connect) and TJ:10D (a withdrawn route). Every
+ * line still in service audits at 0.00%.
+ *
+ * That matters for reading this number: the headroom under 2% is mostly spent on
+ * known-bad data, so a real regression has less room to hide than the figure
+ * suggests. If those three are ever corrected or dropped, bring the ceiling back
+ * down rather than banking the slack — TJ:6 alone was 16% of its own length when
+ * it was drawn along koridor 4, which is the scale this exists to catch.
  */
 const MAX_OFF_COLOUR_LENGTH_RATIO = 0.02
 
