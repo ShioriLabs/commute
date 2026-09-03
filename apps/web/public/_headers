@@ -5,6 +5,12 @@
 # (max-age=0, must-revalidate), which errs toward fresh rather than frozen.
 /assets/*
   Cache-Control: public, max-age=2592000, immutable
+# The roundel's PT Sans subsets. These live in public/ so their filenames are
+# not build-hashed, but the bytes are a fixed subset of a released font and only
+# change if the character set is regenerated — at which point the file must be
+# renamed, since `immutable` means a client will never re-fetch this path.
+/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
 # Tiles and preview keep stable filenames across builds, so `immutable` here is
 # only safe because the renderer requests them with `?v=<manifest.build>` — a
 # content hash that changes whenever build:map-tiles regenerates them (see
