@@ -624,6 +624,27 @@ const ON_INK_WORLD = 12.5
 const FIT_TIE_WORLD = 15
 
 /*
+ * Below this, two chains sit equally close to a stop's tap bar.
+ *
+ * Much tighter than FIT_TIE_WORLD because both values are bar distances, where
+ * a stop drawn on its stroke measures well under a unit — Cawang's competing
+ * chains read 0.5 and 1.6. Anything above noise is a real difference.
+ */
+const BAR_TIE_WORLD = 0.5
+
+/*
+ * How long a tap bar must be before it counts as an interchange bar, where the
+ * bar rather than the midpoint decides which chain serves the stop.
+ *
+ * Measured over the 109 TJ bars with any span: the distribution runs to 76 and
+ * then jumps to 92-97, six bars sitting alone at the top. Cawang is 92.2. The
+ * gap is where this sits, so an ordinary halte bar (median 26, and the
+ * 13-family's 26-52) keeps the midpoint tiebreak it needs — allowing the bar to
+ * arbitrate there cost 13B, 13E and L13E a pair each.
+ */
+const INTERCHANGE_BAR_SPAN_WORLD = 85
+
+/*
  * Below this a corridor is a fragment, not a route.
  *
  * Measured over the sheet, corridors reaching a single stop run 128-309 world
@@ -874,11 +895,26 @@ function matchAcrossJoin(
   a: ResolvedStop,
   b: ResolvedStop,
   prepared: readonly PreparedCorridor[],
-  eligible: (index: number) => boolean
+  eligible: (index: number) => boolean,
+  /*
+   * Where the drawn line currently ends, when there is one.
+   *
+   * Several chains routinely fit a pair equally well, and at a wide tap bar they
+   * can start at OPPOSITE ends of it: Cawang's bar is 92 units across, with the
+   * line's own ink broken into a piece at each end. Choosing on fit alone picked
+   * the far end, 82.6 units from where the previous pair stopped, and the bridge
+   * between them drew an eastward tail the artwork does not have.
+   *
+   * So among chains that fit equally, prefer the one that carries on from what
+   * is already drawn. Optional: the first pair of a segment has nothing to
+   * continue from, and the ranking falls back to fit exactly as before.
+   */
+  continueFrom?: readonly [number, number]
 ): { edges: Array<[number, number, number, number]>, fit: number } | null {
   let best: Array<[number, number, number, number]> | null = null
   let bestFit = Infinity
   let bestMidFit = Infinity
+  let bestGap = Infinity
   for (let i = 0; i < prepared.length; i++) {
     if (!eligible(i)) continue
     // Only a corridor that actually reaches the first stop can start the chain.
@@ -982,9 +1018,61 @@ function matchAcrossJoin(
        * halves keeps chaining to what it is for — a line drawn in pieces — and
        * out of gaps where the line is not drawn.
        */
-      if (fit < bestFit - FIT_TIE_WORLD || (fit < bestFit + FIT_TIE_WORLD && midFit < bestMidFit)) {
+      /*
+       * How far this chain starts from what is already drawn. Infinity when
+       * there is nothing to continue from, which makes every chain equal on it.
+       */
+      const head = edges[0]
+      const gap = continueFrom && head
+        ? Math.hypot(head[0] - continueFrom[0], head[1] - continueFrom[1])
+        : Infinity
+      const decisivelyCloser = fit < bestFit - FIT_TIE_WORLD
+      const comparable = fit < bestFit + FIT_TIE_WORLD
+      // Continuity first among comparable chains, then fit, then the midpoint.
+      const continuesBetter = comparable && gap + FIT_TIE_WORLD < bestGap
+      const sameContinuity = comparable && Math.abs(gap - bestGap) <= FIT_TIE_WORLD
+      /*
+       * Among chains that fit and continue equally, the one whose far half sits
+       * closest to the stop's own tap BAR.
+       *
+       * The midpoint tiebreak below exists for a stop drawn between two pieces
+       * of a fillet, where it says which piece the line actually runs on. It is
+       * the wrong ruler at a wide interchange bar: at Cawang the ramp's two
+       * candidates end at opposite ends of a 92-unit bar, and the midpoint
+       * favours the far one by 3.8 units while the bar favours the near one by
+       * a whole unit — leaving the ramp overshooting the corner the trunk
+       * already turns at.
+       *
+       * So the bar decides first, and the midpoint only where the bar cannot
+       * tell them apart.
+       */
+      /*
+       * Only where the stop is drawn as a wide BAR. Where it is a dot the two
+       * rulers agree and this would just add noise; the 13-family lost a pair
+       * each when the bar was allowed to arbitrate at ordinary stops.
+       */
+      /*
+       * At a wide interchange BAR the bar distance decides, not the midpoint.
+       *
+       * The midpoint tiebreak below is for a stop drawn between two pieces of a
+       * fillet, where it says which piece the line runs on. At a 92-unit bar it
+       * is misleading: Cawang's two candidate chains end at opposite ends of the
+       * bar, and the midpoint prefers the far one by 3.8 units while the bar
+       * prefers the near one — leaving koridor 9A's return ramp overshooting the
+       * corner its own trunk already turns at.
+       *
+       * So where the stop is a wide bar, a chain that fits it better wins and a
+       * chain that fits it worse is refused outright; the midpoint only arbitrates
+       * at ordinary dot-shaped stops, where both rulers agree anyway.
+       */
+      const wideBar = Math.hypot(b.bx - b.ax, b.by - b.ay) >= INTERCHANGE_BAR_SPAN_WORLD
+      const barDecides = wideBar && sameContinuity && Math.abs(fit - bestFit) > BAR_TIE_WORLD
+      const closerOnBar = barDecides && fit < bestFit
+      const midpointDecides = sameContinuity && !barDecides && midFit < bestMidFit
+      if (decisivelyCloser || continuesBetter || closerOnBar || midpointDecides) {
         bestFit = Math.min(fit, bestFit)
         bestMidFit = midFit
+        bestGap = gap
         best = edges
       }
     }
@@ -1210,6 +1298,36 @@ export function traceLine(
        * the ink audit exists to catch.
        */
       const first = byStation.get(stationId)
+      /*
+       * ...and the stroke must be one that carries the line ONWARD.
+       *
+       * Proximity alone is not enough where the artwork breaks a colour into
+       * pieces that do not touch. Tanjung Priok is drawn twice on koridor 10's
+       * own red: the -b dot sits 2.5 units from a stroke running WEST (x
+       * 2431-5977) and the plain dot 14.0 from one running EAST (x 6144-6440).
+       * Nearest wins picks the -b dot, and from there Mambo — the line's very
+       * next stop, 162 units east — is 334 units away with nothing between, so
+       * the opening pair was never drawn.
+       *
+       * So a candidate stroke only counts when it also reaches one of this
+       * station's NEIGHBOURS on the line. That is what makes it this line's
+       * piece rather than a same-coloured stretch elsewhere.
+       */
+      const neighbours: Array<{ x: number, y: number }> = []
+      for (const resolved of resolvedBySegment) {
+        for (let i = 0; i < resolved.length; i++) {
+          if (resolved[i].id !== stationId) continue
+          if (i > 0) neighbours.push(resolved[i - 1])
+          if (i < resolved.length - 1) neighbours.push(resolved[i + 1])
+        }
+      }
+      const reachesNeighbour = (corridor: PreparedCorridor): boolean => {
+        if (neighbours.length === 0) return true
+        for (const n of neighbours) {
+          if (projectOntoPolyline(n.x, n.y, corridor).dist <= CORRIDOR_MATCH_MAX_DIST_WORLD) return true
+        }
+        return false
+      }
       let best: TracePoint | undefined
       let bestDist = Infinity
       for (const shape of shapes) {
@@ -1220,6 +1338,7 @@ export function traceLine(
           if (!modeOk(i)) continue
           const ink = colourAt(i)
           if (!ink || !colourMatches(ink, tracedColour)) continue
+          if (!reachesNeighbour(prepared[i])) continue
           onInk = Math.min(onInk, projectOntoPolyline(x, y, prepared[i]).dist)
         }
         if (onInk < bestDist) {
@@ -1576,7 +1695,11 @@ export function traceLine(
          * route the sheet actually draws: koridor 1's Glodok to Kali Besar is
          * 521 units through the corner piece against 1122 the wrong way round.
          */
-        const ownChain = own && !own.loopArc ? null : matchAcrossJoin(a, b, prepared, strict)
+        // Where the line currently ends, so a chain can prefer to continue it.
+        const drawnEnd = edges.length > 0
+          ? [edges[edges.length - 1][2], edges[edges.length - 1][3]] as const
+          : undefined
+        const ownChain = own && !own.loopArc ? null : matchAcrossJoin(a, b, prepared, strict, drawnEnd)
         /*
          * A chain also beats a loop-arc match, which is a last resort by
          * construction — but only when it actually fits the stops better.
@@ -1615,7 +1738,23 @@ export function traceLine(
          * prefer it when it genuinely sits closer. The direct match still stands
          * whenever no better-fitting chain exists, which is every ordinary pair.
          */
-        const directFit = match ? worstEndpointDistance(a, b, prepared[match.index]) : Infinity
+        /*
+         * How far the pair's stops sit from the stroke that matched them.
+         *
+         * Measured from each stop's drawn TAP BAR, not its midpoint. A wide bar
+         * makes a stop that is plainly ON its stroke look stranded: Cawang's bar
+         * is 92 units across and koridor 9A's ink runs through one end, so the
+         * midpoint reads 45.6 — past NEAR_STROKE_WORLD — and a 17-edge chain
+         * replaced a clean two-edge match, drawing an eastward tail across the
+         * interchange before doubling back.
+         *
+         * The bar is the right ruler for "is this stop served by this stroke",
+         * which is exactly what this value gates. (The chain's own fit already
+         * uses it, via barDistance.)
+         */
+        const directFit = match
+          ? Math.max(barDistance(a, prepared[match.index]), barDistance(b, prepared[match.index]))
+          : Infinity
         /*
          * A chain never displaces a match already on the line's own ink.
          *
@@ -1630,8 +1769,8 @@ export function traceLine(
           && !!tracedColour
           && channelDistance(colourAt(match.index) ?? '', tracedColour) === 0
         if (directFit > NEAR_STROKE_WORLD) {
-          const chained = matchAcrossJoin(a, b, prepared, strict)
-            ?? matchAcrossJoin(a, b, prepared, eligible)
+          const chained = matchAcrossJoin(a, b, prepared, strict, drawnEnd)
+            ?? matchAcrossJoin(a, b, prepared, eligible, drawnEnd)
           /*
            * Only when the chain is a decisive improvement, not merely different.
            *
@@ -1679,8 +1818,8 @@ export function traceLine(
           // Strict first here too, for the reason given above: the chain should
           // not reach for a neighbour's colour while this line's own stroke is
           // available on both halves.
-          const chained = matchAcrossJoin(a, b, prepared, strict)
-            ?? matchAcrossJoin(a, b, prepared, eligible)
+          const chained = matchAcrossJoin(a, b, prepared, strict, drawnEnd)
+            ?? matchAcrossJoin(a, b, prepared, eligible, drawnEnd)
           if (chained) {
             if (chained.edges.length > 0) {
               if (!bridgeFromPrevious(edges, chainHead(chained.edges))) continue
