@@ -155,6 +155,56 @@ describe('plan', () => {
       const journeys = plan(twins, 'S1', 'S2')
       expect(journeys).toHaveLength(1)
     })
+
+    /*
+     * The same journey split at a different junction is still the same journey.
+     *
+     * Q shadows P along S1..S3 a little more cheaply and then stops, so a rider
+     * who wants S4 has to be on P — but every stop is served by both. Splitting
+     * the ride at S2 or at S3 gives two more renderings of one trip, and the
+     * rider cannot tell any of them apart. Ragunan -> Pasar Santa returned three
+     * of these, all reading "6V", with the genuine one-seat ride missing.
+     */
+    it('collapses journeys that differ only in where the ride was split', () => {
+      const shadowed = buildGraph([
+        ...edge('P', 'S1', 'S2', 1000),
+        ...edge('P', 'S2', 'S3', 1000),
+        ...edge('P', 'S3', 'S4', 1000),
+        ...edge('Q', 'S1', 'S2', 900),
+        ...edge('Q', 'S2', 'S3', 900)
+      ], [])
+
+      const journeys = plan(shadowed, 'S1', 'S4')
+
+      expect(journeys).toHaveLength(1)
+      expect(journeys[0]!.criteria.boardings).toBe(1)
+      expect(journeys[0]!.criteria.rideDistanceM).toBe(3000)
+      expect(journeys[0]!.legs).toEqual([{
+        type: 'RIDE',
+        lineCode: 'P',
+        operator: 'S1',
+        fromStationId: 'S1',
+        toStationId: 'S4',
+        stationIds: ['S1', 'S2', 'S3', 'S4'],
+        distanceM: 3000
+      }])
+    })
+
+    // Same stops in the same order is not the same journey when one of them is
+    // walked — the key has to tell a footpath from a ride.
+    it('keeps a journey that walks a stretch another one rides', () => {
+      const walkable = buildGraph(
+        [...edge('P', 'S1', 'S2', 1000), ...edge('P', 'S2', 'S3', 4000)],
+        [{ fromStationId: 'S2', toStationId: 'S3', distance: 400 }]
+      )
+
+      const journeys = plan(walkable, 'S1', 'S3')
+
+      expect(journeys.map(j => j.legs.map(l => l.type))).toEqual([
+        ['RIDE', 'TRANSFER'],
+        ['RIDE']
+      ])
+    })
   })
 
   describe('labels', () => {

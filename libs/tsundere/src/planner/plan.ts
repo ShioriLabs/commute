@@ -123,7 +123,9 @@ function expectedWaitS(lineCode: string, headwaysS: Map<string, number> | undefi
  * cost. Two things follow from that shape:
  *
  * 1. The line boarded is part of the label, so arriving at a stop on two
- *    different lines is two states.
+ *    different lines is two states — and the bag's dominance test compares only
+ *    within a state, or a line that shadows another for part of its run deletes
+ *    the one-seat rides that had to stay aboard.
  * 2. Journeys that trade one axis against another both survive, so the caller
  *    gets a genuine choice rather than one answer picked on the rider's behalf.
  *
@@ -176,7 +178,10 @@ export function plan(
   }
   getBag(fromStationId, 0).insert(origin)
 
-  const destinationBag = new Bag<Trace | null>({ maxSize: maxBagSize, weights })
+  // The one bag that is a result set rather than a state: the journey is over,
+  // so the line the rider arrived on decides nothing further and two labels here
+  // are two finished journeys, comparable outright.
+  const destinationBag = new Bag<Trace | null>({ maxSize: maxBagSize, weights, comparesAcrossLines: true })
   // Fewest boardings of any completed journey, for the bound above.
   let bestCompletedBoardings = Infinity
 
@@ -323,24 +328,49 @@ export function plan(
 }
 
 /*
+ * The stops a journey visits and which of them it walks between, flattened.
+ *
+ * Deliberately blind to where the ride was split as well as to which line served
+ * it. On a corridor several lines share, a journey can change vehicle at any of
+ * the shared stops and come out with the identical stop list — six renderings of
+ * one trip, and a rider cannot tell them apart. Walks keep a marker of their own
+ * so a footpath between two stops never reads as a ride between them.
+ */
+function journeyPath(legs: readonly RouteLeg[]): string {
+  const path: string[] = []
+  const push = (id: string) => {
+    if (path[path.length - 1] !== id) path.push(id)
+  }
+  for (const leg of legs) {
+    if (leg.type === 'RIDE') {
+      for (const id of leg.stationIds) push(id)
+    } else {
+      push(leg.fromStationId)
+      path.push('~')
+      path.push(leg.toStationId)
+    }
+  }
+  return path.join('>')
+}
+
+/*
  * Order the front, and drop journeys that are the same trip wearing a different
- * line code.
+ * line code — or the same trip boarded twice where one vehicle would do.
  *
  * TJ's overlapping corridors (13 / 13E / L13E share a trunk) otherwise fill the
  * result set with five renderings of one journey — the same shape the old
- * router's LINE_CHANGE_PENALTY_M existed to suppress.
+ * router's LINE_CHANGE_PENALTY_M existed to suppress. Sorted before deduping, so
+ * the survivor of each path is the best-ranked way of riding it: given the
+ * choice between staying aboard and changing vehicle for the same stops, that is
+ * the one-seat ride.
  */
 function rank(journeys: Journey[], weights: RankWeights): Journey[] {
   const seen = new Set<string>()
   const unique: Journey[] = []
   for (const journey of [...journeys].sort((a, b) => rankScore(a.criteria, weights) - rankScore(b.criteria, weights))) {
-    // Shape = the stops visited and where the walks fall, ignoring which line
-    // served each ride.
-    const shape = journey.legs
-      .map(leg => (leg.type === 'RIDE' ? `R:${leg.stationIds.join('>')}` : `W:${leg.fromStationId}>${leg.toStationId}`))
-      .join('|')
-    if (seen.has(shape)) continue
-    seen.add(shape)
+    const path = journeyPath(journey.legs)
+    if (seen.has(path)) continue
+    seen.add(path)
     unique.push(journey)
   }
   return unique

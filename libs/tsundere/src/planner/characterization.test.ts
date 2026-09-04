@@ -123,8 +123,14 @@ describe('bag, fed the whole corpus', () => {
     }
   }
 
+  /*
+   * Re-recorded 2026-09-04, when dominance became state-aware: a label may only
+   * be beaten by one that arrived on the same line. Fewer labels are rejected on
+   * the way in, so more of them reach a full bag and lose their place to the size
+   * cap instead — which is why `kept` FELL while `size` held.
+   */
   it('keeps the same labels at maxSize 4', () => {
-    expect(fingerprint(4)).toEqual({ kept: 29, size: 4, traces: '29,137,202,214' })
+    expect(fingerprint(4)).toEqual({ kept: 23, size: 4, traces: '137,198,202,214' })
   })
 
   it('keeps the same labels at maxSize 1', () => {
@@ -132,7 +138,7 @@ describe('bag, fed the whole corpus', () => {
   })
 
   it('keeps the same labels at maxSize 8', () => {
-    expect(fingerprint(8)).toEqual({ kept: 46, size: 8, traces: '29,40,108,137,174,202,214,215' })
+    expect(fingerprint(8)).toEqual({ kept: 42, size: 8, traces: '29,107,137,152,174,198,202,214' })
   })
 })
 
@@ -234,6 +240,14 @@ describe('planner output on a branching network', () => {
         }
       }
     }
-    expect({ journeys, checksum }).toEqual({ journeys: 122, checksum: 268792055 })
+    /*
+     * Re-recorded 2026-09-04 alongside the bag fingerprints. Exactly one of the
+     * 56 ordered pairs moved: LRTJ-H -> KCI-A traded a two-boarding alternative
+     * for a genuine one-seat one (walk to MRTJ-G, ride Y through to KCI-A),
+     * which the old cross-line dominance deleted by letting the label arriving
+     * at MRTJ-F on W beat the one arriving on Y. FEWEST_CHANGES correctly comes
+     * off the primary there — with two one-boarding journeys, nothing wins it.
+     */
+    expect({ journeys, checksum }).toEqual({ journeys: 122, checksum: 1953764488 })
   })
 })

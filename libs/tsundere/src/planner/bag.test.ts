@@ -67,6 +67,48 @@ describe('Bag', () => {
     expect(bag.size).toBe(1)
   })
 
+  /*
+   * Two lines running the same road carry independently measured distances, so
+   * one is always a few metres better than the other. If that lets it dominate,
+   * the loser's state is gone — and with it any journey that had to stay on the
+   * losing line. TJ 6 beat 6V into Warung Buncit by 360m and deleted the only
+   * line that continues to Pasar Santa.
+   */
+  it('does not let a label dominate one that arrived on a different line', () => {
+    const bag = new Bag<string>({ maxSize: 8 })
+    bag.insert(label({ rideDistanceM: 5679 }, '6', 'six'))
+    expect(bag.insert(label({ rideDistanceM: 6039 }, '6V', 'sixV'))).toBe(true)
+    expect(bag.labels().map(l => l.trace)).toEqual(['six', 'sixV'])
+  })
+
+  it('still evicts a worse label that arrived on the same line', () => {
+    const bag = new Bag<string>({ maxSize: 8 })
+    bag.insert(label({ rideDistanceM: 6039 }, '6V', 'long'))
+    expect(bag.insert(label({ rideDistanceM: 5679 }, '6V', 'short'))).toBe(true)
+    expect(bag.labels().map(l => l.trace)).toEqual(['short'])
+  })
+
+  /*
+   * The destination front is not a state — the journey is over, so the line the
+   * rider arrived on decides nothing further and two journeys there are directly
+   * comparable.
+   */
+  describe('comparesAcrossLines', () => {
+    it('compares labels from different lines against each other', () => {
+      const bag = new Bag<string>({ maxSize: 8, comparesAcrossLines: true })
+      bag.insert(label({ rideDistanceM: 5679 }, '6', 'six'))
+      expect(bag.insert(label({ rideDistanceM: 6039 }, '6V', 'sixV'))).toBe(false)
+      expect(bag.labels().map(l => l.trace)).toEqual(['six'])
+    })
+
+    it('drops an equal-cost journey that only differs by the line it arrived on', () => {
+      const bag = new Bag<string>({ maxSize: 8, comparesAcrossLines: true })
+      bag.insert(label({}, 'C', 'first'))
+      expect(bag.insert(label({}, 'M', 'second'))).toBe(false)
+      expect(bag.size).toBe(1)
+    })
+  })
+
   describe('size cap', () => {
     it('never grows past maxSize', () => {
       const bag = new Bag<string>({ maxSize: 3 })

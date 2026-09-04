@@ -26,12 +26,26 @@ export interface BagOptions {
    *
    * An approximation, and worth being honest about: a full bag evicts its
    * worst-ranked member, which can discard a genuinely non-dominated journey.
+   * Eviction is ranked across the whole bag rather than within a line, so it can
+   * take a line's only label and cost the same one-seat rides `dominates` is
+   * careful to protect — the cap is where that risk now lives.
+   *
    * Without it, TJ's overlapping corridors (13 / 13E / L13E share a trunk) grow
    * bags without bound and the search stops finishing. Bounded and slightly
    * lossy beats correct and too slow to run.
    */
   maxSize: number
   weights?: RankWeights
+  /**
+   * Compare every label against every other, ignoring the line it arrived on.
+   *
+   * Correct only where the journey is over. At the destination the boarded line
+   * decides nothing further, so two labels there are two finished journeys and
+   * directly comparable; for a (stop, round) bag the same comparison deletes
+   * states the search still needs. Off by default because the state bags
+   * outnumber the one front.
+   */
+  comparesAcrossLines?: boolean
 }
 
 /** Identical on every axis, so keeping both would just duplicate a journey. */
@@ -48,10 +62,12 @@ export class Bag<T> {
   #labels: Label<T>[] = []
   readonly #maxSize: number
   readonly #weights: RankWeights | undefined
+  readonly #comparesAcrossLines: boolean
 
-  constructor({ maxSize, weights }: BagOptions) {
+  constructor({ maxSize, weights, comparesAcrossLines = false }: BagOptions) {
     this.#maxSize = maxSize
     this.#weights = weights
+    this.#comparesAcrossLines = comparesAcrossLines
   }
 
   get size(): number {
@@ -71,15 +87,28 @@ export class Bag<T> {
    * new, and re-expanding on it is how a round-based scan turns quadratic.
    */
   insert(label: Label<T>): boolean {
+    /*
+     * Dominance only means anything between labels in the SAME state.
+     *
+     * Two lines running the same road are measured separately, so one is always
+     * a few metres ahead — and comparing across them lets the winner delete the
+     * loser's state along with every journey that had to stay on that line. TJ 6
+     * reached Warung Buncit 360m ahead of 6V and deleted the only line
+     * continuing to Pasar Santa, so a plain one-seat ride came back as three
+     * renderings of 6 + 6V instead. This is the invariant `incomingLine` was
+     * added for; until now only the duplicate check below honoured it.
+     */
+    const comparable = (existing: Label<T>) =>
+      this.#comparesAcrossLines || existing.incomingLine === label.incomingLine
+
     for (const existing of this.#labels) {
+      if (!comparable(existing)) continue
       if (dominates(existing.criteria, label.criteria)) return false
       // A genuine duplicate — same state, same costs on every axis — is not
       // worth keeping twice. Note this must compare the criteria directly
       // rather than asking "neither dominates", which is also true of a real
       // tradeoff (fewer boardings but more walking) that both deserve to stay.
-      if (existing.incomingLine === label.incomingLine && sameCriteria(existing.criteria, label.criteria)) {
-        return false
-      }
+      if (sameCriteria(existing.criteria, label.criteria)) return false
     }
 
     /*
@@ -91,7 +120,7 @@ export class Bag<T> {
     let kept = 0
     for (let i = 0; i < this.#labels.length; i++) {
       const existing = this.#labels[i]!
-      if (!dominates(label.criteria, existing.criteria)) this.#labels[kept++] = existing
+      if (!comparable(existing) || !dominates(label.criteria, existing.criteria)) this.#labels[kept++] = existing
     }
     this.#labels.length = kept
     this.#labels.push(label)
