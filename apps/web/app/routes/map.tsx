@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import LineRoundel from '~/components/line-roundel'
 import LineSheet from '~/components/line-sheet'
 import { findLine, lineCutShapes, linesNear, seedFadeFrom, type LinesManifest } from '~/lib/map-line-isolate'
+import { prepareLinePaths } from '~/lib/map-line-path'
 import { openSurface, isSurfaceOpen, type OpenSurface } from '~/lib/map-detail-surface'
 import { easeCameraFlight } from '~/lib/map-easing'
 import { clamp01, easeOut } from '~/lib/map-phase-tick'
@@ -640,6 +641,20 @@ export default function MapPage() {
   const fareError = fareQuery.error
   const fareLoading = fareQuery.isLoading
 
+  /*
+   * Every traced line's stations projected onto its own stroke, so a ride leg
+   * can read its geometry off map-lines.json instead of matching for it.
+   *
+   * Memoised on the two inputs it derives from rather than rebuilt with the
+   * overlay: the projection walks every vertex of every segment across all 41
+   * lines, while the overlay below rebuilds whenever the selected journey or
+   * the pair changes.
+   */
+  const linePaths = useMemo(
+    () => prepareLinePaths(linesManifest, workingPoints),
+    [linesManifest, workingPoints]
+  )
+
   // Drawable overlay geometry. Null fare is fine — pins resolve straight from
   // the pair, so a deep link shows its endpoints before the fare lands.
   const routeModel = useMemo<RouteOverlayModel | null>(() => {
@@ -712,9 +727,10 @@ export default function MapPage() {
       routePair,
       workingPoints,
       resolveLine,
-      corridorsManifest?.corridors ?? null
+      corridorsManifest?.corridors ?? null,
+      linePaths
     )
-  }, [debugCorridors, debugTrace, traceHiddenLines, traceHiddenTjColors, linesManifest, activeJourney, routePair, workingPoints, resolveLine, corridorsManifest])
+  }, [debugCorridors, debugTrace, traceHiddenLines, traceHiddenTjColors, linesManifest, activeJourney, routePair, workingPoints, resolveLine, corridorsManifest, linePaths])
 
   // Distinct BRT stroke colours, for the trace panel's TJ swatches — see the
   // note on traceHiddenTjColors for why these are colours rather than names.

@@ -3,6 +3,8 @@ import type { FareResult, FareResultRideLeg, FareResultTransferLeg } from '@comm
 import type { Point } from './map-renderer'
 import { ROUTE_LINE_HALF_WIDTH_WORLD, ROUTE_PIN_RADIUS_WORLD, ROUTE_STOP_RADIUS_WORLD } from './map-renderer'
 import type { Corridor } from './map-corridors'
+import type { LinesManifest } from './map-line-isolate'
+import { prepareLinePaths } from './map-line-path'
 import { buildRouteOverlayModel } from './map-route-overlay'
 
 // The overlay model is where fare legs (station id sequences) meet points.json
@@ -621,5 +623,126 @@ describe('mode gate', () => {
     for (const s of rides) {
       expect(Math.max(s.ax, s.bx)).toBeLessThanOrEqual(3640)
     }
+  })
+})
+
+/*
+ * The traced lines, which is where a ride's geometry comes from whenever it can
+ * answer. These check the handoff — that a trace wins over a corridor, that the
+ * matcher still catches what the trace cannot, and that a leg spanning both
+ * still draws as one line.
+ */
+describe('buildRouteOverlayModel with traced lines', () => {
+  // Same L as the corridor tests, but this time the line itself is traced.
+  const traced = (key: string, pts: Array<[number, number]>, markers: string[]): LinesManifest => ({
+    version: 'test',
+    pointsVersion: 'test',
+    lines: [{
+      key,
+      operator: key.split(':')[0],
+      code: key.split(':')[1],
+      name: key,
+      color: '#FF0000',
+      r: 5,
+      segments: [{
+        kind: 'TRUNK',
+        edges: pts.slice(1).map((p, i) => [pts[i][0], pts[i][1], p[0], p[1]]),
+        markers
+      }],
+      bbox: [0, 0, 0, 0],
+      matchedPairs: 0,
+      totalPairs: 0
+    }]
+  })
+
+  // A leg on a line the manifest carries, so the key the fixture generates is
+  // the key the manifest is built around.
+  function tracedFare(stopIds: string[]) {
+    const leg = rideLeg(stopIds, '#FF0000')
+    return { fare: fareResult([leg], stopIds[0], stopIds[stopIds.length - 1]), key: leg.line }
+  }
+
+  it('follows the traced stroke around a corner', () => {
+    const points = [pt('KCI-AAA', 0, 0), pt('KCI-BBB', 200, 200)]
+    const { fare, key } = tracedFare(['KCI-AAA', 'KCI-BBB'])
+    const paths = prepareLinePaths(traced(key, [[0, 0], [200, 0], [200, 200]], ['KCI-AAA', 'KCI-BBB']), points)
+    const model = buildRouteOverlayModel(fare, pair('KCI-AAA', 'KCI-BBB'), points, resolveLine, null, paths)
+    const rides = model!.overlay.segments.filter(s => s.kind === 'ride')
+    expect(rides).toHaveLength(2)
+    expect(rides[0]).toMatchObject({ ax: 0, ay: 0, bx: 200, by: 0 })
+    expect(rides[1]).toMatchObject({ ax: 200, ay: 0, bx: 200, by: 200 })
+  })
+
+  /*
+   * The point of the whole change. A corridor is identity-less, so a leg can
+   * elect the wrong one; the trace knows which line it is. Here the only
+   * corridor on offer runs somewhere the line does not, and the trace must win.
+   */
+  it('rides its own traced stroke rather than the corridor underneath', () => {
+    const points = [pt('KCI-AAA', 0, 0), pt('KCI-BBB', 200, 0)]
+    const { fare, key } = tracedFare(['KCI-AAA', 'KCI-BBB'])
+    // The corridor detours north; the trace runs straight.
+    const corridors: Corridor[] = [{ w: 25, c: '#FF0000', pts: [[0, 0], [100, -100], [200, 0]] }]
+    const paths = prepareLinePaths(traced(key, [[0, 0], [200, 0]], ['KCI-AAA', 'KCI-BBB']), points)
+    const model = buildRouteOverlayModel(fare, pair('KCI-AAA', 'KCI-BBB'), points, resolveLine, corridors, paths)
+    const rides = model!.overlay.segments.filter(s => s.kind === 'ride')
+    // Nothing is drawn north of the straight line the trace describes.
+    for (const s of rides) expect(Math.min(s.ay, s.by)).toBeGreaterThanOrEqual(0)
+  })
+
+  it('falls back to the corridor for a line the manifest does not carry', () => {
+    const points = [pt('KCI-AAA', 0, 0), pt('KCI-BBB', 200, 200)]
+    const { fare } = tracedFare(['KCI-AAA', 'KCI-BBB'])
+    const corridors: Corridor[] = [{ w: 25, c: '#FF0000', pts: [[0, 0], [200, 0], [200, 200]] }]
+    // A manifest that knows a different line entirely.
+    const paths = prepareLinePaths(traced('TJ:99', [[0, 0], [1, 1]], []), points)
+    const model = buildRouteOverlayModel(fare, pair('KCI-AAA', 'KCI-BBB'), points, resolveLine, corridors, paths)
+    const rides = model!.overlay.segments.filter(s => s.kind === 'ride')
+    // Still turns the corner, so the corridor matcher did the work.
+    expect(rides).toHaveLength(2)
+    expect(rides[1]).toMatchObject({ ax: 200, ay: 0, bx: 200, by: 200 })
+  })
+
+  /*
+   * A trace with a gap in it. The pairs either side are traced, the pair
+   * spanning the break is not, and the leg still has to read as one line — the
+   * seam is bridged exactly as a corridor handoff is.
+   */
+  it('mixes traced and matched pairs within one leg, without a gap', () => {
+    const points = [pt('KCI-AAA', 0, 0), pt('KCI-BBB', 100, 0), pt('KCI-CCC', 500, 0), pt('KCI-DDD', 600, 0)]
+    const { fare, key } = tracedFare(['KCI-AAA', 'KCI-BBB', 'KCI-CCC', 'KCI-DDD'])
+    const manifest = traced(key, [[0, 0], [100, 0]], ['KCI-AAA', 'KCI-BBB'])
+    // A second piece past the break, the way a stroke drawn in two parts traces.
+    manifest.lines[0].segments.push({
+      kind: 'TRUNK',
+      edges: [[500, 0, 600, 0]],
+      markers: ['KCI-CCC', 'KCI-DDD']
+    })
+    const corridors: Corridor[] = [{ w: 25, c: '#FF0000', pts: [[0, 0], [600, 0]] }]
+    const paths = prepareLinePaths(manifest, points)
+    const model = buildRouteOverlayModel(fare, pair('KCI-AAA', 'KCI-DDD'), points, resolveLine, corridors, paths)
+    const rides = model!.overlay.segments.filter(s => s.kind === 'ride')
+    // Every stop is reached, and the drawn line is continuous from end to end.
+    const xs = rides.flatMap(s => [s.ax, s.bx])
+    expect(Math.min(...xs)).toBe(0)
+    expect(Math.max(...xs)).toBe(600)
+    for (let i = 1; i < rides.length; i++) {
+      expect(rides[i].ax).toBeCloseTo(rides[i - 1].bx, 5)
+    }
+  })
+
+  it('puts the stop dots on the traced stroke, not the tap target', () => {
+    // The interchange bar's centroid sits 40 units off the line, as Manggarai's does.
+    const points = [pt('KCI-AAA', 0, 0), pt('KCI-XCH', 100, 40), pt('KCI-BBB', 200, 0)]
+    const { fare, key } = tracedFare(['KCI-AAA', 'KCI-XCH', 'KCI-BBB'])
+    const paths = prepareLinePaths(
+      traced(key, [[0, 0], [200, 0]], ['KCI-AAA', 'KCI-XCH', 'KCI-BBB']),
+      points
+    )
+    const model = buildRouteOverlayModel(fare, pair('KCI-AAA', 'KCI-BBB'), points, resolveLine, null, paths)
+    const stops = model!.overlay.pins.filter(p => p.kind === 'stop')
+    expect(stops).toHaveLength(1)
+    expect(stops[0].y).toBe(0)
+    expect(stops[0].x).toBeCloseTo(100, 0)
   })
 })
