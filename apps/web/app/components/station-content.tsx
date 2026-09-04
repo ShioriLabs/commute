@@ -8,7 +8,6 @@ import {
   NavigationArrowIcon,
   BroadcastIcon,
   ElevatorIcon,
-  EscalatorDownIcon,
   EscalatorUpIcon,
   LetterCirclePIcon,
   LockersIcon,
@@ -95,8 +94,18 @@ const AMENITY_ICONS: Record<AmenityType, JSX.Element> = {
     </div>
   ),
   CHARGING_STATION: <PlugIcon weight="duotone" className="w-6 h-6" />,
+  /*
+   * Both escalators share one glyph, the way the lift pair below does.
+   *
+   * In Jak Lingko's iconography the up and down escalator marks mean direction
+   * of travel (Eskalator Naik / Eskalator Turun — see docs/jaklingko-wayfinding.md),
+   * so spending them on paid-vs-unpaid told a rider "escalator going down" where
+   * we meant "escalator inside the gates". Phosphor has no neutral escalator, so
+   * we pick one rather than keep the pair carrying a meaning it doesn't have; the
+   * fare-zone distinction is already in the label.
+   */
   ESCALATOR_UNPAID: <EscalatorUpIcon weight="duotone" className="w-6 h-6" />,
-  ESCALATOR_PAID: <EscalatorDownIcon weight="duotone" className="w-6 h-6" />,
+  ESCALATOR_PAID: <EscalatorUpIcon weight="duotone" className="w-6 h-6" />,
   ELEVATOR_UNPAID: <ElevatorIcon weight="duotone" className="w-6 h-6" />,
   ELEVATOR_PAID: <ElevatorIcon weight="duotone" className="w-6 h-6" />,
   PRAYING_ROOM: <StarAndCrescentIcon weight="duotone" className="w-6 h-6 text-green-700" />,

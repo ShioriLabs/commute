@@ -2,6 +2,7 @@ import type { FareResult } from '@commute/schemas'
 import { hexToRgb01 } from 'utils/colors'
 import type { Point, RouteOverlay, RouteSegment } from './map-renderer'
 import { colourMatches } from './map-corridor-colour'
+import { sliceLinePath, type PreparedLinePaths } from './map-line-path'
 import { CORRIDOR_MATCH_MAX_DIST_WORLD, matchCorridorPath, modeMatches, pickLegCorridor, pointAtArcLength, polylineLength, prepareCorridors, projectOntoPolyline, type Corridor } from './map-corridors'
 import {
   dashSegment,
@@ -89,7 +90,22 @@ export function buildRouteOverlayModel(
   // chording between stations. Optional throughout: the file is fetched
   // separately and may not have landed yet, and every pair falls back to a
   // chord without it.
-  corridors?: readonly Corridor[] | null
+  corridors?: readonly Corridor[] | null,
+  /*
+   * The lines traced at build time, which is where a ride's geometry comes from
+   * whenever it can.
+   *
+   * This and `corridors` answer the same question from opposite ends. A corridor
+   * is raw artwork with no identity, so matching one means electing it by
+   * colour, mode and proximity — an inference. A traced line already knows it is
+   * TJ:9A, so its geometry is a lookup. The lookup wins wherever it answers, and
+   * the matcher stays underneath for the rest: the traces have gaps, and 14 of
+   * the 790 adjacent pairs on the shipped network still need it.
+   *
+   * Optional like the corridors, and for the same reason — the manifest is
+   * fetched separately, so every pair has to draw without it.
+   */
+  linePaths?: PreparedLinePaths | null
 ): RouteOverlayModel | null {
   // Falls back to the transfer grey rather than black: /operators may still be
   // in flight when a deep link paints its first overlay, and a neutral line
@@ -135,9 +151,15 @@ export function buildRouteOverlayModel(
   let cursor: { x: number, y: number } | null = null
   for (const leg of fare?.legs ?? []) {
     if (leg.type === 'RIDE') {
+      // The station id rides along with its centroid: the traced-path lookup is
+      // by id, and filtering to the points that resolved would otherwise lose
+      // which stop each vertex came from.
       const vertices = leg.stops
-        .map(stop => centroid(stop.id))
-        .filter((v): v is { x: number, y: number } => v !== null)
+        .map((stop) => {
+          const c = centroid(stop.id)
+          return c ? { x: c.x, y: c.y, id: stop.id } : null
+        })
+        .filter((v): v is { x: number, y: number, id: string } => v !== null)
       if (vertices.length === 0) continue
       const color = hexToRgb01(lineColor(leg.line))
       // Match the corridor this leg rides: the artwork draws BRT thinner than
@@ -264,6 +286,34 @@ export function buildRouteOverlayModel(
         const a = vertices[i - 1]
         const b = vertices[i]
         if (a.x === b.x && a.y === b.y) continue
+        /*
+         * The traced stroke first, and where it answers nothing else runs.
+         *
+         * This is the whole point of the change: the tracer already decided
+         * which artwork this line rides, at build time, with the line's identity
+         * in hand. Everything below — electing a corridor, gating it on colour
+         * and mode, then judging whether the result adds shape — is the same
+         * question asked without that identity, so a traced path does not need
+         * any of it. It IS the drawn stroke, not a candidate for one.
+         *
+         * Per pair rather than per leg: a leg can cross a gap in its own trace
+         * (TJ:4's trunk is drawn in two pieces), and the pairs either side are
+         * still perfectly traced. The seam is bridged like any other below.
+         */
+        const traced = sliceLinePath(linePaths, leg.line, a.id, b.id)
+        if (traced) {
+          plans.push({
+            a,
+            b,
+            i,
+            path: traced,
+            feet: [
+              [traced[0][0], traced[0][1]],
+              [traced[traced.length - 1][0], traced[traced.length - 1][1]]
+            ]
+          })
+          continue
+        }
         // Corridor first, chord as the fallback — a pair whose stops aren't both
         // near one drawn corridor (or whose only candidate detours the long way)
         // still gets a straight connector rather than nothing.

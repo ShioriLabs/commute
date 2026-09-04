@@ -51,7 +51,10 @@ function Node({ kind, color, stationNumber, operator, compact }: {
   const text = filled && getForegroundColor(color) === 'LIGHT' ? 'text-white' : 'text-slate-900'
   return (
     <span
-      className={`flex flex-col items-center justify-center rounded-full font-bold tabular-nums leading-none ${size} ${text} ${filled ? 'shadow-sm' : `bg-white border-4 ${kind === 'INTERCHANGE' ? 'shadow-sm' : ''}`}`}
+      // Always narrow: every badge here is a stacked station number, the tight-
+      // space case the wayfinding standard sanctions Narrow for. Matches
+      // line-roundel.tsx, which draws the same badge.
+      className={`flex flex-col items-center justify-center rounded-full font-roundel-narrow font-bold tabular-nums leading-none ${size} ${text} ${filled ? 'shadow-sm' : `bg-white border-4 ${kind === 'INTERCHANGE' ? 'shadow-sm' : ''}`}`}
       style={filled ? { backgroundColor: color } : { borderColor: color }}
     >
       {planePrefix

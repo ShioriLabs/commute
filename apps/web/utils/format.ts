@@ -16,8 +16,8 @@ export function formatRupiah(amount: number): string {
   // official convention (RpX.XXX, no gap).
   return rupiah
     .formatToParts(amount)
-    .filter((part) => part.type !== 'literal' || part.value.trim() !== '')
-    .map((part) => part.value)
+    .filter(part => part.type !== 'literal' || part.value.trim() !== '')
+    .map(part => part.value)
     .join('')
 }
 

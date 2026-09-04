@@ -108,7 +108,7 @@ CREATE TABLE pois (
   slug        VARCHAR(64) NOT NULL UNIQUE,              -- URL key, mutable
   name        VARCHAR(128) NOT NULL,
   keywords    TEXT,           -- curated aliases/nicknames for search: 'Senop' (Senopati), 'JCC' — nullable
-  category    VARCHAR(32),    -- 'STADIUM' | 'PARK' | 'LANDMARK' | 'DISTRICT' | … nullable
+  category    VARCHAR(32),    -- from the Jak Lingko set, see "Categories" below; nullable
   description TEXT,           -- editorial (someday), nullable
   heroImage   VARCHAR(255),   -- path or R2 URL, nullable
   latitude    REAL,           -- POI centroid (you already have coords), nullable
@@ -138,6 +138,44 @@ station↔station transfer graph, and their semantics stay separable (see fare-s
 below). Kysely: `PoiSchema` + `PoiStationSchema` in
 `apps/api/src/db/schemas/pois.ts`, registered in `schemas/index.ts`. Seed via a
 generated `pois.sql` (same pattern as `hubs.sql` / `edges.sql`).
+
+### Categories — take Jak Lingko's, don't invent one
+
+`category` uses the POI vocabulary from the official DKI wayfinding standard rather than
+a set coined here (see `jaklingko-wayfinding.md`). The rider has already met these
+categories on station totems and locality maps, and each one has a drawn pictogram
+waiting if we ever render category icons:
+
+> Pasar, Masjid, Gereja, Pura, Klenteng, Vihara, Monumen, Museum, Kantor Polisi, Pemadam
+> Kebakaran, Rumah Sakit, Sarana Olahraga, Penginapan, Pusat Perbelanjaan, Kantor
+> Pemerintahan, Sekolah/Universitas, Apartemen/Perkantoran, Perumahan, SPBU, Pusat Wisata,
+> Perpustakaan, Taman/RPTRA, Restoran, Kafe, Kantor Pos, Kedutaan Besar, Teater, Galeri
+> Seni, Pantai, Bank.
+
+Two additions of our own, both justified by things the standard handles differently:
+
+- **`DISTRICT`** — the standard has no district category because a totem stands *inside*
+  the district and never needs to point at it as a destination. We do (see the nightlife
+  archetype above), so this one is ours.
+- **`LANDMARK`** — the standard's answer for famous places is a *bespoke glyph per place*
+  (Monas, Istiqlal, Kota Tua, GBK, Ancol…), which is an artwork commitment we aren't
+  making. `LANDMARK` is the honest stand-in for "famous enough to deserve its own mark".
+
+### What earns POI status — the two-tier test
+
+The standard's curation criteria, worth following because they select for **navigational**
+value rather than importance:
+
+- **Primary** — a public attraction with heavy visitation; the nearest transit or
+  bike-share access point; a distinctly local place; internationally recognised.
+- **Secondary** — memorable and easily identified along a walking route; heritage or
+  architecturally unusual; a place that *defines* an area; an important or well-known
+  building; sited at a major junction.
+
+The secondary tier is the useful one and the easy one to get wrong. A strange-looking
+building on a corner is a better POI than a nationally significant one set back behind a
+wall, because the test is "can the walker confirm they're on track", not "does this
+matter". Curate `pois` rows against these, not against a mental list of famous places.
 
 ### Seeding — coords make this semi-automatic
 

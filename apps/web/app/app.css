@@ -1,6 +1,52 @@
 @import "tailwindcss";
 
+/* PT Sans is the typeface the Jak Lingko wayfinding standard specifies, chosen
+   there as a public-space face with distinct letterforms (see
+   docs/jaklingko-wayfinding.md). It is deliberately scoped to **roundels only**
+   and never to body text: the roundel is a reproduction of a physical badge, so
+   matching its type is what makes it read as the real thing, while the rest of
+   the UI stays on Plus Jakarta Sans — itself the +Jakarta city typeface, and the
+   other half of the same identity system.
+
+   Self-hosted and subset to [0-9A-Za-z], the roundel's entire character set, so
+   this costs no extra connection on top of the two font preconnects in root.tsx
+   and cannot leak into body copy. `unicode-range` also stops the browser
+   fetching either file on a page that renders no roundel.
+
+   Narrow is the standard's own answer for constrained space, which is what the
+   stacked two-character codes are. Regenerate with the `text=` parameter on
+   Google's css2 API if the character set ever grows; rename the file if so,
+   because _headers freezes these paths.
+
+   `font-display: swap` is safe here despite the metric difference: the roundel
+   is a fixed-size circle with centred content, so a late swap restyles glyphs
+   without moving any box. */
+@font-face {
+  font-family: "PT Sans Roundel";
+  src: url("/fonts/pt-sans-bold-subset.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+30-39, U+41-5A, U+61-7A;
+}
+
+@font-face {
+  font-family: "PT Sans Narrow Roundel";
+  src: url("/fonts/pt-sans-narrow-bold-subset.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+30-39, U+41-5A, U+61-7A;
+}
+
 @theme {
+  /* Roundel faces. Both fall back through Plus Jakarta Sans so a failed font
+     load degrades to the app's own face rather than to a system serif. */
+  --font-roundel: "PT Sans Roundel", "Plus Jakarta Sans", ui-sans-serif, system-ui,
+    sans-serif;
+  --font-roundel-narrow: "PT Sans Narrow Roundel", "PT Sans Roundel",
+    "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 

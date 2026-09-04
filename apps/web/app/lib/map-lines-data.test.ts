@@ -153,6 +153,145 @@ describe('the shipped map-lines.json', () => {
     expect(offColour / (onColour + offColour)).toBeLessThan(0.02)
   })
 
+  it('draws each line as a continuous run, not a string of disconnected pieces', () => {
+    /*
+     * The gap guard, and the one the ink audit above structurally cannot provide.
+     *
+     * When a pair matches a corridor that is not this line's, the drawn line
+     * jumps to that stroke and back, leaving a visible break at each end. The
+     * colour audit misses it whenever the intruding stroke is a near-enough hue:
+     * koridor 9's teal sits 56 channels from koridor 6's green, INSIDE the 72
+     * tolerance, so TJ:6V read as 0% off-colour while visibly split in two.
+     *
+     * Consecutive edges are emitted head-to-tail within a pair, so a gap between
+     * them means the two pairs landed on different strokes. The tolerance is the
+     * widest station disc: the artwork genuinely breaks a corridor where a marker
+     * is drawn over it, and those breaks are real ink, not tracing errors.
+     *
+     * Only lines that traced EVERY pair are checked. A refused pair is meant to
+     * leave a hole — that is the whole no-chord rule — so a line carrying one is
+     * expected to be discontinuous and says so in matchedPairs. Checking those
+     * too would pin the refusals rather than the jumps this exists to catch.
+     */
+    const MAX_GAP_WORLD = 92
+    const offenders: string[] = []
+    for (const line of lines) {
+      if (line.matchedPairs < line.totalPairs) continue
+      for (const segment of line.segments) {
+        let worst = 0
+        for (let i = 1; i < segment.edges.length; i++) {
+          const [, , px, py] = segment.edges[i - 1]
+          const [qx, qy] = segment.edges[i]
+          worst = Math.max(worst, Math.hypot(qx - px, qy - py))
+        }
+        if (worst > MAX_GAP_WORLD) offenders.push(`${line.key} ${Math.round(worst)}`)
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+
+  it('leaves a gap only where the sheet draws no stroke to follow', () => {
+    /*
+     * The gap test above only looks at lines that traced EVERY pair, because a
+     * refused pair is meant to leave a hole. That exemption is too generous: it
+     * also excuses a line that refused a pair the artwork plainly does draw.
+     *
+     * The honest distinction is not "did the line trace every pair" but "is
+     * there ink to follow across the hole". TJ:4 and TJ:4D break across blank
+     * paper — measured, no corridor of any colour lies within 60 units of the
+     * midpoint of their 884-unit gap, so no tracer can draw them and the gap is
+     * correct. TJ:9A's 542-unit break, by contrast, had its own #49947F on BOTH
+     * sides and the two strokes joined 45.6 units apart: ink the whole way, and
+     * a gap that was a tracing failure rather than a data limit.
+     *
+     * So every gap must be over paper the sheet left empty. Lines whose data is
+     * known not to match the artwork are named rather than pattern-matched, so
+     * adding one is a deliberate act with a reason attached.
+     */
+    /*
+     * Lines whose stop list and the drawn sheet disagree, so a gap is the sheet
+     * telling the truth rather than the tracer failing.
+     *
+     * TJ:4/4D: the GTFS sequence runs through stations the artwork does not
+     * connect — no corridor of ANY colour lies within 60 units of the midpoint
+     * of their 884-unit gap.
+     */
+    const KNOWN_DATA_MISMATCH = new Set(['TJ:4', 'TJ:4D'])
+    const MAX_GAP_WORLD = 92
+    const INK_REACH_WORLD = 60
+
+    const brt = prepareCorridors(
+      (corridorsManifest as unknown as { corridors: Corridor[] }).corridors
+    ).filter(c => isBrtCorridor(c))
+
+    const offenders: string[] = []
+    for (const line of lines) {
+      if (KNOWN_DATA_MISMATCH.has(line.key)) continue
+      for (const segment of line.segments) {
+        for (let i = 1; i < segment.edges.length; i++) {
+          const [, , px, py] = segment.edges[i - 1]
+          const [qx, qy] = segment.edges[i]
+          const gap = Math.hypot(qx - px, qy - py)
+          if (gap <= MAX_GAP_WORLD) continue
+          // Is there ink across the hole? Sample the midpoint of the break.
+          const mx = (px + qx) / 2
+          const my = (py + qy) / 2
+          let nearest = Infinity
+          for (const c of brt) nearest = Math.min(nearest, projectOntoPolyline(mx, my, c).dist)
+          if (nearest <= INK_REACH_WORLD) {
+            offenders.push(`${line.key} ${Math.round(gap)}u over ink at ${Math.round(nearest)}u`)
+          }
+        }
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+
+  it('turns through curves, never a mitre or a sidestep', () => {
+    /*
+     * The schematic's own drawing rule: a run going horizontal cannot change its
+     * Y, and one going vertical cannot change its X, without a curved section
+     * between. Every corner on the sheet is a fillet.
+     *
+     * So a hard turn between two long edges that meet exactly means the trace
+     * cut a corner the artwork draws round, and a short edge cutting across both
+     * its neighbours means it stepped sideways onto a parallel stroke — the
+     * staircase that appears where a line and its neighbour run 12-24 units
+     * apart. Neither shape exists in the source, so neither may appear here.
+     *
+     * Only real joints are checked: where consecutive edges do not meet, the
+     * pair between them was refused, and the angle across that hole is not a
+     * corner the trace drew.
+     */
+    const MIN_LEG_WORLD = 25
+    const MAX_TURN_DEG = 60
+    const bearing = (ax: number, ay: number, bx: number, by: number): number => {
+      const angle = Math.atan2(by - ay, bx - ax) * 180 / Math.PI
+      return ((angle % 180) + 180) % 180
+    }
+    const turn = (p: number, q: number): number => {
+      const d = Math.abs(p - q) % 180
+      return d > 90 ? 180 - d : d
+    }
+    const corners: string[] = []
+    for (const line of lines) {
+      for (const segment of line.segments) {
+        const edges = segment.edges
+        for (let i = 0; i < edges.length - 1; i++) {
+          const [ax, ay, axEnd, ayEnd] = edges[i]
+          const [bx, by, bxEnd, byEnd] = edges[i + 1]
+          if (Math.hypot(bx - axEnd, by - ayEnd) > 1) continue
+          const lenA = Math.hypot(axEnd - ax, ayEnd - ay)
+          const lenB = Math.hypot(bxEnd - bx, byEnd - by)
+          if (lenA < MIN_LEG_WORLD || lenB < MIN_LEG_WORLD) continue
+          const angle = turn(bearing(ax, ay, axEnd, ayEnd), bearing(bx, by, bxEnd, byEnd))
+          if (angle >= MAX_TURN_DEG) corners.push(`${line.key} ${Math.round(angle)}deg`)
+        }
+      }
+    }
+    expect(corners).toEqual([])
+  })
+
   it('only lets a line leave its brand colour where the sheet demands it', () => {
     /*
      * The companion to the audit above, and the reason it can be strict.
@@ -167,11 +306,15 @@ describe('the shipped map-lines.json', () => {
      */
     const EXPECTED_REDRAWN: Record<string, string> = {
       // Branded a pale tint of the orange it is drawn in.
-      'TJ:14': '#FA7116',
-      // Branded brown, drawn crimson — and the brown-ish stubs they cross would
-      // pass a brand-gated match, so this is the pair the election exists for.
-      'TJ:7': '#F71752',
-      'TJ:7F': '#F71752'
+      'TJ:14': '#FA7116'
+      /*
+       * TJ:7 and TJ:7F used to be here: the GTFS feed gives them brown #914900
+       * while TransJakarta's own roundel and the poster draw them pink, so the
+       * election had to recover the pink from the artwork. The brand is now
+       * corrected at source (apps/api/src/operators/tj/lines.ts), so there is
+       * nothing left to re-elect — which is the better fix, because the brown
+       * also sat closer to koridor 5's stroke than to their real colour.
+       */
     }
     const redrawn = lines.filter(line =>
       channelDistance(drawnColour(line), line.color) > CORRIDOR_COLOUR_TOLERANCE
