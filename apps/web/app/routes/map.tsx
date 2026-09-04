@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import LineRoundel from '~/components/line-roundel'
 import LineSheet from '~/components/line-sheet'
 import { findLine, lineCutShapes, linesNear, seedFadeFrom, type LinesManifest } from '~/lib/map-line-isolate'
+import { prepareLinePaths } from '~/lib/map-line-path'
 import { openSurface, isSurfaceOpen, type OpenSurface } from '~/lib/map-detail-surface'
 import { easeCameraFlight } from '~/lib/map-easing'
 import { clamp01, easeOut } from '~/lib/map-phase-tick'
@@ -640,6 +641,20 @@ export default function MapPage() {
   const fareError = fareQuery.error
   const fareLoading = fareQuery.isLoading
 
+  /*
+   * Every traced line's stations projected onto its own stroke, so a ride leg
+   * can read its geometry off map-lines.json instead of matching for it.
+   *
+   * Memoised on the two inputs it derives from rather than rebuilt with the
+   * overlay: the projection walks every vertex of every segment across all 41
+   * lines, while the overlay below rebuilds whenever the selected journey or
+   * the pair changes.
+   */
+  const linePaths = useMemo(
+    () => prepareLinePaths(linesManifest, workingPoints),
+    [linesManifest, workingPoints]
+  )
+
   // Drawable overlay geometry. Null fare is fine — pins resolve straight from
   // the pair, so a deep link shows its endpoints before the fare lands.
   const routeModel = useMemo<RouteOverlayModel | null>(() => {
@@ -656,7 +671,17 @@ export default function MapPage() {
               bx,
               by,
               r: line.r,
-              color: hexToRgb01(line.color),
+              /*
+               * The ink the sheet DRAWS this line in, not its brand colour.
+               *
+               * This overlay exists to check traced geometry against the artwork
+               * underneath, so it has to use the same colour the artwork does.
+               * Three lines are branded a colour the sheet never uses for them
+               * (TJ:7 and TJ:7F are branded brown and drawn crimson, TJ:14 a
+               * pale tint of its orange), and painting the brand over them made
+               * a correct trace look like it had landed on the wrong stroke.
+               */
+              color: hexToRgb01(line.inkColor ?? line.color),
               kind: 'ride' as const
             }))
           )
@@ -702,9 +727,10 @@ export default function MapPage() {
       routePair,
       workingPoints,
       resolveLine,
-      corridorsManifest?.corridors ?? null
+      corridorsManifest?.corridors ?? null,
+      linePaths
     )
-  }, [debugCorridors, debugTrace, traceHiddenLines, traceHiddenTjColors, linesManifest, activeJourney, routePair, workingPoints, resolveLine, corridorsManifest])
+  }, [debugCorridors, debugTrace, traceHiddenLines, traceHiddenTjColors, linesManifest, activeJourney, routePair, workingPoints, resolveLine, corridorsManifest, linePaths])
 
   // Distinct BRT stroke colours, for the trace panel's TJ swatches — see the
   // note on traceHiddenTjColors for why these are colours rather than names.
@@ -3275,7 +3301,12 @@ export default function MapPage() {
                   <button
                     key={line.key}
                     type="button"
-                    title={line.name}
+                    /*
+                     * Name the drawn ink when it differs from the brand, so the
+                     * chip and the stroke on the map can be told apart rather
+                     * than read as a mistrace.
+                     */
+                    title={line.inkColor ? `${line.name} — drawn ${line.inkColor}` : line.name}
                     onClick={() => setTraceHiddenLines((prev) => {
                       const next = new Set(prev)
                       if (next.has(line.key)) next.delete(line.key)
@@ -3286,7 +3317,15 @@ export default function MapPage() {
                       'px-2 py-1 rounded font-mono text-xs border',
                       hidden ? 'border-slate-200 text-slate-400 bg-white' : 'border-transparent text-white'
                     )}
-                    style={hidden ? undefined : { backgroundColor: line.color }}
+                    style={hidden
+                      ? undefined
+                      : {
+                          backgroundColor: line.color,
+                          // A line drawn in an ink its brand does not name gets
+                          // that ink as an outline, so the chip explains the
+                          // colour difference on the map instead of hiding it.
+                          boxShadow: line.inkColor ? `0 0 0 2px ${line.inkColor}` : undefined
+                        }}
                   >
                     {line.code}
                   </button>
