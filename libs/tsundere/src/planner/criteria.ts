@@ -46,22 +46,34 @@ export interface Criteria {
 }
 
 /*
- * Comparison buckets.
+ * Comparison tolerances.
  *
  * Without these the engine does not work. Five continuous axes means two
  * journeys differing by one metre of walking are mutually non-dominated, so
- * nothing is ever discarded and every bag grows until the search dies. Rounding
- * *for the comparison only* collapses that family into a single label while the
- * reported values stay exact.
+ * nothing is ever discarded and every bag grows until the search dies. Treating
+ * differences below these as equal *for the comparison only* collapses that
+ * family into a single label while the reported values stay exact.
  *
  * 100m is roughly a city block, and below a minute of waiting is not a
  * difference a rider can act on.
+ *
+ * Applied as a tolerance rather than by rounding to a grid. Rounding collapses
+ * small differences everywhere EXCEPT at the boundary, where 5049 and 5051 land
+ * in different buckets and separate — so a journey losing on every other axis
+ * could survive on a 2m edge. Comparing relative to the pair has no boundary to
+ * straddle. See the dated note in criteria.test.ts for the production case.
  */
 export const DISTANCE_BUCKET_M = 100
 export const WAIT_BUCKET_S = 60
 
-// Exported because labelJourneys quantises the same way dominates does — see
-// plan.ts. Re-typing the sizes there would let the two drift silently.
+/*
+ * Grid quantisation, still used by labelJourneys — see plan.ts.
+ *
+ * Labelling asks a different question from dominance: which single journey wins
+ * an axis outright, where ties mean nobody wins. A grid is right for that, and
+ * its boundary is harmless because the answer is only a label. Re-typing the
+ * sizes there would let the two drift silently, hence the shared export.
+ */
 export const bucket = (value: number, size: number) => Math.round(value / size)
 
 /*
@@ -125,20 +137,23 @@ export function dominates(a: Criteria, b: Criteria): boolean {
   if (a.boardings > b.boardings) return false
   if (a.boardings < b.boardings) strictlyBetter = true
 
-  const aTravel = bucket(travelCostM(a), DISTANCE_BUCKET_M)
-  const bTravel = bucket(travelCostM(b), DISTANCE_BUCKET_M)
-  if (aTravel > bTravel) return false
-  if (aTravel < bTravel) strictlyBetter = true
+  /*
+   * "No worse" means within a tolerance; "better" means clear of it by more
+   * than a tolerance. Both halves are needed: the first stops a rounding-sized
+   * difference blocking dominance, the second stops one earning it.
+   */
+  const aTravel = travelCostM(a)
+  const bTravel = travelCostM(b)
+  if (aTravel > bTravel + DISTANCE_BUCKET_M) return false
+  if (aTravel < bTravel - DISTANCE_BUCKET_M) strictlyBetter = true
 
-  const aWalk = bucket(effectiveWalkM(a), DISTANCE_BUCKET_M)
-  const bWalk = bucket(effectiveWalkM(b), DISTANCE_BUCKET_M)
-  if (aWalk > bWalk) return false
-  if (aWalk < bWalk) strictlyBetter = true
+  const aWalk = effectiveWalkM(a)
+  const bWalk = effectiveWalkM(b)
+  if (aWalk > bWalk + DISTANCE_BUCKET_M) return false
+  if (aWalk < bWalk - DISTANCE_BUCKET_M) strictlyBetter = true
 
-  const aWait = bucket(a.waitS, WAIT_BUCKET_S)
-  const bWait = bucket(b.waitS, WAIT_BUCKET_S)
-  if (aWait > bWait) return false
-  if (aWait < bWait) strictlyBetter = true
+  if (a.waitS > b.waitS + WAIT_BUCKET_S) return false
+  if (a.waitS < b.waitS - WAIT_BUCKET_S) strictlyBetter = true
 
   // Skipped entirely when either fare is unknown, leaving the pair
   // incomparable on that axis rather than guessing.

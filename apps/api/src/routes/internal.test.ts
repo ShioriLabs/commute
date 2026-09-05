@@ -46,8 +46,15 @@ describe('tripCacheKey', () => {
 /** Minimal stand-in for the Cloudflare binding, as in middleware.test.ts. */
 const limiter = (success: boolean) => ({ limit: async () => ({ success }) })
 
+/*
+ * A deployed host, not localhost: cacheControl disables itself on localhost so a
+ * developer's browser cannot serve a stale answer over a change they just made,
+ * and these tests are about the production headers.
+ */
+const ORIGIN = 'https://api.commute.shiorilabs.id'
+
 const request = (path: string, env: Partial<Bindings>, init?: RequestInit) =>
-  app.fetch(new Request(`http://localhost${path}`, init), env as Bindings)
+  app.fetch(new Request(`${ORIGIN}${path}`, init), env as Bindings)
 
 describe('/_internal/trips', () => {
   /*

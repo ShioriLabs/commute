@@ -17,6 +17,13 @@ import { rateLimit, RATE_LIMITS } from './rate-limit'
 
 type Env = { Bindings: Bindings }
 
+/*
+ * cacheControl is off on localhost, and Hono resolves a bare path against
+ * http://localhost — so every cache-header test must name a deployed host
+ * explicitly or it would silently assert the dev behaviour instead.
+ */
+const DEPLOYED = 'https://api.commute.shiorilabs.id'
+
 const app = (...mw: MiddlewareHandler<Env>[]) => {
   const a = new Hono<Env>()
   for (const m of mw) a.use('*', m)
@@ -27,12 +34,12 @@ const app = (...mw: MiddlewareHandler<Env>[]) => {
 
 describe('cacheControl', () => {
   it('sets max-age and s-maxage on a 200', async () => {
-    const res = await app(cacheControl(MAX_AGE.TOPOLOGY)).request('/ok')
+    const res = await app(cacheControl(MAX_AGE.TOPOLOGY)).request(`${DEPLOYED}/ok`)
     expect(res.headers.get('Cache-Control')).toBe('public, max-age=3600, s-maxage=3600')
   })
 
   it('attaches a weak ETag', async () => {
-    const res = await app(cacheControl(MAX_AGE.STATIC)).request('/ok')
+    const res = await app(cacheControl(MAX_AGE.STATIC)).request(`${DEPLOYED}/ok`)
     expect(res.headers.get('ETag')).toMatch(/^W\/"[0-9a-f]+"$/)
   })
 
@@ -42,10 +49,10 @@ describe('cacheControl', () => {
    */
   it('answers a matching If-None-Match with a bodyless 304', async () => {
     const a = app(cacheControl(MAX_AGE.STATIC))
-    const first = await a.request('/ok')
+    const first = await a.request(`${DEPLOYED}/ok`)
     const etag = first.headers.get('ETag')!
 
-    const second = await a.request('/ok', { headers: { 'If-None-Match': etag } })
+    const second = await a.request(`${DEPLOYED}/ok`, { headers: { 'If-None-Match': etag } })
     expect(second.status).toBe(304)
     expect(await second.text()).toBe('')
     // A 304 must still carry the validators, or the client cannot extend its copy.
@@ -54,7 +61,7 @@ describe('cacheControl', () => {
   })
 
   it('serves the body when If-None-Match does not match', async () => {
-    const res = await app(cacheControl(MAX_AGE.STATIC)).request('/ok', {
+    const res = await app(cacheControl(MAX_AGE.STATIC)).request(`${DEPLOYED}/ok`, {
       headers: { 'If-None-Match': 'W/"stale"' }
     })
     expect(res.status).toBe(200)
@@ -66,15 +73,35 @@ describe('cacheControl', () => {
     a.use('*', cacheControl(MAX_AGE.STATIC))
     a.get('/a', c => c.json({ v: 1 }))
     a.get('/b', c => c.json({ v: 2 }))
-    const [x, y] = await Promise.all([a.request('/a'), a.request('/b')])
+    const [x, y] = await Promise.all([a.request(`${DEPLOYED}/a`), a.request(`${DEPLOYED}/b`)])
     expect(x.headers.get('ETag')).not.toBe(y.headers.get('ETag'))
+  })
+
+  /*
+   * Local dev must not be cacheable, and production must not be affected by the
+   * check that makes that true. Both directions are pinned because the failure
+   * is invisible from the response body: a stale answer and a fresh one look
+   * identical, so a regression here reads as a bug in whatever produced the
+   * data. A ten-minute browser cache on /_internal/trips once hid a planner
+   * change completely.
+   */
+  it('disables caching entirely on localhost', async () => {
+    const res = await app(cacheControl(MAX_AGE.FARE)).request('http://localhost:3000/ok')
+    expect(res.headers.get('Cache-Control')).toBe('no-store')
+    expect(res.headers.get('ETag')).toBeNull()
+  })
+
+  it('still caches on a deployed host', async () => {
+    const res = await app(cacheControl(MAX_AGE.FARE)).request('https://api.commute.shiorilabs.id/ok')
+    expect(res.headers.get('Cache-Control')).toBe(`public, max-age=${MAX_AGE.FARE}, s-maxage=${MAX_AGE.FARE}`)
+    expect(res.headers.get('ETag')).not.toBeNull()
   })
 
   /*
    * A cached 404 outlives the import that fixes it. Errors must stay fresh.
    */
   it('does not cache non-200 responses', async () => {
-    const res = await app(cacheControl(MAX_AGE.STATIC)).request('/missing')
+    const res = await app(cacheControl(MAX_AGE.STATIC)).request(`${DEPLOYED}/missing`)
     expect(res.status).toBe(404)
     expect(res.headers.get('Cache-Control')).toBeNull()
     expect(res.headers.get('ETag')).toBeNull()

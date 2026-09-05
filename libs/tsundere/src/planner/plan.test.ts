@@ -129,6 +129,45 @@ describe('plan', () => {
       expect(plan(graph, 'KCI-A', 'MRTJ-Q', { maxRounds: 1 })).toEqual([])
     })
 
+    /*
+     * Termination does not depend on bags improving monotonically.
+     *
+     * The worklist re-queues a stop whenever `insert` reports the bag changed,
+     * and that is only a convergence signal while a bag has room. Once full, a
+     * label can be accepted (re-queueing its stop), be evicted by the next
+     * arrival, and then a variant of it can be accepted again — the bag revisits
+     * states it already held and the round never drains.
+     *
+     * On the real network this was the difference between finishing and not:
+     * Pisangan -> Warung Jati ran ~2 acceptances per expansion with 60% of them
+     * later evicted, completed in 29ms at maxBagSize 3, and never terminated at
+     * 4. One extra label per bag. See MAX_SAME_ROUND_REVISITS.
+     *
+     * A small fixture cannot reliably reproduce the cycle — it needs the label
+     * density of a real corridor network — so this asserts the property that
+     * matters rather than the specific pathology: a dense many-line graph with
+     * full bags still returns.
+     */
+    it('terminates on a dense graph where bags stay saturated', () => {
+      const stops = ['A', 'B', 'C', 'D', 'E', 'F']
+      const dense = buildGraph(
+        stops.flatMap((from, i) =>
+          stops.flatMap((to, j) =>
+            // Several parallel lines per pair, each a slightly different length,
+            // so labels are mutually non-dominated and bags fill and churn.
+            (i >= j ? [] : [0, 1, 2].flatMap(k => edge(`L${i}${j}K${k}`, from, to, 500 + i * 130 + j * 70 + k * 40)))
+          )
+        ),
+        []
+      )
+      const started = performance.now()
+      const journeys = plan(dense, 'A', 'F', { maxBagSize: 4 })
+      // Fails by hanging rather than by being slow, so this only has to catch a
+      // runaway — it is three orders of magnitude above the real cost.
+      expect(performance.now() - started).toBeLessThan(2000)
+      expect(journeys.length).toBeGreaterThan(0)
+    })
+
     it('terminates on a graph with a cycle', () => {
       const cyclic = buildGraph([
         ...edge('X', 'A', 'B'),
@@ -154,6 +193,56 @@ describe('plan', () => {
       ], [])
       const journeys = plan(twins, 'S1', 'S2')
       expect(journeys).toHaveLength(1)
+    })
+
+    /*
+     * The same journey split at a different junction is still the same journey.
+     *
+     * Q shadows P along S1..S3 a little more cheaply and then stops, so a rider
+     * who wants S4 has to be on P — but every stop is served by both. Splitting
+     * the ride at S2 or at S3 gives two more renderings of one trip, and the
+     * rider cannot tell any of them apart. Ragunan -> Pasar Santa returned three
+     * of these, all reading "6V", with the genuine one-seat ride missing.
+     */
+    it('collapses journeys that differ only in where the ride was split', () => {
+      const shadowed = buildGraph([
+        ...edge('P', 'S1', 'S2', 1000),
+        ...edge('P', 'S2', 'S3', 1000),
+        ...edge('P', 'S3', 'S4', 1000),
+        ...edge('Q', 'S1', 'S2', 900),
+        ...edge('Q', 'S2', 'S3', 900)
+      ], [])
+
+      const journeys = plan(shadowed, 'S1', 'S4')
+
+      expect(journeys).toHaveLength(1)
+      expect(journeys[0]!.criteria.boardings).toBe(1)
+      expect(journeys[0]!.criteria.rideDistanceM).toBe(3000)
+      expect(journeys[0]!.legs).toEqual([{
+        type: 'RIDE',
+        lineCode: 'P',
+        operator: 'S1',
+        fromStationId: 'S1',
+        toStationId: 'S4',
+        stationIds: ['S1', 'S2', 'S3', 'S4'],
+        distanceM: 3000
+      }])
+    })
+
+    // Same stops in the same order is not the same journey when one of them is
+    // walked — the key has to tell a footpath from a ride.
+    it('keeps a journey that walks a stretch another one rides', () => {
+      const walkable = buildGraph(
+        [...edge('P', 'S1', 'S2', 1000), ...edge('P', 'S2', 'S3', 4000)],
+        [{ fromStationId: 'S2', toStationId: 'S3', distance: 400 }]
+      )
+
+      const journeys = plan(walkable, 'S1', 'S3')
+
+      expect(journeys.map(j => j.legs.map(l => l.type))).toEqual([
+        ['RIDE', 'TRANSFER'],
+        ['RIDE']
+      ])
     })
   })
 
@@ -257,14 +346,14 @@ describe('plan', () => {
 
 describe('defaults', () => {
   /*
-   * The default bag size is a CPU budget, not an algorithmic choice: Cloudflare
-   * Workers' free tier allows 10ms per request, and the wider search measured
-   * 15.1ms median / 31.0ms max on the real network. If someone raises this,
-   * they should do it knowing what it costs — see the table above DEFAULTS.
+   * The default bag size is a latency budget, not an algorithmic choice. It was
+   * the free tier's 10ms of CPU; on Workers Paid the platform allows 30s, so
+   * what bounds it now is what a rider will wait for. See the measured table
+   * above DEFAULTS before changing it.
    */
-  it('searches narrowly enough to fit a 10ms CPU budget', () => {
-    // Asking for more journeys than a narrow search can find must not throw or
-    // pad the result — it simply returns what genuinely exists.
+  it('returns only journeys that exist, never padding to maxResults', () => {
+    // Asking for more journeys than the graph can offer must not throw or pad
+    // the result — it simply returns what genuinely exists.
     const journeys = plan(graph, 'KCI-A', 'MRTJ-Q', { maxResults: 5 })
     expect(journeys.length).toBeLessThanOrEqual(5)
     expect(journeys.length).toBeGreaterThan(0)
