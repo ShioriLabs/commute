@@ -78,7 +78,13 @@ describe('dominance, over the whole corpus', () => {
         }
       }
     }
-    expect({ trueCount, checksum }).toEqual({ trueCount: 2995, checksum: 911319407 })
+    /*
+     * Re-recorded 2026-09-05 when dominance moved from grid-rounding to a
+     * tolerance. Verdicts rose 2995 -> 3277, +9.4%, which is the change working:
+     * pairs that used to escape domination by straddling a bucket boundary no
+     * longer do. See the note in criteria.test.ts.
+     */
+    expect({ trueCount, checksum }).toEqual({ trueCount: 3277, checksum: 4023133581 })
   })
 
   /*
@@ -266,7 +272,14 @@ describe('planner output on a branching network', () => {
      * parallel routes plus a branch are exactly the shape that produces them.
      * On the real network the same change takes 2.407 journeys/OD to 2.993,
      * with 141 of 300 pairs gaining and 3 losing.
+     *
+     * Re-recorded again 2026-09-05 for the dominance tolerance: 126 -> 128 here,
+     * where the real network went the other way (2.993 -> 2.873 journeys/OD).
+     * Both are the same change. A stricter test discards more of the detours
+     * that survived on a rounding artefact, and on this fixture it also frees
+     * bag space for genuinely different journeys to reach the front — which is
+     * why a count can move either way and only reading the journeys settles it.
      */
-    expect({ journeys, checksum }).toEqual({ journeys: 126, checksum: 3821255438 })
+    expect({ journeys, checksum }).toEqual({ journeys: 128, checksum: 839605904 })
   })
 })
