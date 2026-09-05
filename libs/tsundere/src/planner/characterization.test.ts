@@ -128,9 +128,21 @@ describe('bag, fed the whole corpus', () => {
    * be beaten by one that arrived on the same line. Fewer labels are rejected on
    * the way in, so more of them reach a full bag and lose their place to the size
    * cap instead — which is why `kept` FELL while `size` held.
+   *
+   * Re-recorded again the same day, when eviction gained a per-line floor: the
+   * cap now spares a line's last label and takes the next-worst instead, so a
+   * label that used to be evicted survives and `kept` rose 23 -> 24. The held
+   * set is unchanged, which is the point — the floor changes WHICH label pays
+   * for the cap, not how wide the bag is.
+   *
+   * The other two sizes did not move, and both are explicable. This corpus
+   * cycles three lines, so at maxSize 1 every label is the only one on its line
+   * and the floor has no protected-free victim to choose — it falls back to the
+   * global worst, which is the old behaviour exactly. At maxSize 8 the cap
+   * rarely binds on three lines, so there is little eviction to change.
    */
   it('keeps the same labels at maxSize 4', () => {
-    expect(fingerprint(4)).toEqual({ kept: 23, size: 4, traces: '137,198,202,214' })
+    expect(fingerprint(4)).toEqual({ kept: 24, size: 4, traces: '137,198,202,214' })
   })
 
   it('keeps the same labels at maxSize 1', () => {
@@ -247,7 +259,14 @@ describe('planner output on a branching network', () => {
      * which the old cross-line dominance deleted by letting the label arriving
      * at MRTJ-F on W beat the one arriving on Y. FEWEST_CHANGES correctly comes
      * off the primary there — with two one-boarding journeys, nothing wins it.
+     *
+     * Re-recorded 2026-09-05 when maxBagSize moved 4 -> 8. Four more journeys
+     * across the 56 pairs, which is the change working rather than a defect: a
+     * wider bag keeps states the cap was evicting, and this fixture's three
+     * parallel routes plus a branch are exactly the shape that produces them.
+     * On the real network the same change takes 2.407 journeys/OD to 2.993,
+     * with 141 of 300 pairs gaining and 3 losing.
      */
-    expect({ journeys, checksum }).toEqual({ journeys: 122, checksum: 1953764488 })
+    expect({ journeys, checksum }).toEqual({ journeys: 126, checksum: 3821255438 })
   })
 })

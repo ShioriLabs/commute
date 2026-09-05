@@ -1,8 +1,14 @@
-import { execFileSync, spawn } from 'node:child_process'
-import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
-import { loadGraph } from '@commute/tsundere'
-import { HEADWAYS_S } from '../data/headways'
-import { ENDPOINT_RESTRICTIONS, SERVICE_BREAKS, TOPOLOGY } from '../data/topology'
+import { spawn } from 'node:child_process'
+import { readFileSync, writeFileSync } from 'node:fs'
+import {
+  assertBuildIsCurrent,
+  DEFAULT_PAIRS,
+  DEFAULT_SEED,
+  loadNetwork,
+  percentile,
+  samplePairs,
+  stopsOf
+} from './benchShared'
 
 /*
  * Time findRoute and findRoutes over a deterministic sample of the real network.
@@ -22,8 +28,8 @@ import { ENDPOINT_RESTRICTIONS, SERVICE_BREAKS, TOPOLOGY } from '../data/topolog
  *
  * 1. `@commute/tsundere` resolves to its BUILT output, not to src. Editing the
  *    planner and re-running this measures the previous build — silently, with
- *    plausible numbers. The staleness check below refuses to run rather than
- *    report a comparison between two identical builds.
+ *    plausible numbers. `assertBuildIsCurrent` (benchShared) refuses to run
+ *    rather than report a comparison between two identical builds.
  *
  * 2. Some ODs never finish. The search explodes in its last round on at least
  *    two pairs (Pisangan -> Warung Jati, Pasar Enjo -> Terminal 1), and since
@@ -37,8 +43,6 @@ import { ENDPOINT_RESTRICTIONS, SERVICE_BREAKS, TOPOLOGY } from '../data/topolog
  *    machine into a factor. Compare planner numbers only after dividing by it.
  */
 
-const DEFAULT_PAIRS = 300
-const DEFAULT_SEED = 42
 // Generous: the slowest legitimate OD measured is ~150ms, and a pair that has
 // not answered in four seconds is not slow, it is gone.
 const DEFAULT_TIMEOUT_MS = 4000
@@ -46,85 +50,18 @@ const DEFAULT_TIMEOUT_MS = 4000
 interface Measurement { index: number, from: string, to: string, findRouteMs: number, planMs: number, journeys: number }
 interface Baseline { calibrationMedianMs: number, pairs: [string, number][] }
 
-// ── graph ────────────────────────────────────────────────────────────────────
-
 /*
- * Read from the local D1 file directly rather than through `wrangler d1
- * execute`, which hangs on tables this size. Local D1 is expected to hold a full
- * prod dump — refresh it with `wrangler d1 export commute --remote` and import
- * with sqlite3, since wrangler's own importer chokes on the dump.
+ * Planner knobs are passed through to the child rather than read from DEFAULTS,
+ * so a sweep runs without editing source between configurations — which the
+ * staleness guard would otherwise turn into a rebuild per data point.
  */
-function localD1Path(): string {
-  const dir = `${__dirname}/../../../.wrangler/state/v3/d1/miniflare-D1DatabaseObject`
-  const files = readdirSync(dir).filter(f => f.endsWith('.sqlite'))
-  if (files.length !== 1) throw new Error(`expected exactly one .sqlite in ${dir}, found ${files.length}`)
-  return `${dir}/${files[0]}`
-}
-
-function query<T>(sql: string): T[] {
-  let raw: string
-  try {
-    raw = execFileSync('sqlite3', ['-readonly', '-json', localD1Path(), sql], { encoding: 'utf-8', maxBuffer: 1 << 28 })
-  } catch (error) {
-    throw new Error(`sqlite3 failed (is it installed?): ${(error as Error).message}`)
-  }
-  return raw.trim() ? JSON.parse(raw) as T[] : []
-}
-
-/*
- * Mirrors EdgeRepository.getGraphInputs plus routes/fares.ts getRouter. Kept in
- * step by hand, which is a liability — if the graph the API builds ever stops
- * matching this one, every number here is measuring a network nobody rides.
- */
-function loadNetwork() {
-  const routableLineCodes = [...new Set(TOPOLOGY.map(t => t.lineCode))].filter(code => code !== 'A')
-  const codes = routableLineCodes.map(code => `'${code}'`).join(',')
-  const edges = query<{ lineCode: string, fromStationId: string, toStationId: string, distance: number }>(
-    `SELECT lineCode, fromStationId, toStationId, distance FROM edges WHERE lineCode IN (${codes})`
-  )
-  const transfers = query<{ fromStationId: string, toStationId: string | null, distance: number, noTap: number }>(
-    'SELECT fromStationId, toStationId, distance, noTap FROM transfers WHERE dataType = \'INTERNAL\''
-  )
-  const router = loadGraph({
-    edges,
-    transfers,
-    restrictions: ENDPOINT_RESTRICTIONS.map(r => ({
-      stationId: `${r.operator}-${r.station}`,
-      forbiddenNeighborId: `${r.operator}-${r.forbiddenNeighbor}`
-    })),
-    serviceBreaks: SERVICE_BREAKS.map(b => ({
-      lineCode: b.lineCode,
-      viaStationId: `${b.operator}-${b.via}`,
-      fromStationId: `${b.operator}-${b.from}`,
-      toStationId: `${b.operator}-${b.to}`
-    })),
-    headwaysS: new Map(Object.entries(HEADWAYS_S))
-  })
-  return { router, edges, transfers }
-}
-
-/*
- * A fixed LCG, not Math.random: the sample has to be identical across runs or a
- * before/after comparison is measuring two different questions.
- */
-function samplePairs(stops: string[], count: number, seed: number): [string, string][] {
-  let state = seed
-  const rnd = () => (state = (state * 1103515245 + 12345) % 2147483648) / 2147483648
-  const pairs: [string, string][] = []
-  while (pairs.length < count) {
-    const from = stops[Math.floor(rnd() * stops.length)]!
-    const to = stops[Math.floor(rnd() * stops.length)]!
-    if (from !== to) pairs.push([from, to])
-  }
-  return pairs
-}
+interface BenchOptions { pairs: number, seed: number, timeoutMs: number, bag?: number, rounds?: number }
 
 // ── child: measures, one pair per line of NDJSON ─────────────────────────────
 
-function runChild(startIndex: number, skip: Set<number>, options: { pairs: number, seed: number }): void {
+function runChild(startIndex: number, skip: Set<number>, options: BenchOptions): void {
   const { router, edges } = loadNetwork()
-  const stops = [...new Set(edges.flatMap(e => [e.fromStationId, e.toStationId]))]
-  const pairs = samplePairs(stops, options.pairs, options.seed)
+  const pairs = samplePairs(stopsOf(edges), options.pairs, options.seed)
 
   for (let index = startIndex; index < pairs.length; index++) {
     if (skip.has(index)) continue
@@ -135,7 +72,10 @@ function runChild(startIndex: number, skip: Set<number>, options: { pairs: numbe
     const findRouteMs = performance.now() - routeStart
 
     const planStart = performance.now()
-    const journeys = router.findRoutes(from, to).length
+    const journeys = router.findRoutes(from, to, {
+      ...(options.bag !== undefined ? { maxBagSize: options.bag } : {}),
+      ...(options.rounds !== undefined ? { maxRounds: options.rounds } : {})
+    }).length
     const planMs = performance.now() - planStart
 
     const line: Measurement = { index, from, to, findRouteMs, planMs, journeys }
@@ -147,12 +87,19 @@ function runChild(startIndex: number, skip: Set<number>, options: { pairs: numbe
 
 // ── parent: supervises, resumes past pairs that never answer ─────────────────
 
-async function measureAll(options: { pairs: number, seed: number, timeoutMs: number }): Promise<{ results: Measurement[], timedOut: number[] }> {
+async function measureAll(options: BenchOptions): Promise<{ results: Measurement[], timedOut: number[] }> {
   const results: Measurement[] = []
   const timedOut: number[] = []
   let next = 0
 
   for (;;) {
+    /*
+     * The last index THIS child reported, not the highest ever seen. A global max
+     * stays pinned at an earlier child's furthest result once anything has been
+     * skipped, so every later timeout resolves to the same index and the run never
+     * ends. Latent here until a configuration produces several timeouts.
+     */
+    let lastInChild = -1
     const outcome = await new Promise<'done' | 'timeout'>((resolve) => {
       const child = spawn(process.execPath, [
         ...process.execArgv,
@@ -160,7 +107,9 @@ async function measureAll(options: { pairs: number, seed: number, timeoutMs: num
         '--child', String(next),
         '--skip', timedOut.join(','),
         '--pairs', String(options.pairs),
-        '--seed', String(options.seed)
+        '--seed', String(options.seed),
+        ...(options.bag !== undefined ? ['--bag', String(options.bag)] : []),
+        ...(options.rounds !== undefined ? ['--rounds', String(options.rounds)] : [])
       ], { stdio: ['ignore', 'pipe', 'inherit'] })
 
       let buffer = ''
@@ -172,7 +121,9 @@ async function measureAll(options: { pairs: number, seed: number, timeoutMs: num
           resolve('timeout')
         // The first pair also pays for process start and graph load, so the very
         // first deadline is generous; every later one is the real budget.
-        }, results.length === 0 ? options.timeoutMs + 30_000 : options.timeoutMs)
+        // Every child pays process start and graph load before its first line,
+        // not just the first child — a resumed one reloads the whole network.
+        }, lastInChild === -1 ? options.timeoutMs + 30_000 : options.timeoutMs)
       }
       arm()
 
@@ -182,7 +133,9 @@ async function measureAll(options: { pairs: number, seed: number, timeoutMs: num
         buffer = lines.pop() ?? ''
         for (const line of lines) {
           if (!line.trim()) continue
-          results.push(JSON.parse(line) as Measurement)
+          const measurement = JSON.parse(line) as Measurement
+          results.push(measurement)
+          lastInChild = measurement.index
           arm()
         }
       })
@@ -194,9 +147,8 @@ async function measureAll(options: { pairs: number, seed: number, timeoutMs: num
 
     if (outcome === 'done') return { results, timedOut }
 
-    // The pair that never answered is the one after the last we heard about.
-    const lastSeen = results.length > 0 ? Math.max(...results.map(r => r.index)) : next - 1
-    const stuck = lastSeen + 1
+    // The pair that never answered is the one after the last this child reported.
+    const stuck = (lastInChild === -1 ? next - 1 : lastInChild) + 1
     timedOut.push(stuck)
     next = stuck + 1
     if (next >= options.pairs) return { results, timedOut }
@@ -204,8 +156,6 @@ async function measureAll(options: { pairs: number, seed: number, timeoutMs: num
 }
 
 // ── reporting ────────────────────────────────────────────────────────────────
-
-const percentile = (sorted: number[], p: number) => sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * p) - 1)] ?? 0
 
 function summarise(label: string, times: number[]): number {
   const sorted = [...times].sort((a, b) => a - b)
@@ -217,37 +167,6 @@ function summarise(label: string, times: number[]): number {
   return median
 }
 
-/*
- * Refuse to measure a build that predates the source.
- *
- * The whole point of this script is comparing two versions of the planner, and
- * the import resolves to dist — so without this it will happily report that a
- * change you just made costs exactly nothing.
- */
-function assertBuildIsCurrent(): void {
-  const root = `${__dirname}/../../../../../libs/tsundere`
-  const newest = (dir: string): number => {
-    let latest = 0
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const path = `${dir}/${entry.name}`
-      latest = Math.max(latest, entry.isDirectory() ? newest(path) : statSync(path).mtimeMs)
-    }
-    return latest
-  }
-  let dist: number
-  try {
-    dist = newest(`${root}/dist`)
-  } catch {
-    throw new Error('libs/tsundere is not built. Run: pnpm --filter @commute/tsundere build')
-  }
-  if (newest(`${root}/src`) > dist) {
-    throw new Error(
-      'libs/tsundere/src is newer than dist — this would measure the PREVIOUS build.\n'
-      + 'Run: pnpm --filter @commute/tsundere build'
-    )
-  }
-}
-
 async function main(): Promise<void> {
   const args = process.argv.slice(2)
   const flag = (name: string) => {
@@ -255,10 +174,23 @@ async function main(): Promise<void> {
     return at === -1 ? undefined : args[at + 1]
   }
 
+  const num = (name: string) => {
+    const raw = flag(name)
+    return raw === undefined ? undefined : Number(raw)
+  }
+
+  const options: BenchOptions = {
+    pairs: Number(flag('--pairs') ?? DEFAULT_PAIRS),
+    seed: Number(flag('--seed') ?? DEFAULT_SEED),
+    timeoutMs: Number(flag('--timeout') ?? DEFAULT_TIMEOUT_MS),
+    bag: num('--bag'),
+    rounds: num('--rounds')
+  }
+
   const childStart = flag('--child')
   if (childStart !== undefined) {
     const skip = new Set((flag('--skip') ?? '').split(',').filter(Boolean).map(Number))
-    runChild(Number(childStart), skip, { pairs: Number(flag('--pairs')), seed: Number(flag('--seed')) })
+    runChild(Number(childStart), skip, options)
     return
   }
 
@@ -273,18 +205,20 @@ async function main(): Promise<void> {
     // it alone would overstate the cost of every OD.
     for (let i = 0; i < 5; i++) {
       const start = performance.now()
-      const journeys = router.findRoutes(from, to).length
+      const journeys = router.findRoutes(from, to, {
+        ...(options.bag !== undefined ? { maxBagSize: options.bag } : {}),
+        ...(options.rounds !== undefined ? { maxRounds: options.rounds } : {})
+      }).length
       console.log(`  ${(performance.now() - start).toFixed(1)}ms (${journeys} journeys)`)
     }
     return
   }
 
-  const options = {
-    pairs: Number(flag('--pairs') ?? DEFAULT_PAIRS),
-    seed: Number(flag('--seed') ?? DEFAULT_SEED),
-    timeoutMs: Number(flag('--timeout') ?? DEFAULT_TIMEOUT_MS)
-  }
-  console.log(`sampling ${options.pairs} OD pairs (seed ${options.seed}, ${options.timeoutMs}ms per pair)\n`)
+  const settings = [
+    options.bag !== undefined ? `bag ${options.bag}` : 'bag default',
+    options.rounds !== undefined ? `rounds ${options.rounds}` : 'rounds default'
+  ].join(', ')
+  console.log(`sampling ${options.pairs} OD pairs (seed ${options.seed}, ${options.timeoutMs}ms per pair, ${settings})\n`)
 
   const { results, timedOut } = await measureAll(options)
 
@@ -294,11 +228,7 @@ async function main(): Promise<void> {
   console.log('divide planner numbers by that before comparing them to anyone else\'s')
 
   if (timedOut.length > 0) {
-    const pairs = samplePairs(
-      [...new Set(loadNetwork().edges.flatMap(e => [e.fromStationId, e.toStationId]))],
-      options.pairs,
-      options.seed
-    )
+    const pairs = samplePairs(stopsOf(loadNetwork().edges), options.pairs, options.seed)
     console.log(`\nnever answered within ${options.timeoutMs}ms (${timedOut.length}):`)
     for (const index of timedOut) console.log(`  #${index}  ${pairs[index]![0]} -> ${pairs[index]![1]}`)
   }

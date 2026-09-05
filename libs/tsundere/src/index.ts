@@ -14,6 +14,12 @@ export { loadGraph, Tsundere, type LoadGraphInput } from './tsundere'
  * rider chooses.
  */
 export type { FareScorer, Journey, JourneyLabel, PlanOptions } from './planner/plan'
+
+/*
+ * Search counters. Not part of routing — a measurement hook the bench/audit
+ * scripts pass in, so the engine's caps can be sized with numbers.
+ */
+export { newInstrument, type PlanInstrument } from './planner/instrument'
 export {
   DEFAULT_RANK_WEIGHTS,
   WALKING_WEIGHTS,

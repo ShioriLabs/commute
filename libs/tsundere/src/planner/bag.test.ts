@@ -130,6 +130,45 @@ describe('Bag', () => {
       expect(bag.labels().map(l => l.trace)).toContain('good')
     })
 
+    it('spares a line\'s only label and evicts the next-worst instead', () => {
+      const bag = new Bag<string>({ maxSize: 2 })
+      // Two on line A, the second of them the worst in the bag.
+      bag.insert(label({ walkDistanceM: 0, waitS: 0 }, 'A', 'a-good'))
+      bag.insert(label({ walkDistanceM: 300, waitS: 600 }, 'A', 'a-bad'))
+      // Sole representative of B, and worse still on the weighted sum — the old
+      // rule would have taken it and left B with no state at all.
+      bag.insert(label({ walkDistanceM: 900, waitS: 900 }, 'B', 'b-only'))
+
+      expect(bag.size).toBe(2)
+      expect(bag.labels().map(l => l.trace).sort()).toEqual(['a-good', 'b-only'])
+    })
+
+    it('falls back to the global worst when every label is alone on its line', () => {
+      const bag = new Bag<string>({ maxSize: 2 })
+      bag.insert(label({ walkDistanceM: 0, waitS: 0 }, 'A', 'best'))
+      bag.insert(label({ walkDistanceM: 300, waitS: 300 }, 'B', 'middle'))
+      // No protected-free victim exists, so the cap stays hard and the worst
+      // goes. This is the residual loss the floor cannot cover.
+      bag.insert(label({ walkDistanceM: 9000, waitS: 900 }, 'C', 'worst'))
+
+      expect(bag.size).toBe(2)
+      expect(bag.labels().map(l => l.trace).sort()).toEqual(['best', 'middle'])
+    })
+
+    it('ignores the floor when comparing across lines', () => {
+      // The destination bag: the journey is over, so the line a rider arrived on
+      // decides nothing and must not buy a worse journey its place.
+      const bag = new Bag<string>({ maxSize: 2, comparesAcrossLines: true })
+      // Mutually non-dominated (each wins an axis), so all three reach the cap
+      // and eviction is what decides between them.
+      bag.insert(label({ walkDistanceM: 0, waitS: 900 }, 'A', 'a-good'))
+      bag.insert(label({ walkDistanceM: 300, waitS: 0 }, 'A', 'a-bad'))
+      bag.insert(label({ walkDistanceM: 9000, waitS: 60 }, 'B', 'b-only'))
+
+      expect(bag.size).toBe(2)
+      expect(bag.labels().map(l => l.trace).sort()).toEqual(['a-bad', 'a-good'])
+    })
+
     it('reports false when the offered label is the one evicted', () => {
       const bag = new Bag<string>({ maxSize: 1 })
       bag.insert(label({ walkDistanceM: 0, waitS: 0 }, 'A', 'best'))
