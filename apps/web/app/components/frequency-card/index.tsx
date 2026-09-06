@@ -40,6 +40,29 @@ function directionLabel(row: HeadwayRow): string | null {
 }
 
 /*
+ * Which days this corridor runs, as a rider would say it.
+ *
+ * Absent `days` means every day, and that gets no label at all — most corridors
+ * run all week, and printing "tiap hari" on all of them would bury the handful
+ * that genuinely differ. Only the exceptions are worth the words.
+ *
+ * Sunday-only is its own phrase rather than being folded into "akhir pekan":
+ * two TransJakarta corridors really do run on Sundays and not Saturdays, and
+ * telling a Saturday rider "akhir pekan" would send them to a halte for a bus
+ * that is not coming.
+ */
+export function dayLabel(days: HeadwayRow['days']): string | null {
+  if (!days || days.length === 3) return null
+  const set = new Set(days)
+  const weekend = set.has('SAT') && set.has('SUN')
+  if (set.has('WD')) return weekend ? null : 'hari kerja'
+  if (weekend) return 'akhir pekan'
+  if (set.has('SAT')) return 'Sabtu'
+  if (set.has('SUN')) return 'Minggu'
+  return null
+}
+
+/*
  * One corridor, one or two rows.
  *
  * Two when its directions genuinely differ — the API only labels those — and the
@@ -68,9 +91,23 @@ function CorridorRows({ rows }: { rows: readonly HeadwayRow[] }) {
   // direction label needs its own line under it.
   const inline = rows.length === 1 && !rows[0]!.boundFor
 
-  const frequencyOf = (row: HeadwayRow) => (
-    row.weekendOnly || row.headwayS === null ? 'Akhir pekan saja' : formatHeadway(row.headwayS)
-  )
+  /*
+   * A corridor that does not run on the day being shown has no frequency to
+   * report, so it says WHEN it runs instead. Everything else reports its
+   * frequency, with the day qualifier carried separately below.
+   */
+  const frequencyOf = (row: HeadwayRow) => {
+    if (row.headwayS !== null) return formatHeadway(row.headwayS)
+    const label = dayLabel(row.days)
+    return label ? `${label.charAt(0).toUpperCase()}${label.slice(1)} saja` : 'Tidak beroperasi'
+  }
+
+  /*
+   * The qualifier only appears beside a real figure. When the row is already
+   * saying "Akhir pekan saja" the days ARE the message, and repeating them
+   * would read as a stutter.
+   */
+  const qualifierOf = (row: HeadwayRow) => (row.headwayS === null ? null : dayLabel(row.days))
 
   return (
     <li
@@ -100,8 +137,15 @@ function CorridorRows({ rows }: { rows: readonly HeadwayRow[] }) {
            * fixed phrase and the whole reason the row exists, so it keeps one line
            * while a long corridor name wraps around it.
            */
-          <span className="ml-auto shrink-0 text-sm font-semibold text-slate-700 whitespace-nowrap leading-6">
-            {frequencyOf(first)}
+          <span className="ml-auto shrink-0 text-right leading-6">
+            <span className="block text-sm font-semibold text-slate-700 whitespace-nowrap">
+              {frequencyOf(first)}
+            </span>
+            {qualifierOf(first) && (
+              /* Muted and under the figure: the frequency is what the rider came
+                 for, the day is the caveat on it. */
+              <span className="block text-xs text-slate-500 whitespace-nowrap">{qualifierOf(first)}</span>
+            )}
           </span>
         )}
       </div>
@@ -116,8 +160,13 @@ function CorridorRows({ rows }: { rows: readonly HeadwayRow[] }) {
         {rows.map(row => (
           <li key={row.boundFor ?? row.line} className="flex flex-row items-baseline gap-3 pl-13 pr-4 py-0.5">
             <span className="text-sm text-slate-700 min-w-0">{directionLabel(row)}</span>
-            <span className="ml-auto shrink-0 text-sm font-semibold text-slate-700 whitespace-nowrap">
-              {frequencyOf(row)}
+            <span className="ml-auto shrink-0 text-right">
+              <span className="block text-sm font-semibold text-slate-700 whitespace-nowrap">
+                {frequencyOf(row)}
+              </span>
+              {qualifierOf(row) && (
+                <span className="block text-xs text-slate-500 whitespace-nowrap">{qualifierOf(row)}</span>
+              )}
             </span>
           </li>
         ))}

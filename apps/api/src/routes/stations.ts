@@ -22,7 +22,15 @@ import * as v from 'valibot'
 import { doc, operatorParam, pathParam, queryParam, stationCodeParam, timeWindowParams } from 'schemas/describe'
 import { CompactGroupedTimetableSchema, GroupedTimetableSchema, HeadwayRowSchema, ScheduleSchema, StationSchema, TransferSchema } from '@commute/schemas'
 import type { HeadwayRow } from '@commute/schemas'
-import { DIRECTIONAL_HEADWAYS_S, HEADWAYS_S, LINE_TERMINI, STOP_HEADWAYS_S, WEEKEND_ONLY_LINES } from 'db/data/headways'
+import { DAY_HEADWAYS_S, DIRECTIONAL_HEADWAYS_S, HEADWAYS_S, LINE_DAY_MASK, LINE_TERMINI, STOP_HEADWAYS_S } from 'db/data/headways'
+import { serviceDay } from 'utils/fare'
+
+/*
+ * The three day buckets, high bit first, matching how LINE_DAY_MASK is packed
+ * in the generated headways file: WD (Mon-Fri), SAT, SUN.
+ */
+const DAY_ORDER = ['WD', 'SAT', 'SUN'] as const
+type ServiceDayName = (typeof DAY_ORDER)[number]
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -609,10 +617,14 @@ app.get(
   '/:operator/:stationCode/headway',
   doc({
     summary: 'Frekuensi kendaraan di satu stasiun',
-    description: 'Rata-rata berapa lama sekali kendaraan tiap lin lewat stasiun ini. Ini BUKAN jadwal: nggak bisa dipakai buat tahu keberangkatan berikutnya jam berapa, cuma buat tahu kira-kira nunggunya berapa lama. Lin yang cuma jalan pas akhir pekan `headwayS`-nya `null`.',
+    description: 'Rata-rata berapa lama sekali kendaraan tiap lin lewat stasiun ini. Ini BUKAN jadwal: nggak bisa dipakai buat tahu keberangkatan berikutnya jam berapa, cuma buat tahu kira-kira nunggunya berapa lama.\n\nAngkanya ikut hari: sebagian koridor lebih jarang atau malah nggak jalan pas akhir pekan. Defaultnya hari ini di Jakarta, atau tentukan sendiri lewat `day`. Lin yang nggak jalan di hari yang diminta `headwayS`-nya `null` dan `days`-nya berisi hari-hari lin itu jalan.',
     tag: 'Stasiun',
     data: v.array(HeadwayRowSchema),
-    parameters: [operatorParam, stationCodeParam],
+    parameters: [
+      operatorParam,
+      stationCodeParam,
+      queryParam('day', 'Hari yang mau dilihat: `WD` (Senin-Jumat), `SAT`, atau `SUN`. Hari libur nasional ikut jadwal `SUN`. Default-nya hari ini waktu Jakarta.', 'SAT')
+    ],
     errors: { 404: 'Kode operator atau stasiun tidak ditemukan.' }
   }),
   async (c) => {
@@ -623,10 +635,23 @@ app.get(
       return c.json(NotFound('UNKNOWN_OPERATOR', `Unknown Operator Code: ${operatorCode}`), 404)
     }
 
+    /*
+     * Which day the rider is asking about. `?day=` for an explicit one,
+     * otherwise today in Jakarta — so the halte page shows what is running now
+     * without the caller having to say so.
+     */
+    const requested = c.req.query('day')?.toUpperCase()
+    const day: ServiceDayName = requested === 'WD' || requested === 'SAT' || requested === 'SUN'
+      ? requested
+      : serviceDay(new Date())
+
     const kvRepository = new KVRepository(c.env.KV)
     const stationRepository = new StationRepository(c.env.DB)
 
-    const kvKey = `headway:${operator.code}-${stationCode}:${c.env.API_VERSION}`
+    // The day is part of the key: frequencies differ by day, and some corridors
+    // do not run at all, so a Saturday body served from a Tuesday key would show
+    // a weekday-only line as though it were running.
+    const kvKey = `headway:${operator.code}-${stationCode}:${day}:${c.env.API_VERSION}`
     const cached = await kvRepository.get(kvKey)
     if (cached) return c.json(Ok(cached), 200)
 
@@ -636,7 +661,43 @@ app.get(
       return c.json(NotFound('UNKNOWN_STATION', `Unknown Station Code ${stationCode} in Operator ${operator.code}`), 404)
     }
 
-    const weekendOnly = new Set<string>(WEEKEND_ONLY_LINES)
+    /*
+     * Headway for a (line, key) on this day: the day's own figure where one
+     * exists, otherwise the weekday number.
+     *
+     * DAY_HEADWAYS_S is sparse — only the pairs that genuinely differ — so the
+     * fallback is the common path rather than an error case.
+     *
+     * The base lookup gates the override deliberately. A day delta can exist at
+     * a granularity the weekday table has no entry for — `SUN:4@TJ-H00181P` is
+     * real while `4@TJ-H00181P` is not, because corridor 4 only reaches that
+     * halte on Sundays — and returning it unguarded would report a per-stop
+     * figure for a stop that was never measured on a weekday, breaking the
+     * `source: 'STOP' | 'LINE'` distinction the whole table rests on. An
+     * override refines a measurement; it does not create one.
+     */
+    const headwayOn = (
+      table: Record<string, number>,
+      key: string,
+      days: readonly ServiceDayName[]
+    ): number | undefined => {
+      const override = DAY_HEADWAYS_S[`${day}:${key}`]
+      const base = table[key]
+      /*
+       * A line that does not run on weekdays has no base value anywhere — the
+       * weekday tables are simply empty for it — so its only real figure IS the
+       * override. Accepting it there is not promotion, it is the measurement.
+       */
+      if (base === undefined) return days.includes('WD') ? undefined : override
+      return override ?? base
+    }
+
+    // Days a line runs. Absent from the mask means every day.
+    const daysOf = (lineCode: string): readonly ServiceDayName[] => {
+      const mask = LINE_DAY_MASK[lineCode]
+      if (mask === undefined) return DAY_ORDER
+      return DAY_ORDER.filter((_, i) => (mask & (1 << (DAY_ORDER.length - 1 - i))) !== 0)
+    }
     /*
      * Terminus names for any line whose two directions differ here. Resolved from
      * the stations table rather than baked into the generated data, so renaming a
@@ -664,10 +725,19 @@ app.get(
     const rows: HeadwayRow[] = []
     for (const key of station.lines) {
       const lineCode = key.slice(key.indexOf(':') + 1)
-      if (weekendOnly.has(lineCode)) {
-        rows.push({ line: key, headwayS: null, source: 'LINE', weekendOnly: true })
-        continue
-      }
+      const days = daysOf(lineCode)
+
+      /*
+       * What a row says about the days it runs.
+       *
+       * `days` is omitted for a line that runs all week, which is most of them.
+       * `weekendOnly` is the old shape of this same fact and is still emitted
+       * whenever the line skips weekdays, so existing callers keep working
+       * until the web app has shipped against `days`.
+       */
+      const dayFields = days.length === DAY_ORDER.length
+        ? {}
+        : { days: [...days], ...(days.includes('WD') ? {} : { weekendOnly: true as const }) }
 
       /*
        * Directional rows, when the generated table has anything to say about this
@@ -678,26 +748,32 @@ app.get(
        * applied both ways.
        */
       const directional = (['F', 'R'] as const)
-        .map(dir => ({ dir, headwayS: DIRECTIONAL_HEADWAYS_S[`${lineCode}@${station.id}@${dir}`] }))
+        .map(dir => ({ dir, headwayS: headwayOn(DIRECTIONAL_HEADWAYS_S, `${lineCode}@${station.id}@${dir}`, days) }))
         .filter((entry): entry is { dir: 'F' | 'R', headwayS: number } => entry.headwayS !== undefined)
       if (directional.length > 0) {
         const termini = LINE_TERMINI[lineCode]
         for (const { dir, headwayS } of directional) {
           const boundFor = termini ? terminusName.get(termini[dir]) : undefined
-          rows.push({ line: key, headwayS, source: 'STOP', ...(boundFor ? { boundFor } : {}) })
+          rows.push({ line: key, headwayS, source: 'STOP', ...dayFields, ...(boundFor ? { boundFor } : {}) })
         }
         continue
       }
 
-      const perStop = STOP_HEADWAYS_S[`${lineCode}@${station.id}`]
+      const perStop = headwayOn(STOP_HEADWAYS_S, `${lineCode}@${station.id}`, days)
       if (perStop !== undefined) {
-        rows.push({ line: key, headwayS: perStop, source: 'STOP' })
+        rows.push({ line: key, headwayS: perStop, source: 'STOP', ...dayFields })
         continue
       }
-      const perLine = HEADWAYS_S[lineCode]
-      // No value at either level: the line is not one we derive headways for
-      // (a feeder with no topology). Omitted rather than guessed at.
-      if (perLine !== undefined) rows.push({ line: key, headwayS: perLine, source: 'LINE' })
+      const perLine = headwayOn(HEADWAYS_S, lineCode, days)
+      /*
+       * No value at either level. Two different cases, and only one of them is
+       * a row: a line that does not run on the requested day at all still gets
+       * a labelled row carrying `null`, so the page says "akhir pekan saja"
+       * rather than dropping the corridor off the halte silently. A line we
+       * simply derive no headway for (a feeder with no topology) is omitted.
+       */
+      if (perLine !== undefined) rows.push({ line: key, headwayS: perLine, source: 'LINE', ...dayFields })
+      else if (!days.includes(day)) rows.push({ line: key, headwayS: null, source: 'LINE', ...dayFields })
     }
 
     // Cache an empty result too. A station with no headway data is a stable fact

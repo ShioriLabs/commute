@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { DIRECTIONAL_HEADWAYS_S, HEADWAYS_S, LINE_TERMINI, STOP_HEADWAYS_S, WEEKEND_ONLY_LINES } from 'db/data/headways'
+import { DAY_HEADWAYS_S, DIRECTIONAL_HEADWAYS_S, HEADWAYS_S, LINE_TERMINI, STOP_HEADWAYS_S } from 'db/data/headways'
 
 /*
  * The handler reaches D1 through the `db(d1)` Kysely factory, so the query
@@ -132,7 +132,9 @@ describe('/stations/:operator/:code/headway', () => {
    */
   it('falls back to the line value and says so', async () => {
     const res = await request(
-      '/stations/TJ/H00181P/headway',
+      // Pinned to a weekday: the answer is day-dependent, and an unpinned test
+      // would assert weekday figures only from Monday to Friday.
+      '/stations/TJ/H00181P/headway?day=WD',
       envFor(station({ id: 'TJ-H00181P', code: 'H00181P', name: 'Simpang Pramuka', lines: '4' }))
     )
     const body = await res.json() as HeadwayBody
@@ -141,19 +143,74 @@ describe('/stations/:operator/:code/headway', () => {
   })
 
   /*
-   * A weekend-only corridor has no weekday headway at all. Borrowing one would
-   * assert service that does not run, so it reports null and flags itself.
+   * A day override must REFINE a measurement, never invent one.
+   *
+   * Corridor 4 reaches Simpang Pramuka only on Sundays, so `SUN:4@TJ-H00181P`
+   * exists while the weekday per-stop key does not. Reading the override
+   * unguarded would report a per-stop figure for a stop that was never measured
+   * as one, which is exactly the borrowed-number confusion `source` exists to
+   * prevent.
    */
-  it('reports a weekend-only line with no figure', async () => {
-    const weekendLine = WEEKEND_ONLY_LINES[0]!
+  it('does not let a Sunday override invent a per-stop measurement', async () => {
+    expect(STOP_HEADWAYS_S['4@TJ-H00181P']).toBeUndefined()
+    expect(DAY_HEADWAYS_S['SUN:4@TJ-H00181P']).toBeDefined()
+
     const res = await request(
-      '/stations/TJ/H00190P/headway',
-      envFor(station({ id: 'TJ-H00190P', code: 'H00190P', lines: weekendLine }))
+      '/stations/TJ/H00181P/headway?day=SUN',
+      envFor(station({ id: 'TJ-H00181P', code: 'H00181P', name: 'Simpang Pramuka', lines: '4' }))
+    )
+    const body = await res.json() as HeadwayBody
+    const [row] = body.data
+    expect(row!.source).toBe('LINE')
+    expect(row!.headwayS).toBe(DAY_HEADWAYS_S['SUN:4'] ?? HEADWAYS_S['4'])
+  })
+
+  /*
+   * A weekend-only corridor has no weekday headway at all. Borrowing one would
+   * assert service that does not run, so on a weekday it reports null and says
+   * which days it does run.
+   */
+  it('reports a weekend-only line with no weekday figure', async () => {
+    const res = await request(
+      '/stations/TJ/H00190P/headway?day=WD',
+      envFor(station({ id: 'TJ-H00190P', code: 'H00190P', lines: '13E' }))
     )
     const body = await res.json() as HeadwayBody
     expect(body.data).toEqual([
-      { line: `TJ:${weekendLine}`, headwayS: null, source: 'LINE', weekendOnly: true }
+      { line: 'TJ:13E', headwayS: null, source: 'LINE', days: ['SAT', 'SUN'], weekendOnly: true }
     ])
+  })
+
+  /*
+   * ...and on the days it DOES run it carries a real number. Before day
+   * awareness this corridor was `null` every day of the week, so the halte page
+   * could only say "akhir pekan saja" with no frequency at all.
+   */
+  it('gives a weekend-only line a real figure at the weekend', async () => {
+    const res = await request(
+      '/stations/TJ/H00190P/headway?day=SAT',
+      envFor(station({ id: 'TJ-H00190P', code: 'H00190P', lines: '13E' }))
+    )
+    const body = await res.json() as HeadwayBody
+    const [row] = body.data
+    expect(row!.headwayS).toBe(DAY_HEADWAYS_S['SAT:13E'])
+    expect(row!.headwayS).not.toBeNull()
+    expect(row!.days).toEqual(['SAT', 'SUN'])
+    expect(row!.weekendOnly).toBe(true)
+  })
+
+  /*
+   * A line that runs every day carries no `days` at all — absent means all
+   * three, which keeps the common case off the wire.
+   */
+  it('omits days for a line that runs all week', async () => {
+    const res = await request(
+      '/stations/TJ/H00014P/headway?day=WD',
+      envFor(station({ id: 'TJ-H00014P', code: 'H00014P', lines: '1' }))
+    )
+    const body = await res.json() as HeadwayBody
+    expect(body.data[0]!.days).toBeUndefined()
+    expect(body.data[0]!.weekendOnly).toBeUndefined()
   })
 
   /*
