@@ -171,3 +171,6 @@ Group 1 (2).png
 # — scratch/ is not backed up by git, so treat it as losable. Promote it into
 # the tree when it matters.
 scratch/
+
+# Local D1 snapshots taken before a remote apply. Never committed.
+.backups/
