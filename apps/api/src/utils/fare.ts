@@ -1,4 +1,4 @@
-import { FareContext, Operator, OPERATORS, SURCHARGED_CORRIDORS, SurchargedCorridor } from '@commute/constants'
+import { FareContext, HOLIDAYS, Operator, OPERATORS, SURCHARGED_CORRIDORS, SurchargedCorridor } from '@commute/constants'
 import { getMRTJFare } from 'operators/mrtj/fares'
 import { TJ_FLAT_FARE } from 'operators/tj/fares'
 import type { RouteLeg } from '@commute/tsundere'
@@ -46,13 +46,49 @@ export type FareTimeBucket = 'peak' | 'offpeak'
 
 const WIB_OFFSET_MS = 7 * 60 * 60 * 1000
 
+/*
+ * The same instant, shifted so its UTC getters read as Jakarta wall-clock time.
+ *
+ * Shared by every caller that needs to know what day or hour it is locally.
+ * A second copy of this shift is the kind of thing that drifts by an hour and
+ * is noticed months later, so callers take this rather than redoing it.
+ */
+export function wib(date: Date): Date {
+  return new Date(date.getTime() + WIB_OFFSET_MS)
+}
+
 export function fareTimeBucket(date: Date): FareTimeBucket {
-  const wib = new Date(date.getTime() + WIB_OFFSET_MS)
-  const day = wib.getUTCDay() // 0 Sun … 6 Sat, in WIB after the shift
+  const local = wib(date)
+  const day = local.getUTCDay() // 0 Sun … 6 Sat, in WIB after the shift
   if (day === 0 || day === 6) return 'offpeak'
-  const hour = wib.getUTCHours()
+  const hour = local.getUTCHours()
   const isPeak = (hour >= 7 && hour < 9) || (hour >= 16 && hour < 19)
   return isPeak ? 'peak' : 'offpeak'
+}
+
+/**
+ * Which day bucket a moment falls in, Jakarta time.
+ *
+ * Indonesian public holidays run a Sunday-shaped service, so they resolve to
+ * SUN rather than to the weekday they land on. The list is hand-maintained —
+ * the TJ feed's `calendar_dates.txt` does not exist, so there is nothing to
+ * import — and it degrades safely: a holiday nobody listed is simply treated as
+ * whatever day of the week it is, which is exactly today's behaviour.
+ */
+export function serviceDay(date: Date): 'WD' | 'SAT' | 'SUN' {
+  const local = wib(date)
+  const iso = local.toISOString().slice(0, 10)
+  if (HOLIDAYS.has(iso)) return 'SUN'
+  const day = local.getUTCDay()
+  if (day === 0) return 'SUN'
+  if (day === 6) return 'SAT'
+  return 'WD'
+}
+
+/** Seconds since local (Jakarta) midnight — what the router filters on. */
+export function secondsSinceLocalMidnight(date: Date): number {
+  const local = wib(date)
+  return local.getUTCHours() * 3600 + local.getUTCMinutes() * 60 + local.getUTCSeconds()
 }
 
 export function calculateSegmentFare(segment: FareSegmentInput, context: FareContext): number | null {

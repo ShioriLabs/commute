@@ -5,8 +5,10 @@ import { EdgeRepository } from 'db/repositories/edges'
 import { assembleJourney, planJourney } from 'utils/fare-journey'
 import { handleJourneyRequest, journeyCacheKey } from 'utils/journey-endpoint'
 import { ENDPOINT_RESTRICTIONS, SERVICE_BREAKS } from 'db/data/topology'
-import { loadGraph, type Tsundere } from '@commute/tsundere'
-import { HEADWAYS_S, STOP_HEADWAYS_S } from 'db/data/headways'
+import { loadGraph, type ServiceWindow, type Tsundere } from '@commute/tsundere'
+import { DAY_HEADWAYS_S, HEADWAYS_S, STOP_HEADWAYS_S } from 'db/data/headways'
+import { SERVICE_HOURS, type ServiceDay } from 'db/data/service-hours'
+import { secondsSinceLocalMidnight, serviceDay } from 'utils/fare'
 import { doc, pathParam, queryParam } from 'schemas/describe'
 import { FareResultSchema, type FareResult } from '@commute/schemas'
 
@@ -46,9 +48,72 @@ export async function getRouter(d1: D1Database): Promise<Tsundere> {
     // measured value, `lineCode` is the fallback. The planner tries them in that
     // order, so the per-stop entries must not shadow a line key of the same name
     // (they cannot — `@` is not legal in a line code).
-    headwaysS: new Map([...Object.entries(HEADWAYS_S), ...Object.entries(STOP_HEADWAYS_S)])
+    headwaysS: new Map([...Object.entries(HEADWAYS_S), ...Object.entries(STOP_HEADWAYS_S)]),
+    // When each line runs. A static property of the network, so it is loaded
+    // with the graph; only the moment being asked about varies per request,
+    // and that is findRoutes' `departureS`.
+    serviceHours: serviceHoursMap()
   })
   return cachedRouter
+}
+
+/*
+ * Per-line service windows, flattened for the day the caller is asking about.
+ *
+ * SERVICE_HOURS keys a line by day, with ALL where the window does not vary.
+ * The planner wants one map, so the day is resolved here. Built once per
+ * isolate per day rather than per request: three small maps, and the graph
+ * memoisation above stays intact because none of this touches the graph.
+ */
+const serviceHoursCache = new Map<ServiceDay, Map<string, ServiceWindow>>()
+function serviceHoursMap(day: ServiceDay = 'ALL'): Map<string, ServiceWindow> {
+  const cached = serviceHoursCache.get(day)
+  if (cached) return cached
+  const resolved = new Map<string, ServiceWindow>()
+  for (const [line, byDay] of Object.entries(SERVICE_HOURS)) {
+    // Specific day first, then the every-day window. A line with neither is
+    // left out, which leaves it always boardable.
+    const window = (day === 'ALL' ? undefined : byDay[day]) ?? byDay.ALL
+    if (window) resolved.set(line, window)
+  }
+  serviceHoursCache.set(day, resolved)
+  return resolved
+}
+
+/*
+ * Headways for a given day: the weekday table, overlaid with that day's deltas.
+ *
+ * DAY_HEADWAYS_S is sparse — only the (day, line) and (day, line@stop) pairs
+ * that actually differ — so a miss falls through to the weekday number, which
+ * is what the planner used before days existed.
+ */
+const headwaysCache = new Map<ServiceDay, Map<string, number>>()
+function headwaysFor(day: ServiceDay): Map<string, number> {
+  const cached = headwaysCache.get(day)
+  if (cached) return cached
+  const base = new Map([...Object.entries(HEADWAYS_S), ...Object.entries(STOP_HEADWAYS_S)])
+  if (day !== 'ALL') {
+    const prefix = `${day}:`
+    for (const [key, seconds] of Object.entries(DAY_HEADWAYS_S)) {
+      if (key.startsWith(prefix)) base.set(key.slice(prefix.length), seconds)
+    }
+  }
+  headwaysCache.set(day, base)
+  return base
+}
+
+/** Planner options that depend on when the rider is travelling. */
+export function timeOptions(context: FareContext): {
+  departureS: number
+  serviceHours: Map<string, ServiceWindow>
+  headwaysS: Map<string, number>
+} {
+  const day = serviceDay(context.departureAt)
+  return {
+    departureS: secondsSinceLocalMidnight(context.departureAt),
+    serviceHours: serviceHoursMap(day),
+    headwaysS: headwaysFor(day)
+  }
 }
 
 // Resolve the fare context from optional query params, defaulting to today's

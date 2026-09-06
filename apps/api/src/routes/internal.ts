@@ -5,7 +5,7 @@ import { HubRepository } from 'db/repositories/hubs'
 import { KVRepository } from 'db/repositories/kv'
 import { StationRepository } from 'db/repositories/stations'
 import type { TripResult } from '@commute/schemas'
-import { getRouter, parseFareContext } from 'routes/fares'
+import { getRouter, parseFareContext, timeOptions } from 'routes/fares'
 import { assembleJourney, planJourney } from 'utils/fare-journey'
 import { handleJourneyRequest, journeyCacheKey } from 'utils/journey-endpoint'
 import { summarizeFares } from 'utils/fare-summary'
@@ -100,6 +100,12 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
    */
   build: async ({ router, timing, context, fromId, toId, hydrate }) => {
     const routed = timing.measureSync('route', () => router.findRoutes(fromId, toId, {
+      /*
+       * When the rider is travelling, which decides both which lines are
+       * running at all and how often they come. Omitting these is what the
+       * search did before service hours existed.
+       */
+      ...timeOptions(context),
       /*
        * Pricing the journeys is what makes the CHEAPEST label reachable at all —
        * without a scorer every journey's `fare` criterion is null and the axis

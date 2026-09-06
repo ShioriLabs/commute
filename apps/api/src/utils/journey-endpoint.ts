@@ -4,7 +4,7 @@ import type { Tsundere } from '@commute/tsundere'
 import type { Bindings } from 'app'
 import { KVRepository } from 'db/repositories/kv'
 import { StationRepository } from 'db/repositories/stations'
-import { fareTimeBucket } from 'utils/fare'
+import { fareTimeBucket, serviceDay } from 'utils/fare'
 import { stationNamer, type StationNamer } from 'utils/fare-journey'
 import { Internal, NotFound, Ok } from 'utils/response'
 import { ServerTiming } from 'utils/server-timing'
@@ -32,6 +32,10 @@ import { ServerTiming } from 'utils/server-timing'
  *
  * Keyed on payment method and time bucket because fare depends on both — peak
  * and off-peak, and the integrated-fare steps, must not share a cached body.
+ *
+ * The service day joins them because routing now depends on it too: lines run
+ * on different days and at different frequencies, so a Saturday answer served
+ * from a Tuesday key would route onto a corridor that is not running.
  */
 export function journeyCacheKey(
   prefix: 'fares' | 'trips',
@@ -40,7 +44,8 @@ export function journeyCacheKey(
   context: FareContext,
   apiVersion: string
 ): string {
-  return `${prefix}:${fromId}:${toId}:${context.paymentMethod}:${fareTimeBucket(context.departureAt)}:${apiVersion}`
+  const day = serviceDay(context.departureAt)
+  return `${prefix}:${fromId}:${toId}:${context.paymentMethod}:${day}:${fareTimeBucket(context.departureAt)}:${apiVersion}`
 }
 
 /** What the endpoint-specific half is handed once the shared work is done. */
