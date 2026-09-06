@@ -1,119 +1,182 @@
 # "Go mode" — from fare calc to trip planner (roadmap)
 
-**Status:** vision / sequencing note — nothing here is committed. Umbrella over
-`points-of-interest.md` and `transit-hubs.md`. **Fares ship first**; this exists so the
-order is written down, not to authorise building any of it yet.
+**Status:** sequencing note, rewritten 2026-09-06 to describe what exists. Umbrella over
+`points-of-interest.md` and `transit-hubs.md`. The original discipline — *fares first,
+then stop* — has served its purpose: fares are solid, and Tier 1 shipped without a
+rewrite. What follows records where the tiers actually stand, not where they were
+planned to stand.
 
 ## Thesis: the fare tool *is* the planner's spine
 
-The reason to build fares first isn't just focus — it's that **nothing built for fares
-gets thrown away**. The fare experience quietly assembles every load-bearing piece of a
-trip planner; "go mode" is what you get by adding two layers on top, not by rewriting.
-So we ship the fare slice of a planner, and the planner is mostly already there when we
-decide to turn it on.
+The reason to build fares first wasn't just focus — it's that **nothing built for fares
+got thrown away**. That claim has now been tested rather than asserted. The multi-criteria
+planner was added *beside* the fare pipeline, not in place of it: both endpoints render
+through the same `utils/fare-journey.ts`, so they cannot drift in how a leg looks, only in
+how many journeys come back.
 
 ```
-Tier 0  static route + per-segment fare + POIs   ← here (once POIs land)
-Tier 1  + route preferences (least walk / fewest transfers / cheapest)
-Tier 2  + schedule-aware routing (next-train, last-train, arrive-by)
+Tier 0  static route + per-segment fare                    ← DONE (POIs still unbuilt)
+Tier 1  + route preferences, several journeys, labels      ← DONE, shipped behind a toggle
+Tier 2  + time                                             ← HALF DONE
+        service hours + day-awareness + headway waits        DONE
+        timetable-driven departures ("next train", arrive-by) NOT STARTED
         = go mode
 ```
 
-Each tier is independently shippable and useful on its own. You are never mid-rewrite.
+Each tier is independently shippable and useful on its own. That held.
 
-## Tier 0 — where we are
+## Tier 0 — done, minus POIs
 
-- **Router** (`apps/api/src/utils/router.ts`): Dijkstra over ride edges + walk transfers,
-  returns **one** shortest weighted route; `TRANSFER_PENALTY_M` biases against needless
-  network hops.
-- **Fare** (`apps/api/src/utils/fare-summary.ts` + `fare.ts`): per ride-segment, priced
-  by operator tariff.
-- **POIs** (`points-of-interest.md`): landmark origins/destinations as curated access
-  walks — transfer-shaped virtual nodes.
+- **Fare** (`apps/api/src/utils/fare-summary.ts` + `fare.ts`): per ride-segment, priced by
+  operator tariff. Time-aware since the fare criteria bar shipped.
+- **POIs** (`points-of-interest.md`): **still unbuilt.** No `poiStations`, no access walks,
+  nothing in the codebase. Door-to-door endpoints remain the one Tier 0 item outstanding,
+  and it is now the *only* thing on this roadmap that is purely additive — it needs no
+  engine work, just data and a virtual-node injection per request.
 
-Static and **time-agnostic**. That last word is the whole story of the tiers above.
+## Tier 1 — done, and built better than this doc predicted
 
-## Tier 1 — route preferences (the "1 step")
+The router moved out of `apps/api/src/utils/router.ts` into **`libs/tsundere`**, a
+dependency-free routing engine package with its own tests, benchmarks and public surface
+(`loadGraph` → `findRoute` / `findRoutes`). Read its README before touching it; the
+boundary it keeps (no operators, no rupiah, no database types) is deliberate and
+load-bearing.
 
-Offer *least walk* / *fewest transfers* / *cheapest*, and show them as alternatives
-instead of a single answer. Mostly a generalisation of the router that exists:
+What shipped is not the "crank `TRANSFER_PENALTY_M`" generalisation this doc originally
+sketched. It is the better version:
 
-- **Parametrise the cost model.** *Fewest transfers* → crank `TRANSFER_PENALTY_M` or make
-  transfer count a lexicographic tiebreaker; *least walk* → weight walk edges harder.
-  Same Dijkstra, different weights.
-- **k-shortest-paths** so you can *present* alternatives, not just return the argmin.
-- **"Cheapest" is not a fourth edge weight — this is the subtle one.** Fares aren't
-  per-edge additive: `calculateSegmentFare` is progressive (KCI), flat (LRTJ), capped
-  (LRTJBDB), or an OD matrix (MRTJ), and the total depends on **where the tap-outs land**
-  (segment boundaries), which depends on the whole path. So cheapest ≠ minimise a weight;
-  it's **generate candidate routes → score each with `summarizeFares` → pick the min**.
-  Doable, but "generate + evaluate," not "one clever weight."
-- **Payoff concentrates at the hub complexes** (Manggarai, Dukuh Atas) — that's where a
-  transfer trades against a longer ride, or a one-stop ride against a walk. So this tier
-  leans on the hub work in `transit-hubs.md` (a hub as a transfer super-node).
+- **Five criteria, not one weighted scalar** (`planner/criteria.ts`): boardings,
+  `rideDistanceM`, `walkDistanceM`, `concourseWalkM`, `waitS`, `fare`. Per-(stop, round)
+  Pareto bags replaced the scalar Dijkstra.
+- **"Cheapest" resolved exactly as this doc warned it must be.** Fare is not a fourth edge
+  weight; it rides along as an axis scored over materialised legs via a `scoreFare`
+  closure, so the engine prices a journey without knowing what money is. `fare: null`
+  means *incomparable* — never zero (which would make an unpriceable journey spuriously
+  dominant) and never infinity (which would silently delete it).
+- **Dominance tolerances are not a nicety.** `DISTANCE_BUCKET_M` (100m) and
+  `WAIT_BUCKET_S` (60s) exist because five continuous axes means two journeys differing by
+  one metre are mutually non-dominated, and every bag grows until the search dies. Applied
+  as a pairwise tolerance rather than a grid, because a grid separates 5049 from 5051 at
+  the boundary.
+- **Labels ship in Indonesian**, four of them, as a total `Record` so a fifth engine label
+  breaks the build rather than rendering `SHORTEST_WAIT` at a rider: *Termurah*, *Paling
+  santai*, *Minim jalan*, *Sering lewat*. `SHORTEST_WAIT` is worded as "the vehicle comes
+  often" and never as "you will arrive sooner" — it comes from headways, and the app has
+  no arrival time to promise.
 
-## Tier 2 — schedule-aware routing (the half-step that makes it a planner)
+### How it reaches riders
 
-The real gap nobody notices until here: **time**. Everything in Tiers 0–1 is a static
-graph; a planner answers "how do I get there *now*, and when do I arrive?" That needs
-next-train, service frequencies, the **last-train** problem, and a "best route" that
-changes with the clock.
+`/fares/:from/:to` **still calls `findRoute`, singular, on purpose.** It is the shared URL,
+the OG card and the TransportForJakarta embed, so its answer must not move for anyone who
+did not ask. `findRoutes` picks a different primary on some pairs — Bogor → Lebak Bulus
+becomes a one-transfer Rp 20.000 route where `/fares` returns the three-transfer
+Rp 17.500 one. Neither is wrong.
 
-- **The data already supports it.** `schedules` (`db/schemas/schedules.ts`) is a
-  per-station stop-time table — `stationId`, `estimatedDeparture`/`estimatedArrival`,
-  `boundFor`, `lineCode`, keyed by `tripNumber`. Group by `tripNumber`, order by time, and
-  you have **trips → a connection list** — exactly the input for a Connection-Scan /
-  RAPTOR-style time-dependent router. Today those rows only feed the timetable display;
-  Tier 2 promotes them to routing input.
-- **The late-night edge case is the time dimension biting early.** The rare
-  Cikarang↔Jakarta Kota late-night ops (and the KCI-JAKK-C grouping) are exactly the
-  "the best route at 02:00 ≠ the best route at 14:00 / does the last train still run?"
-  problem. A static router can't express it; a time-dependent one must.
-- **Bonus: fares get *more accurate*, not just routes.** The LRTJBDB cap is
-  time-dependent (peak 20000 / off-peak & weekend 10000). This is **no longer flattened**:
-  `fare.ts` buckets `context.departureAt` through `fareTimeBucket`, and since the fare
-  criteria bar shipped, riders can pick that bucket directly. What Tier 2 adds is having
-  the departure time *derived from the route* rather than chosen — the fare stops
-  depending on the rider telling us when they are travelling.
-  (Corrected 2026-08-02: this bullet previously claimed the cap was still flattened.)
+The multi-journey answer lives at **`/_internal/trips/:from/:to`**, and asking for it is a
+rider-facing choice: the **beta router toggle** on `/fare` (`fare-sheet/router-toggle.tsx`,
+`hooks/use-fare-router.ts`), with the alternatives rendered as cards plus a criteria bar
+(`fare-sheet/criteria/`). The split survives *because* a switch picks between two endpoints
+that each answer honestly — a mode flag on `/fares` would have made one URL mean two things.
 
-This tier is a **different algorithm class** (time-expanded graph / CSA / RAPTOR), which
-is why it's the "half-step" rather than another weight tweak — and it's the interesting
-half.
+The toggle persists in **localStorage only**. There is no URL form, so a link cannot put a
+rider on a router they did not choose. Do not reintroduce a `?router=` param; it was tried
+and removed.
+
+## Tier 2 — half done, and the half nobody expected came first
+
+This doc assumed "time" meant timetables, and that the tier was one algorithm-class jump.
+It wasn't. Time arrived by the cheaper road, and the expensive road is still unbuilt.
+
+### Done: the network knows when it is shut
+
+- **Service windows** (`planner/service-hours.ts`) as `[startS, endS]` seconds since local
+  midnight, with the engine staying timezone-free — apps/api converts a `Date` and passes
+  a number, the same way it passes distances rather than coordinates. `endS < startS`
+  means the window crosses midnight, which is the *normal* case for a rail line.
+- **Windows are derived, not declared**: the complement of the largest circular gap
+  between departures. `MIN`/`MAX` cannot work (KCI lines B, C and R all have departures at
+  both 00:00 and 23:59, so extremes report 24-hour service and filter nothing), and
+  percentiles cannot either (a wrapping window has its ends at opposite ends of a linear
+  sort). `minGapS` guards genuinely round-the-clock service — TJ's AMARI night corridors
+  have no break worth calling one.
+- **Day-awareness** merged 2026-09-05 (PR #126): TJ day-aware headways, LRT Jabodebek
+  weekend schedules, and no-service date/time handling end to end through API and UI.
+- **Wait modelling from headways**, per-stop and directional where the data supports it.
+- **Closed ≠ disconnected.** An empty Pareto front has two causes and riders need them
+  told apart, so `/trips` probes `nextServiceAt` and answers `outcome: 'CLOSED'` with a
+  reopening time — behind both conditions, off the hot path.
+
+This is the *realistic ceiling* identified earlier: service-hours plus frequency filtering,
+not RAPTOR. The late-night problem this doc flagged as the time dimension biting early —
+"the best route at 02:00 ≠ the best route at 14:00" — is answered.
+
+### Not started: departures
+
+The engine models **how often** a vehicle comes, never **when the next one is**. The
+`schedules` table still only feeds timetable display; nothing in `libs/tsundere` reads it.
+So these remain unanswerable:
+
+- "Leave now" with real next-departure times on each leg.
+- **Arrive-by** planning.
+- The **last-train** question in its precise form (service *windows* answer the coarse
+  version already).
+
+That is the genuine Connection-Scan / RAPTOR step. Note the constraint discovered since
+this doc was written: **TJ has no timetable at all**, only frequencies, so timetable-driven
+routing is structurally a rail-only capability. A planner that offers exact departures for
+KCI and LRT but not for TJ is a UX problem before it is an algorithms problem, and that
+question should be settled before any of it is built.
 
 ## UX layer (go mode proper)
 
-- "Leave now / depart at HH:MM / arrive by HH:MM."
-- Next departures inline on the itinerary legs (you already render legs).
-- Alternatives as cards: *fastest* · *fewest transfers* · *cheapest* (Tier 1 output).
-- Reframe the entry point — it stops being "Cek Tarif" gated behind the fare button and
-  becomes a plan-a-journey surface. (Fare stays a first-class answer *within* a plan.)
+- ~~Alternatives as cards: *fastest* · *fewest transfers* · *cheapest*~~ — **shipped**
+  behind the beta toggle, with four labels rather than three.
+- "Leave now / depart at HH:MM / arrive by HH:MM." — needs the departures work above.
+  Departure *time* is already a rider input (it drives the fare bucket and service hours);
+  what is missing is arrive-by and next-departure.
+- Next departures inline on the itinerary legs — same blocker.
+- Reframe the entry point: it is still "Cek Tarif" gated behind the fare button rather
+  than a plan-a-journey surface. This is now the largest purely-presentational gap, and it
+  no longer depends on any engine work.
 
-## The spine — what carries over (nothing thrown away)
+## The spine — what carried over (nothing thrown away)
 
 | Piece | Built for | Reused in go mode as |
 | --- | --- | --- |
-| Route graph + `buildGraph` | fares | the planning graph (add a time layer) |
-| `TRANSFER_PENALTY_M` | fares | one of Tier 1's tunable weights |
-| `summarizeFares` / `calculateSegmentFare` | fares | the "cheapest" scorer + per-plan fare |
-| POI access walks (`poiStations`) | fares | door-to-door plan endpoints + `ACCESS` legs |
-| `JourneyTimeline` renderer | fares | the itinerary view (add times to legs) |
+| Route graph + `loadGraph` | fares | the planning graph, now with a time layer |
+| `TRANSFER_PENALTY_M` | fares | superseded by the five-axis criteria model |
+| `summarizeFares` / `calculateSegmentFare` | fares | the `scoreFare` closure + per-plan fare |
+| `JourneyTimeline` renderer | fares | the itinerary view, shared by both endpoints |
+| `utils/fare-journey.ts` | fares | the one renderer both routers go through |
 | Hubs as transfer super-nodes | hubs | interchange modelling for preferences |
-| `schedules` stop-times | timetable | Tier 2 connection list |
+| POI access walks (`poiStations`) | — | **still unbuilt** |
+| `schedules` stop-times | timetable | **still display-only**; Tier 2's remaining input |
 
 ## Sequencing / discipline
 
-**Fares first, then stop.** Do not start Tier 1/2 until the fare experience is solid —
-the point of this doc is to prove that waiting costs nothing (no rework), not to green-light
-building ahead. Ship in tier order; each tier is a real, standalone improvement.
+The original rule was "fares first, then stop." That expired: the engine work went well
+past it, deliberately and without rework, which is the outcome this doc predicted.
+
+The live question is no longer *what to build next* but **what to promote**. Three
+independent moves, in rough order of leverage:
+
+1. **Decide the beta toggle's fate.** The alternatives UI is built, tested and in riders'
+   hands behind a switch. Either it becomes the default (and `/fares` keeps its singular
+   answer for embeds, which it can do indefinitely) or it stays opt-in on purpose. Leaving
+   it undecided is the one option that costs something.
+2. **POIs.** The last Tier 0 item, additive, and blocked on nothing.
+3. **Departures.** Real Tier 2, a different algorithm class, and gated on the TJ
+   no-timetable question above.
 
 ## Open questions
 
-- k-shortest-paths vs repeated single-objective Dijkstra runs for alternatives.
-- Scheduled-only vs realtime: we route on `schedules` (planned times); live train
-  positions are a separate, later question.
-- Schedule coverage — full operating day, weekend/holiday service variants, and freshness
-  (the sync path) all become correctness-critical once schedules drive routing.
-- How many alternatives to surface (fastest/fewest/cheapest — 3? collapse when identical?).
-- Whether Tier 2 reuses the per-isolate `cachedGraph` pattern or needs a different
-  cache/shape for the time-expanded structure.
+- Does the beta router become the default, and if so what happens to the toggle?
+- Whether exact departures are worth shipping rail-only, given TJ can never have them.
+- Scheduled-only vs realtime: live vehicle positions remain a separate, later question.
+- Schedule coverage — full operating day, holiday variants, and sync freshness — becomes
+  correctness-critical only if departures are built; service *windows* already tolerate
+  gaps.
+- Whether a time-expanded structure reuses the per-isolate `cachedGraph` pattern.
+- ~~k-shortest-paths vs repeated Dijkstra~~ — settled: neither. Pareto bags per (stop,
+  round), with `maxBagSize` trading width for cost.
+- ~~How many alternatives to surface~~ — settled: `maxResults`, labelled, ties unlabelled.
