@@ -5,11 +5,17 @@ import { LINES } from './lines'
 /*
  * Batch CSV -> SQL generator for the hand-transcribed LRT Jabodebek
  * timetables (source: official @lrt_jabodebek Instagram schedule posters —
- * there is no public API). Reads every `<STATION>_<LINE>_<DEST>.csv` in
+ * there is no public API). Reads every `<STATION>_<LINE>_<DEST>_<DAY>.csv` in
  * ./timetables (one departure per line, H:MM or HH:MM) and overwrites the
- * committed `lrtjbdb_<STATION>_<LINE>_<DEST>_timetable.sql` files in
+ * committed `lrtjbdb_<STATION>_<LINE>_<DEST>_<DAY>_timetable.sql` files in
  * db/scripts, so `git diff` is the transcription review. See
  * ./timetables/README.md for the workflow and transcription checklist.
+ *
+ * The `<DAY>` slot is REQUIRED, not optional-defaulting-to-weekday. LRT
+ * Jabodebek publishes a separate weekend timetable, and an optional slot would
+ * let a weekend file that lost its suffix load as weekday data and wipe the
+ * real weekday board — a silent, total loss of a hand-transcribed poster. A
+ * required slot turns that into a parse error before anything is written.
  */
 
 const INPUT_DIR = path.join(__dirname, 'timetables')
@@ -25,19 +31,32 @@ export const DEST_BOUND_FOR: Record<string, string> = {
 
 const LINE_CODES = new Set<string>(LINES.map(line => line.lineCode))
 
+/*
+ * Day types a poster can cover, and the `schedules.dayMask` each writes.
+ *
+ * WD is Monday-Friday and WE is the whole weekend: LRT Jabodebek publishes one
+ * weekend timetable, not a Saturday one and a Sunday one, so splitting them
+ * here would invent a distinction the operator does not make.
+ */
+export const DAY_MASKS: Record<string, number> = { WD: 0b100, WE: 0b011 }
+
 export interface TimetableFileKey {
   station: string
   line: string
   dest: string
+  day: string
 }
 
 export function parseTimetableFilename(basename: string): TimetableFileKey | { error: string } {
-  const match = basename.match(/^([A-Z0-9]{2,4})_([A-Z]{2})_([A-Z]{3})\.csv$/)
-  if (!match?.[1] || !match[2] || !match[3]) {
-    return { error: `"${basename}" does not match <STATION>_<LINE>_<DEST>.csv` }
+  const match = basename.match(/^([A-Z0-9]{2,4})_([A-Z]{2})_([A-Z]{3})_([A-Z]{2})\.csv$/)
+  if (!match?.[1] || !match[2] || !match[3] || !match[4]) {
+    return { error: `"${basename}" does not match <STATION>_<LINE>_<DEST>_<DAY>.csv` }
   }
 
-  const [, station, line, dest] = match
+  const [, station, line, dest, day] = match
+  if (!DAY_MASKS[day]) {
+    return { error: `"${basename}" has unknown day "${day}" (expected ${Object.keys(DAY_MASKS).join('/')})` }
+  }
   if (!LINE_CODES.has(line)) {
     return { error: `"${basename}" has unknown line code "${line}" (expected ${[...LINE_CODES].join('/')})` }
   }
@@ -51,7 +70,7 @@ export function parseTimetableFilename(basename: string): TimetableFileKey | { e
     return { error: `"${basename}" pairs line ${line} with destination ${dest}, which is not a service pattern (expected ${Object.keys(TRIP_NUMBER_BASE).join('/')})` }
   }
 
-  return { station, line, dest }
+  return { station, line, dest, day }
 }
 
 // Zero-padding is a deliberate fix: the previously committed SQL stored
@@ -83,23 +102,30 @@ export const TRIP_NUMBER_BASE: Record<string, number> = {
   CB_HAR: 2001
 }
 
-export function buildTimetableSQL(station: string, line: string, dest: string, times: string[]): string {
+export function buildTimetableSQL(station: string, line: string, dest: string, day: string, times: string[]): string {
   const stationId = `LRTJBDB-${station}`
   const boundFor = DEST_BOUND_FOR[dest]
   const tripNumberBase = TRIP_NUMBER_BASE[`${line}_${dest}`]
+  const dayMask = DAY_MASKS[day]
 
   const rows = times.map((time, index) => {
-    const id = `${stationId}-${line}-${index + 1}-${dest}`
+    const id = `${stationId}-${line}-${day}-${index + 1}-${dest}`
     const tripNumber = `LRTJBDB-${tripNumberBase! + index * 2}`
-    return `('${id}', '${stationId}', '${tripNumber}', '${time}', '${time}', '${boundFor}', '${line}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+    return `('${id}', '${stationId}', '${tripNumber}', '${time}', '${time}', '${boundFor}', '${line}', ${dayMask}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
   })
 
-  // The delete makes re-applying a file safe on an already-loaded station
-  // (a resync would otherwise hit primary-key conflicts). Scoped by id
-  // pattern rather than boundFor: ids are stable while boundFor labels
-  // change on terminus re-sponsoring, which would strand old rows.
-  const clearStatement = `DELETE FROM schedules WHERE id LIKE '${stationId}-${line}-%-${dest}';\n`
-  const insertStatement = 'INSERT INTO schedules (id, stationId, tripNumber, estimatedDeparture, estimatedArrival, boundFor, lineCode, createdAt, updatedAt) VALUES\n'
+  /*
+   * The delete makes re-applying a file safe on an already-loaded station
+   * (a resync would otherwise hit primary-key conflicts). Scoped by id
+   * pattern rather than boundFor: ids are stable while boundFor labels
+   * change on terminus re-sponsoring, which would strand old rows.
+   *
+   * The day sits in the id for the same reason it sits in the pattern: a file
+   * must clear only the rows it is about to replace. Without it, loading the
+   * weekend board would delete the weekday one — the pattern would match both.
+   */
+  const clearStatement = `DELETE FROM schedules WHERE id LIKE '${stationId}-${line}-${day}-%-${dest}';\n`
+  const insertStatement = 'INSERT INTO schedules (id, stationId, tripNumber, estimatedDeparture, estimatedArrival, boundFor, lineCode, dayMask, createdAt, updatedAt) VALUES\n'
   const switchTimetableSynced = `UPDATE stations SET timetableSynced = 1 WHERE id = '${stationId}';\n`
   return clearStatement + insertStatement + rows.join(',\n') + ';\n\n' + switchTimetableSynced
 }
@@ -107,8 +133,8 @@ export function buildTimetableSQL(station: string, line: string, dest: string, t
 function expectedCombos(): Set<string> {
   const combos = new Set<string>()
   for (const file of fs.readdirSync(OUTPUT_DIR)) {
-    const match = file.match(/^lrtjbdb_([A-Z0-9]{2,4})_([A-Z]{2})_([A-Z]{3})_timetable\.sql$/)
-    if (match) combos.add(`${match[1]}_${match[2]}_${match[3]}`)
+    const match = file.match(/^lrtjbdb_([A-Z0-9]{2,4})_([A-Z]{2})_([A-Z]{3})_([A-Z]{2})_timetable\.sql$/)
+    if (match) combos.add(`${match[1]}_${match[2]}_${match[3]}_${match[4]}`)
   }
   return combos
 }
@@ -116,13 +142,13 @@ function expectedCombos(): Set<string> {
 function main() {
   if (!fs.existsSync(INPUT_DIR)) {
     console.error(`Input directory not found: ${INPUT_DIR}`)
-    console.error('Create it and add <STATION>_<LINE>_<DEST>.csv files (one HH:MM departure per line).')
+    console.error('Create it and add <STATION>_<LINE>_<DEST>_<DAY>.csv files (one HH:MM departure per line).')
     process.exit(1)
   }
 
   const csvFiles = fs.readdirSync(INPUT_DIR).filter(file => file.endsWith('.csv'))
   if (csvFiles.length === 0) {
-    console.error(`No CSV files in ${INPUT_DIR}. Expected <STATION>_<LINE>_<DEST>.csv, e.g. SET_BK_JTM.csv.`)
+    console.error(`No CSV files in ${INPUT_DIR}. Expected <STATION>_<LINE>_<DEST>_<DAY>.csv, e.g. SET_BK_JTM_WD.csv.`)
     process.exit(1)
   }
 
@@ -170,7 +196,10 @@ function main() {
   // slip — refuse to number rather than misalign silently.
   const countsByDirection = new Map<string, Set<number>>()
   for (const { key, times } of parsedFiles) {
-    const direction = `${key.line}_${key.dest}`
+    // Partitioned by DAY as well as direction: a weekday board and a weekend
+    // board legitimately run different numbers of trips, and comparing them
+    // would report every station as disagreeing with itself.
+    const direction = `${key.line}_${key.dest}_${key.day}`
     const counts = countsByDirection.get(direction) ?? new Set()
     counts.add(times.length)
     countsByDirection.set(direction, counts)
@@ -183,10 +212,10 @@ function main() {
 
   if (!errors.some(error => error.includes('cannot align'))) {
     for (const { key, times } of parsedFiles) {
-      const outputPath = path.join(OUTPUT_DIR, `lrtjbdb_${key.station}_${key.line}_${key.dest}_timetable.sql`)
-      fs.writeFileSync(outputPath, buildTimetableSQL(key.station, key.line, key.dest, times))
+      const outputPath = path.join(OUTPUT_DIR, `lrtjbdb_${key.station}_${key.line}_${key.dest}_${key.day}_timetable.sql`)
+      fs.writeFileSync(outputPath, buildTimetableSQL(key.station, key.line, key.dest, key.day, times))
       written.push(outputPath)
-      transcribed.add(`${key.station}_${key.line}_${key.dest}`)
+      transcribed.add(`${key.station}_${key.line}_${key.dest}_${key.day}`)
     }
   }
 
@@ -196,7 +225,13 @@ function main() {
 
   const expected = expectedCombos()
   const missing = [...expected].filter(combo => !transcribed.has(combo)).sort()
-  console.log(`\nTranscribed ${transcribed.size}/${expected.size} station/line/direction combos.`)
+  console.log(`\nTranscribed ${transcribed.size}/${expected.size} station/line/direction/day combos.`)
+  // Reported per day so the weekend backlog is a number rather than something
+  // to count by eye against the checklist.
+  for (const day of Object.keys(DAY_MASKS)) {
+    const done = [...transcribed].filter(combo => combo.endsWith(`_${day}`)).length
+    console.log(`  ${day}: ${done}`)
+  }
   if (missing.length > 0) {
     console.log(`Missing: ${missing.join(', ')}`)
   }

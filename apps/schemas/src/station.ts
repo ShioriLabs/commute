@@ -141,7 +141,11 @@ export const HeadwayRowSchema = v.pipe(
     ),
     weekendOnly: v.pipe(
       v.optional(v.literal(true)),
-      v.description('Ada dan bernilai `true` kalau linnya cuma beroperasi Sabtu-Minggu.')
+      v.description('DEPRECATED, pakai `days`. Ada dan bernilai `true` kalau linnya nggak jalan di hari kerja.')
+    ),
+    days: v.pipe(
+      v.optional(v.array(v.picklist(['WD', 'SAT', 'SUN']))),
+      v.description('Hari-hari linnya jalan, urut. `WD` = Senin-Jumat, `SAT` = Sabtu, `SUN` = Minggu. Cuma ada kalau linnya nggak jalan setiap hari — kalau field-nya nggak ada, berarti tiap hari.')
     ),
     boundFor: v.pipe(
       v.optional(v.string()),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatHeadway } from './index'
+import { dayLabel, formatHeadway } from './index'
 
 /*
  * The copy rules around a headway are the part worth pinning.
@@ -35,5 +35,36 @@ describe('formatHeadway', () => {
   // House style: no trailing period on the last sentence of UI prose.
   it('carries no trailing period', () => {
     expect(formatHeadway(300).endsWith('.')).toBe(false)
+  })
+})
+
+/*
+ * Which days a corridor runs, in the words a rider would use.
+ *
+ * The rule that matters: only the exceptions get a label. Most TransJakarta
+ * corridors run all week, so labelling those "tiap hari" would bury the handful
+ * that genuinely differ under noise.
+ */
+describe('dayLabel', () => {
+  it('says nothing about a corridor that runs all week', () => {
+    expect(dayLabel(['WD', 'SAT', 'SUN'])).toBeNull()
+    // Absent means every day — the API omits the field for the common case.
+    expect(dayLabel(undefined)).toBeNull()
+  })
+
+  it('names the weekday-only and weekend-only cases', () => {
+    expect(dayLabel(['WD'])).toBe('hari kerja')
+    expect(dayLabel(['SAT', 'SUN'])).toBe('akhir pekan')
+  })
+
+  /*
+   * 7T and 8A really do run on Sundays and not Saturdays. Folding them into
+   * "akhir pekan" would send a Saturday rider to a halte for a bus that is not
+   * coming, which is the one thing this label exists to prevent.
+   */
+  it('keeps a single weekend day distinct from the whole weekend', () => {
+    expect(dayLabel(['SUN'])).toBe('Minggu')
+    expect(dayLabel(['SAT'])).toBe('Sabtu')
+    expect(dayLabel(['SUN'])).not.toBe(dayLabel(['SAT', 'SUN']))
   })
 })

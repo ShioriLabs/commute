@@ -1,4 +1,5 @@
 import { plan, type Journey, type PlanOptions } from './planner/plan'
+import type { ServiceWindow } from './planner/service-hours'
 import {
   buildGraph,
   findRoute,
@@ -42,6 +43,15 @@ export interface LoadGraphInput {
    * RouteGraph.serviceBreaks for why `findRoute` ignores them.
    */
   serviceBreaks?: ServiceBreak[]
+  /**
+   * When each line runs, in seconds since local midnight.
+   *
+   * A static property of the network, like restrictions, so it is loaded once
+   * rather than passed per query — only the *evaluation time* varies, and that
+   * is `plan`'s `departureS`. Without it no journey is ever filtered by service
+   * hours, whatever departure time a caller passes.
+   */
+  serviceHours?: Map<string, ServiceWindow>
 }
 
 export class Tsundere {
@@ -54,10 +64,16 @@ export class Tsundere {
    */
   readonly #graph: RouteGraph
   readonly #headwaysS: Map<string, number> | undefined
+  readonly #serviceHours: Map<string, ServiceWindow> | undefined
 
-  constructor(graph: RouteGraph, headwaysS?: Map<string, number>) {
+  constructor(
+    graph: RouteGraph,
+    headwaysS?: Map<string, number>,
+    serviceHours?: Map<string, ServiceWindow>
+  ) {
     this.#graph = graph
     this.#headwaysS = headwaysS
+    this.#serviceHours = serviceHours
   }
 
   /** Node count, for cache diagnostics and sanity checks after a reseed. */
@@ -90,6 +106,7 @@ export class Tsundere {
   findRoutes(fromStationId: string, toStationId: string, options: PlanOptions = {}): Journey[] {
     return plan(this.#graph, fromStationId, toStationId, {
       headwaysS: this.#headwaysS,
+      serviceHours: this.#serviceHours,
       ...options
     })
   }
@@ -106,6 +123,13 @@ export class Tsundere {
  * '-' to fill `RideLeg.operator`. See planner/materialise.ts, which documents
  * why that leak is kept.
  */
-export function loadGraph({ edges, transfers, restrictions, serviceBreaks, headwaysS }: LoadGraphInput): Tsundere {
-  return new Tsundere(buildGraph(edges, transfers, restrictions, serviceBreaks), headwaysS)
+export function loadGraph({
+  edges,
+  transfers,
+  restrictions,
+  serviceBreaks,
+  headwaysS,
+  serviceHours
+}: LoadGraphInput): Tsundere {
+  return new Tsundere(buildGraph(edges, transfers, restrictions, serviceBreaks), headwaysS, serviceHours)
 }

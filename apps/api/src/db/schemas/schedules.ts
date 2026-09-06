@@ -1,6 +1,17 @@
 import { ColumnType, Insertable, Selectable, Updateable } from 'kysely'
 import type { Line } from 'models/line'
 
+/*
+ * Days a board runs, as a three-bit mask: WD (Mon-Fri) 4, SAT 2, SUN 1.
+ *
+ * The same packing the generated headway data uses, so one mental model covers
+ * both. 7 is every day and is the default for rows loaded before day-typed
+ * boards existed.
+ */
+export const DAY_MASK = { WD: 0b100, SAT: 0b010, SUN: 0b001 } as const
+export const DAY_MASK_ALL = DAY_MASK.WD | DAY_MASK.SAT | DAY_MASK.SUN
+export const DAY_MASK_WEEKEND = DAY_MASK.SAT | DAY_MASK.SUN
+
 export interface ScheduleSchema {
   id: string
   stationId: string
@@ -9,6 +20,8 @@ export interface ScheduleSchema {
   estimatedArrival: ColumnType<Date, string | Date, string | Date>
   boundFor: string
   lineCode: string
+  /** Days this departure runs. See DAY_MASK. */
+  dayMask: ColumnType<number, number | undefined, number>
   createdAt: ColumnType<Date, string | undefined, never>
   updatedAt: ColumnType<Date, string | undefined, string | undefined>
 }

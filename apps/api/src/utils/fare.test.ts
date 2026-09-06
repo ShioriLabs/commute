@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FareContext } from '@commute/constants'
-import { calculateSegmentFare, calculateTransferFare, fareTimeBucket, LRTJBDB_FARE_CAP_OFFPEAK, LRTJBDB_FARE_CAP_PEAK, resolveCorridorMerges } from 'utils/fare'
+import { calculateSegmentFare, calculateTransferFare, fareTimeBucket, LRTJBDB_FARE_CAP_OFFPEAK, LRTJBDB_FARE_CAP_PEAK, resolveCorridorMerges, secondsSinceLocalMidnight, serviceDay, wibIsoString } from 'utils/fare'
 import type { RouteLeg } from '@commute/tsundere'
 
 const ctx: FareContext = { paymentMethod: 'STORED_VALUE', departureAt: new Date('2026-07-18T08:00:00+07:00') }
@@ -235,5 +235,68 @@ describe('resolveCorridorMerges', () => {
   it('does not merge an ordinary free walk with no corridor', () => {
     const legs: RouteLeg[] = [ride('KCI', 'KCI-A', 'KCI-B'), walk('KCI-B', 'KCI-C', 200), ride('KCI', 'KCI-C', 'KCI-D')]
     expect(resolveCorridorMerges(legs, ctx).size).toBe(0)
+  })
+})
+
+describe('serviceDay', () => {
+  const on = (iso: string) => serviceDay(new Date(iso))
+
+  it('reads the day in Jakarta time, not UTC', () => {
+    // 22:00 UTC Friday is already Saturday in WIB (+7).
+    expect(on('2026-07-24T22:00:00Z')).toBe('SAT')
+    // 18:00 UTC Saturday is still Saturday locally, just before midnight.
+    expect(on('2026-07-25T16:59:00Z')).toBe('SAT')
+  })
+
+  it('buckets the ordinary week', () => {
+    expect(on('2026-07-20T09:00:00+07:00')).toBe('WD') // Monday
+    expect(on('2026-07-24T09:00:00+07:00')).toBe('WD') // Friday
+    expect(on('2026-07-25T09:00:00+07:00')).toBe('SAT')
+    expect(on('2026-07-26T09:00:00+07:00')).toBe('SUN')
+  })
+
+  /*
+   * Public holidays run a Sunday-shaped service, so they resolve to SUN even on
+   * a weekday. The list is hand-maintained because the TJ feed ships no
+   * calendar_dates.txt to import.
+   */
+  it('treats a listed national holiday as a Sunday', () => {
+    // Hari Kemerdekaan 2026 falls on a Monday.
+    expect(on('2026-08-17T09:00:00+07:00')).toBe('SUN')
+    // Christmas Day 2026 falls on a Friday.
+    expect(on('2026-12-25T09:00:00+07:00')).toBe('SUN')
+  })
+
+  // A holiday nobody added degrades to the weekday it lands on, which is
+  // exactly the behaviour before the list existed.
+  it('treats an unlisted holiday as its ordinary weekday', () => {
+    expect(on('2027-08-17T09:00:00+07:00')).toBe('WD')
+  })
+})
+
+describe('secondsSinceLocalMidnight', () => {
+  it('counts from Jakarta midnight', () => {
+    expect(secondsSinceLocalMidnight(new Date('2026-07-20T00:00:00+07:00'))).toBe(0)
+    expect(secondsSinceLocalMidnight(new Date('2026-07-20T03:05:00+07:00'))).toBe(3 * 3600 + 5 * 60)
+    expect(secondsSinceLocalMidnight(new Date('2026-07-20T23:59:59+07:00'))).toBe(86399)
+  })
+
+  it('does not read the UTC clock', () => {
+    // 20:00 UTC is 03:00 the next day in WIB — the hour the 3am case turns on.
+    expect(secondsSinceLocalMidnight(new Date('2026-07-19T20:00:00Z'))).toBe(3 * 3600)
+  })
+})
+
+describe('wibIsoString', () => {
+  it('writes the local wall clock with the +07:00 offset', () => {
+    expect(wibIsoString(new Date('2026-09-06T05:00:00+07:00'))).toBe('2026-09-06T05:00:00+07:00')
+  })
+
+  /*
+   * The point of the offset form: a rider reads this. 22:00 UTC is 05:00 the
+   * next morning in Jakarta, and "come back at 05:00" is the useful sentence.
+   */
+  it('renders a UTC instant as the Jakarta time a rider would read', () => {
+    expect(wibIsoString(new Date('2026-09-05T22:00:00Z'))).toBe('2026-09-06T05:00:00+07:00')
   })
 })

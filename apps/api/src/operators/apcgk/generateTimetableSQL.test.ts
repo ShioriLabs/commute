@@ -88,6 +88,8 @@ describe('buildTimetableSQL', () => {
   })
 
   it('carries the line code onto every row', () => {
-    expect(buildTimetableSQL('T2', 'KLB', 'T3', ['06:05:00'])).toContain('\'KLB\', CURRENT_TIMESTAMP')
+    // 7 = every day: the airport people-mover publishes one board, so its rows
+    // are stamped as running all week rather than carrying a day distinction.
+    expect(buildTimetableSQL('T2', 'KLB', 'T3', ['06:05:00'])).toContain('\'KLB\', 7, CURRENT_TIMESTAMP')
   })
 })

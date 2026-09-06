@@ -21,8 +21,9 @@ const offpeak = { paymentMethod: 'STORED_VALUE', departureAt: new Date('2026-07-
 const jaklingko = { paymentMethod: 'JAKLINGKO', departureAt: new Date('2026-07-20T08:00:00+07:00') } as const
 
 describe('tripCacheKey', () => {
-  it('encodes payment method and time bucket', () => {
-    expect(tripCacheKey('KCI-BKS', 'MRTJ-LBB', peak, 'v3')).toBe('trips:KCI-BKS:MRTJ-LBB:STORED_VALUE:peak:v3')
+  it('encodes payment method, service day and time bucket', () => {
+    // 2026-07-20 is a Monday, so the service day is WD.
+    expect(tripCacheKey('KCI-BKS', 'MRTJ-LBB', peak, 'v3')).toBe('trips:KCI-BKS:MRTJ-LBB:STORED_VALUE:WD:peak:v3')
   })
 
   it('produces distinct keys per payment method and per time bucket', () => {

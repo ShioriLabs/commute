@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { DAY_MASK, DAY_MASK_ALL } from 'db/schemas/schedules'
 
 // The repository builds queries via the `db(d1)` Kysely factory and then runs a
 // pure mapping loop over the rows. We mock `db` so the query builder is a chainable
@@ -134,18 +135,18 @@ describe('StationRepository read passthroughs', () => {
   it('getTimetableFromStationId returns rows (with line + pagination filters)', async () => {
     const rows = [{ id: 's1', lineCode: 'C' }]
     terminalResults.push(rows)
-    await expect(repo().getTimetableFromStationId('KCI-BOO', 'C', 1, 10)).resolves.toBe(rows)
+    await expect(repo().getTimetableFromStationId('KCI-BOO', DAY_MASK.WD, 'C', 1, 10)).resolves.toBe(rows)
   })
 
   it('getTimetableFromStationId works without optional filters', async () => {
     terminalResults.push([])
-    await expect(repo().getTimetableFromStationId('KCI-BOO')).resolves.toEqual([])
+    await expect(repo().getTimetableFromStationId('KCI-BOO', DAY_MASK.WD)).resolves.toEqual([])
   })
 
   it('getGroupingTimetableFromStationId returns projected rows', async () => {
     const rows = [{ id: 's1', lineCode: 'C', boundFor: 'JAKK', estimatedDeparture: '10:00', tripNumber: 'C1' }]
     terminalResults.push(rows)
-    await expect(repo().getGroupingTimetableFromStationId('KCI-BOO')).resolves.toBe(rows)
+    await expect(repo().getGroupingTimetableFromStationId('KCI-BOO', DAY_MASK.WD)).resolves.toBe(rows)
   })
 })
 
@@ -285,12 +286,12 @@ describe('StationRepository.getTransfersFromStationId', () => {
 describe('StationRepository.insertTimetable', () => {
   it('returns undefined when the station does not exist', async () => {
     terminalResults.push(undefined) // getById -> executeTakeFirst -> nothing
-    await expect(repo().insertTimetable('missing', [{ id: 's1' } as never])).resolves.toBeUndefined()
+    await expect(repo().insertTimetable('missing', [{ id: 's1' } as never], DAY_MASK_ALL)).resolves.toBeUndefined()
   })
 
   it('returns the (empty) timetable untouched on an empty feed', async () => {
     terminalResults.push({ id: 'KCI-BOO', operator: 'KCI', lines: null, amenities: null, searchable: 1 })
-    await expect(repo().insertTimetable('KCI-BOO', [])).resolves.toEqual([])
+    await expect(repo().insertTimetable('KCI-BOO', [], DAY_MASK_ALL)).resolves.toEqual([])
   })
 
   it('dedupes (last wins), batches, and returns the deduped set', async () => {
@@ -302,8 +303,31 @@ describe('StationRepository.insertTimetable', () => {
       { id: 'dup', boundFor: 'B' },
       { id: 'other', boundFor: 'C' }
     ] as never[]
-    const result = await r.insertTimetable('KCI-BOO', feed)
+    const result = await r.insertTimetable('KCI-BOO', feed, DAY_MASK_ALL)
     expect(result).toEqual([{ id: 'dup', boundFor: 'B' }, { id: 'other', boundFor: 'C' }])
     expect((d1.batch as ReturnType<typeof vi.fn>)).toHaveBeenCalledOnce()
+  })
+
+  /*
+   * The wipe is scoped to the day being loaded.
+   *
+   * Before day-typed boards this deleted every schedule for the station, which
+   * was right when a station had exactly one board. Now a weekday sync must
+   * leave the weekend board alone — otherwise each sync would destroy the other
+   * day's data and the two would never coexist.
+   *
+   * Asserted as a batch shape here (this suite mocks the dialect, so the SQL
+   * text never reaches the D1 stub); the WHERE clause itself is covered against
+   * a real database by db/migrations/0015 verification.
+   */
+  it('still writes exactly one delete alongside the inserts', async () => {
+    terminalResults.push({ id: 'MRTJ-LBB', operator: 'MRTJ', lines: null, amenities: null, searchable: 1 })
+    const d1 = makeD1()
+    await new StationRepository(d1)
+      .insertTimetable('MRTJ-LBB', [{ id: 'x', boundFor: 'A' }] as never[], DAY_MASK.WD)
+
+    const batched = (d1.batch as ReturnType<typeof vi.fn>).mock.calls[0]![0] as unknown[]
+    // delete + one insert chunk + the timetableSynced update.
+    expect(batched).toHaveLength(3)
   })
 })

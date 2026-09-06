@@ -1,5 +1,6 @@
 import { makeEndpointGuard, serviceBreakKey, type GraphEdge, type RouteGraph, type RouteLeg } from '../router'
 import { Bag, type Label } from './bag'
+import { inWindow, type ServiceWindow } from './service-hours'
 import {
   DEFAULT_RANK_WEIGHTS,
   DISTANCE_BUCKET_M,
@@ -56,6 +57,22 @@ export interface PlanOptions {
   headwaysS?: Map<string, number>
   /** Used when a line has no headway data at all. */
   defaultHeadwayS?: number
+  /**
+   * When the rider sets off, in seconds since local midnight.
+   *
+   * A number rather than a Date because this package has no timezone: the
+   * caller resolves "now in Jakarta" and passes the offset in, the same way it
+   * passes metres rather than coordinates. Omit it and service hours are not
+   * consulted at all, which is exactly the behaviour before they existed.
+   */
+  departureS?: number
+  /**
+   * lineCode -> when that line runs. Only consulted when `departureS` is set.
+   *
+   * Lives here rather than on the graph because the caller picks the day's map
+   * per request, while the graph is built once per isolate and memoised.
+   */
+  serviceHours?: Map<string, ServiceWindow>
   scoreFare?: FareScorer
   /**
    * Counters describing what the search did. See PlanInstrument.
@@ -215,6 +232,8 @@ export function plan(
     weights = DEFAULT_RANK_WEIGHTS,
     headwaysS,
     defaultHeadwayS = DEFAULTS.defaultHeadwayS,
+    departureS,
+    serviceHours,
     scoreFare,
     instrument
   } = options
@@ -226,6 +245,25 @@ export function plan(
   // engines cannot drift. They constrain only this trip's own origin and
   // destination, never a stop passed through mid-journey.
   const isForbiddenHop = makeEndpointGuard(restrictions, fromStationId, toStationId)
+
+  /*
+   * Can a rider BOARD this line at this moment?
+   *
+   * Hoisted out of the relaxation loop, and short-circuiting to `true` when
+   * either input is absent — a caller that passes no departure time gets
+   * exactly the search it got before service hours existed, which is what makes
+   * the whole feature additive.
+   *
+   * A line with no window is open. Absent data must never close a line that
+   * runs: we hold windows for the routable network, and anything we have not
+   * measured keeps its previous always-available behaviour.
+   */
+  const canBoard = departureS === undefined || serviceHours === undefined
+    ? () => true
+    : (lineCode: string): boolean => {
+        const window = serviceHours.get(lineCode)
+        return window === undefined || inWindow(departureS, window)
+      }
 
   const bagFor = new Map<string, Bag<Trace | null>>()
   const bagKey = (stop: string, round: number) => `${round}:${stop}`
@@ -312,6 +350,19 @@ export function plan(
             && label.trace !== null
             && serviceBreaks.has(serviceBreakKey(edge.lineCode!, label.trace.hop.from, stop, edge.to))
           const boarding = !isWalk && (!sameLine || brokenTurn)
+
+          /*
+           * A line that is not running cannot be boarded.
+           *
+           * Two deliberate asymmetries. Walk edges are never filtered — `isWalk`
+           * makes `boarding` false, and pavement keeps no hours. And riding
+           * THROUGH a stop on a line already boarded is never filtered either:
+           * once the rider is aboard, when that line opens is no longer their
+           * problem, and filtering the stay-on edge would sever a legitimate
+           * ride at every stop it passes.
+           */
+          if (boarding && !canBoard(edge.lineCode!)) continue
+
           if (boarding && round === maxRounds) {
             if (instrument) instrument.roundBudgetPrunes++
             continue
