@@ -47,17 +47,26 @@ committed SQL under `src/db/scripts/`.
 | ----- | ------- | ----------- |
 | All 26 `*_BK_*_WD` files | https://www.instagram.com/lrt_jabodebek/p/DZ-eJKrDzME/ (weekday tables; carousel of 12 slides) | effective 15 Juni 2026 |
 | All 22 `*_CB_*_WD` files | https://www.instagram.com/lrt_jabodebek/p/DZ-eIyAj2MY/ (weekday tables; carousel of 12 slides) | effective 15 Juni 2026 |
-| `*_WE` files | **not yet transcribed** — the operator publishes a weekend board; find its poster and add it here | — |
+| All 26 `*_BK_*_WE` files | @lrt_jabodebek weekend carousel, transcribed from screenshots 2026-09-06 | same edition as the weekday board |
+| All 22 `*_CB_*_WE` files | @lrt_jabodebek weekend carousel, transcribed from screenshots 2026-09-06 | same edition as the weekday board |
+
+The weekend board was transcribed from the operator's weekend carousel on
+2026-09-06. Its edition was checked against the weekday board before loading:
+the weekday poster's Jati Mulya column still reads 05:12 / 05:20 / 05:29 /
+05:37, matching the committed `JTM_BK_DKA_WD.csv` exactly, so both day types
+describe the same service period. **Re-check that pairing whenever either board
+is re-transcribed** — two editions side by side in `schedules` would be
+invisible in the data and wrong on the platform.
 
 ## Transcription checklist
 
-48 combos **per day type**. The `WD` column below is complete; `WE` is the
-outstanding work and needs the same 48 files with a `_WE` suffix. The generator
-reports the per-day counts on every run, so the backlog is a number rather than
-something to count by eye.
+48 combos **per day type**, so 96 in total. Both are complete as of
+2026-09-06 — the generator prints the per-day counts on every run
+(`WD: 48, WE: 48`), which is the check to trust rather than the boxes below.
 
-48 combos. Termini (JTM, HAR, DKA) only depart in one direction; DKA appears on
-both lines.
+The list is per combo, not per day: a ticked box means both `_WD.csv` and
+`_WE.csv` exist for it. Termini (JTM, HAR, DKA) only depart in one direction;
+DKA appears on both lines.
 
 ### Lin Bekasi (BK) — arah Jatimulya (JTM)
 
