@@ -29,6 +29,20 @@ export interface FareCriteria {
    * it would still route you onto a corridor that stops running at 22:00.
    */
   fareTime: 'now' | 'peak' | 'offpeak'
+  /**
+   * Which networks the route may use.
+   *
+   * `'all'` is everything; `'rail'` drops TransJakarta. Unlike `operator` below
+   * this genuinely changes the ROUTE rather than the picker, so it is sent to
+   * the server and forms part of the cache key.
+   *
+   * An enum rather than a set of operators on purpose. TransJakarta is most of
+   * the searchable network and the only way to reach LRT Jakarta, so rail-only
+   * is one deliberate alternative product rather than one filter among many —
+   * and only the beta router honours it, because `/fares` must keep answering
+   * the same thing for the embed and the OG card.
+   */
+  modes: 'all' | 'rail'
   /** Restricts which stations the picker offers. `null` = every operator. */
   operator: OperatorCode | null
 }
@@ -38,6 +52,7 @@ export const FARE_CRITERIA_KEY = 'fare-criteria'
 export const DEFAULT_FARE_CRITERIA: FareCriteria = {
   paymentMethod: 'STORED_VALUE',
   fareTime: 'now',
+  modes: 'all',
   operator: null
 }
 
@@ -88,11 +103,12 @@ export function parseFareCriteria(raw: string | null): FareCriteria {
   // code for one that is temporarily absent should come back when it returns.
   // A stale code only ever over-filters the picker, which is visible and
   // recoverable; the "Semua" option is always there.
+  const modes = record.modes === 'rail' ? 'rail' : DEFAULT_FARE_CRITERIA.modes
   const operator = typeof record.operator === 'string'
     ? record.operator as OperatorCode
     : null
 
-  return { paymentMethod, fareTime, operator }
+  return { paymentMethod, fareTime, modes, operator }
 }
 
 /**
@@ -158,7 +174,9 @@ export function criteriaToPersist(
  *
  * `operator` is never included — it decides which stations the picker offers,
  * not how a chosen pair is priced, and sending it would imply the router filters
- * by operator, which it does not.
+ * by operator, which it does not. `modes` IS included, and the two are not the
+ * same thing: it excludes lines from the search rather than stations from the
+ * picker, so the answer genuinely differs.
  */
 export function fareQueryParams(criteria: FareCriteria): URLSearchParams {
   const params = new URLSearchParams()
@@ -167,6 +185,12 @@ export function fareQueryParams(criteria: FareCriteria): URLSearchParams {
   }
   if (criteria.fareTime === 'peak') params.set('at', PEAK_SAMPLE)
   if (criteria.fareTime === 'offpeak') params.set('at', OFFPEAK_SAMPLE)
+  /*
+   * Sent, unlike `operator`, because it changes the route rather than the
+   * picker. Only `/_internal/trips` reads it — `/fares` ignores an unknown
+   * param, so a standard-router request is unaffected either way.
+   */
+  if (criteria.modes !== DEFAULT_FARE_CRITERIA.modes) params.set('modes', criteria.modes)
   return params
 }
 

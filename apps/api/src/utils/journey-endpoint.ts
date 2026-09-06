@@ -42,10 +42,22 @@ export function journeyCacheKey(
   fromId: string,
   toId: string,
   context: FareContext,
-  apiVersion: string
+  apiVersion: string,
+  /*
+   * What the rider excluded from routing, if anything.
+   *
+   * Part of the key because it changes the ANSWER, not just its presentation:
+   * a rail-only search and an everything search for the same pair are two
+   * different journeys, and a 20-hour cache entry that ignored this would serve
+   * one rider the other's route. Absent for an unrestricted search so the
+   * default key is byte-identical to the one before this existed, which keeps
+   * every warm entry warm.
+   */
+  scope?: string
 ): string {
   const day = serviceDay(context.departureAt)
-  return `${prefix}:${fromId}:${toId}:${context.paymentMethod}:${day}:${fareTimeBucket(context.departureAt)}:${apiVersion}`
+  const base = `${prefix}:${fromId}:${toId}:${context.paymentMethod}:${day}:${fareTimeBucket(context.departureAt)}:${apiVersion}`
+  return scope ? `${base}:${scope}` : base
 }
 
 /*
@@ -88,6 +100,11 @@ export function isClosed<T>(result: JourneyOutcome<T>): result is ClosedOutcome 
 
 export interface JourneyEndpointOptions<T> {
   keyPrefix: 'fares' | 'trips'
+  /**
+   * Extra key component for a request whose answer depends on something beyond
+   * the pair and the fare context. See journeyCacheKey's `scope`.
+   */
+  scope?: (c: Context<{ Bindings: Bindings }>) => string | undefined
   /*
    * Build the response body, return null for "no route", or a ClosedOutcome
    * when a path exists but nothing serving it is running yet.
@@ -103,7 +120,7 @@ export async function handleJourneyRequest<T>(
   c: Context<{ Bindings: Bindings }>,
   getRouter: (db: D1Database) => Promise<Tsundere>,
   parseContext: (paymentMethodRaw?: string, atRaw?: string) => FareContext,
-  { keyPrefix, build }: JourneyEndpointOptions<T>
+  { keyPrefix, scope, build }: JourneyEndpointOptions<T>
 ) {
   const fromId = c.req.param('from')!
   const toId = c.req.param('to')!
@@ -124,7 +141,7 @@ export async function handleJourneyRequest<T>(
   const timing = new ServerTiming()
 
   const kvRepository = new KVRepository(c.env.KV)
-  const kvKey = journeyCacheKey(keyPrefix, fromId, toId, context, c.env.API_VERSION)
+  const kvKey = journeyCacheKey(keyPrefix, fromId, toId, context, c.env.API_VERSION, scope?.(c))
 
   const cached = await timing.measure('kv', () => kvRepository.get<JourneyOutcome<T>>(kvKey))
   if (cached) {

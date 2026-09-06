@@ -88,10 +88,14 @@ export default function FarePanel({
         </button>
       </div>
 
+      {/* showModes follows `alternatives`: only the beta router reads `modes`,
+          and /fares ignores it, so on the standard router the chip would be a
+          control that silently does nothing. */}
       <CriteriaBar
         criteria={criteria}
         onChange={setCriteria}
         wrap={wrapCriteria}
+        showModes={alternatives}
       />
 
       {router && onRouterChange

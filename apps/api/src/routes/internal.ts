@@ -5,7 +5,7 @@ import { HubRepository } from 'db/repositories/hubs'
 import { KVRepository } from 'db/repositories/kv'
 import { StationRepository } from 'db/repositories/stations'
 import type { TripResult } from '@commute/schemas'
-import { getRouter, nextServiceAt, parseFareContext, timeOptions } from 'routes/fares'
+import { getRouter, linesOf, nextServiceAt, parseFareContext, timeOptions } from 'routes/fares'
 import { wibIsoString } from 'utils/fare'
 import { assembleJourney, planJourney } from 'utils/fare-journey'
 import { handleJourneyRequest, journeyCacheKey } from 'utils/journey-endpoint'
@@ -92,8 +92,31 @@ export const tripCacheKey = (fromId: string, toId: string, context: FareContext,
  * Rendering is identical either way: both go through utils/fare-journey.ts, so
  * a leg looks the same on both endpoints. Only the number of journeys differs.
  */
+/*
+ * Which operators the rider is willing to use.
+ *
+ * Only one exclusion is offered today — `?modes=rail` drops TransJakarta — and
+ * it is deliberately an enum rather than a free list of operators. TJ is 61% of
+ * the searchable network and the only bridge to LRT Jakarta, so "rail only" is
+ * a genuinely different product rather than one filter among many; letting a
+ * caller exclude arbitrary operators would promise a matrix nobody has checked.
+ *
+ * Anything unrecognised means no exclusion, matching how parseFareContext
+ * treats a malformed value: a query param the rider did not knowingly set must
+ * not silently shrink their network.
+ */
+function excludedLines(modesRaw?: string): ReadonlySet<string> | undefined {
+  return modesRaw === 'rail' ? linesOf('TJ') : undefined
+}
+
 app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRouter, parseFareContext, {
   keyPrefix: 'trips',
+  /*
+   * Rail-only answers are cached apart from unrestricted ones — they are
+   * different journeys for the same pair. Undefined for the default search, so
+   * its key is unchanged and stays warm.
+   */
+  scope: c => (c.req.query('modes') === 'rail' ? 'rail' : undefined),
   /*
    * The same phase timings as /fares, and the more interesting of the two: this
    * is the multi-criteria search, roughly ten times the work of findRoute. If
@@ -107,6 +130,11 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
        * search did before service hours existed.
        */
       ...timeOptions(context),
+      /*
+       * Lines the rider will not board. Boarding-only, so a walk between two
+       * haltes is still offered and a ride already under way is never cut.
+       */
+      excludeLines: excludedLines(c.req.query('modes')),
       /*
        * Pricing the journeys is what makes the CHEAPEST label reachable at all —
        * without a scorer every journey's `fare` criterion is null and the axis
@@ -129,7 +157,7 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
      * so the probe sits behind both conditions rather than on the hot path.
      */
     if (routed.length === 0) {
-      const reopening = timing.measureSync('reopen', () => nextServiceAt(router, fromId, toId, context))
+      const reopening = timing.measureSync('reopen', () => nextServiceAt(router, fromId, toId, context, excludedLines(c.req.query('modes'))))
       if (!reopening) return null
       return {
         outcome: 'CLOSED' as const,

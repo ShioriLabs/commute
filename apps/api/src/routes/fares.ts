@@ -1,13 +1,14 @@
 import { Hono } from 'hono'
-import { FareContext, PAYMENT_METHODS, PaymentMethod } from '@commute/constants'
+import { FareContext, Operator, PAYMENT_METHODS, PaymentMethod } from '@commute/constants'
 import { Bindings } from 'app'
 import { EdgeRepository } from 'db/repositories/edges'
 import { assembleJourney, planJourney } from 'utils/fare-journey'
 import { handleJourneyRequest, journeyCacheKey } from 'utils/journey-endpoint'
-import { ENDPOINT_RESTRICTIONS, SERVICE_BREAKS } from 'db/data/topology'
+import { ENDPOINT_RESTRICTIONS, SERVICE_BREAKS, TOPOLOGY } from 'db/data/topology'
 import { loadGraph, type ServiceWindow, type Tsundere } from '@commute/tsundere'
 import { DAY_HEADWAYS_S, HEADWAYS_S, STOP_HEADWAYS_S } from 'db/data/headways'
 import { SERVICE_HOURS, type ServiceDay } from 'db/data/service-hours'
+import { TRIP_PATTERNS } from 'db/data/trips'
 import { secondsSinceLocalMidnight, serviceDay } from 'utils/fare'
 import { doc, pathParam, queryParam } from 'schemas/describe'
 import { FareResultSchema, type FareResult } from '@commute/schemas'
@@ -52,7 +53,23 @@ export async function getRouter(d1: D1Database): Promise<Tsundere> {
     // When each line runs. A static property of the network, so it is loaded
     // with the graph; only the moment being asked about varies per request,
     // and that is findRoutes' `departureS`.
-    serviceHours: serviceHoursMap()
+    serviceHours: serviceHoursMap(),
+    /*
+     * The timetable. Indexed at load beside the graph, and NOT READ BY THE
+     * SEARCH YET — findRoutes is still headway-based. It is loaded now so the
+     * data is exercised on the real network (and visible to /_internal health
+     * checks) before anything depends on it. See docs/go-mode.md.
+     */
+    trips: TRIP_PATTERNS.map(pattern => ({
+      lineCode: pattern.line,
+      stationIds: pattern.stations,
+      trips: pattern.trips.map(trip => ({
+        id: trip.t,
+        dayMask: trip.d,
+        departuresS: trip.s,
+        arrivalsS: trip.a
+      }))
+    }))
   })
   return cachedRouter
 }
@@ -145,7 +162,13 @@ export function nextServiceAt(
   router: Tsundere,
   fromId: string,
   toId: string,
-  context: FareContext
+  context: FareContext,
+  /*
+   * Must match the exclusion the failed search used, or the probe answers a
+   * different question than the one that came back empty — promising a 05:00
+   * reopening on a corridor the rider has just said they will not board.
+   */
+  excludeLines?: ReadonlySet<string>
 ): { departureS: number, at: Date } | null {
   const day = serviceDay(context.departureAt)
   const from = secondsSinceLocalMidnight(context.departureAt)
@@ -155,7 +178,8 @@ export function nextServiceAt(
     const found = router.findRoutes(fromId, toId, {
       departureS,
       serviceHours: serviceHoursMap(day),
-      headwaysS: headwaysFor(day)
+      headwaysS: headwaysFor(day),
+      excludeLines
     })
     if (found.length > 0) {
       // Same calendar day, at the opening — the caller renders it in WIB.
@@ -165,6 +189,22 @@ export function nextServiceAt(
     }
   }
   return null
+}
+
+/*
+ * Line codes belonging to one operator, derived from the topology rather than
+ * listed by hand so a new corridor is covered the day it is declared.
+ *
+ * Built lazily and memoised per isolate: the same reasoning as the graph, and
+ * the same lifetime.
+ */
+const linesByOperator = new Map<string, ReadonlySet<string>>()
+export function linesOf(operator: Operator): ReadonlySet<string> {
+  const cached = linesByOperator.get(operator)
+  if (cached) return cached
+  const lines = new Set(TOPOLOGY.filter(t => t.operator === operator).map(t => t.lineCode))
+  linesByOperator.set(operator, lines)
+  return lines
 }
 
 /** Planner options that depend on when the rider is travelling. */

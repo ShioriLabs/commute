@@ -50,3 +50,26 @@ export const FARE_TIME_DESCRIPTIONS: Record<FareCriteria['fareTime'], string> = 
   peak: 'Senin sampai Jumat, 07.00 sampai 09.00 dan 16.00 sampai 19.00. Batas tarif LRT Jabodebek naik jadi Rp20.000',
   offpeak: 'Di luar jam sibuk dan akhir pekan. Batas tarif LRT Jabodebek Rp10.000'
 }
+
+/*
+ * Which networks a route may use.
+ *
+ * "Semua" rather than "Semua moda": the chip already says Jalur, and the
+ * shorter word is what a rider scanning a rail of chips actually reads.
+ */
+export const MODES_LABELS: Record<FareCriteria['modes'], string> = {
+  all: 'Semua',
+  rail: 'Tanpa TransJakarta'
+}
+
+/*
+ * The rail-only description names the cost rather than selling the feature.
+ * TransJakarta reaches most of the network and is the only way to LRT Jakarta,
+ * so turning it off can leave a pair with no route at all, and a rider who is
+ * told that up front reads an empty result as their own choice rather than a
+ * broken app.
+ */
+export const MODES_DESCRIPTIONS: Record<FareCriteria['modes'], string> = {
+  all: 'Pakai semua pilihan yang ada, termasuk TransJakarta',
+  rail: 'Cuma kereta dan MRT/LRT. Beberapa rute jadi nggak ketemu, soalnya TransJakarta yang nyambungin'
+}

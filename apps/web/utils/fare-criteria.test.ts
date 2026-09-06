@@ -30,10 +30,13 @@ describe('parseFareCriteria', () => {
   })
 
   it('reads a fully-specified value back', () => {
-    const stored = JSON.stringify({ paymentMethod: 'QRIS_TAP', fareTime: 'peak', operator: 'KCI' })
+    const stored = JSON.stringify({
+      paymentMethod: 'QRIS_TAP', fareTime: 'peak', modes: 'rail', operator: 'KCI'
+    })
     expect(parseFareCriteria(stored)).toEqual({
       paymentMethod: 'QRIS_TAP',
       fareTime: 'peak',
+      modes: 'rail',
       operator: 'KCI'
     })
   })
@@ -44,10 +47,15 @@ describe('parseFareCriteria', () => {
    * server's parseFareContext already has, and the two should not disagree.
    */
   it('falls back per field, keeping the values it can still use', () => {
-    const stored = JSON.stringify({ paymentMethod: 'CASH', fareTime: 'peak', operator: 'KCI' })
+    const stored = JSON.stringify({
+      paymentMethod: 'CASH', fareTime: 'peak', modes: 'monorail', operator: 'KCI'
+    })
     expect(parseFareCriteria(stored)).toEqual({
       paymentMethod: DEFAULT_FARE_CRITERIA.paymentMethod,
       fareTime: 'peak',
+      // An unreadable mode must widen the network back to everything, never
+      // narrow it: a rider is never stranded by a value they cannot see.
+      modes: 'all',
       operator: 'KCI'
     })
   })
@@ -78,7 +86,9 @@ describe('fare criteria persistence', () => {
       setItem: (k: string, v: string) => { store.set(k, v) }
     })
 
-    const criteria: FareCriteria = { paymentMethod: 'QRIS_TAP', fareTime: 'offpeak', operator: 'TJ' }
+    const criteria: FareCriteria = {
+      paymentMethod: 'QRIS_TAP', fareTime: 'offpeak', modes: 'rail', operator: 'TJ'
+    }
     writeFareCriteria(criteria)
     expect(store.has(FARE_CRITERIA_KEY)).toBe(true)
     expect(readFareCriteria()).toEqual(criteria)
@@ -140,9 +150,21 @@ describe('fareQueryParams', () => {
   // Operator scopes the picker, not the pricing. Sending it would imply the
   // router filters by operator, which it does not.
   it('never sends the operator to the fare endpoint', () => {
-    const params = fareQueryParams({ paymentMethod: 'QRIS_TAP', fareTime: 'peak', operator: 'KCI' })
+    const params = fareQueryParams({
+      paymentMethod: 'QRIS_TAP', fareTime: 'peak', modes: 'all', operator: 'KCI'
+    })
     expect(params.has('operator')).toBe(false)
     expect([...params.keys()].sort()).toEqual(['at', 'paymentMethod'])
+  })
+
+  /*
+   * `modes` is the counterexample to `operator` above: it excludes lines from
+   * the search rather than stations from the picker, so it has to reach the
+   * server or the rail-only answer is silently the same as the normal one.
+   */
+  it('sends modes only when it is not the default', () => {
+    expect(fareQueryParams(DEFAULT_FARE_CRITERIA).has('modes')).toBe(false)
+    expect(fareQueryParams({ ...DEFAULT_FARE_CRITERIA, modes: 'rail' }).get('modes')).toBe('rail')
   })
 })
 
@@ -198,7 +220,9 @@ describe('readCriteriaFromUrl', () => {
 // Landing on an operator-scoped link must not rewrite the rider's own stored
 // filter — the scope belongs to that visit, not to them.
 describe('criteriaToPersist', () => {
-  const scoped: FareCriteria = { paymentMethod: 'QRIS_TAP', fareTime: 'now', operator: 'TJ' }
+  const scoped: FareCriteria = {
+    paymentMethod: 'QRIS_TAP', fareTime: 'now', modes: 'all', operator: 'TJ'
+  }
 
   it('persists everything when no operator came from the URL', () => {
     expect(criteriaToPersist(scoped, undefined)).toEqual(scoped)
@@ -208,9 +232,11 @@ describe('criteriaToPersist', () => {
   // The FDTJ case: the rider tweaked payment on an ?operator=TJ page, so the
   // payment method is theirs to keep but the TJ scope is not.
   it('drops an operator the URL supplied, keeping the rest', () => {
+    // Spread from `scoped` rather than re-listing the fields: the assertion is
+    // "operator is cleared and nothing else moves", and spelling out every
+    // field made this drift the moment one was added.
     expect(criteriaToPersist(scoped, { operator: 'TJ' })).toEqual({
-      paymentMethod: 'QRIS_TAP',
-      fareTime: 'now',
+      ...scoped,
       operator: null
     })
   })

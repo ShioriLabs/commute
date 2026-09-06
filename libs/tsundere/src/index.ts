@@ -46,6 +46,15 @@ export {
 } from './planner/service-hours'
 
 /*
+ * The timetable: which vehicles run each stop pattern, and when.
+ *
+ * Exported as the input shape only. The index built over it stays private, like
+ * RouteGraph — a caller supplies patterns, it does not query them. Nothing in
+ * the search reads this yet; see planner/trips.ts.
+ */
+export type { Trip, TripPattern } from './planner/trips'
+
+/*
  * Graph inputs. Structural by design — apps/api passes Kysely rows straight in,
  * so these must never grow a field a database row would not have.
  */

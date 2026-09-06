@@ -632,10 +632,19 @@ export default function MapRailPill({
                       *
                       * `wrap` is not optional here: unwrapped, CriteriaBar bleeds
                       * -mx-8 px-8 for a scrolling rail and assumes 8-unit parent
-                      * padding, which this px-4 card does not give it. Wrapped it
-                      * is two chips on one line, which fits the column.
+                      * padding, which this px-4 card does not give it. Wrapped
+                      * the chips flow onto as many lines as the column needs.
+                      *
+                      * showModes follows the toggle below: only the beta router
+                      * reads `modes`, so on the standard one the chip would be a
+                      * control that silently does nothing.
                       */}
-                      <CriteriaBar criteria={criteria} onChange={onCriteriaChange} wrap />
+                      <CriteriaBar
+                        criteria={criteria}
+                        onChange={onCriteriaChange}
+                        wrap
+                        showModes={router === 'beta'}
+                      />
                       <RouterToggle router={router} onChange={onRouterChange} />
 
                       {/*
