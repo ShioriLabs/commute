@@ -23,10 +23,12 @@ import type { StandardResponse } from '@schema/response'
 import type { Station } from '@commute/schemas'
 import type { CompactLineGroupedTimetable } from '@commute/schemas'
 import type { Transfer } from '@commute/schemas'
+import type { HeadwayRow } from '@commute/schemas'
 import { directionalBaseName } from 'utils/directional-stations'
 import LineCard from '~/components/line-card'
 import LineRoundel from '~/components/line-roundel'
 import EmptyState from '~/components/empty-state'
+import FrequencyList from '~/components/frequency-card'
 import ExitLink from '~/components/exit-link'
 import { fetcher } from 'utils/fetcher'
 import { normalizeGroupedTimetable } from 'utils/timetable-shim'
@@ -197,11 +199,24 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
     new URL(`/stations/${operator}/${code}/transfers`, import.meta.env.VITE_API_BASE_URL).href,
   [operator, code]
   )
+  /*
+   * TJ only. Rail stations show a real departure board, so they never pay for
+   * this request — a null SWR key skips the fetch entirely. The endpoint itself
+   * serves every operator; it is the station page that has no use for it where a
+   * timetable already exists.
+   */
+  const headwayUrl = useMemo(() =>
+    operator === 'TJ'
+      ? new URL(`/stations/${operator}/${code}/headway`, import.meta.env.VITE_API_BASE_URL).href
+      : null,
+  [operator, code]
+  )
 
   const station = useSWR<StandardResponse<Station>>(unserved ? null : stationUrl, fetcher, swrConfig)
   const timetable = useSWR<StandardResponse<CompactLineGroupedTimetable>>(unserved ? null : timetableUrl, fetcher, swrConfig)
   const timetableData = useMemo(() => normalizeGroupedTimetable(timetable.data?.data), [timetable.data])
   const transfers = useSWR<StandardResponse<Transfer[]>>(unserved ? null : transfersUrl, fetcher, swrConfig)
+  const headway = useSWR<StandardResponse<HeadwayRow[]>>(unserved ? null : headwayUrl, fetcher, swrConfig)
   // Line keys on stations and transfers resolve through the dictionary.
   const { lines: resolveLines } = useLines()
   const networkStatus = useNetworkStatus()
@@ -319,9 +334,18 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
          * button leads to would likely fail the same way.
          */
         if (operator === 'TJ') {
+          const frequencies = headway.data?.data ?? []
           return (
             <>
-              <EmptyState mode="NO_SCHEDULE" />
+              {/*
+                * While the request is in flight the empty state stays put rather
+                * than a skeleton: the answer is KV-cached and quick, and flashing
+                * "Jadwal Tidak Tersedia" before replacing it with rows reads worse
+                * than a beat of nothing.
+                */}
+              {frequencies.length > 0
+                ? <FrequencyList rows={frequencies} />
+                : <EmptyState mode="NO_SCHEDULE" />}
               {otwButton && <div className="flex flex-row gap-2 mt-4">{otwButton}</div>}
             </>
           )

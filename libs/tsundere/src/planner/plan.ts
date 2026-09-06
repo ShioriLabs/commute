@@ -161,8 +161,24 @@ const DEFAULTS = {
  * That uniform-arrival assumption is the whole time model. It is not a
  * timetable: this engine cannot say when the next vehicle comes, only how long
  * you tend to wait for one.
+ *
+ * Headways are looked up per boarding STOP first (`lineCode@stopId`), then per
+ * line. How often a vehicle passes is a property of the stop, not the line: a TJ
+ * corridor's short-turn variants only serve its inner haltes, and a rail line's
+ * departures thin out toward its termini. Koridor 1 comes every ~2 minutes at
+ * Blok M; MRT line M every ~2.8 at Stasiun ASEAN but ~8 at Lebak Bulus. A map
+ * carrying only line keys behaves exactly as it did before per-stop data existed.
  */
-function expectedWaitS(lineCode: string, headwaysS: Map<string, number> | undefined, fallback: number): number {
+function expectedWaitS(
+  lineCode: string,
+  stopId: string,
+  headwaysS: Map<string, number> | undefined,
+  fallback: number
+): number {
+  if (headwaysS !== undefined) {
+    const perStop = headwaysS.get(`${lineCode}@${stopId}`)
+    if (perStop !== undefined) return perStop / 2
+  }
   return (headwaysS?.get(lineCode) ?? fallback) / 2
 }
 
@@ -313,7 +329,7 @@ export function plan(
             rideDistanceM: label.criteria.rideDistanceM + (isWalk ? 0 : edge.distanceM),
             walkDistanceM: label.criteria.walkDistanceM + (isWalk ? edge.distanceM : 0),
             concourseWalkM: label.criteria.concourseWalkM + (isWalk ? concourseWalkFor(edge) : 0),
-            waitS: label.criteria.waitS + (boarding ? expectedWaitS(edge.lineCode!, headwaysS, defaultHeadwayS) : 0),
+            waitS: label.criteria.waitS + (boarding ? expectedWaitS(edge.lineCode!, stop, headwaysS, defaultHeadwayS) : 0),
             fare: null
           }
 

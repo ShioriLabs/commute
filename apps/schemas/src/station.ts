@@ -125,6 +125,36 @@ export const TransferSchema = v.pipe(
   v.metadata({ ref: 'Transfer' })
 )
 
+export const HeadwayRowSchema = v.pipe(
+  v.object({
+    line: v.pipe(
+      v.string(),
+      v.description('Kunci lin, format `OPERATOR:KODE` — sama seperti yang ada di `lines` punya stasiun.')
+    ),
+    headwayS: v.pipe(
+      v.nullable(v.number()),
+      v.description('Rata-rata jarak antar kendaraan dalam detik. `null` kalau linnya cuma jalan pas akhir pekan.')
+    ),
+    source: v.pipe(
+      v.picklist(['STOP', 'LINE']),
+      v.description('`STOP` kalau angkanya diukur di halte/stasiun ini sendiri, `LINE` kalau ambil rata-rata se-lin.')
+    ),
+    weekendOnly: v.pipe(
+      v.optional(v.literal(true)),
+      v.description('Ada dan bernilai `true` kalau linnya cuma beroperasi Sabtu-Minggu.')
+    ),
+    boundFor: v.pipe(
+      v.optional(v.string()),
+      v.description('Nama halte tujuan akhir buat arah ini, kayak yang ada di papan halte ("arah Galunggung"). Cuma ada kalau dua arahnya beda frekuensi — kalau nggak ada, angkanya berlaku buat dua-duanya.')
+    )
+  }),
+  v.title('HeadwayRow'),
+  v.description('Seberapa sering kendaraan lewat, bukan jadwal. Nggak bisa dipakai buat tahu kapan yang berikutnya datang.'),
+  v.metadata({ ref: 'HeadwayRow' })
+)
+
+export type HeadwayRow = v.InferOutput<typeof HeadwayRowSchema>
+
 /*
  * A single scheduled departure. The row's own id, its station id and the
  * timestamps are gone: a schedule is always read in the context of the station

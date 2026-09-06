@@ -17,8 +17,8 @@ import { findTopology } from 'utils/topology'
  * `code` may be a directional-platform pair `A/B` (one halte, one code per Arah)
  * or a `B…` code (Manggarai Temporer, dropped by the current generator).
  *
- * Not covered (no poster image provided): corridors 1, 10D. L7 is absent from
- * the GTFS feed.
+ * Not covered (no poster image provided): corridor 1. L7 is absent from the
+ * GTFS feed, and 10D was retired out of it.
  */
 const CORRIDORS: Record<string, string> = {
   '2': `
@@ -237,7 +237,6 @@ Karet Kuningan,H00098P,·
 Kuningan Madya,H00114P,·
 Setiabudi Integritas,H00215P,·
 Flyover Kuningan,H00118P,↓
-Halimun,H00073P,↓
 Galunggung,H00283P,·
 `,
   '6A': `

@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { readdirSync, statSync } from 'node:fs'
 import { loadGraph } from '@commute/tsundere'
-import { HEADWAYS_S } from '../data/headways'
+import { HEADWAYS_S, STOP_HEADWAYS_S } from '../data/headways'
 import { ENDPOINT_RESTRICTIONS, SERVICE_BREAKS, TOPOLOGY } from '../data/topology'
 
 /*
@@ -28,7 +28,9 @@ export const DEFAULT_SEED = 42
  */
 function localD1Path(): string {
   const dir = `${__dirname}/../../../.wrangler/state/v3/d1/miniflare-D1DatabaseObject`
-  const files = readdirSync(dir).filter(f => f.endsWith('.sqlite'))
+  // `metadata.sqlite` is a wrangler bookkeeping file that appears beside the real
+  // database; the D1 content is the hash-named one.
+  const files = readdirSync(dir).filter(f => f.endsWith('.sqlite') && f !== 'metadata.sqlite')
   if (files.length !== 1) throw new Error(`expected exactly one .sqlite in ${dir}, found ${files.length}`)
   return `${dir}/${files[0]}`
 }
@@ -70,7 +72,7 @@ export function loadNetwork() {
       fromStationId: `${b.operator}-${b.from}`,
       toStationId: `${b.operator}-${b.to}`
     })),
-    headwaysS: new Map(Object.entries(HEADWAYS_S))
+    headwaysS: new Map([...Object.entries(HEADWAYS_S), ...Object.entries(STOP_HEADWAYS_S)])
   })
   return { router, edges, transfers }
 }
