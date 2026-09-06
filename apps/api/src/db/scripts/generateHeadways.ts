@@ -566,8 +566,21 @@ function tjHeadways(topology: Set<string>, topologyByDirection: Set<string>): De
  * would collapse every median to nothing.
  */
 function railHeadways(): Derived {
+  /*
+   * Weekday boards only, matching the TJ half of this generator.
+   *
+   * Without the mask this merges every day type a station holds. Once LRT
+   * Jabodebek's weekend board landed beside its weekday one, the two
+   * interleaved into a single sorted list and halved the apparent gap: line BK
+   * read 180s against a true 300s. A day filter is not optional here — a
+   * station with two boards produces a headway belonging to neither.
+   *
+   * `& 4` rather than `= 4` so an every-day board (7) still counts, which is
+   * what every operator except LRT Jabodebek currently stores.
+   */
   const sql = `SELECT lineCode, stationId, boundFor, estimatedDeparture FROM schedules
-               WHERE lineCode IS NOT NULL AND lineCode != 'NUL'`
+               WHERE lineCode IS NOT NULL AND lineCode != 'NUL'
+                 AND (dayMask & 4) != 0`
   const raw = execFileSync(
     'npx',
     ['wrangler', 'd1', 'execute', 'commute', '--local', '--command', sql, '--json'],
