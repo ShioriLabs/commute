@@ -631,138 +631,147 @@ function railHeadways(): Derived {
   }
 }
 
-const topology = topologyPairs()
-const tj = tjHeadways(topology, topologyDirectionPairs())
-const rail = railHeadways()
-
-const perLine = new Map([...tj.perLine, ...rail.perLine])
-const perStop = new Map([...tj.perStop, ...rail.perStop])
-for (const [line, seconds] of Object.entries(OVERRIDES)) perLine.set(line, clamp(seconds))
-
-const perDirection = new Map([...tj.perDirection, ...rail.perDirection])
-
 /*
- * Terminus per line and direction, for the "arah ..." labels a halte page shows.
- *
- * Station IDS rather than names: the display name is resolved against the stations
- * table at request time, so renaming a station does not require regenerating this
- * file. `F` is the last stop of TOPOLOGY `path`, `R` of `pathReverse`.
+ * Everything above is pure and importable; everything below runs the generator.
+ * The guard lets generateServiceHours.ts and the tests reuse the day-bit
+ * helpers without triggering a headways regeneration as an import side effect.
  */
-const termini = lineTerminiMap()
+function main(): void {
+  const topology = topologyPairs()
+  const tj = tjHeadways(topology, topologyDirectionPairs())
+  const rail = railHeadways()
 
-const weekendOnly = [...tj.weekendOnly].sort((a, b) => a.localeCompare(b))
-const maskEntries = [...tj.dayMask].filter(([, m]) => m !== 0b111).sort(([a], [b]) => a.localeCompare(b))
-const dayHeadwayEntries = [...tj.dayHeadways].sort(([a], [b]) => a.localeCompare(b))
-const lineEntries = [...perLine].sort(([a], [b]) => a.localeCompare(b))
-const stopEntries = [...perStop].sort(([a], [b]) => a.localeCompare(b))
-const dirEntries = [...perDirection].sort(([a], [b]) => a.localeCompare(b))
-const terminusEntries = [...termini].sort(([a], [b]) => a.localeCompare(b))
-const overridden = new Set(Object.keys(OVERRIDES))
+  const perLine = new Map([...tj.perLine, ...rail.perLine])
+  const perStop = new Map([...tj.perStop, ...rail.perStop])
+  for (const [line, seconds] of Object.entries(OVERRIDES)) perLine.set(line, clamp(seconds))
 
-const fileTS = '/*\n'
-  + ' * Seconds between vehicles, per line, per (line, stop), and per direction.\n'
-  + ' *\n'
-  + ' * GENERATED — do not edit by hand; re-run `pnpm --filter api generate:headways`.\n'
-  + ' * TJ values combine the frequencies of every weekday route variant serving a\n'
-  + ' * stop (1/Σ(1/h)); rail values are the median gap between departures in the\n'
-  + ` * schedules table. Both are clamped to [${HEADWAY_FLOOR_S}, ${HEADWAY_CAP_S}] seconds.\n`
-  + ' * See generateHeadways.ts for why.\n'
-  + ' *\n'
-  + ' * Consumed by routes/fares.ts as the planner\'s expected-wait input and by the\n'
-  + ' * /stations/:operator/:code/headway endpoint. It is an average, not a schedule:\n'
-  + ' * it cannot say when the next vehicle comes, only how long a rider tends to\n'
-  + ' * wait for one.\n'
-  + ' */\n\n'
-  + '/** Per-line fallback, used when a stop has no measured value of its own. */\n'
-  + 'export const HEADWAYS_S: Record<string, number> = {\n'
-  + lineEntries.map(([line, s]) => `  '${line}': ${s}${overridden.has(line) ? ' // HAND-OVERRIDE' : ''}`).join(',\n')
-  + '\n}\n\n'
-  + '/** Per-(line, station) headway. Key: `${lineCode}@${stationId}`. */\n'
-  + 'export const STOP_HEADWAYS_S: Record<string, number> = {\n'
-  + stopEntries.map(([key, s]) => `  '${key}': ${s}`).join(',\n')
-  + '\n}\n\n'
-  + '/*\n'
-  + ' * Lines whose only service runs at the weekend, so no weekday headway exists.\n'
-  + ' * These deliberately carry NO value rather than borrowing a neighbouring one:\n'
-  + ' * a number here would assert weekday service that does not run.\n'
-  + ' */\n'
-  + `export const WEEKEND_ONLY_LINES: readonly string[] = [${weekendOnly.map(l => `'${l}'`).join(', ')}]\n\n`
-  + '/*\n'
-  + ' * Per-(line, station, direction), ONLY where the two directions genuinely\n'
-  + ' * differ. A pair absent here means both directions match STOP_HEADWAYS_S, so a\n'
-  + ' * halte page shows one row instead of two identical ones.\n'
-  + ' *\n'
-  + ' * `F` follows TOPOLOGY `path`, `R` follows `pathReverse`. Both halves are always\n'
-  + ' * emitted together, so finding one key guarantees its opposite exists.\n'
-  + ' *\n'
-  + ' * Direction comes from TOPOLOGY, never GTFS `direction_id` — that field is broken\n'
-  + ' * in this feed (Koridor 5 labels both directions `0`).\n'
-  + ' */\n'
-  + 'export const DIRECTIONAL_HEADWAYS_S: Record<string, number> = {\n'
-  + dirEntries.map(([key, s]) => `  '${key}': ${s}`).join(',\n')
-  + '\n}\n\n'
-  + '/*\n'
-  + ' * Days each line runs, as a three-bit mask: WD (Mon-Fri) | SAT | SUN.\n'
-  + ' *\n'
-  + ' * A line ABSENT from this map runs all three days (0b111) — the common case,\n'
-  + ' * so only the exceptions are listed. Read it with a bit test rather than an\n'
-  + ' * equality check: `mask & DAY_BIT[today]`.\n'
-  + ' *\n'
-  + ' * Three bits rather than a weekday/weekend enum because the feed genuinely\n'
-  + ' * separates the two weekend days: 7T and 8A run Sundays only. Sourced from\n'
-  + ' * GTFS calendar.txt day columns, so a service the feed adds needs no code\n'
-  + ' * change here.\n'
-  + ' */\n'
-  + 'export const LINE_DAY_MASK: Record<string, number> = {\n'
-  + maskEntries.map(([line, m]) => `  '${line}': 0b${m.toString(2).padStart(3, '0')}`).join(',\n')
-  + '\n}\n\n'
-  + '/*\n'
-  + ' * Headways that differ from the weekday figure, keyed `${day}:${weekdayKey}`\n'
-  + ' * where day is SAT or SUN and weekdayKey is a HEADWAYS_S or STOP_HEADWAYS_S key.\n'
-  + ' *\n'
-  + ' * Sparse: a miss means the weekday value applies that day too, so absent data\n'
-  + ' * degrades to the weekday number rather than closing a line that runs.\n'
-  + ' *\n'
-  + ' * Saturday and Sunday are separate because TJ\'s `HM` service ADDS Sunday trips\n'
-  + ' * on top of a route\'s everyday service rather than replacing it — 9C combines\n'
-  + ' * to 514s on Saturday but 212s on Sunday. Merging them would either promise\n'
-  + ' * Saturday riders the Sunday frequency or discard the extra Sunday service.\n'
-  + ' */\n'
-  + 'export const DAY_HEADWAYS_S: Record<string, number> = {\n'
-  + dayHeadwayEntries.map(([key, s]) => `  '${key}': ${s}`).join(',\n')
-  + '\n}\n\n'
-  + '/*\n'
-  + ' * Terminus station id per line and direction, for "arah ..." labels. Names are\n'
-  + ' * resolved against the stations table at request time so a rename needs no\n'
-  + ' * regeneration here.\n'
-  + ' */\n'
-  + 'export const LINE_TERMINI: Record<string, { F: string, R: string }> = {\n'
-  + terminusEntries.map(([line, t]) => `  '${line}': { F: '${t.F}', R: '${t.R}' }`).join(',\n')
-  + '\n}\n'
+  const perDirection = new Map([...tj.perDirection, ...rail.perDirection])
 
-fs.writeFileSync(OUT_PATH, fileTS)
+  /*
+   * Terminus per line and direction, for the "arah ..." labels a halte page shows.
+   *
+   * Station IDS rather than names: the display name is resolved against the stations
+   * table at request time, so renaming a station does not require regenerating this
+   * file. `F` is the last stop of TOPOLOGY `path`, `R` of `pathReverse`.
+   */
+  const termini = lineTerminiMap()
 
-console.log(`Wrote ${lineEntries.length} line headways and ${stopEntries.length} stop headways to ${OUT_PATH}`)
-const twoWay = dirEntries.filter(([k]) => perDirection.has(`${k.slice(0, -1)}${k.endsWith('F') ? 'R' : 'F'}`)).length
-console.log(`  Directional:          ${twoWay / 2} split pairs + ${dirEntries.length - twoWay} one-way stops = ${dirEntries.length} entries`)
-console.log(`  Termini:              ${terminusEntries.length} corridors`)
-console.log(`  TJ   — ${tj.perLine.size} lines, ${tj.perStop.size} stop pairs (of ${topology.size} in TOPOLOGY)`)
-console.log(`  Rail — ${rail.perLine.size} lines, ${rail.perStop.size} stop pairs`)
-if (weekendOnly.length > 0) console.log(`  Weekend-only lines:   ${weekendOnly.join(', ')}`)
-if (tj.fellBack.length > 0) console.log(`  Line-level fallbacks: ${tj.fellBack.sort().join(', ')}`)
-if (overridden.size > 0) console.log(`  Hand overrides:       ${[...overridden].join(', ')}`)
+  const weekendOnly = [...tj.weekendOnly].sort((a, b) => a.localeCompare(b))
+  const maskEntries = [...tj.dayMask].filter(([, m]) => m !== 0b111).sort(([a], [b]) => a.localeCompare(b))
+  const dayHeadwayEntries = [...tj.dayHeadways].sort(([a], [b]) => a.localeCompare(b))
+  const lineEntries = [...perLine].sort(([a], [b]) => a.localeCompare(b))
+  const stopEntries = [...perStop].sort(([a], [b]) => a.localeCompare(b))
+  const dirEntries = [...perDirection].sort(([a], [b]) => a.localeCompare(b))
+  const terminusEntries = [...termini].sort(([a], [b]) => a.localeCompare(b))
+  const overridden = new Set(Object.keys(OVERRIDES))
 
-// A topology pair with no value at all is either a weekend-only line or a real
-// gap worth knowing about. Naming them keeps a silent fallback from turning a
-// rerouted corridor into a plausible-looking wrong number.
-const uncovered = [...topology].filter(k => !perStop.has(k))
-if (uncovered.length > 0) {
-  const byLine = new Map<string, number>()
-  for (const key of uncovered) {
-    const line = key.split('@')[0]!
-    byLine.set(line, (byLine.get(line) ?? 0) + 1)
+  const fileTS = '/*\n'
+    + ' * Seconds between vehicles, per line, per (line, stop), and per direction.\n'
+    + ' *\n'
+    + ' * GENERATED — do not edit by hand; re-run `pnpm --filter api generate:headways`.\n'
+    + ' * TJ values combine the frequencies of every weekday route variant serving a\n'
+    + ' * stop (1/Σ(1/h)); rail values are the median gap between departures in the\n'
+    + ` * schedules table. Both are clamped to [${HEADWAY_FLOOR_S}, ${HEADWAY_CAP_S}] seconds.\n`
+    + ' * See generateHeadways.ts for why.\n'
+    + ' *\n'
+    + ' * Consumed by routes/fares.ts as the planner\'s expected-wait input and by the\n'
+    + ' * /stations/:operator/:code/headway endpoint. It is an average, not a schedule:\n'
+    + ' * it cannot say when the next vehicle comes, only how long a rider tends to\n'
+    + ' * wait for one.\n'
+    + ' */\n\n'
+    + '/** Per-line fallback, used when a stop has no measured value of its own. */\n'
+    + 'export const HEADWAYS_S: Record<string, number> = {\n'
+    + lineEntries.map(([line, s]) => `  '${line}': ${s}${overridden.has(line) ? ' // HAND-OVERRIDE' : ''}`).join(',\n')
+    + '\n}\n\n'
+    + '/** Per-(line, station) headway. Key: `${lineCode}@${stationId}`. */\n'
+    + 'export const STOP_HEADWAYS_S: Record<string, number> = {\n'
+    + stopEntries.map(([key, s]) => `  '${key}': ${s}`).join(',\n')
+    + '\n}\n\n'
+    + '/*\n'
+    + ' * Lines whose only service runs at the weekend, so no weekday headway exists.\n'
+    + ' * These deliberately carry NO value rather than borrowing a neighbouring one:\n'
+    + ' * a number here would assert weekday service that does not run.\n'
+    + ' */\n'
+    + `export const WEEKEND_ONLY_LINES: readonly string[] = [${weekendOnly.map(l => `'${l}'`).join(', ')}]\n\n`
+    + '/*\n'
+    + ' * Per-(line, station, direction), ONLY where the two directions genuinely\n'
+    + ' * differ. A pair absent here means both directions match STOP_HEADWAYS_S, so a\n'
+    + ' * halte page shows one row instead of two identical ones.\n'
+    + ' *\n'
+    + ' * `F` follows TOPOLOGY `path`, `R` follows `pathReverse`. Both halves are always\n'
+    + ' * emitted together, so finding one key guarantees its opposite exists.\n'
+    + ' *\n'
+    + ' * Direction comes from TOPOLOGY, never GTFS `direction_id` — that field is broken\n'
+    + ' * in this feed (Koridor 5 labels both directions `0`).\n'
+    + ' */\n'
+    + 'export const DIRECTIONAL_HEADWAYS_S: Record<string, number> = {\n'
+    + dirEntries.map(([key, s]) => `  '${key}': ${s}`).join(',\n')
+    + '\n}\n\n'
+    + '/*\n'
+    + ' * Days each line runs, as a three-bit mask: WD (Mon-Fri) | SAT | SUN.\n'
+    + ' *\n'
+    + ' * A line ABSENT from this map runs all three days (0b111) — the common case,\n'
+    + ' * so only the exceptions are listed. Read it with a bit test rather than an\n'
+    + ' * equality check: `mask & DAY_BIT[today]`.\n'
+    + ' *\n'
+    + ' * Three bits rather than a weekday/weekend enum because the feed genuinely\n'
+    + ' * separates the two weekend days: 7T and 8A run Sundays only. Sourced from\n'
+    + ' * GTFS calendar.txt day columns, so a service the feed adds needs no code\n'
+    + ' * change here.\n'
+    + ' */\n'
+    + 'export const LINE_DAY_MASK: Record<string, number> = {\n'
+    + maskEntries.map(([line, m]) => `  '${line}': 0b${m.toString(2).padStart(3, '0')}`).join(',\n')
+    + '\n}\n\n'
+    + '/*\n'
+    + ' * Headways that differ from the weekday figure, keyed `${day}:${weekdayKey}`\n'
+    + ' * where day is SAT or SUN and weekdayKey is a HEADWAYS_S or STOP_HEADWAYS_S key.\n'
+    + ' *\n'
+    + ' * Sparse: a miss means the weekday value applies that day too, so absent data\n'
+    + ' * degrades to the weekday number rather than closing a line that runs.\n'
+    + ' *\n'
+    + ' * Saturday and Sunday are separate because TJ\'s `HM` service ADDS Sunday trips\n'
+    + ' * on top of a route\'s everyday service rather than replacing it — 9C combines\n'
+    + ' * to 514s on Saturday but 212s on Sunday. Merging them would either promise\n'
+    + ' * Saturday riders the Sunday frequency or discard the extra Sunday service.\n'
+    + ' */\n'
+    + 'export const DAY_HEADWAYS_S: Record<string, number> = {\n'
+    + dayHeadwayEntries.map(([key, s]) => `  '${key}': ${s}`).join(',\n')
+    + '\n}\n\n'
+    + '/*\n'
+    + ' * Terminus station id per line and direction, for "arah ..." labels. Names are\n'
+    + ' * resolved against the stations table at request time so a rename needs no\n'
+    + ' * regeneration here.\n'
+    + ' */\n'
+    + 'export const LINE_TERMINI: Record<string, { F: string, R: string }> = {\n'
+    + terminusEntries.map(([line, t]) => `  '${line}': { F: '${t.F}', R: '${t.R}' }`).join(',\n')
+    + '\n}\n'
+
+  fs.writeFileSync(OUT_PATH, fileTS)
+
+  console.log(`Wrote ${lineEntries.length} line headways and ${stopEntries.length} stop headways to ${OUT_PATH}`)
+  const twoWay = dirEntries.filter(([k]) => perDirection.has(`${k.slice(0, -1)}${k.endsWith('F') ? 'R' : 'F'}`)).length
+  console.log(`  Directional:          ${twoWay / 2} split pairs + ${dirEntries.length - twoWay} one-way stops = ${dirEntries.length} entries`)
+  console.log(`  Termini:              ${terminusEntries.length} corridors`)
+  console.log(`  TJ   — ${tj.perLine.size} lines, ${tj.perStop.size} stop pairs (of ${topology.size} in TOPOLOGY)`)
+  console.log(`  Rail — ${rail.perLine.size} lines, ${rail.perStop.size} stop pairs`)
+  if (weekendOnly.length > 0) console.log(`  Weekend-only lines:   ${weekendOnly.join(', ')}`)
+  if (tj.fellBack.length > 0) console.log(`  Line-level fallbacks: ${tj.fellBack.sort().join(', ')}`)
+  if (overridden.size > 0) console.log(`  Hand overrides:       ${[...overridden].join(', ')}`)
+
+  // A topology pair with no value at all is either a weekend-only line or a real
+  // gap worth knowing about. Naming them keeps a silent fallback from turning a
+  // rerouted corridor into a plausible-looking wrong number.
+  const uncovered = [...topology].filter(k => !perStop.has(k))
+  if (uncovered.length > 0) {
+    const byLine = new Map<string, number>()
+    for (const key of uncovered) {
+      const line = key.split('@')[0]!
+      byLine.set(line, (byLine.get(line) ?? 0) + 1)
+    }
+    const summary = [...byLine].sort(([a], [b]) => a.localeCompare(b))
+      .map(([line, n]) => `${line}:${n}${tj.weekendOnly.has(line) ? ' (weekend-only)' : ''}`)
+    console.log(`  No weekday value:     ${uncovered.length} pairs — ${summary.join(', ')}`)
   }
-  const summary = [...byLine].sort(([a], [b]) => a.localeCompare(b))
-    .map(([line, n]) => `${line}:${n}${tj.weekendOnly.has(line) ? ' (weekend-only)' : ''}`)
-  console.log(`  No weekday value:     ${uncovered.length} pairs — ${summary.join(', ')}`)
 }
+
+if (require.main === module) main()

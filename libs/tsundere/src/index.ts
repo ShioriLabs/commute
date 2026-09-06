@@ -34,6 +34,18 @@ export {
 export type { RideLeg, RouteLeg, TransferLeg } from './router'
 
 /*
+ * Service windows — when a line runs, in seconds since local midnight. The
+ * engine never learns which timezone "local" is; apps/api does that conversion
+ * and passes numbers, so this stays as dependency-free as the rest.
+ */
+export {
+  DAY_S,
+  inWindow,
+  windowFromDepartures,
+  type ServiceWindow
+} from './planner/service-hours'
+
+/*
  * Graph inputs. Structural by design — apps/api passes Kysely rows straight in,
  * so these must never grow a field a database row would not have.
  */
