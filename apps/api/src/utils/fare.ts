@@ -85,6 +85,19 @@ export function serviceDay(date: Date): 'WD' | 'SAT' | 'SUN' {
   return 'WD'
 }
 
+/**
+ * A moment as a local (WIB) ISO 8601 string, e.g. `2026-09-06T05:00:00+07:00`.
+ *
+ * Written with the offset rather than as UTC because riders read this: "the bus
+ * starts at 05:00" is the point, and a `Z` timestamp makes every consumer redo
+ * the conversion to find that out.
+ */
+export function wibIsoString(date: Date): string {
+  // The shifted clock's UTC fields ARE the Jakarta wall clock, so formatting
+  // them and stamping the offset is exact rather than an approximation.
+  return `${wib(date).toISOString().slice(0, 19)}+07:00`
+}
+
 /** Seconds since local (Jakarta) midnight — what the router filters on. */
 export function secondsSinceLocalMidnight(date: Date): number {
   const local = wib(date)

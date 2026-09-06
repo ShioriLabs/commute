@@ -48,6 +48,12 @@ export function journeyCacheKey(
   return `${prefix}:${fromId}:${toId}:${context.paymentMethod}:${day}:${fareTimeBucket(context.departureAt)}:${apiVersion}`
 }
 
+/*
+ * How long a CLOSED answer stays cached. Short, because the cache key's time
+ * component is only peak/off-peak and cannot express a 05:00 opening.
+ */
+const CLOSED_CACHE_TTL_S = 5 * 60
+
 /** What the endpoint-specific half is handed once the shared work is done. */
 export interface JourneyBuildTools {
   router: Tsundere
@@ -59,16 +65,38 @@ export interface JourneyBuildTools {
   hydrate: (stationIds: string[]) => Promise<StationNamer>
 }
 
+/*
+ * A trip that no line can carry right now, but which a line could carry later.
+ *
+ * Distinct from "no route" on purpose: a rider standing at a halte at 03:00
+ * needs to know the bus starts at 05:00, not that their trip is impossible.
+ * Carrying the reopening time is what makes the answer actionable — "closed"
+ * on its own leaves them with nothing to do.
+ */
+export interface ClosedOutcome {
+  outcome: 'CLOSED'
+  /** When the trip next becomes possible, as a local (WIB) ISO timestamp. */
+  nextServiceAt: string
+}
+
+/** A body, `null` for no route at any time, or CLOSED for "not right now". */
+export type JourneyOutcome<T> = T | null | ClosedOutcome
+
+export function isClosed<T>(result: JourneyOutcome<T>): result is ClosedOutcome {
+  return result !== null && typeof result === 'object' && 'outcome' in result && result.outcome === 'CLOSED'
+}
+
 export interface JourneyEndpointOptions<T> {
   keyPrefix: 'fares' | 'trips'
   /*
-   * Build the response body, or return null for "no route".
+   * Build the response body, return null for "no route", or a ClosedOutcome
+   * when a path exists but nothing serving it is running yet.
    *
    * Null rather than a thrown error because the two engines report it
    * differently — findRoute returns null, findRoutes an empty front — and both
    * mean a 404, not a 500.
    */
-  build: (tools: JourneyBuildTools) => Promise<T | null>
+  build: (tools: JourneyBuildTools) => Promise<JourneyOutcome<T>>
 }
 
 export async function handleJourneyRequest<T>(
@@ -98,11 +126,26 @@ export async function handleJourneyRequest<T>(
   const kvRepository = new KVRepository(c.env.KV)
   const kvKey = journeyCacheKey(keyPrefix, fromId, toId, context, c.env.API_VERSION)
 
-  const cached = await timing.measure('kv', () => kvRepository.get<T>(kvKey))
+  const cached = await timing.measure('kv', () => kvRepository.get<JourneyOutcome<T>>(kvKey))
   if (cached) {
     // A hit is the whole request, so `kv` alone already tells the story: no
     // route was computed, and the absence of the other spans says so.
     c.header('Server-Timing', timing.header())
+    // A cached CLOSED must replay as CLOSED. Handing it back through Ok would
+    // serve `{outcome: 'CLOSED'}` to a caller parsing a journey list.
+    if (isClosed(cached)) {
+      return c.json(
+        {
+          status: 404,
+          error: {
+            code: 'CLOSED',
+            message: 'No service on this route at that time.',
+            nextServiceAt: cached.nextServiceAt
+          }
+        },
+        404
+      )
+    }
     return c.json(Ok(cached), 200)
   }
 
@@ -131,6 +174,33 @@ export async function handleJourneyRequest<T>(
 
     if (result === null) {
       return c.json(NotFound('NO_ROUTE', 'No route between these stations.'), 404)
+    }
+
+    /*
+     * Closed is still a 404 — there is no journey to return — but a different
+     * code, so a caller can tell "come back at 05:00" from "this pair is not
+     * connected" without parsing prose.
+     *
+     * Cached briefly rather than for the usual 20 hours. The key carries the
+     * peak/off-peak bucket, which is far coarser than a service-hour boundary:
+     * 04:30 and 06:00 are both off-peak on a weekday, so a full-length cache
+     * would keep serving "closed" long after the line opened. A short TTL fixes
+     * that without widening the key and costing the OK path its hit rate.
+     */
+    if (isClosed(result)) {
+      c.executionCtx.waitUntil(kvRepository.set(kvKey, result, CLOSED_CACHE_TTL_S))
+      c.header('Server-Timing', timing.header())
+      return c.json(
+        {
+          status: 404,
+          error: {
+            code: 'CLOSED',
+            message: 'No service on this route at that time.',
+            nextServiceAt: result.nextServiceAt
+          }
+        },
+        404
+      )
     }
 
     c.executionCtx.waitUntil(kvRepository.set(kvKey, result))

@@ -102,6 +102,71 @@ function headwaysFor(day: ServiceDay): Map<string, number> {
   return base
 }
 
+/*
+ * Every distinct moment a line opens, in seconds since local midnight, sorted.
+ *
+ * Small by construction — nine across the whole network (03:47, 03:50, 04:12,
+ * 04:27, 05:00, 05:12, 05:18, 05:30, 05:58), because corridors share opening
+ * times. That is what makes "when does this trip become possible" answerable by
+ * re-planning at each candidate rather than by walking the clock minute by
+ * minute.
+ *
+ * A window opening at 0 is a line that never closes, so it can never be the
+ * reason a trip is unroutable and is left out.
+ */
+const openingTimesCache = new Map<ServiceDay, number[]>()
+function openingTimes(day: ServiceDay): number[] {
+  const cached = openingTimesCache.get(day)
+  if (cached) return cached
+  const opens = new Set<number>()
+  for (const window of serviceHoursMap(day).values()) {
+    if (window[0] !== 0) opens.add(window[0])
+  }
+  const sorted = [...opens].sort((a, b) => a - b)
+  openingTimesCache.set(day, sorted)
+  return sorted
+}
+
+/**
+ * The next moment this pair becomes routable, or null if it never does today.
+ *
+ * Re-runs the search at each opening after `departureS`, earliest first, and
+ * returns the first that yields a journey. Bounded twice over: only openings
+ * later today are tried, and never more than MAX_REOPEN_PROBES of them, so a
+ * pair that is genuinely disconnected costs a handful of searches rather than
+ * an unbounded scan.
+ *
+ * Deliberately does NOT wrap into tomorrow. "Come back at 05:00" is useful;
+ * "come back at 05:00 the day after next" is a routing answer nobody asked for,
+ * and a pair with no path at any hour should read as NO_ROUTE instead.
+ */
+const MAX_REOPEN_PROBES = 8
+export function nextServiceAt(
+  router: Tsundere,
+  fromId: string,
+  toId: string,
+  context: FareContext
+): { departureS: number, at: Date } | null {
+  const day = serviceDay(context.departureAt)
+  const from = secondsSinceLocalMidnight(context.departureAt)
+  const candidates = openingTimes(day).filter(t => t > from).slice(0, MAX_REOPEN_PROBES)
+
+  for (const departureS of candidates) {
+    const found = router.findRoutes(fromId, toId, {
+      departureS,
+      serviceHours: serviceHoursMap(day),
+      headwaysS: headwaysFor(day)
+    })
+    if (found.length > 0) {
+      // Same calendar day, at the opening — the caller renders it in WIB.
+      const at = new Date(context.departureAt)
+      at.setUTCSeconds(at.getUTCSeconds() + (departureS - from))
+      return { departureS, at }
+    }
+  }
+  return null
+}
+
 /** Planner options that depend on when the rider is travelling. */
 export function timeOptions(context: FareContext): {
   departureS: number

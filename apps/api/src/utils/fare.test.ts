@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FareContext } from '@commute/constants'
-import { calculateSegmentFare, calculateTransferFare, fareTimeBucket, LRTJBDB_FARE_CAP_OFFPEAK, LRTJBDB_FARE_CAP_PEAK, resolveCorridorMerges, secondsSinceLocalMidnight, serviceDay } from 'utils/fare'
+import { calculateSegmentFare, calculateTransferFare, fareTimeBucket, LRTJBDB_FARE_CAP_OFFPEAK, LRTJBDB_FARE_CAP_PEAK, resolveCorridorMerges, secondsSinceLocalMidnight, serviceDay, wibIsoString } from 'utils/fare'
 import type { RouteLeg } from '@commute/tsundere'
 
 const ctx: FareContext = { paymentMethod: 'STORED_VALUE', departureAt: new Date('2026-07-18T08:00:00+07:00') }
@@ -284,5 +284,19 @@ describe('secondsSinceLocalMidnight', () => {
   it('does not read the UTC clock', () => {
     // 20:00 UTC is 03:00 the next day in WIB — the hour the 3am case turns on.
     expect(secondsSinceLocalMidnight(new Date('2026-07-19T20:00:00Z'))).toBe(3 * 3600)
+  })
+})
+
+describe('wibIsoString', () => {
+  it('writes the local wall clock with the +07:00 offset', () => {
+    expect(wibIsoString(new Date('2026-09-06T05:00:00+07:00'))).toBe('2026-09-06T05:00:00+07:00')
+  })
+
+  /*
+   * The point of the offset form: a rider reads this. 22:00 UTC is 05:00 the
+   * next morning in Jakarta, and "come back at 05:00" is the useful sentence.
+   */
+  it('renders a UTC instant as the Jakarta time a rider would read', () => {
+    expect(wibIsoString(new Date('2026-09-05T22:00:00Z'))).toBe('2026-09-06T05:00:00+07:00')
   })
 })

@@ -5,7 +5,8 @@ import { HubRepository } from 'db/repositories/hubs'
 import { KVRepository } from 'db/repositories/kv'
 import { StationRepository } from 'db/repositories/stations'
 import type { TripResult } from '@commute/schemas'
-import { getRouter, parseFareContext, timeOptions } from 'routes/fares'
+import { getRouter, nextServiceAt, parseFareContext, timeOptions } from 'routes/fares'
+import { wibIsoString } from 'utils/fare'
 import { assembleJourney, planJourney } from 'utils/fare-journey'
 import { handleJourneyRequest, journeyCacheKey } from 'utils/journey-endpoint'
 import { summarizeFares } from 'utils/fare-summary'
@@ -117,8 +118,24 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
        */
       scoreFare: legs => summarizeFares(mergeInterlinedLegs([...legs]), context).totalFare
     }))
-    // findRoutes reports "no route" as an empty front, where findRoute returns null.
-    if (routed.length === 0) return null
+    /*
+     * findRoutes reports "no route" as an empty front, where findRoute returns
+     * null. An empty front has two very different causes, and the rider needs
+     * them told apart: either nothing connects these stations at all, or
+     * everything that does is shut right now.
+     *
+     * The second is only worth asking about when the search was time-filtered
+     * in the first place, and only costs anything when the answer was empty —
+     * so the probe sits behind both conditions rather than on the hot path.
+     */
+    if (routed.length === 0) {
+      const reopening = timing.measureSync('reopen', () => nextServiceAt(router, fromId, toId, context))
+      if (!reopening) return null
+      return {
+        outcome: 'CLOSED' as const,
+        nextServiceAt: wibIsoString(reopening.at)
+      }
+    }
 
     const plans = timing.measureSync('plan', () => routed.map(journey => planJourney(journey.legs, journey.criteria, journey.labels, context)))
 
