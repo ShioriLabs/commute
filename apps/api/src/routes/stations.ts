@@ -32,6 +32,26 @@ import { serviceDay } from 'utils/fare'
 const DAY_ORDER = ['WD', 'SAT', 'SUN'] as const
 type ServiceDayName = (typeof DAY_ORDER)[number]
 
+/*
+ * Which day a request is about: `?day=` when given, otherwise today in Jakarta.
+ *
+ * Resolved server-side on purpose. The caller's clock may be in any timezone,
+ * and a departure board is a fact about Jakarta rather than about the reader.
+ */
+function requestedDay(raw: string | undefined): ServiceDayName {
+  const upper = raw?.toUpperCase()
+  return upper === 'WD' || upper === 'SAT' || upper === 'SUN' ? upper : serviceDay(new Date())
+}
+
+/** The stored `schedules.dayMask` bit for a day. Mirrors DAY_MASK. */
+const DAY_BIT: Record<ServiceDayName, number> = { WD: 0b100, SAT: 0b010, SUN: 0b001 }
+
+const dayParam = queryParam(
+  'day',
+  'Hari yang mau dilihat: `WD` (Senin-Jumat), `SAT`, atau `SUN`. Hari libur nasional ikut jadwal `SUN`. Default-nya hari ini waktu Jakarta.',
+  'SAT'
+)
+
 const app = new Hono<{ Bindings: Bindings }>()
 
 // Direction derivation inputs are stable per isolate (fares.ts cachedGraph
@@ -198,7 +218,7 @@ app.get(
     description: 'Semua jadwal keberangkatan dalam satu daftar, tanpa dipisah per lin. Kalau butuh yang sudah dikelompokkan per arah seperti papan keberangkatan, pakai `/timetable/grouped`.\n\nBisa dipersempit ke rentang jam pakai `from` dan `to` (format `HH:MM`, waktu lokal Asia/Jakarta). Rentangnya dibulatkan ke jam bulat: `from=12:13&to=15:18` jadi jam 12 sampai 15, mencakup keberangkatan sampai `15:59`. Rentang yang melewati tengah malam ditulis biasa saja, misalnya `from=22:00&to=02:00` buat kereta terakhir. Kalau `from` dan `to` persis sama, yang keluar sehari penuh.',
     tag: 'Stasiun',
     data: v.array(ScheduleSchema),
-    parameters: [operatorParam, stationCodeParam, ...timeWindowParams],
+    parameters: [operatorParam, stationCodeParam, dayParam, ...timeWindowParams],
     errors: {
       400: 'Format `from` atau `to` salah (`INVALID_TIME_RANGE`). Pakai `HH:MM` 24 jam.',
       404: 'Kode operator atau stasiun tidak ditemukan.'
@@ -217,15 +237,18 @@ app.get(
       return c.json(BadRequest('INVALID_TIME_RANGE', 'Use HH:MM in 24-hour local time, e.g. from=06:00&to=09:00.'), 400)
     }
 
+    const day = requestedDay(c.req.query('day'))
+
     const kvRepository = new KVRepository(c.env.KV)
     const stationRepository = new StationRepository(c.env.DB)
 
     /*
-     * The window is part of the key. Caching a filtered body under the plain
-     * key would serve a morning-only timetable to the next caller who asked for
-     * the whole day.
+     * The window and the day are both part of the key. Caching a filtered body
+     * under the plain key would serve a morning-only timetable to the next
+     * caller who asked for the whole day, and a weekday board to a caller
+     * asking about Saturday.
      */
-    const kvKey = `timetable:${operator.code}-${stationCode}:${windowCacheKey(window)}:${c.env.API_VERSION}`
+    const kvKey = `timetable:${operator.code}-${stationCode}:${day}:${windowCacheKey(window)}:${c.env.API_VERSION}`
 
     const cachedTimetable = await kvRepository.get(kvKey)
     if (cachedTimetable) {
@@ -245,7 +268,7 @@ app.get(
       )
     }
 
-    const allDepartures = await stationRepository.getTimetableFromStationId(checkStationResult.station!.id)
+    const allDepartures = await stationRepository.getTimetableFromStationId(checkStationResult.station!.id, DAY_BIT[day])
     const timetable = window ? filterByWindow(allDepartures, window) : allDepartures
     if (timetable.length === 0) {
       return c.json(
@@ -278,6 +301,7 @@ app.get(
       operatorParam,
       stationCodeParam,
       queryParam('compact', 'Isi `1` kalau mau keberangkatannya dalam bentuk tuple. Nilai lain akan mengembalikan bentuk penuh.', '1'),
+      dayParam,
       ...timeWindowParams
     ],
     errors: {
@@ -302,7 +326,9 @@ app.get(
     const kvRepository = new KVRepository(c.env.KV)
     const stationRepository = new StationRepository(c.env.DB)
 
-    const kvKey = `timetable:${operator.code}-${stationCode}:grouped:${compactMode ? 'compact' : 'full'}:${windowCacheKey(window)}:${c.env.API_VERSION}`
+    const day = requestedDay(c.req.query('day'))
+
+    const kvKey = `timetable:${operator.code}-${stationCode}:${day}:grouped:${compactMode ? 'compact' : 'full'}:${windowCacheKey(window)}:${c.env.API_VERSION}`
 
     const cachedTimetable = await kvRepository.get(kvKey)
     if (cachedTimetable) {
@@ -322,8 +348,8 @@ app.get(
       // Compact mode only needs the grouping/compact columns; full mode embeds
       // whole Schedule rows in the response, so keep selectAll there.
       compactMode
-        ? stationRepository.getGroupingTimetableFromStationId(stationID)
-        : stationRepository.getTimetableFromStationId(stationID)
+        ? stationRepository.getGroupingTimetableFromStationId(stationID, DAY_BIT[day])
+        : stationRepository.getTimetableFromStationId(stationID, DAY_BIT[day])
     ])
 
     if (checkStationResult.status === 'rejected' || schedules.status === 'rejected') return c.json(Internal('DATABASE_ERROR', 'Can\'t connect to database, please try again later.'))
@@ -482,7 +508,7 @@ app.get(
     description: 'Jadwal satu lin di satu stasiun. Sama seperti `/timetable`, bisa dipersempit pakai `from` dan `to`.',
     tag: 'Stasiun',
     data: v.array(ScheduleSchema),
-    parameters: [operatorParam, stationCodeParam, pathParam('line', 'Kode lin yang mau difilter.', 'C'), ...timeWindowParams],
+    parameters: [operatorParam, stationCodeParam, pathParam('line', 'Kode lin yang mau difilter.', 'C'), dayParam, ...timeWindowParams],
     errors: {
       400: 'Format `from` atau `to` salah (`INVALID_TIME_RANGE`). Pakai `HH:MM` 24 jam.',
       404: 'Kode operator, stasiun, atau lin tidak ditemukan.'
@@ -505,7 +531,9 @@ app.get(
     const kvRepository = new KVRepository(c.env.KV)
     const stationRepository = new StationRepository(c.env.DB)
 
-    const kvKey = `timetable:${operator.code}-${stationCode}:${lineCode}:${windowCacheKey(window)}:${c.env.API_VERSION}`
+    const day = requestedDay(c.req.query('day'))
+
+    const kvKey = `timetable:${operator.code}-${stationCode}:${day}:${lineCode}:${windowCacheKey(window)}:${c.env.API_VERSION}`
 
     const cachedTimetable = await kvRepository.get(kvKey)
     if (cachedTimetable) {
@@ -518,7 +546,11 @@ app.get(
     const checkIfLineExists = await stationRepository.checkIfLineExists(`${operator.code}-${stationCode}`, lineCode)
     if (!checkIfLineExists.exists || checkIfLineExists.line === null) return c.json(NotFound(`Unknown Line Code ${lineCode} in Station ID ${operator.code}-${stationCode}`), 404)
 
-    const lineDepartures = await stationRepository.getTimetableFromStationId(checkIfLineExists.line!.stationId, checkIfLineExists.line!.lineCode)
+    const lineDepartures = await stationRepository.getTimetableFromStationId(
+      checkIfLineExists.line!.stationId,
+      DAY_BIT[day],
+      checkIfLineExists.line!.lineCode
+    )
     const timetable = window ? filterByWindow(lineDepartures, window) : lineDepartures
     if (timetable.length === 0) {
       return c.json(
@@ -623,7 +655,7 @@ app.get(
     parameters: [
       operatorParam,
       stationCodeParam,
-      queryParam('day', 'Hari yang mau dilihat: `WD` (Senin-Jumat), `SAT`, atau `SUN`. Hari libur nasional ikut jadwal `SUN`. Default-nya hari ini waktu Jakarta.', 'SAT')
+      dayParam
     ],
     errors: { 404: 'Kode operator atau stasiun tidak ditemukan.' }
   }),
@@ -640,10 +672,7 @@ app.get(
      * otherwise today in Jakarta — so the halte page shows what is running now
      * without the caller having to say so.
      */
-    const requested = c.req.query('day')?.toUpperCase()
-    const day: ServiceDayName = requested === 'WD' || requested === 'SAT' || requested === 'SUN'
-      ? requested
-      : serviceDay(new Date())
+    const day = requestedDay(c.req.query('day'))
 
     const kvRepository = new KVRepository(c.env.KV)
     const stationRepository = new StationRepository(c.env.DB)

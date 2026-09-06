@@ -1,5 +1,6 @@
 import { MRTJ_STATIONS_BY_SLUG, OPERATORS, REGIONS } from '@commute/constants'
 import { StationRepository } from 'db/repositories/stations'
+import { DAY_MASK, DAY_MASK_WEEKEND } from 'db/schemas/schedules'
 import { NewStation } from 'db/schemas/stations'
 import { MRTJDatumRow, buildStationTimetable, cleanDisplayName, isStationRow, resolveTerminusNames, synthesizeTripNumbers } from 'operators/mrtj/datum'
 import { chunkArray } from 'utils/chunk'
@@ -63,7 +64,29 @@ export async function syncTimetable(d1: D1Database, stationCode: string) {
   if (!row) return []
 
   const stationId = `${OPERATORS.MRTJ.code}-${stationCode}`
-  const timetable = buildStationTimetable(row, stationId, resolveTerminusNames(rows), synthesizeTripNumbers(rows))
+  const terminusNames = resolveTerminusNames(rows)
 
-  return await new StationRepository(d1).insertTimetable(stationId, timetable)
+  /*
+   * Both boards, loaded independently.
+   *
+   * Two calls rather than one because each owns its own rows: the weekday load
+   * clears only weekday rows and the weekend load only weekend ones, so a feed
+   * that drops one board leaves the other standing rather than wiping it.
+   *
+   * Trip numbering runs per day type and restarts within each, which is what
+   * keeps weekday numbers identical to what they were before the weekend board
+   * existed.
+   */
+  const weekdays = await new StationRepository(d1).insertTimetable(
+    stationId,
+    buildStationTimetable(row, stationId, terminusNames, synthesizeTripNumbers(rows, 'WEEKDAYS'), 'WEEKDAYS'),
+    DAY_MASK.WD
+  )
+  await new StationRepository(d1).insertTimetable(
+    stationId,
+    buildStationTimetable(row, stationId, terminusNames, synthesizeTripNumbers(rows, 'WEEKENDS'), 'WEEKENDS'),
+    DAY_MASK_WEEKEND
+  )
+
+  return weekdays
 }

@@ -311,11 +311,21 @@ export class StationRepository extends Repository {
       .execute()
   }
 
-  async getTimetableFromStationId(id: string, line?: string, page?: number, limit?: number) {
+  /*
+   * `dayMask` is a bitwise filter, not an equality one.
+   *
+   * A board stored as "every day" (7) has to answer a Saturday query, and a
+   * weekend board (3) has to answer both a Saturday and a Sunday one. Matching
+   * on equality would return only boards whose days are exactly the day asked
+   * about, which is almost never what is wanted — an every-day board would
+   * vanish from every single-day query.
+   */
+  async getTimetableFromStationId(id: string, dayMask: number, line?: string, page?: number, limit?: number) {
     let query = db(this.d1)
       .selectFrom('schedules')
       .selectAll()
       .where('stationId', '=', id)
+      .where(sql<boolean>`("dayMask" & ${sql.lit(dayMask)}) != 0`)
       // Only the lines this station actually serves (per stationLines). KAI's
       // feed lists passage times for trains that pass through without stopping
       // (e.g. Soekarno-Hatta trains at Kalideres); those lines aren't in
@@ -339,11 +349,12 @@ export class StationRepository extends Repository {
   // columns the grouping + compact response consume, so cache-miss requests
   // marshal fewer bytes from D1. Same filtering/ordering as
   // getTimetableFromStationId. See GroupingSchedule.
-  async getGroupingTimetableFromStationId(id: string) {
+  async getGroupingTimetableFromStationId(id: string, dayMask: number) {
     const timetable = await db(this.d1)
       .selectFrom('schedules')
       .select(['id', 'lineCode', 'boundFor', 'estimatedDeparture', 'tripNumber'])
       .where('stationId', '=', id)
+      .where(sql<boolean>`("dayMask" & ${sql.lit(dayMask)}) != 0`)
       .where('lineCode', 'in', eb =>
         eb.selectFrom('stationLines').select('stationLines.lineCode').where('stationLines.stationId', '=', id))
       .orderBy('estimatedDeparture asc')
@@ -399,7 +410,17 @@ export class StationRepository extends Repository {
   // e.g. `1676` -> `1676C`), so an upsert keyed on id would pile new rows on top
   // of stale ones instead of updating them. Replacing wholesale keeps the board
   // in sync and drops orphaned/removed departures.
-  async insertTimetable(id: string, timetable: NewSchedule[]) {
+  /*
+   * `dayMask` scopes the wipe, and is REQUIRED rather than defaulted.
+   *
+   * The delete below clears what it is about to replace. Before day-typed
+   * boards it could clear the whole station, because a station had exactly one
+   * board; now a weekday sync would wipe the weekend board it knows nothing
+   * about. Making every caller name its mask is what forces that decision to be
+   * made — a default would let a caller silently keep the old whole-station
+   * wipe and lose the other day's data on the next sync.
+   */
+  async insertTimetable(id: string, timetable: NewSchedule[], dayMask: number) {
     const station = await this.getById(id)
     if (!station) return undefined
 
@@ -418,7 +439,7 @@ export class StationRepository extends Repository {
     // non-interactive transaction and rolls back on any failure — no partial-write
     // window and no moment where the station has no board.
     const queries = [
-      databaseInstance.deleteFrom('schedules').where('stationId', '=', id),
+      databaseInstance.deleteFrom('schedules').where('stationId', '=', id).where('dayMask', '=', dayMask),
       ...chunkArray(deduped, 10).map(chunk => databaseInstance.insertInto('schedules').values(chunk)),
       databaseInstance.updateTable('stations').set('timetableSynced', 1).where('id', '=', id)
     ]
