@@ -471,20 +471,10 @@ function JourneyDetail({ journey }: { journey: FareJourney }) {
 
 export default function FareResultCard({
   result,
-  alternatives = false,
   selectedIndex,
   onSelectIndex
 }: {
   result: FareResult | TripResult
-  /*
-   * Whether to offer the other journeys the API returned.
-   *
-   * Off by default, so a surface that does not pass it renders exactly what it
-   * rendered before alternatives existed: one result, no badges, no cards to
-   * choose between. Set from the rider's router toggle on every surface that
-   * offers one.
-   */
-  alternatives?: boolean
   /*
    * Which option is open, lifted.
    *
@@ -498,16 +488,17 @@ export default function FareResultCard({
   onSelectIndex?: (index: number) => void
 }) {
   /*
-   * Always the full list, so the hooks below never change shape; the primary is
-   * sliced off afterwards when alternatives are off.
+   * Every journey the answer carries, however many that is.
    *
-   * Its labels go with them. A badge is a comparison — "paling murah" only means
-   * anything beside the option it beats — so keeping them on a lone card would
-   * boast about a choice the rider was never shown. Same rule the engine
-   * applies when it declines to label a single journey.
+   * One entry is a normal answer, not a special case: a pair with a single
+   * non-dominated journey gets one card, and the engine already declines to
+   * label a lone journey — a badge is a comparison, and "paling murah" means
+   * nothing beside no alternative. So the list needs no trimming here.
+   *
+   * A `/fares`-shaped body served from a warm cache also lands as one, promoted
+   * by journeysOf. See there for why that path outlives the endpoint switch.
    */
-  const all = journeysOf(result)
-  const journeys = alternatives ? all : all.slice(0, 1).map(j => ({ ...j, labels: [] }))
+  const journeys = journeysOf(result)
 
   /*
    * The uncontrolled half. Declared unconditionally — hooks cannot be skipped —

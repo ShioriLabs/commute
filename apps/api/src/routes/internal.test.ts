@@ -35,8 +35,9 @@ describe('tripCacheKey', () => {
   /*
    * The two endpoints answer the same question with different shapes — one
    * journey against several. Sharing a key would serve a `TripResult` to a
-   * caller parsing a `FareResult`, and the beta router switch means both are
-   * warm for the same pair at the same time.
+   * caller parsing a `FareResult`, and both stay warm for the same pair at the
+   * same time — the app reads /trips while the OG card and shared links still
+   * read /fares.
    */
   it('never collides with a fare key for the same arguments', () => {
     expect(tripCacheKey('KCI-BKS', 'MRTJ-LBB', peak, 'v3'))

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { haptic } from 'utils/haptics'
-import { DEFAULT_FARE_CRITERIA, type FareCriteria } from 'utils/fare-criteria'
+import { DEFAULT_FARE_CRITERIA, WALKING_PREFERENCES, type FareCriteria } from 'utils/fare-criteria'
 import CriterionSheet, { type CriterionOption } from './criterion-sheet'
 import {
   FARE_TIME_DESCRIPTIONS,
@@ -10,21 +10,14 @@ import {
   MODES_LABELS,
   OFFERED_PAYMENT_METHODS,
   PAYMENT_METHOD_DESCRIPTIONS,
-  PAYMENT_METHOD_LABELS
+  PAYMENT_METHOD_LABELS,
+  WALKING_DESCRIPTIONS,
+  WALKING_LABELS
 } from './labels'
 
 interface Props {
   criteria: FareCriteria
   onChange: (criteria: FareCriteria) => void
-  /*
-   * Offer the network filter.
-   *
-   * Off by default because only the beta router honours it: `/fares` ignores
-   * the param, so showing the chip on the standard router would let a rider
-   * pick "Tanpa TransJakarta" and watch the route come back through a busway.
-   * The caller that knows which endpoint it is talking to decides.
-   */
-  showModes?: boolean
   /*
    * Wrap the chips onto multiple lines instead of scrolling them horizontally.
    *
@@ -40,7 +33,7 @@ interface Props {
   wrap?: boolean
 }
 
-type OpenCriterion = 'payment' | 'time' | 'modes' | null
+type OpenCriterion = 'payment' | 'time' | 'modes' | 'walking' | null
 
 /*
  * The persistent settings rail under the Dari/Ke fields.
@@ -56,7 +49,7 @@ type OpenCriterion = 'payment' | 'time' | 'modes' | null
  * one system. The -mx-8 px-8 bleed assumes 8-unit parent padding, which /fare
  * (p-8) and the search sheet (px-8) both provide.
  */
-export default function CriteriaBar({ criteria, onChange, wrap = false, showModes = false }: Props) {
+export default function CriteriaBar({ criteria, onChange, wrap = false }: Props) {
   const [open, setOpen] = useState<OpenCriterion>(null)
 
   const paymentOptions = useMemo<CriterionOption<FareCriteria['paymentMethod']>[]>(
@@ -82,6 +75,15 @@ export default function CriteriaBar({ criteria, onChange, wrap = false, showMode
       value: mode,
       label: MODES_LABELS[mode],
       description: MODES_DESCRIPTIONS[mode]
+    })),
+    []
+  )
+
+  const walkingOptions = useMemo<CriterionOption<FareCriteria['walking']>[]>(
+    () => WALKING_PREFERENCES.map(preference => ({
+      value: preference,
+      label: WALKING_LABELS[preference],
+      description: WALKING_DESCRIPTIONS[preference]
     })),
     []
   )
@@ -132,11 +134,17 @@ export default function CriteriaBar({ criteria, onChange, wrap = false, showMode
           FARE_TIME_LABELS[criteria.fareTime],
           criteria.fareTime !== DEFAULT_FARE_CRITERIA.fareTime
         )}
-        {showModes && chip(
+        {chip(
           'modes',
           'Jalur',
           MODES_LABELS[criteria.modes],
           criteria.modes !== DEFAULT_FARE_CRITERIA.modes
+        )}
+        {chip(
+          'walking',
+          'Jalan kaki',
+          WALKING_LABELS[criteria.walking],
+          criteria.walking !== DEFAULT_FARE_CRITERIA.walking
         )}
       </div>
 
@@ -162,6 +170,14 @@ export default function CriteriaBar({ criteria, onChange, wrap = false, showMode
         options={modesOptions}
         selected={criteria.modes}
         onSelect={modes => onChange({ ...criteria, modes })}
+        onClose={() => setOpen(null)}
+      />
+      <CriterionSheet
+        open={open === 'walking'}
+        title="Jalan kaki"
+        options={walkingOptions}
+        selected={criteria.walking}
+        onSelect={walking => onChange({ ...criteria, walking })}
         onClose={() => setOpen(null)}
       />
     </>

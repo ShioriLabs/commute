@@ -93,7 +93,7 @@ export default function MapTripCard({
   /*
    * Every new answer lands on the options, when there are options to land on.
    *
-   * Which of these is the rider's first question on the beta router — the
+   * Which of these is the rider's first question when there are several — the
    * detail is what they read once they have chosen. Opening on the detail
    * showed them one journey out of several, picked by ordinal rather than by
    * them, and left the list they actually wanted behind a click.

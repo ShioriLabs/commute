@@ -36,13 +36,13 @@ export function fareApiUrl(
  * A separate endpoint on purpose: findRoutes weighs a saved boarding against a
  * longer ride, so it picks a different primary on some pairs, and `/fares` is
  * the shared URL, the OG card and the TransportForJakarta embed. Its answer does
- * not move for anyone who has not asked for the other one — which is what the
- * router toggle asks, per rider, and why the two endpoints stay distinct rather
- * than one growing a mode flag.
+ * not move for those consumers, which is why the two endpoints stay distinct
+ * rather than one growing a mode flag. The app itself reads only the trip
+ * endpoint.
  *
  * Distinct paths also mean distinct SWR keys, so neither surface can render the
- * other's cached body — including the flip itself, where both are warm for the
- * same pair at once.
+ * other's cached body — which still matters, because a `/fares` body cached
+ * before the app switched stays warm for its full life.
  */
 export function tripApiUrl(
   fromId: string | null | undefined,

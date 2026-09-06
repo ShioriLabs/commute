@@ -16,7 +16,7 @@ how many journeys come back.
 
 ```
 Tier 0  static route + per-segment fare                    ← DONE (POIs still unbuilt)
-Tier 1  + route preferences, several journeys, labels      ← DONE, shipped behind a toggle
+Tier 1  + route preferences, several journeys, labels      ← DONE, now the only router
 Tier 2  + time                                             ← HALF DONE
         service hours + day-awareness + headway waits        DONE
         timetable-driven departures ("next train", arrive-by) NOT STARTED
@@ -72,15 +72,41 @@ did not ask. `findRoutes` picks a different primary on some pairs — Bogor → 
 becomes a one-transfer Rp 20.000 route where `/fares` returns the three-transfer
 Rp 17.500 one. Neither is wrong.
 
-The multi-journey answer lives at **`/_internal/trips/:from/:to`**, and asking for it is a
-rider-facing choice: the **beta router toggle** on `/fare` (`fare-sheet/router-toggle.tsx`,
-`hooks/use-fare-router.ts`), with the alternatives rendered as cards plus a criteria bar
-(`fare-sheet/criteria/`). The split survives *because* a switch picks between two endpoints
-that each answer honestly — a mode flag on `/fares` would have made one URL mean two things.
+The multi-journey answer lives at **`/_internal/trips/:from/:to`**, rendered as cards plus
+a criteria bar (`fare-sheet/criteria/`). **Since 2026-09-06 it is the only answer the app
+shows** — the standard/beta toggle it shipped behind was deleted, not flipped, along with
+`utils/fare-router.ts`, `hooks/use-fare-router.ts` and `fare-sheet/router-toggle.tsx`.
 
-The toggle persists in **localStorage only**. There is no URL form, so a link cannot put a
-rider on a router they did not choose. Do not reintroduce a `?router=` param; it was tried
-and removed.
+The split still survives, for the reason it always had: two endpoints that each answer
+honestly, where a mode flag on `/fares` would have made one URL mean two things. `/fares`
+is now purely a public contract — the OG worker (`apps/opengraph`), shared links and the
+embed — and `findRoute` stays as the oracle `compareRouters.ts` diffs against.
+
+What promotion cost, measured over 300 seeded pairs before the switch: the **primary route
+changes on 42%** of them, but the **fare is identical on 70%**, and where it moves it is
+79 pairs cheaper against 8 dearer (mean **−Rp 1.484**). Coverage is unchanged — there is no
+pair one router can route and the other cannot. Of the 8 dearer, 5 still show a cheaper
+option on screen wearing *Termurah*; only 3 genuinely trade money for a saved boarding.
+
+Two consequences worth remembering:
+
+- **Deleting the toggle deleted a fetch gate.** `routerReady` existed only so a beta
+  rider's first paint would not query `/fares` and then immediately `/_internal/trips`.
+  With one endpoint that race cannot happen, so the query now fires on first paint.
+- **The embed changed behaviour.** `readFareRouter` fell back to `standard` when storage
+  throws, which is exactly what happens in the partitioned TransportForJakarta iframe — so
+  the embed had been silently riding the old router. It now gets the multi-journey answer
+  like everything else. `useIsEmbed` (`?embed=true`) is there if it ever needs its own
+  treatment.
+
+There is still no URL form of *which router*, and there is nothing left to put in one. Do
+not reintroduce a `?router=` param; it was tried and removed. `?modes=rail` is different
+and does round-trip — it names what the rider excluded, not which engine answered.
+
+**A `/fares`-shaped body still reaches the card**, from the API's 20-hour KV, from SWR's
+IndexedDB, and from the service worker. `journeysOf` (`fare-sheet/journeys.ts`) promotes it
+to a single unbadged journey. That branch is cache compatibility, not dead standard-router
+code — deleting it strands every rider holding a warm body.
 
 ## Tier 2 — half done, and the half nobody expected came first
 
@@ -129,8 +155,8 @@ question should be settled before any of it is built.
 
 ## UX layer (go mode proper)
 
-- ~~Alternatives as cards: *fastest* · *fewest transfers* · *cheapest*~~ — **shipped**
-  behind the beta toggle, with four labels rather than three.
+- ~~Alternatives as cards: *fastest* · *fewest transfers* · *cheapest*~~ — **shipped**,
+  with four labels rather than three, and since 2026-09-06 the only answer the app shows.
 - "Leave now / depart at HH:MM / arrive by HH:MM." — needs the departures work above.
   Departure *time* is already a rider input (it drives the fare bucket and service hours);
   what is missing is arrive-by and next-departure.
@@ -160,17 +186,16 @@ past it, deliberately and without rework, which is the outcome this doc predicte
 The live question is no longer *what to build next* but **what to promote**. Three
 independent moves, in rough order of leverage:
 
-1. **Decide the beta toggle's fate.** The alternatives UI is built, tested and in riders'
-   hands behind a switch. Either it becomes the default (and `/fares` keeps its singular
-   answer for embeds, which it can do indefinitely) or it stays opt-in on purpose. Leaving
-   it undecided is the one option that costs something.
+1. ~~**Decide the beta toggle's fate.**~~ **Settled 2026-09-06: the multi-journey answer
+   is the default and the toggle is gone.** See the section below.
 2. **POIs.** The last Tier 0 item, additive, and blocked on nothing.
 3. **Departures.** Real Tier 2, a different algorithm class, and gated on the TJ
    no-timetable question above.
 
 ## Open questions
 
-- Does the beta router become the default, and if so what happens to the toggle?
+- ~~Does the beta router become the default, and if so what happens to the toggle?~~ —
+  settled: yes, and the toggle was deleted rather than flipped.
 - Whether exact departures are worth shipping rail-only, given TJ can never have them.
 - Scheduled-only vs realtime: live vehicle positions remain a separate, later question.
 - Schedule coverage — full operating day, holiday variants, and sync freshness — becomes

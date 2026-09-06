@@ -27,8 +27,9 @@ import { ServerTiming } from 'utils/server-timing'
  * KV key for a journey answer.
  *
  * `prefix` separates the namespaces: the two endpoints return different shapes
- * for the same pair, and the beta router switch keeps both warm at once, so a
- * shared key would serve a TripResult to a caller parsing a FareResult.
+ * for the same pair, and both stay warm at once — the app reads /trips while
+ * the OG worker and shared links still read /fares — so a shared key would
+ * serve a TripResult to a caller parsing a FareResult.
  *
  * Keyed on payment method and time bucket because fare depends on both — peak
  * and off-peak, and the integrated-fare steps, must not share a cached body.

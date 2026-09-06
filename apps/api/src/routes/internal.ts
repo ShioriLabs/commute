@@ -5,6 +5,7 @@ import { HubRepository } from 'db/repositories/hubs'
 import { KVRepository } from 'db/repositories/kv'
 import { StationRepository } from 'db/repositories/stations'
 import type { TripResult } from '@commute/schemas'
+import { weightsForWalking, type RankWeights, type WalkingPreference } from '@commute/tsundere'
 import { getRouter, linesOf, nextServiceAt, parseFareContext, timeOptions } from 'routes/fares'
 import { wibIsoString } from 'utils/fare'
 import { assembleJourney, planJourney } from 'utils/fare-journey'
@@ -84,10 +85,10 @@ export const tripCacheKey = (fromId: string, toId: string, context: FareContext,
  * TransportForJakarta embed, so its answer does not move for anyone who has not
  * asked for this one.
  *
- * Asking is now a rider-facing choice — the beta router toggle on /fare — rather
- * than an unlisted route. That is why the split survives: a switch picks between
- * two endpoints that each answer honestly, where a mode flag on /fares would
- * have made one URL mean two different things.
+ * This is what the app renders, everywhere. The split survives anyway, because
+ * the two endpoints answer different questions honestly: /fares is a frozen
+ * public contract for the OG card, shared links and the embed, and a mode flag
+ * on it would have made one URL mean two different things.
  *
  * Rendering is identical either way: both go through utils/fare-journey.ts, so
  * a leg looks the same on both endpoints. Only the number of journeys differs.
@@ -109,14 +110,42 @@ function excludedLines(modesRaw?: string): ReadonlySet<string> | undefined {
   return modesRaw === 'rail' ? linesOf('TJ') : undefined
 }
 
+const WALKING_PREFERENCES: ReadonlySet<string> = new Set(['BRISK', 'AVERAGE', 'SLOW', 'AVOID'])
+
+/*
+ * How much the rider minds walking, as rank weights.
+ *
+ * A PREFERENCE, not a speed. The engine has no duration model — every edge's
+ * `durationSeconds` is null — so this cannot say a journey takes eight minutes
+ * longer at your pace. It shifts which tradeoffs win: weight walking harder and
+ * a 600m transfer stops beating an extra boarding.
+ *
+ * Undefined for the default, so the search runs on DEFAULT_RANK_WEIGHTS exactly
+ * as it did before this existed. AVERAGE is that default, so it is spelled the
+ * same way an absent param is.
+ */
+function walkingWeights(walkingRaw?: string): RankWeights | undefined {
+  if (walkingRaw === undefined || walkingRaw === 'AVERAGE') return undefined
+  return WALKING_PREFERENCES.has(walkingRaw as WalkingPreference)
+    ? weightsForWalking(walkingRaw as WalkingPreference)
+    : undefined
+}
+
 app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRouter, parseFareContext, {
   keyPrefix: 'trips',
   /*
-   * Rail-only answers are cached apart from unrestricted ones — they are
-   * different journeys for the same pair. Undefined for the default search, so
-   * its key is unchanged and stays warm.
+   * Both params change the ANSWER — one excludes lines, the other reorders the
+   * front — so both join the key, or a rider is served someone else's route
+   * from a 20-hour entry. Undefined for a default search, which keeps that key
+   * byte-identical to the one before either existed and every warm entry warm.
    */
-  scope: c => (c.req.query('modes') === 'rail' ? 'rail' : undefined),
+  scope: (c) => {
+    const parts = [
+      c.req.query('modes') === 'rail' ? 'rail' : null,
+      walkingWeights(c.req.query('walking')) ? c.req.query('walking') : null
+    ].filter(Boolean)
+    return parts.length > 0 ? parts.join('+') : undefined
+  },
   /*
    * The same phase timings as /fares, and the more interesting of the two: this
    * is the multi-criteria search, roughly ten times the work of findRoute. If
@@ -135,6 +164,11 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
        * haltes is still offered and a ride already under way is never cut.
        */
       excludeLines: excludedLines(c.req.query('modes')),
+      /*
+       * Reorders the front; never prunes it. A rider who avoids walking still
+       * gets the footbridge route offered, just ranked below the alternatives.
+       */
+      weights: walkingWeights(c.req.query('walking')),
       /*
        * Pricing the journeys is what makes the CHEAPEST label reachable at all —
        * without a scorer every journey's `fare` criterion is null and the axis

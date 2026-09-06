@@ -31,12 +31,13 @@ describe('parseFareCriteria', () => {
 
   it('reads a fully-specified value back', () => {
     const stored = JSON.stringify({
-      paymentMethod: 'QRIS_TAP', fareTime: 'peak', modes: 'rail', operator: 'KCI'
+      paymentMethod: 'QRIS_TAP', fareTime: 'peak', modes: 'rail', walking: 'SLOW', operator: 'KCI'
     })
     expect(parseFareCriteria(stored)).toEqual({
       paymentMethod: 'QRIS_TAP',
       fareTime: 'peak',
       modes: 'rail',
+      walking: 'SLOW',
       operator: 'KCI'
     })
   })
@@ -48,7 +49,7 @@ describe('parseFareCriteria', () => {
    */
   it('falls back per field, keeping the values it can still use', () => {
     const stored = JSON.stringify({
-      paymentMethod: 'CASH', fareTime: 'peak', modes: 'monorail', operator: 'KCI'
+      paymentMethod: 'CASH', fareTime: 'peak', modes: 'monorail', walking: 'SPRINT', operator: 'KCI'
     })
     expect(parseFareCriteria(stored)).toEqual({
       paymentMethod: DEFAULT_FARE_CRITERIA.paymentMethod,
@@ -56,6 +57,7 @@ describe('parseFareCriteria', () => {
       // An unreadable mode must widen the network back to everything, never
       // narrow it: a rider is never stranded by a value they cannot see.
       modes: 'all',
+      walking: 'AVERAGE',
       operator: 'KCI'
     })
   })
@@ -87,7 +89,8 @@ describe('fare criteria persistence', () => {
     })
 
     const criteria: FareCriteria = {
-      paymentMethod: 'QRIS_TAP', fareTime: 'offpeak', modes: 'rail', operator: 'TJ'
+      ...DEFAULT_FARE_CRITERIA,
+      paymentMethod: 'QRIS_TAP', fareTime: 'offpeak', modes: 'rail', walking: 'AVOID', operator: 'TJ'
     }
     writeFareCriteria(criteria)
     expect(store.has(FARE_CRITERIA_KEY)).toBe(true)
@@ -151,7 +154,7 @@ describe('fareQueryParams', () => {
   // router filters by operator, which it does not.
   it('never sends the operator to the fare endpoint', () => {
     const params = fareQueryParams({
-      paymentMethod: 'QRIS_TAP', fareTime: 'peak', modes: 'all', operator: 'KCI'
+      ...DEFAULT_FARE_CRITERIA, paymentMethod: 'QRIS_TAP', fareTime: 'peak', operator: 'KCI'
     })
     expect(params.has('operator')).toBe(false)
     expect([...params.keys()].sort()).toEqual(['at', 'paymentMethod'])
@@ -165,6 +168,17 @@ describe('fareQueryParams', () => {
   it('sends modes only when it is not the default', () => {
     expect(fareQueryParams(DEFAULT_FARE_CRITERIA).has('modes')).toBe(false)
     expect(fareQueryParams({ ...DEFAULT_FARE_CRITERIA, modes: 'rail' }).get('modes')).toBe('rail')
+  })
+
+  /*
+   * AVERAGE is the engine's own default weighting, so it must go out as silence
+   * rather than as `walking=AVERAGE` — otherwise every default rider gets a
+   * distinct cache key for the ranking they would have had anyway.
+   */
+  it('sends walking only when it is not the default', () => {
+    expect(fareQueryParams(DEFAULT_FARE_CRITERIA).has('walking')).toBe(false)
+    expect(fareQueryParams({ ...DEFAULT_FARE_CRITERIA, walking: 'AVERAGE' }).has('walking')).toBe(false)
+    expect(fareQueryParams({ ...DEFAULT_FARE_CRITERIA, walking: 'AVOID' }).get('walking')).toBe('AVOID')
   })
 })
 
@@ -215,13 +229,38 @@ describe('readCriteriaFromUrl', () => {
     expect(read('operator=NOPE&paymentMethod=QRIS_TAP')).toEqual({ paymentMethod: 'QRIS_TAP' })
     expect(read('operator=TJ&paymentMethod=NOPE')).toEqual({ operator: 'TJ' })
   })
+
+  /*
+   * `modes` is the one criterion that round-trips BOTH ways, because it is the
+   * one that changes which lines the route may use. A shared rail-only link
+   * that came back through a busway would show the recipient a different
+   * journey than the sender meant to send.
+   */
+  it('reads modes back so a rail-only link reproduces its route', () => {
+    expect(read('modes=rail')).toEqual({ modes: 'rail' })
+    // Round trip: what fareQueryParams writes is what this reads.
+    const params = fareQueryParams({ ...DEFAULT_FARE_CRITERIA, modes: 'rail' })
+    expect(read(params.toString())).toEqual({ modes: 'rail' })
+  })
+
+  it('ignores an unreadable modes value rather than narrowing the network', () => {
+    expect(read('modes=monorail')).toBeUndefined()
+    expect(read('modes=all')).toBeUndefined()
+  })
+
+  it('reads walking back, and ignores a level it does not know', () => {
+    expect(read('walking=AVOID')).toEqual({ walking: 'AVOID' })
+    expect(read('walking=SPRINT')).toBeUndefined()
+    // The default is silence in both directions, so it never lands in the URL.
+    expect(read('walking=AVERAGE')).toEqual({ walking: 'AVERAGE' })
+  })
 })
 
 // Landing on an operator-scoped link must not rewrite the rider's own stored
 // filter — the scope belongs to that visit, not to them.
 describe('criteriaToPersist', () => {
   const scoped: FareCriteria = {
-    paymentMethod: 'QRIS_TAP', fareTime: 'now', modes: 'all', operator: 'TJ'
+    ...DEFAULT_FARE_CRITERIA, paymentMethod: 'QRIS_TAP', operator: 'TJ'
   }
 
   it('persists everything when no operator came from the URL', () => {

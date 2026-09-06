@@ -58,7 +58,6 @@ import Wordmark from '../components/wordmark'
 import MapFareSheet from '../components/map-fare-sheet'
 import { useFareQuery } from '../components/fare-sheet/use-fare-query'
 import { journeysOf } from '../components/fare-sheet/journeys'
-import { useFareRouter } from '../hooks/use-fare-router'
 import {
   createRecoveryController,
   MAX_RECOVERY_ATTEMPTS,
@@ -541,7 +540,7 @@ export default function MapPage() {
   }, [authorMode, workingPoints])
 
   /*
-   * The rider's router, and which of its journeys is open.
+   * Which of the answer's journeys is open.
    *
    * Selection lives here rather than inside the fare sheet's result card
    * because on this route it is not a detail of the card: the overlay draws the
@@ -549,7 +548,6 @@ export default function MapPage() {
    * which are on screen with the sheet closed. Owning it here is what keeps the
    * corridor, the price and the open card describing one journey.
    */
-  const { router: fareRouter, routerReady: fareRouterReady, setRouter: setFareRouter } = useFareRouter()
   const [selectedJourney, setSelectedJourney] = useState(0)
 
   /*
@@ -582,19 +580,17 @@ export default function MapPage() {
       syncRouteUrl(fromId, toId)
     },
     // The map owns document.title through its own meta() export.
-    syncDocumentTitle: false,
-    alternatives: fareRouter === 'beta',
-    // Nothing goes out until the stored router is known — see useFareRouter.
-    gate: fareRouterReady
+    syncDocumentTitle: false
   })
   const fareResponse = fareQuery.fare
 
   /*
    * The journey the map is currently about.
    *
-   * journeysOf normalises both response shapes, so this is the primary route on
-   * `/fares` and the selected option on `/_internal/trips` — the overlay and the
-   * chip read it without either knowing which endpoint answered.
+   * journeysOf normalises both response shapes, so this is the selected option
+   * on `/_internal/trips` — and still the promoted primary of a `/fares` body
+   * served from a warm cache. The overlay and the chip read it without either
+   * knowing which shape answered.
    */
   const journeys = useMemo(
     () => (fareResponse?.data ? journeysOf(fareResponse.data) : []),
@@ -2930,8 +2926,6 @@ export default function MapPage() {
               }}
               criteria={fareQuery.criteria}
               onCriteriaChange={fareQuery.setCriteria}
-              router={fareRouter}
-              onRouterChange={setFareRouter}
               pairFromId={fareQuery.pairFromId}
               pairToId={fareQuery.pairToId}
             />
@@ -3435,13 +3429,9 @@ export default function MapPage() {
           /*
            * Phones only, now — every remaining opener is behind a !isDesktop
            * branch, because desktop's rail column carries the criteria, the
-           * router, the options, the share and the /fare link itself. The sheet
-           * is still the whole fare surface here, where there is no rail to move
-           * any of it to.
+           * options, the share and the /fare link itself. The sheet is still the
+           * whole fare surface here, where there is no rail to move any of it to.
            */
-          router={fareRouter}
-          onRouterChange={setFareRouter}
-          alternatives={fareRouter === 'beta'}
           // Selection is the map's, not the card's: see where it is declared.
           selectedIndex={selectedJourney}
           onSelectIndex={setSelectedJourney}

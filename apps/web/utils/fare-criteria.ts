@@ -22,11 +22,16 @@ export interface FareCriteria {
    * almost everyone wants; the explicit buckets are for "what will this cost me
    * tomorrow morning".
    *
-   * Deliberately a bucket and not a timestamp. The server only ever reduces
-   * `at` to peak/off-peak (`fareTimeBucket`), and the *router* is time-blind —
-   * `findRoute` takes no context and runs before fares are summed. A datetime
-   * picker would imply schedule-aware routing the app cannot do: pick 03:00 and
-   * it would still route you onto a corridor that stops running at 22:00.
+   * Still a bucket and not a timestamp, but no longer for the original reason.
+   * That reason was that the router was time-blind — true of `findRoute`, and
+   * false of `findRoutes`, which takes `departureS` and `serviceHours` and will
+   * not board a corridor that is shut. The app routes schedule-aware now, so a
+   * datetime picker would no longer promise something the engine cannot do.
+   *
+   * What still holds it back is the cache. The server reduces `at` to
+   * peak/off-peak (`fareTimeBucket`) and keys KV on that bucket, so a
+   * per-minute timestamp would split every entry and miss on nearly every
+   * request. Build the picker with a quantisation, or not at all.
    */
   fareTime: 'now' | 'peak' | 'offpeak'
   /**
@@ -38,21 +43,45 @@ export interface FareCriteria {
    *
    * An enum rather than a set of operators on purpose. TransJakarta is most of
    * the searchable network and the only way to reach LRT Jakarta, so rail-only
-   * is one deliberate alternative product rather than one filter among many —
-   * and only the beta router honours it, because `/fares` must keep answering
-   * the same thing for the embed and the OG card.
+   * is one deliberate alternative product rather than one filter among many.
+   * Only `/_internal/trips` honours it; `/fares` ignores it, because that
+   * endpoint must keep answering the same thing for the embed and the OG card.
    */
   modes: 'all' | 'rail'
+  /**
+   * How much the rider minds walking.
+   *
+   * A preference, not a speed. The engine has no duration model at all, so this
+   * cannot promise a journey takes longer at your pace — it only shifts which
+   * tradeoffs win, so a 600m transfer stops beating an extra change. Copy must
+   * say "I walk slowly", never a number of minutes.
+   *
+   * `AVOID` is steep rather than absolute: a short-walk option is still found
+   * and offered, just ranked below the alternatives. Nothing here can make a
+   * route disappear, which is why this is safe to default anyone into.
+   */
+  walking: WalkingPreference
   /** Restricts which stations the picker offers. `null` = every operator. */
   operator: OperatorCode | null
 }
 
 export const FARE_CRITERIA_KEY = 'fare-criteria'
 
+/*
+ * The four levels the engine ranks by. Re-declared rather than imported from
+ * @commute/tsundere: the web app does not depend on the engine package, and the
+ * set is a wire contract with the API either way.
+ */
+export type WalkingPreference = 'BRISK' | 'AVERAGE' | 'SLOW' | 'AVOID'
+export const WALKING_PREFERENCES: WalkingPreference[] = ['BRISK', 'AVERAGE', 'SLOW', 'AVOID']
+
 export const DEFAULT_FARE_CRITERIA: FareCriteria = {
   paymentMethod: 'STORED_VALUE',
   fareTime: 'now',
   modes: 'all',
+  // AVERAGE is the engine's own default weighting, so the default rider sends
+  // no param and gets exactly the ranking they got before this existed.
+  walking: 'AVERAGE',
   operator: null
 }
 
@@ -104,11 +133,14 @@ export function parseFareCriteria(raw: string | null): FareCriteria {
   // A stale code only ever over-filters the picker, which is visible and
   // recoverable; the "Semua" option is always there.
   const modes = record.modes === 'rail' ? 'rail' : DEFAULT_FARE_CRITERIA.modes
+  const walking = WALKING_PREFERENCES.includes(record.walking as WalkingPreference)
+    ? record.walking as WalkingPreference
+    : DEFAULT_FARE_CRITERIA.walking
   const operator = typeof record.operator === 'string'
     ? record.operator as OperatorCode
     : null
 
-  return { paymentMethod, fareTime, modes, operator }
+  return { paymentMethod, fareTime, modes, walking, operator }
 }
 
 /**
@@ -191,6 +223,9 @@ export function fareQueryParams(criteria: FareCriteria): URLSearchParams {
    * param, so a standard-router request is unaffected either way.
    */
   if (criteria.modes !== DEFAULT_FARE_CRITERIA.modes) params.set('modes', criteria.modes)
+  // Reorders the result; never removes one. Sent for the same reason as modes —
+  // it changes the answer, so it has to reach the server and the cache key.
+  if (criteria.walking !== DEFAULT_FARE_CRITERIA.walking) params.set('walking', criteria.walking)
   return params
 }
 
@@ -204,6 +239,9 @@ export function fareQueryParams(criteria: FareCriteria): URLSearchParams {
  *
  * - `paymentMethod` round-trips. It changes the number, so a shared link must
  *   reproduce what the sender saw.
+ * - `modes` round-trips too, and for the stronger version of that reason: it
+ *   changes which lines the route may use at all, so a rail-only link that came
+ *   back through a busway would show a different journey than the one sent.
  * - `operator` is read here but never written back. It scopes which stations
  *   the picker offers, which is a property of where you *entered* the app, not
  *   of the journey — FDTJ links riders straight to an operator-specific fare
@@ -227,6 +265,24 @@ export function readCriteriaFromUrl(params: URLSearchParams): Partial<FareCriter
   const paymentMethod = params.get('paymentMethod')
   if (paymentMethod && paymentMethod in PAYMENT_METHODS) {
     criteria.paymentMethod = paymentMethod as PaymentMethod
+  }
+
+  /*
+   * `modes` round-trips, where `operator` below does not.
+   *
+   * The asymmetry follows what each one does. An inherited operator hides
+   * stations from a recipient for a reason they cannot see, so it is read for
+   * the visit and never persisted. `modes` changes the ROUTE, so a shared
+   * rail-only link that quietly came back through a busway would show the
+   * recipient a different journey than the one the sender meant to send.
+   */
+  if (params.get('modes') === 'rail') criteria.modes = 'rail'
+
+  // Round-trips for the same reason modes does: a shared link should reproduce
+  // the ordering the sender was looking at.
+  const walking = params.get('walking')
+  if (walking && WALKING_PREFERENCES.includes(walking as WalkingPreference)) {
+    criteria.walking = walking as WalkingPreference
   }
 
   // `NUL` is excluded for the same reason a typo is: it is an internal

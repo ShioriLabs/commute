@@ -1,5 +1,5 @@
 import type { PaymentMethod } from '@commute/constants'
-import type { FareCriteria } from 'utils/fare-criteria'
+import type { FareCriteria, WalkingPreference } from 'utils/fare-criteria'
 
 /*
  * Display strings for the criteria bar and its sheets.
@@ -72,4 +72,34 @@ export const MODES_LABELS: Record<FareCriteria['modes'], string> = {
 export const MODES_DESCRIPTIONS: Record<FareCriteria['modes'], string> = {
   all: 'Pakai semua pilihan yang ada, termasuk TransJakarta',
   rail: 'Cuma kereta dan MRT/LRT. Beberapa rute jadi nggak ketemu, soalnya TransJakarta yang nyambungin'
+}
+
+/*
+ * How much the rider minds walking.
+ *
+ * Named for the rider, not the multiplier: "how many times worse than riding is
+ * a metre on foot" is not a question anyone can answer, while "I walk slowly"
+ * is. AVERAGE reads as "Biasa aja" rather than "Rata-rata" — this is a habit,
+ * not a statistic.
+ */
+export const WALKING_LABELS: Record<WalkingPreference, string> = {
+  BRISK: 'Jalan cepat',
+  AVERAGE: 'Biasa aja',
+  SLOW: 'Jalan santai',
+  AVOID: 'Males jalan'
+}
+
+/*
+ * Never a duration. The engine has no duration model — `edges.durationSeconds`
+ * is null on every row — so any wording like "5 menit lebih lama" would be a
+ * promise it cannot keep. These describe what the ranking does instead.
+ *
+ * AVOID says "sebisanya", not "nggak akan", because the search still offers a
+ * walking route when that is the only way through; it just ranks it last.
+ */
+export const WALKING_DESCRIPTIONS: Record<WalkingPreference, string> = {
+  BRISK: 'Nggak masalah jalan jauh kalau transitnya jadi lebih sedikit',
+  AVERAGE: 'Seimbang antara jalan kaki sama gonta-ganti kendaraan',
+  SLOW: 'Lebih milih rute yang jalan kakinya pendek',
+  AVOID: 'Hindari jalan kaki sebisanya, walau transitnya jadi lebih banyak'
 }

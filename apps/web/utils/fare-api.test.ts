@@ -69,27 +69,32 @@ describe('fareApiUrl', () => {
 })
 
 /*
- * The router toggle means both endpoints are warm for the same pair at the same
- * time — flipping it does not evict what the other one cached. These keys are
- * what keep the two bodies apart in SWR, in IndexedDB and in the service
- * worker, all three of which key on this exact string.
+ * `tripApiUrl` is the app's only fare key now, so the warm-cache invariant that
+ * mattered on `fareApiUrl` has to hold here instead: a default search must
+ * produce a byte-identical string forever, or every rider misses SWR, IndexedDB
+ * and the service worker at once on the deploy that changes it.
+ *
+ * `fareApiUrl` is still exercised above because the endpoint it builds is still
+ * live for the OG worker and anyone holding a shared link — the app just does
+ * not render it any more.
  */
-describe('tripApiUrl beside fareApiUrl', () => {
-  it('keys the same pair differently per endpoint', () => {
+describe('tripApiUrl', () => {
+  it('keys the same pair differently from the fare endpoint', () => {
     const fare = fareApiUrl('KCI-SUD', 'MRTJ-BLA', DEFAULT_FARE_CRITERIA)
     const trip = tripApiUrl('KCI-SUD', 'MRTJ-BLA', DEFAULT_FARE_CRITERIA)
     expect(trip).not.toBe(fare)
     expect(trip).toContain('/_internal/trips/KCI-SUD/MRTJ-BLA')
   })
 
-  it('carries no router param on either endpoint', () => {
-    // The router picks the path; it is never a query param on the API call, or
-    // it would split the cache on a value the server does not read.
-    expect(fareApiUrl('KCI-SUD', 'MRTJ-BLA', DEFAULT_FARE_CRITERIA)).not.toContain('router')
-    expect(tripApiUrl('KCI-SUD', 'MRTJ-BLA', DEFAULT_FARE_CRITERIA)).not.toContain('router')
-  })
-
   it('keeps the default-criteria silence on the trip endpoint too', () => {
     expect(tripApiUrl('KCI-SUD', 'MRTJ-BLA', DEFAULT_FARE_CRITERIA)).not.toContain('?')
+  })
+
+  // The one param that reaches the router and changes the answer, so it must
+  // reach the key too — see fareQueryParams.
+  it('carries modes when the rider asked for rail only', () => {
+    const rail = tripApiUrl('KCI-SUD', 'MRTJ-BLA', { ...DEFAULT_FARE_CRITERIA, modes: 'rail' })
+    expect(rail).toContain('modes=rail')
+    expect(rail).not.toBe(tripApiUrl('KCI-SUD', 'MRTJ-BLA', DEFAULT_FARE_CRITERIA))
   })
 })
