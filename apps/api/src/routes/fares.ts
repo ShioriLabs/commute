@@ -6,7 +6,7 @@ import { assembleJourney, planJourney } from 'utils/fare-journey'
 import { handleJourneyRequest, journeyCacheKey } from 'utils/journey-endpoint'
 import { ENDPOINT_RESTRICTIONS, SERVICE_BREAKS } from 'db/data/topology'
 import { loadGraph, type Tsundere } from '@commute/tsundere'
-import { HEADWAYS_S } from 'db/data/headways'
+import { HEADWAYS_S, STOP_HEADWAYS_S } from 'db/data/headways'
 import { doc, pathParam, queryParam } from 'schemas/describe'
 import { FareResultSchema, type FareResult } from '@commute/schemas'
 
@@ -41,7 +41,12 @@ export async function getRouter(d1: D1Database): Promise<Tsundere> {
     serviceBreaks,
     // Read by findRoutes to price the expected wait per boarding, which is what
     // separates journeys that are otherwise equal on distance and changes.
-    headwaysS: new Map(Object.entries(HEADWAYS_S))
+    //
+    // One map, two key shapes: `lineCode@stationId` wins where a stop has its own
+    // measured value, `lineCode` is the fallback. The planner tries them in that
+    // order, so the per-stop entries must not shadow a line key of the same name
+    // (they cannot — `@` is not legal in a line code).
+    headwaysS: new Map([...Object.entries(HEADWAYS_S), ...Object.entries(STOP_HEADWAYS_S)])
   })
   return cachedRouter
 }

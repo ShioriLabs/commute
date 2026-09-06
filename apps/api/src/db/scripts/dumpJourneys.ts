@@ -4,7 +4,7 @@ import { loadGraph } from '@commute/tsundere'
 import type { RouteLeg } from '@commute/tsundere'
 import { summarizeFares } from '../../utils/fare-summary'
 import { mergeInterlinedLegs } from '../../utils/interlining'
-import { HEADWAYS_S } from '../data/headways'
+import { HEADWAYS_S, STOP_HEADWAYS_S } from '../data/headways'
 import { ENDPOINT_RESTRICTIONS } from '../data/topology'
 
 /*
@@ -76,7 +76,7 @@ const tsun = loadGraph({
     stationId: `${r.operator}-${r.station}`,
     forbiddenNeighborId: `${r.operator}-${r.forbiddenNeighbor}`
   })),
-  headwaysS: new Map(Object.entries(HEADWAYS_S))
+  headwaysS: new Map([...Object.entries(HEADWAYS_S), ...Object.entries(STOP_HEADWAYS_S)])
 })
 
 const context = {

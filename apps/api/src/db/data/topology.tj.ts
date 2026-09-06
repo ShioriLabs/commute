@@ -33,24 +33,7 @@ export const TJ_TOPOLOGY: LineTopology[] = [
       { station: 'H00281P', pos: '', cumM: 3002 },
       { station: 'H00280P', pos: '', cumM: 3485 },
       { station: 'H00278P', pos: '', cumM: 4104 },
-      /*
-       * Monas, not Petojo.
-       *
-       * The GTFS feed routes koridor 1 northbound via Petojo `H00170P`, but the
-       * poster draws K1 straight down past Monas `H00131P` — and the map is
-       * authoritative for where a halte sits (docs/fdtj-map-points.md). Petojo
-       * lies 224 units WEST of the Harmoni→Kebon Sirih alignment and belongs to
-       * koridors 2A and 3, which is why a K1 trace through it jumped onto their
-       * yellow stroke, and why routing Masjid Agung→Glodok detoured through it.
-       *
-       * `pathReverse` below already used Monas, so the two directions of one
-       * corridor disagreed: southbound was right, northbound was not.
-       *
-       * cumM interpolated between Harmoni (4104) and Kebon Sirih (9182) at the
-       * same fraction the reverse path puts Monas at between its own two
-       * neighbours, so the edge distances stay consistent in both directions.
-       */
-      { station: 'H00131P', pos: '', cumM: 5730 },
+      { station: 'H00170P', pos: '', cumM: 6163 },
       { station: 'H00268S', pos: '', cumM: 9182 },
       { station: 'H00207P', pos: '', cumM: 9636 },
       { station: 'H00022P', pos: '', cumM: 10229 },
@@ -524,27 +507,27 @@ export const TJ_TOPOLOGY: LineTopology[] = [
     operator: 'TJ',
     lineCode: '6A',
     path: [
-      { station: 'H00191P', pos: '', cumM: 0 },
-      { station: 'H00044P', pos: '', cumM: 1551 },
-      { station: 'H00221P', pos: '', cumM: 1989 },
-      { station: 'H00081P', pos: '', cumM: 2680 },
-      { station: 'H00158P', pos: '', cumM: 3545 },
-      { station: 'H00021P', pos: '', cumM: 4008 },
-      { station: 'H00262P', pos: '', cumM: 5391 },
-      { station: 'H00075P', pos: '', cumM: 6031 },
-      { station: 'H00049P', pos: '', cumM: 6563 },
-      { station: 'H00123P', pos: '', cumM: 7648 },
-      { station: 'H00115P', pos: '', cumM: 8647 },
-      { station: 'H00154P', pos: '', cumM: 9065 },
-      { station: 'H00043P', pos: '', cumM: 9519 },
-      { station: 'H00069P', pos: '', cumM: 10323 },
-      { station: 'H00098P', pos: '', cumM: 10900 },
-      { station: 'H00114P', pos: '', cumM: 11262 },
-      { station: 'H00215P', pos: '', cumM: 11735 },
-      { station: 'H00251P', pos: '', cumM: 13748 },
-      { station: 'H00047P', pos: '', cumM: 14759 },
-      { station: 'H00099P', pos: '', cumM: 15553 },
-      { station: 'H00120S', pos: '', cumM: 17531 }
+      { station: 'H00191P', pos: '' },
+      { station: 'H00044P', pos: '' },
+      { station: 'H00221P', pos: '' },
+      { station: 'H00081P', pos: '' },
+      { station: 'H00158P', pos: '' },
+      { station: 'H00021P', pos: '' },
+      { station: 'H00262P', pos: '' },
+      { station: 'H00075P', pos: '' },
+      { station: 'H00049P', pos: '' },
+      { station: 'H00123P', pos: '' },
+      { station: 'H00115P', pos: '' },
+      { station: 'H00154P', pos: '' },
+      { station: 'H00043P', pos: '' },
+      { station: 'H00069P', pos: '' },
+      { station: 'H00098P', pos: '' },
+      { station: 'H00114P', pos: '' },
+      { station: 'H00215P', pos: '' },
+      { station: 'H00022P', pos: '' },
+      { station: 'H00207P', pos: '' },
+      { station: 'H00267S', pos: '' },
+      { station: 'H00268S', pos: '' }
     ],
     pathReverse: [
       { station: 'H00006P', pos: '', cumM: 0 },
@@ -1011,50 +994,6 @@ export const TJ_TOPOLOGY: LineTopology[] = [
       { station: 'H00165P', pos: '', cumM: 17772 },
       { station: 'H00051P', pos: '', cumM: 18290 },
       { station: 'H00240P', pos: '', cumM: 19874 }
-    ]
-  },
-  {
-    operator: 'TJ',
-    lineCode: '10D',
-    path: [
-      { station: 'H00240P', pos: '', cumM: 0 },
-      { station: 'H00051P', pos: '', cumM: 1166 },
-      { station: 'H00165P', pos: '', cumM: 1729 },
-      { station: 'H00261S', pos: '', cumM: 2229 },
-      { station: 'H00175P', pos: '', cumM: 3299 },
-      { station: 'H00233P', pos: '', cumM: 4947 },
-      { station: 'H00263P', pos: '', cumM: 7334 },
-      { station: 'H00032P', pos: '', cumM: 7840 },
-      { station: 'H00033P', pos: '', cumM: 8819 },
-      { station: 'H00188P', pos: '', cumM: 9131 },
-      { station: 'H00100P', pos: '', cumM: 10298 },
-      { station: 'H00160P', pos: '', cumM: 10896 },
-      { station: 'H00256P', pos: '', cumM: 11433 },
-      { station: 'H00147P', pos: '', cumM: 24210 },
-      { station: 'H00196P', pos: '', cumM: 25201 },
-      { station: 'H00056P', pos: '', cumM: 25782 },
-      { station: 'H00239S', pos: '', cumM: 26736 },
-      { station: 'H00096P', pos: '', cumM: 29772 }
-    ],
-    pathReverse: [
-      { station: 'H00096P', pos: '', cumM: 0 },
-      { station: 'H00238S', pos: '', cumM: 1126 },
-      { station: 'H00056P', pos: '', cumM: 2135 },
-      { station: 'H00196P', pos: '', cumM: 2801 },
-      { station: 'H00147P', pos: '', cumM: 3786 },
-      { station: 'H00256P', pos: '', cumM: 16016 },
-      { station: 'H00160P', pos: '', cumM: 16551 },
-      { station: 'H00100P', pos: '', cumM: 17148 },
-      { station: 'H00188P', pos: '', cumM: 18317 },
-      { station: 'H00033P', pos: '', cumM: 18631 },
-      { station: 'H00032P', pos: '', cumM: 19615 },
-      { station: 'H00263P', pos: '', cumM: 20123 },
-      { station: 'H00233P', pos: '', cumM: 22497 },
-      { station: 'H00175P', pos: '', cumM: 24156 },
-      { station: 'H00260S', pos: '', cumM: 25232 },
-      { station: 'H00165P', pos: '', cumM: 25753 },
-      { station: 'H00051P', pos: '', cumM: 26271 },
-      { station: 'H00240P', pos: '', cumM: 27844 }
     ]
   },
   {

@@ -357,8 +357,7 @@ export const TJ_TOPOLOGY_OVERRIDES: LineTopology[] = [
       { station: 'H00114P', pos: '', cumM: 10850 },
       { station: 'H00215P', pos: '', cumM: 11320 },
       { station: 'H00118P', pos: '', cumM: 12087 },
-      { station: 'H00073P', pos: '', cumM: 12768 },
-      { station: 'H00283P', pos: '', cumM: 13876 }
+      { station: 'H00283P', pos: '', cumM: 12599 }
     ],
     pathReverse: [
       { station: 'H00283P', pos: '', cumM: 0 },

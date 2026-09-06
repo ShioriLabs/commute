@@ -103,6 +103,32 @@ describe('findRoutes', () => {
     expect(journeys[0]!.criteria.waitS).toBe(600)
   })
 
+  /*
+   * How often a vehicle passes is a property of the STOP, not the line: a TJ
+   * corridor's short-turns only serve its inner haltes, and rail departures thin
+   * out toward a terminus. A `lineCode@stopId` entry therefore beats the bare
+   * line key, and the line key stays the fallback for every other stop.
+   */
+  it('prefers a per-stop headway over the line-level one', () => {
+    const tsun = loadGraph({
+      edges,
+      transfers,
+      headwaysS: new Map([['X', 600], ['X@KCI-A', 120]])
+    })
+    // Boarding happens at KCI-A, which carries its own value: 120 / 2.
+    expect(tsun.findRoutes('KCI-A', 'KCI-C')[0]!.criteria.waitS).toBe(60)
+  })
+
+  it('falls back to the line headway at a stop with no value of its own', () => {
+    const tsun = loadGraph({
+      edges,
+      transfers,
+      // A per-stop entry for a stop this journey never boards at.
+      headwaysS: new Map([['X', 600], ['X@KCI-Z', 120]])
+    })
+    expect(tsun.findRoutes('KCI-A', 'KCI-C')[0]!.criteria.waitS).toBe(300)
+  })
+
   it('honours a walking preference', () => {
     const tsun = loadGraph({ edges, transfers })
     // Both preferences must still FIND the journey; only the order may differ.
