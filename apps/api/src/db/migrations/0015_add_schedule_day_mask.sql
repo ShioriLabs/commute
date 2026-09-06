@@ -28,3 +28,20 @@ CREATE INDEX IF NOT EXISTS idx_station_daymask_departure
   ON schedules(stationId, dayMask, estimatedDeparture);
 
 DROP INDEX IF EXISTS idx_station_departure;
+
+-- Retire the LRT Jabodebek rows written under the old id grammar.
+--
+-- Those ids look like `LRTJBDB-SET-BK-1-JTM`; the regenerated files write
+-- `LRTJBDB-SET-BK-WD-1-JTM` and scope their DELETE to `...-BK-WD-%-JTM`. The
+-- new pattern therefore cannot match the old rows, so without this the next
+-- load would leave the previous board sitting beside the new one and every LRT
+-- Jabodebek station would report its departures twice.
+--
+-- Safe to run before the new files are applied: the station is briefly without
+-- a board, and `pnpm generate:lrtjbdbtimetable` + applying the 48 committed
+-- `lrtjbdb_*_WD_timetable.sql` files restores it. Matching on the id prefix
+-- rather than on `stationId` keeps every other operator's rows untouched.
+DELETE FROM schedules
+WHERE id LIKE 'LRTJBDB-%'
+  AND id NOT LIKE 'LRTJBDB-%-WD-%'
+  AND id NOT LIKE 'LRTJBDB-%-WE-%';

@@ -8,11 +8,17 @@ committed SQL under `src/db/scripts/`.
 
 ## File format
 
-- Name: `<STATION>_<LINE>_<DEST>.csv`, e.g. `SET_BK_JTM.csv`
-  (Setiabudi, Lin Bekasi, towards Jatimulya).
+- Name: `<STATION>_<LINE>_<DEST>_<DAY>.csv`, e.g. `SET_BK_JTM_WD.csv`
+  (Setiabudi, Lin Bekasi, towards Jatimulya, weekday board).
 - Content: one departure per line, 24-hour `H:MM` or `HH:MM`, in poster order
   (ascending). Blank lines are ignored.
 - Line codes: `BK` (Lin Bekasi), `CB` (Lin Cibubur).
+- Day codes: `WD` (Senin-Jumat), `WE` (Sabtu-Minggu). LRT Jabodebek publishes one
+  weekend board rather than separate Saturday and Sunday ones.
+
+  The day is **required**. A weekend file that lost its suffix would load as
+  weekday data and its `DELETE` would wipe the real weekday board, so the
+  generator refuses to parse a filename without one rather than guessing.
 - Destination codes: `JTM` (Jatimulya), `HAR` (Harjamukti), `DKA` (Dukuh Atas BSI).
 
 ## Workflow
@@ -27,22 +33,28 @@ committed SQL under `src/db/scripts/`.
    ```
 
 3. Apply (from `apps/api`; each file first deletes the rows it owns —
-   station + line + direction — so re-applying over an already-loaded station
-   is safe):
+   station + line + direction + day — so re-applying over an already-loaded
+   station is safe, and loading one day never disturbs the other):
 
    ```sh
-   wrangler d1 execute commute --local --file=src/db/scripts/lrtjbdb_<...>_timetable.sql
-   wrangler d1 execute commute --remote --file=src/db/scripts/lrtjbdb_<...>_timetable.sql
+   wrangler d1 execute commute --local --file=src/db/scripts/lrtjbdb_<...>_<DAY>_timetable.sql
+   wrangler d1 execute commute --remote --file=src/db/scripts/lrtjbdb_<...>_<DAY>_timetable.sql
    ```
 
 ## Sources
 
 | Batch | IG post | Poster date |
 | ----- | ------- | ----------- |
-| All 26 `*_BK_*` files | https://www.instagram.com/lrt_jabodebek/p/DZ-eJKrDzME/ (weekday tables; carousel of 12 slides) | effective 15 Juni 2026 |
-| All 22 `*_CB_*` files | https://www.instagram.com/lrt_jabodebek/p/DZ-eIyAj2MY/ (weekday tables; carousel of 12 slides) | effective 15 Juni 2026 |
+| All 26 `*_BK_*_WD` files | https://www.instagram.com/lrt_jabodebek/p/DZ-eJKrDzME/ (weekday tables; carousel of 12 slides) | effective 15 Juni 2026 |
+| All 22 `*_CB_*_WD` files | https://www.instagram.com/lrt_jabodebek/p/DZ-eIyAj2MY/ (weekday tables; carousel of 12 slides) | effective 15 Juni 2026 |
+| `*_WE` files | **not yet transcribed** — the operator publishes a weekend board; find its poster and add it here | — |
 
 ## Transcription checklist
+
+48 combos **per day type**. The `WD` column below is complete; `WE` is the
+outstanding work and needs the same 48 files with a `_WE` suffix. The generator
+reports the per-day counts on every run, so the backlog is a number rather than
+something to count by eye.
 
 48 combos. Termini (JTM, HAR, DKA) only depart in one direction; DKA appears on
 both lines.
