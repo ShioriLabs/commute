@@ -35,43 +35,93 @@ export function formatHeadway(seconds: number): string {
   return `Setiap ~${minutes} menit`
 }
 
-function FrequencyRow({ row }: { row: HeadwayRow }) {
+function directionLabel(row: HeadwayRow): string | null {
+  return row.boundFor ? `arah ${row.boundFor}` : null
+}
+
+/*
+ * One corridor, one or two rows.
+ *
+ * Two when its directions genuinely differ — the API only labels those — and the
+ * halte page cannot pick one for the rider, who has not chosen a destination yet.
+ * The roundel is drawn ONCE for the corridor rather than per row: repeating it
+ * would read as two different lines rather than two directions of one.
+ *
+ * "arah <terminus>" matches the wording on the halte's own PIDS ("Karet Kuningan
+ * arah Galunggung"), so the app and the board agree. The station's own name is
+ * deliberately absent — the page header carries it, and 30 haltes have a compass
+ * "Arah" in their NAME already (`Kota Bambu Arah Utara`), a different sense of
+ * the word that would collide if both appeared in one line.
+ */
+function CorridorRows({ rows }: { rows: readonly HeadwayRow[] }) {
   const { line: lookupLine } = useLines()
-  const resolved = lookupLine(row.line)
-  const lineCode = codeOfLineKey(row.line)
-  const operator = operatorOfLineKey(row.line)
+  const first = rows[0]!
+  const resolved = lookupLine(first.line)
+  const lineCode = codeOfLineKey(first.line)
+  const operator = operatorOfLineKey(first.line)
   // Same fallback as LineCard: render the bare code in neutral grey rather than
   // blanking while /operators is still in flight.
   const lineName = resolved?.name ?? (lineCode || 'Lin lain')
   const lineColor = resolved?.colorCode ?? '#94a3b8'
 
-  const frequency = row.weekendOnly || row.headwayS === null
-    ? 'Akhir pekan saja'
-    : formatHeadway(row.headwayS)
+  // One unlabelled row sits inline beside the corridor name; anything with a
+  // direction label needs its own line under it.
+  const inline = rows.length === 1 && !rows[0]!.boundFor
+
+  const frequencyOf = (row: HeadwayRow) => (
+    row.weekendOnly || row.headwayS === null ? 'Akhir pekan saja' : formatHeadway(row.headwayS)
+  )
 
   return (
     <li
-      /*
-       * items-start, not items-center: a two-line corridor name would otherwise
-       * push the roundel to the middle of the pair, leaving it hanging between
-       * the lines. The roundel belongs to the name's FIRST line — that is where
-       * the eye enters the row — so it is pinned there and centred against that
-       * line's box rather than the whole cell.
-       */
-      className="flex flex-row items-start gap-3 px-4 py-3 border-b-2 border-white last:border-b-0"
+      className="border-b-2 border-white last:border-b-0"
       style={{ backgroundColor: getTintFromColor(lineColor, 0.1) }}
     >
-      {/* Roundel is 36px (MD), the text line-box 24px: -6px centres it on that line. */}
-      <span className="shrink-0 -my-1.5">
-        <LineRoundel code={lineCode} color={lineColor as `#${string}`} operator={operator} />
-      </span>
       {/*
-        * The name yields and the frequency does not: the frequency is a short
-        * fixed phrase and the whole reason the row exists, so it keeps one line
-        * while a long corridor name wraps around it.
+        * items-start, never items-center: the roundel and the frequency belong to
+        * the name's FIRST line — that is where the eye enters the row — and a name
+        * that wraps to two lines would otherwise leave them floating in the middle
+        * of the pair. Vertical centring on a one-line row comes from equal padding
+        * instead, which holds however the name wraps.
+        *
+        * The padding closes up when a direction list follows, since that list
+        * supplies the space below.
         */}
-      <span className="font-bold text-base min-w-0">{lineName}</span>
-      <span className="ml-auto shrink-0 text-sm font-semibold text-slate-700 whitespace-nowrap">{frequency}</span>
+      <div className={`flex flex-row items-start gap-3 px-4 ${inline ? 'py-3' : 'pt-3 pb-1'}`}>
+        {/* SM is 24px, matching the 16px name's line-box, so it needs no vertical
+            nudge to sit on that first line. */}
+        <span className="shrink-0">
+          <LineRoundel code={lineCode} color={lineColor as `#${string}`} operator={operator} size="SM" />
+        </span>
+        <span className="font-bold text-base min-w-0">{lineName}</span>
+        {inline && (
+          /*
+           * The name yields and the frequency does not: the frequency is a short
+           * fixed phrase and the whole reason the row exists, so it keeps one line
+           * while a long corridor name wraps around it.
+           */
+          <span className="ml-auto shrink-0 text-sm font-semibold text-slate-700 whitespace-nowrap leading-6">
+            {frequencyOf(first)}
+          </span>
+        )}
+      </div>
+      {/*
+        * Directions indent to the name column, under the roundel that owns them.
+        * Rendered whenever a row carries a label — including a SINGLE labelled row,
+        * which is a halte the corridor only passes one way. Keying this on the label
+        * rather than the row count is what stops a one-way stop from silently
+        * reporting its frequency as though it applied in both directions.
+        */}
+      <ul className={inline ? 'hidden' : 'pb-2'}>
+        {rows.map(row => (
+          <li key={row.boundFor ?? row.line} className="flex flex-row items-baseline gap-3 pl-13 pr-4 py-0.5">
+            <span className="text-sm text-slate-700 min-w-0">{directionLabel(row)}</span>
+            <span className="ml-auto shrink-0 text-sm font-semibold text-slate-700 whitespace-nowrap">
+              {frequencyOf(row)}
+            </span>
+          </li>
+        ))}
+      </ul>
     </li>
   )
 }
@@ -83,10 +133,19 @@ interface Props {
 export default function FrequencyList({ rows }: Props) {
   if (rows.length === 0) return null
 
+  // Two rows of one corridor arrive adjacent and share a `line`; group them so the
+  // roundel and name are drawn once.
+  const byLine: HeadwayRow[][] = []
+  for (const row of rows) {
+    const last = byLine[byLine.length - 1]
+    if (last && last[0]!.line === row.line) last.push(row)
+    else byLine.push([row])
+  }
+
   return (
     <section aria-label="Frekuensi kendaraan di halte ini">
       <ul className="rounded-xl overflow-hidden shadow-lg">
-        {rows.map(row => <FrequencyRow key={row.line} row={row} />)}
+        {byLine.map(group => <CorridorRows key={group[0]!.line} rows={group} />)}
       </ul>
       <p className="mt-3 px-1 text-sm text-gray-600">
         Hanya perkiraan. Harap cek layar halte atau tanyakan pramusapa

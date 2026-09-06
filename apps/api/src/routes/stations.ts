@@ -22,7 +22,7 @@ import * as v from 'valibot'
 import { doc, operatorParam, pathParam, queryParam, stationCodeParam, timeWindowParams } from 'schemas/describe'
 import { CompactGroupedTimetableSchema, GroupedTimetableSchema, HeadwayRowSchema, ScheduleSchema, StationSchema, TransferSchema } from '@commute/schemas'
 import type { HeadwayRow } from '@commute/schemas'
-import { HEADWAYS_S, STOP_HEADWAYS_S, WEEKEND_ONLY_LINES } from 'db/data/headways'
+import { DIRECTIONAL_HEADWAYS_S, HEADWAYS_S, LINE_TERMINI, STOP_HEADWAYS_S, WEEKEND_ONLY_LINES } from 'db/data/headways'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -637,6 +637,30 @@ app.get(
     }
 
     const weekendOnly = new Set<string>(WEEKEND_ONLY_LINES)
+    /*
+     * Terminus names for any line whose two directions differ here. Resolved from
+     * the stations table rather than baked into the generated data, so renaming a
+     * station does not need a regeneration — one extra query, and only when a
+     * split actually applies at this station.
+     */
+    const splitLines = station.lines.filter((key) => {
+      const lineCode = key.slice(key.indexOf(':') + 1)
+      return DIRECTIONAL_HEADWAYS_S[`${lineCode}@${station.id}@F`] !== undefined
+        || DIRECTIONAL_HEADWAYS_S[`${lineCode}@${station.id}@R`] !== undefined
+    })
+    const terminusName = new Map<string, string>()
+    if (splitLines.length > 0) {
+      const ids = new Set<string>()
+      for (const key of splitLines) {
+        const t = LINE_TERMINI[key.slice(key.indexOf(':') + 1)]
+        if (t) {
+          ids.add(t.F)
+          ids.add(t.R)
+        }
+      }
+      for (const s of await stationRepository.getByIds([...ids])) terminusName.set(s.id, s.name)
+    }
+
     const rows: HeadwayRow[] = []
     for (const key of station.lines) {
       const lineCode = key.slice(key.indexOf(':') + 1)
@@ -644,6 +668,27 @@ app.get(
         rows.push({ line: key, headwayS: null, source: 'LINE', weekendOnly: true })
         continue
       }
+
+      /*
+       * Directional rows, when the generated table has anything to say about this
+       * (line, stop). Two entries mean the directions genuinely differ and the
+       * rider — who has not chosen a destination yet — is shown both. ONE entry
+       * means the corridor only passes here in that direction, so the single row
+       * gets labelled rather than silently reporting a one-way frequency as if it
+       * applied both ways.
+       */
+      const directional = (['F', 'R'] as const)
+        .map(dir => ({ dir, headwayS: DIRECTIONAL_HEADWAYS_S[`${lineCode}@${station.id}@${dir}`] }))
+        .filter((entry): entry is { dir: 'F' | 'R', headwayS: number } => entry.headwayS !== undefined)
+      if (directional.length > 0) {
+        const termini = LINE_TERMINI[lineCode]
+        for (const { dir, headwayS } of directional) {
+          const boundFor = termini ? terminusName.get(termini[dir]) : undefined
+          rows.push({ line: key, headwayS, source: 'STOP', ...(boundFor ? { boundFor } : {}) })
+        }
+        continue
+      }
+
       const perStop = STOP_HEADWAYS_S[`${lineCode}@${station.id}`]
       if (perStop !== undefined) {
         rows.push({ line: key, headwayS: perStop, source: 'STOP' })

@@ -142,6 +142,10 @@ export const HeadwayRowSchema = v.pipe(
     weekendOnly: v.pipe(
       v.optional(v.literal(true)),
       v.description('Ada dan bernilai `true` kalau linnya cuma beroperasi Sabtu-Minggu.')
+    ),
+    boundFor: v.pipe(
+      v.optional(v.string()),
+      v.description('Nama halte tujuan akhir buat arah ini, kayak yang ada di papan halte ("arah Galunggung"). Cuma ada kalau dua arahnya beda frekuensi — kalau nggak ada, angkanya berlaku buat dua-duanya.')
     )
   }),
   v.title('HeadwayRow'),

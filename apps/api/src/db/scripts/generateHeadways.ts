@@ -114,6 +114,80 @@ const combine = (headways: number[]): number => 1 / headways.reduce((sum, h) => 
 /** Key for the per-stop map. Station ids carry their operator prefix. */
 const stopKey = (lineCode: string, stationId: string) => `${lineCode}@${stationId}`
 
+/** Direction of travel along a corridor. `F` follows TOPOLOGY `path`, `R` `pathReverse`. */
+type Direction = 'F' | 'R'
+
+/** Key for the per-direction map. */
+const dirKey = (lineCode: string, stationId: string, dir: Direction) =>
+  `${stopKey(lineCode, stationId)}@${dir}`
+
+/*
+ * Stop order along each direction of a TJ corridor, for classifying trips.
+ *
+ * `pathReverse` is NOT the mirror of `path` on TJ — a corridor's two directions
+ * genuinely serve different stops (verified on 10H). Scoring a trip against the
+ * forward index alone therefore misclassifies most of them, because reverse-only
+ * stops are invisible to it. Both indices are needed.
+ */
+function directionIndices(): Map<string, { F: Map<string, number>, R: Map<string, number> }> {
+  const out = new Map<string, { F: Map<string, number>, R: Map<string, number> }>()
+  for (const line of TOPOLOGY) {
+    if (line.operator !== 'TJ') continue
+    const reverse = line.pathReverse ?? line.path
+    out.set(line.lineCode, {
+      F: new Map(line.path.map((s, i) => [s.station, i])),
+      R: new Map(reverse.map((s, i) => [s.station, i]))
+    })
+  }
+  return out
+}
+
+/*
+ * How well an ordered stop sequence fits one direction's stop order.
+ *
+ * Two factors, multiplied: how monotonically increasing the matched indices are
+ * (a trip running this direction visits stops in path order), and how much of the
+ * trip the path explains at all (a short-turn that only touches a few stops of the
+ * reverse path should not outscore the direction it actually runs).
+ */
+function fitScore(sequence: string[], order: Map<string, number>): number {
+  const indices = sequence.map(s => order.get(s)).filter((v): v is number => v !== undefined)
+  if (indices.length < 2) return -1
+  let ascending = 0
+  for (let i = 1; i < indices.length; i++) if (indices[i]! > indices[i - 1]!) ascending++
+  return (ascending / (indices.length - 1)) * Math.min(1, indices.length / sequence.length)
+}
+
+/*
+ * Which direction(s) a trip serves.
+ *
+ * Returns BOTH when the trip cannot be pinned to one — a loop run genuinely covers
+ * both directions in a single circuit (66 of them, each covering the two paths at
+ * near-equal rates), and an unclassifiable trip degrades to the combined figure
+ * rather than being guessed into one direction.
+ *
+ * GTFS `direction_id` is deliberately unused: it is broken in this feed. Koridor 5's
+ * `5-R01` (Kampung Melayu->Ancol) and `5-R02` (Ancol->Kampung Melayu) are opposite
+ * directions BOTH labelled `direction_id=0`, and 29 of 94 in-scope lines carry only
+ * one value at all.
+ */
+function tripDirections(
+  sequence: string[],
+  order: { F: Map<string, number>, R: Map<string, number> } | undefined
+): Direction[] {
+  const BOTH: Direction[] = ['F', 'R']
+  if (!order || sequence.length < 2) return BOTH
+  // A circuit returning to where it started serves both directions in one run.
+  if (sequence[0] === sequence[sequence.length - 1]) return BOTH
+
+  const forward = fitScore(sequence, order.F)
+  const reverse = fitScore(sequence, order.R)
+  const CONFIDENT = 0.6
+  if (forward >= reverse && forward > CONFIDENT) return ['F']
+  if (reverse > forward && reverse > CONFIDENT) return ['R']
+  return BOTH
+}
+
 /*
  * (line, station) pairs the curated topology actually serves.
  *
@@ -134,9 +208,51 @@ function topologyPairs(): Set<string> {
   return pairs
 }
 
+/*
+ * The same gate, per direction: which (line, stop, direction) triples the topology
+ * actually serves.
+ *
+ * Needed because a loop trip touches a stop in both directions of its circuit while
+ * the corridor may only SERVE it one way — 28% of pairs are single-direction. Without
+ * this, such a stop would advertise a frequency for a direction no service calls in,
+ * which is the same failure the combined gate above exists to prevent.
+ */
+/*
+ * Terminus station id per line and direction, for the "arah ..." labels a halte
+ * page shows and for suppressing the split at a terminus itself.
+ */
+function lineTerminiMap(): Map<string, { F: string, R: string }> {
+  const out = new Map<string, { F: string, R: string }>()
+  for (const line of TOPOLOGY) {
+    if (line.operator !== 'TJ') continue
+    const reverse = line.pathReverse ?? [...line.path].reverse()
+    out.set(line.lineCode, {
+      F: `${line.operator}-${line.path[line.path.length - 1]!.station}`,
+      R: `${line.operator}-${reverse[reverse.length - 1]!.station}`
+    })
+  }
+  return out
+}
+
+function topologyDirectionPairs(): Set<string> {
+  const pairs = new Set<string>()
+  for (const line of TOPOLOGY) {
+    if (line.operator !== 'TJ') continue
+    const reverse = line.pathReverse ?? line.path
+    for (const stop of line.path) pairs.add(dirKey(line.lineCode, `${line.operator}-${stop.station}`, 'F'))
+    for (const stop of reverse) pairs.add(dirKey(line.lineCode, `${line.operator}-${stop.station}`, 'R'))
+  }
+  return pairs
+}
+
 interface Derived {
   /** Per-(line, station) headway, seconds. */
   perStop: Map<string, number>
+  /**
+   * Per-(line, station, direction), seconds — ONLY where the two directions
+   * differ. Absent means both directions equal the `perStop` value.
+   */
+  perDirection: Map<string, number>
   /** Per-line fallback, seconds. */
   perLine: Map<string, number>
   /** Lines whose only service runs at the weekend — no weekday headway exists. */
@@ -155,7 +271,8 @@ interface Derived {
  * on the short name would silently drop every headway the day a feed makes the
  * two differ.
  */
-function tjHeadways(topology: Set<string>): Derived {
+function tjHeadways(topology: Set<string>, topologyByDirection: Set<string>): Derived {
+  const lineTermini = lineTerminiMap()
   const trips = new Map(load('trips.txt').map(t => [t.trip_id!, t]))
   const scopedRoutes = new Set(
     load('routes.txt').filter(r => SCOPE_DESC.has(r.route_desc!)).map(r => r.route_id!)
@@ -196,23 +313,44 @@ function tjHeadways(topology: Set<string>): Derived {
     return stop?.parent_station ? stop.parent_station : id
   }
 
-  const perStopHeadways = new Map<string, number[]>()
-  const perLineHeadways = new Map<string, number[]>()
-  const seenOnTrip = new Set<string>()
+  /*
+   * Ordered stop sequence per trip. Direction is decided from the whole sequence,
+   * not stop by stop, so the rows are gathered before anything is accumulated.
+   * Collapsed ids here, matching what `stations.id` carries.
+   */
+  const sequences = new Map<string, { seq: number, station: string }[]>()
   for (const row of load('stop_times.txt')) {
-    const headways = weekdayHeadways.get(row.trip_id!)
-    if (!headways) continue
-    const trip = trips.get(row.trip_id!)!
-    const stationId = `TJ-${collapse(row.stop_id!)}`
+    if (!weekdayHeadways.has(row.trip_id!)) continue
+    const list = sequences.get(row.trip_id!) ?? []
+    list.push({ seq: Number(row.stop_sequence), station: collapse(row.stop_id!) })
+    sequences.set(row.trip_id!, list)
+  }
+  for (const list of sequences.values()) list.sort((a, b) => a.seq - b.seq)
+
+  const indices = directionIndices()
+  const perStopHeadways = new Map<string, number[]>()
+  const perDirHeadways = new Map<string, number[]>()
+  const perLineHeadways = new Map<string, number[]>()
+  const directionCounts = { F: 0, R: 0, BOTH: 0 }
+
+  for (const [tripId, headways] of weekdayHeadways) {
+    const trip = trips.get(tripId)!
+    const line = trip.route_id!
+    const ordered = (sequences.get(tripId) ?? []).map(r => r.station)
+    const directions = tripDirections(ordered, indices.get(line))
+    directionCounts[directions.length === 2 ? 'BOTH' : directions[0]!]++
 
     // A trip that visits a stop twice (loop corridors) must contribute its
     // frequency once, not twice — otherwise the loop looks twice as frequent.
-    const dedupe = `${row.trip_id}\t${stationId}`
-    if (seenOnTrip.has(dedupe)) continue
-    seenOnTrip.add(dedupe)
-
-    const key = stopKey(trip.route_id!, stationId)
-    perStopHeadways.set(key, [...(perStopHeadways.get(key) ?? []), ...headways])
+    for (const station of new Set(ordered)) {
+      const stationId = `TJ-${station}`
+      const key = stopKey(line, stationId)
+      perStopHeadways.set(key, [...(perStopHeadways.get(key) ?? []), ...headways])
+      for (const dir of directions) {
+        const dk = dirKey(line, stationId, dir)
+        perDirHeadways.set(dk, [...(perDirHeadways.get(dk) ?? []), ...headways])
+      }
+    }
   }
   for (const [tripId, headways] of weekdayHeadways) {
     const line = trips.get(tripId)!.route_id!
@@ -227,6 +365,57 @@ function tjHeadways(topology: Set<string>): Derived {
   for (const [line, headways] of perLineHeadways) perLine.set(line, clamp(combine(headways)))
 
   /*
+   * Keep only the pairs whose two directions actually differ.
+   *
+   * Both halves are emitted together or neither is, so a consumer that finds one
+   * key can rely on its opposite existing. Where the directions agree the combined
+   * `perStop` value already says the same thing, and emitting it twice would
+   * double the rows on a halte page for no information.
+   */
+  const perDirection = new Map<string, number>()
+  for (const key of perStop.keys()) {
+    const servesForward = topologyByDirection.has(`${key}@F`)
+    const servesReverse = topologyByDirection.has(`${key}@R`)
+    const forward = servesForward ? perDirHeadways.get(`${key}@F`) : undefined
+    const reverse = servesReverse ? perDirHeadways.get(`${key}@R`) : undefined
+
+    /*
+     * A halte the corridor only passes ONE way. The number is already
+     * direction-specific — it just never said so, leaving a rider at (say)
+     * Koridor 1's Kejaksaan Agung with a Blok M-bound frequency and no hint that
+     * nothing runs the other way. One labelled row, not two.
+     *
+     * Note this deliberately breaks the "both halves together" symmetry that the
+     * two-way case guarantees, so consumers must read the halves independently.
+     */
+    if (servesForward !== servesReverse) {
+      const only = servesForward ? 'F' : 'R'
+      const headways = servesForward ? forward : reverse
+      if (headways) perDirection.set(`${key}@${only}`, clamp(combine(headways)))
+      continue
+    }
+
+    /*
+     * A terminus is not two directions. Standing at Tanjung Priok, corridor 12's
+     * "arah Tanjung Priok" is where buses ARRIVE, not a service anyone boards —
+     * only the outbound direction is a departure. Splitting there would label a
+     * row with the name of the halte the rider is already standing at.
+     */
+    const [lineCode, stationId] = [key.slice(0, key.indexOf('@')), key.slice(key.indexOf('@') + 1)]
+    const terminus = lineTermini.get(lineCode)
+    if (terminus && (terminus.F === stationId || terminus.R === stationId)) continue
+
+    if (!forward || !reverse) continue
+    const f = clamp(combine(forward))
+    const r = clamp(combine(reverse))
+    // Both directions agree: the combined value already says this, and emitting
+    // it twice would put two identical rows on a halte page.
+    if (f === r) continue
+    perDirection.set(`${key}@F`, f)
+    perDirection.set(`${key}@R`, r)
+  }
+
+  /*
    * Topology pairs the feed gave us nothing for are deliberately NOT written into
    * the per-stop map. Both consumers already fall back to the line-level value on
    * a miss, and materialising it here would make a borrowed number indistinguishable
@@ -237,8 +426,11 @@ function tjHeadways(topology: Set<string>): Derived {
   const fellBack = [...topology]
     .filter(key => !perStop.has(key) && perLine.has(key.split('@')[0]!))
 
+  console.log(`  TJ trips by direction: F=${directionCounts.F} R=${directionCounts.R} both/loop=${directionCounts.BOTH}`)
+
   return {
     perStop,
+    perDirection,
     perLine,
     weekendOnly: new Set([...weekendLines].filter(l => !weekdayLines.has(l))),
     fellBack
@@ -301,24 +493,39 @@ function railHeadways(): Derived {
   const perLine = new Map<string, number>()
   for (const [line, gaps] of gapsByLine) perLine.set(line, clamp(median(gaps)))
 
-  return { perStop, perLine, weekendOnly: new Set(), fellBack: [] }
+  // Rail stations show a real departure board with true boundFor values, so they
+  // neither call /headway nor need a directional split.
+  return { perStop, perDirection: new Map(), perLine, weekendOnly: new Set(), fellBack: [] }
 }
 
 const topology = topologyPairs()
-const tj = tjHeadways(topology)
+const tj = tjHeadways(topology, topologyDirectionPairs())
 const rail = railHeadways()
 
 const perLine = new Map([...tj.perLine, ...rail.perLine])
 const perStop = new Map([...tj.perStop, ...rail.perStop])
 for (const [line, seconds] of Object.entries(OVERRIDES)) perLine.set(line, clamp(seconds))
 
+const perDirection = new Map([...tj.perDirection, ...rail.perDirection])
+
+/*
+ * Terminus per line and direction, for the "arah ..." labels a halte page shows.
+ *
+ * Station IDS rather than names: the display name is resolved against the stations
+ * table at request time, so renaming a station does not require regenerating this
+ * file. `F` is the last stop of TOPOLOGY `path`, `R` of `pathReverse`.
+ */
+const termini = lineTerminiMap()
+
 const weekendOnly = [...tj.weekendOnly].sort((a, b) => a.localeCompare(b))
 const lineEntries = [...perLine].sort(([a], [b]) => a.localeCompare(b))
 const stopEntries = [...perStop].sort(([a], [b]) => a.localeCompare(b))
+const dirEntries = [...perDirection].sort(([a], [b]) => a.localeCompare(b))
+const terminusEntries = [...termini].sort(([a], [b]) => a.localeCompare(b))
 const overridden = new Set(Object.keys(OVERRIDES))
 
 const fileTS = '/*\n'
-  + ' * Seconds between vehicles, per line and per (line, stop).\n'
+  + ' * Seconds between vehicles, per line, per (line, stop), and per direction.\n'
   + ' *\n'
   + ' * GENERATED — do not edit by hand; re-run `pnpm --filter api generate:headways`.\n'
   + ' * TJ values combine the frequencies of every weekday route variant serving a\n'
@@ -344,11 +551,36 @@ const fileTS = '/*\n'
   + ' * These deliberately carry NO value rather than borrowing a neighbouring one:\n'
   + ' * a number here would assert weekday service that does not run.\n'
   + ' */\n'
-  + `export const WEEKEND_ONLY_LINES: readonly string[] = [${weekendOnly.map(l => `'${l}'`).join(', ')}]\n`
+  + `export const WEEKEND_ONLY_LINES: readonly string[] = [${weekendOnly.map(l => `'${l}'`).join(', ')}]\n\n`
+  + '/*\n'
+  + ' * Per-(line, station, direction), ONLY where the two directions genuinely\n'
+  + ' * differ. A pair absent here means both directions match STOP_HEADWAYS_S, so a\n'
+  + ' * halte page shows one row instead of two identical ones.\n'
+  + ' *\n'
+  + ' * `F` follows TOPOLOGY `path`, `R` follows `pathReverse`. Both halves are always\n'
+  + ' * emitted together, so finding one key guarantees its opposite exists.\n'
+  + ' *\n'
+  + ' * Direction comes from TOPOLOGY, never GTFS `direction_id` — that field is broken\n'
+  + ' * in this feed (Koridor 5 labels both directions `0`).\n'
+  + ' */\n'
+  + 'export const DIRECTIONAL_HEADWAYS_S: Record<string, number> = {\n'
+  + dirEntries.map(([key, s]) => `  '${key}': ${s}`).join(',\n')
+  + '\n}\n\n'
+  + '/*\n'
+  + ' * Terminus station id per line and direction, for "arah ..." labels. Names are\n'
+  + ' * resolved against the stations table at request time so a rename needs no\n'
+  + ' * regeneration here.\n'
+  + ' */\n'
+  + 'export const LINE_TERMINI: Record<string, { F: string, R: string }> = {\n'
+  + terminusEntries.map(([line, t]) => `  '${line}': { F: '${t.F}', R: '${t.R}' }`).join(',\n')
+  + '\n}\n'
 
 fs.writeFileSync(OUT_PATH, fileTS)
 
 console.log(`Wrote ${lineEntries.length} line headways and ${stopEntries.length} stop headways to ${OUT_PATH}`)
+const twoWay = dirEntries.filter(([k]) => perDirection.has(`${k.slice(0, -1)}${k.endsWith('F') ? 'R' : 'F'}`)).length
+console.log(`  Directional:          ${twoWay / 2} split pairs + ${dirEntries.length - twoWay} one-way stops = ${dirEntries.length} entries`)
+console.log(`  Termini:              ${terminusEntries.length} corridors`)
 console.log(`  TJ   — ${tj.perLine.size} lines, ${tj.perStop.size} stop pairs (of ${topology.size} in TOPOLOGY)`)
 console.log(`  Rail — ${rail.perLine.size} lines, ${rail.perStop.size} stop pairs`)
 if (weekendOnly.length > 0) console.log(`  Weekend-only lines:   ${weekendOnly.join(', ')}`)
