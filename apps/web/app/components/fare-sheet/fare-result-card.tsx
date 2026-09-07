@@ -465,17 +465,27 @@ function JourneyDetail({ journey }: { journey: FareJourney }) {
    * genuinely spans something: the waiting and walking between them.
    */
   const journeyClock = journey.arrivalAt && rides.length > 1 && start?.type === 'RIDE' && start.departureAt
-    ? `${formatClock(start.departureAt)} - ${formatClock(journey.arrivalAt)}`
+    ? { departure: formatClock(start.departureAt), arrival: formatClock(journey.arrivalAt) }
     : null
 
   return (
     <>
+      {/*
+        * Each time labelled by its own verb, rather than one phrase covering
+        * both: "berangkat sampai tiba" is a gloss nobody says out loud, and the
+        * rest of the timeline speaks in short verb phrases (Pindah kereta,
+        * Transit ke). `figure` stays on the numerals alone so they align with
+        * every other figure on the card.
+        */}
       {journeyClock
         ? (
             <p className="mt-4 text-sm font-semibold text-slate-700">
-              Berangkat sampai tiba
+              Berangkat
               {' '}
-              <span className="figure">{ journeyClock }</span>
+              <span className="figure">{ journeyClock.departure }</span>
+              , tiba
+              {' '}
+              <span className="figure">{ journeyClock.arrival }</span>
             </p>
           )
         : null}
