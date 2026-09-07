@@ -21,14 +21,21 @@ interface Props {
   /*
    * Wrap the chips onto multiple lines instead of scrolling them horizontally.
    *
-   * Off by default, so /fare and the search sheet keep the scrolling rail. The
-   * map's fare sheet must set it: components/bottom-sheet.tsx puts
-   * touch-action: none on the sheet and its body to drive scrollTop by hand,
-   * touch-action intersects down the ancestor chain so a descendant cannot
-   * re-enable panning, and the sheet's drag engine only commits on vertical
-   * movement — a horizontal swipe there is swallowed entirely, leaving the
-   * overflowing chips visible but unreachable. Wrapping also drops the
-   * -mx-8 px-8 bleed, which suits the narrow desktop side pane.
+   * ON by default now. Four chips do not fit a phone: at 420px "Jalan kaki"
+   * was clipped at the right edge, and a rider who never discovers a criterion
+   * cannot use it. A scrolling rail hides a control behind a gesture with no
+   * affordance pointing at it, which is the wrong trade for a setting that
+   * changes the answer.
+   *
+   * The map's fare sheet could never scroll it anyway:
+   * components/bottom-sheet.tsx puts touch-action: none on the sheet and its
+   * body to drive scrollTop by hand, touch-action intersects down the ancestor
+   * chain so a descendant cannot re-enable panning, and the sheet's drag engine
+   * only commits on vertical movement — a horizontal swipe there is swallowed
+   * entirely. Wrapping also drops the -mx-8 px-8 bleed, which suits the narrow
+   * desktop side pane.
+   *
+   * Pass false only for a surface with genuine horizontal room.
    */
   wrap?: boolean
 }
@@ -49,7 +56,7 @@ type OpenCriterion = 'payment' | 'time' | 'modes' | 'walking' | null
  * one system. The -mx-8 px-8 bleed assumes 8-unit parent padding, which /fare
  * (p-8) and the search sheet (px-8) both provide.
  */
-export default function CriteriaBar({ criteria, onChange, wrap = false }: Props) {
+export default function CriteriaBar({ criteria, onChange, wrap = true }: Props) {
   const [open, setOpen] = useState<OpenCriterion>(null)
 
   const paymentOptions = useMemo<CriterionOption<FareCriteria['paymentMethod']>[]>(
@@ -88,6 +95,21 @@ export default function CriteriaBar({ criteria, onChange, wrap = false }: Props)
     []
   )
 
+  /*
+   * How many settings the rider has moved off the default.
+   *
+   * The rose tint already marks each changed chip, but on a wrapped two-line
+   * rail that is four things to read before knowing whether anything is set at
+   * all. Announced to assistive tech rather than drawn: the tint carries it
+   * visually, and a second visible badge would compete with the chips it counts.
+   */
+  const changedCount = [
+    criteria.paymentMethod !== DEFAULT_FARE_CRITERIA.paymentMethod,
+    criteria.fareTime !== DEFAULT_FARE_CRITERIA.fareTime,
+    criteria.modes !== DEFAULT_FARE_CRITERIA.modes,
+    criteria.walking !== DEFAULT_FARE_CRITERIA.walking
+  ].filter(Boolean).length
+
   const chip = (
     key: Exclude<OpenCriterion, null>,
     label: string,
@@ -120,7 +142,7 @@ export default function CriteriaBar({ criteria, onChange, wrap = false }: Props)
           wrap ? 'flex-wrap' : '-mx-8 px-8 overflow-x-auto no-scrollbar'
         )}
         role="group"
-        aria-label="Pengaturan tarif"
+        aria-label={changedCount > 0 ? `Pengaturan tarif, ${changedCount} diubah` : 'Pengaturan tarif'}
       >
         {chip(
           'payment',

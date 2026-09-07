@@ -12,9 +12,10 @@ export function buildFareShareUrl(
   fromId: string | null | undefined,
   toId: string | null | undefined,
   origin: string,
-  criteria?: FareCriteria
+  criteria?: FareCriteria,
+  journeyKey?: string | null
 ): string | null {
-  const path = buildFarePath(fromId, toId, criteria)
+  const path = buildFarePath(fromId, toId, criteria, journeyKey)
   if (!path) return null
   return new URL(path, origin).toString()
 }
@@ -28,7 +29,20 @@ export function buildFareShareUrl(
 export function buildFarePath(
   fromId: string | null | undefined,
   toId: string | null | undefined,
-  criteria?: FareCriteria
+  criteria?: FareCriteria,
+  /*
+   * The route the sender was looking at, from utils/journey-key.ts.
+   *
+   * Written only when a link is actually being shared, and never mirrored into
+   * the address bar as the rider taps between options — the same asymmetry
+   * `operator` has (see fare-criteria.ts). Mirroring would make every tap a
+   * history entry, and would leave a stale key in the URL a rider then copies
+   * by hand from the address bar.
+   *
+   * `from`/`to` stay in the URL beside it, so the SEO middleware and the OG
+   * worker — both keyed on the pair alone — keep working untouched.
+   */
+  journeyKey?: string | null
 ): string | null {
   if (!fromId || !toId) return null
   // URLSearchParams percent-encodes, which matters because station ids are
@@ -41,6 +55,7 @@ export function buildFarePath(
   if (criteria) {
     for (const [key, value] of fareQueryParams(criteria)) params.set(key, value)
   }
+  if (journeyKey) params.set('j', journeyKey)
   return `/fare?${params.toString()}`
 }
 

@@ -44,3 +44,30 @@ export function formatClock(isoInstant: string): string {
     timeZone: 'Asia/Jakarta'
   })
 }
+
+/*
+ * How long a journey takes, from two PUBLISHED times.
+ *
+ * The engine has no duration model — `edges.durationSeconds` is null on every
+ * row — and the walking-preference copy is explicit that nothing may be worded
+ * as a duration for exactly that reason (see criteria/labels.ts). This does not
+ * breach that rule, it is the one case outside it: subtracting a timetabled
+ * arrival from a timetabled departure is arithmetic on two figures the operator
+ * published, not an estimate this app invented. Same distinction that let trip
+ * times ship while `waitS` stayed off the wire entirely.
+ *
+ * So the caller must only reach here with a FULLY timed journey. A journey
+ * missing one leg's times has no honest total, and the API already withholds
+ * `arrivalAt` in that case — which is the check, rather than anything here.
+ *
+ * Hours appear only once there are any: "1 j 5 mnt" beside "45 mnt" in the same
+ * list would be two shapes for one fact, and most journeys are under an hour.
+ * Abbreviated because this sits in a meta row beside three other figures.
+ */
+export function formatDuration(fromIso: string, toIso: string): string {
+  const minutes = Math.round((Date.parse(toIso) - Date.parse(fromIso)) / 60000)
+  if (!Number.isFinite(minutes) || minutes < 0) return ''
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return hours > 0 ? `${hours} j ${rest} mnt` : `${minutes} mnt`
+}

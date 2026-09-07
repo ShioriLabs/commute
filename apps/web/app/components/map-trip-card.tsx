@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import type { FareJourney } from '@commute/schemas'
 import { useReducedMotion } from '~/hooks/reduced-motion'
 import { JourneyCardFace, JourneyTimeline } from './fare-sheet/fare-result-card'
+import { useJourneyPager } from './fare-sheet/journey-pager'
 
 interface MapTripCardProps {
   /*
@@ -52,8 +53,6 @@ const SLIDE_FRACTION = 1 / 3
  */
 const FLOOR_CLEARANCE_PX = 72
 
-type Page = 'detail' | 'options'
-
 /*
  * The drawn route's legs, docked under the desktop rail card.
  *
@@ -79,50 +78,13 @@ export default function MapTripCard({
   onCollapse
 }: MapTripCardProps) {
   const reduced = useReducedMotion()
-  const [page, setPage] = useState<Page>('options')
-
   /*
-   * A lone journey was never compared against anything, so there is nothing to
-   * choose between and no way to reach the options page. This is what keeps the
-   * standard router looking exactly as it did before beta existed.
+   * The options/detail state machine, shared with the fare sheet's result card
+   * so the two surfaces cannot drift on when a rider is sent back to the list.
+   * See journey-pager.ts for why it is a hook and not a component.
    */
-  const hasOptions = journeys.length > 1
+  const { showing, hasOptions, toDetail, toOptions, pageFadeRef } = useJourneyPager(journeys)
   const journey = journeys[selectedIndex] ?? journeys[0]
-  const showing: Page = hasOptions ? page : 'detail'
-
-  /*
-   * Every new answer lands on the options, when there are options to land on.
-   *
-   * Which of these is the rider's first question when there are several — the
-   * detail is what they read once they have chosen. Opening on the detail
-   * showed them one journey out of several, picked by ordinal rather than by
-   * them, and left the list they actually wanted behind a click.
-   *
-   * Reset on every answer rather than only the first, because the index is an
-   * ordinal into a set recomputed per request: change the payment method and
-   * option three may be a different route or may not exist. Holding a rider on
-   * a detail page through that would quietly swap the journey under them, so
-   * the honest move is to show the new set and let them re-confirm. Same
-   * reasoning as the selection reset in map.tsx.
-   */
-  useLayoutEffect(() => setPage('options'), [journeys])
-
-  /*
-   * Replay the body's fade whenever the page changes.
-   *
-   * Rewinding the running animation is what actually restarts it; toggling the
-   * class off and on would need a forced reflow between the two writes to have
-   * any effect at all. getAnimations() is empty under reduced motion, where
-   * app.css sets `animation: none`, so this quietly does nothing there — which
-   * is the behaviour that block asks for.
-   */
-  const pageFadeRef = useRef<HTMLDivElement>(null)
-  useLayoutEffect(() => {
-    for (const animation of pageFadeRef.current?.getAnimations() ?? []) {
-      animation.currentTime = 0
-      animation.play()
-    }
-  }, [showing])
 
   /*
    * The card's own natural height, measured rather than transitioned.
@@ -255,7 +217,7 @@ export default function MapTripCard({
             ? (
                 <button
                   type="button"
-                  onClick={() => setPage('options')}
+                  onClick={toOptions}
                   aria-label="Kembali ke pilihan rute"
                   className="flex-1 min-w-0 flex items-center gap-1 -ml-1 text-left rounded-lg px-1 py-1 cursor-pointer transition-colors duration-150 ease hover:bg-slate-100"
                 >
@@ -289,11 +251,8 @@ export default function MapTripCard({
           * the height transition is already carrying the movement, and a
           * second transform here would read as the content correcting itself.
           *
-          * A `key` alone does not do it. Both arms render a plain div in the
-          * same slot, so React reconciles them as one node, the element is
-          * never remounted and the CSS animation never restarts — measured:
-          * the same DOM node survived the swap with its animation already at
-          * its 180ms end. pageFadeRef restarts it by hand instead.
+          * The ref is what restarts the animation; a `key` alone does not.
+          * See journey-pager.ts.
           */}
         <div ref={pageFadeRef} className="content-fade">
           {showing === 'options'
@@ -323,7 +282,7 @@ export default function MapTripCard({
                             onSelectIndex(index)
                             // Straight back to the detail: picking an option is
                             // asking to see it, not to stay in the list.
-                            setPage('detail')
+                            toDetail()
                           }}
                         />
                       </li>

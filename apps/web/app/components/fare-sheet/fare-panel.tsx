@@ -13,8 +13,9 @@ interface Props {
   // for its "open on /fare" link, which is how a route found in the sheet
   // becomes a shareable URL — see utils/fare-url.ts.
   footer?: ReactNode
-  // Wrap the criteria chips instead of scrolling them. Set by the map's fare
-  // sheet, where a horizontally-scrolling rail cannot work — see CriteriaBar.
+  // Wrap the criteria chips instead of scrolling them. On by default, because
+  // four chips do not fit a phone — see CriteriaBar. Pass false only for a
+  // surface with genuine horizontal room.
   wrapCriteria?: boolean
   /*
    * Journey selection, lifted. Only the map passes these — it draws the chosen
@@ -23,6 +24,8 @@ interface Props {
    */
   selectedIndex?: number
   onSelectIndex?: (index: number) => void
+  /** Open the result on the chosen journey, for a `?j=` link. */
+  openOnDetail?: boolean
 }
 
 // The fare query body: the Dari/Ke pair, the swap control, and whichever of
@@ -31,9 +34,10 @@ interface Props {
 export default function FarePanel({
   query,
   footer,
-  wrapCriteria = false,
+  wrapCriteria = true,
   selectedIndex,
-  onSelectIndex
+  onSelectIndex,
+  openOnDetail
 }: Props) {
   const {
     origin,
@@ -121,6 +125,7 @@ export default function FarePanel({
               result={fare.data}
               selectedIndex={selectedIndex}
               onSelectIndex={onSelectIndex}
+              openOnDetail={openOnDetail}
             />
           )
         : null}
