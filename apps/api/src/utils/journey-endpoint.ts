@@ -107,6 +107,25 @@ export interface JourneyEndpointOptions<T> {
    */
   scope?: (c: Context<{ Bindings: Bindings }>) => string | undefined
   /*
+   * Apply request-time facts to a body on its way out, on BOTH the cache-hit
+   * and the miss path.
+   *
+   * This is what lets a journey carry real clock times while staying cached for
+   * 20 hours. The route a search returns does not change during the day —
+   * measured, 162 of 162 rail pairs return the identical route at six different
+   * hours — so the body is cacheable, but "the 07:14 train" is only true for
+   * the moment asked about. Storing the untimed journey and timing it here is
+   * what keeps a warm answer's times fresh rather than stale by hours.
+   *
+   * It must therefore be a pure function of (body, request) and must never be
+   * applied before `kvRepository.set`, or the times are frozen into the entry.
+   *
+   * Async because it needs the loaded graph, which is memoised per isolate and
+   * so is free after the first request — but awaiting it is what makes that a
+   * fact rather than an assumption.
+   */
+  retime?: (body: T, c: Context<{ Bindings: Bindings }>) => Promise<T>
+  /*
    * Build the response body, return null for "no route", or a ClosedOutcome
    * when a path exists but nothing serving it is running yet.
    *
@@ -121,7 +140,7 @@ export async function handleJourneyRequest<T>(
   c: Context<{ Bindings: Bindings }>,
   getRouter: (db: D1Database) => Promise<Tsundere>,
   parseContext: (paymentMethodRaw?: string, atRaw?: string) => FareContext,
-  { keyPrefix, scope, build }: JourneyEndpointOptions<T>
+  { keyPrefix, scope, retime, build }: JourneyEndpointOptions<T>
 ) {
   const fromId = c.req.param('from')!
   const toId = c.req.param('to')!
@@ -164,7 +183,8 @@ export async function handleJourneyRequest<T>(
         404
       )
     }
-    return c.json(Ok(cached), 200)
+    // Timed on the way out, never on the way in — see `retime`.
+    return c.json(Ok(retime ? await retime(cached, c) : cached), 200)
   }
 
   const stationRepository = new StationRepository(c.env.DB)
@@ -221,10 +241,15 @@ export async function handleJourneyRequest<T>(
       )
     }
 
+    /*
+     * Cache the UNTIMED body. `retime` runs after this, on the value handed
+     * back, so the entry stays true for its whole 20 hours while every rider
+     * reading it gets times resolved against their own request.
+     */
     c.executionCtx.waitUntil(kvRepository.set(kvKey, result))
 
     c.header('Server-Timing', timing.header())
-    return c.json(Ok(result), 200)
+    return c.json(Ok(retime ? await retime(result, c) : result), 200)
   } catch (error) {
     console.error(error)
     return c.json(Internal('DATABASE_ERROR', 'Can\'t connect to database, please try again later.'), 500)

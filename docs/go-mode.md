@@ -17,9 +17,10 @@ how many journeys come back.
 ```
 Tier 0  static route + per-segment fare                    ← DONE (POIs still unbuilt)
 Tier 1  + route preferences, several journeys, labels      ← DONE, now the only router
-Tier 2  + time                                             ← HALF DONE
+Tier 2  + time                                             ← MOSTLY DONE
         service hours + day-awareness + headway waits        DONE
-        timetable-driven departures ("next train", arrive-by) NOT STARTED
+        timetable-driven departures ("next train")           DONE, rail only
+        arrive-by                                            NOT STARTED
         = go mode
 ```
 
@@ -136,22 +137,41 @@ This is the *realistic ceiling* identified earlier: service-hours plus frequency
 not RAPTOR. The late-night problem this doc flagged as the time dimension biting early —
 "the best route at 02:00 ≠ the best route at 14:00" — is answered.
 
-### Not started: departures
+### Done: departures, and not the way this doc expected
 
-The engine models **how often** a vehicle comes, never **when the next one is**. The
-`schedules` table still only feeds timetable display; nothing in `libs/tsundere` reads it.
-So these remain unanswerable:
+Shipped 2026-09-07. Each ride leg carries `departureAt` / `arrivalAt` where a real trip
+covers it, and a journey carries `arrivalAt` only when every ride leg is timed.
 
-- "Leave now" with real next-departure times on each leg.
-- **Arrive-by** planning.
-- The **last-train** question in its precise form (service *windows* answer the coarse
+**This was not the Connection-Scan / RAPTOR step the section above predicted**, because
+a measurement removed the need for one. Replanning 200 seeded rail pairs at 06:00,
+09:00, 12:00, 15:00, 18:00 and 21:00 returned the **identical route at all six hours for
+162 of the 162 pairs** that route at all six. Service hours already exclude the shut
+corridors and nothing else in the criteria vector moves with the clock, so *which way you
+go* is stable and only *which vehicle you catch* varies. No time axis was added to
+`Criteria`, `dominates` or the search — `auditRouter --baseline` still reports 0 changed
+result sets over 300 pairs, which is the gate that keeps it true.
+
+Instead `planner/departures.ts` resolves times **after** the search, and the API applies
+them in a `retime` hook that runs on the cache-hit path as well as the miss. So KV keeps
+storing the untimed journey for its full 20 hours while every reader gets times against
+their own `at` — the route is the cacheable half, the vehicle is the per-request half.
+
+**Coverage is 51.5% of rail-only journeys fully timed**, and the shortfall is directional
+data rather than engine capability: not one KCI stop pattern is reversible (line C has 23
+patterns and 0 reversible endpoint pairs; R 15/0; B 13/0), and 0 of 142 southbound MRTJ
+trips include Lebak Bulus against 142 of 142 northbound. Both directions' trips exist —
+their per-trip stop lists are what have gaps.
+
+Still unanswerable, and each for its own reason:
+
+- **Arrive-by** planning. A different query, and this one genuinely does need the search
+  to change.
+- **The last-train question** in its precise form (service *windows* answer the coarse
   version already).
-
-That is the genuine Connection-Scan / RAPTOR step. Note the constraint discovered since
-this doc was written: **TJ has no timetable at all**, only frequencies, so timetable-driven
-routing is structurally a rail-only capability. A planner that offers exact departures for
-KCI and LRT but not for TJ is a UX problem before it is an algorithms problem, and that
-question should be settled before any of it is built.
+- Exact departures on **TransJakarta**, ever: the feed is 730 trips with `frequencies.txt`
+  and no timetable at all. That is why leg times are per-leg and absent rather than
+  journey-wide — a mixed journey shows the clock on its rail legs and the headway wording
+  on its TJ ones, which is the UX answer to the question this section used to pose.
 
 ## UX layer (go mode proper)
 
@@ -188,20 +208,28 @@ independent moves, in rough order of leverage:
 
 1. ~~**Decide the beta toggle's fate.**~~ **Settled 2026-09-06: the multi-journey answer
    is the default and the toggle is gone.** See the section below.
-2. **POIs.** The last Tier 0 item, additive, and blocked on nothing.
-3. **Departures.** Real Tier 2, a different algorithm class, and gated on the TJ
-   no-timetable question above.
+2. ~~**Departures.**~~ **Shipped 2026-09-07**, and not as a different algorithm class —
+   the route turned out to be stable across the day, so times resolve onto it after the
+   search. See above.
+3. **POIs.** Now the last item on this list: the final Tier 0 gap, additive, and blocked
+   on nothing.
 
 ## Open questions
 
 - ~~Does the beta router become the default, and if so what happens to the toggle?~~ —
   settled: yes, and the toggle was deleted rather than flipped.
-- Whether exact departures are worth shipping rail-only, given TJ can never have them.
+- ~~Whether exact departures are worth shipping rail-only, given TJ can never have
+  them.~~ — settled: yes, per LEG rather than per journey. A mixed journey shows the
+  clock on its rail legs and the headway wording on its TJ ones, so nothing has to be
+  withheld from rail riders to stay honest about buses.
 - Scheduled-only vs realtime: live vehicle positions remain a separate, later question.
-- Schedule coverage — full operating day, holiday variants, and sync freshness — becomes
-  correctness-critical only if departures are built; service *windows* already tolerate
-  gaps.
-- Whether a time-expanded structure reuses the per-isolate `cachedGraph` pattern.
+- Schedule coverage is now correctness-critical, and the binding gap is **directional**:
+  no KCI pattern is reversible and no southbound MRTJ trip reaches Lebak Bulus, which is
+  most of why only 51.5% of rail journeys are fully timed. Holiday variants and sync
+  freshness matter for the same reason now.
+- ~~Whether a time-expanded structure reuses the per-isolate `cachedGraph` pattern.~~ —
+  moot: there is no time-expanded structure. The trip index rides along on `cachedGraph`
+  and the times are resolved per request.
 - ~~k-shortest-paths vs repeated Dijkstra~~ — settled: neither. Pareto bags per (stop,
   round), with `maxBagSize` trading width for cost.
 - ~~How many alternatives to surface~~ — settled: `maxResults`, labelled, ties unlabelled.

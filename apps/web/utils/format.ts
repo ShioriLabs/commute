@@ -26,3 +26,21 @@ export function formatRupiah(amount: number): string {
 export function formatKm(distanceM: number): string {
   return `${(distanceM / 1000).toLocaleString('id-ID', { maximumFractionDigits: 1 })} km`
 }
+
+/*
+ * A wall clock from an ISO instant, as 07.14.
+ *
+ * `id-ID` uses a dot rather than a colon, which is what the station departure
+ * board and the timetable already render — one convention across every surface
+ * that shows a time.
+ *
+ * The timezone is pinned to Asia/Jakarta rather than left to the device. The
+ * API stamps +07:00 explicitly, and a rider abroad checking a Jakarta journey
+ * wants the time they will read off the platform sign, not their own.
+ */
+export function formatClock(isoInstant: string): string {
+  return new Date(isoInstant).toLocaleTimeString('id-ID', {
+    timeStyle: 'short',
+    timeZone: 'Asia/Jakarta'
+  })
+}

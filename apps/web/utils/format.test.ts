@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatKm, formatRupiah } from './format'
+import { formatClock, formatKm, formatRupiah } from './format'
 
 describe('formatRupiah', () => {
   it('renders whole rupiah with no fractional part', () => {
@@ -46,5 +46,27 @@ describe('formatKm', () => {
 
   it('handles zero', () => {
     expect(formatKm(0)).toBe('0 km')
+  })
+})
+
+describe('formatClock', () => {
+  it('renders a Jakarta wall clock with the dot separator', () => {
+    // id-ID uses a dot, matching the station departure board and timetable.
+    expect(formatClock('2026-09-07T07:14:00+07:00')).toBe('07.14')
+    expect(formatClock('2026-09-07T19:05:00+07:00')).toBe('19.05')
+  })
+
+  /*
+   * Pinned to Asia/Jakarta rather than the device: a rider abroad checking a
+   * Jakarta journey wants the time on the platform sign, not their own.
+   */
+  it('reads in Jakarta time whatever zone the instant is written in', () => {
+    expect(formatClock('2026-09-07T00:14:00+00:00')).toBe('07.14')
+  })
+
+  // A journey the engine reported past midnight arrives as the next day's
+  // instant, so the clock reads 00.23 rather than 24.23.
+  it('shows a past-midnight arrival as a small-hours time', () => {
+    expect(formatClock('2026-09-08T00:23:00+07:00')).toBe('00.23')
   })
 })

@@ -3,7 +3,7 @@ import { OPERATORS, type Operator } from '@commute/constants'
 import { type CSSProperties, useEffect, useState } from 'react'
 import { ArrowsDownUpIcon, CaretDownIcon, CaretRightIcon, PersonSimpleWalkIcon, TicketIcon } from '@phosphor-icons/react'
 import { getForegroundColor } from 'utils/colors'
-import { formatKm, formatRupiah } from 'utils/format'
+import { formatClock, formatKm, formatRupiah } from 'utils/format'
 import { joinLabels } from 'utils/labels'
 import LineRoundel from '~/components/line-roundel'
 import { FARE_GUTTER_CLASS, FARE_RAIL_CENTER_PX, interlinedTrackFill, LINE_COLOR_FALLBACK, RAIL_WIDTH_PX } from '~/components/transit-geometry'
@@ -83,6 +83,14 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
   const legLines = useLegLines()
   // Optional-chained against a stale API during deploy skew.
   const intermediate = leg.stops?.slice(1, -1) ?? []
+  /*
+   * Both ends or neither: the API sets them together, and half a range would
+   * read as a departure with an unknown arrival rather than as a leg we cannot
+   * time. `id-ID` renders 07.14, the dot form the departure board already uses.
+   */
+  const legTimes = leg.departureAt && leg.arrivalAt
+    ? `${formatClock(leg.departureAt)} - ${formatClock(leg.arrivalAt)}`
+    : null
   const summary = `${leg.stationCount - 1} stasiun • ${formatKm(leg.distanceM)}`
   const lines = legLines(leg)
   const isInterlined = lines.length > 1
@@ -153,6 +161,22 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
                   arah
                   {' '}
                   { joinLabels(directions) }
+                </span>
+              )
+            : null}
+          {/*
+            * Only where the timetable actually covers this leg.
+            *
+            * Absent is the honest answer for TransJakarta, which has no
+            * timetable and never will, and for a rail leg whose trip reaches us
+            * without its intermediate stops. Rendering nothing is deliberate:
+            * a dash or a "—" would read as a missing value we could have
+            * fetched, where the truth is that no such time was ever published.
+            */}
+          {legTimes
+            ? (
+                <span className="text-sm font-semibold text-slate-700">
+                  { legTimes }
                 </span>
               )
             : null}
@@ -422,8 +446,39 @@ function JourneyDetail({ journey }: { journey: FareJourney }) {
       leg.type === 'TRANSFER' && leg.fare != null && leg.corridorLabel != null
   )
 
+  /*
+   * The whole journey's clock, shown only when every ride leg is timed.
+   *
+   * The API omits `arrivalAt` the moment one leg cannot be timed, so this is
+   * all-or-nothing by construction rather than by a check here — a total that
+   * skipped an untimed leg would read as more certain than the legs it came
+   * from.
+   */
+  const rides = journey.legs.filter(leg => leg.type === 'RIDE')
+  const start = rides[0]
+  /*
+   * Only when it says something the legs do not.
+   *
+   * On a single-ride journey the strip would repeat that leg's own times
+   * verbatim, one line above them — the same figure twice, which reads as a
+   * rendering bug rather than a summary. With two or more rides the span
+   * genuinely spans something: the waiting and walking between them.
+   */
+  const journeyClock = journey.arrivalAt && rides.length > 1 && start?.type === 'RIDE' && start.departureAt
+    ? `${formatClock(start.departureAt)} - ${formatClock(journey.arrivalAt)}`
+    : null
+
   return (
     <>
+      {journeyClock
+        ? (
+            <p className="mt-4 text-sm font-semibold text-slate-700">
+              Berangkat sampai tiba
+              {' '}
+              <span className="figure">{ journeyClock }</span>
+            </p>
+          )
+        : null}
       <JourneyTimeline legs={journey.legs} />
 
       {journey.segments.length + surchargedTransfers.length > 1

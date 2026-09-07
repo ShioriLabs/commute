@@ -10,6 +10,7 @@ import { getRouter, linesOf, nextServiceAt, parseFareContext, timeOptions } from
 import { wibIsoString } from 'utils/fare'
 import { assembleJourney, planJourney } from 'utils/fare-journey'
 import { handleJourneyRequest, journeyCacheKey } from 'utils/journey-endpoint'
+import { retimeTrips } from 'utils/journey-times'
 import { summarizeFares } from 'utils/fare-summary'
 import { mergeInterlinedLegs } from 'utils/interlining'
 import { Ok } from 'utils/response'
@@ -139,6 +140,16 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
    * from a 20-hour entry. Undefined for a default search, which keeps that key
    * byte-identical to the one before either existed and every warm entry warm.
    */
+  /*
+   * Clock times go on here, not in `build` — so they are applied to a cached
+   * body as well as a fresh one, and never written into KV. The route is the
+   * cacheable half; the vehicle you catch is the per-request half.
+   */
+  retime: async (result, c) => retimeTrips(
+    result,
+    await getRouter(c.env.DB),
+    parseFareContext(c.req.query('paymentMethod'), c.req.query('at'))
+  ),
   scope: (c) => {
     const parts = [
       c.req.query('modes') === 'rail' ? 'rail' : null,

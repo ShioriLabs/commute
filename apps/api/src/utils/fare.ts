@@ -104,6 +104,24 @@ export function secondsSinceLocalMidnight(date: Date): number {
   return local.getUTCHours() * 3600 + local.getUTCMinutes() * 60 + local.getUTCSeconds()
 }
 
+/**
+ * The instant `secondsS` after the local midnight that `on` falls in.
+ *
+ * The inverse of `secondsSinceLocalMidnight`, and the reason it takes a whole
+ * date rather than a day: the engine reports a journey that crosses midnight as
+ * seconds past 86400 rather than wrapping to 00:23, so that "later" stays a
+ * plain numeric comparison. Adding those seconds to local midnight rolls into
+ * the next day on its own, which is exactly right — and it means a caller must
+ * NOT take a modulus first, or a train arriving after midnight lands eleven
+ * hours before the one it followed.
+ */
+export function atSecondsOfDay(on: Date, secondsS: number): Date {
+  const local = wib(on)
+  const midnightUTC = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate())
+  // Back out of the WIB shift, since `wib` moved the clock forward to read it.
+  return new Date(midnightUTC + secondsS * 1000 - WIB_OFFSET_MS)
+}
+
 export function calculateSegmentFare(segment: FareSegmentInput, context: FareContext): number | null {
   const { operator, distanceM } = segment
   switch (operator) {

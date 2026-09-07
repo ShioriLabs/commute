@@ -2,6 +2,12 @@ import { plan, type Journey, type PlanOptions } from './planner/plan'
 import type { ServiceWindow } from './planner/service-hours'
 import { buildTripIndex, type TripIndex, type TripPattern } from './planner/trips'
 import {
+  journeyArrivalS,
+  resolveDepartures,
+  type LegTiming,
+  type ResolveDeparturesOptions
+} from './planner/departures'
+import {
   buildGraph,
   findRoute,
   type EdgeInput,
@@ -135,6 +141,29 @@ export class Tsundere {
    *
    * Empty when the pair is unroutable within `maxRounds` boardings.
    */
+  /**
+   * Clock times for a journey this graph produced, or nulls where the timetable
+   * cannot honestly say.
+   *
+   * A method rather than a free function taking the index, because the index
+   * stays private — a caller needs departure times, not the structure that
+   * produces them. Returns all-null when no timetable was loaded, which is
+   * exactly the behaviour before trips existed.
+   *
+   * Deliberately separate from `findRoutes`: the route is stable across the day
+   * and is cached for 20 hours upstream, while these times are only true for
+   * the moment asked about. See planner/departures.ts.
+   */
+  timeJourney(legs: readonly RouteLeg[], options: ResolveDeparturesOptions): (LegTiming | null)[] {
+    if (!this.#trips) return legs.map(() => null)
+    return resolveDepartures(legs, this.#trips, options)
+  }
+
+  /** When a journey ends, or null unless every ride leg was timed. */
+  journeyArrival(legs: readonly RouteLeg[], timings: readonly (LegTiming | null)[]): number | null {
+    return journeyArrivalS(legs, timings)
+  }
+
   findRoutes(fromStationId: string, toStationId: string, options: PlanOptions = {}): Journey[] {
     return plan(this.#graph, fromStationId, toStationId, {
       headwaysS: this.#headwaysS,
