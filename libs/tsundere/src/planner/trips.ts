@@ -41,6 +41,15 @@ export interface Trip {
    * apps/api's business, exactly as with `ServiceWindow` and timezones.
    */
   dayMask: number
+  /**
+   * Where this vehicle is signed for, opaque here.
+   *
+   * A line code identifies a route, not a service: one line can run trains to
+   * two different places from the same platform, and a rider choosing between
+   * departures is choosing between those. The engine never reads it — it exists
+   * so a caller can tell one boarding from another.
+   */
+  headsign?: string
   departuresS: number[]
   /**
    * Arrival per stop, or absent where the feed records no real one.

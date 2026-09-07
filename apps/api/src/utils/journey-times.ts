@@ -50,14 +50,31 @@ function toRouteLegs(legs: readonly FareResultLeg[]): RouteLeg[] {
 }
 
 /** One journey, with times on every leg the timetable actually covers. */
-function timeJourney(journey: FareJourney, router: Tsundere, context: FareContext): FareJourney {
-  const routeLegs = toRouteLegs(journey.legs)
-  const timings = router.timeJourney(routeLegs, {
-    departureS: secondsSinceLocalMidnight(context.departureAt),
-    dayMask: dayMaskFor(context.departureAt)
-  })
+/*
+ * How many boardings of one route to offer.
+ *
+ * A route is a way of getting there; a boarding is a train. From Cakung the
+ * 08.11, the 08.22 and the 08.33 are all the same route and all real choices,
+ * and showing only the first hides that the 08.22 arrives at the same 08.56 —
+ * eleven fewer minutes on the platform for nothing.
+ *
+ * Three rather than more: a pair with two routes then lands six rows, which is
+ * a list a rider can still read. Five would be closer to the reference apps and
+ * would push genuinely different routes off the first screen.
+ */
+const BOARDINGS_PER_ROUTE = 3
 
+/** One journey, timed for a specific boarding. Null when nothing runs. */
+function timeOnce(
+  journey: FareJourney,
+  routeLegs: RouteLeg[],
+  router: Tsundere,
+  context: FareContext,
+  afterS: number
+): { journey: FareJourney, departureS: number, tripId: string } | null {
+  const timings = router.timeJourney(routeLegs, { departureS: afterS, dayMask: dayMaskFor(context.departureAt) })
   const stamp = (seconds: number) => wibIsoString(atSecondsOfDay(context.departureAt, seconds))
+
   const legs = journey.legs.map((leg, index): FareResultLeg => {
     const timing: LegTiming | null = timings[index] ?? null
     if (leg.type !== 'RIDE' || !timing) return leg
@@ -65,10 +82,169 @@ function timeJourney(journey: FareJourney, router: Tsundere, context: FareContex
   })
 
   const arrivalS = router.journeyArrival(routeLegs, timings)
-  return { ...journey, legs, ...(arrivalS === null ? {} : { arrivalAt: stamp(arrivalS) }) }
+  const timed = { ...journey, legs, ...(arrivalS === null ? {} : { arrivalAt: stamp(arrivalS) }) }
+
+  const first = timings.find(t => t)
+  return first ? { journey: timed, departureS: first.departureS, tripId: first.tripId } : null
+}
+
+/**
+ * Every boarding of one route worth offering, earliest first.
+ *
+ * An untimed route yields exactly one row: there are no departures to walk, and
+ * three identical cards with no clock on them would be noise rather than
+ * choice. That is the TransJakarta case and the unchained-rail case both.
+ */
+function boardingsOf(journey: FareJourney, router: Tsundere, context: FareContext): FareJourney[] {
+  const routeLegs = toRouteLegs(journey.legs)
+  const rows: FareJourney[] = []
+  const seenTrips = new Set<string>()
+  let afterS = secondsSinceLocalMidnight(context.departureAt)
+
+  for (let i = 0; i < BOARDINGS_PER_ROUTE; i++) {
+    const timed = timeOnce(journey, routeLegs, router, context, afterS)
+    // No timetable at all, or the service is done for the day. Either way there
+    // is nothing further to offer, so stop rather than pad the list.
+    if (!timed) break
+    /*
+     * Two patterns on one line can resolve to the same train — a full run and a
+     * short-turn both serving the boarding stop. That is one vehicle and must
+     * be one row.
+     */
+    if (!seenTrips.has(timed.tripId)) {
+      seenTrips.add(timed.tripId)
+      rows.push(timed.journey)
+    }
+    afterS = timed.departureS + 60
+  }
+
+  // Untimed: one row, exactly as before this existed.
+  return rows.length > 0 ? rows : [journey]
 }
 
 /** Every journey in a trips answer, timed against the request's own clock. */
 export function retimeTrips(result: TripResult, router: Tsundere, context: FareContext): TripResult {
-  return { ...result, journeys: result.journeys.map(j => timeJourney(j, router, context)) }
+  const rows = result.journeys.flatMap(j => boardingsOf(j, router, context))
+  return { ...result, journeys: relabel(byArrival(rows)) }
+}
+
+/*
+ * Reassign the badges across the expanded set.
+ *
+ * The engine labels the journey that UNIQUELY wins an axis, and declines to
+ * label a lone one — a badge is a comparison, so "Termurah" means nothing
+ * without the option it beats. Expanding two journeys into six rows breaks that
+ * outright: three rows of one route share a fare, so three cards would read
+ * "Termurah" and tell a rider nothing.
+ *
+ * So the engine's labels are dropped and recomputed here, keeping its rule
+ * exactly — a tie means nobody wins.
+ *
+ * Compared per ROUTE rather than per row, which is the part that matters. Three
+ * boardings of one route share its fare and its walk, so comparing rows would
+ * tie every axis against itself and award nothing at all. The question a badge
+ * answers is "which way is cheapest", not "which train", so routes are ranked
+ * and the winner's badge goes on its earliest row.
+ *
+ * Only the axes that survive the wire are comparable: `waitS` never crosses it
+ * (see the schema's note on why), so SHORTEST_WAIT cannot be recomputed and is
+ * dropped rather than guessed at.
+ */
+function relabel(journeys: FareJourney[]): FareJourney[] {
+  const stripped = journeys.map(j => ({ ...j, labels: [] as FareJourney['labels'] }))
+  if (stripped.length < 2) return stripped
+
+  /*
+   * One representative row per route — the first, which after the arrival sort
+   * is its soonest usable boarding. `routeKey` is the leg shape, so two
+   * boardings of one route collapse and two genuinely different routes do not.
+   */
+  const routeKey = (j: FareJourney) => j.legs
+    .map(l => (l.type === 'RIDE' ? `${l.line}:${l.from.id}>${l.to.id}` : `~${l.to.id}`))
+    .join('|')
+  const firstOfRoute = new Map<string, number>()
+  stripped.forEach((j, i) => {
+    const key = routeKey(j)
+    if (!firstOfRoute.has(key)) firstOfRoute.set(key, i)
+  })
+  const representatives = [...firstOfRoute.values()]
+  if (representatives.length < 2) return stripped
+
+  /** Index of the sole minimum, or -1 when nothing wins outright. */
+  const winner = (values: (number | null)[]): number => {
+    let bestIndex = -1
+    let best = Infinity
+    let tied = false
+    for (let i = 0; i < values.length; i++) {
+      const value = values[i]
+      if (value === null || value === undefined) continue
+      if (value < best) {
+        best = value
+        bestIndex = i
+        tied = false
+      } else if (value === best) {
+        tied = true
+      }
+    }
+    return tied ? -1 : bestIndex
+  }
+
+  // `winner` indexes into `representatives`, so map back to the row it names.
+  const assign = (index: number, label: FareJourney['labels'][number]) => {
+    if (index >= 0) stripped[representatives[index]!]!.labels.push(label)
+  }
+  const axis = (read: (j: FareJourney) => number | null) =>
+    representatives.map(i => read(stripped[i]!))
+
+  assign(winner(axis(j => j.boardings)), 'FEWEST_CHANGES')
+  assign(winner(axis(j => j.walkDistanceM)), 'LEAST_WALKING')
+  assign(winner(axis(j => j.totalFare)), 'CHEAPEST')
+
+  return stripped
+}
+
+/*
+ * Earliest arrival first, once every journey has one.
+ *
+ * The engine ranks on distance, walking, boardings and wait, and cannot rank on
+ * arrival because it has no clock — so its order and the times on the cards can
+ * disagree. Measured over 1200 seeded rail pairs: on **10.6% of the fully-timed
+ * pairs with more than one journey the top card was not the earliest arrival**,
+ * by a mean of 7 minutes. MRTJ-STB -> KCI-CSK is the clearest case, where two
+ * journeys share their lines and their 08.04 departure but one reaches Cisauk
+ * at 09.00 against 09.10, and walks 90m against 200m — better on both axes and
+ * still listed second.
+ *
+ * Sorting here rather than in the engine keeps arrival out of the Pareto search
+ * entirely, which is what stops the front widening and the bag-eviction and
+ * termination arguments in plan.ts from having to be re-argued.
+ *
+ * Timed rows sort among themselves; untimed ones keep the engine's ranking and
+ * follow after. A mixed list is now the normal case rather than the exception —
+ * a TransJakarta route has no arrival to sort on while the rail route beside it
+ * does — so refusing to sort at all whenever one row is untimed would leave the
+ * common case unordered. What must not happen is interleaving the two rules,
+ * because then neither half's position means anything; keeping the untimed tail
+ * whole and behind is what avoids that.
+ *
+ * A stable sort, so journeys that arrive at the same minute keep the engine's
+ * ranking between them — that is still the better tie-break, and it keeps the
+ * order deterministic for a `selectedIndex` the map holds across a render.
+ *
+ * Labels are untouched: the engine assigns them by comparison, not by position,
+ * so `Termurah` stays on the cheapest card wherever it lands.
+ *
+ * Exported for its own tests: the all-or-nothing rule and the stable tie-break
+ * are the parts worth pinning, and reaching them through retimeTrips would mean
+ * standing up a whole graph to assert an ordering.
+ */
+export function byArrival(journeys: FareJourney[]): FareJourney[] {
+  if (journeys.length < 2) return journeys
+  const timed = journeys.filter(j => j.arrivalAt !== undefined)
+  const untimed = journeys.filter(j => j.arrivalAt === undefined)
+  if (timed.length < 2) return journeys
+  return [
+    ...[...timed].sort((a, b) => Date.parse(a.arrivalAt!) - Date.parse(b.arrivalAt!)),
+    ...untimed
+  ]
 }

@@ -346,6 +346,24 @@ export function JourneyCardFace({ journey, selected, onSelect }: {
    * cheapest has its price printed right there.
    */
   const labels = sortJourneyLabels(journey.labels).slice(0, 2)
+  /*
+   * When this option leaves, and when it lands if we can say.
+   *
+   * The boarding alone is enough to show, and on a mixed journey it is all
+   * there is: several cards can be the same route at different departures, and
+   * without the boarding they are indistinguishable plates. That case is real —
+   * a KCI leg into an untimed TransJakarta leg has a known 08.57 boarding and
+   * no arrival anyone can promise.
+   *
+   * So the arrival is appended only when it exists, rather than the pair being
+   * all-or-nothing. "08.57" is honest and useful; "08.57 - 09.37" says more
+   * when the timetable reaches the end.
+   */
+  const boarding = journey.legs.find(leg => leg.type === 'RIDE' && leg.departureAt)
+  const boardsAt = boarding?.type === 'RIDE' ? boarding.departureAt : undefined
+  const boardingClock = boardsAt
+    ? (journey.arrivalAt ? `${formatClock(boardsAt)} - ${formatClock(journey.arrivalAt)}` : formatClock(boardsAt))
+    : null
   const walkM = walkDistanceOf(journey)
   const segments = routeBarSegments(journey.legs, leg => legLines(leg))
 
@@ -379,6 +397,16 @@ export function JourneyCardFace({ journey, selected, onSelect }: {
         * not say — see journeys.ts.
         */}
       <div className="mt-1.5 flex items-center gap-3 figure text-xs text-slate-500">
+        {/*
+          * Leads the row, because when several cards are the same route at
+          * different departures this is the only thing telling them apart. The
+          * arrival rides with it: "which train" and "when does it get me there"
+          * are one question, and splitting them across the card would make a
+          * rider read twice.
+          */}
+        {boardingClock
+          ? <span className="font-semibold text-slate-700">{ boardingClock }</span>
+          : null}
         <span>{ formatKm(journey.totalDistanceM) }</span>
         <span className="flex items-center gap-1">
           <ArrowsDownUpIcon weight="bold" className="w-3.5 h-3.5 shrink-0" />

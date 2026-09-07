@@ -167,6 +167,15 @@ interface Trip {
   lineCode: string
   /** Days this trip runs, as the 3-bit WD|SAT|SUN mask from schemas/schedules. */
   dayMask: number
+  /*
+   * Where this train is signed for.
+   *
+   * Carried because a line code is not a service: from Cakung, line C runs 92
+   * trips to Kampung Bandan and 60 to Angke, and a rider choosing between two
+   * departures is choosing between those, not between interchangeable trains.
+   * Without it every departure on a line reads as the same thing.
+   */
+  boundFor: string
   stops: TripStop[]
 }
 
@@ -310,7 +319,7 @@ for (const group of grouped.values()) {
     continue
   }
 
-  trips.push({ tripNumber, lineCode, dayMask, stops })
+  trips.push({ tripNumber, lineCode, dayMask, boundFor: first.boundFor, stops })
 }
 
 // ── patterns ─────────────────────────────────────────────────────────────────
@@ -387,12 +396,17 @@ if (gapHops.size > 0) {
  * stop list is what repeats, and writing it once per trip instead of once per
  * pattern would multiply the file by the trips-per-pattern factor for nothing.
  */
+/* Headsigns are free text from five different feeds, so never assume they are
+ * apostrophe-free — "Ancol Barat" is fine, but nothing guarantees the next one is. */
+const quote = (value: string) => `'${value.replace(/\\/g, '\\\\').replace(/'/g, '\\\'')}'`
+
 const patternEntries = [...patterns.values()]
   .sort((a, b) => a.lineCode.localeCompare(b.lineCode) || a.stationIds.length - b.stationIds.length)
   .map((pattern) => {
     const trips = pattern.trips
       .sort((a, b) => a.stops[0]!.departureS - b.stops[0]!.departureS)
-      .map(trip => `      { t: '${trip.tripNumber}', d: ${trip.dayMask}, s: [${trip.stops.map(s => s.departureS).join(', ')}]`
+      .map(trip => `      { t: '${trip.tripNumber}', d: ${trip.dayMask}, f: ${quote(trip.boundFor)}`
+        + `, s: [${trip.stops.map(s => s.departureS).join(', ')}]`
         + `${trip.stops[0]!.arrivalS === null ? '' : `, a: [${trip.stops.map(s => s.arrivalS).join(', ')}]`} }`)
     return `  {\n    line: '${pattern.lineCode}',\n`
       + `    stations: [${pattern.stationIds.map(id => `'${id}'`).join(', ')}],\n`
@@ -432,6 +446,10 @@ const fileTS = '/*\n'
   + 'export interface TripTimes {\n'
   + '  t: string\n'
   + '  d: number\n'
+  + '  /** Where this train is signed for. A line code is not a service: from\n'
+  + '   * Cakung, line C runs 92 trips to Kampung Bandan and 60 to Angke, and a\n'
+  + '   * rider choosing between departures is choosing between those. */\n'
+  + '  f: string\n'
   + '  s: number[]\n'
   + '  a?: number[]\n'
   + '}\n\n'

@@ -156,6 +156,20 @@ them in a `retime` hook that runs on the cache-hit path as well as the miss. So 
 storing the untimed journey for its full 20 hours while every reader gets times against
 their own `at` — the route is the cacheable half, the vehicle is the per-request half.
 
+**Each route is offered at its next three boardings** (`journey-times.ts`), merged across
+routes and sorted by arrival. A route is a way of getting there; a boarding is a train,
+and they are different choices: from Cakung the 08.11 and the 08.22 both reach Rasuna
+Said at 08.56, so the later one is strictly better and the old one-card-per-route view
+could not say so. Untimed routes contribute exactly one row, because there are no
+departures to enumerate.
+
+Two consequences worth knowing. **Labels are recomputed in apps/api over the expanded
+set**, compared per ROUTE rather than per row — three boardings of one route share its
+fare, so comparing rows would tie every axis against itself and award nothing. And the
+card face shows the boarding even when the arrival is unknown: on a rail-into-TJ journey
+the departure is a fact and the arrival is not, and without it several rows of one route
+are indistinguishable plates.
+
 **Coverage is 51.5% of rail-only journeys fully timed**, and the shortfall is directional
 data rather than engine capability: not one KCI stop pattern is reversible (line C has 23
 patterns and 0 reversible endpoint pairs; R 15/0; B 13/0), and 0 of 142 southbound MRTJ

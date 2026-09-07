@@ -61,6 +61,8 @@ export interface LegTiming {
   arrivalS: number
   /** The trip boarded, for tracing back to the feed. Never parsed here. */
   tripId: string
+  /** Where that vehicle is signed for, when the feed says. See Trip.headsign. */
+  headsign?: string
 }
 
 export interface ResolveDeparturesOptions {
@@ -167,7 +169,12 @@ export function resolveDepartures(
       continue
     }
 
-    timings.push({ departureS: best.boardAt, arrivalS: best.alightAt, tripId: best.trip.id })
+    timings.push({
+      departureS: best.boardAt,
+      arrivalS: best.alightAt,
+      tripId: best.trip.id,
+      ...(best.trip.headsign === undefined ? {} : { headsign: best.trip.headsign })
+    })
     clockS = best.alightAt
   }
 
