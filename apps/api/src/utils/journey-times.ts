@@ -12,7 +12,7 @@
  * and it must never run before the KV write. See `retime` in journey-endpoint.
  */
 
-import type { LegTiming, RouteLeg, Tsundere } from '@commute/tsundere'
+import type { LegTiming, RouteLeg, Tsundere, WalkingPreference } from '@commute/tsundere'
 import type { FareJourney, FareResultLeg, TripResult } from '@commute/schemas'
 import { atSecondsOfDay, serviceDay, secondsSinceLocalMidnight, wibIsoString } from 'utils/fare'
 import { DAY_MASK } from 'db/schemas/schedules'
@@ -70,15 +70,39 @@ function timeOnce(
   routeLegs: RouteLeg[],
   router: Tsundere,
   context: FareContext,
-  afterS: number
+  afterS: number,
+  walking?: WalkingPreference
 ): { journey: FareJourney, departureS: number, tripId: string } | null {
-  const timings = router.timeJourney(routeLegs, { departureS: afterS, dayMask: dayMaskFor(context.departureAt) })
+  const timings = router.timeJourney(routeLegs, {
+    departureS: afterS,
+    dayMask: dayMaskFor(context.departureAt),
+    ...(walking === undefined ? {} : { walking })
+  })
   const stamp = (seconds: number) => wibIsoString(atSecondsOfDay(context.departureAt, seconds))
 
   const legs = journey.legs.map((leg, index): FareResultLeg => {
     const timing: LegTiming | null = timings[index] ?? null
     if (leg.type !== 'RIDE' || !timing) return leg
-    return { ...leg, departureAt: stamp(timing.departureS), arrivalAt: stamp(timing.arrivalS) }
+    /*
+     * The boarded train's own headsign wins over the one planJourney derived.
+     *
+     * That derivation walks the line topology, which cannot see which vehicle
+     * this is: from Cakung every westbound leg came out "Angke via Manggarai"
+     * whichever of the line's three destinations the rider was actually on.
+     * Where a trip is known its `boundFor` is the fact, and the walk stays the
+     * fallback for the legs no timetable reaches (all of TransJakarta, and the
+     * rail trips whose stop lists have gaps).
+     *
+     * Applied here rather than in planJourney because it belongs to the
+     * per-request half, exactly like the two stamps beside it — the cached body
+     * must keep the derivation, or one rider's train is served to the next.
+     */
+    return {
+      ...leg,
+      departureAt: stamp(timing.departureS),
+      arrivalAt: stamp(timing.arrivalS),
+      ...(timing.headsign === undefined ? {} : { headsign: timing.headsign })
+    }
   })
 
   const arrivalS = router.journeyArrival(routeLegs, timings)
@@ -95,14 +119,19 @@ function timeOnce(
  * three identical cards with no clock on them would be noise rather than
  * choice. That is the TransJakarta case and the unchained-rail case both.
  */
-function boardingsOf(journey: FareJourney, router: Tsundere, context: FareContext): FareJourney[] {
+function boardingsOf(
+  journey: FareJourney,
+  router: Tsundere,
+  context: FareContext,
+  walking?: WalkingPreference
+): FareJourney[] {
   const routeLegs = toRouteLegs(journey.legs)
   const rows: FareJourney[] = []
   const seenTrips = new Set<string>()
   let afterS = secondsSinceLocalMidnight(context.departureAt)
 
   for (let i = 0; i < BOARDINGS_PER_ROUTE; i++) {
-    const timed = timeOnce(journey, routeLegs, router, context, afterS)
+    const timed = timeOnce(journey, routeLegs, router, context, afterS, walking)
     // No timetable at all, or the service is done for the day. Either way there
     // is nothing further to offer, so stop rather than pad the list.
     if (!timed) break
@@ -123,8 +152,13 @@ function boardingsOf(journey: FareJourney, router: Tsundere, context: FareContex
 }
 
 /** Every journey in a trips answer, timed against the request's own clock. */
-export function retimeTrips(result: TripResult, router: Tsundere, context: FareContext): TripResult {
-  const rows = result.journeys.flatMap(j => boardingsOf(j, router, context))
+export function retimeTrips(
+  result: TripResult,
+  router: Tsundere,
+  context: FareContext,
+  walking?: WalkingPreference
+): TripResult {
+  const rows = result.journeys.flatMap(j => boardingsOf(j, router, context, walking))
   return { ...result, journeys: relabel(byArrival(rows)) }
 }
 

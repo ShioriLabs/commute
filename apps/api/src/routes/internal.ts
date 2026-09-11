@@ -132,6 +132,21 @@ function walkingWeights(walkingRaw?: string): RankWeights | undefined {
     : undefined
 }
 
+/*
+ * The same param, as the preference itself rather than as rank weights.
+ *
+ * `walkingWeights` above answers "how should this rider's front be ordered";
+ * this answers "how fast does this rider cross a station", which is what decides
+ * the connections they make. Both read one query param, and an unrecognised
+ * value falls back to the default in both — an unknown preference must not
+ * silently retime a journey.
+ */
+function walkingPreference(walkingRaw?: string): WalkingPreference | undefined {
+  return walkingRaw !== undefined && WALKING_PREFERENCES.has(walkingRaw as WalkingPreference)
+    ? walkingRaw as WalkingPreference
+    : undefined
+}
+
 app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRouter, parseFareContext, {
   keyPrefix: 'trips',
   /*
@@ -148,7 +163,14 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
   retime: async (result, c) => retimeTrips(
     result,
     await getRouter(c.env.DB),
-    parseFareContext(c.req.query('paymentMethod'), c.req.query('at'))
+    parseFareContext(c.req.query('paymentMethod'), c.req.query('at')),
+    /*
+     * The same preference the search ranks by, used here as a SPEED: how fast
+     * this rider crosses a station decides which connections they make, and so
+     * how long the journey takes. Already part of the cache scope below, so a
+     * slow rider's timings can never be served to a brisk one.
+     */
+    walkingPreference(c.req.query('walking'))
   ),
   scope: (c) => {
     const parts = [

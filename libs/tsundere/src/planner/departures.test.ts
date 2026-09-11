@@ -100,6 +100,142 @@ describe('resolveDepartures', () => {
     expect(timings[2]?.tripId).toBe('c-late')
   })
 
+  /*
+   * A change of vehicle takes time, and none of it is recorded anywhere.
+   *
+   * These are the cases that used to quote a connection nobody can make: the
+   * clock only ever moved across a TRANSFER leg, and a change at one station
+   * does not produce one.
+   */
+  describe('charging for the change', () => {
+    /*
+     * Two lines meeting at one station, so the journey is RIDE then RIDE with
+     * nothing between them — the shape hopsToLegs emits for a cross-platform
+     * change and for a service break alike.
+     */
+    const connecting: TripPattern = {
+      lineCode: 'C',
+      stationIds: ['MRTJ-FTM', 'KCI-Y'],
+      trips: [
+        // Departs the very second the M train gets in at 06:09.
+        { id: 'c-same-second', dayMask: ALL_DAYS, departuresS: [at(6, 9), at(6, 15)] },
+        { id: 'c-catchable', dayMask: ALL_DAYS, departuresS: [at(6, 25), at(6, 35)] }
+      ]
+    }
+
+    it('will not board a train leaving the second the rider steps off', () => {
+      const legs = [ride('M', ['MRTJ-LBB', 'MRTJ-FTM']), ride('C', ['MRTJ-FTM', 'KCI-Y'])]
+      const timings = resolveDepartures(legs, index(mrt, connecting), { departureS: at(5), dayMask: ALL_DAYS })
+
+      expect(timings[0]?.arrivalS).toBe(at(6, 9))
+      expect(timings[1]?.tripId).toBe('c-catchable')
+    })
+
+    /*
+     * Boarding the first vehicle is not a change — the rider is already on the
+     * platform — so the allowance must not be charged before it.
+     */
+    it('does not charge the first boarding', () => {
+      const [timing] = resolveDepartures(
+        [ride('M', ['MRTJ-LBB', 'MRTJ-FTM'])], index(mrt), { departureS: at(6), dayMask: ALL_DAYS }
+      )
+      expect(timing?.departureS).toBe(at(6))
+    })
+
+    /*
+     * distanceM = 0 means UNMEASURED in this repo, never "no walk at all", so a
+     * zero-distance transfer must still cost the in-station allowance.
+     */
+    it('floors an unmeasured transfer rather than crossing it instantly', () => {
+      const legs = [
+        ride('M', ['MRTJ-LBB', 'MRTJ-FTM']),
+        walk('MRTJ-FTM', 'MRTJ-FTM', 0),
+        ride('C', ['MRTJ-FTM', 'KCI-Y'])
+      ]
+      const timings = resolveDepartures(legs, index(mrt, connecting), { departureS: at(5), dayMask: ALL_DAYS })
+      expect(timings[2]?.tripId).toBe('c-catchable')
+    })
+
+    /*
+     * The pace is a per-rider input, and the only thing separating these two is
+     * how fast they cross the station.
+     */
+    it('lets a brisk rider make a connection a slow one misses', () => {
+      const tight: TripPattern = {
+        lineCode: 'C',
+        stationIds: ['KCI-X', 'KCI-Y'],
+        // 06:19 + a 240m walk: 160s brisk lands 06:21:40, 267s slow lands 06:23:27.
+        trips: [
+          { id: 'tight', dayMask: ALL_DAYS, departuresS: [at(6, 22), at(6, 30)] },
+          { id: 'next', dayMask: ALL_DAYS, departuresS: [at(6, 45), at(6, 55)] }
+        ]
+      }
+      const legs = [
+        ride('M', ['MRTJ-LBB', 'MRTJ-FTM', 'MRTJ-BLA']),
+        walk('MRTJ-BLA', 'KCI-X'),
+        ride('C', ['KCI-X', 'KCI-Y'])
+      ]
+      const brisk = resolveDepartures(legs, index(mrt, tight), { departureS: at(5), dayMask: ALL_DAYS, walking: 'BRISK' })
+      const slow = resolveDepartures(legs, index(mrt, tight), { departureS: at(5), dayMask: ALL_DAYS, walking: 'SLOW' })
+
+      expect(brisk[2]?.tripId).toBe('tight')
+      expect(slow[2]?.tripId).toBe('next')
+    })
+
+    /*
+     * However fast the rider, the doors still have to open and the platform
+     * still has to clear.
+     */
+    it('never lets a change take less than a minute', () => {
+      const justUnder: TripPattern = {
+        lineCode: 'C',
+        stationIds: ['MRTJ-FTM', 'KCI-Y'],
+        trips: [
+          // 30s after the 06:09 arrival: inside the floor at any pace.
+          { id: 'too-soon', dayMask: ALL_DAYS, departuresS: [at(6, 9) + 30, at(6, 20)] },
+          { id: 'after-floor', dayMask: ALL_DAYS, departuresS: [at(6, 12), at(6, 22)] }
+        ]
+      }
+      const legs = [ride('M', ['MRTJ-LBB', 'MRTJ-FTM']), ride('C', ['MRTJ-FTM', 'KCI-Y'])]
+      const timings = resolveDepartures(
+        legs, index(mrt, justUnder), { departureS: at(5), dayMask: ALL_DAYS, walking: 'BRISK' }
+      )
+      expect(timings[1]?.tripId).toBe('after-floor')
+    })
+  })
+
+  /*
+   * Which train this is, as the feed signs it. The topology walk in apps/api
+   * cannot tell two trains on one line apart; this can, and only where a trip
+   * was actually resolved.
+   */
+  describe('reporting the boarded train', () => {
+    const signed: TripPattern = {
+      lineCode: 'C',
+      stationIds: ['KCI-CUK', 'KCI-JNG'],
+      trips: [
+        { id: 'kpb', dayMask: ALL_DAYS, headsign: 'Kampung Bandan', departuresS: [at(6), at(6, 20)] },
+        { id: 'ak', dayMask: ALL_DAYS, headsign: 'Angke', departuresS: [at(7), at(7, 20)] }
+      ]
+    }
+
+    it('carries the headsign of the trip it actually boarded', () => {
+      const legs = [ride('C', ['KCI-CUK', 'KCI-JNG'])]
+      expect(resolveDepartures(legs, index(signed), { departureS: at(5), dayMask: ALL_DAYS })[0]?.headsign)
+        .toBe('Kampung Bandan')
+      // An hour later the same leg is a different train, signed differently.
+      expect(resolveDepartures(legs, index(signed), { departureS: at(6, 30), dayMask: ALL_DAYS })[0]?.headsign)
+        .toBe('Angke')
+    })
+
+    it('omits the headsign where the feed does not sign the trip', () => {
+      const [timing] = resolveDepartures(
+        [ride('M', ['MRTJ-LBB', 'MRTJ-FTM'])], index(mrt), { departureS: at(5), dayMask: ALL_DAYS }
+      )
+      expect(timing?.headsign).toBeUndefined()
+    })
+  })
+
   it('respects the day mask', () => {
     const weekdayOnly: TripPattern = {
       ...mrt,

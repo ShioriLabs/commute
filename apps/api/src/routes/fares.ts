@@ -66,6 +66,10 @@ export async function getRouter(d1: D1Database): Promise<Tsundere> {
       trips: pattern.trips.map(trip => ({
         id: trip.t,
         dayMask: trip.d,
+        // Where the train is signed. A line code is not a service — from Cakung
+        // line C runs trains to Kampung Bandan, to Angke and out to Cikarang —
+        // and this is the only thing that tells two of its departures apart.
+        headsign: trip.f,
         departuresS: trip.s,
         arrivalsS: trip.a
       }))
