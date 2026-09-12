@@ -13,10 +13,6 @@ interface Props {
   // for its "open on /fare" link, which is how a route found in the sheet
   // becomes a shareable URL — see utils/fare-url.ts.
   footer?: ReactNode
-  // Wrap the criteria chips instead of scrolling them. On by default, because
-  // four chips do not fit a phone — see CriteriaBar. Pass false only for a
-  // surface with genuine horizontal room.
-  wrapCriteria?: boolean
   /*
    * Journey selection, lifted. Only the map passes these — it draws the chosen
    * journey on the canvas behind this sheet, so the choice has to live where
@@ -34,7 +30,6 @@ interface Props {
 export default function FarePanel({
   query,
   footer,
-  wrapCriteria = true,
   selectedIndex,
   onSelectIndex,
   openOnDetail
@@ -74,7 +69,6 @@ export default function FarePanel({
       <CriteriaBar
         criteria={criteria}
         onChange={setCriteria}
-        wrap={wrapCriteria}
       />
 
       {!origin || !destination

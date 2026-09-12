@@ -1,5 +1,6 @@
 import { OPERATORS, PAYMENT_METHODS, type PaymentMethod } from '@commute/constants'
 import type { OperatorCode } from '@commute/schemas'
+import { isStaleDeparture, quantiseToSlot } from 'utils/departure-time'
 
 // The fare search's persistent settings — what the criteria bar under the
 // Dari/Ke fields edits.
@@ -18,22 +19,27 @@ import type { OperatorCode } from '@commute/schemas'
 export interface FareCriteria {
   paymentMethod: PaymentMethod
   /**
-   * Which fare period to price for. `'now'` follows the clock, which is what
-   * almost everyone wants; the explicit buckets are for "what will this cost me
-   * tomorrow morning".
+   * When the rider is leaving. `'now'` follows the clock, which is what almost
+   * everyone wants; anything else is an ISO instant they picked.
    *
-   * Still a bucket and not a timestamp, but no longer for the original reason.
-   * That reason was that the router was time-blind — true of `findRoute`, and
-   * false of `findRoutes`, which takes `departureS` and `serviceHours` and will
-   * not board a corridor that is shut. The app routes schedule-aware now, so a
-   * datetime picker would no longer promise something the engine cannot do.
+   * This used to be a peak|offpeak bucket, for a cache reason that no longer
+   * holds. The router has been schedule-aware since findRoutes took
+   * `departureS` and `serviceHours`, so the engine could always honour a real
+   * departure time — what blocked it was the KV key, which reduced `at` to the
+   * same two buckets and served whichever body first warmed the window. That
+   * key now carries a 20-minute slot (see the API's `departureSlot`), so a
+   * picked time reaches the router and comes back as its own cached answer.
    *
-   * What still holds it back is the cache. The server reduces `at` to
-   * peak/off-peak (`fareTimeBucket`) and keys KV on that bucket, so a
-   * per-minute timestamp would split every entry and miss on nearly every
-   * request. Build the picker with a quantisation, or not at all.
+   * Quantised to DEPARTURE_SLOT_MINUTES on the way out for exactly that reason:
+   * an unrounded instant would key a fresh entry per minute and miss on nearly
+   * every request. The picker only offers slot boundaries, so this is belt and
+   * braces against a hand-edited URL.
+   *
+   * A stored instant goes stale — "08.40" means nothing tomorrow — so
+   * parseFareCriteria resets a past one to `'now'` rather than pricing a
+   * journey the rider cannot take.
    */
-  fareTime: 'now' | 'peak' | 'offpeak'
+  fareTime: 'now' | string
   /**
    * Which networks the route may use.
    *
@@ -85,18 +91,22 @@ export const DEFAULT_FARE_CRITERIA: FareCriteria = {
   operator: null
 }
 
-const FARE_TIMES = new Set<FareCriteria['fareTime']>(['now', 'peak', 'offpeak'])
-
-/*
- * Representative instants for the explicit buckets, as local WIB offsets.
+/**
+ * Read a stored or URL-supplied departure back.
  *
- * The server buckets `at` down to peak/off-peak and keys its KV cache on the
- * bucket rather than the instant, so any time inside the window is equivalent.
- * A Monday is used because `fareTimeBucket` treats every weekend as off-peak —
- * a "peak" pick landing on a Saturday would silently price as off-peak.
+ * Three ways to be unusable, all landing on `'now'`: not a string at all, not a
+ * parseable instant, or an instant the clock has already passed. The last is
+ * the one that matters in practice — criteria persist, so yesterday's 08.40
+ * would otherwise come back tomorrow and price a train that has gone.
  */
-const PEAK_SAMPLE = '2026-08-03T08:00:00+07:00'
-const OFFPEAK_SAMPLE = '2026-08-03T12:00:00+07:00'
+function parseFareTime(raw: unknown): FareCriteria['fareTime'] {
+  if (raw === 'now') return 'now'
+  if (typeof raw !== 'string') return 'now'
+  const at = new Date(raw)
+  if (Number.isNaN(at.getTime())) return 'now'
+  if (isStaleDeparture(raw)) return 'now'
+  return quantiseToSlot(at).toISOString()
+}
 
 /**
  * Parse stored criteria, falling back per field rather than wholesale.
@@ -125,9 +135,7 @@ export function parseFareCriteria(raw: string | null): FareCriteria {
   const paymentMethod = typeof record.paymentMethod === 'string' && record.paymentMethod in PAYMENT_METHODS
     ? record.paymentMethod as PaymentMethod
     : DEFAULT_FARE_CRITERIA.paymentMethod
-  const fareTime = FARE_TIMES.has(record.fareTime as FareCriteria['fareTime'])
-    ? record.fareTime as FareCriteria['fareTime']
-    : DEFAULT_FARE_CRITERIA.fareTime
+  const fareTime = parseFareTime(record.fareTime)
   // Not validated against the operator list: operators are data, and a stored
   // code for one that is temporarily absent should come back when it returns.
   // A stale code only ever over-filters the picker, which is visible and
@@ -215,8 +223,17 @@ export function fareQueryParams(criteria: FareCriteria): URLSearchParams {
   if (criteria.paymentMethod !== DEFAULT_FARE_CRITERIA.paymentMethod) {
     params.set('paymentMethod', criteria.paymentMethod)
   }
-  if (criteria.fareTime === 'peak') params.set('at', PEAK_SAMPLE)
-  if (criteria.fareTime === 'offpeak') params.set('at', OFFPEAK_SAMPLE)
+  /*
+   * A picked departure goes out as the instant itself; `'now'` goes out as
+   * silence. That silence is load-bearing — it is what keeps the default
+   * rider's SWR key and share URL byte-identical to the one they have always
+   * had, so nobody's warm cache misses because a picker was added.
+   *
+   * Already quantised by parseFareTime and by the picker, which only offers
+   * slot boundaries. Sent unrounded it would still work, just key a colder
+   * entry per minute: see the API's departureSlot.
+   */
+  if (criteria.fareTime !== 'now') params.set('at', criteria.fareTime)
   /*
    * Sent, unlike `operator`, because it changes the route rather than the
    * picker. Only `/_internal/trips` reads it — `/fares` ignores an unknown
@@ -277,6 +294,25 @@ export function readCriteriaFromUrl(params: URLSearchParams): Partial<FareCriter
    * recipient a different journey than the one the sender meant to send.
    */
   if (params.get('modes') === 'rail') criteria.modes = 'rail'
+
+  /*
+   * `at` now round-trips, where the peak/off-peak buckets deliberately did not.
+   *
+   * The old reasoning was that the instants in the URL were representative
+   * samples rather than anything the rider chose, so reading them back would
+   * invent a specificity the UI did not offer. With a real picker that inverts:
+   * the instant IS the rider's choice, and a shared "leaving 08.40 tomorrow"
+   * link that came back as "now" would show the recipient a different journey
+   * than the sender was looking at.
+   *
+   * Through parseFareTime like stored criteria, so a stale or malformed `at`
+   * degrades to `'now'` rather than pricing a departure that has passed.
+   */
+  const at = params.get('at')
+  if (at) {
+    const fareTime = parseFareTime(at)
+    if (fareTime !== 'now') criteria.fareTime = fareTime
+  }
 
   // Round-trips for the same reason modes does: a shared link should reproduce
   // the ordering the sender was looking at.

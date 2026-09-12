@@ -1,4 +1,4 @@
-import type { Operator, FareContext } from '@commute/constants'
+import { PLATFORM_CODES, type Operator, type FareContext } from '@commute/constants'
 import type { Criteria, JourneyLabel, RouteLeg } from '@commute/tsundere'
 import type { FareJourney, FareJourneyLabel, FareResultLeg, FareResultLineRef, FareResultStation, OperatorCode } from '@commute/schemas'
 import { calculateTransferFare, resolveCorridorMerges, type CorridorMerge } from 'utils/fare'
@@ -141,6 +141,30 @@ export function assembleJourney(plan: JourneyPlan, namer: StationNamer, context:
       ? (known(h.viaId) ? `${stationRef(h.terminusId).name} via ${stationRef(h.viaId).name}` : stationRef(h.terminusId).name)
       : null
 
+  /*
+   * The platform a rider boards from, where it has been verified.
+   *
+   * Keyed on where you get on, which line, and which way you leave — the next
+   * hop is what distinguishes the two faces of a through station. Note the key
+   * is asymmetric: the station is a full id (`KCI-CUK`) while the next hop is a
+   * BARE topology code (`KRI`), so the operator prefix has to come off the
+   * second stop. Passing `stationIds[1]` straight in yields `KCI-KRI`, misses
+   * every key, and fails silently — a miss is indistinguishable from "no
+   * platform known", which is also the correct answer almost everywhere.
+   *
+   * `lineCode` off the leg rather than `primary.line`: that one is the
+   * composite `KCI:C`, and the table keys on the bare code.
+   *
+   * Interlined legs resolve to undefined today (no trunk station is in the
+   * table), so the arbitrary line pick there costs nothing yet.
+   */
+  const platformCodeOf = (leg: RouteLeg & { type: 'RIDE' }): string | undefined => {
+    const nextHopId = leg.stationIds[1]
+    if (!nextHopId) return undefined
+    const nextHopCode = nextHopId.slice(leg.operator.length + 1)
+    return PLATFORM_CODES[`${leg.fromStationId}:${leg.lineCode}:${nextHopCode}`]
+  }
+
   const resultLegs: FareResultLeg[] = legs.flatMap((leg, index): FareResultLeg[] => {
     if (leg.type === 'TRANSFER') {
       const merge = corridorMerges.get(index)
@@ -177,6 +201,7 @@ export function assembleJourney(plan: JourneyPlan, namer: StationNamer, context:
     // On interlined track the router's line pick is arbitrary; present the
     // first topology-ordered service line as the primary for a stable badge.
     const primary = serviceLines[0]!
+    const platform = platformCodeOf(leg)
     return [{
       type: 'RIDE',
       line: primary.line,
@@ -192,7 +217,8 @@ export function assembleJourney(plan: JourneyPlan, namer: StationNamer, context:
       stops: leg.stationIds.map(stationRef),
       headsign: primary.headsign,
       distanceM: leg.distanceM,
-      ...(meta.interlined ? { serviceLines } : {})
+      ...(meta.interlined ? { serviceLines } : {}),
+      ...(platform ? { platformCode: platform } : {})
     }]
   })
 

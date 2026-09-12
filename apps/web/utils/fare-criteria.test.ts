@@ -19,6 +19,17 @@ function stubStorage(impl: Partial<Storage>) {
   vi.stubGlobal('localStorage', impl as Storage)
 }
 
+/*
+ * A departure far enough ahead that it never goes stale mid-suite.
+ *
+ * Stale instants reset to 'now' by design, so a fixture anywhere near the
+ * present would make these assertions pass or fail depending on the day they
+ * run. Both sit on slot boundaries, since anything else is floored on the way
+ * in and would not compare equal to itself.
+ */
+const FUTURE_SLOT = '2099-01-05T08:00:00.000Z'
+const LATER_SLOT = '2099-01-05T08:40:00.000Z'
+
 afterEach(() => {
   vi.unstubAllGlobals()
 })
@@ -31,11 +42,11 @@ describe('parseFareCriteria', () => {
 
   it('reads a fully-specified value back', () => {
     const stored = JSON.stringify({
-      paymentMethod: 'QRIS_TAP', fareTime: 'peak', modes: 'rail', walking: 'SLOW', operator: 'KCI'
+      paymentMethod: 'QRIS_TAP', fareTime: FUTURE_SLOT, modes: 'rail', walking: 'SLOW', operator: 'KCI'
     })
     expect(parseFareCriteria(stored)).toEqual({
       paymentMethod: 'QRIS_TAP',
-      fareTime: 'peak',
+      fareTime: new Date(FUTURE_SLOT).toISOString(),
       modes: 'rail',
       walking: 'SLOW',
       operator: 'KCI'
@@ -49,11 +60,11 @@ describe('parseFareCriteria', () => {
    */
   it('falls back per field, keeping the values it can still use', () => {
     const stored = JSON.stringify({
-      paymentMethod: 'CASH', fareTime: 'peak', modes: 'monorail', walking: 'SPRINT', operator: 'KCI'
+      paymentMethod: 'CASH', fareTime: FUTURE_SLOT, modes: 'monorail', walking: 'SPRINT', operator: 'KCI'
     })
     expect(parseFareCriteria(stored)).toEqual({
       paymentMethod: DEFAULT_FARE_CRITERIA.paymentMethod,
-      fareTime: 'peak',
+      fareTime: new Date(FUTURE_SLOT).toISOString(),
       // An unreadable mode must widen the network back to everything, never
       // narrow it: a rider is never stranded by a value they cannot see.
       modes: 'all',
@@ -66,6 +77,25 @@ describe('parseFareCriteria', () => {
     const stored = JSON.stringify({ paymentMethod: 'QRIS_TAP', fareTime: 'midnight', operator: null })
     expect(parseFareCriteria(stored).fareTime).toBe('now')
     expect(parseFareCriteria(stored).paymentMethod).toBe('QRIS_TAP')
+  })
+
+  /*
+   * Criteria persist, so a departure outlives the journey it was chosen for.
+   * Yesterday's 08.40 coming back tomorrow would price a train that has gone —
+   * worse than quietly following the clock, because the rider cannot see why
+   * the number is wrong.
+   */
+  it('resets a departure the clock has already passed', () => {
+    const stored = JSON.stringify({ fareTime: '2020-01-01T08:00:00+07:00' })
+    expect(parseFareCriteria(stored).fareTime).toBe('now')
+  })
+
+  // Quantised on the way in as well as out: a hand-edited value between slot
+  // boundaries would otherwise key a cache entry nothing else ever hits.
+  it('floors a stored departure onto the slot grid', () => {
+    const offGrid = new Date(new Date(FUTURE_SLOT).getTime() + 7 * 60_000).toISOString()
+    expect(parseFareCriteria(JSON.stringify({ fareTime: offGrid })).fareTime)
+      .toBe(new Date(FUTURE_SLOT).toISOString())
   })
 
   // JSON.parse succeeds on all of these, so a plain try/catch is not enough.
@@ -90,7 +120,7 @@ describe('fare criteria persistence', () => {
 
     const criteria: FareCriteria = {
       ...DEFAULT_FARE_CRITERIA,
-      paymentMethod: 'QRIS_TAP', fareTime: 'offpeak', modes: 'rail', walking: 'AVOID', operator: 'TJ'
+      paymentMethod: 'QRIS_TAP', fareTime: new Date(FUTURE_SLOT).toISOString(), modes: 'rail', walking: 'AVOID', operator: 'TJ'
     }
     writeFareCriteria(criteria)
     expect(store.has(FARE_CRITERIA_KEY)).toBe(true)
@@ -128,22 +158,19 @@ describe('fareQueryParams', () => {
     expect(params.get('paymentMethod')).toBe('QRIS_TAP')
   })
 
-  // The server reduces `at` to a bucket, so any instant inside the window works
-  // — but it must be a weekday, since fareTimeBucket calls every weekend
-  // off-peak and a Saturday "peak" would silently price as off-peak.
-  it('emits a weekday peak instant for the peak bucket', () => {
-    const at = fareQueryParams({ ...DEFAULT_FARE_CRITERIA, fareTime: 'peak' }).get('at')
-    expect(at).toBeTruthy()
-    const date = new Date(at!)
-    expect(date.getUTCDay()).toBeGreaterThanOrEqual(1)
-    expect(date.getUTCDay()).toBeLessThanOrEqual(5)
+  // The instant goes out as the rider picked it. The server keys its cache on a
+  // 20-minute slot, so this is what makes a chosen departure its own answer
+  // rather than whatever body first warmed the surrounding peak window.
+  it('emits a chosen departure verbatim', () => {
+    const at = fareQueryParams({ ...DEFAULT_FARE_CRITERIA, fareTime: FUTURE_SLOT }).get('at')
+    expect(at).toBe(FUTURE_SLOT)
   })
 
-  it('emits a different instant for off-peak than for peak', () => {
-    const peak = fareQueryParams({ ...DEFAULT_FARE_CRITERIA, fareTime: 'peak' }).get('at')
-    const offpeak = fareQueryParams({ ...DEFAULT_FARE_CRITERIA, fareTime: 'offpeak' }).get('at')
-    expect(offpeak).toBeTruthy()
-    expect(offpeak).not.toBe(peak)
+  it('emits a different instant per slot', () => {
+    const early = fareQueryParams({ ...DEFAULT_FARE_CRITERIA, fareTime: FUTURE_SLOT }).get('at')
+    const later = fareQueryParams({ ...DEFAULT_FARE_CRITERIA, fareTime: LATER_SLOT }).get('at')
+    expect(later).toBeTruthy()
+    expect(later).not.toBe(early)
   })
 
   it('omits `at` entirely when following the clock', () => {
@@ -154,7 +181,7 @@ describe('fareQueryParams', () => {
   // router filters by operator, which it does not.
   it('never sends the operator to the fare endpoint', () => {
     const params = fareQueryParams({
-      ...DEFAULT_FARE_CRITERIA, paymentMethod: 'QRIS_TAP', fareTime: 'peak', operator: 'KCI'
+      ...DEFAULT_FARE_CRITERIA, paymentMethod: 'QRIS_TAP', fareTime: FUTURE_SLOT, operator: 'KCI'
     })
     expect(params.has('operator')).toBe(false)
     expect([...params.keys()].sort()).toEqual(['at', 'paymentMethod'])
@@ -246,6 +273,26 @@ describe('readCriteriaFromUrl', () => {
   it('ignores an unreadable modes value rather than narrowing the network', () => {
     expect(read('modes=monorail')).toBeUndefined()
     expect(read('modes=all')).toBeUndefined()
+  })
+
+  /*
+   * `at` round-trips, where the old peak/off-peak samples deliberately did not.
+   * The instant is the rider's own choice now, so a shared "leaving 08.40"
+   * link that came back as "now" would show the recipient a different journey
+   * than the sender was looking at.
+   */
+  it('reads a departure back so a shared link reproduces it', () => {
+    expect(read(`at=${encodeURIComponent(FUTURE_SLOT)}`)).toEqual({ fareTime: FUTURE_SLOT })
+    // Round trip: what fareQueryParams writes is what this reads.
+    const params = fareQueryParams({ ...DEFAULT_FARE_CRITERIA, fareTime: FUTURE_SLOT })
+    expect(read(params.toString())).toEqual({ fareTime: FUTURE_SLOT })
+  })
+
+  // Same staleness rule as storage: a link sent last week must not price a
+  // departure that has already gone.
+  it('ignores a departure that has already passed', () => {
+    expect(read('at=2020-01-01T08%3A00%3A00%2B07%3A00')).toBeUndefined()
+    expect(read('at=nonsense')).toBeUndefined()
   })
 
   it('reads walking back, and ignores a level it does not know', () => {

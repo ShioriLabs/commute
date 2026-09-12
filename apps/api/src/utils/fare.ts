@@ -66,6 +66,38 @@ export function fareTimeBucket(date: Date): FareTimeBucket {
   return isPeak ? 'peak' : 'offpeak'
 }
 
+/** How coarsely a departure time is quantised for cache purposes, in minutes. */
+export const DEPARTURE_SLOT_MINUTES = 20
+
+/**
+ * A departure time as a quantised local slot, e.g. `0840`.
+ *
+ * The cache key's time component. `fareTimeBucket` used to fill that role, but
+ * two buckets cannot express "the 08:42 train" — every instant in a three-hour
+ * peak window collapsed to one entry, so a rider choosing a departure time got
+ * whatever body the first caller of that window warmed.
+ *
+ * Twenty minutes is the compromise between those two failures. Per-minute keys
+ * would split the namespace 1440 ways and miss on nearly every request; this
+ * splits it 72 ways, which is cold enough to notice and warm enough to work.
+ * The slot floors rather than rounds, so a time never keys to a slot that has
+ * not started yet.
+ *
+ * Fare is NOT computed from this — `fareTimeBucket` still decides the LRT cap,
+ * and must, because the cap genuinely is a peak/off-peak quantity. This only
+ * decides what the cache treats as the same question, where a finer key is
+ * always safe: it can split two identical answers, never merge two different
+ * ones.
+ */
+export function departureSlot(date: Date): string {
+  const local = wib(date)
+  const minuteOfDay = local.getUTCHours() * 60 + local.getUTCMinutes()
+  const slotStart = Math.floor(minuteOfDay / DEPARTURE_SLOT_MINUTES) * DEPARTURE_SLOT_MINUTES
+  const hours = Math.floor(slotStart / 60)
+  const minutes = slotStart % 60
+  return `${String(hours).padStart(2, '0')}${String(minutes).padStart(2, '0')}`
+}
+
 /**
  * Which day bucket a moment falls in, Jakarta time.
  *

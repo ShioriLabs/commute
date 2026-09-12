@@ -1,8 +1,7 @@
 import { PAYMENT_METHODS } from '@commute/constants'
 import { describe, expect, it } from 'vitest'
 import {
-  FARE_TIME_DESCRIPTIONS,
-  FARE_TIME_LABELS,
+  DEPARTURE_NOW_LABEL,
   OFFERED_PAYMENT_METHODS,
   PAYMENT_METHOD_DESCRIPTIONS,
   PAYMENT_METHOD_LABELS
@@ -36,10 +35,9 @@ describe('criteria labels', () => {
     }
   })
 
-  it('labels and describes every fare time bucket', () => {
-    for (const bucket of ['now', 'peak', 'offpeak'] as const) {
-      expect(FARE_TIME_LABELS[bucket]).toBeTruthy()
-      expect(FARE_TIME_DESCRIPTIONS[bucket]).toBeTruthy()
-    }
+  // The peak/offpeak buckets were replaced by a real departure picker, so the
+  // only standing time label left is the one the button wears by default.
+  it('names the default departure mode', () => {
+    expect(DEPARTURE_NOW_LABEL).toBeTruthy()
   })
 })

@@ -624,12 +624,13 @@ export default function MapRailPill({
                       {/*
                       * The query's settings, above the answer they produce.
                       *
-                      * `wrap` is not optional here: unwrapped, CriteriaBar bleeds
-                      * -mx-8 px-8 for a scrolling rail and assumes 8-unit parent
-                      * padding, which this px-4 card does not give it. Wrapped
-                      * the chips flow onto as many lines as the column needs.
+                      * No layout prop any more: CriteriaBar is one button that
+                      * opens a sheet, so it fits this px-4 card the same as it
+                      * fits the wider panels. It used to need `wrap` here to
+                      * stop its chip rail bleeding -mx-8 px-8 into padding this
+                      * card does not have.
                       */}
-                      <CriteriaBar criteria={criteria} onChange={onCriteriaChange} wrap />
+                      <CriteriaBar criteria={criteria} onChange={onCriteriaChange} />
 
                       {/*
                         * The answer, and the two things a rider does with it.

@@ -63,6 +63,21 @@ export const RideLegSchema = v.pipe(
       v.optional(v.string()),
       v.description('Jam tiba di stasiun turun, sesuai jadwal resmi. Cuma ada di tahap yang jadwalnya kami punya.'),
       v.metadata({ examples: ['2026-09-07T07:31:00+07:00'] })
+    ),
+    /*
+     * Optional for the same reason as the two above, but with a sharper edge:
+     * platform assignments are reassigned operationally and change with
+     * engineering work, so PLATFORM_CODES carries only field-verified entries
+     * and is absent for most legs. Absent means "we do not know" and the UI
+     * omits the badge; a guess would send a rider to the wrong trackside.
+     *
+     * A string, not a number: an island platform between two tracks serving one
+     * direction is signed as a range ("1/2"), which is what a rider reads.
+     */
+    platformCode: v.pipe(
+      v.optional(v.string()),
+      v.description('Peron tempat naik, kalau datanya sudah diverifikasi. Bisa berupa rentang kalau peronnya pulau.'),
+      v.metadata({ examples: ['1/2'] })
     )
   }),
   v.title('FareRideLeg'),

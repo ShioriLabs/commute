@@ -4,7 +4,7 @@ import type { Tsundere } from '@commute/tsundere'
 import type { Bindings } from 'app'
 import { KVRepository } from 'db/repositories/kv'
 import { StationRepository } from 'db/repositories/stations'
-import { fareTimeBucket, serviceDay } from 'utils/fare'
+import { departureSlot, serviceDay } from 'utils/fare'
 import { stationNamer, type StationNamer } from 'utils/fare-journey'
 import { Internal, NotFound, Ok } from 'utils/response'
 import { ServerTiming } from 'utils/server-timing'
@@ -31,12 +31,19 @@ import { ServerTiming } from 'utils/server-timing'
  * the OG worker and shared links still read /fares — so a shared key would
  * serve a TripResult to a caller parsing a FareResult.
  *
- * Keyed on payment method and time bucket because fare depends on both — peak
- * and off-peak, and the integrated-fare steps, must not share a cached body.
+ * Keyed on payment method because fare depends on it: the integrated-fare steps
+ * must not share a cached body with single-tap stored value.
  *
- * The service day joins them because routing now depends on it too: lines run
- * on different days and at different frequencies, so a Saturday answer served
- * from a Tuesday key would route onto a corridor that is not running.
+ * The service day joins it because routing depends on that too: lines run on
+ * different days and at different frequencies, so a Saturday answer served from
+ * a Tuesday key would route onto a corridor that is not running.
+ *
+ * The time component is a 20-minute slot rather than the peak/off-peak bucket it
+ * used to be. Two buckets could not express a departure time at all — every
+ * instant in the morning peak was one entry — so a rider who picked 08:40 was
+ * served whichever body happened to warm that window. See departureSlot for why
+ * twenty minutes, and note that fare itself still buckets peak/off-peak: this
+ * only narrows what the cache calls the same question.
  */
 export function journeyCacheKey(
   prefix: 'fares' | 'trips',
@@ -57,13 +64,18 @@ export function journeyCacheKey(
   scope?: string
 ): string {
   const day = serviceDay(context.departureAt)
-  const base = `${prefix}:${fromId}:${toId}:${context.paymentMethod}:${day}:${fareTimeBucket(context.departureAt)}:${apiVersion}`
+  const base = `${prefix}:${fromId}:${toId}:${context.paymentMethod}:${day}:${departureSlot(context.departureAt)}:${apiVersion}`
   return scope ? `${base}:${scope}` : base
 }
 
 /*
- * How long a CLOSED answer stays cached. Short, because the cache key's time
- * component is only peak/off-peak and cannot express a 05:00 opening.
+ * How long a CLOSED answer stays cached.
+ *
+ * Kept short even though the key's 20-minute slot can now express a 05:00
+ * opening, because a CLOSED body carries `nextServiceAt` — a countdown to a
+ * moment, which goes stale inside its own slot. Worth revisiting alongside the
+ * slot width, but not silently: this value is about the freshness of a promise,
+ * not about what the key can distinguish.
  */
 const CLOSED_CACHE_TTL_S = 5 * 60
 

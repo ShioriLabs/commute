@@ -96,12 +96,13 @@ export default function MapFareSheet({
     >
       {ready => (ready
         ? (
-            // px-8 is load-bearing: CriteriaBar's rail assumes 8-unit parent
-            // padding, the same as /fare's p-8 and the search sheet's px-8.
+            // px-8 matches /fare's p-8 and the search sheet's px-8, so the
+            // panel's fields and settings sit on the same margin on every
+            // surface. (It used to be load-bearing for CriteriaBar's bleeding
+            // chip rail; that rail is now a single button and no longer cares.)
             <div className="px-8 pb-8">
               <FarePanel
                 query={query}
-                wrapCriteria
                 selectedIndex={selectedIndex}
                 onSelectIndex={onSelectIndex}
                 footer={farePath

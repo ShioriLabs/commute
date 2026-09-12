@@ -31,12 +31,14 @@ describe('fareApiUrl', () => {
     expect(url).toContain('paymentMethod=QRIS_TAP')
   })
 
-  it('appends a fare-time bucket as `at`', () => {
-    const peak = fareApiUrl('KCI-SUD', 'MRTJ-BLA', criteriaWith({ fareTime: 'peak' }))
-    const offpeak = fareApiUrl('KCI-SUD', 'MRTJ-BLA', criteriaWith({ fareTime: 'offpeak' }))
-    expect(peak).toContain('at=')
-    expect(offpeak).toContain('at=')
-    expect(peak).not.toBe(offpeak)
+  it('appends a chosen departure as `at`, and keys distinctly per slot', () => {
+    // Far enough ahead to stay in the future whenever this suite runs: a past
+    // instant is reset to 'now' by design, which would make this pass vacuously.
+    const early = fareApiUrl('KCI-SUD', 'MRTJ-BLA', criteriaWith({ fareTime: '2099-01-05T08:00:00+07:00' }))
+    const later = fareApiUrl('KCI-SUD', 'MRTJ-BLA', criteriaWith({ fareTime: '2099-01-05T08:40:00+07:00' }))
+    expect(early).toContain('at=')
+    expect(later).toContain('at=')
+    expect(early).not.toBe(later)
   })
 
   it('leaves the operator criterion out of the key', () => {
@@ -58,7 +60,7 @@ describe('fareApiUrl', () => {
   it('matches the URL shape use-fare-query used to build inline', () => {
     // Pins the contract the two callers converged on, so a future edit to either
     // side cannot silently reintroduce the split key.
-    const criteria = criteriaWith({ paymentMethod: 'QRIS_TAP', fareTime: 'peak' })
+    const criteria = criteriaWith({ paymentMethod: 'QRIS_TAP', fareTime: '2099-01-05T08:00:00+07:00' })
     const query = fareQueryParams(criteria).toString()
     const expected = new URL(
       `/fares/KCI-SUD/MRTJ-BLA${query ? `?${query}` : ''}`,

@@ -4,7 +4,7 @@ import { type CSSProperties, useEffect, useMemo, useState } from 'react'
 import { ArrowsDownUpIcon, CaretDownIcon, CaretLeftIcon, CaretRightIcon, PersonSimpleWalkIcon, TicketIcon } from '@phosphor-icons/react'
 import { getForegroundColor } from 'utils/colors'
 import { formatClock, formatDuration, formatKm, formatRupiah } from 'utils/format'
-import { joinLabels } from 'utils/labels'
+import { formatPlatformCode, joinLabels } from 'utils/labels'
 import LineRoundel from '~/components/line-roundel'
 import { FARE_GUTTER_CLASS, FARE_RAIL_CENTER_PX, interlinedTrackFill, LINE_COLOR_FALLBACK, RAIL_WIDTH_PX } from '~/components/transit-geometry'
 import { codeOfLineKey, useLines } from '~/hooks/use-lines'
@@ -125,7 +125,37 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
           <Rail style={railStyle} cap="START" />
           <Node color={legColor} />
         </div>
-        <b className="text-lg py-0.5">{leg.from.name}</b>
+        <div className="flex items-center gap-2 flex-wrap py-0.5">
+          <b className="text-lg">{leg.from.name}</b>
+          {/*
+            * Which peron to stand on, where it has been field-verified.
+            *
+            * Beside the boarding station and nowhere else: a platform is where
+            * you get on, and the same figure against the alight node would be
+            * read as where you get off. Absent for most legs by design — the
+            * table is verified entries only, and a wrong peron sends a rider
+            * to the wrong trackside — so there is no empty slot and no dash,
+            * the badge simply is not there. See PLATFORM_CODES.
+            *
+            * Same pill as the timetable card's and the line card's, down to the
+            * line-tinted ground: a rider reads this figure off a platform sign
+            * either way, so it should not look like two different facts on two
+            * screens. formatPlatformCode is what tightens the stored "3/4" into
+            * the "3·4" those signs use.
+            */}
+          {leg.platformCode
+            ? (
+                <span
+                  className="shrink-0 text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap text-slate-900"
+                  style={{ backgroundColor: `${legColor}33` }}
+                  aria-label={`Berangkat dari peron ${leg.platformCode}`}
+                >
+                  {'Peron '}
+                  { formatPlatformCode(leg.platformCode) }
+                </span>
+              )
+            : null}
+        </div>
       </div>
       <div className={`relative grid ${FARE_GUTTER_CLASS}`}>
         <div className="relative">
@@ -405,49 +435,58 @@ export function JourneyCardFace({ journey, selected, onSelect }: {
         * Untimed journeys keep the fare as the headline below, because then it
         * genuinely is the most a row can say.
         */}
-      {boardsAt
-        ? (
-            <div className="mt-3 flex items-baseline gap-2 flex-wrap">
-              <span className="figure text-xl font-bold tracking-tight shrink-0 tabular-nums">
+      {/*
+        * The lead slot, after JR East: how long it takes, then when it leaves.
+        *
+        * Duration leads because it is the figure a rider compares rows on, and
+        * it is the one JR East sets largest. It exists only on a fully timed
+        * journey though — formatDuration is arithmetic on two PUBLISHED times,
+        * and no TransJakarta journey has them — so the untimed variant is a
+        * defined layout rather than a blank first line: the transfer count
+        * takes the slot, since on an untimed row that is what separates two
+        * otherwise identical shapes.
+        */}
+      <div className="mt-3 flex items-baseline justify-between gap-2">
+        <span className="figure text-xl font-bold tracking-tight shrink-0 tabular-nums">
+          {duration ?? `transit ${journey.transferCount}x`}
+        </span>
+        {boardsAt
+          ? (
+              <span className="figure text-sm font-semibold text-slate-500 shrink-0 tabular-nums">
                 { formatClock(boardsAt) }
                 {journey.arrivalAt
                   ? (
                       <>
-                        <span className="text-slate-400 font-semibold">{' → '}</span>
+                        <span className="text-slate-400">{' → '}</span>
                         { formatClock(journey.arrivalAt) }
                       </>
                     )
                   : null}
               </span>
-              {duration
-                ? <span className="figure text-sm font-semibold text-slate-500 shrink-0">{ duration }</span>
-                : null}
-            </div>
-          )
-        : null}
+            )
+          : null}
+      </div>
 
-      <div className={`${boardsAt ? 'mt-1' : 'mt-3'} flex items-center gap-2 flex-wrap`}>
-        <span className={boardsAt
-          ? 'figure text-sm font-bold text-slate-700 shrink-0'
-          : 'figure text-xl font-bold tracking-tight shrink-0'}
-        >
+      {/*
+        * The fare, and the reason this row is here.
+        *
+        * The label stops being an 11px pill wedged beside the price and becomes
+        * the row's own sentence — it is the plain-language answer to "why am I
+        * being shown this option", which is what TfL sets as its card header.
+        * Still capped at two by sortJourneyLabels: a row wearing four reasons
+        * is making none of them.
+        */}
+      <div className="mt-1 flex items-baseline justify-between gap-2">
+        <span className="figure text-sm font-bold text-slate-700 shrink-0">
           {journey.totalFare !== null ? formatRupiah(journey.totalFare) : 'Tarif tidak tersedia'}
         </span>
-        {/*
-          * Where this train is going, beside what it costs.
-          *
-          * Truncated rather than wrapped: "Angke via Manggarai" is long, and a
-          * headsign that pushed the badges onto a third line would cost more
-          * than it tells. The full form is in the timeline a tap away.
-          */}
-        {headsign
-          ? <span className="text-xs text-slate-500 truncate min-w-0">{ headsign }</span>
+        {labels.length > 0
+          ? (
+              <span className="text-xs font-bold text-rose-700 truncate min-w-0 text-right">
+                { labels.map(label => JOURNEY_LABELS[label]).join(' · ') }
+              </span>
+            )
           : null}
-        {labels.map(label => (
-          <span key={label} className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 shrink-0">
-            { JOURNEY_LABELS[label] }
-          </span>
-        ))}
       </div>
 
       {/*
@@ -470,6 +509,20 @@ export function JourneyCardFace({ journey, selected, onSelect }: {
                 {' m'}
               </span>
             )
+          : null}
+        {/*
+          * Where this train is going.
+          *
+          * It used to sit between the fare and the badges, which gave it
+          * whatever width those two left over — on "Angke via Manggarai" beside
+          * two badges that was a handful of characters before the ellipsis, and
+          * the headsign is the ONLY thing separating two rows of an untimed
+          * pair. Here it gets the rest of the row, after the counts that are
+          * fixed-width by nature. Still truncated rather than wrapped: the full
+          * form is in the timeline a tap away.
+          */}
+        {headsign
+          ? <span className="truncate min-w-0">{ headsign }</span>
           : null}
       </div>
     </>
@@ -568,6 +621,34 @@ function JourneyDetail({ journey }: { journey: FareJourney }) {
           )
         : null}
       <JourneyTimeline legs={journey.legs} />
+
+      {/*
+        * The journey in one line, after the itinerary that justifies it.
+        *
+        * JR East closes its detail the same way, and the reason it works is
+        * that every figure here was already drawn above in context — this is a
+        * recap for someone who has finished reading, not the first statement of
+        * any of them. Duration only on a fully timed journey, for the reason
+        * formatDuration documents; the rest are always knowable.
+        */}
+      <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-1 figure text-sm text-slate-500">
+        {/* Not gated on journeyClock: that one is deliberately null on a
+            single-ride journey (it would repeat the leg's own times), but a
+            one-seat ride still has a duration worth stating here. The real
+            precondition is the pair of published times formatDuration needs. */}
+        {start?.type === 'RIDE' && start.departureAt && journey.arrivalAt
+          ? <b className="text-slate-700">{ formatDuration(start.departureAt, journey.arrivalAt) }</b>
+          : null}
+        <span>
+          {'transit '}
+          { journey.transferCount }
+          x
+        </span>
+        {journey.totalFare !== null
+          ? <b className="text-slate-700">{ formatRupiah(journey.totalFare) }</b>
+          : null}
+        <span>{ formatKm(journey.totalDistanceM) }</span>
+      </div>
 
       {journey.segments.length + surchargedTransfers.length > 1
         ? (
