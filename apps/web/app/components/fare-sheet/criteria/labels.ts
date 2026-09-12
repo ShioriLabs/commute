@@ -17,6 +17,34 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   QRIS_TAP: 'QRIS Tap'
 }
 
+/*
+ * The same methods, short enough to sit in a chip segment.
+ *
+ * "Kartu Uang Elektronik" is four words for the thing everyone calls a kartu;
+ * KUE is what fits beside two other settings on one row and is how the card is
+ * spoken about anyway. The long forms stay above for the sheet, where a rider
+ * is choosing rather than checking.
+ */
+export const PAYMENT_METHOD_SHORT_LABELS: Record<PaymentMethod, string> = {
+  STORED_VALUE: 'KUE',
+  JAKLINGKO: 'JakLingko',
+  QRIS_TAP: 'QRIS'
+}
+
+/*
+ * Walking, as one word.
+ *
+ * Drops the verb the long forms carry ("Jalan cepat" -> "Cepat") because the
+ * pictogram beside it already says walking. Two words would be the only
+ * wrapping segment on the row.
+ */
+export const WALKING_SHORT_LABELS: Record<WalkingPreference, string> = {
+  BRISK: 'Cepat',
+  AVERAGE: 'Biasa',
+  SLOW: 'Santai',
+  AVOID: 'Males'
+}
+
 export const PAYMENT_METHOD_DESCRIPTIONS: Record<PaymentMethod, string> = {
   STORED_VALUE: 'Kartu bank kayak Flazz, e-Money, Brizzi, atau TapCash, atau KMT-nya Commuter Line',
   JAKLINGKO: 'Tarif integrasi antar MRT, LRT Jakarta, dan TransJakarta',
