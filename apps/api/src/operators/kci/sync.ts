@@ -2,7 +2,7 @@ import { OPERATORS, REGIONS } from '@commute/constants'
 import { StationRepository } from 'db/repositories/stations'
 import { DAY_MASK_ALL } from 'db/schemas/schedules'
 import { NewStation } from 'db/schemas/stations'
-import { getLineInfoFromAPIName, tryGetFormattedName } from './formatters'
+import { getLineInfoFromAPIName, toFeedStationCode, tryGetFormattedName } from './formatters'
 import { NewSchedule } from 'db/schemas/schedules'
 import { chunkArray } from 'utils/chunk'
 
@@ -60,8 +60,16 @@ export async function syncStations(d1: D1Database, token?: string) {
 }
 
 export async function syncTimetable(d1: D1Database, stationCode: string, token?: string) {
+  /*
+   * Ask the feed for ITS code, store against OURS.
+   *
+   * KCI renames stations without notice (TTI -> THI, GGL -> GRG), and every id
+   * written below stays on `stationCode` so a rename never reaches the database.
+   * See FEED_STATION_CODES.
+   */
+  const feedStationCode = toFeedStationCode(stationCode)
   const response = await fetch(
-    `https://kci.id/api/krl/schedules?stationid=${stationCode}&timefrom=00:00&timeto=23:59`,
+    `https://kci.id/api/krl/schedules?stationid=${feedStationCode}&timefrom=00:00&timeto=23:59`,
     {
       headers: {
         Authorization: `Bearer ${token}`
