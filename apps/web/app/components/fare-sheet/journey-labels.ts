@@ -17,7 +17,13 @@ export const JOURNEY_LABELS: Record<FareJourneyLabel, string> = {
 }
 
 /*
- * Longer forms, for the expanded card.
+ * Longer forms. Currently unrendered.
+ *
+ * These were written for an expanded card that the list/detail split retired —
+ * the plate shows only the short labels above, capped at two. Kept rather than
+ * deleted because the detail page is the obvious place they land (it has the
+ * room the plate never did), and journeys.test.ts guards their completeness
+ * meanwhile, so a fifth engine label cannot slip in unworded.
  *
  * Word SHORTEST_WAIT carefully. It comes from average headways, not a
  * timetable, so it must read as "the vehicle comes often" and never as "you

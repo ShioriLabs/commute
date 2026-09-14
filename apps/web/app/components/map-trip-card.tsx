@@ -212,6 +212,11 @@ export default function MapTripCard({
             *
             * A lone journey has no list to return to, so it keeps the plain
             * heading it always had.
+            *
+            * The options heading carries the count, matching the fare sheet's:
+            * both read it off the same array, and one surface saying "6 pilihan
+            * rute" where the other says "Pilihan rute" is two answers to one
+            * question a rider moves between.
             */}
           {showing === 'detail' && hasOptions
             ? (
@@ -227,7 +232,7 @@ export default function MapTripCard({
               )
             : (
                 <h2 className="flex-1 min-w-0 font-bold text-sm text-slate-500 truncate">
-                  {showing === 'options' ? 'Pilihan rute' : 'Rincian perjalanan'}
+                  {showing === 'options' ? `${journeys.length} pilihan rute` : 'Rincian perjalanan'}
                 </h2>
               )}
 
@@ -277,7 +282,6 @@ export default function MapTripCard({
                       <li key={index}>
                         <JourneyCardFace
                           journey={option}
-                          selected={index === selectedIndex}
                           onSelect={() => {
                             onSelectIndex(index)
                             // Straight back to the detail: picking an option is

@@ -64,9 +64,6 @@ export const PAYMENT_METHOD_DESCRIPTIONS: Record<PaymentMethod, string> = {
  */
 export const OFFERED_PAYMENT_METHODS: PaymentMethod[] = ['STORED_VALUE', 'QRIS_TAP']
 
-/** What the departure button reads when the rider has not picked a time. */
-export const DEPARTURE_NOW_LABEL = 'Berangkat sekarang'
-
 /*
  * Which networks a route may use.
  *

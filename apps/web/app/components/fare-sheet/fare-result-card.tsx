@@ -363,9 +363,8 @@ export function JourneyTimeline({ legs }: { legs: FareResultLeg[] }) {
  * journey renders the identical block inert, because a press affordance on the
  * only answer invites a rider to look for an alternative that does not exist.
  */
-export function JourneyCardFace({ journey, selected, onSelect }: {
+export function JourneyCardFace({ journey, onSelect }: {
   journey: FareJourney
-  selected: boolean
   onSelect?: () => void
 }) {
   const legLines = useLegLines()
@@ -413,14 +412,19 @@ export function JourneyCardFace({ journey, selected, onSelect }: {
   const body = (
     <>
       {/*
-        * Unselected options step back rather than being marked: the route is
-        * the thing being chosen between, so muting it is a stronger signal than
-        * any badge on the card's edge, and it leaves exactly one journey in
-        * full line colour at a time.
+        * Every option in full line colour. Nothing is marked as chosen here,
+        * because on this surface nothing ever is: the list and the detail are
+        * two pages, and picking a row leaves for the detail in the same
+        * handler — so a selection drawn on the list is never observed.
+        *
+        * It used to mute the unselected rows, from when the two were stacked
+        * and the plate had to point at the timeline below it. Under paging that
+        * left five of six routes looking disabled on arrival (the index
+        * defaults to 0, so the marked row is an ordinal rather than a choice),
+        * and the desaturation fell on the route bar — the one element here
+        * carrying data rather than decoration.
         */}
-      <div className={`transition-[filter,opacity] duration-200 ${selected ? '' : 'saturate-50 opacity-75'}`}>
-        <RouteBar segments={segments} />
-      </div>
+      <RouteBar segments={segments} />
 
       {/*
         * Time leads, and the fare steps back to the meta row.
@@ -495,15 +499,25 @@ export function JourneyCardFace({ journey, selected, onSelect }: {
         * scanned. Walk is omitted rather than zeroed when the response could
         * not say — see journeys.ts.
         */}
-      <div className="mt-1.5 flex items-center gap-3 figure text-xs text-slate-500">
-        <span>{ formatKm(journey.totalDistanceM) }</span>
-        <span className="flex items-center gap-1">
+      {/*
+        * One line at every width, with the headsign as the only thing that
+        * yields.
+        *
+        * flex-nowrap because the figures are the row's fixed part: at the map
+        * rail's ~368px they were breaking "16,8 km" and "310 m" each across two
+        * lines, which made a card's height a function of its headsign's length
+        * — six rows of one answer at three different heights. Truncating the
+        * headsign instead is what the comment below already assumed happened.
+        */}
+      <div className="mt-1.5 flex flex-nowrap items-center gap-3 figure text-xs text-slate-500">
+        <span className="shrink-0 whitespace-nowrap">{ formatKm(journey.totalDistanceM) }</span>
+        <span className="shrink-0 whitespace-nowrap flex items-center gap-1">
           <ArrowsDownUpIcon weight="bold" className="w-3.5 h-3.5 shrink-0" />
           { journey.transferCount }
         </span>
         {walkM !== null && walkM > 0
           ? (
-              <span className="flex items-center gap-1">
+              <span className="shrink-0 whitespace-nowrap flex items-center gap-1">
                 <PersonSimpleWalkIcon weight="bold" className="w-3.5 h-3.5 shrink-0" />
                 {walkM}
                 {' m'}
@@ -550,17 +564,17 @@ export function JourneyCardFace({ journey, selected, onSelect }: {
     )
   }
 
+  /*
+   * No aria-expanded: this row navigates to a page, it does not disclose
+   * anything in place. Announcing it as a collapsed widget on every row
+   * described a control that no longer exists.
+   */
   return (
     <button
       type="button"
       onClick={onSelect}
-      aria-expanded={selected}
-      className={`${plate} w-full text-left cursor-pointer ${
-        selected ? 'bg-rose-50' : 'bg-stone-100/60 hover:bg-stone-100'
-      }`}
-      style={{
-        '--plate-ground': selected ? 'var(--color-rose-50)' : 'var(--color-stone-100)'
-      } as CSSProperties}
+      className={`${plate} w-full text-left cursor-pointer bg-stone-100/60 hover:bg-stone-100`}
+      style={{ '--plate-ground': 'var(--color-stone-100)' } as CSSProperties}
     >
       { body }
     </button>
@@ -806,7 +820,6 @@ export default function FareResultCard({
                   <li key={index}>
                     <JourneyCardFace
                       journey={option}
-                      selected={index === selected}
                       onSelect={() => select(index)}
                     />
                   </li>
@@ -817,7 +830,7 @@ export default function FareResultCard({
               <>
                 {/* Inert: on the detail page this is the journey being read,
                     not one of several being chosen between. */}
-                <JourneyCardFace journey={journey} selected />
+                <JourneyCardFace journey={journey} />
                 <JourneyDetail journey={journey} />
               </>
             )}

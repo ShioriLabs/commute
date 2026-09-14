@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react'
-import { CaretLeftIcon, CaretRightIcon, XIcon } from '@phosphor-icons/react'
+import { CaretLeftIcon, CaretRightIcon } from '@phosphor-icons/react'
 import clsx from 'clsx'
 import { haptic } from 'utils/haptics'
 import {
@@ -14,7 +13,7 @@ import {
   quantiseToSlot,
   shiftBySlot
 } from 'utils/departure-time'
-import { useIsEmbed } from '~/hooks/use-is-embed'
+import CriteriaSheetShell from './criteria-sheet-shell'
 
 interface Props {
   open: boolean
@@ -245,7 +244,7 @@ function WheelColumn<T>({ items, selected, onSettle, render, label, wide }: {
         // mouse click read as "this column is the selection", competing with
         // the centre band that actually marks it. Keyboard users still get the
         // ring they need to know where they are.
-        'focus:outline-none focus-visible:outline-2 focus-visible:outline-[#F55875]/60',
+        'focus:outline-none focus-visible:outline-2 focus-visible:outline-brand/60',
         // Snap is suspended mid-drag; see onPointerDown.
         dragging ? 'cursor-grabbing select-none' : 'snap-y snap-mandatory cursor-grab',
         wide ? 'flex-1 min-w-0' : 'w-16 shrink-0'
@@ -300,8 +299,6 @@ function WheelColumn<T>({ items, selected, onSettle, render, label, wide }: {
  * spend a request on every value the wheel passed through on its way.
  */
 export default function DepartureSheet({ open, value, onSelect, onClose }: Props) {
-  const isEmbed = useIsEmbed()
-
   /*
    * Rebuilt per opening, not memoised on a constant: "today" stops being true
    * at midnight, and a sheet mounted once and reopened for weeks would keep
@@ -351,32 +348,9 @@ export default function DepartureSheet({ open, value, onSelect, onClose }: Props
   }
 
   return (
-    <Dialog open={open} onClose={onClose} className="relative z-modal">
-      <DialogBackdrop transition className="fixed inset-0 bg-slate-950/25 duration-300 ease-out data-closed:opacity-0" />
-      <div className="fixed inset-0 flex w-screen items-end">
-        <DialogPanel
-          transition
-          className={clsx(
-            'bg-white w-screen overflow-y-auto rounded-t-2xl will-change-transform transition duration-300 ease-ios-spring data-closed:translate-y-full',
-            isEmbed ? 'max-h-[85vh]' : 'max-h-[85dvh]'
-          )}
-        >
-          <div className="p-8 pb-4 max-w-3xl mx-auto">
-            <div className="flex gap-4 items-center justify-between">
-              <h2 className="font-bold text-2xl">Kapan Berangkat</h2>
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="Tutup pilihan waktu berangkat"
-                className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
-              >
-                <XIcon weight="bold" className="w-6 h-6" />
-              </button>
-            </div>
-          </div>
-
-          <div className="px-8 max-w-3xl mx-auto">
-            {/*
+    <CriteriaSheetShell open={open} title="Kapan Berangkat" onClose={onClose}>
+      <div className="px-8 max-w-3xl mx-auto">
+        {/*
               * The wheels, with the selection framed rather than highlighted.
               *
               * The frame is one absolutely-positioned band behind the columns,
@@ -384,79 +358,77 @@ export default function DepartureSheet({ open, value, onSelect, onClose }: Props
               * columns as a single object, which is what says "these are one
               * value" rather than three independent lists.
               */}
-            <div className="relative">
-              <div
-                aria-hidden
-                className="absolute inset-x-0 top-1/2 -translate-y-1/2 rounded-xl bg-stone-100/80 pointer-events-none"
-                style={{ height: ROW_H }}
-              />
-              <div className="relative flex items-center gap-2 figure text-lg">
-                <WheelColumn
-                  items={days}
-                  selected={dayIndex}
-                  onSettle={setDay}
-                  label="Tanggal berangkat"
-                  wide
-                  render={day => <span className="truncate px-2">{ formatDepartureDay(day) }</span>}
-                />
-                <WheelColumn
-                  items={DEPARTURE_HOURS}
-                  selected={hourIndex}
-                  onSettle={setHour}
-                  label="Jam berangkat"
-                  render={hour => <span className="tabular-nums">{ String(hour).padStart(2, '0') }</span>}
-                />
-                <WheelColumn
-                  items={DEPARTURE_MINUTES}
-                  selected={minuteIndex}
-                  onSettle={setMinute}
-                  label="Menit berangkat"
-                  render={minute => <span className="tabular-nums">{ String(minute).padStart(2, '0') }</span>}
-                />
-              </div>
-            </div>
+        <div className="relative">
+          <div
+            aria-hidden
+            className="absolute inset-x-0 top-1/2 -translate-y-1/2 rounded-xl bg-stone-100/80 pointer-events-none"
+            style={{ height: ROW_H }}
+          />
+          <div className="relative flex items-center gap-2 figure text-lg">
+            <WheelColumn
+              items={days}
+              selected={dayIndex}
+              onSettle={setDay}
+              label="Tanggal berangkat"
+              wide
+              render={day => <span className="truncate px-2">{ formatDepartureDay(day) }</span>}
+            />
+            <WheelColumn
+              items={DEPARTURE_HOURS}
+              selected={hourIndex}
+              onSettle={setHour}
+              label="Jam berangkat"
+              render={hour => <span className="tabular-nums">{ String(hour).padStart(2, '0') }</span>}
+            />
+            <WheelColumn
+              items={DEPARTURE_MINUTES}
+              selected={minuteIndex}
+              onSettle={setMinute}
+              label="Menit berangkat"
+              render={minute => <span className="tabular-nums">{ String(minute).padStart(2, '0') }</span>}
+            />
+          </div>
+        </div>
 
-            {/*
+        {/*
               * Nudges by one slot, after JR East's 5分前 / 現在時刻 / 5分後.
               * One slot rather than five minutes, because a smaller step would
               * move the label without moving the answer.
               */}
-            <div className="mt-2 flex items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={() => nudge(-1)}
-                className="flex items-center gap-1 text-sm font-bold text-slate-500 rounded-lg px-2 py-1.5 cursor-pointer hover:bg-rose-50/60"
-              >
-                <CaretLeftIcon weight="bold" className="w-3.5 h-3.5 shrink-0" />
-                {`${DEPARTURE_SLOT_MINUTES} mnt awal`}
-              </button>
-              <button
-                type="button"
-                onClick={useNow}
-                className="text-sm font-bold text-[#F55875] rounded-lg px-2 py-1.5 cursor-pointer hover:bg-rose-50/60"
-              >
-                Sekarang
-              </button>
-              <button
-                type="button"
-                onClick={() => nudge(1)}
-                className="flex items-center gap-1 text-sm font-bold text-slate-500 rounded-lg px-2 py-1.5 cursor-pointer hover:bg-rose-50/60"
-              >
-                {`${DEPARTURE_SLOT_MINUTES} mnt lagi`}
-                <CaretRightIcon weight="bold" className="w-3.5 h-3.5 shrink-0" />
-              </button>
-            </div>
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => nudge(-1)}
+            className="flex items-center gap-1 text-sm font-bold text-slate-500 rounded-lg px-2 py-1.5 cursor-pointer hover:bg-rose-50/60"
+          >
+            <CaretLeftIcon weight="bold" className="w-3.5 h-3.5 shrink-0" />
+            {`${DEPARTURE_SLOT_MINUTES} mnt awal`}
+          </button>
+          <button
+            type="button"
+            onClick={useNow}
+            className="text-sm font-bold text-brand rounded-lg px-2 py-1.5 cursor-pointer hover:bg-rose-50/60"
+          >
+            Sekarang
+          </button>
+          <button
+            type="button"
+            onClick={() => nudge(1)}
+            className="flex items-center gap-1 text-sm font-bold text-slate-500 rounded-lg px-2 py-1.5 cursor-pointer hover:bg-rose-50/60"
+          >
+            {`${DEPARTURE_SLOT_MINUTES} mnt lagi`}
+            <CaretRightIcon weight="bold" className="w-3.5 h-3.5 shrink-0" />
+          </button>
+        </div>
 
-            <button
-              type="button"
-              onClick={commit}
-              className="mt-4 mb-8 w-full rounded-xl bg-[#F55875] text-white font-bold py-3.5 cursor-pointer"
-            >
-              Atur
-            </button>
-          </div>
-        </DialogPanel>
+        <button
+          type="button"
+          onClick={commit}
+          className="mt-4 mb-8 w-full rounded-xl bg-brand text-white font-bold py-3.5 cursor-pointer"
+        >
+          Atur
+        </button>
       </div>
-    </Dialog>
+    </CriteriaSheetShell>
   )
 }

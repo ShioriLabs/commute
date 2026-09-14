@@ -57,6 +57,12 @@
      Tailwind also emits an `ease-ios-spring` utility for transitions. */
   --ease-ios-spring: cubic-bezier(0.36, 0.66, 0.04, 1);
 
+  /* The brand pink, as a token rather than a literal.
+     Introduced for the fare criteria sheets; the same hex is still inlined as
+     `bg-[#F55875]` in ~26 other places across the app, which is a separate
+     sweep rather than something to half-migrate here. Point new work at this. */
+  --color-brand: #F55875;
+
   /* The map page's layer scale, bottom to top. Every full-viewport surface on
      /map competes on the root stacking context, so the order between them is a
      single global fact — but it used to live only as bare `z-30`/`z-40` numbers

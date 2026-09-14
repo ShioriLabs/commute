@@ -17,7 +17,6 @@ import CriterionListSheet from './criterion-list-sheet'
 import CriterionSheet, { type CriterionOption } from './criterion-sheet'
 import DepartureSheet from './departure-sheet'
 import {
-  DEPARTURE_NOW_LABEL,
   MODES_DESCRIPTIONS,
   MODES_LABELS,
   OFFERED_PAYMENT_METHODS,
@@ -250,9 +249,11 @@ export default function CriteriaBar({ criteria, onChange }: Props) {
             setOpen('departure')
           }}
           aria-haspopup="dialog"
-          aria-label={criteria.fareTime === 'now'
-            ? DEPARTURE_NOW_LABEL
-            : `Berangkat ${formatDepartureLabel(criteria.fareTime)}`}
+          // Derived from the visible label rather than a parallel string: the
+          // chip read "Sekarang" while its accessible name said "Berangkat
+          // sekarang", which is two wordings for one state and two places to
+          // forget to change.
+          aria-label={`Berangkat ${formatDepartureLabel(criteria.fareTime).toLowerCase()}`}
           className={clsx(
             // shrink-0, not min-w-0: a shrinkable item clips its label instead
             // of pushing itself onto the next row, which is exactly the

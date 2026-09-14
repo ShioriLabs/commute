@@ -122,6 +122,28 @@ export function formatDepartureLabel(value: string, now: Date = new Date()): str
 }
 
 /**
+ * How long until a picked departure stops being current, in milliseconds.
+ *
+ * A departure is good until its own slot ends, which is the grid the cache can
+ * distinguish — so this is the instant plus one slot, not the instant itself.
+ * Callers arm a timer with it to follow the clock across that boundary while a
+ * page sits open; see useFareQuery.
+ *
+ * Floored to a second so a boundary case cannot schedule into the past and spin
+ * a timer that fires immediately and re-arms forever. `'now'` and an
+ * unparseable value have no boundary to wait for and return null — `'now'`
+ * already follows the clock, and a broken instant is dropped on read rather
+ * than waited on.
+ */
+export function msUntilDepartureStale(value: string, now: Date = new Date()): number | null {
+  if (value === 'now') return null
+  const at = new Date(value)
+  if (Number.isNaN(at.getTime())) return null
+  const slotMs = DEPARTURE_SLOT_MINUTES * 60_000
+  return Math.max(1_000, at.getTime() + slotMs - now.getTime())
+}
+
+/**
  * Whether a stored departure has been overtaken by the clock.
  *
  * A stored instant is a promise about a journey the rider was planning; once it

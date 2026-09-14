@@ -12,6 +12,7 @@ import {
   type FareCriteria
 } from 'utils/fare-criteria'
 import { FARE_SWR_CONFIG, tripApiUrl } from 'utils/fare-api'
+import { isStaleDeparture, msUntilDepartureStale } from 'utils/departure-time'
 import { resolveStationId, toPickableStations, type PickableStation } from './pickable-station'
 
 /** Leading words of the tab title on the surfaces that own one. */
@@ -213,6 +214,61 @@ export function useFareQuery({
     writeFareCriteria(criteriaToPersist(next, criteriaFromUrl.current))
     onStateChange?.(origin?.id ?? null, destination?.id ?? null, next)
   }, [onStateChange, origin?.id, destination?.id])
+
+  /*
+   * A picked departure follows the clock once it has passed.
+   *
+   * parseFareCriteria already drops a stale instant on the way IN, so a stored
+   * 08.40 never comes back tomorrow. What it cannot cover is the page staying
+   * open across the boundary: pick 19.40, leave the tab, and at 20.00 the chip
+   * still reads 19.40 while the request underneath prices a departure nobody
+   * can board. This is the same rule applied to a session that outlives its own
+   * choice.
+   *
+   * Timed to the end of the current slot rather than polled by the minute. The
+   * slot is the grid the cache can distinguish (see DEPARTURE_SLOT_MINUTES), so
+   * a departure is genuinely valid until its slot ends and a finer tick would
+   * spend wakeups to learn nothing. Re-arms whenever fareTime changes, which
+   * includes its own reset to `'now'`.
+   *
+   * Through setCriteria, not setCriteriaState: that persists the correction and
+   * fires onStateChange, so /fare's URL drops its own stale `?at=` instead of
+   * leaving a shareable link to a train that has gone.
+   *
+   * visibilitychange as well as the timer, because a backgrounded tab's timers
+   * are throttled and "switch away, come back later" is the common shape of
+   * this. Both paths re-check rather than assume — a timer that fired early
+   * must not reset a departure that is still good.
+   */
+  const fareTime = criteria.fareTime
+  useEffect(() => {
+    if (fareTime === 'now') return
+
+    const refresh = () => {
+      if (!isStaleDeparture(fareTime)) return false
+      setCriteria({ ...criteria, fareTime: 'now' })
+      return true
+    }
+    // Already overtaken by the time this mounted — a tab restored from the
+    // background, or criteria that arrived from a URL mid-slot.
+    if (refresh()) return
+
+    // The boundary arithmetic lives in departure-time.ts, where it is tested
+    // against a fixed clock rather than only through this effect.
+    const dueIn = msUntilDepartureStale(fareTime)
+    if (dueIn === null) return
+    const timer = window.setTimeout(refresh, dueIn)
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+
+    return () => {
+      window.clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [fareTime, criteria, setCriteria])
 
   // Deep link applies once, not on every change of the incoming pair.
   // onPairChange rewrites the query string as the user picks stations, which

@@ -9,6 +9,7 @@ import {
   formatDepartureLabel,
   isSameLocalDay,
   isStaleDeparture,
+  msUntilDepartureStale,
   quantiseToSlot,
   shiftBySlot
 } from './departure-time'
@@ -168,6 +169,43 @@ describe('formatDepartureLabel', () => {
   // beats rendering "Invalid Date" on the button.
   it('degrades to the default mode on an unparseable value', () => {
     expect(formatDepartureLabel('not-a-date', now)).toBe('Sekarang')
+  })
+})
+
+describe('msUntilDepartureStale', () => {
+  it('waits out the rest of the chosen slot', () => {
+    // 09.00 stays current until 09.20, so at 09.05 there are 15 minutes left.
+    expect(msUntilDepartureStale(
+      local(2026, 7, 20, 9, 0).toISOString(),
+      local(2026, 7, 20, 9, 5)
+    )).toBe(15 * 60_000)
+  })
+
+  it('floors to a second rather than scheduling into the past', () => {
+    // Already a full slot past: a negative delay would fire instantly and
+    // re-arm forever.
+    expect(msUntilDepartureStale(
+      local(2026, 7, 20, 9, 0).toISOString(),
+      local(2026, 7, 20, 10, 0)
+    )).toBe(1_000)
+  })
+
+  it('has no boundary for "now" or a broken instant', () => {
+    expect(msUntilDepartureStale('now', local(2026, 7, 20, 9, 5))).toBeNull()
+    expect(msUntilDepartureStale('not-a-date', local(2026, 7, 20, 9, 5))).toBeNull()
+  })
+
+  /*
+   * The pair has to agree: the timer fires when the departure goes stale, so a
+   * delay that lands before isStaleDeparture flips would wake up, find nothing
+   * to do, and never re-arm.
+   */
+  it('lands on the moment isStaleDeparture starts reporting true', () => {
+    const picked = local(2026, 7, 20, 9, 0).toISOString()
+    const now = local(2026, 7, 20, 9, 5)
+    const dueIn = msUntilDepartureStale(picked, now)!
+    expect(isStaleDeparture(picked, new Date(now.getTime() + dueIn - 1))).toBe(false)
+    expect(isStaleDeparture(picked, new Date(now.getTime() + dueIn))).toBe(true)
   })
 })
 
