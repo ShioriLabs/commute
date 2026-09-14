@@ -37,6 +37,9 @@ Each tier is independently shippable and useful on its own. That held.
 
 ## Tier 1 — done, and built better than this doc predicted
 
+See **`mcraptor.md`** for what the engine is and is not — it is McRAPTOR-shaped, not
+RAPTOR, and the four divergences are deliberate.
+
 The router moved out of `apps/api/src/utils/router.ts` into **`libs/tsundere`**, a
 dependency-free routing engine package with its own tests, benchmarks and public surface
 (`loadGraph` → `findRoute` / `findRoutes`). Read its README before touching it; the
@@ -175,6 +178,22 @@ data rather than engine capability: not one KCI stop pattern is reversible (line
 patterns and 0 reversible endpoint pairs; R 15/0; B 13/0), and 0 of 142 southbound MRTJ
 trips include Lebak Bulus against 142 of 142 northbound. Both directions' trips exist —
 their per-trip stop lists are what have gaps.
+
+> **Correction (2026-09-15).** The statistics above are true; the inference from them
+> is not. Both directions ARE present — they fail an endpoint-equality test only
+> because short-turns make them terminate at different stations — and the MRTJ
+> "missing" terminus is correct data: a terminus has no departures in the direction
+> that ends there. Measured at hop level, every one-way hop in the feed is a terminal
+> hop. See `mcraptor.md` for the measurements and for what a route-scanning search
+> would actually need (pattern bookkeeping, not data recovery).
+>
+> The real cause of a large slice of the shortfall was line **T (Tangerang)**, whose
+> stored board split every train across two tripNumbers (`1903` + `1903A`) and so
+> failed hop validation entirely — 242 of 289 chain-gap rejections, zero patterns for
+> the line. The live feed no longer does this; refreshing the board took KCI from 960
+> to 1080 trips and 65 to 67 patterns. KCI had also renamed two station codes
+> upstream (`TTI`→`THI`, `GGL`→`GRG`), which is why those stations had silently
+> stopped syncing — see `toFeedStationCode` in `operators/kci/formatters.ts`.
 
 Still unanswerable, and each for its own reason:
 
