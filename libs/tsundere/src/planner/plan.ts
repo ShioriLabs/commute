@@ -1,4 +1,4 @@
-import { makeEndpointGuard, serviceBreakKey, type GraphEdge, type RouteGraph, type RouteLeg } from '../router'
+import { serviceBreakKey, type GraphEdge, type RouteGraph, type RouteLeg } from '../router'
 import { Bag, type Label } from './bag'
 import { inWindow, type ServiceWindow } from './service-hours'
 import {
@@ -252,13 +252,8 @@ export function plan(
     instrument
   } = options
 
-  const { adjacency, restrictions, serviceBreaks } = graph
+  const { adjacency, serviceBreaks } = graph
   if (!adjacency.has(fromStationId) || !adjacency.has(toStationId)) return []
-
-  // Same endpoint rules as findRoute — literally the same guard, so the two
-  // engines cannot drift. They constrain only this trip's own origin and
-  // destination, never a stop passed through mid-journey.
-  const isForbiddenHop = makeEndpointGuard(restrictions, fromStationId, toStationId)
 
   /*
    * Can a rider BOARD this line at this moment?
@@ -357,8 +352,6 @@ export function plan(
         if (instrument) instrument.labelsExpanded++
         for (const edge of adjacency.get(stop) ?? []) {
           if (instrument) instrument.adjacencyLookups++
-          if (isForbiddenHop(stop, edge.to)) continue
-
           const isWalk = edge.lineCode === null
           /*
            * Staying on the line is normally free. It is not when the turn is a

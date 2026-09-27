@@ -191,43 +191,46 @@ reverses, and `train_id` is a composite (its letter suffix is line-partitioned,
 not directional). MRTJ, LRTJBDB and APCGK answer to no Gapeka and have synthetic
 per-station ids, so parity tagging is **KCI-only by construction**.
 
-## Skip-stop hops: why 43 line-C trips are rejected
+## One-way stops: how 40 line-C trips came back
 
-Worth documenting because it is **not** a data problem, and the fix is not a
-re-sync.
+Pasar Senen (`KCI-PSE`) on the Cikarang loop is served **northbound only**:
+trains call there on `GST → PSE → KMO`, and southbound ones run straight through.
+The schedules say so exactly — every trip via KMO that calls at PSE is Kampung
+Bandan / Jakarta Kota-bound, and none of the Bekasi / Cikarang-bound ones do.
 
-Pasar Senen (`KCI-PSE`) on the Cikarang loop is served **northbound only**. The
-loop runs `GST → PSE → KMO → … → KPB` inbound; southbound trains pass through
-without stopping. The data reflects this exactly — PSE carries 43 rows against
-86 at every neighbour (GST, KMO, KMT, RJW), and the split by direction is total:
+This used to be modelled as bidirectional track plus `ENDPOINT_RESTRICTIONS`, a
+side rule the router consulted at a trip's two ends. That caused two problems:
 
-| Direction | Trips via KMO | Call at PSE |
-| --- | --- | --- |
-| Kampung Bandan / Jakarta Kota (inbound) | 43 | **43** |
-| Bekasi / Cikarang (outbound) | 43 | **0** |
+- **`generateTrips.ts` rejected all 40 southbound workings** as `chain-gap
+  KMO -> GST`, because there was no `KMO → GST` edge for its `hasEdge` check.
+- **The alight half of the rule pointed the wrong way.** It forbade alighting at
+  PSE arriving from GST, which is the direction that serves it, and allowed
+  alighting from KMO, off a train that does not stop. So Jatinegara → Pasar Senen
+  detoured by TransJakarta, and KPB → Pasar Senen was told to get off a
+  southbound train that doesn't stop there.
 
-The network already models this — `ENDPOINT_RESTRICTIONS` in `db/data/topology.ts`
-carries `{ station: 'PSE', lineCode: 'C', forbiddenNeighbor: 'GST' }`, and its
-comment is explicit that *"the through-edges stay bidirectional so a passenger
-may still ride PAST the stop"*.
+Now the stop carries `serves: 'forward'` in `db/data/topology.ts`, and the rule
+lives in the edges themselves (`utils/edgeChain.ts`):
 
-**`generateTrips.ts` does not know that.** Its `hasEdge` check requires a literal
-adjacency, so a southbound trip's real `KMO → GST` hop has no edge and the whole
-trip is dropped. The skip path exists (`KMO → PSE` and `PSE → GST` are both
-edges); nothing consults it.
+- `generateEdgesSQL` emits that list directed: `GST → PSE`, `PSE → KMO`, and
+  one bridged `KMO → GST` (2930m, the track it covers) for the direction that
+  runs through. The router never sees an edge into or out of PSE going south, so
+  nothing downstream needs a side rule. The guard is gone from tsundere.
+- `oneWayTurns` derives the two U-turns this creates (`PSE → KMO → GST` and
+  `KMO → GST → PSE`) and appends them to `SERVICE_BREAKS`. Without them, a ride
+  out on one train and back on another reads as a single train on one line code.
+- `generateTrips` needed no change: with the edge in place, C chain-gaps went
+  from 43 to 3.
 
-So these 43 are a **trip-validator limitation**, not missing rows: the feed is
-right, the topology is right, and the two disagree about what a legal hop is. A
-fix would let `hasEdge` accept a hop that spans exactly one intermediate stop
-whose `ENDPOINT_RESTRICTIONS` entry forbids that direction — deliberately narrow,
-because a general "allow 2-hop gaps" rule would re-admit the genuine chain gaps
-the check exists to catch.
+`pathReverse` remains the tool for a vehicle that takes a different **street**
+each way (TransJakarta corridors). `serves` is for one track with a stop served
+one way, and works on branches, where `pathReverse` cannot.
 
-Not every C rejection is like this. The 3 `JAKK → KPB` rejections are **correct**:
-Jakarta Kota is deliberately absent from the routable Cikarang line, because only
-1–2 late-night *sapu jagat* (sweeper) workings divert there, and trip planning
-must never route a passenger onto a once-nightly train. See the comment above
-`TOPOLOGY` in `db/data/topology.ts`.
+The 3 remaining `JAKK → KPB` rejections are **correct**: Jakarta Kota is
+deliberately absent from the routable Cikarang line, because only 1–2 late-night
+*sapu jagat* (sweeper) workings divert there, and trip planning must never route
+a passenger onto a once-nightly train. See the comment above `TOPOLOGY` in
+`db/data/topology.ts`.
 
 ## Verification
 

@@ -4,7 +4,7 @@ import { Bindings } from 'app'
 import { EdgeRepository } from 'db/repositories/edges'
 import { assembleJourney, planJourney } from 'utils/fare-journey'
 import { handleJourneyRequest, journeyCacheKey } from 'utils/journey-endpoint'
-import { ENDPOINT_RESTRICTIONS, SERVICE_BREAKS, TOPOLOGY } from 'db/data/topology'
+import { SERVICE_BREAKS, TOPOLOGY } from 'db/data/topology'
 import { loadGraph, type ServiceWindow, type Tsundere } from '@commute/tsundere'
 import { DAY_HEADWAYS_S, HEADWAYS_S, STOP_HEADWAYS_S } from 'db/data/headways'
 import { SERVICE_HOURS, type ServiceDay } from 'db/data/service-hours'
@@ -23,13 +23,9 @@ let cachedRouter: Tsundere | null = null
 export async function getRouter(d1: D1Database): Promise<Tsundere> {
   if (cachedRouter) return cachedRouter
   const { edges, transfers } = await new EdgeRepository(d1).getGraphInputs()
-  // Topology restrictions are authored in (operator, station) codes; the graph
-  // works in `${operator}-${station}` DB ids. tsundere treats node ids as
-  // opaque, so this mapping stays here rather than in the engine.
-  const restrictions = ENDPOINT_RESTRICTIONS.map(r => ({
-    stationId: `${r.operator}-${r.station}`,
-    forbiddenNeighborId: `${r.operator}-${r.forbiddenNeighbor}`
-  }))
+  // Service breaks are authored in (operator, station) codes; the graph works
+  // in `${operator}-${station}` DB ids. tsundere treats node ids as opaque, so
+  // this mapping stays here rather than in the engine.
   const serviceBreaks = SERVICE_BREAKS.map(b => ({
     lineCode: b.lineCode,
     viaStationId: `${b.operator}-${b.via}`,
@@ -39,7 +35,6 @@ export async function getRouter(d1: D1Database): Promise<Tsundere> {
   cachedRouter = loadGraph({
     edges,
     transfers,
-    restrictions,
     // Read by findRoutes only; /fares keeps the answer it has always given.
     serviceBreaks,
     // Read by findRoutes to price the expected wait per boarding, which is what

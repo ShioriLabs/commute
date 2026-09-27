@@ -11,7 +11,6 @@ import {
   buildGraph,
   findRoute,
   type EdgeInput,
-  type EndpointRestriction,
   type ServiceBreak,
   type RouteGraph,
   type RouteLeg,
@@ -34,16 +33,11 @@ export interface LoadGraphInput {
    * charge an expected wait per boarding.
    *
    * A property of the network, so it is loaded once rather than passed per
-   * query — same reasoning as restrictions. Optional: without it every line
+   * query — same reasoning as service breaks. Optional: without it every line
    * falls back to one default, which makes waiting a constant per boarding
    * rather than a differentiator.
    */
   headwaysS?: Map<string, number>
-  /**
-   * Stops that may only be boarded/alighted in one direction. A static property
-   * of the network, so it belongs to the loaded graph rather than to a query.
-   */
-  restrictions?: EndpointRestriction[]
   /**
    * Turns that stay on one line but change vehicle, e.g. riding through the
    * point where a loop closes onto its stick. Read by `findRoutes` only — see
@@ -53,7 +47,7 @@ export interface LoadGraphInput {
   /**
    * When each line runs, in seconds since local midnight.
    *
-   * A static property of the network, like restrictions, so it is loaded once
+   * A static property of the network, like service breaks, so it is loaded once
    * rather than passed per query — only the *evaluation time* varies, and that
    * is `plan`'s `departureS`. Without it no journey is ever filtered by service
    * hours, whatever departure time a caller passes.
@@ -62,7 +56,7 @@ export interface LoadGraphInput {
   /**
    * The timetable: which vehicles run each stop pattern, and when.
    *
-   * A static property of the network like restrictions and service hours, so it
+   * A static property of the network like service breaks and service hours, so it
    * is indexed once at load rather than per query — only the moment being asked
    * about varies, and that is `plan`'s `departureS`.
    *
@@ -177,7 +171,7 @@ export class Tsundere {
  * Build a routing engine over a network.
  *
  * Inputs are structural, so the API's Kysely rows are passed straight in with
- * no mapping. Restrictions arrive already in `${operator}-${code}` id form,
+ * no mapping. Service breaks arrive already in `${operator}-${code}` id form,
  * because mapping them is the caller's job.
  *
  * Node ids are opaque here with exactly one exception: leg assembly splits on
@@ -187,14 +181,13 @@ export class Tsundere {
 export function loadGraph({
   edges,
   transfers,
-  restrictions,
   serviceBreaks,
   headwaysS,
   serviceHours,
   trips
 }: LoadGraphInput): Tsundere {
   return new Tsundere(
-    buildGraph(edges, transfers, restrictions, serviceBreaks),
+    buildGraph(edges, transfers, serviceBreaks),
     headwaysS,
     serviceHours,
     trips ? buildTripIndex(trips) : undefined

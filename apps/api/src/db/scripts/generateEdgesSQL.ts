@@ -1,6 +1,7 @@
 import * as fs from 'node:fs'
 import { TOPOLOGY, type LineTopology, type Stop } from '../data/topology'
 import { haversineMeters } from '../../utils/geo'
+import { chainHops, stopLists, type Hop } from '../../utils/edgeChain'
 
 // Emits directed edge rows (both directions per adjacency) for the `edges` table.
 // Distance = real track km where the topology has cumulative km on both stops,
@@ -42,22 +43,30 @@ function distance(line: LineTopology, a: Stop, b: Stop, coords: Map<string, Coor
   return { m: 0, src: 'unknown' }
 }
 
-// `directed` emits a single a->b row (one travel direction); the default emits
-// both directions. Asymmetric corridors (line.pathReverse present) use directed
-// emits so each direction carries its own true stop sequence rather than a mirror.
-function emit(line: LineTopology, a: Stop, b: Stop, coords: Map<string, Coord>, directed = false): void {
+// One Hop becomes one row, or two when it runs both ways. A bridged hop (see
+// Stop.serves) is priced as the track it covers — every stop it runs through —
+// so KMO -> GST past Pasar Senen costs the same metres as the two calls it skips.
+function emit(line: LineTopology, hop: Hop, coords: Map<string, Coord>): void {
+  const { from: a, to: b, via } = hop
+  const covered = [a, ...via, b]
   // Unbuilt stops are on the line for display only — emitting an edge here
   // would let the router send people over track that isn't open yet (and with
   // no coordinates the distance would silently come out as 0).
-  if (a.unbuilt || b.unbuilt) return
+  if (covered.some(s => s.unbuilt)) return
   const aId = `${line.operator}-${a.station}`
   const bId = `${line.operator}-${b.station}`
   if (!coords.has(aId)) missingCoords.add(aId)
   if (!coords.has(bId)) missingCoords.add(bId)
-  const { m, src } = distance(line, a, b, coords)
-  srcCounts[src] = (srcCounts[src] ?? 0) + 1
-  if (m === 0 && aId !== bId) zeroLength.add(`${line.lineCode}: ${aId} <-> ${bId} (${src})`)
-  const pairs = directed ? [[aId, bId]] as const : [[aId, bId], [bId, aId]] as const
+  let m = 0
+  for (let i = 1; i < covered.length; i++) {
+    const segment = distance(line, covered[i - 1]!, covered[i]!, coords)
+    srcCounts[segment.src] = (srcCounts[segment.src] ?? 0) + 1
+    if (segment.m === 0) {
+      zeroLength.add(`${line.lineCode}: ${line.operator}-${covered[i - 1]!.station} <-> ${line.operator}-${covered[i]!.station} (${segment.src})`)
+    }
+    m += segment.m
+  }
+  const pairs = hop.bothWays ? [[aId, bId], [bId, aId]] as const : [[aId, bId]] as const
   for (const [from, to] of pairs) {
     out.push(
       `INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt)`
@@ -67,43 +76,27 @@ function emit(line: LineTopology, a: Stop, b: Stop, coords: Map<string, Coord>, 
 }
 
 function emitChain(line: LineTopology, stops: Stop[], coords: Map<string, Coord>, directed = false): void {
-  for (let i = 1; i < stops.length; i++) {
-    const a = stops[i - 1]
-    const b = stops[i]
-    if (a && b) emit(line, a, b, coords, directed)
-  }
+  for (const hop of chainHops(stops)) emit(line, directed ? { ...hop, bothWays: false } : hop, coords)
 }
 
 async function main(): Promise<void> {
   const coords = await loadCoords()
   for (const line of TOPOLOGY) {
-    const byCode = new Map<string, Stop>()
-    for (const s of line.path) byCode.set(s.station, s)
-    for (const b of line.branches ?? []) for (const s of b.path) byCode.set(s.station, s)
-
     if (line.pathReverse) {
       // Asymmetric corridor: each direction carries its own true stop sequence.
       // Emit forward-only edges from `path` and reverse-only edges from
       // `pathReverse`; shared segments produce both directed rows naturally and
       // INSERT OR REPLACE dedupes on the edge id. (Such lines have no branches.)
+      // Stop.serves would be a second direction model on the same line, and
+      // the two chains here already say which way each stop is served.
+      const flagged = [...line.path, ...line.pathReverse].find(s => s.serves)
+      if (flagged) throw new Error(`${line.lineCode}: ${flagged.station} sets \`serves\` on a line with pathReverse`)
       emitChain(line, line.path, coords, true)
       emitChain(line, line.pathReverse, coords, true)
       continue
     }
 
-    emitChain(line, line.path, coords)
-
-    for (const br of line.branches ?? []) {
-      const junction = byCode.get(br.fromStation)
-      const first = br.path[0]
-      if (junction && first) emit(line, junction, first, coords)
-      emitChain(line, br.path, coords)
-      const last = br.path[br.path.length - 1]
-      if (br.closeTo && last) {
-        const close = byCode.get(br.closeTo)
-        if (close) emit(line, last, close, coords)
-      }
-    }
+    for (const stops of stopLists(line)) emitChain(line, stops, coords)
   }
 
   // Refuse before writing, so a bad run can't leave a poisoned edges.sql on

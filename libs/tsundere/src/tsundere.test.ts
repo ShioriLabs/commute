@@ -53,22 +53,6 @@ describe('loadGraph', () => {
       expect(tsun.findRoute(from!, to!)).toEqual(findRoute(graph, from!, to!))
     }
   })
-
-  it('carries endpoint restrictions from load time into every query', () => {
-    const restricted = loadGraph({
-      edges,
-      transfers,
-      restrictions: [{ stationId: 'KCI-A', forbiddenNeighborId: 'KCI-B' }]
-    })
-    // The restriction is symmetric: no boarding at A heading toward B, and no
-    // alighting at A having arrived from B. Here B is A's only neighbour, so
-    // both directions are blocked — that is the restriction working, not the
-    // handle dropping it.
-    expect(restricted.findRoute('KCI-A', 'KCI-C')).toBeNull()
-    expect(restricted.findRoute('KCI-C', 'KCI-A')).toBeNull()
-    // A pair that never touches the restricted stop is unaffected.
-    expect(restricted.findRoute('KCI-B', 'KCI-C')).not.toBeNull()
-  })
 })
 
 describe('findRoutes', () => {

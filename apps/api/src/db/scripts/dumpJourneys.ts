@@ -5,7 +5,6 @@ import type { RouteLeg } from '@commute/tsundere'
 import { summarizeFares } from '../../utils/fare-summary'
 import { mergeInterlinedLegs } from '../../utils/interlining'
 import { HEADWAYS_S, STOP_HEADWAYS_S } from '../data/headways'
-import { ENDPOINT_RESTRICTIONS } from '../data/topology'
 
 /*
  * Dump real findRoutes output as JSON, for design work.
@@ -72,10 +71,6 @@ for (const operator of operators.data) {
 const tsun = loadGraph({
   edges,
   transfers,
-  restrictions: ENDPOINT_RESTRICTIONS.map(r => ({
-    stationId: `${r.operator}-${r.station}`,
-    forbiddenNeighborId: `${r.operator}-${r.forbiddenNeighbor}`
-  })),
   headwaysS: new Map([...Object.entries(HEADWAYS_S), ...Object.entries(STOP_HEADWAYS_S)])
 })
 
