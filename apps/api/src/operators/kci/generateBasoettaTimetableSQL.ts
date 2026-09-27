@@ -1,5 +1,6 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
+import { DAY_MASK_ALL } from 'db/schemas/schedules'
 
 /*
  * Timetable generator for the Soekarno-Hatta airport line (A), a.k.a. Basoetta.
@@ -208,13 +209,20 @@ export function buildTimetableSQL(rows: ScheduleRow[], tripdate: string): string
         const arrival = normalizeTime(row.trip.arrival)
         const boundFor = BOUND_FOR[row.terminus]!
         return `  ('${esc(`${stationId}-${row.trip.noka}`)}', '${esc(stationId)}', '${esc(row.trip.noka)}',`
-          + ` '${departure}', '${arrival}', '${esc(boundFor)}', 'A', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+          + ` '${departure}', '${arrival}', '${esc(boundFor)}', 'A', ${DAY_MASK_ALL}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
       })
 
     blocks.push(
       `-- ${stationId}: ${stationRows.length} departures\n`
+      /*
+       * Scoped by line rather than by day: the Soekarno-Hatta service runs the
+       * same board every day, so this file owns every row for line A at the
+       * station and the day carries no information here. It is written
+       * explicitly rather than left to the column default so the mask is
+       * visible in the committed SQL.
+       */
       + `DELETE FROM schedules WHERE stationId = '${esc(stationId)}' AND lineCode = 'A';\n`
-      + 'INSERT INTO schedules (id, stationId, tripNumber, estimatedDeparture, estimatedArrival, boundFor, lineCode, createdAt, updatedAt) VALUES\n'
+      + 'INSERT INTO schedules (id, stationId, tripNumber, estimatedDeparture, estimatedArrival, boundFor, lineCode, dayMask, createdAt, updatedAt) VALUES\n'
       + values.join(',\n') + ';\n'
       + `UPDATE stations SET timetableSynced = 1 WHERE id = '${esc(stationId)}';\n`
     )

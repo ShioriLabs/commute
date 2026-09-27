@@ -1,5 +1,6 @@
 import { LRTJ_STATION_CODES, OPERATORS, REGIONS } from '@commute/constants'
 import { StationRepository } from 'db/repositories/stations'
+import { DAY_MASK_ALL } from 'db/schemas/schedules'
 import { NewStation } from 'db/schemas/stations'
 import { chunkArray } from 'utils/chunk'
 import { parseHTML } from 'linkedom'
@@ -113,8 +114,9 @@ export async function syncTimetable(d1: D1Database, stationCode: string) {
     }
   }
 
-  // Save to database
-  await new StationRepository(d1).insertTimetable(stationId, timetable)
+  // Every day: the scraped schedule page publishes one timetable with no day
+  // dimension, so that is what is stored. No weekend variant is known to exist.
+  await new StationRepository(d1).insertTimetable(stationId, timetable, DAY_MASK_ALL)
 
   return timetable
 }

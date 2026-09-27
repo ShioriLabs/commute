@@ -51,14 +51,38 @@ describe('dominates', () => {
   })
 
   /*
-   * Bucketing has a boundary wherever you put it: 5049 and 5051 round to 50 and
-   * 51, so they do separate. That is inherent to quantising, not a bug — the
-   * point is only that *small* differences collapse, which the metre test above
-   * pins. Recorded here so nobody later "fixes" the boundary and reintroduces
-   * unbounded bags.
+   * A grid has a boundary wherever you put it, and rounding to one meant two
+   * journeys 2m apart separated whenever they straddled it — 5049 and 5051 land
+   * in different buckets. An earlier version of this file recorded that as
+   * inherent to quantising and warned against "fixing" it, on the grounds that
+   * doing so would reintroduce unbounded bags.
+   *
+   * The warning was right about the risk and wrong about the cause. What keeps
+   * bags finite is that near-equal journeys collapse; a GRID is only one way to
+   * get that, and the boundary is not the price of it. Comparing with a
+   * TOLERANCE — no worse means within a bucket — collapses the same family with
+   * no boundary to straddle, because the comparison is relative to the pair
+   * rather than to a fixed lattice.
+   *
+   * It mattered in production. MRTJ-BLM -> KCI-CSK offered two detours via 6V
+   * that lost on boardings (4 vs 3), riding (31.1km vs 23.8km) and waiting
+   * (14min vs 9min), and survived purely because walking was 1120m against
+   * 1190m — a 70m difference, less than a city block, of which 500m is a
+   * modelled concourse allowance nobody surveyed. Across 120 sampled pairs, 10
+   * journeys in 9 pairs were kept alive this way, some by as little as 9m.
    */
-  it('separates values that straddle a bucket boundary', () => {
-    expect(dominates(criteria({ rideDistanceM: 5049 }), criteria({ rideDistanceM: 5051 }))).toBe(true)
+  it('does not separate values that merely straddle a bucket boundary', () => {
+    expect(dominates(criteria({ rideDistanceM: 5049 }), criteria({ rideDistanceM: 5051 }))).toBe(false)
+    expect(dominates(criteria({ rideDistanceM: 5051 }), criteria({ rideDistanceM: 5049 }))).toBe(false)
+  })
+
+  /*
+   * The flip side, and what stops the tolerance swallowing real differences: a
+   * journey must beat another by MORE than a bucket to dominate it, so a
+   * genuine gap still separates.
+   */
+  it('still separates journeys more than a bucket apart', () => {
+    expect(dominates(criteria({ rideDistanceM: 5000 }), criteria({ rideDistanceM: 5300 }))).toBe(true)
   })
 
   it('buckets waiting by the minute', () => {

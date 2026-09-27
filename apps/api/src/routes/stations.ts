@@ -20,7 +20,37 @@ import {
 } from 'utils/directions'
 import * as v from 'valibot'
 import { doc, operatorParam, pathParam, queryParam, stationCodeParam, timeWindowParams } from 'schemas/describe'
-import { CompactGroupedTimetableSchema, GroupedTimetableSchema, ScheduleSchema, StationSchema, TransferSchema } from '@commute/schemas'
+import { CompactGroupedTimetableSchema, GroupedTimetableSchema, HeadwayRowSchema, ScheduleSchema, StationSchema, TransferSchema } from '@commute/schemas'
+import type { HeadwayRow } from '@commute/schemas'
+import { DAY_HEADWAYS_S, DIRECTIONAL_HEADWAYS_S, HEADWAYS_S, LINE_DAY_MASK, LINE_TERMINI, STOP_HEADWAYS_S } from 'db/data/headways'
+import { serviceDay } from 'utils/fare'
+
+/*
+ * The three day buckets, high bit first, matching how LINE_DAY_MASK is packed
+ * in the generated headways file: WD (Mon-Fri), SAT, SUN.
+ */
+const DAY_ORDER = ['WD', 'SAT', 'SUN'] as const
+type ServiceDayName = (typeof DAY_ORDER)[number]
+
+/*
+ * Which day a request is about: `?day=` when given, otherwise today in Jakarta.
+ *
+ * Resolved server-side on purpose. The caller's clock may be in any timezone,
+ * and a departure board is a fact about Jakarta rather than about the reader.
+ */
+function requestedDay(raw: string | undefined): ServiceDayName {
+  const upper = raw?.toUpperCase()
+  return upper === 'WD' || upper === 'SAT' || upper === 'SUN' ? upper : serviceDay(new Date())
+}
+
+/** The stored `schedules.dayMask` bit for a day. Mirrors DAY_MASK. */
+const DAY_BIT: Record<ServiceDayName, number> = { WD: 0b100, SAT: 0b010, SUN: 0b001 }
+
+const dayParam = queryParam(
+  'day',
+  'Hari yang mau dilihat: `WD` (Senin-Jumat), `SAT`, atau `SUN`. Hari libur nasional ikut jadwal `SUN`. Default-nya hari ini waktu Jakarta.',
+  'SAT'
+)
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -188,7 +218,7 @@ app.get(
     description: 'Semua jadwal keberangkatan dalam satu daftar, tanpa dipisah per lin. Kalau butuh yang sudah dikelompokkan per arah seperti papan keberangkatan, pakai `/timetable/grouped`.\n\nBisa dipersempit ke rentang jam pakai `from` dan `to` (format `HH:MM`, waktu lokal Asia/Jakarta). Rentangnya dibulatkan ke jam bulat: `from=12:13&to=15:18` jadi jam 12 sampai 15, mencakup keberangkatan sampai `15:59`. Rentang yang melewati tengah malam ditulis biasa saja, misalnya `from=22:00&to=02:00` buat kereta terakhir. Kalau `from` dan `to` persis sama, yang keluar sehari penuh.',
     tag: 'Stasiun',
     data: v.array(ScheduleSchema),
-    parameters: [operatorParam, stationCodeParam, ...timeWindowParams],
+    parameters: [operatorParam, stationCodeParam, dayParam, ...timeWindowParams],
     errors: {
       400: 'Format `from` atau `to` salah (`INVALID_TIME_RANGE`). Pakai `HH:MM` 24 jam.',
       404: 'Kode operator atau stasiun tidak ditemukan.'
@@ -207,15 +237,18 @@ app.get(
       return c.json(BadRequest('INVALID_TIME_RANGE', 'Use HH:MM in 24-hour local time, e.g. from=06:00&to=09:00.'), 400)
     }
 
+    const day = requestedDay(c.req.query('day'))
+
     const kvRepository = new KVRepository(c.env.KV)
     const stationRepository = new StationRepository(c.env.DB)
 
     /*
-     * The window is part of the key. Caching a filtered body under the plain
-     * key would serve a morning-only timetable to the next caller who asked for
-     * the whole day.
+     * The window and the day are both part of the key. Caching a filtered body
+     * under the plain key would serve a morning-only timetable to the next
+     * caller who asked for the whole day, and a weekday board to a caller
+     * asking about Saturday.
      */
-    const kvKey = `timetable:${operator.code}-${stationCode}:${windowCacheKey(window)}:${c.env.API_VERSION}`
+    const kvKey = `timetable:${operator.code}-${stationCode}:${day}:${windowCacheKey(window)}:${c.env.API_VERSION}`
 
     const cachedTimetable = await kvRepository.get(kvKey)
     if (cachedTimetable) {
@@ -235,7 +268,7 @@ app.get(
       )
     }
 
-    const allDepartures = await stationRepository.getTimetableFromStationId(checkStationResult.station!.id)
+    const allDepartures = await stationRepository.getTimetableFromStationId(checkStationResult.station!.id, DAY_BIT[day])
     const timetable = window ? filterByWindow(allDepartures, window) : allDepartures
     if (timetable.length === 0) {
       return c.json(
@@ -268,6 +301,7 @@ app.get(
       operatorParam,
       stationCodeParam,
       queryParam('compact', 'Isi `1` kalau mau keberangkatannya dalam bentuk tuple. Nilai lain akan mengembalikan bentuk penuh.', '1'),
+      dayParam,
       ...timeWindowParams
     ],
     errors: {
@@ -292,7 +326,9 @@ app.get(
     const kvRepository = new KVRepository(c.env.KV)
     const stationRepository = new StationRepository(c.env.DB)
 
-    const kvKey = `timetable:${operator.code}-${stationCode}:grouped:${compactMode ? 'compact' : 'full'}:${windowCacheKey(window)}:${c.env.API_VERSION}`
+    const day = requestedDay(c.req.query('day'))
+
+    const kvKey = `timetable:${operator.code}-${stationCode}:${day}:grouped:${compactMode ? 'compact' : 'full'}:${windowCacheKey(window)}:${c.env.API_VERSION}`
 
     const cachedTimetable = await kvRepository.get(kvKey)
     if (cachedTimetable) {
@@ -312,8 +348,8 @@ app.get(
       // Compact mode only needs the grouping/compact columns; full mode embeds
       // whole Schedule rows in the response, so keep selectAll there.
       compactMode
-        ? stationRepository.getGroupingTimetableFromStationId(stationID)
-        : stationRepository.getTimetableFromStationId(stationID)
+        ? stationRepository.getGroupingTimetableFromStationId(stationID, DAY_BIT[day])
+        : stationRepository.getTimetableFromStationId(stationID, DAY_BIT[day])
     ])
 
     if (checkStationResult.status === 'rejected' || schedules.status === 'rejected') return c.json(Internal('DATABASE_ERROR', 'Can\'t connect to database, please try again later.'))
@@ -472,7 +508,7 @@ app.get(
     description: 'Jadwal satu lin di satu stasiun. Sama seperti `/timetable`, bisa dipersempit pakai `from` dan `to`.',
     tag: 'Stasiun',
     data: v.array(ScheduleSchema),
-    parameters: [operatorParam, stationCodeParam, pathParam('line', 'Kode lin yang mau difilter.', 'C'), ...timeWindowParams],
+    parameters: [operatorParam, stationCodeParam, pathParam('line', 'Kode lin yang mau difilter.', 'C'), dayParam, ...timeWindowParams],
     errors: {
       400: 'Format `from` atau `to` salah (`INVALID_TIME_RANGE`). Pakai `HH:MM` 24 jam.',
       404: 'Kode operator, stasiun, atau lin tidak ditemukan.'
@@ -495,7 +531,9 @@ app.get(
     const kvRepository = new KVRepository(c.env.KV)
     const stationRepository = new StationRepository(c.env.DB)
 
-    const kvKey = `timetable:${operator.code}-${stationCode}:${lineCode}:${windowCacheKey(window)}:${c.env.API_VERSION}`
+    const day = requestedDay(c.req.query('day'))
+
+    const kvKey = `timetable:${operator.code}-${stationCode}:${day}:${lineCode}:${windowCacheKey(window)}:${c.env.API_VERSION}`
 
     const cachedTimetable = await kvRepository.get(kvKey)
     if (cachedTimetable) {
@@ -508,7 +546,11 @@ app.get(
     const checkIfLineExists = await stationRepository.checkIfLineExists(`${operator.code}-${stationCode}`, lineCode)
     if (!checkIfLineExists.exists || checkIfLineExists.line === null) return c.json(NotFound(`Unknown Line Code ${lineCode} in Station ID ${operator.code}-${stationCode}`), 404)
 
-    const lineDepartures = await stationRepository.getTimetableFromStationId(checkIfLineExists.line!.stationId, checkIfLineExists.line!.lineCode)
+    const lineDepartures = await stationRepository.getTimetableFromStationId(
+      checkIfLineExists.line!.stationId,
+      DAY_BIT[day],
+      checkIfLineExists.line!.lineCode
+    )
     const timetable = window ? filterByWindow(lineDepartures, window) : lineDepartures
     if (timetable.length === 0) {
       return c.json(
@@ -586,6 +628,189 @@ app.get(
       Ok(transfers.value),
       200
     )
+  }
+)
+
+/*
+ * How often a vehicle passes, per line serving this station.
+ *
+ * Deliberately NOT a timetable. TransJakarta publishes none at all, and the rail
+ * operators only publish per-station boards, so "when is the next one" stays
+ * unanswerable — but "how long do you usually wait" is derivable for both, and
+ * that is what a rider standing on a platform actually wants to know.
+ *
+ * Both maps are module constants (generated by generateHeadways.ts), so the only
+ * round trip here is the station lookup that also gives us the 404 and the line
+ * list. A per-stop value beats the line-level one wherever it exists: a TJ
+ * corridor's short-turn variants serve only its inner haltes, and rail
+ * departures thin out toward a terminus.
+ */
+app.get(
+  '/:operator/:stationCode/headway',
+  doc({
+    summary: 'Frekuensi kendaraan di satu stasiun',
+    description: 'Rata-rata berapa lama sekali kendaraan tiap lin lewat stasiun ini. Ini BUKAN jadwal: nggak bisa dipakai buat tahu keberangkatan berikutnya jam berapa, cuma buat tahu kira-kira nunggunya berapa lama.\n\nAngkanya ikut hari: sebagian koridor lebih jarang atau malah nggak jalan pas akhir pekan. Defaultnya hari ini di Jakarta, atau tentukan sendiri lewat `day`. Lin yang nggak jalan di hari yang diminta `headwayS`-nya `null` dan `days`-nya berisi hari-hari lin itu jalan.',
+    tag: 'Stasiun',
+    data: v.array(HeadwayRowSchema),
+    parameters: [
+      operatorParam,
+      stationCodeParam,
+      dayParam
+    ],
+    errors: { 404: 'Kode operator atau stasiun tidak ditemukan.' }
+  }),
+  async (c) => {
+    const operatorCode = c.req.param('operator')
+    const stationCode = c.req.param('stationCode')
+    const operator = getOperatorByCode(operatorCode)
+    if (!operator) {
+      return c.json(NotFound('UNKNOWN_OPERATOR', `Unknown Operator Code: ${operatorCode}`), 404)
+    }
+
+    /*
+     * Which day the rider is asking about. `?day=` for an explicit one,
+     * otherwise today in Jakarta — so the halte page shows what is running now
+     * without the caller having to say so.
+     */
+    const day = requestedDay(c.req.query('day'))
+
+    const kvRepository = new KVRepository(c.env.KV)
+    const stationRepository = new StationRepository(c.env.DB)
+
+    // The day is part of the key: frequencies differ by day, and some corridors
+    // do not run at all, so a Saturday body served from a Tuesday key would show
+    // a weekday-only line as though it were running.
+    const kvKey = `headway:${operator.code}-${stationCode}:${day}:${c.env.API_VERSION}`
+    const cached = await kvRepository.get(kvKey)
+    if (cached) return c.json(Ok(cached), 200)
+
+    const stationID = `${operator.code}-${stationCode}`
+    const station = await stationRepository.getById(stationID)
+    if (station === null) {
+      return c.json(NotFound('UNKNOWN_STATION', `Unknown Station Code ${stationCode} in Operator ${operator.code}`), 404)
+    }
+
+    /*
+     * Headway for a (line, key) on this day: the day's own figure where one
+     * exists, otherwise the weekday number.
+     *
+     * DAY_HEADWAYS_S is sparse — only the pairs that genuinely differ — so the
+     * fallback is the common path rather than an error case.
+     *
+     * The base lookup gates the override deliberately. A day delta can exist at
+     * a granularity the weekday table has no entry for — `SUN:4@TJ-H00181P` is
+     * real while `4@TJ-H00181P` is not, because corridor 4 only reaches that
+     * halte on Sundays — and returning it unguarded would report a per-stop
+     * figure for a stop that was never measured on a weekday, breaking the
+     * `source: 'STOP' | 'LINE'` distinction the whole table rests on. An
+     * override refines a measurement; it does not create one.
+     */
+    const headwayOn = (
+      table: Record<string, number>,
+      key: string,
+      days: readonly ServiceDayName[]
+    ): number | undefined => {
+      const override = DAY_HEADWAYS_S[`${day}:${key}`]
+      const base = table[key]
+      /*
+       * A line that does not run on weekdays has no base value anywhere — the
+       * weekday tables are simply empty for it — so its only real figure IS the
+       * override. Accepting it there is not promotion, it is the measurement.
+       */
+      if (base === undefined) return days.includes('WD') ? undefined : override
+      return override ?? base
+    }
+
+    // Days a line runs. Absent from the mask means every day.
+    const daysOf = (lineCode: string): readonly ServiceDayName[] => {
+      const mask = LINE_DAY_MASK[lineCode]
+      if (mask === undefined) return DAY_ORDER
+      return DAY_ORDER.filter((_, i) => (mask & (1 << (DAY_ORDER.length - 1 - i))) !== 0)
+    }
+    /*
+     * Terminus names for any line whose two directions differ here. Resolved from
+     * the stations table rather than baked into the generated data, so renaming a
+     * station does not need a regeneration — one extra query, and only when a
+     * split actually applies at this station.
+     */
+    const splitLines = station.lines.filter((key) => {
+      const lineCode = key.slice(key.indexOf(':') + 1)
+      return DIRECTIONAL_HEADWAYS_S[`${lineCode}@${station.id}@F`] !== undefined
+        || DIRECTIONAL_HEADWAYS_S[`${lineCode}@${station.id}@R`] !== undefined
+    })
+    const terminusName = new Map<string, string>()
+    if (splitLines.length > 0) {
+      const ids = new Set<string>()
+      for (const key of splitLines) {
+        const t = LINE_TERMINI[key.slice(key.indexOf(':') + 1)]
+        if (t) {
+          ids.add(t.F)
+          ids.add(t.R)
+        }
+      }
+      for (const s of await stationRepository.getByIds([...ids])) terminusName.set(s.id, s.name)
+    }
+
+    const rows: HeadwayRow[] = []
+    for (const key of station.lines) {
+      const lineCode = key.slice(key.indexOf(':') + 1)
+      const days = daysOf(lineCode)
+
+      /*
+       * What a row says about the days it runs.
+       *
+       * `days` is omitted for a line that runs all week, which is most of them.
+       * `weekendOnly` is the old shape of this same fact and is still emitted
+       * whenever the line skips weekdays, so existing callers keep working
+       * until the web app has shipped against `days`.
+       */
+      const dayFields = days.length === DAY_ORDER.length
+        ? {}
+        : { days: [...days], ...(days.includes('WD') ? {} : { weekendOnly: true as const }) }
+
+      /*
+       * Directional rows, when the generated table has anything to say about this
+       * (line, stop). Two entries mean the directions genuinely differ and the
+       * rider — who has not chosen a destination yet — is shown both. ONE entry
+       * means the corridor only passes here in that direction, so the single row
+       * gets labelled rather than silently reporting a one-way frequency as if it
+       * applied both ways.
+       */
+      const directional = (['F', 'R'] as const)
+        .map(dir => ({ dir, headwayS: headwayOn(DIRECTIONAL_HEADWAYS_S, `${lineCode}@${station.id}@${dir}`, days) }))
+        .filter((entry): entry is { dir: 'F' | 'R', headwayS: number } => entry.headwayS !== undefined)
+      if (directional.length > 0) {
+        const termini = LINE_TERMINI[lineCode]
+        for (const { dir, headwayS } of directional) {
+          const boundFor = termini ? terminusName.get(termini[dir]) : undefined
+          rows.push({ line: key, headwayS, source: 'STOP', ...dayFields, ...(boundFor ? { boundFor } : {}) })
+        }
+        continue
+      }
+
+      const perStop = headwayOn(STOP_HEADWAYS_S, `${lineCode}@${station.id}`, days)
+      if (perStop !== undefined) {
+        rows.push({ line: key, headwayS: perStop, source: 'STOP', ...dayFields })
+        continue
+      }
+      const perLine = headwayOn(HEADWAYS_S, lineCode, days)
+      /*
+       * No value at either level. Two different cases, and only one of them is
+       * a row: a line that does not run on the requested day at all still gets
+       * a labelled row carrying `null`, so the page says "akhir pekan saja"
+       * rather than dropping the corridor off the halte silently. A line we
+       * simply derive no headway for (a feeder with no topology) is omitted.
+       */
+      if (perLine !== undefined) rows.push({ line: key, headwayS: perLine, source: 'LINE', ...dayFields })
+      else if (!days.includes(day)) rows.push({ line: key, headwayS: null, source: 'LINE', ...dayFields })
+    }
+
+    // Cache an empty result too. A station with no headway data is a stable fact
+    // about the operator, not a miss worth recomputing on every request — the
+    // same reasoning the transfers handler above spells out.
+    c.executionCtx.waitUntil(kvRepository.set(kvKey, rows))
+
+    return c.json(Ok(rows), 200)
   }
 )
 

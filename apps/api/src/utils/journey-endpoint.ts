@@ -4,7 +4,7 @@ import type { Tsundere } from '@commute/tsundere'
 import type { Bindings } from 'app'
 import { KVRepository } from 'db/repositories/kv'
 import { StationRepository } from 'db/repositories/stations'
-import { fareTimeBucket } from 'utils/fare'
+import { departureSlot, serviceDay } from 'utils/fare'
 import { stationNamer, type StationNamer } from 'utils/fare-journey'
 import { Internal, NotFound, Ok } from 'utils/response'
 import { ServerTiming } from 'utils/server-timing'
@@ -27,21 +27,57 @@ import { ServerTiming } from 'utils/server-timing'
  * KV key for a journey answer.
  *
  * `prefix` separates the namespaces: the two endpoints return different shapes
- * for the same pair, and the beta router switch keeps both warm at once, so a
- * shared key would serve a TripResult to a caller parsing a FareResult.
+ * for the same pair, and both stay warm at once — the app reads /trips while
+ * the OG worker and shared links still read /fares — so a shared key would
+ * serve a TripResult to a caller parsing a FareResult.
  *
- * Keyed on payment method and time bucket because fare depends on both — peak
- * and off-peak, and the integrated-fare steps, must not share a cached body.
+ * Keyed on payment method because fare depends on it: the integrated-fare steps
+ * must not share a cached body with single-tap stored value.
+ *
+ * The service day joins it because routing depends on that too: lines run on
+ * different days and at different frequencies, so a Saturday answer served from
+ * a Tuesday key would route onto a corridor that is not running.
+ *
+ * The time component is a 20-minute slot rather than the peak/off-peak bucket it
+ * used to be. Two buckets could not express a departure time at all — every
+ * instant in the morning peak was one entry — so a rider who picked 08:40 was
+ * served whichever body happened to warm that window. See departureSlot for why
+ * twenty minutes, and note that fare itself still buckets peak/off-peak: this
+ * only narrows what the cache calls the same question.
  */
 export function journeyCacheKey(
   prefix: 'fares' | 'trips',
   fromId: string,
   toId: string,
   context: FareContext,
-  apiVersion: string
+  apiVersion: string,
+  /*
+   * What the rider excluded from routing, if anything.
+   *
+   * Part of the key because it changes the ANSWER, not just its presentation:
+   * a rail-only search and an everything search for the same pair are two
+   * different journeys, and a 20-hour cache entry that ignored this would serve
+   * one rider the other's route. Absent for an unrestricted search so the
+   * default key is byte-identical to the one before this existed, which keeps
+   * every warm entry warm.
+   */
+  scope?: string
 ): string {
-  return `${prefix}:${fromId}:${toId}:${context.paymentMethod}:${fareTimeBucket(context.departureAt)}:${apiVersion}`
+  const day = serviceDay(context.departureAt)
+  const base = `${prefix}:${fromId}:${toId}:${context.paymentMethod}:${day}:${departureSlot(context.departureAt)}:${apiVersion}`
+  return scope ? `${base}:${scope}` : base
 }
+
+/*
+ * How long a CLOSED answer stays cached.
+ *
+ * Kept short even though the key's 20-minute slot can now express a 05:00
+ * opening, because a CLOSED body carries `nextServiceAt` — a countdown to a
+ * moment, which goes stale inside its own slot. Worth revisiting alongside the
+ * slot width, but not silently: this value is about the freshness of a promise,
+ * not about what the key can distinguish.
+ */
+const CLOSED_CACHE_TTL_S = 5 * 60
 
 /** What the endpoint-specific half is handed once the shared work is done. */
 export interface JourneyBuildTools {
@@ -54,23 +90,69 @@ export interface JourneyBuildTools {
   hydrate: (stationIds: string[]) => Promise<StationNamer>
 }
 
+/*
+ * A trip that no line can carry right now, but which a line could carry later.
+ *
+ * Distinct from "no route" on purpose: a rider standing at a halte at 03:00
+ * needs to know the bus starts at 05:00, not that their trip is impossible.
+ * Carrying the reopening time is what makes the answer actionable — "closed"
+ * on its own leaves them with nothing to do.
+ */
+export interface ClosedOutcome {
+  outcome: 'CLOSED'
+  /** When the trip next becomes possible, as a local (WIB) ISO timestamp. */
+  nextServiceAt: string
+}
+
+/** A body, `null` for no route at any time, or CLOSED for "not right now". */
+export type JourneyOutcome<T> = T | null | ClosedOutcome
+
+export function isClosed<T>(result: JourneyOutcome<T>): result is ClosedOutcome {
+  return result !== null && typeof result === 'object' && 'outcome' in result && result.outcome === 'CLOSED'
+}
+
 export interface JourneyEndpointOptions<T> {
   keyPrefix: 'fares' | 'trips'
+  /**
+   * Extra key component for a request whose answer depends on something beyond
+   * the pair and the fare context. See journeyCacheKey's `scope`.
+   */
+  scope?: (c: Context<{ Bindings: Bindings }>) => string | undefined
   /*
-   * Build the response body, or return null for "no route".
+   * Apply request-time facts to a body on its way out, on BOTH the cache-hit
+   * and the miss path.
+   *
+   * This is what lets a journey carry real clock times while staying cached for
+   * 20 hours. The route a search returns does not change during the day —
+   * measured, 162 of 162 rail pairs return the identical route at six different
+   * hours — so the body is cacheable, but "the 07:14 train" is only true for
+   * the moment asked about. Storing the untimed journey and timing it here is
+   * what keeps a warm answer's times fresh rather than stale by hours.
+   *
+   * It must therefore be a pure function of (body, request) and must never be
+   * applied before `kvRepository.set`, or the times are frozen into the entry.
+   *
+   * Async because it needs the loaded graph, which is memoised per isolate and
+   * so is free after the first request — but awaiting it is what makes that a
+   * fact rather than an assumption.
+   */
+  retime?: (body: T, c: Context<{ Bindings: Bindings }>) => Promise<T>
+  /*
+   * Build the response body, return null for "no route", or a ClosedOutcome
+   * when a path exists but nothing serving it is running yet.
    *
    * Null rather than a thrown error because the two engines report it
    * differently — findRoute returns null, findRoutes an empty front — and both
    * mean a 404, not a 500.
    */
-  build: (tools: JourneyBuildTools) => Promise<T | null>
+  build: (tools: JourneyBuildTools) => Promise<JourneyOutcome<T>>
 }
 
 export async function handleJourneyRequest<T>(
   c: Context<{ Bindings: Bindings }>,
   getRouter: (db: D1Database) => Promise<Tsundere>,
   parseContext: (paymentMethodRaw?: string, atRaw?: string) => FareContext,
-  { keyPrefix, build }: JourneyEndpointOptions<T>
+  { keyPrefix, scope, retime, build }: JourneyEndpointOptions<T>
 ) {
   const fromId = c.req.param('from')!
   const toId = c.req.param('to')!
@@ -91,14 +173,30 @@ export async function handleJourneyRequest<T>(
   const timing = new ServerTiming()
 
   const kvRepository = new KVRepository(c.env.KV)
-  const kvKey = journeyCacheKey(keyPrefix, fromId, toId, context, c.env.API_VERSION)
+  const kvKey = journeyCacheKey(keyPrefix, fromId, toId, context, c.env.API_VERSION, scope?.(c))
 
-  const cached = await timing.measure('kv', () => kvRepository.get<T>(kvKey))
+  const cached = await timing.measure('kv', () => kvRepository.get<JourneyOutcome<T>>(kvKey))
   if (cached) {
     // A hit is the whole request, so `kv` alone already tells the story: no
     // route was computed, and the absence of the other spans says so.
     c.header('Server-Timing', timing.header())
-    return c.json(Ok(cached), 200)
+    // A cached CLOSED must replay as CLOSED. Handing it back through Ok would
+    // serve `{outcome: 'CLOSED'}` to a caller parsing a journey list.
+    if (isClosed(cached)) {
+      return c.json(
+        {
+          status: 404,
+          error: {
+            code: 'CLOSED',
+            message: 'No service on this route at that time.',
+            nextServiceAt: cached.nextServiceAt
+          }
+        },
+        404
+      )
+    }
+    // Timed on the way out, never on the way in — see `retime`.
+    return c.json(Ok(retime ? await retime(cached, c) : cached), 200)
   }
 
   const stationRepository = new StationRepository(c.env.DB)
@@ -128,10 +226,42 @@ export async function handleJourneyRequest<T>(
       return c.json(NotFound('NO_ROUTE', 'No route between these stations.'), 404)
     }
 
+    /*
+     * Closed is still a 404 — there is no journey to return — but a different
+     * code, so a caller can tell "come back at 05:00" from "this pair is not
+     * connected" without parsing prose.
+     *
+     * Cached briefly rather than for the usual 20 hours. The key carries the
+     * peak/off-peak bucket, which is far coarser than a service-hour boundary:
+     * 04:30 and 06:00 are both off-peak on a weekday, so a full-length cache
+     * would keep serving "closed" long after the line opened. A short TTL fixes
+     * that without widening the key and costing the OK path its hit rate.
+     */
+    if (isClosed(result)) {
+      c.executionCtx.waitUntil(kvRepository.set(kvKey, result, CLOSED_CACHE_TTL_S))
+      c.header('Server-Timing', timing.header())
+      return c.json(
+        {
+          status: 404,
+          error: {
+            code: 'CLOSED',
+            message: 'No service on this route at that time.',
+            nextServiceAt: result.nextServiceAt
+          }
+        },
+        404
+      )
+    }
+
+    /*
+     * Cache the UNTIMED body. `retime` runs after this, on the value handed
+     * back, so the entry stays true for its whole 20 hours while every rider
+     * reading it gets times resolved against their own request.
+     */
     c.executionCtx.waitUntil(kvRepository.set(kvKey, result))
 
     c.header('Server-Timing', timing.header())
-    return c.json(Ok(result), 200)
+    return c.json(Ok(retime ? await retime(result, c) : result), 200)
   } catch (error) {
     console.error(error)
     return c.json(Internal('DATABASE_ERROR', 'Can\'t connect to database, please try again later.'), 500)

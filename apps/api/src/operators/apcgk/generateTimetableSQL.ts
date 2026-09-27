@@ -1,6 +1,7 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { LINES } from './lines'
+import { DAY_MASK_ALL } from 'db/schemas/schedules'
 
 /*
  * Batch CSV -> SQL generator for the Kalayang Bandara timetables (source: the
@@ -10,6 +11,13 @@ import { LINES } from './lines'
  * HH:MM) and overwrites the committed `apcgk_<STATION>_<LINE>_<DEST>_timetable.sql`
  * files in db/scripts, so `git diff` is the transcription review. See
  * ./timetables/README.md for the workflow and the two known poster errors.
+ *
+ * Deliberately has NO day slot in its filename grammar, unlike the LRT
+ * Jabodebek generator beside it. The airport people-mover publishes one
+ * timetable — the source artwork carries no weekday/weekend distinction at all
+ * — so every departure is stamped as running every day. A day slot here would
+ * be ceremony around a distinction the operator does not make; add one if and
+ * when InJourney publishes a second board.
  */
 
 const INPUT_DIR = path.join(__dirname, 'timetables')
@@ -83,7 +91,7 @@ export function buildTimetableSQL(station: string, line: string, dest: string, t
     const id = `${stationId}-${line}-${index + 1}-${dest}`
     const tripNumber = `APCGK-${tripNumberBase + index * 2}`
     return `  ('${esc(id)}', '${esc(stationId)}', '${esc(tripNumber)}', '${time}', '${time}',`
-      + ` '${esc(boundFor)}', '${esc(line)}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+      + ` '${esc(boundFor)}', '${esc(line)}', ${DAY_MASK_ALL}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
   })
 
   /*
@@ -92,7 +100,7 @@ export function buildTimetableSQL(station: string, line: string, dest: string, t
    * direction's rows at the same station survive.
    */
   const clearStatement = `DELETE FROM schedules WHERE id LIKE '${esc(stationId)}-${esc(line)}-%-${esc(dest)}';\n`
-  const insertStatement = 'INSERT INTO schedules (id, stationId, tripNumber, estimatedDeparture, estimatedArrival, boundFor, lineCode, createdAt, updatedAt) VALUES\n'
+  const insertStatement = 'INSERT INTO schedules (id, stationId, tripNumber, estimatedDeparture, estimatedArrival, boundFor, lineCode, dayMask, createdAt, updatedAt) VALUES\n'
   const switchTimetableSynced = `UPDATE stations SET timetableSynced = 1 WHERE id = '${esc(stationId)}';\n`
 
   const header = `-- ${stationId} -> ${boundFor} (${times.length} departures)\n`

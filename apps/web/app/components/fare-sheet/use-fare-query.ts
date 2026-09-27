@@ -11,7 +11,8 @@ import {
   writeFareCriteria,
   type FareCriteria
 } from 'utils/fare-criteria'
-import { FARE_SWR_CONFIG, fareApiUrl, tripApiUrl } from 'utils/fare-api'
+import { FARE_SWR_CONFIG, tripApiUrl } from 'utils/fare-api'
+import { isStaleDeparture, msUntilDepartureStale } from 'utils/departure-time'
 import { resolveStationId, toPickableStations, type PickableStation } from './pickable-station'
 
 /** Leading words of the tab title on the surfaces that own one. */
@@ -47,27 +48,16 @@ export interface FareQueryOptions {
   // routes, where the title is the page's; off in the search sheet, which owns
   // its own title.
   syncDocumentTitle?: boolean
-  // Ask `/_internal/trips` for every journey worth choosing between, rather
-  // than the single route `/fares` returns. Driven by the router toggle.
-  alternatives?: boolean
-  /*
-   * Hold the fetch until the caller's own async state has landed. Defaults to
-   * true, so a caller with nothing to wait for is unaffected.
-   *
-   * /fare passes `routerReady` here. `alternatives` picks the endpoint and is
-   * read from storage after mount, so without this gate a beta rider's first
-   * paint fires at /fares and the next render fires again at /_internal/trips —
-   * warming a KV and edge entry on an endpoint the rider never reads, on the
-   * more expensive of the two.
-   */
-  gate?: boolean
 }
 
 /*
- * `TResult` follows the endpoint: a caller that never asks for alternatives is
- * talking to `/fares`, which cannot answer with a `journeys` array, so it should
- * not have to narrow a union it can never receive. The map's overlay and chip
- * rely on this — they consume the flat route fields directly.
+ * Still a union, though only `/_internal/trips` is ever asked.
+ *
+ * `FareResult` is the wire shape of a body cached before the app stopped
+ * calling `/fares` — the API's KV holds one for 20 hours, SWR persists them to
+ * IndexedDB and the service worker caches them too — so a live answer is a
+ * TripResult while a warm one may not be. `journeysOf` is what flattens the
+ * difference; see there.
  */
 export interface FareQuery<TResult = FareResult | TripResult> {
   origin: PickableStation | null
@@ -105,16 +95,12 @@ export interface FareQuery<TResult = FareResult | TripResult> {
 // route mode. Owns the station pair, the picker, and the fare fetch; renders
 // nothing. Both call sites go through the same useSWR key, so SWR dedupes across
 // them.
-export function useFareQuery(options?: FareQueryOptions & { alternatives?: false }): FareQuery<FareResult>
-export function useFareQuery(options: FareQueryOptions & { alternatives: boolean }): FareQuery<FareResult | TripResult>
 export function useFareQuery({
   initialPair,
   controlledPair,
   onStateChange,
   initialCriteria,
-  syncDocumentTitle = false,
-  alternatives = false,
-  gate = true
+  syncDocumentTitle = false
 }: FareQueryOptions = {}): FareQuery {
   const controlled = controlledPair !== undefined
   // The prebuilt search index, shared with the search sheet through the same
@@ -229,6 +215,61 @@ export function useFareQuery({
     onStateChange?.(origin?.id ?? null, destination?.id ?? null, next)
   }, [onStateChange, origin?.id, destination?.id])
 
+  /*
+   * A picked departure follows the clock once it has passed.
+   *
+   * parseFareCriteria already drops a stale instant on the way IN, so a stored
+   * 08.40 never comes back tomorrow. What it cannot cover is the page staying
+   * open across the boundary: pick 19.40, leave the tab, and at 20.00 the chip
+   * still reads 19.40 while the request underneath prices a departure nobody
+   * can board. This is the same rule applied to a session that outlives its own
+   * choice.
+   *
+   * Timed to the end of the current slot rather than polled by the minute. The
+   * slot is the grid the cache can distinguish (see DEPARTURE_SLOT_MINUTES), so
+   * a departure is genuinely valid until its slot ends and a finer tick would
+   * spend wakeups to learn nothing. Re-arms whenever fareTime changes, which
+   * includes its own reset to `'now'`.
+   *
+   * Through setCriteria, not setCriteriaState: that persists the correction and
+   * fires onStateChange, so /fare's URL drops its own stale `?at=` instead of
+   * leaving a shareable link to a train that has gone.
+   *
+   * visibilitychange as well as the timer, because a backgrounded tab's timers
+   * are throttled and "switch away, come back later" is the common shape of
+   * this. Both paths re-check rather than assume — a timer that fired early
+   * must not reset a departure that is still good.
+   */
+  const fareTime = criteria.fareTime
+  useEffect(() => {
+    if (fareTime === 'now') return
+
+    const refresh = () => {
+      if (!isStaleDeparture(fareTime)) return false
+      setCriteria({ ...criteria, fareTime: 'now' })
+      return true
+    }
+    // Already overtaken by the time this mounted — a tab restored from the
+    // background, or criteria that arrived from a URL mid-slot.
+    if (refresh()) return
+
+    // The boundary arithmetic lives in departure-time.ts, where it is tested
+    // against a fixed clock rather than only through this effect.
+    const dueIn = msUntilDepartureStale(fareTime)
+    if (dueIn === null) return
+    const timer = window.setTimeout(refresh, dueIn)
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+
+    return () => {
+      window.clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [fareTime, criteria, setCriteria])
+
   // Deep link applies once, not on every change of the incoming pair.
   // onPairChange rewrites the query string as the user picks stations, which
   // feeds back into initialPair on the /fare route — without the latch a pick
@@ -268,8 +309,7 @@ export function useFareQuery({
   /*
    * Built through the shared helpers so this key is byte-identical to the map's
    * — the two surfaces must share one SWR entry, or the chip and the sheet can
-   * show different prices for one route. `alternatives` picks the endpoint, and
-   * with it the key: see tripApiUrl for why the two must not converge.
+   * show different prices for one route.
    *
    * Keyed on the controlled ids rather than the resolved stations: those ids can
    * arrive before the search index does (a /map?from=&to= deep link), and the
@@ -277,8 +317,7 @@ export function useFareQuery({
    */
   const keyFromId = controlled ? controlledPair?.fromId ?? null : origin?.id ?? null
   const keyToId = controlled ? controlledPair?.toId ?? null : destination?.id ?? null
-  const journeyApiUrl = alternatives ? tripApiUrl : fareApiUrl
-  const fareUrl = criteriaReady && gate ? journeyApiUrl(keyFromId, keyToId, criteria) : null
+  const fareUrl = criteriaReady ? tripApiUrl(keyFromId, keyToId, criteria) : null
   const { data: fare, error, isLoading }
     = useSWR<StandardResponse<FareResult | TripResult>>(fareUrl, fetcher, FARE_SWR_CONFIG)
 

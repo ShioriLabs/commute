@@ -5,11 +5,11 @@ import { buildTimetableSQL, normalizeTime, parseTimetableFilename } from 'operat
 
 describe('parseTimetableFilename', () => {
   it('parses a valid filename', () => {
-    expect(parseTimetableFilename('SET_BK_JTM.csv')).toEqual({ station: 'SET', line: 'BK', dest: 'JTM' })
+    expect(parseTimetableFilename('SET_BK_JTM_WD.csv')).toEqual({ station: 'SET', line: 'BK', dest: 'JTM', day: 'WD' })
   })
 
   it('accepts alphanumeric station codes', () => {
-    expect(parseTimetableFilename('CK1_BK_DKA.csv')).toEqual({ station: 'CK1', line: 'BK', dest: 'DKA' })
+    expect(parseTimetableFilename('CK1_BK_DKA_WD.csv')).toEqual({ station: 'CK1', line: 'BK', dest: 'DKA', day: 'WD' })
   })
 
   it('rejects an unknown destination code', () => {
@@ -55,23 +55,71 @@ describe('normalizeTime', () => {
 
 describe('buildTimetableSQL', () => {
   it('assigns even trip numbers towards Dukuh Atas and odd away, per line series', () => {
-    const towardsDKA = buildTimetableSQL('SET', 'BK', 'DKA', ['05:59:00', '06:07:00'])
-    expect(towardsDKA).toContain('\'LRTJBDB-SET-BK-1-DKA\', \'LRTJBDB-SET\', \'LRTJBDB-1000\'')
-    expect(towardsDKA).toContain('\'LRTJBDB-SET-BK-2-DKA\', \'LRTJBDB-SET\', \'LRTJBDB-1002\'')
+    const towardsDKA = buildTimetableSQL('SET', 'BK', 'DKA', 'WD', ['05:59:00', '06:07:00'])
+    expect(towardsDKA).toContain('\'LRTJBDB-SET-BK-WD-1-DKA\', \'LRTJBDB-SET\', \'LRTJBDB-1000\'')
+    expect(towardsDKA).toContain('\'LRTJBDB-SET-BK-WD-2-DKA\', \'LRTJBDB-SET\', \'LRTJBDB-1002\'')
 
-    const awayFromDKA = buildTimetableSQL('SET', 'CB', 'HAR', ['06:12:00', '06:20:00'])
-    expect(awayFromDKA).toContain('\'LRTJBDB-SET-CB-1-HAR\', \'LRTJBDB-SET\', \'LRTJBDB-2001\'')
-    expect(awayFromDKA).toContain('\'LRTJBDB-SET-CB-2-HAR\', \'LRTJBDB-SET\', \'LRTJBDB-2003\'')
+    const awayFromDKA = buildTimetableSQL('SET', 'CB', 'HAR', 'WD', ['06:12:00', '06:20:00'])
+    expect(awayFromDKA).toContain('\'LRTJBDB-SET-CB-WD-1-HAR\', \'LRTJBDB-SET\', \'LRTJBDB-2001\'')
+    expect(awayFromDKA).toContain('\'LRTJBDB-SET-CB-WD-2-HAR\', \'LRTJBDB-SET\', \'LRTJBDB-2003\'')
   })
 
   it('round-trips the committed SET_BK_JTM CSV to the committed SQL byte-for-byte', () => {
-    const csv = fs.readFileSync(path.resolve(__dirname, 'timetables/SET_BK_JTM.csv'), 'utf8')
+    const csv = fs.readFileSync(path.resolve(__dirname, 'timetables/SET_BK_JTM_WD.csv'), 'utf8')
     const times = csv.split(/\r?\n/).filter(line => line.trim()).map(line => normalizeTime(line))
     expect(times.length).toBeGreaterThan(0)
     expect(times).not.toContain(null)
 
-    const generated = buildTimetableSQL('SET', 'BK', 'JTM', times as string[])
-    const committed = fs.readFileSync(path.resolve(__dirname, '../../db/scripts/lrtjbdb_SET_BK_JTM_timetable.sql'), 'utf8')
+    const generated = buildTimetableSQL('SET', 'BK', 'JTM', 'WD', times as string[])
+    const committed = fs.readFileSync(path.resolve(__dirname, '../../db/scripts/lrtjbdb_SET_BK_JTM_WD_timetable.sql'), 'utf8')
     expect(generated).toBe(committed)
+  })
+
+  /*
+   * The idempotency key that makes two boards able to coexist.
+   *
+   * Each generated file deletes exactly the rows it is about to write. Without
+   * the day in both the id and the DELETE pattern, loading the weekend board
+   * would match and destroy the weekday rows — silently, since the delete
+   * succeeds either way and the loss only shows up as a missing timetable.
+   */
+  it('scopes its delete to its own day', () => {
+    const weekday = buildTimetableSQL('SET', 'BK', 'JTM', 'WD', ['05:59:00'])
+    const weekend = buildTimetableSQL('SET', 'BK', 'JTM', 'WE', ['06:30:00'])
+
+    expect(weekday).toContain('DELETE FROM schedules WHERE id LIKE \'LRTJBDB-SET-BK-WD-%-JTM\'')
+    expect(weekend).toContain('DELETE FROM schedules WHERE id LIKE \'LRTJBDB-SET-BK-WE-%-JTM\'')
+
+    // The weekday pattern must not match a weekend row id, nor the reverse.
+    expect(weekend).not.toContain('LRTJBDB-SET-BK-WD-')
+    expect(weekday).not.toContain('LRTJBDB-SET-BK-WE-')
+  })
+
+  it('stamps each board with the days it runs', () => {
+    expect(buildTimetableSQL('SET', 'BK', 'JTM', 'WD', ['05:59:00'])).toContain('\'BK\', 4,')
+    expect(buildTimetableSQL('SET', 'BK', 'JTM', 'WE', ['06:30:00'])).toContain('\'BK\', 3,')
+  })
+})
+
+describe('parseTimetableFilename day slot', () => {
+  it('accepts a weekend file', () => {
+    expect(parseTimetableFilename('SET_BK_JTM_WE.csv')).toEqual({
+      station: 'SET', line: 'BK', dest: 'JTM', day: 'WE'
+    })
+  })
+
+  /*
+   * The day slot is required rather than optional-defaulting-to-weekday. A
+   * weekend file that lost its suffix would otherwise load as weekday data and
+   * wipe a hand-transcribed board; this turns that into a parse error instead.
+   */
+  it('rejects a filename with no day slot', () => {
+    expect(parseTimetableFilename('SET_BK_JTM.csv')).toHaveProperty('error')
+  })
+
+  it('rejects an unknown day', () => {
+    const result = parseTimetableFilename('SET_BK_JTM_XX.csv')
+    expect(result).toHaveProperty('error')
+    expect((result as { error: string }).error).toContain('unknown day')
   })
 })

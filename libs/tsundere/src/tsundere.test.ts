@@ -53,22 +53,6 @@ describe('loadGraph', () => {
       expect(tsun.findRoute(from!, to!)).toEqual(findRoute(graph, from!, to!))
     }
   })
-
-  it('carries endpoint restrictions from load time into every query', () => {
-    const restricted = loadGraph({
-      edges,
-      transfers,
-      restrictions: [{ stationId: 'KCI-A', forbiddenNeighborId: 'KCI-B' }]
-    })
-    // The restriction is symmetric: no boarding at A heading toward B, and no
-    // alighting at A having arrived from B. Here B is A's only neighbour, so
-    // both directions are blocked — that is the restriction working, not the
-    // handle dropping it.
-    expect(restricted.findRoute('KCI-A', 'KCI-C')).toBeNull()
-    expect(restricted.findRoute('KCI-C', 'KCI-A')).toBeNull()
-    // A pair that never touches the restricted stop is unaffected.
-    expect(restricted.findRoute('KCI-B', 'KCI-C')).not.toBeNull()
-  })
 })
 
 describe('findRoutes', () => {
@@ -101,6 +85,32 @@ describe('findRoutes', () => {
     const tsun = loadGraph({ edges, transfers, headwaysS: new Map([['X', 600]]) })
     const journeys = tsun.findRoutes('KCI-A', 'KCI-C', { headwaysS: new Map([['X', 1200]]) })
     expect(journeys[0]!.criteria.waitS).toBe(600)
+  })
+
+  /*
+   * How often a vehicle passes is a property of the STOP, not the line: a TJ
+   * corridor's short-turns only serve its inner haltes, and rail departures thin
+   * out toward a terminus. A `lineCode@stopId` entry therefore beats the bare
+   * line key, and the line key stays the fallback for every other stop.
+   */
+  it('prefers a per-stop headway over the line-level one', () => {
+    const tsun = loadGraph({
+      edges,
+      transfers,
+      headwaysS: new Map([['X', 600], ['X@KCI-A', 120]])
+    })
+    // Boarding happens at KCI-A, which carries its own value: 120 / 2.
+    expect(tsun.findRoutes('KCI-A', 'KCI-C')[0]!.criteria.waitS).toBe(60)
+  })
+
+  it('falls back to the line headway at a stop with no value of its own', () => {
+    const tsun = loadGraph({
+      edges,
+      transfers,
+      // A per-stop entry for a stop this journey never boards at.
+      headwaysS: new Map([['X', 600], ['X@KCI-Z', 120]])
+    })
+    expect(tsun.findRoutes('KCI-A', 'KCI-C')[0]!.criteria.waitS).toBe(300)
   })
 
   it('honours a walking preference', () => {

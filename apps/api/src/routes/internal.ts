@@ -5,9 +5,12 @@ import { HubRepository } from 'db/repositories/hubs'
 import { KVRepository } from 'db/repositories/kv'
 import { StationRepository } from 'db/repositories/stations'
 import type { TripResult } from '@commute/schemas'
-import { getRouter, parseFareContext } from 'routes/fares'
+import { weightsForWalking, type RankWeights, type WalkingPreference } from '@commute/tsundere'
+import { getRouter, linesOf, nextServiceAt, parseFareContext, timeOptions } from 'routes/fares'
+import { wibIsoString } from 'utils/fare'
 import { assembleJourney, planJourney } from 'utils/fare-journey'
 import { handleJourneyRequest, journeyCacheKey } from 'utils/journey-endpoint'
+import { retimeTrips } from 'utils/journey-times'
 import { summarizeFares } from 'utils/fare-summary'
 import { mergeInterlinedLegs } from 'utils/interlining'
 import { Ok } from 'utils/response'
@@ -83,16 +86,99 @@ export const tripCacheKey = (fromId: string, toId: string, context: FareContext,
  * TransportForJakarta embed, so its answer does not move for anyone who has not
  * asked for this one.
  *
- * Asking is now a rider-facing choice — the beta router toggle on /fare — rather
- * than an unlisted route. That is why the split survives: a switch picks between
- * two endpoints that each answer honestly, where a mode flag on /fares would
- * have made one URL mean two different things.
+ * This is what the app renders, everywhere. The split survives anyway, because
+ * the two endpoints answer different questions honestly: /fares is a frozen
+ * public contract for the OG card, shared links and the embed, and a mode flag
+ * on it would have made one URL mean two different things.
  *
  * Rendering is identical either way: both go through utils/fare-journey.ts, so
  * a leg looks the same on both endpoints. Only the number of journeys differs.
  */
+/*
+ * Which operators the rider is willing to use.
+ *
+ * Only one exclusion is offered today — `?modes=rail` drops TransJakarta — and
+ * it is deliberately an enum rather than a free list of operators. TJ is 61% of
+ * the searchable network and the only bridge to LRT Jakarta, so "rail only" is
+ * a genuinely different product rather than one filter among many; letting a
+ * caller exclude arbitrary operators would promise a matrix nobody has checked.
+ *
+ * Anything unrecognised means no exclusion, matching how parseFareContext
+ * treats a malformed value: a query param the rider did not knowingly set must
+ * not silently shrink their network.
+ */
+function excludedLines(modesRaw?: string): ReadonlySet<string> | undefined {
+  return modesRaw === 'rail' ? linesOf('TJ') : undefined
+}
+
+const WALKING_PREFERENCES: ReadonlySet<string> = new Set(['BRISK', 'AVERAGE', 'SLOW', 'AVOID'])
+
+/*
+ * How much the rider minds walking, as rank weights.
+ *
+ * A PREFERENCE, not a speed. The engine has no duration model — every edge's
+ * `durationSeconds` is null — so this cannot say a journey takes eight minutes
+ * longer at your pace. It shifts which tradeoffs win: weight walking harder and
+ * a 600m transfer stops beating an extra boarding.
+ *
+ * Undefined for the default, so the search runs on DEFAULT_RANK_WEIGHTS exactly
+ * as it did before this existed. AVERAGE is that default, so it is spelled the
+ * same way an absent param is.
+ */
+function walkingWeights(walkingRaw?: string): RankWeights | undefined {
+  if (walkingRaw === undefined || walkingRaw === 'AVERAGE') return undefined
+  return WALKING_PREFERENCES.has(walkingRaw as WalkingPreference)
+    ? weightsForWalking(walkingRaw as WalkingPreference)
+    : undefined
+}
+
+/*
+ * The same param, as the preference itself rather than as rank weights.
+ *
+ * `walkingWeights` above answers "how should this rider's front be ordered";
+ * this answers "how fast does this rider cross a station", which is what decides
+ * the connections they make. Both read one query param, and an unrecognised
+ * value falls back to the default in both — an unknown preference must not
+ * silently retime a journey.
+ */
+function walkingPreference(walkingRaw?: string): WalkingPreference | undefined {
+  return walkingRaw !== undefined && WALKING_PREFERENCES.has(walkingRaw as WalkingPreference)
+    ? walkingRaw as WalkingPreference
+    : undefined
+}
+
 app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRouter, parseFareContext, {
   keyPrefix: 'trips',
+  /*
+   * Both params change the ANSWER — one excludes lines, the other reorders the
+   * front — so both join the key, or a rider is served someone else's route
+   * from a 20-hour entry. Undefined for a default search, which keeps that key
+   * byte-identical to the one before either existed and every warm entry warm.
+   */
+  /*
+   * Clock times go on here, not in `build` — so they are applied to a cached
+   * body as well as a fresh one, and never written into KV. The route is the
+   * cacheable half; the vehicle you catch is the per-request half.
+   */
+  retime: async (result, c) => retimeTrips(
+    result,
+    await getRouter(c.env.DB),
+    parseFareContext(c.req.query('paymentMethod'), c.req.query('at')),
+    /*
+     * The same preference the search ranks by, used here as a SPEED: how fast
+     * this rider crosses a station decides which connections they make, and so
+     * how long the journey takes. Already part of the cache scope below, so a
+     * slow rider's timings can never be served to a brisk one.
+     */
+    walkingPreference(c.req.query('walking'))
+  ),
+  scope: (c) => {
+    const parts = [
+      c.req.query('modes') === 'rail' ? 'rail' : null,
+      walkingWeights(c.req.query('walking')) ? c.req.query('walking') : null
+    ].filter(Boolean)
+    return parts.length > 0 ? parts.join('+') : undefined
+  },
   /*
    * The same phase timings as /fares, and the more interesting of the two: this
    * is the multi-criteria search, roughly ten times the work of findRoute. If
@@ -100,6 +186,22 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
    */
   build: async ({ router, timing, context, fromId, toId, hydrate }) => {
     const routed = timing.measureSync('route', () => router.findRoutes(fromId, toId, {
+      /*
+       * When the rider is travelling, which decides both which lines are
+       * running at all and how often they come. Omitting these is what the
+       * search did before service hours existed.
+       */
+      ...timeOptions(context),
+      /*
+       * Lines the rider will not board. Boarding-only, so a walk between two
+       * haltes is still offered and a ride already under way is never cut.
+       */
+      excludeLines: excludedLines(c.req.query('modes')),
+      /*
+       * Reorders the front; never prunes it. A rider who avoids walking still
+       * gets the footbridge route offered, just ranked below the alternatives.
+       */
+      weights: walkingWeights(c.req.query('walking')),
       /*
        * Pricing the journeys is what makes the CHEAPEST label reachable at all —
        * without a scorer every journey's `fare` criterion is null and the axis
@@ -111,8 +213,24 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
        */
       scoreFare: legs => summarizeFares(mergeInterlinedLegs([...legs]), context).totalFare
     }))
-    // findRoutes reports "no route" as an empty front, where findRoute returns null.
-    if (routed.length === 0) return null
+    /*
+     * findRoutes reports "no route" as an empty front, where findRoute returns
+     * null. An empty front has two very different causes, and the rider needs
+     * them told apart: either nothing connects these stations at all, or
+     * everything that does is shut right now.
+     *
+     * The second is only worth asking about when the search was time-filtered
+     * in the first place, and only costs anything when the answer was empty —
+     * so the probe sits behind both conditions rather than on the hot path.
+     */
+    if (routed.length === 0) {
+      const reopening = timing.measureSync('reopen', () => nextServiceAt(router, fromId, toId, context, excludedLines(c.req.query('modes'))))
+      if (!reopening) return null
+      return {
+        outcome: 'CLOSED' as const,
+        nextServiceAt: wibIsoString(reopening.at)
+      }
+    }
 
     const plans = timing.measureSync('plan', () => routed.map(journey => planJourney(journey.legs, journey.criteria, journey.labels, context)))
 

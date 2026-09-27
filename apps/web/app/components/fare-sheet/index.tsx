@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CloseButton, DialogTitle } from '@headlessui/react'
 import { XIcon } from '@phosphor-icons/react'
 import { useSearchParams } from 'react-router'
 import FarePanel from './fare-panel'
 import FareShareButton from './fare-share-button'
 import { fareQueryParams, readCriteriaFromUrl, type FareCriteria } from 'utils/fare-criteria'
-import { useFareRouter } from '~/hooks/use-fare-router'
 import { useFareQuery } from './use-fare-query'
+import { journeysOf } from './journeys'
+import { findJourneyByKey, journeyKey } from 'utils/journey-key'
 
 // Rendered inside a headlessui Dialog in both contexts: the homepage
 // SheetButton morph and the standalone /fare route (which wraps it in an
@@ -22,18 +23,6 @@ const TITLE = 'Cek Tarif'
 export default function FareSheet() {
   const [searchParams] = useSearchParams()
 
-  /*
-   * Which router answers, and whether that has been read yet.
-   *
-   * `alternatives` is not a per-surface constant a route passes down — it is a
-   * rider's setting, read from storage after mount, and every surface offering
-   * the toggle derives it the same way. `routerReady` is handed to useFareQuery
-   * as its gate so no request goes out under the default before the stored
-   * answer lands; see useFareRouter.
-   */
-  const { router, routerReady, setRouter } = useFareRouter()
-  const alternatives = router === 'beta'
-
   // On the homepage the sheet lives behind a faked URL (SheetButton pushStates
   // '/fare' while the router still thinks it's on '/'), so setSearchParams
   // would resolve against '/' and stomp the pathname. Write the query string
@@ -46,10 +35,6 @@ export default function FareSheet() {
   // Stable identity: this is `onStateChange`, which the fare handlers in
   // useFareQuery close over — a fresh function each render would churn their
   // dep arrays and undo their memoization. It reads only its arguments.
-  //
-  // The router is deliberately absent from what this writes. It lives in
-  // storage alone (see utils/fare-router.ts), so flipping the toggle changes
-  // the answer without changing the URL.
   const writeUrl = useCallback((fromId: string | null, toId: string | null, criteria: FareCriteria) => {
     const params = new URLSearchParams()
     // Written independently, not only as a pair: a to-only deep link from the
@@ -75,16 +60,66 @@ export default function FareSheet() {
     // only one of the two is written back.
     initialCriteria: readCriteriaFromUrl(searchParams),
     onStateChange: writeUrl,
-    syncDocumentTitle: true,
+    syncDocumentTitle: true
     // documentTitlePrefix left at its default, which is this same wording.
-    // Decides which endpoint is queried, not just what is rendered.
-    alternatives,
-    // Nothing goes out until the stored router is known, or a beta rider's
-    // first paint would query /fares and the next render would query
-    // /_internal/trips. See useFareRouter.
-    gate: routerReady
   })
-  const { origin, destination, criteria, openPickerFor } = query
+  const { origin, destination, criteria, openPickerFor, fare } = query
+
+  /*
+   * Which option is showing, lifted out of the result card.
+   *
+   * Only so the share button can name it: a link carries the ROUTE the sender
+   * was looking at (see utils/journey-key.ts), and the card cannot hand that
+   * up from inside its own state. The map lifts the same value for a different
+   * reason — its canvas overlay draws the chosen journey.
+   */
+  const [selectedJourney, setSelectedJourney] = useState(0)
+  const journeys = useMemo(() => (fare?.data ? journeysOf(fare.data) : []), [fare])
+  /*
+   * The route a shared link named, applied once.
+   *
+   * Read from the *initial* params via ref, for the same reason the origin
+   * picker below is: writeUrl rewrites the query string on every change, so
+   * re-reading it later would resurrect a key the rider has already moved off.
+   * One-shot, and cleared whether or not it matched.
+   */
+  const sharedJourney = useRef(searchParams.get('j'))
+  /*
+   * Which row the shared key names, resolved during render rather than in an
+   * effect.
+   *
+   * The pager resets its page in a layout effect keyed on `journeys`, so a flag
+   * raised by an effect here would arrive one commit too late and the rider
+   * would land on the list anyway. Deriving it alongside the journeys it
+   * describes is what makes the two agree within a single commit.
+   *
+   * Latched rather than recomputed: the key is consumed once, and a later
+   * answer — the rider changes the payment method — must fall back to the
+   * ordinary reset rather than re-applying a route they have moved on from.
+   * Without the latch, clearing the ref would also flip `openOnDetail` back to
+   * false and bounce them off the detail they were sent to.
+   */
+  const [sharedIndex, setSharedIndex] = useState<number | null>(null)
+  const sharedResolved = useRef(false)
+  if (!sharedResolved.current && journeys.length > 0) {
+    sharedResolved.current = true
+    const found = findJourneyByKey(journeys, sharedJourney.current)
+    sharedJourney.current = null
+    if (found !== null) setSharedIndex(found)
+  }
+
+  /*
+   * The index is an ordinal into a set recomputed per request, so a new answer
+   * invalidates it. Same rule as the card's own reset, and map.tsx's.
+   *
+   * A shared key gets first refusal on that reset. Not matching is an ordinary
+   * outcome — a route can disappear between the sender's request and the
+   * recipient's — so it falls back to the first row silently rather than
+   * reporting a journey nobody asked for by name.
+   */
+  useEffect(() => setSelectedJourney(sharedIndex ?? 0), [fare, sharedIndex])
+
+  const sharedKey = journeys[selectedJourney] ? journeyKey(journeys[selectedJourney]!) : null
 
   // A to-only deep link (station page's "Petunjuk Arah") lands here with the
   // destination set and no origin — open the origin picker so the next step is
@@ -108,7 +143,7 @@ export default function FareSheet() {
         <div className="flex gap-4 items-center justify-between">
           <DialogTitle className="font-bold text-2xl">{ TITLE }</DialogTitle>
           <div className="flex gap-4">
-            <FareShareButton fromId={origin?.id} toId={destination?.id} criteria={criteria} />
+            <FareShareButton fromId={origin?.id} toId={destination?.id} criteria={criteria} journeyKey={sharedKey} />
             <CloseButton
               aria-label={`Tutup halaman ${TITLE.toLowerCase()}`}
               className="rounded-full leading-0 flex items-center justify-center w-8 h-8 cursor-pointer"
@@ -120,9 +155,9 @@ export default function FareSheet() {
 
         <FarePanel
           query={query}
-          alternatives={alternatives}
-          router={router}
-          onRouterChange={setRouter}
+          selectedIndex={selectedJourney}
+          onSelectIndex={setSelectedJourney}
+          openOnDetail={sharedIndex !== null}
         />
       </div>
     </section>

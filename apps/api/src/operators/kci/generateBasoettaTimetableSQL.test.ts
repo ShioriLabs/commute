@@ -123,7 +123,7 @@ describe('buildTimetableSQL', () => {
     const sql = buildTimetableSQL(rows, '2026-08-31')
     expect(sql).toContain(
       '(\'KCI-DU-801A802A\', \'KCI-DU\', \'801A802A\', \'05:18:00\', \'05:46:00\','
-      + ' \'Bandara Soekarno-Hatta\', \'A\', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)'
+      + ' \'Bandara Soekarno-Hatta\', \'A\', 7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)'
     )
   })
 

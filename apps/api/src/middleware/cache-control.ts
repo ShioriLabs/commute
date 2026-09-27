@@ -61,6 +61,28 @@ function etagFor(body: string): string {
   return `W/"${hash.toString(16)}"`
 }
 
+/*
+ * Is this the local dev server?
+ *
+ * Read from the request URL rather than a var, because wrangler.toml has a
+ * single [vars] block with no environments — anything added there would ship to
+ * production, which is the one place this must never be on. A deployed worker is
+ * never reached on localhost, so the check cannot leak.
+ *
+ * The URL rather than the Host header specifically because Hono only populates
+ * Host from a real network request; in tests it is null, and a check that cannot
+ * be exercised by a test is a check nobody will notice breaking.
+ */
+function isLocalDev(url: string): boolean {
+  let hostname: string
+  try {
+    hostname = new URL(url).hostname
+  } catch {
+    return false
+  }
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
+}
+
 /**
  * Attaches `Cache-Control` and a weak `ETag`, and answers matching
  * `If-None-Match` with a bodyless 304.
@@ -68,12 +90,27 @@ function etagFor(body: string): string {
  * Applied per route group rather than globally so each group states its own
  * freshness. Errors are never cached: a 404 for a station that is about to be
  * imported should not stick to a client for an hour.
+ *
+ * Disabled entirely on localhost. These TTLs are hours to a day, which is right
+ * for data that changes when an importer runs — and wrong for a developer who
+ * has just changed the code that produces it. A ten-minute browser cache on
+ * /_internal/trips hid a planner change completely: the fix was live, curl
+ * showed it, and the browser served its disk copy without asking. Nothing about
+ * the response says which layer answered, so the failure reads as "my change
+ * did nothing" rather than as a cache hit. KV still caches locally, and
+ * API_VERSION still busts that — this only removes the layer the developer
+ * cannot see.
  */
 export function cacheControl(maxAge: number) {
   return createMiddleware(async (c, next) => {
     await next()
 
     if (c.res.status !== 200) return
+
+    if (isLocalDev(c.req.url)) {
+      c.res.headers.set('Cache-Control', 'no-store')
+      return
+    }
 
     c.res.headers.set('Cache-Control', `public, max-age=${maxAge}, s-maxage=${maxAge}`)
 

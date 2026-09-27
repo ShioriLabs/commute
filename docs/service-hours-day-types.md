@@ -1,8 +1,27 @@
 # Service hours and day types
 
-**Status:** *design* — nothing built. Implements the service-hours half of
+**Status:** *shipped* (2026-09-06). Implements the service-hours half of
 `go-mode.md`'s **Tier 2** (schedule-aware routing). Companion to
 `tj-gtfs-import.md` (where the TJ calendar comes from).
+
+**Four decisions below were overturned during implementation, on measurements
+taken against the real feed and the production database. Where this doc and the
+code disagree, the code is right.** Each is flagged inline; the short list:
+
+1. **Day types are a 3-bit `WD | SAT | SUN` mask**, not the per-operator enums
+   described here. TransJakarta's `HM` service turned out to be *additive* —
+   extra Sunday trips layered on top of everyday service, not an alternative
+   board — so any two-value weekend bucket either over-promises Saturday or
+   discards real Sunday service. 7 of the 30 routable lines have Saturday ≠
+   Sunday. See `LINE_DAY_MASK` in `db/data/headways.ts`.
+2. **Rail service hours come from the largest circular gap, not percentiles.**
+   Percentiles fail on exactly the midnight-crossing lines the feature exists
+   for. Measured below.
+3. **The migration is `0015_add_schedule_day_mask.sql`**, storing the same
+   3-bit mask as an integer, defaulting to `7` (every day) rather than to
+   weekday. See its own comments for why that default matters.
+4. **`13E` and `L13E` are not the same corridor.** They are the all-stops and
+   Express variants, running on complementary days.
 
 ## Goal
 
@@ -58,7 +77,8 @@ it.** Its schedules are already hand-transcribed from the official
 into 48 CSVs under `operators/lrtjbdb/timetables/`, with a documented
 review workflow in that directory's `README.md`. A weekend variant needs no new
 machinery — it is more transcription through the pipeline that exists, plus a
-day-type field in the `<STATION>_<LINE>_<DEST>.csv` filename convention. The
+day-type field in the `<STATION>_<LINE>_<DEST>_<DAY>.csv` filename convention
+(shipped; the day slot is required, and all 96 combos are transcribed). The
 cost is human, not technical: up to 48 more posters to transcribe and review.
 
 **KCI weekend service is unconfirmed.** KCI schedules once carried a weekend
@@ -68,7 +88,26 @@ travel chart) rather than inferring from what we have already imported. Until
 that check happens, KCI is treated as having no day-type data — which, under the
 fallback rule below, means its weekday window applies every day.
 
-## Deriving rail service hours: percentiles, not min/max (decided)
+## Deriving rail service hours: percentiles, not min/max (decided) — SUPERSEDED
+
+> **Overturned.** The reasoning below about `MIN`/`MAX` is correct and worth
+> keeping; the percentile *fix* is not. Percentiles sort linearly, so a window
+> that wraps midnight has its two ends at opposite ends of the sort and neither
+> gets trimmed. Measured against production:
+>
+> | line | min/max | p1–p99 | largest circular gap |
+> | --- | --- | --- | --- |
+> | A | 05:00–23:37 | 05:27–23:12 ✗ truncates | **05:00–23:37** ✓ |
+> | B | 00:00–23:59 | 00:18–23:43 ✗ still 24 h | **03:50–01:07** ✓ |
+> | C | 00:00–23:59 | 00:13–23:48 ✗ | **04:12–00:57** ✓ |
+> | R | 00:00–23:59 | 00:17–23:42 ✗ | **03:47–00:48** ✓ |
+> | T | 00:00–23:57 | 04:38–23:28 ✗ | **04:27–00:13** ✓ |
+>
+> The shipped rule takes the **complement of the largest circular gap** between
+> consecutive distinct departures, with a ~90-minute floor so genuinely
+> 24-hour corridors assert no window at all. No tuning constant: the largest gap
+> is 163–323 min on every line while the second-largest is ≤ 12.
+> See `windowFromDepartures` in `libs/tsundere/src/planner/service-hours.ts`.
 
 The obvious implementation — `MIN(estimatedDeparture)` and
 `MAX(estimatedDeparture)` per line — **silently disables the feature**. KCI
@@ -98,7 +137,15 @@ endS`, so every comparison must be modular: `inService(t) = start <= end ? (t >=
 start && t <= end) : (t >= start || t <= end)`. This is the single easiest thing
 in the design to get wrong.
 
-## Day-type resolution differs per operator (decided)
+## Day-type resolution differs per operator (decided) — SUPERSEDED
+
+> **Overturned.** One scheme covers every operator: a 3-bit `WD | SAT | SUN`
+> mask. The per-operator split below was premised on TransJakarta needing a
+> three-way enum while rail needed a two-way one; the mask represents both
+> losslessly and makes "does this run today" a single bit test everywhere.
+> Measured over 240 TJ routes, only 4 of the 8 representable states occur —
+> `111` (223 routes), `100` (13), `011` (2), `001` (2) — and no route differs
+> *within* Mon–Fri, which is why the five weekday columns collapse to one bit.
 
 There is no single day-type model, because the operators do not carry the same
 information. Resolution is therefore **per operator**, from a single resolved
@@ -181,7 +228,8 @@ estimatedDeparture, estimatedArrival, boundFor, lineCode`, with no day column,
 and the primary key `${stationId}-${time}-${direction}` would **collide** between
 a weekday and weekend departure at the same minute.
 
-Migration `0015_add_schedule_day_type.sql`:
+Migration `0015_add_schedule_day_mask.sql` (note: `dayMask`, not `dayType` —
+an INTEGER carrying the 3-bit mask rather than a VARCHAR enum):
 
 - add `dayType VARCHAR(8) NOT NULL DEFAULT 'WEEKDAY'` — the default backfills
   every existing row correctly, since everything currently stored *is* the

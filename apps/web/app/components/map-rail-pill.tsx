@@ -12,9 +12,7 @@ import { ArrowSquareOutIcon } from '@phosphor-icons/react'
 import { buildFarePath } from 'utils/fare-url'
 import FareShareButton from './fare-sheet/fare-share-button'
 import CriteriaBar from './fare-sheet/criteria/criteria-bar'
-import RouterToggle from './fare-sheet/router-toggle'
 import type { FareCriteria } from 'utils/fare-criteria'
-import type { FareRouter } from 'utils/fare-router'
 import { operatorOfLineKey, useLines } from '~/hooks/use-lines'
 import { boardingLineKeys, endpointRoundelLines } from './fare-sheet/journeys'
 
@@ -84,8 +82,6 @@ interface MapRailPillProps {
    */
   criteria: FareCriteria
   onCriteriaChange: (criteria: FareCriteria) => void
-  router: FareRouter
-  onRouterChange: (router: FareRouter) => void
   /*
    * The fetched pair's ids, for sharing and for the /fare link.
    *
@@ -284,8 +280,6 @@ export default function MapRailPill({
   onExpandTrip,
   criteria,
   onCriteriaChange,
-  router,
-  onRouterChange,
   pairFromId,
   pairToId
 }: MapRailPillProps) {
@@ -450,8 +444,8 @@ export default function MapRailPill({
            *
            * It used to open the fare pane once a pair existed, under the label
            * "Ubah rute" — which was never true: the rows directly below are how
-           * a route gets changed. Now that the criteria, the router, the
-           * options, the share and the /fare link all live in this column, the
+           * a route gets changed. Now that the criteria, the options, the
+           * share and the /fare link all live in this column, the
            * pane has nothing of its own left to show on desktop, so there is
            * nothing for this to open. Starting a new search is what a rider
            * reaching for the card's title actually wants, and it is what the
@@ -630,13 +624,13 @@ export default function MapRailPill({
                       {/*
                       * The query's settings, above the answer they produce.
                       *
-                      * `wrap` is not optional here: unwrapped, CriteriaBar bleeds
-                      * -mx-8 px-8 for a scrolling rail and assumes 8-unit parent
-                      * padding, which this px-4 card does not give it. Wrapped it
-                      * is two chips on one line, which fits the column.
+                      * No layout prop any more: CriteriaBar is one button that
+                      * opens a sheet, so it fits this px-4 card the same as it
+                      * fits the wider panels. It used to need `wrap` here to
+                      * stop its chip rail bleeding -mx-8 px-8 into padding this
+                      * card does not have.
                       */}
-                      <CriteriaBar criteria={criteria} onChange={onCriteriaChange} wrap />
-                      <RouterToggle router={router} onChange={onRouterChange} />
+                      <CriteriaBar criteria={criteria} onChange={onCriteriaChange} />
 
                       {/*
                         * The answer, and the two things a rider does with it.

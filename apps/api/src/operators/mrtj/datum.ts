@@ -1,5 +1,5 @@
 import { MRTJ_STATIONS_BY_SLUG } from '@commute/constants'
-import { NewSchedule } from 'db/schemas/schedules'
+import { DAY_MASK, DAY_MASK_WEEKEND, NewSchedule } from 'db/schemas/schedules'
 
 /*
  * Parsing helpers for the MRT Jakarta middleware "datum" feed
@@ -180,7 +180,23 @@ function alignTrips(boards: { code: string, times: string[] }[]): SynthesizedTri
  * change that adds or removes early trips shifts later numbers — inherent to
  * synthesizing identity the feed doesn't carry.
  */
-export function synthesizeTripNumbers(stationRows: MRTJDatumRow[]): Map<string, string> {
+/*
+ * The two boards MRT Jakarta publishes. The feed names them `weekdays*` and
+ * `weekends*` and offers nothing finer, so this is the whole day dimension the
+ * operator gives us — a Saturday and a Sunday board are the same data.
+ */
+export type MRTJDay = 'WEEKDAYS' | 'WEEKENDS'
+type MRTJDepartureField = 'weekdaysStart' | 'weekdaysEnd' | 'weekendsStart' | 'weekendsEnd'
+
+const DEPARTURE_FIELDS: Record<MRTJDay, { start: MRTJDepartureField, end: MRTJDepartureField }> = {
+  WEEKDAYS: { start: 'weekdaysStart', end: 'weekdaysEnd' },
+  WEEKENDS: { start: 'weekendsStart', end: 'weekendsEnd' }
+}
+
+export function synthesizeTripNumbers(
+  stationRows: MRTJDatumRow[],
+  day: MRTJDay = 'WEEKDAYS'
+): Map<string, string> {
   const scheduleByCode = new Map<string, MRTJDatumSchedule>()
   for (const row of stationRows) {
     const entry = MRTJ_STATIONS_BY_SLUG[row.slug]
@@ -189,13 +205,14 @@ export function synthesizeTripNumbers(stationRows: MRTJDatumRow[]): Map<string, 
     }
   }
 
-  const boardsFor = (order: string[], field: 'weekdaysStart' | 'weekdaysEnd') => order
+  const fields = DEPARTURE_FIELDS[day]
+  const boardsFor = (order: string[], field: MRTJDepartureField) => order
     .map(code => ({ code, times: parseDepartureTimes(scheduleByCode.get(code)?.[field]) }))
     .filter(board => board.times.length > 0)
 
   const directions = [
-    { suffix: 'NORTHBOUND', firstNumber: 1000, boards: boardsFor(MRTJ_STATION_ORDER, 'weekdaysEnd') },
-    { suffix: 'SOUTHBOUND', firstNumber: 1001, boards: boardsFor([...MRTJ_STATION_ORDER].reverse(), 'weekdaysStart') }
+    { suffix: 'NORTHBOUND', firstNumber: 1000, boards: boardsFor(MRTJ_STATION_ORDER, fields.end) },
+    { suffix: 'SOUTHBOUND', firstNumber: 1001, boards: boardsFor([...MRTJ_STATION_ORDER].reverse(), fields.start) }
   ]
 
   const tripNumbers = new Map<string, string>()
@@ -213,30 +230,53 @@ export function synthesizeTripNumbers(stationRows: MRTJDatumRow[]): Map<string, 
   return tripNumbers
 }
 
-// TODO: Handle day-off schedules (weekends* fields exist in the feed, but the
-// schedules table has no day-type column yet)
-export function buildStationTimetable(row: MRTJDatumRow, stationId: string, terminusNames: TerminusNames, tripNumbers: Map<string, string>): NewSchedule[] {
+/*
+ * One station's board for one day type.
+ *
+ * The feed has always carried `weekendsStart`/`weekendsEnd` alongside the
+ * weekday fields; until `schedules` gained a day column there was nowhere to
+ * put a second board, so they were fetched and dropped. Now the caller runs
+ * this once per day type.
+ *
+ * The day is part of the row id. Without it a weekday and a weekend departure
+ * at the same minute in the same direction collide on the primary key, and the
+ * second board would silently overwrite the first row by row.
+ */
+export function buildStationTimetable(
+  row: MRTJDatumRow,
+  stationId: string,
+  terminusNames: TerminusNames,
+  tripNumbers: Map<string, string>,
+  day: MRTJDay = 'WEEKDAYS'
+): NewSchedule[] {
   const schedule = isStationRow(row) ? row.object?.schedule as MRTJDatumSchedule : undefined
   if (!schedule) return []
 
   const stationCode = MRTJ_STATIONS_BY_SLUG[row.slug]?.code
   const timetable: NewSchedule[] = []
+  const fields = DEPARTURE_FIELDS[day]
 
   const directions = [
-    { times: parseDepartureTimes(schedule.weekdaysStart), suffix: 'SOUTHBOUND', boundFor: terminusNames.southbound },
-    { times: parseDepartureTimes(schedule.weekdaysEnd), suffix: 'NORTHBOUND', boundFor: terminusNames.northbound }
+    { times: parseDepartureTimes(schedule[fields.start]), suffix: 'SOUTHBOUND', boundFor: terminusNames.southbound },
+    { times: parseDepartureTimes(schedule[fields.end]), suffix: 'NORTHBOUND', boundFor: terminusNames.northbound }
   ]
 
   for (const direction of directions) {
     for (const time of direction.times) {
+      // Weekday ids keep their historical shape so existing rows still match;
+      // only the weekend board carries the extra segment.
+      const id = day === 'WEEKDAYS'
+        ? `${stationId}-${time}-${direction.suffix}`
+        : `${stationId}-WE-${time}-${direction.suffix}`
       timetable.push({
-        id: `${stationId}-${time}-${direction.suffix}`,
+        id,
         stationId,
-        tripNumber: tripNumbers.get(`${stationCode}:${direction.suffix}:${time}`) ?? `${stationId}-${time}-${direction.suffix}`,
+        tripNumber: tripNumbers.get(`${stationCode}:${direction.suffix}:${time}`) ?? id,
         estimatedDeparture: time,
         estimatedArrival: time,
         boundFor: direction.boundFor,
-        lineCode: 'M'
+        lineCode: 'M',
+        dayMask: day === 'WEEKDAYS' ? DAY_MASK.WD : DAY_MASK_WEEKEND
       })
     }
   }

@@ -30,9 +30,15 @@ const OPERATOR = 'TJ'
 // Authoritative BRT corridor set (TransJakarta BRT poster). L7 is intentionally
 // absent: it is in the poster but NOT in this GTFS dataset, so it cannot be
 // authored here — add it when the feed includes it.
+//
+// 10D is also absent, but for the opposite reason: the corridor was retired and
+// dropped out of the feed entirely (last seen in the 2026-06-29 export, gone by
+// 2026-07-24). Do not re-add it on a feed refresh without checking it actually
+// runs again — all 20 of its haltes are served by other corridors, so nothing
+// depends on it.
 const BRT_CODES = [
   '1', '2', '2A', '3', '3F', '3H', '4', '4D', '5', '5C', '6', '6A', '6B', '6V',
-  '7', '7F', '8', '9', '9A', '9C', '9N', '10', '10D', '10H', '11', '12', '13',
+  '7', '7F', '8', '9', '9A', '9C', '9N', '10', '10H', '11', '12', '13',
   '13B', '13E', 'L13E', '14'
 ]
 

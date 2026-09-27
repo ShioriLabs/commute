@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import corridorsManifest from '../data/map-corridors.json'
 import pointsManifest from '../data/points.json'
-import { traceLine, type TracePoint, type TraceableLine } from './map-line-trace'
+import linesManifest from '../data/map-lines.json'
+import { traceLine, type TracePoint, type TraceableLine, type TracedLine } from './map-line-trace'
 import { channelDistance, CORRIDOR_COLOUR_TOLERANCE } from './map-corridor-colour'
 import { prepareCorridors, projectOntoPolyline, type Corridor } from './map-corridors'
 
@@ -121,6 +122,18 @@ describe('traceLine', () => {
     expect(traced.matchedPairs).toBe(1)
   })
 
+  it('leaves a singly-drawn station alone while resolving a twinned one', () => {
+    // Only B is drawn twice, so only B needs choosing between shapes. A and C
+    // have one shape each and take it directly.
+    const twin = dot('B-b', 100, 900, 'B')
+    const traced = traceLine(
+      line({ kind: 'TRUNK', ids: ['A', 'B', 'C'] }),
+      [...points, twin], [YELLOW], ['#F8C434'], '#F8C434'
+    )
+    expect(traced.segments[0].markers).toEqual(['A', 'B', 'C'])
+    expect(traced.matchedPairs).toBe(2)
+  })
+
   it('reports nothing to trace without corridors', () => {
     const traced = traceLine(line({ kind: 'TRUNK', ids: ['A', 'B'] }), points, [], [], '#F8C434')
     expect(traced.matchedPairs).toBe(0)
@@ -183,6 +196,20 @@ describe('traceLine joins branches to their trunk', () => {
       points, [spine], ['#F8C434'], '#F8C434'
     )
     expect(traced.segments[0].markers).toEqual(['KCI-B', 'KCI-C'])
+  })
+
+  it('finds a junction whose operator differs from its segment', () => {
+    // The code is bare, so the prefix is borrowed from a station the segment
+    // already names. Where the junction belongs to another operator that guess
+    // misses, and the scan over the point set is what still resolves it.
+    const crossOperator = [
+      dot('TJ-A', 0, 0), dot('KCI-J', 100, 0), dot('TJ-B', 200, 0), dot('TJ-C', 300, 0)
+    ]
+    const traced = traceLine(
+      line({ kind: 'LOOP', ids: ['TJ-B', 'TJ-C'], joinsAtCode: 'J' }),
+      crossOperator, [spine], ['#F8C434'], '#F8C434'
+    )
+    expect(traced.segments[0].markers).toEqual(['KCI-J', 'TJ-B', 'TJ-C', 'KCI-J'])
   })
 
   it('does not double the junction when the segment already starts there', () => {
@@ -450,5 +477,221 @@ describe('traceLine on the shipped artwork', () => {
       points, corridors, undefined, '#262262', undefined, false
     )
     expect(channelDistance(traced.tracedColour!, '#262262')).toBeLessThanOrEqual(CORRIDOR_COLOUR_TOLERANCE)
+  })
+})
+
+/*
+ * Joining consecutive pairs at the station they share.
+ *
+ * A pair is drawn between the FEET its stops project to, so where two pairs
+ * match different pieces of the artwork the station between them has two feet
+ * and the space between goes undrawn. Bridging closes that — but only where the
+ * artwork really does run through, which is what the refusals below pin.
+ */
+describe('traceLine bridges consecutive pairs', () => {
+  it('closes the gap where one run continues into the next', () => {
+    // Two collinear pieces of one stroke, 40 units apart. The connector runs on
+    // the same bearing as both, so it is describing track the sheet draws.
+    const west: Corridor = { w: 25, c: '#F8C434', pts: [[0, 0], [200, 0]] }
+    const east: Corridor = { w: 25, c: '#F8C434', pts: [[240, 0], [440, 0]] }
+    const stops = [dot('A', 0, 0), dot('B', 200, 0), dot('C', 440, 0)]
+    const traced = traceLine(
+      line({ kind: 'TRUNK', ids: ['A', 'B', 'C'] }),
+      stops, [west, east], ['#F8C434', '#F8C434'], '#F8C434'
+    )
+    expect(traced.matchedPairs).toBe(2)
+    expect(traced.segments[0].edges).toContainEqual([200, 0, 240, 0])
+  })
+
+  it('refuses a connector that cuts a corner the artwork draws', () => {
+    // The second stroke leaves at a right angle. A straight bridge across would
+    // replace the fillet the sheet turns through, so the pair is dropped instead
+    // — the corner is drawn, this pair simply did not match it.
+    const west: Corridor = { w: 25, c: '#F8C434', pts: [[0, 0], [200, 0]] }
+    const north: Corridor = { w: 25, c: '#F8C434', pts: [[200, 40], [200, 240]] }
+    const stops = [dot('A', 0, 0), dot('B', 200, 0), dot('C', 200, 240)]
+    const traced = traceLine(
+      line({ kind: 'TRUNK', ids: ['A', 'B', 'C'] }),
+      stops, [west, north], ['#F8C434', '#F8C434'], '#F8C434'
+    )
+    // The first run is drawn; the second is refused rather than mitred onto it.
+    expect(traced.matchedPairs).toBe(1)
+    expect(traced.segments[0].edges).toEqual([[0, 0, 200, 0]])
+  })
+
+  it('refuses a sidestep onto a stroke running alongside', () => {
+    // The signature of the staircase: a short connector crossing both the run
+    // before it and the run after, which themselves keep the same bearing. A
+    // gap is the honest answer — the line is not drawn stepping sideways here.
+    const west: Corridor = { w: 25, c: '#F8C434', pts: [[0, 0], [200, 0]] }
+    const beside: Corridor = { w: 25, c: '#F8C434', pts: [[200, 20], [400, 20]] }
+    const stops = [dot('A', 0, 0), dot('B', 200, 0), dot('C', 400, 20)]
+    const traced = traceLine(
+      line({ kind: 'TRUNK', ids: ['A', 'B', 'C'] }),
+      stops, [west, beside], ['#F8C434', '#F8C434'], '#F8C434'
+    )
+    expect(traced.matchedPairs).toBe(1)
+    expect(traced.segments[0].edges).toEqual([[0, 0, 200, 0]])
+  })
+
+  it('refuses a connector that arrives across the run it joins', () => {
+    // The mitre cut from the other end: the bridge leaves along the incoming
+    // bearing, so the first test passes, and then meets a stroke running square
+    // to it. Judged against what the bridge leads INTO as well as what it leaves.
+    const west: Corridor = { w: 25, c: '#F8C434', pts: [[0, 0], [200, 0]] }
+    const upright: Corridor = { w: 25, c: '#F8C434', pts: [[240, 0], [240, 200]] }
+    const stops = [dot('A', 0, 0), dot('B', 200, 0), dot('C', 240, 200)]
+    const traced = traceLine(
+      line({ kind: 'TRUNK', ids: ['A', 'B', 'C'] }),
+      stops, [west, upright], ['#F8C434', '#F8C434'], '#F8C434'
+    )
+    expect(traced.matchedPairs).toBe(1)
+    expect(traced.segments[0].edges).toEqual([[0, 0, 200, 0]])
+  })
+
+  it('bridges into a pair only a chain could reach', () => {
+    // The second pair straddles a break, so no single stroke serves it and the
+    // chain is the only match. It still has to join what is already drawn, and
+    // here it carries straight on — so the connector is drawn with it.
+    const west: Corridor = { w: 25, c: '#F8C434', pts: [[0, 0], [200, 0]] }
+    const midWest: Corridor = { w: 25, c: '#F8C434', pts: [[230, 0], [400, 0]] }
+    const midEast: Corridor = { w: 25, c: '#F8C434', pts: [[400, 0], [600, 0]] }
+    const stops = [dot('A', 0, 0), dot('B', 200, 0), dot('C', 600, 0)]
+    const traced = traceLine(
+      line({ kind: 'TRUNK', ids: ['A', 'B', 'C'] }),
+      stops, [west, midWest, midEast], ['#F8C434', '#F8C434', '#F8C434'], '#F8C434'
+    )
+    expect(traced.matchedPairs).toBe(2)
+    expect(traced.segments[0].edges).toContainEqual([200, 0, 230, 0])
+  })
+
+  it('refuses a chain that would have to turn a corner to join', () => {
+    // Same shape, except the chain leaves at a right angle. The pair is dropped
+    // rather than mitred on: a chain gets no more licence to cut a corner than a
+    // single stroke does.
+    const west: Corridor = { w: 25, c: '#F8C434', pts: [[0, 0], [200, 0]] }
+    const northLow: Corridor = { w: 25, c: '#F8C434', pts: [[200, 30], [200, 150]] }
+    const northHigh: Corridor = { w: 25, c: '#F8C434', pts: [[200, 150], [200, 300]] }
+    const stops = [dot('A', 0, 0), dot('B', 200, 0), dot('C', 200, 300)]
+    const traced = traceLine(
+      line({ kind: 'TRUNK', ids: ['A', 'B', 'C'] }),
+      stops, [west, northLow, northHigh], ['#F8C434', '#F8C434', '#F8C434'], '#F8C434'
+    )
+    expect(traced.matchedPairs).toBe(1)
+    expect(traced.segments[0].edges).toEqual([[0, 0, 200, 0]])
+  })
+
+  it('leaves a gap too wide to be one continuous run unbridged', () => {
+    // Beyond MAX_STATION_BRIDGE_WORLD the two pairs are not describing one run,
+    // and a connector would be inventing track. Both pairs still draw; only the
+    // connector between them is withheld.
+    const west: Corridor = { w: 25, c: '#F8C434', pts: [[0, 0], [200, 0]] }
+    const east: Corridor = { w: 25, c: '#F8C434', pts: [[400, 0], [600, 0]] }
+    const stops = [dot('A', 0, 0), dot('B', 200, 0), dot('C', 600, 0)]
+    const traced = traceLine(
+      line({ kind: 'TRUNK', ids: ['A', 'B', 'C'] }),
+      stops, [west, east], ['#F8C434', '#F8C434'], '#F8C434'
+    )
+    const edges = traced.segments[0].edges
+    expect(edges).toContainEqual([0, 0, 200, 0])
+    expect(edges.some(([ax, , bx]) => ax === 200 && bx === 400)).toBe(false)
+  })
+})
+
+// The committed artifact's shape, reduced to what a replay reads.
+interface ShippedLine {
+  key: string
+  operator: string
+  color: string
+  matchedPairs: number
+  totalPairs: number
+  segments: Array<{ kind: string, markers: string[], edges: Array<[number, number, number, number]> }>
+}
+
+/*
+ * Every shipped line, traced against the artwork it was built from.
+ *
+ * The synthetic fixtures above each isolate one rule, which is what makes them
+ * readable — and is also why they cannot reach the paths that only a real sheet
+ * produces: a ring closed by a 42-unit fillet, a terminus whose return arm is
+ * drawn separately, a 92-unit interchange bar with the line's ink broken into a
+ * piece at each end. None of those can be posed in six points.
+ *
+ * So this drives all 41 lines through the tracer and holds the result against
+ * the committed artifact. It is a regression test rather than a behavioural one:
+ * it does not say what the tracer SHOULD do, it says the tracer still does what
+ * the shipped map was drawn from. A change that moves any line's coverage has to
+ * regenerate the artifact and show the diff, which is exactly the review the
+ * geometry deserves.
+ */
+describe('traceLine reproduces the shipped artifact', () => {
+  const corridors = corridorsManifest.corridors as unknown as Corridor[]
+  const points = pointsManifest.points as TracePoint[]
+
+  const shipped = Object.values(linesManifest.lines) as unknown as ShippedLine[]
+
+  // Which stops each line serves, which is all the shared-track lookup needs:
+  // the build asks "does any OTHER line call at both ends of this pair", not
+  // whether it runs them adjacently.
+  const servedByKey = new Map<string, Set<string>>(
+    shipped.map(entry => [entry.key, new Set(entry.segments.flatMap(s => s.markers))])
+  )
+
+  /*
+   * The build's sharedTrack lookup, rebuilt from the artifact.
+   *
+   * Without it the replay is not the same call the artifact was built from —
+   * four TJ lines run stretches the sheet draws once, in a neighbour's colour,
+   * and a strict gate refuses the whole shared run. Reconstructing it here keeps
+   * the comparison honest rather than lowering the expectation to match.
+   */
+  const sharedTrackFor = (key: string) => (fromId: string, toId: string): string[] => {
+    const shared: string[] = []
+    for (const other of shipped) {
+      if (other.key === key) continue
+      const served = servedByKey.get(other.key)
+      if (served?.has(fromId) && served.has(toId)) shared.push(other.color)
+    }
+    return shared
+  }
+
+  // The artifact's own marker lists are the traced stop order, junctions already
+  // resolved — so replaying them needs no joinsAtCode and no network call.
+  const replay = (entry: ShippedLine): TracedLine => traceLine(
+    { segments: entry.segments.map(s => ({ kind: s.kind, stations: s.markers.map(id => ({ id })) })) },
+    points, corridors, undefined, entry.color, sharedTrackFor(entry.key), entry.operator === 'TJ'
+  )
+
+  it('covers all 41 lines', () => {
+    expect(shipped).toHaveLength(41)
+  })
+
+  it.each(shipped.map(entry => [entry.key, entry] as const))(
+    'traces %s to its recorded coverage',
+    (_key, entry) => {
+      const traced = replay(entry)
+      expect(traced.matchedPairs).toBe(entry.matchedPairs)
+      /*
+       * Counted off the artifact's own markers rather than its totalPairs.
+       *
+       * The two agree everywhere but TJ:7, where the line detail named a station
+       * with no drawn point: it counted toward the build's totalPairs and was
+       * then dropped from markers, so replaying the markers has one pair fewer.
+       * Deriving the expectation from what is actually being replayed keeps this
+       * a real assertion instead of a constant tuned to absorb that.
+       */
+      const pairs = entry.segments.reduce((n, s) => n + Math.max(0, s.markers.length - 1), 0)
+      expect(traced.totalPairs).toBe(pairs)
+    }
+  )
+
+  it('draws the same geometry the artifact ships', () => {
+    // Edge for edge, not merely the same pair count: a trace can keep its
+    // coverage while moving onto a neighbouring stroke, which is the failure
+    // this whole module exists to prevent.
+    for (const entry of shipped) {
+      const traced = replay(entry)
+      expect(traced.segments.map(s => s.edges)).toEqual(entry.segments.map(s => s.edges))
+    }
   })
 })

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { DAY_MASK, DAY_MASK_WEEKEND } from 'db/schemas/schedules'
 import { MRTJDatumRow, buildStationTimetable, cleanDisplayName, isStationRow, parseDepartureTimes, resolveTerminusNames, synthesizeTripNumbers } from 'operators/mrtj/datum'
 
 // Trimmed copies of real datum rows (2026-08-03): a mid-line station with both
@@ -241,5 +242,72 @@ describe('synthesizeTripNumbers', () => {
     // boards were matched to their own trips (asserted above), not shifted.
     const assignedTo1008 = [...tripNumbers.entries()].filter(([, trip]) => trip === 'MRTJ-1008')
     expect(assignedTo1008).toEqual([['LBB:NORTHBOUND:23:00:00', 'MRTJ-1008']])
+  })
+})
+
+/*
+ * The weekend board the feed always carried and we always dropped.
+ *
+ * `weekendsStart`/`weekendsEnd` have been in MRTJDatumSchema since the syncer
+ * was written; there was simply nowhere to store a second board until
+ * `schedules` gained `dayMask`. These pin the two properties that make storing
+ * both safe: the weekday board must be byte-identical to what it always was,
+ * and the two boards must not collide on the primary key.
+ */
+describe('buildStationTimetable across day types', () => {
+  const terminusNames = { northbound: 'Bundaran HI', southbound: 'Lebak Bulus' }
+
+  it('reads the weekend fields, not the weekday ones', () => {
+    const weekday = buildStationTimetable(midlineRow, 'MRTJ-ASN', terminusNames, new Map(), 'WEEKDAYS')
+    const weekend = buildStationTimetable(midlineRow, 'MRTJ-ASN', terminusNames, new Map(), 'WEEKENDS')
+
+    // The fixture's weekday board is longer than its weekend one (3+2 vs 2+1).
+    expect(weekday).toHaveLength(5)
+    expect(weekend).toHaveLength(3)
+  })
+
+  it('leaves the weekday board exactly as it was before day types existed', () => {
+    const explicit = buildStationTimetable(midlineRow, 'MRTJ-ASN', terminusNames, new Map(), 'WEEKDAYS')
+    // The default is WEEKDAYS, so an un-migrated caller keeps its old answer.
+    const defaulted = buildStationTimetable(midlineRow, 'MRTJ-ASN', terminusNames, new Map())
+    expect(defaulted).toEqual(explicit)
+    // Ids keep their historical shape, so existing rows still match on re-sync.
+    expect(explicit[0]!.id).toBe('MRTJ-ASN-05:13:10-SOUTHBOUND')
+  })
+
+  /*
+   * The collision this migration exists to prevent. Both boards have a 05:13:10
+   * southbound departure; without the day in the id the second load would
+   * overwrite the first row rather than sitting beside it.
+   */
+  it('gives the two boards disjoint ids at the same minute', () => {
+    const weekday = buildStationTimetable(midlineRow, 'MRTJ-ASN', terminusNames, new Map(), 'WEEKDAYS')
+    const weekend = buildStationTimetable(midlineRow, 'MRTJ-ASN', terminusNames, new Map(), 'WEEKENDS')
+
+    const shared = new Set(weekday.map(s => s.id))
+    for (const row of weekend) expect(shared.has(row.id)).toBe(false)
+
+    // Same departure time on both boards, proving the ids differ by day alone.
+    expect(weekday.some(s => s.estimatedDeparture === '05:13:10')).toBe(true)
+    expect(weekend.some(s => s.estimatedDeparture === '05:13:10')).toBe(true)
+  })
+
+  it('stamps each board with the days it runs', () => {
+    const weekday = buildStationTimetable(midlineRow, 'MRTJ-ASN', terminusNames, new Map(), 'WEEKDAYS')
+    const weekend = buildStationTimetable(midlineRow, 'MRTJ-ASN', terminusNames, new Map(), 'WEEKENDS')
+    expect(weekday.every(s => s.dayMask === DAY_MASK.WD)).toBe(true)
+    expect(weekend.every(s => s.dayMask === DAY_MASK_WEEKEND)).toBe(true)
+  })
+
+  /*
+   * Trip numbering restarts per day type. That is what keeps weekday numbers
+   * unchanged from before the weekend board existed — they are positional, so
+   * numbering the two boards in one sequence would renumber every weekday trip.
+   */
+  it('numbers each day type from the same starting point', () => {
+    const weekday = synthesizeTripNumbers([lebakBulusRow, midlineRow, terminusRow], 'WEEKDAYS')
+    const weekend = synthesizeTripNumbers([lebakBulusRow, midlineRow, terminusRow], 'WEEKENDS')
+    expect([...weekday.values()]).toContain('MRTJ-1000')
+    expect([...weekend.values()]).toContain('MRTJ-1000')
   })
 })

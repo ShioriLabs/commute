@@ -61,19 +61,18 @@ describe('journeysOf', () => {
 })
 
 /*
- * The release gate, as FareResultCard applies it.
+ * What FareResultCard renders, as data.
  *
- * Asserted on the data rather than the DOM (vitest collects `.test.ts` only, so
- * the component itself is uncoverable) — but this IS the gate: the component
- * does `alternatives ? all : all.slice(0, 1).map(j => ({ ...j, labels: [] }))`
- * and renders whatever comes out. If this shape is right, /fare is right.
+ * Asserted on the shape rather than the DOM (vitest collects `.test.ts` only,
+ * so the component itself is uncoverable) — but this IS what it renders: the
+ * card does `journeysOf(result)` and maps the result. If this shape is right,
+ * /fare is right.
+ *
+ * There is no longer a gate to test. The card used to slice the list to one and
+ * strip its badges when the rider was on the standard router; now every answer
+ * is a trip answer and the list is shown as it arrives.
  */
-describe('the alternatives gate', () => {
-  const gate = (result: FareResult | TripResult, alternatives: boolean) => {
-    const all = journeysOf(result)
-    return alternatives ? all : all.slice(0, 1).map(j => ({ ...j, labels: [] }))
-  }
-
+describe('what the card is handed', () => {
   const twoOptions: TripResult = {
     from: legacy.from,
     to: legacy.to,
@@ -83,44 +82,27 @@ describe('the alternatives gate', () => {
     ]
   }
 
-  it('offers every option when the surface opts in', () => {
-    expect(gate(twoOptions, true)).toHaveLength(2)
+  it('offers every option the answer carries', () => {
+    expect(journeysOf(twoOptions)).toHaveLength(2)
   })
 
-  it('shows only the primary when it does not', () => {
-    const shown = gate(twoOptions, false)
-    expect(shown).toHaveLength(1)
-    expect(shown[0]!.totalFare).toBe(11000)
-  })
-
-  /*
-   * The subtle half. Slicing to one journey keeps that journey's labels, which
-   * would badge "paling sedikit transit" on a card with nothing beside it —
-   * boasting about a choice the rider was never offered. /fare showed three
-   * such badges before this was fixed.
-   */
-  it('strips the badges from a gated primary', () => {
-    expect(gate(twoOptions, false)[0]!.labels).toEqual([])
-  })
-
-  it('leaves the journey otherwise untouched', () => {
-    const [gated] = gate(twoOptions, false)
-    const [full] = journeysOf(twoOptions)
-    expect({ ...gated, labels: full!.labels }).toEqual(full)
+  it('keeps each option its badges', () => {
+    const [first, second] = journeysOf(twoOptions)
+    expect(first!.labels).toEqual(['FEWEST_CHANGES', 'LEAST_WALKING'])
+    expect(second!.labels).toEqual(['CHEAPEST'])
   })
 
   /*
-   * The flip itself, which the router toggle made reachable.
+   * The case that outlived the router toggle.
    *
-   * Switching to beta sets `alternatives` immediately, but SWR still holds the
-   * /fares body under its own key until the /_internal/trips request lands — so
-   * for a render or two the card is asked to offer alternatives from a response
-   * that has none. It must show the one journey it has, unbadged, rather than
-   * empty. Before the toggle this pairing could not happen: `alternatives` was
-   * fixed per surface, so the shape and the flag always agreed.
+   * The app only asks /_internal/trips now, but a /fares-shaped body still
+   * reaches the card from a warm cache — the API's KV holds one for 20 hours,
+   * and SWR and the service worker keep their own copies. It must render the
+   * one journey it has, unbadged, rather than empty. A badge is a comparison,
+   * and a promoted primary was never compared against anything.
    */
-  it('renders a single-route body asked for alternatives, unbadged', () => {
-    const shown = gate(legacy, true)
+  it('renders a cached single-route body unbadged', () => {
+    const shown = journeysOf(legacy)
     expect(shown).toHaveLength(1)
     expect(shown[0]!.totalFare).toBe(14000)
     expect(shown[0]!.labels).toEqual([])

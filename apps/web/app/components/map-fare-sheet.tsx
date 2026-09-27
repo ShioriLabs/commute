@@ -5,7 +5,6 @@ import DetailSurface from './detail-surface'
 import FarePanel from './fare-sheet/fare-panel'
 import FareShareButton from './fare-sheet/fare-share-button'
 import type { FareQuery } from './fare-sheet/use-fare-query'
-import type { FareRouter } from 'utils/fare-router'
 
 interface MapFareSheetProps {
   open: boolean
@@ -24,23 +23,12 @@ interface MapFareSheetProps {
    */
   query: FareQuery
   /*
-   * Router choice and journey selection, both owned by the map route.
+   * Journey selection, owned by the map route.
    *
-   * This sheet is the only surface that does not own either: the map draws the
+   * This sheet is the only surface that does not own it: the map draws the
    * selected journey on the canvas behind it and prices it in the chip, so the
    * choice has to outlive a sheet that unmounts on close.
    */
-  /*
-   * Optional, and both-or-neither — the same gate FarePanel documents.
-   *
-   * Desktop passes neither: the rail column owns the router toggle and the
-   * options list there, and this one sheet instance serves both form factors,
-   * so the props are what decide which surface carries them rather than two
-   * separate components.
-   */
-  router?: FareRouter
-  onRouterChange?: (router: FareRouter) => void
-  alternatives: boolean
   selectedIndex: number
   onSelectIndex: (index: number) => void
   /*
@@ -69,9 +57,6 @@ export default function MapFareSheet({
   open,
   initialSnap,
   query,
-  router,
-  onRouterChange,
-  alternatives,
   selectedIndex,
   onSelectIndex,
   onDismissStart,
@@ -111,15 +96,13 @@ export default function MapFareSheet({
     >
       {ready => (ready
         ? (
-            // px-8 is load-bearing: CriteriaBar's rail assumes 8-unit parent
-            // padding, the same as /fare's p-8 and the search sheet's px-8.
+            // px-8 matches /fare's p-8 and the search sheet's px-8, so the
+            // panel's fields and settings sit on the same margin on every
+            // surface. (It used to be load-bearing for CriteriaBar's bleeding
+            // chip rail; that rail is now a single button and no longer cares.)
             <div className="px-8 pb-8">
               <FarePanel
                 query={query}
-                wrapCriteria
-                alternatives={alternatives}
-                router={router}
-                onRouterChange={onRouterChange}
                 selectedIndex={selectedIndex}
                 onSelectIndex={onSelectIndex}
                 footer={farePath

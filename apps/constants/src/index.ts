@@ -291,6 +291,41 @@ export interface FareContext {
   departureAt: Date
 }
 
+/*
+ * Indonesian national holidays (hari libur nasional), as local YYYY-MM-DD.
+ *
+ * Hand-maintained, because there is nothing to import: TransJakarta's GTFS feed
+ * ships no `calendar_dates.txt`, so the feed declares no exceptions at all.
+ *
+ * Holidays run a Sunday-shaped service, so `serviceDay` resolves a date in here
+ * to SUN. Both failure modes are safe: a holiday nobody added is treated as the
+ * weekday it falls on, which is exactly the behaviour before this list existed,
+ * and a date left here after the fact only ever under-promises service.
+ *
+ * NEEDS A YEARLY UPDATE, and nothing enforces that. The dates below are the
+ * 2026 libur nasional; add the following year's when the government publishes
+ * the SKB. Cuti bersama are deliberately excluded — they are leave days, not
+ * reduced-service days, and operators run a normal timetable on them.
+ */
+export const HOLIDAYS: ReadonlySet<string> = new Set([
+  '2026-01-01', // Tahun Baru Masehi
+  '2026-01-17', // Isra Mikraj
+  '2026-02-17', // Tahun Baru Imlek
+  '2026-03-19', // Hari Suci Nyepi
+  '2026-03-20', // Idulfitri
+  '2026-03-21', // Idulfitri
+  '2026-04-03', // Wafat Isa Almasih
+  '2026-05-01', // Hari Buruh
+  '2026-05-14', // Kenaikan Isa Almasih
+  '2026-05-27', // Iduladha
+  '2026-05-31', // Hari Lahir Pancasila
+  '2026-06-01', // Waisak
+  '2026-06-16', // Tahun Baru Islam
+  '2026-08-17', // Hari Kemerdekaan
+  '2026-08-25', // Maulid Nabi
+  '2026-12-25' // Hari Raya Natal
+])
+
 /**
  * Transfers that cross a paid area and therefore may carry a passerby surcharge,
  * unlike ordinary free walking transfers. The JPM Dukuh Atas footbridge is a

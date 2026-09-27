@@ -10,7 +10,6 @@ export const LINES: readonly Line[] = [
   { name: 'Blok M - Kota', lineCode: '1', colorCode: '#D62126' },
   { name: 'Tanjung Priok - PGC', lineCode: '10', colorCode: '#9b1f21' },
   { name: 'Pelabuhan Tanjung Priok - Tanjung Priok', lineCode: '10C', colorCode: '#9B474A' },
-  { name: 'Kampung Rambutan - Tanjung Priok', lineCode: '10D', colorCode: '#9B1F21' },
   { name: 'Tanjung Priok - Bundaran Senayan', lineCode: '10H', colorCode: '#9B1F21' },
   { name: 'Pulo Gebang - Kampung Melayu', lineCode: '11', colorCode: '#312F92' },
   { name: 'Pulo Gebang - Pulo Gadung via PIK', lineCode: '11D', colorCode: '#504F92' },

@@ -7,6 +7,14 @@ interface Props {
   fromId: string | null | undefined
   toId: string | null | undefined
   criteria: FareCriteria
+  /*
+   * The route the rider is looking at, from utils/journey-key.ts.
+   *
+   * Optional: a surface that does not track which option is selected shares the
+   * pair alone, which is exactly what this button did before. Passing it makes
+   * the link reopen on the same ROUTE rather than on whatever now sorts first.
+   */
+  journeyKey?: string | null
 }
 
 /*
@@ -19,13 +27,13 @@ interface Props {
  * Renders nothing until both ends are set — there is no route to share yet, and
  * a disabled control would only ask the rider to wonder why.
  */
-export default function FareShareButton({ fromId, toId, criteria }: Props) {
+export default function FareShareButton({ fromId, toId, criteria, journeyKey }: Props) {
   const [copied, setCopied] = useState(false)
 
   if (!fromId || !toId) return null
 
   const handleShare = async () => {
-    const url = buildFareShareUrl(fromId, toId, window.location.origin, criteria)
+    const url = buildFareShareUrl(fromId, toId, window.location.origin, criteria, journeyKey)
     if (!url) return
 
     if (navigator.share) {

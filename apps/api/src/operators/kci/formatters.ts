@@ -27,6 +27,45 @@ const WELL_KNOWN_STATION_NAMES: Record<string, string> = {
   'CIKARANG VIA MRI': 'Cikarang'
 }
 
+/*
+ * Station codes KCI renamed upstream, as `our code -> the feed's code`.
+ *
+ * The feed stopped serving TTI and GGL in September 2026 and now answers to THI
+ * and GRG for the same two stations. Our ids stay put: `KCI-TTI` and `KCI-GGL`
+ * are referenced by edges, transfers, topology, headways, station numbering and
+ * the data-platform network dump, so renaming them costs eight source files and
+ * a data migration to gain nothing a two-line lookup does not.
+ *
+ * Only the FETCH code changes. Everything written to the database keeps our
+ * code, which is why `syncTimetable` maps on the way out and never on the way
+ * back in.
+ *
+ * Why this must exist at all: `syncTimetable` is reached through a route that
+ * first checks the station exists locally, so neither name works without it —
+ * our code is no longer served upstream, and the feed's code is not a station we
+ * hold. Both stations silently stopped refreshing, which is how line Tangerang
+ * ended up with a board old enough to still split each train across two
+ * tripNumbers and fail trip generation entirely.
+ *
+ * If KCI renames more stations, add them here. A rename is invisible in the
+ * data: `syncStations` writes `sta_id` verbatim, so a renamed station arrives as
+ * a NEW row while the old one keeps its schedules and quietly goes stale.
+ */
+const FEED_STATION_CODES: Record<string, string> = {
+  TTI: 'THI', // Tanah Tinggi
+  GGL: 'GRG' // Grogol
+}
+
+/**
+ * The code to ask the KCI feed for, given one of our station codes.
+ *
+ * Identity for every station KCI has not renamed, so callers can map
+ * unconditionally.
+ */
+export function toFeedStationCode(stationCode: string): string {
+  return FEED_STATION_CODES[stationCode] ?? stationCode
+}
+
 // For mapping API line names to our line codes
 const WELL_KNOWN_LINE_KEY: Record<string, Line> = {
   'COMMUTER LINE CIKARANG': CIKARANG_LINE,

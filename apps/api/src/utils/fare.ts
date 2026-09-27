@@ -1,4 +1,4 @@
-import { FareContext, Operator, OPERATORS, SURCHARGED_CORRIDORS, SurchargedCorridor } from '@commute/constants'
+import { FareContext, HOLIDAYS, Operator, OPERATORS, SURCHARGED_CORRIDORS, SurchargedCorridor } from '@commute/constants'
 import { getMRTJFare } from 'operators/mrtj/fares'
 import { TJ_FLAT_FARE } from 'operators/tj/fares'
 import type { RouteLeg } from '@commute/tsundere'
@@ -46,13 +46,112 @@ export type FareTimeBucket = 'peak' | 'offpeak'
 
 const WIB_OFFSET_MS = 7 * 60 * 60 * 1000
 
+/*
+ * The same instant, shifted so its UTC getters read as Jakarta wall-clock time.
+ *
+ * Shared by every caller that needs to know what day or hour it is locally.
+ * A second copy of this shift is the kind of thing that drifts by an hour and
+ * is noticed months later, so callers take this rather than redoing it.
+ */
+export function wib(date: Date): Date {
+  return new Date(date.getTime() + WIB_OFFSET_MS)
+}
+
 export function fareTimeBucket(date: Date): FareTimeBucket {
-  const wib = new Date(date.getTime() + WIB_OFFSET_MS)
-  const day = wib.getUTCDay() // 0 Sun … 6 Sat, in WIB after the shift
+  const local = wib(date)
+  const day = local.getUTCDay() // 0 Sun … 6 Sat, in WIB after the shift
   if (day === 0 || day === 6) return 'offpeak'
-  const hour = wib.getUTCHours()
+  const hour = local.getUTCHours()
   const isPeak = (hour >= 7 && hour < 9) || (hour >= 16 && hour < 19)
   return isPeak ? 'peak' : 'offpeak'
+}
+
+/** How coarsely a departure time is quantised for cache purposes, in minutes. */
+export const DEPARTURE_SLOT_MINUTES = 20
+
+/**
+ * A departure time as a quantised local slot, e.g. `0840`.
+ *
+ * The cache key's time component. `fareTimeBucket` used to fill that role, but
+ * two buckets cannot express "the 08:42 train" — every instant in a three-hour
+ * peak window collapsed to one entry, so a rider choosing a departure time got
+ * whatever body the first caller of that window warmed.
+ *
+ * Twenty minutes is the compromise between those two failures. Per-minute keys
+ * would split the namespace 1440 ways and miss on nearly every request; this
+ * splits it 72 ways, which is cold enough to notice and warm enough to work.
+ * The slot floors rather than rounds, so a time never keys to a slot that has
+ * not started yet.
+ *
+ * Fare is NOT computed from this — `fareTimeBucket` still decides the LRT cap,
+ * and must, because the cap genuinely is a peak/off-peak quantity. This only
+ * decides what the cache treats as the same question, where a finer key is
+ * always safe: it can split two identical answers, never merge two different
+ * ones.
+ */
+export function departureSlot(date: Date): string {
+  const local = wib(date)
+  const minuteOfDay = local.getUTCHours() * 60 + local.getUTCMinutes()
+  const slotStart = Math.floor(minuteOfDay / DEPARTURE_SLOT_MINUTES) * DEPARTURE_SLOT_MINUTES
+  const hours = Math.floor(slotStart / 60)
+  const minutes = slotStart % 60
+  return `${String(hours).padStart(2, '0')}${String(minutes).padStart(2, '0')}`
+}
+
+/**
+ * Which day bucket a moment falls in, Jakarta time.
+ *
+ * Indonesian public holidays run a Sunday-shaped service, so they resolve to
+ * SUN rather than to the weekday they land on. The list is hand-maintained —
+ * the TJ feed's `calendar_dates.txt` does not exist, so there is nothing to
+ * import — and it degrades safely: a holiday nobody listed is simply treated as
+ * whatever day of the week it is, which is exactly today's behaviour.
+ */
+export function serviceDay(date: Date): 'WD' | 'SAT' | 'SUN' {
+  const local = wib(date)
+  const iso = local.toISOString().slice(0, 10)
+  if (HOLIDAYS.has(iso)) return 'SUN'
+  const day = local.getUTCDay()
+  if (day === 0) return 'SUN'
+  if (day === 6) return 'SAT'
+  return 'WD'
+}
+
+/**
+ * A moment as a local (WIB) ISO 8601 string, e.g. `2026-09-06T05:00:00+07:00`.
+ *
+ * Written with the offset rather than as UTC because riders read this: "the bus
+ * starts at 05:00" is the point, and a `Z` timestamp makes every consumer redo
+ * the conversion to find that out.
+ */
+export function wibIsoString(date: Date): string {
+  // The shifted clock's UTC fields ARE the Jakarta wall clock, so formatting
+  // them and stamping the offset is exact rather than an approximation.
+  return `${wib(date).toISOString().slice(0, 19)}+07:00`
+}
+
+/** Seconds since local (Jakarta) midnight — what the router filters on. */
+export function secondsSinceLocalMidnight(date: Date): number {
+  const local = wib(date)
+  return local.getUTCHours() * 3600 + local.getUTCMinutes() * 60 + local.getUTCSeconds()
+}
+
+/**
+ * The instant `secondsS` after the local midnight that `on` falls in.
+ *
+ * The inverse of `secondsSinceLocalMidnight`, and the reason it takes a whole
+ * date rather than a day: the engine reports a journey that crosses midnight as
+ * seconds past 86400 rather than wrapping to 00:23, so that "later" stays a
+ * plain numeric comparison. Adding those seconds to local midnight rolls into
+ * the next day on its own, which is exactly right — and it means a caller must
+ * NOT take a modulus first, or a train arriving after midnight lands eleven
+ * hours before the one it followed.
+ */
+export function atSecondsOfDay(on: Date, secondsS: number): Date {
+  const local = wib(on)
+  const midnightUTC = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate())
+  // Back out of the WIB shift, since `wib` moved the clock forward to read it.
+  return new Date(midnightUTC + secondsS * 1000 - WIB_OFFSET_MS)
 }
 
 export function calculateSegmentFare(segment: FareSegmentInput, context: FareContext): number | null {

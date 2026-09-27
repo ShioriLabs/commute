@@ -2,6 +2,7 @@ import type { Operator } from '@commute/constants'
 import { TJ_TOPOLOGY } from './topology.tj'
 import { withStationNumbers } from './topology.tj.numbers'
 import { TJ_TOPOLOGY_OVERRIDES } from './topology.tj.overrides'
+import { oneWayTurns } from '../../utils/edgeChain'
 
 /*
  * Line topology — the single source of truth for the network graph.
@@ -38,6 +39,28 @@ export interface Stop {
    * route over track that doesn't exist. Drop the flag when service starts.
    */
   unbuilt?: boolean
+  /*
+   * Served in ONE travel direction only; the other direction runs through the
+   * stop without calling. 'forward' is the order of the list the stop sits in
+   * (`path`, or a branch's `path` from its junction to its `closeTo`).
+   *
+   * generateEdgesSQL emits such a list as directed edges and bridges the
+   * unserved direction straight past the stop, so the graph itself says where a
+   * rider can board and alight — nothing downstream needs a side rule. That
+   * matters beyond the router: generateTrips validates every timetabled hop
+   * against `edges`, and a southbound train's real KMO -> GST hop only exists
+   * as an edge because of this.
+   *
+   * KCI-PSE (Pasar Senen, C loop) is the case that needed it: only KPB-bound
+   * trains call there (GST -> PSE -> KMO), and the loop is a branch, where
+   * `pathReverse` cannot reach. It replaced ENDPOINT_RESTRICTIONS, whose alight
+   * rule pointed the wrong way — it forbade alighting from GST, the one
+   * direction that actually serves the stop.
+   *
+   * `pathReverse` stays the tool for a vehicle that takes a different STREET
+   * each way; this is for one track with a stop served one way.
+   */
+  serves?: 'forward' | 'reverse'
 }
 
 export interface Branch {
@@ -79,22 +102,6 @@ export const BOGUS_MEMBERSHIPS: { operator: Operator, station: string, lineCode:
 ]
 
 /*
- * Stops served (board/alight) in only ONE travel direction even though the
- * track passes through both ways. The through-edges stay bidirectional so a
- * passenger may still ride PAST the stop in either direction; the restriction
- * only forbids the stop as a trip ENDPOINT in the banned direction. Expressed
- * as `forbiddenNeighbor`: the router won't let a trip START at `station` heading
- * toward that neighbor, nor END at `station` having arrived from it.
- *
- * KCI-PSE (Pasar Senen, C loop): only KPB-bound trains serve it (the loop order
- * runs GST → PSE → KMO → … → KPB). The GST-side (Bekasi/Jatinegara-bound)
- * direction passes through without stopping, so GST is the forbidden neighbor.
- */
-export const ENDPOINT_RESTRICTIONS: { operator: Operator, station: string, lineCode: string, forbiddenNeighbor: string }[] = [
-  { operator: 'KCI', station: 'PSE', lineCode: 'C', forbiddenNeighbor: 'GST' }
-]
-
-/*
  * Turns that stay on one line but change vehicle.
  *
  * The Cikarang line is a lollipop: a stick running in to Jatinegara, and a loop
@@ -119,7 +126,9 @@ export const ENDPOINT_RESTRICTIONS: { operator: Operator, station: string, lineC
  * ordinary through-running: a Cikarang train runs in and continues onto the
  * loop as one service, and charging it a boarding would be its own bug.
  */
-export const SERVICE_BREAKS: { operator: Operator, lineCode: string, via: string, from: string, to: string }[] = [
+type ServiceBreakCodes = { operator: Operator, lineCode: string, via: string, from: string, to: string }
+
+const LOOP_CLOSURE_BREAKS: ServiceBreakCodes[] = [
   { operator: 'KCI', lineCode: 'C', via: 'JNG', from: 'MTR', to: 'POK' },
   { operator: 'KCI', lineCode: 'C', via: 'JNG', from: 'POK', to: 'MTR' }
 ]
@@ -167,7 +176,7 @@ export const TOPOLOGY: LineTopology[] = [
           { station: 'POK', pos: 'C01' },
           { station: 'KMT', pos: 'C02' },
           { station: 'GST', pos: 'C03' },
-          { station: 'PSE', pos: 'C04' },
+          { station: 'PSE', pos: 'C04', serves: 'forward' },
           { station: 'KMO', pos: 'C05' },
           { station: 'RJW', pos: 'C06' },
           { station: 'KPB', pos: 'C07' },
@@ -419,4 +428,15 @@ export const TOPOLOGY: LineTopology[] = [
   },
   // ── TransJakarta BRT corridors (generated; see topology.tj.ts) ────────────
   ...TJ_MERGED
+]
+
+/*
+ * Every turn that stays on one line but changes vehicle: the hand-written
+ * loop closure above, plus the U-turns each `Stop.serves` stop creates (see
+ * oneWayTurns). Derived rather than listed so marking a stop one-way can never
+ * leave the planner reading an out-and-back as a single train.
+ */
+export const SERVICE_BREAKS: ServiceBreakCodes[] = [
+  ...LOOP_CLOSURE_BREAKS,
+  ...TOPOLOGY.flatMap(line => oneWayTurns(line).map(turn => ({ operator: line.operator, lineCode: line.lineCode, ...turn })))
 ]

@@ -43,6 +43,41 @@ export const RideLegSchema = v.pipe(
     serviceLines: v.pipe(
       v.optional(v.array(LineRefSchema)),
       v.description('Cuma muncul di jalur yang dipakai bersama beberapa lin, jadi naik yang mana pun tetap sampai. Lin utamanya ditaruh paling depan.')
+    ),
+    /*
+     * Optional, like serviceLines, and for the same reason: the field appears
+     * only where the data genuinely supports it.
+     *
+     * These are published trip times, not estimates — which is what separates
+     * them from the waitS this schema still refuses below. TransJakarta has no
+     * timetable at all and never will, and some rail trips reach us without
+     * their intermediate stops, so those legs carry nothing rather than a
+     * guess. Absent means "we do not know", and the UI must render nothing.
+     */
+    departureAt: v.pipe(
+      v.optional(v.string()),
+      v.description('Jam berangkat dari stasiun naik, sesuai jadwal resmi. Cuma ada di tahap yang jadwalnya kami punya.'),
+      v.metadata({ examples: ['2026-09-07T07:14:00+07:00'] })
+    ),
+    arrivalAt: v.pipe(
+      v.optional(v.string()),
+      v.description('Jam tiba di stasiun turun, sesuai jadwal resmi. Cuma ada di tahap yang jadwalnya kami punya.'),
+      v.metadata({ examples: ['2026-09-07T07:31:00+07:00'] })
+    ),
+    /*
+     * Optional for the same reason as the two above, but with a sharper edge:
+     * platform assignments are reassigned operationally and change with
+     * engineering work, so PLATFORM_CODES carries only field-verified entries
+     * and is absent for most legs. Absent means "we do not know" and the UI
+     * omits the badge; a guess would send a rider to the wrong trackside.
+     *
+     * A string, not a number: an island platform between two tracks serving one
+     * direction is signed as a range ("1/2"), which is what a rider reads.
+     */
+    platformCode: v.pipe(
+      v.optional(v.string()),
+      v.description('Peron tempat naik, kalau datanya sudah diverifikasi. Bisa berupa rentang kalau peronnya pulau.'),
+      v.metadata({ examples: ['1/2'] })
     )
   }),
   v.title('FareRideLeg'),
@@ -107,6 +142,11 @@ export const FareJourneyLabelSchema = v.pipe(
  * timetable. A number in seconds invites the UI to render "tunggu ±7 menit",
  * which is a departure-time promise this engine cannot keep. The label carries
  * the comparison; the figure would carry a lie.
+ *
+ * The per-leg `departureAt` above is not a counterexample to that rule, it is
+ * the rule applied: those come from a published trip rather than an average, so
+ * they are a promise the timetable already makes. Where there is no timetable
+ * the fields are absent — which is why the refusal here still stands.
  */
 export const FareJourneySchema = v.pipe(
   v.object({
@@ -124,10 +164,20 @@ export const FareJourneySchema = v.pipe(
       v.description('Boleh kosong, dan itu wajar: rute yang tidak menang sendirian di kriteria mana pun memang tidak punya kelebihan khusus buat disebut.')
     ),
     boardings: v.pipe(v.number(), v.description('Berapa kali naik kendaraan. Beda tipis dari `transferCount`: ganti kereta di peron yang sama tetap dihitung naik, tapi tidak dihitung transit.')),
-    walkDistanceM: v.pipe(v.number(), v.description('Total jarak jalan kaki di pilihan rute ini dalam meter.'))
+    walkDistanceM: v.pipe(v.number(), v.description('Total jarak jalan kaki di pilihan rute ini dalam meter.')),
+    /*
+     * All-or-nothing: present only when EVERY ride leg is timed. A total that
+     * skipped an untimed leg would read as more certain than the legs it came
+     * from, which is the same reason a leg after an untimed one carries nothing.
+     */
+    arrivalAt: v.pipe(
+      v.optional(v.string()),
+      v.description('Jam sampai tujuan. Cuma ada kalau semua tahap naik kendaraannya punya jadwal, jadi kalau ada tahap yang pakai TransJakarta memang tidak muncul.'),
+      v.metadata({ examples: ['2026-09-07T08:02:00+07:00'] })
+    )
   }),
   v.title('FareJourney'),
-  v.description('Satu pilihan rute lengkap dengan tarifnya. Yang dibandingkan cuma jumlah naik kendaraan, jarak jalan kaki, rata-rata lama nunggu, dan tarif — bukan waktu tempuh, karena mesinnya memang tidak punya jadwal.'),
+  v.description('Satu pilihan rute lengkap dengan tarifnya. Yang dibandingkan cuma jumlah naik kendaraan, jarak jalan kaki, rata-rata lama nunggu, dan tarif, bukan waktu tempuh. Jam berangkat dan tiba ikut ditampilkan di tahap yang jadwalnya kami punya.'),
   v.metadata({ ref: 'FareJourney' })
 )
 

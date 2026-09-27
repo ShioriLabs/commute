@@ -3,7 +3,7 @@
 The routing engine. Dependency-free by design.
 
 ```ts
-const tsun = loadGraph({ edges, transfers, restrictions, headwaysS })
+const tsun = loadGraph({ edges, transfers, serviceBreaks, headwaysS })
 const legs = tsun.findRoute('KCI-SUD', 'MRTJ-LBB')       // one best route
 const options = tsun.findRoutes('KCI-SUD', 'MRTJ-LBB')   // several, scored
 ```
@@ -12,8 +12,8 @@ const options = tsun.findRoutes('KCI-SUD', 'MRTJ-LBB')   // several, scored
 
 This package knows about nodes, arcs and distances. It does not know what an
 operator is, what a rupiah is, or that station ids happen to look like
-`${operator}-${code}`. Everything Jakarta-specific — topology, endpoint
-restrictions, fares, the D1 graph inputs — stays in `apps/api` and is passed in.
+`${operator}-${code}`. Everything Jakarta-specific — topology, service
+breaks, fares, the D1 graph inputs — stays in `apps/api` and is passed in.
 
 Keep it that way. The moment this package imports `@commute/constants` or a
 database type, it stops being a routing engine and becomes part of the API.

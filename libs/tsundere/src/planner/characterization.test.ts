@@ -78,7 +78,13 @@ describe('dominance, over the whole corpus', () => {
         }
       }
     }
-    expect({ trueCount, checksum }).toEqual({ trueCount: 2995, checksum: 911319407 })
+    /*
+     * Re-recorded 2026-09-05 when dominance moved from grid-rounding to a
+     * tolerance. Verdicts rose 2995 -> 3277, +9.4%, which is the change working:
+     * pairs that used to escape domination by straddling a bucket boundary no
+     * longer do. See the note in criteria.test.ts.
+     */
+    expect({ trueCount, checksum }).toEqual({ trueCount: 3277, checksum: 4023133581 })
   })
 
   /*
@@ -123,8 +129,26 @@ describe('bag, fed the whole corpus', () => {
     }
   }
 
+  /*
+   * Re-recorded 2026-09-04, when dominance became state-aware: a label may only
+   * be beaten by one that arrived on the same line. Fewer labels are rejected on
+   * the way in, so more of them reach a full bag and lose their place to the size
+   * cap instead — which is why `kept` FELL while `size` held.
+   *
+   * Re-recorded again the same day, when eviction gained a per-line floor: the
+   * cap now spares a line's last label and takes the next-worst instead, so a
+   * label that used to be evicted survives and `kept` rose 23 -> 24. The held
+   * set is unchanged, which is the point — the floor changes WHICH label pays
+   * for the cap, not how wide the bag is.
+   *
+   * The other two sizes did not move, and both are explicable. This corpus
+   * cycles three lines, so at maxSize 1 every label is the only one on its line
+   * and the floor has no protected-free victim to choose — it falls back to the
+   * global worst, which is the old behaviour exactly. At maxSize 8 the cap
+   * rarely binds on three lines, so there is little eviction to change.
+   */
   it('keeps the same labels at maxSize 4', () => {
-    expect(fingerprint(4)).toEqual({ kept: 29, size: 4, traces: '29,137,202,214' })
+    expect(fingerprint(4)).toEqual({ kept: 24, size: 4, traces: '137,198,202,214' })
   })
 
   it('keeps the same labels at maxSize 1', () => {
@@ -132,7 +156,7 @@ describe('bag, fed the whole corpus', () => {
   })
 
   it('keeps the same labels at maxSize 8', () => {
-    expect(fingerprint(8)).toEqual({ kept: 46, size: 8, traces: '29,40,108,137,174,202,214,215' })
+    expect(fingerprint(8)).toEqual({ kept: 42, size: 8, traces: '29,107,137,152,174,198,202,214' })
   })
 })
 
@@ -234,6 +258,28 @@ describe('planner output on a branching network', () => {
         }
       }
     }
-    expect({ journeys, checksum }).toEqual({ journeys: 122, checksum: 268792055 })
+    /*
+     * Re-recorded 2026-09-04 alongside the bag fingerprints. Exactly one of the
+     * 56 ordered pairs moved: LRTJ-H -> KCI-A traded a two-boarding alternative
+     * for a genuine one-seat one (walk to MRTJ-G, ride Y through to KCI-A),
+     * which the old cross-line dominance deleted by letting the label arriving
+     * at MRTJ-F on W beat the one arriving on Y. FEWEST_CHANGES correctly comes
+     * off the primary there — with two one-boarding journeys, nothing wins it.
+     *
+     * Re-recorded 2026-09-05 when maxBagSize moved 4 -> 8. Four more journeys
+     * across the 56 pairs, which is the change working rather than a defect: a
+     * wider bag keeps states the cap was evicting, and this fixture's three
+     * parallel routes plus a branch are exactly the shape that produces them.
+     * On the real network the same change takes 2.407 journeys/OD to 2.993,
+     * with 141 of 300 pairs gaining and 3 losing.
+     *
+     * Re-recorded again 2026-09-05 for the dominance tolerance: 126 -> 128 here,
+     * where the real network went the other way (2.993 -> 2.873 journeys/OD).
+     * Both are the same change. A stricter test discards more of the detours
+     * that survived on a rounding artefact, and on this fixture it also frees
+     * bag space for genuinely different journeys to reach the front — which is
+     * why a count can move either way and only reading the journeys settles it.
+     */
+    expect({ journeys, checksum }).toEqual({ journeys: 128, checksum: 839605904 })
   })
 })

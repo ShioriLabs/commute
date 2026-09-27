@@ -139,6 +139,7 @@ apps/api/src/operators/lrtjbdb/output.sql
 # TransJakarta GTFS feed — local input for the TJ topology/SQL generators.
 # Large (~20MB extracted); re-extract from the provided zip when regenerating.
 apps/api/src/db/scripts/file_gtfs/
+apps/api/src/db/scripts/file_gtfs.prev/
 file_gtfs.zip
 
 # TransJakarta poster scans + transcriptions — local scratch for authoring the
@@ -170,3 +171,6 @@ Group 1 (2).png
 # — scratch/ is not backed up by git, so treat it as losable. Promote it into
 # the tree when it matters.
 scratch/
+
+# Local D1 snapshots taken before a remote apply. Never committed.
+.backups/

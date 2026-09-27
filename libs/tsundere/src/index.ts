@@ -14,6 +14,12 @@ export { loadGraph, Tsundere, type LoadGraphInput } from './tsundere'
  * rider chooses.
  */
 export type { FareScorer, Journey, JourneyLabel, PlanOptions } from './planner/plan'
+
+/*
+ * Search counters. Not part of routing — a measurement hook the bench/audit
+ * scripts pass in, so the engine's caps can be sized with numbers.
+ */
+export { newInstrument, type PlanInstrument } from './planner/instrument'
 export {
   DEFAULT_RANK_WEIGHTS,
   WALKING_WEIGHTS,
@@ -28,7 +34,37 @@ export {
 export type { RideLeg, RouteLeg, TransferLeg } from './router'
 
 /*
+ * Service windows — when a line runs, in seconds since local midnight. The
+ * engine never learns which timezone "local" is; apps/api does that conversion
+ * and passes numbers, so this stays as dependency-free as the rest.
+ */
+export {
+  DAY_S,
+  inWindow,
+  windowFromDepartures,
+  type ServiceWindow
+} from './planner/service-hours'
+
+/*
+ * The timetable: which vehicles run each stop pattern, and when.
+ *
+ * Exported as the input shape only. The index built over it stays private, like
+ * RouteGraph — a caller supplies patterns, it does not query them. Nothing in
+ * the search reads this yet; see planner/trips.ts.
+ */
+export type { Trip, TripPattern } from './planner/trips'
+
+/*
+ * Departure times, resolved onto a journey after the search.
+ *
+ * The function itself is not exported — it needs the trip index, which stays
+ * private — so callers reach it through `Tsundere.timeJourney`. Only the shapes
+ * that cross the boundary are here.
+ */
+export { clockOf, type LegTiming, type ResolveDeparturesOptions } from './planner/departures'
+
+/*
  * Graph inputs. Structural by design — apps/api passes Kysely rows straight in,
  * so these must never grow a field a database row would not have.
  */
-export type { EdgeInput, EndpointRestriction, ServiceBreak, TransferInput } from './router'
+export type { EdgeInput, ServiceBreak, TransferInput } from './router'
