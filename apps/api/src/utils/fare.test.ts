@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FareContext } from '@commute/constants'
-import { calculateSegmentFare, calculateTransferFare, fareTimeBucket, LRTJBDB_FARE_CAP_OFFPEAK, LRTJBDB_FARE_CAP_PEAK, resolveCorridorMerges, secondsSinceLocalMidnight, serviceDay, wibIsoString } from 'utils/fare'
+import { calculateSegmentFare, calculateTransferFare, departureSlot, fareTimeBucket, LRTJBDB_FARE_CAP_OFFPEAK, LRTJBDB_FARE_CAP_PEAK, resolveCorridorMerges, secondsSinceLocalMidnight, serviceDay, wibIsoString } from 'utils/fare'
 import type { RouteLeg } from '@commute/tsundere'
 
 const ctx: FareContext = { paymentMethod: 'STORED_VALUE', departureAt: new Date('2026-07-18T08:00:00+07:00') }
@@ -116,6 +116,30 @@ describe('fareTimeBucket', () => {
     expect(fareTimeBucket(new Date('2026-07-20T12:00:00+07:00'))).toBe('offpeak') // Mon midday
     expect(fareTimeBucket(new Date('2026-07-20T22:00:00+07:00'))).toBe('offpeak') // Mon night
     expect(fareTimeBucket(new Date('2026-07-18T08:00:00+07:00'))).toBe('offpeak') // Sat morning
+  })
+})
+
+describe('departureSlot', () => {
+  it('floors to the containing 20-minute slot, never the next one', () => {
+    const slot = (iso: string) => departureSlot(new Date(iso))
+    expect(slot('2026-07-20T08:00:00+07:00')).toBe('0800')
+    expect(slot('2026-07-20T08:19:59+07:00')).toBe('0800')
+    expect(slot('2026-07-20T08:20:00+07:00')).toBe('0820')
+    expect(slot('2026-07-20T08:59:00+07:00')).toBe('0840')
+  })
+
+  it('pads to four digits so keys sort and compare as strings', () => {
+    expect(departureSlot(new Date('2026-07-20T00:05:00+07:00'))).toBe('0000')
+    expect(departureSlot(new Date('2026-07-20T09:00:00+07:00'))).toBe('0900')
+  })
+
+  it('reads the Jakarta wall clock, not UTC', () => {
+    // 2026-07-20T01:00:00Z is 08:00 WIB — the slot follows the local clock.
+    expect(departureSlot(new Date('2026-07-20T01:00:00Z'))).toBe('0800')
+  })
+
+  it('covers the last slot of the day without rolling over', () => {
+    expect(departureSlot(new Date('2026-07-20T23:59:59+07:00'))).toBe('2340')
   })
 })
 

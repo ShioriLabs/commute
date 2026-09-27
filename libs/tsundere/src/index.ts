@@ -46,7 +46,25 @@ export {
 } from './planner/service-hours'
 
 /*
+ * The timetable: which vehicles run each stop pattern, and when.
+ *
+ * Exported as the input shape only. The index built over it stays private, like
+ * RouteGraph — a caller supplies patterns, it does not query them. Nothing in
+ * the search reads this yet; see planner/trips.ts.
+ */
+export type { Trip, TripPattern } from './planner/trips'
+
+/*
+ * Departure times, resolved onto a journey after the search.
+ *
+ * The function itself is not exported — it needs the trip index, which stays
+ * private — so callers reach it through `Tsundere.timeJourney`. Only the shapes
+ * that cross the boundary are here.
+ */
+export { clockOf, type LegTiming, type ResolveDeparturesOptions } from './planner/departures'
+
+/*
  * Graph inputs. Structural by design — apps/api passes Kysely rows straight in,
  * so these must never grow a field a database row would not have.
  */
-export type { EdgeInput, EndpointRestriction, ServiceBreak, TransferInput } from './router'
+export type { EdgeInput, ServiceBreak, TransferInput } from './router'

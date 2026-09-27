@@ -67,45 +67,6 @@ export interface GraphEdge {
 }
 
 /*
- * A stop served (board/alight) in only one travel direction while the track
- * passes both ways (e.g. KCI-PSE). The through-edges stay in the graph so a
- * trip may still ride PAST the stop; these entries only forbid the stop as a
- * trip ENDPOINT in the banned direction — no boarding heading toward
- * `forbiddenNeighbor`, no alighting having arrived from it.
- */
-export interface EndpointRestriction {
-  stationId: string // DB id, e.g. `KCI-PSE`
-  forbiddenNeighborId: string // DB id, e.g. `KCI-GST`
-}
-
-/*
- * The endpoint rule, shared by findRoute and the multi-criteria planner.
- *
- * Both engines must apply it identically — findRoute is the oracle the planner
- * is diffed against (see planner/plan.ts), so a divergence here would surface as
- * a routing bug rather than a copy-paste one.
- *
- * Returns true when the hop is forbidden. Build it ONCE outside the search loop:
- * the returned closure runs per edge in the hot path, and both engines carry
- * explicit keep-this-allocation-free notes.
- */
-export function makeEndpointGuard(
-  restrictions: Map<string, EndpointRestriction>,
-  fromStationId: string,
-  toStationId: string
-): (at: string, to: string) => boolean {
-  const origin = restrictions.get(fromStationId)
-  const destination = restrictions.get(toStationId)
-  return (at, to) => {
-    // Can't BOARD the origin heading toward its forbidden neighbor.
-    if (at === fromStationId && origin && to === origin.forbiddenNeighborId) return true
-    // Can't ALIGHT at the destination having arrived from its forbidden neighbor.
-    if (to === toStationId && destination && at === destination.forbiddenNeighborId) return true
-    return false
-  }
-}
-
-/*
  * A turn that stays on one line but changes vehicle.
  *
  * A line code identifies a *route*, not a service, and on a loop the two come
@@ -138,13 +99,12 @@ export const serviceBreakKey = (lineCode: string, from: string, via: string, to:
   `${lineCode}|${from}|${via}|${to}`
 
 /*
- * The routing graph plus the endpoint restrictions that apply to it. Restrictions
- * live on the graph (not passed per-query) since they're a static property of the
- * network; `findRoute` consults them only for the trip's own origin/destination.
+ * The routing graph. A stop served in one direction only (KCI-PSE) needs no
+ * side rule here: its edges are directed at generation time (Stop.serves in
+ * apps/api), so the adjacency itself says where a rider can board and alight.
  */
 export interface RouteGraph {
   adjacency: Map<string, GraphEdge[]>
-  restrictions: Map<string, EndpointRestriction> // keyed by restricted stationId
   /*
    * Turns that cost a boarding, keyed by `serviceBreakKey`.
    *
@@ -181,7 +141,6 @@ export type RouteLeg = RideLeg | TransferLeg
 export function buildGraph(
   edges: EdgeInput[],
   transfers: TransferInput[],
-  restrictions: EndpointRestriction[] = [],
   serviceBreaks: ServiceBreak[] = []
 ): RouteGraph {
   const adjacency = new Map<string, GraphEdge[]>()
@@ -265,22 +224,15 @@ export function buildGraph(
     push(from, { to, distanceM: t.distance, routingCostM: t.distance + out, lineCode: null, noTap })
     push(to, { to: from, distanceM: t.distance, routingCostM: t.distance + back, lineCode: null, noTap })
   }
-  const restrictionMap = new Map(restrictions.map(r => [r.stationId, r]))
   const breakSet = new Set(serviceBreaks.map(
     b => serviceBreakKey(b.lineCode, b.fromStationId, b.viaStationId, b.toStationId)
   ))
-  return { adjacency, restrictions: restrictionMap, serviceBreaks: breakSet }
+  return { adjacency, serviceBreaks: breakSet }
 }
 
 export function findRoute(graph: RouteGraph, fromStationId: string, toStationId: string): RouteLeg[] | null {
-  const { adjacency, restrictions } = graph
+  const { adjacency } = graph
   if (!adjacency.has(fromStationId) || !adjacency.has(toStationId)) return null
-
-  // Endpoint direction rules for THIS trip's own origin/destination (a stop
-  // that's a served endpoint only one way, e.g. KCI-PSE). Mid-route pass-through
-  // is never affected — these only constrain the first hop out of the origin and
-  // the last hop into the destination.
-  const isForbiddenHop = makeEndpointGuard(restrictions, fromStationId, toStationId)
 
   const dist = new Map<string, number>([[fromStationId, 0]])
   const prev = new Map<string, { station: string, edge: GraphEdge }>()
@@ -334,7 +286,6 @@ export function findRoute(graph: RouteGraph, fromStationId: string, toStationId:
      */
     const incomingLine = prev.get(current)?.edge.lineCode ?? null
     for (const edge of adjacency.get(current) ?? []) {
-      if (isForbiddenHop(current, edge.to)) continue
       let penalty = 0
       if (edge.lineCode === null) {
         penalty = TRANSFER_PENALTY_M

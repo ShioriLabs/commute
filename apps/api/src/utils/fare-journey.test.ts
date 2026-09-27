@@ -190,6 +190,44 @@ describe('assembleJourney', () => {
     })
   })
 
+  /*
+   * Platform badges, from the field-verified PLATFORM_CODES table.
+   *
+   * Worth pinning because the lookup fails SILENTLY: the key wants a bare
+   * topology code for the next hop (`KRI`) while the leg carries full ids
+   * (`KCI-KRI`), and a miss is indistinguishable from "no platform known" —
+   * which is the correct answer at most stations. Without this test a broken
+   * key would look exactly like normal operation.
+   */
+  describe('platform codes', () => {
+    it('names the boarding platform, keyed on the direction of travel', () => {
+      // Cakung eastbound to Bekasi leaves via KRI (peron 1/2); the same station
+      // westbound leaves via KLDB (peron 3/4). Same station, same line.
+      const east = build([ride('KCI', 'C', ['CUK', 'KRI', 'BKS'], 6000)]).journey.legs[0]!
+      if (east.type !== 'RIDE') throw new Error('expected a ride leg')
+      expect(east.platformCode).toBe('1/2')
+
+      const west = build([ride('KCI', 'C', ['CUK', 'KLDB', 'JNG'], 6000)]).journey.legs[0]!
+      if (west.type !== 'RIDE') throw new Error('expected a ride leg')
+      expect(west.platformCode).toBe('3/4')
+    })
+
+    it('omits the field entirely where no verified platform exists', () => {
+      // MRT has no entries at all. Absent, never null: the UI renders nothing
+      // rather than a blank badge, and a guess would send a rider trackside.
+      const leg = build([ride('MRTJ', 'M', ['DKA', 'LBB'], 8000)]).journey.legs[0]!
+      if (leg.type !== 'RIDE') throw new Error('expected a ride leg')
+      expect(leg.platformCode).toBeUndefined()
+      expect('platformCode' in leg).toBe(false)
+    })
+
+    it('omits the field on a single-stop leg with no next hop', () => {
+      const leg = build([ride('KCI', 'C', ['CUK'], 0)]).journey.legs[0]!
+      if (leg.type !== 'RIDE') throw new Error('expected a ride leg')
+      expect(leg.platformCode).toBeUndefined()
+    })
+  })
+
   it('carries the engine criteria onto the journey', () => {
     const { journey } = build([ride('KCI', 'C', ['BOO', 'MRI'], 1000)], { boardings: 3, walkDistanceM: 460 })
     expect(journey.boardings).toBe(3)

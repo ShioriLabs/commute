@@ -9,7 +9,7 @@ interface Props {
 
 const OPTIONS: { value: SearchMode, label: string }[] = [
   { value: 'STATION', label: 'Satu stasiun' },
-  { value: 'FARE', label: 'Rute & tarif' }
+  { value: 'FARE', label: 'OTW' }
 ]
 
 // Switches the sheet between looking up one station and routing between two.

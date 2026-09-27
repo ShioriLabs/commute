@@ -16,10 +16,11 @@ how many journeys come back.
 
 ```
 Tier 0  static route + per-segment fare                    ← DONE (POIs still unbuilt)
-Tier 1  + route preferences, several journeys, labels      ← DONE, shipped behind a toggle
-Tier 2  + time                                             ← HALF DONE
+Tier 1  + route preferences, several journeys, labels      ← DONE, now the only router
+Tier 2  + time                                             ← MOSTLY DONE
         service hours + day-awareness + headway waits        DONE
-        timetable-driven departures ("next train", arrive-by) NOT STARTED
+        timetable-driven departures ("next train")           DONE, rail only
+        arrive-by                                            NOT STARTED
         = go mode
 ```
 
@@ -35,6 +36,9 @@ Each tier is independently shippable and useful on its own. That held.
   engine work, just data and a virtual-node injection per request.
 
 ## Tier 1 — done, and built better than this doc predicted
+
+See **`mcraptor.md`** for what the engine is and is not — it is McRAPTOR-shaped, not
+RAPTOR, and the four divergences are deliberate.
 
 The router moved out of `apps/api/src/utils/router.ts` into **`libs/tsundere`**, a
 dependency-free routing engine package with its own tests, benchmarks and public surface
@@ -72,15 +76,41 @@ did not ask. `findRoutes` picks a different primary on some pairs — Bogor → 
 becomes a one-transfer Rp 20.000 route where `/fares` returns the three-transfer
 Rp 17.500 one. Neither is wrong.
 
-The multi-journey answer lives at **`/_internal/trips/:from/:to`**, and asking for it is a
-rider-facing choice: the **beta router toggle** on `/fare` (`fare-sheet/router-toggle.tsx`,
-`hooks/use-fare-router.ts`), with the alternatives rendered as cards plus a criteria bar
-(`fare-sheet/criteria/`). The split survives *because* a switch picks between two endpoints
-that each answer honestly — a mode flag on `/fares` would have made one URL mean two things.
+The multi-journey answer lives at **`/_internal/trips/:from/:to`**, rendered as cards plus
+a criteria bar (`fare-sheet/criteria/`). **Since 2026-09-06 it is the only answer the app
+shows** — the standard/beta toggle it shipped behind was deleted, not flipped, along with
+`utils/fare-router.ts`, `hooks/use-fare-router.ts` and `fare-sheet/router-toggle.tsx`.
 
-The toggle persists in **localStorage only**. There is no URL form, so a link cannot put a
-rider on a router they did not choose. Do not reintroduce a `?router=` param; it was tried
-and removed.
+The split still survives, for the reason it always had: two endpoints that each answer
+honestly, where a mode flag on `/fares` would have made one URL mean two things. `/fares`
+is now purely a public contract — the OG worker (`apps/opengraph`), shared links and the
+embed — and `findRoute` stays as the oracle `compareRouters.ts` diffs against.
+
+What promotion cost, measured over 300 seeded pairs before the switch: the **primary route
+changes on 42%** of them, but the **fare is identical on 70%**, and where it moves it is
+79 pairs cheaper against 8 dearer (mean **−Rp 1.484**). Coverage is unchanged — there is no
+pair one router can route and the other cannot. Of the 8 dearer, 5 still show a cheaper
+option on screen wearing *Termurah*; only 3 genuinely trade money for a saved boarding.
+
+Two consequences worth remembering:
+
+- **Deleting the toggle deleted a fetch gate.** `routerReady` existed only so a beta
+  rider's first paint would not query `/fares` and then immediately `/_internal/trips`.
+  With one endpoint that race cannot happen, so the query now fires on first paint.
+- **The embed changed behaviour.** `readFareRouter` fell back to `standard` when storage
+  throws, which is exactly what happens in the partitioned TransportForJakarta iframe — so
+  the embed had been silently riding the old router. It now gets the multi-journey answer
+  like everything else. `useIsEmbed` (`?embed=true`) is there if it ever needs its own
+  treatment.
+
+There is still no URL form of *which router*, and there is nothing left to put in one. Do
+not reintroduce a `?router=` param; it was tried and removed. `?modes=rail` is different
+and does round-trip — it names what the rider excluded, not which engine answered.
+
+**A `/fares`-shaped body still reaches the card**, from the API's 20-hour KV, from SWR's
+IndexedDB, and from the service worker. `journeysOf` (`fare-sheet/journeys.ts`) promotes it
+to a single unbadged journey. That branch is cache compatibility, not dead standard-router
+code — deleting it strands every rider holding a warm body.
 
 ## Tier 2 — half done, and the half nobody expected came first
 
@@ -110,27 +140,76 @@ This is the *realistic ceiling* identified earlier: service-hours plus frequency
 not RAPTOR. The late-night problem this doc flagged as the time dimension biting early —
 "the best route at 02:00 ≠ the best route at 14:00" — is answered.
 
-### Not started: departures
+### Done: departures, and not the way this doc expected
 
-The engine models **how often** a vehicle comes, never **when the next one is**. The
-`schedules` table still only feeds timetable display; nothing in `libs/tsundere` reads it.
-So these remain unanswerable:
+Shipped 2026-09-07. Each ride leg carries `departureAt` / `arrivalAt` where a real trip
+covers it, and a journey carries `arrivalAt` only when every ride leg is timed.
 
-- "Leave now" with real next-departure times on each leg.
-- **Arrive-by** planning.
-- The **last-train** question in its precise form (service *windows* answer the coarse
+**This was not the Connection-Scan / RAPTOR step the section above predicted**, because
+a measurement removed the need for one. Replanning 200 seeded rail pairs at 06:00,
+09:00, 12:00, 15:00, 18:00 and 21:00 returned the **identical route at all six hours for
+162 of the 162 pairs** that route at all six. Service hours already exclude the shut
+corridors and nothing else in the criteria vector moves with the clock, so *which way you
+go* is stable and only *which vehicle you catch* varies. No time axis was added to
+`Criteria`, `dominates` or the search — `auditRouter --baseline` still reports 0 changed
+result sets over 300 pairs, which is the gate that keeps it true.
+
+Instead `planner/departures.ts` resolves times **after** the search, and the API applies
+them in a `retime` hook that runs on the cache-hit path as well as the miss. So KV keeps
+storing the untimed journey for its full 20 hours while every reader gets times against
+their own `at` — the route is the cacheable half, the vehicle is the per-request half.
+
+**Each route is offered at its next three boardings** (`journey-times.ts`), merged across
+routes and sorted by arrival. A route is a way of getting there; a boarding is a train,
+and they are different choices: from Cakung the 08.11 and the 08.22 both reach Rasuna
+Said at 08.56, so the later one is strictly better and the old one-card-per-route view
+could not say so. Untimed routes contribute exactly one row, because there are no
+departures to enumerate.
+
+Two consequences worth knowing. **Labels are recomputed in apps/api over the expanded
+set**, compared per ROUTE rather than per row — three boardings of one route share its
+fare, so comparing rows would tie every axis against itself and award nothing. And the
+card face shows the boarding even when the arrival is unknown: on a rail-into-TJ journey
+the departure is a fact and the arrival is not, and without it several rows of one route
+are indistinguishable plates.
+
+**Coverage is 51.5% of rail-only journeys fully timed**, and the shortfall is directional
+data rather than engine capability: not one KCI stop pattern is reversible (line C has 23
+patterns and 0 reversible endpoint pairs; R 15/0; B 13/0), and 0 of 142 southbound MRTJ
+trips include Lebak Bulus against 142 of 142 northbound. Both directions' trips exist —
+their per-trip stop lists are what have gaps.
+
+> **Correction (2026-09-15).** The statistics above are true; the inference from them
+> is not. Both directions ARE present — they fail an endpoint-equality test only
+> because short-turns make them terminate at different stations — and the MRTJ
+> "missing" terminus is correct data: a terminus has no departures in the direction
+> that ends there. Measured at hop level, every one-way hop in the feed is a terminal
+> hop. See `mcraptor.md` for the measurements and for what a route-scanning search
+> would actually need (pattern bookkeeping, not data recovery).
+>
+> The real cause of a large slice of the shortfall was line **T (Tangerang)**, whose
+> stored board split every train across two tripNumbers (`1903` + `1903A`) and so
+> failed hop validation entirely — 242 of 289 chain-gap rejections, zero patterns for
+> the line. The live feed no longer does this; refreshing the board took KCI from 960
+> to 1080 trips and 65 to 67 patterns. KCI had also renamed two station codes
+> upstream (`TTI`→`THI`, `GGL`→`GRG`), which is why those stations had silently
+> stopped syncing — see `toFeedStationCode` in `operators/kci/formatters.ts`.
+
+Still unanswerable, and each for its own reason:
+
+- **Arrive-by** planning. A different query, and this one genuinely does need the search
+  to change.
+- **The last-train question** in its precise form (service *windows* answer the coarse
   version already).
-
-That is the genuine Connection-Scan / RAPTOR step. Note the constraint discovered since
-this doc was written: **TJ has no timetable at all**, only frequencies, so timetable-driven
-routing is structurally a rail-only capability. A planner that offers exact departures for
-KCI and LRT but not for TJ is a UX problem before it is an algorithms problem, and that
-question should be settled before any of it is built.
+- Exact departures on **TransJakarta**, ever: the feed is 730 trips with `frequencies.txt`
+  and no timetable at all. That is why leg times are per-leg and absent rather than
+  journey-wide — a mixed journey shows the clock on its rail legs and the headway wording
+  on its TJ ones, which is the UX answer to the question this section used to pose.
 
 ## UX layer (go mode proper)
 
-- ~~Alternatives as cards: *fastest* · *fewest transfers* · *cheapest*~~ — **shipped**
-  behind the beta toggle, with four labels rather than three.
+- ~~Alternatives as cards: *fastest* · *fewest transfers* · *cheapest*~~ — **shipped**,
+  with four labels rather than three, and since 2026-09-06 the only answer the app shows.
 - "Leave now / depart at HH:MM / arrive by HH:MM." — needs the departures work above.
   Departure *time* is already a rider input (it drives the fare bucket and service hours);
   what is missing is arrive-by and next-departure.
@@ -160,23 +239,30 @@ past it, deliberately and without rework, which is the outcome this doc predicte
 The live question is no longer *what to build next* but **what to promote**. Three
 independent moves, in rough order of leverage:
 
-1. **Decide the beta toggle's fate.** The alternatives UI is built, tested and in riders'
-   hands behind a switch. Either it becomes the default (and `/fares` keeps its singular
-   answer for embeds, which it can do indefinitely) or it stays opt-in on purpose. Leaving
-   it undecided is the one option that costs something.
-2. **POIs.** The last Tier 0 item, additive, and blocked on nothing.
-3. **Departures.** Real Tier 2, a different algorithm class, and gated on the TJ
-   no-timetable question above.
+1. ~~**Decide the beta toggle's fate.**~~ **Settled 2026-09-06: the multi-journey answer
+   is the default and the toggle is gone.** See the section below.
+2. ~~**Departures.**~~ **Shipped 2026-09-07**, and not as a different algorithm class —
+   the route turned out to be stable across the day, so times resolve onto it after the
+   search. See above.
+3. **POIs.** Now the last item on this list: the final Tier 0 gap, additive, and blocked
+   on nothing.
 
 ## Open questions
 
-- Does the beta router become the default, and if so what happens to the toggle?
-- Whether exact departures are worth shipping rail-only, given TJ can never have them.
+- ~~Does the beta router become the default, and if so what happens to the toggle?~~ —
+  settled: yes, and the toggle was deleted rather than flipped.
+- ~~Whether exact departures are worth shipping rail-only, given TJ can never have
+  them.~~ — settled: yes, per LEG rather than per journey. A mixed journey shows the
+  clock on its rail legs and the headway wording on its TJ ones, so nothing has to be
+  withheld from rail riders to stay honest about buses.
 - Scheduled-only vs realtime: live vehicle positions remain a separate, later question.
-- Schedule coverage — full operating day, holiday variants, and sync freshness — becomes
-  correctness-critical only if departures are built; service *windows* already tolerate
-  gaps.
-- Whether a time-expanded structure reuses the per-isolate `cachedGraph` pattern.
+- Schedule coverage is now correctness-critical, and the binding gap is **directional**:
+  no KCI pattern is reversible and no southbound MRTJ trip reaches Lebak Bulus, which is
+  most of why only 51.5% of rail journeys are fully timed. Holiday variants and sync
+  freshness matter for the same reason now.
+- ~~Whether a time-expanded structure reuses the per-isolate `cachedGraph` pattern.~~ —
+  moot: there is no time-expanded structure. The trip index rides along on `cachedGraph`
+  and the times are resolved per request.
 - ~~k-shortest-paths vs repeated Dijkstra~~ — settled: neither. Pareto bags per (stop,
   round), with `maxBagSize` trading width for cost.
 - ~~How many alternatives to surface~~ — settled: `maxResults`, labelled, ties unlabelled.

@@ -1,5 +1,5 @@
 import type { PaymentMethod } from '@commute/constants'
-import type { FareCriteria } from 'utils/fare-criteria'
+import type { FareCriteria, WalkingPreference } from 'utils/fare-criteria'
 
 /*
  * Display strings for the criteria bar and its sheets.
@@ -15,6 +15,34 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   STORED_VALUE: 'Kartu Uang Elektronik',
   JAKLINGKO: 'JakLingko',
   QRIS_TAP: 'QRIS Tap'
+}
+
+/*
+ * The same methods, short enough to sit in a chip segment.
+ *
+ * "Kartu Uang Elektronik" is four words for the thing everyone calls a kartu;
+ * KUE is what fits beside two other settings on one row and is how the card is
+ * spoken about anyway. The long forms stay above for the sheet, where a rider
+ * is choosing rather than checking.
+ */
+export const PAYMENT_METHOD_SHORT_LABELS: Record<PaymentMethod, string> = {
+  STORED_VALUE: 'KUE',
+  JAKLINGKO: 'JakLingko',
+  QRIS_TAP: 'QRIS'
+}
+
+/*
+ * Walking, as one word.
+ *
+ * Drops the verb the long forms carry ("Jalan cepat" -> "Cepat") because the
+ * pictogram beside it already says walking. Two words would be the only
+ * wrapping segment on the row.
+ */
+export const WALKING_SHORT_LABELS: Record<WalkingPreference, string> = {
+  BRISK: 'Cepat',
+  AVERAGE: 'Biasa',
+  SLOW: 'Santai',
+  AVOID: 'Males'
 }
 
 export const PAYMENT_METHOD_DESCRIPTIONS: Record<PaymentMethod, string> = {
@@ -36,17 +64,55 @@ export const PAYMENT_METHOD_DESCRIPTIONS: Record<PaymentMethod, string> = {
  */
 export const OFFERED_PAYMENT_METHODS: PaymentMethod[] = ['STORED_VALUE', 'QRIS_TAP']
 
-export const FARE_TIME_LABELS: Record<FareCriteria['fareTime'], string> = {
-  now: 'Sekarang',
-  peak: 'Jam Sibuk',
-  offpeak: 'Di Luar Jam Sibuk'
+/*
+ * Which networks a route may use.
+ *
+ * "Semua" rather than "Semua moda": the chip already says Jalur, and the
+ * shorter word is what a rider scanning a rail of chips actually reads.
+ */
+export const MODES_LABELS: Record<FareCriteria['modes'], string> = {
+  all: 'Semua',
+  rail: 'Tanpa TransJakarta'
 }
 
-export const FARE_TIME_DESCRIPTIONS: Record<FareCriteria['fareTime'], string> = {
-  now: 'Tarif dihitung buat jam sekarang',
-  // Naming the operator matters: this is the only place the bucket changes the
-  // number, so a rider who never touches LRT Jabodebek should see that it will
-  // not affect them rather than wonder why nothing moved.
-  peak: 'Senin sampai Jumat, 07.00 sampai 09.00 dan 16.00 sampai 19.00. Batas tarif LRT Jabodebek naik jadi Rp20.000',
-  offpeak: 'Di luar jam sibuk dan akhir pekan. Batas tarif LRT Jabodebek Rp10.000'
+/*
+ * The rail-only description names the cost rather than selling the feature.
+ * TransJakarta reaches most of the network and is the only way to LRT Jakarta,
+ * so turning it off can leave a pair with no route at all, and a rider who is
+ * told that up front reads an empty result as their own choice rather than a
+ * broken app.
+ */
+export const MODES_DESCRIPTIONS: Record<FareCriteria['modes'], string> = {
+  all: 'Pakai semua pilihan yang ada, termasuk TransJakarta',
+  rail: 'Cuma kereta dan MRT/LRT. Beberapa rute jadi nggak ketemu, soalnya TransJakarta yang nyambungin'
+}
+
+/*
+ * How much the rider minds walking.
+ *
+ * Named for the rider, not the multiplier: "how many times worse than riding is
+ * a metre on foot" is not a question anyone can answer, while "I walk slowly"
+ * is. AVERAGE reads as "Biasa aja" rather than "Rata-rata" — this is a habit,
+ * not a statistic.
+ */
+export const WALKING_LABELS: Record<WalkingPreference, string> = {
+  BRISK: 'Jalan cepat',
+  AVERAGE: 'Biasa aja',
+  SLOW: 'Jalan santai',
+  AVOID: 'Males jalan'
+}
+
+/*
+ * Never a duration. The engine has no duration model — `edges.durationSeconds`
+ * is null on every row — so any wording like "5 menit lebih lama" would be a
+ * promise it cannot keep. These describe what the ranking does instead.
+ *
+ * AVOID says "sebisanya", not "nggak akan", because the search still offers a
+ * walking route when that is the only way through; it just ranks it last.
+ */
+export const WALKING_DESCRIPTIONS: Record<WalkingPreference, string> = {
+  BRISK: 'Nggak masalah jalan jauh kalau transitnya jadi lebih sedikit',
+  AVERAGE: 'Seimbang antara jalan kaki sama gonta-ganti kendaraan',
+  SLOW: 'Lebih milih rute yang jalan kakinya pendek',
+  AVOID: 'Hindari jalan kaki sebisanya, walau transitnya jadi lebih banyak'
 }

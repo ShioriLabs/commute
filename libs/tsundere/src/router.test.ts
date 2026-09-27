@@ -129,45 +129,26 @@ describe('findRoute — asymmetric corridors (directed ride edges)', () => {
   })
 })
 
-describe('findRoute — endpoint direction restriction (KCI-PSE)', () => {
-  // Loop fragment: GST — PSE — KMO — KPB, bidirectional track (both directions
-  // exist, matching real edges). PSE serves KPB-bound only, so GST is PSE's
-  // forbidden neighbor: no boarding at PSE toward GST, no alighting at PSE from GST.
-  const loop = [
-    ...edge('C', 'KCI-GST', 'KCI-PSE'), ...edge('C', 'KCI-PSE', 'KCI-KMO'),
-    ...edge('C', 'KCI-KMO', 'KCI-KPB'), ...edge('C', 'KCI-KPB', 'KCI-AK')
-  ]
-  const restriction = { stationId: 'KCI-PSE', forbiddenNeighborId: 'KCI-GST' }
-  const restricted = buildGraph(loop, [], [restriction])
+describe('findRoute — one-way stop (KCI-PSE)', () => {
+  // Loop fragment as generated from Stop.serves: PSE is called at northbound
+  // only (GST -> PSE -> KMO), and southbound trains run KMO -> GST past it.
+  const ride = (from: string, to: string) => ({ lineCode: 'C', fromStationId: from, toStationId: to, distance: 1000 })
+  const loop = buildGraph([
+    ride('KCI-GST', 'KCI-PSE'), ride('KCI-PSE', 'KCI-KMO'), ride('KCI-KMO', 'KCI-GST'),
+    ...edge('C', 'KCI-KMO', 'KCI-KPB')
+  ], [])
+  const stopsOf = (from: string, to: string) => findRoute(loop, from, to)!.flatMap(l => l.type === 'RIDE' ? l.stationIds : [])
 
-  it('through-routes past PSE in both directions (restriction never blocks pass-through)', () => {
-    expect(findRoute(restricted, 'KCI-GST', 'KCI-KPB')).not.toBeNull()
-    expect(findRoute(restricted, 'KCI-KPB', 'KCI-GST')).not.toBeNull()
+  it('rides past the stop southbound without calling at it', () => {
+    expect(stopsOf('KCI-KPB', 'KCI-GST')).toEqual(['KCI-KPB', 'KCI-KMO', 'KCI-GST'])
   })
 
-  it('forbids boarding at PSE toward the forbidden neighbor (GST-bound)', () => {
-    // The only way from PSE to GST is the single hop toward the forbidden
-    // neighbor; with the restriction there is no legal route.
-    expect(findRoute(restricted, 'KCI-PSE', 'KCI-GST')).toBeNull()
+  it('alights at the stop arriving from GST, the direction that serves it', () => {
+    expect(stopsOf('KCI-GST', 'KCI-PSE')).toEqual(['KCI-GST', 'KCI-PSE'])
   })
 
-  it('still allows boarding at PSE toward the served direction (KPB-bound)', () => {
-    expect(findRoute(restricted, 'KCI-PSE', 'KCI-KPB')).not.toBeNull()
-  })
-
-  it('forbids alighting at PSE having arrived from the forbidden neighbor', () => {
-    // GST→PSE is a single hop arriving from the forbidden neighbor.
-    expect(findRoute(restricted, 'KCI-GST', 'KCI-PSE')).toBeNull()
-  })
-
-  it('still allows alighting at PSE from the served direction (from KMO/KPB)', () => {
-    expect(findRoute(restricted, 'KCI-KPB', 'KCI-PSE')).not.toBeNull()
-  })
-
-  it('leaves routing unchanged when no restrictions are passed', () => {
-    const open = buildGraph(loop, [])
-    expect(findRoute(open, 'KCI-PSE', 'KCI-GST')).not.toBeNull()
-    expect(findRoute(open, 'KCI-GST', 'KCI-PSE')).not.toBeNull()
+  it('boards at the stop only northbound', () => {
+    expect(stopsOf('KCI-PSE', 'KCI-GST')).toEqual(['KCI-PSE', 'KCI-KMO', 'KCI-GST'])
   })
 })
 

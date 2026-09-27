@@ -21,22 +21,23 @@ const offpeak = { paymentMethod: 'STORED_VALUE', departureAt: new Date('2026-07-
 const jaklingko = { paymentMethod: 'JAKLINGKO', departureAt: new Date('2026-07-20T08:00:00+07:00') } as const
 
 describe('tripCacheKey', () => {
-  it('encodes payment method, service day and time bucket', () => {
-    // 2026-07-20 is a Monday, so the service day is WD.
-    expect(tripCacheKey('KCI-BKS', 'MRTJ-LBB', peak, 'v3')).toBe('trips:KCI-BKS:MRTJ-LBB:STORED_VALUE:WD:peak:v3')
+  it('encodes payment method, service day and departure slot', () => {
+    // 2026-07-20 is a Monday, so the service day is WD; 08:00 floors to 0800.
+    expect(tripCacheKey('KCI-BKS', 'MRTJ-LBB', peak, 'v3')).toBe('trips:KCI-BKS:MRTJ-LBB:STORED_VALUE:WD:0800:v3')
   })
 
-  it('produces distinct keys per payment method and per time bucket', () => {
+  it('produces distinct keys per payment method and per departure slot', () => {
     const base = tripCacheKey('KCI-BKS', 'MRTJ-LBB', peak, 'v3')
     expect(tripCacheKey('KCI-BKS', 'MRTJ-LBB', jaklingko, 'v3')).not.toBe(base) // method differs
-    expect(tripCacheKey('KCI-BKS', 'MRTJ-LBB', offpeak, 'v3')).not.toBe(base) // bucket differs
+    expect(tripCacheKey('KCI-BKS', 'MRTJ-LBB', offpeak, 'v3')).not.toBe(base) // slot differs
   })
 
   /*
    * The two endpoints answer the same question with different shapes — one
    * journey against several. Sharing a key would serve a `TripResult` to a
-   * caller parsing a `FareResult`, and the beta router switch means both are
-   * warm for the same pair at the same time.
+   * caller parsing a `FareResult`, and both stay warm for the same pair at the
+   * same time — the app reads /trips while the OG card and shared links still
+   * read /fares.
    */
   it('never collides with a fare key for the same arguments', () => {
     expect(tripCacheKey('KCI-BKS', 'MRTJ-LBB', peak, 'v3'))

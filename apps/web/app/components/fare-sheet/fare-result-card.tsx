@@ -1,15 +1,16 @@
 import type { FareJourney, FareResult, FareResultLeg, FareResultRideLeg, FareResultTransferLeg, TripResult } from '@commute/schemas'
 import { OPERATORS, type Operator } from '@commute/constants'
-import { type CSSProperties, useEffect, useState } from 'react'
-import { ArrowsDownUpIcon, CaretDownIcon, CaretRightIcon, PersonSimpleWalkIcon, TicketIcon } from '@phosphor-icons/react'
+import { type CSSProperties, useEffect, useMemo, useState } from 'react'
+import { ArrowsDownUpIcon, CaretDownIcon, CaretLeftIcon, CaretRightIcon, PersonSimpleWalkIcon, TicketIcon } from '@phosphor-icons/react'
 import { getForegroundColor } from 'utils/colors'
-import { formatKm, formatRupiah } from 'utils/format'
-import { joinLabels } from 'utils/labels'
+import { formatClock, formatDuration, formatKm, formatRupiah } from 'utils/format'
+import { formatPlatformCode, joinLabels } from 'utils/labels'
 import LineRoundel from '~/components/line-roundel'
 import { FARE_GUTTER_CLASS, FARE_RAIL_CENTER_PX, interlinedTrackFill, LINE_COLOR_FALLBACK, RAIL_WIDTH_PX } from '~/components/transit-geometry'
 import { codeOfLineKey, useLines } from '~/hooks/use-lines'
 import { JOURNEY_LABELS } from './journey-labels'
 import { journeysOf, sortJourneyLabels, walkDistanceOf } from './journeys'
+import { useJourneyPager } from './journey-pager'
 import RouteBar from './route-bar'
 import { routeBarSegments } from './route-bar-segments'
 
@@ -83,6 +84,14 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
   const legLines = useLegLines()
   // Optional-chained against a stale API during deploy skew.
   const intermediate = leg.stops?.slice(1, -1) ?? []
+  /*
+   * Both ends or neither: the API sets them together, and half a range would
+   * read as a departure with an unknown arrival rather than as a leg we cannot
+   * time. `id-ID` renders 07.14, the dot form the departure board already uses.
+   */
+  const legTimes = leg.departureAt && leg.arrivalAt
+    ? `${formatClock(leg.departureAt)} - ${formatClock(leg.arrivalAt)}`
+    : null
   const summary = `${leg.stationCount - 1} stasiun • ${formatKm(leg.distanceM)}`
   const lines = legLines(leg)
   const isInterlined = lines.length > 1
@@ -116,7 +125,37 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
           <Rail style={railStyle} cap="START" />
           <Node color={legColor} />
         </div>
-        <b className="text-lg py-0.5">{leg.from.name}</b>
+        <div className="flex items-center gap-2 flex-wrap py-0.5">
+          <b className="text-lg">{leg.from.name}</b>
+          {/*
+            * Which peron to stand on, where it has been field-verified.
+            *
+            * Beside the boarding station and nowhere else: a platform is where
+            * you get on, and the same figure against the alight node would be
+            * read as where you get off. Absent for most legs by design — the
+            * table is verified entries only, and a wrong peron sends a rider
+            * to the wrong trackside — so there is no empty slot and no dash,
+            * the badge simply is not there. See PLATFORM_CODES.
+            *
+            * Same pill as the timetable card's and the line card's, down to the
+            * line-tinted ground: a rider reads this figure off a platform sign
+            * either way, so it should not look like two different facts on two
+            * screens. formatPlatformCode is what tightens the stored "3/4" into
+            * the "3·4" those signs use.
+            */}
+          {leg.platformCode
+            ? (
+                <span
+                  className="shrink-0 text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap text-slate-900"
+                  style={{ backgroundColor: `${legColor}33` }}
+                  aria-label={`Berangkat dari peron ${leg.platformCode}`}
+                >
+                  {'Peron '}
+                  { formatPlatformCode(leg.platformCode) }
+                </span>
+              )
+            : null}
+        </div>
       </div>
       <div className={`relative grid ${FARE_GUTTER_CLASS}`}>
         <div className="relative">
@@ -153,6 +192,22 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
                   arah
                   {' '}
                   { joinLabels(directions) }
+                </span>
+              )
+            : null}
+          {/*
+            * Only where the timetable actually covers this leg.
+            *
+            * Absent is the honest answer for TransJakarta, which has no
+            * timetable and never will, and for a rail leg whose trip reaches us
+            * without its intermediate stops. Rendering nothing is deliberate:
+            * a dash or a "—" would read as a missing value we could have
+            * fetched, where the truth is that no such time was ever published.
+            */}
+          {legTimes
+            ? (
+                <span className="text-sm font-semibold text-slate-700">
+                  { legTimes }
                 </span>
               )
             : null}
@@ -308,9 +363,8 @@ export function JourneyTimeline({ legs }: { legs: FareResultLeg[] }) {
  * journey renders the identical block inert, because a press affordance on the
  * only answer invites a rider to look for an alternative that does not exist.
  */
-export function JourneyCardFace({ journey, selected, onSelect }: {
+export function JourneyCardFace({ journey, onSelect }: {
   journey: FareJourney
-  selected: boolean
   onSelect?: () => void
 }) {
   const legLines = useLegLines()
@@ -322,30 +376,121 @@ export function JourneyCardFace({ journey, selected, onSelect }: {
    * cheapest has its price printed right there.
    */
   const labels = sortJourneyLabels(journey.labels).slice(0, 2)
+  /*
+   * When this option leaves, and when it lands if we can say.
+   *
+   * The boarding alone is enough to show, and on a mixed journey it is all
+   * there is: several cards can be the same route at different departures, and
+   * without the boarding they are indistinguishable plates. That case is real —
+   * a KCI leg into an untimed TransJakarta leg has a known 08.57 boarding and
+   * no arrival anyone can promise.
+   */
+  const boarding = journey.legs.find(leg => leg.type === 'RIDE' && leg.departureAt)
+  const boardsAt = boarding?.type === 'RIDE' ? boarding.departureAt : undefined
+  /*
+   * Only on a fully timed journey, which `arrivalAt` already guarantees — the
+   * API withholds it the moment one leg cannot be timed. See formatDuration for
+   * why this is not the "never a duration" rule being broken.
+   */
+  const duration = boardsAt && journey.arrivalAt ? formatDuration(boardsAt, journey.arrivalAt) : null
+  /*
+   * Which service this is, not just which line.
+   *
+   * From Cakung, line C runs 92 trips to Kampung Bandan and 60 to Angke — same
+   * code, same platform, different trains. Where a pair is untimed this is the
+   * ONLY thing separating two rows, so the plate has to carry it and not leave
+   * it to the timeline below.
+   *
+   * The first ride's headsign: that is the vehicle the rider is deciding to
+   * board, and the later legs are consequences of it.
+   */
+  const firstRide = journey.legs.find(leg => leg.type === 'RIDE')
+  const headsign = firstRide?.type === 'RIDE' ? firstRide.headsign : null
   const walkM = walkDistanceOf(journey)
   const segments = routeBarSegments(journey.legs, leg => legLines(leg))
 
   const body = (
     <>
       {/*
-        * Unselected options step back rather than being marked: the route is
-        * the thing being chosen between, so muting it is a stronger signal than
-        * any badge on the card's edge, and it leaves exactly one journey in
-        * full line colour at a time.
+        * Every option in full line colour. Nothing is marked as chosen here,
+        * because on this surface nothing ever is: the list and the detail are
+        * two pages, and picking a row leaves for the detail in the same
+        * handler — so a selection drawn on the list is never observed.
+        *
+        * It used to mute the unselected rows, from when the two were stacked
+        * and the plate had to point at the timeline below it. Under paging that
+        * left five of six routes looking disabled on arrival (the index
+        * defaults to 0, so the marked row is an ordinal rather than a choice),
+        * and the desaturation fell on the route bar — the one element here
+        * carrying data rather than decoration.
         */}
-      <div className={`transition-[filter,opacity] duration-200 ${selected ? '' : 'saturate-50 opacity-75'}`}>
-        <RouteBar segments={segments} />
+      <RouteBar segments={segments} />
+
+      {/*
+        * Time leads, and the fare steps back to the meta row.
+        *
+        * The order is set by what actually varies. Where a list is one route at
+        * several departures — which is now the common answer, not an edge case
+        * — the fare is CONSTANT across those rows and the clock is the only
+        * thing that moves. Leading with Rp6.500 three times over prints the
+        * same figure as a headline on three cards a rider is trying to tell
+        * apart, and buries the one fact that separates them in 12px grey.
+        *
+        * Untimed journeys keep the fare as the headline below, because then it
+        * genuinely is the most a row can say.
+        */}
+      {/*
+        * The lead slot, after JR East: how long it takes, then when it leaves.
+        *
+        * Duration leads because it is the figure a rider compares rows on, and
+        * it is the one JR East sets largest. It exists only on a fully timed
+        * journey though — formatDuration is arithmetic on two PUBLISHED times,
+        * and no TransJakarta journey has them — so the untimed variant is a
+        * defined layout rather than a blank first line: the transfer count
+        * takes the slot, since on an untimed row that is what separates two
+        * otherwise identical shapes.
+        */}
+      <div className="mt-3 flex items-baseline justify-between gap-2">
+        <span className="figure text-xl font-bold tracking-tight shrink-0 tabular-nums">
+          {duration ?? `transit ${journey.transferCount}x`}
+        </span>
+        {boardsAt
+          ? (
+              <span className="figure text-sm font-semibold text-slate-500 shrink-0 tabular-nums">
+                { formatClock(boardsAt) }
+                {journey.arrivalAt
+                  ? (
+                      <>
+                        <span className="text-slate-400">{' → '}</span>
+                        { formatClock(journey.arrivalAt) }
+                      </>
+                    )
+                  : null}
+              </span>
+            )
+          : null}
       </div>
 
-      <div className="mt-3 flex items-center gap-2 flex-wrap">
-        <span className="figure text-xl font-bold tracking-tight shrink-0">
+      {/*
+        * The fare, and the reason this row is here.
+        *
+        * The label stops being an 11px pill wedged beside the price and becomes
+        * the row's own sentence — it is the plain-language answer to "why am I
+        * being shown this option", which is what TfL sets as its card header.
+        * Still capped at two by sortJourneyLabels: a row wearing four reasons
+        * is making none of them.
+        */}
+      <div className="mt-1 flex items-baseline justify-between gap-2">
+        <span className="figure text-sm font-bold text-slate-700 shrink-0">
           {journey.totalFare !== null ? formatRupiah(journey.totalFare) : 'Tarif tidak tersedia'}
         </span>
-        {labels.map(label => (
-          <span key={label} className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 shrink-0">
-            { JOURNEY_LABELS[label] }
-          </span>
-        ))}
+        {labels.length > 0
+          ? (
+              <span className="text-xs font-bold text-rose-700 truncate min-w-0 text-right">
+                { labels.map(label => JOURNEY_LABELS[label]).join(' · ') }
+              </span>
+            )
+          : null}
       </div>
 
       {/*
@@ -354,20 +499,44 @@ export function JourneyCardFace({ journey, selected, onSelect }: {
         * scanned. Walk is omitted rather than zeroed when the response could
         * not say — see journeys.ts.
         */}
-      <div className="mt-1.5 flex items-center gap-3 figure text-xs text-slate-500">
-        <span>{ formatKm(journey.totalDistanceM) }</span>
-        <span className="flex items-center gap-1">
+      {/*
+        * One line at every width, with the headsign as the only thing that
+        * yields.
+        *
+        * flex-nowrap because the figures are the row's fixed part: at the map
+        * rail's ~368px they were breaking "16,8 km" and "310 m" each across two
+        * lines, which made a card's height a function of its headsign's length
+        * — six rows of one answer at three different heights. Truncating the
+        * headsign instead is what the comment below already assumed happened.
+        */}
+      <div className="mt-1.5 flex flex-nowrap items-center gap-3 figure text-xs text-slate-500">
+        <span className="shrink-0 whitespace-nowrap">{ formatKm(journey.totalDistanceM) }</span>
+        <span className="shrink-0 whitespace-nowrap flex items-center gap-1">
           <ArrowsDownUpIcon weight="bold" className="w-3.5 h-3.5 shrink-0" />
           { journey.transferCount }
         </span>
         {walkM !== null && walkM > 0
           ? (
-              <span className="flex items-center gap-1">
+              <span className="shrink-0 whitespace-nowrap flex items-center gap-1">
                 <PersonSimpleWalkIcon weight="bold" className="w-3.5 h-3.5 shrink-0" />
                 {walkM}
                 {' m'}
               </span>
             )
+          : null}
+        {/*
+          * Where this train is going.
+          *
+          * It used to sit between the fare and the badges, which gave it
+          * whatever width those two left over — on "Angke via Manggarai" beside
+          * two badges that was a handful of characters before the ellipsis, and
+          * the headsign is the ONLY thing separating two rows of an untimed
+          * pair. Here it gets the rest of the row, after the counts that are
+          * fixed-width by nature. Still truncated rather than wrapped: the full
+          * form is in the timeline a tap away.
+          */}
+        {headsign
+          ? <span className="truncate min-w-0">{ headsign }</span>
           : null}
       </div>
     </>
@@ -395,17 +564,17 @@ export function JourneyCardFace({ journey, selected, onSelect }: {
     )
   }
 
+  /*
+   * No aria-expanded: this row navigates to a page, it does not disclose
+   * anything in place. Announcing it as a collapsed widget on every row
+   * described a control that no longer exists.
+   */
   return (
     <button
       type="button"
       onClick={onSelect}
-      aria-expanded={selected}
-      className={`${plate} w-full text-left cursor-pointer ${
-        selected ? 'bg-rose-50' : 'bg-stone-100/60 hover:bg-stone-100'
-      }`}
-      style={{
-        '--plate-ground': selected ? 'var(--color-rose-50)' : 'var(--color-stone-100)'
-      } as CSSProperties}
+      className={`${plate} w-full text-left cursor-pointer bg-stone-100/60 hover:bg-stone-100`}
+      style={{ '--plate-ground': 'var(--color-stone-100)' } as CSSProperties}
     >
       { body }
     </button>
@@ -422,9 +591,78 @@ function JourneyDetail({ journey }: { journey: FareJourney }) {
       leg.type === 'TRANSFER' && leg.fare != null && leg.corridorLabel != null
   )
 
+  /*
+   * The whole journey's clock, shown only when every ride leg is timed.
+   *
+   * The API omits `arrivalAt` the moment one leg cannot be timed, so this is
+   * all-or-nothing by construction rather than by a check here — a total that
+   * skipped an untimed leg would read as more certain than the legs it came
+   * from.
+   */
+  const rides = journey.legs.filter(leg => leg.type === 'RIDE')
+  const start = rides[0]
+  /*
+   * Only when it says something the legs do not.
+   *
+   * On a single-ride journey the strip would repeat that leg's own times
+   * verbatim, one line above them — the same figure twice, which reads as a
+   * rendering bug rather than a summary. With two or more rides the span
+   * genuinely spans something: the waiting and walking between them.
+   */
+  const journeyClock = journey.arrivalAt && rides.length > 1 && start?.type === 'RIDE' && start.departureAt
+    ? { departure: formatClock(start.departureAt), arrival: formatClock(journey.arrivalAt) }
+    : null
+
   return (
     <>
+      {/*
+        * Each time labelled by its own verb, rather than one phrase covering
+        * both: "berangkat sampai tiba" is a gloss nobody says out loud, and the
+        * rest of the timeline speaks in short verb phrases (Pindah kereta,
+        * Transit ke). `figure` stays on the numerals alone so they align with
+        * every other figure on the card.
+        */}
+      {journeyClock
+        ? (
+            <p className="mt-4 text-sm font-semibold text-slate-700">
+              Berangkat
+              {' '}
+              <span className="figure">{ journeyClock.departure }</span>
+              , tiba
+              {' '}
+              <span className="figure">{ journeyClock.arrival }</span>
+            </p>
+          )
+        : null}
       <JourneyTimeline legs={journey.legs} />
+
+      {/*
+        * The journey in one line, after the itinerary that justifies it.
+        *
+        * JR East closes its detail the same way, and the reason it works is
+        * that every figure here was already drawn above in context — this is a
+        * recap for someone who has finished reading, not the first statement of
+        * any of them. Duration only on a fully timed journey, for the reason
+        * formatDuration documents; the rest are always knowable.
+        */}
+      <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-1 figure text-sm text-slate-500">
+        {/* Not gated on journeyClock: that one is deliberately null on a
+            single-ride journey (it would repeat the leg's own times), but a
+            one-seat ride still has a duration worth stating here. The real
+            precondition is the pair of published times formatDuration needs. */}
+        {start?.type === 'RIDE' && start.departureAt && journey.arrivalAt
+          ? <b className="text-slate-700">{ formatDuration(start.departureAt, journey.arrivalAt) }</b>
+          : null}
+        <span>
+          {'transit '}
+          { journey.transferCount }
+          x
+        </span>
+        {journey.totalFare !== null
+          ? <b className="text-slate-700">{ formatRupiah(journey.totalFare) }</b>
+          : null}
+        <span>{ formatKm(journey.totalDistanceM) }</span>
+      </div>
 
       {journey.segments.length + surchargedTransfers.length > 1
         ? (
@@ -471,20 +709,11 @@ function JourneyDetail({ journey }: { journey: FareJourney }) {
 
 export default function FareResultCard({
   result,
-  alternatives = false,
   selectedIndex,
-  onSelectIndex
+  onSelectIndex,
+  openOnDetail = false
 }: {
   result: FareResult | TripResult
-  /*
-   * Whether to offer the other journeys the API returned.
-   *
-   * Off by default, so a surface that does not pass it renders exactly what it
-   * rendered before alternatives existed: one result, no badges, no cards to
-   * choose between. Set from the rider's router toggle on every surface that
-   * offers one.
-   */
-  alternatives?: boolean
   /*
    * Which option is open, lifted.
    *
@@ -496,18 +725,24 @@ export default function FareResultCard({
    */
   selectedIndex?: number
   onSelectIndex?: (index: number) => void
+  /*
+   * Open on the chosen journey rather than the list, for a link that named a
+   * route (`?j=`). See journey-pager.ts.
+   */
+  openOnDetail?: boolean
 }) {
   /*
-   * Always the full list, so the hooks below never change shape; the primary is
-   * sliced off afterwards when alternatives are off.
+   * Every journey the answer carries, however many that is.
    *
-   * Its labels go with them. A badge is a comparison — "paling murah" only means
-   * anything beside the option it beats — so keeping them on a lone card would
-   * boast about a choice the rider was never shown. Same rule the engine
-   * applies when it declines to label a single journey.
+   * One entry is a normal answer, not a special case: a pair with a single
+   * non-dominated journey gets one card, and the engine already declines to
+   * label a lone journey — a badge is a comparison, and "paling murah" means
+   * nothing beside no alternative. So the list needs no trimming here.
+   *
+   * A `/fares`-shaped body served from a warm cache also lands as one, promoted
+   * by journeysOf. See there for why that path outlives the endpoint switch.
    */
-  const all = journeysOf(result)
-  const journeys = alternatives ? all : all.slice(0, 1).map(j => ({ ...j, labels: [] }))
+  const journeys = useMemo(() => journeysOf(result), [result])
 
   /*
    * The uncontrolled half. Declared unconditionally — hooks cannot be skipped —
@@ -529,31 +764,77 @@ export default function FareResultCard({
     if (!controlled) setOwnSelected(0)
   }, [result, controlled])
 
+  const { showing, hasOptions, toDetail, toOptions, pageFadeRef } = useJourneyPager(journeys, openOnDetail)
+
   const select = (index: number) => {
     if (!controlled) setOwnSelected(index)
     onSelectIndex?.(index)
+    // Picking an option is asking to see it, not to stay in the list.
+    toDetail()
   }
 
   const journey = journeys[selected] ?? journeys[0]!
 
   return (
-    <article className="mt-6 content-fade">
-      {journeys.length > 1
+    <article className="mt-6">
+      {/*
+        * A way back, and only where there is something to go back to.
+        *
+        * The list and the timeline answer different questions — "which of
+        * these" and "what is this one" — and a rider is only ever asking one of
+        * them. Stacking both meant every plate had to be scrolled past to reach
+        * the detail of the one just chosen, which at six rows put it off screen
+        * entirely. Same reasoning, and the same two pages, as the map's trip
+        * card; see journey-pager.ts.
+        */}
+      {hasOptions
         ? (
-            <div className="flex flex-col gap-2">
-              {journeys.map((option, index) => (
-                <JourneyCardFace
-                  key={index}
-                  journey={option}
-                  selected={index === selected}
-                  onSelect={() => select(index)}
-                />
-              ))}
+            <div className="flex items-center h-8">
+              {showing === 'detail'
+                ? (
+                    <button
+                      type="button"
+                      onClick={toOptions}
+                      aria-label="Kembali ke pilihan rute"
+                      className="flex items-center gap-1 -ml-1 rounded-lg px-1 py-1 cursor-pointer transition-colors duration-150 ease hover:bg-slate-100"
+                    >
+                      <CaretLeftIcon weight="bold" className="w-3.5 h-3.5 shrink-0 text-slate-500" />
+                      <span className="font-bold text-sm text-slate-500">Rincian perjalanan</span>
+                    </button>
+                  )
+                : (
+                    <h2 className="font-bold text-sm text-slate-500">
+                      {journeys.length}
+                      {' pilihan rute'}
+                    </h2>
+                  )}
             </div>
           )
-        : <JourneyCardFace journey={journey} selected />}
+        : null}
 
-      <JourneyDetail journey={journey} />
+      <div ref={pageFadeRef} className="content-fade">
+        {showing === 'options'
+          ? (
+              <ul className="mt-2 flex flex-col gap-2">
+                {journeys.map((option, index) => (
+                  <li key={index}>
+                    <JourneyCardFace
+                      journey={option}
+                      onSelect={() => select(index)}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )
+          : (
+              <>
+                {/* Inert: on the detail page this is the journey being read,
+                    not one of several being chosen between. */}
+                <JourneyCardFace journey={journey} />
+                <JourneyDetail journey={journey} />
+              </>
+            )}
+      </div>
     </article>
   )
 }

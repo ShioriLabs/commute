@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { BOGOR_LINE, CIKARANG_LINE } from 'operators/kci/lines'
-import { getLineInfoByLineCode, getLineInfoFromAPIName, tryGetFormattedName } from 'operators/kci/formatters'
+import { getLineInfoByLineCode, getLineInfoFromAPIName, toFeedStationCode, tryGetFormattedName } from 'operators/kci/formatters'
 
 describe('tryGetFormattedName', () => {
   it('returns a well-known name by code, ignoring the raw station name', () => {
@@ -64,5 +64,35 @@ describe('getLineInfoByLineCode', () => {
 
   it('returns undefined for an empty code', () => {
     expect(getLineInfoByLineCode('')).toBeUndefined()
+  })
+})
+
+describe('toFeedStationCode', () => {
+  /*
+   * KCI renamed two stations upstream in September 2026. We keep our own codes —
+   * they are referenced by edges, topology and the network dump — and translate
+   * only on the way out to the feed.
+   */
+  it('maps the stations KCI renamed to the code the feed now serves', () => {
+    expect(toFeedStationCode('TTI')).toBe('THI')
+    expect(toFeedStationCode('GGL')).toBe('GRG')
+  })
+
+  it('passes through every station KCI has not renamed', () => {
+    expect(toFeedStationCode('TNG')).toBe('TNG')
+    expect(toFeedStationCode('DU')).toBe('DU')
+    expect(toFeedStationCode('BOO')).toBe('BOO')
+  })
+
+  it('never maps a feed code back to ours, so a rename cannot reach the database', () => {
+    // syncTimetable writes ids from OUR code and fetches with the feed's. If this
+    // were symmetric, a station would start writing rows under the feed's id.
+    expect(toFeedStationCode('THI')).toBe('THI')
+    expect(toFeedStationCode('GRG')).toBe('GRG')
+  })
+
+  it('leaves an unknown code alone rather than guessing', () => {
+    expect(toFeedStationCode('ZZZ')).toBe('ZZZ')
+    expect(toFeedStationCode('')).toBe('')
   })
 })

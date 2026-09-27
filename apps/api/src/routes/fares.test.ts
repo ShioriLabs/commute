@@ -32,15 +32,34 @@ describe('fareCacheKey', () => {
   const offpeak = { paymentMethod: 'STORED_VALUE', departureAt: new Date('2026-07-20T12:00:00+07:00') } as const
   const jaklingko = { paymentMethod: 'JAKLINGKO', departureAt: new Date('2026-07-20T08:00:00+07:00') } as const
 
-  it('encodes payment method, service day and time bucket', () => {
-    // 2026-07-20 is a Monday, so the service day is WD.
-    expect(fareCacheKey('KCI-BKS', 'KCI-JAKK', peak, 'v3')).toBe('fares:KCI-BKS:KCI-JAKK:STORED_VALUE:WD:peak:v3')
+  it('encodes payment method, service day and departure slot', () => {
+    // 2026-07-20 is a Monday, so the service day is WD; 08:00 floors to 0800.
+    expect(fareCacheKey('KCI-BKS', 'KCI-JAKK', peak, 'v3')).toBe('fares:KCI-BKS:KCI-JAKK:STORED_VALUE:WD:0800:v3')
   })
 
-  it('produces distinct keys per payment method and per time bucket', () => {
+  it('produces distinct keys per payment method and per departure slot', () => {
     const base = fareCacheKey('KCI-BKS', 'KCI-JAKK', peak, 'v3')
     expect(fareCacheKey('KCI-BKS', 'KCI-JAKK', jaklingko, 'v3')).not.toBe(base) // method differs
-    expect(fareCacheKey('KCI-BKS', 'KCI-JAKK', offpeak, 'v3')).not.toBe(base) // bucket differs
+    expect(fareCacheKey('KCI-BKS', 'KCI-JAKK', offpeak, 'v3')).not.toBe(base) // slot differs
+  })
+
+  /*
+   * The reason the slot replaced the peak/off-peak bucket: two departures an
+   * hour apart inside one peak window used to collapse onto a single entry, so
+   * a rider asking for 08:40 could be served the body warmed for 07:10.
+   */
+  it('separates two departures inside the same fare bucket', () => {
+    const at = (iso: string) =>
+      fareCacheKey('KCI-BKS', 'KCI-JAKK', { paymentMethod: 'STORED_VALUE', departureAt: new Date(iso) }, 'v3')
+    expect(at('2026-07-20T07:10:00+07:00')).not.toBe(at('2026-07-20T08:40:00+07:00'))
+  })
+
+  it('shares one key across a slot, so the cache still warms', () => {
+    const at = (iso: string) =>
+      fareCacheKey('KCI-BKS', 'KCI-JAKK', { paymentMethod: 'STORED_VALUE', departureAt: new Date(iso) }, 'v3')
+    // 08:41 and 08:52 both floor to the 08:40 slot.
+    expect(at('2026-07-20T08:41:00+07:00')).toBe(at('2026-07-20T08:52:00+07:00'))
+    expect(at('2026-07-20T08:41:00+07:00')).toContain(':0840:')
   })
 
   /*

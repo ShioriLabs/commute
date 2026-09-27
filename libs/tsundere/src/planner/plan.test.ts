@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildGraph, findRoute } from '../router'
-import { plan } from './plan'
+import { plan, type Journey } from './plan'
 
 const edge = (lineCode: string, from: string, to: string, distance = 1000) => ([
   { lineCode, fromStationId: from, toStationId: to, distance },
@@ -328,20 +328,6 @@ describe('plan', () => {
       expect(journeys.filter(j => j.labels.includes('LEAST_WALKING'))).toHaveLength(0)
     })
   })
-
-  describe('endpoint restrictions', () => {
-    const restricted = buildGraph(edges, transfers, [
-      { stationId: 'KCI-A', forbiddenNeighborId: 'KCI-B' }
-    ])
-
-    it('refuses to board the origin toward its forbidden neighbour', () => {
-      expect(plan(restricted, 'KCI-A', 'KCI-D')).toEqual([])
-    })
-
-    it('leaves unaffected pairs alone', () => {
-      expect(plan(restricted, 'KCI-B', 'KCI-D').length).toBeGreaterThan(0)
-    })
-  })
 })
 
 describe('defaults', () => {
@@ -385,7 +371,7 @@ describe('defaults', () => {
  * riding G -> J -> A means changing trains at J even though the line code never
  * changes. That is what SERVICE BREAKS express.
  */
-const lollipop = (serviceBreaks: Parameters<typeof buildGraph>[3] = []) => buildGraph(
+const lollipop = (serviceBreaks: Parameters<typeof buildGraph>[2] = []) => buildGraph(
   [
     ...edge('L', 'KCI-S', 'KCI-J'),
     ...edge('L', 'KCI-J', 'KCI-A'),
@@ -397,7 +383,6 @@ const lollipop = (serviceBreaks: Parameters<typeof buildGraph>[3] = []) => build
     ...edge('L', 'KCI-F', 'KCI-G'),
     ...edge('L', 'KCI-G', 'KCI-J')
   ],
-  [],
   [],
   serviceBreaks
 )
@@ -454,5 +439,66 @@ describe('service breaks', () => {
     expect(legs).toHaveLength(2)
     expect(legs[0]!.type === 'RIDE' && legs[0]!.stationIds).toEqual(['KCI-G', 'KCI-J'])
     expect(legs[1]!.type === 'RIDE' && legs[1]!.stationIds).toEqual(['KCI-J', 'KCI-A'])
+  })
+})
+
+/*
+ * A stop served in one direction only, the shape of KCI-PSE (Pasar Senen) on
+ * the Cikarang loop. Northbound trains call at it (GST -> PSE -> KMO);
+ * southbound ones run straight through, so that direction has one bridged hop
+ * KMO -> GST and there is no edge into or out of PSE going south.
+ *
+ *   JNG <-> GST -> PSE -> KMO <-> KPB
+ *            ^______________|
+ *
+ * Directed edges carry the rule, so nothing here passes a restriction. What
+ * they cannot say on their own is that PSE -> KMO -> GST and KMO -> GST -> PSE
+ * are U-turns, riding one train out and a different one back. On one line code
+ * those look like a single ride, which is what the service breaks are for.
+ */
+describe('one-way stops', () => {
+  const ride = (from: string, to: string, distance: number) => ({ lineCode: 'C', fromStationId: from, toStationId: to, distance })
+  const oneWay = (serviceBreaks: Parameters<typeof buildGraph>[2] = []) => buildGraph([
+    ...edge('C', 'KCI-JNG', 'KCI-GST'),
+    ride('KCI-GST', 'KCI-PSE', 1452),
+    ride('KCI-PSE', 'KCI-KMO', 1478),
+    ride('KCI-KMO', 'KCI-GST', 2930),
+    ...edge('C', 'KCI-KMO', 'KCI-KPB')
+  ], [], serviceBreaks)
+  const U_TURNS = [
+    { lineCode: 'C', viaStationId: 'KCI-KMO', fromStationId: 'KCI-PSE', toStationId: 'KCI-GST' },
+    { lineCode: 'C', viaStationId: 'KCI-GST', fromStationId: 'KCI-KMO', toStationId: 'KCI-PSE' }
+  ]
+  const rides = (journey: Journey) => journey.legs.flatMap(l => l.type === 'RIDE' ? [l.stationIds] : [])
+
+  it('alights at the stop from the direction that serves it', () => {
+    // The old endpoint guard forbade exactly this: arriving from GST.
+    const [best] = plan(oneWay(U_TURNS), 'KCI-JNG', 'KCI-PSE')
+    expect(rides(best!)).toEqual([['KCI-JNG', 'KCI-GST', 'KCI-PSE']])
+    expect(best!.criteria.boardings).toBe(1)
+  })
+
+  it('never boards at the stop in the direction that runs through it', () => {
+    const journeys = plan(oneWay(U_TURNS), 'KCI-PSE', 'KCI-JNG')
+    expect(journeys.length).toBeGreaterThan(0)
+    for (const journey of journeys) expect(rides(journey)[0]!.slice(0, 2)).toEqual(['KCI-PSE', 'KCI-KMO'])
+  })
+
+  it('never alights at the stop off a train that runs through it', () => {
+    const journeys = plan(oneWay(U_TURNS), 'KCI-KPB', 'KCI-PSE')
+    expect(journeys.length).toBeGreaterThan(0)
+    for (const journey of journeys) expect(rides(journey).at(-1)!.slice(-2)).toEqual(['KCI-GST', 'KCI-PSE'])
+  })
+
+  it('charges the U-turn a boarding and splits the ride there', () => {
+    const [best] = plan(oneWay(U_TURNS), 'KCI-KPB', 'KCI-PSE')
+    expect(rides(best!)).toEqual([['KCI-KPB', 'KCI-KMO', 'KCI-GST'], ['KCI-GST', 'KCI-PSE']])
+    expect(best!.criteria.boardings).toBe(2)
+  })
+
+  it('would read the U-turn as one train without the breaks', () => {
+    // Why U_TURNS exist: the same journey on bare directed edges is one "ride".
+    const [best] = plan(oneWay(), 'KCI-KPB', 'KCI-PSE')
+    expect(best!.criteria.boardings).toBe(1)
   })
 })

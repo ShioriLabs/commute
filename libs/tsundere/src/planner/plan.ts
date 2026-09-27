@@ -1,4 +1,4 @@
-import { makeEndpointGuard, serviceBreakKey, type GraphEdge, type RouteGraph, type RouteLeg } from '../router'
+import { serviceBreakKey, type GraphEdge, type RouteGraph, type RouteLeg } from '../router'
 import { Bag, type Label } from './bag'
 import { inWindow, type ServiceWindow } from './service-hours'
 import {
@@ -73,6 +73,19 @@ export interface PlanOptions {
    * per request, while the graph is built once per isolate and memoised.
    */
   serviceHours?: Map<string, ServiceWindow>
+  /**
+   * Line codes the rider will not board, e.g. every TransJakarta corridor when
+   * they have asked for rail only.
+   *
+   * A property of the QUERY, not the network — the same graph answers both with
+   * and without it — so it lives here rather than on the loaded graph, and the
+   * engine never learns that these particular codes mean buses.
+   *
+   * Filters BOARDING only, which is what makes it safe: a walk keeps no line
+   * code, and a ride already in progress is never severed part-way. Both fall
+   * out of composing into `canBoard` rather than being special-cased.
+   */
+  excludeLines?: ReadonlySet<string>
   scoreFare?: FareScorer
   /**
    * Counters describing what the search did. See PlanInstrument.
@@ -234,17 +247,13 @@ export function plan(
     defaultHeadwayS = DEFAULTS.defaultHeadwayS,
     departureS,
     serviceHours,
+    excludeLines,
     scoreFare,
     instrument
   } = options
 
-  const { adjacency, restrictions, serviceBreaks } = graph
+  const { adjacency, serviceBreaks } = graph
   if (!adjacency.has(fromStationId) || !adjacency.has(toStationId)) return []
-
-  // Same endpoint rules as findRoute — literally the same guard, so the two
-  // engines cannot drift. They constrain only this trip's own origin and
-  // destination, never a stop passed through mid-journey.
-  const isForbiddenHop = makeEndpointGuard(restrictions, fromStationId, toStationId)
 
   /*
    * Can a rider BOARD this line at this moment?
@@ -258,12 +267,24 @@ export function plan(
    * runs: we hold windows for the routable network, and anything we have not
    * measured keeps its previous always-available behaviour.
    */
-  const canBoard = departureS === undefined || serviceHours === undefined
+  const inService = departureS === undefined || serviceHours === undefined
     ? () => true
     : (lineCode: string): boolean => {
         const window = serviceHours.get(lineCode)
         return window === undefined || inWindow(departureS, window)
       }
+
+  /*
+   * Two reasons a line cannot be boarded, composed into one test.
+   *
+   * A line the rider excluded is treated exactly like one that is shut: not an
+   * error and not a downgrade, just an edge the search does not take. Composed
+   * here rather than checked at the call site so the hot loop keeps making one
+   * call, and so both reasons inherit the same boarding-only semantics.
+   */
+  const canBoard = excludeLines === undefined || excludeLines.size === 0
+    ? inService
+    : (lineCode: string): boolean => !excludeLines.has(lineCode) && inService(lineCode)
 
   const bagFor = new Map<string, Bag<Trace | null>>()
   const bagKey = (stop: string, round: number) => `${round}:${stop}`
@@ -331,8 +352,6 @@ export function plan(
         if (instrument) instrument.labelsExpanded++
         for (const edge of adjacency.get(stop) ?? []) {
           if (instrument) instrument.adjacencyLookups++
-          if (isForbiddenHop(stop, edge.to)) continue
-
           const isWalk = edge.lineCode === null
           /*
            * Staying on the line is normally free. It is not when the turn is a

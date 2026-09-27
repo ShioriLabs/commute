@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { readdirSync, statSync } from 'node:fs'
 import { loadGraph } from '@commute/tsundere'
 import { HEADWAYS_S, STOP_HEADWAYS_S } from '../data/headways'
-import { ENDPOINT_RESTRICTIONS, SERVICE_BREAKS, TOPOLOGY } from '../data/topology'
+import { SERVICE_BREAKS, TOPOLOGY } from '../data/topology'
 
 /*
  * The parts benchRouter and auditRouter must not disagree about.
@@ -62,10 +62,6 @@ export function loadNetwork() {
   const router = loadGraph({
     edges,
     transfers,
-    restrictions: ENDPOINT_RESTRICTIONS.map(r => ({
-      stationId: `${r.operator}-${r.station}`,
-      forbiddenNeighborId: `${r.operator}-${r.forbiddenNeighbor}`
-    })),
     serviceBreaks: SERVICE_BREAKS.map(b => ({
       lineCode: b.lineCode,
       viaStationId: `${b.operator}-${b.via}`,

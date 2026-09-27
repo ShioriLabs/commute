@@ -20,6 +20,7 @@
     "generate:edges": "tsx ./src/db/scripts/generateEdgesSQL.ts",
     "generate:headways": "tsx ./src/db/scripts/generateHeadways.ts",
     "generate:service-hours": "tsx ./src/db/scripts/generateServiceHours.ts",
+    "generate:trips": "tsx ./src/db/scripts/generateTrips.ts",
     "graft:shape-dist": "tsx ./src/db/scripts/graftShapeDist.ts",
     "generate:tj-topology": "tsx ./src/db/scripts/generateTJTopology.ts",
     "generate:tj": "tsx ./src/db/scripts/generateTJSQL.ts",

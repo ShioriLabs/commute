@@ -121,14 +121,22 @@ function tjWindows(): Map<string, Partial<Record<DayName, ServiceWindow>>> {
  * Rail: inferred from the departures we hold, read through
  * `wrangler d1 execute --local` exactly as generateHeadways.ts does.
  *
- * Emitted under every day, because `schedules` carries one timetable per
- * station and cannot yet say which days it applies to. Migration 0015 and the
- * MRT syncer are what make a real weekend window possible; until then a rail
- * line's window is the same every day, which is what we actually know.
+ * Restricted to weekday boards with the same `(dayMask & 4)` filter
+ * generateHeadways.ts uses, and for the same reason: MRTJ and LRTJBDB now carry
+ * genuinely day-typed rows, so an unfiltered read derives one window from two
+ * interleaved timetables. Measured 2026-09-06 the filter changes no window on
+ * any line — every weekend board falls inside its weekday span — so this is
+ * closing a latent hole rather than fixing a wrong number. It matters the day a
+ * weekend service starts earlier or ends later than the weekday one.
+ *
+ * Still emitted under every day. A weekday-derived window is what we can defend
+ * for all three; deriving a real per-day window needs the SAT/SUN masks read
+ * separately, which is worth doing when a line's spans actually diverge.
  */
 function railWindows(): Map<string, Partial<Record<DayName, ServiceWindow>>> {
   const sql = `SELECT lineCode, estimatedDeparture FROM schedules
-               WHERE lineCode IS NOT NULL AND lineCode != 'NUL'`
+               WHERE lineCode IS NOT NULL AND lineCode != 'NUL'
+                 AND (dayMask & 4) != 0`
   const raw = execFileSync(
     'npx',
     ['wrangler', 'd1', 'execute', 'commute', '--local', '--command', sql, '--json'],

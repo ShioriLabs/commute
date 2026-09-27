@@ -78,8 +78,8 @@ app.use('/fares/*', rateLimit('FARE'), cacheControl(MAX_AGE.FARE))
 /*
  * `/_internal` is not public, but it is as reachable as everything else, and
  * `/_internal/trips` runs findRoutes — strictly more work than the findRoute
- * behind `/fares`. It went un-shaped only while nothing linked to it; the beta
- * router switch on /fare is what changes that.
+ * behind `/fares`. It went un-shaped only while nothing linked to it, and it is
+ * now what every fare surface in the app calls.
  *
  * The limiter is the weaker half here. Our own front ends are exempt by origin
  * (see EXEMPT_ORIGINS in middleware/rate-limit.ts), and one of them is the

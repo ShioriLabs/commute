@@ -66,6 +66,38 @@ export function fareTimeBucket(date: Date): FareTimeBucket {
   return isPeak ? 'peak' : 'offpeak'
 }
 
+/** How coarsely a departure time is quantised for cache purposes, in minutes. */
+export const DEPARTURE_SLOT_MINUTES = 20
+
+/**
+ * A departure time as a quantised local slot, e.g. `0840`.
+ *
+ * The cache key's time component. `fareTimeBucket` used to fill that role, but
+ * two buckets cannot express "the 08:42 train" — every instant in a three-hour
+ * peak window collapsed to one entry, so a rider choosing a departure time got
+ * whatever body the first caller of that window warmed.
+ *
+ * Twenty minutes is the compromise between those two failures. Per-minute keys
+ * would split the namespace 1440 ways and miss on nearly every request; this
+ * splits it 72 ways, which is cold enough to notice and warm enough to work.
+ * The slot floors rather than rounds, so a time never keys to a slot that has
+ * not started yet.
+ *
+ * Fare is NOT computed from this — `fareTimeBucket` still decides the LRT cap,
+ * and must, because the cap genuinely is a peak/off-peak quantity. This only
+ * decides what the cache treats as the same question, where a finer key is
+ * always safe: it can split two identical answers, never merge two different
+ * ones.
+ */
+export function departureSlot(date: Date): string {
+  const local = wib(date)
+  const minuteOfDay = local.getUTCHours() * 60 + local.getUTCMinutes()
+  const slotStart = Math.floor(minuteOfDay / DEPARTURE_SLOT_MINUTES) * DEPARTURE_SLOT_MINUTES
+  const hours = Math.floor(slotStart / 60)
+  const minutes = slotStart % 60
+  return `${String(hours).padStart(2, '0')}${String(minutes).padStart(2, '0')}`
+}
+
 /**
  * Which day bucket a moment falls in, Jakarta time.
  *
@@ -102,6 +134,24 @@ export function wibIsoString(date: Date): string {
 export function secondsSinceLocalMidnight(date: Date): number {
   const local = wib(date)
   return local.getUTCHours() * 3600 + local.getUTCMinutes() * 60 + local.getUTCSeconds()
+}
+
+/**
+ * The instant `secondsS` after the local midnight that `on` falls in.
+ *
+ * The inverse of `secondsSinceLocalMidnight`, and the reason it takes a whole
+ * date rather than a day: the engine reports a journey that crosses midnight as
+ * seconds past 86400 rather than wrapping to 00:23, so that "later" stays a
+ * plain numeric comparison. Adding those seconds to local midnight rolls into
+ * the next day on its own, which is exactly right — and it means a caller must
+ * NOT take a modulus first, or a train arriving after midnight lands eleven
+ * hours before the one it followed.
+ */
+export function atSecondsOfDay(on: Date, secondsS: number): Date {
+  const local = wib(on)
+  const midnightUTC = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate())
+  // Back out of the WIB shift, since `wib` moved the clock forward to read it.
+  return new Date(midnightUTC + secondsS * 1000 - WIB_OFFSET_MS)
 }
 
 export function calculateSegmentFare(segment: FareSegmentInput, context: FareContext): number | null {
