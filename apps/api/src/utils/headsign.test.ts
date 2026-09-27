@@ -40,6 +40,14 @@ describe('computeHeadsignCode', () => {
     expect(computeHeadsignCode('KCI', 'C', ['GST', 'PSE'])).toEqual({ code: 'KPB', viaCode: null })
   })
 
+  it('resolves a leg that runs through a one-way stop without calling', () => {
+    // Southbound trains pass Pasar Senen (served northbound only), so the leg
+    // reaches Gang Sentiong straight from Kemayoran. PSE must not read as a
+    // second way forward from GST.
+    expect(computeHeadsignCode('KCI', 'C', ['KMO', 'GST'])).toEqual({ code: 'CKR', viaCode: null })
+    expect(computeHeadsignCode('KCI', 'C', ['KPB', 'RJW', 'KMO', 'GST'])).toEqual({ code: 'CKR', viaCode: null })
+  })
+
   it('resolves loop legs heading toward the mouth out to the stick', () => {
     expect(computeHeadsignCode('KCI', 'C', ['SUD', 'MRI'])).toEqual({ code: 'CKR', viaCode: null })
   })
