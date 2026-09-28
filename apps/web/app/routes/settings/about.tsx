@@ -1,6 +1,7 @@
 /* eslint-disable @stylistic/jsx-one-expression-per-line */
 import { useCallback, useState } from 'react'
 import { CaretLeftIcon } from '@phosphor-icons/react'
+import { Link } from 'react-router'
 import CommuteLogotype from 'public/img/logotype.svg'
 import { useMapGlDebug } from '~/hooks/secret-features'
 
@@ -66,7 +67,8 @@ export default function AboutSettingsPage() {
           Repo: <a href="https://github.com/ShioriLabs/commute" className="text-[#F55875] font-semibold">ShioriLabs/commute</a><br />
           Laman Web: <a href="https://shiorilabs.id" className="text-[#F55875] font-semibold">shiorilabs.id</a><br />
           (tidak menerima curhatan soal percintaan)
-        </p>
+        </p><br />
+        <p>Suka sama Commute? <Link to="/settings/support" className="text-[#F55875] font-semibold">Dukung di sini</Link></p>
         <div className="block mt-8 font-mono text-slate-500">
           {/* Deliberately styled as plain text — cursor-default so it doesn't
               advertise itself, select-none so rapid taps don't raise the mobile
