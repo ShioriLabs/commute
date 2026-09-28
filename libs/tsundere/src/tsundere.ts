@@ -10,6 +10,7 @@ import {
 import {
   buildGraph,
   findRoute,
+  type FindRouteOptions,
   type EdgeInput,
   type ServiceBreak,
   type RouteGraph,
@@ -121,8 +122,8 @@ export class Tsundere {
    * `findRoutes`, plural, rather than replacing this: this one is the oracle the
    * new engine gets diffed against, so it has to stay callable.
    */
-  findRoute(fromStationId: string, toStationId: string): RouteLeg[] | null {
-    return findRoute(this.#graph, fromStationId, toStationId)
+  findRoute(fromStationId: string, toStationId: string, options?: FindRouteOptions): RouteLeg[] | null {
+    return findRoute(this.#graph, fromStationId, toStationId, options)
   }
 
   /**

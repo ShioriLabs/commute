@@ -230,7 +230,18 @@ export function buildGraph(
   return { adjacency, serviceBreaks: breakSet }
 }
 
-export function findRoute(graph: RouteGraph, fromStationId: string, toStationId: string): RouteLeg[] | null {
+/*
+ * `excludeLines` drops those lines' ride edges from the search outright, which
+ * is exactly the answer the graph gave before they were loaded. Unlike
+ * findRoutes' boarding-only exclusion there is no ride "already under way" to
+ * spare: this search has no notion of the rider's first boarding.
+ */
+export interface FindRouteOptions {
+  excludeLines?: ReadonlySet<string>
+}
+
+export function findRoute(graph: RouteGraph, fromStationId: string, toStationId: string, options: FindRouteOptions = {}): RouteLeg[] | null {
+  const { excludeLines } = options
   const { adjacency } = graph
   if (!adjacency.has(fromStationId) || !adjacency.has(toStationId)) return null
 
@@ -286,6 +297,7 @@ export function findRoute(graph: RouteGraph, fromStationId: string, toStationId:
      */
     const incomingLine = prev.get(current)?.edge.lineCode ?? null
     for (const edge of adjacency.get(current) ?? []) {
+      if (edge.lineCode !== null && excludeLines?.has(edge.lineCode)) continue
       let penalty = 0
       if (edge.lineCode === null) {
         penalty = TRANSFER_PENALTY_M

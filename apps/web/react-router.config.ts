@@ -18,6 +18,7 @@ export default {
         '/settings/legal/data-attributions',
         '/settings/legal/oss-attributions',
         '/settings/legal/creative-assets-attributions',
-        '/settings/about'
+        '/settings/about',
+        '/settings/support'
       ]
 } satisfies Config

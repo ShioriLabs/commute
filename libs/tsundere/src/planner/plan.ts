@@ -86,6 +86,19 @@ export interface PlanOptions {
    * out of composing into `canBoard` rather than being special-cased.
    */
   excludeLines?: ReadonlySet<string>
+  /**
+   * Stations that count as the same PLACE as the origin or destination, e.g.
+   * the LRT and TransJakarta Rasuna Said stops stacked on one another, or the
+   * two sides of an "Arah" halte. Each includes the named station itself;
+   * omitted means just that one station.
+   *
+   * A journey may start boarding at any origin member and is finished the
+   * moment it reaches any target member — it never walks on to the one that
+   * was named, because the rider is already there. Which stations are one place
+   * is the caller's curation; the engine only reads the sets.
+   */
+  originIds?: ReadonlySet<string>
+  targetIds?: ReadonlySet<string>
   scoreFare?: FareScorer
   /**
    * Counters describing what the search did. See PlanInstrument.
@@ -251,9 +264,12 @@ export function plan(
     scoreFare,
     instrument
   } = options
+  const originIds = [...(options.originIds ?? [fromStationId])]
+  const targetIds = options.targetIds ?? new Set([toStationId])
 
   const { adjacency, serviceBreaks } = graph
-  if (!adjacency.has(fromStationId) || !adjacency.has(toStationId)) return []
+  const origins = originIds.filter(id => adjacency.has(id))
+  if (origins.length === 0 || ![...targetIds].some(id => adjacency.has(id))) return []
 
   /*
    * Can a rider BOARD this line at this moment?
@@ -303,7 +319,7 @@ export function plan(
     incomingLine: null,
     trace: null
   }
-  getBag(fromStationId, 0).insert(origin)
+  for (const id of origins) getBag(id, 0).insert(origin)
 
   // The one bag that is a result set rather than a state: the journey is over,
   // so the line the rider arrived on decides nothing further and two labels here
@@ -326,7 +342,7 @@ export function plan(
    * writing the same round's bag while iterating is why this is a worklist and
    * not a for-loop over a frontier set.
    */
-  let frontier: string[] = [fromStationId]
+  let frontier: string[] = origins
 
   for (let round = 0; round <= maxRounds && frontier.length > 0; round++) {
     if (instrument && round > instrument.roundsUsed) instrument.roundsUsed = round
@@ -442,7 +458,7 @@ export function plan(
             trace: { hop: { from: stop, to: edge.to, edge, breaksService: brokenTurn }, previous: label.trace }
           }
 
-          if (edge.to === toStationId) {
+          if (targetIds.has(edge.to)) {
             if (instrument) instrument.destinationInserts++
             destinationBag.insert(next)
             if (criteria.boardings < bestCompletedBoardings) bestCompletedBoardings = criteria.boardings

@@ -34,7 +34,7 @@ const OUTPUT_SQL_PATH = path.resolve(__dirname, '../../db/scripts/kci_basoetta_t
  * Re-grab it from DevTools > Network > train-schedule > Request Headers >
  * next-action.
  */
-const NEXT_ACTION = '60d62eb3c0832dc3737b081fa312549ac7c295df27'
+const NEXT_ACTION = '60d731219d2a2fa7de70494d4a721b4eff2eaf3457'
 
 /*
  * The API matches on these name strings as well as the station code, and a

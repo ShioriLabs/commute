@@ -1,6 +1,7 @@
 import { Operator } from '@commute/constants'
 import { LineTopology } from 'db/data/topology'
 import { getLineGraph } from 'utils/directions'
+import { chainHops, stopLists } from 'utils/edgeChain'
 import { findTopology } from 'utils/topology'
 
 // Mid-loop service termini. Cikarang-loop trains terminate at Kampung Bandan
@@ -38,6 +39,25 @@ function buildTrunkSpine(topology: LineTopology): string[] {
   return spine
 }
 
+// Stops a train runs through without calling, keyed by the bridged hop
+// `from>to` (see Stop.serves). The line graph still joins such a stop to both
+// neighbours, so a leg that skipped it would otherwise find it as a second way
+// forward and give up at a phantom fork.
+const bridgedStopsCache = new Map<string, Map<string, string[]>>()
+function bridgedStops(lineKey: string, topology: LineTopology): Map<string, string[]> {
+  let bridged = bridgedStopsCache.get(lineKey)
+  if (!bridged) {
+    bridged = new Map()
+    if (!topology.pathReverse) {
+      for (const hop of stopLists(topology).flatMap(chainHops)) {
+        if (hop.via.length > 0) bridged.set(`${hop.from.station}>${hop.to.station}`, hop.via.map(stop => stop.station))
+      }
+    }
+    bridgedStopsCache.set(lineKey, bridged)
+  }
+  return bridged
+}
+
 // The terminus a leg's train heads toward, found by extending the leg's
 // travel direction along the line graph until the line ends or a mid-loop
 // service terminus is reached. Null when no single direction can be resolved:
@@ -65,6 +85,10 @@ export function computeHeadsignCode(
   )
   const spine = buildTrunkSpine(topology)
   const visited = new Set(stationCodes)
+  const bridged = bridgedStops(lineKey, topology)
+  for (let i = 1; i < stationCodes.length; i++) {
+    for (const code of bridged.get(`${stationCodes[i - 1]}>${stationCodes[i]}`) ?? []) visited.add(code)
+  }
 
   const finish = (code: string): Headsign => {
     // Boarding inside the loop already fixes the side; no via needed.

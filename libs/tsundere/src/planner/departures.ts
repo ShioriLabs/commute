@@ -133,6 +133,13 @@ export interface ResolveDeparturesOptions {
    * engine where it means a SPEED rather than a ranking — see WALK_PACE_MS.
    */
   walking?: WalkingPreference
+  /**
+   * Lines behind their own fare gates at stations they share with other lines.
+   * A change onto or off one of them at the same station crosses a gate line
+   * even though no transfer leg is walked, so it takes the gated allowance.
+   * Line codes only, like every other line set the engine takes.
+   */
+  gatedLines?: ReadonlySet<string>
 }
 
 /*
@@ -183,7 +190,7 @@ const alightTimeOf = (trip: Trip, index: number) =>
 export function resolveDepartures(
   legs: readonly RouteLeg[],
   trips: TripIndex,
-  { departureS, dayMask, walking = 'AVERAGE' }: ResolveDeparturesOptions
+  { departureS, dayMask, walking = 'AVERAGE', gatedLines }: ResolveDeparturesOptions
 ): (LegTiming | null)[] {
   const timings: (LegTiming | null)[] = []
   let clockS: number | null = departureS
@@ -194,6 +201,7 @@ export function resolveDepartures(
    * costs no change time — the rider is already standing on the platform.
    */
   let rodePrevious = false
+  let previousLine: string | null = null
 
   for (const leg of legs) {
     if (leg.type === 'TRANSFER') {
@@ -213,6 +221,10 @@ export function resolveDepartures(
       continue
     }
 
+    const crossesGate = rodePrevious && previousLine !== null
+      && (gatedLines?.has(previousLine) ?? false) !== (gatedLines?.has(leg.lineCode) ?? false)
+    previousLine = leg.lineCode
+
     if (clockS === null) {
       timings.push(null)
       continue
@@ -226,7 +238,7 @@ export function resolveDepartures(
      * charged, and without it the rider "catches" a train leaving the instant
      * they step off the last one.
      */
-    if (rodePrevious) clockS += changeSecondsAt(paceMs, false)
+    if (rodePrevious) clockS += changeSecondsAt(paceMs, crossesGate)
 
     /*
      * Only patterns on this leg's own line. A pattern that happens to serve the

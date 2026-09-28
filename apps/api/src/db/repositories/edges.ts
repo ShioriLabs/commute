@@ -9,10 +9,11 @@ import { Repository } from 'models/repository'
  * in the topology — their haltes are already hidden (searchable=0), but their
  * edges would otherwise pollute routing, letting a one-seat BRT ride fragment
  * across overlapping feeder corridors (e.g. Blok M→Kota splitting into 1+1A+3H).
- * The premium-fare Soekarno-Hatta line A is in TOPOLOGY but never routed in v1,
- * so it's excluded here too.
+ * The premium-fare Soekarno-Hatta line A is loaded like any other line and
+ * excluded per request instead, since it is only offered for airport journeys
+ * (utils/airport.ts).
  */
-const ROUTABLE_LINE_CODES = [...new Set(TOPOLOGY.map(t => t.lineCode))].filter(code => code !== 'A')
+const ROUTABLE_LINE_CODES = [...new Set(TOPOLOGY.map(t => t.lineCode))]
 
 export class EdgeRepository extends Repository {
   private d1: D1Database

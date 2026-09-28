@@ -157,14 +157,24 @@ function lowercasedKeywords(values: (string | null | undefined)[]): string[] {
  * another operator is never merged in. Input order is preserved by the position
  * of each group's first-seen member.
  */
+/*
+ * The fold key: operator + base name for an "Arah" halte, the station's own id
+ * otherwise. Exported so routing (utils/places.ts) treats exactly the pairs
+ * search folds as one place — the two must never disagree about which stops
+ * are one halte.
+ */
+export function directionalGroupKey(station: { id: string, operator: string, officialName: string }): string {
+  return ARAH_SUFFIX.test(station.officialName)
+    ? `${station.operator}:${directionalBaseName(station.officialName)}`
+    : `id:${station.id}`
+}
+
 function groupDirectionalStations(stations: IndexableStation[]): IndexableStation[][] {
   const groups = new Map<string, IndexableStation[]>()
   const order: string[] = []
 
   for (const station of stations) {
-    const key = ARAH_SUFFIX.test(station.officialName)
-      ? `${station.operator}:${directionalBaseName(station.officialName)}`
-      : `id:${station.id}`
+    const key = directionalGroupKey(station)
 
     let group = groups.get(key)
     if (!group) {

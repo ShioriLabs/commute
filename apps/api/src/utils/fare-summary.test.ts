@@ -20,6 +20,24 @@ describe('summarizeFares', () => {
     expect(s.totalFare).toBe(4000)
   })
 
+  it('a change onto KA Bandara at a shared station is a second paid journey', () => {
+    const s = summarizeFares([ride('KCI', 'B', 'KCI-BOO', 'KCI-MRI', 44000), ride('KCI', 'A', 'KCI-MRI', 'KCI-BST', 36000)], ctx)
+    expect(s.segments.map(x => x.fare)).toEqual([5000, 85000])
+    expect(s.totalFare).toBe(90000)
+    // No walk was taken, so the rider-facing transfer count is unchanged.
+    expect(s.transferCount).toBe(0)
+  })
+
+  it('a change off KA Bandara ends its run too, and consecutive A rides stay one', () => {
+    const s = summarizeFares([
+      ride('KCI', 'A', 'KCI-BST', 'KCI-BPR', 10000),
+      ride('KCI', 'A', 'KCI-BPR', 'KCI-RW', 3000),
+      ride('KCI', 'T', 'KCI-RW', 'KCI-DU', 12000)
+    ], ctx)
+    expect(s.segments).toHaveLength(2)
+    expect(s.segments.map(x => x.fare)).toEqual([40000, 3000])
+  })
+
   it('a walk transfer starts a new fare even within one operator', () => {
     const s = summarizeFares([ride('KCI', 'C', 'KCI-A', 'KCI-B', 10000), walk('KCI-B', 'KCI-C'), ride('KCI', 'T', 'KCI-C', 'KCI-D', 10000)], ctx)
     expect(s.segments).toHaveLength(2)

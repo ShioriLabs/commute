@@ -34,6 +34,14 @@ describe('loadGraph', () => {
     expect(legs!.map(leg => leg.type)).toEqual(['RIDE', 'TRANSFER', 'RIDE'])
   })
 
+  it('routes around excluded lines as if they were never loaded', () => {
+    // A shortcut line A->C, excluded: the answer is the one without it.
+    const withShortcut = [...edges, ...edge('Z', 'KCI-A', 'KCI-C', 100)]
+    const excluded = loadGraph({ edges: withShortcut, transfers }).findRoute('KCI-A', 'MRTJ-Q', { excludeLines: new Set(['Z']) })
+    expect(excluded).toEqual(loadGraph({ edges, transfers }).findRoute('KCI-A', 'MRTJ-Q'))
+    expect(loadGraph({ edges: withShortcut, transfers }).findRoute('KCI-A', 'MRTJ-Q')![0]).toMatchObject({ lineCode: 'Z' })
+  })
+
   it('returns null for an unreachable pair, like the free function', () => {
     const tsun = loadGraph({ edges: edge('X', 'KCI-A', 'KCI-B'), transfers: [] })
     expect(tsun.findRoute('KCI-A', 'KCI-ZZZ')).toBeNull()

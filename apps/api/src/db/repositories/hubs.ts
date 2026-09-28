@@ -89,6 +89,28 @@ export class HubRepository extends Repository {
     return assembled
   }
 
+  /*
+   * Member station ids of every `integrated` hub, grouped by hub. Those are the
+   * hubs that are one place to a rider (utils/places.ts); a `hub`-kind complex
+   * like Dukuh Atas is several places and is deliberately left out.
+   */
+  async getIntegratedMemberIds(): Promise<string[][]> {
+    const rows = await db(this.d1)
+      .selectFrom('hubStations')
+      .innerJoin('hubs', 'hubs.id', 'hubStations.hubId')
+      .select(['hubStations.hubId', 'hubStations.stationId'])
+      .where('hubs.kind', '=', 'integrated')
+      .execute()
+
+    const byHub = new Map<string, string[]>()
+    for (const row of rows) {
+      const members = byHub.get(row.hubId)
+      if (members) members.push(row.stationId)
+      else byHub.set(row.hubId, [row.stationId])
+    }
+    return [...byHub.values()]
+  }
+
   async getBySlug(slug: string) {
     const hub = await db(this.d1)
       .selectFrom('hubs')

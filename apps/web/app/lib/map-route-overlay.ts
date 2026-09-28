@@ -527,8 +527,17 @@ export function buildRouteOverlayModel(
   // would float the arrow off the line it is supposed to mark.
   const snap = (p: { x: number, y: number }) => snapped.get(`${p.x}|${p.y}`) ?? p
 
+  /*
+   * Pins go where the journey actually starts and ends, once it is known. The
+   * API treats stacked stops and "Arah" halte pairs as one place, so a journey
+   * asked for LRT Rasuna Said may end at the TJ halte on top of it — and the pin
+   * belongs on the stop the rider gets off at, not the one they typed. The pair
+   * is the fallback while the fare is still loading, and wherever the journey's
+   * end is not drawn on the schematic.
+   */
+  const legs = fare?.legs ?? []
   const pins: RouteOverlay['pins'] = []
-  const originCentroid = centroid(routePair.fromId)
+  const originCentroid = centroid(legs[0]?.from?.id ?? null) ?? centroid(routePair.fromId)
   // first vs last matters only when a station is served twice in one journey:
   // you board the origin on the FIRST leg to touch it and alight at the
   // destination from the LAST.
@@ -536,7 +545,7 @@ export function buildRouteOverlayModel(
     const origin = snap(originCentroid)
     pins.push({ x: origin.x, y: origin.y, kind: 'origin', color: colorAt(origin.x, origin.y, 'first') })
   }
-  const destinationCentroid = centroid(routePair.toId)
+  const destinationCentroid = centroid(legs[legs.length - 1]?.to?.id ?? null) ?? centroid(routePair.toId)
   if (destinationCentroid) {
     const destination = snap(destinationCentroid)
     pins.push({
