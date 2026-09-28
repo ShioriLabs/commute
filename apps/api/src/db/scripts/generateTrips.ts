@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { readdirSync, writeFileSync } from 'node:fs'
 import { DAY_S } from '@commute/tsundere'
 import { TOPOLOGY } from '../data/topology'
+import { feedTerminusArrivalS, hopRunTimesS, MAX_TERMINUS_HOP_S, signedStation } from './tripTerminus'
 
 /*
  * Trip generator: WHEN each vehicle runs, as opposed to how often one comes.
@@ -37,6 +38,10 @@ import { TOPOLOGY } from '../data/topology'
  *   3. 22% of KCI trips have gaps — a hop between two consecutive rows that no
  *      edge serves, because intermediate stop rows are missing from the feed.
  *      Non-KCI has none: every hop matches an edge with the same lineCode.
+ *
+ *   5. Every feed is a departure board, so a train that terminates at a station
+ *      has no row there, and every trip ends one stop short of its terminus.
+ *      That stop is appended back after validation; see "terminus" below.
  *
  *   4. LRTJ cannot chain at all. Its tripNumber is a per-station synthetic key
  *      (`${stationId}-${time}-PGD-BOUND`), so a "trip" there is one row — a
@@ -222,6 +227,11 @@ for (const row of rows) {
 }
 
 const trips: Trip[] = []
+/*
+ * KCI's terminus arrival per trip (trap 1), kept aside for the terminus pass.
+ * Null where the rows of one trip disagree, which would make it a guess.
+ */
+const feedArrivals = new Map<Trip, string | null>()
 const rejects: Reject[] = []
 let wrapsRepaired = 0
 let trimmedStops = 0
@@ -319,7 +329,59 @@ for (const group of grouped.values()) {
     continue
   }
 
-  trips.push({ tripNumber, lineCode, dayMask, boundFor: first.boundFor, stops })
+  const trip: Trip = { tripNumber, lineCode, dayMask, boundFor: first.boundFor, stops }
+  trips.push(trip)
+  const arrivals = new Set(trimmed.map(r => r.estimatedArrival))
+  feedArrivals.set(trip, arrivals.size === 1 ? first.estimatedArrival : null)
+}
+
+// ── terminus ─────────────────────────────────────────────────────────────────
+
+/*
+ * Put back the stop every trip is missing: the one it terminates at (trap 5).
+ *
+ * Without it a rider travelling TO Bogor, Jakarta Kota or Lebak Bulus finds no
+ * trip that reaches the stop and gets no times at all, while the same ride the
+ * other way is timed. The terminus is the station the headsign names, and only
+ * when it is exactly one edge past the last row: a short-turn train whose
+ * named terminus is further on is left as it is rather than extended by guess.
+ *
+ * The arrival comes from the feed where it has one (KCI repeats the terminus
+ * arrival on every row) and is otherwise INFERRED from the same hop run the
+ * other way (MRTJ, LRT Jabodebek). The report counts the two separately.
+ */
+const stationsByLine = new Map<string, { id: string, name: string }[]>()
+for (const row of query<{ lineCode: string, id: string, name: string }>(
+  'SELECT sl.lineCode, st.id, st.name FROM stationLines sl JOIN stations st ON st.id = sl.stationId'
+)) {
+  const bucket = stationsByLine.get(row.lineCode)
+  if (bucket) bucket.push(row)
+  else stationsByLine.set(row.lineCode, [row])
+}
+const runTimesS = hopRunTimesS(trips)
+const terminusAppended = new Map<string, number>()
+for (const trip of trips) {
+  const last = trip.stops[trip.stops.length - 1]!
+  const terminus = signedStation(trip.boundFor, stationsByLine.get(trip.lineCode) ?? [])
+  if (!terminus || terminus === last.stationId || !hasEdge(trip.lineCode, last.stationId, terminus)) continue
+
+  const operator = operatorOf(last.stationId)
+  const inferred = PER_STOP_ARRIVAL_OPERATORS.has(operator)
+  let arrivalS: number | null = null
+  if (inferred) {
+    const runS = runTimesS.get(`${trip.lineCode}|${terminus}|${last.stationId}`)
+    if (runS !== undefined && runS > 0 && runS <= MAX_TERMINUS_HOP_S) arrivalS = last.departureS + runS
+  } else {
+    const raw = feedArrivals.get(trip)
+    if (raw) arrivalS = feedTerminusArrivalS(last.departureS, raw)
+  }
+  if (arrivalS === null) continue
+
+  // A terminus is arrived at, never departed from; the departure slot carries
+  // the arrival so the trip stays one time per stop, as the index requires.
+  trip.stops.push({ stationId: terminus, departureS: arrivalS, arrivalS: inferred ? arrivalS : null })
+  const key = `${operator} ${inferred ? 'inferred' : 'feed'}`
+  terminusAppended.set(key, (terminusAppended.get(key) ?? 0) + 1)
 }
 
 // ── patterns ─────────────────────────────────────────────────────────────────
@@ -369,6 +431,9 @@ for (const operator of operators) {
 console.log(`\n  total kept ${trips.length}, rejected ${rejects.length}, patterns ${patterns.size}`)
 console.log(`  midnight wraps repaired: ${wrapsRepaired}`)
 console.log(`  retired stops trimmed:   ${trimmedStops}`)
+
+console.log('\nterminus stops appended:')
+for (const [key, count] of [...terminusAppended].sort()) console.log(`  ${key.padEnd(22)} ${String(count).padStart(5)}`)
 
 console.log('\nrejections by reason:')
 for (const [reason, count] of [...countBy(rejects, r => r.reason)].sort((a, b) => b[1] - a[1])) {
