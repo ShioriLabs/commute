@@ -407,6 +407,8 @@ export function JourneyCardFace({ journey, onSelect }: {
   const firstRide = journey.legs.find(leg => leg.type === 'RIDE')
   const headsign = firstRide?.type === 'RIDE' ? firstRide.headsign : null
   const walkM = walkDistanceOf(journey)
+  const fareText = journey.totalFare !== null ? formatRupiah(journey.totalFare) : null
+  const fareLeads = !duration && fareText !== null
   const segments = routeBarSegments(journey.legs, leg => legLines(leg))
 
   const body = (
@@ -446,13 +448,13 @@ export function JourneyCardFace({ journey, onSelect }: {
         * it is the one JR East sets largest. It exists only on a fully timed
         * journey though — formatDuration is arithmetic on two PUBLISHED times,
         * and no TransJakarta journey has them — so the untimed variant is a
-        * defined layout rather than a blank first line: the transfer count
-        * takes the slot, since on an untimed row that is what separates two
-        * otherwise identical shapes.
+        * defined layout rather than a blank first line: the fare moves up into
+        * the slot. The transfer count only takes it when the fare is unknown
+        * too, since the meta row below already carries that figure.
         */}
       <div className="mt-3 flex items-baseline justify-between gap-2">
         <span className="figure text-xl font-bold tracking-tight shrink-0 tabular-nums">
-          {duration ?? `transit ${journey.transferCount}x`}
+          {duration ?? fareText ?? `transit ${journey.transferCount}x`}
         </span>
         {boardsAt
           ? (
@@ -480,18 +482,26 @@ export function JourneyCardFace({ journey, onSelect }: {
         * Still capped at two by sortJourneyLabels: a row wearing four reasons
         * is making none of them.
         */}
-      <div className="mt-1 flex items-baseline justify-between gap-2">
-        <span className="figure text-sm font-bold text-slate-700 shrink-0">
-          {journey.totalFare !== null ? formatRupiah(journey.totalFare) : 'Tarif tidak tersedia'}
-        </span>
-        {labels.length > 0
-          ? (
-              <span className="text-xs font-bold text-rose-700 truncate min-w-0 text-right">
-                { labels.map(label => JOURNEY_LABELS[label]).join(' · ') }
-              </span>
-            )
-          : null}
-      </div>
+      {fareLeads && labels.length === 0
+        ? null
+        : (
+            <div className="mt-1 flex items-baseline justify-between gap-2">
+              {fareLeads
+                ? null
+                : (
+                    <span className="figure text-sm font-bold text-slate-700 shrink-0">
+                      { fareText ?? 'Tarif tidak tersedia' }
+                    </span>
+                  )}
+              {labels.length > 0
+                ? (
+                    <span className="ml-auto text-xs font-bold text-rose-700 truncate min-w-0 text-right">
+                      { labels.map(label => JOURNEY_LABELS[label]).join(' · ') }
+                    </span>
+                  )
+                : null}
+            </div>
+          )}
 
       {/*
         * Counts, not a sentence. "13,5 km • 2x transit • jalan 460 m" reads as
