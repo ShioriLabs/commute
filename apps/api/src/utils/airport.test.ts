@@ -16,6 +16,11 @@ describe('airportExclusion', () => {
     expect([...airportExclusion('KCI-MRI', 'KCI-DU')]).toEqual(['A'])
   })
 
+  it('counts any member of a place as the airport', () => {
+    expect(airportExclusion(new Set(['KCI-MRI', 'TJ-X']), new Set(['KCI-SUDB'])).size).toBe(1)
+    expect(airportExclusion(new Set(['KCI-MRI']), new Set(['KCI-BST', 'APCGK-SHIA'])).size).toBe(0)
+  })
+
   it('merges with an exclusion the rider already asked for', () => {
     expect([...withAirportExclusion('KCI-MRI', 'KCI-DU', new Set(['1']))].sort()).toEqual(['1', 'A'])
     expect([...withAirportExclusion('KCI-MRI', 'KCI-BST', new Set(['1']))]).toEqual(['1'])

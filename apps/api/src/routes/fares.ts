@@ -168,7 +168,12 @@ export function nextServiceAt(
    * different question than the one that came back empty — promising a 05:00
    * reopening on a corridor the rider has just said they will not board.
    */
-  excludeLines?: ReadonlySet<string>
+  excludeLines?: ReadonlySet<string>,
+  /*
+   * The same place-equivalent endpoints the search used (utils/places.ts), for
+   * the same reason as `excludeLines`.
+   */
+  endpoints?: { originIds: ReadonlySet<string>, targetIds: ReadonlySet<string> }
 ): { departureS: number, at: Date } | null {
   const day = serviceDay(context.departureAt)
   const from = secondsSinceLocalMidnight(context.departureAt)
@@ -179,7 +184,8 @@ export function nextServiceAt(
       departureS,
       serviceHours: serviceHoursMap(day),
       headwaysS: headwaysFor(day),
-      excludeLines
+      excludeLines,
+      ...endpoints
     })
     if (found.length > 0) {
       // Same calendar day, at the opening — the caller renders it in WIB.

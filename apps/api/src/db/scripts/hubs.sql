@@ -61,3 +61,59 @@ INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, u
 INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-MRI:LRTJ-MGI', 'HUB-MRI', 'LRTJ-MGI', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-MRI:TJ-H00272P', 'HUB-MRI', 'TJ-H00272P', 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-MRI:TJ-H00271P', 'HUB-MRI', 'TJ-H00271P', 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- ── Integrated hubs ─────────────────────────────────────────────────────────
+-- kind='integrated': one place to a rider, split across operators only in the
+-- data. Unlike the `hub` complexes above, ROUTING reads these: a journey to any
+-- member has arrived at all of them, and one from any member may board at any
+-- of them (apps/api/src/utils/places.ts). So a membership change moves routes,
+-- and needs an API_VERSION bump to clear cached trips. Arah halte pairs are
+-- joined by routing on their own; both sides are listed here for the hub page.
+-- HUB-BST (KA Bandara + Kalayang) is seeded in apcgk_stations_insert.sql.
+
+-- HUB-RAS — Rasuna Said: LRT Jabodebek station and BRT halte stacked on one another (80m of stairs).
+INSERT OR REPLACE INTO hubs (id, slug, name, kind, description, heroImage, latitude, longitude, score, createdAt, updatedAt) VALUES ('HUB-RAS', 'rasuna-said', 'Rasuna Said', 'integrated', NULL, NULL, -6.2216, 106.8322, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-RAS:LRTJBDB-RAS', 'HUB-RAS', 'LRTJBDB-RAS', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-RAS:TJ-H00069P', 'HUB-RAS', 'TJ-H00069P', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- HUB-KUA — Kuningan: stacked LRT station and BRT halte (80m).
+INSERT OR REPLACE INTO hubs (id, slug, name, kind, description, heroImage, latitude, longitude, score, createdAt, updatedAt) VALUES ('HUB-KUA', 'kuningan', 'Kuningan', 'integrated', NULL, NULL, -6.2287, 106.8332, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-KUA:LRTJBDB-KUA', 'HUB-KUA', 'LRTJBDB-KUA', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-KUA:TJ-H00043P', 'HUB-KUA', 'TJ-H00043P', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- HUB-SET — Setiabudi: stacked LRT station and Setiabudi Integritas halte (80m).
+INSERT OR REPLACE INTO hubs (id, slug, name, kind, description, heroImage, latitude, longitude, score, createdAt, updatedAt) VALUES ('HUB-SET', 'setiabudi', 'Setiabudi', 'integrated', NULL, NULL, -6.2092, 106.8302, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-SET:LRTJBDB-SET', 'HUB-SET', 'LRTJBDB-SET', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-SET:TJ-H00215P', 'HUB-SET', 'TJ-H00215P', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- HUB-PAN — Pancoran: LRT station over both Arah sides of the BRT halte (70m).
+INSERT OR REPLACE INTO hubs (id, slug, name, kind, description, heroImage, latitude, longitude, score, createdAt, updatedAt) VALUES ('HUB-PAN', 'pancoran', 'Pancoran', 'integrated', NULL, NULL, -6.2417, 106.8379, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-PAN:LRTJBDB-PAN', 'HUB-PAN', 'LRTJBDB-PAN', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-PAN:TJ-H00198S', 'HUB-PAN', 'TJ-H00198S', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-PAN:TJ-H00203S', 'HUB-PAN', 'TJ-H00203S', 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- HUB-CIL — Ciliwung: LRT station over both Arah sides of the BRT halte (70m).
+INSERT OR REPLACE INTO hubs (id, slug, name, kind, description, heroImage, latitude, longitude, score, createdAt, updatedAt) VALUES ('HUB-CIL', 'ciliwung', 'Ciliwung', 'integrated', NULL, NULL, -6.2432, 106.8636, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-CIL:LRTJBDB-CIL', 'HUB-CIL', 'LRTJBDB-CIL', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-CIL:TJ-H00062S', 'HUB-CIL', 'TJ-H00062S', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-CIL:TJ-H00061S', 'HUB-CIL', 'TJ-H00061S', 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- HUB-JAKK — Jakarta Kota: KRL terminus and Kota BRT halte (50m).
+INSERT OR REPLACE INTO hubs (id, slug, name, kind, description, heroImage, latitude, longitude, score, createdAt, updatedAt) VALUES ('HUB-JAKK', 'jakarta-kota', 'Jakarta Kota', 'integrated', NULL, NULL, -6.1371, 106.8148, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-JAKK:KCI-JAKK', 'HUB-JAKK', 'KCI-JAKK', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-JAKK:TJ-H00275P', 'HUB-JAKK', 'TJ-H00275P', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- HUB-JUA — Juanda: KRL station and BRT halte (150m).
+INSERT OR REPLACE INTO hubs (id, slug, name, kind, description, heroImage, latitude, longitude, score, createdAt, updatedAt) VALUES ('HUB-JUA', 'juanda', 'Juanda', 'integrated', NULL, NULL, -6.1674, 106.8306, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-JUA:KCI-JUA', 'HUB-JUA', 'KCI-JUA', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-JUA:TJ-H00092P', 'HUB-JUA', 'TJ-H00092P', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- HUB-JNG — Jatinegara: KRL station and Stasiun Jatinegara halte (110m).
+INSERT OR REPLACE INTO hubs (id, slug, name, kind, description, heroImage, latitude, longitude, score, createdAt, updatedAt) VALUES ('HUB-JNG', 'jatinegara', 'Jatinegara', 'integrated', NULL, NULL, -6.2153, 106.8691, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-JNG:KCI-JNG', 'HUB-JNG', 'KCI-JNG', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-JNG:TJ-H00225P', 'HUB-JNG', 'TJ-H00225P', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- HUB-TPK — Tanjung Priok: KRL terminus and BRT terminal (110m).
+INSERT OR REPLACE INTO hubs (id, slug, name, kind, description, heroImage, latitude, longitude, score, createdAt, updatedAt) VALUES ('HUB-TPK', 'tanjung-priok', 'Tanjung Priok', 'integrated', NULL, NULL, -6.1102, 106.8816, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-TPK:KCI-TPK', 'HUB-TPK', 'KCI-TPK', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR REPLACE INTO hubStations (id, hubId, stationId, position, createdAt, updatedAt) VALUES ('HUB-TPK:TJ-H00240P', 'HUB-TPK', 'TJ-H00240P', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);

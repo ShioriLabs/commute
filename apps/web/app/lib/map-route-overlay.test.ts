@@ -131,6 +131,19 @@ describe('buildRouteOverlayModel', () => {
     expect(b!.overlay.segments).toHaveLength(1)
   })
 
+  /*
+   * The API treats stacked stops as one place, so a journey asked for LRT
+   * Rasuna Said can end at the TJ halte on top of it. The pin marks where the
+   * rider gets off, not the station they typed.
+   */
+  it('pins the journey’s real ends, not the pair it was asked for', () => {
+    const points = [pt('TJ-AAA', 0, 0), pt('TJ-RAS', 100, 0), pt('LRT-RAS', 100, 40)]
+    const journey = { legs: [rideLeg(['TJ-AAA', 'TJ-RAS'], '#FF0000')] }
+    const model = buildRouteOverlayModel(journey, pair('TJ-AAA', 'LRT-RAS'), points, resolveLine)
+    const ends = model!.overlay.pins.filter(p => p.kind !== 'stop')
+    expect(ends.find(p => p.kind === 'destination')).toMatchObject({ x: 100, y: 0 })
+  })
+
   it('turns a ride leg into solid segments through stop centroids', () => {
     const points = [pt('KCI-AAA', 0, 0), pt('KCI-MID', 100, 0), pt('KCI-BBB', 200, 0)]
     const fare = fareResult([rideLeg(['KCI-AAA', 'KCI-MID', 'KCI-BBB'], '#FF0000')], 'KCI-AAA', 'KCI-BBB')

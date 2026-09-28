@@ -17,8 +17,16 @@ function touchesAirport(stationId: string): boolean {
   return stationId === AIRPORT_STATION_ID || stationId.startsWith(`${OPERATORS.APCGK.code}-`)
 }
 
-export function airportExclusion(fromId: string, toId: string): ReadonlySet<string> {
-  return touchesAirport(fromId) || touchesAirport(toId) ? new Set() : AIRPORT_LINES
+/*
+ * Endpoints are a station id or a whole place (utils/places.ts): Kalayang's
+ * SHIA stop and KCI-BST are one integrated place, and any member counts.
+ */
+type Endpoint = string | ReadonlySet<string>
+const anyTouchesAirport = (endpoint: Endpoint) =>
+  typeof endpoint === 'string' ? touchesAirport(endpoint) : [...endpoint].some(touchesAirport)
+
+export function airportExclusion(from: Endpoint, to: Endpoint): ReadonlySet<string> {
+  return anyTouchesAirport(from) || anyTouchesAirport(to) ? new Set() : AIRPORT_LINES
 }
 
 /*
@@ -35,8 +43,8 @@ export function ridesAirportPairsOnly(legs: readonly RouteLeg[]): boolean {
 }
 
 /** Both exclusions as one set, for callers that already exclude something. */
-export function withAirportExclusion(fromId: string, toId: string, excluded?: ReadonlySet<string>): ReadonlySet<string> {
-  const airport = airportExclusion(fromId, toId)
+export function withAirportExclusion(from: Endpoint, to: Endpoint, excluded?: ReadonlySet<string>): ReadonlySet<string> {
+  const airport = airportExclusion(from, to)
   if (!excluded || excluded.size === 0) return airport
   if (airport.size === 0) return excluded
   return new Set([...excluded, ...airport])
