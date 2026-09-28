@@ -67,4 +67,4 @@ export { clockOf, type LegTiming, type ResolveDeparturesOptions } from './planne
  * Graph inputs. Structural by design — apps/api passes Kysely rows straight in,
  * so these must never grow a field a database row would not have.
  */
-export type { EdgeInput, ServiceBreak, TransferInput } from './router'
+export type { EdgeInput, FindRouteOptions, ServiceBreak, TransferInput } from './router'

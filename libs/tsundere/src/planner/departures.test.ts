@@ -135,6 +135,29 @@ describe('resolveDepartures', () => {
      * Boarding the first vehicle is not a change — the rider is already on the
      * platform — so the allowance must not be charged before it.
      */
+    /*
+     * A line behind its own gates (KA Bandara at Manggarai) shares the node but
+     * not the paid zone: stepping off one onto the other crosses the gate line,
+     * so it takes the gated allowance (250m, ~3.5 min at AVERAGE), not 100m.
+     */
+    it('charges the gate line on a change onto a separately gated line', () => {
+      const gated: TripPattern = {
+        lineCode: 'G',
+        stationIds: ['MRTJ-FTM', 'KCI-Y'],
+        trips: [
+          // 06:09 arrival + 84s paid-zone change makes this; + 209s gated does not.
+          { id: 'g-close', dayMask: ALL_DAYS, departuresS: [at(6, 11), at(6, 20)] },
+          { id: 'g-later', dayMask: ALL_DAYS, departuresS: [at(6, 30), at(6, 40)] }
+        ]
+      }
+      const legs = [ride('M', ['MRTJ-LBB', 'MRTJ-FTM']), ride('G', ['MRTJ-FTM', 'KCI-Y'])]
+      const plain = resolveDepartures(legs, index(mrt, gated), { departureS: at(5), dayMask: ALL_DAYS })
+      const gatedTimings = resolveDepartures(legs, index(mrt, gated), { departureS: at(5), dayMask: ALL_DAYS, gatedLines: new Set(['G']) })
+
+      expect(plain[1]?.tripId).toBe('g-close')
+      expect(gatedTimings[1]?.tripId).toBe('g-later')
+    })
+
     it('does not charge the first boarding', () => {
       const [timing] = resolveDepartures(
         [ride('M', ['MRTJ-LBB', 'MRTJ-FTM'])], index(mrt), { departureS: at(6), dayMask: ALL_DAYS }

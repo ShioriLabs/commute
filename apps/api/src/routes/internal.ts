@@ -12,6 +12,7 @@ import { assembleJourney, planJourney } from 'utils/fare-journey'
 import { handleJourneyRequest, journeyCacheKey } from 'utils/journey-endpoint'
 import { retimeTrips } from 'utils/journey-times'
 import { summarizeFares } from 'utils/fare-summary'
+import { ridesAirportPairsOnly, withAirportExclusion } from 'utils/airport'
 import { mergeInterlinedLegs } from 'utils/interlining'
 import { Ok } from 'utils/response'
 import { buildSearchableIndex } from 'utils/searchables'
@@ -106,9 +107,12 @@ export const tripCacheKey = (fromId: string, toId: string, context: FareContext,
  * Anything unrecognised means no exclusion, matching how parseFareContext
  * treats a malformed value: a query param the rider did not knowingly set must
  * not silently shrink their network.
+ *
+ * KA Bandara is folded in on top, for every request: it is only offered when
+ * the journey touches the airport (utils/airport.ts).
  */
-function excludedLines(modesRaw?: string): ReadonlySet<string> | undefined {
-  return modesRaw === 'rail' ? linesOf('TJ') : undefined
+function excludedLines(modesRaw: string | undefined, fromId: string, toId: string): ReadonlySet<string> {
+  return withAirportExclusion(fromId, toId, modesRaw === 'rail' ? linesOf('TJ') : undefined)
 }
 
 const WALKING_PREFERENCES: ReadonlySet<string> = new Set(['BRISK', 'AVERAGE', 'SLOW', 'AVOID'])
@@ -196,7 +200,7 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
        * Lines the rider will not board. Boarding-only, so a walk between two
        * haltes is still offered and a ride already under way is never cut.
        */
-      excludeLines: excludedLines(c.req.query('modes')),
+      excludeLines: excludedLines(c.req.query('modes'), fromId, toId),
       /*
        * Reorders the front; never prunes it. A rider who avoids walking still
        * gets the footbridge route offered, just ranked below the alternatives.
@@ -212,7 +216,7 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
        * over the same decomposition. Scoring raw legs would let them disagree.
        */
       scoreFare: legs => summarizeFares(mergeInterlinedLegs([...legs]), context).totalFare
-    }))
+    }).filter(journey => ridesAirportPairsOnly(journey.legs)))
     /*
      * findRoutes reports "no route" as an empty front, where findRoute returns
      * null. An empty front has two very different causes, and the rider needs
@@ -224,7 +228,7 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
      * so the probe sits behind both conditions rather than on the hot path.
      */
     if (routed.length === 0) {
-      const reopening = timing.measureSync('reopen', () => nextServiceAt(router, fromId, toId, context, excludedLines(c.req.query('modes'))))
+      const reopening = timing.measureSync('reopen', () => nextServiceAt(router, fromId, toId, context, excludedLines(c.req.query('modes'), fromId, toId)))
       if (!reopening) return null
       return {
         outcome: 'CLOSED' as const,

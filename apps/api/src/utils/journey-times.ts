@@ -16,10 +16,13 @@ import type { LegTiming, RouteLeg, Tsundere, WalkingPreference } from '@commute/
 import type { FareJourney, FareResultLeg, TripResult } from '@commute/schemas'
 import { atSecondsOfDay, serviceDay, secondsSinceLocalMidnight, wibIsoString } from 'utils/fare'
 import { DAY_MASK } from 'db/schemas/schedules'
-import type { FareContext } from '@commute/constants'
+import { SEPARATELY_GATED_LINES, type FareContext } from '@commute/constants'
 
 /** The 3-bit mask the trips carry, for the day the rider is travelling. */
 const dayMaskFor = (at: Date): number => DAY_MASK[serviceDay(at)]
+
+// The engine keys lines by bare code; SEPARATELY_GATED_LINES is `operator:code`.
+const GATED_LINE_CODES: ReadonlySet<string> = new Set([...SEPARATELY_GATED_LINES].map(key => key.split(':')[1]!))
 
 /*
  * The wire leg, back in the shape the engine's resolver understands.
@@ -76,6 +79,7 @@ function timeOnce(
   const timings = router.timeJourney(routeLegs, {
     departureS: afterS,
     dayMask: dayMaskFor(context.departureAt),
+    gatedLines: GATED_LINE_CODES,
     ...(walking === undefined ? {} : { walking })
   })
   const stamp = (seconds: number) => wibIsoString(atSecondsOfDay(context.departureAt, seconds))

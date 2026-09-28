@@ -27,6 +27,25 @@ describe('KCI progressive fare', () => {
   })
 })
 
+describe('KA Bandara (KCI line A) fare', () => {
+  const airport = (from: string, to: string, lineCode = 'A') =>
+    calculateSegmentFare({ operator: 'KCI', lineCode, distanceM: 30000, fromStationCode: from, toStationCode: to }, ctx)
+
+  it('prices airport pairs from the table, in either direction', () => {
+    expect(airport('MRI', 'BST')).toBe(85000)
+    expect(airport('BST', 'DU')).toBe(70000)
+    expect(airport('BPR', 'BST')).toBe(35000)
+  })
+
+  it('leaves a pair without the airport unpriced', () => {
+    expect(airport('MRI', 'DU')).toBeNull()
+  })
+
+  it('keeps the distance formula for every other KCI line', () => {
+    expect(airport('MRI', 'DU', 'C')).toBe(4000)
+  })
+})
+
 describe('LRTJ flat fare', () => {
   it('is 5000 regardless of distance', () => {
     expect(fare('LRTJ', 12000)).toBe(5000)

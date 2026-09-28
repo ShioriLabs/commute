@@ -51,7 +51,7 @@ function query<T>(sql: string): T[] {
  * matching this one, every number here is measuring a network nobody rides.
  */
 export function loadNetwork() {
-  const routableLineCodes = [...new Set(TOPOLOGY.map(t => t.lineCode))].filter(code => code !== 'A')
+  const routableLineCodes = [...new Set(TOPOLOGY.map(t => t.lineCode))]
   const codes = routableLineCodes.map(code => `'${code}'`).join(',')
   const edges = query<{ lineCode: string, fromStationId: string, toStationId: string, distance: number }>(
     `SELECT lineCode, fromStationId, toStationId, distance FROM edges WHERE lineCode IN (${codes})`

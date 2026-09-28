@@ -9,6 +9,7 @@ import {
   samplePairs,
   stopsOf
 } from './benchShared'
+import { airportExclusion } from 'utils/airport'
 
 /*
  * Measure what the planner RETURNS, over the same sample benchRouter times.
@@ -96,6 +97,8 @@ function runChild(startIndex: number, skip: Set<number>, options: Options): void
     const counters = newInstrument()
     const journeys = router.findRoutes(from, to, {
       instrument: counters,
+      // Line A is loaded but only offered for airport journeys, as in the API.
+      excludeLines: airportExclusion(from, to),
       ...(options.bag !== undefined ? { maxBagSize: options.bag } : {}),
       ...(options.rounds !== undefined ? { maxRounds: options.rounds } : {})
     })

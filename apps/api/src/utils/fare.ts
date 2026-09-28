@@ -1,4 +1,6 @@
 import { FareContext, HOLIDAYS, Operator, OPERATORS, SURCHARGED_CORRIDORS, SurchargedCorridor } from '@commute/constants'
+import { getAirportFare } from 'operators/kci/airportFares'
+import { APT_CGK_LINE } from 'operators/kci/lines'
 import { getMRTJFare } from 'operators/mrtj/fares'
 import { TJ_FLAT_FARE } from 'operators/tj/fares'
 import type { RouteLeg } from '@commute/tsundere'
@@ -7,6 +9,8 @@ import type { RouteLeg } from '@commute/tsundere'
  * Tariff rules per operator. All amounts in rupiah, all distances in metres.
  * Verified against official tariffs 2026-07-06:
  *  - KCI: progressive, 3000 for the first 25 km + 1000 per started 10 km.
+ *    Except line A (KA Bandara): a per-pair table to/from BST
+ *    (operators/kci/airportFares.ts), behind its own gates.
  *  - LRTJ (LRT Jakarta): flat 5000.
  *  - LRTJBDB (LRT Jabodebek, KM 67/2023 jo. KM 70/2024): 5000 for the first
  *    km + 700 per started km, capped. The cap is time-dependent: 20000 at peak
@@ -31,6 +35,7 @@ export const JAKLINGKO_JOURNEY_CAP = 10000
 
 export interface FareSegmentInput {
   operator: Operator
+  lineCode: string
   distanceM: number
   fromStationCode: string
   toStationCode: string
@@ -158,6 +163,9 @@ export function calculateSegmentFare(segment: FareSegmentInput, context: FareCon
   const { operator, distanceM } = segment
   switch (operator) {
     case OPERATORS.KCI.code:
+      if (segment.lineCode === APT_CGK_LINE.lineCode) {
+        return getAirportFare(segment.fromStationCode, segment.toStationCode)
+      }
       return KCI_BASE_FARE + Math.max(0, Math.ceil((distanceM - 25000) / 10000)) * 1000
     case OPERATORS.LRTJ.code:
       return 5000

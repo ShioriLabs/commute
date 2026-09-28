@@ -17,7 +17,7 @@ import { DAY_S } from '@commute/tsundere'
  */
 export const MAX_TERMINUS_HOP_S = 30 * 60
 
-const normalise = (name: string) => name.trim().toLowerCase().replace(/^stasiun\s+/, '')
+const normalise = (name: string) => name.trim().toLowerCase().replace(/^stasiun\s+/, '').replace(/-/g, ' ')
 
 /*
  * The station a train signed `boundFor` is heading to, among a line's
@@ -25,8 +25,10 @@ const normalise = (name: string) => name.trim().toLowerCase().replace(/^stasiun\
  *
  * The feeds and the stations table spell names differently: KCI writes
  * "Bogor" against a station named "BOGOR", MRTJ signs "Lebak Bulus Bank
- * Syariah Indonesia" for "Stasiun Lebak Bulus". Case and a "Stasiun " prefix are
- * dropped, and a sponsor suffix is allowed after a whole word. A suffix looks
+ * Syariah Indonesia" for "Stasiun Lebak Bulus", and the airport line signs
+ * "Bandara Soekarno-Hatta" for "BANDARA SOEKARNO HATTA". Case, a "Stasiun "
+ * prefix and hyphens are dropped, and a sponsor suffix is allowed after a whole
+ * word. A suffix looks
  * just like a longer station name, though — "Bekasi Timur" starts with
  * "Bekasi" — so an exact match wins, then the longest matching name.
  */

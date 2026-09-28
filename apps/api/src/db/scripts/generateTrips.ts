@@ -69,11 +69,11 @@ const WRAP_THRESHOLD_S = 6 * 3600
 
 /*
  * The lineCodes the router may traverse. Mirrors ROUTABLE_LINE_CODES in
- * db/repositories/edges.ts, including the 'A' exclusion — a line scoped into one
- * generator and out of the other carries a timetable the router can never read,
- * which is the drift generateServiceHours.ts already warns about.
+ * db/repositories/edges.ts — a line scoped into one generator and out of the
+ * other carries a timetable the router can never read, which is the drift
+ * generateServiceHours.ts already warns about.
  */
-const ROUTABLE_LINE_CODES = new Set([...new Set(TOPOLOGY.map(t => t.lineCode))].filter(code => code !== 'A'))
+const ROUTABLE_LINE_CODES = new Set(TOPOLOGY.map(t => t.lineCode))
 
 /*
  * Operators whose `estimatedArrival` is a real per-stop arrival.

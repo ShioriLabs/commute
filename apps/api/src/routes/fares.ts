@@ -9,6 +9,7 @@ import { loadGraph, type ServiceWindow, type Tsundere } from '@commute/tsundere'
 import { DAY_HEADWAYS_S, HEADWAYS_S, STOP_HEADWAYS_S } from 'db/data/headways'
 import { SERVICE_HOURS, type ServiceDay } from 'db/data/service-hours'
 import { TRIP_PATTERNS } from 'db/data/trips'
+import { airportExclusion } from 'utils/airport'
 import { secondsSinceLocalMidnight, serviceDay } from 'utils/fare'
 import { doc, pathParam, queryParam } from 'schemas/describe'
 import { FareResultSchema, type FareResult } from '@commute/schemas'
@@ -275,7 +276,12 @@ app.get(
        * utils/fare-journey.ts, so they cannot drift apart in how they render a
        * journey — only in how many they return.
        */
-      const rawLegs = timing.measureSync('route', () => router.findRoute(fromId, toId))
+      // KA Bandara only for airport journeys, same as /_internal/trips; for every
+      // other pair this is the graph the endpoint answered from before line A
+      // was loaded, so its answers do not move.
+      const rawLegs = timing.measureSync('route', () => router.findRoute(fromId, toId, {
+        excludeLines: airportExclusion(fromId, toId)
+      }))
       if (!rawLegs) return null
 
       // No criteria and no labels: findRoute produces neither, and a single

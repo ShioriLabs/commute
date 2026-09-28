@@ -1,4 +1,4 @@
-import { JAKLINGKO_OPERATORS, type FareContext, type Operator } from '@commute/constants'
+import { isSeparatelyGated, JAKLINGKO_OPERATORS, type FareContext, type Operator } from '@commute/constants'
 import { calculateSegmentFare, calculateTransferFare, JAKLINGKO_JOURNEY_CAP } from 'utils/fare'
 import type { RideLeg, RouteLeg } from '@commute/tsundere'
 
@@ -11,7 +11,9 @@ import type { RideLeg, RouteLeg } from '@commute/tsundere'
  * segments. Exception: a `noTap` transfer (e.g. the Simpang Kuningan <->
  * Underpass Kuningan busway underpass) stays inside one paid zone with no gate
  * on either side, so it does NOT end the run — the rides before and after it
- * merge into one priced segment, same as if the walk weren't there.
+ * merge into one priced segment, same as if the walk weren't there. The
+ * opposite exception: a change onto or off a separately gated line (KA Bandara)
+ * at a shared station is a tap even with no walk, so it ends the run.
  */
 export interface FareSegment {
   operator: string
@@ -101,8 +103,12 @@ export function summarizeFares(legs: RouteLeg[], context: FareContext): FareSumm
       }
       continue
     }
-    if (previousWasRide) {
-      runs[runs.length - 1]!.push(leg)
+    const previousRun = runs[runs.length - 1]
+    const previousLeg = previousRun?.[previousRun.length - 1]
+    const crossesGate = previousLeg !== undefined
+      && isSeparatelyGated(previousLeg.operator, previousLeg.lineCode) !== isSeparatelyGated(leg.operator, leg.lineCode)
+    if (previousWasRide && !crossesGate) {
+      previousRun!.push(leg)
     } else {
       runs.push([leg])
     }
@@ -121,6 +127,7 @@ export function summarizeFares(legs: RouteLeg[], context: FareContext): FareSumm
       distanceM,
       fare: calculateSegmentFare({
         operator: first.operator as Operator,
+        lineCode: first.lineCode,
         distanceM,
         fromStationCode: stationCode(fromStationId),
         toStationCode: stationCode(toStationId)

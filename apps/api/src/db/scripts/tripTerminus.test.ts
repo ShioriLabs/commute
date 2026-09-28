@@ -8,7 +8,8 @@ describe('signedStation', () => {
     { id: 'KCI-BKST', name: 'BEKASI TIMUR' },
     { id: 'KCI-BOO', name: 'BOGOR' },
     { id: 'MRTJ-LBB', name: 'Stasiun Lebak Bulus' },
-    { id: 'LRTJBDB-DKA', name: 'Dukuh Atas' }
+    { id: 'LRTJBDB-DKA', name: 'Dukuh Atas' },
+    { id: 'KCI-BST', name: 'BANDARA SOEKARNO HATTA' }
   ]
 
   it('matches KCI headsigns against upper-case station names', () => {
@@ -18,6 +19,10 @@ describe('signedStation', () => {
   it('matches a headsign carrying a sponsor suffix', () => {
     expect(signedStation('Lebak Bulus Bank Syariah Indonesia', line)).toBe('MRTJ-LBB')
     expect(signedStation('Dukuh Atas Bank Syariah Indonesia', line)).toBe('LRTJBDB-DKA')
+  })
+
+  it('matches a hyphenated headsign against a station name spelled with a space', () => {
+    expect(signedStation('Bandara Soekarno-Hatta', line)).toBe('KCI-BST')
   })
 
   it('prefers the exact or longest name when one station name prefixes another', () => {

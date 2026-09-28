@@ -383,6 +383,23 @@ export const SURCHARGED_CORRIDORS: SurchargedCorridor[] = [
   }
 ]
 
+/*
+ * Lines that sit behind their own fare gates even where they share a station
+ * with the rest of their operator's network. KA Bandara (KCI line A) calls at
+ * Manggarai, Sudirman Baru, Duri, Rawa Buaya and Batu Ceper, but a rider coming
+ * off a KRL taps out of the commuter gates and into the airport ones: two paid
+ * journeys, not one KCI distance fare. The router sees one shared node and no
+ * walk, so fare-summary has to be told where the tap happens.
+ *
+ * Keyed `${operator}:${lineCode}` because line codes are only unique per
+ * operator.
+ */
+export const SEPARATELY_GATED_LINES: ReadonlySet<string> = new Set(['KCI:A'])
+
+export function isSeparatelyGated(operator: string, lineCode: string): boolean {
+  return SEPARATELY_GATED_LINES.has(`${operator}:${lineCode}`)
+}
+
 export const CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES = new Set([
   'CKR',
   'TLM',

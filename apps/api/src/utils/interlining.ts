@@ -1,4 +1,4 @@
-import type { Operator } from '@commute/constants'
+import { isSeparatelyGated, type Operator } from '@commute/constants'
 import { TOPOLOGY } from 'db/data/topology'
 import type { RouteLeg } from '@commute/tsundere'
 
@@ -65,6 +65,9 @@ export function mergeInterlinedLegs(legs: RouteLeg[]): RouteLeg[] {
       && last.operator === leg.operator
       && last.lineCode !== leg.lineCode
       && last.toStationId === leg.fromStationId
+      // A gated line is a separate paid journey, never one seat with its neighbour.
+      && !isSeparatelyGated(last.operator, last.lineCode)
+      && !isSeparatelyGated(leg.operator, leg.lineCode)
     ) {
       const combinedIds = [...last.stationIds, ...leg.stationIds.slice(1)]
       const operator = last.operator as Operator
