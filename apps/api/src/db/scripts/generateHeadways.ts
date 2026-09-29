@@ -242,7 +242,11 @@ function topologyPairs(): Set<string> {
   const pairs = new Set<string>()
   for (const line of TOPOLOGY) {
     for (const segment of [line.path, line.pathReverse, ...(line.branches ?? []).map(b => b.path)]) {
-      for (const stop of segment ?? []) pairs.add(stopKey(line.lineCode, `${line.operator}-${stop.station}`))
+      for (const stop of segment ?? []) {
+        // Nothing calls at a pass-through stop, so there is no wait to measure.
+        if (stop.passThrough) continue
+        pairs.add(stopKey(line.lineCode, `${line.operator}-${stop.station}`))
+      }
     }
   }
   return pairs
