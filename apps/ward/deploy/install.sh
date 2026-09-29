@@ -2,6 +2,7 @@
 # Idempotent VPS bootstrap for ward. Run as root from /opt/ward after syncing
 # the app there (see apps/ward/README.md). Safe to re-run on every deploy.
 set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
 
 APP_DIR=/opt/ward
 DATA_DIR=/var/lib/ward
