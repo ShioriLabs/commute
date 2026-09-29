@@ -1,0 +1,28 @@
+{
+  "name": "@commute/ward",
+  "version": "1.0.0",
+  "description": "Unattended collector for the TransJakarta relay feed: hourly snapshots on disk, nightly zstd checkpoints to R2.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "collect": "node src/collect.ts",
+    "checkpoint": "node src/checkpoint.ts",
+    "pull": "node src/pull.ts",
+    "test": "vitest run",
+    "typecheck": "tsc",
+    "lint": "eslint",
+    "lint:fix": "eslint --fix"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1142.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.9"
+  }
+}

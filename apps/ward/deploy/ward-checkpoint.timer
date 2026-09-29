@@ -1,0 +1,12 @@
+[Unit]
+Description=ward: run the checkpoint nightly after WIB midnight
+
+[Timer]
+# 00:30 WIB, so the 23:00 hourly file has been closed for half an hour.
+OnCalendar=*-*-* 00:30:00 Asia/Jakarta
+# A VPS that was off at 00:30 runs it on boot; checkpoint catches up missed days anyway.
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

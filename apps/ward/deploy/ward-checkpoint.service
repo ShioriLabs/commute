@@ -1,0 +1,22 @@
+[Unit]
+Description=ward: nightly zstd checkpoint to R2
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=ward
+Group=ward
+WorkingDirectory=/opt/ward
+EnvironmentFile=/etc/ward.env
+Environment=TZ=Asia/Jakarta
+ExecStart=/usr/bin/node src/checkpoint.ts
+# zstd -19 on one core is slow but it is the middle of the night; keep the
+# collector ahead of it.
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/ward
