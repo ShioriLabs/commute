@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { TOPOLOGY } from './topology'
 import { TJ_STATION_NUMBERS } from './topology.tj.numbers'
+import { chainHops } from '../../utils/edgeChain'
 
 /*
  * Data integrity for the FDTJ "Peta Integrasi Jakarta" 2026-08 import: the
@@ -78,6 +79,15 @@ describe('unbuilt stops', () => {
       'S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07', 'S08', 'S09', 'S10', 'S11'
     ])
     expect(s.path.filter(p => p.unbuilt)).toEqual([])
+  })
+
+  it('runs LRT Jakarta through S08-S10 without severing Rawamangun from Manggarai', () => {
+    // The 17 Sep 2026 timetable marks Pramuka, Matraman and Proklamasi "Ls.".
+    const s = TOPOLOGY.find(l => l.operator === 'LRTJ' && l.lineCode === 'S')!
+    expect(s.path.filter(p => p.passThrough).map(p => p.pos)).toEqual(['S08', 'S09', 'S10'])
+    const bridge = chainHops(s.path).find(h => h.from.station === 'RWM')!
+    expect(bridge.to.station).toBe('MGI')
+    expect(bridge.bothWays).toBe(true)
   })
 
   it('never places an unbuilt stop between two open ones', () => {

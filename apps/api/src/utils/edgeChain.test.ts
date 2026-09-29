@@ -49,6 +49,18 @@ describe('chainHops', () => {
   it('refuses two adjacent stops skipped in the same direction', () => {
     expect(() => chainHops([stop('A'), stop('B', 'forward'), stop('C', 'forward'), stop('D')])).toThrow(/skip-stop/)
   })
+
+  it('bridges a run of pass-through stops both ways', () => {
+    // LRTJ: Rawamangun -> Manggarai runs through S08-S10 without calling.
+    const through = (station: string): Stop => ({ station, pos: station, passThrough: true })
+    expect(summary([stop('VEL'), stop('RWM'), through('PKA'), through('KYM'), through('MAT'), stop('MGI')])).toEqual([
+      'VEL<->RWM', 'RWM<->MGI via PKA,KYM,MAT'
+    ])
+  })
+
+  it('refuses a pass-through stop at either end of the list', () => {
+    expect(() => chainHops([{ station: 'A', pos: 'A', passThrough: true }, stop('B')])).toThrow(/end of the list/)
+  })
 })
 
 // The Cikarang loop in miniature: a stick into JNG, a loop branch closing back

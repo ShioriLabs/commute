@@ -101,8 +101,8 @@ export const SERVICE_HOURS: Record<string, Partial<Record<ServiceDay, ServiceWin
   'M': { ALL: [18000, 86260] },
   // 03:47-00:48
   'R': { ALL: [13620, 2880] },
-  // 05:30-22:49
-  'S': { ALL: [19800, 82140] },
+  // 05:30-22:48
+  'S': { ALL: [19800, 82080] },
   // 04:27-00:13
   'T': { ALL: [16020, 780] },
   // 05:00-21:12

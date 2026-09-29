@@ -43,9 +43,10 @@ import { feedTerminusArrivalS, hopRunTimesS, MAX_TERMINUS_HOP_S, signedStation }
  *      has no row there, and every trip ends one stop short of its terminus.
  *      That stop is appended back after validation; see "terminus" below.
  *
- *   4. LRTJ cannot chain at all. Its tripNumber is a per-station synthetic key
- *      (`${stationId}-${time}-PGD-BOUND`), so a "trip" there is one row — a
- *      departure board, not a trip.
+ *   4. LRTJ used to be unchainable: the scraped board gave every row its own
+ *      per-station tripNumber (`${stationId}-${time}-PGD-BOUND`). Its rows now
+ *      come from the numbered 17 Sep 2026 poster (operators/lrtj) and chain
+ *      like any other; re-running that scraper would bring the trap back.
  *
  * A generator that silently swallowed those would emit a plausible-looking
  * timetable that is wrong in ways nobody would notice until a rider missed a
@@ -83,7 +84,7 @@ const ROUTABLE_LINE_CODES = new Set(TOPOLOGY.map(t => t.lineCode))
  * has checked should default to the conservative reading, not inherit a
  * per-stop arrival it may not have.
  */
-const PER_STOP_ARRIVAL_OPERATORS = new Set(['MRTJ', 'LRTJBDB', 'APCGK'])
+const PER_STOP_ARRIVAL_OPERATORS = new Set(['MRTJ', 'LRTJBDB', 'APCGK', 'LRTJ'])
 
 /*
  * Stations that still carry schedule rows but are gone from the routing graph.
@@ -259,9 +260,9 @@ for (const group of grouped.values()) {
   const trimmed = group.filter(r => !RETIRED_STATIONS.has(r.stationId))
   if (trimmed.length < group.length) trimmedStops += group.length - trimmed.length
   /*
-   * A one-row "trip" is a departure board entry, not a trip. This is every LRTJ
-   * row by construction, plus KCI trains that touch a single station in our
-   * data. Neither can be ridden from anywhere to anywhere, so neither is useful
+   * A one-row "trip" is a departure board entry, not a trip: KCI trains that
+   * touch a single station in our data (and every row of the old scraped LRTJ
+   * board, see trap 4). Neither can be ridden from anywhere to anywhere, so neither is useful
    * to a router that needs to know where a vehicle goes next.
    */
   if (trimmed.length < 2) {

@@ -17,21 +17,27 @@ export interface Hop {
 }
 
 /*
- * The hops a stop list describes, honouring `Stop.serves`.
+ * The hops a stop list describes, honouring `Stop.serves` and `Stop.passThrough`.
  *
  * A list with no directional stop is paired up exactly as it always was, one
- * hop per neighbour pair, emitted both ways. A list with one is walked once
- * per direction instead, each walk leaving out the stops that direction does
- * not serve, so the unserved direction gets a single hop straight past them.
+ * hop per neighbour pair, emitted both ways, with any pass-through stops folded
+ * into the hop that runs past them. A list with one is walked once per
+ * direction instead, each walk leaving out the stops that direction does not
+ * serve, so the unserved direction gets a single hop straight past them.
  *
  * Kept free of coordinates and SQL so the rule can be tested on its own.
  */
 export function chainHops(stops: Stop[]): Hop[] {
-  if (!stops.some(s => s.serves)) {
-    return stops.slice(1).map((to, i) => ({ from: stops[i]!, to, via: [], bothWays: true }))
+  const ends = [stops[0], stops[stops.length - 1]]
+  const unserved = ends.find(s => s?.passThrough)
+  if (unserved) {
+    throw new Error(`${unserved.station} is passed through but sits at the end of the list, so there is nothing to bridge to`)
   }
 
-  const ends = [stops[0], stops[stops.length - 1]]
+  if (!stops.some(s => s.serves)) {
+    return walk(stops, 'forward').map(({ from, to, via }) => ({ from, to, via, bothWays: true }))
+  }
+
   const stranded = ends.find(s => s?.serves)
   if (stranded) {
     throw new Error(`${stranded.station} is served one way only but sits at the end of the list, so there is nothing to bridge to`)
@@ -55,7 +61,7 @@ function walk(ordered: Stop[], direction: 'forward' | 'reverse'): Hop[] {
   let from = ordered[0]!
   let via: Stop[] = []
   for (const stop of ordered.slice(1)) {
-    if (stop.serves && stop.serves !== direction) {
+    if (stop.passThrough || (stop.serves && stop.serves !== direction)) {
       via.push(stop)
       continue
     }
