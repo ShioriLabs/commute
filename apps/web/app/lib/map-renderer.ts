@@ -390,7 +390,7 @@ export function ringOffsetWorld(ringProgress: number): number {
 }
 
 // Route overlay: the fare pair drawn on the map — a polyline through station
-// centroids per ride leg, dashed connectors for transfers, and origin/
+// centroids per ride leg, dotted connectors for transfers, and origin/
 // destination pins. Same doctrine as the selection overlay: geometry is pushed
 // statefully via setRouteOverlay, while map.tsx animates the frame values and
 // passes them per draw.
@@ -420,8 +420,8 @@ export interface RoutePin {
 }
 
 export interface RouteOverlay {
-  // Transfers arrive pre-dashed (dashSegment), so renderers draw every entry
-  // the same way and need no dash logic of their own.
+  // Transfers arrive pre-dotted (dotPolyline), each dot a zero-length capsule,
+  // so renderers draw every entry the same way and need no dot logic of their own.
   segments: RouteSegment[]
   pins: RoutePin[]
 }
@@ -496,8 +496,10 @@ export const ROUTE_LINE_HALF_WIDTH_WORLD = 16
  */
 export const ROUTE_LINE_HALF_WIDTH_BRT_WORLD = 10
 export const ROUTE_CASING_EXTRA_WORLD = 3
-export const ROUTE_TRANSFER_DASH_WORLD = 24
-export const ROUTE_TRANSFER_GAP_WORLD = 14
+// Walk dots: well under the ride line's 16 half-width, so a walk reads as a
+// lighter thing than riding, and spaced so the gaps stay open at a fitted zoom.
+export const ROUTE_TRANSFER_DOT_RADIUS_WORLD = 7
+export const ROUTE_TRANSFER_DOT_SPACING_WORLD = 26
 export const ROUTE_PIN_RADIUS_WORLD = 26
 
 // Pin styling, shared by both renderers via routeDrawItems. The dark ink is the
@@ -620,36 +622,170 @@ function pushArrow(
   stroke(cx + ROUTE_ARROW_HALF_W, barbY, cx, tipY)
 }
 
-// Split a→b into dash sub-segments. The pattern is centered — equal margins at
-// both ends — and a segment shorter than one dash yields itself whole, so very
-// close stations still get a visible connector.
-export function dashSegment(
+/*
+ * The artwork's interchange connectors are all built one way: straight runs
+ * joined by a rounded corner, never a sharp one. Manggarai's C13 to S11 bar is
+ * a 45° diagonal out, a ~61-radius turn, and a 45° diagonal back in, swinging
+ * ~69 units off its chord. A walk borrows both numbers so it reads as the same
+ * kind of line.
+ */
+const WALK_BULGE_WORLD = 60
+export const WALK_CORNER_RADIUS_WORLD = 60
+// Arc samples per corner. Dots are laid by arc length afterwards, so this only
+// has to make the curve smooth, not match the dot spacing.
+const WALK_CORNER_SAMPLES = 12
+
+/*
+ * How far off horizontal, vertical or 45° a walk may be and still count as
+ * straight, degrees. Measured over every drawn transfer: 17 of 59 sit under 2°
+ * (Sudirman to its halte is 0.01°, Manggarai's KCI to LRT 1.49°), and past the
+ * gap at 1.49 → 2.08 they climb steadily, so a walk beyond this is a real angle.
+ */
+export const WALK_STRAIGHT_TOLERANCE_DEG = 2
+
+// Off the nearest multiple of 45°, degrees, 0..22.5.
+export function octilinearDeviationDeg(dx: number, dy: number): number {
+  const angle = ((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 45
+  return Math.min(angle, 45 - angle)
+}
+
+/*
+ * A walk's path in the schematic's own grammar.
+ *
+ * Within WALK_STRAIGHT_TOLERANCE_DEG of horizontal, vertical or 45° it is one
+ * straight line. Otherwise it is one diagonal, then one straight run: diagonal
+ * first, so the walk leaves its station at an angle and comes into the next one
+ * square-on, the way the artwork's lines turn into a stop.
+ *
+ * `bulgeSide` asks a straight, near-axis walk to bulge out instead, the way the
+ * artwork draws its interchange connectors: a diagonal out, a straight run
+ * alongside, a diagonal back in. The caller decides when (see drawing walks in
+ * map-route-overlay.ts); a walk that is not near-axis ignores it, as does one
+ * too short to fit a bulge.
+ */
+export function octilinearPath(
   ax: number,
   ay: number,
   bx: number,
   by: number,
-  dashLen: number,
-  gapLen: number
-): Array<{ ax: number, ay: number, bx: number, by: number }> {
-  const len = Math.hypot(bx - ax, by - ay)
-  if (len <= 0) return []
-  const dirX = (bx - ax) / len
-  const dirY = (by - ay) / len
-  const count = Math.max(1, Math.floor((len + gapLen) / (dashLen + gapLen)))
-  const patternLen = count * dashLen + (count - 1) * gapLen
-  const margin = (len - patternLen) / 2
-  const dashes: Array<{ ax: number, ay: number, bx: number, by: number }> = []
-  for (let i = 0; i < count; i++) {
-    const start = Math.max(0, margin + i * (dashLen + gapLen))
-    const end = Math.min(len, start + dashLen)
-    dashes.push({
-      ax: ax + dirX * start,
-      ay: ay + dirY * start,
-      bx: ax + dirX * end,
-      by: ay + dirY * end
-    })
+  // Which way to bulge, as a world-axis sign across the walk: +1 is right of a
+  // vertical walk and below a horizontal one.
+  bulgeSide?: 1 | -1
+): Array<[number, number]> {
+  const dx = bx - ax
+  const dy = by - ay
+  if (dx === 0 && dy === 0) return [[ax, ay], [bx, by]]
+  const horizontal = Math.abs(dx) > Math.abs(dy)
+  // Work in (major, lateral) and map back, so one body covers both orientations.
+  const major = horizontal ? dx : dy
+  const lateral = horizontal ? dy : dx
+  const toWorld = (m: number, l: number): [number, number] =>
+    horizontal ? [ax + Math.sign(major) * m, ay + l] : [ax + l, ay + Math.sign(major) * m]
+  const length = Math.abs(major)
+  const offset = Math.abs(lateral)
+  if (octilinearDeviationDeg(dx, dy) >= WALK_STRAIGHT_TOLERANCE_DEG) {
+    return [[ax, ay], toWorld(offset, lateral), [bx, by]]
   }
-  return dashes
+  // Straight. Only a near-axis walk can bulge; a near-45° one stays a chord.
+  const nearAxis = offset < length / 2
+  const depth = Math.min(WALK_BULGE_WORLD, (length - offset) / 2)
+  if (bulgeSide === undefined || !nearAxis || depth < 1) return [[ax, ay], [bx, by]]
+  // Built going down (or right) and reversed for the other way, so a walk and
+  // its reverse are the same line.
+  if (major < 0) return octilinearPath(bx, by, ax, ay, bulgeSide).reverse()
+  const back = Math.abs(lateral - bulgeSide * depth)
+  const path: Array<[number, number]> = [[ax, ay], toWorld(depth, bulgeSide * depth)]
+  if (length - back > depth) path.push(toWorld(length - back, bulgeSide * depth))
+  path.push([bx, by])
+  return path
+}
+
+/*
+ * Round every interior corner of a polyline with an arc of the given radius,
+ * the way the artwork turns its lines.
+ *
+ * The radius shrinks where a neighbouring run is too short to hold the full
+ * turn: each corner may use at most half of either run, so two corners sharing
+ * a run meet in the middle rather than overlapping.
+ */
+export function roundCorners(
+  pts: ReadonlyArray<readonly [number, number]>,
+  radius: number
+): Array<[number, number]> {
+  if (pts.length < 3) return pts.map(([x, y]) => [x, y])
+  const out: Array<[number, number]> = [[pts[0][0], pts[0][1]]]
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [px, py] = pts[i - 1]
+    const [cx, cy] = pts[i]
+    const [nx, ny] = pts[i + 1]
+    const inLen = Math.hypot(cx - px, cy - py)
+    const outLen = Math.hypot(nx - cx, ny - cy)
+    if (inLen === 0 || outLen === 0) continue
+    const ux = (cx - px) / inLen
+    const uy = (cy - py) / inLen
+    const vx = (nx - cx) / outLen
+    const vy = (ny - cy) / outLen
+    const cross = ux * vy - uy * vx
+    const dot = ux * vx + uy * vy
+    const turn = Math.atan2(Math.abs(cross), dot)
+    if (turn < 1e-6) {
+      out.push([cx, cy])
+      continue
+    }
+    const half = Math.tan(turn / 2)
+    const tangent = Math.min(radius * half, inLen / 2, outLen / 2)
+    const r = tangent / half
+    // Arc from where the corner's inbound run stops to where the outbound starts,
+    // around a centre one radius off the inbound run, on the inside of the turn.
+    const sx = cx - ux * tangent
+    const sy = cy - uy * tangent
+    const side = cross > 0 ? 1 : -1
+    const ox = sx - uy * r * side
+    const oy = sy + ux * r * side
+    const start = Math.atan2(sy - oy, sx - ox)
+    for (let k = 0; k <= WALK_CORNER_SAMPLES; k++) {
+      const a = start + side * turn * (k / WALK_CORNER_SAMPLES)
+      out.push([ox + Math.cos(a) * r, oy + Math.sin(a) * r])
+    }
+  }
+  const last = pts[pts.length - 1]
+  out.push([last[0], last[1]])
+  return out
+}
+
+/*
+ * Dots evenly spaced along a polyline by arc length, the bend included, so a
+ * dot lands wherever the spacing falls rather than always on the corner.
+ *
+ * Both ends always get a dot: the spacing stretches a little so the pattern
+ * lands exactly on each station instead of stopping ragged short of one. A
+ * path shorter than one interval still gets its two end dots.
+ */
+export function dotPolyline(pts: ReadonlyArray<readonly [number, number]>, spacing: number): Array<{ x: number, y: number }> {
+  const lengths: number[] = []
+  let total = 0
+  for (let i = 1; i < pts.length; i++) {
+    const len = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])
+    lengths.push(len)
+    total += len
+  }
+  if (total <= 0) return []
+  const intervals = Math.max(1, Math.round(total / spacing))
+  const dots: Array<{ x: number, y: number }> = []
+  let seg = 0
+  let segStart = 0
+  for (let k = 0; k <= intervals; k++) {
+    const s = (total * k) / intervals
+    while (seg < lengths.length - 1 && s > segStart + lengths[seg]) {
+      segStart += lengths[seg]
+      seg++
+    }
+    const t = lengths[seg] > 0 ? Math.min(1, (s - segStart) / lengths[seg]) : 0
+    const [x0, y0] = pts[seg]
+    const [x1, y1] = pts[seg + 1]
+    dots.push({ x: x0 + (x1 - x0) * t, y: y0 + (y1 - y0) * t })
+  }
+  return dots
 }
 
 export interface TileStats {

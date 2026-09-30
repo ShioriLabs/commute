@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
-  dashSegment,
   DESKTOP_TILE_BUDGET_CEILING_BYTES,
+  dotPolyline,
   LOW_MEMORY_CEILING_BYTES,
   MAX_RENDER_DPR,
   MAX_TIER,
+  octilinearPath,
+  roundCorners,
   PHONE_TILE_BUDGET_CEILING_BYTES,
   pickTier,
   renderDpr,
@@ -201,58 +203,106 @@ describe('renderDpr', () => {
   })
 })
 
-// dashSegment pre-splits transfer connectors into capsule sub-segments on the
-// CPU, so the renderers draw dashes with the same program as solid segments
-// and no shader dash math. The pattern is centered: margins at both ends are
-// equal, so a dash never starts flush at one station and ragged at the other.
+// Walks are drawn as dots along an octilinear path: one 45° diagonal, then a
+// straight run into the next stop, dots spaced evenly across the bend.
 
-describe('dashSegment', () => {
-  it('returns nothing for a zero-length segment', () => {
-    expect(dashSegment(10, 20, 10, 20, 14, 10)).toEqual([])
+describe('octilinearPath', () => {
+  it('goes diagonal first, then straight, at a real angle', () => {
+    expect(octilinearPath(0, 0, 200, 60)).toEqual([[0, 0], [60, 60], [200, 60]])
+    expect(octilinearPath(0, 0, -70, -190)).toEqual([[0, 0], [-70, -70], [-70, -190]])
+    // 4.9° off vertical is past the tolerance: a small but real bend.
+    expect(octilinearPath(0, 0, -18, 209)).toEqual([[0, 0], [-18, 18], [-18, 209]])
   })
 
-  it('covers a segment shorter than one dash with a single full-length dash', () => {
-    // Two stations nearly touching: the connector is still visible, just short.
-    expect(dashSegment(0, 0, 8, 0, 14, 10)).toEqual([
-      { ax: 0, ay: 0, bx: 8, by: 0 }
-    ])
+  it('draws a walk within 2° of an octilinear direction as one straight line', () => {
+    expect(octilinearPath(0, 0, 200, 0)).toEqual([[0, 0], [200, 0]])
+    expect(octilinearPath(0, 0, 5, 200)).toEqual([[0, 0], [5, 200]])
+    expect(octilinearPath(0, 0, 50, -50)).toEqual([[0, 0], [50, -50]])
+    expect(octilinearPath(0, 0, 100, 103)).toEqual([[0, 0], [100, 103]])
   })
 
-  it('lays out an exact-fit pattern with no margins', () => {
-    // len 38 = 14 + 10 + 14: two dashes, one gap, flush at both ends.
-    expect(dashSegment(0, 0, 38, 0, 14, 10)).toEqual([
-      { ax: 0, ay: 0, bx: 14, by: 0 },
-      { ax: 24, ay: 0, bx: 38, by: 0 }
-    ])
+  it('bulges a straight near-axis walk to the side asked for', () => {
+    expect(octilinearPath(0, 0, 200, 0, 1)).toEqual([[0, 0], [60, 60], [140, 60], [200, 0]])
+    expect(octilinearPath(0, 0, 0, 200, 1)).toEqual([[0, 0], [60, 60], [60, 140], [0, 200]])
+    const path = octilinearPath(0, 0, -5, 200, -1)
+    expect(path).toEqual([[0, 0], [-60, 60], [-60, 145], [-5, 200]])
+    for (let i = 1; i < path.length; i++) {
+      const ddx = Math.abs(path[i][0] - path[i - 1][0])
+      const ddy = Math.abs(path[i][1] - path[i - 1][1])
+      expect(ddx === 0 || ddy === 0 || ddx === ddy).toBe(true)
+    }
   })
 
-  it('centers the pattern when there is leftover length', () => {
-    // len 42 leaves 4 over the exact-fit 38: margin 2 at each end.
-    expect(dashSegment(0, 0, 42, 0, 14, 10)).toEqual([
-      { ax: 2, ay: 0, bx: 16, by: 0 },
-      { ax: 26, ay: 0, bx: 40, by: 0 }
-    ])
+  it('never bulges a bent or near-45° walk', () => {
+    expect(octilinearPath(0, 0, 200, 60, 1)).toEqual([[0, 0], [60, 60], [200, 60]])
+    expect(octilinearPath(0, 0, 100, 103, 1)).toEqual([[0, 0], [100, 103]])
   })
 
-  it('has a centered pattern the same from either end', () => {
-    const forward = dashSegment(0, 0, 42, 0, 14, 10)
-    const backward = dashSegment(42, 0, 0, 0, 14, 10)
-    expect(backward.map(d => ({ ax: d.bx, ay: d.by, bx: d.ax, by: d.ay })).reverse()).toEqual(forward)
+  it('bulges the same way in both directions', () => {
+    const forward = octilinearPath(0, 0, -5, 200, -1)
+    expect(octilinearPath(-5, 200, 0, 0, -1)).toEqual([...forward].reverse())
+    const across = octilinearPath(0, 0, 200, 5, 1)
+    expect(octilinearPath(200, 5, 0, 0, 1)).toEqual([...across].reverse())
   })
 
-  it('follows the segment direction off-axis', () => {
-    // 3-4-5 direction, len 50: exact fit for 14+10+14 is 38, margin 6 each end.
-    const dashes = dashSegment(0, 0, 30, 40, 14, 10)
-    expect(dashes).toHaveLength(2)
-    const [first, second] = dashes
-    expect(first.ax).toBeCloseTo(6 * 0.6)
-    expect(first.ay).toBeCloseTo(6 * 0.8)
-    expect(first.bx).toBeCloseTo(20 * 0.6)
-    expect(first.by).toBeCloseTo(20 * 0.8)
-    expect(second.ax).toBeCloseTo(30 * 0.6)
-    expect(second.ay).toBeCloseTo(30 * 0.8)
-    expect(second.bx).toBeCloseTo(44 * 0.6)
-    expect(second.by).toBeCloseTo(44 * 0.8)
+  it('shrinks the bulge to fit a short walk', () => {
+    expect(octilinearPath(0, 0, 30, 0, 1)).toEqual([[0, 0], [15, 15], [30, 0]])
+  })
+})
+
+describe('roundCorners', () => {
+  it('leaves a straight path alone', () => {
+    expect(roundCorners([[0, 0], [100, 0]], 60)).toEqual([[0, 0], [100, 0]])
+  })
+
+  it('replaces a corner with an arc of the given radius, tangent to both runs', () => {
+    // 90° corner at (100, 0), radius 20: the arc runs (80, 0) → (100, 20)
+    // around (80, 20).
+    const out = roundCorners([[0, 0], [100, 0], [100, 100]], 20)
+    expect(out[0]).toEqual([0, 0])
+    expect(out[out.length - 1]).toEqual([100, 100])
+    const arc = out.slice(1, -1)
+    expect(arc[0][0]).toBeCloseTo(80)
+    expect(arc[0][1]).toBeCloseTo(0)
+    expect(arc[arc.length - 1][0]).toBeCloseTo(100)
+    expect(arc[arc.length - 1][1]).toBeCloseTo(20)
+    for (const [x, y] of arc) expect(Math.hypot(x - 80, y - 20)).toBeCloseTo(20)
+  })
+
+  it('shrinks the radius to fit a short run', () => {
+    // 90° corner with 10-unit runs: the arc may use only 5 of each.
+    const out = roundCorners([[0, 0], [10, 0], [10, 10]], 60)
+    const arc = out.slice(1, -1)
+    expect(arc[0][0]).toBeCloseTo(5)
+    expect(arc[arc.length - 1][1]).toBeCloseTo(5)
+  })
+})
+
+describe('dotPolyline', () => {
+  it('returns nothing for a zero-length path', () => {
+    expect(dotPolyline([[5, 5], [5, 5]], 10)).toEqual([])
+  })
+
+  it('puts a dot on both ends even when shorter than one interval', () => {
+    expect(dotPolyline([[0, 0], [4, 0]], 10)).toEqual([{ x: 0, y: 0 }, { x: 4, y: 0 }])
+  })
+
+  it('stretches the spacing to land exactly on both ends', () => {
+    const dots = dotPolyline([[0, 0], [105, 0]], 10)
+    expect(dots).toHaveLength(12) // round(10.5) = 11 intervals
+    expect(dots[0]).toEqual({ x: 0, y: 0 })
+    expect(dots[dots.length - 1].x).toBeCloseTo(105)
+    for (let i = 1; i < dots.length; i++) expect(dots[i].x - dots[i - 1].x).toBeCloseTo(105 / 11)
+  })
+
+  it('spaces dots by arc length across a bend', () => {
+    // Two 10-unit legs meeting at a right angle, spacing 5: the corner is s=10.
+    const dots = dotPolyline([[0, 0], [10, 0], [10, 10]], 5)
+    expect(dots).toHaveLength(5)
+    expect(dots[2].x).toBeCloseTo(10)
+    expect(dots[2].y).toBeCloseTo(0)
+    expect(dots[3].x).toBeCloseTo(10)
+    expect(dots[3].y).toBeCloseTo(5)
   })
 })
 

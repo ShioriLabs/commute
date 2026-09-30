@@ -181,7 +181,7 @@ describe('buildRouteOverlayModel', () => {
     expect(model!.overlay.pins).toHaveLength(2)
   })
 
-  it('renders transfers as dashed sub-segments', () => {
+  it('renders transfers as dots', () => {
     const points = [pt('KCI-AAA', 0, 0), pt('KCI-BBB', 100, 0), pt('MRT-CCC', 200, 0), pt('MRT-DDD', 300, 0)]
     const fare = fareResult(
       [
@@ -194,9 +194,13 @@ describe('buildRouteOverlayModel', () => {
     )
     const model = buildRouteOverlayModel(fare, pair('KCI-AAA', 'MRT-DDD'), points, resolveLine)
     const transfers = model!.overlay.segments.filter(s => s.kind === 'transfer')
-    expect(transfers.length).toBeGreaterThan(1) // 100 world units → several dashes
-    expect(transfers[0].ax).toBeGreaterThanOrEqual(100)
-    expect(transfers[transfers.length - 1].bx).toBeLessThanOrEqual(200)
+    expect(transfers.length).toBeGreaterThan(2) // 100 world units → several dots
+    for (const dot of transfers) {
+      expect(dot.bx).toBe(dot.ax)
+      expect(dot.by).toBe(dot.ay)
+    }
+    expect(transfers[0].ax).toBe(100)
+    expect(transfers[transfers.length - 1].ax).toBeCloseTo(200)
     const rides = model!.overlay.segments.filter(s => s.kind === 'ride')
     expect(rides).toHaveLength(2)
   })
@@ -213,6 +217,64 @@ describe('buildRouteOverlayModel', () => {
     expect(transfers.length).toBeGreaterThan(0)
     expect(transfers[0].ax).toBeGreaterThanOrEqual(100)
     expect(transfers[transfers.length - 1].bx).toBeLessThanOrEqual(200)
+  })
+
+  it('walks an offset transfer diagonally, then straight into the next stop', () => {
+    const points = [pt('KCI-AAA', 0, 0), pt('KCI-BBB', 100, 0), pt('MRT-CCC', 300, 60), pt('MRT-DDD', 400, 60)]
+    const fare = fareResult(
+      [rideLeg(['KCI-AAA', 'KCI-BBB']), transferLeg('KCI-BBB', 'MRT-CCC'), rideLeg(['MRT-CCC', 'MRT-DDD'])],
+      'KCI-AAA',
+      'MRT-DDD'
+    )
+    const model = buildRouteOverlayModel(fare, pair('KCI-AAA', 'MRT-DDD'), points, resolveLine)
+    const dots = model!.overlay.segments.filter(s => s.kind === 'transfer')
+    expect(dots.length).toBeGreaterThan(2)
+    // Corner at (160, 60), rounded ~25 units either side: dots before it are on
+    // the 45° run from B, dots after it on the flat run into C, and the ones on
+    // the arc stay inside the corner's box.
+    for (const dot of dots) {
+      if (dot.ax < 140) expect(dot.ay).toBeCloseTo(dot.ax - 100)
+      else if (dot.ax > 185) expect(dot.ay).toBeCloseTo(60)
+      else expect(dot.ay).toBeGreaterThan(38)
+      expect(dot.ay).toBeLessThanOrEqual(60 + 1e-6)
+    }
+    expect(dots.some(d => d.ay > 0 && d.ay < 60)).toBe(true)
+    expect(dots.some(d => d.ax > 160 && d.ax < 300)).toBe(true)
+  })
+
+  it('keeps a near-aligned walk straight when nothing crowds it', () => {
+    // Sudirman-shaped: the next ride leaves C sideways, well clear of the walk.
+    const points = [pt('KCI-AAA', -300, 0), pt('KCI-BBB', 0, 0), pt('MRT-CCC', 0, 270), pt('MRT-DDD', 300, 270)]
+    const legs = [rideLeg(['KCI-AAA', 'KCI-BBB']), transferLeg('KCI-BBB', 'MRT-CCC'), rideLeg(['MRT-CCC', 'MRT-DDD'])]
+    const model = buildRouteOverlayModel(fareResult(legs, 'KCI-AAA', 'MRT-DDD'), pair('KCI-AAA', 'MRT-DDD'), points, resolveLine)
+    const dots = model!.overlay.segments.filter(s => s.kind === 'transfer')
+    for (const dot of dots) expect(dot.ax).toBeCloseTo(0)
+  })
+
+  it('bulges a near-aligned walk to the side clear of the rides', () => {
+    // Manggarai-shaped: C is 5 right of B, and the line leaving C climbs right
+    // alongside the straight walk, so it bulges. Toward the offset would put it
+    // across that line; it has to swing left instead.
+    const points = [pt('KCI-AAA', -300, 0), pt('KCI-BBB', 0, 0), pt('MRT-CCC', 5, 200), pt('MRT-DDD', 35, 0)]
+    const legs = [rideLeg(['KCI-AAA', 'KCI-BBB']), transferLeg('KCI-BBB', 'MRT-CCC'), rideLeg(['MRT-CCC', 'MRT-DDD'])]
+    const model = buildRouteOverlayModel(fareResult(legs, 'KCI-AAA', 'MRT-DDD'), pair('KCI-AAA', 'MRT-DDD'), points, resolveLine)
+    const dots = model!.overlay.segments.filter(s => s.kind === 'transfer')
+    expect(Math.min(...dots.map(d => d.ax))).toBeLessThan(-30)
+    expect(Math.max(...dots.map(d => d.ax))).toBeLessThanOrEqual(5 + 1e-6)
+  })
+
+  it('bulges a walk the same way in both directions', () => {
+    const points = [pt('KCI-AAA', -300, 0), pt('KCI-BBB', 0, 0), pt('MRT-CCC', 5, 200), pt('MRT-DDD', 35, 0)]
+    const dotsOf = (legs: FareResult['legs'], from: string, to: string) =>
+      buildRouteOverlayModel(fareResult(legs, from, to), pair(from, to), points, resolveLine)!
+        .overlay.segments.filter(s => s.kind === 'transfer').map(d => [d.ax, d.ay])
+    const forward = dotsOf([rideLeg(['KCI-AAA', 'KCI-BBB']), transferLeg('KCI-BBB', 'MRT-CCC'), rideLeg(['MRT-CCC', 'MRT-DDD'])], 'KCI-AAA', 'MRT-DDD')
+    const backward = dotsOf([rideLeg(['MRT-DDD', 'MRT-CCC']), transferLeg('MRT-CCC', 'KCI-BBB'), rideLeg(['KCI-BBB', 'KCI-AAA'])], 'MRT-DDD', 'KCI-AAA')
+    expect(backward.length).toBe(forward.length)
+    backward.reverse().forEach(([x, y], i) => {
+      expect(x).toBeCloseTo(forward[i][0])
+      expect(y).toBeCloseTo(forward[i][1])
+    })
   })
 
   it('prefers an exact point id over a station alias', () => {
@@ -436,7 +498,7 @@ describe('buildRouteOverlayModel with corridors', () => {
     expect(followed!.bbox.minY).toBeLessThanOrEqual(chorded!.bbox.minY)
   })
 
-  it('leaves transfers as straight dashes', () => {
+  it('draws transfers the same with or without corridors', () => {
     const points = [pt('KCI-AAA', 0, 0), pt('KCI-BBB', 100, 0), pt('MRT-CCC', 200, 0), pt('MRT-DDD', 300, 0)]
     const fare = fareResult(
       [rideLeg(['KCI-AAA', 'KCI-BBB']), transferLeg('KCI-BBB', 'MRT-CCC'), rideLeg(['MRT-CCC', 'MRT-DDD'])],
