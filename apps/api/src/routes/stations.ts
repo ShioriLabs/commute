@@ -24,12 +24,14 @@ import { CompactGroupedTimetableSchema, GroupedTimetableSchema, HeadwayRowSchema
 import type { HeadwayRow } from '@commute/schemas'
 import { DAY_HEADWAYS_S, DIRECTIONAL_HEADWAYS_S, HEADWAYS_S, LINE_DAY_MASK, LINE_TERMINI, STOP_HEADWAYS_S } from 'db/data/headways'
 import { serviceDay } from 'utils/fare'
+import { SERVICE_HOURS } from 'db/data/service-hours'
 
 /*
  * The three day buckets, high bit first, matching how LINE_DAY_MASK is packed
  * in the generated headways file: WD (Mon-Fri), SAT, SUN.
  */
 const DAY_ORDER = ['WD', 'SAT', 'SUN'] as const
+const DAY_SECONDS = 86400
 type ServiceDayName = (typeof DAY_ORDER)[number]
 
 /*
@@ -751,6 +753,28 @@ app.get(
       for (const s of await stationRepository.getByIds([...ids])) terminusName.set(s.id, s.name)
     }
 
+    /*
+     * The corridor's operating hours on this day, as the planner reads them:
+     * the day's own window, else the every-day one.
+     *
+     * TJ only. Its spans are exact, from GTFS frequencies.txt; rail windows are
+     * inferred from the timetable, which the rail station page already shows in
+     * full. Keyed by bare line code, which is safe while no TJ corridor shares a
+     * code with a rail line. A line with no entry gets no field: that means
+     * unknown, and saying "24 jam" for it would be a guess.
+     */
+    const hhmm = (s: number) =>
+      `${String(Math.floor(s / 3600) % 24).padStart(2, '0')}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}`
+    const serviceHoursOf = (key: string, lineCode: string): Pick<HeadwayRow, 'serviceHours'> => {
+      if (!key.startsWith('TJ:')) return {}
+      const byDay = SERVICE_HOURS[lineCode]
+      const window = byDay?.[day] ?? byDay?.ALL
+      if (!window) return {}
+      const [startS, endS] = window
+      if (startS === 0 && endS >= DAY_SECONDS - 60) return { serviceHours: { allDay: true } }
+      return { serviceHours: { start: hhmm(startS), end: hhmm(endS) } }
+    }
+
     const rows: HeadwayRow[] = []
     for (const key of station.lines) {
       const lineCode = key.slice(key.indexOf(':') + 1)
@@ -764,9 +788,12 @@ app.get(
        * whenever the line skips weekdays, so existing callers keep working
        * until the web app has shipped against `days`.
        */
-      const dayFields = days.length === DAY_ORDER.length
-        ? {}
-        : { days: [...days], ...(days.includes('WD') ? {} : { weekendOnly: true as const }) }
+      const dayFields = {
+        ...(days.length === DAY_ORDER.length
+          ? {}
+          : { days: [...days], ...(days.includes('WD') ? {} : { weekendOnly: true as const }) }),
+        ...serviceHoursOf(key, lineCode)
+      }
 
       /*
        * Directional rows, when the generated table has anything to say about this

@@ -44,16 +44,18 @@ import { nextTrip, type IndexedPattern, type Trip, type TripIndex } from './trip
  * is the safe direction: quoting a connection they cannot catch is worse than
  * quoting the one after it.
  *
+ * SLOWEST is someone with a big suitcase, a pram, or a grandparent on their
+ * arm.
+ *
  * NOT `WALKING_WEIGHTS` from criteria.ts, which are comparison multipliers on
- * the walk axis and nothing to do with speed — dividing this pace by them would
- * put AVOID at 0.15 m/s, a pace no one walks. AVOID matches SLOW here because it
- * is a preference about WHETHER to walk, not about how fast a rider does.
+ * the walk axis — dividing this pace by them would put SLOWEST at 0.15 m/s, a
+ * pace no one walks. The two tables share a key, not a unit.
  */
 const WALK_PACE_MS: Record<WalkingPreference, number> = {
   BRISK: 1.5,
   AVERAGE: 1.2,
   SLOW: 0.9,
-  AVOID: 0.9
+  SLOWEST: 0.7
 }
 
 /** Seconds to cross a distance on foot, at the rider's own pace. */
@@ -114,6 +116,12 @@ export interface LegTiming {
   tripId: string
   /** Where that vehicle is signed for, when the feed says. See Trip.headsign. */
   headsign?: string
+  /**
+   * Nothing later on this line tonight goes from this boarding stop to this
+   * alighting stop: miss it and the leg cannot be ridden until tomorrow.
+   * Present only when true.
+   */
+  lastOfDay?: true
 }
 
 export interface ResolveDeparturesOptions {
@@ -274,13 +282,54 @@ export function resolveDepartures(
       departureS: best.boardAt,
       arrivalS: best.alightAt,
       tripId: best.trip.id,
-      ...(best.trip.headsign === undefined ? {} : { headsign: best.trip.headsign })
+      ...(best.trip.headsign === undefined ? {} : { headsign: best.trip.headsign }),
+      ...(hasLaterTrip(trips, leg, best.boardAt, dayMask) ? {} : { lastOfDay: true as const })
     })
     clockS = best.alightAt
     rodePrevious = true
   }
 
   return timings
+}
+
+/*
+ * Where the night ends, for deciding whether a departure is "later tonight".
+ *
+ * A trip that crosses midnight stores its later stops past DAY_S, but one that
+ * STARTS after midnight is stored as-is: a 00.13 departure is 780, not 87180.
+ * Compared raw, it reads as this morning and a 23.50 boarding looks like the
+ * last train when one more is coming. Times before this read as the night
+ * before instead. 03.00 clears both the latest last train (01.07) and the
+ * earliest first one (03.47) on this network; the web app's service-day
+ * rollover uses the same hour.
+ */
+const NIGHT_END_S = 3 * 3600
+const nightTime = (s: number) => (s < NIGHT_END_S ? s + DAY_S : s)
+
+/*
+ * Is there a later trip tonight that serves this leg?
+ *
+ * The same candidates the boarding scan considers, which is what makes "last"
+ * honest: every pattern on the leg's line that goes far enough, on the same
+ * days. A later short-turn that stops before the rider's alighting station
+ * does not count, because boardingIndexFor already refuses it.
+ */
+function hasLaterTrip(
+  trips: TripIndex,
+  leg: Extract<RouteLeg, { type: 'RIDE' }>,
+  boardAtS: number,
+  dayMask: number
+): boolean {
+  const after = nightTime(boardAtS)
+  for (const pattern of trips.byLine.get(leg.lineCode) ?? []) {
+    const board = boardingIndexFor(pattern, leg.stationIds)
+    if (board < 0) continue
+    for (const trip of pattern.trips) {
+      if ((trip.dayMask & dayMask) === 0) continue
+      if (nightTime(trip.departuresS[board]!) > after) return true
+    }
+  }
+  return false
 }
 
 /**

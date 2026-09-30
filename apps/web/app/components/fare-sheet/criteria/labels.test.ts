@@ -75,10 +75,10 @@ describe('criteria labels', () => {
   /*
    * Never a duration, in any walking copy.
    *
-   * The engine has no duration model (edges.durationSeconds is null on every
-   * row), so "5 menit lebih lama" would be a promise it cannot keep. These
-   * describe how the RANKING shifts instead. Catches a well-meaning rewrite
-   * that reaches for minutes to sound concrete.
+   * Walk times are deliberately not shown for this setting, so "5 menit lebih
+   * lama" would promise a number the result never displays. These describe the
+   * rider's situation instead. Catches a well-meaning rewrite that reaches for
+   * minutes to sound concrete.
    */
   it('never promises a duration in walking copy', () => {
     for (const preference of WALKING_PREFERENCES) {

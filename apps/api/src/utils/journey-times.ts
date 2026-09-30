@@ -105,7 +105,10 @@ function timeOnce(
       ...leg,
       departureAt: stamp(timing.departureS),
       arrivalAt: stamp(timing.arrivalS),
-      ...(timing.headsign === undefined ? {} : { headsign: timing.headsign })
+      ...(timing.headsign === undefined ? {} : { headsign: timing.headsign }),
+      // Per-request like the stamps: whether this is the last train depends on
+      // which train was caught, never on the cached route.
+      ...(timing.lastOfDay ? { lastService: true as const } : {})
     }
   })
 

@@ -1,4 +1,5 @@
 import { CheckCircleIcon } from '@phosphor-icons/react'
+import type { ReactNode } from 'react'
 import { haptic } from 'utils/haptics'
 import CriteriaSheetShell from './criteria-sheet-shell'
 
@@ -10,6 +11,8 @@ export interface CriterionOption<T extends string> {
    * for a value, not for what the value means.
    */
   description?: string
+  /** Leads the row. Only for options that differ by degree, like walking speed. */
+  icon?: ReactNode
 }
 
 interface Props<T extends string> {
@@ -55,6 +58,7 @@ export default function CriterionSheet<T extends string>({
               onClick={() => choose(option.value)}
               className={`px-8 py-3 flex items-center gap-3 w-full text-left cursor-pointer ${isSelected ? 'bg-rose-50' : 'hover:bg-rose-50/60'}`}
             >
+              {option.icon}
               <span className="flex flex-col gap-1 flex-1 min-w-0">
                 <b className="text-lg">{ option.label }</b>
                 {option.description

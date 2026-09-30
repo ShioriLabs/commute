@@ -202,24 +202,23 @@ export function rankScore(criteria: Criteria, weights: RankWeights = DEFAULT_RAN
 }
 
 /*
- * How much a rider minds walking.
+ * How fast a rider walks.
  *
- * This is a *preference*, not a speed. The engine has no duration model at all —
- * `edges.durationSeconds` exists in the schema but is null on all 1293 rows —
- * so it cannot tell anyone their journey takes eight minutes longer at their
- * pace. What it can do is shift which tradeoffs win: weight walking harder and
- * a 600m transfer stops beating an extra boarding.
+ * A speed, and the rank weight follows from it. `departures.ts` turns the same
+ * level into a pace, which decides which connection a rider makes; here it
+ * decides how much a long walk counts against a route, because a metre costs a
+ * slow walker more than a fast one. One setting, both effects, so the rider
+ * answers one question ("how fast do I walk today?") rather than two.
  *
- * Expressed as named levels rather than a raw number because "how many times
- * worse than riding is a metre of walking" is not a question anyone can answer,
- * while "I walk slowly" is.
+ * Named levels rather than a raw number, as in JR East's 歩く速度: a rider
+ * knows they are carrying a suitcase, not that they walk at 0.7 m/s.
  */
-export type WalkingPreference = 'BRISK' | 'AVERAGE' | 'SLOW' | 'AVOID'
+export type WalkingPreference = 'BRISK' | 'AVERAGE' | 'SLOW' | 'SLOWEST'
 
 /*
  * Multipliers on the walk axis, relative to riding.
  *
- * AVERAGE (2x) is the default and matches DEFAULT_RANK_WEIGHTS. AVOID is
+ * AVERAGE (2x) is the default and matches DEFAULT_RANK_WEIGHTS. SLOWEST is
  * deliberately steep rather than infinite: a hard ban would return nothing at
  * all when the only path involves a footbridge, and no route is worse than an
  * unwanted one. The dominance test is untouched — these only reorder the front
@@ -230,7 +229,7 @@ export const WALKING_WEIGHTS: Record<WalkingPreference, number> = {
   BRISK: 1,
   AVERAGE: 2,
   SLOW: 4,
-  AVOID: 8
+  SLOWEST: 8
 }
 
 /** Rank weights adjusted for how much the rider minds walking. */

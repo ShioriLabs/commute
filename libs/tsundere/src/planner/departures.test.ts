@@ -206,6 +206,31 @@ describe('resolveDepartures', () => {
     })
 
     /*
+     * The bottom rung is its own pace, not a copy of SLOW. 250m of gated
+     * change from 06:19: 278s at SLOW lands 06:23:38, 358s at SLOWEST 06:24:58.
+     */
+    it('lets a slow rider make a connection the slowest one misses', () => {
+      const tight: TripPattern = {
+        lineCode: 'C',
+        stationIds: ['KCI-X', 'KCI-Y'],
+        trips: [
+          { id: 'tight', dayMask: ALL_DAYS, departuresS: [at(6, 24) + 30, at(6, 30)] },
+          { id: 'next', dayMask: ALL_DAYS, departuresS: [at(6, 45), at(6, 55)] }
+        ]
+      }
+      const legs = [
+        ride('M', ['MRTJ-LBB', 'MRTJ-FTM', 'MRTJ-BLA']),
+        walk('MRTJ-BLA', 'KCI-X'),
+        ride('C', ['KCI-X', 'KCI-Y'])
+      ]
+      const slow = resolveDepartures(legs, index(mrt, tight), { departureS: at(5), dayMask: ALL_DAYS, walking: 'SLOW' })
+      const slowest = resolveDepartures(legs, index(mrt, tight), { departureS: at(5), dayMask: ALL_DAYS, walking: 'SLOWEST' })
+
+      expect(slow[2]?.tripId).toBe('tight')
+      expect(slowest[2]?.tripId).toBe('next')
+    })
+
+    /*
      * However fast the rider, the doors still have to open and the platform
      * still has to clear.
      */
@@ -364,5 +389,61 @@ describe('journeyArrivalS', () => {
   it('reports nothing when any ride leg is untimed', () => {
     const timings = [{ departureS: at(6), arrivalS: at(6, 9), tripId: 'a' }, null, null]
     expect(journeyArrivalS(legs, timings)).toBeNull()
+  })
+})
+
+/*
+ * Whether the boarded train is the last one that makes this leg tonight. The
+ * rider is told because missing it means no journey, not a later one.
+ */
+describe('last train of the day', () => {
+  const leg = [ride('M', ['MRTJ-LBB', 'MRTJ-FTM', 'MRTJ-BLA'])]
+
+  it('flags the last trip and not the one before it', () => {
+    const [early] = resolveDepartures(leg, index(mrt), { departureS: at(5), dayMask: ALL_DAYS })
+    const [late] = resolveDepartures(leg, index(mrt), { departureS: at(6, 30), dayMask: ALL_DAYS })
+    expect(early?.lastOfDay).toBeUndefined()
+    expect(late?.lastOfDay).toBe(true)
+  })
+
+  /*
+   * A trip that starts after midnight is stored at its clock time (00.13 is
+   * 780), not past DAY_S. It is still later tonight than a 23.50.
+   */
+  it('counts a trip that starts after midnight as later tonight', () => {
+    const night: TripPattern = {
+      lineCode: 'M',
+      stationIds: ['MRTJ-LBB', 'MRTJ-FTM', 'MRTJ-BLA'],
+      trips: [
+        { id: 'n1', dayMask: ALL_DAYS, departuresS: [at(0, 13), at(0, 23), at(0, 33)] },
+        { id: 'n0', dayMask: ALL_DAYS, departuresS: [at(23, 50), at(24), at(24, 10)] }
+      ]
+    }
+    const [timing] = resolveDepartures(leg, index(night), { departureS: at(23, 45), dayMask: ALL_DAYS })
+    expect(timing?.tripId).toBe('n0')
+    expect(timing?.lastOfDay).toBeUndefined()
+  })
+
+  // A later short-turn that stops before the rider's station is no help.
+  it('ignores a later trip that does not go far enough', () => {
+    const shortTurn: TripPattern = {
+      lineCode: 'M',
+      stationIds: ['MRTJ-LBB', 'MRTJ-FTM'],
+      trips: [{ id: 's8', dayMask: ALL_DAYS, departuresS: [at(8), at(8, 10)] }]
+    }
+    const [timing] = resolveDepartures(leg, index(mrt, shortTurn), { departureS: at(6, 30), dayMask: ALL_DAYS })
+    expect(timing?.tripId).toBe('m7')
+    expect(timing?.lastOfDay).toBe(true)
+  })
+
+  // Only trips running on the requested days count as later.
+  it('ignores a later trip that does not run that day', () => {
+    const weekdayLate: TripPattern = {
+      lineCode: 'M',
+      stationIds: ['MRTJ-LBB', 'MRTJ-FTM', 'MRTJ-BLA'],
+      trips: [{ id: 'w9', dayMask: WD, departuresS: [at(9), at(9, 10), at(9, 20)] }]
+    }
+    const [timing] = resolveDepartures(leg, index(mrt, weekdayLate), { departureS: at(6, 30), dayMask: 0b001 })
+    expect(timing?.lastOfDay).toBe(true)
   })
 })

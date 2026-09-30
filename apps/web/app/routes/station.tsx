@@ -6,6 +6,7 @@ import StationContent, { useStationHeader } from '~/components/station-content'
 import LineRoundel from '~/components/line-roundel'
 import { sortLineKeysForDisplay } from '~/utils/lines'
 import { useLines } from '~/hooks/use-lines'
+import { readSavedStations, toggleSavedStation } from 'utils/saved-stations'
 
 export function meta() {
   return [
@@ -23,14 +24,12 @@ export default function StationPage({ params }: Route.ComponentProps) {
 
   useEffect(() => {
     if (header.isLoading) return
-    const savedStationsRaw = localStorage.getItem('saved-stations')
-    if (!savedStationsRaw || !header.stationId) {
+    if (!header.stationId) {
       setSaved(false)
       return
     }
 
-    const savedStations = JSON.parse(savedStationsRaw) as string[]
-    setSaved(savedStations.includes(header.stationId))
+    setSaved(readSavedStations().includes(header.stationId))
 
     if (header.name) {
       document.title = `${header.name} - Commute`
@@ -47,22 +46,7 @@ export default function StationPage({ params }: Route.ComponentProps) {
 
   const handleSaveStationButton = useCallback(() => {
     if (!header.stationId) return
-    const savedStations = JSON.parse(localStorage.getItem('saved-stations') ?? '[]') as string[]
-
-    if (!savedStations) {
-      localStorage.setItem('saved-stations', JSON.stringify([header.stationId]))
-      setSaved(true)
-      return
-    }
-
-    if (savedStations.includes(header.stationId)) {
-      const newSavedStations = savedStations.filter(item => item !== header.stationId)
-      localStorage.setItem('saved-stations', JSON.stringify(newSavedStations))
-      setSaved(false)
-    } else {
-      localStorage.setItem('saved-stations', JSON.stringify([...savedStations, header.stationId]))
-      setSaved(true)
-    }
+    setSaved(toggleSavedStation(header.stationId).includes(header.stationId))
   }, [header.stationId])
 
   return (

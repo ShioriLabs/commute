@@ -55,14 +55,15 @@ export interface FareCriteria {
    */
   modes: 'all' | 'rail'
   /**
-   * How much the rider minds walking.
+   * How fast the rider walks, as JR East's 歩く速度 asks it.
    *
-   * A preference, not a speed. The engine has no duration model at all, so this
-   * cannot promise a journey takes longer at your pace — it only shifts which
-   * tradeoffs win, so a 600m transfer stops beating an extra change. Copy must
-   * say "I walk slowly", never a number of minutes.
+   * One speed, two effects on the server: it decides which connection the rider
+   * makes (a slower walker misses a tight change and gets the next train), and
+   * how much a long walk counts against a route. Durations are not shown for it
+   * on purpose, so copy names the rider's situation ("bawa barang gede"), never
+   * a number of minutes.
    *
-   * `AVOID` is steep rather than absolute: a short-walk option is still found
+   * `SLOWEST` is steep rather than absolute: a short-walk option is still found
    * and offered, just ranked below the alternatives. Nothing here can make a
    * route disappear, which is why this is safe to default anyone into.
    */
@@ -78,8 +79,21 @@ export const FARE_CRITERIA_KEY = 'fare-criteria'
  * @commute/tsundere: the web app does not depend on the engine package, and the
  * set is a wire contract with the API either way.
  */
-export type WalkingPreference = 'BRISK' | 'AVERAGE' | 'SLOW' | 'AVOID'
-export const WALKING_PREFERENCES: WalkingPreference[] = ['BRISK', 'AVERAGE', 'SLOW', 'AVOID']
+export type WalkingPreference = 'BRISK' | 'AVERAGE' | 'SLOW' | 'SLOWEST'
+export const WALKING_PREFERENCES: WalkingPreference[] = ['BRISK', 'AVERAGE', 'SLOW', 'SLOWEST']
+
+/**
+ * Read a stored or URL-supplied walking level.
+ *
+ * `AVOID` ("Males jalan") is the retired fourth level, from before this became
+ * a pure speed. It ranked exactly as SLOWEST does, so a rider who picked it, or
+ * a link that carries it, lands there rather than being reset to the default.
+ * The API reads it the same way.
+ */
+function parseWalking(raw: unknown): WalkingPreference | undefined {
+  if (raw === 'AVOID') return 'SLOWEST'
+  return WALKING_PREFERENCES.includes(raw as WalkingPreference) ? raw as WalkingPreference : undefined
+}
 
 export const DEFAULT_FARE_CRITERIA: FareCriteria = {
   paymentMethod: 'STORED_VALUE',
@@ -141,9 +155,7 @@ export function parseFareCriteria(raw: string | null): FareCriteria {
   // A stale code only ever over-filters the picker, which is visible and
   // recoverable; the "Semua" option is always there.
   const modes = record.modes === 'rail' ? 'rail' : DEFAULT_FARE_CRITERIA.modes
-  const walking = WALKING_PREFERENCES.includes(record.walking as WalkingPreference)
-    ? record.walking as WalkingPreference
-    : DEFAULT_FARE_CRITERIA.walking
+  const walking = parseWalking(record.walking) ?? DEFAULT_FARE_CRITERIA.walking
   const operator = typeof record.operator === 'string'
     ? record.operator as OperatorCode
     : null
@@ -316,10 +328,8 @@ export function readCriteriaFromUrl(params: URLSearchParams): Partial<FareCriter
 
   // Round-trips for the same reason modes does: a shared link should reproduce
   // the ordering the sender was looking at.
-  const walking = params.get('walking')
-  if (walking && WALKING_PREFERENCES.includes(walking as WalkingPreference)) {
-    criteria.walking = walking as WalkingPreference
-  }
+  const walking = parseWalking(params.get('walking'))
+  if (walking) criteria.walking = walking
 
   // `NUL` is excluded for the same reason a typo is: it is an internal
   // placeholder that never labels a real station, so scoping to it would empty

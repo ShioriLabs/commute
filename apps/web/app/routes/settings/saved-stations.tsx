@@ -1,10 +1,11 @@
 import { OPERATORS } from '@commute/constants'
-import { CaretLeftIcon, PushPinIcon, PushPinSlashIcon } from '@phosphor-icons/react'
+import { CaretDownIcon, CaretLeftIcon, CaretUpIcon, PushPinIcon, PushPinSlashIcon } from '@phosphor-icons/react'
 import type { StandardResponse } from '@schema/response'
 import type { Station } from '@commute/schemas'
 import { useState, useEffect, useCallback } from 'react'
 import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
+import { moveEntry } from 'utils/saved-stations'
 
 export function meta() {
   return [
@@ -17,6 +18,10 @@ interface SavedStationItemProps {
   stationId: string
   isSaved: boolean
   onSaveButtonClick: (id: string) => void
+  // Ends of the list disable the matching chevron rather than wrapping around.
+  isFirst: boolean
+  isLast: boolean
+  onMove: (id: string, offset: -1 | 1) => void
 }
 
 interface SavedStationObject {
@@ -24,7 +29,7 @@ interface SavedStationObject {
   isSaved: boolean
 }
 
-function SavedStationItem({ stationId, isSaved, onSaveButtonClick }: SavedStationItemProps) {
+function SavedStationItem({ stationId, isSaved, onSaveButtonClick, isFirst, isLast, onMove }: SavedStationItemProps) {
   const [operator, code] = stationId.split(/-/g)
   const station = useSWR<StandardResponse<Station>>(new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher)
 
@@ -61,15 +66,35 @@ function SavedStationItem({ stationId, isSaved, onSaveButtonClick }: SavedStatio
             {OPERATORS[station.data.data.operator]?.name ?? station.data.data.operator}
           </h2>
         </div>
-        <button onClick={handleSaveStationButton} className="cursor-pointer">
-          {isSaved
-            ? (
-                <PushPinSlashIcon weight="fill" className="w-6 h-6 text-red-400" />
-              )
-            : (
-                <PushPinIcon weight="fill" className="w-6 h-6" />
-              )}
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => onMove(stationId, -1)}
+            disabled={isFirst}
+            aria-label={`Naikkan ${station.data.data.name}`}
+            className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer disabled:cursor-default disabled:text-slate-300"
+          >
+            <CaretUpIcon weight="bold" className="w-5 h-5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onMove(stationId, 1)}
+            disabled={isLast}
+            aria-label={`Turunkan ${station.data.data.name}`}
+            className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer disabled:cursor-default disabled:text-slate-300"
+          >
+            <CaretDownIcon weight="bold" className="w-5 h-5" />
+          </button>
+          <button onClick={handleSaveStationButton} className="ms-2 cursor-pointer">
+            {isSaved
+              ? (
+                  <PushPinSlashIcon weight="fill" className="w-6 h-6 text-red-400" />
+                )
+              : (
+                  <PushPinIcon weight="fill" className="w-6 h-6" />
+                )}
+          </button>
+        </div>
       </article>
     </li>
   )
@@ -127,6 +152,16 @@ export default function SavedStationsSettingsPage() {
     setIsDirty(true)
   }
 
+  // Order is what the search sheet's pin pills follow, so a move is a change
+  // like any other and commits on leaving the page.
+  const handleMove = (id: string, offset: -1 | 1) => {
+    setStations((prevStations) => {
+      const from = prevStations.findIndex(station => station.id === id)
+      return from === -1 ? prevStations : moveEntry(prevStations, from, from + offset)
+    })
+    setIsDirty(true)
+  }
+
   return (
     <main className="bg-white w-full h-full min-h-screen overflow-y-auto pb-4">
       <div className="p-8 pb-4 sticky top-0 max-w-3xl mx-auto bg-white">
@@ -152,12 +187,15 @@ export default function SavedStationsSettingsPage() {
             <ul className="max-w-3xl mx-auto">
               {stations.length > 0
                 ? (
-                    stations.map(station => (
+                    stations.map((station, index) => (
                       <SavedStationItem
                         stationId={station.id}
                         key={station.id}
                         onSaveButtonClick={handleSaveStationButton}
                         isSaved={station.isSaved}
+                        isFirst={index === 0}
+                        isLast={index === stations.length - 1}
+                        onMove={handleMove}
                       />
                     ))
                   )

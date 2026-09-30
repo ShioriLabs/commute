@@ -150,6 +150,18 @@ export const HeadwayRowSchema = v.pipe(
     boundFor: v.pipe(
       v.optional(v.string()),
       v.description('Nama halte tujuan akhir buat arah ini, kayak yang ada di papan halte ("arah Galunggung"). Cuma ada kalau dua arahnya beda frekuensi — kalau nggak ada, angkanya berlaku buat dua-duanya.')
+    ),
+    serviceHours: v.pipe(
+      v.optional(v.union([
+        v.object({
+          start: v.pipe(v.string(), v.description('Jam mulai operasional, `HH:MM` waktu Jakarta.'), v.metadata({ examples: ['05:00'] })),
+          end: v.pipe(v.string(), v.description('Jam selesai operasional, `HH:MM` waktu Jakarta. Bisa lebih kecil dari `start` kalau lewat tengah malam.'), v.metadata({ examples: ['22:00'] }))
+        }),
+        v.object({
+          allDay: v.pipe(v.literal(true), v.description('Linnya jalan 24 jam.'))
+        })
+      ])),
+      v.description('Jam operasional lin ini di hari yang diminta, se-lin, bukan jam lewat di halte ini. Sekarang cuma ada buat TransJakarta, dan cuma kalau datanya ada — kalau nggak ada, berarti nggak diketahui, bukan 24 jam.')
     )
   }),
   v.title('HeadwayRow'),
