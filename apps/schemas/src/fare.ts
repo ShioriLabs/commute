@@ -64,6 +64,10 @@ export const RideLegSchema = v.pipe(
       v.description('Jam tiba di stasiun turun, sesuai jadwal resmi. Cuma ada di tahap yang jadwalnya kami punya.'),
       v.metadata({ examples: ['2026-09-07T07:31:00+07:00'] })
     ),
+    lastService: v.pipe(
+      v.optional(v.literal(true)),
+      v.description('Ada dan bernilai `true` kalau ini kendaraan terakhir hari ini yang bisa dinaiki dari stasiun naik sampai stasiun turun tahap ini. Ketinggalan berarti tahap ini baru bisa dinaiki besok. Cuma ada di tahap yang jadwalnya kami punya.')
+    ),
     /*
      * Optional for the same reason as the two above, but with a sharper edge:
      * platform assignments are reassigned operationally and change with

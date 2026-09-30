@@ -207,8 +207,12 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
             */}
           {legTimes
             ? (
-                <span className="text-sm font-semibold text-slate-700">
+                <span className="text-sm font-semibold text-slate-700 flex items-center gap-2">
                   { legTimes }
+                  {/* Missing this one means no leg tonight, not a later one. */}
+                  {leg.lastService
+                    ? <span className="text-xs font-bold text-amber-800 bg-amber-100 rounded-full px-2 py-0.5">Terakhir</span>
+                    : null}
                 </span>
               )
             : null}
@@ -378,6 +382,12 @@ export function JourneyCardFace({ journey, onSelect }: {
    */
   const labels = sortJourneyLabels(journey.labels).slice(0, 2)
   /*
+   * Rides the last train of the night somewhere along the way. Not a reason to
+   * pick this option like the labels beside it, but a condition on taking it,
+   * so it leads the line in its own colour rather than joining their list.
+   */
+  const lastTrain = journey.legs.some(leg => leg.type === 'RIDE' && leg.lastService)
+  /*
    * When this option leaves, and when it lands if we can say.
    *
    * The boarding alone is enough to show, and on a mixed journey it is all
@@ -483,7 +493,7 @@ export function JourneyCardFace({ journey, onSelect }: {
         * Still capped at two by sortJourneyLabels: a row wearing four reasons
         * is making none of them.
         */}
-      {fareLeads && labels.length === 0
+      {fareLeads && labels.length === 0 && !lastTrain
         ? null
         : (
             <div className="mt-1 flex items-baseline justify-between gap-2">
@@ -494,10 +504,12 @@ export function JourneyCardFace({ journey, onSelect }: {
                       { fareText ?? 'Tarif tidak tersedia' }
                     </span>
                   )}
-              {labels.length > 0
+              {lastTrain || labels.length > 0
                 ? (
-                    <span className="ml-auto text-xs font-bold text-rose-700 truncate min-w-0 text-right">
-                      { labels.map(label => JOURNEY_LABELS[label]).join(' · ') }
+                    <span className="ml-auto text-xs font-bold truncate min-w-0 text-right">
+                      {lastTrain ? <span className="text-amber-700">Kereta terakhir</span> : null}
+                      {lastTrain && labels.length > 0 ? <span className="text-slate-400">{' · '}</span> : null}
+                      <span className="text-rose-700">{ labels.map(label => JOURNEY_LABELS[label]).join(' · ') }</span>
                     </span>
                   )
                 : null}

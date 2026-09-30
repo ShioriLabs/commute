@@ -5,6 +5,8 @@ import LineCard from '~/components/line-card'
 import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
 import { normalizeGroupedTimetable } from 'utils/timetable-shim'
+import { serviceDayOf } from 'utils/service-day'
+import { useNextDayTimetable } from '~/hooks/use-next-day-timetable'
 import SearchStationsButton from '~/components/nav-buttons/search-stations'
 import { CaretRightIcon, DownloadSimpleIcon, InfoIcon, WarningIcon } from '@phosphor-icons/react'
 import { Link } from 'react-router'
@@ -76,8 +78,10 @@ function EmptyState({ mode = 'NO_SAVED' }: { mode: 'NO_SAVED' | 'OFFLINE' }) {
 function StationCard({ stationId, index = 0 }: { stationId: string, index?: number }) {
   const [operator, code] = stationId.split(/-/g)
   const station = useSWR<StandardResponse<Station>>(new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
-  const timetable = useSWR<StandardResponse<CompactLineGroupedTimetable>>(new URL(`/stations/${operator}/${code}/timetable/grouped?compact=1`, import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
+  // The service day, not the calendar one; see station-content's timetableUrl.
+  const timetable = useSWR<StandardResponse<CompactLineGroupedTimetable>>(new URL(`/stations/${operator}/${code}/timetable/grouped?compact=1&day=${serviceDayOf(new Date())}`, import.meta.env.VITE_API_BASE_URL).href, fetcher, swrConfig)
   const timetableData = useMemo(() => normalizeGroupedTimetable(timetable.data?.data), [timetable.data])
+  const nextDayLine = useNextDayTimetable(operator, code)
   const networkStatus = useNetworkStatus()
 
   // Every branch below is wrapped by the single <li> at the end of this
@@ -137,7 +141,7 @@ function StationCard({ stationId, index = 0 }: { stationId: string, index?: numb
                   // to soften the remaining difference.
                   <ul className="content-fade flex flex-col lg:grid lg:grid-cols-2 gap-4 mx-4">
                     {timetableData.map(line => (
-                      <LineCard key={line.line} line={line} />
+                      <LineCard key={line.line} line={line} nextDayLine={nextDayLine(line)} />
                     ))}
                   </ul>
                 )

@@ -26,12 +26,15 @@ import type { Transfer } from '@commute/schemas'
 import type { HeadwayRow } from '@commute/schemas'
 import { directionalBaseName } from 'utils/directional-stations'
 import LineCard from '~/components/line-card'
+import LastDepartures from '~/components/last-departures'
 import LineRoundel from '~/components/line-roundel'
 import EmptyState from '~/components/empty-state'
 import FrequencyList from '~/components/frequency-card'
 import ExitLink from '~/components/exit-link'
 import { fetcher } from 'utils/fetcher'
 import { normalizeGroupedTimetable } from 'utils/timetable-shim'
+import { serviceDayOf } from 'utils/service-day'
+import { useNextDayTimetable } from '~/hooks/use-next-day-timetable'
 import { sortLinesForDisplay } from '~/utils/lines'
 import { useNetworkStatus } from '~/hooks/network'
 import { getUnservedStation } from '~/lib/unserved-stations'
@@ -191,9 +194,17 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
     new URL(`/stations/${operator}/${code}`, import.meta.env.VITE_API_BASE_URL).href,
   [operator, code]
   )
+  /*
+   * Asked for explicitly rather than left to the API, which resolves an absent
+   * `day` by calendar date: at 00:30 on a Saturday that is the SAT board, while
+   * Friday night's trains, last ones included, are still running off WD's.
+   * Recomputed per render but a plain string, so the URLs below only change
+   * when the service day actually turns over.
+   */
+  const day = serviceDayOf(new Date())
   const timetableUrl = useMemo(() =>
-    new URL(`/stations/${operator}/${code}/timetable/grouped?compact=1`, import.meta.env.VITE_API_BASE_URL).href,
-  [operator, code]
+    new URL(`/stations/${operator}/${code}/timetable/grouped?compact=1&day=${day}`, import.meta.env.VITE_API_BASE_URL).href,
+  [operator, code, day]
   )
   const transfersUrl = useMemo(() =>
     new URL(`/stations/${operator}/${code}/transfers`, import.meta.env.VITE_API_BASE_URL).href,
@@ -207,14 +218,15 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
    */
   const headwayUrl = useMemo(() =>
     operator === 'TJ'
-      ? new URL(`/stations/${operator}/${code}/headway`, import.meta.env.VITE_API_BASE_URL).href
+      ? new URL(`/stations/${operator}/${code}/headway?day=${day}`, import.meta.env.VITE_API_BASE_URL).href
       : null,
-  [operator, code]
+  [operator, code, day]
   )
 
   const station = useSWR<StandardResponse<Station>>(unserved ? null : stationUrl, fetcher, swrConfig)
   const timetable = useSWR<StandardResponse<CompactLineGroupedTimetable>>(unserved ? null : timetableUrl, fetcher, swrConfig)
   const timetableData = useMemo(() => normalizeGroupedTimetable(timetable.data?.data), [timetable.data])
+  const nextDayLine = useNextDayTimetable(operator, code)
   const transfers = useSWR<StandardResponse<Transfer[]>>(unserved ? null : transfersUrl, fetcher, swrConfig)
   const headway = useSWR<StandardResponse<HeadwayRow[]>>(unserved ? null : headwayUrl, fetcher, swrConfig)
   // Line keys on stations and transfers resolve through the dictionary.
@@ -315,9 +327,10 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
               </div>
               <ul className="flex flex-col gap-2 mt-4">
                 {timetableData.map(line => (
-                  <LineCard key={line.line} line={line} operator={operator} onIsolateLine={onIsolateLine} />
+                  <LineCard key={line.line} line={line} operator={operator} onIsolateLine={onIsolateLine} nextDayLine={nextDayLine(line)} />
                 ))}
               </ul>
+              <LastDepartures timetable={timetableData} />
             </>
           )
         }

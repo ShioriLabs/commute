@@ -8,6 +8,7 @@ import { getForegroundColor, getTintFromColor } from 'utils/colors'
 import { departureSortKey, getRelativeDepartureLabel, isImminentDeparture, parseMinute } from 'utils/schedules'
 import { formatPlatformCode, joinLabels } from 'utils/labels'
 import { useClock } from '~/hooks/clock'
+import { firstDeparture, isServiceOver, lastDepartures, minuteOfDay, restartsToday, serviceStartMinute } from 'utils/service-day'
 import PidsChevrons from './pids-chevrons'
 import { codeOfLineKey, useLines } from '~/hooks/use-lines'
 
@@ -50,9 +51,15 @@ interface Props {
    * Must be referentially stable, like onSelectDeparture beside it.
    */
   onIsolateLine?: (key: string) => void
+  /*
+   * The same line on the next service day's board, for "mulai lagi" once a
+   * destination has finished. See useNextDayTimetable. Undefined while it loads
+   * or where the line does not run tomorrow; the row then says when it ended.
+   */
+  nextDayLine?: CompactLineTimetable
 }
 
-export default function LineCard({ line, operator, onIsolateLine }: Props) {
+export default function LineCard({ line, operator, onIsolateLine, nextDayLine }: Props) {
   const stack = usePaneStack()
   // Shared 10s clock — one timer for the whole feed instead of one per card.
   const nowMs = useClock()
@@ -69,15 +76,67 @@ export default function LineCard({ line, operator, onIsolateLine }: Props) {
   const lineName = resolved?.name ?? (lineCode || 'Lin lain')
   const lineColor = resolved?.colorCode ?? '#94a3b8'
 
+  /*
+   * Where this line's service day starts, from its overnight gap. Over the whole
+   * line on purpose: a peak-only short-turn has a midday gap longer than its
+   * night. Null for a line that never stops, which is never "over".
+   */
+  const serviceStart = useMemo(
+    () => serviceStartMinute(line.timetable.flatMap(group =>
+      group.destinations.flatMap(destination => destination.schedules.map(schedule => schedule[1])))),
+    [line.timetable]
+  )
+
+  const nextStart = useMemo(
+    () => nextDayLine
+      ? serviceStartMinute(nextDayLine.timetable.flatMap(group =>
+          group.destinations.flatMap(destination => destination.schedules.map(schedule => schedule[1]))))
+      : null,
+    [nextDayLine]
+  )
+
   const upcomingGroups = useMemo(() => {
+    const nowMinute = minuteOfDay(lastUpdated)
     return line.timetable
       .map((group) => {
         const destinations = group.destinations
-          .map(destination => ({
-            boundFor: destination.boundFor,
-            via: destination.via,
-            schedules: getNextSchedules(destination.schedules)
-          }))
+          .map((destination) => {
+            /*
+             * Past the last departure, say so, rather than let getNextSchedules
+             * fall back to the first train of the day and present it as next.
+             * Per destination, so a short-turn that finished at 21.00 reads as
+             * done while the full run beside it is still going.
+             */
+            const last = serviceStart === null
+              ? undefined
+              : lastDepartures(destination.schedules, serviceStart, 1)[0]
+            const over = last !== undefined && serviceStart !== null && isServiceOver(nowMinute, last[1], serviceStart)
+            /*
+             * When it starts again. Before the line's first train in the small
+             * hours that is today's board; any other time it is tomorrow's,
+             * matched by group and destination so a short-turn restarts with
+             * its own first train rather than the full run's.
+             */
+            let restart: CompactSchedule | undefined
+            if (over) {
+              if (restartsToday(nowMinute, serviceStart)) {
+                restart = firstDeparture(destination.schedules, serviceStart)
+              } else if (nextDayLine) {
+                const same = (d: { boundFor: string, via: string | null }) =>
+                  d.boundFor === destination.boundFor && d.via === destination.via
+                const match = nextDayLine.timetable.find(g => g.key === group.key)?.destinations.find(same)
+                  ?? nextDayLine.timetable.flatMap(g => g.destinations).find(same)
+                if (match) restart = firstDeparture(match.schedules, nextStart ?? serviceStart)
+              }
+            }
+            return {
+              boundFor: destination.boundFor,
+              via: destination.via,
+              schedules: over ? [last] : getNextSchedules(destination.schedules),
+              over,
+              restart
+            }
+          })
           .filter(destination => destination.schedules.length > 0)
 
         return {
@@ -88,7 +147,7 @@ export default function LineCard({ line, operator, onIsolateLine }: Props) {
         }
       })
       .filter(group => group.destinations.length > 0)
-  }, [line.timetable, lastUpdated])
+  }, [line.timetable, lastUpdated, serviceStart, nextDayLine, nextStart])
 
   if (upcomingGroups.length === 0) return null
 
@@ -216,6 +275,32 @@ export default function LineCard({ line, operator, onIsolateLine }: Props) {
               )}
               <ul>
                 {group.destinations.map((destination) => {
+                  if (destination.over) {
+                    const format = (minute: number) => parseMinute(minute).toLocaleTimeString('id-ID', { timeStyle: 'short' })
+                    // "mulai lagi" is what a rider can act on; the last time is
+                    // only the fallback for when tomorrow's board has not said.
+                    const note = destination.restart
+                      ? `mulai lagi ${format(destination.restart[1])}`
+                      : `terakhir ${format(destination.schedules[0][1])}`
+                    return (
+                      <li
+                        key={`${destination.boundFor}${destination.via ? `:${destination.via}` : ''}`}
+                        className="py-2.5 px-4 flex items-baseline justify-between gap-3"
+                        aria-label={`Layanan menuju ${destination.boundFor} sudah selesai, ${note}`}
+                      >
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-sm text-slate-800 truncate">{destination.boundFor}</span>
+                          { /* eslint-disable-next-line @stylistic/jsx-one-expression-per-line */ }
+                          {destination.via && <span className="text-xs text-gray-500">via {destination.via}</span>}
+                        </div>
+                        <div className="text-right flex flex-col shrink-0">
+                          <span className="text-base font-bold leading-tight text-slate-500">Udahan</span>
+                          <span className="text-sm tabular-nums text-gray-600">{note}</span>
+                        </div>
+                      </li>
+                    )
+                  }
+
                   const departure = parseMinute(destination.schedules[0][1])
                   const relativeLabel = getRelativeDepartureLabel(lastUpdated, departure)
                   const absoluteTime = departure.toLocaleTimeString('id-ID', { timeStyle: 'short' })

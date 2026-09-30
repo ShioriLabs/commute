@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dayLabel, formatHeadway } from './index'
+import { dayLabel, formatHeadway, serviceHoursLabel } from './index'
 
 /*
  * The copy rules around a headway are the part worth pinning.
@@ -66,5 +66,17 @@ describe('dayLabel', () => {
     expect(dayLabel(['SUN'])).toBe('Minggu')
     expect(dayLabel(['SAT'])).toBe('Sabtu')
     expect(dayLabel(['SUN'])).not.toBe(dayLabel(['SAT', 'SUN']))
+  })
+})
+
+describe('serviceHoursLabel', () => {
+  it('names the corridor window, never a last bus', () => {
+    expect(serviceHoursLabel({ start: '05:00', end: '22:00' })).toBe('operasional 05.00–22.00')
+  })
+
+  it('says 24 jam only when the source says so', () => {
+    expect(serviceHoursLabel({ allDay: true })).toBe('24 jam')
+    // Absent means unknown, not round the clock.
+    expect(serviceHoursLabel(undefined)).toBeNull()
   })
 })

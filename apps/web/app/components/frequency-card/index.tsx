@@ -35,6 +35,20 @@ export function formatHeadway(seconds: number): string {
   return `Setiap ~${minutes} menit`
 }
 
+/*
+ * The corridor's operating hours, when the source has them.
+ *
+ * "operasional", never "bus terakhir": the window is the whole corridor's, so
+ * the last bus reaches a halte halfway along later than the time shown. Absent
+ * hours print nothing rather than "24 jam", because absent means unknown.
+ */
+export function serviceHoursLabel(hours: HeadwayRow['serviceHours']): string | null {
+  if (!hours) return null
+  if ('allDay' in hours) return '24 jam'
+  const dotted = (hhmm: string) => hhmm.replace(':', '.')
+  return `operasional ${dotted(hours.start)}–${dotted(hours.end)}`
+}
+
 function directionLabel(row: HeadwayRow): string | null {
   return row.boundFor ? `arah ${row.boundFor}` : null
 }
@@ -130,7 +144,13 @@ function CorridorRows({ rows }: { rows: readonly HeadwayRow[] }) {
         <span className="shrink-0">
           <LineRoundel code={lineCode} color={lineColor as `#${string}`} operator={operator} size="SM" />
         </span>
-        <span className="font-bold text-base min-w-0">{lineName}</span>
+        <span className="min-w-0">
+          <span className="block font-bold text-base">{lineName}</span>
+          {/* Per corridor, so it sits with the name rather than on each direction. */}
+          {serviceHoursLabel(first.serviceHours) && (
+            <span className="block text-xs text-slate-500">{serviceHoursLabel(first.serviceHours)}</span>
+          )}
+        </span>
         {inline && (
           /*
            * The name yields and the frequency does not: the frequency is a short

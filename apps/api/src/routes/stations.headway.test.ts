@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { DAY_HEADWAYS_S, DIRECTIONAL_HEADWAYS_S, HEADWAYS_S, LINE_TERMINI, STOP_HEADWAYS_S } from 'db/data/headways'
+import { SERVICE_HOURS } from 'db/data/service-hours'
 
 /*
  * The handler reaches D1 through the `db(d1)` Kysely factory, so the query
@@ -94,7 +95,9 @@ interface HeadwayBody {
     headwayS: number | null
     source: 'STOP' | 'LINE'
     weekendOnly?: true
+    days?: string[]
     boundFor?: string
+    serviceHours?: { start: string, end: string } | { allDay: true }
   }[]
 }
 
@@ -120,7 +123,7 @@ describe('/stations/:operator/:code/headway', () => {
     expect(res.status).toBe(200)
     const body = await res.json() as HeadwayBody
     expect(body.data).toEqual([
-      { line: 'TJ:1', headwayS: STOP_HEADWAYS_S['1@TJ-H00014P'], source: 'STOP' }
+      { line: 'TJ:1', headwayS: STOP_HEADWAYS_S['1@TJ-H00014P'], source: 'STOP', serviceHours: { allDay: true } }
     ])
   })
 
@@ -139,7 +142,7 @@ describe('/stations/:operator/:code/headway', () => {
     )
     const body = await res.json() as HeadwayBody
     expect(STOP_HEADWAYS_S['4@TJ-H00181P']).toBeUndefined()
-    expect(body.data).toEqual([{ line: 'TJ:4', headwayS: HEADWAYS_S['4'], source: 'LINE' }])
+    expect(body.data).toEqual([{ line: 'TJ:4', headwayS: HEADWAYS_S['4'], source: 'LINE', serviceHours: { allDay: true } }])
   })
 
   /*
@@ -284,7 +287,7 @@ describe('/stations/:operator/:code/headway', () => {
     const res = await request('/stations/TJ/H00014P/headway', envFor(station({ lines: '1' })))
     const body = await res.json() as HeadwayBody
     expect(body.data).toEqual([
-      { line: 'TJ:1', headwayS: STOP_HEADWAYS_S['1@TJ-H00014P'], source: 'STOP' }
+      { line: 'TJ:1', headwayS: STOP_HEADWAYS_S['1@TJ-H00014P'], source: 'STOP', serviceHours: { allDay: true } }
     ])
     expect(body.data[0]).not.toHaveProperty('boundFor')
   })
@@ -314,5 +317,40 @@ describe('/stations/:operator/:code/headway', () => {
     expect(body.data).toHaveLength(1)
     expect(body.data[0]!.headwayS).toBe(DIRECTIONAL_HEADWAYS_S[key])
     expect(body.data[0]!.boundFor).toBe('Ujung Satu-Arah')
+  })
+
+  /*
+   * Operating hours ride along on each TJ row. The corridor's span, not this
+   * halte's last bus, and only where the source has one: a line with no entry
+   * must not be reported as round the clock.
+   */
+  describe('serviceHours', () => {
+    const hoursOf = async (lines: string, day = 'WD') => {
+      const res = await request(`/stations/TJ/H00014P/headway?day=${day}`, envFor(station({ lines })))
+      return (await res.json() as HeadwayBody).data.map(row => row.serviceHours)
+    }
+
+    it('reports a 24-hour corridor as allDay', async () => {
+      expect(SERVICE_HOURS['1']?.ALL).toEqual([0, 86399])
+      expect(await hoursOf('1')).toEqual([{ allDay: true }])
+    })
+
+    it('reports a daytime corridor as a window', async () => {
+      expect(SERVICE_HOURS['10H']?.ALL).toEqual([18000, 79200])
+      expect(await hoursOf('10H')).toEqual([{ start: '05:00', end: '22:00' }])
+    })
+
+    it('reads the day-specific window where a corridor has one', async () => {
+      expect(SERVICE_HOURS['13E']?.SAT).toEqual([18000, 79200])
+      expect(await hoursOf('13E', 'SAT')).toEqual([{ start: '05:00', end: '22:00' }])
+    })
+
+    it('leaves rail rows without hours', async () => {
+      const res = await request(
+        '/stations/MRTJ/SSM/headway',
+        envFor(station({ id: 'MRTJ-SSM', code: 'SSM', name: 'Stasiun ASEAN', operator: 'MRTJ', lines: 'M' }))
+      )
+      expect((await res.json() as HeadwayBody).data[0]!.serviceHours).toBeUndefined()
+    })
   })
 })
