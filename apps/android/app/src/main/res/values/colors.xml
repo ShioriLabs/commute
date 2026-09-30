@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The window behind MainActivity, drawn before the first Compose frame. Matches
+         CommuteColors.backgroundLight so launch doesn't flash white. -->
+    <color name="window_background">#FFFFF8F8</color>
+</resources>
