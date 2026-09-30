@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { readSavedStations, toggleSavedStation } from './saved-stations'
+import { moveEntry, readSavedStations, toggleSavedStation } from './saved-stations'
 
 // The station page and the search sheet both star through these, so the stored
 // shape has to survive a round trip and a corrupted value must read as empty.
@@ -37,5 +37,23 @@ describe('saved stations', () => {
     expect(readSavedStations()).toEqual([])
     store.set('saved-stations', '["KCI-MRI", 3, null]')
     expect(readSavedStations()).toEqual(['KCI-MRI'])
+  })
+})
+
+describe('moveEntry', () => {
+  it('moves an entry up and down by one', () => {
+    expect(moveEntry(['a', 'b', 'c'], 1, 0)).toEqual(['b', 'a', 'c'])
+    expect(moveEntry(['a', 'b', 'c'], 1, 2)).toEqual(['a', 'c', 'b'])
+  })
+
+  it('leaves the list unchanged past either end', () => {
+    expect(moveEntry(['a', 'b'], 0, -1)).toEqual(['a', 'b'])
+    expect(moveEntry(['a', 'b'], 1, 2)).toEqual(['a', 'b'])
+  })
+
+  it('does not mutate the input', () => {
+    const list = ['a', 'b']
+    moveEntry(list, 0, 1)
+    expect(list).toEqual(['a', 'b'])
   })
 })
