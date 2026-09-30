@@ -86,6 +86,18 @@ const CONNECTOR_MAX_CHANNEL = 40
 // 29 on the 2026-08c edition. Fails the build if an edition changes how they are drawn,
 // rather than quietly shipping walks without them.
 const MIN_CONNECTORS = 15
+/*
+ * Lines drawn in a neutral grey, which the saturation gate rejects as furniture. Only the
+ * Soekarno-Hatta skytrain (Kalayang, APCGK) is: rgb(84,81,82) at rail width 25. A sheet-wide
+ * survey found no other grey stroke at 25 in this lightness band (the rest are white label
+ * halos and light #B1AEA6 badge outlines), so the band is what admits it.
+ *
+ * Route overlay only, like the connectors: the skeleton keeps the saturated lines it was
+ * tuned on.
+ */
+const NEUTRAL_LINE_MIN_LIGHTNESS = 0.2
+const NEUTRAL_LINE_MAX_LIGHTNESS = 0.45
+const NEUTRAL_LINE_WIDTH = 25
 // Below this a "stroke" is a station tick or an icon detail, not a corridor.
 //
 // Shared by both width classes. The corridors design doc expected BRT to need a lower
@@ -257,6 +269,9 @@ async function extractStrokes(page: import('playwright').Page): Promise<RawStrok
     connectorWidth: number
     connectorWidthTolerance: number
     connectorMaxChannel: number
+    neutralMinLightness: number
+    neutralMaxLightness: number
+    neutralWidth: number
     minLength: number
     sampleStep: number
     maxSamples: number
@@ -305,7 +320,10 @@ async function extractStrokes(page: import('playwright').Page): Promise<RawStrok
         widthClass = cfg.connectorWidth
       } else {
         const { s, l } = rgbToHsl(r, g, b)
-        if (s < cfg.minSaturation || l < cfg.minLightness || l > cfg.maxLightness) continue
+        const neutralLine = s < cfg.minSaturation
+          && l >= cfg.neutralMinLightness && l <= cfg.neutralMaxLightness
+          && Math.abs(width - cfg.neutralWidth) <= cfg.widthTolerance
+        if (!neutralLine && (s < cfg.minSaturation || l < cfg.minLightness || l > cfg.maxLightness)) continue
         widthClass = cfg.widthClasses.find(w => Math.abs(width - w) <= cfg.widthTolerance)
       }
       if (widthClass === undefined) continue
@@ -371,6 +389,9 @@ async function extractStrokes(page: import('playwright').Page): Promise<RawStrok
     connectorWidth: CONNECTOR_WIDTH,
     connectorWidthTolerance: CONNECTOR_WIDTH_TOLERANCE,
     connectorMaxChannel: CONNECTOR_MAX_CHANNEL,
+    neutralMinLightness: NEUTRAL_LINE_MIN_LIGHTNESS,
+    neutralMaxLightness: NEUTRAL_LINE_MAX_LIGHTNESS,
+    neutralWidth: NEUTRAL_LINE_WIDTH,
     minLength: MIN_EXTRACT_LENGTH,
     sampleStep: SAMPLE_STEP,
     maxSamples: MAX_SAMPLES
@@ -532,6 +553,17 @@ function segmentDistance(p: number[], a: number[], b: number[]): number {
   if (lengthSquared === 0) return Math.hypot(p[0] - a[0], p[1] - a[1])
   const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / lengthSquared))
   return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy))
+}
+
+// Below the saturation gate: a grey the extractor only admitted as a neutral line.
+function isNeutralHex(hex: string): boolean {
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  if (max === min) return true
+  const l = (max + min) / 2
+  const s = l > 0.5 ? (max - min) / (2 - max - min) : (max - min) / (max + min)
+  return s < MIN_SATURATION
 }
 
 function channelDistance(a: string, b: string): number {
@@ -718,6 +750,8 @@ async function main(): Promise<void> {
    */
   const list: SkeletonStroke[] = extracted
     .filter(s => WIDTH_CLASSES.includes(s.w))
+    // The grey skytrain is corridors-only; see NEUTRAL_LINE_MIN_LIGHTNESS.
+    .filter(s => !isNeutralHex(s.c))
     // Re-applied here rather than at extraction, which now admits short connectors for the
     // corridors file. The animation wants long radials that read as lines; a 67-unit stub
     // adds nothing to it. Keeping this filter is what holds map-skeleton.json byte-identical
