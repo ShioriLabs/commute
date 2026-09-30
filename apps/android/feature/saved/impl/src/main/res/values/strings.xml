@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Empty state -->
+    <string name="saved_empty_illustration_description">Gambar peron stasiun dengan jembatan di atasnya</string>
+    <string name="saved_empty_title">Belum Ada Stasiun Disimpan</string>
+    <!-- %1$s is saved_nav_search_title, rendered in bold. -->
+    <string name="saved_empty_body">Klik tombol %1$s di bawah untuk cari jadwal, cek tarif &amp; simpan stasiun!</string>
+
+    <!-- Navigation rail -->
+    <string name="saved_nav_rail_description">Navigasi utama</string>
+    <string name="saved_nav_search_title">Mau ke mana?</string>
+    <string name="saved_nav_search_subtitle">Cari stasiun\n&amp; rute</string>
+    <string name="saved_nav_search_description">Cari stasiun, rute, dan tarif</string>
+    <string name="saved_nav_settings_title">Pengaturan</string>
+    <string name="saved_nav_settings_subtitle">Aplikasi</string>
+    <string name="saved_nav_settings_description">Pengaturan aplikasi</string>
+
+    <!-- Error state -->
+    <string name="saved_error_message">Gagal memuat stasiun tersimpan</string>
+</resources>
