@@ -1,6 +1,9 @@
 # Points of interest (POIs) in fares
 
 **Status:** design note — not yet implemented. Companion to `transit-hubs.md`.
+Revised 2026-09-30 to carry **station exits** on each access link (see
+"Exits: which door to use"), so a result can say *which* exit, not just which
+station.
 
 ## Goal
 
@@ -119,12 +122,27 @@ CREATE TABLE pois (
 );
 CREATE INDEX idx_pois_slug ON pois (slug);
 
+CREATE TABLE stationExits (          -- a station's exits/gates, independent of POIs
+  id         VARCHAR(64) PRIMARY KEY NOT NULL UNIQUE,  -- `${stationId}:${ref}`, e.g. 'MRTJ-DKA:B'
+  stationId  VARCHAR(48) NOT NULL,   -- FK -> stations.id
+  ref        VARCHAR(16) NOT NULL,   -- what the signage says: 'A', 'B', 'Utara', 'Selatan'
+  name       VARCHAR(128),           -- street/landmark the exit opens onto, nullable
+  latitude   REAL,                   -- the exit's own coords (NOT the station centroid), nullable
+  longitude  REAL,
+  access     VARCHAR(32),            -- 'LIFT' | 'ESCALATOR' | 'STAIRS' | 'LEVEL', nullable
+  source     VARCHAR(16) NOT NULL,   -- 'FIELD' | 'OPERATOR' | 'OSM' — see "Exit data sources"
+  createdAt  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updatedAt  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_stationExits_stationId ON stationExits (stationId);
+
 CREATE TABLE poiStations (           -- access walks: a POI ⇄ a nearby station
   id         VARCHAR(96) PRIMARY KEY NOT NULL UNIQUE,  -- `${poiId}:${stationId}`
   poiId      VARCHAR(48) NOT NULL,   -- FK -> pois.id (stable)
   stationId  VARCHAR(48) NOT NULL,   -- FK -> stations.id
-  distance   INTEGER NOT NULL,       -- walk metres (the honest, reported distance)
-  notes      VARCHAR(255),           -- e.g. 'via Gerbang Utama', nullable
+  exitId     VARCHAR(64),            -- FK -> stationExits.id: the exit to use for this POI, nullable
+  distance   INTEGER NOT NULL,       -- walk metres FROM THAT EXIT when set (the reported distance)
+  notes      VARCHAR(255),           -- free-text fallback, e.g. 'via Gerbang Utama', nullable
   createdAt  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updatedAt  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -132,12 +150,70 @@ CREATE INDEX idx_poiStations_poiId ON poiStations (poiId);
 CREATE INDEX idx_poiStations_stationId ON poiStations (stationId);
 ```
 
+`exitId` is nullable on purpose: a POI link without a known exit still routes and
+prices correctly, it just can't name the door. Exits get backfilled station by
+station without blocking the POI launch.
+
 `poiStations` is deliberately a **transfer-shaped** table (a from/to/distance walk
 link) rather than more rows in `transfers` — so POI access walks never bleed into the
 station↔station transfer graph, and their semantics stay separable (see fare-summary
 below). Kysely: `PoiSchema` + `PoiStationSchema` in
-`apps/api/src/db/schemas/pois.ts`, registered in `schemas/index.ts`. Seed via a
-generated `pois.sql` (same pattern as `hubs.sql` / `edges.sql`).
+`apps/api/src/db/schemas/pois.ts` and `StationExitSchema` in
+`apps/api/src/db/schemas/station-exits.ts`, registered in `schemas/index.ts`. Seed via
+generated `pois.sql` and `station-exits.sql` (same pattern as `hubs.sql` / `edges.sql`).
+
+### Exits: which door to use
+
+"Take the MRT to Dukuh Atas" is half an answer at a station with several exits
+on opposite sides of a main road. The other half is **which exit**, and that's
+what riders get wrong at MRT stations and big KRL stations (Sudirman,
+Manggarai, Tanah Abang). The POI link is the natural place for it: the access
+walk *starts at an exit*, so `poiStations.exitId` names it and `distance` is
+measured from it.
+
+**Why its own table, not a column on `poiStations`.** An exit belongs to the
+station, not to the POI. Several POIs share one exit (Exit B at Dukuh Atas serves
+more than one destination), a station page wants to list its exits whether or not a
+POI uses them, and transfers can later point at exits too (below). `stationExits`
+keeps one row per physical door; POI links reference it.
+
+**One link per (POI, station).** Keep `poiStations` at one row per pair, holding
+the *best* exit for that POI. If two exits of the same station both work for a
+POI, the router still only needs the shorter walk, and the extra exit is
+editorial, not routing. It can go in `notes` until a real need for several rows
+appears.
+
+**Routing: no change.** Exits never enter the graph. The walk edge is still
+POI ⇄ station with the curated `distance`; `exitId` is carried alongside it and
+only read when building the response.
+
+**How it surfaces:**
+
+- **`ACCESS` leg label** (see fare-summary below) gains the exit:
+  *"Keluar di Pintu B, jalan kaki ± 250 m ke GBK"* for a trailing access walk,
+  *"Jalan kaki dari GBK ± 250 m, masuk lewat Pintu B"* for a leading one. Without
+  an `exitId` it falls back to the current exit-less wording.
+- **Station page:** an "Pintu keluar" list (ref, what it opens onto, lift/stairs),
+  and the "what's nearby" reverse read (see Bonus) grouped **by exit**, which is how
+  a rider standing at the gate actually thinks.
+- **Map:** exits are natural tap targets at street zoom. Defer, as with POIs.
+
+**Transfers via exits (later, same table).** Many interchange walks leave one
+station by a specific exit ("to TJ Dukuh Atas, use the Kendal tunnel exit").
+`transfers` rows could take optional `fromExitId`/`toExitId` so interchange walk
+cards name the passage too. Out of scope for the POI launch, but it's why exits
+are station-owned rows rather than POI metadata.
+
+#### Exit data sources
+
+| Source | Covers | Notes |
+|---|---|---|
+| **Field** (`FIELD`) | KRL gates, TJ halte bridges | Like the 137 field-verified `PLATFORM_CODES`: the reliable source for KRL, where gates are named inconsistently or not at all. |
+| **Operator** (`OPERATOR`) | MRT Jakarta exits | MRTJ publishes per-station exit maps with lettered exits. Manual transcription. |
+| **OpenStreetMap** (`OSM`) | Many MRT entrances | `railway=subway_entrance` with `ref=A/B/…`. **ODbL**: attribute it, and keep OSM-derived rows identifiable (`source = 'OSM'`) and separable, since the share-alike clause applies to a derived *database* if it's ever redistributed. |
+
+`source` is required so a row's provenance is never ambiguous, and so OSM-derived
+rows can be exported, attributed or dropped as a set.
 
 ### Categories — take Jak Lingko's, don't invent one
 
@@ -182,7 +258,10 @@ matter". Curate `pois` rows against these, not against a mental list of famous p
 You already have station coords. For each curated POI (coords in hand), compute the
 *k* nearest stations by great-circle distance under a walking threshold (~1.2 km),
 eyeball the candidates, keep the sensible entrances, hand-tune `distance` to the real
-walking metres (not crow-flies). The nearest-station computation is the discovery aid;
+walking metres (not crow-flies). Where the station has `stationExits` rows with
+coords, run the same nearest search against **exits** instead of the station
+centroid: the nearest exit is the `exitId` candidate, and its distance is a far
+better starting point for the hand-tuned walk than the centroid's. The nearest-station computation is the discovery aid;
 the curated `poiStations` rows are the source of truth — same philosophy as the hub
 connected-components seeder.
 
@@ -240,7 +319,9 @@ interchange — counting it as "1x transit" is wrong, and the generic walk card
    count) so "Nx transit" reflects real interchanges only.
 3. Frontend `JourneyTimeline` renders an `ACCESS` leg naming the POI —
    *"Jalan kaki dari GBK ± 300 m ke Istora"* for a leading walk, *"… ke Ancol"* for a
-   trailing one — distinct from a mid-route interchange walk.
+   trailing one — distinct from a mid-route interchange walk. When the link has an
+   `exitId`, the leg also carries the exit (`exit: { ref, name }`) and the label names
+   it: *"Keluar di Pintu B, jalan kaki ± 250 m ke GBK"*.
 
 `totalDistanceM` **should** keep including the access walk (it's real distance the user
 covers); only the transfer *count* and the leg *label* need the POI-awareness.
@@ -289,6 +370,10 @@ the access-walk injection and `ACCESS` leg are exactly what a door-to-door plan 
 the planner just adds the time layer on top. Same graph machinery as `transit-hubs.md`
 and `platform-codes.md`.
 
+Exits are also the anchor for the visual follow-up in `interior-and-locality-maps.md`:
+an interior map draws the platform → gate → exit path inside the station, and a
+locality map draws the walk from that exit to the POI.
+
 ## Bonus: reverse-read → "what's nearby" on station/hub pages
 
 `poiStations` is many-to-many, so reading it **by `stationId`** — the reverse of the fare
@@ -296,8 +381,9 @@ lookup — hands you every POI near a station, from data you're curating for far
 `SELECT … FROM poiStations WHERE stationId = ? ORDER BY distance`, joined to `pois`,
 capped to a few and ranked by walk distance (with `score` to break ties, so a dense node
 like Istora doesn't dump eight POIs). On the **station page** it's a "Tempat terdekat"
-section in `StationContent`; on the **hub page**, union across `hubStations` members and
-keep each POI's *minimum* walk distance.
+section in `StationContent`, **grouped by exit** where `exitId` is set ("Pintu B: GBK,
+Senayan Park"); on the **hub page**, union across `hubStations` members and keep each
+POI's *minimum* walk distance.
 
 **Scope flag:** this is a *third* surface — discovery on station/hub pages, not fare and
 not planner. Genuinely additive. Ship it **after** the fare POI picker so it doesn't
@@ -320,8 +406,9 @@ crow-flies distance.
 
 ## Build order
 
-1. Migration + `schemas/pois.ts` (`PoiSchema`, `PoiStationSchema`) + register in
-   `schemas/index.ts`.
+1. Migration + `schemas/pois.ts` (`PoiSchema`, `PoiStationSchema`) +
+   `schemas/station-exits.ts` (`StationExitSchema`) + register in `schemas/index.ts`.
+   The `stationExits` table ships empty; `poiStations.exitId` stays null until backfilled.
 2. `PoiRepository` — POIs with their `poiStations` adjacency; a `getPoiAdjacency()`
    returning walk edges for the graph injector.
 3. `fares.ts`: resolve POI endpoints, per-request `injectPoiEndpoints`, `ACCESS` leg
@@ -331,6 +418,11 @@ crow-flies distance.
 5. Web: `/pois` fetch, merge into the picker candidate list, landmark icon + "Tempat"
    tag, POI quick-picks.
 6. Seed script (nearest-stations-by-coords → curated `pois.sql`).
+7. Exits, station by station: seed `station-exits.sql` (MRTJ from the operator's exit
+   maps, OSM entrances where they exist, KRL from field checks), backfill
+   `poiStations.exitId`, and add the exit to the `ACCESS` leg and the station page.
+   Independent of steps 1–6 shipping; each station's exits make its results better
+   the moment they land.
 
 ## Open / to decide later
 
@@ -341,3 +433,8 @@ crow-flies distance.
 - Whether to surface POIs on the map as tap targets (defer — reuse the hub tap-target
   work in `transit-hubs.md` if so).
 - `ACCESS` as a new leg type vs a boolean flag on the transfer leg. (lean: new type)
+- Exit refs as signage shows them (`A`, `Utara`) vs a normalised form. (lean: as signed,
+  since riders match what they see)
+- Whether exits get a `level`/`side` field (e.g. which side of the road, which floor)
+  or whether `name` is enough.
+- Transfers via exits (`fromExitId`/`toExitId` on `transfers`): after the POI launch.
