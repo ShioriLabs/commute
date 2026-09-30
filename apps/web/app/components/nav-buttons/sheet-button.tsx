@@ -1,7 +1,7 @@
 import { Dialog, DialogBackdrop, DialogPanel, Transition, TransitionChild } from '@headlessui/react'
 import clsx from 'clsx'
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode, type TransitionEvent } from 'react'
-import { measureBox, morphStyle } from 'utils/morph'
+import { cubicBezierAt, linearEasing, measureBox, morphStyle, type CubicBezier } from 'utils/morph'
 import { useReducedMotion } from '~/hooks/reduced-motion'
 
 interface Props {
@@ -31,6 +31,9 @@ interface Props {
 // back button (and the sheet's CloseButton) restores the previous page without a
 // navigation.
 
+// Card face (and the tint that stands in for it during the morph).
+const ACCENT_BG = 'bg-[#F55875]'
+
 // Timing for the morph. Derived from one another rather than restated, and fed
 // to the elements as custom properties, because the relationships between them
 // are load-bearing rather than stylistic — a class string that drifts out of
@@ -38,6 +41,38 @@ interface Props {
 
 // Card → fullscreen. Everything else is expressed relative to this.
 const PANEL_MS = 250
+// --ease-ios-spring from app.css, restated as numbers because the accent tint
+// below is computed from it. Not Tailwind's ease-out: that one covers 95% of
+// the distance by 60% of the duration and crawls the rest, so the landing read
+// as a stall.
+const PANEL_EASE: CubicBezier = [0.36, 0.66, 0.04, 1]
+
+// The accent tint's opacity as a function of the panel's SIZE, not of time:
+// how close the panel is to card size, raised to TINT_POWER, in both
+// directions. Measured against the clock instead (a delay plus ease-in on
+// close, a short fade on open), the colour lagged the shape by ~100ms either
+// way, because the panel is ~95% of the way there well before it ends: closing
+// shrank as a white ghost and only turned pink once it had stopped moving.
+//
+// The power keeps the colour to the card end of the morph. At 2 the pink
+// covered about half of a still-large panel, and colour plus shape changing
+// across that much screen read as hyperactive next to the plain white Settings
+// card; at 4 the large moving surface stays white and the pink gathers only as
+// the panel closes in on the card. linear() because "a power of another curve"
+// is not a cubic-bezier.
+//
+// Opening animates the tint 1 → 0, so its easing is 1 - (1 - p)^n; closing
+// animates 0 → 1 against progress toward the card, so it is p^n.
+const TINT_POWER = 4
+const TINT_IN_EASE = linearEasing(x => 1 - (1 - cubicBezierAt(PANEL_EASE, x)) ** TINT_POWER)
+const TINT_OUT_EASE = linearEasing(x => cubicBezierAt(PANEL_EASE, x) ** TINT_POWER)
+
+// On close the landed panel crossfades into the card over this tail. Linear,
+// and starting once the panel is ~97% landed with the tint ~94% in: on the
+// panel's own front-loaded curve it was 80% gone before the tint had finished
+// turning pink, and any later than this the iOS curve leaves a blank card
+// sitting still for ~80ms before the face's slide-in shows through.
+const LAND_FADE_MS = 100
 
 // The card-face mask has to outlive the panel's shrink. Drop it to or below
 // PANEL_MS and headlessui unmounts the mask while the panel is still shrinking,
@@ -301,7 +336,7 @@ export default function SheetButton({ url, ariaLabel, title, subtitle, icon, cla
         type="button"
         className={clsx(
           'p-4 rounded-xl shadow-2xs w-screen h-screen max-w-42 max-h-32 border-2 flex flex-col relative overflow-clip select-none text-left cursor-pointer scale-100 lg:hover:scale-105 transition-transform transform-gpu ease-in-out shrink-0',
-          accent ? 'bg-[#F55875] text-white border-[#F55875]' : 'bg-white border-rose-50',
+          accent ? clsx(ACCENT_BG, 'text-white border-[#F55875]') : 'bg-white border-rose-50',
           className
         )}
         aria-label={ariaLabel}
@@ -312,7 +347,17 @@ export default function SheetButton({ url, ariaLabel, title, subtitle, icon, cla
             headlessui merges its classes and data-* onto the child only in that
             case, and renders a wrapper div instead as soon as there are two —
             at which point every data-closed: variant here silently stops
-            matching and the face just snaps. */}
+            matching and the face just snaps.
+
+            The enter delays are the reveal on close: the panel lands as a blank
+            card (~120ms on the iOS curve) and crossfades out from 150ms, so the
+            text and icon slide in as it clears. Without the delay they finish
+            hidden under the panel and the reveal never shows.
+
+            Title and subtitle travel the same fixed distance (enough to clear
+            the subtitle, the lower of the two) so they move as one block. As
+            percentages of their own heights they travelled different distances
+            and crossed each other mid-slide. */}
         <Transition show={!isOpen}>
           <TransitionChild>
             <div className={clsx(
@@ -329,14 +374,14 @@ export default function SheetButton({ url, ariaLabel, title, subtitle, icon, cla
           </TransitionChild>
           <TransitionChild>
             <b
-              className="z-[2] translate-y-0 data-closed:-translate-y-[200%] motion-reduce:data-closed:translate-y-0 ease-in-out transition-transform data-enter:delay-150 transform-gpu duration-200"
+              className="z-[2] translate-y-0 data-closed:-translate-y-20 motion-reduce:data-closed:translate-y-0 ease-in-out transition-transform data-enter:delay-150 transform-gpu duration-200"
             >
               {title}
             </b>
           </TransitionChild>
           <TransitionChild>
             <span
-              className="leading-tight z-[2] translate-y-0 data-closed:-translate-y-[250%] motion-reduce:data-closed:translate-y-0 ease-in-out transition-transform data-enter:delay-150 transform-gpu duration-200"
+              className="leading-tight z-[2] translate-y-0 data-closed:-translate-y-20 motion-reduce:data-closed:translate-y-0 ease-in-out transition-transform data-enter:delay-150 transform-gpu duration-200"
             >
               {subtitle}
             </span>
@@ -349,7 +394,11 @@ export default function SheetButton({ url, ariaLabel, title, subtitle, icon, cla
           <DialogPanel
             ref={setPanelRef}
             transition
-            style={{ '--panel-ms': `${PANEL_MS}ms` } as CSSProperties}
+            style={{
+              '--panel-ms': `${PANEL_MS}ms`,
+              '--panel-ease': `cubic-bezier(${PANEL_EASE.join(', ')})`,
+              '--land-fade-ms': `${LAND_FADE_MS}ms`
+            } as CSSProperties}
             onTransitionEnd={handlePanelTransitionEnd}
             className={clsx(
               // h-dvh, not h-screen: 100vh is the large viewport, so the bottom
@@ -358,17 +407,34 @@ export default function SheetButton({ url, ariaLabel, title, subtitle, icon, cla
               // not be scrolled into view. Safe for the morph because it
               // measures the panel's real box rather than assuming one — see
               // applyMorph above.
-              'overflow-hidden relative w-screen h-dvh mt-auto transform-gpu ease-out rounded-none origin-top-left',
+              'overflow-hidden relative w-screen h-dvh mt-auto transform-gpu ease-[var(--panel-ease)] rounded-none origin-top-left',
               // Named rather than transition-all: these three are the only
               // properties that ever animate here, and narrowing it keeps the
               // transitionend filter above unambiguous.
               'transition-[transform,border-radius,opacity] duration-[var(--panel-ms)]',
               reducedMotion
                 ? 'data-closed:opacity-0'
-                : 'data-closed:transform-[var(--panel-transform,none)] data-closed:rounded-[var(--panel-radius,var(--radius-xl))]'
+                : clsx(
+                    'data-closed:transform-[var(--panel-transform,none)] data-closed:rounded-[var(--panel-radius,var(--radius-xl))]',
+                    // Closing only: crossfade the landed panel into the card (see
+                    // LAND_FADE_MS). It lands as a face-less copy of the card, so
+                    // without this the text and icon popped in the frame it
+                    // unmounted. Each list follows the transition-property order
+                    // above (transform, border-radius, opacity).
+                    'data-leave:data-closed:opacity-0',
+                    'data-leave:[transition-duration:var(--panel-ms),var(--panel-ms),var(--land-fade-ms)]',
+                    'data-leave:[transition-delay:0ms,0ms,calc(var(--panel-ms)-var(--land-fade-ms))]',
+                    'data-leave:[transition-timing-function:var(--panel-ease),var(--panel-ease),linear]'
+                  )
             )}
           >
-            {children}
+            {/* Its own stacking context, so nothing a sheet z-indexes can paint
+                over the masks below. The search header is sticky with z-[2],
+                and without this it sat squashed on top of the mask for the
+                whole morph in both directions. */}
+            <div className="relative isolate h-full">
+              {children}
+            </div>
             <Transition show={isOpen} appear>
               <div
                 style={{ '--mask-ms': `${MASK_MS}ms` } as CSSProperties}
@@ -382,31 +448,28 @@ export default function SheetButton({ url, ariaLabel, title, subtitle, icon, cla
                   // within ~60ms of the shrink starting — without which the
                   // panel sits at scale 0.61/0.42 behind a mask only 31% opaque
                   // and you watch the text distort.
-                  // transition-opacity, NOT transition-all: the mask's colour must
-                  // SNAP between states rather than interpolate. That is what lets
-                  // the accent face be pink on the way out and white on the way in
-                  // (see below) — with transition-all the colour would crossfade
-                  // instead, which is the pink wash all over again.
-                  'block w-screen h-dvh absolute top-0 opacity-0 pointer-events-none data-closed:opacity-100 transition-opacity duration-[var(--mask-ms)] data-enter:delay-50 data-enter:duration-100 data-leave:ease-[cubic-bezier(0,0.95,0.2,1)]',
-                  // The mask covers the panel for the whole morph, so it is
-                  // exactly as large as the panel — up to the full viewport. That
-                  // is fine while it is white (a white mask over a white sheet is
-                  // invisible) and is why the non-accent cards never flashed. In
-                  // accent pink it was a flash across two thirds of the screen:
-                  // the panel is ~42% of fullscreen by 30ms and ~79% by 80ms, so
-                  // there is no fade fast enough to keep a pink mask small. The
-                  // colour has to go, not the timing.
-                  //
-                  // Direction is what makes it safe to drop. Opening, the pink is
-                  // decorative — the card face is already behind the backdrop and
-                  // the sheet it becomes is white, so entering white loses nothing
-                  // and the mask still hides the scaled content underneath.
-                  // Closing, the pink IS the destination: the sheet has to read as
-                  // collapsing back into a pink card, so data-closed keeps it.
-                  accent ? 'bg-white data-closed:bg-[#F55875]' : 'bg-white'
+                  'block w-screen h-dvh absolute top-0 opacity-0 pointer-events-none data-closed:opacity-100 transition-opacity duration-[var(--mask-ms)] data-enter:delay-50 data-enter:duration-100 data-leave:ease-[cubic-bezier(0,0.95,0.2,1)] bg-white'
                 )}
               />
             </Transition>
+            {/* The accent colour rides its own layer over the white mask, with
+                its opacity tied to the panel's size (TINT_IN/OUT_EASE, same
+                duration as the panel). Folded into the mask it could only be
+                pink everywhere or nowhere: a pink mask was a wash across most of
+                the screen, a white one turned the card white on frame 0. Not
+                under reduced motion: the panel is fullscreen from frame 0
+                there, so the tint would just wash the whole screen pink. */}
+            {accent && !reducedMotion && (
+              <Transition show={isOpen} appear>
+                <div
+                  style={{ '--tint-in': TINT_IN_EASE, '--tint-out': TINT_OUT_EASE } as CSSProperties}
+                  className={clsx(
+                    'block w-screen h-dvh absolute top-0 opacity-0 pointer-events-none data-closed:opacity-100 transition-opacity duration-[var(--panel-ms)] data-enter:ease-[var(--tint-in)] data-leave:ease-[var(--tint-out)]',
+                    ACCENT_BG
+                  )}
+                />
+              </Transition>
+            )}
           </DialogPanel>
         </div>
       </Dialog>
