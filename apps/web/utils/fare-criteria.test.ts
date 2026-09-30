@@ -53,6 +53,12 @@ describe('parseFareCriteria', () => {
     })
   })
 
+  // The retired "Males jalan" level ranked exactly as SLOWEST does, so a rider
+  // who stored it keeps that ordering rather than being reset to AVERAGE.
+  it('reads the retired AVOID level as SLOWEST', () => {
+    expect(parseFareCriteria(JSON.stringify({ walking: 'AVOID' })).walking).toBe('SLOWEST')
+  })
+
   /*
    * Per-field, not wholesale. A payment method retired from the constants must
    * not also throw away the rider's operator choice — that is the behaviour the
@@ -120,7 +126,7 @@ describe('fare criteria persistence', () => {
 
     const criteria: FareCriteria = {
       ...DEFAULT_FARE_CRITERIA,
-      paymentMethod: 'QRIS_TAP', fareTime: new Date(FUTURE_SLOT).toISOString(), modes: 'rail', walking: 'AVOID', operator: 'TJ'
+      paymentMethod: 'QRIS_TAP', fareTime: new Date(FUTURE_SLOT).toISOString(), modes: 'rail', walking: 'SLOWEST', operator: 'TJ'
     }
     writeFareCriteria(criteria)
     expect(store.has(FARE_CRITERIA_KEY)).toBe(true)
@@ -205,7 +211,7 @@ describe('fareQueryParams', () => {
   it('sends walking only when it is not the default', () => {
     expect(fareQueryParams(DEFAULT_FARE_CRITERIA).has('walking')).toBe(false)
     expect(fareQueryParams({ ...DEFAULT_FARE_CRITERIA, walking: 'AVERAGE' }).has('walking')).toBe(false)
-    expect(fareQueryParams({ ...DEFAULT_FARE_CRITERIA, walking: 'AVOID' }).get('walking')).toBe('AVOID')
+    expect(fareQueryParams({ ...DEFAULT_FARE_CRITERIA, walking: 'SLOWEST' }).get('walking')).toBe('SLOWEST')
   })
 })
 
@@ -296,10 +302,15 @@ describe('readCriteriaFromUrl', () => {
   })
 
   it('reads walking back, and ignores a level it does not know', () => {
-    expect(read('walking=AVOID')).toEqual({ walking: 'AVOID' })
+    expect(read('walking=SLOWEST')).toEqual({ walking: 'SLOWEST' })
     expect(read('walking=SPRINT')).toBeUndefined()
     // The default is silence in both directions, so it never lands in the URL.
     expect(read('walking=AVERAGE')).toEqual({ walking: 'AVERAGE' })
+  })
+
+  // Links shared before the rename still reproduce the sender's ordering.
+  it('reads a retired walking=AVOID link as SLOWEST', () => {
+    expect(read('walking=AVOID')).toEqual({ walking: 'SLOWEST' })
   })
 })
 

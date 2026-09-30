@@ -202,18 +202,18 @@ describe('walking preference', () => {
     expect(rankScore(longWalk, slow)).toBeGreaterThan(rankScore(extraBoarding, slow))
   })
 
-  it('charges more for walking at every step from BRISK to AVOID', () => {
-    const scores = (['BRISK', 'AVERAGE', 'SLOW', 'AVOID'] as const)
+  it('charges more for walking at every step from BRISK to SLOWEST', () => {
+    const scores = (['BRISK', 'AVERAGE', 'SLOW', 'SLOWEST'] as const)
       .map(p => rankScore(longWalk, weightsForWalking(p)))
     for (let i = 1; i < scores.length; i++) {
       expect(scores[i]!).toBeGreaterThan(scores[i - 1]!)
     }
   })
 
-  // AVOID must not be a ban. A route that can only be walked has to survive, or
-  // the rider gets nothing instead of an option they merely dislike.
-  it('leaves AVOID finite so a walk-only route is still rankable', () => {
-    expect(Number.isFinite(rankScore(longWalk, weightsForWalking('AVOID')))).toBe(true)
+  // SLOWEST must not be a ban. A route that can only be walked has to survive,
+  // or the rider gets nothing instead of an option they merely dislike.
+  it('leaves SLOWEST finite so a walk-only route is still rankable', () => {
+    expect(Number.isFinite(rankScore(longWalk, weightsForWalking('SLOWEST')))).toBe(true)
   })
 
   it('leaves the other axes alone', () => {

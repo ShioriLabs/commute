@@ -120,40 +120,34 @@ function excludedLines(
   return withAirportExclusion(originIds, targetIds, modesRaw === 'rail' ? linesOf('TJ') : undefined)
 }
 
-const WALKING_PREFERENCES: ReadonlySet<string> = new Set(['BRISK', 'AVERAGE', 'SLOW', 'AVOID'])
+const WALKING_PREFERENCES: ReadonlySet<string> = new Set(['BRISK', 'AVERAGE', 'SLOW', 'SLOWEST'])
 
 /*
- * How much the rider minds walking, as rank weights.
+ * How fast the rider walks, read from the `walking` param.
  *
- * A PREFERENCE, not a speed. The engine has no duration model — every edge's
- * `durationSeconds` is null — so this cannot say a journey takes eight minutes
- * longer at your pace. It shifts which tradeoffs win: weight walking harder and
- * a 600m transfer stops beating an extra boarding.
+ * `AVOID` is the retired fourth level ("males jalan"), from before the setting
+ * became a pure speed. It carried the same rank weight SLOWEST does now, so it
+ * reads as SLOWEST: shared links and stored settings keep their ordering, and
+ * both spellings land on one cache scope. An unrecognised value falls back to
+ * the default — an unknown preference must not silently retime a journey.
+ */
+function walkingPreference(walkingRaw?: string): WalkingPreference | undefined {
+  if (walkingRaw === 'AVOID') return 'SLOWEST'
+  return walkingRaw !== undefined && WALKING_PREFERENCES.has(walkingRaw)
+    ? walkingRaw as WalkingPreference
+    : undefined
+}
+
+/*
+ * The same speed, as rank weights: a slower walker pays more per metre, so a
+ * 600m transfer stops beating an extra boarding.
  *
  * Undefined for the default, so the search runs on DEFAULT_RANK_WEIGHTS exactly
  * as it did before this existed. AVERAGE is that default, so it is spelled the
  * same way an absent param is.
  */
-function walkingWeights(walkingRaw?: string): RankWeights | undefined {
-  if (walkingRaw === undefined || walkingRaw === 'AVERAGE') return undefined
-  return WALKING_PREFERENCES.has(walkingRaw as WalkingPreference)
-    ? weightsForWalking(walkingRaw as WalkingPreference)
-    : undefined
-}
-
-/*
- * The same param, as the preference itself rather than as rank weights.
- *
- * `walkingWeights` above answers "how should this rider's front be ordered";
- * this answers "how fast does this rider cross a station", which is what decides
- * the connections they make. Both read one query param, and an unrecognised
- * value falls back to the default in both — an unknown preference must not
- * silently retime a journey.
- */
-function walkingPreference(walkingRaw?: string): WalkingPreference | undefined {
-  return walkingRaw !== undefined && WALKING_PREFERENCES.has(walkingRaw as WalkingPreference)
-    ? walkingRaw as WalkingPreference
-    : undefined
+function walkingWeights(walking?: WalkingPreference): RankWeights | undefined {
+  return walking === undefined || walking === 'AVERAGE' ? undefined : weightsForWalking(walking)
 }
 
 app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRouter, parseFareContext, {
@@ -182,9 +176,10 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
     walkingPreference(c.req.query('walking'))
   ),
   scope: (c) => {
+    const walking = walkingPreference(c.req.query('walking'))
     const parts = [
       c.req.query('modes') === 'rail' ? 'rail' : null,
-      walkingWeights(c.req.query('walking')) ? c.req.query('walking') : null
+      walking === 'AVERAGE' ? null : walking
     ].filter(Boolean)
     return parts.length > 0 ? parts.join('+') : undefined
   },
@@ -215,10 +210,10 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
        */
       excludeLines: excluded,
       /*
-       * Reorders the front; never prunes it. A rider who avoids walking still
+       * Reorders the front; never prunes it. A rider who walks slowly still
        * gets the footbridge route offered, just ranked below the alternatives.
        */
-      weights: walkingWeights(c.req.query('walking')),
+      weights: walkingWeights(walkingPreference(c.req.query('walking'))),
       /*
        * Pricing the journeys is what makes the CHEAPEST label reachable at all —
        * without a scorer every journey's `fare` criterion is null and the axis

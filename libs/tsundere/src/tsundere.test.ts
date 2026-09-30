@@ -124,7 +124,7 @@ describe('findRoutes', () => {
   it('honours a walking preference', () => {
     const tsun = loadGraph({ edges, transfers })
     // Both preferences must still FIND the journey; only the order may differ.
-    expect(tsun.findRoutes('KCI-A', 'MRTJ-Q', { weights: weightsForWalking('AVOID') }).length)
+    expect(tsun.findRoutes('KCI-A', 'MRTJ-Q', { weights: weightsForWalking('SLOWEST') }).length)
       .toBeGreaterThan(0)
   })
 })

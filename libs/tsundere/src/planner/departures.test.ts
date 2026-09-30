@@ -206,6 +206,31 @@ describe('resolveDepartures', () => {
     })
 
     /*
+     * The bottom rung is its own pace, not a copy of SLOW. 250m of gated
+     * change from 06:19: 278s at SLOW lands 06:23:38, 358s at SLOWEST 06:24:58.
+     */
+    it('lets a slow rider make a connection the slowest one misses', () => {
+      const tight: TripPattern = {
+        lineCode: 'C',
+        stationIds: ['KCI-X', 'KCI-Y'],
+        trips: [
+          { id: 'tight', dayMask: ALL_DAYS, departuresS: [at(6, 24) + 30, at(6, 30)] },
+          { id: 'next', dayMask: ALL_DAYS, departuresS: [at(6, 45), at(6, 55)] }
+        ]
+      }
+      const legs = [
+        ride('M', ['MRTJ-LBB', 'MRTJ-FTM', 'MRTJ-BLA']),
+        walk('MRTJ-BLA', 'KCI-X'),
+        ride('C', ['KCI-X', 'KCI-Y'])
+      ]
+      const slow = resolveDepartures(legs, index(mrt, tight), { departureS: at(5), dayMask: ALL_DAYS, walking: 'SLOW' })
+      const slowest = resolveDepartures(legs, index(mrt, tight), { departureS: at(5), dayMask: ALL_DAYS, walking: 'SLOWEST' })
+
+      expect(slow[2]?.tripId).toBe('tight')
+      expect(slowest[2]?.tripId).toBe('next')
+    })
+
+    /*
      * However fast the rider, the doors still have to open and the platform
      * still has to clear.
      */

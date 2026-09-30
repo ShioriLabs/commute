@@ -32,17 +32,17 @@ export const PAYMENT_METHOD_SHORT_LABELS: Record<PaymentMethod, string> = {
 }
 
 /*
- * Walking, as one word.
+ * Walking speed, as one word.
  *
- * Drops the verb the long forms carry ("Jalan cepat" -> "Cepat") because the
- * pictogram beside it already says walking. Two words would be the only
- * wrapping segment on the row.
+ * "Pelan banget" loses its intensifier here: two words would be the only
+ * wrapping segment on the row, and the pictogram beside it already carries the
+ * tier in its speed lines.
  */
 export const WALKING_SHORT_LABELS: Record<WalkingPreference, string> = {
   BRISK: 'Cepat',
   AVERAGE: 'Biasa',
   SLOW: 'Santai',
-  AVOID: 'Males'
+  SLOWEST: 'Pelan'
 }
 
 export const PAYMENT_METHOD_DESCRIPTIONS: Record<PaymentMethod, string> = {
@@ -88,31 +88,29 @@ export const MODES_DESCRIPTIONS: Record<FareCriteria['modes'], string> = {
 }
 
 /*
- * How much the rider minds walking.
- *
- * Named for the rider, not the multiplier: "how many times worse than riding is
- * a metre on foot" is not a question anyone can answer, while "I walk slowly"
- * is. AVERAGE reads as "Biasa aja" rather than "Rata-rata" — this is a habit,
- * not a statistic.
+ * How fast the rider walks, after JR East's 歩く速度: はやい, ふつう, ゆっくり,
+ * もっとゆっくり. Plain speed words, with no "jalan" prefix because the sheet
+ * title already says what is being asked.
  */
 export const WALKING_LABELS: Record<WalkingPreference, string> = {
-  BRISK: 'Jalan cepat',
-  AVERAGE: 'Biasa aja',
-  SLOW: 'Jalan santai',
-  AVOID: 'Males jalan'
+  BRISK: 'Cepat',
+  AVERAGE: 'Biasa',
+  SLOW: 'Santai',
+  SLOWEST: 'Pelan banget'
 }
 
 /*
- * Never a duration. The engine has no duration model — `edges.durationSeconds`
- * is null on every row — so any wording like "5 menit lebih lama" would be a
- * promise it cannot keep. These describe what the ranking does instead.
+ * When to pick each speed, not what it does. Also JR East's move: nobody knows
+ * their pace in metres per second, but everyone knows whether they have done
+ * this transfer before or are dragging a suitcase.
  *
- * AVOID says "sebisanya", not "nggak akan", because the search still offers a
- * walking route when that is the only way through; it just ranks it last.
+ * Never a duration. Walk times are deliberately not shown for this setting, so
+ * wording like "5 menit lebih lama" would promise a number the result never
+ * displays.
  */
 export const WALKING_DESCRIPTIONS: Record<WalkingPreference, string> = {
-  BRISK: 'Nggak masalah jalan jauh kalau transitnya jadi lebih sedikit',
-  AVERAGE: 'Seimbang antara jalan kaki sama gonta-ganti kendaraan',
-  SLOW: 'Lebih milih rute yang jalan kakinya pendek',
-  AVOID: 'Hindari jalan kaki sebisanya, walau transitnya jadi lebih banyak'
+  BRISK: 'Udah hafal jalur transitnya',
+  AVERAGE: 'Bisa jalan tanpa bingung cari arah',
+  SLOW: 'Belum yakin sama jalur transitnya',
+  SLOWEST: 'Lagi bawa barang gede, atau jalan bareng anak atau orang tua'
 }

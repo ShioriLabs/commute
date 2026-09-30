@@ -44,16 +44,18 @@ import { nextTrip, type IndexedPattern, type Trip, type TripIndex } from './trip
  * is the safe direction: quoting a connection they cannot catch is worse than
  * quoting the one after it.
  *
+ * SLOWEST is someone with a big suitcase, a pram, or a grandparent on their
+ * arm.
+ *
  * NOT `WALKING_WEIGHTS` from criteria.ts, which are comparison multipliers on
- * the walk axis and nothing to do with speed — dividing this pace by them would
- * put AVOID at 0.15 m/s, a pace no one walks. AVOID matches SLOW here because it
- * is a preference about WHETHER to walk, not about how fast a rider does.
+ * the walk axis — dividing this pace by them would put SLOWEST at 0.15 m/s, a
+ * pace no one walks. The two tables share a key, not a unit.
  */
 const WALK_PACE_MS: Record<WalkingPreference, number> = {
   BRISK: 1.5,
   AVERAGE: 1.2,
   SLOW: 0.9,
-  AVOID: 0.9
+  SLOWEST: 0.7
 }
 
 /** Seconds to cross a distance on foot, at the rider's own pace. */

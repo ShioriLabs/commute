@@ -7,7 +7,6 @@ import {
   CheckIcon,
   ClockIcon,
   CreditCardIcon,
-  PersonSimpleWalkIcon,
   ProhibitIcon
 } from '@phosphor-icons/react'
 import { haptic } from 'utils/haptics'
@@ -16,6 +15,7 @@ import { DEFAULT_FARE_CRITERIA, WALKING_PREFERENCES, type FareCriteria } from 'u
 import CriterionListSheet from './criterion-list-sheet'
 import CriterionSheet, { type CriterionOption } from './criterion-sheet'
 import DepartureSheet from './departure-sheet'
+import WalkingIcon from './walking-icon'
 import {
   MODES_DESCRIPTIONS,
   MODES_LABELS,
@@ -108,7 +108,8 @@ export default function CriteriaBar({ criteria, onChange }: Props) {
     () => WALKING_PREFERENCES.map(preference => ({
       value: preference,
       label: WALKING_LABELS[preference],
-      description: WALKING_DESCRIPTIONS[preference]
+      description: WALKING_DESCRIPTIONS[preference],
+      icon: <WalkingIcon level={preference} className="h-7 w-10 justify-end text-slate-600" />
     })),
     []
   )
@@ -117,9 +118,9 @@ export default function CriteriaBar({ criteria, onChange }: Props) {
    * One row of the settings sheet: what the setting is, what it is set to.
    *
    * The same two-line shape the chips used to carry, unrolled into a list —
-   * which is what buys the descriptions room. WALKING_DESCRIPTIONS.AVOID is a
-   * full sentence about how the ranking shifts, and there was nowhere to put it
-   * on a 120px chip.
+   * which is what buys the descriptions room. WALKING_DESCRIPTIONS.SLOWEST is a
+   * full sentence about when to pick it, and there was nowhere to put it on a
+   * 120px chip.
    */
   const row = (
     key: Exclude<OpenCriterion, null>,
@@ -235,7 +236,7 @@ export default function CriteriaBar({ criteria, onChange }: Props) {
             modified={criteria.modes !== DEFAULT_FARE_CRITERIA.modes}
           />
           <ChipSegment
-            icon={<PersonSimpleWalkIcon weight="bold" className="w-4 h-4 shrink-0" />}
+            icon={<WalkingIcon level={criteria.walking} reserve={false} className="h-4" />}
             value={WALKING_SHORT_LABELS[criteria.walking]}
             modified={criteria.walking !== DEFAULT_FARE_CRITERIA.walking}
             last
@@ -329,7 +330,7 @@ export default function CriteriaBar({ criteria, onChange }: Props) {
       />
       <CriterionSheet
         open={open === 'walking'}
-        title="Jalan kaki"
+        title="Kecepatan jalan"
         options={walkingOptions}
         selected={criteria.walking}
         onSelect={walking => onChange({ ...criteria, walking })}
