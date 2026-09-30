@@ -217,6 +217,11 @@ Still unanswerable, and each for its own reason:
 - Reframe the entry point: it is still "Cek Tarif" gated behind the fare button rather
   than a plan-a-journey surface. This is now the largest purely-presentational gap, and it
   no longer depends on any engine work.
+- **Following the journey, not just planning it** — alight reminders, lock-screen
+  progress and a watch companion need a native app. Designed, not scheduled, in
+  `android-app.md` (with `android-trip-mode.md`). It consumes this planner through the
+  API and adds no engine work, but it does need the trips answer promoted from
+  `/_internal` to a public contract first.
 
 ## The spine — what carried over (nothing thrown away)
 

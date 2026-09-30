@@ -1,0 +1,26 @@
+[Unit]
+Description=ward: TransJakarta relay collector
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=ward
+Group=ward
+WorkingDirectory=/opt/ward
+EnvironmentFile=/etc/ward.env
+# Hour and day boundaries are WIB regardless of the host's zone.
+Environment=TZ=Asia/Jakarta
+ExecStart=/usr/bin/node src/collect.ts
+Restart=always
+RestartSec=5
+# Measured ~70MB resident; the cap catches a leak long before the box swaps.
+MemoryMax=300M
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/ward
+
+[Install]
+WantedBy=multi-user.target

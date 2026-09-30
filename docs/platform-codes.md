@@ -222,3 +222,26 @@ disambiguation handles the Bekasi interlining fork, so junctions resolve correct
 UI: always show the direction; if `platformCode` present, add a "Peron {code}"
 badge. Still bump `API_VERSION` on overlay edits (values are baked into the KV
 cache).
+
+## Next: coverage beyond KCI
+
+As of 2026-09 the overlay is effectively KCI-only (137 entries). Two ways to widen
+it, very different in cost:
+
+- **TransJakarta: derive, don't curate.** The TJ GTFS feed already models platforms
+  the GTFS way (see "How GTFS models it" above): BRT trips stop at platform
+  children (`G…`/`P…` stops with `parent_station` and `platform_code`), which the
+  importer currently collapses to the parent halte. Walking each trip's stop
+  sequence yields `(parent halte, line, next parent halte) → platform_code`, which
+  is exactly this overlay's key shape. Generate those rows into their own file
+  (`generate:tj-platforms`, next to the other TJ generators) rather than
+  hand-editing `PLATFORM_CODES`, so a GTFS refresh regenerates them. **Check first**
+  that the feed's `platform_code` values match what's signed at the halte doors;
+  a code riders can't see on site is worse than none.
+- **MRT, LRT, LRTJBDB, airport train: small curated additions.** Most stations have
+  one platform per direction, so the direction label already says everything. Only
+  the complex stations (Dukuh Atas area, the LRTJBDB branch stations, Manggarai for
+  the airport train) earn overlay rows.
+
+Exits are the other half of "where do I stand": they live with POIs, see
+`points-of-interest.md` ("Exits: which door to use").

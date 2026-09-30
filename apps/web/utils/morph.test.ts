@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { morphStyle, type Box } from './morph'
+import { cubicBezierAt, linearEasing, morphStyle, type Box } from './morph'
 
 const box = (left: number, top: number, width: number, height: number): Box =>
   ({ left, top, width, height })
@@ -45,5 +45,28 @@ describe('morphStyle', () => {
     expect(morphStyle(CARD, box(0, 0, 0, 915), 12)).toBeNull()
     expect(morphStyle(CARD, box(0, 0, 412, 0), 12)).toBeNull()
     expect(morphStyle(box(0, 0, 0, 0), SHEET, 12)).toBeNull()
+  })
+})
+
+describe('cubicBezierAt', () => {
+  it('is linear for the linear curve', () => {
+    expect(cubicBezierAt([0, 0, 1, 1], 0.3)).toBeCloseTo(0.3, 4)
+  })
+
+  it('pins both ends', () => {
+    expect(cubicBezierAt([0, 0, 0.2, 1], 0)).toBeCloseTo(0, 6)
+    expect(cubicBezierAt([0, 0, 0.2, 1], 1)).toBeCloseTo(1, 6)
+  })
+
+  it('front-loads ease-out', () => {
+    // Matches the panel width Chrome measured one frame into a 250ms morph
+    // (0.22 of the way at 16.7ms).
+    expect(cubicBezierAt([0, 0, 0.2, 1], 1 / 15)).toBeCloseTo(0.22, 2)
+  })
+})
+
+describe('linearEasing', () => {
+  it('samples evenly including both ends', () => {
+    expect(linearEasing(x => x, 4)).toBe('linear(0, 0.25, 0.5, 0.75, 1)')
   })
 })

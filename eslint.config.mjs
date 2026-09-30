@@ -16,6 +16,11 @@ export default defineConfig([
     files: ['apps/data-platform/scripts/**/*.{js,mjs,ts}'],
     languageOptions: { globals: { ...globals.node, ...globals.browser } }
   },
+  {
+    // A plain Node service (collector + nightly checkpoint on a VPS).
+    files: ['apps/ward/**/*.ts'],
+    languageOptions: { globals: globals.node }
+  },
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,
   stylistic.configs.customize({

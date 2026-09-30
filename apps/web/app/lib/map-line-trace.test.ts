@@ -617,7 +617,7 @@ interface ShippedLine {
  * drawn separately, a 92-unit interchange bar with the line's ink broken into a
  * piece at each end. None of those can be posed in six points.
  *
- * So this drives all 41 lines through the tracer and holds the result against
+ * So this drives all 42 lines through the tracer and holds the result against
  * the committed artifact. It is a regression test rather than a behavioural one:
  * it does not say what the tracer SHOULD do, it says the tracer still does what
  * the shipped map was drawn from. A change that moves any line's coverage has to
@@ -662,8 +662,8 @@ describe('traceLine reproduces the shipped artifact', () => {
     points, corridors, undefined, entry.color, sharedTrackFor(entry.key), entry.operator === 'TJ'
   )
 
-  it('covers all 41 lines', () => {
-    expect(shipped).toHaveLength(41)
+  it('covers all 42 lines', () => {
+    expect(shipped).toHaveLength(42)
   })
 
   it.each(shipped.map(entry => [entry.key, entry] as const))(

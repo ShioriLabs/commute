@@ -68,6 +68,36 @@ const WIDTH_CLASSES = [25]
 // partition it afterwards, so the skeleton is unaffected.
 const CORRIDOR_WIDTH_CLASSES = [25, 15]
 const WIDTH_TOLERANCE = 1.2
+/*
+ * Interchange connectors: the near-black bars the artwork draws between stations a rider
+ * walks between (Manggarai's C13 to S11, Cawang, most LRT Jabodebek to halte links). They
+ * are the one stroke on the sheet that is neither saturated nor furniture: all of them one
+ * ink, rgb(16,13,15), at 27 (26.8 and 28.8 also occur). A walk traces them the way a ride
+ * traces its corridor.
+ *
+ * Route overlay only. They go to the corridors file and never reach the skeleton, which
+ * draws the lines people ride while the app loads.
+ */
+const CONNECTOR_WIDTH = 27
+const CONNECTOR_WIDTH_TOLERANCE = 2
+// Max channel for the connector ink. Label ink is the same near-black, but it is filled
+// glyphs in <defs>, never a stroke this wide.
+const CONNECTOR_MAX_CHANNEL = 40
+// 29 on the 2026-08c edition. Fails the build if an edition changes how they are drawn,
+// rather than quietly shipping walks without them.
+const MIN_CONNECTORS = 15
+/*
+ * Lines drawn in a neutral grey, which the saturation gate rejects as furniture. Only the
+ * Soekarno-Hatta skytrain (Kalayang, APCGK) is: rgb(84,81,82) at rail width 25. A sheet-wide
+ * survey found no other grey stroke at 25 in this lightness band (the rest are white label
+ * halos and light #B1AEA6 badge outlines), so the band is what admits it.
+ *
+ * Route overlay only, like the connectors: the skeleton keeps the saturated lines it was
+ * tuned on.
+ */
+const NEUTRAL_LINE_MIN_LIGHTNESS = 0.2
+const NEUTRAL_LINE_MAX_LIGHTNESS = 0.45
+const NEUTRAL_LINE_WIDTH = 25
 // Below this a "stroke" is a station tick or an icon detail, not a corridor.
 //
 // Shared by both width classes. The corridors design doc expected BRT to need a lower
@@ -236,6 +266,12 @@ async function extractStrokes(page: import('playwright').Page): Promise<RawStrok
     maxLightness: number
     widthClasses: number[]
     widthTolerance: number
+    connectorWidth: number
+    connectorWidthTolerance: number
+    connectorMaxChannel: number
+    neutralMinLightness: number
+    neutralMaxLightness: number
+    neutralWidth: number
     minLength: number
     sampleStep: number
     maxSamples: number
@@ -273,12 +309,23 @@ async function extractStrokes(page: import('playwright').Page): Promise<RawStrok
       const r = Number(match[1])
       const g = Number(match[2])
       const b = Number(match[3])
-      const { s, l } = rgbToHsl(r, g, b)
-      if (s < cfg.minSaturation || l < cfg.minLightness || l > cfg.maxLightness) continue
-
       const width = parseFloat(style.strokeWidth)
       if (!Number.isFinite(width)) continue
-      const widthClass = cfg.widthClasses.find(w => Math.abs(width - w) <= cfg.widthTolerance)
+      // A connector is ink, which the saturation gate below exists to reject, so it is
+      // admitted on its own terms first and tagged with its own width class.
+      const isConnector = Math.max(r, g, b) <= cfg.connectorMaxChannel
+        && Math.abs(width - cfg.connectorWidth) <= cfg.connectorWidthTolerance
+      let widthClass: number | undefined
+      if (isConnector) {
+        widthClass = cfg.connectorWidth
+      } else {
+        const { s, l } = rgbToHsl(r, g, b)
+        const neutralLine = s < cfg.minSaturation
+          && l >= cfg.neutralMinLightness && l <= cfg.neutralMaxLightness
+          && Math.abs(width - cfg.neutralWidth) <= cfg.widthTolerance
+        if (!neutralLine && (s < cfg.minSaturation || l < cfg.minLightness || l > cfg.maxLightness)) continue
+        widthClass = cfg.widthClasses.find(w => Math.abs(width - w) <= cfg.widthTolerance)
+      }
       if (widthClass === undefined) continue
 
       const rawD = el.getAttribute('d') ?? ''
@@ -339,6 +386,12 @@ async function extractStrokes(page: import('playwright').Page): Promise<RawStrok
     maxLightness: MAX_LIGHTNESS,
     widthClasses: [...CORRIDOR_WIDTH_CLASSES],
     widthTolerance: WIDTH_TOLERANCE,
+    connectorWidth: CONNECTOR_WIDTH,
+    connectorWidthTolerance: CONNECTOR_WIDTH_TOLERANCE,
+    connectorMaxChannel: CONNECTOR_MAX_CHANNEL,
+    neutralMinLightness: NEUTRAL_LINE_MIN_LIGHTNESS,
+    neutralMaxLightness: NEUTRAL_LINE_MAX_LIGHTNESS,
+    neutralWidth: NEUTRAL_LINE_WIDTH,
     minLength: MIN_EXTRACT_LENGTH,
     sampleStep: SAMPLE_STEP,
     maxSamples: MAX_SAMPLES
@@ -502,6 +555,17 @@ function segmentDistance(p: number[], a: number[], b: number[]): number {
   return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy))
 }
 
+// Below the saturation gate: a grey the extractor only admitted as a neutral line.
+function isNeutralHex(hex: string): boolean {
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  if (max === min) return true
+  const l = (max + min) / 2
+  const s = l > 0.5 ? (max - min) / (2 - max - min) : (max - min) / (max + min)
+  return s < MIN_SATURATION
+}
+
 function channelDistance(a: string, b: string): number {
   let worst = 0
   for (let i = 1; i < 7; i += 2) {
@@ -574,7 +638,15 @@ function writeCorridors(extracted: ExtractedStroke[], version: string): void {
     throw new Error(`only ${brt} BRT corridors (min ${MIN_BRT_CORRIDORS}) — the width-15 predicate probably no longer matches this map edition`)
   }
 
-  const json = JSON.stringify({ version, corridors }) + '\n'
+  // Bare point lists: a connector has no colour or width worth carrying, they are all
+  // the same ink at the same weight.
+  const connectors = extracted.filter(s => s.w === CONNECTOR_WIDTH).map(s => s.corridorPts)
+  log(`connectors: ${connectors.length}`)
+  if (connectors.length < MIN_CONNECTORS) {
+    throw new Error(`only ${connectors.length} interchange connectors (min ${MIN_CONNECTORS}) — the ink/width-27 predicate probably no longer matches this map edition`)
+  }
+
+  const json = JSON.stringify({ version, corridors, connectors }) + '\n'
   if (json.length > MAX_CORRIDOR_BYTES) throw new Error(`${json.length} bytes exceeds ${MAX_CORRIDOR_BYTES}`)
   writeFileSync(CORRIDORS_OUT_PATH, json)
   log(`wrote ${path.relative(WEB_ROOT, CORRIDORS_OUT_PATH)} (${(json.length / 1024).toFixed(1)} KB)`)
@@ -663,7 +735,7 @@ async function main(): Promise<void> {
   }
 
   const extracted = [...strokes.values()]
-  log(`extracted ${extracted.length} unique strokes across widths ${CORRIDOR_WIDTH_CLASSES.join('/')}`)
+  log(`extracted ${extracted.length} unique strokes across widths ${[...CORRIDOR_WIDTH_CLASSES, CONNECTOR_WIDTH].join('/')}`)
 
   writeCorridors(extracted, manifest.version)
 
@@ -678,6 +750,8 @@ async function main(): Promise<void> {
    */
   const list: SkeletonStroke[] = extracted
     .filter(s => WIDTH_CLASSES.includes(s.w))
+    // The grey skytrain is corridors-only; see NEUTRAL_LINE_MIN_LIGHTNESS.
+    .filter(s => !isNeutralHex(s.c))
     // Re-applied here rather than at extraction, which now admits short connectors for the
     // corridors file. The animation wants long radials that read as lines; a 67-unit stub
     // adds nothing to it. Keeping this filter is what holds map-skeleton.json byte-identical

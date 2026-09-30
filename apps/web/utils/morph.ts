@@ -105,3 +105,29 @@ export function morphStyle(from: Box, to: Box, cornerRadius: number): MorphStyle
     radius: `${cornerRadius / scaleX}px / ${cornerRadius / scaleY}px`
   }
 }
+
+export type CubicBezier = readonly [x1: number, y1: number, x2: number, y2: number]
+
+// The eased progress of a CSS cubic-bezier() at time fraction `x` (0..1).
+// Bisects for the curve parameter whose x matches, which is safe because a
+// timing function's x is monotonic by spec (x1 and x2 are clamped to 0..1).
+export function cubicBezierAt([x1, y1, x2, y2]: CubicBezier, x: number): number {
+  const at = (a: number, b: number, s: number) => 3 * a * s * (1 - s) ** 2 + 3 * b * s ** 2 * (1 - s) + s ** 3
+  let lo = 0
+  let hi = 1
+  for (let i = 0; i < 32; i++) {
+    const mid = (lo + hi) / 2
+    if (at(x1, x2, mid) < x) lo = mid
+    else hi = mid
+  }
+  return at(y1, y2, (lo + hi) / 2)
+}
+
+// A CSS linear() easing that samples `curve` at evenly spaced time fractions.
+// Lets one layer's opacity be an arbitrary function of another element's eased
+// progress — something no cubic-bezier can express — while both still run on
+// the compositor with the same duration.
+export function linearEasing(curve: (x: number) => number, samples = 24): string {
+  const values = Array.from({ length: samples + 1 }, (_, i) => +curve(i / samples).toFixed(4))
+  return `linear(${values.join(', ')})`
+}
