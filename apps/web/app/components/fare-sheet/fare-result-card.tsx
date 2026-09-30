@@ -1,11 +1,12 @@
 import type { FareJourney, FareResult, FareResultLeg, FareResultRideLeg, FareResultTransferLeg, TripResult } from '@commute/schemas'
 import { OPERATORS, type Operator } from '@commute/constants'
 import { type CSSProperties, useEffect, useMemo, useState } from 'react'
-import { ArrowsDownUpIcon, CaretDownIcon, CaretLeftIcon, CaretRightIcon, PersonSimpleWalkIcon, TicketIcon } from '@phosphor-icons/react'
+import { CaretDownIcon, CaretLeftIcon, CaretRightIcon, PersonSimpleWalkIcon, TicketIcon } from '@phosphor-icons/react'
 import { getForegroundColor } from 'utils/colors'
 import { formatClock, formatDuration, formatKm, formatRupiah } from 'utils/format'
 import { formatPlatformCode, joinLabels } from 'utils/labels'
 import LineRoundel from '~/components/line-roundel'
+import TransferIcon from '~/components/transfer-icon'
 import { FARE_GUTTER_CLASS, FARE_RAIL_CENTER_PX, interlinedTrackFill, LINE_COLOR_FALLBACK, RAIL_WIDTH_PX } from '~/components/transit-geometry'
 import { codeOfLineKey, useLines } from '~/hooks/use-lines'
 import { JOURNEY_LABELS } from './journey-labels'
@@ -114,7 +115,7 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
                 <Rail style={{ backgroundColor: 'var(--color-slate-300)' }} />
               </div>
               <div className="flex items-center gap-1.5 text-sm text-slate-500 py-1.5">
-                <ArrowsDownUpIcon weight="bold" className="w-3.5 h-3.5" />
+                <TransferIcon mode={leg.operator === OPERATORS.TJ.code ? 'bus' : 'train'} className="w-3.5 h-3.5" />
                 <span>{leg.operator === OPERATORS.TJ.code ? 'Pindah bus' : 'Pindah kereta'}</span>
               </div>
             </div>
@@ -522,7 +523,7 @@ export function JourneyCardFace({ journey, onSelect }: {
       <div className="mt-1.5 flex flex-nowrap items-center gap-3 figure text-xs text-slate-500">
         <span className="shrink-0 whitespace-nowrap">{ formatKm(journey.totalDistanceM) }</span>
         <span className="shrink-0 whitespace-nowrap flex items-center gap-1">
-          <ArrowsDownUpIcon weight="bold" className="w-3.5 h-3.5 shrink-0" />
+          <TransferIcon className="w-3.5 h-3.5" />
           { journey.transferCount }
         </span>
         {walkM !== null && walkM > 0
