@@ -2,25 +2,27 @@ import type { ReactNode } from 'react'
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { getForegroundColor, getTintFromColor } from 'utils/colors'
-import LineRoundel from '~/components/line-roundel'
 import { filterBestTier, keywordScore, popularityTerm, SCORE_THRESHOLD } from 'utils/fuzzy-match'
 import type { Searchable } from '@commute/schemas'
 import { useSearchables } from '~/hooks/use-searchables'
-import { CaretRightIcon } from '@phosphor-icons/react'
+import { CaretRightIcon, MagnifyingGlassIcon, PencilSimpleIcon, PushPinIcon, XCircleIcon } from '@phosphor-icons/react'
 import clsx from 'clsx'
-import { readRecents, recordRecent, type RecentEntry } from 'utils/recents'
+import { clearRecents, readRecents, recordRecent, type RecentEntry } from 'utils/recents'
+import { readSavedStations, toggleSavedStation } from 'utils/saved-stations'
 import { buildFarePath } from 'utils/fare-url'
 import { readSearchMode, writeSearchMode, type SearchMode } from 'utils/search-mode'
 import FarePanel from '~/components/fare-sheet/fare-panel'
 import { useFareQuery } from '~/components/fare-sheet/use-fare-query'
 import SearchableItem from './searchable-item'
 import SearchModeToggle from './mode-toggle'
+import { haptic } from 'utils/haptics'
 
-// Horizontal card rail for the idle state. Resolves mixed station/hub entries
-// against the prebuilt index (already fetched by the parent, so SWR serves this
-// from cache), preserving the given order.
-function HighlightedList({ title, items, searchables, className }: { title: string, items: RecentEntry[], searchables: Searchable[], className?: string }) {
-  // Ids live in `data` — 'station-id' or 'hub-id', matching RecentEntry.type.
+// Resolves mixed station/hub entries against the prebuilt index (already
+// fetched by the parent, so SWR serves this from cache), preserving the given
+// order. Ids live in `data`: 'station-id' or 'hub-id', matching
+// RecentEntry.type. Memoized because the idle state is gated on the live
+// query, so it re-renders on the keystroke that opens a search.
+function useResolved(items: RecentEntry[], searchables: Searchable[]) {
   const byId = useMemo(() => {
     const index = new Map<string, Searchable>()
     for (const searchable of searchables) {
@@ -30,64 +32,91 @@ function HighlightedList({ title, items, searchables, className }: { title: stri
     return index
   }, [searchables])
 
-  // Memoized alongside `byId`: the idle state is gated on the live query, so
-  // these rails re-render on the keystroke that opens a search, and rebuilding
-  // a card object per item there is work done on the way out.
-  const cards = useMemo(() => items
-    .map((item) => {
-      // The index already carries the display name (directional suffix stripped),
-      // the subtitle, and the lines — everything a card renders.
-      const searchable = byId.get(`${item.type}:${item.id}`)
-      if (!searchable) return null
-      return {
-        key: `${item.type}:${item.id}`,
-        to: searchable.to,
-        name: searchable.title,
-        subtitle: searchable.subtitle,
-        // Keyed by station-id/hub-id, so these are never LINE entries; the
-        // card shows the first line serving the stop.
-        line: searchable.type === 'LINE' ? searchable.line : searchable.lines[0],
-        operator: searchable.type === 'HUB' ? undefined : searchable.operator
-      }
-    })
-    .filter(card => card !== null), [items, byId])
+  return useMemo(() => items
+    .map(item => byId.get(`${item.type}:${item.id}`))
+    .filter(searchable => searchable !== undefined), [items, byId])
+}
 
-  if (cards.length === 0) {
-    return null
-  }
+const asStations = (ids: string[]): RecentEntry[] => ids.map(id => ({ type: 'STATION', id }))
+
+// Pinned stations as shortcut pills under the field, TfL Go style. Tinted from
+// each station's first line, like every other line-bearing surface. The
+// trailing pencil goes to the settings page, the one place pins are reordered.
+function SavedChips({ ids, searchables, onClick }: { ids: string[], searchables: Searchable[], onClick: (e: React.MouseEvent<HTMLAnchorElement>) => void }) {
+  const entries = useMemo(() => asStations(ids), [ids])
+  const saved = useResolved(entries, searchables)
+  if (saved.length === 0) return null
 
   return (
-    <article className={`max-w-3xl mx-auto ${className}`}>
-      <h1 className="text-xl font-bold mx-8">{ title }</h1>
-      <ul
-        className="mt-2 flex flex-row gap-4 overflow-auto pb-2 rounded-xl ps-8 pe-8 scroll-smooth no-scrollbar"
-      >
-        {cards.map(card => (
-          <li key={card.key} className="shrink-0">
+    <ul className="mt-3 flex flex-row flex-wrap gap-2">
+      {saved.map((searchable) => {
+        const line = searchable.type === 'LINE' ? searchable.line : searchable.lines[0]
+        const stationId = searchable.data?.['station-id']
+        return (
+          <li key={searchable.to}>
             <Link
-              to={card.to}
-              className={`flex flex-col gap-2 w-[54vw] lg:w-48 aspect-[3/4] p-4 rounded-xl shadow-sm ${card.line ? 'shadow-slate-900/15' : 'bg-rose-100 text-pink-800 shadow-pink-900/15'}`}
-              style={card.line ? { backgroundColor: getTintFromColor(card.line.colorCode, 0.2, 'light'), color: card.line.colorCode } : undefined}
+              to={searchable.to}
+              onClick={onClick}
+              data-station-id={stationId}
+              className="flex items-center gap-1.5 text-sm font-bold px-3 py-1.5 rounded-full"
+              style={line
+                ? { backgroundColor: getTintFromColor(line.colorCode, 0.2, 'light'), color: line.colorCode }
+                : undefined}
               replace
             >
-              {card.line ? <LineRoundel size="SM" code={card.line.lineCode} color={card.line.colorCode} operator={card.operator} /> : null}
-              <span className="font-semibold mt-auto">{ card.name }</span>
-              <span className={card.line ? 'text-slate-700' : ''}>{ card.subtitle }</span>
+              <PushPinIcon weight="fill" className="w-4 h-4" />
+              <span className={line ? 'text-slate-900' : undefined}>{searchable.title}</span>
             </Link>
           </li>
+        )
+      })}
+      <li>
+        <Link
+          to="/settings/saved-stations"
+          aria-label="Atur stasiun yang di-pin"
+          className="flex items-center justify-center h-full px-3.5 py-1.5 rounded-full bg-stone-100/80 text-slate-700"
+        >
+          <PencilSimpleIcon weight="bold" className="w-4 h-4" />
+        </Link>
+      </li>
+    </ul>
+  )
+}
+
+function RecentList({ items, searchables, savedIds, onClick, onToggleSave, onClear }: {
+  items: RecentEntry[]
+  searchables: Searchable[]
+  savedIds: ReadonlySet<string>
+  onClick: (e: React.MouseEvent<HTMLAnchorElement>) => void
+  onToggleSave: (e: React.MouseEvent<HTMLButtonElement>) => void
+  onClear: () => void
+}) {
+  const recents = useResolved(items, searchables)
+  if (recents.length === 0) return null
+
+  return (
+    <article className="mt-4 max-w-3xl mx-auto">
+      <div className="flex items-center justify-between px-8">
+        <h1 className="text-sm font-bold text-slate-500">Terakhir dicari</h1>
+        <button type="button" onClick={onClear} className="text-sm font-bold text-[#F55875] cursor-pointer">
+          Hapus
+        </button>
+      </div>
+      <ul className="mt-1">
+        {recents.map((searchable, index) => (
+          <SearchableItem
+            key={`${searchable.type}:${searchable.to}`}
+            searchable={searchable}
+            onClick={onClick}
+            index={index}
+            saved={savedIds.has(searchable.data?.['station-id'] ?? '')}
+            onToggleSave={onToggleSave}
+          />
         ))}
       </ul>
     </article>
   )
 }
-
-const asStations = (ids: string[]): RecentEntry[] => ids.map(id => ({ type: 'STATION', id }))
-
-// Hoisted: these two rails are fixed editorial picks, so building them at module
-// scope keeps their identity stable and lets HighlightedList's memo hold across
-// keystrokes. Inline in JSX they were fresh arrays of fresh objects per render.
-const TRANSIT_STATIONS = asStations(['KCI-MRI', 'KCI-SUD', 'MRTJ-DKA', 'KCI-DU', 'KCI-THB'])
-const JAKSELCORE_STATIONS = asStations(['KCI-TEB', 'MRTJ-BLM', 'MRTJ-IST', 'KCI-SUD', 'MRTJ-DKA'])
 
 // All rail lines as colored chips linking to their line pages, grouped in a
 // single wrap. Fed by the index's LINE entries, which already exclude TJ (its
@@ -105,7 +134,7 @@ function LineChipList({ searchables, className }: { searchables: Searchable[], c
 
   return (
     <article className={`max-w-3xl mx-auto ${className}`}>
-      <h1 className="text-xl font-bold mx-8">Lin</h1>
+      <h1 className="text-sm font-bold text-slate-500 mx-8">Lin</h1>
       <ul className="mt-2 flex flex-row flex-wrap gap-2 px-8">
         {lines.map((searchable) => {
           const line = searchable.line
@@ -228,7 +257,7 @@ export default function SearchContent({ title, closeButton }: Props) {
 
   useEffect(() => {
     setRecentlySearched(readRecents())
-    setSavedStations(JSON.parse(localStorage.getItem('saved-stations') ?? '[]') as string[])
+    setSavedStations(readSavedStations())
     const stored = readSearchMode()
     if (stored === 'FARE') {
       setMode('FARE')
@@ -256,9 +285,7 @@ export default function SearchContent({ title, closeButton }: Props) {
     return () => cancelAnimationFrame(raf)
   }, [])
 
-  // The saved-station ids only change when storage does, so the RecentEntry
-  // objects the rail takes are built with them rather than inline in JSX.
-  const savedStationEntries = useMemo(() => asStations(savedStations), [savedStations])
+  const savedIds = useMemo(() => new Set(savedStations), [savedStations])
 
   useEffect(() => {
     // Only in station mode: route mode renders no input, and the picker inside
@@ -283,6 +310,20 @@ export default function SearchContent({ title, closeButton }: Props) {
     }
   }, [])
 
+  // Stable for the same reason. The id rides on the button's dataset, and the
+  // returned list is what storage now holds, so the pills follow at once.
+  const handleToggleSave = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    const { stationId } = e.currentTarget.dataset
+    if (!stationId) return
+    haptic()
+    setSavedStations(toggleSavedStation(stationId))
+  }, [])
+
+  const handleClearRecents = useCallback(() => {
+    clearRecents()
+    setRecentlySearched([])
+  }, [])
+
   // scrollbar-gutter: results grow and shrink per keystroke; without the
   // reserved gutter the whole sheet shifts sideways each time the list
   // crosses one screen tall on classic-scrollbar platforms.
@@ -302,16 +343,39 @@ export default function SearchContent({ title, closeButton }: Props) {
         <SearchModeToggle mode={mode} onChange={handleModeChange} />
         {mode === 'STATION'
           ? (
-              <input
-                id="search-input"
-                className="mt-4 w-full px-4 py-2 rounded-xl bg-stone-100/80 border-2 border-stone-200/40 focus:outline-stone-300/60"
-                type="text"
-                placeholder="Mau cari apa?"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                aria-label="Cari sesuatu berdasarkan kata kunci"
-                ref={searchInputRef}
-              />
+              <>
+                <div className="mt-4 relative">
+                  <MagnifyingGlassIcon weight="bold" className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+                  <input
+                    id="search-input"
+                    className="w-full ps-11 pe-11 py-2 rounded-xl bg-stone-100/80 border-2 border-stone-200/40 focus:outline-stone-300/60"
+                    type="text"
+                    placeholder="Mau cari apa?"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    aria-label="Cari sesuatu berdasarkan kata kunci"
+                    ref={searchInputRef}
+                  />
+                  {searchQuery.length > 0
+                    ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchQuery('')
+                            searchInputRef.current?.focus()
+                          }}
+                          aria-label="Hapus kata kunci"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center text-slate-500 cursor-pointer"
+                        >
+                          <XCircleIcon weight="fill" className="w-6 h-6" />
+                        </button>
+                      )
+                    : null}
+                </div>
+                {searchQuery.length < 2 && railsMounted
+                  ? <SavedChips ids={savedStations} searchables={searchables} onClick={handleSearchClick} />
+                  : null}
+              </>
             )
           : null}
       </div>
@@ -355,14 +419,17 @@ export default function SearchContent({ title, closeButton }: Props) {
         {searchQuery.length < 2 && railsMounted
           ? (
               <>
-                {recentlySearched.length > 0
-                  ? <HighlightedList title="Stasiun Terakhir Dicari" items={recentlySearched} searchables={searchables} className="mt-4" />
+                <RecentList
+                  items={recentlySearched}
+                  searchables={searchables}
+                  savedIds={savedIds}
+                  onClick={handleSearchClick}
+                  onToggleSave={handleToggleSave}
+                  onClear={handleClearRecents}
+                />
+                {recentlySearched.length === 0 && savedStations.length === 0
+                  ? <p className="mt-4 px-8 max-w-3xl mx-auto text-sm text-slate-500">Stasiun yang kamu cari bakal muncul di sini</p>
                   : null}
-                {savedStations.length > 0
-                  ? <HighlightedList title="Stasiun Tersimpan" items={savedStationEntries} searchables={searchables} className="mt-2" />
-                  : null}
-                <HighlightedList title="Stasiun Transit" items={TRANSIT_STATIONS} searchables={searchables} className="mt-2" />
-                <HighlightedList title="Jakselcore" items={JAKSELCORE_STATIONS} searchables={searchables} className="mt-2" />
                 <LineChipList searchables={searchables} className="mt-6 pb-8" />
               </>
             )
@@ -399,6 +466,8 @@ export default function SearchContent({ title, closeButton }: Props) {
                     // It also matches the list, which is filtered by deferredQuery.
                     query={deferredQuery}
                     index={index}
+                    saved={savedIds.has(searchable.data?.['station-id'] ?? '')}
+                    onToggleSave={handleToggleSave}
                   />
                 ))}
               </ul>

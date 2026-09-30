@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { createStore, get, keys as getAllKeys, clear } from 'idb-keyval'
 import { useMemo } from 'react'
 import { CaretLeftIcon, TrashIcon } from '@phosphor-icons/react'
+import { clearRecents } from 'utils/recents'
 
 export function meta() {
   return [
@@ -110,7 +111,7 @@ export default function ManageDataSettingsPage() {
   }, [cacheSize, isCacheSizeLoading])
 
   const handleClearRecentlySearched = useCallback(() => {
-    localStorage.setItem('recently-searched', JSON.stringify([]))
+    clearRecents()
     setRecentlySearchedCount(0)
   }, [setRecentlySearchedCount])
 

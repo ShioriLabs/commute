@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'recently-searched'
-const MAX_ENTRIES = 3
+const MAX_ENTRIES = 8
 
 export interface RecentEntry {
   type: 'STATION' | 'HUB'
@@ -27,4 +27,8 @@ export function recordRecent(entry: RecentEntry): void {
   ].slice(0, MAX_ENTRIES)
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(recents))
+}
+
+export function clearRecents(): void {
+  localStorage.setItem(STORAGE_KEY, '[]')
 }
