@@ -724,7 +724,8 @@ export default function MapPage() {
       workingPoints,
       resolveLine,
       corridorsManifest?.corridors ?? null,
-      linePaths
+      linePaths,
+      corridorsManifest?.connectors ?? null
     )
   }, [debugCorridors, debugTrace, traceHiddenLines, traceHiddenTjColors, linesManifest, activeJourney, routePair, workingPoints, resolveLine, corridorsManifest, linePaths])
 

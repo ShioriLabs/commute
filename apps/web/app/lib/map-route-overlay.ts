@@ -3,7 +3,7 @@ import { hexToRgb01 } from 'utils/colors'
 import type { Point, RouteOverlay, RouteSegment } from './map-renderer'
 import { colourMatches } from './map-corridor-colour'
 import { sliceLinePath, type PreparedLinePaths } from './map-line-path'
-import { CORRIDOR_MATCH_MAX_DIST_WORLD, matchCorridorPath, modeMatches, pickLegCorridor, pointAtArcLength, polylineLength, prepareCorridors, projectOntoPolyline, type Corridor } from './map-corridors'
+import { CORRIDOR_MATCH_MAX_DIST_WORLD, matchCorridorPath, modeMatches, pickLegCorridor, pointAtArcLength, polylineLength, prepareCorridor, prepareCorridors, projectOntoPolyline, type Corridor } from './map-corridors'
 import {
   dotPolyline,
   octilinearPath,
@@ -56,6 +56,15 @@ const WALK_CLEAR_OF_STATION_WORLD = 50
  * (bend), Sudirman's to the Dukuh Atas halte stays 38 clear (straight).
  */
 const WALK_CROWDING_WORLD = 28
+
+/*
+ * How far a connector's end may be from a station's tap target and still count
+ * as ending there, world units. Connectors end on a marker's rim or an
+ * interchange bar, within ~40 of the shape; 45 matched 23 of the 60 drawn
+ * transfer pairs on the 2026-08c edition, each to the connector the artwork
+ * draws between them.
+ */
+const CONNECTOR_STATION_REACH_WORLD = 45
 
 function distanceToSegment(x: number, y: number, s: { ax: number, ay: number, bx: number, by: number }): number {
   const dx = s.bx - s.ax
@@ -132,17 +141,30 @@ export function buildRouteOverlayModel(
    * Optional like the corridors, and for the same reason — the manifest is
    * fetched separately, so every pair has to draw without it.
    */
-  linePaths?: PreparedLinePaths | null
+  linePaths?: PreparedLinePaths | null,
+  /*
+   * The artwork's interchange connectors (map-corridors.json `connectors`): the
+   * near-black bars drawn between stations a rider walks between. A walk whose
+   * two stations sit at a connector's two ends follows it exactly; every other
+   * walk is drawn by rule (see octilinearPath). Optional like the corridors.
+   */
+  connectors?: ReadonlyArray<ReadonlyArray<readonly [number, number]>> | null
 ): RouteOverlayModel | null {
   // Falls back to the transfer grey rather than black: /operators may still be
   // in flight when a deep link paints its first overlay, and a neutral line
   // reads as "colour pending" instead of as a deliberate black line.
   const lineColor = (key: string | undefined) => resolveLine(key)?.colorCode ?? FALLBACK_LINE_COLOR
   const byStation = new Map<string, Point>()
+  // Every shape a station is drawn as, aliases included: a connector can end at
+  // any of them.
+  const shapesByStation = new Map<string, Point[]>()
   for (const p of points) {
+    const stationId = pointStationId(p)
+    const shapes = shapesByStation.get(stationId)
+    if (shapes) shapes.push(p)
+    else shapesByStation.set(stationId, [p])
     // First alias wins, but an exact id always beats an alias: stations drawn
     // in more than one place (Point.station) must pin their primary shape.
-    const stationId = pointStationId(p)
     if (p.id === stationId || !byStation.has(stationId)) byStation.set(stationId, p)
   }
 
@@ -168,19 +190,24 @@ export function buildRouteOverlayModel(
   const snapped = new Map<string, { x: number, y: number }>()
   /*
    * Walks are queued and drawn after every ride leg, because the side a
-   * near-aligned walk bulges to depends on where the rides go. See drawWalk.
+   * near-aligned walk bulges to depends on where the rides go. Each carries its
+   * two stations, which is what a connector is matched on.
    */
-  const walks: Array<{ a: { x: number, y: number }, b: { x: number, y: number } }> = []
-  const pushWalk = (a: { x: number, y: number }, b: { x: number, y: number }) => {
-    walks.push({ a, b })
+  type Walk = { a: { x: number, y: number }, b: { x: number, y: number }, fromId: string | null, toId: string | null }
+  const walks: Walk[] = []
+  const pushWalk = (a: Walk['a'], b: Walk['b'], fromId: string | null, toId: string | null) => {
+    walks.push({ a, b, fromId, toId })
   }
 
   // Where the previous leg's drawn geometry ended: legs that abut without a
   // TRANSFER between them (or around an unresolvable transfer endpoint) still
   // get a dotted bridge instead of a bare gap.
   let cursor: { x: number, y: number } | null = null
+  // The station the cursor is at.
+  let cursorId: string | null = null
   // A TRANSFER's far end, waiting to see whether a ride follows it.
   let heldWalkTo: { x: number, y: number } | null = null
+  let heldWalkToId: string | null = null
   for (const leg of fare?.legs ?? []) {
     if (leg.type === 'RIDE') {
       // The station id rides along with its centroid: the traced-path lookup is
@@ -515,7 +542,7 @@ export function buildRouteOverlayModel(
       // known: the walk has to reach where this leg is actually drawn, not the
       // centroid it was matched from, or it stops short of its own marker.
       if (cursor && (cursor.x !== marks[0].x || cursor.y !== marks[0].y)) {
-        pushWalk(cursor, marks[0])
+        pushWalk(cursor, marks[0], cursorId, vertices[0].id)
       }
       heldWalkTo = null
       // A dot at every station this leg calls at, in the ridden line's colour —
@@ -532,6 +559,7 @@ export function buildRouteOverlayModel(
         if (!snapped.has(key)) snapped.set(key, marks[i])
       })
       cursor = marks[marks.length - 1]
+      cursorId = vertices[vertices.length - 1].id
     } else {
       /*
        * TRANSFER: held rather than drawn. The far station's centroid is not
@@ -542,14 +570,16 @@ export function buildRouteOverlayModel(
        * the centroid is only the target when no ride follows.
        */
       if (heldWalkTo && cursor) {
-        pushWalk(cursor, heldWalkTo)
+        pushWalk(cursor, heldWalkTo, cursorId, heldWalkToId)
         cursor = heldWalkTo
+        cursorId = heldWalkToId
       }
       const to = centroid(leg.to.id)
       heldWalkTo = cursor && to && (cursor.x !== to.x || cursor.y !== to.y) ? to : null
+      heldWalkToId = leg.to.id
     }
   }
-  if (heldWalkTo && cursor) pushWalk(cursor, heldWalkTo)
+  if (heldWalkTo && cursor) pushWalk(cursor, heldWalkTo, cursorId, heldWalkToId)
 
   /*
    * A walk is a dotted octilinear path with rounded corners, each dot a
@@ -595,7 +625,67 @@ export function buildRouteOverlayModel(
   }
   const collisions = (dots: Array<{ x: number, y: number }>, a: { x: number, y: number }, b: { x: number, y: number }) =>
     clearances(dots, a, b).filter(gap => gap < ROUTE_TRANSFER_DOT_RADIUS_WORLD + ROUTE_CASING_EXTRA_WORLD).length
-  for (const { a, b } of walks) {
+  /*
+   * The artwork connector joining two stations, oriented from the first, or
+   * null. A connector ends on a station's tap target rather than on its marker
+   * (Manggarai's ends on the grey bar, ~80 units from B09), so ends are matched
+   * against every shape the station is drawn as, not against the walk's ends.
+   */
+  const stationReach = (stationId: string, [x, y]: readonly [number, number]) => {
+    let best = Infinity
+    for (const shape of shapesByStation.get(stationId) ?? []) {
+      best = Math.min(best, distanceToSegment(x, y, shape))
+    }
+    return best
+  }
+  const connectorBetween = (fromId: string | null, toId: string | null): Array<[number, number]> | null => {
+    if (!fromId || !toId || fromId === toId || !connectors) return null
+    let best: { score: number, path: Array<[number, number]> } | null = null
+    for (const connector of connectors) {
+      if (connector.length < 2) continue
+      const first = connector[0]
+      const last = connector[connector.length - 1]
+      const forward = stationReach(fromId, first) + stationReach(toId, last)
+      const backward = stationReach(fromId, last) + stationReach(toId, first)
+      const reversed = backward < forward
+      const [nearFrom, nearTo] = reversed ? [last, first] : [first, last]
+      if (stationReach(fromId, nearFrom) > CONNECTOR_STATION_REACH_WORLD) continue
+      if (stationReach(toId, nearTo) > CONNECTOR_STATION_REACH_WORLD) continue
+      const score = Math.min(forward, backward)
+      if (!best || score < best.score) {
+        const path = connector.map(([x, y]) => [x, y] as [number, number])
+        best = { score, path: reversed ? path.reverse() : path }
+      }
+    }
+    return best?.path ?? null
+  }
+  for (const { a, b, fromId, toId } of walks) {
+    const connector = connectorBetween(fromId, toId)
+    if (connector) {
+      /*
+       * Only the stretch between the walk's ends. A connector can run past
+       * where the walk starts or stops (Cawang's reaches beyond the LRT marker),
+       * and walking to its tip would double back. So each end is projected onto
+       * it and the connector sliced between the two. From the walk's own ends
+       * onto that slice and off again, the joins rounded like any walk's.
+       */
+      const line = prepareCorridor({ w: 0, c: '', pts: connector })
+      const from = projectOntoPolyline(a.x, a.y, line).s
+      const to = projectOntoPolyline(b.x, b.y, line).s
+      const slice: Array<[number, number]> = from < to
+        ? [
+            pointAtArcLength(line, from),
+            ...connector.filter((_, i) => line.cums[i] > from && line.cums[i] < to),
+            pointAtArcLength(line, to)
+          ]
+        : connector
+      const path: Array<[number, number]> = [[a.x, a.y], ...slice, [b.x, b.y]]
+        .filter((p, i, all) => i === 0 || Math.hypot(p[0] - all[i - 1][0], p[1] - all[i - 1][1]) >= 1) as Array<[number, number]>
+      for (const { x, y } of walkDots(path)) {
+        segments.push({ ax: x, ay: y, bx: x, by: y, r: ROUTE_TRANSFER_DOT_RADIUS_WORLD, color: TRANSFER_COLOR, kind: 'transfer' })
+      }
+      continue
+    }
     let dots = walkDots(octilinearPath(a.x, a.y, b.x, b.y))
     const left = octilinearPath(a.x, a.y, b.x, b.y, -1)
     const right = octilinearPath(a.x, a.y, b.x, b.y, 1)

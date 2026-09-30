@@ -40,6 +40,9 @@ export interface Corridor {
 export interface CorridorsManifest {
   version: string
   corridors: Corridor[]
+  // The artwork's interchange connectors, walks only (see buildRouteOverlayModel).
+  // Optional so a cached manifest from before they were extracted still loads.
+  connectors?: Array<Array<[number, number]>>
 }
 
 // A corridor with its cumulative arc lengths: cums[i] is the distance from

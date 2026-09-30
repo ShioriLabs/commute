@@ -68,6 +68,24 @@ const WIDTH_CLASSES = [25]
 // partition it afterwards, so the skeleton is unaffected.
 const CORRIDOR_WIDTH_CLASSES = [25, 15]
 const WIDTH_TOLERANCE = 1.2
+/*
+ * Interchange connectors: the near-black bars the artwork draws between stations a rider
+ * walks between (Manggarai's C13 to S11, Cawang, most LRT Jabodebek to halte links). They
+ * are the one stroke on the sheet that is neither saturated nor furniture: all of them one
+ * ink, rgb(16,13,15), at 27 (26.8 and 28.8 also occur). A walk traces them the way a ride
+ * traces its corridor.
+ *
+ * Route overlay only. They go to the corridors file and never reach the skeleton, which
+ * draws the lines people ride while the app loads.
+ */
+const CONNECTOR_WIDTH = 27
+const CONNECTOR_WIDTH_TOLERANCE = 2
+// Max channel for the connector ink. Label ink is the same near-black, but it is filled
+// glyphs in <defs>, never a stroke this wide.
+const CONNECTOR_MAX_CHANNEL = 40
+// 29 on the 2026-08c edition. Fails the build if an edition changes how they are drawn,
+// rather than quietly shipping walks without them.
+const MIN_CONNECTORS = 15
 // Below this a "stroke" is a station tick or an icon detail, not a corridor.
 //
 // Shared by both width classes. The corridors design doc expected BRT to need a lower
@@ -236,6 +254,9 @@ async function extractStrokes(page: import('playwright').Page): Promise<RawStrok
     maxLightness: number
     widthClasses: number[]
     widthTolerance: number
+    connectorWidth: number
+    connectorWidthTolerance: number
+    connectorMaxChannel: number
     minLength: number
     sampleStep: number
     maxSamples: number
@@ -273,12 +294,20 @@ async function extractStrokes(page: import('playwright').Page): Promise<RawStrok
       const r = Number(match[1])
       const g = Number(match[2])
       const b = Number(match[3])
-      const { s, l } = rgbToHsl(r, g, b)
-      if (s < cfg.minSaturation || l < cfg.minLightness || l > cfg.maxLightness) continue
-
       const width = parseFloat(style.strokeWidth)
       if (!Number.isFinite(width)) continue
-      const widthClass = cfg.widthClasses.find(w => Math.abs(width - w) <= cfg.widthTolerance)
+      // A connector is ink, which the saturation gate below exists to reject, so it is
+      // admitted on its own terms first and tagged with its own width class.
+      const isConnector = Math.max(r, g, b) <= cfg.connectorMaxChannel
+        && Math.abs(width - cfg.connectorWidth) <= cfg.connectorWidthTolerance
+      let widthClass: number | undefined
+      if (isConnector) {
+        widthClass = cfg.connectorWidth
+      } else {
+        const { s, l } = rgbToHsl(r, g, b)
+        if (s < cfg.minSaturation || l < cfg.minLightness || l > cfg.maxLightness) continue
+        widthClass = cfg.widthClasses.find(w => Math.abs(width - w) <= cfg.widthTolerance)
+      }
       if (widthClass === undefined) continue
 
       const rawD = el.getAttribute('d') ?? ''
@@ -339,6 +368,9 @@ async function extractStrokes(page: import('playwright').Page): Promise<RawStrok
     maxLightness: MAX_LIGHTNESS,
     widthClasses: [...CORRIDOR_WIDTH_CLASSES],
     widthTolerance: WIDTH_TOLERANCE,
+    connectorWidth: CONNECTOR_WIDTH,
+    connectorWidthTolerance: CONNECTOR_WIDTH_TOLERANCE,
+    connectorMaxChannel: CONNECTOR_MAX_CHANNEL,
     minLength: MIN_EXTRACT_LENGTH,
     sampleStep: SAMPLE_STEP,
     maxSamples: MAX_SAMPLES
@@ -574,7 +606,15 @@ function writeCorridors(extracted: ExtractedStroke[], version: string): void {
     throw new Error(`only ${brt} BRT corridors (min ${MIN_BRT_CORRIDORS}) — the width-15 predicate probably no longer matches this map edition`)
   }
 
-  const json = JSON.stringify({ version, corridors }) + '\n'
+  // Bare point lists: a connector has no colour or width worth carrying, they are all
+  // the same ink at the same weight.
+  const connectors = extracted.filter(s => s.w === CONNECTOR_WIDTH).map(s => s.corridorPts)
+  log(`connectors: ${connectors.length}`)
+  if (connectors.length < MIN_CONNECTORS) {
+    throw new Error(`only ${connectors.length} interchange connectors (min ${MIN_CONNECTORS}) — the ink/width-27 predicate probably no longer matches this map edition`)
+  }
+
+  const json = JSON.stringify({ version, corridors, connectors }) + '\n'
   if (json.length > MAX_CORRIDOR_BYTES) throw new Error(`${json.length} bytes exceeds ${MAX_CORRIDOR_BYTES}`)
   writeFileSync(CORRIDORS_OUT_PATH, json)
   log(`wrote ${path.relative(WEB_ROOT, CORRIDORS_OUT_PATH)} (${(json.length / 1024).toFixed(1)} KB)`)
@@ -663,7 +703,7 @@ async function main(): Promise<void> {
   }
 
   const extracted = [...strokes.values()]
-  log(`extracted ${extracted.length} unique strokes across widths ${CORRIDOR_WIDTH_CLASSES.join('/')}`)
+  log(`extracted ${extracted.length} unique strokes across widths ${[...CORRIDOR_WIDTH_CLASSES, CONNECTOR_WIDTH].join('/')}`)
 
   writeCorridors(extracted, manifest.version)
 

@@ -277,6 +277,48 @@ describe('buildRouteOverlayModel', () => {
     })
   })
 
+  describe('interchange connectors', () => {
+    // B at (0, 0), C at (0, 200): the artwork's connector bulges out to x = -60
+    // and runs on past C to y = 240.
+    const points = [pt('KCI-AAA', -300, 0), pt('KCI-BBB', 0, 0), pt('MRT-CCC', 0, 200), pt('MRT-DDD', 300, 200)]
+    const connector: Array<[number, number]> = [[0, 15], [-60, 75], [-60, 125], [0, 185], [0, 240]]
+    const walkDots = (legs: FareResult['legs'], from: string, to: string, connectors: Array<Array<[number, number]>>) =>
+      buildRouteOverlayModel(fareResult(legs, from, to), pair(from, to), points, resolveLine, null, null, connectors)!
+        .overlay.segments.filter(s => s.kind === 'transfer')
+    const legs = () => [rideLeg(['KCI-AAA', 'KCI-BBB']), transferLeg('KCI-BBB', 'MRT-CCC'), rideLeg(['MRT-CCC', 'MRT-DDD'])]
+
+    it('walks along the connector drawn between the two stations', () => {
+      const dots = walkDots(legs(), 'KCI-AAA', 'MRT-DDD', [connector])
+      // Out to the connector's far side (its corners are rounded, so short of -60),
+      // and never past it.
+      expect(Math.min(...dots.map(d => d.ax))).toBeLessThan(-45)
+      expect(Math.min(...dots.map(d => d.ax))).toBeGreaterThanOrEqual(-60 - 1e-6)
+    })
+
+    it('stops where the walk ends instead of running to the connector tip', () => {
+      const dots = walkDots(legs(), 'KCI-AAA', 'MRT-DDD', [connector])
+      expect(Math.max(...dots.map(d => d.ay))).toBeLessThanOrEqual(200 + 1e-6)
+      expect(dots[dots.length - 1].ay).toBeCloseTo(200)
+    })
+
+    it('is the same line in both directions', () => {
+      const back = [rideLeg(['MRT-DDD', 'MRT-CCC']), transferLeg('MRT-CCC', 'KCI-BBB'), rideLeg(['KCI-BBB', 'KCI-AAA'])]
+      const forward = walkDots(legs(), 'KCI-AAA', 'MRT-DDD', [connector]).map(d => [d.ax, d.ay])
+      const backward = walkDots(back, 'MRT-DDD', 'KCI-AAA', [connector]).map(d => [d.ax, d.ay]).reverse()
+      expect(backward.length).toBe(forward.length)
+      backward.forEach(([x, y], i) => {
+        expect(x).toBeCloseTo(forward[i][0])
+        expect(y).toBeCloseTo(forward[i][1])
+      })
+    })
+
+    it('ignores a connector that does not join both stations', () => {
+      const elsewhere: Array<[number, number]> = [[0, 15], [-60, 75], [-500, 75]]
+      const dots = walkDots(legs(), 'KCI-AAA', 'MRT-DDD', [elsewhere])
+      for (const dot of dots) expect(dot.ax).toBeCloseTo(0)
+    })
+  })
+
   it('prefers an exact point id over a station alias', () => {
     // Flyover Jatinegara case: a decorative extra shape aliases the station via
     // `station`, while the primary shape owns the exact id. The pin must land
