@@ -25,7 +25,7 @@ fun SearchableIndex.toSearchables(): List<Searchable> {
                 subtitle = item.subtitle,
                 score = item.score,
                 stationId = item.`data`?.get("station-id"),
-                operator = item.`operator`.value,
+                operator = item.`operator`,
                 lines = item.lineKeys.mapNotNull(::resolve),
             )
 
@@ -46,7 +46,7 @@ fun SearchableIndex.toSearchables(): List<Searchable> {
                     keywords = item.keywords,
                     subtitle = item.subtitle,
                     score = item.score,
-                    operator = item.`operator`.value,
+                    operator = item.`operator`,
                     line = line,
                 )
             }
@@ -58,5 +58,5 @@ private fun SearchableLine.toSearchLine() = SearchLine(
     name = name,
     lineCode = lineCode,
     colorCode = colorCode,
-    operator = `operator`.value,
+    operator = `operator`,
 )

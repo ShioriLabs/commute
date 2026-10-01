@@ -2,6 +2,7 @@ package id.shiorilabs.commute.core.ui.ext
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -12,31 +13,55 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /*
- * The web's `.search-result-enter` (apps/web/app/app.css) with its LIST_STAGGER delays
- * (apps/web/utils/stagger.ts): dense rows rise 8 dp into place over 250 ms, 30 ms apart.
+ * The web's staggered entrances (apps/web/app/app.css) with their delays (apps/web/utils/stagger.ts).
+ * Two of them, because what reads as a cascade depends on the size of what is moving:
+ *
+ *   rows   `.search-result-enter` + LIST_STAGGER: dense rows rise 8 dp over 250 ms, 30 ms apart.
+ *   cards  `.home-enter` + CARD_STAGGER: tall cards rise 12 dp over 300 ms, 45 ms apart. 8 dp of
+ *          travel is invisible on a block that size, and 30 ms between them reads as all at once.
  */
 
-private const val ROW_ENTRANCE_MILLIS = 250
-private const val ROW_STAGGER_MILLIS = 30
+private class Entrance(
+    val millis: Int,
+    val step: Int,
+    /**
+     * Index past which every item shares the same delay. Without a cap the fiftieth row of a long
+     * list would sit invisible for a second and a half before appearing at all.
+     */
+    val maxIndex: Int,
+    val travel: Dp,
+    val easing: Easing,
+) {
+    fun delayMillis(index: Int): Int = index.coerceIn(0, maxIndex) * step
+}
 
-/**
- * Index past which every row shares the same delay. Without a cap the fiftieth row of a long list
- * would sit invisible for a second and a half before appearing at all.
- */
-private const val ROW_STAGGER_MAX_INDEX = 12
+private val RowEntrance = Entrance(
+    millis = 250,
+    step = 30,
+    maxIndex = 12,
+    travel = 8.dp,
+    // CSS's `ease-out` keyword, which is what the web's keyframes run on (not Tailwind's).
+    easing = CubicBezierEasing(0f, 0f, 0.58f, 1f),
+)
 
-/** How far a row travels up into place. */
-private val ROW_ENTRANCE_TRAVEL = 8.dp
-
-/** CSS's `ease-out` keyword, which is what the web's keyframes run on (not Tailwind's). */
-private val RowEntranceEasing = CubicBezierEasing(0f, 0f, 0.58f, 1f)
+private val CardEntrance = Entrance(
+    millis = 300,
+    step = 45,
+    maxIndex = 6,
+    travel = 12.dp,
+    // The web's --ease-ios-spring.
+    easing = CubicBezierEasing(0.36f, 0.66f, 0.04f, 1f),
+)
 
 /** The entrance delay for the row at [index]. */
-fun rowStaggerDelayMillis(index: Int): Int =
-    index.coerceIn(0, ROW_STAGGER_MAX_INDEX) * ROW_STAGGER_MILLIS
+fun rowStaggerDelayMillis(index: Int): Int = RowEntrance.delayMillis(index)
+
+/** The entrance delay for the card at [index]. */
+fun cardStaggerDelayMillis(index: Int): Int = CardEntrance.delayMillis(index)
 
 /**
  * Fades and lifts a list row into place the first time it composes, after a delay that grows with
@@ -51,7 +76,14 @@ fun rowStaggerDelayMillis(index: Int): Int =
  * animations turned off.
  */
 @Composable
-fun Modifier.rowEntrance(index: Int): Modifier {
+fun Modifier.rowEntrance(index: Int): Modifier = entrance(RowEntrance, index)
+
+/** [rowEntrance] for tall cards: further, slower, and further apart. */
+@Composable
+fun Modifier.cardEntrance(index: Int): Modifier = entrance(CardEntrance, index)
+
+@Composable
+private fun Modifier.entrance(entrance: Entrance, index: Int): Modifier {
     var played by rememberSaveable { mutableStateOf(false) }
     val progress = remember { Animatable(if (played) 1f else 0f) }
 
@@ -60,9 +92,9 @@ fun Modifier.rowEntrance(index: Int): Modifier {
             progress.animateTo(
                 targetValue = 1f,
                 animationSpec = tween(
-                    durationMillis = ROW_ENTRANCE_MILLIS,
-                    delayMillis = rowStaggerDelayMillis(index),
-                    easing = RowEntranceEasing,
+                    durationMillis = entrance.millis,
+                    delayMillis = entrance.delayMillis(index),
+                    easing = entrance.easing,
                 ),
             )
             played = true
@@ -71,6 +103,6 @@ fun Modifier.rowEntrance(index: Int): Modifier {
 
     return this.graphicsLayer {
         alpha = progress.value
-        translationY = (1f - progress.value) * ROW_ENTRANCE_TRAVEL.toPx()
+        translationY = (1f - progress.value) * entrance.travel.toPx()
     }
 }
