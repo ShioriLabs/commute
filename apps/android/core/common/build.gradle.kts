@@ -8,5 +8,8 @@ dependencies {
     api(libs.arrow.core)
     api(libs.kotlinx.coroutines.core)
 
+    // Internal: FailureMapping classifies Ktor's timeout exceptions.
+    implementation(libs.ktor.client.core)
+
     testImplementation(libs.junit)
 }

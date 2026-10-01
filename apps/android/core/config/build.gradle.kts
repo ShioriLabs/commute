@@ -7,5 +7,7 @@ android {
 }
 
 dependencies {
+    // Pure config holder: plain Kotlin data with no BuildConfig coupling — :app owns the build
+    // config fields and provides Environment via DI.
     implementation(project(":core:common"))
 }
