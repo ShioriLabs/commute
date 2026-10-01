@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Header -->
+    <string name="search_title">Temukan</string>
+    <string name="search_close_description">Tutup halaman pencarian</string>
+    <string name="search_field_placeholder">Mau cari apa?</string>
+    <string name="search_field_description">Cari sesuatu berdasarkan kata kunci</string>
+    <string name="search_field_clear">Hapus kata kunci</string>
+
+    <!-- Idle state -->
+    <string name="search_recent_title">Terakhir dicari</string>
+    <string name="search_recent_clear">Hapus</string>
+    <string name="search_idle_hint">Stasiun yang kamu cari bakal muncul di sini</string>
+    <string name="search_lines">Lin</string>
+
+    <!-- Pins. %1$s is the station's name. -->
+    <string name="search_pin">Pin %1$s</string>
+    <string name="search_unpin">Lepas pin %1$s</string>
+
+    <!-- Not found -->
+    <string name="search_not_found_illustration_description">Gambar peron stasiun dengan jembatan di atasnya, dengan kaca pembesar bergambar tanda tanya di depannya</string>
+    <string name="search_not_found_title">Stasiun Tidak Ditemukan</string>
+    <string name="search_not_found_body">Coba cari dengan nama atau kode stasiun yang lain</string>
+
+    <!-- Error -->
+    <string name="search_retry">Coba Lagi</string>
+</resources>

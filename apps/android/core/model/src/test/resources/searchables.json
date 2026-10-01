@@ -1,0 +1,173 @@
+{
+  "status": 200,
+  "data": {
+    "lines": {
+      "APCGK:KLB": {
+        "name": "Lin Kalayang Bandara",
+        "lineCode": "KLB",
+        "colorCode": "#6D6E71",
+        "operator": "APCGK"
+      },
+      "KCI:A": {
+        "name": "Lin Soekarno-Hatta",
+        "lineCode": "A",
+        "colorCode": "#262262",
+        "operator": "KCI"
+      },
+      "KCI:B": {
+        "name": "Lin Bogor",
+        "lineCode": "B",
+        "colorCode": "#EE3D43",
+        "operator": "KCI"
+      },
+      "KCI:C": {
+        "name": "Lin Cikarang",
+        "lineCode": "C",
+        "colorCode": "#25B8EB",
+        "operator": "KCI"
+      },
+      "MRTJ:M": {
+        "name": "Lin Utara Selatan",
+        "lineCode": "M",
+        "colorCode": "#ca2a51",
+        "operator": "MRTJ"
+      },
+      "TJ:4K": {
+        "name": "Pulo Gadung - Kejaksaan Agung",
+        "lineCode": "4K",
+        "colorCode": "#512C62",
+        "operator": "TJ"
+      },
+      "TJ:7D": {
+        "name": "TMII - Pancoran",
+        "lineCode": "7D",
+        "colorCode": "#916131",
+        "operator": "TJ"
+      },
+      "TJ:7R": {
+        "name": "Cibubur - Pluit",
+        "lineCode": "7R",
+        "colorCode": "#916131",
+        "operator": "TJ"
+      },
+      "TJ:9": {
+        "name": "Pinang Ranti - Pluit",
+        "lineCode": "9",
+        "colorCode": "#45A49E",
+        "operator": "TJ"
+      },
+      "TJ:9A": {
+        "name": "Cililitan - Grogol",
+        "lineCode": "9A",
+        "colorCode": "#45A49E",
+        "operator": "TJ"
+      },
+      "TJ:9C": {
+        "name": "Pinang Ranti - Bundaran Senayan",
+        "lineCode": "9C",
+        "colorCode": "#45A49E",
+        "operator": "TJ"
+      }
+    },
+    "items": [
+      {
+        "type": "STATION",
+        "title": "Manggarai",
+        "subtitle": "Commuter Line",
+        "to": "/stations/KCI/MRI",
+        "keywords": [
+          "manggarai",
+          "mri"
+        ],
+        "lineKeys": [
+          "KCI:A",
+          "KCI:B",
+          "KCI:C"
+        ],
+        "data": {
+          "station-id": "KCI-MRI"
+        },
+        "operator": "KCI",
+        "score": 95
+      },
+      {
+        "type": "STATION",
+        "title": "Ciliwung",
+        "subtitle": "TransJakarta",
+        "to": "/stations/TJ/H00061S",
+        "keywords": [
+          "ciliwung arah timur",
+          "h00061s",
+          "ciliwung arah barat",
+          "h00062s",
+          "ciliwung"
+        ],
+        "lineKeys": [
+          "TJ:4K",
+          "TJ:7D",
+          "TJ:9",
+          "TJ:9A",
+          "TJ:9C",
+          "TJ:7R"
+        ],
+        "data": {
+          "station-id": "TJ-H00061S",
+          "station-ids": "TJ-H00061S,TJ-H00062S"
+        },
+        "operator": "TJ"
+      },
+      {
+        "type": "STATION",
+        "title": "Lebak Bulus Bank Syariah Indonesia",
+        "subtitle": "MRT Jakarta",
+        "to": "/stations/MRTJ/LBB",
+        "keywords": [
+          "lebak bulus bank syariah indonesia",
+          "stasiun lebak bulus",
+          "lbb"
+        ],
+        "lineKeys": [
+          "MRTJ:M"
+        ],
+        "data": {
+          "station-id": "MRTJ-LBB"
+        },
+        "operator": "MRTJ",
+        "score": 54
+      },
+      {
+        "type": "HUB",
+        "title": "Bandara Soekarno-Hatta",
+        "subtitle": "Stasiun Terintegrasi",
+        "to": "/hubs/bandara-soekarno-hatta",
+        "keywords": [
+          "bandara soekarno-hatta",
+          "bandara soekarno hatta",
+          "bst",
+          "stasiun ka bandara",
+          "shia"
+        ],
+        "lineKeys": [
+          "KCI:A",
+          "APCGK:KLB"
+        ],
+        "data": {
+          "hub-id": "bandara-soekarno-hatta"
+        }
+      },
+      {
+        "type": "LINE",
+        "title": "Lin Cikarang",
+        "subtitle": "Commuter Line",
+        "to": "/lines/KCI/C",
+        "keywords": [
+          "lin cikarang",
+          "cikarang",
+          "c"
+        ],
+        "lineKey": "KCI:C",
+        "operator": "KCI"
+      }
+    ]
+  }
+}

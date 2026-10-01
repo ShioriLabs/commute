@@ -1,0 +1,75 @@
+package id.shiorilabs.commute.feature.search.domain
+
+import id.shiorilabs.commute.core.model.models.SearchableHub
+import id.shiorilabs.commute.core.model.models.SearchableIndex
+import id.shiorilabs.commute.core.model.models.SearchableLine
+import id.shiorilabs.commute.core.model.models.SearchableLineEntry
+import id.shiorilabs.commute.core.model.models.SearchableLineEntryOperator
+import id.shiorilabs.commute.core.model.models.SearchableLineOperator
+import id.shiorilabs.commute.core.model.models.SearchableStation
+import id.shiorilabs.commute.core.model.models.SearchableStationOperator
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+class SearchableMapperTest {
+
+    private val bogor = SearchableLine("Lin Bogor", "B", "#EE3D43", SearchableLineOperator.KCI)
+    private val cikarang = SearchableLine("Lin Cikarang", "C", "#25B8EB", SearchableLineOperator.KCI)
+
+    private fun index(vararg items: id.shiorilabs.commute.core.model.models.Searchable) = SearchableIndex(
+        lines = mapOf("KCI:B" to bogor, "KCI:C" to cikarang),
+        items = items.toList(),
+    )
+
+    @Test
+    fun `a station's line keys resolve to its lines, in order`() {
+        val result = index(
+            SearchableStation(
+                title = "Manggarai",
+                to = "/stations/KCI/MRI",
+                keywords = listOf("manggarai"),
+                `data` = mapOf("station-id" to "KCI-MRI"),
+                score = 95.0,
+                `operator` = SearchableStationOperator.KCI,
+                lineKeys = listOf("KCI:C", "KCI:B"),
+            ),
+        ).toSearchables().single() as Searchable.Station
+
+        assertEquals("KCI-MRI", result.stationId)
+        assertEquals("KCI", result.operator)
+        assertEquals(listOf("C", "B"), result.lines.map { it.lineCode })
+    }
+
+    @Test
+    fun `a line key missing from the dictionary is dropped from a hub`() {
+        val result = index(
+            SearchableHub(
+                title = "Dukuh Atas",
+                to = "/hubs/dukuh-atas",
+                keywords = listOf("dukuh atas"),
+                `data` = mapOf("hub-id" to "dukuh-atas"),
+                lineKeys = listOf("KCI:B", "MRTJ:M"),
+            ),
+        ).toSearchables().single() as Searchable.Hub
+
+        assertEquals("dukuh-atas", result.hubId)
+        assertEquals(listOf("B"), result.lines.map { it.lineCode })
+    }
+
+    @Test
+    fun `a line entry whose key is missing is dropped whole`() {
+        val entry = { key: String ->
+            SearchableLineEntry(
+                title = "Lin",
+                to = "/lines/KCI/$key",
+                keywords = listOf("lin"),
+                `operator` = SearchableLineEntryOperator.KCI,
+                lineKey = key,
+            )
+        }
+
+        val result = index(entry("KCI:C"), entry("KCI:Z")).toSearchables()
+
+        assertEquals(listOf("C"), result.map { (it as Searchable.Line).line.lineCode })
+    }
+}
