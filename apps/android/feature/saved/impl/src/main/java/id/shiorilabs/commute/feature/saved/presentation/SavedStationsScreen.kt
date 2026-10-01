@@ -1,5 +1,8 @@
 package id.shiorilabs.commute.feature.saved.presentation
 
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,14 +18,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -252,6 +258,11 @@ private fun StationFeed(
  * Drawn over the list rather than as a sticky header in it: a sticky header pins to the very top of
  * the list, so to clear the clock every title would have to carry the status bar's height, and the
  * stations would sit that much further apart.
+ *
+ * When the next station's title pushes in, only the name moves. The background stays put and its
+ * bottom edge gives way to the incoming title, so that title arrives sharp and the blur never jumps:
+ * moving the whole bar would slide its blurred half up behind the clock and snap the solid top back
+ * the moment the next station took over.
  */
 @Composable
 private fun StuckTitleBar(
@@ -268,29 +279,65 @@ private fun StuckTitleBar(
         blurRadius = TitleBlur,
         noiseFactor = 0f,
     )
-    val fade = remember(background) {
-        Brush.verticalGradient(0f to background, TITLE_FADE_END to background.copy(alpha = 0f))
-    }
     val density = LocalDensity.current
     val statusBarPx = with(density) { statusBar.roundToPx() }
+    var fullHeight by remember { mutableIntStateOf(0) }
+
+    // The name fades on the feed's entrance curve when the bar gains or loses one, rather than
+    // popping: the first time a station loads under the bar, and when the feed empties.
+    val nameAlpha by animateFloatAsState(
+        targetValue = if (name == null) 0f else 1f,
+        animationSpec = tween(NAME_FADE_MILLIS, easing = IosSpringEasing),
+        label = "stuckTitleName",
+    )
+    // The last name shown, kept through the fade out.
+    var shownName by remember { mutableStateOf(name.orEmpty()) }
+    if (name != null) {
+        shownName = name
+    }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .graphicsLayer { translationY = pushOffset().toFloat() }
-            .onSizeChanged { onTitleHeight(it.height - statusBarPx) }
+            .layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                // Never above the status bar: that part is the page itself, whatever is arriving.
+                val height = (placeable.height + pushOffset()).coerceIn(statusBarPx, placeable.height)
+                layout(placeable.width, height) {
+                    placeable.place(0, 0)
+                }
+            }
+            .clipToBounds()
             .hazeEffect(hazeState, style) {
                 // Blur only what is behind the bar, as CSS's backdrop-filter does. Haze's default
                 // also captures a blur radius around it, which tints the bar with cards still below.
                 expandLayerBounds = false
             }
-            .drawBehind { drawRect(fade) },
+            .drawBehind {
+                // Against the bar's full height, so the fade holds still while the bottom gives way.
+                drawRect(
+                    Brush.verticalGradient(
+                        0f to background,
+                        1f to background.copy(alpha = 0f),
+                        startY = 0f,
+                        endY = fullHeight * TITLE_FADE_END,
+                    ),
+                )
+            },
     ) {
         // Always laid out, so the bar's height is known before the first title reaches it.
         StationTitle(
-            name = name.orEmpty(),
+            name = shownName,
             topInset = statusBar,
-            modifier = Modifier.graphicsLayer { alpha = if (name == null) 0f else 1f },
+            modifier = Modifier
+                .onSizeChanged {
+                    fullHeight = it.height
+                    onTitleHeight(it.height - statusBarPx)
+                }
+                .graphicsLayer {
+                    translationY = pushOffset().toFloat()
+                    alpha = nameAlpha
+                },
         )
     }
 }
@@ -309,6 +356,12 @@ private val TitleBlur = 40.dp
 
 /** How far down a title's bar its solid top has cleared to pure blur. */
 private const val TITLE_FADE_END = 0.5f
+
+/** The bar's name fading in or out, as long as a card's entrance. */
+private const val NAME_FADE_MILLIS = 300
+
+/** The web's --ease-ios-spring, the feed's own curve. */
+private val IosSpringEasing = CubicBezierEasing(0.36f, 0.66f, 0.04f, 1f)
 
 @Composable
 private fun SavedStationsEmpty(
