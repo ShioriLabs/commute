@@ -4,17 +4,14 @@ import id.shiorilabs.commute.core.model.models.SearchableHub
 import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.model.models.SearchableLine
 import id.shiorilabs.commute.core.model.models.SearchableLineEntry
-import id.shiorilabs.commute.core.model.models.SearchableLineEntryOperator
-import id.shiorilabs.commute.core.model.models.SearchableLineOperator
 import id.shiorilabs.commute.core.model.models.SearchableStation
-import id.shiorilabs.commute.core.model.models.SearchableStationOperator
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class SearchableMapperTest {
 
-    private val bogor = SearchableLine("Lin Bogor", "B", "#EE3D43", SearchableLineOperator.KCI)
-    private val cikarang = SearchableLine("Lin Cikarang", "C", "#25B8EB", SearchableLineOperator.KCI)
+    private val bogor = SearchableLine("Lin Bogor", "B", "#EE3D43", "KCI")
+    private val cikarang = SearchableLine("Lin Cikarang", "C", "#25B8EB", "KCI")
 
     private fun index(vararg items: id.shiorilabs.commute.core.model.models.Searchable) = SearchableIndex(
         lines = mapOf("KCI:B" to bogor, "KCI:C" to cikarang),
@@ -30,7 +27,7 @@ class SearchableMapperTest {
                 keywords = listOf("manggarai"),
                 `data` = mapOf("station-id" to "KCI-MRI"),
                 score = 95.0,
-                `operator` = SearchableStationOperator.KCI,
+                `operator` = "KCI",
                 lineKeys = listOf("KCI:C", "KCI:B"),
             ),
         ).toSearchables().single() as Searchable.Station
@@ -63,7 +60,7 @@ class SearchableMapperTest {
                 title = "Lin",
                 to = "/lines/KCI/$key",
                 keywords = listOf("lin"),
-                `operator` = SearchableLineEntryOperator.KCI,
+                `operator` = "KCI",
                 lineKey = key,
             )
         }

@@ -1,5 +1,7 @@
 plugins {
     alias(libs.plugins.commute.android.library)
+    // StationModule (@Binds) → Hilt + KSP.
+    alias(libs.plugins.commute.android.hilt)
 }
 
 android {
@@ -7,8 +9,14 @@ android {
 }
 
 dependencies {
+    // The repository interfaces and domain models this implements.
     implementation(project(":feature:station:api"))
+    // apiCallToFailure, Failure, ServiceDayName.
     implementation(project(":core:common"))
-    implementation(project(":core:navigation"))
-    implementation(project(":core:ui"))
+    // CommuteService + the generated Station/GroupedTimetable/OperatorWithLines (via :core:model).
+    implementation(project(":core:network"))
+
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(testFixtures(project(":core:network")))
 }
