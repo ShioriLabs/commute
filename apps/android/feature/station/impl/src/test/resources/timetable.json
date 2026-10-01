@@ -1,0 +1,81 @@
+{
+  "status": 200,
+  "data": [
+    {
+      "line": "KCI:B",
+      "timetable": [
+        {
+          "key": "TEB:",
+          "label": [
+            "Depok",
+            "Citayam",
+            "Bogor"
+          ],
+          "platformCode": "11/12",
+          "destinations": [
+            {
+              "boundFor": "Bogor",
+              "via": null,
+              "schedules": [
+                {
+                  "tripNumber": "1470",
+                  "estimatedDeparture": "00:15:00",
+                  "boundFor": "Bogor",
+                  "lineCode": "B"
+                },
+                {
+                  "tripNumber": "1000",
+                  "estimatedDeparture": "05:10:00",
+                  "boundFor": "Bogor",
+                  "lineCode": "B"
+                },
+                {
+                  "tripNumber": "1002",
+                  "estimatedDeparture": "05:27:00",
+                  "boundFor": "Bogor",
+                  "lineCode": "B"
+                },
+                {
+                  "tripNumber": "1150F",
+                  "estimatedDeparture": "05:43:00",
+                  "boundFor": "Bogor",
+                  "lineCode": "B"
+                }
+              ]
+            },
+            {
+              "boundFor": "Nambo",
+              "via": null,
+              "schedules": [
+                {
+                  "tripNumber": "1504",
+                  "estimatedDeparture": "05:37:00",
+                  "boundFor": "Nambo",
+                  "lineCode": "B"
+                },
+                {
+                  "tripNumber": "1506",
+                  "estimatedDeparture": "06:34:00",
+                  "boundFor": "Nambo",
+                  "lineCode": "B"
+                },
+                {
+                  "tripNumber": "1508",
+                  "estimatedDeparture": "08:03:00",
+                  "boundFor": "Nambo",
+                  "lineCode": "B"
+                },
+                {
+                  "tripNumber": "1510",
+                  "estimatedDeparture": "09:07:00",
+                  "boundFor": "Nambo",
+                  "lineCode": "B"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
