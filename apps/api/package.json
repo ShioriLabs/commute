@@ -33,6 +33,7 @@
     "generate:prune-feeder-edges": "tsx ./src/db/scripts/generatePruneFeederEdgesSQL.ts",
     "generate:prune-stationlines": "tsx ./src/db/scripts/generatePruneStationLinesSQL.ts",
     "generate:dataplatform-network": "tsx ./src/db/scripts/generateDataPlatformNetwork.ts",
+    "android:constants": "tsx ./src/scripts/exportAndroidConstants.ts",
     "openapi:internal": "pnpm --filter @commute/tsundere build && tsx ./src/scripts/dumpInternalOpenAPI.ts",
     "analyze:headways": "tsx ./src/db/scripts/analyzeObservedHeadways.ts"
   },
