@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { FareJourney } from '@commute/schemas'
-import { byArrival } from './journey-times'
+import type { FareContext } from '@commute/constants'
+import type { Tsundere } from '@commute/tsundere'
+import { byArrival, retimeTrips } from './journey-times'
 
 /*
  * Only the fields the ordering reads. A real FareJourney carries legs, fares
@@ -64,5 +66,60 @@ describe('byArrival', () => {
 
   it('does not disturb a single journey', () => {
     expect(idsOf(byArrival([journey('only', at('09:00'))]))).toEqual(['only'])
+  })
+})
+
+describe('retimeTrips after the last train', () => {
+  const station = (id: string) => ({ id, name: id })
+  const route: FareJourney = {
+    legs: [{
+      type: 'RIDE',
+      line: 'KCI:C',
+      operator: 'KCI',
+      from: station('KCI-BKS'),
+      to: station('KCI-SUD'),
+      stationCount: 2,
+      stops: [station('KCI-BKS'), station('KCI-SUD')],
+      headsign: null,
+      distanceM: 20000
+    }],
+    segments: [],
+    totalFare: 3000,
+    totalDistanceM: 20000,
+    transferCount: 0,
+    labels: [],
+    boardings: 1,
+    walkDistanceM: 0
+  }
+  const result = { from: station('KCI-BKS'), to: station('KCI-SUD'), journeys: [route] }
+  const context = { paymentMethod: 'KMT', departureAt: new Date('2026-10-01T23:30:00+07:00') } as unknown as FareContext
+
+  // One train a day at 04:05; nothing after it.
+  const timetabled = {
+    timeJourney: (_legs: unknown, { departureS }: { departureS: number }) =>
+      departureS <= 4 * 3600 + 300 ? [{ departureS: 4 * 3600 + 300, arrivalS: 5 * 3600, tripId: 'T1' }] : [null],
+    journeyArrival: () => null
+  } as unknown as Tsundere
+  const untimetabled = { timeJourney: () => [null], journeyArrival: () => null } as unknown as Tsundere
+
+  it('says when a timetabled route starts again', () => {
+    const [row] = retimeTrips(result, timetabled, context).journeys
+    expect(row!.resumesAt).toBe('2026-10-02T04:05:00+07:00')
+    expect(row!.legs[0]!.type === 'RIDE' && row!.legs[0]!.departureAt).toBeUndefined()
+  })
+
+  it('leaves a route the timetable never covers as one untimed row', () => {
+    const rows = retimeTrips(result, untimetabled, context).journeys
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.resumesAt).toBeUndefined()
+  })
+
+  // After midnight the morning's first train is simply the next departure, so
+  // it comes back as an ordinary timed row rather than a "starts again".
+  it('offers the morning train as a departure when asked after midnight', () => {
+    const late = { ...context, departureAt: new Date('2026-10-02T01:30:00+07:00') }
+    const [row] = retimeTrips(result, timetabled, late).journeys
+    expect(row!.resumesAt).toBeUndefined()
+    expect(row!.legs[0]!.type === 'RIDE' && row!.legs[0]!.departureAt).toBe('2026-10-02T04:05:00+07:00')
   })
 })

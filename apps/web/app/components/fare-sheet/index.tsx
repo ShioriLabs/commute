@@ -4,6 +4,7 @@ import { XIcon } from '@phosphor-icons/react'
 import { useSearchParams } from 'react-router'
 import FarePanel from './fare-panel'
 import FareShareButton from './fare-share-button'
+import SaveRouteButton from './save-route-button'
 import { fareQueryParams, readCriteriaFromUrl, type FareCriteria } from 'utils/fare-criteria'
 import { useFareQuery } from './use-fare-query'
 import { journeysOf } from './journeys'
@@ -84,6 +85,8 @@ export default function FareSheet() {
    * One-shot, and cleared whether or not it matched.
    */
   const sharedJourney = useRef(searchParams.get('j'))
+  // Which boarding of that route, from home's saved-route rows. See boardingClock.
+  const sharedBoarding = useRef(searchParams.get('jt'))
   /*
    * Which row the shared key names, resolved during render rather than in an
    * effect.
@@ -103,8 +106,9 @@ export default function FareSheet() {
   const sharedResolved = useRef(false)
   if (!sharedResolved.current && journeys.length > 0) {
     sharedResolved.current = true
-    const found = findJourneyByKey(journeys, sharedJourney.current)
+    const found = findJourneyByKey(journeys, sharedJourney.current, sharedBoarding.current)
     sharedJourney.current = null
+    sharedBoarding.current = null
     if (found !== null) setSharedIndex(found)
   }
 
@@ -143,6 +147,7 @@ export default function FareSheet() {
         <div className="flex gap-4 items-center justify-between">
           <DialogTitle className="font-bold text-2xl">{ TITLE }</DialogTitle>
           <div className="flex gap-4">
+            <SaveRouteButton fromId={origin?.id} toId={destination?.id} />
             <FareShareButton fromId={origin?.id} toId={destination?.id} criteria={criteria} journeyKey={sharedKey} />
             <CloseButton
               aria-label={`Tutup halaman ${TITLE.toLowerCase()}`}

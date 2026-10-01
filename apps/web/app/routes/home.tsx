@@ -16,6 +16,8 @@ import { useNetworkStatus } from '~/hooks/network'
 import { useInstall } from '~/contexts/installable'
 import { CARD_STAGGER, NAV_STAGGER, staggerDelay } from 'utils/stagger'
 import clsx from 'clsx'
+import SavedRouteCard from '~/components/saved-route-card'
+import { entryKey, isSavedRoute, readSavedEntries, type SavedEntry } from 'utils/saved-stations'
 
 const swrConfig = {
   dedupingInterval: import.meta.env.DEV ? 0 : 60 * 60 * 1000,
@@ -46,13 +48,13 @@ function EmptyState({ mode = 'NO_SAVED' }: { mode: 'NO_SAVED' | 'OFFLINE' }) {
       </picture>
       {mode === 'NO_SAVED' && (
         <>
-          <span className="text-2xl text-center font-bold mt-0">Belum Ada Stasiun Disimpan</span>
+          <span className="text-2xl text-center font-bold mt-0">Belum Ada Stasiun atau Rute Disimpan</span>
           <p className="text-center mt-2">
             Klik tombol
             {' '}
             <b>Mau ke mana?</b>
             {' '}
-            di bawah untuk cari jadwal, cek tarif & simpan stasiun!
+            di bawah untuk cari jadwal, cek tarif & simpan stasiun atau rute!
           </p>
         </>
       )}
@@ -198,38 +200,20 @@ function StationCard({ stationId, index = 0 }: { stationId: string, index?: numb
 // with nothing to show, which put a full-screen spinner between the boot
 // splash and the skeletons. This route is not in the prerender list
 // (react-router.config.ts), so the component body only ever runs in the
-// browser and localStorage is safe to touch directly. The try/catch covers
-// blocked storage (private mode), where the old effect would have thrown
-// before setting ready and spun forever.
-function readSavedStations(): string[] {
-  try {
-    const savedStationsRaw = localStorage.getItem('saved-stations')
-    if (!savedStationsRaw) {
-      localStorage.setItem('saved-stations', '[]')
-      return []
-    }
+// browser and localStorage is safe to touch directly. readSavedEntries
+// swallows blocked storage (private mode) and corrupt values as an empty list.
 
-    const parsedSavedStations = JSON.parse(savedStationsRaw)
-    if (!(parsedSavedStations instanceof Array)) {
-      localStorage.setItem('saved-stations', '[]')
-      return []
-    }
-
-    return parsedSavedStations as string[]
-  } catch (e) {
-    if (e instanceof SyntaxError) {
-      try {
-        localStorage.setItem('saved-stations', '[]')
-      } catch {
-        // Storage unwritable — nothing to reset.
-      }
-    }
-    return []
-  }
+// Same entrance wrapper as StationCard, for the same reason; see there.
+function SavedRouteItem({ from, to, index }: { from: string, to: string, index: number }) {
+  return (
+    <li className="home-enter" style={{ animationDelay: staggerDelay(index, CARD_STAGGER) }}>
+      <SavedRouteCard from={from} to={to} />
+    </li>
+  )
 }
 
 export default function HomePage() {
-  const [stations] = useState<string[]>(readSavedStations)
+  const [entries] = useState<SavedEntry[]>(readSavedEntries)
   const networkStatus = useNetworkStatus()
   const { isInstallable, showIOSInstructions, isStandalone, promptInstall } = useInstall()
   const [showInstallBanner, setShowInstallBanner] = useState(() => {
@@ -303,12 +287,12 @@ export default function HomePage() {
         </div>
       )}
 
-      {stations.length > 0
+      {entries.length > 0
         ? (
-            <ul className="flex flex-col gap-5 pb-42 max-w-3xl mx-auto" aria-label="Daftar stasiun tersimpan">
-              {stations.map((station, index) => (
-                <StationCard key={station} stationId={station} index={index} />
-              ))}
+            <ul className="flex flex-col gap-5 pb-42 max-w-3xl mx-auto" aria-label="Daftar stasiun dan rute tersimpan">
+              {entries.map((entry, index) => isSavedRoute(entry)
+                ? <SavedRouteItem key={entryKey(entry)} from={entry.from} to={entry.to} index={index} />
+                : <StationCard key={entry} stationId={entry} index={index} />)}
             </ul>
           )
         : (

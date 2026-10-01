@@ -178,6 +178,18 @@ export const FareJourneySchema = v.pipe(
       v.optional(v.string()),
       v.description('Jam sampai tujuan. Cuma ada kalau semua tahap naik kendaraannya punya jadwal, jadi kalau ada tahap yang pakai TransJakarta memang tidak muncul.'),
       v.metadata({ examples: ['2026-09-07T08:02:00+07:00'] })
+    ),
+    /*
+     * Separates the two reasons a journey comes back with no clock on it. A
+     * route the timetable never covers (TransJakarta, rail trips with gaps in
+     * their stop lists) carries nothing, as before. A route it does cover but
+     * where tonight's last train has gone carries this, so the UI can say the
+     * service is done rather than offer a journey nobody can take.
+     */
+    resumesAt: v.pipe(
+      v.optional(v.string()),
+      v.description('Jam berangkat pertama rute ini di hari layanan berikutnya. Cuma ada kalau rutenya punya jadwal tapi layanan hari ini sudah selesai.'),
+      v.metadata({ examples: ['2026-09-08T04:05:00+07:00'] })
     )
   }),
   v.title('FareJourney'),

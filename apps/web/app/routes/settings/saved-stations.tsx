@@ -1,15 +1,16 @@
 import { OPERATORS } from '@commute/constants'
-import { CaretDownIcon, CaretLeftIcon, CaretUpIcon, PushPinIcon, PushPinSlashIcon } from '@phosphor-icons/react'
+import { ArrowRightIcon, CaretDownIcon, CaretLeftIcon, CaretUpIcon, PushPinIcon, PushPinSlashIcon } from '@phosphor-icons/react'
 import type { StandardResponse } from '@schema/response'
 import type { Station } from '@commute/schemas'
 import { useState, useEffect, useCallback } from 'react'
 import useSWR from 'swr'
 import { fetcher } from 'utils/fetcher'
-import { moveEntry } from 'utils/saved-stations'
+import { entryKey, isSavedRoute, moveEntry, readSavedEntries, writeSavedEntries, type SavedEntry, type SavedRoute } from 'utils/saved-stations'
+import { useSearchables } from '~/hooks/use-searchables'
 
 export function meta() {
   return [
-    { title: 'Stasiun Tersimpan - Commute' },
+    { title: 'Stasiun & Rute Disimpan - Commute' },
     { name: 'theme-color', content: '#FFFFFF' }
   ]
 }
@@ -25,6 +26,7 @@ interface SavedStationItemProps {
 }
 
 interface SavedStationObject {
+  entry: SavedEntry
   id: string
   isSaved: boolean
 }
@@ -66,35 +68,115 @@ function SavedStationItem({ stationId, isSaved, onSaveButtonClick, isFirst, isLa
             {OPERATORS[station.data.data.operator]?.name ?? station.data.data.operator}
           </h2>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            type="button"
-            onClick={() => onMove(stationId, -1)}
-            disabled={isFirst}
-            aria-label={`Naikkan ${station.data.data.name}`}
-            className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer disabled:cursor-default disabled:text-slate-300"
-          >
-            <CaretUpIcon weight="bold" className="w-5 h-5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => onMove(stationId, 1)}
-            disabled={isLast}
-            aria-label={`Turunkan ${station.data.data.name}`}
-            className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer disabled:cursor-default disabled:text-slate-300"
-          >
-            <CaretDownIcon weight="bold" className="w-5 h-5" />
-          </button>
-          <button onClick={handleSaveStationButton} className="ms-2 cursor-pointer">
-            {isSaved
-              ? (
-                  <PushPinSlashIcon weight="fill" className="w-6 h-6 text-red-400" />
-                )
-              : (
-                  <PushPinIcon weight="fill" className="w-6 h-6" />
-                )}
-          </button>
+        <ItemControls name={station.data.data.name} id={stationId} isSaved={isSaved} isFirst={isFirst} isLast={isLast} onMove={onMove} onToggle={handleSaveStationButton} />
+      </article>
+    </li>
+  )
+}
+
+// Reorder chevrons and the pin, shared by station and route rows. Ends of the
+// list disable the matching chevron rather than wrapping around.
+function ItemControls({ name, id, isSaved, isFirst, isLast, onMove, onToggle }: {
+  name: string
+  id: string
+  isSaved: boolean
+  isFirst: boolean
+  isLast: boolean
+  onMove: (id: string, offset: -1 | 1) => void
+  onToggle: () => void
+}) {
+  return (
+    <div className="flex items-center gap-1 shrink-0">
+      <button
+        type="button"
+        onClick={() => onMove(id, -1)}
+        disabled={isFirst}
+        aria-label={`Naikkan ${name}`}
+        className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer disabled:cursor-default disabled:text-slate-300"
+      >
+        <CaretUpIcon weight="bold" className="w-5 h-5" />
+      </button>
+      <button
+        type="button"
+        onClick={() => onMove(id, 1)}
+        disabled={isLast}
+        aria-label={`Turunkan ${name}`}
+        className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer disabled:cursor-default disabled:text-slate-300"
+      >
+        <CaretDownIcon weight="bold" className="w-5 h-5" />
+      </button>
+      <button onClick={onToggle} aria-label={isSaved ? `Hapus ${name}` : `Simpan lagi ${name}`} className="ms-2 cursor-pointer">
+        {isSaved
+          ? <PushPinSlashIcon weight="fill" className="w-6 h-6 text-red-400" />
+          : <PushPinIcon weight="fill" className="w-6 h-6" />}
+      </button>
+    </div>
+  )
+}
+
+interface SavedRouteItemProps extends Omit<SavedStationItemProps, 'stationId'> {
+  route: SavedRoute
+  id: string
+}
+
+// Names come from the search index rather than two /stations fetches per row;
+// it is already cached for the search sheet.
+function SavedRouteItem({ route, id, isSaved, onSaveButtonClick, isFirst, isLast, onMove }: SavedRouteItemProps) {
+  const { searchables, isLoading } = useSearchables()
+  const lookup = (stationId: string) => searchables.find(item => item.type === 'STATION' && item.data?.['station-id'] === stationId)
+  const from = lookup(route.from)
+  const to = lookup(route.to)
+  const operatorName = (operator?: string) => (operator ? (OPERATORS as Record<string, { name: string }>)[operator]?.name ?? operator : '')
+
+  // A pair whose station left the index (a retired stop) still has to be
+  // removable here, so it falls back to its ids instead of loading forever.
+  if (!isLoading && (!from || !to)) {
+    return (
+      <li>
+        <article className="px-8 py-4 flex items-center gap-4 justify-between">
+          <div className="min-w-0">
+            <h1 className="font-semibold text-lg truncate">{`${route.from} → ${route.to}`}</h1>
+            <h2 className="font-semibold text-sm text-slate-700">Stasiun tidak ditemukan</h2>
+          </div>
+          <ItemControls name={`rute ${route.from} ke ${route.to}`} id={id} isSaved={isSaved} isFirst={isFirst} isLast={isLast} onMove={onMove} onToggle={() => onSaveButtonClick(id)} />
+        </article>
+      </li>
+    )
+  }
+
+  if (!from || !to) {
+    return (
+      <li className="animate-pulse">
+        <article className="px-8 py-4 flex items-center gap-4 justify-between">
+          <div>
+            <div className="h-4 w-64 bg-slate-200 rounded" />
+            <div className="h-3 w-32 mt-1 bg-slate-200 rounded" />
+          </div>
+          <div className="w-6 h-6 bg-slate-200 rounded" />
+        </article>
+      </li>
+    )
+  }
+
+  const fromOperator = from.type === 'STATION' ? from.operator : undefined
+  const toOperator = to.type === 'STATION' ? to.operator : undefined
+  const operators = fromOperator === toOperator
+    ? operatorName(fromOperator)
+    : `${operatorName(fromOperator)} · ${operatorName(toOperator)}`
+  const name = `rute ${from.title} ke ${to.title}`
+
+  return (
+    <li>
+      <article className="px-8 py-4 flex items-center gap-4 justify-between">
+        <div className="min-w-0">
+          <h1 className="font-semibold text-lg flex items-center gap-2 min-w-0">
+            <span className="truncate">{from.title}</span>
+            <ArrowRightIcon weight="bold" className="w-4 h-4 shrink-0" />
+            <span className="truncate">{to.title}</span>
+          </h1>
+          <h2 className="font-semibold text-sm text-slate-700">{operators}</h2>
         </div>
+        <ItemControls name={name} id={id} isSaved={isSaved} isFirst={isFirst} isLast={isLast} onMove={onMove} onToggle={() => onSaveButtonClick(id)} />
       </article>
     </li>
   )
@@ -106,36 +188,14 @@ export default function SavedStationsSettingsPage() {
   const [isDirty, setIsDirty] = useState(false)
 
   useEffect(() => {
-    const savedStationsRaw = localStorage.getItem('saved-stations')
-    if (!savedStationsRaw) {
-      localStorage.setItem('saved-stations', '[]')
-      setIsReady(true)
-      return
-    }
-
-    try {
-      const parsedSavedStations = JSON.parse(savedStationsRaw)
-      if (!(parsedSavedStations instanceof Array)) {
-        localStorage.setItem('saved-stations', '[]')
-        setIsReady(true)
-        return
-      }
-
-      setStations((parsedSavedStations as string[]).map(stat => ({ id: stat, isSaved: true })))
-      setIsReady(true)
-    } catch (e) {
-      if (e instanceof SyntaxError) {
-        localStorage.setItem('saved-stations', '[]')
-      }
-      setIsReady(true)
-    }
+    setStations(readSavedEntries().map(entry => ({ entry, id: entryKey(entry), isSaved: true })))
+    setIsReady(true)
   }, [])
 
   useEffect(() => {
     return () => {
       if (isDirty) {
-        const committed = stations.filter(station => station.isSaved).map(station => station.id)
-        localStorage.setItem('saved-stations', JSON.stringify(committed))
+        writeSavedEntries(stations.filter(station => station.isSaved).map(station => station.entry))
       }
     }
   }, [isDirty, stations])
@@ -173,9 +233,9 @@ export default function SavedStationsSettingsPage() {
           >
             <CaretLeftIcon weight="bold" className="w-6 h-6" />
           </button>
-          <h1 className="font-bold text-2xl">Stasiun Disimpan</h1>
+          <h1 className="font-bold text-2xl">Stasiun & Rute Disimpan</h1>
         </div>
-        <h2 className="mt-4 text-sm">Perubahan pada stasiun di bawah ini akan disimpan pada saat meninggalkan halaman ini</h2>
+        <h2 className="mt-4 text-sm">Perubahan pada stasiun dan rute di bawah ini akan disimpan pada saat meninggalkan halaman ini</h2>
       </div>
       {!isReady
         ? (
@@ -187,20 +247,33 @@ export default function SavedStationsSettingsPage() {
             <ul className="max-w-3xl mx-auto">
               {stations.length > 0
                 ? (
-                    stations.map((station, index) => (
-                      <SavedStationItem
-                        stationId={station.id}
-                        key={station.id}
-                        onSaveButtonClick={handleSaveStationButton}
-                        isSaved={station.isSaved}
-                        isFirst={index === 0}
-                        isLast={index === stations.length - 1}
-                        onMove={handleMove}
-                      />
-                    ))
+                    stations.map((station, index) => isSavedRoute(station.entry)
+                      ? (
+                          <SavedRouteItem
+                            route={station.entry}
+                            id={station.id}
+                            key={station.id}
+                            onSaveButtonClick={handleSaveStationButton}
+                            isSaved={station.isSaved}
+                            isFirst={index === 0}
+                            isLast={index === stations.length - 1}
+                            onMove={handleMove}
+                          />
+                        )
+                      : (
+                          <SavedStationItem
+                            stationId={station.id}
+                            key={station.id}
+                            onSaveButtonClick={handleSaveStationButton}
+                            isSaved={station.isSaved}
+                            isFirst={index === 0}
+                            isLast={index === stations.length - 1}
+                            onMove={handleMove}
+                          />
+                        ))
                   )
                 : (
-                    <li className="px-8 py-4 font-bold">Tidak ada stasiun disimpan</li>
+                    <li className="px-8 py-4 font-bold">Tidak ada stasiun atau rute disimpan</li>
                   )}
             </ul>
           )}

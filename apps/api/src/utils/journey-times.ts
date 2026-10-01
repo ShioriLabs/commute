@@ -154,8 +154,39 @@ function boardingsOf(
     afterS = timed.departureS + 60
   }
 
-  // Untimed: one row, exactly as before this existed.
-  return rows.length > 0 ? rows : [journey]
+  if (rows.length > 0) return rows
+
+  /*
+   * Nothing left tonight, or never timed at all? The first boarding of the
+   * next service day tells the two apart: a route the timetable covers has
+   * one, and the rider is told when it starts again instead of being offered
+   * an untimed row that looks rideable. A route it never covers still comes
+   * back as the one untimed row, exactly as before this existed.
+   */
+  const tomorrow = nextServiceDay(context)
+  const resumes = timeOnce(journey, routeLegs, router, tomorrow, SERVICE_DAY_START_S, walking)
+  return resumes
+    ? [{ ...journey, resumesAt: wibIsoString(atSecondsOfDay(tomorrow.departureAt, resumes.departureS)) }]
+    : [journey]
+}
+
+/*
+ * The service day turns over at 03:00, the same rollover the web's boards use:
+ * trips after midnight belong to the night before, and the first trains run
+ * from around 04:00.
+ */
+const SERVICE_DAY_START_S = 3 * 3600
+
+/*
+ * The context at the start of the next service day. Before 03:00 that is this
+ * calendar day's morning; after, tomorrow's. Carrying a date rather than only
+ * seconds is what gives the probe the right day mask, so a Friday night asks
+ * Saturday's timetable.
+ */
+function nextServiceDay(context: FareContext): FareContext {
+  const nowS = secondsSinceLocalMidnight(context.departureAt)
+  const startS = nowS < SERVICE_DAY_START_S ? SERVICE_DAY_START_S : SERVICE_DAY_START_S + 24 * 3600
+  return { ...context, departureAt: atSecondsOfDay(context.departureAt, startS) }
 }
 
 /** Every journey in a trips answer, timed against the request's own clock. */

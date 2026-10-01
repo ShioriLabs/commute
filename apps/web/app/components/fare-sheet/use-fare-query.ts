@@ -13,6 +13,7 @@ import {
 } from 'utils/fare-criteria'
 import { FARE_SWR_CONFIG, tripApiUrl } from 'utils/fare-api'
 import { isStaleDeparture, msUntilDepartureStale } from 'utils/departure-time'
+import { recordRecentRoute } from 'utils/recents'
 import { resolveStationId, toPickableStations, type PickableStation } from './pickable-station'
 
 /** Leading words of the tab title on the surfaces that own one. */
@@ -320,6 +321,15 @@ export function useFareQuery({
   const fareUrl = criteriaReady ? tripApiUrl(keyFromId, keyToId, criteria) : null
   const { data: fare, error, isLoading }
     = useSWR<StandardResponse<FareResult | TripResult>>(fareUrl, fetcher, FARE_SWR_CONFIG)
+
+  // A pair becomes a recent once it has actually answered, not on every pick:
+  // a half-made selection or a failed lookup is not a trip worth offering back.
+  const answered = fare?.data !== undefined
+  useEffect(() => {
+    if (answered && keyFromId && keyToId && keyFromId !== keyToId) {
+      recordRecentRoute({ from: keyFromId, to: keyToId })
+    }
+  }, [answered, keyFromId, keyToId])
 
   /*
    * The one place the pair moves. Uncontrolled keeps the both-ends guard it has
