@@ -24,3 +24,15 @@ class EntranceExtTest {
         assertEquals(0, rowStaggerDelayMillis(-1))
     }
 }
+
+/** The same delays as the web's `staggerDelay(index, CARD_STAGGER)`. */
+class CardEntranceTest {
+
+    @Test
+    fun `cards start 45 ms apart, capped at the sixth`() {
+        assertEquals(0, cardStaggerDelayMillis(0))
+        assertEquals(45, cardStaggerDelayMillis(1))
+        assertEquals(270, cardStaggerDelayMillis(6))
+        assertEquals(270, cardStaggerDelayMillis(9))
+    }
+}

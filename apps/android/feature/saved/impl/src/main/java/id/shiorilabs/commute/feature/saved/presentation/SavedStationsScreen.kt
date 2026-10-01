@@ -4,47 +4,84 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.ui.components.CommuteEmptyState
+import id.shiorilabs.commute.core.ui.ext.cardEntrance
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
+import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
 import id.shiorilabs.commute.feature.saved.R
 import id.shiorilabs.commute.feature.saved.presentation.components.HomeNavRail
+import id.shiorilabs.commute.feature.saved.presentation.components.StationPlaceholder
+import id.shiorilabs.commute.feature.saved.presentation.components.StationTimetable
+import id.shiorilabs.commute.feature.saved.presentation.components.StationTitle
+import java.time.LocalDateTime
 
 @Composable
 fun SavedStationsScreen(
     innerPadding: PaddingValues,
     viewModel: SavedStationsViewModel = hiltViewModel(),
 ) {
-    val stations by viewModel.stations.collectAsStateWithLifecycle()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
+    val now = rememberJakartaNow()
+    LaunchedEffect(now) {
+        viewModel.onClockTick(now)
+    }
 
     SavedStationsContent(
-        stations = stations,
+        state = state,
+        now = now,
         innerPadding = innerPadding,
+        onRetry = viewModel::retry,
         onSearchClick = { navigator.goTo(Route.Search) },
     )
 }
 
 @Composable
 private fun SavedStationsContent(
-    stations: UIState<List<String>>,
+    state: UIState<SavedStationsUiState>,
+    now: LocalDateTime,
     innerPadding: PaddingValues,
+    onRetry: (stationId: String) -> Unit = {},
     onSearchClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
 ) {
@@ -53,19 +90,24 @@ private fun SavedStationsContent(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
     ) {
-        when (stations) {
+        when (state) {
             // Nothing is drawn while the list is read off disk: it resolves within a frame or two,
             // and a spinner that short only reads as a flicker.
             is UIState.Idle, is UIState.Loading -> Unit
 
-            is UIState.Success -> {
-                if (stations.data.isEmpty()) {
-                    SavedStationsEmpty(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(innerPadding),
-                    )
-                }
+            is UIState.Success -> if (state.data.cards.isEmpty()) {
+                SavedStationsEmpty(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding),
+                )
+            } else {
+                StationFeed(
+                    feed = state.data,
+                    now = now,
+                    innerPadding = innerPadding,
+                    onRetry = onRetry,
+                )
             }
 
             is UIState.Error -> {
@@ -91,6 +133,183 @@ private fun SavedStationsContent(
     }
 }
 
+/** The content type of a station's title row, and of the placeholder that stands in for it. */
+private const val TITLE_ROW = "station-title"
+
+@Composable
+private fun StationFeed(
+    feed: SavedStationsUiState,
+    now: LocalDateTime,
+    innerPadding: PaddingValues,
+    onRetry: (stationId: String) -> Unit,
+) {
+    val listDescription = stringResource(R.string.saved_station_list_description)
+    val listState = rememberLazyListState()
+    val hazeState = rememberHazeState()
+    val statusBar = innerPadding.calculateTopPadding()
+
+    // The rows, in list order, so a row index leads back to its station. A loaded station is a title
+    // row then its cards; one still loading, or failed, is a single placeholder row standing in for
+    // its title. Either way the first row of a station is its title row.
+    val titleRows = remember(feed.cards) {
+        var row = 0
+        feed.cards.map { card ->
+            val titleRow = row
+            row += if (card.station is UIState.Success) 2 else 1
+            titleRow to card
+        }
+    }
+
+    var barTitleHeight by remember { mutableIntStateOf(0) }
+    val stuck by remember(titleRows) {
+        derivedStateOf {
+            val layout = listState.layoutInfo
+            stuckTitle(
+                visibleTitles = layout.visibleItemsInfo
+                    .filter { it.contentType == TITLE_ROW }
+                    .map { TitleSlot(it.index, it.offset) },
+                titleIndices = titleRows.map { it.first },
+                firstVisibleIndex = listState.firstVisibleItemIndex,
+                titleHeight = barTitleHeight,
+            )
+        }
+    }
+    val stuckName = stuck?.let { current ->
+        (titleRows.firstOrNull { it.first == current.index }?.second?.station as? UIState.Success)?.data?.name
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .hazeSource(hazeState)
+                .semantics { contentDescription = listDescription },
+            // Under the status bar at rest, and clear of the rail at the bottom, which sits over the
+            // feed's last card otherwise.
+            contentPadding = PaddingValues(
+                top = statusBar,
+                bottom = innerPadding.calculateBottomPadding() + NavRailClearance,
+            ),
+        ) {
+            titleRows.forEachIndexed { index, (row, card) ->
+                val station = card.station
+                if (station is UIState.Success) {
+                    item(key = "saved-station-title:${card.stationId}", contentType = TITLE_ROW) {
+                        StationTitle(
+                            name = station.data.name,
+                            modifier = Modifier
+                                .cardEntrance(index)
+                                // The bar shows this title while it is the current one; drawn
+                                // twice, the copy in the list would blur behind the bar's.
+                                .graphicsLayer { alpha = if (stuckName != null && stuck?.index == row) 0f else 1f },
+                        )
+                    }
+                    item(key = "saved-station:${card.stationId}") {
+                        StationTimetable(
+                            card = card,
+                            lineCount = station.data.lineKeys.size,
+                            lines = feed.lines,
+                            now = now,
+                            onRetry = { onRetry(card.stationId) },
+                            modifier = Modifier
+                                .cardEntrance(index)
+                                .padding(bottom = StationGap),
+                        )
+                    }
+                } else {
+                    // Keyed as the title that replaces it, not as the timetable. The list holds its
+                    // place by the key at the top, so a placeholder sharing the timetable's key
+                    // would scroll the feed down past the title the moment the station loads.
+                    item(key = "saved-station-title:${card.stationId}", contentType = TITLE_ROW) {
+                        StationPlaceholder(
+                            station = station,
+                            onRetry = { onRetry(card.stationId) },
+                            modifier = Modifier
+                                .cardEntrance(index)
+                                .padding(bottom = StationGap),
+                        )
+                    }
+                }
+            }
+        }
+
+        StuckTitleBar(
+            name = stuckName,
+            pushOffset = { stuck?.pushOffset ?: 0 },
+            statusBar = statusBar,
+            hazeState = hazeState,
+            onTitleHeight = { barTitleHeight = it },
+        )
+    }
+}
+
+/**
+ * The bar over the feed: the current station's name, blurred over the cards passing under it,
+ * reaching up behind the status bar. Solid at its top edge and clearing to pure blur halfway down,
+ * so behind the clock it reads as the page itself and the blur shows where the title is.
+ *
+ * Drawn over the list rather than as a sticky header in it: a sticky header pins to the very top of
+ * the list, so to clear the clock every title would have to carry the status bar's height, and the
+ * stations would sit that much further apart.
+ */
+@Composable
+private fun StuckTitleBar(
+    name: String?,
+    pushOffset: () -> Int,
+    statusBar: Dp,
+    hazeState: HazeState,
+    onTitleHeight: (Int) -> Unit,
+) {
+    val background = MaterialTheme.colorScheme.background
+    val style = HazeStyle(
+        backgroundColor = background,
+        tint = HazeTint(TitleWash),
+        blurRadius = TitleBlur,
+        noiseFactor = 0f,
+    )
+    val fade = remember(background) {
+        Brush.verticalGradient(0f to background, TITLE_FADE_END to background.copy(alpha = 0f))
+    }
+    val density = LocalDensity.current
+    val statusBarPx = with(density) { statusBar.roundToPx() }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer { translationY = pushOffset().toFloat() }
+            .onSizeChanged { onTitleHeight(it.height - statusBarPx) }
+            .hazeEffect(hazeState, style) {
+                // Blur only what is behind the bar, as CSS's backdrop-filter does. Haze's default
+                // also captures a blur radius around it, which tints the bar with cards still below.
+                expandLayerBounds = false
+            }
+            .drawBehind { drawRect(fade) },
+    ) {
+        // Always laid out, so the bar's height is known before the first title reaches it.
+        StationTitle(
+            name = name.orEmpty(),
+            topInset = statusBar,
+            modifier = Modifier.graphicsLayer { alpha = if (name == null) 0f else 1f },
+        )
+    }
+}
+
+/** The rail's cards plus their padding: what the feed's last card has to scroll clear of. */
+private val NavRailClearance = 168.dp
+
+/** Between one station's last card and the next station's name, the web's `gap-5`. */
+private val StationGap = 20.dp
+
+/** A stuck title's wash over the blur, the web's `bg-rose-50/20`. */
+private val TitleWash = Color(0x33FFF1F2)
+
+/** The web's `backdrop-blur-2xl`. */
+private val TitleBlur = 40.dp
+
+/** How far down a title's bar its solid top has cleared to pure blur. */
+private const val TITLE_FADE_END = 0.5f
+
 @Composable
 private fun SavedStationsEmpty(
     modifier: Modifier = Modifier,
@@ -111,7 +330,8 @@ private fun SavedStationsEmpty(
 private fun SavedStationsEmptyPreview() {
     CommutePreviewScaffold {
         SavedStationsContent(
-            stations = UIState.Success(emptyList()),
+            state = UIState.Success(SavedStationsUiState(cards = emptyList(), lines = emptyMap())),
+            now = LocalDateTime.of(2026, 10, 1, 8, 0),
             innerPadding = PaddingValues(),
         )
     }
