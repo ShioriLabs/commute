@@ -1,6 +1,9 @@
 package id.shiorilabs.commute.core.network.service
 
+import id.shiorilabs.commute.core.model.models.GroupedTimetable
+import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.SearchableIndex
+import id.shiorilabs.commute.core.model.models.Station
 import id.shiorilabs.commute.core.network.response.Response
 
 /**
@@ -15,4 +18,16 @@ interface CommuteService {
      * reference sent once in a dictionary.
      */
     suspend fun getSearchables(): Response<SearchableIndex>
+
+    /** One station. [operator] and [stationCode] are the two halves of its id (`KCI`, `MRI`). */
+    suspend fun getStation(operator: String, stationCode: String): Response<Station>
+
+    /**
+     * The station's departures on [day] (`WD`, `SAT` or `SUN`), grouped by line, then direction,
+     * then terminus. Always the full form: the compact one's tuples have no typed model.
+     */
+    suspend fun getGroupedTimetable(operator: String, stationCode: String, day: String): Response<List<GroupedTimetable>>
+
+    /** Every operator with its lines: the dictionary line keys resolve against. */
+    suspend fun getOperators(): Response<List<OperatorWithLines>>
 }

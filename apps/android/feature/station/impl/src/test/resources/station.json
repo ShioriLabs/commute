@@ -1,0 +1,63 @@
+{
+  "status": 200,
+  "data": {
+    "id": "KCI-MRI",
+    "name": "Manggarai",
+    "officialName": "MANGGARAI",
+    "code": "MRI",
+    "regionCode": "XYZ",
+    "operator": "KCI",
+    "lines": [
+      "KCI:A",
+      "KCI:B",
+      "KCI:C"
+    ],
+    "amenities": [
+      {
+        "type": "TOILET"
+      },
+      {
+        "type": "TOILET_ACCESSIBLE"
+      },
+      {
+        "type": "PRAYING_ROOM"
+      },
+      {
+        "type": "NURSING_ROOM"
+      },
+      {
+        "type": "ESCALATOR_UNPAID",
+        "text": "Kedua sisi pintu masuk"
+      },
+      {
+        "type": "ESCALATOR_PAID"
+      },
+      {
+        "type": "ELEVATOR_UNPAID",
+        "text": "Pintu Dr. Saharjo"
+      },
+      {
+        "type": "ELEVATOR_PAID"
+      },
+      {
+        "type": "CHARGING_STATION"
+      },
+      {
+        "type": "LOCKERS"
+      },
+      {
+        "type": "PARKING"
+      },
+      {
+        "type": "BIKE_PARKING"
+      },
+      {
+        "type": "SOMETHING_ADDED_LATER"
+      }
+    ],
+    "latitude": -6.21,
+    "longitude": 106.8498,
+    "score": 95,
+    "searchable": true
+  }
+}

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Line card -->
+    <string name="line_card_fallback_name">Lin lain</string>
+    <string name="line_card_description">Jadwal untuk jalur %1$s</string>
+    <string name="line_card_platform">Peron %1$s</string>
+    <string name="line_card_platform_description">Berangkat dari peron %1$s</string>
+    <string name="line_card_via">via %1$s</string>
+    <string name="line_card_now">Sekarang</string>
+    <!-- %1$d is a number of minutes. -->
+    <string name="line_card_in_minutes">%1$d mnt</string>
+    <string name="line_card_in_minutes_description">Keberangkatan berikutnya dalam %1$d menit</string>
+    <string name="line_card_now_description">Keberangkatan berikutnya dalam beberapa menit</string>
+    <string name="line_card_at_description">Keberangkatan berikutnya pada %1$s</string>
+    <!-- %1$s is a list of clock times, e.g. "17.52, 17.58". -->
+    <string name="line_card_then">lalu %1$s</string>
+    <string name="line_card_over">Udahan</string>
+    <string name="line_card_restarts">mulai lagi %1$s</string>
+    <string name="line_card_last">terakhir %1$s</string>
+    <string name="line_card_over_description">Layanan menuju %1$s sudah selesai, %2$s</string>
+</resources>

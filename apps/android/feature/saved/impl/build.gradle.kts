@@ -16,8 +16,10 @@ dependencies {
     implementation(project(":core:datastore"))
     // Route.Home + the NavGraphContribution/NavGraphScope contract.
     implementation(project(":core:navigation"))
-    // CommuteEmptyState, CommuteIcons, Spacers, CommutePreviewScaffold.
+    // CommuteEmptyState, CommuteIcons, Spacers, CommutePreviewScaffold, rememberJakartaNow.
     implementation(project(":core:ui"))
+    // StationRepository/LineRepository, the domain models, and LineCard.
+    implementation(project(":feature:station:api"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.runtime)
@@ -25,6 +27,9 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui.tooling.preview)
+
+    // Haze — the station names blur the feed scrolling under them.
+    implementation(libs.haze)
 
     // ViewModel + viewModelScope.
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
@@ -40,3 +45,4 @@ dependencies {
     // FakePreferencesDataStore — backs SavedStationsRepository in SavedStationsViewModelTest.
     testImplementation(testFixtures(project(":core:datastore")))
 }
+
