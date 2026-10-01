@@ -28,6 +28,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
+import id.shiorilabs.commute.core.ui.morph.NavCardFacePart
+import id.shiorilabs.commute.core.ui.morph.navCardFace
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 
 private val CardWidth = 168.dp
@@ -88,6 +90,7 @@ fun NavRailCard(
         Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
+                .navCardFace(NavCardFacePart.ICON)
                 .offset(x = IconOverhang, y = IconOverhang)
                 .background(iconWashColor, CircleShape)
                 .padding(16.dp),
@@ -100,7 +103,9 @@ fun NavRailCard(
             )
         }
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier
+                .navCardFace(NavCardFacePart.TEXT)
+                .padding(16.dp),
         ) {
             Text(
                 text = title,
