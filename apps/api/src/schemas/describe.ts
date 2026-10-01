@@ -7,7 +7,9 @@ import { Envelope, ErrorResponseSchema } from '@commute/schemas'
  * nested wall of OpenAPI boilerplate.
  */
 
-type Tag = 'Stasiun' | 'Pumpunan Moda' | 'Lin' | 'Tarif' | 'Operator'
+// `Internal` only ever appears in /_internal/openapi.json: the public document
+// excludes every route that carries it.
+type Tag = 'Stasiun' | 'Pumpunan Moda' | 'Lin' | 'Tarif' | 'Operator' | 'Internal'
 
 /*
  * `target` matters: the converter defaults to draft-07, which encodes a tuple as
