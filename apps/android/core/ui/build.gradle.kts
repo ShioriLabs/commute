@@ -23,8 +23,12 @@ dependencies {
     implementation(libs.androidx.compose.runtime)
     // WindowCompat — CommuteTheme sets the system-bar icon appearance.
     implementation(libs.androidx.core.ktx)
+    // NavDisplay's transition metadata keys, for navCardMorphMetadata.
+    implementation(libs.androidx.navigation3.ui)
     // Phosphor — icon set surfaced through the CommuteIcons design-system object.
     implementation(libs.phosphor.icons)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
+
+    testImplementation(libs.junit)
 }

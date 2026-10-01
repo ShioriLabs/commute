@@ -1,0 +1,386 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Commute Data API",
+    "description": "Data transit Jakarta dan Jabodetabek: stasiun, lin, pumpunan moda, jadwal, dan tarif dari Commuter Line (KCI), MRT Jakarta, LRT Jakarta, LRT Jabodebek, dan TransJakarta.\n\n### Bentuk response\nSemua response dibungkus object yang sama, baik berhasil maupun gagal. `status` mengikuti HTTP status code-nya. Kalau berhasil, yang terisi `data`. Kalau gagal, yang terisi `error`, lengkap dengan `code` yang bisa dibaca program.\n\n```json\n{ \"status\": 200, \"data\": { } }\n{ \"status\": 404, \"error\": { \"code\": \"NOT_FOUND\", \"message\": \"Not found\" } }\n```\n\n### Identifier\nStation ID bentuknya `{operatorCode}-{stationCode}`, misalnya `KCI-AC`. Kode stasiun cuma unik di dalam satu operator, jadi kebanyakan endpoint minta operator dan kodenya terpisah. Khusus buat cek tarif, pakai ID yang lengkap.\n\n### Autentikasi dan stabilitas\nSemua endpoint yang ada di sini tidak butuh autentikasi. Yang tidak didokumentasikan di sini bukan bagian dari API publik, terutama yang ada di bawah `/_internal`. Itu dibuat khusus buat commute.shiorilabs.id dan bisa berubah sewaktu-waktu tanpa pemberitahuan.\n\n### Lisensi\nDatanya pakai [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/): bebas dipakai dan diolah, asal sumbernya tetap dicantumkan dan hasil olahannya dibagi dengan lisensi yang sama. Kode aplikasinya sendiri MIT.\n\n### Baca versi web-nya\nVersi yang lebih enak dibaca ada di [data.commute.shiorilabs.id/docs](https://data.commute.shiorilabs.id/docs).",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Commute",
+      "url": "https://commute.shiorilabs.id"
+    },
+    "license": {
+      "name": "ODbL-1.0",
+      "identifier": "ODbL-1.0"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.commute.shiorilabs.id",
+      "description": "Production"
+    }
+  ],
+  "security": [],
+  "tags": [
+    {
+      "name": "Internal",
+      "description": "Dibentuk khusus buat klien Commute sendiri. Bisa berubah tanpa pemberitahuan."
+    }
+  ],
+  "paths": {
+    "/_internal/searchables": {
+      "get": {
+        "operationId": "getInternalSearchables",
+        "summary": "Indeks pencarian",
+        "description": "Semua yang bisa dicari dalam satu response: stasiun, pumpunan moda, dan lin, plus kamus lin yang dirujuk tiap entri.",
+        "tags": [
+          "Internal"
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "description": "Sama dengan HTTP status code-nya.",
+                      "examples": [
+                        200
+                      ],
+                      "format": "double"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/SearchableIndex"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SearchableLine": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "lineCode": {
+            "type": "string",
+            "description": "Kode polosnya, buat ditulis di dalam roundel. Key kamusnya sendiri pakai awalan operator."
+          },
+          "colorCode": {
+            "type": "string"
+          },
+          "operator": {
+            "enum": [
+              "KCI",
+              "MRTJ",
+              "LRTJ",
+              "LRTJBDB",
+              "TJ",
+              "APCGK"
+            ],
+            "type": "string",
+            "title": "Operator code",
+            "description": "Operator transit. `KCI`: Commuter Line · `MRTJ`: MRT Jakarta · `LRTJ`: LRT Jakarta · `LRTJBDB`: LRT Jabodebek · `TJ`: TransJakarta · `APCGK`: Kalayang Bandara. `NUL` cuma placeholder internal dan tidak pernah muncul di response.",
+            "examples": [
+              "KCI",
+              "MRTJ"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "lineCode",
+          "colorCode",
+          "operator"
+        ],
+        "title": "SearchableLine"
+      },
+      "SearchableStation": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "examples": [
+              "Dukuh Atas"
+            ]
+          },
+          "to": {
+            "type": "string",
+            "description": "Link relatif ke aplikasi buat hasil ini.",
+            "examples": [
+              "/stations/KCI/AC"
+            ]
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Target pencocokan dalam huruf kecil. Dibuat di server karena sebagiannya tidak bisa diturunkan dari judul saja, seperti kode stasiun anggota pumpunan moda dan nama halte berarah yang sudah digabung."
+          },
+          "subtitle": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Identifier buat data aslinya, `station-id` atau `hub-id`. Halte berarah yang digabung juga bawa `station-ids`: semua anggotanya, dipisah koma, primary di depan. Cuma ada kalau memang ada yang digabung."
+          },
+          "score": {
+            "type": "number",
+            "description": "Seberapa ramai (0-100): jumlah penumpang beneran kalau operatornya merilis, selain itu perkiraan dari frekuensi kereta dan bentuk jaringan. Tidak dikirim kalau nilainya 0, jadi baca pakai `?? 0`.",
+            "format": "double"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "STATION"
+            ]
+          },
+          "operator": {
+            "enum": [
+              "KCI",
+              "MRTJ",
+              "LRTJ",
+              "LRTJBDB",
+              "TJ",
+              "APCGK"
+            ],
+            "type": "string",
+            "title": "Operator code",
+            "description": "Operator transit. `KCI`: Commuter Line · `MRTJ`: MRT Jakarta · `LRTJ`: LRT Jakarta · `LRTJBDB`: LRT Jabodebek · `TJ`: TransJakarta · `APCGK`: Kalayang Bandara. `NUL` cuma placeholder internal dan tidak pernah muncul di response.",
+            "examples": [
+              "KCI",
+              "MRTJ"
+            ]
+          },
+          "lineKeys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Lin yang berhenti di stasiun ini. Key ke kamus `lines` di response ini, pakai awalan operator (\"KCI:C\")."
+          }
+        },
+        "required": [
+          "title",
+          "to",
+          "keywords",
+          "type",
+          "operator",
+          "lineKeys"
+        ],
+        "title": "SearchableStation"
+      },
+      "SearchableHub": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "examples": [
+              "Dukuh Atas"
+            ]
+          },
+          "to": {
+            "type": "string",
+            "description": "Link relatif ke aplikasi buat hasil ini.",
+            "examples": [
+              "/stations/KCI/AC"
+            ]
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Target pencocokan dalam huruf kecil. Dibuat di server karena sebagiannya tidak bisa diturunkan dari judul saja, seperti kode stasiun anggota pumpunan moda dan nama halte berarah yang sudah digabung."
+          },
+          "subtitle": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Identifier buat data aslinya, `station-id` atau `hub-id`. Halte berarah yang digabung juga bawa `station-ids`: semua anggotanya, dipisah koma, primary di depan. Cuma ada kalau memang ada yang digabung."
+          },
+          "score": {
+            "type": "number",
+            "description": "Seberapa ramai (0-100): jumlah penumpang beneran kalau operatornya merilis, selain itu perkiraan dari frekuensi kereta dan bentuk jaringan. Tidak dikirim kalau nilainya 0, jadi baca pakai `?? 0`.",
+            "format": "double"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "HUB"
+            ]
+          },
+          "lineKeys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Gabungan lin dari semua anggotanya. Key ke kamus `lines` di response ini, pakai awalan operator (\"KCI:C\")."
+          }
+        },
+        "required": [
+          "title",
+          "to",
+          "keywords",
+          "type",
+          "lineKeys"
+        ],
+        "title": "SearchableHub"
+      },
+      "SearchableLineEntry": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "examples": [
+              "Dukuh Atas"
+            ]
+          },
+          "to": {
+            "type": "string",
+            "description": "Link relatif ke aplikasi buat hasil ini.",
+            "examples": [
+              "/stations/KCI/AC"
+            ]
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Target pencocokan dalam huruf kecil. Dibuat di server karena sebagiannya tidak bisa diturunkan dari judul saja, seperti kode stasiun anggota pumpunan moda dan nama halte berarah yang sudah digabung."
+          },
+          "subtitle": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Identifier buat data aslinya, `station-id` atau `hub-id`. Halte berarah yang digabung juga bawa `station-ids`: semua anggotanya, dipisah koma, primary di depan. Cuma ada kalau memang ada yang digabung."
+          },
+          "score": {
+            "type": "number",
+            "description": "Seberapa ramai (0-100): jumlah penumpang beneran kalau operatornya merilis, selain itu perkiraan dari frekuensi kereta dan bentuk jaringan. Tidak dikirim kalau nilainya 0, jadi baca pakai `?? 0`.",
+            "format": "double"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "LINE"
+            ]
+          },
+          "operator": {
+            "enum": [
+              "KCI",
+              "MRTJ",
+              "LRTJ",
+              "LRTJBDB",
+              "TJ",
+              "APCGK"
+            ],
+            "type": "string",
+            "title": "Operator code",
+            "description": "Operator transit. `KCI`: Commuter Line · `MRTJ`: MRT Jakarta · `LRTJ`: LRT Jakarta · `LRTJBDB`: LRT Jabodebek · `TJ`: TransJakarta · `APCGK`: Kalayang Bandara. `NUL` cuma placeholder internal dan tidak pernah muncul di response.",
+            "examples": [
+              "KCI",
+              "MRTJ"
+            ]
+          },
+          "lineKey": {
+            "type": "string",
+            "description": "Lin yang diwakili entri ini. Key ke kamus `lines` di response ini, pakai awalan operator (\"KCI:C\")."
+          }
+        },
+        "required": [
+          "title",
+          "to",
+          "keywords",
+          "type",
+          "operator",
+          "lineKey"
+        ],
+        "title": "SearchableLineEntry"
+      },
+      "Searchable": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/SearchableStation"
+          },
+          {
+            "$ref": "#/components/schemas/SearchableHub"
+          },
+          {
+            "$ref": "#/components/schemas/SearchableLineEntry"
+          }
+        ],
+        "title": "Searchable",
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "STATION": "#/components/schemas/SearchableStation",
+            "HUB": "#/components/schemas/SearchableHub",
+            "LINE": "#/components/schemas/SearchableLineEntry"
+          }
+        }
+      },
+      "SearchableIndex": {
+        "type": "object",
+        "properties": {
+          "lines": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SearchableLine"
+            },
+            "description": "Every line referenced by any item, keyed \"OPERATOR:CODE\" and sent once rather than repeated per entry."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Searchable"
+            }
+          }
+        },
+        "required": [
+          "lines",
+          "items"
+        ],
+        "title": "SearchableIndex"
+      }
+    }
+  }
+}

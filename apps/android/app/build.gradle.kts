@@ -14,8 +14,18 @@ android {
         versionName = "1.0"
     }
 
+    // There are no flavors: one backend. A debug build can be pointed at a local API with
+    // `-Pcommute.apiBaseUrl=http://10.0.2.2:3000`; release always talks to production.
+    val productionApi = "https://api.commute.shiorilabs.id"
+    val debugApi = providers.gradleProperty("commute.apiBaseUrl").orElse(productionApi)
+
     buildTypes {
+        debug {
+            buildConfigField("String", "API_BASE_URL", "\"${debugApi.get()}\"")
+        }
         release {
+            buildConfigField("String", "API_BASE_URL", "\"$productionApi\"")
+
             optimization {
                 enable = false
             }

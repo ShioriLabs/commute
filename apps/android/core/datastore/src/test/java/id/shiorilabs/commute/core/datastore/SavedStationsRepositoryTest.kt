@@ -58,4 +58,16 @@ class SavedStationsRepositoryTest {
 
         assertEquals(emptyList<String>(), repository.stations.first())
     }
+
+    @Test
+    fun `toggle saves an unsaved station at the end and unsaves a saved one`() = runTest {
+        val repository = SavedStationsRepository(FakePreferencesDataStore())
+        repository.save("KCI-MRI")
+
+        repository.toggle("MRTJ-BHI")
+        assertEquals(listOf("KCI-MRI", "MRTJ-BHI"), repository.stations.first())
+
+        repository.toggle("KCI-MRI")
+        assertEquals(listOf("MRTJ-BHI"), repository.stations.first())
+    }
 }
