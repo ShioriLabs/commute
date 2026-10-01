@@ -42,14 +42,14 @@ export default function LastDepartures({ timetable }: { timetable: CompactLineGr
   return (
     <section className="mt-8">
       <h2 className="font-semibold text-lg px-4">Kereta terakhir</h2>
-      <ul className="flex flex-col gap-2 mt-4">
+      <ul className="flex flex-col gap-4 mt-4">
         {lines.map(({ line, destinations }) => {
           const resolved = lookupLine(line)
           const lineColor = resolved?.colorCode ?? '#94a3b8'
           return (
             <li
               key={line}
-              className="rounded-xl overflow-hidden"
+              className="rounded-xl overflow-hidden shadow-lg"
               style={{ backgroundColor: getTintFromColor(lineColor, 0.065) }}
               aria-label={`Keberangkatan terakhir ${resolved?.name ?? line}`}
             >
