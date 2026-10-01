@@ -43,6 +43,18 @@ class SavedStationsRepository @Inject constructor(
         }
     }
 
+    /**
+     * Saves [stationId] if it isn't saved, unsaves it if it is: the pin on a search result. A newly
+     * saved station goes to the end, as with [save].
+     */
+    suspend fun toggle(stationId: String) {
+        dataStore.edit { prefs ->
+            val current = decode(prefs[STATIONS_KEY])
+            val next = if (stationId in current) current - stationId else current + stationId
+            prefs[STATIONS_KEY] = Json.encodeToString(next)
+        }
+    }
+
     private fun decode(raw: String?): List<String> {
         if (raw.isNullOrBlank()) {
             return emptyList()
