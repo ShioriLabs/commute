@@ -18,6 +18,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import id.shiorilabs.commute.core.navigation.LocalNavigator
+import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.ui.components.CommuteEmptyState
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
@@ -30,10 +32,12 @@ fun SavedStationsScreen(
     viewModel: SavedStationsViewModel = hiltViewModel(),
 ) {
     val stations by viewModel.stations.collectAsStateWithLifecycle()
+    val navigator = LocalNavigator.current
 
     SavedStationsContent(
         stations = stations,
         innerPadding = innerPadding,
+        onSearchClick = { navigator.goTo(Route.Search) },
     )
 }
 

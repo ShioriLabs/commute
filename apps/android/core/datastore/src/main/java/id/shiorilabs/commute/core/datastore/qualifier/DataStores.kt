@@ -11,3 +11,11 @@ import javax.inject.Qualifier
 @Qualifier
 @Retention(AnnotationRetention.RUNTIME)
 annotation class SavedStationsDataStore
+
+/**
+ * Hilt [Qualifier] for the preferences [DataStore]<[Preferences]> backing the places the rider last
+ * opened from search.
+ */
+@Qualifier
+@Retention(AnnotationRetention.RUNTIME)
+annotation class RecentSearchesDataStore

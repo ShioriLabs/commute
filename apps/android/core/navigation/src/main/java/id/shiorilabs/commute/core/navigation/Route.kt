@@ -16,4 +16,8 @@ sealed interface Route : NavKey {
     /** The saved stations list: the root of the back stack. */
     @Serializable
     data object Home : Route
+
+    /** Station search, opened from the home screen's "Mau ke mana?" card. */
+    @Serializable
+    data object Search : Route
 }
