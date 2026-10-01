@@ -165,9 +165,14 @@ function RecentRouteList({ routes, searchables, savedKeys, onToggleSave, onClear
               <button
                 type="button"
                 onClick={() => onToggleSave(route)}
-                aria-label={saved ? `Hapus rute ${label} dari beranda` : `Simpan rute ${label} ke beranda`}
+                aria-label={saved ? `Lepas pin rute ${label}` : `Pin rute ${label}`}
                 aria-pressed={saved}
-                className="w-9 h-9 shrink-0 flex items-center justify-center cursor-pointer"
+                // Same pin as the station rows (SearchableItem), so a pinned
+                // route and a pinned station read as the same state.
+                className={clsx(
+                  'shrink-0 w-11 h-11 rounded-full flex items-center justify-center cursor-pointer transition-colors duration-150 ease',
+                  saved ? 'text-[#F55875]' : 'text-slate-300 hover:text-slate-400'
+                )}
               >
                 <PushPinIcon weight={saved ? 'fill' : 'bold'} className="w-6 h-6" />
               </button>
