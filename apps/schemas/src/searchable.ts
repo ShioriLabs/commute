@@ -9,6 +9,11 @@ import { OperatorCodeSchema } from './common'
  * around commute.shiorilabs.id's search sheet and carries no compatibility
  * promise. It lives here anyway so the one consumer that does use it shares the
  * same definition as the endpoint producing it.
+ *
+ * The `ref` metadata below names these as components in
+ * /_internal/openapi.json, the document Commute's own clients generate models
+ * from. None of it reaches /openapi.json: a component is only emitted for a
+ * schema some described route uses, and that document describes no route here.
  */
 
 export const SearchableTypeSchema = v.picklist(['STATION', 'LINE', 'HUB'])
@@ -45,7 +50,8 @@ export const SearchableStationSchema = v.pipe(
     operator: OperatorCodeSchema,
     lineKeys: v.pipe(v.array(v.string()), v.description(`Lin yang berhenti di stasiun ini. ${lineKeysDescription}`))
   }),
-  v.title('SearchableStation')
+  v.title('SearchableStation'),
+  v.metadata({ ref: 'SearchableStation' })
 )
 
 export const SearchableHubSchema = v.pipe(
@@ -55,7 +61,8 @@ export const SearchableHubSchema = v.pipe(
     // No `operator`: one pumpunan moda can span several.
     lineKeys: v.pipe(v.array(v.string()), v.description(`Gabungan lin dari semua anggotanya. ${lineKeysDescription}`))
   }),
-  v.title('SearchableHub')
+  v.title('SearchableHub'),
+  v.metadata({ ref: 'SearchableHub' })
 )
 
 export const SearchableLineEntrySchema = v.pipe(
@@ -68,7 +75,8 @@ export const SearchableLineEntrySchema = v.pipe(
     lineKey: v.pipe(v.string(), v.description(`Lin yang diwakili entri ini. ${lineKeysDescription}`))
   }),
   // Not 'SearchableLine' — that title belongs to the dictionary entry below.
-  v.title('SearchableLineEntry')
+  v.title('SearchableLineEntry'),
+  v.metadata({ ref: 'SearchableLineEntry' })
 )
 
 /*
@@ -85,7 +93,8 @@ export const SearchableLineEntrySchema = v.pipe(
  */
 export const SearchableSchema = v.pipe(
   v.variant('type', [SearchableStationSchema, SearchableHubSchema, SearchableLineEntrySchema]),
-  v.title('Searchable')
+  v.title('Searchable'),
+  v.metadata({ ref: 'Searchable' })
 )
 
 export const SearchableLineSchema = v.pipe(
@@ -95,7 +104,8 @@ export const SearchableLineSchema = v.pipe(
     colorCode: v.string(),
     operator: OperatorCodeSchema
   }),
-  v.title('SearchableLine')
+  v.title('SearchableLine'),
+  v.metadata({ ref: 'SearchableLine' })
 )
 
 export const SearchableIndexSchema = v.pipe(
@@ -106,7 +116,8 @@ export const SearchableIndexSchema = v.pipe(
     ),
     items: v.array(SearchableSchema)
   }),
-  v.title('SearchableIndex')
+  v.title('SearchableIndex'),
+  v.metadata({ ref: 'SearchableIndex' })
 )
 
 export type SearchableType = v.InferOutput<typeof SearchableTypeSchema>
