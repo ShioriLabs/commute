@@ -18,7 +18,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
+import id.shiorilabs.commute.core.ui.morph.navCardMorphSource
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.feature.saved.R
 
@@ -62,6 +64,8 @@ fun HomeNavRail(
             description = stringResource(R.string.saved_nav_search_description),
             icon = CommuteIcons.Search,
             onClick = onSearchClick,
+            // First in the card's chain, so the bounds the morph starts from are the card's own.
+            modifier = Modifier.navCardMorphSource(Route.Search),
             accent = true,
         )
         NavRailCard(

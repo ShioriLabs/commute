@@ -1,0 +1,330 @@
+package id.shiorilabs.commute.feature.search.presentation
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import id.shiorilabs.commute.core.navigation.LocalNavigator
+import id.shiorilabs.commute.core.navigation.Route
+import id.shiorilabs.commute.core.type.UIState
+import id.shiorilabs.commute.core.ui.components.VerticalSpacer
+import id.shiorilabs.commute.core.ui.ext.rowEntrance
+import id.shiorilabs.commute.core.ui.morph.NAV_CARD_MORPH_MILLIS
+import id.shiorilabs.commute.core.ui.morph.NavCardMorphTarget
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
+import id.shiorilabs.commute.feature.search.R
+import id.shiorilabs.commute.feature.search.domain.MIN_QUERY_LENGTH
+import id.shiorilabs.commute.feature.search.domain.SearchLine
+import id.shiorilabs.commute.feature.search.domain.Searchable
+import id.shiorilabs.commute.feature.search.presentation.components.LineChips
+import id.shiorilabs.commute.feature.search.presentation.components.RecentHeader
+import id.shiorilabs.commute.feature.search.presentation.components.SavedChips
+import id.shiorilabs.commute.feature.search.presentation.components.SearchError
+import id.shiorilabs.commute.feature.search.presentation.components.SearchHeader
+import id.shiorilabs.commute.feature.search.presentation.components.SearchNotFound
+import id.shiorilabs.commute.feature.search.presentation.components.SearchResultItem
+import id.shiorilabs.commute.feature.search.presentation.components.SearchResultsSkeleton
+import id.shiorilabs.commute.feature.search.presentation.components.SectionLabelColor
+import kotlinx.coroutines.delay
+
+/** The sheet the morph opens onto is white, not the app's tinted background, as on web. */
+private val SearchBackground = Color.White
+
+@Composable
+fun SearchScreen(
+    innerPadding: PaddingValues,
+    viewModel: SearchViewModel = hiltViewModel(),
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val query by viewModel.query.collectAsStateWithLifecycle()
+    val navigator = LocalNavigator.current
+    val focusManager = LocalFocusManager.current
+
+    // Opened by the home screen's accent card, so this gathers back into its colour.
+    NavCardMorphTarget(
+        destination = Route.Search,
+        cardTint = MaterialTheme.colorScheme.primary,
+    ) {
+        SearchContent(
+            state = state,
+            query = query,
+            innerPadding = innerPadding,
+            onQueryChange = viewModel::onQueryChange,
+            onClose = {
+                // The keyboard would otherwise slide away against the collapsing screen.
+                focusManager.clearFocus()
+                navigator.pop()
+            },
+            onRetry = viewModel::retry,
+            // Opening a result waits for the station, hub and line pages. Until then a tap only
+            // records the recent search, which is what the web does before navigating.
+            onResultClick = viewModel::onResultClick,
+            onTogglePin = viewModel::onToggleSave,
+            onClearRecents = viewModel::onClearRecents,
+        )
+    }
+}
+
+@Composable
+private fun SearchContent(
+    state: UIState<SearchUiState>,
+    query: String,
+    innerPadding: PaddingValues,
+    onQueryChange: (String) -> Unit,
+    onClose: () -> Unit,
+    onRetry: () -> Unit,
+    onResultClick: (Searchable) -> Unit,
+    onTogglePin: (stationId: String) -> Unit,
+    onClearRecents: () -> Unit,
+    focusOnOpen: Boolean = true,
+) {
+    val focusRequester = remember { FocusRequester() }
+
+    // Focused once the morph has settled, so the keyboard doesn't slide up against the expanding
+    // screen. The web waits the same 250 ms.
+    if (focusOnOpen) {
+        LaunchedEffect(focusRequester) {
+            delay(NAV_CARD_MORPH_MILLIS.toLong())
+            focusRequester.requestFocus()
+        }
+    }
+
+    // The idle state carries most of this screen's nodes and none of what the tap was for, so it
+    // joins one frame after the header rather than in the frame the morph starts on.
+    var idleMounted by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        idleMounted = true
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(SearchBackground)
+            .padding(top = innerPadding.calculateTopPadding()),
+    ) {
+        val searching = query.length >= MIN_QUERY_LENGTH
+        val loaded = (state as? UIState.Success)?.data
+
+        SearchHeader(
+            query = query,
+            onQueryChange = onQueryChange,
+            onClose = onClose,
+            focusRequester = focusRequester,
+            belowField = {
+                if (!searching && idleMounted && loaded != null) {
+                    SavedChips(
+                        stations = loaded.idle.saved,
+                        onClick = onResultClick,
+                    )
+                }
+            },
+        )
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = WindowInsets.ime.union(WindowInsets.navigationBars).asPaddingValues(),
+        ) {
+            when (state) {
+                is UIState.Idle, is UIState.Loading -> if (searching) {
+                    item(key = "search-skeleton") {
+                        SearchResultsSkeleton(Modifier.padding(top = 16.dp))
+                    }
+                }
+
+                is UIState.Error -> item(key = "search-error") {
+                    SearchError(
+                        message = state.message.orEmpty(),
+                        onRetry = onRetry,
+                    )
+                }
+
+                is UIState.Success -> when (val results = state.data.results) {
+                    is SearchResults.None -> if (idleMounted) {
+                        idleContent(
+                            idle = state.data.idle,
+                            savedStationIds = state.data.savedStationIds,
+                            onClick = onResultClick,
+                            onTogglePin = onTogglePin,
+                            onClearRecents = onClearRecents,
+                        )
+                    }
+
+                    is SearchResults.Found -> {
+                        item(key = "search-results-top") {
+                            VerticalSpacer(16.dp)
+                        }
+                        itemsIndexed(results.items, key = { _, it -> "search-result:${it.key}" }) { index, searchable ->
+                            SearchResultItem(
+                                searchable = searchable,
+                                query = results.query,
+                                onClick = { onResultClick(searchable) },
+                                pinned = searchable.isPinned(state.data.savedStationIds),
+                                onTogglePin = onTogglePin,
+                                // Keyed rows, so a row that stays across a keystroke keeps its
+                                // place and only the newcomers rise in.
+                                modifier = Modifier.rowEntrance(index),
+                                showDivider = index < results.items.lastIndex,
+                            )
+                        }
+                    }
+
+                    is SearchResults.NotFound -> item(key = "search-not-found") {
+                        SearchNotFound()
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun Searchable.isPinned(savedStationIds: Set<String>): Boolean =
+    this is Searchable.Station && stationId in savedStationIds
+
+private fun LazyListScope.idleContent(
+    idle: IdleContent,
+    savedStationIds: Set<String>,
+    onClick: (Searchable) -> Unit,
+    onTogglePin: (stationId: String) -> Unit,
+    onClearRecents: () -> Unit,
+) {
+    if (idle.recents.isNotEmpty()) {
+        item(key = "search-recent-header") {
+            RecentHeader(
+                onClear = onClearRecents,
+                modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
+            )
+        }
+        itemsIndexed(idle.recents, key = { _, it -> "search-recent:${it.key}" }) { index, searchable ->
+            SearchResultItem(
+                searchable = searchable,
+                query = "",
+                onClick = { onClick(searchable) },
+                pinned = searchable.isPinned(savedStationIds),
+                onTogglePin = onTogglePin,
+                modifier = Modifier.rowEntrance(index),
+                showDivider = index < idle.recents.lastIndex,
+            )
+        }
+    } else if (idle.saved.isEmpty()) {
+        item(key = "search-idle-hint") {
+            Text(
+                text = stringResource(R.string.search_idle_hint),
+                modifier = Modifier.padding(start = 32.dp, top = 16.dp, end = 32.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = SectionLabelColor,
+            )
+        }
+    }
+    if (idle.lines.isNotEmpty()) {
+        item(key = "search-lines") {
+            LineChips(
+                title = stringResource(R.string.search_lines),
+                lines = idle.lines,
+                onClick = onClick,
+                modifier = Modifier.padding(top = 24.dp, bottom = 32.dp),
+            )
+        }
+    }
+}
+
+private val previewManggarai = Searchable.Station(
+    title = "Manggarai",
+    to = "/stations/KCI/MRI",
+    keywords = listOf("manggarai", "mri"),
+    subtitle = "Commuter Line",
+    score = 95.0,
+    stationId = "KCI-MRI",
+    operator = "KCI",
+    lines = listOf(SearchLine("Lin Bogor", "B", "#EE3D43", "KCI")),
+)
+
+private val previewLine = Searchable.Line(
+    title = "Lin Cikarang",
+    to = "/lines/KCI/C",
+    keywords = listOf("lin cikarang"),
+    subtitle = "Commuter Line",
+    score = null,
+    operator = "KCI",
+    line = SearchLine("Lin Cikarang", "C", "#25B8EB", "KCI"),
+)
+
+@Preview(showBackground = true)
+@Composable
+private fun SearchIdlePreview() {
+    CommutePreviewScaffold {
+        SearchContent(
+            state = UIState.Success(
+                SearchUiState(
+                    idle = IdleContent(
+                        saved = listOf(previewManggarai),
+                        recents = listOf(previewManggarai),
+                        lines = listOf(previewLine),
+                    ),
+                    results = SearchResults.None,
+                    savedStationIds = setOf("KCI-MRI"),
+                ),
+            ),
+            query = "",
+            innerPadding = PaddingValues(),
+            onQueryChange = {},
+            onClose = {},
+            onRetry = {},
+            onResultClick = {},
+            onTogglePin = {},
+            onClearRecents = {},
+            focusOnOpen = false,
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun SearchResultsPreview() {
+    CommutePreviewScaffold {
+        SearchContent(
+            state = UIState.Success(
+                SearchUiState(
+                    idle = IdleContent(emptyList(), emptyList(), emptyList()),
+                    results = SearchResults.Found("mang", listOf(previewManggarai)),
+                    savedStationIds = emptySet(),
+                ),
+            ),
+            query = "mang",
+            innerPadding = PaddingValues(),
+            onQueryChange = {},
+            onClose = {},
+            onRetry = {},
+            onResultClick = {},
+            onTogglePin = {},
+            onClearRecents = {},
+            focusOnOpen = false,
+        )
+    }
+}
