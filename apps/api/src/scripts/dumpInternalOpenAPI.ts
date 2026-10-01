@@ -43,6 +43,13 @@ const refName = (node: Json) =>
  *     sealed type rather than three unrelated classes.
  *   - A bare `number` gains `format: double`, or it is generated as BigDecimal.
  *
+ * And one thing is deliberately loosened. A string `enum` of more than one value
+ * becomes a plain string, its values kept in the description. The API's enums
+ * only ever grow (a new amenity, a new operator), which is an additive change
+ * for the API and a crash for an installed app: kotlinx.serialization fails the
+ * whole response on a value its enum class does not know. The one-value enums
+ * that discriminate unions stay, since those are the union.
+ *
  * Applied to the snapshot only. The served /openapi.json is untouched.
  */
 function normalizeForCodegen(document: JsonObject): JsonObject {
@@ -97,6 +104,14 @@ function normalizeForCodegen(document: JsonObject): JsonObject {
 
     if (next.type === 'number' && !('format' in next)) next.format = 'double'
 
+    if (Array.isArray(next.enum) && next.enum.length > 1 && next.enum.every(value => typeof value === 'string')) {
+      const values = next.enum.map(value => `\`${String(value)}\``).join(', ')
+      const description = typeof next.description === 'string' ? `${next.description} ` : ''
+      delete next.enum
+      next.type = 'string'
+      next.description = `${description}Nilai yang dikenal saat ini: ${values}. Bisa bertambah.`
+    }
+
     for (const [key, value] of Object.entries(next)) next[key] = visit(value)
     return next
   }
@@ -109,8 +124,24 @@ function normalizeForCodegen(document: JsonObject): JsonObject {
  * consuming it, then rerun the script.
  */
 const APP_PATHS = [
-  '/_internal/searchables'
+  '/_internal/searchables',
+  '/operators',
+  '/stations/{operator}/{stationCode}',
+  '/stations/{operator}/{stationCode}/timetable/grouped'
 ]
+
+/*
+ * Response shapes the app never asks for, left out of the snapshot even where a
+ * route it reads can return them.
+ *
+ * CompactGroupedTimetable is the `?compact=1` answer of the grouped timetable.
+ * Its CompactSchedule is a `[string | null, number]` tuple that no typed model
+ * can express, and the app asks for the full form instead, which is a little
+ * larger on the wire (4.4 against 3.3 KB gzipped for Manggarai) and typed.
+ */
+const APP_EXCLUDED_SCHEMAS = new Set([
+  'CompactGroupedTimetable'
+])
 
 /*
  * Cuts the document down to `APP_PATHS` and the components they reach.
@@ -127,7 +158,34 @@ function pruneToAppPaths(document: JsonObject): JsonObject {
   const missing = APP_PATHS.filter(path => !(path in paths))
   if (missing.length > 0) throw new Error(`not described: ${missing.join(', ')}`)
 
-  const kept: JsonObject = Object.fromEntries(APP_PATHS.map(path => [path, paths[path]]))
+  // A union that offered an excluded shape keeps the rest; one left with a single
+  // alternative becomes that alternative.
+  const dropExcluded = (node: Json): Json => {
+    if (Array.isArray(node)) return node.map(dropExcluded)
+    if (!isObject(node)) return node
+
+    const next: JsonObject = {}
+    for (const [key, value] of Object.entries(node)) next[key] = dropExcluded(value)
+
+    for (const union of ['anyOf', 'oneOf']) {
+      const alternatives = next[union]
+      if (!Array.isArray(alternatives)) continue
+      const excludes = (alternative: Json) => {
+        const name = refName(alternative) ?? (isObject(alternative) && isObject(alternative.items) ? refName(alternative.items) : undefined)
+        return name !== undefined && APP_EXCLUDED_SCHEMAS.has(name)
+      }
+      const kept = alternatives.filter(alternative => !excludes(alternative))
+      if (kept.length === alternatives.length) continue
+      if (kept.length === 1 && isObject(kept[0])) {
+        const rest = Object.fromEntries(Object.entries(next).filter(([key]) => key !== union))
+        return { ...rest, ...kept[0] }
+      }
+      next[union] = kept
+    }
+    return next
+  }
+
+  const kept = dropExcluded(Object.fromEntries(APP_PATHS.map(path => [path, paths[path]]))) as JsonObject
 
   const components = isObject(document.components) ? document.components : {}
   const schemas = isObject(components.schemas) ? components.schemas : {}
