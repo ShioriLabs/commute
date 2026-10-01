@@ -1,0 +1,46 @@
+{
+  "status": 200,
+  "data": [
+    {
+      "code": "KCI",
+      "name": "Commuter Line",
+      "url": "https://kci.id/",
+      "timezone": "Asia/Jakarta",
+      "lang": "id",
+      "mode": "RAIL",
+      "lines": [
+        {
+          "name": "Lin Cikarang",
+          "colorCode": "#25B8EB",
+          "lineCode": "C",
+          "mode": "RAIL",
+          "searchable": true
+        },
+        {
+          "name": "Lin Bogor",
+          "colorCode": "#EE3D43",
+          "lineCode": "B",
+          "mode": "RAIL",
+          "searchable": true
+        }
+      ]
+    },
+    {
+      "code": "MRTJ",
+      "name": "MRT Jakarta",
+      "url": "https://jakartamrt.co.id/",
+      "timezone": "Asia/Jakarta",
+      "lang": "id",
+      "mode": "SUBWAY",
+      "lines": [
+        {
+          "name": "Lin Utara Selatan",
+          "colorCode": "#ca2a51",
+          "lineCode": "M",
+          "mode": "SUBWAY",
+          "searchable": true
+        }
+      ]
+    }
+  ]
+}

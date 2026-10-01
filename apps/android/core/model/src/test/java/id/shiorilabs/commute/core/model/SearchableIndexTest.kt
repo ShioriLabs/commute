@@ -4,7 +4,6 @@ import id.shiorilabs.commute.core.model.models.SearchableHub
 import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.model.models.SearchableLineEntry
 import id.shiorilabs.commute.core.model.models.SearchableStation
-import id.shiorilabs.commute.core.model.models.SearchableStationOperator
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonObject
@@ -46,7 +45,7 @@ class SearchableIndexTest {
         val manggarai = index.items.filterIsInstance<SearchableStation>().first()
 
         assertEquals("Manggarai", manggarai.title)
-        assertEquals(SearchableStationOperator.KCI, manggarai.`operator`)
+        assertEquals("KCI", manggarai.`operator`)
         assertEquals(listOf("KCI:A", "KCI:B", "KCI:C"), manggarai.lineKeys)
         assertEquals("KCI-MRI", manggarai.`data`?.get("station-id"))
         assertEquals(95.0, manggarai.score)

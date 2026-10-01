@@ -23,6 +23,8 @@ dependencies {
     implementation(libs.androidx.compose.runtime)
     // WindowCompat — CommuteTheme sets the system-bar icon appearance.
     implementation(libs.androidx.core.ktx)
+    // rememberJakartaNow pauses with the lifecycle.
+    implementation(libs.androidx.lifecycle.runtime.compose)
     // NavDisplay's transition metadata keys, for navCardMorphMetadata.
     implementation(libs.androidx.navigation3.ui)
     // Phosphor — icon set surfaced through the CommuteIcons design-system object.

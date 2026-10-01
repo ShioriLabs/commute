@@ -15,6 +15,15 @@
     <string name="saved_nav_settings_subtitle">Aplikasi</string>
     <string name="saved_nav_settings_description">Pengaturan aplikasi</string>
 
+    <!-- Station cards. %1$s is the station's name. -->
+    <string name="saved_station_title">Stasiun %1$s</string>
+    <string name="saved_station_list_description">Daftar stasiun tersimpan</string>
+    <string name="saved_station_failed">Gagal memuat stasiun ini</string>
+    <string name="saved_station_offline">Tidak dapat memuat stasiun ini saat offline</string>
+    <string name="saved_timetable_failed">Gagal memuat jadwal</string>
+    <string name="saved_timetable_empty">Jadwal tidak tersedia</string>
+    <string name="saved_retry">Coba Lagi</string>
+
     <!-- Error state -->
     <string name="saved_error_message">Gagal memuat stasiun tersimpan</string>
 </resources>
