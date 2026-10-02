@@ -1,5 +1,7 @@
 import com.android.build.api.dsl.ApplicationExtension
 import id.shiorilabs.commute.buildlogic.configureAndroidCompose
+import id.shiorilabs.commute.buildlogic.configureFlavors
+import id.shiorilabs.commute.buildlogic.configureSigning
 import org.gradle.api.JavaVersion
 import org.gradle.api.Plugin
 import org.gradle.api.Project
@@ -29,6 +31,10 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
             }
 
             configureAndroidCompose(this)
+            // The `production` flavor and both signing configs, shared by :app and :wear: the
+            // companion pairs only when it is signed like the phone app.
+            configureFlavors(this)
+            configureSigning(this)
         }
     }
 }
