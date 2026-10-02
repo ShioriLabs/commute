@@ -13,9 +13,6 @@
     <string name="station_timetable_failed">Gagal memuat jadwal</string>
     <string name="station_timetable_offline">Tidak dapat memuat jadwal saat offline</string>
     <string name="station_timetable_empty">Jadwal tidak tersedia</string>
-    <!-- Operators that publish no timetable (TransJakarta): not an error, so no retry. -->
-    <string name="station_no_schedule_title">Jadwal Tidak Tersedia</string>
-    <string name="station_no_schedule_message">Lihat papan keberangkatan atau tanyakan pramusapa</string>
     <string name="station_retry">Coba Lagi</string>
 
     <!-- Actions over the departures -->
