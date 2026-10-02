@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -74,10 +75,28 @@ internal fun RouteBar(segments: List<RouteBarSegment>, plateColor: Color, modifi
         stringResource(R.string.journey_route_description, spoken.joinToString(", "))
     }
 
-    Row(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .clearAndSetSemantics { contentDescription = description },
+    ) {
+        // A weight overrides a minimum width, so the floor goes into the weights: no ride's share
+        // may fall below the roundel's width over the room the rides get (walks are estimated at
+        // their badge's width).
+        val walks = segments.count { it is RouteBarSegment.Walk }
+        val rideRoom = maxWidth - WalkEstimate * walks - 4.dp * (segments.size - 1)
+        val minShare = if (rideRoom > 0.dp) (MinRideWidth / rideRoom).toDouble() else 0.0
+        RouteBarRow(segments, plateColor, minShare)
+    }
+}
+
+/** Roughly how wide a walk's badge draws, for sharing the rest between the rides. */
+private val WalkEstimate = 64.dp
+
+@Composable
+private fun RouteBarRow(segments: List<RouteBarSegment>, plateColor: Color, minShare: Double) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -86,8 +105,8 @@ internal fun RouteBar(segments: List<RouteBarSegment>, plateColor: Color, modifi
                 is RouteBarSegment.Walk -> WalkSegment(segment.distanceM)
                 is RouteBarSegment.Ride -> Box(
                     modifier = Modifier
-                        // Weight by distance alone, floored at the roundel it carries.
-                        .weight(segment.distanceM.coerceAtLeast(1).toFloat())
+                        // Weight by share of ground covered, floored at the roundel it carries.
+                        .weight(segment.share.coerceAtLeast(minShare).coerceAtLeast(0.001).toFloat())
                         .widthIn(min = MinRideWidth)
                         .height(24.dp),
                     contentAlignment = Alignment.CenterStart,
