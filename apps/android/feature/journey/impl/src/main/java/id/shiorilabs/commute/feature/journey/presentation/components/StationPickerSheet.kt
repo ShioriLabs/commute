@@ -81,6 +81,8 @@ private val FieldOutline = Color(0x66E7E5E4)
 internal fun StationPickerSheet(
     end: PairEnd,
     picker: PickerUiState,
+    /** What the field shows: the typed text, never the ranked query, which arrives late. */
+    text: String,
     selectedId: String?,
     onQueryChange: (String) -> Unit,
     onPick: (PickableStation) -> Unit,
@@ -103,7 +105,7 @@ internal fun StationPickerSheet(
         }
 
         PickerField(
-            query = picker.query,
+            query = text,
             onQueryChange = onQueryChange,
             modifier = Modifier
                 .padding(horizontal = 32.dp)
@@ -116,7 +118,7 @@ internal fun StationPickerSheet(
                 .padding(top = 8.dp),
             contentPadding = WindowInsets.ime.union(WindowInsets.navigationBars).asPaddingValues(),
         ) {
-            if (picker.query.length < MIN_QUERY_LENGTH && picker.quickPicks.isNotEmpty()) {
+            if (text.length < MIN_QUERY_LENGTH && picker.quickPicks.isNotEmpty()) {
                 item(key = "quick-picks") {
                     QuickPicks(stations = picker.quickPicks, onPick = pick)
                 }
