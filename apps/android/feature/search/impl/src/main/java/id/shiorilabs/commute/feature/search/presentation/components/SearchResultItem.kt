@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,13 +22,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import id.shiorilabs.commute.core.ui.components.CommuteIconButton
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
@@ -38,6 +35,8 @@ import id.shiorilabs.commute.feature.search.R
 import id.shiorilabs.commute.feature.search.domain.SearchLine
 import id.shiorilabs.commute.feature.search.domain.Searchable
 import id.shiorilabs.commute.feature.search.presentation.highlightMatch
+import id.shiorilabs.commute.feature.station.presentation.sharedLineRoundel
+import id.shiorilabs.commute.feature.station.presentation.sharedStationName
 
 /** The subtitle beside a result's title, `text-slate-500`. */
 private val SubtitleColor = Color(0xFF64748B)
@@ -60,6 +59,8 @@ private val RowInset = 32.dp
  * boxed in; [showDivider] is false on the last row.
  *
  * @param pinned whether the station is saved; ignored for hubs and lines, which can't be.
+ * @param shared whether this is the row the rider opened, whose name and roundels fly into the
+ *   station page and back. Only one row on screen may be, as the same station can be listed twice.
  */
 @Composable
 fun SearchResultItem(
@@ -70,20 +71,12 @@ fun SearchResultItem(
     onTogglePin: (stationId: String) -> Unit,
     modifier: Modifier = Modifier,
     showDivider: Boolean = true,
+    shared: Boolean = false,
 ) {
     val highlight = MaterialTheme.colorScheme.primary
-    val heading = remember(searchable, query, highlight) {
-        buildAnnotatedString {
-            append(searchable.title.highlightMatch(query, highlight))
-            searchable.subtitle?.let { subtitle ->
-                append("  ")
-                withStyle(SpanStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = SubtitleColor)) {
-                    append(subtitle)
-                }
-            }
-        }
-    }
+    val title = remember(searchable, query, highlight) { searchable.title.highlightMatch(query, highlight) }
     val stationId = (searchable as? Searchable.Station)?.stationId
+    val sharedStationId = stationId?.takeIf { shared }
 
     Row(
         modifier = modifier
@@ -105,20 +98,38 @@ fun SearchResultItem(
                 .padding(vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
         ) {
-            Text(
-                text = heading,
-                style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, lineHeight = 22.sp),
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
+            // The title stands apart from its subtitle so it alone can fly into the station page's
+            // header.
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = title,
+                    modifier = Modifier
+                        .alignByBaseline()
+                        .then(sharedStationId?.let { Modifier.sharedStationName(it) } ?: Modifier),
+                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, lineHeight = 22.sp),
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                searchable.subtitle?.let { subtitle ->
+                    Text(
+                        text = subtitle,
+                        modifier = Modifier.alignByBaseline(),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SubtitleColor,
+                    )
+                }
+            }
             when (searchable) {
-                is Searchable.Station -> LineRoundels(searchable.lines)
+                is Searchable.Station -> LineRoundels(searchable.lines, sharedStationId)
                 is Searchable.Hub -> LineRoundels(searchable.lines)
                 is Searchable.Line -> LinePill(searchable.line)
             }
         }
         if (stationId != null) {
-            IconButton(
+            CommuteIconButton(
                 onClick = { onTogglePin(stationId) },
                 modifier = Modifier.size(44.dp),
             ) {
@@ -136,8 +147,9 @@ fun SearchResultItem(
     }
 }
 
+/** With [sharedStationId], the roundels fly into that station page's header. */
 @Composable
-private fun LineRoundels(lines: List<SearchLine>) {
+private fun LineRoundels(lines: List<SearchLine>, sharedStationId: String? = null) {
     if (lines.isEmpty()) {
         return
     }
@@ -153,7 +165,9 @@ private fun LineRoundels(lines: List<SearchLine>) {
                 size = RoundelSize.SM,
                 // The code inside the roundel means little read aloud; the line's name is what a
                 // screen reader says instead.
-                modifier = Modifier.clearAndSetSemantics { contentDescription = line.name },
+                modifier = Modifier
+                    .then(sharedStationId?.let { Modifier.sharedLineRoundel(it, line.key) } ?: Modifier)
+                    .clearAndSetSemantics { contentDescription = line.name },
             )
         }
     }

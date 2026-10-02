@@ -15,11 +15,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -93,6 +95,8 @@ private fun SavedStationsContent(
     onSettingsClick: () -> Unit = {},
     onStationClick: (stationId: String) -> Unit = {},
 ) {
+    val coveredByPage = railSlidesWithPage()
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -116,6 +120,7 @@ private fun SavedStationsContent(
                     innerPadding = innerPadding,
                     onRetry = onRetry,
                     onStationClick = onStationClick,
+                    coveredByPage = coveredByPage,
                 )
             }
 
@@ -137,6 +142,7 @@ private fun SavedStationsContent(
             onSearchClick = onSearchClick,
             onSettingsClick = onSettingsClick,
             bottomInset = innerPadding.calculateBottomPadding(),
+            slidesWithPage = coveredByPage,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
     }
@@ -152,8 +158,18 @@ private fun StationFeed(
     innerPadding: PaddingValues,
     onRetry: (stationId: String) -> Unit,
     onStationClick: (stationId: String) -> Unit,
+    coveredByPage: Boolean,
 ) {
     val listDescription = stringResource(R.string.saved_station_list_description)
+    // The station whose page was last opened from here: its name is the one that flies home. Only
+    // while that page is what covers home: coming back from search, nothing flies, and its title
+    // must show whole with the rest of the feed.
+    var openedId by rememberSaveable { mutableStateOf<String?>(null) }
+    val opened = openedId.takeIf { coveredByPage }
+    val openStation = { stationId: String ->
+        openedId = stationId
+        onStationClick(stationId)
+    }
     val listState = rememberLazyListState()
     val hazeState = rememberHazeState()
     val statusBar = innerPadding.calculateTopPadding()
@@ -205,14 +221,19 @@ private fun StationFeed(
                 val station = card.station
                 if (station is UIState.Success) {
                     item(key = "saved-station-title:${card.stationId}", contentType = TITLE_ROW) {
+                        // The bar shows this title while it is the current one; drawn twice, the copy
+                        // in the list would blur behind the bar's. The bar's copy is then the one
+                        // that flies into the station page.
+                        val underBar = stuckName != null && stuck?.index == row
                         StationTitle(
+                            stationId = card.stationId,
                             name = station.data.name,
-                            onClick = { onStationClick(card.stationId) },
+                            shareName = !underBar,
+                            opened = card.stationId == opened,
+                            onClick = { openStation(card.stationId) },
                             modifier = Modifier
                                 .cardEntrance(index)
-                                // The bar shows this title while it is the current one; drawn
-                                // twice, the copy in the list would blur behind the bar's.
-                                .graphicsLayer { alpha = if (stuckName != null && stuck?.index == row) 0f else 1f },
+                                .graphicsLayer { alpha = if (underBar) 0f else 1f },
                         )
                     }
                     item(key = "saved-station:${card.stationId}") {
@@ -245,13 +266,15 @@ private fun StationFeed(
         }
 
         StuckTitleBar(
+            stationId = stuckCard?.stationId,
             name = stuckName,
             pushOffset = { stuck?.pushOffset ?: 0 },
             statusBar = statusBar,
             hazeState = hazeState,
             onTitleHeight = { barTitleHeight = it },
             // The bar covers the list's own copy of the title, so it takes the tap for it.
-            onClick = stuckCard?.takeIf { stuckName != null }?.let { card -> { onStationClick(card.stationId) } },
+            opened = stuckCard != null && stuckCard.stationId == opened,
+            onClick = stuckCard?.takeIf { stuckName != null }?.let { card -> { openStation(card.stationId) } },
         )
     }
 }
@@ -272,11 +295,13 @@ private fun StationFeed(
  */
 @Composable
 private fun StuckTitleBar(
+    stationId: String?,
     name: String?,
     pushOffset: () -> Int,
     statusBar: Dp,
     hazeState: HazeState,
     onTitleHeight: (Int) -> Unit,
+    opened: Boolean,
     onClick: (() -> Unit)?,
 ) {
     val background = MaterialTheme.colorScheme.background
@@ -334,8 +359,11 @@ private fun StuckTitleBar(
     ) {
         // Always laid out, so the bar's height is known before the first title reaches it.
         StationTitle(
+            stationId = stationId.orEmpty(),
             name = shownName,
             topInset = statusBar,
+            shareName = stationId != null && name != null,
+            opened = opened,
             onClick = onClick,
             modifier = Modifier
                 .onSizeChanged {
@@ -348,6 +376,32 @@ private fun StuckTitleBar(
                 },
         )
     }
+}
+
+/** What covered the home screen last, saved so the way back can tell which it was. */
+private enum class CoveredBy { MORPH, PAGE }
+
+/**
+ * Whether the rail's cards drop off the bottom edge as what's covering the home screen comes and
+ * goes: yes for a page, so the rail isn't left fading in place under something that has nothing to
+ * do with it; no for search, which opens out of the rail's own card, and that card has to stay put
+ * for the morph to start from it and land back on it.
+ *
+ * Which one it is comes from the top of the stack while home is being covered. On the way back that
+ * page has already been popped, so the answer is saved from then: it survives home leaving
+ * composition while covered.
+ */
+@Composable
+private fun railSlidesWithPage(): Boolean {
+    val top = LocalNavigator.current.backStack.lastOrNull()
+    var coveredBy by rememberSaveable { mutableStateOf(CoveredBy.PAGE) }
+    val current = when (top) {
+        null, Route.Home -> coveredBy
+        Route.Search -> CoveredBy.MORPH
+        else -> CoveredBy.PAGE
+    }
+    SideEffect { coveredBy = current }
+    return current == CoveredBy.PAGE
 }
 
 /** The rail's cards plus their padding: what the feed's last card has to scroll clear of. */
