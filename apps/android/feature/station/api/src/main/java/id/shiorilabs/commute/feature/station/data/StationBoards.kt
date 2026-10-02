@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.station.data
 
+import arrow.core.Either
 import id.shiorilabs.commute.core.time.nextServiceDayOf
 import id.shiorilabs.commute.core.time.serviceDayOf
 import id.shiorilabs.commute.core.type.UIState
@@ -52,8 +53,13 @@ fun StationRepository.board(stationId: String, now: LocalDateTime): Flow<Station
     )
     send(board)
 
+    // The API answers a halte's timetable with a 404 ("not available yet"), so for TransJakarta a
+    // failed board is the empty one it really is, as the web treats it: its frequencies stand in.
+    val todaysBoard = timetable.await().let { result ->
+        if (isTransJakarta(stationId)) Either.Right(result.getOrNull().orEmpty()) else result
+    }
     board = board.copy(
-        timetable = timetable.await().fold(
+        timetable = todaysBoard.fold(
             ifLeft = { UIState.Error(it.toUserMessage(), it.cause) },
             ifRight = { UIState.Success(it) },
         ),
