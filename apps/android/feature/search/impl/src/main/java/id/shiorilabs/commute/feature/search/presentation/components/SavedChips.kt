@@ -22,6 +22,7 @@ import id.shiorilabs.commute.core.ui.ext.parseHexColor
 import id.shiorilabs.commute.core.ui.ext.tint
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.feature.search.domain.Searchable
+import id.shiorilabs.commute.feature.station.presentation.sharedStationName
 
 /** The chip's name, `text-slate-900`. */
 private val ChipInk = Color(0xFF0F172A)
@@ -38,6 +39,7 @@ fun SavedChips(
     stations: List<Searchable.Station>,
     onClick: (Searchable.Station) -> Unit,
     modifier: Modifier = Modifier,
+    isShared: (Searchable.Station) -> Boolean = { false },
 ) {
     if (stations.isEmpty()) {
         return
@@ -66,6 +68,9 @@ fun SavedChips(
                 )
                 Text(
                     text = station.title,
+                    // The chip tapped hands its name to the station page's header.
+                    modifier = station.stationId?.let { id -> Modifier.sharedStationName(id, enabled = isShared(station)) }
+                        ?: Modifier,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                     color = ChipInk,

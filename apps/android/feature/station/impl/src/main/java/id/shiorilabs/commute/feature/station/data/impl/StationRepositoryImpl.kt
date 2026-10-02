@@ -13,23 +13,45 @@ import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.Station
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Holds what it has fetched in memory for the session. A station and its board for a day type only
+ * change with a data deploy, and the home feed has usually just loaded the very station a rider
+ * opens, so the station page can start from it. A failure or an empty board is not cached, so the
+ * next call tries again.
+ */
+@Singleton
 class StationRepositoryImpl @Inject constructor(
     private val service: CommuteService,
 ) : StationRepository {
 
-    override suspend fun station(stationId: String): Either<Failure, Station> = apiCallToFailure {
-        val (operator, code) = stationId.splitId()
-        service.getStation(operator, code).data.toStation()
-    }
+    private val stations = ConcurrentHashMap<String, Station>()
+    private val timetables = ConcurrentHashMap<Pair<String, ServiceDayName>, List<LineTimetable>>()
+
+    override suspend fun station(stationId: String): Either<Failure, Station> =
+        stations[stationId]?.right() ?: apiCallToFailure {
+            val (operator, code) = stationId.splitId()
+            service.getStation(operator, code).data.toStation()
+        }.onRight { stations[stationId] = it }
 
     override suspend fun timetable(stationId: String, day: ServiceDayName): Either<Failure, List<LineTimetable>> =
-        apiCallToFailure {
+        timetables[stationId to day]?.right() ?: apiCallToFailure {
             val (operator, code) = stationId.splitId()
             service.getGroupedTimetable(operator, code, day.name).data.map { it.toLineTimetable() }
+        }.onRight { lines ->
+            // An empty board is offered a retry on screen, which has to actually ask again.
+            if (lines.isNotEmpty()) {
+                timetables[stationId to day] = lines
+            }
         }
+
+    override fun cachedStation(stationId: String): Station? = stations[stationId]
+
+    override fun cachedTimetable(stationId: String, day: ServiceDayName): List<LineTimetable>? =
+        timetables[stationId to day]
 
     /** `KCI-MRI` to (`KCI`, `MRI`). */
     private fun String.splitId(): Pair<String, String> = substringBefore('-') to substringAfter('-')
@@ -45,6 +67,7 @@ class LineRepositoryImpl @Inject constructor(
 ) : LineRepository {
 
     private val mutex = Mutex()
+    @Volatile
     private var cached: Map<String, LineInfo>? = null
 
     override suspend fun lines(): Either<Failure, Map<String, LineInfo>> = mutex.withLock {
@@ -52,4 +75,6 @@ class LineRepositoryImpl @Inject constructor(
             service.getOperators().data.toLineDictionary()
         }.onRight { cached = it }
     }
+
+    override fun cachedLines(): Map<String, LineInfo>? = cached
 }
