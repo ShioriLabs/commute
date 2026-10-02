@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.core.network.testing
 
 import id.shiorilabs.commute.core.model.models.GroupedTimetable
+import id.shiorilabs.commute.core.model.models.HeadwayRow
 import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.model.models.Station
@@ -40,6 +41,13 @@ class FakeCommuteService : CommuteService {
     var transfersCalls: Int = 0
         private set
 
+    var headway: suspend (operator: String, stationCode: String, day: String) -> List<HeadwayRow> =
+        { _, _, _ -> error("getHeadway was not stubbed") }
+
+    /** How many times [getHeadway] was called — for asserting that a repository caches, or skips it. */
+    var headwayCalls: Int = 0
+        private set
+
     var operators: suspend () -> List<OperatorWithLines> = { error("getOperators was not stubbed") }
 
     /** How many times [getOperators] was called — for asserting that the dictionary is cached. */
@@ -58,6 +66,11 @@ class FakeCommuteService : CommuteService {
     override suspend fun getTransfers(operator: String, stationCode: String): Response<List<Transfer>> {
         transfersCalls++
         return Response(status = 200, data = transfers(operator, stationCode))
+    }
+
+    override suspend fun getHeadway(operator: String, stationCode: String, day: String): Response<List<HeadwayRow>> {
+        headwayCalls++
+        return Response(status = 200, data = headway(operator, stationCode, day))
     }
 
     override suspend fun getOperators(): Response<List<OperatorWithLines>> {
