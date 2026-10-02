@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The splash: the wordmark's letters rise in one after another, as on the web's boot splash
+    (apps/web/app/app.css, .wordmark-letter): each rises past its line and settles back, fully
+    shown by 60% of its 300 ms, 35 ms after the one before. They wait the web's 250 ms first,
+    which here keeps the reveal clear of the window's own opening animation, which would
+    otherwise cover most of it. The web's breathing is left out: the splash leaves as soon as the
+    app has drawn.
+-->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:drawable="@drawable/splash_wordmark">
+    <target android:name="letter0">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="300"
+                android:startOffset="250">
+                <propertyValuesHolder android:propertyName="translateY">
+                    <keyframe android:fraction="0" android:value="9.82" android:valueType="floatType" />
+                    <keyframe android:fraction="0.6" android:value="-2.46" android:valueType="floatType"
+                        android:interpolator="@android:interpolator/decelerate_cubic" />
+                    <keyframe android:fraction="1" android:value="0.0" android:valueType="floatType"
+                        android:interpolator="@android:interpolator/decelerate_cubic" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+    <target android:name="letter0_path">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="300"
+                android:startOffset="250">
+                <propertyValuesHolder android:propertyName="fillAlpha">
+                    <keyframe android:fraction="0" android:value="0.0" android:valueType="floatType" />
+                    <keyframe android:fraction="0.6" android:value="1.0" android:valueType="floatType"
+                        android:interpolator="@android:interpolator/decelerate_cubic" />
+                    <keyframe android:fraction="1" android:value="1.0" android:valueType="floatType" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+    <target android:name="letter1">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="300"
+                android:startOffset="285">
+                <propertyValuesHolder android:propertyName="translateY">
+                    <keyframe android:fraction="0" android:value="9.82" android:valueType="floatType" />
+                    <keyframe android:fraction="0.6" android:value="-2.46" android:valueType="floatType"
+                        android:interpolator="@android:interpolator/decelerate_cubic" />
+                    <keyframe android:fraction="1" android:value="0.0" android:valueType="floatType"
+                        android:interpolator="@android:interpolator/decelerate_cubic" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+    <target android:name="letter1_path">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="300"
+                android:startOffset="285">
+                <propertyValuesHolder android:propertyName="fillAlpha">
+                    <keyframe android:fraction="0" android:value="0.0" android:valueType="floatType" />
+                    <keyframe android:fraction="0.6" android:value="1.0" android:valueType="floatType"
+                        android:interpolator="@android:interpolator/decelerate_cubic" />
+                    <keyframe android:fraction="1" android:value="1.0" android:valueType="floatType" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+    <target android:name="letter2">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="300"
+                android:startOffset="320">
+                <propertyValuesHolder android:propertyName="translateY">
+                    <keyframe android:fraction="0" android:value="9.82" android:valueType="floatType" />
+                    <keyframe android:fraction="0.6" android:value="-2.46" android:valueType="floatType"
+                        android:interpolator="@android:interpolator/decelerate_cubic" />
+                    <keyframe android:fraction="1" android:value="0.0" android:valueType="floatType"
+                        android:interpolator="@android:interpolator/decelerate_cubic" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+    <target android:name="letter2_path">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="300"
+                android:startOffset="320">
+                <propertyValuesHolder android:propertyName="fillAlpha">
+                    <keyframe android:fraction="0" android:value="0.0" android:valueType="floatType" />
+                    <keyframe android:fraction="0.6" android:value="1.0" android:valueType="floatType"
+                        android:interpolator="@android:interpolator/decelerate_cubic" />
+                    <keyframe android:fraction="1" android:value="1.0" android:valueType="floatType" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+    <target android:name="letter3">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="300"
+                android:startOffset="355">
+                <propertyValuesHolder android:propertyName="translateY">
+                    <keyframe android:fraction="0" android:value="9.82" android:valueType="floatType" />
+                    <keyframe android:fraction="0.6" android:value="-2.46" android:valueType="floatType"
+                        android:interpolator="@android:interpolator/decelerate_cubic" />
+                    <keyframe android:fraction="1" android:value="0.0" android:valueType="floatType"
+                        android:interpolator="@android:interpolator/decelerate_cubic" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+    <target android:name="letter3_path">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="300"
+                android:startOffset="355">
+                <propertyValuesHolder android:propertyName="fillAlpha">
+                    <keyframe android:fraction="0" android:value="0.0" android:valueType="floatType" />
+                    <keyframe android:fraction="0.6" android:value="1.0" android:valueType="floatType"
+                        android:interpolator="@android:interpolator/decelerate_cubic" />
+                    <keyframe android:fraction="1" android:value="1.0" android:valueType="floatType" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+    <target android:name="letter4">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="300"
+                android:startOffset="390">
+                <propertyValuesHolder android:propertyName="translateY">
+                    <keyframe android:fraction="0" android:value="9.82" android:valueType="floatType" />
+                    <keyframe android:fraction="0.6" android:value="-2.46" android:valueType="floatType"
+                        android:interpolator="@android:interpolator/decelerate_cubic" />
+                    <keyframe android:fraction="1" android:value="0.0" android:valueType="floatType"
+                        android:interpolator="@android:interpolator/decelerate_cubic" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+    <target android:name="letter4_path">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="300"
+                android:startOffset="390">
+                <propertyValuesHolder android:propertyName="fillAlpha">
+                    <keyframe android:fraction="0" android:value="0.0" android:valueType="floatType" />
+                    <keyframe android:fraction="0.6" android:value="1.0" android:valueType="floatType"
+                        android:interpolator="@android:interpolator/decelerate_cubic" />
+                    <keyframe android:fraction="1" android:value="1.0" android:valueType="floatType" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+    <target android:name="letter5">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="300"
+                android:startOffset="425">
+                <propertyValuesHolder android:propertyName="translateY">
+                    <keyframe android:fraction="0" android:value="9.82" android:valueType="floatType" />
+                    <keyframe android:fraction="0.6" android:value="-2.46" android:valueType="floatType"
+                        android:interpolator="@android:interpolator/decelerate_cubic" />
+                    <keyframe android:fraction="1" android:value="0.0" android:valueType="floatType"
+                        android:interpolator="@android:interpolator/decelerate_cubic" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+    <target android:name="letter5_path">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="300"
+                android:startOffset="425">
+                <propertyValuesHolder android:propertyName="fillAlpha">
+                    <keyframe android:fraction="0" android:value="0.0" android:valueType="floatType" />
+                    <keyframe android:fraction="0.6" android:value="1.0" android:valueType="floatType"
+                        android:interpolator="@android:interpolator/decelerate_cubic" />
+                    <keyframe android:fraction="1" android:value="1.0" android:valueType="floatType" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+    <target android:name="letter6">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="300"
+                android:startOffset="460">
+                <propertyValuesHolder android:propertyName="translateY">
+                    <keyframe android:fraction="0" android:value="9.82" android:valueType="floatType" />
+                    <keyframe android:fraction="0.6" android:value="-2.46" android:valueType="floatType"
+                        android:interpolator="@android:interpolator/decelerate_cubic" />
+                    <keyframe android:fraction="1" android:value="0.0" android:valueType="floatType"
+                        android:interpolator="@android:interpolator/decelerate_cubic" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+    <target android:name="letter6_path">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:duration="300"
+                android:startOffset="460">
+                <propertyValuesHolder android:propertyName="fillAlpha">
+                    <keyframe android:fraction="0" android:value="0.0" android:valueType="floatType" />
+                    <keyframe android:fraction="0.6" android:value="1.0" android:valueType="floatType"
+                        android:interpolator="@android:interpolator/decelerate_cubic" />
+                    <keyframe android:fraction="1" android:value="1.0" android:valueType="floatType" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+</animated-vector>
