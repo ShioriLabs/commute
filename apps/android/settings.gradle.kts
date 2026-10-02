@@ -36,6 +36,7 @@ gradle.startParameter.excludedTaskNames.addAll(listOf(":build-logic:convention:t
 rootProject.name = "Commute"
 
 include(":app")
+include(":baselineprofile")
 include(":wear")
 include(":core:common")
 include(":core:model")

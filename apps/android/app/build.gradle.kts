@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.commute.android.application)
     alias(libs.plugins.commute.android.hilt)
+    alias(libs.plugins.androidx.baselineprofile)
 }
 
 android {
@@ -14,18 +15,23 @@ android {
         versionName = "1.0"
     }
 
-    // There are no flavors: one backend. A debug build can be pointed at a local API with
-    // `-Pcommute.apiBaseUrl=http://10.0.2.2:3000`; release always talks to production.
-    val productionApi = "https://api.commute.shiorilabs.id"
-    val debugApi = providers.gradleProperty("commute.apiBaseUrl").orElse(productionApi)
+    // One flavor, `production`, from the `commute.android.application` convention, as is signing.
+    // A debug build can still be pointed at a local API with
+    // `-Pcommute.apiBaseUrl=http://10.0.2.2:3000`; a build type's field outranks the flavor's.
+    // Release always talks to production.
+    productFlavors {
+        getByName("production") {
+            buildConfigField("String", "API_BASE_URL", "\"https://api.commute.shiorilabs.id\"")
+        }
+    }
 
     buildTypes {
         debug {
-            buildConfigField("String", "API_BASE_URL", "\"${debugApi.get()}\"")
+            providers.gradleProperty("commute.apiBaseUrl").orNull?.let { localApi ->
+                buildConfigField("String", "API_BASE_URL", "\"$localApi\"")
+            }
         }
         release {
-            buildConfigField("String", "API_BASE_URL", "\"$productionApi\"")
-
             // R8. On a Galaxy S23, with the station page's cards as separate list items, the frame
             // a station page opens on went from about 85 ms to about 52; builds take a few
             // minutes longer.
@@ -71,4 +77,8 @@ dependencies {
     implementation(libs.androidx.navigation3.runtime)
     implementation(libs.androidx.navigation3.ui)
     implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+    // Baseline Profile — ProfileInstaller applies the bundled profile on first run; :baselineprofile
+    // generates it (`./gradlew :app:generateProductionReleaseBaselineProfile`).
+    implementation(libs.androidx.profileinstaller)
+    baselineProfile(project(":baselineprofile"))
 }
