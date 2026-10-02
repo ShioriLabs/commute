@@ -8,6 +8,7 @@ import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.feature.station.data.impl.LineRepositoryImpl
 import id.shiorilabs.commute.feature.station.data.impl.StationRepositoryImpl
+import id.shiorilabs.commute.feature.station.domain.Amenity
 import id.shiorilabs.commute.feature.station.domain.Departure
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import kotlinx.coroutines.test.runTest
@@ -43,6 +44,20 @@ class StationRepositoryImplTest {
         assertEquals("KCI-MRI", station.id)
         assertEquals("Manggarai", station.name)
         assertEquals(listOf("KCI:A", "KCI:B", "KCI:C"), station.lineKeys)
+    }
+
+    @Test
+    fun `a station carries its amenities and coordinates for the station page`() = runTest {
+        val service = FakeCommuteService().apply { station = { _, _ -> fixture<Station>("station.json") } }
+
+        val station = StationRepositoryImpl(service).station("KCI-MRI").getOrNull()!!
+
+        assertEquals(Amenity("ESCALATOR_UNPAID", "Kedua sisi pintu masuk"), station.amenities[4])
+        assertEquals(Amenity("TOILET", null), station.amenities.first())
+        // A type the app doesn't know yet is kept, not dropped: the page labels it with the raw type.
+        assertEquals("SOMETHING_ADDED_LATER", station.amenities.last().type)
+        assertEquals(-6.21, station.latitude!!, 0.0)
+        assertEquals(106.8498, station.longitude!!, 0.0)
     }
 
     @Test

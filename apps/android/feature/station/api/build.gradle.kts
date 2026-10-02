@@ -26,4 +26,6 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation(libs.junit)
+    // StationBoardsTest collects the board flow.
+    testImplementation(libs.kotlinx.coroutines.test)
 }

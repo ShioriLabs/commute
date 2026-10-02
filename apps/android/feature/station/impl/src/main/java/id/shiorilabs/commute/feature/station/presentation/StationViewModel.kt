@@ -1,0 +1,106 @@
+package id.shiorilabs.commute.feature.station.presentation
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
+import dagger.hilt.android.lifecycle.HiltViewModel
+import id.shiorilabs.commute.core.datastore.SavedStationsRepository
+import id.shiorilabs.commute.core.time.ServiceDayName
+import id.shiorilabs.commute.core.time.serviceDayOf
+import id.shiorilabs.commute.feature.station.data.LineRepository
+import id.shiorilabs.commute.feature.station.data.StationRepository
+import id.shiorilabs.commute.feature.station.data.board
+import id.shiorilabs.commute.feature.station.domain.LineInfo
+import id.shiorilabs.commute.feature.station.domain.StationBoard
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import java.time.Clock
+import java.time.LocalDateTime
+
+@HiltViewModel(assistedFactory = StationViewModel.Factory::class)
+class StationViewModel @AssistedInject constructor(
+    @Assisted private val stationId: String,
+    private val stationRepository: StationRepository,
+    private val lineRepository: LineRepository,
+    private val savedStationsRepository: SavedStationsRepository,
+    private val clock: Clock,
+) : ViewModel() {
+
+    @AssistedFactory
+    interface Factory {
+        fun create(stationId: String): StationViewModel
+    }
+
+    private val board = MutableStateFlow(StationBoard.loading(stationId))
+    private val lines = MutableStateFlow<Map<String, LineInfo>>(emptyMap())
+    private var load: Job? = null
+
+    /** The service day the loaded board belongs to. */
+    private var loadedDay: ServiceDayName? = null
+
+    val state: StateFlow<StationUiState> = combine(
+        board,
+        lines,
+        savedStationsRepository.stations,
+    ) { board, lines, saved ->
+        StationUiState(board = board, lines = lines, saved = stationId in saved)
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = StationUiState(board = board.value, lines = emptyMap(), saved = false),
+    )
+
+    init {
+        loadLines()
+        load(now())
+    }
+
+    /**
+     * Called as the screen's clock ticks: when the service day turns over, the board refetches, as
+     * the home feed's do.
+     */
+    fun onClockTick(now: LocalDateTime) {
+        if (loadedDay != null && loadedDay != serviceDayOf(now)) {
+            load(now)
+        }
+    }
+
+    fun retry() {
+        load(now())
+        if (lines.value.isEmpty()) {
+            loadLines()
+        }
+    }
+
+    /** The pin in the header: saves the station to the home screen, or unsaves it. */
+    fun onToggleSave() {
+        viewModelScope.launch {
+            savedStationsRepository.toggle(stationId)
+        }
+    }
+
+    private fun now(): LocalDateTime = LocalDateTime.now(clock)
+
+    private fun loadLines() {
+        viewModelScope.launch {
+            lineRepository.lines().onRight { lines.value = it }
+        }
+    }
+
+    private fun load(now: LocalDateTime) {
+        loadedDay = serviceDayOf(now)
+        // A retry or a day turnover replaces a load still in flight, which would otherwise land
+        // after it and put the older board back.
+        load?.cancel()
+        load = viewModelScope.launch {
+            stationRepository.board(stationId, now).collect { board.value = it }
+        }
+    }
+}
