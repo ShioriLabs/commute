@@ -2,6 +2,7 @@ package id.shiorilabs.commute.feature.station.data.impl
 
 import id.shiorilabs.commute.core.model.models.GroupedTimetable
 import id.shiorilabs.commute.core.model.models.OperatorWithLines
+import id.shiorilabs.commute.feature.station.domain.Amenity
 import id.shiorilabs.commute.feature.station.domain.Departure
 import id.shiorilabs.commute.feature.station.domain.DestinationTimetable
 import id.shiorilabs.commute.feature.station.domain.DirectionGroup
@@ -16,6 +17,9 @@ internal fun StationDto.toStation() = Station(
     operator = `operator`,
     code = code,
     lineKeys = lines,
+    amenities = amenities.map { Amenity(type = it.type, text = it.text) },
+    latitude = latitude,
+    longitude = longitude,
 )
 
 /**
