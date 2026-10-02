@@ -21,11 +21,12 @@ import id.shiorilabs.commute.core.ui.morph.LocalNavAnimatedVisibilityScope
 import id.shiorilabs.commute.core.ui.motion.PAGE_MILLIS
 import id.shiorilabs.commute.core.ui.motion.PageEasing
 import id.shiorilabs.commute.feature.station.api.R
+import id.shiorilabs.commute.feature.station.domain.isTransJakarta
 import kotlin.math.roundToInt
 
 /**
- * A station's title as it flies between the home feed, where it reads "Stasiun Manggarai", and the
- * station page's header, where it reads "Manggarai". The two ends draw this same text, so it flies
+ * A station's title as it flies between the home feed, where it reads "Stasiun Manggarai" (or
+ * "Halte …" for TransJakarta), and the station page's header, where it reads "Manggarai". The two ends draw this same text, so it flies
  * as one piece, and the words before the name are clipped in from the start or out to it as the
  * screen enters or leaves: on the way home "Stas", "Stasi", "Stasiun" uncover beside the name while
  * it lands, and on the way out they cover back up.
@@ -53,7 +54,7 @@ fun StationTitleText(
     shared: Boolean = true,
     scaleWithFlight: Boolean = false,
 ) {
-    val title = stringResource(R.string.station_title, name)
+    val title = stringResource(if (isTransJakarta(stationId)) R.string.halte_title else R.string.station_title, name)
     val nameStart = title.indexOf(name).coerceAtLeast(0)
     val before = title.substring(0, nameStart)
     val after = title.substring((nameStart + name.length).coerceAtMost(title.length))
