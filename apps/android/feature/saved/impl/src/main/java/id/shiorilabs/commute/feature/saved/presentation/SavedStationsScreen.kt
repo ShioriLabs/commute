@@ -398,7 +398,7 @@ private fun railSlidesWithPage(): Boolean {
     var coveredBy by rememberSaveable { mutableStateOf(CoveredBy.PAGE) }
     val current = when (top) {
         null, Route.Home -> coveredBy
-        Route.Search -> CoveredBy.MORPH
+        Route.Search, Route.Settings -> CoveredBy.MORPH
         else -> CoveredBy.PAGE
     }
     SideEffect { coveredBy = current }
