@@ -6,9 +6,14 @@ import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.bold.ArrowSquareOut
+import com.adamglin.phosphoricons.bold.CaretDown
+import com.adamglin.phosphoricons.bold.CaretLeft
+import com.adamglin.phosphoricons.bold.CaretRight
+import com.adamglin.phosphoricons.bold.CaretUp
 import com.adamglin.phosphoricons.bold.MagnifyingGlass
 import com.adamglin.phosphoricons.bold.PushPin
 import com.adamglin.phosphoricons.bold.PushPinSlash
+import com.adamglin.phosphoricons.bold.ShareNetwork
 import com.adamglin.phosphoricons.bold.Wheelchair
 import com.adamglin.phosphoricons.bold.X
 import com.adamglin.phosphoricons.duotone.Baby
@@ -22,8 +27,15 @@ import com.adamglin.phosphoricons.duotone.Plug
 import com.adamglin.phosphoricons.duotone.StarAndCrescent
 import com.adamglin.phosphoricons.duotone.Toilet
 import com.adamglin.phosphoricons.fill.Airplane
+import com.adamglin.phosphoricons.fill.Archive
+import com.adamglin.phosphoricons.fill.Database
+import com.adamglin.phosphoricons.fill.Files
 import com.adamglin.phosphoricons.fill.GearSix
+import com.adamglin.phosphoricons.fill.HandHeart
+import com.adamglin.phosphoricons.fill.Info
 import com.adamglin.phosphoricons.fill.PushPin
+import com.adamglin.phosphoricons.fill.PushPinSimple
+import com.adamglin.phosphoricons.fill.Trash
 import com.adamglin.phosphoricons.fill.XCircle
 
 /**
@@ -48,6 +60,26 @@ object CommuteIcons {
 
     /** A link that leaves the app. */
     val ExternalLink: ImageVector = PhosphorIcons.Bold.ArrowSquareOut
+
+    /** Back one page; [Chevron] trails a row that opens another. */
+    val Back: ImageVector = PhosphorIcons.Bold.CaretLeft
+    val Chevron: ImageVector = PhosphorIcons.Bold.CaretRight
+
+    /** Moves an entry one place up or down a list the rider orders. */
+    val MoveUp: ImageVector = PhosphorIcons.Bold.CaretUp
+    val MoveDown: ImageVector = PhosphorIcons.Bold.CaretDown
+
+    /** Clears stored data. */
+    val Delete: ImageVector = PhosphorIcons.Fill.Trash
+    val Share: ImageVector = PhosphorIcons.Bold.ShareNetwork
+
+    /* The settings page's rows, as the web's settings sheet draws them. */
+    val SavedStations: ImageVector = PhosphorIcons.Fill.PushPinSimple
+    val ManageData: ImageVector = PhosphorIcons.Fill.Archive
+    val Legal: ImageVector = PhosphorIcons.Fill.Files
+    val DataPlatform: ImageVector = PhosphorIcons.Fill.Database
+    val Support: ImageVector = PhosphorIcons.Fill.HandHeart
+    val About: ImageVector = PhosphorIcons.Fill.Info
 
     /** The Kalayang's roundel: an aircraft in place of a line code. */
     val Airplane: ImageVector = PhosphorIcons.Fill.Airplane
