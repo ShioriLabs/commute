@@ -20,4 +20,11 @@ sealed interface Route : NavKey {
     /** Station search, opened from the home screen's "Mau ke mana?" card. */
     @Serializable
     data object Search : Route
+
+    /** A station's page, opened from search or a saved station's name on the home screen. */
+    @Serializable
+    data class Station(
+        /** `OPERATOR-CODE`, e.g. `KCI-MRI`. */
+        val stationId: String,
+    ) : Route
 }

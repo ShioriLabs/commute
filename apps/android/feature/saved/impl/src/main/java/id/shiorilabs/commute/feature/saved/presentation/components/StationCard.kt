@@ -1,30 +1,18 @@
 package id.shiorilabs.commute.feature.saved.presentation.components
 
-import androidx.compose.animation.core.InfiniteRepeatableSpec
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.keyframes
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -33,19 +21,14 @@ import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.type.toFailure
+import id.shiorilabs.commute.core.ui.components.ProblemPanel
+import id.shiorilabs.commute.core.ui.components.SkeletonBlock
 import id.shiorilabs.commute.feature.saved.R
-import id.shiorilabs.commute.feature.saved.presentation.StationCardState
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
+import id.shiorilabs.commute.feature.station.domain.StationBoard
 import id.shiorilabs.commute.feature.station.presentation.components.LineCard
 import java.time.LocalDateTime
-
-/** Placeholder blocks, the web's `bg-slate-200`. */
-private val SkeletonColor = Color(0xFFE2E8F0)
-
-/** The failure panel, the web's `bg-rose-50` with `text-slate-700`. */
-private val ProblemFill = Color(0xFFFFF1F2)
-private val ProblemInk = Color(0xFF334155)
 
 /**
  * At most this many line placeholders while a board loads. An interchange like Manggarai serves
@@ -60,18 +43,23 @@ private const val MAX_SKELETON_LINES = 3
  *
  * [topInset] is the status bar's height, carried inside the header rather than above the list: a
  * stuck title then reaches up behind the clock with no change of size at the moment it sticks.
+ *
+ * [onClick] opens the station's page; the whole row is the target, not just the name's width.
  */
 @Composable
 fun StationTitle(
     name: String,
     modifier: Modifier = Modifier,
     topInset: Dp = 0.dp,
+    onClick: (() -> Unit)? = null,
 ) {
     Text(
         text = stringResource(R.string.saved_station_title, name),
         modifier = modifier
             .fillMaxWidth()
             .padding(top = topInset)
+            // Under the inset, so a tap behind the clock doesn't open anything.
+            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
             .padding(16.dp)
             .semantics { heading() },
         style = MaterialTheme.typography.titleLarge,
@@ -94,6 +82,7 @@ fun StationPlaceholder(
         val offline = station.cause?.toFailure() is Failure.Network
         ProblemPanel(
             message = stringResource(if (offline) R.string.saved_station_offline else R.string.saved_station_failed),
+            retryLabel = stringResource(R.string.saved_retry),
             onRetry = onRetry,
             modifier = modifier.padding(horizontal = 16.dp).padding(top = 16.dp),
         )
@@ -108,7 +97,7 @@ fun StationPlaceholder(
  */
 @Composable
 fun StationTimetable(
-    card: StationCardState,
+    card: StationBoard,
     lineCount: Int,
     lines: Map<String, LineInfo>,
     now: LocalDateTime,
@@ -131,6 +120,7 @@ fun StationTimetable(
 
         is UIState.Error -> ProblemPanel(
             message = stringResource(R.string.saved_timetable_failed),
+            retryLabel = stringResource(R.string.saved_retry),
             onRetry = onRetry,
             modifier = inset,
         )
@@ -138,6 +128,7 @@ fun StationTimetable(
         is UIState.Success -> if (timetable.data.isEmpty()) {
             ProblemPanel(
                 message = stringResource(R.string.saved_timetable_empty),
+                retryLabel = stringResource(R.string.saved_retry),
                 onRetry = onRetry,
                 modifier = inset,
             )
@@ -174,68 +165,5 @@ private fun StationSkeleton(modifier: Modifier = Modifier) {
                 .fillMaxWidth()
                 .height(320.dp),
         )
-    }
-}
-
-/** A placeholder block pulsing like the web's `animate-pulse`. */
-@Composable
-private fun SkeletonBlock(modifier: Modifier = Modifier) {
-    val transition = rememberInfiniteTransition(label = "skeletonPulse")
-    val alpha by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1f,
-        animationSpec = PulseSpec,
-        label = "skeletonPulseAlpha",
-    )
-    Box(
-        modifier
-            .graphicsLayer { this.alpha = alpha }
-            .background(SkeletonColor, MaterialTheme.shapes.medium),
-    )
-}
-
-/** Tailwind's `animate-pulse`: down to half opacity and back over two seconds. */
-private val PulseSpec: InfiniteRepeatableSpec<Float> = infiniteRepeatable(
-    animation = keyframes {
-        durationMillis = 2000
-        1f at 0 using LinearEasing
-        0.5f at 1000 using LinearEasing
-        1f at 2000
-    },
-    repeatMode = RepeatMode.Restart,
-)
-
-@Composable
-private fun ProblemPanel(
-    message: String,
-    onRetry: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(ProblemFill, MaterialTheme.shapes.medium)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(
-            text = message,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = ProblemInk,
-        )
-        Button(
-            onClick = onRetry,
-            shape = MaterialTheme.shapes.small,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ),
-        ) {
-            Text(
-                text = stringResource(R.string.saved_retry),
-                fontWeight = FontWeight.Bold,
-            )
-        }
     }
 }

@@ -10,6 +10,18 @@ data class Station(
     val code: String,
     /** Line keys (`KCI:C`), resolved through [LineInfo] by whoever renders them. */
     val lineKeys: List<String>,
+    /** The facilities the station page lists, in the API's order. */
+    val amenities: List<Amenity> = emptyList(),
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+)
+
+/** A facility at a station. */
+data class Amenity(
+    /** `TOILET`, `PARKING`, … A plain string: the API adds types without notice. */
+    val type: String,
+    /** Where it is, when the data says. */
+    val text: String?,
 )
 
 /** A line's name and colour, from the API's line dictionary. */

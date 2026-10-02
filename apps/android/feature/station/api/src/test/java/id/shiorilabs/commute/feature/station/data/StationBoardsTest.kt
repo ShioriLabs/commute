@@ -1,0 +1,87 @@
+package id.shiorilabs.commute.feature.station.data
+
+import arrow.core.Either
+import arrow.core.left
+import arrow.core.right
+import id.shiorilabs.commute.core.time.ServiceDayName
+import id.shiorilabs.commute.core.type.Failure
+import id.shiorilabs.commute.core.type.UIState
+import id.shiorilabs.commute.feature.station.domain.LineTimetable
+import id.shiorilabs.commute.feature.station.domain.Station
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.time.LocalDateTime
+
+class StationBoardsTest {
+
+    private class FakeStationRepository : StationRepository {
+        var station: Either<Failure, Station> = Station("KCI-MRI", "Manggarai", "KCI", "MRI", listOf("KCI:B")).right()
+        var timetable: (ServiceDayName) -> Either<Failure, List<LineTimetable>> =
+            { listOf(LineTimetable("KCI:B", emptyList())).right() }
+        val asked = mutableListOf<ServiceDayName>()
+
+        override suspend fun station(stationId: String) = station
+
+        override suspend fun timetable(stationId: String, day: ServiceDayName): Either<Failure, List<LineTimetable>> {
+            asked += day
+            return timetable(day)
+        }
+    }
+
+    @Test
+    fun `a weekday emits loading, the station, then the board, and never asks for tomorrow`() = runTest {
+        val repository = FakeStationRepository()
+
+        // A Wednesday morning: tomorrow runs the same weekday board.
+        val boards = repository.board("KCI-MRI", LocalDateTime.parse("2026-09-30T08:00:00")).toList()
+
+        assertEquals(3, boards.size)
+        assertTrue(boards[0].station is UIState.Loading)
+        assertTrue(boards[1].station is UIState.Success)
+        assertTrue(boards[1].timetable is UIState.Loading)
+        assertTrue(boards[2].timetable is UIState.Success)
+        assertFalse(boards.last().nextDayDiffers)
+        assertEquals(listOf(ServiceDayName.WD), repository.asked)
+    }
+
+    @Test
+    fun `a Friday also loads Saturday's board, keyed by line`() = runTest {
+        val repository = FakeStationRepository()
+
+        val board = repository.board("KCI-MRI", LocalDateTime.parse("2026-10-02T20:00:00")).toList().last()
+
+        assertTrue(board.nextDayDiffers)
+        assertEquals(setOf("KCI:B"), board.nextDayBoard?.keys)
+        assertEquals(setOf(ServiceDayName.WD, ServiceDayName.SAT), repository.asked.toSet())
+    }
+
+    @Test
+    fun `each part fails on its own`() = runTest {
+        val repository = FakeStationRepository().apply {
+            timetable = { day -> if (day == ServiceDayName.WD) Failure.Unknown().left() else emptyList<LineTimetable>().right() }
+        }
+
+        val board = repository.board("KCI-MRI", LocalDateTime.parse("2026-10-02T20:00:00")).toList().last()
+
+        assertTrue(board.station is UIState.Success)
+        assertTrue(board.timetable is UIState.Error)
+        assertEquals(emptyMap<String, LineTimetable>(), board.nextDayBoard)
+    }
+
+    @Test
+    fun `a failed next-day board leaves no restarts rather than an error`() = runTest {
+        val repository = FakeStationRepository().apply {
+            timetable = { day -> if (day == ServiceDayName.SAT) Failure.Unknown().left() else emptyList<LineTimetable>().right() }
+        }
+
+        val board = repository.board("KCI-MRI", LocalDateTime.parse("2026-10-02T20:00:00")).toList().last()
+
+        assertTrue(board.timetable is UIState.Success)
+        assertNull(board.nextDayBoard)
+    }
+}
