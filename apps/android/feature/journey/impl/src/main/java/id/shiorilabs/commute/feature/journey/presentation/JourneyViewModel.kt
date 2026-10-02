@@ -36,6 +36,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -96,6 +97,13 @@ class JourneyViewModel @AssistedInject constructor(
     private val trip = MutableStateFlow<TripState>(TripState.Idle)
     private val retries = MutableStateFlow(0)
     private val pickerQuery = MutableStateFlow("")
+
+    /**
+     * What the rider has typed into the picker, straight back with no ranking in between. The field
+     * must read this rather than [PickerUiState.query]: a value that comes back late resets the
+     * keyboard's word in progress, which scrambles typing on composing keyboards (Gboard's 12-key).
+     */
+    val pickerText: StateFlow<String> = pickerQuery.asStateFlow()
 
     /** The journey a shared link named, honoured on the first answer only. */
     private var sharedKey: String? = route.journeyKey
