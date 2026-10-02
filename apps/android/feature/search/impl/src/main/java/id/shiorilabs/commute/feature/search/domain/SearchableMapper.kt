@@ -27,6 +27,8 @@ fun SearchableIndex.toSearchables(): List<Searchable> {
                 stationId = item.`data`?.get("station-id"),
                 operator = item.`operator`,
                 lines = item.lineKeys.mapNotNull(::resolve),
+                // `station-ids` lists every folded id, the row's own first: the web's foldedSiblingIds.
+                siblingIds = item.`data`?.get("station-ids")?.split(',')?.drop(1)?.filter { it.isNotEmpty() }.orEmpty(),
             )
 
             is SearchableHub -> Searchable.Hub(

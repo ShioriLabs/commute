@@ -38,6 +38,22 @@ class SearchableMapperTest {
     }
 
     @Test
+    fun `a folded halte keeps its twins' ids, without its own`() {
+        val result = index(
+            SearchableStation(
+                title = "Bundaran HI",
+                to = "/stations/TJ/H00001",
+                keywords = listOf("bundaran hi"),
+                `data` = mapOf("station-id" to "TJ-H00001", "station-ids" to "TJ-H00001,TJ-H00001P,"),
+                `operator` = "TJ",
+                lineKeys = emptyList(),
+            ),
+        ).toSearchables().single() as Searchable.Station
+
+        assertEquals(listOf("TJ-H00001P"), result.siblingIds)
+    }
+
+    @Test
     fun `a line key missing from the dictionary is dropped from a hub`() {
         val result = index(
             SearchableHub(
