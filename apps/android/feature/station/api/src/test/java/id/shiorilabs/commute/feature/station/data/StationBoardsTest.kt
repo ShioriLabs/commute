@@ -161,6 +161,19 @@ class StationBoardsTest {
     }
 
     @Test
+    fun `a halte's timetable 404 reads as the empty board it is`() = runTest {
+        val repository = FakeStationRepository().apply {
+            station = halte.right()
+            timetable = { Failure.Unknown().left() }
+        }
+
+        val board = repository.board("TJ-H00001P", LocalDateTime.parse("2026-09-30T08:00:00")).toList().last()
+
+        assertEquals(emptyList<LineTimetable>(), (board.timetable as UIState.Success).data)
+        assertTrue(board.frequencies is UIState.Success)
+    }
+
+    @Test
     fun `a halte's failed frequencies fail on their own`() = runTest {
         val repository = FakeStationRepository().apply {
             station = halte.right()
