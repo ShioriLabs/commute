@@ -19,3 +19,19 @@ annotation class SavedStationsDataStore
 @Qualifier
 @Retention(AnnotationRetention.RUNTIME)
 annotation class RecentSearchesDataStore
+
+/**
+ * Hilt [Qualifier] for the preferences [DataStore]<[Preferences]> backing the OTW search's standing
+ * settings and its recently picked stations.
+ */
+@Qualifier
+@Retention(AnnotationRetention.RUNTIME)
+annotation class FarePreferencesDataStore
+
+/**
+ * Hilt [Qualifier] for the preferences [DataStore]<[Preferences]> backing which half of search the
+ * rider was last in.
+ */
+@Qualifier
+@Retention(AnnotationRetention.RUNTIME)
+annotation class SearchModeDataStore
