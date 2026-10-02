@@ -6,6 +6,14 @@ import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.bold.ArrowSquareOut
+import com.adamglin.phosphoricons.bold.ArrowsDownUp
+import com.adamglin.phosphoricons.bold.Bus
+import com.adamglin.phosphoricons.bold.Check
+import com.adamglin.phosphoricons.bold.Clock
+import com.adamglin.phosphoricons.bold.CreditCard
+import com.adamglin.phosphoricons.bold.PersonSimpleRun
+import com.adamglin.phosphoricons.bold.Prohibit
+import com.adamglin.phosphoricons.bold.TrainSimple
 import com.adamglin.phosphoricons.bold.CaretDown
 import com.adamglin.phosphoricons.bold.CaretLeft
 import com.adamglin.phosphoricons.bold.CaretRight
@@ -24,12 +32,14 @@ import com.adamglin.phosphoricons.duotone.Broadcast
 import com.adamglin.phosphoricons.duotone.Elevator
 import com.adamglin.phosphoricons.duotone.EscalatorUp
 import com.adamglin.phosphoricons.duotone.LetterCircleP
+import com.adamglin.phosphoricons.duotone.MapPin
 import com.adamglin.phosphoricons.duotone.Lockers
 import com.adamglin.phosphoricons.duotone.Plug
 import com.adamglin.phosphoricons.duotone.StarAndCrescent
 import com.adamglin.phosphoricons.duotone.Toilet
 import com.adamglin.phosphoricons.fill.Airplane
 import com.adamglin.phosphoricons.fill.Archive
+import com.adamglin.phosphoricons.fill.CheckCircle
 import com.adamglin.phosphoricons.fill.Database
 import com.adamglin.phosphoricons.fill.Files
 import com.adamglin.phosphoricons.fill.GearSix
@@ -37,6 +47,7 @@ import com.adamglin.phosphoricons.fill.HandHeart
 import com.adamglin.phosphoricons.fill.Info
 import com.adamglin.phosphoricons.fill.PushPin
 import com.adamglin.phosphoricons.fill.PushPinSimple
+import com.adamglin.phosphoricons.fill.Ticket
 import com.adamglin.phosphoricons.fill.Trash
 import com.adamglin.phosphoricons.fill.XCircle
 
@@ -76,6 +87,29 @@ object CommuteIcons {
 
     /** A walk between stations, beside its distance. */
     val Walk: ImageVector = PhosphorIcons.Bold.PersonSimpleWalk
+
+    /* OTW, as the web's fare sheet draws it. */
+
+    /** Swaps the trip's two ends. */
+    val Swap: ImageVector = PhosphorIcons.Bold.ArrowsDownUp
+
+    /** The OTW panel before a pair is chosen. */
+    val Pair: ImageVector = PhosphorIcons.Duotone.MapPin
+
+    /** A paid corridor transfer. */
+    val Ticket: ImageVector = PhosphorIcons.Fill.Ticket
+
+    /** The settings chip: payment, which networks, walking speed, and when. */
+    val Payment: ImageVector = PhosphorIcons.Bold.CreditCard
+    val Bus: ImageVector = PhosphorIcons.Bold.Bus
+    val Train: ImageVector = PhosphorIcons.Bold.TrainSimple
+    val Check: ImageVector = PhosphorIcons.Bold.Check
+    val Excluded: ImageVector = PhosphorIcons.Bold.Prohibit
+    val Run: ImageVector = PhosphorIcons.Bold.PersonSimpleRun
+    val Clock: ImageVector = PhosphorIcons.Bold.Clock
+
+    /** The chosen row in a single-choice list. */
+    val Selected: ImageVector = PhosphorIcons.Fill.CheckCircle
 
     /** Clears stored data. */
     val Delete: ImageVector = PhosphorIcons.Fill.Trash
