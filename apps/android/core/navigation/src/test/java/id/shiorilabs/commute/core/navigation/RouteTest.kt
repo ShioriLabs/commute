@@ -31,6 +31,15 @@ class RouteTest {
     }
 
     @Test
+    fun `Journey survives a serialization round-trip, half a pair included`() {
+        val shared = Route.Journey(fromId = "KCI-SUD", toId = "MRTJ-LBB", journeyKey = "C.SUD-MRI", modes = "rail")
+        val toOnly = Route.Journey(toId = "KCI-MRI")
+
+        assertEquals(shared, Json.decodeFromString<Route.Journey>(Json.encodeToString(shared)))
+        assertEquals(toOnly, Json.decodeFromString<Route.Journey>(Json.encodeToString(toOnly)))
+    }
+
+    @Test
     fun `the settings pages survive a serialization round-trip`() {
         val routes: List<Route> = listOf(
             Route.Settings,
