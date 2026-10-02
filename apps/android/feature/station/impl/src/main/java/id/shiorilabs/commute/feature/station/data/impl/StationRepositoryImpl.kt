@@ -8,6 +8,7 @@ import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationRepository
+import id.shiorilabs.commute.feature.station.domain.Frequency
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.Station
@@ -32,6 +33,7 @@ class StationRepositoryImpl @Inject constructor(
     private val stations = ConcurrentHashMap<String, Station>()
     private val timetables = ConcurrentHashMap<Pair<String, ServiceDayName>, List<LineTimetable>>()
     private val transfers = ConcurrentHashMap<String, List<Transfer>>()
+    private val frequencies = ConcurrentHashMap<Pair<String, ServiceDayName>, List<Frequency>>()
 
     override suspend fun station(stationId: String): Either<Failure, Station> =
         stations[stationId]?.right() ?: apiCallToFailure {
@@ -58,12 +60,23 @@ class StationRepositoryImpl @Inject constructor(
             service.getTransfers(operator, code).data.map { it.toTransfer() }
         }.onRight { transfers[stationId] = it }
 
+    // An empty list is kept too: a halte the model has no figures for falls back to the no-schedule
+    // note, which offers no retry either.
+    override suspend fun frequencies(stationId: String, day: ServiceDayName): Either<Failure, List<Frequency>> =
+        frequencies[stationId to day]?.right() ?: apiCallToFailure {
+            val (operator, code) = stationId.splitId()
+            service.getHeadway(operator, code, day.name).data.map { it.toFrequency() }
+        }.onRight { frequencies[stationId to day] = it }
+
     override fun cachedStation(stationId: String): Station? = stations[stationId]
 
     override fun cachedTimetable(stationId: String, day: ServiceDayName): List<LineTimetable>? =
         timetables[stationId to day]
 
     override fun cachedTransfers(stationId: String): List<Transfer>? = transfers[stationId]
+
+    override fun cachedFrequencies(stationId: String, day: ServiceDayName): List<Frequency>? =
+        frequencies[stationId to day]
 
     /** `KCI-MRI` to (`KCI`, `MRI`). */
     private fun String.splitId(): Pair<String, String> = substringBefore('-') to substringAfter('-')

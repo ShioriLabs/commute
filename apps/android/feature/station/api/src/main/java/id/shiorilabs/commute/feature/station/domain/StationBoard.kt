@@ -17,6 +17,11 @@ data class StationBoard(
     val nextDayBoard: Map<String, LineTimetable>?,
     /** Whether the next service day differs from today's; when it doesn't, today's board serves. */
     val nextDayDiffers: Boolean,
+    /**
+     * How often each corridor passes, standing in for the timetable TransJakarta doesn't publish.
+     * Only a halte asks for it; everywhere else it stays [UIState.Idle].
+     */
+    val frequencies: UIState<List<Frequency>> = UIState.Idle,
 ) {
 
     /** The same line on the next service day's board, or null where the board doesn't know it. */
@@ -31,6 +36,7 @@ data class StationBoard(
             timetable = UIState.Loading,
             nextDayBoard = null,
             nextDayDiffers = false,
+            frequencies = if (isTransJakarta(stationId)) UIState.Loading else UIState.Idle,
         )
     }
 }

@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.feature.station.data
 
 import id.shiorilabs.commute.core.model.models.GroupedTimetable
+import id.shiorilabs.commute.core.model.models.HeadwayRow
 import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.Station
 import id.shiorilabs.commute.core.model.models.Transfer as TransferDto
@@ -11,9 +12,12 @@ import id.shiorilabs.commute.feature.station.data.impl.LineRepositoryImpl
 import id.shiorilabs.commute.feature.station.data.impl.StationRepositoryImpl
 import id.shiorilabs.commute.feature.station.domain.Amenity
 import id.shiorilabs.commute.feature.station.domain.Departure
+import id.shiorilabs.commute.feature.station.domain.Frequency
 import id.shiorilabs.commute.feature.station.domain.LineInfo
+import id.shiorilabs.commute.feature.station.domain.ServiceHours
 import id.shiorilabs.commute.feature.station.domain.Transfer
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonObject
@@ -205,5 +209,65 @@ class StationRepositoryImplTest {
 
         assertEquals(1, service.transfersCalls)
         assertEquals(emptyList<Transfer>(), repository.cachedTransfers("KCI-THB"))
+    }
+
+    @Test
+    fun `a halte's frequencies decode every shape the API sends`() = runTest {
+        var asked: Triple<String, String, String>? = null
+        val service = FakeCommuteService().apply {
+            headway = { operator, code, day ->
+                asked = Triple(operator, code, day)
+                fixture<List<HeadwayRow>>("headway.json")
+            }
+        }
+
+        val rows = StationRepositoryImpl(service).frequencies("TJ-H00001P", ServiceDayName.WD).getOrNull()!!
+
+        assertEquals(Triple("TJ", "H00001P", "WD"), asked)
+        assertEquals(
+            Frequency("TJ:13", 186.0, boundFor = "Tegal Mampang", serviceHours = ServiceHours.AllDay),
+            rows[0],
+        )
+        assertEquals(ServiceHours.Window("05:00", "22:00"), rows[2].serviceHours)
+        // Weekend-only on a weekday: no figure, the days it runs instead, and hours unknown.
+        assertEquals(
+            Frequency("TJ:13E", null, days = setOf(ServiceDayName.SAT, ServiceDayName.SUN)),
+            rows[4],
+        )
+        assertEquals(setOf(ServiceDayName.WD), rows[5].days)
+    }
+
+    @Test
+    fun `a day the app doesn't know is dropped, and hours missing an end are unknown`() = runTest {
+        val service = FakeCommuteService().apply {
+            headway = { _, _, _ ->
+                json.decodeFromString<List<HeadwayRow>>(
+                    """[
+                        {"line":"TJ:1","headwayS":300,"source":"STOP","days":["SAT","HOL"],"serviceHours":{"start":"05:00"}},
+                        {"line":"TJ:2","headwayS":300,"source":"STOP","days":["HOL"]}
+                    ]""",
+                )
+            }
+        }
+
+        val rows = StationRepositoryImpl(service).frequencies("TJ-H00001P", ServiceDayName.SAT).getOrNull()!!
+
+        assertEquals(setOf(ServiceDayName.SAT), rows[0].days)
+        assertEquals(null, rows[0].serviceHours)
+        assertEquals(null, rows[1].days)
+    }
+
+    @Test
+    fun `frequencies are kept per day, an empty answer included`() = runTest {
+        val service = FakeCommuteService().apply { headway = { _, _, _ -> emptyList() } }
+        val repository = StationRepositoryImpl(service)
+
+        repository.frequencies("TJ-H00001P", ServiceDayName.WD)
+        repository.frequencies("TJ-H00001P", ServiceDayName.WD)
+        repository.frequencies("TJ-H00001P", ServiceDayName.SAT)
+
+        assertEquals(2, service.headwayCalls)
+        assertEquals(emptyList<Frequency>(), repository.cachedFrequencies("TJ-H00001P", ServiceDayName.WD))
+        assertEquals(null, repository.cachedFrequencies("TJ-H00001P", ServiceDayName.SUN))
     }
 }
