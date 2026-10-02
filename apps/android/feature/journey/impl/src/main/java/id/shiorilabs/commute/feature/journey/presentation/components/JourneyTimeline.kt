@@ -1,7 +1,11 @@
 package id.shiorilabs.commute.feature.journey.presentation.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -65,6 +69,10 @@ import id.shiorilabs.commute.feature.station.domain.formatPlatformCode
 import id.shiorilabs.commute.feature.station.domain.joinLabels
 
 private const val TRANSJAKARTA = "TJ"
+
+/** The web's `duration-300` on the stops' reveal, and Tailwind's default 150 ms on the chevron. */
+private const val STOPS_REVEAL_MILLIS = 300
+private const val CHEVRON_TURN_MILLIS = 150
 
 /** The gutter the rail runs down, and where its centre sits: the web's fare timeline grid. */
 private val Gutter = 28.dp
@@ -296,7 +304,11 @@ private fun RideLeg(leg: JourneyLeg.Ride, lines: List<LegLine>, sameStationChang
             if (intermediate.isEmpty()) {
                 Text(text = summary, style = MaterialTheme.typography.bodyMedium, color = Slate500)
             } else {
-                val chevron by animateFloatAsState(if (expanded) 180f else 0f, label = "stops-chevron")
+                val chevron by animateFloatAsState(
+                    targetValue = if (expanded) 180f else 0f,
+                    animationSpec = tween(CHEVRON_TURN_MILLIS, easing = FastOutSlowInEasing),
+                    label = "stops-chevron",
+                )
                 Row(
                     modifier = Modifier
                         .clickable(role = Role.Button) { expanded = !expanded },
@@ -315,8 +327,14 @@ private fun RideLeg(leg: JourneyLeg.Ride, lines: List<LegLine>, sameStationChang
         }
     }
 
-    // The stops passed through, on the rail itself, as the line strip draws them.
-    AnimatedVisibility(visible = expanded && intermediate.isNotEmpty()) {
+    // The stops passed through, on the rail itself, as the line strip draws them. Revealed the
+    // way the web does it (grid rows 0fr to 1fr): height only, from the top, clipped. No fade,
+    // which would leave the rail see-through mid-reveal.
+    AnimatedVisibility(
+        visible = expanded && intermediate.isNotEmpty(),
+        enter = expandVertically(tween(STOPS_REVEAL_MILLIS, easing = FastOutSlowInEasing), expandFrom = Alignment.Top),
+        exit = shrinkVertically(tween(STOPS_REVEAL_MILLIS, easing = FastOutSlowInEasing), shrinkTowards = Alignment.Top),
+    ) {
         Column {
             intermediate.forEach { stop ->
                 TimelineRow(rail = rail, tick = true) {
