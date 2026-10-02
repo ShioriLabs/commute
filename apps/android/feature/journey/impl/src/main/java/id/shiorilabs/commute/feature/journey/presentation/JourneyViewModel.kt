@@ -41,12 +41,13 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOn
+
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Clock
 
 /**
@@ -126,16 +127,18 @@ class JourneyViewModel @AssistedInject constructor(
         stations,
         farePreferences.recentStationIds,
     ) { query, stations, recents -> Triple(query, stations, recents) }
+        // Ranking runs the fuzzy matcher over every station, so off the main thread, as search's
+        // does; mapLatest drops a ranking still running when the next keystroke lands.
         .mapLatest { (query, stations, recents) ->
-            PickerUiState(
-                query = query,
-                stations = stations?.let { rankStations(it, query) }.orEmpty(),
-                quickPicks = stations?.let { quickPickStations(it, recents) }.orEmpty(),
-                loaded = stations != null,
-            )
+            withContext(Dispatchers.Default) {
+                PickerUiState(
+                    query = query,
+                    stations = stations?.let { rankStations(it, query) }.orEmpty(),
+                    quickPicks = stations?.let { quickPickStations(it, recents) }.orEmpty(),
+                    loaded = stations != null,
+                )
+            }
         }
-        // Ranking runs the fuzzy matcher over every station; not on the main thread.
-        .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PickerUiState())
 
     init {

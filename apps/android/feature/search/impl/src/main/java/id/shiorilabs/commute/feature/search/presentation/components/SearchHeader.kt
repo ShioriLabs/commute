@@ -15,6 +15,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -45,7 +46,9 @@ private val ClearIcon = Color(0xFF64748B)
 
 /**
  * Title, close button and the query field: the part of search that stays put while results scroll.
- * [belowField] sits under the field, inside the pinned header; the saved-station chips go there.
+ * [aboveField] sits between the title and the field; the mode toggle goes there. [belowField] sits
+ * under the field, inside the pinned header; the saved-station chips go there. Without
+ * [showField] (the OTW tab, which has its own fields) only the title and [aboveField] show.
  */
 @Composable
 fun SearchHeader(
@@ -54,6 +57,8 @@ fun SearchHeader(
     onClose: () -> Unit,
     focusRequester: FocusRequester,
     modifier: Modifier = Modifier,
+    showField: Boolean = true,
+    aboveField: @Composable () -> Unit = {},
     belowField: @Composable () -> Unit = {},
 ) {
     Column(
@@ -82,13 +87,16 @@ fun SearchHeader(
                 )
             }
         }
-        VerticalSpacer(16.dp)
-        SearchField(
-            query = query,
-            onQueryChange = onQueryChange,
-            focusRequester = focusRequester,
-        )
-        belowField()
+        aboveField()
+        if (showField) {
+            VerticalSpacer(16.dp)
+            SearchField(
+                query = query,
+                onQueryChange = onQueryChange,
+                focusRequester = focusRequester,
+            )
+            belowField()
+        }
     }
 }
 
@@ -173,7 +181,7 @@ private fun SearchHeaderPreview() {
             query = "",
             onQueryChange = {},
             onClose = {},
-            focusRequester = FocusRequester(),
+            focusRequester = remember { FocusRequester() },
         )
     }
 }

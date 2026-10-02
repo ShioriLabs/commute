@@ -98,7 +98,7 @@ fun fareShareUrl(fromId: String?, toId: String?, criteria: JourneyCriteria, jour
         journeyKey?.let { "j" to it },
     )
     return FARE_SHARE_BASE_URL + "?" + params.joinToString("&") { (key, value) ->
-        key + "=" + URLEncoder.encode(value, Charsets.UTF_8)
+        key + "=" + URLEncoder.encode(value, "UTF-8")
     }
 }
 
