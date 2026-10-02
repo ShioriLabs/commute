@@ -1,0 +1,65 @@
+{
+  "status": 200,
+  "data": [
+    {
+      "line": "TJ:13",
+      "headwayS": 186,
+      "source": "STOP",
+      "serviceHours": {
+        "allDay": true
+      },
+      "boundFor": "Tegal Mampang"
+    },
+    {
+      "line": "TJ:13",
+      "headwayS": 121,
+      "source": "STOP",
+      "serviceHours": {
+        "allDay": true
+      },
+      "boundFor": "Puri Beta 1"
+    },
+    {
+      "line": "TJ:13B",
+      "headwayS": 300,
+      "source": "STOP",
+      "serviceHours": {
+        "start": "05:00",
+        "end": "22:00"
+      },
+      "boundFor": "Pancoran Arah Timur"
+    },
+    {
+      "line": "TJ:13B",
+      "headwayS": 240,
+      "source": "STOP",
+      "serviceHours": {
+        "start": "05:00",
+        "end": "22:00"
+      },
+      "boundFor": "Puri Beta 2"
+    },
+    {
+      "line": "TJ:13E",
+      "headwayS": null,
+      "source": "LINE",
+      "days": [
+        "SAT",
+        "SUN"
+      ],
+      "weekendOnly": true
+    },
+    {
+      "line": "TJ:L13E",
+      "headwayS": 120,
+      "source": "STOP",
+      "days": [
+        "WD"
+      ],
+      "serviceHours": {
+        "start": "05:00",
+        "end": "22:00"
+      }
+    }
+  ]
+}

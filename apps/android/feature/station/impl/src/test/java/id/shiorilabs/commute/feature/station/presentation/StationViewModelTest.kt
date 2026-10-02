@@ -11,6 +11,7 @@ import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationRepository
+import id.shiorilabs.commute.feature.station.domain.Frequency
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.Station
@@ -55,6 +56,13 @@ class StationViewModelTest {
         var transfers: Either<Failure, List<Transfer>> = emptyList<Transfer>().right()
 
         override suspend fun transfers(stationId: String) = transfers
+
+        val askedFrequencies = mutableListOf<Pair<String, ServiceDayName>>()
+
+        override suspend fun frequencies(stationId: String, day: ServiceDayName): Either<Failure, List<Frequency>> {
+            askedFrequencies += stationId to day
+            return listOf(Frequency("TJ:13", 186.0)).right()
+        }
     }
 
     private class FakeLineRepository : LineRepository {
@@ -100,6 +108,24 @@ class StationViewModelTest {
         assertTrue(page.board.timetable is UIState.Success)
         assertEquals("Lin Bogor", page.lines.getValue("KCI:B").name)
         assertEquals(listOf("KCI-MRI" to ServiceDayName.WD), stations.asked)
+    }
+
+    @Test
+    fun `a halte's page loads its frequencies for the service day`() = runTest {
+        stations.station = { id -> Station(id, "Petukangan D'MASIV", "TJ", "H00001P", listOf("TJ:13")).right() }
+
+        val page = StationViewModel("TJ-H00001P", stations, lines, saved, clockAt("2026-10-03T08:00:00"))
+            .state.first { it.board.frequencies is UIState.Success }
+
+        assertEquals(listOf(Frequency("TJ:13", 186.0)), (page.board.frequencies as UIState.Success).data)
+        assertEquals(listOf("TJ-H00001P" to ServiceDayName.SAT), stations.askedFrequencies)
+    }
+
+    @Test
+    fun `a rail station's page never asks for frequencies`() = runTest {
+        viewModel().loaded()
+
+        assertTrue(stations.askedFrequencies.isEmpty())
     }
 
     @Test
