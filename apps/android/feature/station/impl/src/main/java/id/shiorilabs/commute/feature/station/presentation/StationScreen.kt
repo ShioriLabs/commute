@@ -3,7 +3,6 @@ package id.shiorilabs.commute.feature.station.presentation
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,25 +13,24 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import id.shiorilabs.commute.core.navigation.LocalNavigator
+import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.type.toFailure
@@ -70,6 +68,8 @@ private const val OPERATOR_TJ = "TJ"
 fun StationScreen(
     stationId: String,
     innerPadding: PaddingValues,
+    placeholderTitle: String? = null,
+    placeholderLineKeys: List<String> = emptyList(),
     viewModel: StationViewModel = hiltViewModel<StationViewModel, StationViewModel.Factory>(
         creationCallback = { factory -> factory.create(stationId) },
     ),
@@ -77,6 +77,13 @@ fun StationScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
     val uriHandler = LocalUriHandler.current
+    // Whether search opened this page, whose rows carry roundels to fly in. Read once, while the
+    // page is still in the stack: on the way back it has already been popped, and its roundels
+    // have to fly home all the same.
+    val openedFromSearch = rememberSaveable {
+        val stack = navigator.backStack
+        stack.getOrNull(stack.indexOfLast { it is Route.Station && it.stationId == stationId } - 1) == Route.Search
+    }
     val now = rememberJakartaNow()
     LaunchedEffect(now) {
         viewModel.onClockTick(now)
@@ -86,6 +93,9 @@ fun StationScreen(
         state = state,
         now = now,
         innerPadding = innerPadding,
+        placeholderTitle = placeholderTitle,
+        placeholderLineKeys = placeholderLineKeys,
+        openedFromSearch = openedFromSearch,
         onToggleSave = viewModel::onToggleSave,
         onClose = { navigator.pop() },
         onRetry = viewModel::retry,
@@ -98,95 +108,42 @@ private fun StationContent(
     state: StationUiState,
     now: LocalDateTime,
     innerPadding: PaddingValues,
+    placeholderTitle: String? = null,
+    placeholderLineKeys: List<String> = emptyList(),
+    openedFromSearch: Boolean = false,
     onToggleSave: () -> Unit = {},
     onClose: () -> Unit = {},
     onRetry: () -> Unit = {},
     onOpenMaps: (Station) -> Unit = {},
 ) {
     val hazeState = rememberHazeState()
-    val density = LocalDensity.current
-    var headerHeight by remember { mutableIntStateOf(0) }
     val board = state.board
     val station = (board.station as? UIState.Success)?.data
 
-    Box(
+    // The header floats over the page so it can blur what scrolls by, and the list starts under it.
+    // Measured together, header first, so the list knows where to start in the very same frame:
+    // read back from the header's size afterwards, it started out at the top for one frame, and
+    // the line cards flying in from the home feed set off towards there before turning down to
+    // their real place, running ahead of the title.
+    SubcomposeLayout(
         modifier = Modifier
             .fillMaxSize()
             .background(StationBackground),
-    ) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .hazeSource(hazeState),
-            // Starts under the header, which floats over the page so it can blur what scrolls by.
-            contentPadding = PaddingValues(
-                top = with(density) { headerHeight.toDp() } + 16.dp,
-                bottom = innerPadding.calculateBottomPadding() + 32.dp,
-            ),
-        ) {
-            val stationState = board.station
-            if (stationState is UIState.Error) {
-                // Nothing below can be drawn without the station, so one panel stands for it all.
-                item(key = "station-failed") {
-                    ProblemPanel(
-                        message = stringResource(
-                            if (stationState.isOffline()) R.string.station_offline else R.string.station_failed,
-                        ),
-                        retryLabel = stringResource(R.string.station_retry),
-                        onRetry = onRetry,
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    )
-                }
-                return@LazyColumn
-            }
-
-            item(key = "departures") {
-                Departures(
-                    board = board,
-                    lines = state.lines,
-                    now = now,
-                    onRetry = onRetry,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-            }
-
-            if (station == null) {
-                return@LazyColumn
-            }
-
-            if (station.id.equals(BEKASI_TIMUR_ID, ignoreCase = true)) {
-                item(key = "memorial") {
-                    BekasiTimurMemorial(Modifier.padding(start = 16.dp, top = 32.dp, end = 16.dp))
-                }
-            }
-
-            item(key = "amenities") {
-                AmenityList(
-                    amenities = station.amenities,
-                    modifier = Modifier.padding(start = 16.dp, top = 32.dp, end = 16.dp),
-                )
-            }
-
-            if (station.latitude != null && station.longitude != null) {
-                item(key = "maps") {
-                    OpenInMapsButton(
-                        onClick = { onOpenMaps(station) },
-                        modifier = Modifier.padding(start = 16.dp, top = 32.dp, end = 16.dp),
-                    )
-                }
-            }
-        }
-
-        StationHeader(
-            station = board.station,
-            lines = state.lines,
-            saved = state.saved,
-            onToggleSave = onToggleSave,
-            onClose = onClose,
-            topInset = innerPadding.calculateTopPadding(),
-            modifier = Modifier
-                .onSizeChanged { headerHeight = it.height }
-                .hazeEffect(
+    ) { constraints ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val header = subcompose(StationSlot.HEADER) {
+            StationHeader(
+                stationId = board.stationId,
+                station = board.station,
+                lines = state.lines,
+                saved = state.saved,
+                onToggleSave = onToggleSave,
+                onClose = onClose,
+                placeholderTitle = placeholderTitle,
+                placeholderLineKeys = placeholderLineKeys,
+                openedFromSearch = openedFromSearch,
+                topInset = innerPadding.calculateTopPadding(),
+                modifier = Modifier.hazeEffect(
                     hazeState,
                     HazeStyle(
                         backgroundColor = StationBackground,
@@ -198,7 +155,103 @@ private fun StationContent(
                     // Blur only what is behind the header, as CSS's backdrop-filter does.
                     expandLayerBounds = false
                 },
-        )
+            )
+        }.map { it.measure(loose) }
+        val headerHeight = header.maxOfOrNull { it.height } ?: 0
+
+        val list = subcompose(StationSlot.LIST) {
+            StationList(
+                state = state,
+                now = now,
+                hazeState = hazeState,
+                contentPadding = PaddingValues(
+                    top = headerHeight.toDp() + 16.dp,
+                    bottom = innerPadding.calculateBottomPadding() + 32.dp,
+                ),
+                onRetry = onRetry,
+                onOpenMaps = onOpenMaps,
+            )
+        }.map { it.measure(constraints) }
+
+        layout(constraints.maxWidth, constraints.maxHeight) {
+            list.forEach { it.placeRelative(0, 0) }
+            header.forEach { it.placeRelative(0, 0) }
+        }
+    }
+}
+
+private enum class StationSlot { HEADER, LIST }
+
+/** Everything under the header: the departures, then the station's facilities and location. */
+@Composable
+private fun StationList(
+    state: StationUiState,
+    now: LocalDateTime,
+    hazeState: HazeState,
+    contentPadding: PaddingValues,
+    onRetry: () -> Unit,
+    onOpenMaps: (Station) -> Unit,
+) {
+    val board = state.board
+    val station = (board.station as? UIState.Success)?.data
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .hazeSource(hazeState),
+        contentPadding = contentPadding,
+    ) {
+        val stationState = board.station
+        if (stationState is UIState.Error) {
+            // Nothing below can be drawn without the station, so one panel stands for it all.
+            item(key = "station-failed") {
+                ProblemPanel(
+                    message = stringResource(
+                        if (stationState.isOffline()) R.string.station_offline else R.string.station_failed,
+                    ),
+                    retryLabel = stringResource(R.string.station_retry),
+                    onRetry = onRetry,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
+            return@LazyColumn
+        }
+
+        item(key = "departures") {
+            Departures(
+                board = board,
+                lines = state.lines,
+                now = now,
+                onRetry = onRetry,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+        }
+
+        if (station == null) {
+            return@LazyColumn
+        }
+
+        if (station.id.equals(BEKASI_TIMUR_ID, ignoreCase = true)) {
+            item(key = "memorial") {
+                BekasiTimurMemorial(Modifier.padding(start = 16.dp, top = 32.dp, end = 16.dp))
+            }
+        }
+
+        item(key = "amenities") {
+            AmenityList(
+                amenities = station.amenities,
+                modifier = Modifier.padding(start = 16.dp, top = 32.dp, end = 16.dp),
+            )
+        }
+
+        if (station.latitude != null && station.longitude != null) {
+            item(key = "maps") {
+                OpenInMapsButton(
+                    onClick = { onOpenMaps(station) },
+                    modifier = Modifier.padding(start = 16.dp, top = 32.dp, end = 16.dp),
+                )
+            }
+        }
     }
 }
 
@@ -243,6 +296,8 @@ private fun Departures(
                         lineInfo = lines[line.lineKey],
                         now = now,
                         nextDayLine = board.nextDayLine(line),
+                        // Lands here from the same card on the home feed.
+                        modifier = Modifier.sharedLineCard(board.stationId, line.lineKey, joinAfterFirstFrame = true),
                     )
                 }
             }

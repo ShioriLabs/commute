@@ -14,6 +14,15 @@ interface StationRepository {
 
     /** The station's departures on [day], one entry per line that runs then. */
     suspend fun timetable(stationId: String, day: ServiceDayName): Either<Failure, List<LineTimetable>>
+
+    /**
+     * The station as already fetched this session, without asking. A screen opening onto data
+     * another one just loaded starts from it, rather than from a skeleton.
+     */
+    fun cachedStation(stationId: String): Station? = null
+
+    /** [timetable] as already fetched this session, without asking. */
+    fun cachedTimetable(stationId: String, day: ServiceDayName): List<LineTimetable>? = null
 }
 
 interface LineRepository {
@@ -23,4 +32,7 @@ interface LineRepository {
      * where the keys resolve to a name and a colour. Fetched once and held in memory.
      */
     suspend fun lines(): Either<Failure, Map<String, LineInfo>>
+
+    /** The dictionary if it has been fetched, without asking. */
+    fun cachedLines(): Map<String, LineInfo>? = null
 }

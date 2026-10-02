@@ -49,6 +49,8 @@ private const val ACCENT_ICON_WASH_ALPHA = 0.2f
  * the one action most people came for has to be visibly the primary one.
  *
  * @param description what the card does, read out in place of its visible text.
+ * @param animateFace whether the face slides out and back as the card morphs: only while the card
+ *   is what the screen opens out of, not while the rail just drops away under another page.
  */
 @Composable
 fun NavRailCard(
@@ -59,6 +61,7 @@ fun NavRailCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     accent: Boolean = false,
+    animateFace: Boolean = true,
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val containerColor = if (accent) colorScheme.primary else colorScheme.surfaceContainerLowest
@@ -90,7 +93,7 @@ fun NavRailCard(
         Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .navCardFace(NavCardFacePart.ICON)
+                .then(if (animateFace) Modifier.navCardFace(NavCardFacePart.ICON) else Modifier)
                 .offset(x = IconOverhang, y = IconOverhang)
                 .background(iconWashColor, CircleShape)
                 .padding(16.dp),
@@ -104,7 +107,7 @@ fun NavRailCard(
         }
         Column(
             modifier = Modifier
-                .navCardFace(NavCardFacePart.TEXT)
+                .then(if (animateFace) Modifier.navCardFace(NavCardFacePart.TEXT) else Modifier)
                 .padding(16.dp),
         ) {
             Text(

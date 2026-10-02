@@ -20,6 +20,8 @@ dependencies {
     implementation(project(":core:navigation"))
     // LineRoundel, CommuteEmptyState, CommuteIcons, colour ext, Spacers, CommutePreviewScaffold.
     implementation(project(":core:ui"))
+    // The station page's shared-element keys, which a station row's name and roundels carry.
+    implementation(project(":feature:station:api"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.runtime)
