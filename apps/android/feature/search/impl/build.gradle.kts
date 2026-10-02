@@ -10,6 +10,8 @@ android {
 }
 
 dependencies {
+    // Searchable, SearchRepository and the fuzzy matcher, shared with the OTW station picker.
+    implementation(project(":feature:search:api"))
     // UIState/Failure/toUserMessage, apiCallToFailure + arrow/coroutines (api).
     implementation(project(":core:common"))
     // CommuteService + the generated SearchableIndex (via :core:model, api).
