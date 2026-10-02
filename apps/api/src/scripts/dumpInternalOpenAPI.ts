@@ -128,6 +128,7 @@ const APP_PATHS = [
   '/_internal/trips/{from}/{to}',
   '/operators',
   '/stations/{operator}/{stationCode}',
+  '/stations/{operator}/{stationCode}/headway',
   '/stations/{operator}/{stationCode}/timetable/grouped',
   '/stations/{operator}/{stationCode}/transfers'
 ]
