@@ -127,7 +127,8 @@ const APP_PATHS = [
   '/_internal/searchables',
   '/operators',
   '/stations/{operator}/{stationCode}',
-  '/stations/{operator}/{stationCode}/timetable/grouped'
+  '/stations/{operator}/{stationCode}/timetable/grouped',
+  '/stations/{operator}/{stationCode}/transfers'
 ]
 
 /*

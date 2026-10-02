@@ -11,6 +11,7 @@ import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.feature.station.data.StationRepository
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.Station
+import id.shiorilabs.commute.feature.station.domain.Transfer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -33,6 +34,8 @@ class SavedStationsSettingsViewModelTest {
 
         override suspend fun timetable(stationId: String, day: ServiceDayName): Either<Failure, List<LineTimetable>> =
             emptyList<LineTimetable>().right()
+
+        override suspend fun transfers(stationId: String): Either<Failure, List<Transfer>> = emptyList<Transfer>().right()
     }
 
     private val saved = SavedStationsRepository(FakePreferencesDataStore())

@@ -9,12 +9,14 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import id.shiorilabs.commute.core.datastore.SavedStationsRepository
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.time.serviceDayOf
+import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationRepository
 import id.shiorilabs.commute.feature.station.data.board
 import id.shiorilabs.commute.feature.station.data.cachedBoard
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.StationBoard
+import id.shiorilabs.commute.feature.station.domain.Transfer
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -43,6 +45,9 @@ class StationViewModel @AssistedInject constructor(
     // title and cards are there to meet the shared-element transition on its first frame.
     private val board = MutableStateFlow(stationRepository.cachedBoard(stationId, now()) ?: StationBoard.loading(stationId))
     private val lines = MutableStateFlow(lineRepository.cachedLines().orEmpty())
+    private val transfers = MutableStateFlow<UIState<List<Transfer>>>(
+        stationRepository.cachedTransfers(stationId)?.let { UIState.Success(it) } ?: UIState.Idle,
+    )
     private var load: Job? = null
 
     /** The service day the loaded board belongs to. */
@@ -52,12 +57,13 @@ class StationViewModel @AssistedInject constructor(
         board,
         lines,
         savedStationsRepository.stations,
-    ) { board, lines, saved ->
-        StationUiState(board = board, lines = lines, saved = stationId in saved)
+        transfers,
+    ) { board, lines, saved, transfers ->
+        StationUiState(board = board, lines = lines, saved = stationId in saved, transfers = transfers)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = StationUiState(board = board.value, lines = lines.value, saved = false),
+        initialValue = StationUiState(board = board.value, lines = lines.value, saved = false, transfers = transfers.value),
     )
 
     init {
@@ -65,6 +71,9 @@ class StationViewModel @AssistedInject constructor(
             loadLines()
         }
         load(now())
+        if (transfers.value !is UIState.Success) {
+            loadTransfers()
+        }
     }
 
     /**
@@ -82,6 +91,9 @@ class StationViewModel @AssistedInject constructor(
         if (lines.value.isEmpty()) {
             loadLines()
         }
+        if (transfers.value !is UIState.Success) {
+            loadTransfers()
+        }
     }
 
     /** The pin in the header: saves the station to the home screen, or unsaves it. */
@@ -96,6 +108,16 @@ class StationViewModel @AssistedInject constructor(
     private fun loadLines() {
         viewModelScope.launch {
             lineRepository.lines().onRight { lines.value = it }
+        }
+    }
+
+    private fun loadTransfers() {
+        transfers.value = UIState.Loading
+        viewModelScope.launch {
+            transfers.value = stationRepository.transfers(stationId).fold(
+                ifLeft = { UIState.Error(message = it.message, cause = it.cause) },
+                ifRight = { UIState.Success(it) },
+            )
         }
     }
 

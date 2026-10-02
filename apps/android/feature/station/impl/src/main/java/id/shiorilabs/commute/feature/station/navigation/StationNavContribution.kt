@@ -7,9 +7,13 @@ import id.shiorilabs.commute.core.navigation.NavGraphScope
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.ui.motion.pageTransitionMetadata
 import id.shiorilabs.commute.feature.station.presentation.StationScreen
+import id.shiorilabs.commute.feature.station.presentation.timetable.StationTimetableScreen
 import javax.inject.Inject
 
-/** Contributes [Route.Station], a station's page, opened from search and the home feed. */
+/**
+ * Contributes [Route.Station], a station's page, opened from search and the home feed, and
+ * [Route.StationTimetable], its full timetable, which slides in over it.
+ */
 class StationNavContribution @Inject constructor() : NavGraphContribution {
 
     override fun EntryProviderScope<NavKey>.addEntries(scope: NavGraphScope) {
@@ -19,6 +23,13 @@ class StationNavContribution @Inject constructor() : NavGraphContribution {
                 innerPadding = scope.screenPadding,
                 placeholderTitle = key.title,
                 placeholderLineKeys = key.lineKeys,
+            )
+        }
+        entry<Route.StationTimetable>(metadata = pageTransitionMetadata()) { key ->
+            StationTimetableScreen(
+                stationId = key.stationId,
+                innerPadding = scope.screenPadding,
+                placeholderTitle = key.title,
             )
         }
     }

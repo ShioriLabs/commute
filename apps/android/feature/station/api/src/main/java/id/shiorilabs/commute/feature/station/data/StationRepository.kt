@@ -6,6 +6,7 @@ import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.Station
+import id.shiorilabs.commute.feature.station.domain.Transfer
 
 interface StationRepository {
 
@@ -15,6 +16,9 @@ interface StationRepository {
     /** The station's departures on [day], one entry per line that runs then. */
     suspend fun timetable(stationId: String, day: ServiceDayName): Either<Failure, List<LineTimetable>>
 
+    /** The stations a rider can walk to from this one, nearest first as the API orders them. */
+    suspend fun transfers(stationId: String): Either<Failure, List<Transfer>>
+
     /**
      * The station as already fetched this session, without asking. A screen opening onto data
      * another one just loaded starts from it, rather than from a skeleton.
@@ -23,6 +27,9 @@ interface StationRepository {
 
     /** [timetable] as already fetched this session, without asking. */
     fun cachedTimetable(stationId: String, day: ServiceDayName): List<LineTimetable>? = null
+
+    /** [transfers] as already fetched this session, without asking. */
+    fun cachedTransfers(stationId: String): List<Transfer>? = null
 }
 
 interface LineRepository {

@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import id.shiorilabs.commute.core.constants.OPERATOR_NAMES
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.ui.components.CommuteIconButton
@@ -41,16 +42,6 @@ import id.shiorilabs.commute.feature.station.domain.Station
 
 /** The web's red-400 on an unpin. */
 private val UnpinColor = Color(0xFFF87171)
-
-/** The operators' names, as the web's OPERATORS constant has them. */
-private val OPERATOR_NAMES = mapOf(
-    "KCI" to "Commuter Line",
-    "MRTJ" to "MRT Jakarta",
-    "LRTJ" to "LRT Jakarta",
-    "LRTJBDB" to "LRT Jabodebek",
-    "TJ" to "TransJakarta",
-    "APCGK" to "Kalayang Bandara",
-)
 
 @Composable
 fun SavedStationsSettingsScreen(
