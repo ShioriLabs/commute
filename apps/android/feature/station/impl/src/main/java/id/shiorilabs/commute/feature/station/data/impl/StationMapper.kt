@@ -1,6 +1,8 @@
 package id.shiorilabs.commute.feature.station.data.impl
 
+import id.shiorilabs.commute.core.model.models.ExternalTransfer
 import id.shiorilabs.commute.core.model.models.GroupedTimetable
+import id.shiorilabs.commute.core.model.models.InternalTransfer
 import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.feature.station.domain.Amenity
 import id.shiorilabs.commute.feature.station.domain.Departure
@@ -8,8 +10,11 @@ import id.shiorilabs.commute.feature.station.domain.DestinationTimetable
 import id.shiorilabs.commute.feature.station.domain.DirectionGroup
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
+import kotlin.math.roundToInt
 import id.shiorilabs.commute.core.model.models.Station as StationDto
+import id.shiorilabs.commute.core.model.models.Transfer as TransferDto
 import id.shiorilabs.commute.feature.station.domain.Station as Station
+import id.shiorilabs.commute.feature.station.domain.Transfer as Transfer
 
 internal fun StationDto.toStation() = Station(
     id = id,
@@ -45,6 +50,27 @@ internal fun GroupedTimetable.toLineTimetable() = LineTimetable(
         )
     },
 )
+
+/** A transfer as the domain carries it: the walk in whole metres, the station flattened in. */
+internal fun TransferDto.toTransfer(): Transfer = when (this) {
+    is InternalTransfer -> Transfer.Internal(
+        id = id,
+        distanceM = distanceM.roundToInt(),
+        notes = notes,
+        stationId = toStation.id,
+        name = toStation.name,
+        operator = toStation.`operator`,
+        lineKeys = toStation.lines,
+    )
+
+    is ExternalTransfer -> Transfer.External(
+        id = id,
+        distanceM = distanceM.roundToInt(),
+        notes = notes,
+        name = toStation.name,
+        operatorName = toStation.operatorName,
+    )
+}
 
 /** `HH:MM:SS` (or `HH:MM`) to minutes since midnight; seconds are dropped, as the boards do. */
 internal fun parseMinute(time: String): Int? {

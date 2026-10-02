@@ -18,6 +18,32 @@
     <string name="station_no_schedule_message">Lihat papan keberangkatan atau tanyakan pramusapa</string>
     <string name="station_retry">Coba Lagi</string>
 
+    <!-- Actions over the departures -->
+    <string name="station_otw">OTW Ke Sini</string>
+    <!-- The OTW button until trip planning lands on Android. -->
+    <string name="station_otw_coming_soon">Segera hadir</string>
+    <string name="station_full_timetable">Jadwal Lengkap</string>
+
+    <!-- Last trains. %1$s is a line's name; %1$s a terminus; %1$s a time. -->
+    <string name="station_last_trains_title">Kereta terakhir</string>
+    <string name="station_last_trains_description">Keberangkatan terakhir %1$s</string>
+    <string name="station_via">via %1$s</string>
+    <string name="station_last_train_time">Terakhir %1$s</string>
+
+    <!-- Transfers. %1$d is the walk in metres. -->
+    <string name="station_transfers_title">Integrasi</string>
+    <string name="station_transfer_distance">%1$dm</string>
+    <string name="station_transfer_distance_description">Jarak transit %1$d meter</string>
+
+    <!-- Full timetable. %1$s is the joined direction labels; %1$s a platform; %1$d/%2$d lines shown of all. -->
+    <string name="station_timetable_subtitle">Jadwal Lengkap</string>
+    <string name="station_timetable_close_description">Tutup halaman jadwal lengkap</string>
+    <string name="station_timetable_filter">Filter Jalur</string>
+    <string name="station_timetable_filter_count">· %1$d/%2$d</string>
+    <string name="station_timetable_towards">menuju %1$s</string>
+    <string name="station_timetable_platform">Peron %1$s</string>
+    <string name="station_timetable_filtered_empty">Tidak ada jadwal untuk jalur yang dipilih</string>
+
     <!-- Facilities -->
     <string name="station_amenities_title">Fasilitas</string>
     <string name="station_amenities_empty">Tidak ada data fasilitas untuk stasiun ini</string>

@@ -24,6 +24,13 @@ class RouteTest {
     }
 
     @Test
+    fun `StationTimetable survives a serialization round-trip`() {
+        val route = Route.StationTimetable("KCI-MRI", title = "Manggarai")
+
+        assertEquals(route, Json.decodeFromString<Route.StationTimetable>(Json.encodeToString(route)))
+    }
+
+    @Test
     fun `the settings pages survive a serialization round-trip`() {
         val routes: List<Route> = listOf(
             Route.Settings,

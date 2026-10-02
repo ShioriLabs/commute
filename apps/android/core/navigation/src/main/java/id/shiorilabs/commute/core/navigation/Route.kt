@@ -37,6 +37,17 @@ sealed interface Route : NavKey {
         val lineKeys: List<String> = emptyList(),
     ) : Route
 
+    /**
+     * A station's whole timetable for the day, opened from its page's "Jadwal Lengkap". [title] is
+     * the station's name as the page already shows it, for the header's first frame.
+     */
+    @Serializable
+    data class StationTimetable(
+        /** `OPERATOR-CODE`, e.g. `KCI-MRI`. */
+        val stationId: String,
+        val title: String? = null,
+    ) : Route
+
     /** Settings, opened from the home screen's "Pengaturan" card. */
     @Serializable
     data object Settings : Route
