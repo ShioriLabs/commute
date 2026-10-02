@@ -5,8 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,18 +41,9 @@ fun ProblemPanel(
             fontWeight = FontWeight.SemiBold,
             color = ProblemInk,
         )
-        Button(
+        CommuteButton(
+            text = retryLabel,
             onClick = onRetry,
-            shape = MaterialTheme.shapes.small,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ),
-        ) {
-            Text(
-                text = retryLabel,
-                fontWeight = FontWeight.Bold,
-            )
-        }
+        )
     }
 }

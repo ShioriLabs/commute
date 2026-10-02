@@ -3,6 +3,7 @@ package id.shiorilabs.commute.feature.saved.presentation.components
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -28,6 +29,8 @@ import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.StationBoard
 import id.shiorilabs.commute.feature.station.presentation.components.LineCard
+import id.shiorilabs.commute.feature.station.presentation.sharedLineCard
+import id.shiorilabs.commute.feature.station.presentation.StationTitleText
 import java.time.LocalDateTime
 
 /**
@@ -44,28 +47,42 @@ private const val MAX_SKELETON_LINES = 3
  * [topInset] is the status bar's height, carried inside the header rather than above the list: a
  * stuck title then reaches up behind the clock with no change of size at the moment it sticks.
  *
- * [onClick] opens the station's page; the whole row is the target, not just the name's width.
+ * [onClick] opens the station's page; the whole row is the target, not just the title's width. The
+ * title flies into the page's header as a shared element, with [shareName] off for a copy hidden
+ * behind the one doing it. [opened] marks the station whose page was last opened from here: its
+ * "Stasiun" clips away as it flies out and back in as it lands home.
  */
 @Composable
 fun StationTitle(
+    stationId: String,
     name: String,
     modifier: Modifier = Modifier,
     topInset: Dp = 0.dp,
+    shareName: Boolean = true,
+    opened: Boolean = false,
     onClick: (() -> Unit)? = null,
 ) {
-    Text(
-        text = stringResource(R.string.saved_station_title, name),
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .padding(top = topInset)
             // Under the inset, so a tap behind the clock doesn't open anything.
             .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
             .padding(16.dp)
-            .semantics { heading() },
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onBackground,
-    )
+            .semantics(mergeDescendants = true) { heading() },
+    ) {
+        StationTitleText(
+            stationId = stationId,
+            name = name,
+            style = MaterialTheme.typography.titleLarge.copy(
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+            ),
+            showWords = true,
+            animateWords = shareName && opened,
+            shared = shareName,
+        )
+    }
 }
 
 /**
@@ -143,6 +160,7 @@ fun StationTimetable(
                         lineInfo = lines[line.lineKey],
                         now = now,
                         nextDayLine = card.nextDayLine(line),
+                        modifier = Modifier.sharedLineCard(card.stationId, line.lineKey),
                     )
                 }
             }

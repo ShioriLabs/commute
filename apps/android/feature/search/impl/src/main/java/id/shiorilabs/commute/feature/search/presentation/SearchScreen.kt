@@ -20,6 +20,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
@@ -54,6 +55,11 @@ import id.shiorilabs.commute.feature.search.presentation.components.SearchResult
 import id.shiorilabs.commute.feature.search.presentation.components.SectionLabelColor
 import kotlinx.coroutines.delay
 
+/** Where an opened row sat, for telling a pinned chip from the same station's recent. */
+private const val SOURCE_CHIP = "chip"
+private const val SOURCE_RECENT = "recent"
+private const val SOURCE_RESULT = "result"
+
 /** The sheet the morph opens onto is white, not the app's tinted background, as on web. */
 private val SearchBackground = Color.White
 
@@ -87,10 +93,15 @@ fun SearchScreen(
             // its page; hubs and lines wait for theirs, so for now the tap only records.
             onResultClick = { searchable ->
                 viewModel.onResultClick(searchable)
-                val stationId = (searchable as? Searchable.Station)?.stationId
-                if (stationId != null) {
+                if (searchable is Searchable.Station && searchable.stationId != null) {
                     focusManager.clearFocus()
-                    navigator.goTo(Route.Station(stationId))
+                    navigator.goTo(
+                        Route.Station(
+                            stationId = searchable.stationId,
+                            title = searchable.title,
+                            lineKeys = searchable.lines.map { it.key },
+                        ),
+                    )
                 }
             },
             onTogglePin = viewModel::onToggleSave,
@@ -113,6 +124,15 @@ private fun SearchContent(
     focusOnOpen: Boolean = true,
 ) {
     val focusRequester = remember { FocusRequester() }
+
+    // The row the rider last opened, by where it sits as well as what it is: the same station can
+    // show twice at once, as a pinned chip and a recent, and only the one tapped flies into the
+    // station page, and back.
+    var opened by rememberSaveable { mutableStateOf<String?>(null) }
+    val openFrom = { source: String, searchable: Searchable ->
+        opened = "$source:${searchable.key}"
+        onResultClick(searchable)
+    }
 
     // Focused once the morph has settled, so the keyboard doesn't slide up against the expanding
     // screen. The web waits the same 250 ms.
@@ -149,7 +169,8 @@ private fun SearchContent(
                 if (!searching && idleMounted && loaded != null) {
                     SavedChips(
                         stations = loaded.idle.saved,
-                        onClick = onResultClick,
+                        onClick = { openFrom(SOURCE_CHIP, it) },
+                        isShared = { opened == "$SOURCE_CHIP:${it.key}" },
                     )
                 }
             },
@@ -177,9 +198,10 @@ private fun SearchContent(
                         idleContent(
                             idle = state.data.idle,
                             savedStationIds = state.data.savedStationIds,
-                            onClick = onResultClick,
+                            onClick = { openFrom(SOURCE_RECENT, it) },
                             onTogglePin = onTogglePin,
                             onClearRecents = onClearRecents,
+                            opened = opened,
                         )
                     }
 
@@ -191,13 +213,14 @@ private fun SearchContent(
                             SearchResultItem(
                                 searchable = searchable,
                                 query = results.query,
-                                onClick = { onResultClick(searchable) },
+                                onClick = { openFrom(SOURCE_RESULT, searchable) },
                                 pinned = searchable.isPinned(state.data.savedStationIds),
                                 onTogglePin = onTogglePin,
                                 // Keyed rows, so a row that stays across a keystroke keeps its
                                 // place and only the newcomers rise in.
                                 modifier = Modifier.rowEntrance(index),
                                 showDivider = index < results.items.lastIndex,
+                                shared = opened == "$SOURCE_RESULT:${searchable.key}",
                             )
                         }
                     }
@@ -220,6 +243,7 @@ private fun LazyListScope.idleContent(
     onClick: (Searchable) -> Unit,
     onTogglePin: (stationId: String) -> Unit,
     onClearRecents: () -> Unit,
+    opened: String?,
 ) {
     if (idle.recents.isNotEmpty()) {
         item(key = "search-recent-header") {
@@ -237,6 +261,7 @@ private fun LazyListScope.idleContent(
                 onTogglePin = onTogglePin,
                 modifier = Modifier.rowEntrance(index),
                 showDivider = index < idle.recents.lastIndex,
+                shared = opened == "$SOURCE_RECENT:${searchable.key}",
             )
         }
     } else if (idle.saved.isEmpty()) {

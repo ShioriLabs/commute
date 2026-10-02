@@ -116,4 +116,48 @@ class StationRepositoryImplTest {
         fail = false
         assertTrue(repository.lines().isRight())
     }
+
+    @Test
+    fun `a fetched station and board are kept for the session, and offered without asking`() = runTest {
+        var stationCalls = 0
+        var timetableCalls = 0
+        val service = FakeCommuteService().apply {
+            station = { _, _ -> stationCalls++; fixture<Station>("station.json") }
+            groupedTimetable = { _, _, _ -> timetableCalls++; fixture<List<GroupedTimetable>>("timetable.json") }
+        }
+        val repository = StationRepositoryImpl(service)
+        assertEquals(null, repository.cachedStation("KCI-MRI"))
+
+        repository.station("KCI-MRI")
+        repository.timetable("KCI-MRI", ServiceDayName.WD)
+        repository.station("KCI-MRI")
+        repository.timetable("KCI-MRI", ServiceDayName.WD)
+
+        assertEquals(1, stationCalls)
+        assertEquals(1, timetableCalls)
+        assertEquals("Manggarai", repository.cachedStation("KCI-MRI")?.name)
+        assertEquals("KCI:B", repository.cachedTimetable("KCI-MRI", ServiceDayName.WD)?.single()?.lineKey)
+        // Another day type is another board.
+        assertEquals(null, repository.cachedTimetable("KCI-MRI", ServiceDayName.SAT))
+    }
+
+    @Test
+    fun `a failure or an empty board is asked for again`() = runTest {
+        var fail = true
+        var timetableCalls = 0
+        val service = FakeCommuteService().apply {
+            station = { _, _ -> if (fail) throw IOException("offline") else fixture<Station>("station.json") }
+            groupedTimetable = { _, _, _ -> timetableCalls++; emptyList() }
+        }
+        val repository = StationRepositoryImpl(service)
+
+        assertTrue(repository.station("KCI-MRI").isLeft())
+        assertEquals(null, repository.cachedStation("KCI-MRI"))
+        fail = false
+        assertTrue(repository.station("KCI-MRI").isRight())
+
+        repository.timetable("KCI-TJ", ServiceDayName.WD)
+        repository.timetable("KCI-TJ", ServiceDayName.WD)
+        assertEquals(2, timetableCalls)
+    }
 }
