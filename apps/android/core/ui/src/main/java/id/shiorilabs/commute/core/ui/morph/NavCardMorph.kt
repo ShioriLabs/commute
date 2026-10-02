@@ -22,8 +22,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -32,6 +36,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.ui.NavDisplay
+import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.navigation.Route
 import kotlin.math.pow
 
@@ -150,6 +155,25 @@ fun NavCardMorphTarget(
     val transition = visibilityScope.transition
     val closing = transition.targetState == EnterExitState.PostExit
 
+    // The morph is only for coming out of the card and going back into it. A page pushed over this
+    // screen covers it with that page's own transition, and popping that page reveals it again;
+    // neither involves the card, which isn't even on screen, so the mask and tint stay out of it.
+    //
+    // Covered rather than closing: still in the stack with something above it. Read off the stack
+    // and not the transition, which runs to PostExit either way; and a predictive back from here
+    // scrubs while this is still on top, which is closing.
+    val backStack = LocalNavigator.current.backStack
+    val covered = destination in backStack && backStack.lastOrNull() != destination
+    // Whether it has opened before, saved with the entry: coming back from a page above, the screen
+    // is revealed rather than opened.
+    var opened by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(transition.currentState) {
+        if (transition.currentState == EnterExitState.Visible) {
+            opened = true
+        }
+    }
+    val morphing = if (closing) !covered else !opened
+
     // Corners: the card's on the way in and out, square once the screen fills the display.
     val corner by transition.animateDp(
         transitionSpec = { tween(NAV_CARD_MORPH_MILLIS, easing = MorphEasing) },
@@ -197,12 +221,12 @@ fun NavCardMorphTarget(
                     boundsTransform = MorphBounds,
                     resizeMode = scaleToBounds(ContentScale.FillWidth, Alignment.TopCenter),
                     zIndexInOverlay = 1f,
-                    clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(corner)),
+                    clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(if (morphing) corner else 0.dp)),
                 )
-                .graphicsLayer { alpha = landingAlpha },
+                .graphicsLayer { alpha = if (morphing) landingAlpha else 1f },
         ) {
             content()
-            if (maskAlpha > 0f) {
+            if (morphing && maskAlpha > 0f) {
                 Box(
                     Modifier
                         .matchParentSize()
@@ -210,7 +234,7 @@ fun NavCardMorphTarget(
                         .background(Color.White),
                 )
             }
-            if (cardTint != null && tintAlpha > 0f) {
+            if (morphing && cardTint != null && tintAlpha > 0f) {
                 Box(
                     Modifier
                         .matchParentSize()

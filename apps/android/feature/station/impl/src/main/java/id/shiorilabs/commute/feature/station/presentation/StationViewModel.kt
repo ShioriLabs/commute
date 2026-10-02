@@ -12,6 +12,7 @@ import id.shiorilabs.commute.core.time.serviceDayOf
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationRepository
 import id.shiorilabs.commute.feature.station.data.board
+import id.shiorilabs.commute.feature.station.data.cachedBoard
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.StationBoard
 import kotlinx.coroutines.Job
@@ -38,8 +39,10 @@ class StationViewModel @AssistedInject constructor(
         fun create(stationId: String): StationViewModel
     }
 
-    private val board = MutableStateFlow(StationBoard.loading(stationId))
-    private val lines = MutableStateFlow<Map<String, LineInfo>>(emptyMap())
+    // Seeded from what the home feed already loaded, so a page opened from there arrives whole: its
+    // title and cards are there to meet the shared-element transition on its first frame.
+    private val board = MutableStateFlow(stationRepository.cachedBoard(stationId, now()) ?: StationBoard.loading(stationId))
+    private val lines = MutableStateFlow(lineRepository.cachedLines().orEmpty())
     private var load: Job? = null
 
     /** The service day the loaded board belongs to. */
@@ -54,11 +57,13 @@ class StationViewModel @AssistedInject constructor(
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = StationUiState(board = board.value, lines = emptyMap(), saved = false),
+        initialValue = StationUiState(board = board.value, lines = lines.value, saved = false),
     )
 
     init {
-        loadLines()
+        if (lines.value.isEmpty()) {
+            loadLines()
+        }
         load(now())
     }
 

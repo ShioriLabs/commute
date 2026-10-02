@@ -16,7 +16,7 @@ class RouteTest {
 
     @Test
     fun `Station survives a serialization round-trip with its id`() {
-        val route = Route.Station("KCI-MRI")
+        val route = Route.Station("KCI-MRI", title = "Manggarai", lineKeys = listOf("KCI:B", "KCI:C"))
         val encoded = Json.encodeToString(route)
 
         assertEquals(route, Json.decodeFromString<Route.Station>(encoded))

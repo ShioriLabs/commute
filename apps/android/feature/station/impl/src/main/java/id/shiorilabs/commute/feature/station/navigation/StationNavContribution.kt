@@ -5,6 +5,7 @@ import androidx.navigation3.runtime.NavKey
 import id.shiorilabs.commute.core.navigation.NavGraphContribution
 import id.shiorilabs.commute.core.navigation.NavGraphScope
 import id.shiorilabs.commute.core.navigation.Route
+import id.shiorilabs.commute.core.ui.motion.pageTransitionMetadata
 import id.shiorilabs.commute.feature.station.presentation.StationScreen
 import javax.inject.Inject
 
@@ -12,8 +13,13 @@ import javax.inject.Inject
 class StationNavContribution @Inject constructor() : NavGraphContribution {
 
     override fun EntryProviderScope<NavKey>.addEntries(scope: NavGraphScope) {
-        entry<Route.Station> { key ->
-            StationScreen(stationId = key.stationId, innerPadding = scope.screenPadding)
+        entry<Route.Station>(metadata = pageTransitionMetadata()) { key ->
+            StationScreen(
+                stationId = key.stationId,
+                innerPadding = scope.screenPadding,
+                placeholderTitle = key.title,
+                placeholderLineKeys = key.lineKeys,
+            )
         }
     }
 }

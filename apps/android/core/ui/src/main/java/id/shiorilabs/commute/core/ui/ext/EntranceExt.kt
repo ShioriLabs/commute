@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.dp
  *   rows   `.search-result-enter` + LIST_STAGGER: dense rows rise 8 dp over 250 ms, 30 ms apart.
  *   cards  `.home-enter` + CARD_STAGGER: tall cards rise 12 dp over 300 ms, 45 ms apart. 8 dp of
  *          travel is invisible on a block that size, and 30 ms between them reads as all at once.
+ *   nav    `.home-enter-nav` + NAV_STAGGER: the home rail's cards rise 16 dp over 300 ms, 50 ms
+ *          apart, starting 120 ms in so they follow the feed rather than race it.
  */
 
 private class Entrance(
@@ -35,8 +37,10 @@ private class Entrance(
     val maxIndex: Int,
     val travel: Dp,
     val easing: Easing,
+    /** Before the first item starts. */
+    val offset: Int = 0,
 ) {
-    fun delayMillis(index: Int): Int = index.coerceIn(0, maxIndex) * step
+    fun delayMillis(index: Int): Int = offset + index.coerceIn(0, maxIndex) * step
 }
 
 private val RowEntrance = Entrance(
@@ -56,6 +60,21 @@ private val CardEntrance = Entrance(
     // The web's --ease-ios-spring.
     easing = CubicBezierEasing(0.36f, 0.66f, 0.04f, 1f),
 )
+
+private val NavEntrance = Entrance(
+    millis = 300,
+    step = NAV_STAGGER_STEP_MILLIS,
+    maxIndex = 4,
+    travel = 16.dp,
+    easing = CardEntrance.easing,
+    offset = NAV_STAGGER_OFFSET_MILLIS,
+)
+
+/** The web's NAV_STAGGER_OFFSET_MS: the home rail waits this long for the feed. */
+const val NAV_STAGGER_OFFSET_MILLIS = 120
+
+/** The web's NAV_STAGGER_STEP_MS, between one rail card and the next. */
+const val NAV_STAGGER_STEP_MILLIS = 50
 
 /** The entrance delay for the row at [index]. */
 fun rowStaggerDelayMillis(index: Int): Int = RowEntrance.delayMillis(index)
@@ -81,6 +100,13 @@ fun Modifier.rowEntrance(index: Int): Modifier = entrance(RowEntrance, index)
 /** [rowEntrance] for tall cards: further, slower, and further apart. */
 @Composable
 fun Modifier.cardEntrance(index: Int): Modifier = entrance(CardEntrance, index)
+
+/**
+ * [rowEntrance] for the home rail's cards, after the feed. Apply it to a wrapper around the card,
+ * not the card: the card's own modifiers carry its morph, which measures it where it stands.
+ */
+@Composable
+fun Modifier.navEntrance(index: Int): Modifier = entrance(NavEntrance, index)
 
 @Composable
 private fun Modifier.entrance(entrance: Entrance, index: Int): Modifier {
