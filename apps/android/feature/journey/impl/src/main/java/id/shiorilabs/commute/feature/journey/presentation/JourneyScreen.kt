@@ -64,6 +64,7 @@ fun JourneyScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val picker by viewModel.picker.collectAsStateWithLifecycle()
+    val pickerText by viewModel.pickerText.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
     val context = LocalContext.current
     val shareTitle = stringResource(R.string.journey_share_title)
@@ -76,6 +77,7 @@ fun JourneyScreen(
     JourneyContent(
         state = state,
         picker = picker,
+        pickerText = pickerText,
         now = rememberJakartaNow().atZone(JAKARTA).toInstant(),
         innerPadding = innerPadding,
         actions = viewModel.panelActions(),
@@ -94,6 +96,7 @@ fun JourneyScreen(
 private fun JourneyContent(
     state: JourneyUiState,
     picker: PickerUiState,
+    pickerText: String,
     now: Instant,
     innerPadding: PaddingValues,
     actions: FarePanelActions,
@@ -142,7 +145,7 @@ private fun JourneyContent(
                 )
             }
         }
-        FarePanel(state = state, picker = picker, now = now, actions = actions)
+        FarePanel(state = state, picker = picker, pickerText = pickerText, now = now, actions = actions)
     }
 }
 
@@ -155,6 +158,7 @@ private fun JourneyEmptyPreview() {
         JourneyContent(
             state = JourneyUiState(),
             picker = PickerUiState(),
+            pickerText = "",
             now = Instant.parse("2026-10-05T01:00:00Z"),
             innerPadding = PaddingValues(),
             actions = previewActions,
@@ -176,6 +180,7 @@ private fun JourneyNotFoundPreview() {
                 trip = TripState.NotFound,
             ),
             picker = PickerUiState(),
+            pickerText = "",
             now = Instant.parse("2026-10-05T01:00:00Z"),
             innerPadding = PaddingValues(),
             actions = previewActions,
@@ -235,6 +240,7 @@ private fun JourneyLoadedPreview() {
                 shareUrl = "https://commute.shiorilabs.id/fare?from=KCI-SUD&to=MRTJ-LBB",
             ),
             picker = PickerUiState(),
+            pickerText = "",
             now = Instant.parse("2026-10-05T01:00:00Z"),
             innerPadding = PaddingValues(),
             actions = previewActions,

@@ -76,6 +76,8 @@ internal fun JourneyViewModel.panelActions() = FarePanelActions(
 internal fun FarePanel(
     state: JourneyUiState,
     picker: PickerUiState,
+    /** The picker field's text, as typed: see [JourneyViewModel.pickerText]. */
+    pickerText: String,
     now: Instant,
     actions: FarePanelActions,
     modifier: Modifier = Modifier,
@@ -122,6 +124,7 @@ internal fun FarePanel(
         StationPickerSheet(
             end = end,
             picker = picker,
+            text = pickerText,
             selectedId = if (end == PairEnd.ORIGIN) state.pair.fromId else state.pair.toId,
             onQueryChange = actions.onPickerQueryChange,
             onPick = actions.onPickStation,
