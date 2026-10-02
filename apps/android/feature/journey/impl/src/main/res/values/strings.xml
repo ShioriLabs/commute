@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Copy is the web's fare sheet, verbatim, so the two clients say the same thing. -->
+
+    <!-- The page -->
+    <string name="journey_title">Cek Tarif</string>
+    <string name="journey_close_description">Tutup halaman cek tarif</string>
+    <string name="journey_share_description">Bagikan rute ini</string>
+    <!-- The share sheet's title -->
+    <string name="journey_share_title">Cek Tarif Commute</string>
+    <!-- Under the result in search's OTW tab -->
+    <string name="journey_open_page">Buka halaman tarif</string>
+
+    <!-- Dari/Ke -->
+    <string name="journey_from">Dari</string>
+    <string name="journey_to">Ke</string>
+    <string name="journey_pick_station">Pilih stasiun</string>
+    <!-- Shown while an end's name is still loading -->
+    <string name="journey_station_loading">…</string>
+    <string name="journey_swap_description">Tukar stasiun asal dan tujuan</string>
+
+    <!-- States -->
+    <string name="journey_empty">Pilih stasiun asal dan tujuan untuk melihat perkiraan tarif perjalananmu</string>
+    <string name="journey_loading_description">Menghitung tarif...</string>
+    <string name="journey_not_found">Rute tidak ditemukan untuk stasiun yang dipilih</string>
+    <string name="journey_failed">Gagal memuat tarif, coba lagi nanti</string>
+    <string name="journey_retry">Coba lagi</string>
+
+    <!-- The station picker -->
+    <string name="journey_picker_from">Dari Stasiun</string>
+    <string name="journey_picker_to">Ke Stasiun</string>
+    <string name="journey_picker_close">Tutup pemilihan stasiun</string>
+    <string name="journey_picker_placeholder">Cari nama atau kode stasiun</string>
+    <string name="journey_picker_field_description">Cari stasiun berdasarkan nama atau kode</string>
+    <string name="journey_picker_quick_picks">Sering dipilih</string>
+    <string name="journey_picker_not_found">Stasiun tidak ditemukan</string>
+    <string name="journey_picker_selected">Stasiun terpilih</string>
+
+    <!-- Results -->
+    <!-- %1$d is how many journeys there are to choose between -->
+    <string name="journey_options">%1$d pilihan rute</string>
+    <string name="journey_detail">Rincian perjalanan</string>
+    <string name="journey_detail_back">Kembali ke pilihan rute</string>
+    <string name="journey_fare_unknown">Tarif tidak tersedia</string>
+    <string name="journey_last_train">Kereta terakhir</string>
+    <string name="journey_last_service">Terakhir</string>
+    <!-- %1$d is the number of transfers -->
+    <string name="journey_transfer_count">transit %1$dx</string>
+    <!-- %1$s is the boarding time, %2$s the arrival, both like 07.14 -->
+    <string name="journey_departs_arrives">Berangkat %1$s, tiba %2$s</string>
+    <!-- %1$s is a platform code like 3·4 -->
+    <string name="journey_platform">Peron %1$s</string>
+    <string name="journey_platform_description">Berangkat dari peron %1$s</string>
+    <string name="journey_board_any_train">Naik salah satu kereta</string>
+    <string name="journey_board_any_bus">Naik salah satu bus</string>
+    <!-- %1$s is where the service is headed -->
+    <string name="journey_headsign">arah %1$s</string>
+    <string name="journey_change_train">Pindah kereta</string>
+    <string name="journey_change_bus">Pindah bus</string>
+    <!-- %1$d is the stations ridden through, %2$s the distance like 4,2 km -->
+    <string name="journey_ride_summary">%1$d stasiun • %2$s</string>
+    <!-- %1$s is the station walked to -->
+    <string name="journey_transfer_to">Transit ke %1$s</string>
+    <!-- %1$d is metres walked -->
+    <string name="journey_transfer_walk">(Jalan kaki ±%1$dm)</string>
+    <string name="journey_walk">Jalan kaki ±%1$dm</string>
+    <!-- %1$s is a paid corridor's name, %2$s its fare -->
+    <string name="journey_corridor">%1$s • %2$s</string>
+    <string name="journey_fare_breakdown">Rincian Tarif</string>
+    <string name="journey_fare_na">N/A</string>
+    <string name="journey_disclaimer">Estimasi berdasarkan tarif resmi per Juli 2026. Tarif LRT Jabodebek memakai batas atas jam sibuk; di luar jam sibuk dan akhir pekan bisa lebih murah</string>
+    <!-- The route bar, read aloud -->
+    <string name="journey_route_description">Rute: %1$s</string>
+    <string name="journey_route_description_empty">Rute perjalanan</string>
+    <string name="journey_route_walk_description">jalan kaki %1$d m</string>
+    <string name="journey_route_change_description">pindah kendaraan</string>
+
+    <!-- Labels -->
+    <string name="journey_label_cheapest">Termurah</string>
+    <string name="journey_label_fewest_changes">Paling santai</string>
+    <string name="journey_label_least_walking">Minim jalan</string>
+    <string name="journey_label_shortest_wait">Sering lewat</string>
+
+    <!-- Settings -->
+    <string name="journey_settings">Pengaturan</string>
+    <!-- %1$s, %2$s and %3$s are the payment method, networks and walking speed -->
+    <string name="journey_settings_description">Pengaturan tarif: %1$s, %2$s, %3$s</string>
+    <!-- %1$s is the departure as the chip shows it, lowercased -->
+    <string name="journey_departure_description">Berangkat %1$s</string>
+    <string name="journey_payment">Pembayaran</string>
+    <string name="journey_modes">Jalur</string>
+    <string name="journey_walking">Jalan kaki</string>
+    <string name="journey_walking_speed">Kecepatan jalan</string>
+    <!-- %1$s is a sheet's title, lowercased -->
+    <string name="journey_sheet_close">Tutup %1$s</string>
+
+    <string name="journey_payment_stored_value">Kartu Uang Elektronik</string>
+    <string name="journey_payment_stored_value_short">KUE</string>
+    <string name="journey_payment_stored_value_description">Kartu bank kayak Flazz, e-Money, Brizzi, atau TapCash, atau KMT-nya Commuter Line</string>
+    <string name="journey_payment_qris">QRIS Tap</string>
+    <string name="journey_payment_qris_short">QRIS</string>
+    <string name="journey_payment_qris_description">Bayar pakai QRIS Tap dari e-wallet kayak GoPay atau mobile banking kayak myBCA</string>
+
+    <string name="journey_modes_all">Semua</string>
+    <string name="journey_modes_all_description">Pakai semua pilihan yang ada, termasuk TransJakarta</string>
+    <string name="journey_modes_rail">Tanpa TransJakarta</string>
+    <string name="journey_modes_rail_description">Cuma kereta dan MRT/LRT. Beberapa rute jadi nggak ketemu, soalnya TransJakarta yang nyambungin</string>
+
+    <string name="journey_walking_brisk">Cepat</string>
+    <string name="journey_walking_brisk_description">Udah hafal jalur transitnya</string>
+    <string name="journey_walking_average">Biasa</string>
+    <string name="journey_walking_average_description">Bisa jalan tanpa bingung cari arah</string>
+    <string name="journey_walking_slow">Santai</string>
+    <string name="journey_walking_slow_description">Belum yakin sama jalur transitnya</string>
+    <string name="journey_walking_slowest">Pelan banget</string>
+    <string name="journey_walking_slowest_short">Pelan</string>
+    <string name="journey_walking_slowest_description">Lagi bawa barang gede, atau jalan bareng anak atau orang tua</string>
+
+    <!-- The departure sheet -->
+    <string name="journey_departure_title">Kapan Berangkat</string>
+    <string name="journey_departure_day">Tanggal berangkat</string>
+    <string name="journey_departure_hour">Jam berangkat</string>
+    <string name="journey_departure_minute">Menit berangkat</string>
+    <!-- %1$d is the slot length in minutes -->
+    <string name="journey_departure_earlier">%1$d mnt awal</string>
+    <string name="journey_departure_later">%1$d mnt lagi</string>
+    <string name="journey_departure_now">Sekarang</string>
+    <string name="journey_departure_set">Atur</string>
+</resources>
