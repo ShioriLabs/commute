@@ -20,9 +20,16 @@ build/
 local.properties
 /.kotlin
 
+# Release signing: the keys secret.properties names, and the file itself. The debug keystore at the
+# root is committed on purpose (see build-logic's Signing.kt).
+secret.properties
+*.jks
+commute-release.keystore
+
 # Build outputs (APKs, AABs)
 *.apk
 *.aab
+/app/production/
 
 # Heap dump
 *.hprof
