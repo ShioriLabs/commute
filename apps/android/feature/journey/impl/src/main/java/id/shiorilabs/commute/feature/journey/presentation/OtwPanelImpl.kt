@@ -33,6 +33,7 @@ class OtwPanelImpl @Inject constructor() : OtwPanel {
         )
         val state by viewModel.state.collectAsStateWithLifecycle()
         val picker by viewModel.picker.collectAsStateWithLifecycle()
+    val pickerText by viewModel.pickerText.collectAsStateWithLifecycle()
         val navigator = LocalNavigator.current
 
         LifecycleResumeEffect(viewModel) {
@@ -43,7 +44,8 @@ class OtwPanelImpl @Inject constructor() : OtwPanel {
         FarePanel(
             state = state,
             picker = picker,
-            now = rememberJakartaNow().atZone(JAKARTA).toInstant(),
+            pickerText = pickerText,
+            now =rememberJakartaNow().atZone(JAKARTA).toInstant(),
             actions = viewModel.panelActions(),
             modifier = modifier
                 .verticalScroll(rememberScrollState())
