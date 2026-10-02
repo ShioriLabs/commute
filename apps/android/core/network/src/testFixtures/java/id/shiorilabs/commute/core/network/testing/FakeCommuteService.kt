@@ -5,6 +5,7 @@ import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.model.models.Station
 import id.shiorilabs.commute.core.model.models.Transfer
+import id.shiorilabs.commute.core.model.models.TripResult
 import id.shiorilabs.commute.core.network.response.Response
 import id.shiorilabs.commute.core.network.service.CommuteService
 
@@ -63,4 +64,31 @@ class FakeCommuteService : CommuteService {
         operatorsCalls++
         return Response(status = 200, data = operators())
     }
+
+    var trips: suspend (fromId: String, toId: String, criteria: TripCriteria) -> TripResult =
+        { _, _, _ -> error("getTrips was not stubbed") }
+
+    /** How many times [getTrips] was called — for asserting that a repository caches. */
+    var tripsCalls: Int = 0
+        private set
+
+    override suspend fun getTrips(
+        fromId: String,
+        toId: String,
+        paymentMethod: String?,
+        at: String?,
+        modes: String?,
+        walking: String?,
+    ): Response<TripResult> {
+        tripsCalls++
+        return Response(status = 200, data = trips(fromId, toId, TripCriteria(paymentMethod, at, modes, walking)))
+    }
+
+    /** The optional query params of one [getTrips] call, as sent. */
+    data class TripCriteria(
+        val paymentMethod: String?,
+        val at: String?,
+        val modes: String?,
+        val walking: String?,
+    )
 }
