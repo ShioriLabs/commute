@@ -24,6 +24,8 @@ dependencies {
     implementation(project(":core:ui"))
     // The station page's shared-element keys, which a station row's name and roundels carry.
     implementation(project(":feature:station:api"))
+    // OtwPanel, the OTW tab's content, bound by the journey feature.
+    implementation(project(":feature:journey:api"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.runtime)

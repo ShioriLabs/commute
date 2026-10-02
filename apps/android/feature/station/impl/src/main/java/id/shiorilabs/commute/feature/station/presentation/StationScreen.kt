@@ -1,7 +1,6 @@
 package id.shiorilabs.commute.feature.station.presentation
 
 import android.net.Uri
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,7 +17,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.SubcomposeLayout
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -86,8 +84,6 @@ fun StationScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
     val uriHandler = LocalUriHandler.current
-    val context = LocalContext.current
-    val comingSoon = stringResource(R.string.station_otw_coming_soon)
     // Whether search opened this page, whose rows carry roundels to fly in. Read once, while the
     // page is still in the stack: on the way back it has already been popped, and its roundels
     // have to fly home all the same.
@@ -111,8 +107,8 @@ fun StationScreen(
         onClose = { navigator.pop() },
         onRetry = viewModel::retry,
         onOpenMaps = { station -> mapsUrl(station)?.let(uriHandler::openUri) },
-        // A stub until trip planning lands: journey takes this over.
-        onOtw = { Toast.makeText(context, comingSoon, Toast.LENGTH_SHORT).show() },
+        // Plans a trip here: OTW opens with this station as the destination, picking the origin.
+        onOtw = { navigator.goTo(Route.Journey(toId = stationId)) },
         onOpenTimetable = { title -> navigator.goTo(Route.StationTimetable(stationId, title)) },
     )
 }

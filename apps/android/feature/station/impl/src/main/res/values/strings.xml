@@ -20,8 +20,6 @@
 
     <!-- Actions over the departures -->
     <string name="station_otw">OTW Ke Sini</string>
-    <!-- The OTW button until trip planning lands on Android. -->
-    <string name="station_otw_coming_soon">Segera hadir</string>
     <string name="station_full_timetable">Jadwal Lengkap</string>
 
     <!-- Last trains. %1$s is a line's name; %1$s a terminus; %1$s a time. -->

@@ -7,6 +7,11 @@
     <string name="search_field_description">Cari sesuatu berdasarkan kata kunci</string>
     <string name="search_field_clear">Hapus kata kunci</string>
 
+    <!-- The two halves of search: one station, or a trip between two -->
+    <string name="search_mode_description">Mode pencarian</string>
+    <string name="search_mode_station">Satu stasiun</string>
+    <string name="search_mode_otw">OTW</string>
+
     <!-- Idle state -->
     <string name="search_recent_title">Terakhir dicari</string>
     <string name="search_recent_clear">Hapus</string>
