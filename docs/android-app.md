@@ -230,33 +230,24 @@ the project starts; the rule is that no response model is typed by hand.
 The API is public and read-only by policy (`api-cors-policy.md`), so the app
 sends no credentials and holds no secrets.
 
-### The trips endpoint (a prerequisite)
+### The trips endpoint
 
 The multi-journey answer the web app shows (`TripResult`: `journeys[]` with
 labels, `boardings`, per-leg `departureAt`/`arrivalAt`) is served from
-`/_internal/trips/:from/:to`. `/_internal` is deliberately **absent from the
-OpenAPI document** and carries no compatibility promise: it is shaped around the
-web app's screen and may change without notice.
+`/_internal/trips/:from/:to`, and that is what the app reads. `/_internal` is
+**absent from the public OpenAPI document**: it is Commute's own surface for
+Commute's own clients, not a contract for third parties, which is exactly what
+the app is. It is described in the internal snapshot
+(`apps/api/src/openapi-internal.ts`) the same way `/_internal/searchables` is,
+so its models generate into `:core:model`.
 
-The web app can live with that because it deploys together with the API. An
-installed Android app can't: old versions stay on phones for months. So before
-the app ships, one of these has to happen:
-
-1. **Promote a trips endpoint into the public API** (documented in
-   `/openapi.json`, versioned, changed only additively). A second consumer is
-   what earns an endpoint a public contract, and the schemas were written to
-   be "ready to promote" (`apps/schemas/src/fare.ts`).
-2. Ship v1 on the public `/fares/:from/:to` (single journey) and add
-   multi-journey results after promotion.
-
-Lean: option 1, done as its own change before any Android code. Do not point an
-installed app at `/_internal`.
-
-Where it stands: OTW was built first against `/_internal/trips`, described in
-the internal snapshot (`apps/api/src/openapi-internal.ts`) the same way
-`/_internal/searchables` already is. That unblocks the screens, not a release:
-promotion (option 1) still has to land before the app ships, and the client
-then only changes the path it calls.
+What the app being a client adds is time: the web deploys with the API, but old
+app versions stay on phones for months. So a change to `/_internal/trips` (or
+any `/_internal` route the app reads, listed in `APP_PATHS` in
+`apps/api/src/scripts/dumpInternalOpenAPI.ts`) has to stay additive, or keep the
+old shape answering until those versions are gone. The generated models already
+tolerate additions: unknown keys are ignored, and multi-value enums are plain
+strings.
 
 ### Offline cache
 
