@@ -48,6 +48,27 @@ sealed interface Route : NavKey {
         val title: String? = null,
     ) : Route
 
+    /**
+     * OTW: the routes and fares between two stations, the web's `/fare`. Opened from a station's
+     * "OTW Ke Sini" with only [toId], which opens the origin picker, from search's OTW tab with
+     * both, and from a shared `/fare` link.
+     *
+     * The rest is what a shared link carries. [journeyKey] names the route the sender was looking
+     * at, opened straight on its detail if it still runs; the criteria are the link's raw query
+     * params, which beat the rider's stored settings for this visit only.
+     */
+    @Serializable
+    data class Journey(
+        /** `OPERATOR-CODE`. */
+        val fromId: String? = null,
+        val toId: String? = null,
+        val journeyKey: String? = null,
+        val paymentMethod: String? = null,
+        val at: String? = null,
+        val modes: String? = null,
+        val walking: String? = null,
+    ) : Route
+
     /** Settings, opened from the home screen's "Pengaturan" card. */
     @Serializable
     data object Settings : Route
