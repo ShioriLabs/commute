@@ -6,6 +6,7 @@ import arrow.core.right
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
+import id.shiorilabs.commute.feature.station.domain.Frequency
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.Station
 import id.shiorilabs.commute.feature.station.domain.Transfer
@@ -39,7 +40,20 @@ class StationBoardsTest {
         }
 
         override suspend fun transfers(stationId: String): Either<Failure, List<Transfer>> = emptyList<Transfer>().right()
+
+        var frequencies: Either<Failure, List<Frequency>> = listOf(Frequency("TJ:13", 186.0)).right()
+        val askedFrequencies = mutableListOf<Pair<String, ServiceDayName>>()
+        var cachedFrequencies: List<Frequency>? = null
+
+        override suspend fun frequencies(stationId: String, day: ServiceDayName): Either<Failure, List<Frequency>> {
+            askedFrequencies += stationId to day
+            return frequencies
+        }
+
+        override fun cachedFrequencies(stationId: String, day: ServiceDayName) = cachedFrequencies
     }
+
+    private val halte = Station("TJ-H00001P", "Petukangan D'MASIV", "TJ", "H00001P", listOf("TJ:13"))
 
     @Test
     fun `a weekday emits loading, the station, then the board, and never asks for tomorrow`() = runTest {
@@ -119,6 +133,72 @@ class StationBoardsTest {
 
         assertTrue(boards.none { it.station is UIState.Loading || it.timetable is UIState.Loading })
         assertEquals(setOf("KCI:B"), boards.last().nextDayBoard?.keys)
+    }
+
+    @Test
+    fun `a rail station never asks for frequencies`() = runTest {
+        val repository = FakeStationRepository()
+
+        val board = repository.board("KCI-MRI", LocalDateTime.parse("2026-09-30T08:00:00")).toList().last()
+
+        assertTrue(board.frequencies is UIState.Idle)
+        assertTrue(repository.askedFrequencies.isEmpty())
+    }
+
+    @Test
+    fun `a halte asks for the service day's frequencies, after its empty board`() = runTest {
+        val repository = FakeStationRepository().apply {
+            station = halte.right()
+            timetable = { emptyList<LineTimetable>().right() }
+        }
+
+        val boards = repository.board("TJ-H00001P", LocalDateTime.parse("2026-09-30T08:00:00")).toList()
+
+        assertTrue(boards.first().frequencies is UIState.Loading)
+        assertTrue(boards.first { it.timetable is UIState.Success }.frequencies is UIState.Loading)
+        assertEquals(listOf(Frequency("TJ:13", 186.0)), (boards.last().frequencies as UIState.Success).data)
+        assertEquals(listOf("TJ-H00001P" to ServiceDayName.WD), repository.askedFrequencies)
+    }
+
+    @Test
+    fun `a halte's failed frequencies fail on their own`() = runTest {
+        val repository = FakeStationRepository().apply {
+            station = halte.right()
+            timetable = { emptyList<LineTimetable>().right() }
+            frequencies = Failure.Unknown().left()
+        }
+
+        val board = repository.board("TJ-H00001P", LocalDateTime.parse("2026-09-30T08:00:00")).toList().last()
+
+        assertTrue(board.timetable is UIState.Success)
+        assertTrue(board.frequencies is UIState.Error)
+    }
+
+    @Test
+    fun `a cached halte without its frequencies still asks for them`() = runTest {
+        val repository = FakeStationRepository().apply {
+            cache = halte to mapOf(ServiceDayName.WD to emptyList())
+        }
+
+        val boards = repository.board("TJ-H00001P", LocalDateTime.parse("2026-09-30T08:00:00")).toList()
+
+        assertTrue(boards.none { it.station is UIState.Loading || it.timetable is UIState.Loading })
+        assertTrue(boards.last().frequencies is UIState.Success)
+        assertEquals(1, repository.askedFrequencies.size)
+    }
+
+    @Test
+    fun `a cached halte with its frequencies is emitted alone, without asking`() = runTest {
+        val repository = FakeStationRepository().apply {
+            cache = halte to mapOf(ServiceDayName.WD to emptyList())
+            cachedFrequencies = emptyList()
+        }
+
+        val boards = repository.board("TJ-H00001P", LocalDateTime.parse("2026-09-30T08:00:00")).toList()
+
+        assertEquals(1, boards.size)
+        assertEquals(emptyList<Frequency>(), (boards.single().frequencies as UIState.Success).data)
+        assertTrue(repository.askedFrequencies.isEmpty())
     }
 
     @Test

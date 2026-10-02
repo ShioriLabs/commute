@@ -2,19 +2,49 @@ package id.shiorilabs.commute.feature.station.data.impl
 
 import id.shiorilabs.commute.core.model.models.ExternalTransfer
 import id.shiorilabs.commute.core.model.models.GroupedTimetable
+import id.shiorilabs.commute.core.model.models.HeadwayRow
+import id.shiorilabs.commute.core.model.models.HeadwayRowServiceHours
 import id.shiorilabs.commute.core.model.models.InternalTransfer
 import id.shiorilabs.commute.core.model.models.OperatorWithLines
+import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.feature.station.domain.Amenity
 import id.shiorilabs.commute.feature.station.domain.Departure
 import id.shiorilabs.commute.feature.station.domain.DestinationTimetable
 import id.shiorilabs.commute.feature.station.domain.DirectionGroup
+import id.shiorilabs.commute.feature.station.domain.Frequency
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
+import id.shiorilabs.commute.feature.station.domain.ServiceHours
 import kotlin.math.roundToInt
 import id.shiorilabs.commute.core.model.models.Station as StationDto
 import id.shiorilabs.commute.core.model.models.Transfer as TransferDto
 import id.shiorilabs.commute.feature.station.domain.Station as Station
 import id.shiorilabs.commute.feature.station.domain.Transfer as Transfer
+
+/**
+ * A frequency row as the domain carries it. A day the app doesn't know is dropped rather than failing
+ * the row; one left with no known day at all reads as every day, the API's own default.
+ */
+internal fun HeadwayRow.toFrequency() = Frequency(
+    lineKey = line,
+    headwaySeconds = headwayS,
+    boundFor = boundFor,
+    days = days
+        ?.mapNotNull { day -> ServiceDayName.entries.firstOrNull { it.name == day } }
+        ?.toSet()
+        ?.takeIf { it.isNotEmpty() },
+    serviceHours = serviceHours?.toServiceHours(),
+)
+
+/** The two shapes the generator folds into one class: a window, or all day. Anything else is unknown. */
+private fun HeadwayRowServiceHours.toServiceHours(): ServiceHours? {
+    if (allDay == true) {
+        return ServiceHours.AllDay
+    }
+    val start = start ?: return null
+    val end = end ?: return null
+    return ServiceHours.Window(start, end)
+}
 
 internal fun StationDto.toStation() = Station(
     id = id,

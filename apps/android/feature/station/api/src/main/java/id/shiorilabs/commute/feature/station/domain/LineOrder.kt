@@ -5,8 +5,6 @@ package id.shiorilabs.commute.feature.station.domain
  * `utils/directional-stations.ts`; keep them in step.
  */
 
-private const val OPERATOR_TJ = "TJ"
-
 /**
  * Seasonal Pekan Raya Jakarta shuttles: they only run during the fair, so corridor lists hide them.
  * Display-only; the data stays.
