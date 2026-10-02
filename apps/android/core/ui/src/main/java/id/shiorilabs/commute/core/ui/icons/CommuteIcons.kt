@@ -11,6 +11,8 @@ import com.adamglin.phosphoricons.bold.CaretLeft
 import com.adamglin.phosphoricons.bold.CaretRight
 import com.adamglin.phosphoricons.bold.CaretUp
 import com.adamglin.phosphoricons.bold.MagnifyingGlass
+import com.adamglin.phosphoricons.bold.NavigationArrow
+import com.adamglin.phosphoricons.bold.PersonSimpleWalk
 import com.adamglin.phosphoricons.bold.PushPin
 import com.adamglin.phosphoricons.bold.PushPinSlash
 import com.adamglin.phosphoricons.bold.ShareNetwork
@@ -68,6 +70,12 @@ object CommuteIcons {
     /** Moves an entry one place up or down a list the rider orders. */
     val MoveUp: ImageVector = PhosphorIcons.Bold.CaretUp
     val MoveDown: ImageVector = PhosphorIcons.Bold.CaretDown
+
+    /** Heading somewhere: the station page's "OTW Ke Sini". The web mirrors it to point right. */
+    val NavigationArrow: ImageVector = PhosphorIcons.Bold.NavigationArrow
+
+    /** A walk between stations, beside its distance. */
+    val Walk: ImageVector = PhosphorIcons.Bold.PersonSimpleWalk
 
     /** Clears stored data. */
     val Delete: ImageVector = PhosphorIcons.Fill.Trash

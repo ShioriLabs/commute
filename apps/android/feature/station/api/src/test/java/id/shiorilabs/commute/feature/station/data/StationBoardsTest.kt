@@ -8,6 +8,7 @@ import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.Station
+import id.shiorilabs.commute.feature.station.domain.Transfer
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -36,6 +37,8 @@ class StationBoardsTest {
             asked += day
             return timetable(day)
         }
+
+        override suspend fun transfers(stationId: String): Either<Failure, List<Transfer>> = emptyList<Transfer>().right()
     }
 
     @Test

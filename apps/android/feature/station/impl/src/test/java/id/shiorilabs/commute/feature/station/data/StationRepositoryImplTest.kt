@@ -3,6 +3,7 @@ package id.shiorilabs.commute.feature.station.data
 import id.shiorilabs.commute.core.model.models.GroupedTimetable
 import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.Station
+import id.shiorilabs.commute.core.model.models.Transfer as TransferDto
 import id.shiorilabs.commute.core.network.testing.FakeCommuteService
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
@@ -11,6 +12,7 @@ import id.shiorilabs.commute.feature.station.data.impl.StationRepositoryImpl
 import id.shiorilabs.commute.feature.station.domain.Amenity
 import id.shiorilabs.commute.feature.station.domain.Departure
 import id.shiorilabs.commute.feature.station.domain.LineInfo
+import id.shiorilabs.commute.feature.station.domain.Transfer
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromJsonElement
@@ -159,5 +161,49 @@ class StationRepositoryImplTest {
         repository.timetable("KCI-TJ", ServiceDayName.WD)
         repository.timetable("KCI-TJ", ServiceDayName.WD)
         assertEquals(2, timetableCalls)
+    }
+
+    // Two of Sudirman's live transfers (trimmed), then LRT Jabodebek Halim's EXTERNAL one to KCIC.
+    @Test
+    fun `transfers decode both kinds`() = runTest {
+        val service = FakeCommuteService().apply { transfers = { _, _ -> fixture<List<TransferDto>>("transfers.json") } }
+
+        val transfers = StationRepositoryImpl(service).transfers("KCI-SUD").getOrNull()!!
+
+        assertEquals(
+            Transfer.Internal(
+                id = "T-KCI-SUD-MRTJ-DKA",
+                distanceM = 90,
+                notes = "Keluar lewat pintu B, lalu jalan lewat Terowongan Kendal dan belok kanan",
+                stationId = "MRTJ-DKA",
+                name = "Dukuh Atas BNI",
+                operator = "MRTJ",
+                lineKeys = listOf("MRTJ:M"),
+            ),
+            transfers[0],
+        )
+        assertEquals(null, transfers[1].notes)
+        assertEquals(
+            Transfer.External(
+                id = "T-LRTJBDB-HAL-XHSR",
+                distanceM = 230,
+                notes = "Keluar lewat pintu A, lalu jalan terus hingga Stasiun KCIC Halim",
+                name = "Halim",
+                operatorName = "KCIC",
+            ),
+            transfers[2],
+        )
+    }
+
+    @Test
+    fun `a station with no transfers is asked once`() = runTest {
+        val service = FakeCommuteService().apply { transfers = { _, _ -> emptyList() } }
+        val repository = StationRepositoryImpl(service)
+
+        repository.transfers("KCI-THB")
+        repository.transfers("KCI-THB")
+
+        assertEquals(1, service.transfersCalls)
+        assertEquals(emptyList<Transfer>(), repository.cachedTransfers("KCI-THB"))
     }
 }
