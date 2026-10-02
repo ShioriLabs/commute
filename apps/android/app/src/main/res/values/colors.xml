@@ -3,4 +3,8 @@
     <!-- The window behind MainActivity, drawn before the first Compose frame. Matches
          CommuteColors.backgroundLight so launch doesn't flash white. -->
     <color name="window_background">#FFFFF8F8</color>
+
+    <!-- Behind the launcher icon's departure board: the web icon's backdrop. Kept identical to
+         wear/src/main/res/values/colors.xml. -->
+    <color name="ic_launcher_background">#FFFFE3E8</color>
 </resources>
