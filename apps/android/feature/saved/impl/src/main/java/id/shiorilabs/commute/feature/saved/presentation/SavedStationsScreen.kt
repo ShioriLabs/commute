@@ -81,6 +81,7 @@ fun SavedStationsScreen(
         innerPadding = innerPadding,
         onRetry = viewModel::retry,
         onSearchClick = { navigator.goTo(Route.Search) },
+        onSettingsClick = { navigator.goTo(Route.Settings) },
         onStationClick = { navigator.goTo(Route.Station(it)) },
     )
 }
