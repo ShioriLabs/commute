@@ -74,6 +74,170 @@
         }
       }
     },
+    "/_internal/trips/{from}/{to}": {
+      "get": {
+        "operationId": "getInternalTripsByFromByTo",
+        "summary": "Beberapa pilihan rute antara dua stasiun",
+        "description": "Sama seperti `/fares/{from}/{to}`, tapi menjawab dengan beberapa `journeys`, masing-masing dengan tarif, label, dan jam berangkat/tiba tiap kaki perjalanan kalau jadwalnya ada.",
+        "tags": [
+          "Internal"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "KCI-SUD"
+              ]
+            },
+            "description": "Station id asal, `{operator}-{code}`."
+          },
+          {
+            "in": "path",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "MRTJ-LBB"
+              ]
+            },
+            "description": "Station id tujuan."
+          },
+          {
+            "in": "query",
+            "name": "paymentMethod",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Menentukan tarif mana yang dipakai. Default-nya tarif kartu uang elektronik biasa."
+          },
+          {
+            "in": "query",
+            "name": "at",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "2026-07-28T08:00:00Z"
+              ]
+            },
+            "description": "Timestamp ISO 8601 buat perjalanannya. Default-nya waktu sekarang."
+          },
+          {
+            "in": "query",
+            "name": "modes",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "rail"
+              ]
+            },
+            "description": "`rail` buat rute tanpa TransJakarta. Default-nya semua moda."
+          },
+          {
+            "in": "query",
+            "name": "walking",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "SLOW"
+              ]
+            },
+            "description": "Kecepatan jalan kaki: `BRISK`, `AVERAGE`, `SLOW`, atau `SLOWEST`. Default-nya `AVERAGE`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "description": "Sama dengan HTTP status code-nya.",
+                      "examples": [
+                        200
+                      ],
+                      "format": "double"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TripResult"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Salah satu stasiunnya tidak ditemukan, tidak ada rute di antara keduanya (`NO_ROUTE`), layanannya sudah tutup (`CLOSED`), atau asal dan tujuannya sama (`SAME_STATION`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "examples": [
+                        404
+                      ],
+                      "format": "double"
+                    },
+                    "error": {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "error"
+                  ],
+                  "title": "ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Perhitungan tarif gagal (`DATABASE_ERROR`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "examples": [
+                        404
+                      ],
+                      "format": "double"
+                    },
+                    "error": {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "error"
+                  ],
+                  "title": "ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/operators": {
       "get": {
         "operationId": "getOperators",
@@ -1016,6 +1180,266 @@
         "title": "Line",
         "description": "Satu lin, dengan kode dan warna yang dipakai di roundel-nya."
       },
+      "FareStation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "examples": [
+              "KCI-SUD"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "examples": [
+              "Sudirman"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "FareStation",
+        "description": "Stasiun di dalam hasil pencarian tarif."
+      },
+      "FareLineRef": {
+        "type": "object",
+        "properties": {
+          "line": {
+            "type": "string",
+            "title": "Line key",
+            "description": "`OPERATOR:CODE`, dicocokkan ke kamus lin dari `/operators`.",
+            "examples": [
+              "KCI:C",
+              "MRTJ:M"
+            ]
+          },
+          "headsign": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Stasiun akhir yang dituju perjalanan ini."
+          }
+        },
+        "required": [
+          "line",
+          "headsign"
+        ],
+        "title": "FareLineRef",
+        "description": "Lin yang dipakai di satu tahap perjalanan."
+      },
+      "FareRideLeg": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "RIDE"
+            ]
+          },
+          "line": {
+            "type": "string",
+            "title": "Line key",
+            "description": "`OPERATOR:CODE`, dicocokkan ke kamus lin dari `/operators`.",
+            "examples": [
+              "KCI:C",
+              "MRTJ:M"
+            ]
+          },
+          "operator": {
+            "type": "string",
+            "title": "Operator code",
+            "description": "Operator transit. `KCI`: Commuter Line · `MRTJ`: MRT Jakarta · `LRTJ`: LRT Jakarta · `LRTJBDB`: LRT Jabodebek · `TJ`: TransJakarta · `APCGK`: Kalayang Bandara. `NUL` cuma placeholder internal dan tidak pernah muncul di response. Nilai yang dikenal saat ini: `KCI`, `MRTJ`, `LRTJ`, `LRTJBDB`, `TJ`, `APCGK`. Bisa bertambah.",
+            "examples": [
+              "KCI",
+              "MRTJ"
+            ]
+          },
+          "from": {
+            "$ref": "#/components/schemas/FareStation"
+          },
+          "to": {
+            "$ref": "#/components/schemas/FareStation"
+          },
+          "stationCount": {
+            "type": "number",
+            "description": "Jumlah stasiun yang dilewati, termasuk stasiun awal dan akhir.",
+            "format": "double"
+          },
+          "stops": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FareStation"
+            },
+            "description": "Daftar stasiun lengkap dan urut, dari tempat naik sampai tempat turun."
+          },
+          "headsign": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Stasiun akhir yang dituju. Null kalau tidak bisa ditentukan."
+          },
+          "distanceM": {
+            "type": "number",
+            "description": "Jarak tempuh tahap ini dalam meter.",
+            "format": "double"
+          },
+          "serviceLines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FareLineRef"
+            },
+            "description": "Cuma muncul di jalur yang dipakai bersama beberapa lin, jadi naik yang mana pun tetap sampai. Lin utamanya ditaruh paling depan."
+          },
+          "departureAt": {
+            "type": "string",
+            "description": "Jam berangkat dari stasiun naik, sesuai jadwal resmi. Cuma ada di tahap yang jadwalnya kami punya.",
+            "examples": [
+              "2026-09-07T07:14:00+07:00"
+            ]
+          },
+          "arrivalAt": {
+            "type": "string",
+            "description": "Jam tiba di stasiun turun, sesuai jadwal resmi. Cuma ada di tahap yang jadwalnya kami punya.",
+            "examples": [
+              "2026-09-07T07:31:00+07:00"
+            ]
+          },
+          "lastService": {
+            "description": "Ada dan bernilai `true` kalau ini kendaraan terakhir hari ini yang bisa dinaiki dari stasiun naik sampai stasiun turun tahap ini. Ketinggalan berarti tahap ini baru bisa dinaiki besok. Cuma ada di tahap yang jadwalnya kami punya.",
+            "type": "boolean"
+          },
+          "platformCode": {
+            "type": "string",
+            "description": "Peron tempat naik, kalau datanya sudah diverifikasi. Bisa berupa rentang kalau peronnya pulau.",
+            "examples": [
+              "1/2"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "line",
+          "operator",
+          "from",
+          "to",
+          "stationCount",
+          "stops",
+          "headsign",
+          "distanceM"
+        ],
+        "title": "FareRideLeg",
+        "description": "Tahap perjalanan naik kendaraan, dari stasiun naik sampai stasiun turun."
+      },
+      "FareTransferLeg": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "TRANSFER"
+            ]
+          },
+          "from": {
+            "$ref": "#/components/schemas/FareStation"
+          },
+          "to": {
+            "$ref": "#/components/schemas/FareStation"
+          },
+          "distanceM": {
+            "type": "number",
+            "description": "Jarak jalan kaki dalam meter.",
+            "format": "double"
+          },
+          "fare": {
+            "type": "number",
+            "description": "Cuma ada di koridor berbayar. Transfer jalan kaki biasa gratis, jadi tidak punya ini.",
+            "format": "double"
+          },
+          "corridorLabel": {
+            "type": "string",
+            "description": "Nama koridor yang dilewati waktu pindah, kalau ada."
+          }
+        },
+        "required": [
+          "type",
+          "from",
+          "to",
+          "distanceM"
+        ],
+        "title": "FareTransferLeg",
+        "description": "Tahap pindah kendaraan, biasanya jalan kaki antar peron atau antar stasiun."
+      },
+      "FareLeg": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/FareRideLeg"
+          },
+          {
+            "$ref": "#/components/schemas/FareTransferLeg"
+          }
+        ],
+        "title": "FareLeg",
+        "description": "Satu tahap perjalanan. Dibedakan lewat `type`.",
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "RIDE": "#/components/schemas/FareRideLeg",
+            "TRANSFER": "#/components/schemas/FareTransferLeg"
+          }
+        }
+      },
+      "FareSegment": {
+        "type": "object",
+        "properties": {
+          "operator": {
+            "type": "string",
+            "title": "Operator code",
+            "description": "Operator transit. `KCI`: Commuter Line · `MRTJ`: MRT Jakarta · `LRTJ`: LRT Jakarta · `LRTJBDB`: LRT Jabodebek · `TJ`: TransJakarta · `APCGK`: Kalayang Bandara. `NUL` cuma placeholder internal dan tidak pernah muncul di response. Nilai yang dikenal saat ini: `KCI`, `MRTJ`, `LRTJ`, `LRTJBDB`, `TJ`, `APCGK`. Bisa bertambah.",
+            "examples": [
+              "KCI",
+              "MRTJ"
+            ]
+          },
+          "from": {
+            "$ref": "#/components/schemas/FareStation"
+          },
+          "to": {
+            "$ref": "#/components/schemas/FareStation"
+          },
+          "fare": {
+            "anyOf": [
+              {
+                "type": "number",
+                "format": "double"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Tarif buat segmen ini dalam rupiah. Null kalau tidak bisa dihitung."
+          }
+        },
+        "required": [
+          "operator",
+          "from",
+          "to",
+          "fare"
+        ],
+        "title": "FareSegment",
+        "description": "Satu bagian perjalanan yang ditagih. Tiap operator menagih per perjalanan menerus di jaringan mereka sendiri, makanya segment dan leg tidak selalu satu lawan satu."
+      },
       "OperatorWithLines": {
         "type": "object",
         "properties": {
@@ -1364,6 +1788,116 @@
           "items"
         ],
         "title": "SearchableIndex"
+      },
+      "FareJourneyLabel": {
+        "type": "string",
+        "title": "FareJourneyLabel",
+        "description": "Kelebihan yang cuma dipunya satu pilihan rute: `FEWEST_CHANGES` paling jarang ganti kendaraan, `LEAST_WALKING` paling sedikit jalan kaki, `CHEAPEST` paling murah, `SHORTEST_WAIT` kendaraannya paling sering lewat. Kalau ada dua rute yang sama-sama unggul, dua-duanya tidak dapat label, biar labelnya benar-benar membedakan. Nilai yang dikenal saat ini: `FEWEST_CHANGES`, `LEAST_WALKING`, `CHEAPEST`, `SHORTEST_WAIT`. Bisa bertambah."
+      },
+      "FareJourney": {
+        "type": "object",
+        "properties": {
+          "legs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FareLeg"
+            },
+            "description": "Perjalanan dari sisi penumpang: naik apa saja dan transfer di mana saja."
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FareSegment"
+            },
+            "description": "Perjalanan dari sisi penagihan tarif."
+          },
+          "totalFare": {
+            "anyOf": [
+              {
+                "type": "number",
+                "format": "double"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Total dalam rupiah buat pilihan rute ini. Null kalau tarifnya tidak bisa dihitung.",
+            "examples": [
+              14000
+            ]
+          },
+          "totalDistanceM": {
+            "type": "number",
+            "description": "Total jarak pilihan rute ini dalam meter.",
+            "format": "double"
+          },
+          "transferCount": {
+            "type": "number",
+            "description": "Berapa kali harus pindah kendaraan, dihitung dari sisi penumpang.",
+            "format": "double"
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FareJourneyLabel"
+            },
+            "description": "Boleh kosong, dan itu wajar: rute yang tidak menang sendirian di kriteria mana pun memang tidak punya kelebihan khusus buat disebut."
+          },
+          "boardings": {
+            "type": "number",
+            "description": "Berapa kali naik kendaraan. Beda tipis dari `transferCount`: ganti kereta di peron yang sama tetap dihitung naik, tapi tidak dihitung transit.",
+            "format": "double"
+          },
+          "walkDistanceM": {
+            "type": "number",
+            "description": "Total jarak jalan kaki di pilihan rute ini dalam meter.",
+            "format": "double"
+          },
+          "arrivalAt": {
+            "type": "string",
+            "description": "Jam sampai tujuan. Cuma ada kalau semua tahap naik kendaraannya punya jadwal, jadi kalau ada tahap yang pakai TransJakarta memang tidak muncul.",
+            "examples": [
+              "2026-09-07T08:02:00+07:00"
+            ]
+          }
+        },
+        "required": [
+          "legs",
+          "segments",
+          "totalFare",
+          "totalDistanceM",
+          "transferCount",
+          "labels",
+          "boardings",
+          "walkDistanceM"
+        ],
+        "title": "FareJourney",
+        "description": "Satu pilihan rute lengkap dengan tarifnya. Yang dibandingkan cuma jumlah naik kendaraan, jarak jalan kaki, rata-rata lama nunggu, dan tarif, bukan waktu tempuh. Jam berangkat dan tiba ikut ditampilkan di tahap yang jadwalnya kami punya."
+      },
+      "TripResult": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "$ref": "#/components/schemas/FareStation"
+          },
+          "to": {
+            "$ref": "#/components/schemas/FareStation"
+          },
+          "journeys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FareJourney"
+            },
+            "description": "Pilihan rute buat pasangan stasiun ini, diurutkan dari yang paling masuk akal. Selalu ada isinya kalau rutenya ketemu."
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "journeys"
+        ],
+        "title": "TripResult",
+        "description": "Beberapa pilihan rute sekaligus buat satu pasangan stasiun, masing-masing lengkap dengan tarifnya."
       }
     }
   }
