@@ -83,9 +83,16 @@ fun SearchScreen(
                 navigator.pop()
             },
             onRetry = viewModel::retry,
-            // Opening a result waits for the station, hub and line pages. Until then a tap only
-            // records the recent search, which is what the web does before navigating.
-            onResultClick = viewModel::onResultClick,
+            // Recorded as a recent search first, as the web does before navigating. A station opens
+            // its page; hubs and lines wait for theirs, so for now the tap only records.
+            onResultClick = { searchable ->
+                viewModel.onResultClick(searchable)
+                val stationId = (searchable as? Searchable.Station)?.stationId
+                if (stationId != null) {
+                    focusManager.clearFocus()
+                    navigator.goTo(Route.Station(stationId))
+                }
+            },
             onTogglePin = viewModel::onToggleSave,
             onClearRecents = viewModel::onClearRecents,
         )
