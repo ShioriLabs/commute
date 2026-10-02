@@ -26,8 +26,11 @@ android {
         release {
             buildConfigField("String", "API_BASE_URL", "\"$productionApi\"")
 
+            // R8. On a Galaxy S23, with the station page's cards as separate list items, the frame
+            // a station page opens on went from about 85 ms to about 52; builds take a few
+            // minutes longer.
             optimization {
-                enable = false
+                enable = true
             }
         }
     }
