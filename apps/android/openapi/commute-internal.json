@@ -372,6 +372,113 @@
         }
       }
     },
+    "/stations/{operator}/{stationCode}/headway": {
+      "get": {
+        "operationId": "getStationsByOperatorByStationCodeHeadway",
+        "summary": "Frekuensi kendaraan di satu stasiun",
+        "description": "Rata-rata berapa lama sekali kendaraan tiap lin lewat stasiun ini. Ini BUKAN jadwal: nggak bisa dipakai buat tahu keberangkatan berikutnya jam berapa, cuma buat tahu kira-kira nunggunya berapa lama.\n\nAngkanya ikut hari: sebagian koridor lebih jarang atau malah nggak jalan pas akhir pekan. Defaultnya hari ini di Jakarta, atau tentukan sendiri lewat `day`. Lin yang nggak jalan di hari yang diminta `headwayS`-nya `null` dan `days`-nya berisi hari-hari lin itu jalan.",
+        "tags": [
+          "Stasiun"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operator",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "KCI"
+              ]
+            },
+            "description": "Kode operator, misalnya `KCI`, `MRTJ`, `TJ`."
+          },
+          {
+            "in": "path",
+            "name": "stationCode",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "SUD"
+              ]
+            },
+            "description": "Kode stasiun versi operatornya, bukan station id yang lengkap."
+          },
+          {
+            "in": "query",
+            "name": "day",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "SAT"
+              ]
+            },
+            "description": "Hari yang mau dilihat: `WD` (Senin-Jumat), `SAT`, atau `SUN`. Hari libur nasional ikut jadwal `SUN`. Default-nya hari ini waktu Jakarta."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "description": "Sama dengan HTTP status code-nya.",
+                      "examples": [
+                        200
+                      ],
+                      "format": "double"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/HeadwayRow"
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Kode operator atau stasiun tidak ditemukan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "examples": [
+                        404
+                      ],
+                      "format": "double"
+                    },
+                    "error": {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "error"
+                  ],
+                  "title": "ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stations/{operator}/{stationCode}/timetable/grouped": {
       "get": {
         "operationId": "getStationsByOperatorByStationCodeTimetableGrouped",
@@ -1133,6 +1240,94 @@
             "EXTERNAL": "#/components/schemas/ExternalTransfer"
           }
         }
+      },
+      "HeadwayRow": {
+        "type": "object",
+        "properties": {
+          "line": {
+            "type": "string",
+            "description": "Kunci lin, format `OPERATOR:KODE` — sama seperti yang ada di `lines` punya stasiun."
+          },
+          "headwayS": {
+            "anyOf": [
+              {
+                "type": "number",
+                "format": "double"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Rata-rata jarak antar kendaraan dalam detik. `null` kalau linnya cuma jalan pas akhir pekan."
+          },
+          "source": {
+            "type": "string",
+            "description": "`STOP` kalau angkanya diukur di halte/stasiun ini sendiri, `LINE` kalau ambil rata-rata se-lin. Nilai yang dikenal saat ini: `STOP`, `LINE`. Bisa bertambah."
+          },
+          "weekendOnly": {
+            "description": "DEPRECATED, pakai `days`. Ada dan bernilai `true` kalau linnya nggak jalan di hari kerja.",
+            "type": "boolean"
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Nilai yang dikenal saat ini: `WD`, `SAT`, `SUN`. Bisa bertambah."
+            },
+            "description": "Hari-hari linnya jalan, urut. `WD` = Senin-Jumat, `SAT` = Sabtu, `SUN` = Minggu. Cuma ada kalau linnya nggak jalan setiap hari — kalau field-nya nggak ada, berarti tiap hari."
+          },
+          "boundFor": {
+            "type": "string",
+            "description": "Nama halte tujuan akhir buat arah ini, kayak yang ada di papan halte (\"arah Galunggung\"). Cuma ada kalau dua arahnya beda frekuensi — kalau nggak ada, angkanya berlaku buat dua-duanya."
+          },
+          "serviceHours": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "string",
+                    "description": "Jam mulai operasional, `HH:MM` waktu Jakarta.",
+                    "examples": [
+                      "05:00"
+                    ]
+                  },
+                  "end": {
+                    "type": "string",
+                    "description": "Jam selesai operasional, `HH:MM` waktu Jakarta. Bisa lebih kecil dari `start` kalau lewat tengah malam.",
+                    "examples": [
+                      "22:00"
+                    ]
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "allDay": {
+                    "description": "Linnya jalan 24 jam.",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "allDay"
+                ]
+              }
+            ],
+            "description": "Jam operasional lin ini di hari yang diminta, se-lin, bukan jam lewat di halte ini. Sekarang cuma ada buat TransJakarta, dan cuma kalau datanya ada — kalau nggak ada, berarti nggak diketahui, bukan 24 jam."
+          }
+        },
+        "required": [
+          "line",
+          "headwayS",
+          "source"
+        ],
+        "title": "HeadwayRow",
+        "description": "Seberapa sering kendaraan lewat, bukan jadwal. Nggak bisa dipakai buat tahu kapan yang berikutnya datang."
       },
       "TransitMode": {
         "type": "string",
