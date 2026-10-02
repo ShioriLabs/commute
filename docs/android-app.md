@@ -71,7 +71,7 @@ features' `:api`; a `:core:*` module never depends on a feature or on `:app`.
 :feature:saved:impl      saved stations
 :feature:trip:{api,impl}      trip mode: foreground service, alerts, Live Update
 :feature:card:{api,impl}      IC card: reader interface (api); screens, comparison (impl)
-:feature:settings:impl   settings, about, licences
+:feature:settings:impl   settings, saved-station order, stored data, legal, about
 
 :core:ui            → navigation, common, datastore   design system: theme, roundel, sheets, icons
 :core:navigation    → common                          Route, navigator, NavGraphContribution

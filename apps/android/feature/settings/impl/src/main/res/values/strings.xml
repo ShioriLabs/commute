@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Copy follows the web's settings pages (apps/web/app/routes/settings). Strings wrapped in CDATA
+    carry inline HTML (<b>, <i>, <a href>), rendered through AnnotatedString.fromHtml; a link to
+    `route:<page>` opens that settings page instead of the browser. Inside CDATA, quotes and
+    apostrophes still need escaping.
+-->
+<resources>
+    <!-- Shared -->
+    <string name="settings_back_description">Kembali</string>
+    <!-- %1$s is the app's versionName. -->
+    <string name="settings_version">\@commute/android %1$s</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Pengaturan</string>
+    <string name="settings_close_description">Tutup halaman pengaturan</string>
+    <string name="settings_item_saved_stations">Stasiun Disimpan</string>
+    <string name="settings_item_manage_data">Atur Data</string>
+    <string name="settings_item_legal">Legal &amp; Atribusi</string>
+    <string name="settings_item_data_platform">Commute Data Platform</string>
+    <string name="settings_item_support">Dukung Commute</string>
+    <string name="settings_item_about">Tentang Commute</string>
+
+    <!-- Saved stations. %1$s is the station's name. -->
+    <string name="settings_saved_title">Stasiun Disimpan</string>
+    <string name="settings_saved_hint">Urutan di sini jadi urutan di beranda. Stasiun yang dilepas pin-nya tetap tampil di sini sampai kamu meninggalkan halaman ini</string>
+    <string name="settings_saved_empty">Tidak ada stasiun disimpan</string>
+    <string name="settings_saved_move_up">Naikkan %1$s</string>
+    <string name="settings_saved_move_down">Turunkan %1$s</string>
+    <string name="settings_saved_pin">Pin %1$s</string>
+    <string name="settings_saved_unpin">Lepas pin %1$s</string>
+
+    <!-- Manage data. %1$d is a count, %1$s an entry's title. -->
+    <string name="settings_data_title">Atur Data</string>
+    <string name="settings_data_recents">Riwayat Pencarian</string>
+    <string name="settings_data_recents_count">%1$d item</string>
+    <string name="settings_data_recents_empty">Riwayat pencarian kosong</string>
+    <string name="settings_data_saved">Stasiun Disimpan</string>
+    <string name="settings_data_saved_count">%1$d stasiun</string>
+    <string name="settings_data_saved_empty">Tidak ada stasiun disimpan</string>
+    <string name="settings_data_clear">Hapus %1$s</string>
+    <string name="settings_data_clear_saved_confirm">Yakin mau hapus semua stasiun disimpan?</string>
+    <string name="settings_data_confirm">Hapus</string>
+    <string name="settings_data_cancel">Batal</string>
+
+    <!-- Legal & attributions -->
+    <string name="settings_legal_title">Legal &amp; Atribusi</string>
+    <string name="settings_legal_section_legal">Hal-Hal Legal</string>
+    <string name="settings_legal_section_attributions">Atribusi</string>
+    <string name="settings_legal_item_privacy">Kebijakan Privasi</string>
+    <string name="settings_legal_item_terms">Syarat dan Ketentuan</string>
+    <string name="settings_legal_item_data">Atribusi Data</string>
+    <string name="settings_legal_item_oss">Atribusi Kode Sumber Terbuka</string>
+    <string name="settings_legal_item_creative">Atribusi Aset Kreatif</string>
+    <string name="settings_legal_effective">Efektif Sejak 15 Juni 2025</string>
+
+    <!-- Privacy policy -->
+    <string name="settings_privacy_title">Kebijakan Privasi</string>
+    <string name="settings_privacy_intro"><![CDATA[<b>Shiori Labs</b> (selanjutnya \"Kami\") berkomitmen untuk menjaga privasi Anda sebagai pengguna aplikasi <b>Commute</b> (selanjutnya \"Aplikasi\").<br>Kami tidak mengumpulkan data pribadi Anda secara langsung, namun Mitra analitik Kami mungkin menyimpan data non-pribadi untuk keperluan analitik.<br>Kebijakan Privasi ini menjelaskan bagaimana Kami dan Mitra analitik Kami mengumpulkan, menggunakan, menyimpan, dan melindungi informasi pribadi Anda saat menggunakan Aplikasi.]]></string>
+    <string name="settings_privacy_collected_title">1. Informasi yang Kami Kumpulkan</string>
+    <string name="settings_privacy_collected_body"><![CDATA[Kami tidak mengumpulkan informasi identitas pribadi secara langsung. Namun, Kami menggunakan <i>platform</i> <b>Cloudflare Web Analytics</b> dari Cloudflare (selanjutnya \"Mitra Kami\" atau \"Cloudflare\") yang secara otomatis mengumpulkan informasi non-pribadi seperti:]]></string>
+    <string name="settings_privacy_collected_1">Alamat IP</string>
+    <string name="settings_privacy_collected_2">Informasi perangkat dan browser Anda</string>
+    <string name="settings_privacy_collected_3">Sistem operasi</string>
+    <string name="settings_privacy_collected_4">Negara asal berdasarkan IP</string>
+    <string name="settings_privacy_collected_5">Halaman yang dikunjungi dan waktu kunjungan</string>
+    <string name="settings_privacy_collected_outro">Data ini dikumpulkan secara anonim dan digunakan hanya untuk keperluan analisis lalu lintas dan performa situs.</string>
+    <string name="settings_privacy_use_title">2. Penggunaan Data</string>
+    <string name="settings_privacy_use_body">Kami menggunakan data yang dikumpulkan oleh Mitra Kami untuk hal-hal seperti:</string>
+    <string name="settings_privacy_use_1">Analisis halaman yang sering dikunjungi</string>
+    <string name="settings_privacy_use_2">Meningkatkan performa dan stabilitas Aplikasi</string>
+    <string name="settings_privacy_use_3">Mengatur prioritas jalan berkembangnya Aplikasi</string>
+    <string name="settings_privacy_use_4">Melindungi Aplikasi dari serangan siber</string>
+    <string name="settings_privacy_use_outro">Kami tidak akan menggunakan data tersebut untuk tujuan iklan, pelacakan, maupun menjualnya kepada pihak ketiga.</string>
+    <string name="settings_privacy_storage_title">3. Penyimpanan dan Keamanan</string>
+    <string name="settings_privacy_storage_body"><![CDATA[Semua data analitik disimpan oleh Cloudflare dan tunduk pada <a href=\"https://www.cloudflare.com/privacypolicy/\">Kebijakan Privasi Cloudflare</a>. Kami tidak menyimpan data pengguna secara lokal di server Kami.]]></string>
+    <string name="settings_privacy_rights_title">4. Hak Pengguna</string>
+    <string name="settings_privacy_rights_body">Karena data dikumpulkan secara anonim dan tidak dapat dikaitkan langsung dengan identitas individu, Kami tidak menyimpan atau memproses data pribadi yang dapat diminta, diubah, atau dihapus oleh Pengguna.</string>
+    <string name="settings_privacy_changes_title">5. Perubahan Kebijakan</string>
+    <string name="settings_privacy_changes_body">Kebijakan ini dapat diperbarui sewaktu-waktu tanpa pemberitahuan pasti. Perubahan signifikan akan diumumkan melalui Aplikasi dan halaman ini.</string>
+    <string name="settings_privacy_contact_title">6. Informasi Kontak</string>
+    <string name="settings_privacy_contact_body"><![CDATA[Jika Anda memiliki pertanyaan mengenai privasi atau kebijakan ini, silakan hubungi Kami melalui:<br>Email: <a href=\"mailto:hai@shiorilabs.id\">hai@shiorilabs.id</a>]]></string>
+
+    <!-- Terms & conditions -->
+    <string name="settings_terms_title">Syarat &amp; Ketentuan</string>
+    <string name="settings_terms_intro">Dengan mengakses dan menggunakan Aplikasi Commute (\"Aplikasi\"), Anda menyetujui Syarat dan Ketentuan ini. Jika Anda tidak setuju, silakan hentikan penggunaan.</string>
+    <string name="settings_terms_service_title">1. Deskripsi Layanan</string>
+    <string name="settings_terms_service_body"><![CDATA[Commute adalah aplikasi <i>open-source</i> yang menyediakan informasi jadwal transportasi secara cepat dan efisien, tanpa perlu login atau pendaftaran.<br>Kami berusaha menyediakan informasi yang akurat berdasarkan jadwal yang diterbitkan oleh Operator, tetapi Kami tidak bisa menjamin keakuratan atau kelengkapan data yang ditampilkan.<br>Gunakan Aplikasi ini sebagaimana mestinya dan jangan salahin Kami kalau keretanya telat.]]></string>
+    <string name="settings_terms_license_title">2. Lisensi dan Keterbukaan</string>
+    <string name="settings_terms_license_body"><![CDATA[Kode sumber Aplikasi ini dirilis di bawah <a href=\"https://github.com/ShioriLabs/commute/blob/main/LICENSE.md\">Lisensi MIT</a>, yang artinya:]]></string>
+    <string name="settings_terms_license_1">Anda bebas menggunakan, menyalin, memodifikasi, menyebarkan, atau membuat tiruan dari proyek ini;</string>
+    <string name="settings_terms_license_2">Asal menyertakan atribusi kepada pengembang aslinya (Shiori Labs);</string>
+    <string name="settings_terms_license_3">Dan tanpa jaminan apa pun.</string>
+    <string name="settings_terms_license_support">Kami dengan senang hati mendukung penggunaan dan kontribusi dari para Pengguna, selama mengikuti ketentuan lisensi tersebut.</string>
+    <string name="settings_terms_license_warning"><![CDATA[<b>PERINGATAN:</b> Lisensi hanya berlaku pada kode sumber Aplikasi ini. Untuk ketentuan penggunaan Data, silakan cek <a href=\"route:data-attributions\">Atribusi Data</a>. Untuk ketentuan penggunaan Aset Kreatif (termasuk, tapi tidak terbatas pada, gambar <i>clipart</i>), silakan cek <a href=\"route:creative-assets\">Atribusi Aset Kreatif</a>]]></string>
+    <string name="settings_terms_privacy_title">3. Data dan Privasi</string>
+    <string name="settings_terms_privacy_body"><![CDATA[Kami tidak mengumpulkan data pribadi Anda secara langsung. Informasi non-pribadi seperti IP dan browser mungkin dikumpulkan secara anonim oleh <b>Cloudflare Web Analytics</b>.<br>Lihat <a href=\"route:privacy-policy\">Kebijakan Privasi</a> untuk info lebih lanjut.]]></string>
+    <string name="settings_terms_liability_title">4. Batasan Tanggung Jawab</string>
+    <string name="settings_terms_liability_body"><![CDATA[Aplikasi ini disediakan <b>sebagaimana adanya (as-is)</b> tanpa jaminan. Kami <b>tidak bertanggung jawab atas kerugian atau kerusakan</b> yang timbul akibat penggunaan Aplikasi ini, baik secara langsung maupun tidak langsung.]]></string>
+    <string name="settings_terms_changes_title">5. Perubahan Aplikasi</string>
+    <string name="settings_terms_changes_body">Aplikasi ini mungkin berubah sewaktu-waktu, baik melalui update, fitur baru, atau perubahan data. Kami tidak wajib memberi tahu sebelumnya, tapi perubahan besar akan diumumkan melalui GitHub, Aplikasi atau kanal resmi Shiori Labs.</string>
+    <string name="settings_terms_law_title">6. Hukum Yang Berlaku</string>
+    <string name="settings_terms_law_body"><![CDATA[Syarat ini tunduk pada hukum yang berlaku di Republik Indonesia. Walaupun Aplikasi ini <i>open-source</i> dan bisa dipakai siapa saja di mana saja, Kami tetap beroperasi dari Indonesia.]]></string>
+    <string name="settings_terms_contact_title">7. Kontak</string>
+    <string name="settings_terms_contact_body"><![CDATA[Punya pertanyaan, saran, atau pengen curhat kenapa Sudirman rame banget pas jam pulang kerja? Hubungi Kami:<br>Email: <a href=\"mailto:hai@shiorilabs.id\">hai@shiorilabs.id</a><br>Repo: <a href=\"https://github.com/ShioriLabs/commute\">ShioriLabs/commute</a><br>Laman Web: <a href=\"https://shiorilabs.id\">shiorilabs.id</a>]]></string>
+
+    <!-- Data attributions -->
+    <string name="settings_data_attr_title">Atribusi Data</string>
+    <string name="settings_data_attr_intro"><![CDATA[<b>Commute</b> menggunakan data dari berbagai sumber resmi untuk tujuan agregasi dan informasi. Kami berharap para operator transportasi berikut dapat mempertimbangkan untuk menyediakan akses data yang lebih terbuka dan terstruktur bagi publik di masa mendatang.<br>Data yang telah kami agregasi dan proses akan tersedia melalui API publik untuk mendukung pengembangan ekosistem aplikasi transportasi yang lebih baik.<br>Kami percaya penggunaan data ini merupakan penggunaan wajar (fair use) untuk tujuan informasi publik dan pengembangan layanan transportasi, dengan menggunakan metode pengumpulan data yang menghormati infrastruktur server sumber.]]></string>
+    <string name="settings_data_attr_kci_body">Kami mengumpulkan data jadwal yang tersedia secara publik melalui sistem otomatis untuk menampilkan jadwal KRL Commuter Line</string>
+    <string name="settings_data_attr_mrtj_body">Kami mengumpulkan data jadwal yang tersedia secara publik melalui sistem otomatis untuk menampilkan jadwal MRT Jakarta</string>
+    <string name="settings_data_attr_lrtj_body">Kami mengumpulkan data jadwal yang tersedia secara publik melalui sistem otomatis untuk menampilkan jadwal LRT Jakarta</string>
+    <string name="settings_data_attr_lrtjbdb_body">Kami secara manual mengumpulkan jadwal yang dipublikasikan melalui Instagram Stories dan papan pengumuman stasiun. Transkripsi dari tangkapan layar dilakukan dengan bantuan teknologi kecerdasan buatan seperti OpenAI ChatGPT dan Anthropic Claude.</string>
+    <string name="settings_data_attr_fdtj_name">Peta Integrasi Transportasi Jakarta</string>
+    <string name="settings_data_attr_fdtj_body">Peta integrasi transportasi umum Jakarta dibuat dan dipublikasikan oleh Forum Diskusi Transportasi Jakarta (FDTJ). Kami menampilkan peta tersebut dalam bentuk yang sama dengan publikasi resmi sebagai referensi visual bagi pengguna.</string>
+    <string name="settings_data_attr_outro"><![CDATA[Meskipun Kami mengumpulkan data melalui sumber resmi tersebut, Jadwal perjalanan transportasi tersebut dapat berubah sewaktu-waktu. Silakan cek laman dan sosial media para operator tersebut untuk memastikan jadwal terkini.<br><br>Operator transportasi yang ingin menyediakan akses data resmi atau memiliki pertanyaan mengenai penggunaan data dapat menghubungi kami di <a href=\"mailto:hai@shiorilabs.id\">hai@shiorilabs.id</a>.]]></string>
+
+    <!-- Open-source attributions -->
+    <string name="settings_oss_title">Atribusi Kode Sumber Terbuka</string>
+    <string name="settings_oss_intro"><![CDATA[<b>Commute</b> menggunakan berbagai <i>library open-source</i> ajaib untuk membuat <b>Commute</b> menjadi sebuah Aplikasi yang nyata. Kami berterimakasih kepada <i>library-library</i> tersebut dan mengakui kerja keras para pengembang dan komunitasnya.<br><br>Berikut ini adalah daftar <i>library</i> yang Kami gunakan untuk membuat <b>Commute</b> menjadi nyata:]]></string>
+    <string name="settings_oss_runtime">Runtime Dependencies</string>
+    <string name="settings_oss_build">Build Dependencies</string>
+    <!-- %1$s is the licence's SPDX id. -->
+    <string name="settings_oss_license">Lisensi: %1$s</string>
+
+    <!-- Creative assets attributions -->
+    <string name="settings_creative_title">Atribusi Aset Kreatif</string>
+    <string name="settings_creative_intro"><![CDATA[<b>Commute</b> menggunakan aset-aset kreatif berikut untuk memberikan sentuhan ajaib dari sisi visual. Kami berterima kasih kepada para kreator yang telah menyediakan aset-aset ini secara terbuka untuk digunakan oleh publik.]]></string>
+    <string name="settings_creative_irasutoya_body"><![CDATA[Kami menggunakan beberapa gambar <i>clipart</i> dari Irasutoya sesuai dengan ketentuan penggunaan yang berlaku]]></string>
+    <string name="settings_creative_phosphor_body">Ikon pada Aplikasi Kami menggunakan ikon dari koleksi Phosphor Icons</string>
+    <string name="settings_creative_jakarta_sans_body">Font pada Aplikasi Kami menggunakan Plus Jakarta Sans yang terlihat modern dan menunjukkan semangat \"Kota Kolaborasi\"-nya Pemerintah DKI Jakarta</string>
+    <!-- %1$s is the licence's URL. -->
+    <string name="settings_creative_license"><![CDATA[Lisensi lengkap bisa dilihat di <a href=\"%1$s\">%1$s</a>]]></string>
+
+    <!-- Support -->
+    <string name="settings_support_title">Dukung Commute</string>
+    <string name="settings_support_headline">Commute gratis, dan bakal tetep gratis</string>
+    <string name="settings_support_intro"><![CDATA[Commute dibikin sama <b>Shiori Labs</b> di sela-sela kegabutan pas lagi nggak commuting. Nggak ada iklan maupun langganan, tapi maintain server dan benerin jadwal juga butuh usaha lohya]]></string>
+    <string name="settings_support_share_title">Bagiin ke sesama pejuang transum</string>
+    <string name="settings_support_share_body">Cara paling gampang buat dukung: kasih tau temen kantor, grup WA keluarga, atau orang di peron sebelah yang lagi bingung naik apa</string>
+    <string name="settings_support_share_button">Bagikan Commute</string>
+    <string name="settings_support_share_text">Aplikasi Jadwal Kereta Buat Anak Jakarta</string>
+    <string name="settings_support_saweria_title">Traktir Shiori Labs lewat Saweria</string>
+    <string name="settings_support_saweria_body">Kalau Commute pernah nyelametin kamu dari ketinggalan kereta terakhir, boleh banget traktir kita nih. Berapa aja boleh kok!</string>
+    <string name="settings_support_saweria_button">Dukung di Saweria</string>
+
+    <!-- About -->
+    <string name="settings_about_title">Tentang</string>
+    <string name="settings_about_logotype_description">Commute</string>
+    <string name="settings_about_headline">Aplikasi Jadwal Kereta Buat Anak Jakarta</string>
+    <string name="settings_about_intro">Aplikasi Jadwal Kereta yang dibikin biar kita gak perlu buka 4 aplikasi cuma buat cek kereta berikutnya\nMudah, cepat, gratis, dan bisa offline (kalau udah di-save stasiunnya tapi)</string>
+    <string name="settings_about_made_by"><![CDATA[Dibuat dengan perasaan cinta, layaknya dapet kursi kosong di <i>rush hour</i> Sudirman, oleh <b>Shiori Labs</b>]]></string>
+    <string name="settings_about_contact"><![CDATA[Punya pertanyaan, saran, atau pengen curhat kenapa Sudirman rame banget pas jam pulang kerja?<br>Langsung aja Hubungi Kami di:<br>Email: <a href=\"mailto:hai@shiorilabs.id\">hai@shiorilabs.id</a><br>Repo: <a href=\"https://github.com/ShioriLabs/commute\">ShioriLabs/commute</a><br>Laman Web: <a href=\"https://shiorilabs.id\">shiorilabs.id</a><br>(tidak menerima curhatan soal percintaan)]]></string>
+    <string name="settings_about_support"><![CDATA[Suka sama Commute? <a href=\"route:support\">Dukung di sini</a>]]></string>
+    <string name="settings_about_motto">dari pekerja jakarta, oleh commuter jakarta, untuk pejuang jakarta</string>
+</resources>
