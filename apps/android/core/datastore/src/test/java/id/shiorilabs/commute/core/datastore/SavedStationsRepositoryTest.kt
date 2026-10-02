@@ -70,4 +70,26 @@ class SavedStationsRepositoryTest {
         repository.toggle("KCI-MRI")
         assertEquals(listOf("MRTJ-BHI"), repository.stations.first())
     }
+
+    @Test
+    fun `replace stores the list in the given order`() = runTest {
+        val repository = SavedStationsRepository(FakePreferencesDataStore())
+        repository.save("KCI-MRI")
+        repository.save("MRTJ-BHI")
+        repository.save("KCI-THB")
+
+        repository.replace(listOf("KCI-THB", "KCI-MRI"))
+
+        assertEquals(listOf("KCI-THB", "KCI-MRI"), repository.stations.first())
+    }
+
+    @Test
+    fun `clear forgets every saved station`() = runTest {
+        val repository = SavedStationsRepository(FakePreferencesDataStore())
+        repository.save("KCI-MRI")
+
+        repository.clear()
+
+        assertEquals(emptyList<String>(), repository.stations.first())
+    }
 }
