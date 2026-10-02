@@ -63,6 +63,7 @@ features' `:api`; a `:core:*` module never depends on a feature or on `:app`.
 :app    Application, MainActivity, nav host, deep links. Nothing else.
   └─ every :feature:*:impl and :core:* below
 :wear   Wear OS companion (its own UI; shares :core:trip, :core:model, :core:common)
+:baselineprofile   generates :app's Baseline Profile on a device; ships nothing itself
 
 :feature:search:impl     station/POI search
 :feature:station:{api,impl}   station page, departures
@@ -85,9 +86,9 @@ features' `:api`; a `:core:*` module never depends on a feature or on `:app`.
 ```
 
 Ten core modules, seven features. What an app with accounts and payments would
-also need (session, security, analytics, locale switching, per-environment
-flavors) is deliberately absent: there is no login, one backend, one language,
-and nothing to measure that the API logs don't already show.
+also need (session, security, analytics, locale switching, a staging
+environment) is deliberately absent: there is no login, one backend, one
+language, and nothing to measure that the API logs don't already show.
 
 **`:api` only when someone else needs it.** A feature gets an `:api` module
 when another feature uses its types: `journey` needs `card`'s balance and
@@ -143,9 +144,33 @@ a module's `build.gradle.kts` is a few lines:
 | `commute.kotlin.library` | pure Kotlin modules (`:core:trip`, `:core:common`) |
 | `commute.kotlin.serialization` | modules with `@Serializable` types |
 
-Versions come from one version catalog. There are no product flavors: the
-debug build can point at a local API through `Environment`, which `:app`
-provides from build config.
+Versions come from one version catalog.
+
+- **One flavor, `production`.** The application convention declares an
+  `environment` dimension with a single flavor, so variants are
+  `productionDebug` and `productionRelease`. With one backend there is nothing
+  to switch between; the dimension is there so a second environment is a
+  flavor away rather than a rename of every variant and task. A debug build
+  can still point at a local API with `-Pcommute.apiBaseUrl=…`, which reaches
+  the app as `Environment`.
+- **Signing.** Debug builds sign with the `debug.keystore` committed at the
+  root of the Gradle build (`apps/android`), the same on every machine and in
+  CI, for `:app` and `:wear` alike: builds replace each other in place, and
+  the Wear companion pairs because it is signed like the phone app. It is the
+  standard debug keystore and protects nothing. Release builds sign with the
+  key a gitignored `secret.properties` names (see `secret.properties.example`),
+  and are left unsigned without one.
+- **Baseline Profile.** `:baselineprofile` walks launch, a search that opens a
+  station, and a saved station opened from the feed, and writes the rules to
+  `app/src/productionRelease/generated/baselineProfiles/`, which are committed.
+  ProfileInstaller applies them on first run, so the app's own code is
+  compiled ahead of time. Regenerate after a change to those paths with
+  `./gradlew :app:generateProductionReleaseBaselineProfile` against a device on
+  API 33+.
+- **R8** is on for release (`isMinifyEnabled`, rules in `app/proguard-rules.pro`).
+  Not AGP 9's `optimization` block: the Baseline Profile plugin builds its
+  profile against a non-minified copy of release by switching
+  `isMinifyEnabled` off, and the block left that copy minified.
 
 ### Tests
 
@@ -175,8 +200,10 @@ to. Those live in a **separate private repo** and are pulled in at build time.
 - **The rule generalises.** Anything else that turns out to be contestable
   goes the same way: interface here, implementation there.
 
-Signing keys and store credentials live in neither repo. Release builds come
-from CI with secrets, not from a laptop.
+Release signing keys and store credentials live in neither repo. Release
+builds come from CI with secrets, not from a laptop. (The debug keystore in
+`apps/android` is the exception on purpose: it signs nothing anyone should
+trust.)
 
 ### API client: generated, not hand-written
 
