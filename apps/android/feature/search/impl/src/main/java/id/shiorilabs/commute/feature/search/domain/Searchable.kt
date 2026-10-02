@@ -8,7 +8,11 @@ data class SearchLine(
     /** `#RRGGBB`. */
     val colorCode: String,
     val operator: String,
-)
+) {
+
+    /** `OPERATOR:CODE`, how the API's other responses refer to the line. */
+    val key: String get() = "$operator:$lineCode"
+}
 
 /**
  * One thing the rider can find: a station, a hub or a line, with the line keys the index carries

@@ -21,10 +21,19 @@ sealed interface Route : NavKey {
     @Serializable
     data object Search : Route
 
-    /** A station's page, opened from search or a saved station's name on the home screen. */
+    /**
+     * A station's page, opened from search or a saved station's name on the home screen.
+     *
+     * [title] and [lineKeys] are what the opener already shows of the station, for the page's
+     * header to stand on until the station itself loads. Search passes them, so its row's name and
+     * roundels have somewhere to land on the page's first frame.
+     */
     @Serializable
     data class Station(
         /** `OPERATOR-CODE`, e.g. `KCI-MRI`. */
         val stationId: String,
+        val title: String? = null,
+        /** `OPERATOR:CODE`. */
+        val lineKeys: List<String> = emptyList(),
     ) : Route
 }

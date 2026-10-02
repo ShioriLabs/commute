@@ -24,8 +24,13 @@ class StationBoardsTest {
         var timetable: (ServiceDayName) -> Either<Failure, List<LineTimetable>> =
             { listOf(LineTimetable("KCI:B", emptyList())).right() }
         val asked = mutableListOf<ServiceDayName>()
+        var cache: Pair<Station, Map<ServiceDayName, List<LineTimetable>>>? = null
 
         override suspend fun station(stationId: String) = station
+
+        override fun cachedStation(stationId: String) = cache?.first
+
+        override fun cachedTimetable(stationId: String, day: ServiceDayName) = cache?.second?.get(day)
 
         override suspend fun timetable(stationId: String, day: ServiceDayName): Either<Failure, List<LineTimetable>> {
             asked += day
@@ -83,5 +88,38 @@ class StationBoardsTest {
 
         assertTrue(board.timetable is UIState.Success)
         assertNull(board.nextDayBoard)
+    }
+
+    @Test
+    fun `a board already fetched whole is emitted alone, without asking`() = runTest {
+        val station = Station("KCI-MRI", "Manggarai", "KCI", "MRI", listOf("KCI:B"))
+        val repository = FakeStationRepository().apply {
+            cache = station to mapOf(ServiceDayName.WD to listOf(LineTimetable("KCI:B", emptyList())))
+        }
+
+        val boards = repository.board("KCI-MRI", LocalDateTime.parse("2026-09-30T08:00:00")).toList()
+
+        assertEquals(1, boards.size)
+        assertEquals(station, (boards.single().station as UIState.Success).data)
+        assertTrue(repository.asked.isEmpty())
+    }
+
+    @Test
+    fun `a cached board missing tomorrow's starts from the cache rather than loading`() = runTest {
+        val repository = FakeStationRepository().apply {
+            cache = Station("KCI-MRI", "Manggarai", "KCI", "MRI", listOf("KCI:B")) to
+                mapOf(ServiceDayName.WD to listOf(LineTimetable("KCI:B", emptyList())))
+        }
+
+        // A Friday: Saturday's board isn't cached yet.
+        val boards = repository.board("KCI-MRI", LocalDateTime.parse("2026-10-02T20:00:00")).toList()
+
+        assertTrue(boards.none { it.station is UIState.Loading || it.timetable is UIState.Loading })
+        assertEquals(setOf("KCI:B"), boards.last().nextDayBoard?.keys)
+    }
+
+    @Test
+    fun `nothing cached is no cached board`() {
+        assertNull(FakeStationRepository().cachedBoard("KCI-MRI", LocalDateTime.parse("2026-09-30T08:00:00")))
     }
 }

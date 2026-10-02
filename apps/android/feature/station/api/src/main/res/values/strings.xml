@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- A station's title. %1$s is its name; the words around it clip away as it flies into the
+         station page's header, which shows the name alone. -->
+    <string name="station_title">Stasiun %1$s</string>
+
     <!-- Line card -->
     <string name="line_card_fallback_name">Lin lain</string>
     <string name="line_card_description">Jadwal untuk jalur %1$s</string>

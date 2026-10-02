@@ -36,8 +36,15 @@ class StationViewModelTest {
     private class FakeStationRepository : StationRepository {
         var station: (String) -> Either<Failure, Station> = { id -> Station(id, "Manggarai", "KCI", "MRI", listOf("KCI:B")).right() }
         val asked = mutableListOf<Pair<String, ServiceDayName>>()
+        var cached = false
 
         override suspend fun station(stationId: String) = station.invoke(stationId)
+
+        override fun cachedStation(stationId: String) =
+            if (cached) Station(stationId, "Manggarai", "KCI", "MRI", listOf("KCI:B")) else null
+
+        override fun cachedTimetable(stationId: String, day: ServiceDayName) =
+            if (cached) listOf(LineTimetable("KCI:B", emptyList())) else null
 
         override suspend fun timetable(stationId: String, day: ServiceDayName): Either<Failure, List<LineTimetable>> {
             asked += stationId to day
@@ -132,5 +139,16 @@ class StationViewModelTest {
         // Saturday's service starts at 03:00.
         vm.onClockTick(LocalDateTime.parse("2026-10-03T03:00:00"))
         assertEquals(ServiceDayName.SAT, stations.asked.first().second)
+    }
+
+    @Test
+    fun `a station the home feed already loaded opens whole, without a loading frame`() = runTest {
+        stations.cached = true
+
+        val vm = viewModel()
+
+        assertTrue(vm.state.value.board.station is UIState.Success)
+        assertTrue(vm.state.value.board.timetable is UIState.Success)
+        assertTrue(stations.asked.isEmpty())
     }
 }
