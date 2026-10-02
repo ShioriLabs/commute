@@ -79,6 +79,7 @@ fun SavedStationsScreen(
         innerPadding = innerPadding,
         onRetry = viewModel::retry,
         onSearchClick = { navigator.goTo(Route.Search) },
+        onStationClick = { navigator.goTo(Route.Station(it)) },
     )
 }
 
@@ -90,6 +91,7 @@ private fun SavedStationsContent(
     onRetry: (stationId: String) -> Unit = {},
     onSearchClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
+    onStationClick: (stationId: String) -> Unit = {},
 ) {
     Box(
         modifier = Modifier
@@ -113,6 +115,7 @@ private fun SavedStationsContent(
                     now = now,
                     innerPadding = innerPadding,
                     onRetry = onRetry,
+                    onStationClick = onStationClick,
                 )
             }
 
@@ -148,6 +151,7 @@ private fun StationFeed(
     now: LocalDateTime,
     innerPadding: PaddingValues,
     onRetry: (stationId: String) -> Unit,
+    onStationClick: (stationId: String) -> Unit,
 ) {
     val listDescription = stringResource(R.string.saved_station_list_description)
     val listState = rememberLazyListState()
@@ -180,9 +184,8 @@ private fun StationFeed(
             )
         }
     }
-    val stuckName = stuck?.let { current ->
-        (titleRows.firstOrNull { it.first == current.index }?.second?.station as? UIState.Success)?.data?.name
-    }
+    val stuckCard = stuck?.let { current -> titleRows.firstOrNull { it.first == current.index }?.second }
+    val stuckName = (stuckCard?.station as? UIState.Success)?.data?.name
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -204,6 +207,7 @@ private fun StationFeed(
                     item(key = "saved-station-title:${card.stationId}", contentType = TITLE_ROW) {
                         StationTitle(
                             name = station.data.name,
+                            onClick = { onStationClick(card.stationId) },
                             modifier = Modifier
                                 .cardEntrance(index)
                                 // The bar shows this title while it is the current one; drawn
@@ -246,6 +250,8 @@ private fun StationFeed(
             statusBar = statusBar,
             hazeState = hazeState,
             onTitleHeight = { barTitleHeight = it },
+            // The bar covers the list's own copy of the title, so it takes the tap for it.
+            onClick = stuckCard?.takeIf { stuckName != null }?.let { card -> { onStationClick(card.stationId) } },
         )
     }
 }
@@ -271,6 +277,7 @@ private fun StuckTitleBar(
     statusBar: Dp,
     hazeState: HazeState,
     onTitleHeight: (Int) -> Unit,
+    onClick: (() -> Unit)?,
 ) {
     val background = MaterialTheme.colorScheme.background
     val style = HazeStyle(
@@ -329,6 +336,7 @@ private fun StuckTitleBar(
         StationTitle(
             name = shownName,
             topInset = statusBar,
+            onClick = onClick,
             modifier = Modifier
                 .onSizeChanged {
                     fullHeight = it.height

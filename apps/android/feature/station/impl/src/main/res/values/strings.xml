@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Header -->
+    <string name="station_close_description">Tutup halaman stasiun</string>
+    <string name="station_save_description">Simpan stasiun ini ke favorit</string>
+    <string name="station_unsave_description">Hapus stasiun ini dari favorit</string>
+    <!-- %1$s is a list of line names, e.g. "Lin Bogor, Lin Cikarang". -->
+    <string name="station_lines_description">Dilayani %1$s</string>
+
+    <!-- Departures -->
+    <string name="station_failed">Gagal memuat stasiun ini</string>
+    <string name="station_offline">Tidak dapat memuat stasiun ini saat offline</string>
+    <string name="station_timetable_failed">Gagal memuat jadwal</string>
+    <string name="station_timetable_offline">Tidak dapat memuat jadwal saat offline</string>
+    <string name="station_timetable_empty">Jadwal tidak tersedia</string>
+    <!-- Operators that publish no timetable (TransJakarta): not an error, so no retry. -->
+    <string name="station_no_schedule_title">Jadwal Tidak Tersedia</string>
+    <string name="station_no_schedule_message">Lihat papan keberangkatan atau tanyakan pramusapa</string>
+    <string name="station_retry">Coba Lagi</string>
+
+    <!-- Facilities -->
+    <string name="station_amenities_title">Fasilitas</string>
+    <string name="station_amenities_empty">Tidak ada data fasilitas untuk stasiun ini</string>
+    <string name="station_amenity_available">Tersedia</string>
+
+    <!-- Location -->
+    <string name="station_open_maps">Buka di Google Maps</string>
+    <string name="station_open_maps_description">Link eksternal, akan membuka Google Maps</string>
+
+    <!--
+        In memoriam, Stasiun Bekasi Timur (27 April 2026). Plain and factual on purpose, not the
+        house voice; copied verbatim from the web's station page. "sedang dalam perjalanan menuju
+        suatu tempat" is the author's phrasing and is load-bearing: do not edit it down.
+    -->
+    <string name="station_memorial_title">In Memoriam</string>
+    <string name="station_memorial_body">27 April 2026. Enam belas perempuan yang sedang dalam perjalanan menuju suatu tempat kehilangan nyawanya di stasiun ini. Sekitar sembilan puluh orang lainnya terluka.</string>
+    <string name="station_memorial_closing">Kami mengenang mereka.</string>
+</resources>
