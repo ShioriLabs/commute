@@ -36,4 +36,42 @@ sealed interface Route : NavKey {
         /** `OPERATOR:CODE`. */
         val lineKeys: List<String> = emptyList(),
     ) : Route
+
+    /** Settings, opened from the home screen's "Pengaturan" card. */
+    @Serializable
+    data object Settings : Route
+
+    /** Reorder and unpin the stations on the home screen. */
+    @Serializable
+    data object SettingsSavedStations : Route
+
+    /** What the app keeps on the device, and clearing it. */
+    @Serializable
+    data object SettingsManageData : Route
+
+    /** The legal documents and attributions, each a page below. */
+    @Serializable
+    data object SettingsLegal : Route
+
+    @Serializable
+    data object SettingsPrivacyPolicy : Route
+
+    @Serializable
+    data object SettingsTerms : Route
+
+    @Serializable
+    data object SettingsDataAttributions : Route
+
+    @Serializable
+    data object SettingsOssAttributions : Route
+
+    @Serializable
+    data object SettingsCreativeAssets : Route
+
+    /** Sharing Commute, and supporting it on Saweria. */
+    @Serializable
+    data object SettingsSupport : Route
+
+    @Serializable
+    data object SettingsAbout : Route
 }

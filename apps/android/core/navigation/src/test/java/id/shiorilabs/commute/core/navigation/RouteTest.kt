@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.core.navigation
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.serializer
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -20,5 +21,28 @@ class RouteTest {
         val encoded = Json.encodeToString(route)
 
         assertEquals(route, Json.decodeFromString<Route.Station>(encoded))
+    }
+
+    @Test
+    fun `the settings pages survive a serialization round-trip`() {
+        val routes: List<Route> = listOf(
+            Route.Settings,
+            Route.SettingsSavedStations,
+            Route.SettingsManageData,
+            Route.SettingsLegal,
+            Route.SettingsPrivacyPolicy,
+            Route.SettingsTerms,
+            Route.SettingsDataAttributions,
+            Route.SettingsOssAttributions,
+            Route.SettingsCreativeAssets,
+            Route.SettingsSupport,
+            Route.SettingsAbout,
+        )
+
+        // Route itself isn't polymorphic-serializable; each key goes through its own serializer.
+        routes.forEach { route ->
+            val serializer = serializer(route::class.java)
+            assertEquals(route, Json.decodeFromString(serializer, Json.encodeToString(serializer, route)))
+        }
     }
 }
