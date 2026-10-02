@@ -252,6 +252,12 @@ the app ships, one of these has to happen:
 Lean: option 1, done as its own change before any Android code. Do not point an
 installed app at `/_internal`.
 
+Where it stands: OTW was built first against `/_internal/trips`, described in
+the internal snapshot (`apps/api/src/openapi-internal.ts`) the same way
+`/_internal/searchables` already is. That unblocks the screens, not a release:
+promotion (option 1) still has to land before the app ships, and the client
+then only changes the path it calls.
+
 ### Offline cache
 
 Riders open a transit app underground and in dead zones. The rule is: **anything
