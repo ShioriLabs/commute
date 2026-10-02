@@ -100,6 +100,7 @@ fun HomeNavRail(
                 description = stringResource(R.string.saved_nav_settings_description),
                 icon = CommuteIcons.Settings,
                 onClick = onSettingsClick,
+                modifier = Modifier.navCardMorphSource(Route.Settings),
                 animateFace = !slidesWithPage,
             )
         }

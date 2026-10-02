@@ -6,6 +6,7 @@ import id.shiorilabs.commute.core.config.Environment
 import id.shiorilabs.commute.core.navigation.NavGraphContribution
 import id.shiorilabs.commute.core.navigation.NavGraphScope
 import id.shiorilabs.commute.core.navigation.Route
+import id.shiorilabs.commute.core.ui.morph.navCardMorphMetadata
 import id.shiorilabs.commute.core.ui.motion.pageTransitionMetadata
 import id.shiorilabs.commute.feature.settings.presentation.about.AboutScreen
 import id.shiorilabs.commute.feature.settings.presentation.home.SettingsScreen
@@ -21,15 +22,16 @@ import id.shiorilabs.commute.feature.settings.presentation.support.SupportScreen
 import javax.inject.Inject
 
 /**
- * Contributes settings and every page under it. Each slides in over the one it was opened from,
- * as the station page does.
+ * Contributes settings and every page under it. Settings opens out of the home screen's
+ * "Pengaturan" card, as search does out of its card; each page under it slides in over the one it
+ * was opened from, as the station page does.
  */
 class SettingsNavContribution @Inject constructor(
     private val environment: Environment,
 ) : NavGraphContribution {
 
     override fun EntryProviderScope<NavKey>.addEntries(scope: NavGraphScope) {
-        entry<Route.Settings>(metadata = pageTransitionMetadata()) {
+        entry<Route.Settings>(metadata = navCardMorphMetadata()) {
             SettingsScreen(appVersion = environment.appVersion, innerPadding = scope.screenPadding)
         }
         entry<Route.SettingsSavedStations>(metadata = pageTransitionMetadata()) {
