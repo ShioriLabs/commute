@@ -1,0 +1,24 @@
+# R8 keep rules for :app, on top of the defaults. Picked up from this keepRules source folder; they
+# only apply where optimization is on (release).
+
+# Play Console's "Edge-to-edge may not display for all users" check scans the uploaded bundle for a
+# call to androidx.activity's EdgeToEdge.enable. R8 renames library classes, so on a minified build
+# the call it looks for is `a.b.c.d(…)` and the check reports the app as never enabling
+# edge-to-edge. Keeping the entry point's name (not its callers) is enough for it to be recognised.
+-keep class androidx.activity.EdgeToEdge {
+    public static void enable(...);
+}
+-keep class androidx.activity.SystemBarStyle { *; }
+-keep class androidx.activity.SystemBarStyle$Companion {
+    public *** light(...);
+    public *** dark(...);
+    public *** auto(...);
+}
+
+# Strip verbose and debug logcat calls from release, including those bundled libraries make
+# unconditionally. Only VERBOSE/DEBUG: WARN and ERROR are worth keeping in a bug report, and Log.i is
+# left alone because a stripped call whose argument does real work would change behaviour.
+-assumenosideeffects class android.util.Log {
+    public static *** v(...);
+    public static *** d(...);
+}
