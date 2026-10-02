@@ -11,6 +11,7 @@ import id.shiorilabs.commute.feature.station.data.StationRepository
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.Station
+import id.shiorilabs.commute.feature.station.domain.Transfer
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
@@ -30,6 +31,7 @@ class StationRepositoryImpl @Inject constructor(
 
     private val stations = ConcurrentHashMap<String, Station>()
     private val timetables = ConcurrentHashMap<Pair<String, ServiceDayName>, List<LineTimetable>>()
+    private val transfers = ConcurrentHashMap<String, List<Transfer>>()
 
     override suspend fun station(stationId: String): Either<Failure, Station> =
         stations[stationId]?.right() ?: apiCallToFailure {
@@ -48,10 +50,20 @@ class StationRepositoryImpl @Inject constructor(
             }
         }
 
+    // An empty list is kept like any other: a station with no transfers is a stable fact, and the
+    // page offers no retry for it.
+    override suspend fun transfers(stationId: String): Either<Failure, List<Transfer>> =
+        transfers[stationId]?.right() ?: apiCallToFailure {
+            val (operator, code) = stationId.splitId()
+            service.getTransfers(operator, code).data.map { it.toTransfer() }
+        }.onRight { transfers[stationId] = it }
+
     override fun cachedStation(stationId: String): Station? = stations[stationId]
 
     override fun cachedTimetable(stationId: String, day: ServiceDayName): List<LineTimetable>? =
         timetables[stationId to day]
+
+    override fun cachedTransfers(stationId: String): List<Transfer>? = transfers[stationId]
 
     /** `KCI-MRI` to (`KCI`, `MRI`). */
     private fun String.splitId(): Pair<String, String> = substringBefore('-') to substringAfter('-')

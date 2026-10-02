@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.feature.station.presentation
 
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +18,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -41,13 +43,20 @@ import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
 import id.shiorilabs.commute.feature.station.R
 import id.shiorilabs.commute.feature.station.domain.Amenity
 import id.shiorilabs.commute.feature.station.domain.LineInfo
+import id.shiorilabs.commute.feature.station.domain.LineTimetable
+import id.shiorilabs.commute.feature.station.domain.lastTrains
 import id.shiorilabs.commute.feature.station.domain.Station
 import id.shiorilabs.commute.feature.station.domain.StationBoard
 import id.shiorilabs.commute.feature.station.presentation.components.AmenityList
 import id.shiorilabs.commute.feature.station.presentation.components.BekasiTimurMemorial
+import id.shiorilabs.commute.feature.station.presentation.components.LastTrainCard
+import id.shiorilabs.commute.feature.station.presentation.components.LastTrainsHeading
 import id.shiorilabs.commute.feature.station.presentation.components.NoScheduleNote
 import id.shiorilabs.commute.feature.station.presentation.components.OpenInMapsButton
+import id.shiorilabs.commute.feature.station.presentation.components.StationActions
 import id.shiorilabs.commute.feature.station.presentation.components.StationHeader
+import id.shiorilabs.commute.feature.station.presentation.components.TransferRow
+import id.shiorilabs.commute.feature.station.presentation.components.TransfersHeading
 import id.shiorilabs.commute.feature.station.presentation.components.LineCard
 import java.time.LocalDateTime
 
@@ -77,6 +86,8 @@ fun StationScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
     val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
+    val comingSoon = stringResource(R.string.station_otw_coming_soon)
     // Whether search opened this page, whose rows carry roundels to fly in. Read once, while the
     // page is still in the stack: on the way back it has already been popped, and its roundels
     // have to fly home all the same.
@@ -100,6 +111,9 @@ fun StationScreen(
         onClose = { navigator.pop() },
         onRetry = viewModel::retry,
         onOpenMaps = { station -> mapsUrl(station)?.let(uriHandler::openUri) },
+        // A stub until trip planning lands: journey takes this over.
+        onOtw = { Toast.makeText(context, comingSoon, Toast.LENGTH_SHORT).show() },
+        onOpenTimetable = { title -> navigator.goTo(Route.StationTimetable(stationId, title)) },
     )
 }
 
@@ -115,6 +129,8 @@ private fun StationContent(
     onClose: () -> Unit = {},
     onRetry: () -> Unit = {},
     onOpenMaps: (Station) -> Unit = {},
+    onOtw: () -> Unit = {},
+    onOpenTimetable: (title: String?) -> Unit = {},
 ) {
     val hazeState = rememberHazeState()
     val board = state.board
@@ -170,6 +186,8 @@ private fun StationContent(
                 ),
                 onRetry = onRetry,
                 onOpenMaps = onOpenMaps,
+                onOtw = onOtw,
+                onOpenTimetable = { onOpenTimetable(station?.name ?: placeholderTitle) },
             )
         }.map { it.measure(constraints) }
 
@@ -182,7 +200,10 @@ private fun StationContent(
 
 private enum class StationSlot { HEADER, LIST }
 
-/** Everything under the header: the departures, then the station's facilities and location. */
+/**
+ * Everything under the header: the actions and departures with the last trains, then the station's
+ * facilities, location and transfers.
+ */
 @Composable
 private fun StationList(
     state: StationUiState,
@@ -191,6 +212,8 @@ private fun StationList(
     contentPadding: PaddingValues,
     onRetry: () -> Unit,
     onOpenMaps: (Station) -> Unit,
+    onOtw: () -> Unit,
+    onOpenTimetable: () -> Unit,
 ) {
     val board = state.board
     val station = (board.station as? UIState.Success)?.data
@@ -217,7 +240,14 @@ private fun StationList(
             return@LazyColumn
         }
 
-        departures(board = board, lines = state.lines, now = now, onRetry = onRetry)
+        departures(
+            board = board,
+            lines = state.lines,
+            now = now,
+            onRetry = onRetry,
+            onOtw = onOtw,
+            onOpenTimetable = onOpenTimetable,
+        )
 
         if (station == null) {
             return@LazyColumn
@@ -244,6 +274,21 @@ private fun StationList(
                 )
             }
         }
+
+        // Outside the departures: a TransJakarta halte with no timetable still has its transfers.
+        val transfers = (state.transfers as? UIState.Success)?.data.orEmpty()
+        if (transfers.isNotEmpty()) {
+            item(key = "transfers-heading") {
+                TransfersHeading(Modifier.padding(top = 32.dp))
+            }
+            itemsIndexed(transfers, key = { _, transfer -> "transfer:${transfer.id}" }) { _, transfer ->
+                TransferRow(
+                    transfer = transfer,
+                    lines = state.lines,
+                    modifier = Modifier.padding(top = 16.dp),
+                )
+            }
+        }
     }
 }
 
@@ -261,6 +306,8 @@ private fun LazyListScope.departures(
     lines: Map<String, LineInfo>,
     now: LocalDateTime,
     onRetry: () -> Unit,
+    onOtw: () -> Unit,
+    onOpenTimetable: () -> Unit,
 ) {
     val inset = Modifier.padding(horizontal = 16.dp)
     when (val timetable = board.timetable) {
@@ -286,21 +333,37 @@ private fun LazyListScope.departures(
         }
 
         is UIState.Success -> when {
-            timetable.data.isNotEmpty() -> itemsIndexed(timetable.data, key = { _, line -> "line:${line.lineKey}" }) { index, line ->
-                LineCard(
-                    line = line,
-                    lineInfo = lines[line.lineKey],
-                    now = now,
-                    nextDayLine = board.nextDayLine(line),
-                    // Lands here from the same card on the home feed.
-                    modifier = inset
-                        .padding(top = if (index == 0) 0.dp else 16.dp)
-                        .sharedLineCard(board.stationId, line.lineKey, joinAfterFirstFrame = true),
-                )
+            timetable.data.isNotEmpty() -> {
+                item(key = "actions") {
+                    StationActions(
+                        onOtw = onOtw,
+                        onOpenTimetable = onOpenTimetable,
+                        modifier = inset.padding(bottom = 16.dp),
+                    )
+                }
+                itemsIndexed(timetable.data, key = { _, line -> "line:${line.lineKey}" }) { index, line ->
+                    LineCard(
+                        line = line,
+                        lineInfo = lines[line.lineKey],
+                        now = now,
+                        nextDayLine = board.nextDayLine(line),
+                        // Lands here from the same card on the home feed.
+                        modifier = inset
+                            .padding(top = if (index == 0) 0.dp else 16.dp)
+                            .sharedLineCard(board.stationId, line.lineKey, joinAfterFirstFrame = true),
+                    )
+                }
+                lastTrains(timetable.data, lines)
             }
 
-            board.stationId.substringBefore('-') == OPERATOR_TJ -> item(key = "departures-no-schedule") {
-                NoScheduleNote(inset)
+            // A missing schedule is a fact about the operator, so trip planning stays on offer.
+            board.stationId.substringBefore('-') == OPERATOR_TJ -> {
+                item(key = "departures-no-schedule") {
+                    NoScheduleNote(inset)
+                }
+                item(key = "actions") {
+                    StationActions(onOtw = onOtw, modifier = inset.padding(top = 16.dp))
+                }
             }
 
             else -> item(key = "departures-empty") {
@@ -312,6 +375,26 @@ private fun LazyListScope.departures(
                 )
             }
         }
+    }
+}
+
+/** The "Kereta terakhir" cards, one item each, under a heading of their own. */
+private fun LazyListScope.lastTrains(timetable: List<LineTimetable>, lines: Map<String, LineInfo>) {
+    val lastTrainLines = lastTrains(timetable)
+    if (lastTrainLines.isEmpty()) {
+        return
+    }
+    item(key = "last-trains-heading") {
+        LastTrainsHeading(Modifier.padding(top = 32.dp, bottom = 16.dp))
+    }
+    itemsIndexed(lastTrainLines, key = { _, line -> "last-train:${line.lineKey}" }) { index, line ->
+        LastTrainCard(
+            line = line,
+            lineInfo = lines[line.lineKey],
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .padding(top = if (index == 0) 0.dp else 8.dp),
+        )
     }
 }
 

@@ -4,6 +4,7 @@ import id.shiorilabs.commute.core.model.models.GroupedTimetable
 import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.model.models.Station
+import id.shiorilabs.commute.core.model.models.Transfer
 import id.shiorilabs.commute.core.network.response.Response
 import id.shiorilabs.commute.core.network.service.CommuteService
 
@@ -31,6 +32,13 @@ class FakeCommuteService : CommuteService {
     var groupedTimetable: suspend (operator: String, stationCode: String, day: String) -> List<GroupedTimetable> =
         { _, _, _ -> error("getGroupedTimetable was not stubbed") }
 
+    var transfers: suspend (operator: String, stationCode: String) -> List<Transfer> =
+        { _, _ -> error("getTransfers was not stubbed") }
+
+    /** How many times [getTransfers] was called — for asserting that a repository caches. */
+    var transfersCalls: Int = 0
+        private set
+
     var operators: suspend () -> List<OperatorWithLines> = { error("getOperators was not stubbed") }
 
     /** How many times [getOperators] was called — for asserting that the dictionary is cached. */
@@ -45,6 +53,11 @@ class FakeCommuteService : CommuteService {
         stationCode: String,
         day: String,
     ): Response<List<GroupedTimetable>> = Response(status = 200, data = groupedTimetable(operator, stationCode, day))
+
+    override suspend fun getTransfers(operator: String, stationCode: String): Response<List<Transfer>> {
+        transfersCalls++
+        return Response(status = 200, data = transfers(operator, stationCode))
+    }
 
     override suspend fun getOperators(): Response<List<OperatorWithLines>> {
         operatorsCalls++

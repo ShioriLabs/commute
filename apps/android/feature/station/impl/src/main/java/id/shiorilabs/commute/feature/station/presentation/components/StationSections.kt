@@ -44,10 +44,10 @@ private val Green700 = Color(0xFF15803D)
 
 /** A section of the page under the departures: the web's `mt-8` and `px-4` heading. */
 @Composable
-private fun SectionHeading(text: String) {
+internal fun SectionHeading(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
-        modifier = Modifier
+        modifier = modifier
             .padding(horizontal = 16.dp)
             .semantics { heading() },
         style = MaterialTheme.typography.titleMedium,

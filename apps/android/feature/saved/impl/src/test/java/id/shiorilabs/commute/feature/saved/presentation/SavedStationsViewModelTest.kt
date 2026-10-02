@@ -14,6 +14,7 @@ import id.shiorilabs.commute.feature.station.data.StationRepository
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.Station
+import id.shiorilabs.commute.feature.station.domain.Transfer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -43,6 +44,8 @@ class SavedStationsViewModelTest {
             asked += stationId to day
             return listOf(LineTimetable("KCI:B", emptyList())).right()
         }
+
+        override suspend fun transfers(stationId: String): Either<Failure, List<Transfer>> = emptyList<Transfer>().right()
     }
 
     private class FakeLineRepository : LineRepository {

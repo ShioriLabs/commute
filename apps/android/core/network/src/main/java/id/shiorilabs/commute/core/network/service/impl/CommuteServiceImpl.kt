@@ -4,6 +4,7 @@ import id.shiorilabs.commute.core.model.models.GroupedTimetable
 import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.model.models.Station
+import id.shiorilabs.commute.core.model.models.Transfer
 import id.shiorilabs.commute.core.network.ext.decodeOrThrow
 import id.shiorilabs.commute.core.network.response.Response
 import id.shiorilabs.commute.core.network.service.CommuteService
@@ -31,6 +32,9 @@ class CommuteServiceImpl @Inject constructor(
         client.get("stations/${operator.encodeURLPathPart()}/${stationCode.encodeURLPathPart()}/timetable/grouped") {
             parameter("day", day)
         }.decodeOrThrow()
+
+    override suspend fun getTransfers(operator: String, stationCode: String): Response<List<Transfer>> =
+        client.get("stations/${operator.encodeURLPathPart()}/${stationCode.encodeURLPathPart()}/transfers").decodeOrThrow()
 
     override suspend fun getOperators(): Response<List<OperatorWithLines>> =
         client.get("operators").decodeOrThrow()

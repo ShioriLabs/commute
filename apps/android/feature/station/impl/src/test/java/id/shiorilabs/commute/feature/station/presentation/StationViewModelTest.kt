@@ -14,6 +14,7 @@ import id.shiorilabs.commute.feature.station.data.StationRepository
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.Station
+import id.shiorilabs.commute.feature.station.domain.Transfer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -50,6 +51,10 @@ class StationViewModelTest {
             asked += stationId to day
             return listOf(LineTimetable("KCI:B", emptyList())).right()
         }
+
+        var transfers: Either<Failure, List<Transfer>> = emptyList<Transfer>().right()
+
+        override suspend fun transfers(stationId: String) = transfers
     }
 
     private class FakeLineRepository : LineRepository {
@@ -150,5 +155,18 @@ class StationViewModelTest {
         assertTrue(vm.state.value.board.station is UIState.Success)
         assertTrue(vm.state.value.board.timetable is UIState.Success)
         assertTrue(stations.asked.isEmpty())
+    }
+
+    @Test
+    fun `transfers load with the page, and a failed load is retried with it`() = runTest {
+        stations.transfers = Failure.Network.NoConnection().left()
+        val vm = viewModel()
+        assertTrue(vm.state.first { it.transfers !is UIState.Loading && it.transfers !is UIState.Idle }.transfers is UIState.Error)
+
+        val walk = Transfer.External("T-1", 230, null, "Halim", "KCIC")
+        stations.transfers = listOf(walk).right()
+        vm.retry()
+
+        assertEquals(listOf(walk), (vm.state.first { it.transfers is UIState.Success }.transfers as UIState.Success).data)
     }
 }
