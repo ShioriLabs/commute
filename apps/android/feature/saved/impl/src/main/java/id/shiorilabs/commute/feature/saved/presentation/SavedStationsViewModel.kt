@@ -5,15 +5,14 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import id.shiorilabs.commute.core.datastore.SavedStationsRepository
 import id.shiorilabs.commute.core.time.ServiceDayName
-import id.shiorilabs.commute.core.time.nextServiceDayOf
 import id.shiorilabs.commute.core.time.serviceDayOf
 import id.shiorilabs.commute.core.type.UIState
-import id.shiorilabs.commute.core.type.toUserMessage
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationRepository
+import id.shiorilabs.commute.feature.station.data.board
 import id.shiorilabs.commute.feature.station.domain.LineInfo
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
+import id.shiorilabs.commute.feature.station.domain.StationBoard
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -34,7 +33,8 @@ class SavedStationsViewModel @Inject constructor(
     private val clock: Clock,
 ) : ViewModel() {
 
-    private val cards = MutableStateFlow<Map<String, StationCardState>>(emptyMap())
+    private val cards = MutableStateFlow<Map<String, StationBoard>>(emptyMap())
+    private val loads = mutableMapOf<String, Job>()
     private val lines = MutableStateFlow<Map<String, LineInfo>>(emptyMap())
 
     /** The service day the loaded boards belong to. */
@@ -45,7 +45,7 @@ class SavedStationsViewModel @Inject constructor(
     val state: StateFlow<UIState<SavedStationsUiState>> = combine(savedIds, cards, lines) { ids, cards, lines ->
         UIState.Success(
             SavedStationsUiState(
-                cards = ids.map { cards[it] ?: StationCardState.loading(it) },
+                cards = ids.map { cards[it] ?: StationBoard.loading(it) },
                 lines = lines,
             ),
         ) as UIState<SavedStationsUiState>
@@ -95,42 +95,16 @@ class SavedStationsViewModel @Inject constructor(
     private fun now(): LocalDateTime = LocalDateTime.now(clock)
 
     private fun load(stationId: String, now: LocalDateTime = now()) {
-        val day = serviceDayOf(now)
-        val nextDay = nextServiceDayOf(now)
-        loadedDay = day
-
-        cards.update { it + (stationId to StationCardState.loading(stationId).copy(nextDayDiffers = nextDay != day)) }
-
-        viewModelScope.launch {
-            coroutineScope {
-                val station = async { stationRepository.station(stationId) }
-                val timetable = async { stationRepository.timetable(stationId, day) }
-                // Only fetched when tomorrow runs a different board: the rest of the week today's
-                // already holds tomorrow's first trains.
-                val nextBoard = if (nextDay != day) async { stationRepository.timetable(stationId, nextDay) } else null
-
-                val stationState = station.await().fold(
-                    ifLeft = { UIState.Error(it.toUserMessage(), it.cause) },
-                    ifRight = { UIState.Success(it) },
-                )
-                setCard(stationId) { it.copy(station = stationState) }
-
-                val timetableState = timetable.await().fold(
-                    ifLeft = { UIState.Error(it.toUserMessage(), it.cause) },
-                    ifRight = { UIState.Success(it) },
-                )
-                setCard(stationId) { it.copy(timetable = timetableState) }
-
-                val next = nextBoard?.await()?.getOrNull()?.associateBy { it.lineKey }
-                setCard(stationId) { it.copy(nextDayBoard = next) }
+        loadedDay = serviceDayOf(now)
+        // A retry or a day turnover replaces a load still in flight, which would otherwise land
+        // after it and put the older board back.
+        loads[stationId]?.cancel()
+        // In place before the load starts, so the card counts as loaded from this call on.
+        cards.update { it + (stationId to StationBoard.loading(stationId)) }
+        loads[stationId] = viewModelScope.launch {
+            stationRepository.board(stationId, now).collect { board ->
+                cards.update { it + (stationId to board) }
             }
-        }
-    }
-
-    private fun setCard(stationId: String, change: (StationCardState) -> StationCardState) {
-        cards.update { current ->
-            val card = current[stationId] ?: return@update current
-            current + (stationId to change(card))
         }
     }
 }
