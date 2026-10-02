@@ -377,6 +377,101 @@
           }
         }
       }
+    },
+    "/stations/{operator}/{stationCode}/transfers": {
+      "get": {
+        "operationId": "getStationsByOperatorByStationCodeTransfers",
+        "summary": "Transfer dari satu stasiun",
+        "description": "Sambungan ke stasiun terdekat, termasuk yang beda operator, lengkap dengan jarak jalan kakinya. Transfer `INTERNAL` masih di dalam area berbayar, sedangkan `EXTERNAL` berarti kamu harus tap keluar dulu lalu tap masuk lagi.",
+        "tags": [
+          "Stasiun"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operator",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "KCI"
+              ]
+            },
+            "description": "Kode operator, misalnya `KCI`, `MRTJ`, `TJ`."
+          },
+          {
+            "in": "path",
+            "name": "stationCode",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "SUD"
+              ]
+            },
+            "description": "Kode stasiun versi operatornya, bukan station id yang lengkap."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "description": "Sama dengan HTTP status code-nya.",
+                      "examples": [
+                        200
+                      ],
+                      "format": "double"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Transfer"
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Kode operator atau stasiun tidak ditemukan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "examples": [
+                        404
+                      ],
+                      "format": "double"
+                    },
+                    "error": {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "error"
+                  ],
+                  "title": "ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -687,6 +782,193 @@
         ],
         "title": "GroupedTimetable",
         "description": "Jadwal satu lin, dikelompokkan tiga tingkat: per arah, lalu per stasiun tujuan, lalu daftar keberangkatannya. Ini bentuk yang dipakai papan keberangkatan."
+      },
+      "StationRef": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Identifier yang stabil, formatnya `{operatorCode}-{stationCode}`. Pakai ini kalau mau cek tarif.",
+            "examples": [
+              "KCI-SUDB"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "Nama yang ditampilkan ke penumpang.",
+            "examples": [
+              "BNI City"
+            ]
+          },
+          "officialName": {
+            "type": "string",
+            "description": "Nama versi operatornya sendiri, yang sering beda jauh dari nama tampilannya. KCI, misalnya, masih menulis \"SUDIRMAN BARU\" buat stasiun yang kita tampilkan sebagai \"BNI City\". Berguna buat pencarian, karena banyak penumpang masih menyebut stasiunnya dengan nama ini.",
+            "examples": [
+              "SUDIRMAN BARU"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "description": "Kode stasiun versi operatornya. Unik di dalam satu operator, tapi belum tentu unik antar operator.",
+            "examples": [
+              "SUDB"
+            ]
+          },
+          "operator": {
+            "type": "string",
+            "title": "Operator code",
+            "description": "Operator transit. `KCI`: Commuter Line · `MRTJ`: MRT Jakarta · `LRTJ`: LRT Jakarta · `LRTJBDB`: LRT Jabodebek · `TJ`: TransJakarta · `APCGK`: Kalayang Bandara. `NUL` cuma placeholder internal dan tidak pernah muncul di response. Nilai yang dikenal saat ini: `KCI`, `MRTJ`, `LRTJ`, `LRTJBDB`, `TJ`, `APCGK`. Bisa bertambah.",
+            "examples": [
+              "KCI",
+              "MRTJ"
+            ]
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "title": "Line key",
+              "description": "`OPERATOR:CODE`, dicocokkan ke kamus lin dari `/operators`.",
+              "examples": [
+                "KCI:C",
+                "MRTJ:M"
+              ]
+            },
+            "description": "Lin yang berhenti di stasiun ini, dalam bentuk key ke kamus lin dari `/operators`. Kosong kalau stasiunnya cuma dipakai buat routing."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "officialName",
+          "code",
+          "operator",
+          "lines"
+        ],
+        "title": "StationRef",
+        "description": "Rujukan ringkas ke sebuah stasiun. Dipakai di tempat yang cuma butuh nama dan kodenya, tanpa detail lengkap."
+      },
+      "InternalTransfer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "distanceM": {
+            "type": "number",
+            "description": "Jarak jalan kaki dalam meter.",
+            "examples": [
+              90
+            ],
+            "format": "double"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Petunjuk tambahan buat jalan kakinya. Null kalau tidak ada yang perlu dijelaskan."
+          },
+          "dataType": {
+            "type": "string",
+            "enum": [
+              "INTERNAL"
+            ]
+          },
+          "toStation": {
+            "$ref": "#/components/schemas/StationRef"
+          }
+        },
+        "required": [
+          "id",
+          "distanceM",
+          "notes",
+          "dataType",
+          "toStation"
+        ],
+        "title": "InternalTransfer",
+        "description": "Sambungan ke stasiun lain yang ada di API ini. `toStation` berisi referensi stasiun lengkap."
+      },
+      "ExternalTransfer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "distanceM": {
+            "type": "number",
+            "description": "Jarak jalan kaki dalam meter.",
+            "examples": [
+              90
+            ],
+            "format": "double"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Petunjuk tambahan buat jalan kakinya. Null kalau tidak ada yang perlu dijelaskan."
+          },
+          "dataType": {
+            "type": "string",
+            "enum": [
+              "EXTERNAL"
+            ]
+          },
+          "toStation": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "operatorName": {
+                "type": "string",
+                "description": "Nama operatornya dalam teks biasa, karena layanan di luar API ini tidak punya kode operator."
+              }
+            },
+            "required": [
+              "name",
+              "operatorName"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "distanceM",
+          "notes",
+          "dataType",
+          "toStation"
+        ],
+        "title": "ExternalTransfer",
+        "description": "Sambungan ke layanan yang belum ada di API ini. Tidak ada station id atau lin, cuma nama."
+      },
+      "Transfer": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/InternalTransfer"
+          },
+          {
+            "$ref": "#/components/schemas/ExternalTransfer"
+          }
+        ],
+        "title": "Transfer",
+        "description": "Dibedakan lewat `dataType`. Kebanyakan INTERNAL, tapi EXTERNAL juga ada, jadi tangani dua-duanya.",
+        "discriminator": {
+          "propertyName": "dataType",
+          "mapping": {
+            "INTERNAL": "#/components/schemas/InternalTransfer",
+            "EXTERNAL": "#/components/schemas/ExternalTransfer"
+          }
+        }
       },
       "TransitMode": {
         "type": "string",
