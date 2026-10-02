@@ -15,6 +15,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -43,7 +47,10 @@ private const val BACKDROP_SOLID_FROM = 0.5f
  * The home screen's bottom rail of entry points, over a backdrop that fades the list out beneath
  * it. It scrolls horizontally so it keeps working once it holds more cards than fit a phone.
  *
- * The cards rise in one after another the first time the screen shows, as on the web. With
+ * The cards rise in one after another the first time the screen shows, as on the web. Only the
+ * card a screen opened out of moves its face with that screen's morph: the rail remembers which
+ * one it was, as the feed does for the station whose title flies, since by the time that screen
+ * closes it is no longer on the back stack to ask. With
  * [slidesWithPage] they also drop off the bottom edge one after another as a page covers the home
  * screen, and come back the same way; meanwhile the rail draws above the shared elements in flight,
  * so a line card that was under it on the feed leaves from under it and lands back under it.
@@ -61,6 +68,7 @@ fun HomeNavRail(
 
     val background = MaterialTheme.colorScheme.background
     val railDescription = stringResource(R.string.saved_nav_rail_description)
+    var opened by rememberSaveable { mutableStateOf<RailCard?>(null) }
 
     Row(
         modifier = modifier
@@ -86,11 +94,14 @@ fun HomeNavRail(
                 subtitle = stringResource(R.string.saved_nav_search_subtitle),
                 description = stringResource(R.string.saved_nav_search_description),
                 icon = CommuteIcons.Search,
-                onClick = onSearchClick,
+                onClick = {
+                    opened = RailCard.SEARCH
+                    onSearchClick()
+                },
                 // First in the card's chain, so the bounds the morph starts from are the card's own.
                 modifier = Modifier.navCardMorphSource(Route.Search),
                 accent = true,
-                animateFace = !slidesWithPage,
+                animateFace = !slidesWithPage && opened == RailCard.SEARCH,
             )
         }
         Box(Modifier.navEntrance(1).navRailCardTransition(1, enabled = slidesWithPage)) {
@@ -99,9 +110,12 @@ fun HomeNavRail(
                 subtitle = stringResource(R.string.saved_nav_settings_subtitle),
                 description = stringResource(R.string.saved_nav_settings_description),
                 icon = CommuteIcons.Settings,
-                onClick = onSettingsClick,
+                onClick = {
+                    opened = RailCard.SETTINGS
+                    onSettingsClick()
+                },
                 modifier = Modifier.navCardMorphSource(Route.Settings),
-                animateFace = !slidesWithPage,
+                animateFace = !slidesWithPage && opened == RailCard.SETTINGS,
             )
         }
     }
@@ -165,6 +179,9 @@ private fun Modifier.navRailCardTransition(index: Int, enabled: Boolean): Modifi
         )
     }
 }
+
+/** The rail's cards that open a screen out of themselves. */
+private enum class RailCard { SEARCH, SETTINGS }
 
 /** Past this many cards they share a delay, as the web caps NAV_STAGGER. */
 private const val NAV_MAX_STAGGER = 4
