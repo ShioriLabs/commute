@@ -31,6 +31,11 @@ ktor = "3.5.2"
 fabrikt = "26.0.1"
 # Testing
 junit = "4.13.2"
+junitVersion = "1.3.0"
+# Baseline Profile — :baselineprofile generates it, ProfileInstaller applies it on first run
+benchmark = "1.5.0-rc01"
+uiautomator = "2.4.0"
+profileinstaller = "1.4.1"
 
 [libraries]
 # KotlinX
@@ -75,6 +80,11 @@ ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx
 fabrikt = { module = "com.cjbooms:fabrikt", version.ref = "fabrikt" }
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
+# Baseline Profile
+androidx-benchmark-macro-junit4 = { module = "androidx.benchmark:benchmark-macro-junit4", version.ref = "benchmark" }
+androidx-uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "uiautomator" }
+androidx-profileinstaller = { module = "androidx.profileinstaller:profileinstaller", version.ref = "profileinstaller" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutinesTest" }
 # Build-logic — Gradle plugin artifacts consumed (compileOnly) by the convention plugins.
 android-gradlePlugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
@@ -86,6 +96,8 @@ hilt-gradlePlugin = { module = "com.google.dagger:hilt-android-gradle-plugin", v
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
+android-test = { id = "com.android.test", version.ref = "agp" }
+androidx-baselineprofile = { id = "androidx.baselineprofile", version.ref = "benchmark" }
 # Convention plugins — resolved from the `build-logic` included build (no version).
 commute-android-application = { id = "commute.android.application" }
 commute-android-library = { id = "commute.android.library" }
