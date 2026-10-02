@@ -28,6 +28,8 @@ import id.shiorilabs.commute.feature.saved.R
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.StationBoard
+import id.shiorilabs.commute.feature.station.domain.isTransJakarta
+import id.shiorilabs.commute.feature.station.presentation.components.HalteFrequencies
 import id.shiorilabs.commute.feature.station.presentation.components.LineCard
 import id.shiorilabs.commute.feature.station.presentation.sharedLineCard
 import id.shiorilabs.commute.feature.station.presentation.StationTitleText
@@ -110,7 +112,8 @@ fun StationPlaceholder(
 
 /**
  * A loaded station's departures: a [LineCard] per line that still has departures. The board fails
- * on its own, saying so under the station's name, as does a board that comes back empty.
+ * on its own, saying so under the station's name, as does a board that comes back empty. A halte's
+ * board is always empty, TransJakarta publishing no timetable, so it shows its frequencies instead.
  */
 @Composable
 fun StationTimetable(
@@ -142,7 +145,16 @@ fun StationTimetable(
             modifier = inset,
         )
 
-        is UIState.Success -> if (timetable.data.isEmpty()) {
+        is UIState.Success -> if (timetable.data.isEmpty() && isTransJakarta(card.stationId)) {
+            when (val frequencies = card.frequencies) {
+                is UIState.Idle, is UIState.Loading -> SkeletonBlock(inset.fillMaxWidth().height(280.dp))
+                is UIState.Success, is UIState.Error -> HalteFrequencies(
+                    frequencies = (frequencies as? UIState.Success)?.data,
+                    lines = lines,
+                    modifier = inset,
+                )
+            }
+        } else if (timetable.data.isEmpty()) {
             ProblemPanel(
                 message = stringResource(R.string.saved_timetable_empty),
                 retryLabel = stringResource(R.string.saved_retry),

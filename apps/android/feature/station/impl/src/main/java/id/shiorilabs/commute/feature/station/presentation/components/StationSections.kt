@@ -214,31 +214,6 @@ fun BekasiTimurMemorial(modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * An operator that publishes no timetable (TransJakarta). A fact about the operator, not a failure,
- * so it offers no retry.
- */
-@Composable
-fun NoScheduleNote(modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.fillMaxWidth().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = stringResource(R.string.station_no_schedule_title),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
-        Text(
-            text = stringResource(R.string.station_no_schedule_message),
-            style = MaterialTheme.typography.bodyLarge,
-            color = Gray600,
-        )
-    }
-}
-
 @Preview(showBackground = true)
 @Composable
 private fun AmenityListPreview() {
