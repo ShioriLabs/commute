@@ -172,6 +172,18 @@ Versions come from one version catalog.
   profile against a non-minified copy of release by switching
   `isMinifyEnabled` off, and the block left that copy minified.
 
+### Icon and splash
+
+- **Launcher icon.** An adaptive icon of the web app's departure board,
+  converted from its SVG into vector drawables: a `#FFE3E8` background, the
+  board as the foreground (the SVG's 512 canvas fills the 72dp a launcher
+  shows, and the board runs on into the bleed), and a tonal monochrome layer
+  for themed icons. `:wear` carries an identical copy; change both together.
+- **Splash.** The platform splash (minSdk 31 needs no compat library) plays
+  the web wordmark's reveal, letters rising in one after another after the
+  web's 250 ms lead-in, on the home screen's background. It leaves as soon as
+  the app has drawn, so a fast start can cut the reveal short.
+
 ### Tests
 
 JUnit plus coroutines-test, hand-written fakes over a mocking library, and test
