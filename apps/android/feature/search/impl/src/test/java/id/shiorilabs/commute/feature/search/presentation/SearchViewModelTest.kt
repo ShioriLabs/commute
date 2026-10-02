@@ -7,6 +7,7 @@ import id.shiorilabs.commute.core.datastore.FakePreferencesDataStore
 import id.shiorilabs.commute.core.datastore.RecentSearch
 import id.shiorilabs.commute.core.datastore.RecentSearchRepository
 import id.shiorilabs.commute.core.datastore.SavedStationsRepository
+import id.shiorilabs.commute.core.datastore.SearchModeRepository
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.feature.search.data.SearchRepository
@@ -53,7 +54,8 @@ class SearchViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun viewModel(repository: SearchRepository) = SearchViewModel(repository, recents, saved)
+    private fun viewModel(repository: SearchRepository) =
+        SearchViewModel(repository, recents, saved, SearchModeRepository(FakePreferencesDataStore()))
 
     private suspend fun SearchViewModel.settled() = state.first { it !is UIState.Loading && it !is UIState.Idle }
 

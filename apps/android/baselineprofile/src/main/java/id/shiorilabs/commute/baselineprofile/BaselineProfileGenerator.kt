@@ -18,8 +18,9 @@ import org.junit.runner.RunWith
  * and ProfileInstaller applies them on first run, so the app's own code is compiled ahead of time
  * rather than interpreted until the JIT catches up.
  *
- * The journey walks what a rider does: cold start onto the home feed, then search for a station and
- * open it, then open a saved station from the feed through its shared-element transition. It doesn't
+ * The journey walks what a rider does: cold start onto the home feed, then search for a station,
+ * open it and plan a trip there with OTW, then open a saved station from the feed through its
+ * shared-element transition. It doesn't
  * rely on the device's saved stations; the search path finds its own. Every step past launch is
  * allowed to fail: the content comes from the network, and a profile missing a path is still valid,
  * where a failed generation run is not.
@@ -60,6 +61,7 @@ class BaselineProfileGenerator {
                 device.findObject(By.clazz(EDIT_TEXT_CLASS))?.text = SEARCH_QUERY
                 device.wait(Until.hasObject(By.text(SEARCH_RESULT)), CONTENT_TIMEOUT_MS)
                 device.findObject(By.text(SEARCH_RESULT))?.click() ?: return@runCatching
+                planTripHere()
                 scrollStationPage()
                 device.pressBack()
                 device.waitForIdle()
@@ -75,6 +77,24 @@ class BaselineProfileGenerator {
                 device.pressBack()
                 device.waitForIdle()
             }
+        }
+    }
+
+    /**
+     * OTW from the open station page: its button opens the origin picker, a typed origin brings the
+     * route options, and back returns to the station. Allowed to fail like every step past launch.
+     */
+    private fun MacrobenchmarkScope.planTripHere() {
+        runCatching {
+            device.wait(Until.hasObject(By.text(OTW_BUTTON)), CONTENT_TIMEOUT_MS)
+            device.findObject(By.text(OTW_BUTTON))?.click() ?: return@runCatching
+            device.wait(Until.hasObject(By.clazz(EDIT_TEXT_CLASS)), CONTENT_TIMEOUT_MS)
+            device.findObject(By.clazz(EDIT_TEXT_CLASS))?.text = OTW_ORIGIN_QUERY
+            device.wait(Until.hasObject(By.textStartsWith(OTW_ORIGIN)), CONTENT_TIMEOUT_MS)
+            device.findObject(By.textStartsWith(OTW_ORIGIN))?.click() ?: return@runCatching
+            device.wait(Until.hasObject(By.textEndsWith(OTW_OPTIONS_SUFFIX)), CONTENT_TIMEOUT_MS)
+            device.pressBack()
+            device.waitForIdle()
         }
     }
 
@@ -103,6 +123,14 @@ class BaselineProfileGenerator {
 
         const val SEARCH_QUERY = "manggarai"
         const val SEARCH_RESULT = "Manggarai"
+
+        /** The station page's OTW button (station_otw), and an origin to plan from to Manggarai. */
+        const val OTW_BUTTON = "OTW Ke Sini"
+        const val OTW_ORIGIN_QUERY = "sudirman"
+        const val OTW_ORIGIN = "Sudirman"
+
+        /** The heading over the route options (journey_options): "3 pilihan rute". */
+        const val OTW_OPTIONS_SUFFIX = "pilihan rute"
 
         /** A saved station's title on the feed (station_title): "Stasiun Manggarai". */
         const val SAVED_TITLE_PREFIX = "Stasiun"

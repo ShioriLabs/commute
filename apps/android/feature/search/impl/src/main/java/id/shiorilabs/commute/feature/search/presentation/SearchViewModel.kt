@@ -6,6 +6,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import id.shiorilabs.commute.core.datastore.RecentSearch
 import id.shiorilabs.commute.core.datastore.RecentSearchRepository
 import id.shiorilabs.commute.core.datastore.SavedStationsRepository
+import id.shiorilabs.commute.core.datastore.SearchMode
+import id.shiorilabs.commute.core.datastore.SearchModeRepository
 import id.shiorilabs.commute.core.ext.toLoading
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.type.toUserMessage
@@ -32,7 +34,15 @@ class SearchViewModel @Inject constructor(
     private val searchRepository: SearchRepository,
     private val recentSearchRepository: RecentSearchRepository,
     private val savedStationsRepository: SavedStationsRepository,
+    private val searchModeRepository: SearchModeRepository,
 ) : ViewModel() {
+
+    /**
+     * Which tab shows: one station, or OTW. `null` until the stored choice is read, so a rider who
+     * left on OTW does not get the station tab's keyboard first.
+     */
+    val mode: StateFlow<SearchMode?> = searchModeRepository.mode
+        .stateIn(viewModelScope, SharingStarted.Eagerly, initialValue = null)
 
     private val _index = MutableStateFlow<UIState<List<Searchable>>>(UIState.Idle)
 
@@ -92,6 +102,13 @@ class SearchViewModel @Inject constructor(
 
     fun retry() {
         load()
+    }
+
+    /** Switches tab, and remembers it for the next time search opens. */
+    fun onModeChange(mode: SearchMode) {
+        viewModelScope.launch {
+            searchModeRepository.setMode(mode)
+        }
     }
 
     /** Remembers a station or hub the rider opened, for the "Terakhir dicari" list. */
