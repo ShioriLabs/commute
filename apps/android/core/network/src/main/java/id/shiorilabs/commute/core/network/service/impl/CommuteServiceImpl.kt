@@ -5,6 +5,7 @@ import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.model.models.Station
 import id.shiorilabs.commute.core.model.models.Transfer
+import id.shiorilabs.commute.core.model.models.TripResult
 import id.shiorilabs.commute.core.network.ext.decodeOrThrow
 import id.shiorilabs.commute.core.network.response.Response
 import id.shiorilabs.commute.core.network.service.CommuteService
@@ -38,4 +39,20 @@ class CommuteServiceImpl @Inject constructor(
 
     override suspend fun getOperators(): Response<List<OperatorWithLines>> =
         client.get("operators").decodeOrThrow()
+
+    override suspend fun getTrips(
+        fromId: String,
+        toId: String,
+        paymentMethod: String?,
+        at: String?,
+        modes: String?,
+        walking: String?,
+    ): Response<TripResult> =
+        client.get("_internal/trips/${fromId.encodeURLPathPart()}/${toId.encodeURLPathPart()}") {
+            // Ktor drops a null parameter, so an unset criterion never reaches the query string.
+            parameter("paymentMethod", paymentMethod)
+            parameter("at", at)
+            parameter("modes", modes)
+            parameter("walking", walking)
+        }.decodeOrThrow()
 }
