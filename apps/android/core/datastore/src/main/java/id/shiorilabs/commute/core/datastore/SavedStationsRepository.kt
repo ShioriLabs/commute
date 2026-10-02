@@ -55,6 +55,23 @@ class SavedStationsRepository @Inject constructor(
         }
     }
 
+    /**
+     * Stores [stationIds] as the saved list, in that order: the settings page's reorder and unpin,
+     * which edit the whole list at once.
+     */
+    suspend fun replace(stationIds: List<String>) {
+        dataStore.edit { prefs ->
+            prefs[STATIONS_KEY] = Json.encodeToString(stationIds.distinct())
+        }
+    }
+
+    /** Forgets every saved station. */
+    suspend fun clear() {
+        dataStore.edit { prefs ->
+            prefs.remove(STATIONS_KEY)
+        }
+    }
+
     private fun decode(raw: String?): List<String> {
         if (raw.isNullOrBlank()) {
             return emptyList()
