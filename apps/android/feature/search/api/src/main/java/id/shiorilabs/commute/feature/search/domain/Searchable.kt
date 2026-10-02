@@ -45,6 +45,11 @@ sealed interface Searchable {
         val stationId: String?,
         val operator: String,
         val lines: List<SearchLine>,
+        /**
+         * The other ids folded into this row: a TransJakarta halte's directional twins, which the
+         * index lists once. The OTW picker resolves a link to any of them back to this row.
+         */
+        val siblingIds: List<String> = emptyList(),
     ) : Searchable {
         override val key: String get() = "STATION:$to"
     }

@@ -93,11 +93,12 @@ fun SearchScreen(
             // its page; hubs and lines wait for theirs, so for now the tap only records.
             onResultClick = { searchable ->
                 viewModel.onResultClick(searchable)
-                if (searchable is Searchable.Station && searchable.stationId != null) {
+                val stationId = (searchable as? Searchable.Station)?.stationId
+                if (searchable is Searchable.Station && stationId != null) {
                     focusManager.clearFocus()
                     navigator.goTo(
                         Route.Station(
-                            stationId = searchable.stationId,
+                            stationId = stationId,
                             title = searchable.title,
                             lineKeys = searchable.lines.map { it.key },
                         ),
