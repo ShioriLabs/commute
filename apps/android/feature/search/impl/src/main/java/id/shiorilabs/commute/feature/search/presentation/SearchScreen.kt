@@ -20,6 +20,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -32,14 +33,17 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import id.shiorilabs.commute.core.datastore.SearchMode
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.type.UIState
+import id.shiorilabs.commute.core.ui.components.PillToggle
 import id.shiorilabs.commute.core.ui.components.VerticalSpacer
 import id.shiorilabs.commute.core.ui.ext.rowEntrance
 import id.shiorilabs.commute.core.ui.morph.NAV_CARD_MORPH_MILLIS
 import id.shiorilabs.commute.core.ui.morph.NavCardMorphTarget
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
+import id.shiorilabs.commute.feature.journey.presentation.OtwPanel
 import id.shiorilabs.commute.feature.search.R
 import id.shiorilabs.commute.feature.search.domain.MIN_QUERY_LENGTH
 import id.shiorilabs.commute.feature.search.domain.SearchLine
@@ -66,10 +70,12 @@ private val SearchBackground = Color.White
 @Composable
 fun SearchScreen(
     innerPadding: PaddingValues,
+    otwPanel: OtwPanel,
     viewModel: SearchViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val query by viewModel.query.collectAsStateWithLifecycle()
+    val mode by viewModel.mode.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
     val focusManager = LocalFocusManager.current
 
@@ -81,7 +87,14 @@ fun SearchScreen(
         SearchContent(
             state = state,
             query = query,
+            mode = mode,
             innerPadding = innerPadding,
+            onModeChange = { next ->
+                // The OTW tab has no use for the station field's keyboard.
+                focusManager.clearFocus()
+                viewModel.onModeChange(next)
+            },
+            otwContent = { padding -> otwPanel.Content(contentPadding = padding, modifier = Modifier.fillMaxSize()) },
             onQueryChange = viewModel::onQueryChange,
             onClose = {
                 // The keyboard would otherwise slide away against the collapsing screen.
@@ -115,7 +128,10 @@ fun SearchScreen(
 private fun SearchContent(
     state: UIState<SearchUiState>,
     query: String,
+    mode: SearchMode?,
     innerPadding: PaddingValues,
+    onModeChange: (SearchMode) -> Unit,
+    otwContent: @Composable (PaddingValues) -> Unit,
     onQueryChange: (String) -> Unit,
     onClose: () -> Unit,
     onRetry: () -> Unit,
@@ -136,11 +152,14 @@ private fun SearchContent(
     }
 
     // Focused once the morph has settled, so the keyboard doesn't slide up against the expanding
-    // screen. The web waits the same 250 ms.
+    // screen. The web waits the same 250 ms. Not on the OTW tab, which has no field to type in.
+    val currentMode by rememberUpdatedState(mode)
     if (focusOnOpen) {
         LaunchedEffect(focusRequester) {
             delay(NAV_CARD_MORPH_MILLIS.toLong())
-            focusRequester.requestFocus()
+            if (currentMode != SearchMode.FARE) {
+                focusRequester.requestFocus()
+            }
         }
     }
 
@@ -166,6 +185,16 @@ private fun SearchContent(
             onQueryChange = onQueryChange,
             onClose = onClose,
             focusRequester = focusRequester,
+            showField = mode != SearchMode.FARE,
+            aboveField = {
+                PillToggle(
+                    options = listOf(stringResource(R.string.search_mode_station), stringResource(R.string.search_mode_otw)),
+                    selected = if (mode == SearchMode.FARE) 1 else 0,
+                    onSelect = { onModeChange(if (it == 1) SearchMode.FARE else SearchMode.STATION) },
+                    description = stringResource(R.string.search_mode_description),
+                    modifier = Modifier.padding(top = 16.dp),
+                )
+            },
             belowField = {
                 if (!searching && idleMounted && loaded != null) {
                     SavedChips(
@@ -176,6 +205,11 @@ private fun SearchContent(
                 }
             },
         )
+        if (mode == SearchMode.FARE) {
+            val insets = WindowInsets.navigationBars.asPaddingValues()
+            otwContent(PaddingValues(start = 32.dp, end = 32.dp, bottom = insets.calculateBottomPadding() + 32.dp))
+            return@Column
+        }
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = WindowInsets.ime.union(WindowInsets.navigationBars).asPaddingValues(),
@@ -325,7 +359,10 @@ private fun SearchIdlePreview() {
                 ),
             ),
             query = "",
+            mode = SearchMode.STATION,
             innerPadding = PaddingValues(),
+            onModeChange = {},
+            otwContent = {},
             onQueryChange = {},
             onClose = {},
             onRetry = {},
@@ -350,7 +387,10 @@ private fun SearchResultsPreview() {
                 ),
             ),
             query = "mang",
+            mode = SearchMode.STATION,
             innerPadding = PaddingValues(),
+            onModeChange = {},
+            otwContent = {},
             onQueryChange = {},
             onClose = {},
             onRetry = {},

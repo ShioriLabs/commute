@@ -7,16 +7,22 @@ import id.shiorilabs.commute.core.navigation.NavGraphScope
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.ui.morph.navCardMorphMetadata
 import id.shiorilabs.commute.core.ui.motion.sharedElementSourceMetadata
+import id.shiorilabs.commute.feature.journey.presentation.OtwPanel
 import id.shiorilabs.commute.feature.search.presentation.SearchScreen
 import javax.inject.Inject
 
-/** Contributes [Route.Search], opened by the home screen's "Mau ke mana?" card morph. */
-class SearchNavContribution @Inject constructor() : NavGraphContribution {
+/**
+ * Contributes [Route.Search], opened by the home screen's "Mau ke mana?" card morph. Its OTW tab is
+ * the journey feature's [OtwPanel], handed in here so search never depends on journey's internals.
+ */
+class SearchNavContribution @Inject constructor(
+    private val otwPanel: OtwPanel,
+) : NavGraphContribution {
 
     override fun EntryProviderScope<NavKey>.addEntries(scope: NavGraphScope) {
         // A station row's name and roundels fly into the station page.
         entry<Route.Search>(metadata = navCardMorphMetadata() + sharedElementSourceMetadata()) {
-            SearchScreen(innerPadding = scope.screenPadding)
+            SearchScreen(innerPadding = scope.screenPadding, otwPanel = otwPanel)
         }
     }
 }
