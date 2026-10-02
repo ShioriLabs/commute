@@ -2,14 +2,14 @@ package id.shiorilabs.commute.feature.station.presentation
 
 import android.net.Uri
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -217,15 +217,7 @@ private fun StationList(
             return@LazyColumn
         }
 
-        item(key = "departures") {
-            Departures(
-                board = board,
-                lines = state.lines,
-                now = now,
-                onRetry = onRetry,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
-        }
+        departures(board = board, lines = state.lines, now = now, onRetry = onRetry)
 
         if (station == null) {
             return@LazyColumn
@@ -258,58 +250,67 @@ private fun StationList(
 /**
  * The line cards, or what stands in for them: a skeleton while the board loads, a retry when it
  * failed, and for an empty board either TransJakarta's no-schedule note or a retry.
+ *
+ * A list item per card rather than one item holding them all, so opening the page builds and
+ * measures only the cards on screen. One item had the frame a station opens on lay out every card
+ * the station has, an interchange's below the fold included, twice over while the shared transition
+ * worked out where everything lands.
  */
-@Composable
-private fun Departures(
+private fun LazyListScope.departures(
     board: StationBoard,
     lines: Map<String, LineInfo>,
     now: LocalDateTime,
     onRetry: () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
+    val inset = Modifier.padding(horizontal = 16.dp)
     when (val timetable = board.timetable) {
         // The web's single h-72 block: the page shows every line, so a per-line skeleton would
         // run screens long at an interchange.
-        is UIState.Idle, is UIState.Loading -> SkeletonBlock(
-            modifier = modifier
-                .fillMaxWidth()
-                .height(288.dp),
-        )
+        is UIState.Idle, is UIState.Loading -> item(key = "departures-loading") {
+            SkeletonBlock(
+                modifier = inset
+                    .fillMaxWidth()
+                    .height(288.dp),
+            )
+        }
 
-        is UIState.Error -> ProblemPanel(
-            message = stringResource(
-                if (timetable.isOffline()) R.string.station_timetable_offline else R.string.station_timetable_failed,
-            ),
-            retryLabel = stringResource(R.string.station_retry),
-            onRetry = onRetry,
-            modifier = modifier,
-        )
-
-        is UIState.Success -> when {
-            timetable.data.isNotEmpty() -> Column(
-                modifier = modifier,
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                timetable.data.forEach { line ->
-                    LineCard(
-                        line = line,
-                        lineInfo = lines[line.lineKey],
-                        now = now,
-                        nextDayLine = board.nextDayLine(line),
-                        // Lands here from the same card on the home feed.
-                        modifier = Modifier.sharedLineCard(board.stationId, line.lineKey, joinAfterFirstFrame = true),
-                    )
-                }
-            }
-
-            board.stationId.substringBefore('-') == OPERATOR_TJ -> NoScheduleNote(modifier)
-
-            else -> ProblemPanel(
-                message = stringResource(R.string.station_timetable_empty),
+        is UIState.Error -> item(key = "departures-failed") {
+            ProblemPanel(
+                message = stringResource(
+                    if (timetable.isOffline()) R.string.station_timetable_offline else R.string.station_timetable_failed,
+                ),
                 retryLabel = stringResource(R.string.station_retry),
                 onRetry = onRetry,
-                modifier = modifier,
+                modifier = inset,
             )
+        }
+
+        is UIState.Success -> when {
+            timetable.data.isNotEmpty() -> itemsIndexed(timetable.data, key = { _, line -> "line:${line.lineKey}" }) { index, line ->
+                LineCard(
+                    line = line,
+                    lineInfo = lines[line.lineKey],
+                    now = now,
+                    nextDayLine = board.nextDayLine(line),
+                    // Lands here from the same card on the home feed.
+                    modifier = inset
+                        .padding(top = if (index == 0) 0.dp else 16.dp)
+                        .sharedLineCard(board.stationId, line.lineKey, joinAfterFirstFrame = true),
+                )
+            }
+
+            board.stationId.substringBefore('-') == OPERATOR_TJ -> item(key = "departures-no-schedule") {
+                NoScheduleNote(inset)
+            }
+
+            else -> item(key = "departures-empty") {
+                ProblemPanel(
+                    message = stringResource(R.string.station_timetable_empty),
+                    retryLabel = stringResource(R.string.station_retry),
+                    onRetry = onRetry,
+                    modifier = inset,
+                )
+            }
         }
     }
 }
