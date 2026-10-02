@@ -45,11 +45,12 @@ import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.lastTrains
 import id.shiorilabs.commute.feature.station.domain.Station
 import id.shiorilabs.commute.feature.station.domain.StationBoard
+import id.shiorilabs.commute.feature.station.domain.isTransJakarta
 import id.shiorilabs.commute.feature.station.presentation.components.AmenityList
 import id.shiorilabs.commute.feature.station.presentation.components.BekasiTimurMemorial
+import id.shiorilabs.commute.feature.station.presentation.components.HalteFrequencies
 import id.shiorilabs.commute.feature.station.presentation.components.LastTrainCard
 import id.shiorilabs.commute.feature.station.presentation.components.LastTrainsHeading
-import id.shiorilabs.commute.feature.station.presentation.components.NoScheduleNote
 import id.shiorilabs.commute.feature.station.presentation.components.OpenInMapsButton
 import id.shiorilabs.commute.feature.station.presentation.components.StationActions
 import id.shiorilabs.commute.feature.station.presentation.components.StationHeader
@@ -67,9 +68,6 @@ private val HeaderBlur = 8.dp
 
 /** Bekasi Timur, which carries the memorial. */
 private const val BEKASI_TIMUR_ID = "KCI-BKST"
-
-/** TransJakarta publishes no timetable, so an empty board there is expected. */
-private const val OPERATOR_TJ = "TJ"
 
 @Composable
 fun StationScreen(
@@ -290,7 +288,8 @@ private fun StationList(
 
 /**
  * The line cards, or what stands in for them: a skeleton while the board loads, a retry when it
- * failed, and for an empty board either TransJakarta's no-schedule note or a retry.
+ * failed, and for an empty board either a halte's frequencies (TransJakarta publishes no timetable)
+ * or a retry.
  *
  * A list item per card rather than one item holding them all, so opening the page builds and
  * measures only the cards on screen. One item had the frame a station opens on lay out every card
@@ -306,16 +305,19 @@ private fun LazyListScope.departures(
     onOpenTimetable: () -> Unit,
 ) {
     val inset = Modifier.padding(horizontal = 16.dp)
-    when (val timetable = board.timetable) {
-        // The web's single h-72 block: the page shows every line, so a per-line skeleton would
-        // run screens long at an interchange.
-        is UIState.Idle, is UIState.Loading -> item(key = "departures-loading") {
+    // The web's single h-72 block: the page shows every line, so a per-line skeleton would run
+    // screens long at an interchange.
+    val skeleton = {
+        item(key = "departures-loading") {
             SkeletonBlock(
                 modifier = inset
                     .fillMaxWidth()
                     .height(288.dp),
             )
         }
+    }
+    when (val timetable = board.timetable) {
+        is UIState.Idle, is UIState.Loading -> skeleton()
 
         is UIState.Error -> item(key = "departures-failed") {
             ProblemPanel(
@@ -352,13 +354,22 @@ private fun LazyListScope.departures(
                 lastTrains(timetable.data, lines)
             }
 
-            // A missing schedule is a fact about the operator, so trip planning stays on offer.
-            board.stationId.substringBefore('-') == OPERATOR_TJ -> {
-                item(key = "departures-no-schedule") {
-                    NoScheduleNote(inset)
-                }
-                item(key = "actions") {
-                    StationActions(onOtw = onOtw, modifier = inset.padding(top = 16.dp))
+            // A missing schedule is a fact about the operator, so trip planning stays on offer. The
+            // skeleton holds while the frequencies load alongside the board, rather than flashing
+            // the no-schedule note before they replace it.
+            isTransJakarta(board.stationId) -> when (val frequencies = board.frequencies) {
+                is UIState.Idle, is UIState.Loading -> skeleton()
+                is UIState.Success, is UIState.Error -> {
+                    item(key = "departures-frequencies") {
+                        HalteFrequencies(
+                            frequencies = (frequencies as? UIState.Success)?.data,
+                            lines = lines,
+                            modifier = inset,
+                        )
+                    }
+                    item(key = "actions") {
+                        StationActions(onOtw = onOtw, modifier = inset.padding(top = 16.dp))
+                    }
                 }
             }
 
