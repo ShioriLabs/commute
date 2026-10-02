@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.core.network.service
 
 import id.shiorilabs.commute.core.model.models.GroupedTimetable
+import id.shiorilabs.commute.core.model.models.HeadwayRow
 import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.model.models.Station
@@ -35,6 +36,12 @@ interface CommuteService {
      * a station reference) or off it (`EXTERNAL`, a name only), each with its walking distance.
      */
     suspend fun getTransfers(operator: String, stationCode: String): Response<List<Transfer>>
+
+    /**
+     * How often each line passes the station on [day] (`WD`, `SAT` or `SUN`): an average gap, not a
+     * schedule, so it can't say when the next one comes. TransJakarta's stand-in for a timetable.
+     */
+    suspend fun getHeadway(operator: String, stationCode: String, day: String): Response<List<HeadwayRow>>
 
     /** Every operator with its lines: the dictionary line keys resolve against. */
     suspend fun getOperators(): Response<List<OperatorWithLines>>
