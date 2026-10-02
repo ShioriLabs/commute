@@ -1,5 +1,4 @@
-# R8 keep rules for :app, on top of the defaults. Picked up from this keepRules source folder; they
-# only apply where optimization is on (release).
+# R8 rules for :app's release build, on top of proguard-android-optimize.txt.
 
 # Play Console's "Edge-to-edge may not display for all users" check scans the uploaded bundle for a
 # call to androidx.activity's EdgeToEdge.enable. R8 renames library classes, so on a minified build

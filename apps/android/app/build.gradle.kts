@@ -34,10 +34,13 @@ android {
         release {
             // R8. On a Galaxy S23, with the station page's cards as separate list items, the frame
             // a station page opens on went from about 85 ms to about 52; builds take a few
-            // minutes longer.
-            optimization {
-                enable = true
-            }
+            // minutes longer. Switched on with isMinifyEnabled rather than AGP 9's `optimization`
+            // block: the Baseline Profile plugin derives its `nonMinifiedRelease` variant by turning
+            // isMinifyEnabled off, and with the block it stayed minified, so the generated profile
+            // named obfuscated classes that change from one build to the next.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 }
