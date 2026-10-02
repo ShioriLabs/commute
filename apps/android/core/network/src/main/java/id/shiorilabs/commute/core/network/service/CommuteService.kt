@@ -5,6 +5,7 @@ import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.model.models.Station
 import id.shiorilabs.commute.core.model.models.Transfer
+import id.shiorilabs.commute.core.model.models.TripResult
 import id.shiorilabs.commute.core.network.response.Response
 
 /**
@@ -37,4 +38,22 @@ interface CommuteService {
 
     /** Every operator with its lines: the dictionary line keys resolve against. */
     suspend fun getOperators(): Response<List<OperatorWithLines>>
+
+    /**
+     * Several priced route options from station [fromId] to [toId] (full ids, `KCI-SUD`), each with
+     * its legs, fare segments and labels, and clock times on the legs whose schedule is known.
+     *
+     * Every criterion is optional and is sent only when non-null: an absent one is the server's
+     * default, which keeps a default search on the same cache entry the web warms.
+     * [paymentMethod] is `STORED_VALUE` or `QRIS_TAP`; [at] an ISO-8601 instant; [modes] `rail` to
+     * leave TransJakarta out; [walking] `BRISK`, `SLOW` or `SLOWEST`.
+     */
+    suspend fun getTrips(
+        fromId: String,
+        toId: String,
+        paymentMethod: String? = null,
+        at: String? = null,
+        modes: String? = null,
+        walking: String? = null,
+    ): Response<TripResult>
 }
