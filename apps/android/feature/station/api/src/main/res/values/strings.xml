@@ -22,4 +22,30 @@
     <string name="line_card_restarts">mulai lagi %1$s</string>
     <string name="line_card_last">terakhir %1$s</string>
     <string name="line_card_over_description">Layanan menuju %1$s sudah selesai, %2$s</string>
+
+    <!-- A halte's frequencies, standing in for the timetable TransJakarta doesn't publish. Words as
+         on the web's frequency card: a frequency, never an arrival. -->
+    <string name="frequency_description">Frekuensi kendaraan di halte ini</string>
+    <!-- %1$d is a number of minutes. The tilde marks it as an average. -->
+    <string name="frequency_every">Setiap ~%1$d menit</string>
+    <!-- The corridor's own hours, not when it passes this halte. %1$s and %2$s are times, "05.00". -->
+    <string name="frequency_hours">operasional %1$s–%2$s</string>
+    <string name="frequency_all_day">24 jam</string>
+    <!-- %1$s is the terminus, as the halte's own board words it: "arah Galunggung". -->
+    <string name="frequency_bound_for">arah %1$s</string>
+    <string name="frequency_weekdays">hari kerja</string>
+    <string name="frequency_weekend">akhir pekan</string>
+    <string name="frequency_saturday">Sabtu</string>
+    <string name="frequency_sunday">Minggu</string>
+    <!-- In place of a frequency, for a corridor that doesn't run on the day shown. -->
+    <string name="frequency_weekdays_only">Hari kerja saja</string>
+    <string name="frequency_weekend_only">Akhir pekan saja</string>
+    <string name="frequency_saturday_only">Sabtu saja</string>
+    <string name="frequency_sunday_only">Minggu saja</string>
+    <string name="frequency_not_running">Tidak beroperasi</string>
+    <string name="frequency_disclaimer">Hanya perkiraan. Harap cek layar halte atau tanyakan pramusapa</string>
+
+    <!-- Operators that publish no timetable (TransJakarta): not an error, so no retry. -->
+    <string name="station_no_schedule_title">Jadwal Tidak Tersedia</string>
+    <string name="station_no_schedule_message">Lihat papan keberangkatan atau tanyakan pramusapa</string>
 </resources>
