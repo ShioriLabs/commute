@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
+import id.shiorilabs.commute.core.ui.morph.NavCardMorphTarget
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.feature.settings.R
 import id.shiorilabs.commute.feature.settings.presentation.components.SettingsGutter
@@ -20,7 +21,7 @@ import id.shiorilabs.commute.feature.settings.presentation.components.VersionTex
 
 private const val DATA_PLATFORM_URL = "https://data.commute.shiorilabs.id"
 
-/** Settings, opened from the home screen's rail: the web's settings sheet. */
+/** Settings, which the home screen's "Pengaturan" card expands into: the web's settings sheet. */
 @Composable
 fun SettingsScreen(
     appVersion: String,
@@ -29,13 +30,16 @@ fun SettingsScreen(
     val navigator = LocalNavigator.current
     val uriHandler = LocalUriHandler.current
 
-    SettingsContent(
-        appVersion = appVersion,
-        innerPadding = innerPadding,
-        onClose = { navigator.pop() },
-        onOpen = navigator::goTo,
-        onOpenDataPlatform = { uriHandler.openUri(DATA_PLATFORM_URL) },
-    )
+    // Opened by the home screen's white card, so the white mask is all the morph needs.
+    NavCardMorphTarget(destination = Route.Settings, cardTint = null) {
+        SettingsContent(
+            appVersion = appVersion,
+            innerPadding = innerPadding,
+            onClose = { navigator.pop() },
+            onOpen = navigator::goTo,
+            onOpenDataPlatform = { uriHandler.openUri(DATA_PLATFORM_URL) },
+        )
+    }
 }
 
 @Composable
