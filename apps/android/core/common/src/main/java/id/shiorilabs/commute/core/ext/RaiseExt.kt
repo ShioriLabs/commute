@@ -71,7 +71,7 @@ suspend fun <E, A> apiCall(map: (Throwable) -> E, block: suspend () -> A): Eithe
  * Specialisation of [apiCall] for the shared [Failure] taxonomy.
  *
  * ```
- * override suspend fun fetch(): Either<Failure, List<Searchable>> = apiCallToFailure { service.getSearchables().data.toSearchables() }
+ * override suspend fun fetch(): Either<Failure, List<Searchable>> = apiCallToFailure { service.getSearchables().requireBody().toSearchables() }
  * ```
  */
 suspend fun <A> apiCallToFailure(block: suspend () -> A): Either<Failure, A> =

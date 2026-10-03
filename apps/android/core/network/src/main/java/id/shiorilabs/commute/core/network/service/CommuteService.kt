@@ -7,12 +7,16 @@ import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.model.models.Station
 import id.shiorilabs.commute.core.model.models.Transfer
 import id.shiorilabs.commute.core.model.models.TripResult
-import id.shiorilabs.commute.core.network.response.Response
+import id.shiorilabs.commute.core.type.Fetched
 
 /**
  * The one backend: the Commute API. Every method throws
- * [id.shiorilabs.commute.core.type.ApiException] on a non-2xx response and returns the response
- * envelope; the repository unwraps `.data`.
+ * [id.shiorilabs.commute.core.type.ApiException] on a non-2xx response and returns the envelope's
+ * `data` as a [Fetched].
+ *
+ * Every method takes an optional `ifNoneMatch`: the ETag of the copy the caller already holds. When
+ * the server's copy is still that one it answers a bodyless 304, [Fetched.NotModified], instead of
+ * sending the body again. Without one the answer is always a [Fetched.Body].
  */
 interface CommuteService {
 
@@ -20,31 +24,45 @@ interface CommuteService {
      * The whole search index in one response: stations, hubs and lines, with the lines they
      * reference sent once in a dictionary.
      */
-    suspend fun getSearchables(): Response<SearchableIndex>
+    suspend fun getSearchables(ifNoneMatch: String? = null): Fetched<SearchableIndex>
 
     /** One station. [operator] and [stationCode] are the two halves of its id (`KCI`, `MRI`). */
-    suspend fun getStation(operator: String, stationCode: String): Response<Station>
+    suspend fun getStation(operator: String, stationCode: String, ifNoneMatch: String? = null): Fetched<Station>
 
     /**
      * The station's departures on [day] (`WD`, `SAT` or `SUN`), grouped by line, then direction,
      * then terminus. Always the full form: the compact one's tuples have no typed model.
      */
-    suspend fun getGroupedTimetable(operator: String, stationCode: String, day: String): Response<List<GroupedTimetable>>
+    suspend fun getGroupedTimetable(
+        operator: String,
+        stationCode: String,
+        day: String,
+        ifNoneMatch: String? = null,
+    ): Fetched<List<GroupedTimetable>>
 
     /**
      * The station's transfers: nearby stations to walk to, on this API's network (`INTERNAL`, with
      * a station reference) or off it (`EXTERNAL`, a name only), each with its walking distance.
      */
-    suspend fun getTransfers(operator: String, stationCode: String): Response<List<Transfer>>
+    suspend fun getTransfers(
+        operator: String,
+        stationCode: String,
+        ifNoneMatch: String? = null,
+    ): Fetched<List<Transfer>>
 
     /**
      * How often each line passes the station on [day] (`WD`, `SAT` or `SUN`): an average gap, not a
      * schedule, so it can't say when the next one comes. TransJakarta's stand-in for a timetable.
      */
-    suspend fun getHeadway(operator: String, stationCode: String, day: String): Response<List<HeadwayRow>>
+    suspend fun getHeadway(
+        operator: String,
+        stationCode: String,
+        day: String,
+        ifNoneMatch: String? = null,
+    ): Fetched<List<HeadwayRow>>
 
     /** Every operator with its lines: the dictionary line keys resolve against. */
-    suspend fun getOperators(): Response<List<OperatorWithLines>>
+    suspend fun getOperators(ifNoneMatch: String? = null): Fetched<List<OperatorWithLines>>
 
     /**
      * Several priced route options from station [fromId] to [toId] (full ids, `KCI-SUD`), each with
@@ -62,5 +80,6 @@ interface CommuteService {
         at: String? = null,
         modes: String? = null,
         walking: String? = null,
-    ): Response<TripResult>
+        ifNoneMatch: String? = null,
+    ): Fetched<TripResult>
 }
