@@ -3,7 +3,7 @@ package id.shiorilabs.commute.feature.saved.presentation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import id.shiorilabs.commute.core.datastore.SavedStationsRepository
+import id.shiorilabs.commute.core.datastore.SavedRepository
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.time.serviceDayOf
 import id.shiorilabs.commute.core.type.UIState
@@ -27,7 +27,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class SavedStationsViewModel @Inject constructor(
-    savedStationsRepository: SavedStationsRepository,
+    savedRepository: SavedRepository,
     private val stationRepository: StationRepository,
     private val lineRepository: LineRepository,
     private val clock: Clock,
@@ -40,7 +40,7 @@ class SavedStationsViewModel @Inject constructor(
     /** The service day the loaded boards belong to. */
     private var loadedDay: ServiceDayName? = null
 
-    private val savedIds = savedStationsRepository.stations
+    private val savedIds = savedRepository.stationIds
 
     val state: StateFlow<UIState<SavedStationsUiState>> = combine(savedIds, cards, lines) { ids, cards, lines ->
         UIState.Success(

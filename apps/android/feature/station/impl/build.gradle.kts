@@ -17,7 +17,7 @@ dependencies {
     implementation(project(":core:network"))
     // Route.Station + the NavGraphContribution/NavGraphScope contract.
     implementation(project(":core:navigation"))
-    // SavedStationsRepository — the page's pin.
+    // SavedRepository — the page's pin.
     implementation(project(":core:datastore"))
     // LineRoundel, CommuteIcons, SkeletonBlock, ProblemPanel, rememberJakartaNow, previews.
     implementation(project(":core:ui"))
@@ -44,6 +44,6 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(testFixtures(project(":core:network")))
-    // FakePreferencesDataStore — backs SavedStationsRepository in StationViewModelTest.
+    // FakePreferencesDataStore — backs SavedRepository in StationViewModelTest.
     testImplementation(testFixtures(project(":core:datastore")))
 }
