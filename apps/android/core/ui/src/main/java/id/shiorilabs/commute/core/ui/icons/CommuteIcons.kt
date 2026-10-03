@@ -25,6 +25,7 @@ import com.adamglin.phosphoricons.bold.PersonSimpleWalk
 import com.adamglin.phosphoricons.bold.PushPin
 import com.adamglin.phosphoricons.bold.PushPinSlash
 import com.adamglin.phosphoricons.bold.ShareNetwork
+import com.adamglin.phosphoricons.bold.SlidersHorizontal
 import com.adamglin.phosphoricons.bold.Wheelchair
 import com.adamglin.phosphoricons.bold.X
 import com.adamglin.phosphoricons.duotone.Baby
@@ -75,6 +76,9 @@ object CommuteIcons {
 
     /** Opens the screen where pins are reordered. */
     val Edit: ImageVector = PhosphorIcons.Bold.PencilSimple
+
+    /** Opens the debug frost tuner. */
+    val Tune: ImageVector = PhosphorIcons.Bold.SlidersHorizontal
 
     /** Heads an amber notice: offline, or a station no train calls at any more. */
     val Warning: ImageVector = PhosphorIcons.Duotone.Warning
