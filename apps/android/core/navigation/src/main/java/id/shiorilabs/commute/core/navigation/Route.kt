@@ -63,6 +63,11 @@ sealed interface Route : NavKey {
         val fromId: String? = null,
         val toId: String? = null,
         val journeyKey: String? = null,
+        /**
+         * Which boarding of [journeyKey]'s route, as `HHmm` WIB: a link's `?jt=`, which home's saved
+         * pairs add because their rows of one route share a key.
+         */
+        val boardingClock: String? = null,
         val paymentMethod: String? = null,
         val at: String? = null,
         val modes: String? = null,
