@@ -65,6 +65,23 @@ class DeepLinksTest {
     }
 
     @Test
+    fun `a hub link opens its page`() {
+        assertEquals(Route.Hub("dukuh-atas"), routeForLink("https://commute.shiorilabs.id/hubs/dukuh-atas"))
+        assertEquals(Route.Hub("dukuh-atas"), routeForLink("https://commute.shiorilabs.id/hubs/dukuh-atas/"))
+        assertNull(routeForLink("https://commute.shiorilabs.id/hubs/"))
+        assertNull(routeForLink("https://commute.shiorilabs.id/hubs/dukuh-atas/extra"))
+    }
+
+    @Test
+    fun `a line link opens its page, its operator upper-cased and its code as written`() {
+        assertEquals(Route.Line("KCI", "B"), routeForLink("https://commute.shiorilabs.id/lines/KCI/B"))
+        assertEquals(Route.Line("LRTJBDB", "BK"), routeForLink("https://commute.shiorilabs.id/lines/lrtjbdb/BK/"))
+        assertNull(routeForLink("https://commute.shiorilabs.id/lines/KCI"))
+        assertNull(routeForLink("https://commute.shiorilabs.id/lines/KCI//"))
+        assertNull(routeForLink("https://commute.shiorilabs.id/lines/KCI/B/stations"))
+    }
+
+    @Test
     fun `links the app has no screen for stay in the browser`() {
         assertNull(routeForLink("https://commute.shiorilabs.id/map?from=KCI-SUD"))
         assertNull(routeForLink("https://example.com/fare?from=KCI-SUD"))
