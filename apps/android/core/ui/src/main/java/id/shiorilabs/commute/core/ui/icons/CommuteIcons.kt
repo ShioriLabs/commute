@@ -5,6 +5,7 @@ import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.Fill
+import com.adamglin.phosphoricons.bold.ArrowRight
 import com.adamglin.phosphoricons.bold.ArrowSquareOut
 import com.adamglin.phosphoricons.bold.ArrowsDownUp
 import com.adamglin.phosphoricons.bold.Bus
@@ -82,6 +83,9 @@ object CommuteIcons {
 
     /** Heads an amber notice: offline, or a station no train calls at any more. */
     val Warning: ImageVector = PhosphorIcons.Duotone.Warning
+
+    /** Between a pair's two stations: Dari → Ke. */
+    val ArrowRight: ImageVector = PhosphorIcons.Bold.ArrowRight
 
     /** A link that leaves the app. */
     val ExternalLink: ImageVector = PhosphorIcons.Bold.ArrowSquareOut
