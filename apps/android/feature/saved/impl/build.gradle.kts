@@ -12,7 +12,7 @@ android {
 dependencies {
     // UIState + coroutines (api).
     implementation(project(":core:common"))
-    // SavedStationsRepository.
+    // SavedRepository.
     implementation(project(":core:datastore"))
     // Route.Home + the NavGraphContribution/NavGraphScope contract.
     implementation(project(":core:navigation"))
@@ -42,7 +42,7 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
-    // FakePreferencesDataStore — backs SavedStationsRepository in SavedStationsViewModelTest.
+    // FakePreferencesDataStore — backs SavedRepository in SavedStationsViewModelTest.
     testImplementation(testFixtures(project(":core:datastore")))
 }
 

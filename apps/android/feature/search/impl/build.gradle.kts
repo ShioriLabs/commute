@@ -16,7 +16,7 @@ dependencies {
     implementation(project(":core:common"))
     // CommuteService + the generated SearchableIndex (via :core:model, api).
     implementation(project(":core:network"))
-    // RecentSearchRepository, SavedStationsRepository.
+    // RecentSearchRepository, SavedRepository.
     implementation(project(":core:datastore"))
     // Route.Search + the NavGraphContribution/NavGraphScope contract.
     implementation(project(":core:navigation"))

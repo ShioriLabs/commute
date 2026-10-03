@@ -27,8 +27,20 @@ data class StoredFareCriteria(
 )
 
 /**
- * The OTW search's standing settings and the stations the rider last picked in it. The port of the
- * web's `fare-criteria` and `fare-recent-stations` storage keys.
+ * A pair the rider checked, the web's `RecentRoute`. Directional, like a saved pair: A→B and B→A
+ * are two entries.
+ */
+@Serializable
+data class RecentRoute(
+    /** `OPERATOR-CODE`. */
+    val fromId: String,
+    val toId: String,
+)
+
+/**
+ * The OTW search's standing settings, the stations the rider last picked in it, and the pairs they
+ * last checked. The port of the web's `fare-criteria`, `fare-recent-stations` and `recent-routes`
+ * storage keys.
  */
 @Singleton
 class FarePreferencesRepository @Inject constructor(
@@ -48,6 +60,9 @@ class FarePreferencesRepository @Inject constructor(
             .orEmpty()
     }
 
+    /** Pairs that answered, newest first: search's "Rute terakhir". */
+    val recentRoutes: Flow<List<RecentRoute>> = dataStore.data.map { prefs -> decodeRoutes(prefs[RECENT_ROUTES_KEY]) }
+
     suspend fun saveCriteria(criteria: StoredFareCriteria) {
         dataStore.edit { prefs ->
             prefs[CRITERIA_KEY] = json.encodeToString(criteria)
@@ -65,12 +80,39 @@ class FarePreferencesRepository @Inject constructor(
         }
     }
 
+    /**
+     * Moves the pair to the front, keeping [MAX_RECENT_ROUTES]. Called once a pair has answered, not
+     * on every pick: a half-made selection or a failed lookup is not a trip worth offering back.
+     */
+    suspend fun recordRoute(fromId: String, toId: String) {
+        val route = RecentRoute(fromId, toId)
+        dataStore.edit { prefs ->
+            val next = (listOf(route) + decodeRoutes(prefs[RECENT_ROUTES_KEY]).filterNot { it == route })
+                .take(MAX_RECENT_ROUTES)
+            prefs[RECENT_ROUTES_KEY] = json.encodeToString(next)
+        }
+    }
+
+    /** Forgets every recent pair: the "Hapus" beside the list, and Manage Data's clear. */
+    suspend fun clearRecentRoutes() {
+        dataStore.edit { prefs ->
+            prefs.remove(RECENT_ROUTES_KEY)
+        }
+    }
+
+    private fun decodeRoutes(raw: String?): List<RecentRoute> =
+        raw?.let { runCatching { json.decodeFromString<List<RecentRoute>>(it) }.getOrNull() }.orEmpty()
+
     companion object {
 
         /** `RECENT_PICKS_MAX` on the web: the picker's quick-pick rail holds four. */
         const val MAX_RECENT_STATIONS = 4
 
+        /** The web's `MAX_ROUTE_ENTRIES`. */
+        const val MAX_RECENT_ROUTES = 5
+
         private val CRITERIA_KEY = stringPreferencesKey("fare_criteria")
         private val RECENT_STATIONS_KEY = stringPreferencesKey("fare_recent_stations")
+        private val RECENT_ROUTES_KEY = stringPreferencesKey("fare_recent_routes")
     }
 }
