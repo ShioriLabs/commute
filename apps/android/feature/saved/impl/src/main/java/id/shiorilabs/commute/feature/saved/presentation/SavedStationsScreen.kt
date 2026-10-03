@@ -27,7 +27,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -330,8 +333,8 @@ private fun StationFeed(
  * under it.
  *
  * The bar holds still and only its names move: when the next station's title pushes in, the
- * current name slides up and out of the bar, clipped where the status bar begins, while the next
- * ([incomingName]) slides in beneath it, drawn sharp over the frost where its own row is.
+ * current name slides up and fades out over the [NAME_FADE] above it, gone by the status bar, while
+ * the next ([incomingName]) slides in beneath it, drawn sharp over the frost where its own row is.
  *
  * Drawn over the list rather than as a sticky header in it: a sticky header pins to the very top of
  * the list, so to clear the clock every title would have to carry the status bar's height, and the
@@ -351,7 +354,9 @@ private fun StuckTitleBar(
     opened: Boolean,
     onClick: (() -> Unit)?,
 ) {
-    val statusBarPx = with(LocalDensity.current) { statusBar.roundToPx() }
+    val density = LocalDensity.current
+    val statusBarPx = with(density) { statusBar.roundToPx() }
+    val fadePx = with(density) { NAME_FADE.toPx() }
 
     // The name fades on the feed's entrance curve when the bar gains or loses one, rather than
     // popping: the first time a station loads under the bar, and when the feed empties.
@@ -366,17 +371,7 @@ private fun StuckTitleBar(
         shownName = name
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            // Names leave and arrive below the status bar, never behind the clock. Open below: the
-            // incoming name runs past the bar's bottom while it is still on its way in.
-            .drawWithContent {
-                clipRect(top = statusBarPx.toFloat(), bottom = size.height + INCOMING_OVERHANG_PX) {
-                    this@drawWithContent.drawContent()
-                }
-            },
-    ) {
+    Box(modifier = Modifier.fillMaxWidth()) {
         // Always laid out, so the bar's height is known before the first title reaches it.
         StationTitle(
             stationId = stationId.orEmpty(),
@@ -390,6 +385,24 @@ private fun StuckTitleBar(
                 .graphicsLayer {
                     translationY = pushOffset().toFloat()
                     alpha = nameAlpha
+                    // Its own layer, for the mask below to cut alpha from.
+                    compositingStrategy = CompositingStrategy.Offscreen
+                }
+                .drawWithContent {
+                    drawContent()
+                    // Gone by the status bar, fading in over the band above the name's resting
+                    // place. The band holds still on screen while the name rises through it, so in
+                    // the name's own coordinates it moves down by however far it has been pushed.
+                    val clearAt = statusBarPx - pushOffset().toFloat()
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            1f to Color.Black,
+                            startY = clearAt,
+                            endY = clearAt + fadePx,
+                        ),
+                        blendMode = BlendMode.DstIn,
+                    )
                 },
         )
         if (incomingStationId != null && incomingName != null) {
@@ -405,8 +418,11 @@ private fun StuckTitleBar(
     }
 }
 
-/** Room below the bar for the incoming name, which runs up to one title past it. */
-private const val INCOMING_OVERHANG_PX = 10_000f
+/**
+ * The band the outgoing name fades out over, above where it rests: the title's own top padding, so
+ * a name at rest never dims.
+ */
+private val NAME_FADE = 16.dp
 
 /** What covered the home screen last, saved so the way back can tell which it was. */
 private enum class CoveredBy { MORPH, PAGE }
