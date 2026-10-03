@@ -10,16 +10,21 @@ import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -68,6 +73,10 @@ fun PidsChevrons(
  * [progress] runs from 0 to 1, as though the train were drawing in. [pulsing] ripples them as
  * [PidsChevrons] does, for the wait once the pull has let go. [progress] is read at draw time, so
  * a drag redraws without recomposing; nothing animates on its own unless [pulsing].
+ *
+ * Drawn as shapes rather than set as text, in the glyph's flat-ended form: a "›" sits at x-height
+ * in a line box that leaves room above for capitals, so as text it can't be centred in anything.
+ * [height] is one chevron's; the row is [CHEVRON_ROW_ASPECT] times as wide.
  */
 @Composable
 fun PidsChevronsProgress(
@@ -75,29 +84,40 @@ fun PidsChevronsProgress(
     pulsing: Boolean,
     color: Color,
     modifier: Modifier = Modifier,
-    fontSize: TextUnit = 16.sp,
+    height: Dp = 10.dp,
 ) {
-    Row(
-        modifier = modifier.clearAndSetSemantics { },
-        horizontalArrangement = Arrangement.spacedBy(1.dp),
-    ) {
-        if (pulsing) {
-            val transition = rememberInfiniteTransition(label = "pidsChevronsProgress")
-            repeat(3) { index ->
-                val alpha by transition.animateFloat(
-                    initialValue = 1f,
-                    targetValue = 1f,
-                    animationSpec = pulse(index),
-                    label = "pidsChevronProgress$index",
-                )
-                Chevron(color, fontSize, Modifier.graphicsLayer { this.alpha = alpha })
-            }
-        } else {
-            repeat(3) { index ->
-                Chevron(color, fontSize, Modifier.graphicsLayer { alpha = litAlpha(progress(), index) })
-            }
+    val pulses = if (pulsing) {
+        val transition = rememberInfiniteTransition(label = "pidsChevronsProgress")
+        List(3) { index ->
+            transition.animateFloat(
+                initialValue = 1f,
+                targetValue = 1f,
+                animationSpec = pulse(index),
+                label = "pidsChevronProgress$index",
+            )
         }
+    } else {
+        null
     }
+    Spacer(
+        modifier = modifier
+            .clearAndSetSemantics { }
+            .size(width = height * CHEVRON_ROW_ASPECT, height = height)
+            .drawWithCache {
+                val chevronHeight = size.height
+                val chevronWidth = chevronHeight * CHEVRON_ASPECT
+                val chevron = chevronPath(chevronWidth, chevronHeight)
+                val step = chevronWidth + chevronHeight * CHEVRON_GAP
+                onDrawBehind {
+                    repeat(3) { index ->
+                        val alpha = pulses?.get(index)?.value ?: litAlpha(progress(), index)
+                        translate(left = index * step) {
+                            drawPath(chevron, color.copy(alpha = color.alpha * alpha))
+                        }
+                    }
+                }
+            },
+    )
 }
 
 /** How lit chevron [index] of three is at [progress]: dim until its third of the pull, then full. */
@@ -106,16 +126,26 @@ internal fun litAlpha(progress: Float, index: Int): Float =
 
 private const val UNLIT_ALPHA = 0.2f
 
-@Composable
-private fun Chevron(color: Color, fontSize: TextUnit, modifier: Modifier) {
-    Text(
-        text = "›",
-        modifier = modifier,
-        color = color,
-        fontSize = fontSize,
-        fontWeight = FontWeight.Black,
-        lineHeight = fontSize,
-    )
+// One chevron's proportions, to its height, after Plus Jakarta Sans Black's "›".
+private const val CHEVRON_ASPECT = 0.75f
+private const val CHEVRON_STROKE = 0.42f
+private const val CHEVRON_GAP = 0.4f
+
+/** How much wider than one chevron's height the row of three is. */
+private const val CHEVRON_ROW_ASPECT = 3 * CHEVRON_ASPECT + 2 * CHEVRON_GAP
+
+/** A chevron pointing right with flat, horizontal ends, filling [width] × [height]. */
+private fun chevronPath(width: Float, height: Float): Path {
+    val stroke = height * CHEVRON_STROKE
+    return Path().apply {
+        moveTo(0f, 0f)
+        lineTo(stroke, 0f)
+        lineTo(width, height / 2)
+        lineTo(stroke, height)
+        lineTo(0f, height)
+        lineTo(width - stroke, height / 2)
+        close()
+    }
 }
 
 /**
