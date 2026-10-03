@@ -46,6 +46,7 @@ import id.shiorilabs.commute.core.ui.frost.FrostedTopChromeBackdrop
 import id.shiorilabs.commute.core.ui.network.rememberIsOffline
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
+import id.shiorilabs.commute.core.ui.time.updatedAgoText
 import id.shiorilabs.commute.feature.station.R
 import id.shiorilabs.commute.feature.station.domain.Amenity
 import id.shiorilabs.commute.feature.station.domain.LineInfo
@@ -384,11 +385,15 @@ private fun LazyListScope.departures(
 
         is UIState.Success -> when {
             timetable.data.isNotEmpty() -> {
-                // Over a board that may have been loaded before the connection went, as on the web.
-                if (offline) {
+                // Over a board that may have been loaded before the connection went, as on the web,
+                // or one that couldn't be refreshed when it was due: either way, how old it is.
+                if (offline || board.isOutdated) {
                     item(key = "offline-banner") {
                         NoticeBanner(
-                            message = stringResource(R.string.station_offline_banner),
+                            message = stringResource(
+                                if (offline) R.string.station_offline_banner else R.string.station_outdated_banner,
+                            ),
+                            detail = board.updatedAt?.let { updatedAgoText(it) },
                             modifier = inset.padding(bottom = 16.dp),
                         )
                     }

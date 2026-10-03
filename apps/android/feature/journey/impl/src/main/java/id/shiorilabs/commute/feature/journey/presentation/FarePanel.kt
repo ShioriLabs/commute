@@ -24,8 +24,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.components.SkeletonBlock
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
+import id.shiorilabs.commute.core.ui.time.updatedAgoText
 import id.shiorilabs.commute.feature.journey.R
 import id.shiorilabs.commute.feature.journey.domain.JourneyCriteria
 import id.shiorilabs.commute.feature.journey.domain.PairEnd
@@ -106,6 +108,15 @@ internal fun FarePanel(
             TripState.Failed -> Problem(text = stringResource(R.string.journey_failed), onRetry = actions.onRetry)
 
             is TripState.Loaded -> {
+                // The last answer held, kept on screen when a fresh one couldn't be had: its times
+                // may have moved on, so say how old it is.
+                if (trip.isOutdated) {
+                    NoticeBanner(
+                        message = stringResource(R.string.journey_outdated_banner),
+                        detail = trip.updatedAt?.let { updatedAgoText(it) },
+                        modifier = Modifier.padding(top = 24.dp),
+                    )
+                }
                 JourneyResult(
                     journeys = trip.answer.journeys,
                     page = state.page,

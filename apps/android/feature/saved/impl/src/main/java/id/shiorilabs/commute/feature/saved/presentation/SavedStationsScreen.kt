@@ -59,6 +59,7 @@ import id.shiorilabs.commute.core.ui.layout.stuckTitle
 import id.shiorilabs.commute.core.ui.network.rememberIsOffline
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
+import id.shiorilabs.commute.core.ui.time.updatedAgoText
 import id.shiorilabs.commute.feature.journey.presentation.SavedRouteCard
 import id.shiorilabs.commute.feature.saved.R
 import id.shiorilabs.commute.feature.saved.presentation.components.HomeNavRail
@@ -66,6 +67,7 @@ import id.shiorilabs.commute.feature.saved.presentation.components.RouteTitle
 import id.shiorilabs.commute.feature.saved.presentation.components.StationPlaceholder
 import id.shiorilabs.commute.feature.saved.presentation.components.StationTimetable
 import id.shiorilabs.commute.feature.saved.presentation.components.StationTitle
+import java.time.Instant
 import java.time.LocalDateTime
 
 @Composable
@@ -223,8 +225,10 @@ private fun StationFeed(
         openedId = stationId
         onStationClick(stationId)
     }
+    // Offline, or a board shown that couldn't be refreshed when it was due: say how old they are.
+    val noticeShown = offline || feed.isOutdated
     val listState = rememberLazyListState()
-    listState.RevealInsertedTop(offline)
+    listState.RevealInsertedTop(noticeShown)
     val hazeState = rememberHazeState()
     val density = LocalDensity.current
     // Off its rest position, the feed has something under the bar for the frost to blur.
@@ -237,8 +241,8 @@ private fun StationFeed(
     // row then its cards; one still loading, or failed, is a single placeholder row standing in for
     // its title. A pair is its title row then its card. Either way the first row of an entry is its
     // title row. The offline banner, while it shows, is a row above them all.
-    val titleRows = remember(feed.entries, offline) {
-        var row = if (offline) 1 else 0
+    val titleRows = remember(feed.entries, noticeShown) {
+        var row = if (noticeShown) 1 else 0
         feed.entries.map { entry ->
             val titleRow = row
             row += when (entry) {
@@ -290,9 +294,13 @@ private fun StationFeed(
                 bottom = innerPadding.calculateBottomPadding() + NavRailClearance,
             ),
         ) {
-            if (offline) {
+            if (noticeShown) {
                 item(key = "offline-banner") {
-                    OfflineBanner(Modifier.padding(top = 32.dp, bottom = StationGap))
+                    OfflineBanner(
+                        offline = offline,
+                        updatedAt = feed.oldestUpdate,
+                        modifier = Modifier.padding(top = 32.dp, bottom = StationGap),
+                    )
                 }
             }
             titleRows.forEachIndexed { index, (row, entry) ->
@@ -560,11 +568,19 @@ private const val NAME_FADE_MILLIS = 300
 /** The web's --ease-ios-spring, the feed's own curve. */
 private val IosSpringEasing = CubicBezierEasing(0.36f, 0.66f, 0.04f, 1f)
 
-/** The web's "Kamu sedang offline" caveat over the feed: what shows may be out of date. */
+/**
+ * The web's "Kamu sedang offline" caveat over the feed: what shows may be out of date. Online, the
+ * same caveat for boards that couldn't be refreshed. [updatedAt] is the oldest board's, when known.
+ */
 @Composable
-private fun OfflineBanner(modifier: Modifier = Modifier) {
+private fun OfflineBanner(
+    modifier: Modifier = Modifier,
+    offline: Boolean = true,
+    updatedAt: Instant? = null,
+) {
     NoticeBanner(
-        message = stringResource(R.string.saved_offline_banner),
+        message = stringResource(if (offline) R.string.saved_offline_banner else R.string.saved_outdated_banner),
+        detail = updatedAt?.let { updatedAgoText(it) },
         modifier = modifier.padding(horizontal = 16.dp),
     )
 }
