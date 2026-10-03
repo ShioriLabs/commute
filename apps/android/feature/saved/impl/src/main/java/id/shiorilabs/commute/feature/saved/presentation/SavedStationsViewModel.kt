@@ -3,6 +3,7 @@ package id.shiorilabs.commute.feature.saved.presentation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import id.shiorilabs.commute.core.datastore.SavedEntry
 import id.shiorilabs.commute.core.datastore.SavedRepository
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.time.serviceDayOf
@@ -37,15 +38,28 @@ class SavedStationsViewModel @Inject constructor(
     private val loads = mutableMapOf<String, Job>()
     private val lines = MutableStateFlow<Map<String, LineInfo>>(emptyMap())
 
+    /** The names of the stations at either end of a pinned pair, by id, as they load. */
+    private val names = MutableStateFlow<Map<String, String>>(emptyMap())
+
     /** The service day the loaded boards belong to. */
     private var loadedDay: ServiceDayName? = null
 
-    private val savedIds = savedRepository.stationIds
+    private val saved = savedRepository.entries
 
-    val state: StateFlow<UIState<SavedStationsUiState>> = combine(savedIds, cards, lines) { ids, cards, lines ->
+    val state: StateFlow<UIState<SavedStationsUiState>> = combine(saved, cards, names, lines) { saved, cards, names, lines ->
         UIState.Success(
             SavedStationsUiState(
-                cards = ids.map { cards[it] ?: StationBoard.loading(it) },
+                entries = saved.map { entry ->
+                    when (entry) {
+                        is SavedEntry.Station -> HomeEntry.StationEntry(cards[entry.stationId] ?: StationBoard.loading(entry.stationId))
+                        is SavedEntry.Route -> HomeEntry.RouteEntry(
+                            fromId = entry.fromId,
+                            toId = entry.toId,
+                            fromName = names[entry.fromId],
+                            toName = names[entry.toId],
+                        )
+                    }
+                },
                 lines = lines,
             ),
         ) as UIState<SavedStationsUiState>
@@ -62,10 +76,19 @@ class SavedStationsViewModel @Inject constructor(
             lineRepository.lines().onRight { lines.value = it }
         }
 
-        // A newly saved station loads on arrival; one already loaded keeps its card.
+        // A newly saved station loads on arrival; one already loaded keeps its card. A pair needs
+        // only its stations' names for its title: its card asks for its own trips.
         viewModelScope.launch {
-            savedIds.collect { ids ->
-                ids.filterNot { it in cards.value }.forEach { load(it) }
+            saved.collect { entries ->
+                entries.filterIsInstance<SavedEntry.Station>()
+                    .map { it.stationId }
+                    .filterNot { it in cards.value }
+                    .forEach { load(it) }
+                entries.filterIsInstance<SavedEntry.Route>()
+                    .flatMap { listOf(it.fromId, it.toId) }
+                    .filterNot { it in names.value }
+                    .distinct()
+                    .forEach(::loadName)
             }
         }
     }
@@ -93,6 +116,18 @@ class SavedStationsViewModel @Inject constructor(
     }
 
     private fun now(): LocalDateTime = LocalDateTime.now(clock)
+
+    private fun loadName(stationId: String) {
+        stationRepository.cachedStation(stationId)?.let { station ->
+            names.update { it + (stationId to station.name) }
+            return
+        }
+        viewModelScope.launch {
+            stationRepository.station(stationId).onRight { station ->
+                names.update { it + (stationId to station.name) }
+            }
+        }
+    }
 
     private fun load(stationId: String, now: LocalDateTime = now()) {
         loadedDay = serviceDayOf(now)
