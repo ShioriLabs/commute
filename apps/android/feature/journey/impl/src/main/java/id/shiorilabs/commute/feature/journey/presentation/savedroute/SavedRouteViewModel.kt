@@ -7,11 +7,13 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import id.shiorilabs.commute.core.datastore.FarePreferencesRepository
+import id.shiorilabs.commute.core.datastore.StoredFareCriteria
 import id.shiorilabs.commute.core.query.toUIState
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.feature.journey.data.JourneyRepository
 import id.shiorilabs.commute.feature.journey.domain.DEPARTURE_SLOT_MINUTES
 import id.shiorilabs.commute.feature.journey.domain.Departure
+import id.shiorilabs.commute.feature.journey.domain.JourneyCriteria
 import id.shiorilabs.commute.feature.journey.domain.TripAnswer
 import id.shiorilabs.commute.feature.journey.domain.toCriteria
 import id.shiorilabs.commute.feature.station.data.LineRepository
@@ -85,8 +87,15 @@ class SavedRouteViewModel @AssistedInject constructor(
     private fun load(now: Instant) {
         loadedSlot = slotOf(now)
         load?.cancel()
+        // What this session already holds, on the card's first frame: the stored settings have to
+        // have been read to know which answer that is, as they will have on a warm start.
+        if (mutableState.value.answer !is UIState.Success) {
+            farePreferences.cachedCriteria()
+                ?.let { snapshot -> journeyRepository.cachedTrips(fromId, toId, snapshot.criteria.forNow(now)) }
+                ?.let { held -> mutableState.value = mutableState.value.copy(answer = UIState.Success(held)) }
+        }
         load = viewModelScope.launch {
-            val criteria = farePreferences.criteria.first().toCriteria(now).copy(departure = Departure.Now)
+            val criteria = farePreferences.criteria.first().forNow(now)
             // The cache keeps the rows on screen while a refresh runs, and after one fails; only a
             // first load with nothing held says it failed. Home's pull to refresh lands here too.
             journeyRepository.observeTrips(fromId, toId, criteria).collect { query ->
@@ -94,6 +103,10 @@ class SavedRouteViewModel @AssistedInject constructor(
             }
         }
     }
+
+    /** The rider's stored settings, but departing now: what home always asks. */
+    private fun StoredFareCriteria?.forNow(now: Instant): JourneyCriteria =
+        toCriteria(now).copy(departure = Departure.Now)
 
     private fun slotOf(now: Instant): Long = now.epochSecond / (DEPARTURE_SLOT_MINUTES * 60)
 }

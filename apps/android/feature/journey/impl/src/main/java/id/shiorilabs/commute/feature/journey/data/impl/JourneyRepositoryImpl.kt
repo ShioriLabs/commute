@@ -77,6 +77,9 @@ class JourneyRepositoryImpl @Inject constructor(
             .map { query -> query.map { it.toTripAnswer() } }
             .flowOn(Dispatchers.Default)
 
+    override fun cachedTrips(fromId: String, toId: String, criteria: JourneyCriteria): TripAnswer? =
+        queries.peek(tripsQuery(fromId, toId, criteria))?.data?.toTripAnswer()
+
     override suspend fun refresh(fromId: String, toId: String): Refetched =
         queries.refetch(queryKey(TRIPS, fromId, toId))
 
