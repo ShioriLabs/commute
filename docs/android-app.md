@@ -24,8 +24,8 @@ API.
 ## Non-goals
 
 - **Not a rewrite of the web app.** v1 covers search, departures, fare/trip
-  results and saved stations. The map, hub pages and the rest stay web-only
-  until a native version clearly earns its keep.
+  results, saved stations, and the hub and line pages those link to. The map
+  stays web-only until a native version clearly earns its keep.
 - **No on-device planner.** `libs/tsundere` stays the one planning engine,
   behind the API. Porting it to Kotlin would mean two engines to keep in
   agreement.
@@ -41,6 +41,8 @@ API.
 | Station search | `/searchables` |
 | Station page, departures | `/stations/…` (grouped timetable, `platformCode`) |
 | Fare and trip results | see "The trips endpoint" below |
+| Hub page | `/hubs/{slug}` |
+| Line page | `/lines/{operator}/{lineCode}` |
 | Saved stations | on device |
 | IC card balance | NFC, on device (`android-ic-balance.md`) |
 | Trip mode, Live Updates | `android-trip-mode.md` |
@@ -68,6 +70,8 @@ features' `:api`; a `:core:*` module never depends on a feature or on `:app`.
 :feature:search:impl     station/POI search
 :feature:station:{api,impl}   station page, departures
 :feature:journey:{api,impl}   fare and trip results, the itinerary timeline
+:feature:hub:impl        hub page: a hub's member stations
+:feature:line:impl       line page: a line's stations down its rail, branches and loop
 :feature:saved:impl      saved stations
 :feature:trip:{api,impl}      trip mode: foreground service, alerts, Live Update
 :feature:card:{api,impl}      IC card: reader interface (api); screens, comparison (impl)
