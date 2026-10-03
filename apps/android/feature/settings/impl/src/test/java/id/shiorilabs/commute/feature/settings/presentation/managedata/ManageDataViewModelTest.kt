@@ -5,16 +5,21 @@ import id.shiorilabs.commute.core.datastore.FarePreferencesRepository
 import id.shiorilabs.commute.core.datastore.RecentSearch
 import id.shiorilabs.commute.core.datastore.RecentSearchRepository
 import id.shiorilabs.commute.core.datastore.SavedRepository
+import id.shiorilabs.commute.core.query.store.StoredEntry
+import id.shiorilabs.commute.core.query.testing.FakeQueryStore
+import id.shiorilabs.commute.core.query.testing.testQueryClient
 import id.shiorilabs.commute.core.type.UIState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -25,7 +30,10 @@ class ManageDataViewModelTest {
     private val saved = SavedRepository(FakePreferencesDataStore())
     private val fares = FarePreferencesRepository(FakePreferencesDataStore())
 
-    private fun viewModel() = ManageDataViewModel(recents, saved, fares)
+    private val offline = FakeQueryStore()
+
+    private fun TestScope.viewModel() =
+        ManageDataViewModel(recents, saved, fares, testQueryClient(backgroundScope, store = offline))
 
     @Before
     fun setUp() {
@@ -63,5 +71,18 @@ class ManageDataViewModelTest {
 
         viewModel.clearSavedStations()
         assertEquals(StoredData(recentSearches = 0, savedStations = 0), viewModel.counts())
+    }
+
+    @Test
+    fun `the offline copies are sized, and cleared on their own`() = runTest {
+        offline.entries["station/KCI-MRI"] = StoredEntry("station/KCI-MRI", "x".repeat(2048), null, 0)
+        saved.toggleStation("KCI-MRI")
+        val viewModel = viewModel()
+        assertEquals(StoredData(recentSearches = 0, savedStations = 1, offlineBytes = 2048), viewModel.counts())
+
+        viewModel.clearOfflineData()
+
+        assertEquals(StoredData(recentSearches = 0, savedStations = 1, offlineBytes = 0), viewModel.counts())
+        assertTrue(offline.entries.isEmpty())
     }
 }

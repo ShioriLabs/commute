@@ -40,6 +40,9 @@
     <string name="settings_data_saved">Stasiun &amp; Rute Disimpan</string>
     <string name="settings_data_saved_count">%1$d item</string>
     <string name="settings_data_saved_empty">Tidak ada stasiun atau rute disimpan</string>
+    <string name="settings_data_offline">Data Offline</string>
+    <string name="settings_data_offline_size">Sekitar %1$s jadwal &amp; rute tersimpan</string>
+    <string name="settings_data_offline_empty">Belum ada jadwal tersimpan untuk offline</string>
     <string name="settings_data_clear">Hapus %1$s</string>
     <string name="settings_data_clear_saved_confirm">Yakin mau hapus semua stasiun dan rute disimpan?</string>
     <string name="settings_data_confirm">Hapus</string>
