@@ -67,6 +67,31 @@ class CommuteServiceImplTest {
     }
 
     @Test
+    fun `a hub and a line are read from their public paths`() = runTest {
+        val service = service { request ->
+            val data = when (request.url.encodedPath) {
+                "/hubs/dukuh-atas" ->
+                    """{"id":"HUB-DKA","slug":"dukuh-atas","name":"Dukuh Atas","kind":"hub","heroImage":null,""" +
+                        """"lines":["KCI:C"],"members":[]}"""
+                "/lines/KCI/B" ->
+                    """{"operator":{"code":"KCI","name":"Commuter Line"},""" +
+                        """"line":{"name":"Lin Bogor","colorCode":"#EE3D43","lineCode":"B"},"segments":[]}"""
+                else -> error("unexpected ${request.url}")
+            }
+            respond(
+                content = """{"status":200,"data":$data}""",
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+
+        val hub = service.getHub("dukuh-atas") as Fetched.Body
+        val line = service.getLine("KCI", "B") as Fetched.Body
+
+        assertEquals("Dukuh Atas", hub.data.name)
+        assertEquals("Lin Bogor", line.data.line.name)
+    }
+
+    @Test
     fun `a non-2xx still throws ApiException`() = runTest {
         val service = service { respond(content = "", status = HttpStatusCode.NotFound) }
 

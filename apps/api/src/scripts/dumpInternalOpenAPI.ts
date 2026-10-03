@@ -126,6 +126,8 @@ function normalizeForCodegen(document: JsonObject): JsonObject {
 const APP_PATHS = [
   '/_internal/searchables',
   '/_internal/trips/{from}/{to}',
+  '/hubs/{slug}',
+  '/lines/{operator}/{lineCode}',
   '/operators',
   '/stations/{operator}/{stationCode}',
   '/stations/{operator}/{stationCode}/headway',

@@ -2,6 +2,8 @@ package id.shiorilabs.commute.core.network.testing
 
 import id.shiorilabs.commute.core.model.models.GroupedTimetable
 import id.shiorilabs.commute.core.model.models.HeadwayRow
+import id.shiorilabs.commute.core.model.models.Hub
+import id.shiorilabs.commute.core.model.models.LineDetail
 import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.model.models.Station
@@ -109,6 +111,29 @@ class FakeCommuteService : CommuteService {
     override suspend fun getOperators(ifNoneMatch: String?): Fetched<List<OperatorWithLines>> {
         operatorsCalls++
         return answer(ifNoneMatch) { operators() }
+    }
+
+    var hub: suspend (slug: String) -> Hub = { error("getHub was not stubbed") }
+
+    /** How many times [getHub] was called — for asserting that a repository caches. */
+    var hubCalls: Int = 0
+        private set
+
+    override suspend fun getHub(slug: String, ifNoneMatch: String?): Fetched<Hub> {
+        hubCalls++
+        return answer(ifNoneMatch) { hub(slug) }
+    }
+
+    var line: suspend (operator: String, lineCode: String) -> LineDetail =
+        { _, _ -> error("getLine was not stubbed") }
+
+    /** How many times [getLine] was called — for asserting that a repository caches. */
+    var lineCalls: Int = 0
+        private set
+
+    override suspend fun getLine(operator: String, lineCode: String, ifNoneMatch: String?): Fetched<LineDetail> {
+        lineCalls++
+        return answer(ifNoneMatch) { line(operator, lineCode) }
     }
 
     var trips: suspend (fromId: String, toId: String, criteria: TripCriteria) -> TripResult =
