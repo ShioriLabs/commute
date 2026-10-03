@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -53,7 +54,9 @@ import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.ui.components.CommuteEmptyState
+import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.ext.cardEntrance
+import id.shiorilabs.commute.core.ui.network.rememberIsOffline
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
 import id.shiorilabs.commute.feature.saved.R
@@ -71,6 +74,7 @@ fun SavedStationsScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
     val now = rememberJakartaNow()
+    val offline by rememberIsOffline()
     LaunchedEffect(now) {
         viewModel.onClockTick(now)
     }
@@ -79,6 +83,7 @@ fun SavedStationsScreen(
         state = state,
         now = now,
         innerPadding = innerPadding,
+        offline = offline,
         onRetry = viewModel::retry,
         onSearchClick = { navigator.goTo(Route.Search) },
         onSettingsClick = { navigator.goTo(Route.Settings) },
@@ -91,6 +96,7 @@ private fun SavedStationsContent(
     state: UIState<SavedStationsUiState>,
     now: LocalDateTime,
     innerPadding: PaddingValues,
+    offline: Boolean = false,
     onRetry: (stationId: String) -> Unit = {},
     onSearchClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
@@ -109,16 +115,26 @@ private fun SavedStationsContent(
             is UIState.Idle, is UIState.Loading -> Unit
 
             is UIState.Success -> if (state.data.cards.isEmpty()) {
-                SavedStationsEmpty(
+                Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding),
-                )
+                ) {
+                    if (offline) {
+                        OfflineBanner(Modifier.padding(top = 32.dp))
+                    }
+                    SavedStationsEmpty(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                    )
+                }
             } else {
                 StationFeed(
                     feed = state.data,
                     now = now,
                     innerPadding = innerPadding,
+                    offline = offline,
                     onRetry = onRetry,
                     onStationClick = onStationClick,
                     coveredByPage = coveredByPage,
@@ -157,6 +173,7 @@ private fun StationFeed(
     feed: SavedStationsUiState,
     now: LocalDateTime,
     innerPadding: PaddingValues,
+    offline: Boolean,
     onRetry: (stationId: String) -> Unit,
     onStationClick: (stationId: String) -> Unit,
     coveredByPage: Boolean,
@@ -177,9 +194,10 @@ private fun StationFeed(
 
     // The rows, in list order, so a row index leads back to its station. A loaded station is a title
     // row then its cards; one still loading, or failed, is a single placeholder row standing in for
-    // its title. Either way the first row of a station is its title row.
-    val titleRows = remember(feed.cards) {
-        var row = 0
+    // its title. Either way the first row of a station is its title row. The offline banner, while it
+    // shows, is a row above them all.
+    val titleRows = remember(feed.cards, offline) {
+        var row = if (offline) 1 else 0
         feed.cards.map { card ->
             val titleRow = row
             row += if (card.station is UIState.Success) 2 else 1
@@ -218,6 +236,11 @@ private fun StationFeed(
                 bottom = innerPadding.calculateBottomPadding() + NavRailClearance,
             ),
         ) {
+            if (offline) {
+                item(key = "offline-banner") {
+                    OfflineBanner(Modifier.padding(top = 32.dp, bottom = StationGap))
+                }
+            }
             titleRows.forEachIndexed { index, (row, card) ->
                 val station = card.station
                 if (station is UIState.Success) {
@@ -425,6 +448,15 @@ private const val NAME_FADE_MILLIS = 300
 
 /** The web's --ease-ios-spring, the feed's own curve. */
 private val IosSpringEasing = CubicBezierEasing(0.36f, 0.66f, 0.04f, 1f)
+
+/** The web's "Kamu sedang offline" caveat over the feed: what shows may be out of date. */
+@Composable
+private fun OfflineBanner(modifier: Modifier = Modifier) {
+    NoticeBanner(
+        message = stringResource(R.string.saved_offline_banner),
+        modifier = modifier.padding(horizontal = 16.dp),
+    )
+}
 
 @Composable
 private fun SavedStationsEmpty(
