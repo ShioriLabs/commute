@@ -10,6 +10,13 @@
     <string name="journey_share_title">Cek Tarif Commute</string>
     <!-- Under the result in search's OTW tab -->
     <string name="journey_open_page">Buka halaman tarif</string>
+    <string name="journey_save_route">Simpan rute ini ke beranda</string>
+    <string name="journey_unsave_route">Hapus rute ini dari beranda</string>
+    <string name="journey_recent_routes">Rute terakhir</string>
+    <string name="journey_recent_routes_clear">Hapus</string>
+    <string name="journey_recent_route_pin">Pin rute %1$s ke %2$s</string>
+    <string name="journey_recent_route_unpin">Lepas pin rute %1$s ke %2$s</string>
+    <string name="journey_recent_route_description">Rute %1$s ke %2$s</string>
 
     <!-- Dari/Ke -->
     <string name="journey_from">Dari</string>

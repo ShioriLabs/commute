@@ -5,6 +5,9 @@ import arrow.core.left
 import arrow.core.right
 import id.shiorilabs.commute.core.datastore.FakePreferencesDataStore
 import id.shiorilabs.commute.core.datastore.FarePreferencesRepository
+import id.shiorilabs.commute.core.datastore.RecentRoute
+import id.shiorilabs.commute.core.datastore.SavedEntry
+import id.shiorilabs.commute.core.datastore.SavedRepository
 import id.shiorilabs.commute.core.datastore.StoredFareCriteria
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.type.Failure
@@ -24,6 +27,9 @@ import id.shiorilabs.commute.feature.search.data.SearchRepository
 import id.shiorilabs.commute.feature.search.domain.Searchable
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.domain.LineInfo
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneOffset
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -38,9 +44,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
-import java.time.Clock
-import java.time.Instant
-import java.time.ZoneOffset
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class JourneyViewModelTest {
@@ -89,6 +92,7 @@ class JourneyViewModelTest {
     private val clock = Clock.fixed(now, ZoneOffset.ofHours(7))
     private val journeys = FakeJourneyRepository()
     private val preferences = FarePreferencesRepository(FakePreferencesDataStore())
+    private val saved = SavedRepository(FakePreferencesDataStore())
 
     @Before
     fun setUp() {
@@ -101,7 +105,7 @@ class JourneyViewModelTest {
     }
 
     private fun TestScope.viewModel(route: Route.Journey = Route.Journey()): JourneyViewModel {
-        val viewModel = JourneyViewModel(route, journeys, FakeSearchRepository(), FakeLineRepository(), preferences, clock)
+        val viewModel = JourneyViewModel(route, journeys, FakeSearchRepository(), FakeLineRepository(), preferences, saved, clock)
         // WhileSubscribed: the state only flows while someone collects it, as the screen does.
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.state.collect {} }
         return viewModel
@@ -177,6 +181,53 @@ class JourneyViewModelTest {
         journeys.answer = { from, to -> TripAnswer(JourneyStop(from, "From"), JourneyStop(to, "To"), listOf(direct)).right() }
         viewModel.retry()
         assertEquals(1, (viewModel.state.value.trip as TripState.Loaded).answer.journeys.size)
+    }
+
+    @Test
+    fun `the pin pins the pair on screen, one way only`() = runTest {
+        val viewModel = viewModel(Route.Journey(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.routeSaved.collect {} }
+        assertEquals(false, viewModel.routeSaved.value)
+
+        viewModel.onToggleSaveRoute()
+        assertEquals(true, viewModel.routeSaved.value)
+        assertEquals(listOf(SavedEntry.Route("KCI-SUD", "MRTJ-LBB")), saved.entries.first())
+
+        // The return trip is another pair.
+        viewModel.onSwap()
+        assertEquals(false, viewModel.routeSaved.value)
+    }
+
+    @Test
+    fun `there is no pin without both ends`() = runTest {
+        val viewModel = viewModel(Route.Journey(toId = "MRTJ-LBB"))
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.routeSaved.collect {} }
+
+        assertNull(viewModel.routeSaved.value)
+        viewModel.onToggleSaveRoute()
+        assertEquals(emptyList<SavedEntry>(), saved.entries.first())
+    }
+
+    @Test
+    fun `a pair that answered becomes a recent one, named, with its pin`() = runTest {
+        val viewModel = viewModel(Route.Journey(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.recentRoutes.collect {} }
+        saved.toggleRoute("KCI-SUD", "MRTJ-LBB")
+
+        val recent = viewModel.recentRoutes.first { it.isNotEmpty() }.single()
+        assertEquals(RecentRouteRow("KCI-SUD", "MRTJ-LBB", "Sudirman", "Lebak Bulus Grab", saved = true), recent)
+
+        viewModel.onClearRecentRoutes()
+        assertEquals(emptyList<RecentRouteRow>(), viewModel.recentRoutes.first { it.isEmpty() })
+    }
+
+    @Test
+    fun `a pair that failed is not offered back`() = runTest {
+        journeys.answer = { _, _ -> Failure.Remote(404).left() }
+
+        viewModel(Route.Journey(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
+
+        assertEquals(emptyList<RecentRoute>(), preferences.recentRoutes.first())
     }
 
     @Test
