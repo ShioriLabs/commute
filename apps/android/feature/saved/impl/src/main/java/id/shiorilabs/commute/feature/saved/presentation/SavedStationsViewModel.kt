@@ -15,6 +15,8 @@ import id.shiorilabs.commute.feature.station.data.board
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.StationBoard
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -40,8 +42,8 @@ class SavedStationsViewModel @Inject constructor(
 
     private val cards = MutableStateFlow<Map<String, StationBoard>>(emptyMap())
 
-    /** A pull to refresh in flight. */
-    private val refreshing = MutableStateFlow(false)
+    /** A pull to refresh in flight, and what the last one found until it has been shown. */
+    private val pull = MutableStateFlow(Pull())
     private val loads = mutableMapOf<String, Job>()
     private val lines = MutableStateFlow<Map<String, LineInfo>>(emptyMap())
 
@@ -58,8 +60,8 @@ class SavedStationsViewModel @Inject constructor(
         cards,
         names,
         lines,
-        refreshing,
-    ) { saved, cards, names, lines, refreshing ->
+        pull,
+    ) { saved, cards, names, lines, pull ->
         UIState.Success(
             SavedStationsUiState(
                 entries = saved.map { entry ->
@@ -74,7 +76,8 @@ class SavedStationsViewModel @Inject constructor(
                     }
                 },
                 lines = lines,
-                isRefreshing = refreshing,
+                isRefreshing = pull.running,
+                refreshNotice = pull.notice,
             ),
         ) as UIState<SavedStationsUiState>
     }
@@ -126,24 +129,31 @@ class SavedStationsViewModel @Inject constructor(
      * screen stays there meanwhile. Offline it ends at once, the caveat already up.
      */
     fun refresh() {
-        if (refreshing.value) return
-        refreshing.value = true
+        if (pull.value.running) return
+        pull.value = Pull(running = true)
         viewModelScope.launch {
+            var notice: RefreshNotice? = null
             try {
-                coroutineScope {
-                    for (entry in saved.first()) {
-                        launch {
+                val found = coroutineScope {
+                    saved.first().map { entry ->
+                        async {
                             when (entry) {
                                 is SavedEntry.Station -> stationRepository.refresh(entry.stationId)
                                 is SavedEntry.Route -> journeyRepository.refresh(entry.fromId, entry.toId)
                             }
                         }
-                    }
+                    }.awaitAll()
                 }
+                notice = RefreshNotice.of(found)
             } finally {
-                refreshing.value = false
+                pull.value = Pull(notice = notice)
             }
         }
+    }
+
+    /** The screen has shown the last refresh's notice. */
+    fun onRefreshNoticeShown() {
+        pull.update { it.copy(notice = null) }
     }
 
     fun retry(stationId: String) {
@@ -182,4 +192,6 @@ class SavedStationsViewModel @Inject constructor(
             }
         }
     }
+
+    private data class Pull(val running: Boolean = false, val notice: RefreshNotice? = null)
 }
