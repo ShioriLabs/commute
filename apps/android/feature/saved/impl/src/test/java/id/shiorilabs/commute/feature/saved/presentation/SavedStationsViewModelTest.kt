@@ -78,13 +78,13 @@ class SavedStationsViewModelTest {
         SavedStationsViewModel(saved, stations, FakeLineRepository(), clock)
 
     private suspend fun SavedStationsViewModel.loaded(): SavedStationsUiState =
-        (state.first { it is UIState.Success && it.data.cards.all { card -> card.timetable is UIState.Success } } as UIState.Success).data
+        (state.first { it is UIState.Success && it.data.stationBoards.all { card -> card.timetable is UIState.Success } } as UIState.Success).data
 
     @Test
     fun `nothing saved is an empty feed`() = runTest {
         val feed = (viewModel().state.first { it is UIState.Success } as UIState.Success).data
 
-        assertTrue(feed.cards.isEmpty())
+        assertTrue(feed.stationBoards.isEmpty())
     }
 
     @Test
@@ -94,8 +94,25 @@ class SavedStationsViewModelTest {
 
         val feed = viewModel().loaded()
 
-        assertEquals(listOf("KCI-MRI", "MRTJ-BHI"), feed.cards.map { it.stationId })
+        assertEquals(listOf("KCI-MRI", "MRTJ-BHI"), feed.stationBoards.map { it.stationId })
         assertEquals("Lin Bogor", feed.lines.getValue("KCI:B").name)
+    }
+
+    @Test
+    fun `a pinned pair sits in the feed in the rider's order, titled by its stations`() = runTest {
+        stations.station = { id -> Station(id, if (id == "KCI-SUD") "Sudirman" else "Bogor", "KCI", id, emptyList()).right() }
+        saved.toggleStation("KCI-MRI")
+        saved.toggleRoute("KCI-SUD", "KCI-BOO")
+
+        val feed = viewModel().state.first { state ->
+            state is UIState.Success && state.data.entries.any { it is HomeEntry.RouteEntry && it.toName != null }
+        } as UIState.Success
+
+        assertEquals(listOf("station:KCI-MRI", "route:KCI-SUD>KCI-BOO"), feed.data.entries.map { it.key })
+        val pair = feed.data.entries[1] as HomeEntry.RouteEntry
+        assertEquals("Sudirman" to "Bogor", pair.fromName to pair.toName)
+        // A pair's card asks for its own trips: no board is fetched for its stations.
+        assertEquals(listOf("KCI-MRI"), stations.asked.map { it.first }.distinct())
     }
 
     @Test
@@ -106,14 +123,14 @@ class SavedStationsViewModelTest {
         val feed = viewModel(clockAt("2026-10-03T00:30:00")).loaded()
 
         assertEquals(listOf("KCI-MRI" to ServiceDayName.WD, "KCI-MRI" to ServiceDayName.SAT), stations.asked)
-        assertTrue(feed.cards.single().nextDayDiffers)
+        assertTrue(feed.stationBoards.single().nextDayDiffers)
     }
 
     @Test
     fun `on an ordinary weekday the next board is today's`() = runTest {
         saved.toggleStation("KCI-MRI")
 
-        val card = viewModel().loaded().cards.single()
+        val card = viewModel().loaded().stationBoards.single()
 
         assertEquals(listOf("KCI-MRI" to ServiceDayName.WD), stations.asked)
         val line = (card.timetable as UIState.Success).data.single()
@@ -126,13 +143,13 @@ class SavedStationsViewModelTest {
         saved.toggleStation("KCI-MRI")
         val vm = viewModel()
 
-        val failed = vm.loaded().cards.single()
+        val failed = vm.loaded().stationBoards.single()
         assertTrue(failed.station is UIState.Error)
 
         stations.station = { id -> Station(id, "Manggarai", "KCI", "MRI", emptyList()).right() }
         vm.retry("KCI-MRI")
 
-        val card = vm.loaded().cards.single()
+        val card = vm.loaded().stationBoards.single()
         assertEquals("Manggarai", (card.station as UIState.Success).data.name)
         assertNull(card.nextDayBoard)
     }

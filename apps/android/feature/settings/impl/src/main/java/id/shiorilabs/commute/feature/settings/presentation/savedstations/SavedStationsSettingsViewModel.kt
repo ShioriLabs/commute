@@ -8,7 +8,6 @@ import id.shiorilabs.commute.core.datastore.SavedRepository
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.feature.station.data.StationRepository
 import id.shiorilabs.commute.feature.station.domain.Station
-import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -19,6 +18,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 /** A row of the page: the station as it loads, and whether it is still pinned. */
 data class SavedStationRow(

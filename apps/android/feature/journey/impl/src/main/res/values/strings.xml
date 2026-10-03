@@ -17,6 +17,17 @@
     <string name="journey_recent_route_pin">Pin rute %1$s ke %2$s</string>
     <string name="journey_recent_route_unpin">Lepas pin rute %1$s ke %2$s</string>
     <string name="journey_recent_route_description">Rute %1$s ke %2$s</string>
+    <string name="journey_saved_route_failed">Gagal memuat rute ini</string>
+    <string name="journey_saved_route_offline">Tidak dapat memuat rute ini saat offline</string>
+    <string name="journey_saved_route_retry">Coba Lagi</string>
+    <string name="journey_saved_route_over">Udahan</string>
+    <string name="journey_saved_route_restarts">mulai lagi %1$s</string>
+    <string name="journey_saved_route_none_left">Udah gak ada keberangkatan lagi</string>
+    <string name="journey_saved_route_untimed">Jadwal tidak tersedia</string>
+    <string name="journey_saved_route_towards">Arah %1$s</string>
+    <string name="journey_saved_route_direct">langsung</string>
+    <string name="journey_saved_route_change_train">ganti kereta</string>
+    <string name="journey_saved_route_rows_description">Keberangkatan berikutnya dari %1$s ke %2$s</string>
 
     <!-- Dari/Ke -->
     <string name="journey_from">Dari</string>

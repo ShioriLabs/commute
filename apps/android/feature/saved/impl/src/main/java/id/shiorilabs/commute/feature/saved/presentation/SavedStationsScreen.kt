@@ -59,8 +59,10 @@ import id.shiorilabs.commute.core.ui.layout.stuckTitle
 import id.shiorilabs.commute.core.ui.network.rememberIsOffline
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
+import id.shiorilabs.commute.feature.journey.presentation.SavedRouteCard
 import id.shiorilabs.commute.feature.saved.R
 import id.shiorilabs.commute.feature.saved.presentation.components.HomeNavRail
+import id.shiorilabs.commute.feature.saved.presentation.components.RouteTitle
 import id.shiorilabs.commute.feature.saved.presentation.components.StationPlaceholder
 import id.shiorilabs.commute.feature.saved.presentation.components.StationTimetable
 import id.shiorilabs.commute.feature.saved.presentation.components.StationTitle
@@ -69,6 +71,7 @@ import java.time.LocalDateTime
 @Composable
 fun SavedStationsScreen(
     innerPadding: PaddingValues,
+    savedRouteCard: SavedRouteCard,
     viewModel: SavedStationsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -88,6 +91,8 @@ fun SavedStationsScreen(
         onSearchClick = { navigator.goTo(Route.Search) },
         onSettingsClick = { navigator.goTo(Route.Settings) },
         onStationClick = { navigator.goTo(Route.Station(it)) },
+        onRouteClick = { fromId, toId -> navigator.goTo(Route.Journey(fromId = fromId, toId = toId)) },
+        savedRouteCard = savedRouteCard,
     )
 }
 
@@ -101,6 +106,8 @@ private fun SavedStationsContent(
     onSearchClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
     onStationClick: (stationId: String) -> Unit = {},
+    onRouteClick: (fromId: String, toId: String) -> Unit = { _, _ -> },
+    savedRouteCard: SavedRouteCard = NoSavedRouteCard,
 ) {
     val coveredByPage = railSlidesWithPage()
 
@@ -114,7 +121,7 @@ private fun SavedStationsContent(
             // and a spinner that short only reads as a flicker.
             is UIState.Idle, is UIState.Loading -> Unit
 
-            is UIState.Success -> if (state.data.cards.isEmpty()) {
+            is UIState.Success -> if (state.data.entries.isEmpty()) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -137,6 +144,8 @@ private fun SavedStationsContent(
                     offline = offline,
                     onRetry = onRetry,
                     onStationClick = onStationClick,
+                    onRouteClick = onRouteClick,
+                    savedRouteCard = savedRouteCard,
                     coveredByPage = coveredByPage,
                 )
             }
@@ -165,8 +174,32 @@ private fun SavedStationsContent(
     }
 }
 
-/** The content type of a station's title row, and of the placeholder that stands in for it. */
-private const val TITLE_ROW = "station-title"
+/**
+ * The content type of an entry's title row (a station's name, a pair's "Dari → Ke") and of the
+ * placeholder that stands in for a station's.
+ */
+private const val TITLE_ROW = "entry-title"
+
+/** What the bar over the feed shows for an entry: a station's name, or a pair's two. */
+private sealed interface BarTitle {
+
+    data class Station(val stationId: String, val name: String) : BarTitle
+
+    data class Pair(val fromId: String, val toId: String, val fromName: String?, val toName: String?) : BarTitle
+}
+
+/** A station has a title once it has loaded; a pair always has one, its names filling in. */
+private fun HomeEntry.barTitle(): BarTitle? = when (this) {
+    is HomeEntry.StationEntry -> (board.station as? UIState.Success)?.data?.let { BarTitle.Station(board.stationId, it.name) }
+    is HomeEntry.RouteEntry -> BarTitle.Pair(fromId, toId, fromName, toName)
+}
+
+/** Previews have no journey feature to draw a pair's card. */
+private object NoSavedRouteCard : SavedRouteCard {
+
+    @Composable
+    override fun Content(fromId: String, toId: String, modifier: Modifier) = Unit
+}
 
 @Composable
 private fun StationFeed(
@@ -176,6 +209,8 @@ private fun StationFeed(
     offline: Boolean,
     onRetry: (stationId: String) -> Unit,
     onStationClick: (stationId: String) -> Unit,
+    onRouteClick: (fromId: String, toId: String) -> Unit,
+    savedRouteCard: SavedRouteCard,
     coveredByPage: Boolean,
 ) {
     val listDescription = stringResource(R.string.saved_station_list_description)
@@ -198,16 +233,19 @@ private fun StationFeed(
     }
     val statusBar = innerPadding.calculateTopPadding()
 
-    // The rows, in list order, so a row index leads back to its station. A loaded station is a title
+    // The rows, in list order, so a row index leads back to its entry. A loaded station is a title
     // row then its cards; one still loading, or failed, is a single placeholder row standing in for
-    // its title. Either way the first row of a station is its title row. The offline banner, while it
-    // shows, is a row above them all.
-    val titleRows = remember(feed.cards, offline) {
+    // its title. A pair is its title row then its card. Either way the first row of an entry is its
+    // title row. The offline banner, while it shows, is a row above them all.
+    val titleRows = remember(feed.entries, offline) {
         var row = if (offline) 1 else 0
-        feed.cards.map { card ->
+        feed.entries.map { entry ->
             val titleRow = row
-            row += if (card.station is UIState.Success) 2 else 1
-            titleRow to card
+            row += when (entry) {
+                is HomeEntry.StationEntry -> if (entry.board.station is UIState.Success) 2 else 1
+                is HomeEntry.RouteEntry -> 2
+            }
+            titleRow to entry
         }
     }
 
@@ -225,13 +263,18 @@ private fun StationFeed(
             )
         }
     }
-    val stuckCard = stuck?.let { current -> titleRows.firstOrNull { it.first == current.index }?.second }
-    val stuckName = (stuckCard?.station as? UIState.Success)?.data?.name
-    // The title sliding into the bar while it pushes the current one out, if it has a name to show.
+    val stuckEntry = stuck?.let { current -> titleRows.firstOrNull { it.first == current.index }?.second }
+    val stuckTitle = stuckEntry?.barTitle()
+    // The title sliding into the bar while it pushes the current one out, if it has one to show.
     val incoming = stuck?.takeIf { it.pushOffset < 0 }
         ?.let { current -> titleRows.firstOrNull { it.first > current.index } }
-        ?.takeIf { it.second.station is UIState.Success }
-    val incomingName = (incoming?.second?.station as? UIState.Success)?.data?.name
+        ?.takeIf { it.second.barTitle() != null }
+    val openTitle = { title: BarTitle ->
+        when (title) {
+            is BarTitle.Station -> openStation(title.stationId)
+            is BarTitle.Pair -> onRouteClick(title.fromId, title.toId)
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -252,23 +295,47 @@ private fun StationFeed(
                     OfflineBanner(Modifier.padding(top = 32.dp, bottom = StationGap))
                 }
             }
-            titleRows.forEachIndexed { index, (row, card) ->
+            titleRows.forEachIndexed { index, (row, entry) ->
+                // The bar shows this title while it is the current one, and while it slides in to
+                // take over; drawn twice, the copy in the list would blur behind the bar's. The bar's
+                // copy is then the one that flies into the station page.
+                val underBar = { (stuckTitle != null && stuck?.index == row) || incoming?.first == row }
+                if (entry is HomeEntry.RouteEntry) {
+                    item(key = "saved-route-title:${entry.key}", contentType = TITLE_ROW) {
+                        RouteTitle(
+                            fromName = entry.fromName,
+                            toName = entry.toName,
+                            onClick = { onRouteClick(entry.fromId, entry.toId) },
+                            modifier = Modifier
+                                .cardEntrance(index)
+                                .graphicsLayer { alpha = if (underBar()) 0f else 1f },
+                        )
+                    }
+                    item(key = "saved-route:${entry.key}") {
+                        savedRouteCard.Content(
+                            fromId = entry.fromId,
+                            toId = entry.toId,
+                            modifier = Modifier
+                                .cardEntrance(index)
+                                .padding(bottom = StationGap),
+                        )
+                    }
+                    return@forEachIndexed
+                }
+                val card = (entry as HomeEntry.StationEntry).board
                 val station = card.station
                 if (station is UIState.Success) {
                     item(key = "saved-station-title:${card.stationId}", contentType = TITLE_ROW) {
-                        // The bar shows this title while it is the current one, and while it slides
-                        // in to take over; drawn twice, the copy in the list would blur behind the
-                        // bar's. The bar's copy is then the one that flies into the station page.
-                        val underBar = (stuckName != null && stuck?.index == row) || incoming?.first == row
+                        val hidden = underBar()
                         StationTitle(
                             stationId = card.stationId,
                             name = station.data.name,
-                            shareName = !underBar,
+                            shareName = !hidden,
                             opened = card.stationId == opened,
                             onClick = { openStation(card.stationId) },
                             modifier = Modifier
                                 .cardEntrance(index)
-                                .graphicsLayer { alpha = if (underBar) 0f else 1f },
+                                .graphicsLayer { alpha = if (hidden) 0f else 1f },
                         )
                     }
                     item(key = "saved-station:${card.stationId}") {
@@ -312,23 +379,22 @@ private fun StationFeed(
         )
 
         StuckTitleBar(
-            stationId = stuckCard?.stationId,
-            name = stuckName,
-            incomingStationId = incoming?.second?.stationId,
-            incomingName = incomingName,
+            title = stuckTitle,
+            incoming = incoming?.second?.barTitle(),
             pushOffset = { stuck?.pushOffset ?: 0 },
             titleHeight = { barTitleHeight },
             statusBar = statusBar,
             onTitleHeight = { barTitleHeight = it },
             // The bar covers the list's own copy of the title, so it takes the tap for it.
-            opened = stuckCard != null && stuckCard.stationId == opened,
-            onClick = stuckCard?.takeIf { stuckName != null }?.let { card -> { openStation(card.stationId) } },
+            opened = (stuckTitle as? BarTitle.Station)?.stationId?.let { it == opened } == true,
+            onClick = stuckTitle?.let { title -> { openTitle(title) } },
         )
     }
 }
 
 /**
- * The bar over the feed: the current station's name, reaching up behind the status bar. It draws
+ * The bar over the feed: the current entry's title, a station's name or a pair's two, reaching up
+ * behind the status bar. It draws
  * no surface of its own; the frost behind it ([FrostedTopChromeBackdrop]) blurs the cards passing
  * under it.
  *
@@ -343,10 +409,8 @@ private fun StationFeed(
  */
 @Composable
 private fun StuckTitleBar(
-    stationId: String?,
-    name: String?,
-    incomingStationId: String?,
-    incomingName: String?,
+    title: BarTitle?,
+    incoming: BarTitle?,
     pushOffset: () -> Int,
     titleHeight: () -> Int,
     statusBar: Dp,
@@ -361,23 +425,22 @@ private fun StuckTitleBar(
     // The name fades on the feed's entrance curve when the bar gains or loses one, rather than
     // popping: the first time a station loads under the bar, and when the feed empties.
     val nameAlpha by animateFloatAsState(
-        targetValue = if (name == null) 0f else 1f,
+        targetValue = if (title == null) 0f else 1f,
         animationSpec = tween(NAME_FADE_MILLIS, easing = IosSpringEasing),
         label = "stuckTitleName",
     )
-    // The last name shown, kept through the fade out.
-    var shownName by remember { mutableStateOf(name.orEmpty()) }
-    if (name != null) {
-        shownName = name
+    // The last title shown, kept through the fade out.
+    var shownTitle by remember { mutableStateOf(title) }
+    if (title != null) {
+        shownTitle = title
     }
 
     Box(modifier = Modifier.fillMaxWidth()) {
         // Always laid out, so the bar's height is known before the first title reaches it.
-        StationTitle(
-            stationId = stationId.orEmpty(),
-            name = shownName,
+        BarTitleRow(
+            title = shownTitle,
             topInset = statusBar,
-            shareName = stationId != null && name != null,
+            shareName = title is BarTitle.Station,
             opened = opened,
             onClick = onClick,
             modifier = Modifier
@@ -405,16 +468,51 @@ private fun StuckTitleBar(
                     )
                 },
         )
-        if (incomingStationId != null && incomingName != null) {
+        if (incoming != null) {
             // Where its row in the list is: one title down, less however far it has pushed.
-            StationTitle(
-                stationId = incomingStationId,
-                name = incomingName,
+            BarTitleRow(
+                title = incoming,
                 topInset = statusBar,
                 shareName = false,
                 modifier = Modifier.graphicsLayer { translationY = (titleHeight() + pushOffset()).toFloat() },
             )
         }
+    }
+}
+
+/**
+ * A title in the bar, set as the feed sets it. Only a station's name flies into its page; with no
+ * title yet, an empty station title still lays out, so the bar has a height to measure.
+ */
+@Composable
+private fun BarTitleRow(
+    title: BarTitle?,
+    topInset: Dp,
+    shareName: Boolean,
+    modifier: Modifier = Modifier,
+    opened: Boolean = false,
+    onClick: (() -> Unit)? = null,
+) {
+    when (title) {
+        is BarTitle.Pair -> RouteTitle(
+            fromName = title.fromName,
+            toName = title.toName,
+            modifier = modifier,
+            topInset = topInset,
+            onClick = onClick,
+        )
+
+        is BarTitle.Station -> StationTitle(
+            stationId = title.stationId,
+            name = title.name,
+            modifier = modifier,
+            topInset = topInset,
+            shareName = shareName,
+            opened = opened,
+            onClick = onClick,
+        )
+
+        null -> StationTitle(stationId = "", name = "", modifier = modifier, topInset = topInset, shareName = false)
     }
 }
 
@@ -491,7 +589,7 @@ private fun SavedStationsEmpty(
 private fun SavedStationsEmptyPreview() {
     CommutePreviewScaffold {
         SavedStationsContent(
-            state = UIState.Success(SavedStationsUiState(cards = emptyList(), lines = emptyMap())),
+            state = UIState.Success(SavedStationsUiState(entries = emptyList(), lines = emptyMap())),
             now = LocalDateTime.of(2026, 10, 1, 8, 0),
             innerPadding = PaddingValues(),
         )

@@ -20,6 +20,8 @@ dependencies {
     implementation(project(":core:ui"))
     // StationRepository/LineRepository, the domain models, and LineCard.
     implementation(project(":feature:station:api"))
+    // SavedRouteCard: a pinned pair's card, the journey feature's seam.
+    implementation(project(":feature:journey:api"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.runtime)
