@@ -19,6 +19,7 @@
     <string name="journey_recent_route_description">Rute %1$s ke %2$s</string>
     <string name="journey_saved_route_failed">Gagal memuat rute ini</string>
     <string name="journey_saved_route_offline">Tidak dapat memuat rute ini saat offline</string>
+    <string name="journey_outdated_banner">Rute ini belum bisa diperbarui, jadwalnya mungkin sudah berubah</string>
     <string name="journey_saved_route_retry">Coba Lagi</string>
     <string name="journey_saved_route_over">Udahan</string>
     <string name="journey_saved_route_restarts">mulai lagi %1$s</string>
