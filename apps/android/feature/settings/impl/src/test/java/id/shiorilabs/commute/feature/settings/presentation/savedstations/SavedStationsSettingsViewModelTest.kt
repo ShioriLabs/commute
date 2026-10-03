@@ -23,6 +23,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -56,8 +57,13 @@ class SavedStationsSettingsViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private suspend fun SavedStationsSettingsViewModel.rows(): List<SavedStationRow> =
-        (state.first { it is UIState.Success && it.data.none { row -> row.station is UIState.Loading } } as UIState.Success).data
+    private fun SavedRow.loading(): Boolean = when (this) {
+        is SavedRow.StationRow -> station is UIState.Loading
+        is SavedRow.RouteRow -> from is UIState.Loading || to is UIState.Loading
+    }
+
+    private suspend fun SavedStationsSettingsViewModel.rows(): List<SavedRow> =
+        (state.first { it is UIState.Success && it.data.none { row -> row.loading() } } as UIState.Success).data
 
     @Test
     fun `rows follow the saved order, with the ends marked`() = runTest {
@@ -65,7 +71,7 @@ class SavedStationsSettingsViewModelTest {
 
         val rows = SavedStationsSettingsViewModel(saved, stations).rows()
 
-        assertEquals(listOf("KCI-MRI", "MRTJ-BHI", "KCI-THB"), rows.map { it.id })
+        assertEquals(listOf("KCI-MRI", "MRTJ-BHI", "KCI-THB"), rows.map { it.key })
         assertEquals(listOf(true, false, false), rows.map { it.isFirst })
         assertEquals(listOf(false, false, true), rows.map { it.isLast })
     }
@@ -79,7 +85,7 @@ class SavedStationsSettingsViewModelTest {
         viewModel.onMove("MRTJ-BHI", -1)
 
         assertEquals(listOf("MRTJ-BHI", "KCI-MRI"), saved.stationIds.first())
-        assertEquals(listOf("MRTJ-BHI", "KCI-MRI"), viewModel.rows().map { it.id })
+        assertEquals(listOf("MRTJ-BHI", "KCI-MRI"), viewModel.rows().map { it.key })
     }
 
     @Test
@@ -99,6 +105,41 @@ class SavedStationsSettingsViewModelTest {
     }
 
     @Test
+    fun `pairs share the list with stations, named by their ends`() = runTest {
+        stations.station = { id -> Station(id, if (id == "KCI-SUD") "Sudirman" else "Bogor", "KCI", id, emptyList()).right() }
+        saved.replace(listOf(SavedEntry.Station("KCI-SUD"), SavedEntry.Route("KCI-SUD", "KCI-BOO")))
+
+        val rows = SavedStationsSettingsViewModel(saved, stations).rows()
+
+        assertEquals(listOf("KCI-SUD", "route:KCI-SUD>KCI-BOO"), rows.map { it.key })
+        val pair = rows[1] as SavedRow.RouteRow
+        assertEquals("Bogor", (pair.to as UIState.Success).data.name)
+    }
+
+    @Test
+    fun `a pair is moved and unpinned like a station, and stored as a pair`() = runTest {
+        saved.replace(listOf(SavedEntry.Station("KCI-MRI"), SavedEntry.Route("KCI-SUD", "KCI-BOO")))
+        val viewModel = SavedStationsSettingsViewModel(saved, stations)
+        viewModel.rows()
+
+        viewModel.onMove("route:KCI-SUD>KCI-BOO", -1)
+        assertEquals(listOf(SavedEntry.Route("KCI-SUD", "KCI-BOO"), SavedEntry.Station("KCI-MRI")), saved.entries.first())
+
+        viewModel.onToggle("route:KCI-SUD>KCI-BOO")
+        assertEquals(listOf(SavedEntry.Station("KCI-MRI")), saved.entries.first())
+    }
+
+    @Test
+    fun `a pair whose station is gone keeps its row, to be removed`() = runTest {
+        stations.station = { id -> if (id == "KCI-GONE") Failure.Remote(404).left() else Station(id, id, "KCI", id, emptyList()).right() }
+        saved.replace(listOf(SavedEntry.Route("KCI-SUD", "KCI-GONE")))
+
+        val pair = SavedStationsSettingsViewModel(saved, stations).rows().single() as SavedRow.RouteRow
+
+        assertTrue(pair.to is UIState.Error)
+    }
+
+    @Test
     fun `a station that fails to load has no row, but stays saved`() = runTest {
         saved.replace(listOf("KCI-MRI", "KCI-GONE").map(SavedEntry::Station))
         stations.station = { id ->
@@ -107,7 +148,7 @@ class SavedStationsSettingsViewModelTest {
 
         val rows = SavedStationsSettingsViewModel(saved, stations).rows()
 
-        assertEquals(listOf("KCI-MRI"), rows.map { it.id })
+        assertEquals(listOf("KCI-MRI"), rows.map { it.key })
         assertEquals(listOf("KCI-MRI", "KCI-GONE"), saved.stationIds.first())
     }
 }
