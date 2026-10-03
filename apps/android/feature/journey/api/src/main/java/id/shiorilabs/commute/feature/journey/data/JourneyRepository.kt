@@ -27,6 +27,12 @@ interface JourneyRepository {
         queryOnce(null) { trips(fromId, toId, criteria) }
 
     /**
+     * [trips] as already loaded this session, without asking or reading the disk: for a card that
+     * paints what it holds on its first frame.
+     */
+    fun cachedTrips(fromId: String, toId: String, criteria: JourneyCriteria): TripAnswer? = null
+
+    /**
      * Asks again for every answer between [fromId] and [toId] being observed, whatever their age,
      * and once they are in (at once offline) says what they found. A pull to refresh.
      */
