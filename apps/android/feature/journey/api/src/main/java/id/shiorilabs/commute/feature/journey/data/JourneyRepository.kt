@@ -2,6 +2,7 @@ package id.shiorilabs.commute.feature.journey.data
 
 import arrow.core.Either
 import id.shiorilabs.commute.core.query.Query
+import id.shiorilabs.commute.core.query.Refetched
 import id.shiorilabs.commute.core.query.queryOnce
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.feature.journey.domain.JourneyCriteria
@@ -27,7 +28,7 @@ interface JourneyRepository {
 
     /**
      * Asks again for every answer between [fromId] and [toId] being observed, whatever their age,
-     * and returns once they are in (at once offline). A pull to refresh.
+     * and once they are in (at once offline) says what they found. A pull to refresh.
      */
-    suspend fun refresh(fromId: String, toId: String) = Unit
+    suspend fun refresh(fromId: String, toId: String): Refetched = Refetched()
 }

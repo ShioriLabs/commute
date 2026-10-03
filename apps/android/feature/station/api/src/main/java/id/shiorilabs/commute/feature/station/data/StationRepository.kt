@@ -2,6 +2,7 @@ package id.shiorilabs.commute.feature.station.data
 
 import arrow.core.Either
 import id.shiorilabs.commute.core.query.Query
+import id.shiorilabs.commute.core.query.Refetched
 import id.shiorilabs.commute.core.query.queryOnce
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
@@ -49,10 +50,10 @@ interface StationRepository {
 
     /**
      * Asks again for every part of [stationId] being observed (the station, its boards, a halte's
-     * frequencies), whatever their age, and returns once they are in (at once offline). A pull to
-     * refresh.
+     * frequencies), whatever their age, and once they are in (at once offline) says what they found.
+     * A pull to refresh.
      */
-    suspend fun refresh(stationId: String) = Unit
+    suspend fun refresh(stationId: String): Refetched = Refetched()
 
     /**
      * The station as already loaded this session, without asking or reading the disk. A screen

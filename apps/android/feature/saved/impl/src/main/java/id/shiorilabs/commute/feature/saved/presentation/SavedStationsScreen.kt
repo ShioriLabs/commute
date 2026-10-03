@@ -15,7 +15,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -69,7 +68,9 @@ import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
 import id.shiorilabs.commute.core.ui.time.updatedAgoText
 import id.shiorilabs.commute.feature.journey.presentation.SavedRouteCard
 import id.shiorilabs.commute.feature.saved.R
+import id.shiorilabs.commute.feature.saved.presentation.components.ChevronPullIndicator
 import id.shiorilabs.commute.feature.saved.presentation.components.HomeNavRail
+import id.shiorilabs.commute.feature.saved.presentation.components.RefreshNoticeHost
 import id.shiorilabs.commute.feature.saved.presentation.components.RouteTitle
 import id.shiorilabs.commute.feature.saved.presentation.components.StationPlaceholder
 import id.shiorilabs.commute.feature.saved.presentation.components.StationTimetable
@@ -101,6 +102,7 @@ fun SavedStationsScreen(
         offline = offline,
         onRetry = viewModel::retry,
         onRefresh = viewModel::refresh,
+        onRefreshNoticeShown = viewModel::onRefreshNoticeShown,
         onSearchClick = { navigator.goTo(Route.Search) },
         onSettingsClick = { navigator.goTo(Route.Settings) },
         onStationClick = { navigator.goTo(Route.Station(it)) },
@@ -117,6 +119,7 @@ private fun SavedStationsContent(
     offline: Boolean = false,
     onRetry: (stationId: String) -> Unit = {},
     onRefresh: () -> Unit = {},
+    onRefreshNoticeShown: () -> Unit = {},
     onSearchClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
     onStationClick: (stationId: String) -> Unit = {},
@@ -158,6 +161,7 @@ private fun SavedStationsContent(
                     offline = offline,
                     onRetry = onRetry,
                     onRefresh = onRefresh,
+                    onRefreshNoticeShown = onRefreshNoticeShown,
                     onStationClick = onStationClick,
                     onRouteClick = onRouteClick,
                     savedRouteCard = savedRouteCard,
@@ -224,6 +228,7 @@ private fun StationFeed(
     offline: Boolean,
     onRetry: (stationId: String) -> Unit,
     onRefresh: () -> Unit,
+    onRefreshNoticeShown: () -> Unit,
     onStationClick: (stationId: String) -> Unit,
     onRouteClick: (fromId: String, toId: String) -> Unit,
     savedRouteCard: SavedRouteCard,
@@ -294,6 +299,11 @@ private fun StationFeed(
         }
     }
 
+    // The bar: the status bar, and the stuck title under it once there is one. With no title at the
+    // top yet (the offline banner is above them all) it is only the status bar, so neither the frost
+    // nor its resting fill covers the banner.
+    val barHeight = if (stuck != null) statusBar + with(density) { barTitleHeight.toDp() } else statusBar
+
     val pullState = rememberPullToRefreshState()
     // A tick as the pull crosses the point where letting go refreshes, and again if it is pulled
     // back and across once more: the platform's own pull. Not while a refresh already spins.
@@ -311,14 +321,15 @@ private fun StationFeed(
         onRefresh = onRefresh,
         modifier = Modifier.fillMaxSize(),
         state = pullState,
-        // Over the bar and its frost, and clear of the status bar the list starts under.
+        // Drawn over the feed, but drawing in from under the bar's bottom edge rather than over its
+        // title.
         indicator = {
-            PullToRefreshDefaults.Indicator(
+            ChevronPullIndicator(
                 state = pullState,
                 isRefreshing = feed.isRefreshing,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = statusBar),
+                    .padding(top = barHeight),
             )
         },
     ) {
@@ -416,10 +427,7 @@ private fun StationFeed(
             }
         }
 
-        // The bar's frost, behind it, the same height throughout: only the names move. With no title
-        // at the top yet (the offline banner is above them all) the bar is only the status bar, so
-        // neither the frost nor its resting fill covers the banner.
-        val barHeight = if (stuck != null) statusBar + with(density) { barTitleHeight.toDp() } else statusBar
+        // The bar's frost, behind it, the same height throughout: only the names move.
         FrostedTopChromeBackdrop(
             hazeState = hazeState,
             chromeHeight = barHeight,
@@ -437,6 +445,15 @@ private fun StationFeed(
             // The bar covers the list's own copy of the title, so it takes the tap for it.
             opened = (stuckTitle as? BarTitle.Station)?.stationId?.let { it == opened } == true,
             onClick = stuckTitle?.let { title -> { openTitle(title) } },
+        )
+
+        // What the pull found, just under the bar, over whatever the feed is showing.
+        RefreshNoticeHost(
+            notice = feed.refreshNotice,
+            onShown = onRefreshNoticeShown,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = barHeight + 12.dp),
         )
     }
 }
