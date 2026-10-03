@@ -24,4 +24,10 @@ interface JourneyRepository {
      */
     fun observeTrips(fromId: String, toId: String, criteria: JourneyCriteria): Flow<Query<TripAnswer>> =
         queryOnce(null) { trips(fromId, toId, criteria) }
+
+    /**
+     * Asks again for every answer between [fromId] and [toId] being observed, whatever their age,
+     * and returns once they are in (at once offline). A pull to refresh.
+     */
+    suspend fun refresh(fromId: String, toId: String) = Unit
 }

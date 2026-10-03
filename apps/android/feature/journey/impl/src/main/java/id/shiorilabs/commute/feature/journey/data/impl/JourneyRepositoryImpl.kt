@@ -49,7 +49,7 @@ class JourneyRepositoryImpl @Inject constructor(
             params.walking?.let { "walk=$it" },
         ).joinToString("&").ifEmpty { "default" }
         return QuerySpec(
-            key = queryKey("trips", fromId, toId, sent),
+            key = queryKey(TRIPS, fromId, toId, sent),
             serializer = TripResult.serializer(),
             policy = when (criteria.departure) {
                 Departure.Now -> UntilSlotEnds
@@ -76,7 +76,13 @@ class JourneyRepositoryImpl @Inject constructor(
             .map { query -> query.map { it.toTripAnswer() } }
             .flowOn(Dispatchers.Default)
 
+    override suspend fun refresh(fromId: String, toId: String) {
+        queries.refetch(queryKey(TRIPS, fromId, toId))
+    }
+
     private companion object {
+
+        const val TRIPS = "trips"
 
         /** Fresh until the end of the departure slot it was fetched in. */
         val UntilSlotEnds = QueryPolicy { fetchedAt ->
