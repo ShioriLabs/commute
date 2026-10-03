@@ -51,8 +51,10 @@ import id.shiorilabs.commute.feature.station.R
 import id.shiorilabs.commute.feature.station.domain.Amenity
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
+import id.shiorilabs.commute.feature.station.domain.OPERATOR_TJ
 import id.shiorilabs.commute.feature.station.domain.Station
 import id.shiorilabs.commute.feature.station.domain.StationBoard
+import id.shiorilabs.commute.feature.station.domain.codeOfLineKey
 import id.shiorilabs.commute.feature.station.domain.isTransJakarta
 import id.shiorilabs.commute.feature.station.domain.lastTrains
 import id.shiorilabs.commute.feature.station.presentation.components.AmenityList
@@ -118,6 +120,7 @@ fun StationScreen(
         onOtw = { navigator.goTo(Route.Journey(toId = stationId)) },
         onOpenTimetable = { title -> navigator.goTo(Route.StationTimetable(stationId, title)) },
         onOpenStation = { id -> navigator.goTo(Route.Station(id)) },
+        onOpenLine = { key -> lineRoute(key, state.lines)?.let(navigator::goTo) },
     )
 }
 
@@ -137,6 +140,7 @@ private fun StationContent(
     onOtw: () -> Unit = {},
     onOpenTimetable: (title: String?) -> Unit = {},
     onOpenStation: (stationId: String) -> Unit = {},
+    onOpenLine: (lineKey: String) -> Unit = {},
 ) {
     val hazeState = rememberHazeState()
     val listState = rememberLazyListState()
@@ -202,6 +206,7 @@ private fun StationContent(
                 onOtw = onOtw,
                 onOpenTimetable = { onOpenTimetable(station?.name ?: placeholderTitle) },
                 onOpenStation = onOpenStation,
+                onOpenLine = onOpenLine,
             )
         }.map { it.measure(constraints) }
 
@@ -232,6 +237,7 @@ private fun StationList(
     onOtw: () -> Unit,
     onOpenTimetable: () -> Unit,
     onOpenStation: (stationId: String) -> Unit,
+    onOpenLine: (lineKey: String) -> Unit,
 ) {
     val board = state.board
     val station = (board.station as? UIState.Success)?.data
@@ -292,6 +298,7 @@ private fun StationList(
             onRetry = onRetry,
             onOtw = onOtw,
             onOpenTimetable = onOpenTimetable,
+            onOpenLine = onOpenLine,
         )
 
         if (station == null) {
@@ -332,6 +339,7 @@ private fun StationList(
                     transfer = transfer,
                     lines = state.lines,
                     modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp),
+                    onOpenLine = onOpenLine,
                 )
             }
         }
@@ -356,6 +364,7 @@ private fun LazyListScope.departures(
     onRetry: () -> Unit,
     onOtw: () -> Unit,
     onOpenTimetable: () -> Unit,
+    onOpenLine: (lineKey: String) -> Unit,
 ) {
     val inset = Modifier.padding(horizontal = 16.dp)
     // The web's single h-72 block: the page shows every line, so a per-line skeleton would run
@@ -411,6 +420,12 @@ private fun LazyListScope.departures(
                         lineInfo = lines[line.lineKey],
                         now = now,
                         nextDayLine = board.nextDayLine(line),
+                        // Its name opens the line's page, as on the web; a corridor has none.
+                        onHeaderClick = if (hasLinePage(line.lineKey)) {
+                            { onOpenLine(line.lineKey) }
+                        } else {
+                            null
+                        },
                         // Lands here from the same card on the home feed.
                         modifier = inset
                             .padding(top = if (index == 0) 0.dp else 16.dp)
@@ -486,6 +501,29 @@ private fun UnservedNotice(unserved: UnservedStation, modifier: Modifier = Modif
 }
 
 private fun UIState.Error.isOffline(): Boolean = cause?.toFailure() is Failure.Network
+
+/**
+ * Whether the line keyed [lineKey] (`KCI:B`) has a page to open. The web gives TransJakarta
+ * corridors none, even those the API has a topology for.
+ */
+private fun hasLinePage(lineKey: String): Boolean {
+    val operator = lineKey.substringBefore(':', "")
+    return operator.isNotEmpty() && operator != OPERATOR_TJ && codeOfLineKey(lineKey).isNotEmpty()
+}
+
+/** The page of the line keyed [lineKey], with the name and colour the page shows meanwhile. */
+private fun lineRoute(lineKey: String, lines: Map<String, LineInfo>): Route.Line? {
+    if (!hasLinePage(lineKey)) {
+        return null
+    }
+    val info = lines[lineKey]
+    return Route.Line(
+        operator = lineKey.substringBefore(':'),
+        lineCode = codeOfLineKey(lineKey),
+        title = info?.name,
+        colorCode = info?.colorCode,
+    )
+}
 
 /** The station's pin in Google Maps, labelled with its name, as the web links it. */
 private fun mapsUrl(station: Station): String? {
