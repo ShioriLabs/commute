@@ -41,10 +41,10 @@ class FrostTuning {
     var quality: Float by mutableFloatStateOf(DEFAULT_QUALITY)
 
     /** Moves where the fade below a header starts: positive starts it higher, inside the header. */
-    var featherShift: Dp by mutableStateOf(0.dp)
+    var featherShift: Dp by mutableStateOf(DEFAULT_FEATHER_SHIFT)
 
     /** Scales how far below a header the fade runs. */
-    var featherScale: Float by mutableFloatStateOf(1f)
+    var featherScale: Float by mutableFloatStateOf(DEFAULT_FEATHER_SCALE)
 
     /**
      * Blur even where [rememberFrostBlurEnabled] says the phone can't afford it, so the real frost
@@ -63,8 +63,8 @@ class FrostTuning {
         backgroundFill = DEFAULT_BACKGROUND_FILL
         adaptiveQuality = DEFAULT_ADAPTIVE
         quality = DEFAULT_QUALITY
-        featherShift = 0.dp
-        featherScale = 1f
+        featherShift = DEFAULT_FEATHER_SHIFT
+        featherScale = DEFAULT_FEATHER_SCALE
         forceBlur = false
     }
 
@@ -83,12 +83,16 @@ class FrostTuning {
 
         /**
          * Wide headers that carry text want most of a solid surface and only a hint of what passes
-         * beneath; any less and the detail scrolling under churns through.
+         * beneath; any less and the colour scrolling under smears through as blobs. Washier than
+         * midori's 0.70: tuned on an S23 with the frost tuner.
          */
-        const val DEFAULT_TINT_ALPHA = 0.70f
+        const val DEFAULT_TINT_ALPHA = 0.80f
 
-        /** What makes the blur read as frost rather than smoke. Haze's default is 0.15. */
-        const val DEFAULT_NOISE = 0.20f
+        /**
+         * What makes the blur read as frost rather than smoke; Haze's default is 0.15. Grainier than
+         * midori's 0.20, tuned alongside the tint.
+         */
+        const val DEFAULT_NOISE = 0.35f
 
         const val DEFAULT_BACKGROUND_FILL = true
 
@@ -98,6 +102,13 @@ class FrostTuning {
          */
         const val DEFAULT_ADAPTIVE = false
         const val DEFAULT_QUALITY = 1f
+
+        /**
+         * The fade starts this far inside a header's bottom edge, and runs a little shorter than
+         * [FrostFeatherHeight], so the rows coming up under it meet less of a veil.
+         */
+        val DEFAULT_FEATHER_SHIFT: Dp = 8.dp
+        const val DEFAULT_FEATHER_SCALE = 0.90f
     }
 }
 
