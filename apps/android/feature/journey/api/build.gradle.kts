@@ -11,6 +11,8 @@ android {
 dependencies {
     // Failure/Either in JourneyRepository's signature → api.
     api(project(":core:common"))
+    // Query in JourneyRepository.observeTrips → api.
+    api(project(":core:query"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.runtime)
