@@ -30,6 +30,7 @@ fun routeForLink(link: String): Route? {
                 fromId = params["from"]?.ifEmpty { null },
                 toId = params["to"]?.ifEmpty { null },
                 journeyKey = params["j"]?.ifEmpty { null },
+                boardingClock = params["jt"]?.ifEmpty { null },
                 paymentMethod = params["paymentMethod"],
                 at = params["at"],
                 modes = params["modes"],

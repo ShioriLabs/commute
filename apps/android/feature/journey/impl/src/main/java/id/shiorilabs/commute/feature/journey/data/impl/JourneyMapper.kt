@@ -39,6 +39,7 @@ private fun FareJourney.toJourney(): Journey = Journey(
     boardings = boardings.roundToInt(),
     walkDistanceM = walkDistanceM.roundToInt(),
     arrivalAt = arrivalAt?.toInstantOrNull(),
+    resumesAt = resumesAt?.toInstantOrNull(),
 )
 
 private fun FareRideLeg.toRide(): JourneyLeg.Ride = JourneyLeg.Ride(

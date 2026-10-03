@@ -28,6 +28,14 @@ class DeepLinksTest {
     }
 
     @Test
+    fun `a saved pair's row link names the boarding too`() {
+        assertEquals(
+            Route.Journey(fromId = "KCI-SUD", toId = "KCI-MRI", journeyKey = "C.SUD-MRI", boardingClock = "2321"),
+            routeForLink("https://commute.shiorilabs.id/fare?from=KCI-SUD&to=KCI-MRI&j=C.SUD-MRI&jt=2321"),
+        )
+    }
+
+    @Test
     fun `a station's OTW link carries only the destination`() {
         assertEquals(Route.Journey(toId = "KCI-MRI"), routeForLink("https://commute.shiorilabs.id/fare?to=KCI-MRI"))
         assertEquals(Route.Journey(), routeForLink("https://commute.shiorilabs.id/fare/"))

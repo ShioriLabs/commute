@@ -105,8 +105,9 @@ class JourneyViewModel @AssistedInject constructor(
      */
     val pickerText: StateFlow<String> = pickerQuery.asStateFlow()
 
-    /** The journey a shared link named, honoured on the first answer only. */
+    /** The journey a shared link named, and which boarding of it, honoured on the first answer only. */
     private var sharedKey: String? = route.journeyKey
+    private var sharedBoarding: String? = route.boardingClock
 
     val state: StateFlow<JourneyUiState> = combine(session, criteria, trip, stations, lines) { session, criteria, trip, stations, lines ->
         val answer = (trip as? TripState.Loaded)?.answer
@@ -258,8 +259,9 @@ class JourneyViewModel @AssistedInject constructor(
      * The one exception is the first answer to a shared link whose route still runs.
      */
     private fun onAnswer(answer: TripAnswer) {
-        val shared = findJourneyByKey(answer.journeys, sharedKey)
+        val shared = findJourneyByKey(answer.journeys, sharedKey, sharedBoarding)
         sharedKey = null
+        sharedBoarding = null
         session.update {
             it.copy(
                 page = if (shared != null) JourneyPage.DETAIL else JourneyPage.OPTIONS,
