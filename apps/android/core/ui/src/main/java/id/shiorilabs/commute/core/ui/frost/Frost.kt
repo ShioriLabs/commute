@@ -20,7 +20,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeInput
-import dev.chrisbanes.haze.HazePerformanceMode
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.blur.HazeBlurStyle
 import dev.chrisbanes.haze.blur.HazeColorEffect
@@ -34,18 +33,6 @@ import dev.chrisbanes.haze.blur.hazeBlur
 
 /** How long the frost takes to fade in once something scrolls under the header, or out again. */
 private const val FROST_FADE_MS = 220
-
-/** One blur for every frosted header, so they read as one material. */
-private val FrostBlur = 24.dp
-
-/**
- * The page colour washed over the blur. Wide headers that carry text want most of a solid surface
- * and only a hint of what passes beneath; any less and the detail scrolling under churns through.
- */
-private const val FROST_TINT_ALPHA = 0.70f
-
-/** Grain over the blur: what makes it read as frost rather than smoke. Haze's default is 0.15. */
-private const val FROST_NOISE = 0.20f
 
 /**
  * Colour stops sampled along the feather's easing. A mask gradient runs straight between stops, so
@@ -75,7 +62,8 @@ fun frostFeatherMask(fromPx: Float, toPx: Float): Brush {
  * which is why a blur on the header itself ends in a line.
  *
  * Place it over the scrolling [dev.chrisbanes.haze.hazeSource] and under the header, which draws
- * no surface of its own. [chromeHeight] is the header's height, status bar included.
+ * no surface of its own. [chromeHeight] is the header's height, status bar included. The blur's
+ * look, and where and how long the fade runs, come from [LocalFrostTuning].
  *
  * At rest nothing sits under the header, and a blur would only tint the page a shade off, so the
  * header shows [restingColor] until [scrolled]; then the frost fades in over it. It also waits for
@@ -92,8 +80,9 @@ fun FrostedTopChromeBackdrop(
     restingColor: Color = surfaceColor,
     featherHeight: Dp = FrostFeatherHeight,
 ) {
+    val tuning = LocalFrostTuning.current
     val settled = rememberNavTransitionSettled()
-    val canBlur = rememberFrostBlurEnabled()
+    val canBlur = rememberFrostBlurEnabled() || tuning.forceBlur
     val frostAlpha = animateFloatAsState(
         targetValue = if (settled && scrolled) 1f else 0f,
         animationSpec = tween(FROST_FADE_MS),
@@ -102,15 +91,18 @@ fun FrostedTopChromeBackdrop(
     val frostVisible by remember { derivedStateOf { frostAlpha.value > 0f } }
     val density = LocalDensity.current
     val chromeHeightPx = with(density) { chromeHeight.toPx() }
-    val featherPx = with(density) { featherHeight.toPx() }
-    val featherMask = remember(chromeHeightPx, featherPx) {
-        frostFeatherMask(chromeHeightPx, chromeHeightPx + featherPx)
+    val feather = (featherHeight * tuning.featherScale).coerceAtLeast(1.dp)
+    val fadeStart = (chromeHeight - tuning.featherShift).coerceAtLeast(0.dp)
+    val fadeStartPx = with(density) { fadeStart.toPx() }
+    val featherPx = with(density) { feather.toPx() }
+    val featherMask = remember(fadeStartPx, featherPx) {
+        frostFeatherMask(fadeStartPx, fadeStartPx + featherPx)
     }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(chromeHeight + featherHeight)
+            .height(maxOf(chromeHeight, fadeStart + feather))
             // Under the header only: the band below is the page's own while the frost is out.
             .drawBehind {
                 drawRect(
@@ -131,16 +123,14 @@ fun FrostedTopChromeBackdrop(
                 .hazeBlur(
                     input = HazeInput.Sources(hazeState),
                     style = HazeBlurStyle {
-                        backgroundColor(surfaceColor)
-                        colorEffects(listOf(HazeColorEffect.tint(surfaceColor.copy(alpha = FROST_TINT_ALPHA))))
-                        blurRadius(FrostBlur)
-                        noiseFactor(FROST_NOISE)
+                        backgroundColor(if (tuning.backgroundFill) surfaceColor else Color.Transparent)
+                        colorEffects(listOf(HazeColorEffect.tint(surfaceColor.copy(alpha = tuning.tintAlpha))))
+                        blurRadius(tuning.blurRadius)
+                        noiseFactor(tuning.noiseFactor)
                         blurEnabled(canBlur)
                         mask(featherMask)
                     },
-                    // Full resolution: the layer is wide and the radius large, and Haze's adaptive
-                    // input halves it, which shows. The platform blur downsamples inside anyway.
-                    performanceMode = HazePerformanceMode.Quality,
+                    performanceMode = tuning.performanceMode,
                 ),
         )
     }
