@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import id.shiorilabs.commute.core.datastore.RecentSearch
 import id.shiorilabs.commute.core.datastore.RecentSearchRepository
-import id.shiorilabs.commute.core.datastore.SavedStationsRepository
+import id.shiorilabs.commute.core.datastore.SavedRepository
 import id.shiorilabs.commute.core.datastore.SearchMode
 import id.shiorilabs.commute.core.datastore.SearchModeRepository
 import id.shiorilabs.commute.core.ext.toLoading
@@ -33,7 +33,7 @@ import javax.inject.Inject
 class SearchViewModel @Inject constructor(
     private val searchRepository: SearchRepository,
     private val recentSearchRepository: RecentSearchRepository,
-    private val savedStationsRepository: SavedStationsRepository,
+    private val savedRepository: SavedRepository,
     private val searchModeRepository: SearchModeRepository,
 ) : ViewModel() {
 
@@ -72,7 +72,7 @@ class SearchViewModel @Inject constructor(
         _index,
         results,
         recentSearchRepository.recents,
-        savedStationsRepository.stations,
+        savedRepository.stationIds,
     ) { index, results, recents, saved ->
         when (index) {
             is UIState.Idle -> UIState.Idle
@@ -127,7 +127,7 @@ class SearchViewModel @Inject constructor(
     /** The pin on a station row: saves the station to the home screen, or unsaves it. */
     fun onToggleSave(stationId: String) {
         viewModelScope.launch {
-            savedStationsRepository.toggle(stationId)
+            savedRepository.toggleStation(stationId)
         }
     }
 

@@ -4,7 +4,8 @@ import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
 import id.shiorilabs.commute.core.datastore.FakePreferencesDataStore
-import id.shiorilabs.commute.core.datastore.SavedStationsRepository
+import id.shiorilabs.commute.core.datastore.SavedEntry
+import id.shiorilabs.commute.core.datastore.SavedRepository
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
@@ -42,7 +43,7 @@ class SavedStationsSettingsViewModelTest {
             emptyList<Frequency>().right()
     }
 
-    private val saved = SavedStationsRepository(FakePreferencesDataStore())
+    private val saved = SavedRepository(FakePreferencesDataStore())
     private val stations = FakeStationRepository()
 
     @Before
@@ -60,7 +61,7 @@ class SavedStationsSettingsViewModelTest {
 
     @Test
     fun `rows follow the saved order, with the ends marked`() = runTest {
-        saved.replace(listOf("KCI-MRI", "MRTJ-BHI", "KCI-THB"))
+        saved.replace(listOf("KCI-MRI", "MRTJ-BHI", "KCI-THB").map(SavedEntry::Station))
 
         val rows = SavedStationsSettingsViewModel(saved, stations).rows()
 
@@ -71,35 +72,35 @@ class SavedStationsSettingsViewModelTest {
 
     @Test
     fun `a move is stored straight away`() = runTest {
-        saved.replace(listOf("KCI-MRI", "MRTJ-BHI"))
+        saved.replace(listOf("KCI-MRI", "MRTJ-BHI").map(SavedEntry::Station))
         val viewModel = SavedStationsSettingsViewModel(saved, stations)
         viewModel.rows()
 
         viewModel.onMove("MRTJ-BHI", -1)
 
-        assertEquals(listOf("MRTJ-BHI", "KCI-MRI"), saved.stations.first())
+        assertEquals(listOf("MRTJ-BHI", "KCI-MRI"), saved.stationIds.first())
         assertEquals(listOf("MRTJ-BHI", "KCI-MRI"), viewModel.rows().map { it.id })
     }
 
     @Test
     fun `an unpinned station keeps its row and comes back to its place`() = runTest {
-        saved.replace(listOf("KCI-MRI", "MRTJ-BHI", "KCI-THB"))
+        saved.replace(listOf("KCI-MRI", "MRTJ-BHI", "KCI-THB").map(SavedEntry::Station))
         val viewModel = SavedStationsSettingsViewModel(saved, stations)
         viewModel.rows()
 
         viewModel.onToggle("MRTJ-BHI")
 
-        assertEquals(listOf("KCI-MRI", "KCI-THB"), saved.stations.first())
+        assertEquals(listOf("KCI-MRI", "KCI-THB"), saved.stationIds.first())
         assertEquals(listOf(true, false, true), viewModel.rows().map { it.isSaved })
 
         viewModel.onToggle("MRTJ-BHI")
 
-        assertEquals(listOf("KCI-MRI", "MRTJ-BHI", "KCI-THB"), saved.stations.first())
+        assertEquals(listOf("KCI-MRI", "MRTJ-BHI", "KCI-THB"), saved.stationIds.first())
     }
 
     @Test
     fun `a station that fails to load has no row, but stays saved`() = runTest {
-        saved.replace(listOf("KCI-MRI", "KCI-GONE"))
+        saved.replace(listOf("KCI-MRI", "KCI-GONE").map(SavedEntry::Station))
         stations.station = { id ->
             if (id == "KCI-GONE") Failure.Remote(404).left() else Station(id, id, "KCI", id, emptyList()).right()
         }
@@ -107,6 +108,6 @@ class SavedStationsSettingsViewModelTest {
         val rows = SavedStationsSettingsViewModel(saved, stations).rows()
 
         assertEquals(listOf("KCI-MRI"), rows.map { it.id })
-        assertEquals(listOf("KCI-MRI", "KCI-GONE"), saved.stations.first())
+        assertEquals(listOf("KCI-MRI", "KCI-GONE"), saved.stationIds.first())
     }
 }

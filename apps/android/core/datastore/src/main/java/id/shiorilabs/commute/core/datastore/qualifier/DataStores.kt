@@ -5,12 +5,12 @@ import androidx.datastore.preferences.core.Preferences
 import javax.inject.Qualifier
 
 /**
- * Hilt [Qualifier] for the preferences [DataStore]<[Preferences]> backing the rider's saved
- * stations shown on the home screen.
+ * Hilt [Qualifier] for the preferences [DataStore]<[Preferences]> backing what the rider pinned to
+ * the home screen: stations and Dari→Ke pairs.
  */
 @Qualifier
 @Retention(AnnotationRetention.RUNTIME)
-annotation class SavedStationsDataStore
+annotation class SavedDataStore
 
 /**
  * Hilt [Qualifier] for the preferences [DataStore]<[Preferences]> backing the places the rider last

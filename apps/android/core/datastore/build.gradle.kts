@@ -3,7 +3,7 @@
 plugins {
     alias(libs.plugins.commute.android.library)
     alias(libs.plugins.commute.android.hilt)
-    // SavedStationsRepository serializes its station list via kotlinx-serialization Json.
+    // SavedRepository serializes its entries via kotlinx-serialization Json.
     alias(libs.plugins.commute.kotlin.serialization)
 }
 
