@@ -10,6 +10,7 @@ import id.shiorilabs.commute.core.datastore.SavedEntry
 import id.shiorilabs.commute.core.datastore.SavedRepository
 import id.shiorilabs.commute.core.datastore.StoredFareCriteria
 import id.shiorilabs.commute.core.navigation.Route
+import id.shiorilabs.commute.core.query.Query
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.feature.journey.data.JourneyRepository
 import id.shiorilabs.commute.feature.journey.domain.Departure
@@ -29,7 +30,10 @@ import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -38,7 +42,9 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.time.Clock
@@ -58,6 +64,12 @@ class JourneyViewModelTest {
             asked += Triple(fromId, toId, criteria)
             return answer(fromId, toId)
         }
+
+        /** Stands in for the cache's stale-first stream when set; otherwise [trips] answers once. */
+        var observed: Flow<Query<TripAnswer>>? = null
+
+        override fun observeTrips(fromId: String, toId: String, criteria: JourneyCriteria): Flow<Query<TripAnswer>> =
+            observed ?: super.observeTrips(fromId, toId, criteria)
     }
 
     private class FakeSearchRepository : SearchRepository {
@@ -166,6 +178,37 @@ class JourneyViewModelTest {
         val asked = journeys.asked.single().third
         assertEquals(PaymentMethod.QRIS_TAP, asked.paymentMethod)
         assertEquals(Modes.RAIL, asked.modes)
+    }
+
+    @Test
+    fun `the held answer shows while it refreshes, and the fresh one keeps the rider's journey`() = runTest {
+        val held = TripAnswer(JourneyStop("KCI-SUD", "From"), JourneyStop("MRTJ-LBB", "To"), listOf(direct, viaDukuhAtas))
+        val answers = MutableStateFlow(Query(held, updatedAt = now, isFetching = true))
+        journeys.observed = answers
+        val viewModel = viewModel(Route.Journey(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
+        assertTrue((viewModel.state.value.trip as TripState.Loaded).isRefreshing)
+        viewModel.onSelectJourney(1)
+
+        // The fresh answer orders them the other way round.
+        answers.value = Query(held.copy(journeys = listOf(viaDukuhAtas, direct)), updatedAt = now)
+
+        val state = viewModel.state.value
+        assertEquals(JourneyPage.DETAIL, state.page)
+        assertEquals(0, state.selected)
+        assertFalse((state.trip as TripState.Loaded).isRefreshing)
+    }
+
+    @Test
+    fun `an answer that couldn't be refreshed is shown outdated, and not offered back as a recent`() = runTest {
+        val held = TripAnswer(JourneyStop("KCI-SUD", "From"), JourneyStop("MRTJ-LBB", "To"), listOf(direct))
+        journeys.observed = flowOf(Query(held, updatedAt = now, failure = Failure.Network.NoConnection()))
+
+        val viewModel = viewModel(Route.Journey(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
+
+        val trip = viewModel.state.value.trip as TripState.Loaded
+        assertTrue(trip.isOutdated)
+        assertEquals(now, trip.updatedAt)
+        assertEquals(emptyList<RecentRoute>(), preferences.recentRoutes.first())
     }
 
     @Test
