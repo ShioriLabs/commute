@@ -5,6 +5,7 @@ import arrow.core.left
 import arrow.core.right
 import id.shiorilabs.commute.core.datastore.FakePreferencesDataStore
 import id.shiorilabs.commute.core.datastore.SavedRepository
+import id.shiorilabs.commute.core.query.Refetched
 import id.shiorilabs.commute.core.time.JAKARTA
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
@@ -61,9 +62,13 @@ class SavedStationsViewModelTest {
         /** Holds every refresh until completed, as the network would. */
         var refreshAnswered = CompletableDeferred(Unit)
 
-        override suspend fun refresh(stationId: String) {
+        /** What each station's refresh finds. */
+        var found = Refetched(unchanged = 3)
+
+        override suspend fun refresh(stationId: String): Refetched {
             refreshed += stationId
             refreshAnswered.await()
+            return found
         }
     }
 
@@ -73,8 +78,12 @@ class SavedStationsViewModelTest {
         override suspend fun trips(fromId: String, toId: String, criteria: JourneyCriteria): Either<Failure, TripAnswer> =
             error("Home asks for no trips itself: a pair's card does")
 
-        override suspend fun refresh(fromId: String, toId: String) {
+        /** What each pair's refresh finds. */
+        var found = Refetched(unchanged = 1)
+
+        override suspend fun refresh(fromId: String, toId: String): Refetched {
             refreshed += fromId to toId
+            return found
         }
     }
 
@@ -163,6 +172,28 @@ class SavedStationsViewModelTest {
         stations.refreshAnswered.complete(Unit)
 
         assertFalse(viewModel.loaded().isRefreshing)
+    }
+
+    @Test
+    fun `a refresh says what it found, once, and a new pull clears it`() = runTest {
+        saved.toggleStation("KCI-MRI")
+        saved.toggleRoute("KCI-SUD", "KCI-BOO")
+        journeys.found = Refetched(changed = 1)
+        val viewModel = viewModel()
+        viewModel.loaded()
+
+        viewModel.refresh()
+        assertEquals(RefreshNotice.Updated(1), viewModel.loaded().refreshNotice)
+
+        viewModel.onRefreshNoticeShown()
+        assertNull(viewModel.loaded().refreshNotice)
+
+        stations.refreshAnswered = CompletableDeferred()
+        journeys.found = Refetched(unchanged = 1)
+        viewModel.refresh()
+        assertNull(viewModel.loaded().refreshNotice)
+        stations.refreshAnswered.complete(Unit)
+        assertEquals(RefreshNotice.UpToDate, viewModel.loaded().refreshNotice)
     }
 
     @Test

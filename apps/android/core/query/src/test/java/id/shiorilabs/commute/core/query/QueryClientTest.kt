@@ -7,6 +7,8 @@ import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.Fetched
 import id.shiorilabs.commute.core.type.UIState
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
@@ -28,6 +30,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class QueryClientTest {
 
     @Serializable
@@ -248,7 +251,7 @@ class QueryClientTest {
         val thing = collect(client.observe(spec()))
         runCurrent()
 
-        val refetch = backgroundScope.launch { client.refetch(queryKey("thing")) }
+        val refetch = backgroundScope.async { client.refetch(queryKey("thing")) }
         runCurrent()
         assertTrue(thing.last().isFetching)
         assertFalse(refetch.isCompleted)
@@ -256,20 +259,39 @@ class QueryClientTest {
         gate.complete(Unit)
         runCurrent()
 
-        assertTrue(refetch.isCompleted)
+        assertEquals(Refetched(unchanged = 1), refetch.getCompleted())
         assertEquals(Query(Thing("stored"), start), thing.last())
     }
 
     @Test
-    fun `refetch offline returns at once, the answer marked outdated`() = runTest {
+    fun `refetch counts what changed, and a full answer that is the same again as unchanged`() = runTest {
+        stored(name = "stored", key = "thing/1")
+        stored(name = "stored", key = "thing/2")
+        answer = { Fetched.Body(Thing("fresh"), null) }
+        val client = client()
+        collect(client.observe(spec("thing", "1")))
+        // The second key's server answers in full, with what is already held.
+        collect(
+            client.observe(
+                QuerySpec(queryKey("thing", "2"), Thing.serializer(), QueryPolicy.freshFor(Duration.ofMinutes(10))) {
+                    Fetched.Body(Thing("stored"), null)
+                },
+            ),
+        )
+        runCurrent()
+
+        assertEquals(Refetched(changed = 1, unchanged = 1), client.refetch(queryKey("thing")))
+    }
+
+    @Test
+    fun `refetch offline returns at once, every observed key failed and its answer outdated`() = runTest {
         stored(age = Duration.ofMinutes(1))
         network.isOnline.value = false
         val client = client()
         val thing = collect(client.observe(spec()))
         runCurrent()
 
-        client.refetch(queryKey("thing"))
-
+        assertEquals(Refetched(failed = 1), client.refetch(queryKey("thing")))
         assertEquals(0, calls)
         assertTrue(thing.last().isOutdated)
     }
