@@ -20,6 +20,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import id.shiorilabs.commute.core.ui.R as CoreUiR
 import id.shiorilabs.commute.core.ui.components.CommuteButton
 import id.shiorilabs.commute.core.ui.components.CommuteEmptyState
 import id.shiorilabs.commute.core.ui.components.VerticalSpacer
@@ -56,7 +57,7 @@ private fun SkeletonBlock(width: Dp, height: Dp) {
 @Composable
 fun SearchNotFound(modifier: Modifier = Modifier) {
     CommuteEmptyState(
-        illustration = painterResource(R.drawable.img_search_empty),
+        illustration = painterResource(CoreUiR.drawable.img_search_empty),
         illustrationDescription = stringResource(R.string.search_not_found_illustration_description),
         title = stringResource(R.string.search_not_found_title),
         body = AnnotatedString(stringResource(R.string.search_not_found_body)),
