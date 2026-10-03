@@ -29,7 +29,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui.tooling.preview)
 
-    // Haze — the header blurs the page scrolling under it.
+    // Haze: the page and the timetable are what the frost behind their pinned headers blurs.
     implementation(libs.haze)
 
     // ViewModel + viewModelScope.
