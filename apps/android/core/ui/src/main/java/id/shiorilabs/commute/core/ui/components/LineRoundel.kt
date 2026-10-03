@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
@@ -29,6 +30,7 @@ import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.RoundelFontFamily
 import id.shiorilabs.commute.core.ui.theme.RoundelNarrowFontFamily
+import kotlin.math.roundToInt
 
 /** The text colour on a roundel's white face, and on a pale filled one. */
 private val RoundelInk = Color(0xFF0F172A)
@@ -47,7 +49,10 @@ enum class RoundelSize(
     internal val text: Dp,
     internal val compactText: Dp,
     internal val icon: Dp,
-    /** A station number's prefix, stacked over its position (which takes [compactText]). */
+    /**
+     * A station number's prefix of more than one character, stacked over its position (which, like
+     * a one-letter prefix, takes [compactText]).
+     */
     internal val prefixText: Dp,
     /** The Kalayang's aircraft standing in for that prefix. */
     internal val prefixIcon: Dp,
@@ -116,9 +121,12 @@ fun LineRoundel(
                             tint = ink,
                         )
                     } else if (prefix.isNotEmpty()) {
-                        RoundelText(prefix, size.prefixText, compact = true, ink)
+                        // A single letter matches the position under it; a longer prefix ("TP", a
+                        // corridor's "13") would crowd the circle at that size, so it shrinks.
+                        val prefixSize = if (prefix.length == 1) size.compactText else size.prefixText
+                        RoundelText(prefix, prefixSize, compact = true, ink, stacked = true)
                     }
-                    RoundelText(position, size.compactText, compact = true, ink)
+                    RoundelText(position, size.compactText, compact = true, ink, stacked = true)
                 }
             }
 
@@ -134,11 +142,41 @@ fun LineRoundel(
     }
 }
 
+/**
+ * How tall each line of a stacked station number lays out, as a share of its font size: about its
+ * cap height. At the font's own height the prefix and the position sit apart by the room left for
+ * descenders, which capitals and digits never use. A line height can't do this: Compose never
+ * shrinks a single line below the font's own ascent and descent.
+ */
+private const val STACKED_LINE_SHARE = 0.75f
+
+/**
+ * [stacked] for a line of a station number, laid out [STACKED_LINE_SHARE] tall with its glyphs
+ * centred, so they overhang the box only by the font's empty ascent and descent; otherwise the code
+ * alone, at the font's own height.
+ */
 @Composable
-private fun RoundelText(text: String, size: Dp, compact: Boolean, color: Color) {
+private fun RoundelText(
+    text: String,
+    size: Dp,
+    compact: Boolean,
+    color: Color,
+    stacked: Boolean = false,
+) {
     val fontSize = with(LocalDensity.current) { size.toSp() }
     Text(
         text = text,
+        modifier = if (stacked) {
+            Modifier.layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                val height = (size.toPx() * STACKED_LINE_SHARE).roundToInt()
+                layout(placeable.width, height) {
+                    placeable.place(0, (height - placeable.height) / 2)
+                }
+            }
+        } else {
+            Modifier
+        },
         style = TextStyle(
             // Narrow is the standard's sanctioned face when space is tight, which is exactly what
             // a multi-character code sharing one circle, or a stacked station number, is.
