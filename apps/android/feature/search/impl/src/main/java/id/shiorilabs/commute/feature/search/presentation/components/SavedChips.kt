@@ -16,28 +16,36 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.ui.ext.parseHexColor
 import id.shiorilabs.commute.core.ui.ext.tint
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
+import id.shiorilabs.commute.feature.search.R
 import id.shiorilabs.commute.feature.search.domain.Searchable
 import id.shiorilabs.commute.feature.station.presentation.sharedStationName
 
 /** The chip's name, `text-slate-900`. */
 private val ChipInk = Color(0xFF0F172A)
 
+/** The pencil chip, the web's `bg-stone-100/80` and `text-slate-700`. */
+private val EditChipFill = Color(0xCCF5F5F4)
+private val EditChipInk = Color(0xFF334155)
+
 /**
  * The pinned stations as shortcut pills under the field, each tinted from its first line with the
  * pin in that line's colour.
  *
- * The web ends the row with a pencil to the screen where pins are reordered. That screen doesn't
- * exist here yet, so neither does the pencil.
+ * The row ends with a pencil, [onEdit], to the settings screen where pins are reordered: the one
+ * place that happens.
  */
 @Composable
 fun SavedChips(
     stations: List<Searchable.Station>,
     onClick: (Searchable.Station) -> Unit,
+    onEdit: () -> Unit,
     modifier: Modifier = Modifier,
     isShared: (Searchable.Station) -> Boolean = { false },
 ) {
@@ -77,5 +85,17 @@ fun SavedChips(
                 )
             }
         }
+        Icon(
+            imageVector = CommuteIcons.Edit,
+            contentDescription = stringResource(R.string.search_saved_edit),
+            modifier = Modifier
+                .fillMaxRowHeight()
+                .clip(CircleShape)
+                .background(EditChipFill)
+                .clickable(role = Role.Button, onClick = onEdit)
+                .padding(horizontal = 14.dp, vertical = 6.dp)
+                .size(16.dp),
+            tint = EditChipInk,
+        )
     }
 }
