@@ -32,6 +32,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -133,6 +135,11 @@ internal fun CriteriaBar(
 ) {
     var open by rememberSaveable { mutableStateOf<OpenCriterion?>(null) }
     val defaults = JourneyCriteria()
+    val haptics = LocalHapticFeedback.current
+    val openSheet = { criterion: OpenCriterion ->
+        haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+        open = criterion
+    }
 
     // Wraps rather than squeezes: truncating a departure would drop its day, the one thing that
     // tells two journeys apart.
@@ -156,7 +163,7 @@ internal fun CriteriaBar(
                 .clip(CircleShape)
                 .background(Color.White)
                 .border(2.dp, Stone200, CircleShape)
-                .clickable { open = OpenCriterion.ALL }
+                .clickable { openSheet(OpenCriterion.ALL) }
                 .clearAndSetSemantics {
                     contentDescription = settingsDescription
                     role = Role.Button
@@ -193,7 +200,7 @@ internal fun CriteriaBar(
                 .clip(CircleShape)
                 .background(if (picked) Rose100 else Color.White)
                 .border(2.dp, if (picked) Rose200 else Stone200, CircleShape)
-                .clickable { open = OpenCriterion.DEPARTURE }
+                .clickable { openSheet(OpenCriterion.DEPARTURE) }
                 .clearAndSetSemantics {
                     contentDescription = departureDescription
                     role = Role.Button

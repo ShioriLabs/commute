@@ -38,6 +38,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -99,7 +101,9 @@ internal fun StationPickerSheet(
             delay(FOCUS_DELAY_MILLIS)
             focusRequester.requestFocus()
         }
+        val haptics = LocalHapticFeedback.current
         val pick: (PickableStation) -> Unit = { station ->
+            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
             onPick(station)
             hide()
         }
