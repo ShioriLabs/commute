@@ -18,6 +18,8 @@ dependencies {
     implementation(project(":core:datastore"))
     // The settings routes + the NavGraphContribution/NavGraphScope contract.
     implementation(project(":core:navigation"))
+    // QueryClient — the offline copies, counted and cleared.
+    implementation(project(":core:query"))
     // CommuteIcons, CommuteIconButton, CommuteButton, SkeletonBlock, CommutePreviewScaffold.
     implementation(project(":core:ui"))
     // StationRepository — the saved stations page names each station.
@@ -43,4 +45,6 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     // FakePreferencesDataStore — backs the repositories in the view model tests.
     testImplementation(testFixtures(project(":core:datastore")))
+    // FakeQueryStore + testQueryClient — the offline copies in ManageDataViewModelTest.
+    testImplementation(testFixtures(project(":core:query")))
 }

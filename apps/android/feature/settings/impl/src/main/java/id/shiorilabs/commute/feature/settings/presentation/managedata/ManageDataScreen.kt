@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.settings.presentation.managedata
 
+import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -21,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -54,6 +56,7 @@ fun ManageDataScreen(
         onBack = { navigator.pop() },
         onClearRecentSearches = viewModel::clearRecentSearches,
         onClearSavedStations = viewModel::clearSavedStations,
+        onClearOfflineData = viewModel::clearOfflineData,
     )
 }
 
@@ -64,6 +67,7 @@ private fun ManageDataContent(
     onBack: () -> Unit = {},
     onClearRecentSearches: () -> Unit = {},
     onClearSavedStations: () -> Unit = {},
+    onClearOfflineData: () -> Unit = {},
 ) {
     var confirmingSavedStations by rememberSaveable { mutableStateOf(false) }
 
@@ -95,6 +99,20 @@ private fun ManageDataContent(
                 },
                 canClear = data.savedStations > 0,
                 onClear = { confirmingSavedStations = true },
+            )
+            DataEntry(
+                title = stringResource(R.string.settings_data_offline),
+                subtitle = if (data.offlineBytes > 0) {
+                    stringResource(
+                        R.string.settings_data_offline_size,
+                        Formatter.formatShortFileSize(LocalContext.current, data.offlineBytes),
+                    )
+                } else {
+                    stringResource(R.string.settings_data_offline_empty)
+                },
+                canClear = data.offlineBytes > 0,
+                // Without asking: it is only copies, fetched again as stations are opened online.
+                onClear = onClearOfflineData,
             )
         }
     }
@@ -173,7 +191,7 @@ private fun DataEntry(
 private fun ManageDataContentPreview() {
     CommutePreviewScaffold {
         ManageDataContent(
-            state = UIState.Success(StoredData(recentSearches = 3, savedStations = 0)),
+            state = UIState.Success(StoredData(recentSearches = 3, savedStations = 0, offlineBytes = 1_800_000)),
             innerPadding = PaddingValues(),
         )
     }

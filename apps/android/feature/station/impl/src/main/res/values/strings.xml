@@ -14,6 +14,7 @@
     <string name="station_timetable_offline">Tidak dapat memuat jadwal saat offline</string>
     <string name="station_timetable_empty">Jadwal tidak tersedia</string>
     <string name="station_offline_banner">Kamu sedang offline, data mungkin tidak up-to-date</string>
+    <string name="station_outdated_banner">Jadwal belum bisa diperbarui, data mungkin tidak up-to-date</string>
     <string name="station_retry">Coba Lagi</string>
 
     <!-- Actions over the departures -->
