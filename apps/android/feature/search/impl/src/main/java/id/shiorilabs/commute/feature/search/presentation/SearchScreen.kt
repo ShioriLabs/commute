@@ -120,6 +120,10 @@ fun SearchScreen(
             },
             onTogglePin = viewModel::onToggleSave,
             onClearRecents = viewModel::onClearRecents,
+            onEditPins = {
+                focusManager.clearFocus()
+                navigator.goTo(Route.SettingsSavedStations)
+            },
         )
     }
 }
@@ -138,6 +142,7 @@ private fun SearchContent(
     onResultClick: (Searchable) -> Unit,
     onTogglePin: (stationId: String) -> Unit,
     onClearRecents: () -> Unit,
+    onEditPins: () -> Unit = {},
     focusOnOpen: Boolean = true,
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -200,6 +205,7 @@ private fun SearchContent(
                     SavedChips(
                         stations = loaded.idle.saved,
                         onClick = { openFrom(SOURCE_CHIP, it) },
+                        onEdit = onEditPins,
                         isShared = { opened == "$SOURCE_CHIP:${it.key}" },
                     )
                 }
