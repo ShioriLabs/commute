@@ -7,6 +7,8 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import id.shiorilabs.commute.core.datastore.FarePreferencesRepository
+import id.shiorilabs.commute.core.datastore.SavedEntry
+import id.shiorilabs.commute.core.datastore.SavedRepository
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.feature.journey.data.JourneyRepository
@@ -42,7 +44,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
-
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
@@ -66,6 +67,7 @@ class JourneyViewModel @AssistedInject constructor(
     private val searchRepository: SearchRepository,
     private val lineRepository: LineRepository,
     private val farePreferences: FarePreferencesRepository,
+    private val savedRepository: SavedRepository,
     private val clock: Clock,
 ) : ViewModel() {
 
@@ -131,6 +133,45 @@ class JourneyViewModel @AssistedInject constructor(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), JourneyUiState(pair = session.value.pair, picker = session.value.picker))
 
+    /**
+     * Whether the pair on screen is pinned to home: the pin beside share. `null` until both ends are
+     * set, and different, as the web's button renders nothing until then. Directional, so after a
+     * swap it reads unpinned until the return trip is pinned too.
+     */
+    val routeSaved: StateFlow<Boolean?> = combine(
+        session.map { it.pair }.distinctUntilChanged(),
+        savedRepository.entries,
+    ) { pair, entries ->
+        val fromId = pair.fromId
+        val toId = pair.toId
+        if (fromId == null || toId == null || fromId == toId) null else SavedEntry.Route(fromId, toId) in entries
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /**
+     * The pairs that last answered, for search's "Rute terakhir": named from the station index, so
+     * none shows before it loads, and a pair whose station has left it is dropped, as on the web.
+     */
+    val recentRoutes: StateFlow<List<RecentRouteRow>> = combine(
+        farePreferences.recentRoutes,
+        stations,
+        savedRepository.entries,
+    ) { routes, stations, entries ->
+        if (stations == null) {
+            return@combine emptyList()
+        }
+        routes.mapNotNull { route ->
+            val from = resolveStationId(stations, route.fromId) ?: return@mapNotNull null
+            val to = resolveStationId(stations, route.toId) ?: return@mapNotNull null
+            RecentRouteRow(
+                fromId = route.fromId,
+                toId = route.toId,
+                fromName = from.name,
+                toName = to.name,
+                saved = SavedEntry.Route(route.fromId, route.toId) in entries,
+            )
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val picker: StateFlow<PickerUiState> = combine(
         pickerQuery,
         stations,
@@ -193,6 +234,27 @@ class JourneyViewModel @AssistedInject constructor(
         viewModelScope.launch { farePreferences.saveCriteria(next.toStored()) }
     }
 
+    /** The pin beside share: pins the pair on screen to home, or unpins it. */
+    fun onToggleSaveRoute() {
+        val pair = session.value.pair
+        val fromId = pair.fromId ?: return
+        val toId = pair.toId ?: return
+        if (fromId == toId) {
+            return
+        }
+        viewModelScope.launch { savedRepository.toggleRoute(fromId, toId) }
+    }
+
+    /** A recent pair's pin. */
+    fun onToggleRecentRoute(route: RecentRouteRow) {
+        viewModelScope.launch { savedRepository.toggleRoute(route.fromId, route.toId) }
+    }
+
+    /** The "Hapus" beside "Rute terakhir". */
+    fun onClearRecentRoutes() {
+        viewModelScope.launch { farePreferences.clearRecentRoutes() }
+    }
+
     fun onSelectJourney(index: Int) {
         session.update { it.copy(selected = index, page = JourneyPage.DETAIL) }
     }
@@ -248,7 +310,12 @@ class JourneyViewModel @AssistedInject constructor(
                     ifLeft = { failure ->
                         trip.value = if (failure is Failure.Remote && failure.code == 404) TripState.NotFound else TripState.Failed
                     },
-                    ifRight = ::onAnswer,
+                    ifRight = { answer ->
+                        onAnswer(answer)
+                        // A pair becomes a recent once it has answered, not on every pick, as on
+                        // the web: a half-made selection or a failed lookup is not a trip to offer back.
+                        farePreferences.recordRoute(fromId, toId)
+                    },
                 )
             }
     }
