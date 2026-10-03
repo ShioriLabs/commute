@@ -229,6 +229,24 @@ class SavedStationsViewModelTest {
     }
 
     @Test
+    fun `with the list and its boards already held, the very first state is the whole feed`() = runTest {
+        saved.toggleStation("KCI-MRI")
+        saved.toggleRoute("KCI-SUD", "KCI-BOO")
+        stations.held = Station("KCI-MRI", "Manggarai", "KCI", "MRI", listOf("KCI:B")) to
+            listOf(LineTimetable("KCI:B", emptyList()))
+        stations.boardNeverLands = true
+
+        // Read before anything collects it: what the first frame draws.
+        val first = viewModel().state.value
+
+        val feed = (first as UIState.Success).data
+        assertEquals(listOf("station:KCI-MRI", "route:KCI-SUD>KCI-BOO"), feed.entries.map { it.key })
+        assertTrue(feed.stationBoards.single().timetable is UIState.Success)
+        val pair = feed.entries[1] as HomeEntry.RouteEntry
+        assertEquals("Manggarai" to "Manggarai", pair.fromName to pair.toName)
+    }
+
+    @Test
     fun `boards are fetched for the service day, not the calendar day`() = runTest {
         saved.toggleStation("KCI-MRI")
 

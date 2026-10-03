@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.core.datastore
 
 import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -49,7 +50,19 @@ class SavedRepository @Inject constructor(
     @SavedDataStore private val dataStore: DataStore<Preferences>,
 ) {
 
-    val entries: Flow<List<SavedEntry>> = dataStore.data.map { prefs -> decode(prefs[ENTRIES_KEY]) }
+    /** The list as last read or written this session, for [cachedEntries]. */
+    @Volatile
+    private var snapshot: List<SavedEntry>? = null
+
+    val entries: Flow<List<SavedEntry>> = dataStore.data.map { prefs ->
+        decode(prefs[ENTRIES_KEY]).also { snapshot = it }
+    }
+
+    /**
+     * [entries] as last read or written this session, without reading the disk: for home to build
+     * its first frame from. Null until the list has been read once.
+     */
+    fun cachedEntries(): List<SavedEntry>? = snapshot
 
     /** The pinned stations alone, in order: the station page's pin and search's. */
     val stationIds: Flow<List<String>> = entries
@@ -66,24 +79,24 @@ class SavedRepository @Inject constructor(
      * Stores [entries] as the list, in that order: the settings page's reorder and unpin, which edit
      * the whole list at once.
      */
-    suspend fun replace(entries: List<SavedEntry>) {
-        dataStore.edit { prefs ->
-            prefs[ENTRIES_KEY] = encode(entries.distinct())
-        }
+    suspend fun replace(entries: List<SavedEntry>) = write { prefs ->
+        prefs[ENTRIES_KEY] = encode(entries.distinct())
     }
 
     /** Forgets every pin. */
-    suspend fun clear() {
-        dataStore.edit { prefs ->
-            prefs.remove(ENTRIES_KEY)
-        }
+    suspend fun clear() = write { prefs ->
+        prefs.remove(ENTRIES_KEY)
     }
 
-    private suspend fun toggle(entry: SavedEntry) {
-        dataStore.edit { prefs ->
-            val current = decode(prefs[ENTRIES_KEY])
-            prefs[ENTRIES_KEY] = encode(if (entry in current) current - entry else current + entry)
-        }
+    private suspend fun toggle(entry: SavedEntry) = write { prefs ->
+        val current = decode(prefs[ENTRIES_KEY])
+        prefs[ENTRIES_KEY] = encode(if (entry in current) current - entry else current + entry)
+    }
+
+    /** Edits the stored list, and keeps [snapshot] to what was written. */
+    private suspend fun write(transform: (MutablePreferences) -> Unit) {
+        val written = dataStore.edit { prefs -> transform(prefs) }
+        snapshot = decode(written[ENTRIES_KEY])
     }
 
     private fun encode(entries: List<SavedEntry>): String = JSON.encodeToString(entries)
