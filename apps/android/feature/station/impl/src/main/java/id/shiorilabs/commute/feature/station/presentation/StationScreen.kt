@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,6 +42,7 @@ import id.shiorilabs.commute.core.ui.components.CommuteEmptyState
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.components.ProblemPanel
 import id.shiorilabs.commute.core.ui.components.SkeletonBlock
+import id.shiorilabs.commute.core.ui.ext.RevealInsertedTop
 import id.shiorilabs.commute.core.ui.network.rememberIsOffline
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
@@ -228,8 +230,12 @@ private fun StationList(
 ) {
     val board = state.board
     val station = (board.station as? UIState.Success)?.data
+    val listState = rememberLazyListState()
+    val timetableShown = (board.timetable as? UIState.Success)?.data?.isNotEmpty() == true
+    listState.RevealInsertedTop(offline && timetableShown)
 
     LazyColumn(
+        state = listState,
         modifier = Modifier
             .fillMaxSize()
             .hazeSource(hazeState),
