@@ -27,7 +27,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -36,8 +38,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -51,6 +56,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.time.minuteOfDay
 import id.shiorilabs.commute.core.type.Failure
@@ -61,7 +68,10 @@ import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.ProblemPanel
 import id.shiorilabs.commute.core.ui.components.SkeletonBlock
 import id.shiorilabs.commute.core.ui.ext.parseHexColor
+import id.shiorilabs.commute.core.ui.frost.FrostedTopChromeBackdrop
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
+import id.shiorilabs.commute.core.ui.layout.TitleSlot
+import id.shiorilabs.commute.core.ui.layout.stuckTitle
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
 import id.shiorilabs.commute.feature.station.R
@@ -309,8 +319,12 @@ private fun LineFilter(
 }
 
 /**
- * The sections, a sticky header each over its departures. On first showing, the soonest departure
- * of all is scrolled to the middle of the screen.
+ * The sections, a header each over its departures. On first showing, the soonest departure of all
+ * is scrolled to the middle of the screen.
+ *
+ * The current section's header stays pinned at the top, pushed out by the next one, as a sticky
+ * header would. It is drawn over the list rather than in it, so the frost behind it can blur the
+ * departures scrolling under: a header inside the list cannot blur the list it is part of.
  */
 @Composable
 private fun TimetableList(
@@ -320,8 +334,34 @@ private fun TimetableList(
     bottomInset: Dp,
 ) {
     val listState = rememberLazyListState()
+    val hazeState = rememberHazeState()
+    val density = LocalDensity.current
     // Each section's next departure, re-picked as the clock ticks.
     val nearest = remember(sections, nowMinute) { sections.associate { it.key to nearestIndex(it, nowMinute) } }
+    // Where each section's header sits in the list: a header, then its rows.
+    val headerRows = remember(sections) {
+        var row = 0
+        sections.map { section -> (row to section).also { row += 1 + section.rows.size } }
+    }
+    val headerIndex = remember(headerRows) { headerRows.associate { (row, section) -> section.key to row } }
+    var headerHeight by remember { mutableIntStateOf(0) }
+    val stuck by remember(headerRows) {
+        derivedStateOf {
+            stuckTitle(
+                visibleTitles = listState.layoutInfo.visibleItemsInfo
+                    .filter { it.contentType == SECTION_HEADER }
+                    .map { TitleSlot(it.index, it.offset) },
+                titleIndices = headerRows.map { it.first },
+                firstVisibleIndex = listState.firstVisibleItemIndex,
+                titleHeight = headerHeight,
+            )
+        }
+    }
+    val stuckSection = stuck?.let { current -> headerRows.firstOrNull { it.first == current.index }?.second }
+    // Off its rest position, the list has departures under the header for the frost to blur.
+    val scrolled by remember {
+        derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0 }
+    }
 
     if (sections.isEmpty()) {
         Text(
@@ -338,32 +378,73 @@ private fun TimetableList(
 
     ScrollToSoonest(listState, sections, nearest, nowMinute)
 
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = bottomInset + 32.dp),
+    // Clipped, so the pinned header pushed out goes under the line filter rather than over it.
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clipToBounds(),
     ) {
-        sections.forEach { section ->
-            val info = lines[section.lineKey]
-            val lineColor = info?.colorCode?.let { parseHexColor(it) } ?: Slate400
-            val nearestIndex = nearest[section.key] ?: -1
-            stickyHeader(key = "header:${section.key}") {
-                SectionHeader(section, info, lineColor)
-            }
-            section.rows.forEachIndexed { index, row ->
-                item(key = "row:${section.key}:${row.tripNumber ?: index}:${row.minute}") {
-                    val isNearest = index == nearestIndex
-                    DepartureRow(
-                        row = row,
-                        isNearest = isNearest,
-                        imminent = isNearest && isDepartingNow(row.minute, nowMinute),
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .hazeSource(hazeState),
+            contentPadding = PaddingValues(bottom = bottomInset + 32.dp),
+        ) {
+            sections.forEach { section ->
+                val info = lines[section.lineKey]
+                val lineColor = info?.colorCode?.let { parseHexColor(it) } ?: Slate400
+                val nearestIndex = nearest[section.key] ?: -1
+                item(key = "header:${section.key}", contentType = SECTION_HEADER) {
+                    // The pinned copy stands for it while it is at the top; drawn twice, the list's
+                    // would show through the frost.
+                    val pinned = stuck?.index == headerIndex[section.key]
+                    SectionHeader(
+                        section = section,
+                        info = info,
                         lineColor = lineColor,
+                        modifier = Modifier
+                            .onSizeChanged { headerHeight = it.height }
+                            .graphicsLayer { alpha = if (pinned) 0f else 1f },
                     )
+                }
+                section.rows.forEachIndexed { index, row ->
+                    item(key = "row:${section.key}:${row.tripNumber ?: index}:${row.minute}") {
+                        val isNearest = index == nearestIndex
+                        DepartureRow(
+                            row = row,
+                            isNearest = isNearest,
+                            imminent = isNearest && isDepartingNow(row.minute, nowMinute),
+                            lineColor = lineColor,
+                        )
+                    }
                 }
             }
         }
+
+        // The frost gives way with the pinned header as the next one pushes it out.
+        val pinnedHeight = stuck?.let { with(density) { (headerHeight + it.pushOffset).coerceAtLeast(0).toDp() } }
+            ?: 0.dp
+        FrostedTopChromeBackdrop(
+            hazeState = hazeState,
+            chromeHeight = pinnedHeight,
+            surfaceColor = TimetableBackground,
+            scrolled = scrolled,
+        )
+        stuckSection?.let { section ->
+            val info = lines[section.lineKey]
+            SectionHeader(
+                section = section,
+                info = info,
+                lineColor = info?.colorCode?.let { parseHexColor(it) } ?: Slate400,
+                modifier = Modifier.graphicsLayer { translationY = (stuck?.pushOffset ?: 0).toFloat() },
+            )
+        }
     }
 }
+
+/** The content type of a section's header row, which the pinned header follows. */
+private const val SECTION_HEADER = "section-header"
 
 /**
  * Scrolls once, when the list first lays out, so the soonest upcoming departure across every
@@ -406,14 +487,18 @@ private fun ScrollToSoonest(
     }
 }
 
-/** A section's sticky header: the line's roundel, where it heads, and its platform. */
+/**
+ * A section's header: the line's roundel, where it heads, and its platform. No surface of its own:
+ * pinned, it sits on the frost; in the list, on the page.
+ */
 @Composable
 private fun SectionHeader(
     section: TimetableSection,
     info: LineInfo?,
     lineColor: Color,
+    modifier: Modifier = Modifier,
 ) {
-    Column(modifier = Modifier.background(TimetableBackground.copy(alpha = 0.95f))) {
+    Column(modifier = modifier) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
