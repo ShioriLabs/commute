@@ -6,6 +6,7 @@ import id.shiorilabs.commute.feature.journey.domain.PickableStation
 import id.shiorilabs.commute.feature.journey.domain.StationPair
 import id.shiorilabs.commute.feature.journey.domain.TripAnswer
 import id.shiorilabs.commute.feature.station.domain.LineInfo
+import java.time.Instant
 
 /** The answer for the chosen pair, or why there is none. */
 sealed interface TripState {
@@ -15,7 +16,18 @@ sealed interface TripState {
 
     data object Loading : TripState
 
-    data class Loaded(val answer: TripAnswer) : TripState
+    /**
+     * @property isRefreshing A fresh answer is on its way; this one is the last held.
+     * @property updatedAt When [answer] was last confirmed with the API.
+     * @property isOutdated [answer] is an old one that couldn't be refreshed (offline, or the
+     *   fetch failed): say how old it is.
+     */
+    data class Loaded(
+        val answer: TripAnswer,
+        val isRefreshing: Boolean = false,
+        val updatedAt: Instant? = null,
+        val isOutdated: Boolean = false,
+    ) : TripState
 
     /** A 404: no route between the two, as the web words every one. */
     data object NotFound : TripState

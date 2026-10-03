@@ -22,6 +22,8 @@ dependencies {
     implementation(project(":core:common"))
     // CommuteService + the generated TripResult (via :core:model).
     implementation(project(":core:network"))
+    // QueryClient — the repository's cache, memory and disk.
+    implementation(project(":core:query"))
     // Route.Journey + the NavGraphContribution/NavGraphScope contract.
     implementation(project(":core:navigation"))
     // FarePreferencesRepository: the settings and the recently picked stations.
@@ -48,6 +50,7 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(testFixtures(project(":core:network")))
+    testImplementation(testFixtures(project(":core:query")))
     // FakePreferencesDataStore — backs FarePreferencesRepository in JourneyViewModelTest.
     testImplementation(testFixtures(project(":core:datastore")))
 }

@@ -306,22 +306,44 @@ class JourneyViewModel @AssistedInject constructor(
                     return@collectLatest
                 }
                 trip.value = TripState.Loading
-                journeyRepository.trips(fromId, toId, criteria).fold(
-                    ifLeft = { failure ->
-                        trip.value = if (failure is Failure.Remote && failure.code == 404) TripState.NotFound else TripState.Failed
-                    },
-                    ifRight = { answer ->
-                        onAnswer(answer)
-                        // A pair becomes a recent once it has answered, not on every pick, as on
-                        // the web: a half-made selection or a failed lookup is not a trip to offer back.
+                var shown: TripAnswer? = null
+                var recorded = false
+                // The last answer held for this ask comes first, however old, then a fresh one.
+                journeyRepository.observeTrips(fromId, toId, criteria).collect { query ->
+                    val answer = query.data
+                    if (answer == null) {
+                        val failure = query.failure
+                        trip.value = when {
+                            failure == null -> TripState.Loading
+                            failure is Failure.Remote && failure.code == 404 -> TripState.NotFound
+                            else -> TripState.Failed
+                        }
+                        return@collect
+                    }
+                    val previous = shown
+                    when {
+                        previous == null -> onAnswer(answer)
+                        previous != answer -> onRefreshedAnswer(previous, answer)
+                    }
+                    shown = answer
+                    trip.value = TripState.Loaded(
+                        answer = answer,
+                        isRefreshing = query.isFetching,
+                        updatedAt = query.updatedAt,
+                        isOutdated = query.isOutdated,
+                    )
+                    // A pair becomes a recent once it has answered, not on every pick, as on the
+                    // web: a half-made selection or a failed lookup is not a trip to offer back.
+                    if (!recorded && !query.isFetching && query.failure == null) {
+                        recorded = true
                         farePreferences.recordRoute(fromId, toId)
-                    },
-                )
+                    }
+                }
             }
     }
 
     /**
-     * Every new answer lands on its options: the selection is an ordinal into a list recomputed per
+     * Every new ask lands on its options: the selection is an ordinal into a list recomputed per
      * request, so holding a rider on a detail through a change would swap the journey under them.
      * The one exception is the first answer to a shared link whose route still runs.
      */
@@ -335,7 +357,18 @@ class JourneyViewModel @AssistedInject constructor(
                 selected = shared ?: 0,
             )
         }
-        trip.value = TripState.Loaded(answer)
+    }
+
+    /**
+     * A fresh answer replacing the held one for the same ask: the rider stays on the journey they
+     * were on, found again by its route, and only goes back to the options when it no longer runs.
+     */
+    private fun onRefreshedAnswer(previous: TripAnswer, answer: TripAnswer) {
+        session.update { current ->
+            val kept = previous.journeys.getOrNull(current.selected)
+                ?.let { findJourneyByKey(answer.journeys, journeyKey(it)) }
+            if (kept != null) current.copy(selected = kept) else current.copy(page = JourneyPage.OPTIONS, selected = 0)
+        }
     }
 
     /** A picked departure goes back to now once its slot ends, while the screen sits open. */
