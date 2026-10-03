@@ -71,6 +71,8 @@ fun StationHeader(
     placeholderLineKeys: List<String> = emptyList(),
     openedFromSearch: Boolean = false,
     topInset: Dp = 0.dp,
+    /** False for a station there is no page to pin: an unserved one, titled by [placeholderTitle]. */
+    saveable: Boolean = true,
 ) {
     val shown = when (station) {
         is UIState.Success -> directionalBaseName(station.data.name) to station.data.lineKeys
@@ -122,13 +124,15 @@ fun StationHeader(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.Top,
         ) {
-            when (station) {
-                is UIState.Idle, is UIState.Loading -> SkeletonBlock(
+            when {
+                !saveable -> Unit
+
+                station is UIState.Idle || station is UIState.Loading -> SkeletonBlock(
                     modifier = Modifier.size(32.dp),
                     shape = CircleShape,
                 )
 
-                is UIState.Success -> HeaderButton(
+                station is UIState.Success -> HeaderButton(
                     icon = if (saved) CommuteIcons.Unpin else CommuteIcons.Pin,
                     description = stringResource(
                         if (saved) R.string.station_unsave_description else R.string.station_save_description,
@@ -136,7 +140,7 @@ fun StationHeader(
                     onClick = onToggleSave,
                 )
 
-                is UIState.Error -> Unit
+                station is UIState.Error -> Unit
             }
             HeaderButton(
                 icon = CommuteIcons.Close,

@@ -54,6 +54,12 @@
         house voice; copied verbatim from the web's station page. "sedang dalam perjalanan menuju
         suatu tempat" is the author's phrasing and is load-bearing: do not edit it down.
     -->
+    <string name="station_unserved_gambir_name">Gambir</string>
+    <string name="station_unserved_gambir_title">Belum Melayani Commuter Line</string>
+    <string name="station_unserved_gambir_message">Stasiun Gambir saat ini hanya melayani kereta api antarkota dan belum melayani KRL Commuter Line. Stasiun Commuter Line terdekat adalah Gondangdia dan Juanda</string>
+    <string name="station_unserved_illustration_description">Gambar peron stasiun dengan jembatan di atasnya, dengan kaca pembesar bergambar tanda tanya di depannya</string>
+    <string name="station_retired_karet_message">Mulai September 2026, seluruh operasional Stasiun Karet dipindahkan ke Stasiun BNI City. Commuter Line sudah tidak berhenti di sini</string>
+    <string name="station_retired_karet_redirect">Lihat BNI City</string>
     <string name="station_memorial_title">In Memoriam</string>
     <string name="station_memorial_body">27 April 2026. Enam belas perempuan yang sedang dalam perjalanan menuju suatu tempat kehilangan nyawanya di stasiun ini. Sekitar sembilan puluh orang lainnya terluka.</string>
     <string name="station_memorial_closing">Kami mengenang mereka.</string>
