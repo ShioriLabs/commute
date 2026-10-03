@@ -5,6 +5,7 @@ import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.Fill
+import com.adamglin.phosphoricons.bold.ArrowBendDownRight
 import com.adamglin.phosphoricons.bold.ArrowRight
 import com.adamglin.phosphoricons.bold.ArrowSquareOut
 import com.adamglin.phosphoricons.bold.ArrowsDownUp
@@ -93,6 +94,9 @@ object CommuteIcons {
     /** Back one page; [Chevron] trails a row that opens another. */
     val Back: ImageVector = PhosphorIcons.Bold.CaretLeft
     val Chevron: ImageVector = PhosphorIcons.Bold.CaretRight
+
+    /** A line's branch peeling off the way it isn't shown: tapping it shows that way instead. */
+    val Branch: ImageVector = PhosphorIcons.Bold.ArrowBendDownRight
 
     /** Moves an entry one place up or down a list the rider orders. */
     val MoveUp: ImageVector = PhosphorIcons.Bold.CaretUp
