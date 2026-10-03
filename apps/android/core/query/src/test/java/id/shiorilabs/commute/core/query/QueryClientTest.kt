@@ -237,6 +237,44 @@ class QueryClientTest {
     }
 
     @Test
+    fun `refetch returns once the observed keys under it have answered`() = runTest {
+        stored(age = Duration.ofMinutes(1))
+        val gate = CompletableDeferred<Unit>()
+        answer = {
+            gate.await()
+            Fetched.NotModified("W/\"1\"")
+        }
+        val client = client()
+        val thing = collect(client.observe(spec()))
+        runCurrent()
+
+        val refetch = backgroundScope.launch { client.refetch(queryKey("thing")) }
+        runCurrent()
+        assertTrue(thing.last().isFetching)
+        assertFalse(refetch.isCompleted)
+
+        gate.complete(Unit)
+        runCurrent()
+
+        assertTrue(refetch.isCompleted)
+        assertEquals(Query(Thing("stored"), start), thing.last())
+    }
+
+    @Test
+    fun `refetch offline returns at once, the answer marked outdated`() = runTest {
+        stored(age = Duration.ofMinutes(1))
+        network.isOnline.value = false
+        val client = client()
+        val thing = collect(client.observe(spec()))
+        runCurrent()
+
+        client.refetch(queryKey("thing"))
+
+        assertEquals(0, calls)
+        assertTrue(thing.last().isOutdated)
+    }
+
+    @Test
     fun `fetch returns a fresh answer without asking`() = runTest {
         stored(age = Duration.ofMinutes(1))
 
