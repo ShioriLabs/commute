@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.feature.saved.presentation
 
 import id.shiorilabs.commute.core.query.Refetched
+import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.StationBoard
 import java.time.Instant
@@ -76,6 +77,14 @@ data class SavedStationsUiState(
 
     /** Whether a board shown couldn't be refreshed when it was due. */
     val isOutdated: Boolean get() = stationBoards.any { it.isOutdated }
+
+    /**
+     * Whether what the feed opens on is still loading: a station's board, or a pinned pair's
+     * station names. The splash waits for it rather than reveal skeletons and "… → …" titles.
+     */
+    val isFirstContentLoading: Boolean
+        get() = stationBoards.any { it.station is UIState.Loading || it.timetable is UIState.Loading } ||
+            entries.any { it is HomeEntry.RouteEntry && (it.fromName == null || it.toName == null) }
 
     /** When the oldest board shown was last confirmed, for the feed's "last updated" line. */
     val oldestUpdate: Instant? get() = stationBoards.mapNotNull { it.updatedAt }.minOrNull()

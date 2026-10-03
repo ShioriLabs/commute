@@ -3,13 +3,19 @@ package id.shiorilabs.commute
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.os.SystemClock
+import android.view.View
+import android.view.ViewTreeObserver
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.CompositionLocalProvider
 import dagger.hilt.android.AndroidEntryPoint
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.navigation.routeForLink
+import id.shiorilabs.commute.core.ui.startup.LocalStartupGate
+import id.shiorilabs.commute.core.ui.startup.StartupGate
 import kotlinx.coroutines.flow.MutableStateFlow
 
 @AndroidEntryPoint
@@ -34,9 +40,37 @@ class MainActivity : ComponentActivity() {
             pendingLink.value = intent.linkRoute()
         }
 
+        val startupGate = StartupGate()
+        holdSplashUntil(startupGate)
+
         setContent {
-            CommuteApp(pendingLink = pendingLink)
+            CompositionLocalProvider(LocalStartupGate provides startupGate) {
+                CommuteApp(pendingLink = pendingLink)
+            }
         }
+    }
+
+    /**
+     * Keeps the splash up, by holding back the first draw, while a screen's first content is still
+     * loading off disk ([gate]), for at most [MAX_SPLASH_HOLD_MILLIS]: the reveal already plays that
+     * long, so the wait costs nothing a rider can see, and the screen opens on its content instead
+     * of its skeleton. Composition and layout carry on underneath, so the loads it waits on run.
+     */
+    private fun holdSplashUntil(gate: StartupGate) {
+        val content = findViewById<View>(android.R.id.content)
+        val heldSince = SystemClock.uptimeMillis()
+        content.viewTreeObserver.addOnPreDrawListener(
+            object : ViewTreeObserver.OnPreDrawListener {
+                override fun onPreDraw(): Boolean {
+                    val ready = gate.isOpen || SystemClock.uptimeMillis() - heldSince >= MAX_SPLASH_HOLD_MILLIS
+                    if (ready) {
+                        gate.open()
+                        content.viewTreeObserver.removeOnPreDrawListener(this)
+                    }
+                    return ready
+                }
+            },
+        )
     }
 
     /** A link opened while the app is already up (it is singleTop) lands on top of where the rider is. */
@@ -48,3 +82,9 @@ class MainActivity : ComponentActivity() {
     private fun Intent.linkRoute(): Route? =
         dataString?.takeIf { action == Intent.ACTION_VIEW }?.let(::routeForLink)
 }
+
+/**
+ * The longest the splash is held for a screen's first content: the length of its reveal
+ * (`windowSplashScreenAnimationDuration`), so the hold never outlasts what plays anyway.
+ */
+private const val MAX_SPLASH_HOLD_MILLIS = 760L
