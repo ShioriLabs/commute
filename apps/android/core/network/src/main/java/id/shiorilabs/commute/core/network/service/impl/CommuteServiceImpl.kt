@@ -2,6 +2,8 @@ package id.shiorilabs.commute.core.network.service.impl
 
 import id.shiorilabs.commute.core.model.models.GroupedTimetable
 import id.shiorilabs.commute.core.model.models.HeadwayRow
+import id.shiorilabs.commute.core.model.models.Hub
+import id.shiorilabs.commute.core.model.models.LineDetail
 import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.model.models.Station
@@ -55,6 +57,14 @@ class CommuteServiceImpl @Inject constructor(
     ): Fetched<List<HeadwayRow>> =
         client.get("${stationPath(operator, stationCode)}/headway") {
             parameter("day", day)
+            validator(ifNoneMatch)
+        }.decodeFetched()
+
+    override suspend fun getHub(slug: String, ifNoneMatch: String?): Fetched<Hub> =
+        client.get("hubs/${slug.encodeURLPathPart()}") { validator(ifNoneMatch) }.decodeFetched()
+
+    override suspend fun getLine(operator: String, lineCode: String, ifNoneMatch: String?): Fetched<LineDetail> =
+        client.get("lines/${operator.encodeURLPathPart()}/${lineCode.encodeURLPathPart()}") {
             validator(ifNoneMatch)
         }.decodeFetched()
 
