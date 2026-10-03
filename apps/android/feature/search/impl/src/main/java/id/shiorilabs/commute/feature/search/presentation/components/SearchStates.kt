@@ -20,11 +20,11 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import id.shiorilabs.commute.core.ui.R as CoreUiR
 import id.shiorilabs.commute.core.ui.components.CommuteButton
 import id.shiorilabs.commute.core.ui.components.CommuteEmptyState
 import id.shiorilabs.commute.core.ui.components.VerticalSpacer
 import id.shiorilabs.commute.feature.search.R
+import id.shiorilabs.commute.core.ui.R as CoreUiR
 
 /** Placeholder blocks, the web's `bg-slate-200`. */
 private val SkeletonColor = Color(0xFFE2E8F0)
