@@ -11,8 +11,8 @@ private const val WEB_HOST = "commute.shiorilabs.id"
 
 /**
  * The screen a web link opens, or `null` for one the app has no screen for (the browser keeps
- * those): `/fare`, a shared OTW link with its pair, settings and journey, and a station's page or
- * its full timetable.
+ * those): `/fare`, a shared OTW link with its pair, settings and journey, a station's page or its
+ * full timetable, a hub's page and a line's page.
  */
 fun routeForLink(link: String): Route? {
     val uri = runCatching { URI(link) }.getOrNull() ?: return null
@@ -20,8 +20,11 @@ fun routeForLink(link: String): Route? {
         return null
     }
     val path = uri.path?.trimEnd('/')
-    if (path?.startsWith("/stations/") == true) {
-        return stationRoute(path)
+    when {
+        path == null -> return null
+        path.startsWith("/stations/") -> return stationRoute(path)
+        path.startsWith("/hubs/") -> return hubRoute(path)
+        path.startsWith("/lines/") -> return lineRoute(path)
     }
     return when (path) {
         "/fare" -> {
@@ -56,6 +59,22 @@ private fun stationRoute(path: String): Route? {
         "timetable" -> Route.StationTimetable(stationId)
         else -> null
     }
+}
+
+/** `/hubs/dukuh-atas`. A slug is lower case on the web, and the API matches it exactly. */
+private fun hubRoute(path: String): Route? {
+    val slug = path.removePrefix("/hubs/").takeIf { it.isNotEmpty() && '/' !in it } ?: return null
+    return Route.Hub(slug)
+}
+
+/**
+ * `/lines/KCI/B`. The operator is upper-cased as station links' is; the line code is kept as
+ * written, since the API matches it exactly.
+ */
+private fun lineRoute(path: String): Route? {
+    val segments = path.removePrefix("/lines/").split('/')
+    val (operator, lineCode) = segments.takeIf { it.size == 2 && it.none(String::isEmpty) } ?: return null
+    return Route.Line(operator.uppercase(), lineCode)
 }
 
 /** The first value of each query param, decoded. */

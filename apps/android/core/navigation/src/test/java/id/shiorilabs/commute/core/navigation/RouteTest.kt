@@ -31,6 +31,15 @@ class RouteTest {
     }
 
     @Test
+    fun `Hub and Line survive a serialization round-trip with their placeholders`() {
+        val hub = Route.Hub("dukuh-atas", title = "Dukuh Atas")
+        val line = Route.Line("KCI", "B", title = "Lin Bogor", colorCode = "#EE3D43")
+
+        assertEquals(hub, Json.decodeFromString<Route.Hub>(Json.encodeToString(hub)))
+        assertEquals(line, Json.decodeFromString<Route.Line>(Json.encodeToString(line)))
+    }
+
+    @Test
     fun `Journey survives a serialization round-trip, half a pair included`() {
         val shared = Route.Journey(fromId = "KCI-SUD", toId = "MRTJ-LBB", journeyKey = "C.SUD-MRI", modes = "rail")
         val toOnly = Route.Journey(toId = "KCI-MRI")

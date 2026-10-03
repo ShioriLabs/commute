@@ -49,6 +49,37 @@ sealed interface Route : NavKey {
     ) : Route
 
     /**
+     * A hub's page, the web's `/hubs/{slug}`: the stations that count as one place, each opening
+     * its own page. Opened from search. [title] is the name the opener shows, for the header's
+     * first frame.
+     */
+    @Serializable
+    data class Hub(
+        /** The hub's URL key, e.g. `dukuh-atas`. */
+        val slug: String,
+        val title: String? = null,
+    ) : Route
+
+    /**
+     * A line's page, the web's `/lines/{operator}/{lineCode}`: its stations in order along the
+     * line, with its branches. Opened from search, a line card's header on a station's page, a
+     * transfer's roundels and another line's page.
+     *
+     * [title] and [colorCode] are the name and roundel colour the opener shows, for the header's
+     * first frame.
+     */
+    @Serializable
+    data class Line(
+        /** e.g. `KCI`. */
+        val operator: String,
+        /** e.g. `B`. */
+        val lineCode: String,
+        val title: String? = null,
+        /** `#RRGGBB`. */
+        val colorCode: String? = null,
+    ) : Route
+
+    /**
      * OTW: the routes and fares between two stations, the web's `/fare`. Opened from a station's
      * "OTW Ke Sini" with only [toId], which opens the origin picker, from search's OTW tab with
      * both, and from a shared `/fare` link.
