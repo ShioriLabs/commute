@@ -9,6 +9,7 @@
     <!-- Line card -->
     <string name="line_card_fallback_name">Lin lain</string>
     <string name="line_card_description">Jadwal untuk jalur %1$s</string>
+    <string name="line_card_open_line_description">Lihat rute %1$s</string>
     <string name="line_card_platform">Peron %1$s</string>
     <string name="line_card_platform_description">Berangkat dari peron %1$s</string>
     <string name="line_card_via">via %1$s</string>

@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.station.presentation.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -15,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -27,6 +29,7 @@ import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.feature.station.R
 import id.shiorilabs.commute.feature.station.domain.LineInfo
+import id.shiorilabs.commute.feature.station.domain.OPERATOR_TJ
 import id.shiorilabs.commute.feature.station.domain.Transfer
 import id.shiorilabs.commute.feature.station.domain.codeOfLineKey
 import id.shiorilabs.commute.feature.station.domain.sortLineKeysForDisplay
@@ -44,14 +47,15 @@ fun TransfersHeading(modifier: Modifier = Modifier) {
  * the walk in metres, its operator, the lines it serves for one on this network, and directions for
  * the walk when there are any.
  *
- * The roundels don't link anywhere: the web opens a line's page from them, and the app has no line
- * pages yet.
+ * Each roundel opens its line's page through [onOpenLine], as on the web, except a TransJakarta
+ * corridor's: the web gives corridors no page.
  */
 @Composable
 fun TransferRow(
     transfer: Transfer,
     lines: Map<String, LineInfo>,
     modifier: Modifier = Modifier,
+    onOpenLine: (lineKey: String) -> Unit = {},
 ) {
     val distanceDescription = stringResource(R.string.station_transfer_distance_description, transfer.distanceM)
     Column(modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
@@ -106,7 +110,15 @@ fun TransferRow(
                         color = info?.colorCode ?: "#94A3B8",
                         operator = transfer.operator,
                         size = RoundelSize.SM,
-                        modifier = Modifier.semantics { contentDescription = info?.name ?: key },
+                        modifier = Modifier
+                            .then(
+                                if (transfer.operator != OPERATOR_TJ) {
+                                    Modifier.clickable(role = Role.Button) { onOpenLine(key) }
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .semantics { contentDescription = info?.name ?: key },
                     )
                 }
             }

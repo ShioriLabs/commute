@@ -102,20 +102,13 @@ fun SearchScreen(
                 navigator.pop()
             },
             onRetry = viewModel::retry,
-            // Recorded as a recent search first, as the web does before navigating. A station opens
-            // its page; hubs and lines wait for theirs, so for now the tap only records.
+            // Recorded as a recent search first, as the web does before navigating, then opens the
+            // station's, hub's or line's page.
             onResultClick = { searchable ->
                 viewModel.onResultClick(searchable)
-                val stationId = (searchable as? Searchable.Station)?.stationId
-                if (searchable is Searchable.Station && stationId != null) {
+                routeFor(searchable)?.let { route ->
                     focusManager.clearFocus()
-                    navigator.goTo(
-                        Route.Station(
-                            stationId = stationId,
-                            title = searchable.title,
-                            lineKeys = searchable.lines.map { it.key },
-                        ),
-                    )
+                    navigator.goTo(route)
                 }
             },
             onTogglePin = viewModel::onToggleSave,
@@ -277,6 +270,27 @@ private fun SearchContent(
 
 private fun Searchable.isPinned(savedStationIds: Set<String>): Boolean =
     this is Searchable.Station && stationId in savedStationIds
+
+/**
+ * The page a result opens, carrying what its row shows (name, roundels, colour) for the page's
+ * first frame; null for an entry too malformed to name one.
+ */
+internal fun routeFor(searchable: Searchable): Route? = when (searchable) {
+    is Searchable.Station -> searchable.stationId?.let { stationId ->
+        Route.Station(stationId = stationId, title = searchable.title, lineKeys = searchable.lines.map { it.key })
+    }
+
+    // The slug is the hub's `hub-id`, or else the tail of its `/hubs/{slug}` link.
+    is Searchable.Hub -> (searchable.hubId ?: searchable.to.substringAfter("/hubs/", "").ifEmpty { null })
+        ?.let { slug -> Route.Hub(slug, title = searchable.title) }
+
+    is Searchable.Line -> Route.Line(
+        operator = searchable.operator,
+        lineCode = searchable.line.lineCode,
+        title = searchable.line.name,
+        colorCode = searchable.line.colorCode,
+    )
+}
 
 private fun LazyListScope.idleContent(
     idle: IdleContent,
