@@ -15,6 +15,8 @@ dependencies {
     implementation(project(":core:common"))
     // CommuteService + the generated Station/GroupedTimetable/OperatorWithLines (via :core:model).
     implementation(project(":core:network"))
+    // QueryClient — the repositories' cache, memory and disk.
+    implementation(project(":core:query"))
     // Route.Station + the NavGraphContribution/NavGraphScope contract.
     implementation(project(":core:navigation"))
     // SavedRepository — the page's pin.
@@ -44,6 +46,8 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(testFixtures(project(":core:network")))
+    // FakeQueryStore + FakeNetworkMonitor — a real QueryClient under StationRepositoryImplTest.
+    testImplementation(testFixtures(project(":core:query")))
     // FakePreferencesDataStore — backs SavedRepository in StationViewModelTest.
     testImplementation(testFixtures(project(":core:datastore")))
 }
