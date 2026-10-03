@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class SavedRepositoryTest {
@@ -22,6 +23,25 @@ class SavedRepositoryTest {
 
         assertEquals(emptyList<SavedEntry>(), repository.entries.first())
         assertEquals(emptyList<String>(), repository.stationIds.first())
+    }
+
+    @Test
+    fun `the list last read or written is offered without reading the disk`() = runTest {
+        val repository = SavedRepository(FakePreferencesDataStore())
+        assertNull(repository.cachedEntries())
+
+        repository.entries.first()
+        assertEquals(emptyList<SavedEntry>(), repository.cachedEntries())
+
+        repository.toggleStation("KCI-MRI")
+        repository.toggleRoute("KCI-BOO", "KCI-SUD")
+        assertEquals(listOf(manggarai, toWork), repository.cachedEntries())
+
+        repository.replace(listOf(toWork))
+        assertEquals(listOf(toWork), repository.cachedEntries())
+
+        repository.clear()
+        assertEquals(emptyList<SavedEntry>(), repository.cachedEntries())
     }
 
     @Test
