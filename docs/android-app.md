@@ -108,9 +108,12 @@ CommuteService (in :core:network)  →  Repository  →  ViewModel  →  Composa
 ```
 
 - **Service:** one `CommuteService` for the one backend. It throws on a
-  non-2xx response and returns the response envelope.
+  non-2xx response and returns the envelope's data as `Fetched<T>`: a body
+  with its ETag, or `NotModified` when the caller sent that ETag back and the
+  server answered 304.
 - **Repository:** returns `Either<Failure, T>`; never lets a `Throwable`
-  escape. `Failure` is one small sealed type in `:core:common` (`Network`,
+  escape. Reads go through `:core:query`'s `QueryClient` (see Offline cache);
+  a screen that should paint stale data first observes a `Flow<Query<T>>`. `Failure` is one small sealed type in `:core:common` (`Network`,
   `Remote(code)`, `Unknown`). Interfaces live in the feature's `:api` when it
   has one, implementations and their Hilt `@Binds` module in `:impl`.
 - **ViewModel:** exposes a read-only `StateFlow<UIState<T>>`, where `UIState`
@@ -258,12 +261,26 @@ already seen is available offline, and its age is shown.**
   timetables, the most recent fare/trip results, and the active trip in full.
 - **Where:** `:core:query`, a stale-while-revalidate cache persisted to disk
   (the same idea as the web app's SWR with its IndexedDB provider), for
-  responses; `:core:datastore` for settings and saved stations.
-- **Staleness:** entries are keyed by the API version they came from. A
-  version bump marks them stale; stale entries still show, labelled with their
-  age, until refreshed.
-- **Offline:** cached screens render with a "terakhir diperbarui …" line.
-  Nothing pretends to be live.
+  responses; `:core:datastore` for settings and saved stations. `QueryClient`
+  holds each answer under a `QueryKey` (`station/KCI-MRI/timetable/WD`) in
+  memory and in a one-table Room store (`commute_query.db`), as the wire
+  model's JSON. Observers of one key share one fetch; fetches run in the app's
+  scope, so leaving a screen doesn't waste one.
+- **Staleness:** per endpoint, mirroring the API's own `Cache-Control`
+  max-ages (`apps/api/src/middleware/cache-control.ts`): operators a day;
+  stations, transfers, headways and the search index an hour; timetables 30
+  minutes; a trip at a picked time 10 minutes; a trip for now until its
+  20-minute departure slot ends. A stale answer is still served at once, and
+  revalidated with its ETag (`If-None-Match`), so a data deploy that changed
+  nothing costs a 304. The API sends no data version; the ETag is the signal.
+- **Offline:** nothing is asked while the device is offline, and observed
+  keys refetch on reconnecting. Cached screens render under the offline
+  caveat with a "terakhir diperbarui …" line, as does an answer that couldn't
+  be refreshed online. Nothing pretends to be live.
+- **Size:** pruned once a launch: entries unread for 30 days, then the least
+  recently used down to 25 MB. Settings → Atur Data shows the size and clears
+  it. An entry that no longer decodes after an app update is dropped and
+  fetched again.
 
 ## Design language
 
