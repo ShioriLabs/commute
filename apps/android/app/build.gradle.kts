@@ -62,6 +62,7 @@ dependencies {
     implementation(project(":feature:search:impl"))
     implementation(project(":feature:station:impl"))
     implementation(project(":feature:journey:impl"))
+    implementation(project(":feature:hub:impl"))
     implementation(project(":feature:saved:impl"))
     implementation(project(":feature:trip:impl"))
     implementation(project(":feature:card:impl"))

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Header. The kind labels are the web's HUB_KIND_LABEL. -->
+    <string name="hub_kind_hub">Pumpunan Moda</string>
+    <string name="hub_kind_integrated">Stasiun Terintegrasi</string>
+    <string name="hub_close_description">Tutup halaman hub</string>
+
+    <!-- Members. %1$s is a list of line names, e.g. "Lin Bogor, Lin Cikarang". -->
+    <string name="hub_member_lines_description">Dilayani %1$s</string>
+
+    <!-- States -->
+    <string name="hub_failed">Gagal memuat halaman ini</string>
+    <string name="hub_offline">Tidak dapat memuat halaman ini saat offline</string>
+    <string name="hub_retry">Coba Lagi</string>
+    <string name="hub_offline_banner">Kamu sedang offline, data mungkin tidak up-to-date</string>
+    <string name="hub_outdated_banner">Data belum bisa diperbarui, mungkin tidak up-to-date</string>
+</resources>
