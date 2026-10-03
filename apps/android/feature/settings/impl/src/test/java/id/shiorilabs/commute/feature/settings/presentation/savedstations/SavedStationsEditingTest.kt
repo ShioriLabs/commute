@@ -1,16 +1,17 @@
 package id.shiorilabs.commute.feature.settings.presentation.savedstations
 
+import id.shiorilabs.commute.core.datastore.SavedEntry
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class SavedStationsEditingTest {
 
-    private val rows = listOf(EditableStation("A"), EditableStation("B"), EditableStation("C"))
+    private val rows = listOf("A", "B", "C").map { EditableEntry(SavedEntry.Station(it)) }
 
     @Test
     fun `move swaps neighbours`() {
-        assertEquals(listOf("B", "A", "C"), rows.move(0, 1).map { it.id })
-        assertEquals(listOf("A", "C", "B"), rows.move(2, 1).map { it.id })
+        assertEquals(listOf("B", "A", "C"), rows.move(0, 1).map { it.key })
+        assertEquals(listOf("A", "C", "B"), rows.move(2, 1).map { it.key })
     }
 
     @Test
@@ -23,8 +24,17 @@ class SavedStationsEditingTest {
     fun `toggle keeps the row in place and committed drops it`() {
         val edited = rows.toggle("B")
 
-        assertEquals(listOf("A", "B", "C"), edited.map { it.id })
-        assertEquals(listOf("A", "C"), edited.committed())
-        assertEquals(listOf("A", "B", "C"), edited.toggle("B").committed())
+        assertEquals(listOf("A", "B", "C"), edited.map { it.key })
+        assertEquals(listOf("A", "C").map(SavedEntry::Station), edited.committed())
+        assertEquals(listOf("A", "B", "C").map(SavedEntry::Station), edited.toggle("B").committed())
+    }
+
+    @Test
+    fun `a pair is keyed by its two ends, one way`() {
+        val pairs = listOf(EditableEntry(SavedEntry.Route("A", "B")), EditableEntry(SavedEntry.Route("B", "A")))
+
+        val edited = pairs.toggle("route:A>B")
+
+        assertEquals(listOf(SavedEntry.Route("B", "A")), edited.committed())
     }
 }
