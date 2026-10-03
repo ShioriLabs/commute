@@ -21,11 +21,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -93,21 +95,35 @@ private fun AmenityRow(amenity: Amenity) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AmenityIcon(amenity.type)
+        // The name keeps its width and the detail wraps beside it: "Parkir" broken over two lines
+        // reads worse than a long place name over two. Only a name past [AMENITY_NAME_MAX_FRACTION]
+        // of the row wraps too, so a short detail is never squeezed to a few letters a line.
         Text(
             // A type newer than this build's labels still shows, as its raw name.
             text = AMENITY_LABELS[amenity.type] ?: amenity.type,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.layout { measurable, constraints ->
+                val maxWidth = (constraints.maxWidth * AMENITY_NAME_MAX_FRACTION).toInt()
+                val placeable = measurable.measure(
+                    constraints.copy(minWidth = minOf(constraints.minWidth, maxWidth), maxWidth = maxWidth),
+                )
+                layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+            },
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground,
         )
         Text(
             text = amenity.text?.takeIf { it.isNotBlank() } ?: stringResource(R.string.station_amenity_available),
+            modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.bodyLarge,
             color = Gray600,
+            textAlign = TextAlign.End,
         )
     }
 }
+
+/** The most of a facility row its name takes before it wraps, leaving the rest to the detail. */
+private const val AMENITY_NAME_MAX_FRACTION = 0.6f
 
 /** The web's amenity glyphs. Decorative: the label beside it says what it is. */
 @Composable
