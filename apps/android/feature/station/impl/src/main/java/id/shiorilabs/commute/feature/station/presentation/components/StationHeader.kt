@@ -42,8 +42,8 @@ import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.Station
 import id.shiorilabs.commute.feature.station.domain.directionalBaseName
 import id.shiorilabs.commute.feature.station.domain.sortLineKeysForDisplay
-import id.shiorilabs.commute.feature.station.presentation.sharedLineRoundel
 import id.shiorilabs.commute.feature.station.presentation.StationTitleText
+import id.shiorilabs.commute.feature.station.presentation.sharedLineRoundel
 
 /**
  * The page's header, as the web's station page draws it: the station's roundels over its name, with
