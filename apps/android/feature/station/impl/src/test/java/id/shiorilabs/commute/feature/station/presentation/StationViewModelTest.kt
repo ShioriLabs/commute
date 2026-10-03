@@ -122,6 +122,33 @@ class StationViewModelTest {
     }
 
     @Test
+    fun `an unserved station asks for nothing, even on retry, and carries its notice`() = runTest {
+        var stationCalls = 0
+        stations.station = { id ->
+            stationCalls++
+            Station(id, "Gambir", "KCI", "GMR", emptyList()).right()
+        }
+
+        val vm = StationViewModel("KCI-GMR", stations, lines, saved, clockAt("2026-09-30T08:00:00"))
+        vm.retry()
+        val page = vm.state.first()
+
+        assertEquals(unservedStation("KCI-GMR"), page.unserved)
+        assertEquals(0, stationCalls)
+        assertTrue(stations.asked.isEmpty())
+        assertEquals(0, lines.calls)
+    }
+
+    @Test
+    fun `a retired station still loads its page, under its notice`() = runTest {
+        val page = StationViewModel("KCI-KAT", stations, lines, saved, clockAt("2026-09-30T08:00:00")).loaded()
+
+        assertEquals(retiredStation("KCI-KAT"), page.retired)
+        assertEquals(null, page.unserved)
+        assertEquals(listOf("KCI-KAT" to ServiceDayName.WD), stations.asked)
+    }
+
+    @Test
     fun `a rail station's page never asks for frequencies`() = runTest {
         viewModel().loaded()
 
