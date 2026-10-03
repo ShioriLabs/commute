@@ -3,10 +3,12 @@ package id.shiorilabs.commute.feature.settings.presentation.savedstations
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import id.shiorilabs.commute.core.datastore.SavedStationsRepository
+import id.shiorilabs.commute.core.datastore.SavedEntry
+import id.shiorilabs.commute.core.datastore.SavedRepository
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.feature.station.data.StationRepository
 import id.shiorilabs.commute.feature.station.domain.Station
+import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -17,7 +19,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 /** A row of the page: the station as it loads, and whether it is still pinned. */
 data class SavedStationRow(
@@ -36,7 +37,7 @@ data class SavedStationRow(
  */
 @HiltViewModel
 class SavedStationsSettingsViewModel @Inject constructor(
-    private val savedStationsRepository: SavedStationsRepository,
+    private val savedRepository: SavedRepository,
     private val stationRepository: StationRepository,
 ) : ViewModel() {
 
@@ -69,13 +70,15 @@ class SavedStationsSettingsViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            val ids = savedStationsRepository.stations.first()
+            val ids = savedRepository.stationIds.first()
             rows.value = ids.map { EditableStation(it) }
             ids.forEach(::load)
 
             // Every edit after that is stored as it happens, one write after another.
             rows.filterNotNull().drop(1).collect { edited ->
-                savedStationsRepository.replace(edited.committed())
+                // Pairs aren't on this page yet; they keep their place after the stations.
+                val routes = savedRepository.entries.first().filterIsInstance<SavedEntry.Route>()
+                savedRepository.replace(edited.committed().map(SavedEntry::Station) + routes)
             }
         }
     }

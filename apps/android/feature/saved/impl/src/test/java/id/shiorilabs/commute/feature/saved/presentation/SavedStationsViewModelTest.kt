@@ -4,7 +4,7 @@ import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
 import id.shiorilabs.commute.core.datastore.FakePreferencesDataStore
-import id.shiorilabs.commute.core.datastore.SavedStationsRepository
+import id.shiorilabs.commute.core.datastore.SavedRepository
 import id.shiorilabs.commute.core.time.JAKARTA
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
@@ -60,7 +60,7 @@ class SavedStationsViewModelTest {
     private fun clockAt(iso: String): Clock =
         Clock.fixed(LocalDateTime.parse(iso).atZone(JAKARTA).toInstant(), JAKARTA)
 
-    private val saved = SavedStationsRepository(FakePreferencesDataStore())
+    private val saved = SavedRepository(FakePreferencesDataStore())
     private val stations = FakeStationRepository()
 
     @Before
@@ -89,8 +89,8 @@ class SavedStationsViewModelTest {
 
     @Test
     fun `each saved station gets a card, in the rider's order, with the line dictionary`() = runTest {
-        saved.save("KCI-MRI")
-        saved.save("MRTJ-BHI")
+        saved.toggleStation("KCI-MRI")
+        saved.toggleStation("MRTJ-BHI")
 
         val feed = viewModel().loaded()
 
@@ -100,7 +100,7 @@ class SavedStationsViewModelTest {
 
     @Test
     fun `boards are fetched for the service day, not the calendar day`() = runTest {
-        saved.save("KCI-MRI")
+        saved.toggleStation("KCI-MRI")
 
         // 00:30 on a Saturday is still Friday night's service, and Saturday's board comes next.
         val feed = viewModel(clockAt("2026-10-03T00:30:00")).loaded()
@@ -111,7 +111,7 @@ class SavedStationsViewModelTest {
 
     @Test
     fun `on an ordinary weekday the next board is today's`() = runTest {
-        saved.save("KCI-MRI")
+        saved.toggleStation("KCI-MRI")
 
         val card = viewModel().loaded().cards.single()
 
@@ -123,7 +123,7 @@ class SavedStationsViewModelTest {
     @Test
     fun `a station that fails is an error on its own card, and retry loads it again`() = runTest {
         stations.station = { Failure.Network.NoConnection().left() }
-        saved.save("KCI-MRI")
+        saved.toggleStation("KCI-MRI")
         val vm = viewModel()
 
         val failed = vm.loaded().cards.single()
@@ -139,7 +139,7 @@ class SavedStationsViewModelTest {
 
     @Test
     fun `the boards refetch when the service day turns over, and only then`() = runTest {
-        saved.save("KCI-MRI")
+        saved.toggleStation("KCI-MRI")
         val vm = viewModel(clockAt("2026-10-02T22:00:00"))
         vm.loaded()
         stations.asked.clear()

@@ -6,7 +6,7 @@ import arrow.core.right
 import id.shiorilabs.commute.core.datastore.FakePreferencesDataStore
 import id.shiorilabs.commute.core.datastore.RecentSearch
 import id.shiorilabs.commute.core.datastore.RecentSearchRepository
-import id.shiorilabs.commute.core.datastore.SavedStationsRepository
+import id.shiorilabs.commute.core.datastore.SavedRepository
 import id.shiorilabs.commute.core.datastore.SearchModeRepository
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
@@ -42,7 +42,7 @@ class SearchViewModelTest {
     }
 
     private val recents = RecentSearchRepository(FakePreferencesDataStore())
-    private val saved = SavedStationsRepository(FakePreferencesDataStore())
+    private val saved = SavedRepository(FakePreferencesDataStore())
 
     @Before
     fun setUp() {
@@ -128,7 +128,7 @@ class SearchViewModelTest {
         assertEquals(listOf(manggarai), pinned.data.idle.saved)
 
         vm.onToggleSave("KCI-MRI")
-        assertEquals(emptyList<String>(), saved.stations.first())
+        assertEquals(emptyList<String>(), saved.stationIds.first())
     }
 
     @Test
