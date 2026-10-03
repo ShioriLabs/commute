@@ -46,7 +46,7 @@ class SavedStationsViewModel @Inject constructor(
     /** A pull to refresh in flight, and what the last one found until it has been shown. */
     private val pull = MutableStateFlow(Pull())
     private val loads = mutableMapOf<String, Job>()
-    private val lines = MutableStateFlow<Map<String, LineInfo>>(emptyMap())
+    private val lines = MutableStateFlow(lineRepository.cachedLines().orEmpty())
 
     /** The names of the stations at either end of a pinned pair, by id, as they load. */
     private val names = MutableStateFlow<Map<String, String>>(emptyMap())
@@ -56,60 +56,83 @@ class SavedStationsViewModel @Inject constructor(
 
     private val saved = savedRepository.entries
 
+    /**
+     * The pinned list as this session already holds it (the startup warm-up reads it while the
+     * splash plays), so the feed's first frame can be built from memory rather than read for.
+     */
+    private val heldEntries = savedRepository.cachedEntries()
+
+    init {
+        // Before the state's first value is taken below: each held card starts from what memory
+        // holds of its board, and each held pair from its stations' names.
+        heldEntries?.let(::loadNew)
+    }
+
     val state: StateFlow<UIState<SavedStationsUiState>> = combine(
         saved,
         cards,
         names,
         lines,
         pull,
-    ) { saved, cards, names, lines, pull ->
-        UIState.Success(
-            SavedStationsUiState(
-                entries = saved.map { entry ->
-                    when (entry) {
-                        is SavedEntry.Station -> HomeEntry.StationEntry(cards[entry.stationId] ?: StationBoard.loading(entry.stationId))
-                        is SavedEntry.Route -> HomeEntry.RouteEntry(
-                            fromId = entry.fromId,
-                            toId = entry.toId,
-                            fromName = names[entry.fromId],
-                            toName = names[entry.toId],
-                        )
-                    }
-                },
-                lines = lines,
-                isRefreshing = pull.running,
-                refreshNotice = pull.notice,
-            ),
-        ) as UIState<SavedStationsUiState>
-    }
+    ) { saved, cards, names, lines, pull -> feed(saved, cards, names, lines, pull) }
         .catch { emit(UIState.Error(cause = it)) }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = UIState.Loading,
+            initialValue = heldEntries?.let { feed(it, cards.value, names.value, lines.value, pull.value) } ?: UIState.Loading,
         )
 
     init {
-        viewModelScope.launch {
-            lineRepository.lines().onRight { lines.value = it }
+        if (lines.value.isEmpty()) {
+            viewModelScope.launch {
+                lineRepository.lines().onRight { lines.value = it }
+            }
         }
 
         // A newly saved station loads on arrival; one already loaded keeps its card. A pair needs
         // only its stations' names for its title: its card asks for its own trips.
         viewModelScope.launch {
-            saved.collect { entries ->
-                entries.filterIsInstance<SavedEntry.Station>()
-                    .map { it.stationId }
-                    .filterNot { it in cards.value }
-                    .forEach { load(it) }
-                entries.filterIsInstance<SavedEntry.Route>()
-                    .flatMap { listOf(it.fromId, it.toId) }
-                    .filterNot { it in names.value }
-                    .distinct()
-                    .forEach(::loadName)
-            }
+            saved.collect(::loadNew)
         }
     }
+
+    /** Loads the boards and names [entries] needs that aren't loaded yet. */
+    private fun loadNew(entries: List<SavedEntry>) {
+        entries.filterIsInstance<SavedEntry.Station>()
+            .map { it.stationId }
+            .filterNot { it in cards.value }
+            .forEach { load(it) }
+        entries.filterIsInstance<SavedEntry.Route>()
+            .flatMap { listOf(it.fromId, it.toId) }
+            .filterNot { it in names.value }
+            .distinct()
+            .forEach(::loadName)
+    }
+
+    private fun feed(
+        saved: List<SavedEntry>,
+        cards: Map<String, StationBoard>,
+        names: Map<String, String>,
+        lines: Map<String, LineInfo>,
+        pull: Pull,
+    ): UIState<SavedStationsUiState> = UIState.Success(
+        SavedStationsUiState(
+            entries = saved.map { entry ->
+                when (entry) {
+                    is SavedEntry.Station -> HomeEntry.StationEntry(cards[entry.stationId] ?: StationBoard.loading(entry.stationId))
+                    is SavedEntry.Route -> HomeEntry.RouteEntry(
+                        fromId = entry.fromId,
+                        toId = entry.toId,
+                        fromName = names[entry.fromId],
+                        toName = names[entry.toId],
+                    )
+                }
+            },
+            lines = lines,
+            isRefreshing = pull.running,
+            refreshNotice = pull.notice,
+        ),
+    )
 
     /**
      * Called as the screen's clock ticks. The boards are for one service day: when it turns over
