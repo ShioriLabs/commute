@@ -5,6 +5,7 @@ import arrow.core.left
 import arrow.core.right
 import id.shiorilabs.commute.core.datastore.FakePreferencesDataStore
 import id.shiorilabs.commute.core.datastore.SavedRepository
+import id.shiorilabs.commute.core.query.Query
 import id.shiorilabs.commute.core.query.Refetched
 import id.shiorilabs.commute.core.time.JAKARTA
 import id.shiorilabs.commute.core.time.ServiceDayName
@@ -23,7 +24,10 @@ import id.shiorilabs.commute.feature.station.domain.Transfer
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -56,6 +60,22 @@ class SavedStationsViewModelTest {
 
         override suspend fun frequencies(stationId: String, day: ServiceDayName): Either<Failure, List<Frequency>> =
             emptyList<Frequency>().right()
+
+        /** What this session already holds, offered without asking. */
+        var held: Pair<Station, List<LineTimetable>>? = null
+
+        /** A live board that never lands, as on the frames before the cache answers. */
+        var boardNeverLands = false
+
+        override fun cachedStation(stationId: String) = held?.first
+
+        override fun cachedTimetable(stationId: String, day: ServiceDayName) = held?.second
+
+        override fun observeStation(stationId: String): Flow<Query<Station>> =
+            if (boardNeverLands) flow { awaitCancellation() } else super.observeStation(stationId)
+
+        override fun observeTimetable(stationId: String, day: ServiceDayName): Flow<Query<List<LineTimetable>>> =
+            if (boardNeverLands) flow { awaitCancellation() } else super.observeTimetable(stationId, day)
 
         val refreshed = mutableListOf<String>()
 
@@ -194,6 +214,18 @@ class SavedStationsViewModelTest {
         assertNull(viewModel.loaded().refreshNotice)
         stations.refreshAnswered.complete(Unit)
         assertEquals(RefreshNotice.UpToDate, viewModel.loaded().refreshNotice)
+    }
+
+    @Test
+    fun `a station this session already holds shows its board at once, not a skeleton`() = runTest {
+        saved.toggleStation("KCI-MRI")
+        stations.held = Station("KCI-MRI", "Manggarai", "KCI", "MRI", listOf("KCI:B")) to
+            listOf(LineTimetable("KCI:B", emptyList()))
+        stations.boardNeverLands = true
+
+        val feed = (viewModel().state.first { it is UIState.Success && it.data.stationBoards.isNotEmpty() } as UIState.Success).data
+
+        assertTrue(feed.stationBoards.single().timetable is UIState.Success)
     }
 
     @Test
