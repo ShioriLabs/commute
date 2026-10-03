@@ -50,6 +50,10 @@ class StationViewModel @AssistedInject constructor(
     )
     private var load: Job? = null
 
+    /** A station no train serves has nothing to load: its notice is the page. */
+    private val unserved = unservedStation(stationId)
+    private val retired = retiredStation(stationId)
+
     /** The service day the loaded board belongs to. */
     private var loadedDay: ServiceDayName? = null
 
@@ -59,20 +63,30 @@ class StationViewModel @AssistedInject constructor(
         savedStationsRepository.stations,
         transfers,
     ) { board, lines, saved, transfers ->
-        StationUiState(board = board, lines = lines, saved = stationId in saved, transfers = transfers)
+        StationUiState(
+            board = board,
+            lines = lines,
+            saved = stationId in saved,
+            transfers = transfers,
+            unserved = unserved,
+            retired = retired,
+        )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = StationUiState(board = board.value, lines = lines.value, saved = false, transfers = transfers.value),
+        initialValue = StationUiState(
+            board = board.value,
+            lines = lines.value,
+            saved = false,
+            transfers = transfers.value,
+            unserved = unserved,
+            retired = retired,
+        ),
     )
 
     init {
-        if (lines.value.isEmpty()) {
-            loadLines()
-        }
-        load(now())
-        if (transfers.value !is UIState.Success) {
-            loadTransfers()
+        if (unserved == null) {
+            loadAll()
         }
     }
 
@@ -87,12 +101,8 @@ class StationViewModel @AssistedInject constructor(
     }
 
     fun retry() {
-        load(now())
-        if (lines.value.isEmpty()) {
-            loadLines()
-        }
-        if (transfers.value !is UIState.Success) {
-            loadTransfers()
+        if (unserved == null) {
+            loadAll()
         }
     }
 
@@ -104,6 +114,17 @@ class StationViewModel @AssistedInject constructor(
     }
 
     private fun now(): LocalDateTime = LocalDateTime.now(clock)
+
+    /** (Re)loads the board, and the lines and transfers unless they are already in. */
+    private fun loadAll() {
+        load(now())
+        if (lines.value.isEmpty()) {
+            loadLines()
+        }
+        if (transfers.value !is UIState.Success) {
+            loadTransfers()
+        }
+    }
 
     private fun loadLines() {
         viewModelScope.launch {

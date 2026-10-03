@@ -17,4 +17,8 @@ data class StationUiState(
     val saved: Boolean,
     /** Shown only once loaded and not empty: a failure leaves the section out, as on the web. */
     val transfers: UIState<List<Transfer>> = UIState.Idle,
+    /** Set for a station no commuter train serves: its notice stands in for the whole page. */
+    val unserved: UnservedStation? = null,
+    /** Set for a station trains no longer call at: a notice over its page. */
+    val retired: RetiredStation? = null,
 )
