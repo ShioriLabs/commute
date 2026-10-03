@@ -2,7 +2,7 @@ package id.shiorilabs.commute.feature.saved.presentation.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
@@ -15,11 +15,13 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import id.shiorilabs.commute.feature.station.presentation.components.PidsChevronsProgress
 
 private val IndicatorShape = RoundedCornerShape(percent = 50)
 private val IndicatorElevation = 6.dp
+private val IndicatorWidth = 64.dp
+private val IndicatorHeight = 40.dp
+private val ChevronHeight = 12.dp
 
 /** Smallest the indicator draws, at the very start of a pull; full size by the threshold. */
 private const val MIN_SCALE = 0.7f
@@ -59,14 +61,14 @@ internal fun ChevronPullIndicator(
                 clip = true
             }
             .background(MaterialTheme.colorScheme.surface, IndicatorShape)
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+            .size(width = IndicatorWidth, height = IndicatorHeight),
         contentAlignment = Alignment.Center,
     ) {
         PidsChevronsProgress(
             progress = { state.distanceFraction },
             pulsing = isRefreshing,
             color = MaterialTheme.colorScheme.primary,
-            fontSize = 24.sp,
+            height = ChevronHeight,
         )
     }
 }
