@@ -20,6 +20,7 @@ import com.adamglin.phosphoricons.bold.CaretRight
 import com.adamglin.phosphoricons.bold.CaretUp
 import com.adamglin.phosphoricons.bold.MagnifyingGlass
 import com.adamglin.phosphoricons.bold.NavigationArrow
+import com.adamglin.phosphoricons.bold.PencilSimple
 import com.adamglin.phosphoricons.bold.PersonSimpleWalk
 import com.adamglin.phosphoricons.bold.PushPin
 import com.adamglin.phosphoricons.bold.PushPinSlash
@@ -70,6 +71,9 @@ object CommuteIcons {
 
     /** Takes a pinned station off the home screen. */
     val Unpin: ImageVector = PhosphorIcons.Bold.PushPinSlash
+
+    /** Opens the screen where pins are reordered. */
+    val Edit: ImageVector = PhosphorIcons.Bold.PencilSimple
 
     /** A link that leaves the app. */
     val ExternalLink: ImageVector = PhosphorIcons.Bold.ArrowSquareOut
