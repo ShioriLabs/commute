@@ -11,14 +11,19 @@ private const val WEB_HOST = "commute.shiorilabs.id"
 
 /**
  * The screen a web link opens, or `null` for one the app has no screen for (the browser keeps
- * those). Only `/fare` for now: a shared OTW link, with its pair, settings and journey.
+ * those): `/fare`, a shared OTW link with its pair, settings and journey, and a station's page or
+ * its full timetable.
  */
 fun routeForLink(link: String): Route? {
     val uri = runCatching { URI(link) }.getOrNull() ?: return null
     if (uri.scheme != "https" || uri.host != WEB_HOST) {
         return null
     }
-    return when (uri.path?.trimEnd('/')) {
+    val path = uri.path?.trimEnd('/')
+    if (path?.startsWith("/stations/") == true) {
+        return stationRoute(path)
+    }
+    return when (path) {
         "/fare" -> {
             val params = queryParams(uri.rawQuery)
             Route.Journey(
@@ -32,6 +37,22 @@ fun routeForLink(link: String): Route? {
             )
         }
 
+        else -> null
+    }
+}
+
+/**
+ * `/stations/KCI/MRI` and `/stations/KCI/MRI/timetable`. The web doesn't normalise the case of
+ * either half, so a hand-typed `/stations/kci/mri` works there; the id it names is upper case.
+ */
+private fun stationRoute(path: String): Route? {
+    val segments = path.removePrefix("/stations/").split('/')
+    val (operator, code) = segments.takeIf { it.size in 2..3 && it[0].isNotEmpty() && it[1].isNotEmpty() }
+        ?: return null
+    val stationId = "${operator.uppercase()}-${code.uppercase()}"
+    return when (segments.getOrNull(2)) {
+        null -> Route.Station(stationId)
+        "timetable" -> Route.StationTimetable(stationId)
         else -> null
     }
 }
