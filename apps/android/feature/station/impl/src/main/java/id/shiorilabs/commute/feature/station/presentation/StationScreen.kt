@@ -320,13 +320,14 @@ private fun StationList(
         val transfers = (state.transfers as? UIState.Success)?.data.orEmpty()
         if (transfers.isNotEmpty()) {
             item(key = "transfers-heading") {
-                TransfersHeading(Modifier.padding(top = 32.dp))
+                // Inset by the page's gutter like the sections above, then by the section's own.
+                TransfersHeading(Modifier.padding(start = 16.dp, top = 32.dp, end = 16.dp))
             }
             itemsIndexed(transfers, key = { _, transfer -> "transfer:${transfer.id}" }) { _, transfer ->
                 TransferRow(
                     transfer = transfer,
                     lines = state.lines,
-                    modifier = Modifier.padding(top = 16.dp),
+                    modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp),
                 )
             }
         }
