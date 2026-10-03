@@ -9,18 +9,18 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
-import id.shiorilabs.commute.core.datastore.qualifier.SavedStationsDataStore
+import id.shiorilabs.commute.core.datastore.qualifier.SavedDataStore
 import javax.inject.Singleton
 
-private val Context.savedStationsDataStore: DataStore<Preferences> by preferencesDataStore(name = "commute_saved_stations")
+private val Context.savedDataStore: DataStore<Preferences> by preferencesDataStore(name = "commute_saved")
 
 @Module
 @InstallIn(SingletonComponent::class)
-object SavedStationsDatastoreModule {
+object SavedDatastoreModule {
 
     @Provides
     @Singleton
-    @SavedStationsDataStore
-    fun provideSavedStationsDataStore(@ApplicationContext context: Context): DataStore<Preferences> =
-        context.savedStationsDataStore
+    @SavedDataStore
+    fun provideSavedDataStore(@ApplicationContext context: Context): DataStore<Preferences> =
+        context.savedDataStore
 }
