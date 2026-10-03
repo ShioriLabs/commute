@@ -21,6 +21,7 @@
     <!-- Pins. %1$s is the station's name. -->
     <string name="search_pin">Pin %1$s</string>
     <string name="search_unpin">Lepas pin %1$s</string>
+    <string name="search_saved_edit">Atur stasiun yang di-pin</string>
 
     <!-- Not found -->
     <string name="search_not_found_illustration_description">Gambar peron stasiun dengan jembatan di atasnya, dengan kaca pembesar bergambar tanda tanya di depannya</string>
