@@ -18,6 +18,8 @@ phosphor = "1.0.0"
 arrow = "2.2.3"
 # DataStore
 datastore = "1.2.1"
+# Room — the disk half of :core:query's response cache
+room = "2.8.5"
 # Navigation
 navigation3 = "1.1.6"
 # Hilt
@@ -61,6 +63,9 @@ phosphor-icons = { module = "com.adamglin:phosphor-icon", version.ref = "phospho
 arrow-core = { module = "io.arrow-kt:arrow-core", version.ref = "arrow" }
 # DataStore
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
+# Room
+androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
+androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 # Navigation 3
 androidx-navigation3-runtime = { group = "androidx.navigation3", name = "navigation3-runtime", version.ref = "navigation3" }
 androidx-navigation3-ui = { group = "androidx.navigation3", name = "navigation3-ui", version.ref = "navigation3" }
@@ -84,6 +89,7 @@ fabrikt = { module = "com.cjbooms:fabrikt", version.ref = "fabrikt" }
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
+androidx-test-runner = { group = "androidx.test", name = "runner", version = "1.7.0" }
 # Baseline Profile
 androidx-benchmark-macro-junit4 = { module = "androidx.benchmark:benchmark-macro-junit4", version.ref = "benchmark" }
 androidx-uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "uiautomator" }
