@@ -47,6 +47,7 @@ import id.shiorilabs.commute.core.ui.components.SkeletonBlock
 import id.shiorilabs.commute.core.ui.ext.parseHexColor
 import id.shiorilabs.commute.core.ui.ext.tint
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
+import id.shiorilabs.commute.core.ui.startup.HoldStartupWhile
 import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
 import id.shiorilabs.commute.feature.journey.R
 import id.shiorilabs.commute.feature.journey.domain.JAKARTA
@@ -89,6 +90,8 @@ class SavedRouteCardImpl @Inject constructor() : SavedRouteCard {
             creationCallback = { factory -> factory.create(fromId, toId) },
         )
         val state by viewModel.state.collectAsStateWithLifecycle()
+        // With home's feed, the splash waits for this card's rows rather than reveal its skeleton.
+        HoldStartupWhile(waiting = state.answer is UIState.Loading)
         val navigator = LocalNavigator.current
         val now = rememberJakartaNow().atZone(JAKARTA).toInstant()
 
