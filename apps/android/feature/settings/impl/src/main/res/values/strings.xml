@@ -14,7 +14,7 @@
     <!-- Settings -->
     <string name="settings_title">Pengaturan</string>
     <string name="settings_close_description">Tutup halaman pengaturan</string>
-    <string name="settings_item_saved_stations">Stasiun Disimpan</string>
+    <string name="settings_item_saved_stations">Stasiun &amp; Rute Disimpan</string>
     <string name="settings_item_manage_data">Atur Data</string>
     <string name="settings_item_legal">Legal &amp; Atribusi</string>
     <string name="settings_item_data_platform">Commute Data Platform</string>
@@ -22,9 +22,11 @@
     <string name="settings_item_about">Tentang Commute</string>
 
     <!-- Saved stations. %1$s is the station's name. -->
-    <string name="settings_saved_title">Stasiun Disimpan</string>
-    <string name="settings_saved_hint">Urutan di sini jadi urutan di beranda. Stasiun yang dilepas pin-nya tetap tampil di sini sampai kamu meninggalkan halaman ini</string>
-    <string name="settings_saved_empty">Tidak ada stasiun disimpan</string>
+    <string name="settings_saved_title">Stasiun &amp; Rute Disimpan</string>
+    <string name="settings_saved_hint">Urutan di sini jadi urutan di beranda. Stasiun dan rute yang dilepas pin-nya tetap tampil di sini sampai kamu meninggalkan halaman ini</string>
+    <string name="settings_saved_empty">Tidak ada stasiun atau rute disimpan</string>
+    <string name="settings_saved_route_name">rute %1$s ke %2$s</string>
+    <string name="settings_saved_route_missing">Stasiun tidak ditemukan</string>
     <string name="settings_saved_move_up">Naikkan %1$s</string>
     <string name="settings_saved_move_down">Turunkan %1$s</string>
     <string name="settings_saved_pin">Pin %1$s</string>
@@ -35,11 +37,11 @@
     <string name="settings_data_recents">Riwayat Pencarian</string>
     <string name="settings_data_recents_count">%1$d item</string>
     <string name="settings_data_recents_empty">Riwayat pencarian kosong</string>
-    <string name="settings_data_saved">Stasiun Disimpan</string>
-    <string name="settings_data_saved_count">%1$d stasiun</string>
-    <string name="settings_data_saved_empty">Tidak ada stasiun disimpan</string>
+    <string name="settings_data_saved">Stasiun &amp; Rute Disimpan</string>
+    <string name="settings_data_saved_count">%1$d item</string>
+    <string name="settings_data_saved_empty">Tidak ada stasiun atau rute disimpan</string>
     <string name="settings_data_clear">Hapus %1$s</string>
-    <string name="settings_data_clear_saved_confirm">Yakin mau hapus semua stasiun disimpan?</string>
+    <string name="settings_data_clear_saved_confirm">Yakin mau hapus semua stasiun dan rute disimpan?</string>
     <string name="settings_data_confirm">Hapus</string>
     <string name="settings_data_cancel">Batal</string>
 
