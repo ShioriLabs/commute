@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import id.shiorilabs.commute.core.datastore.RecentSearchRepository
-import id.shiorilabs.commute.core.datastore.SavedStationsRepository
+import id.shiorilabs.commute.core.datastore.SavedRepository
 import id.shiorilabs.commute.core.type.UIState
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -23,12 +23,12 @@ data class StoredData(
 @HiltViewModel
 class ManageDataViewModel @Inject constructor(
     private val recentSearchRepository: RecentSearchRepository,
-    private val savedStationsRepository: SavedStationsRepository,
+    private val savedRepository: SavedRepository,
 ) : ViewModel() {
 
     val state: StateFlow<UIState<StoredData>> = combine(
         recentSearchRepository.recents,
-        savedStationsRepository.stations,
+        savedRepository.entries,
     ) { recents, saved ->
         UIState.Success(StoredData(recentSearches = recents.size, savedStations = saved.size)) as UIState<StoredData>
     }
@@ -45,6 +45,6 @@ class ManageDataViewModel @Inject constructor(
 
     /** Asked for only once the rider confirmed it, as on the web. */
     fun clearSavedStations() {
-        viewModelScope.launch { savedStationsRepository.clear() }
+        viewModelScope.launch { savedRepository.clear() }
     }
 }

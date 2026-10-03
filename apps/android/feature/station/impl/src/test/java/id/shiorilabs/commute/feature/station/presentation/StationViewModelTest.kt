@@ -4,7 +4,7 @@ import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
 import id.shiorilabs.commute.core.datastore.FakePreferencesDataStore
-import id.shiorilabs.commute.core.datastore.SavedStationsRepository
+import id.shiorilabs.commute.core.datastore.SavedRepository
 import id.shiorilabs.commute.core.time.JAKARTA
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
@@ -79,7 +79,7 @@ class StationViewModelTest {
     private fun clockAt(iso: String): Clock =
         Clock.fixed(LocalDateTime.parse(iso).atZone(JAKARTA).toInstant(), JAKARTA)
 
-    private val saved = SavedStationsRepository(FakePreferencesDataStore())
+    private val saved = SavedRepository(FakePreferencesDataStore())
     private val stations = FakeStationRepository()
     private val lines = FakeLineRepository()
 
@@ -162,11 +162,11 @@ class StationViewModelTest {
 
         vm.onToggleSave()
         assertTrue(vm.state.first { it.saved }.saved)
-        assertEquals(listOf("KCI-MRI"), saved.stations.first())
+        assertEquals(listOf("KCI-MRI"), saved.stationIds.first())
 
         vm.onToggleSave()
         assertFalse(vm.state.first { !it.saved }.saved)
-        assertTrue(saved.stations.first().isEmpty())
+        assertTrue(saved.stationIds.first().isEmpty())
     }
 
     @Test

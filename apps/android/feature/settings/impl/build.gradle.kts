@@ -14,7 +14,7 @@ dependencies {
     implementation(project(":core:common"))
     // Environment.appVersion — the version line.
     implementation(project(":core:config"))
-    // SavedStationsRepository, RecentSearchRepository.
+    // SavedRepository, RecentSearchRepository.
     implementation(project(":core:datastore"))
     // The settings routes + the NavGraphContribution/NavGraphScope contract.
     implementation(project(":core:navigation"))
