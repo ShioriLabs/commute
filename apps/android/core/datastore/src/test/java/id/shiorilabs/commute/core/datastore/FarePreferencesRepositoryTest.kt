@@ -22,6 +22,18 @@ class FarePreferencesRepositoryTest {
     }
 
     @Test
+    fun `the criteria last read or saved are offered without reading the disk`() = runTest {
+        val repository = FarePreferencesRepository(FakePreferencesDataStore())
+        assertNull(repository.cachedCriteria())
+
+        repository.criteria.first()
+        assertEquals(CriteriaSnapshot(null), repository.cachedCriteria())
+
+        repository.saveCriteria(StoredFareCriteria(paymentMethod = "QRIS_TAP"))
+        assertEquals(CriteriaSnapshot(StoredFareCriteria(paymentMethod = "QRIS_TAP")), repository.cachedCriteria())
+    }
+
+    @Test
     fun `unreadable stored criteria read as none`() = runTest {
         val store = FakePreferencesDataStore(preferencesOf(stringPreferencesKey("fare_criteria") to "{not json"))
 

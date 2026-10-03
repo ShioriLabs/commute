@@ -12,6 +12,7 @@ import id.shiorilabs.commute.feature.journey.data.JourneyRepository
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationRepository
 import id.shiorilabs.commute.feature.station.data.board
+import id.shiorilabs.commute.feature.station.data.cachedBoard
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.StationBoard
 import kotlinx.coroutines.Job
@@ -184,8 +185,11 @@ class SavedStationsViewModel @Inject constructor(
         // A retry or a day turnover replaces a load still in flight, which would otherwise land
         // after it and put the older board back.
         loads[stationId]?.cancel()
-        // In place before the load starts, so the card counts as loaded from this call on.
-        cards.update { it + (stationId to StationBoard.loading(stationId)) }
+        // In place before the load starts, so the card counts as loaded from this call on: what this
+        // session already holds when there is any, so a warm start paints boards on its first frame,
+        // and the skeleton only when there is nothing.
+        val seed = stationRepository.cachedBoard(stationId, now) ?: StationBoard.loading(stationId)
+        cards.update { it + (stationId to seed) }
         loads[stationId] = viewModelScope.launch {
             stationRepository.board(stationId, now).collect { board ->
                 cards.update { it + (stationId to board) }
