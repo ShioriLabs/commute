@@ -1,8 +1,11 @@
 package id.shiorilabs.commute.core.query
 
+import arrow.core.Either
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.type.toUserMessage
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import java.time.Instant
 
 /**
@@ -27,6 +30,19 @@ data class Query<out T>(
 
     fun <R> map(transform: (T) -> R): Query<R> =
         Query(data?.let(transform), updatedAt, isFetching, failure)
+}
+
+/**
+ * A [Query] over a one-shot [fetch], for a source without a cache of its own (a test's fake, say):
+ * [held] alone when there is one, else a fetch in flight and then its answer.
+ */
+fun <T> queryOnce(held: T?, fetch: suspend () -> Either<Failure, T>): Flow<Query<T>> = flow {
+    if (held != null) {
+        emit(Query(held))
+        return@flow
+    }
+    emit(Query(isFetching = true))
+    emit(fetch().fold(ifLeft = { Query(failure = it) }, ifRight = { Query(it) }))
 }
 
 /**

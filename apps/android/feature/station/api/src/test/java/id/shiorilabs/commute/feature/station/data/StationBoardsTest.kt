@@ -10,6 +10,8 @@ import id.shiorilabs.commute.feature.station.domain.Frequency
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.Station
 import id.shiorilabs.commute.feature.station.domain.Transfer
+import id.shiorilabs.commute.core.query.Query
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -17,6 +19,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.Instant
 import java.time.LocalDateTime
 
 class StationBoardsTest {
@@ -56,19 +59,39 @@ class StationBoardsTest {
     private val halte = Station("TJ-H00001P", "Petukangan D'MASIV", "TJ", "H00001P", listOf("TJ:13"))
 
     @Test
-    fun `a weekday emits loading, the station, then the board, and never asks for tomorrow`() = runTest {
+    fun `a weekday starts loading, shows the board only after the station, and never asks for tomorrow`() = runTest {
         val repository = FakeStationRepository()
 
         // A Wednesday morning: tomorrow runs the same weekday board.
         val boards = repository.board("KCI-MRI", LocalDateTime.parse("2026-09-30T08:00:00")).toList()
 
-        assertEquals(3, boards.size)
-        assertTrue(boards[0].station is UIState.Loading)
-        assertTrue(boards[1].station is UIState.Success)
-        assertTrue(boards[1].timetable is UIState.Loading)
-        assertTrue(boards[2].timetable is UIState.Success)
+        assertTrue(boards.first().station is UIState.Loading)
+        assertTrue(boards.first().timetable is UIState.Loading)
+        assertTrue(boards.none { it.station is UIState.Loading && it.timetable !is UIState.Loading })
+        assertTrue(boards.last().station is UIState.Success)
+        assertTrue(boards.last().timetable is UIState.Success)
         assertFalse(boards.last().nextDayDiffers)
         assertEquals(listOf(ServiceDayName.WD), repository.asked)
+    }
+
+    @Test
+    fun `an old part that couldn't be refreshed marks the board outdated, as of its age`() = runTest {
+        val confirmed = Instant.parse("2026-09-30T00:00:00Z")
+        val repository = object : StationRepository by FakeStationRepository() {
+            override fun observeStation(stationId: String) = flowOf(
+                Query(
+                    data = Station("KCI-MRI", "Manggarai", "KCI", "MRI", listOf("KCI:B")),
+                    updatedAt = confirmed,
+                    failure = Failure.Network.NoConnection(),
+                ),
+            )
+        }
+
+        val board = repository.board("KCI-MRI", LocalDateTime.parse("2026-09-30T08:00:00")).toList().last()
+
+        assertTrue(board.station is UIState.Success)
+        assertTrue(board.isOutdated)
+        assertEquals(confirmed, board.updatedAt)
     }
 
     @Test
@@ -146,7 +169,7 @@ class StationBoardsTest {
     }
 
     @Test
-    fun `a halte asks for the service day's frequencies, after its empty board`() = runTest {
+    fun `a halte asks for the service day's frequencies`() = runTest {
         val repository = FakeStationRepository().apply {
             station = halte.right()
             timetable = { emptyList<LineTimetable>().right() }
@@ -155,7 +178,6 @@ class StationBoardsTest {
         val boards = repository.board("TJ-H00001P", LocalDateTime.parse("2026-09-30T08:00:00")).toList()
 
         assertTrue(boards.first().frequencies is UIState.Loading)
-        assertTrue(boards.first { it.timetable is UIState.Success }.frequencies is UIState.Loading)
         assertEquals(listOf(Frequency("TJ:13", 186.0)), (boards.last().frequencies as UIState.Success).data)
         assertEquals(listOf("TJ-H00001P" to ServiceDayName.WD), repository.askedFrequencies)
     }
