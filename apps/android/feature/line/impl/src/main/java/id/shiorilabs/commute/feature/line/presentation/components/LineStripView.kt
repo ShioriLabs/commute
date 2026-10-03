@@ -1,7 +1,6 @@
 package id.shiorilabs.commute.feature.line.presentation.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,30 +30,25 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.PlatformTextStyle
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import id.shiorilabs.commute.core.ui.components.LineRoundel
+import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.ext.Foreground
 import id.shiorilabs.commute.core.ui.ext.foreground
 import id.shiorilabs.commute.core.ui.ext.parseHexColor
 import id.shiorilabs.commute.core.ui.ext.tint
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
-import id.shiorilabs.commute.core.ui.theme.RoundelNarrowFontFamily
 import id.shiorilabs.commute.feature.line.R
 import id.shiorilabs.commute.feature.line.domain.LineStop
 import id.shiorilabs.commute.feature.line.domain.LineStrip
@@ -63,17 +57,16 @@ import id.shiorilabs.commute.feature.line.domain.LoopRow
 import id.shiorilabs.commute.feature.line.domain.NodeKind
 import id.shiorilabs.commute.feature.line.domain.RailCap
 import id.shiorilabs.commute.feature.line.domain.StripRow
-import id.shiorilabs.commute.feature.line.domain.splitStationNumber
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 
 /*
  * The rail vocabulary, the web's transit-geometry.ts: a 6dp bar centred 22dp into a 44dp gutter
- * carrying a 32dp node. The loop's ring lines its sides up with the same centreline.
+ * carrying a station's roundel. The loop's ring lines its sides up with the same centreline.
  */
 private val RailWidth = 6.dp
 private val RailCenter = 22.dp
 private val Gutter = 44.dp
-private val NodeSize = 32.dp
+private val NodeSize = RoundelSize.MD
 
 /** The web's `max-w-md`. */
 private val StripMaxWidth = 448.dp
@@ -118,7 +111,7 @@ fun LineStripView(
             when (row) {
                 is StripRow.Stop -> StationRow(
                     stop = row,
-                    color = color,
+                    colorCode = colorCode,
                     operator = operator,
                     lines = lines,
                     onClick = { onOpenStation(row.station) },
@@ -138,7 +131,7 @@ fun LineStripView(
         strip.loop?.let { loop ->
             LoopSection(
                 loop = loop,
-                color = color,
+                colorCode = colorCode,
                 operator = operator,
                 lines = lines,
                 onOpenStation = onOpenStation,
@@ -155,13 +148,14 @@ fun LineStripView(
 @Composable
 private fun StationRow(
     stop: StripRow.Stop,
-    color: Color,
+    colorCode: String,
     operator: String,
     lines: Map<String, LineInfo>,
     onClick: () -> Unit,
     onOpenLine: (LineInfo) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val color = parseHexColor(colorCode)
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -179,7 +173,7 @@ private fun StationRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(Gutter), contentAlignment = Alignment.Center) {
-            StationNode(stop.kind, color, stop.station.stationNumber, operator, compact = false)
+            StationNode(stop.kind, colorCode, stop.station.stationNumber, operator)
         }
         StopContent(
             station = stop.station,
@@ -197,70 +191,32 @@ private fun StationRow(
 }
 
 /**
- * The node riding the rail, FDTJ-map style: the line's prefix stacked over the stop's position.
- * Filled with the line's colour at the strip's anchors (termini, junctions), outlined elsewhere.
- * The Kalayang stacks an aircraft over the position instead of a letter, as its roundel does.
+ * The station's roundel riding the rail: its number stacked as the line's prefix over its position,
+ * as the FDTJ map prints them. Filled with the line's colour at the strip's anchors (termini,
+ * junctions) and ringed elsewhere, whatever the operator, so the anchors read at a glance; raised
+ * off the rail where something happens (an anchor, an interchange).
+ *
+ * The web draws its own node here; the app uses the roundel, so a station number looks the same
+ * wherever it is shown.
  */
 @Composable
 private fun StationNode(
     kind: NodeKind,
-    color: Color,
+    colorCode: String,
     stationNumber: String,
     operator: String,
-    compact: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val filled = kind == NodeKind.TERMINUS || kind == NodeKind.JUNCTION
-    val ink = if (filled && color.foreground() == Foreground.LIGHT) Color.White else NodeInk
-    val (prefix, number) = splitStationNumber(stationNumber)
     val raised = filled || kind == NodeKind.INTERCHANGE
-
-    Column(
-        modifier = modifier
-            .size(NodeSize)
-            .then(if (raised) Modifier.shadow(1.dp, CircleShape) else Modifier)
-            .background(if (filled) color else Color.White, CircleShape)
-            .then(if (filled) Modifier else Modifier.border(4.dp, color, CircleShape)),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        if (operator == OPERATOR_APCGK) {
-            Icon(
-                imageVector = CommuteIcons.Airplane,
-                contentDescription = null,
-                modifier = Modifier.size(if (compact) 8.dp else 9.dp),
-                tint = ink,
-            )
-        } else if (prefix.isNotEmpty()) {
-            NodeText(prefix, size = if (compact) 7.dp else 8.dp, color = ink)
-        }
-        NodeText(number, size = if (compact) 10.dp else 11.dp, color = ink)
-    }
-}
-
-/**
- * A line of a node's stacked number. Sized in dp rather than sp, as roundels are: the node is a
- * fixed badge, and a larger system font would only push the number out of its circle.
- */
-@Composable
-private fun NodeText(text: String, size: Dp, color: Color) {
-    val fontSize = with(LocalDensity.current) { size.toSp() }
-    Text(
-        text = text,
-        style = TextStyle(
-            // Always narrow, as on the web: a stacked number is the tight space the wayfinding
-            // standard sanctions Narrow for.
-            fontFamily = RoundelNarrowFontFamily,
-            fontWeight = FontWeight.Bold,
-            fontSize = fontSize,
-            lineHeight = 1.em,
-            color = color,
-            platformStyle = PlatformTextStyle(includeFontPadding = false),
-            lineHeightStyle = LineHeightStyle(
-                alignment = LineHeightStyle.Alignment.Center,
-                trim = LineHeightStyle.Trim.Both,
-            ),
-        ),
+    LineRoundel(
+        code = stationNumber,
+        color = colorCode,
+        operator = operator,
+        size = NodeSize,
+        station = true,
+        filled = filled,
+        modifier = modifier.then(if (raised) Modifier.shadow(1.dp, CircleShape) else Modifier),
     )
 }
 
@@ -401,13 +357,14 @@ private fun BranchRamp(
 @Composable
 private fun LoopSection(
     loop: LoopLayout,
-    color: Color,
+    colorCode: String,
     operator: String,
     lines: Map<String, LineInfo>,
     onOpenStation: (LineStop) -> Unit,
     onOpenLine: (LineInfo) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val color = parseHexColor(colorCode)
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -420,7 +377,7 @@ private fun LoopSection(
                 LoopCell(
                     station = row.left,
                     side = LoopSide.LEFT,
-                    color = color,
+                    colorCode = colorCode,
                     operator = operator,
                     lines = lines,
                     onClick = { onOpenStation(row.left) },
@@ -432,7 +389,7 @@ private fun LoopSection(
                         LoopCell(
                             station = right,
                             side = LoopSide.RIGHT,
-                            color = color,
+                            colorCode = colorCode,
                             operator = operator,
                             lines = lines,
                             onClick = { onOpenStation(right) },
@@ -450,7 +407,7 @@ private fun LoopSection(
 private fun LoopCell(
     station: LineStop,
     side: LoopSide,
-    color: Color,
+    colorCode: String,
     operator: String,
     lines: Map<String, LineInfo>,
     onClick: () -> Unit,
@@ -460,7 +417,9 @@ private fun LoopCell(
     val kind = if (station.isInterchange) NodeKind.INTERCHANGE else NodeKind.REGULAR
     val left = side == LoopSide.LEFT
     // The node's centre sits on the ring's centreline, half a rail outside the cell's edge.
-    val nodeShift = RailWidth / 2 + NodeSize / 2
+    val nodeShift = RailWidth / 2 + NodeSize.diameter / 2
+    // The name keeps the same clearance from the node as on the web.
+    val contentInset = nodeShift + 9.dp
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -477,14 +436,18 @@ private fun LoopCell(
             // Wider on the ring's side: the node straddles it and reaches into the cell.
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = if (left) 28.dp else 4.dp, end = if (left) 4.dp else 28.dp, top = 8.dp, bottom = 8.dp),
+                .padding(
+                    start = if (left) contentInset else 4.dp,
+                    end = if (left) 4.dp else contentInset,
+                    top = 8.dp,
+                    bottom = 8.dp,
+                ),
         )
         StationNode(
             kind = kind,
-            color = color,
+            colorCode = colorCode,
             stationNumber = station.stationNumber,
             operator = operator,
-            compact = true,
             modifier = Modifier
                 .align(if (left) Alignment.CenterStart else Alignment.CenterEnd)
                 .offset(x = if (left) -nodeShift else nodeShift),
@@ -517,7 +480,6 @@ private fun DrawScope.ringPath(size: Size): Path {
     }
 }
 
-private const val OPERATOR_APCGK = "APCGK"
 
 private fun previewStop(code: String, name: String, number: String, others: List<String> = emptyList()) =
     LineStop("KCI-$code", code, name, number, others.isNotEmpty(), others)
