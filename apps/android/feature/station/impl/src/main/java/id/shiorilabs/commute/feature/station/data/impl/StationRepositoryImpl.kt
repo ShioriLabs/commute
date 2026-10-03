@@ -1,12 +1,18 @@
 package id.shiorilabs.commute.feature.station.data.impl
 
 import arrow.core.Either
-import arrow.core.right
-import id.shiorilabs.commute.core.ext.apiCallToFailure
+import id.shiorilabs.commute.core.ext.onDataThread
+import id.shiorilabs.commute.core.model.models.GroupedTimetable
+import id.shiorilabs.commute.core.model.models.HeadwayRow
+import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.network.service.CommuteService
+import id.shiorilabs.commute.core.query.Query
+import id.shiorilabs.commute.core.query.QueryClient
+import id.shiorilabs.commute.core.query.QueryPolicy
+import id.shiorilabs.commute.core.query.QuerySpec
+import id.shiorilabs.commute.core.query.queryKey
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
-import id.shiorilabs.commute.core.type.requireBody
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationRepository
 import id.shiorilabs.commute.feature.station.domain.Frequency
@@ -14,93 +20,140 @@ import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.Station
 import id.shiorilabs.commute.feature.station.domain.Transfer
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.serialization.builtins.ListSerializer
 import javax.inject.Inject
 import javax.inject.Singleton
+import id.shiorilabs.commute.core.model.models.Station as StationDto
+import id.shiorilabs.commute.core.model.models.Transfer as TransferDto
 
 /**
- * Holds what it has fetched in memory for the session. A station and its board for a day type only
- * change with a data deploy, and the home feed has usually just loaded the very station a rider
- * opens, so the station page can start from it. A failure or an empty board is not cached, so the
- * next call tries again.
+ * Serves stations through the [QueryClient], under keys nested by station (`station/KCI-MRI`,
+ * `station/KCI-MRI/timetable/WD`, …), so a station's parts are held, on disk too, and invalidated
+ * together. A station and its board for a day type only change with a data deploy, and the home
+ * feed has usually just loaded the very station a rider opens, so the station page starts from it.
+ *
+ * An empty board is kept but counts as stale, so the next look asks again: the screen offers a
+ * retry for it, which has to actually ask. An empty list of transfers or frequencies is a stable
+ * fact, kept like any other.
  */
 @Singleton
 class StationRepositoryImpl @Inject constructor(
     private val service: CommuteService,
+    private val queries: QueryClient,
 ) : StationRepository {
 
-    private val stations = ConcurrentHashMap<String, Station>()
-    private val timetables = ConcurrentHashMap<Pair<String, ServiceDayName>, List<LineTimetable>>()
-    private val transfers = ConcurrentHashMap<String, List<Transfer>>()
-    private val frequencies = ConcurrentHashMap<Pair<String, ServiceDayName>, List<Frequency>>()
-
-    override suspend fun station(stationId: String): Either<Failure, Station> =
-        stations[stationId]?.right() ?: apiCallToFailure {
+    private fun stationQuery(stationId: String): QuerySpec<StationDto> =
+        QuerySpec(queryKey(STATION, stationId), StationDto.serializer(), QueryPolicy.Topology) { etag ->
             val (operator, code) = stationId.splitId()
-            service.getStation(operator, code).requireBody().toStation()
-        }.onRight { stations[stationId] = it }
-
-    override suspend fun timetable(stationId: String, day: ServiceDayName): Either<Failure, List<LineTimetable>> =
-        timetables[stationId to day]?.right() ?: apiCallToFailure {
-            val (operator, code) = stationId.splitId()
-            service.getGroupedTimetable(operator, code, day.name).requireBody().map { it.toLineTimetable() }
-        }.onRight { lines ->
-            // An empty board is offered a retry on screen, which has to actually ask again.
-            if (lines.isNotEmpty()) {
-                timetables[stationId to day] = lines
-            }
+            service.getStation(operator, code, etag)
         }
 
-    // An empty list is kept like any other: a station with no transfers is a stable fact, and the
-    // page offers no retry for it.
+    private fun timetableQuery(stationId: String, day: ServiceDayName): QuerySpec<List<GroupedTimetable>> =
+        QuerySpec(
+            key = queryKey(STATION, stationId, "timetable", day.name),
+            serializer = ListSerializer(GroupedTimetable.serializer()),
+            policy = QueryPolicy.Timetable,
+            isUsable = { it.isNotEmpty() },
+        ) { etag ->
+            val (operator, code) = stationId.splitId()
+            service.getGroupedTimetable(operator, code, day.name, etag)
+        }
+
+    private fun transfersQuery(stationId: String): QuerySpec<List<TransferDto>> =
+        QuerySpec(
+            key = queryKey(STATION, stationId, "transfers"),
+            serializer = ListSerializer(TransferDto.serializer()),
+            policy = QueryPolicy.Topology,
+        ) { etag ->
+            val (operator, code) = stationId.splitId()
+            service.getTransfers(operator, code, etag)
+        }
+
+    private fun frequenciesQuery(stationId: String, day: ServiceDayName): QuerySpec<List<HeadwayRow>> =
+        QuerySpec(
+            key = queryKey(STATION, stationId, "headway", day.name),
+            serializer = ListSerializer(HeadwayRow.serializer()),
+            policy = QueryPolicy.Topology,
+        ) { etag ->
+            val (operator, code) = stationId.splitId()
+            service.getHeadway(operator, code, day.name, etag)
+        }
+
+    override suspend fun station(stationId: String): Either<Failure, Station> =
+        queries.fetch(stationQuery(stationId)).mapOnDataThread { it.toStation() }
+
+    override suspend fun timetable(stationId: String, day: ServiceDayName): Either<Failure, List<LineTimetable>> =
+        queries.fetch(timetableQuery(stationId, day)).mapOnDataThread { it.toLineTimetables() }
+
     override suspend fun transfers(stationId: String): Either<Failure, List<Transfer>> =
-        transfers[stationId]?.right() ?: apiCallToFailure {
-            val (operator, code) = stationId.splitId()
-            service.getTransfers(operator, code).requireBody().map { it.toTransfer() }
-        }.onRight { transfers[stationId] = it }
+        queries.fetch(transfersQuery(stationId)).mapOnDataThread { rows -> rows.map { it.toTransfer() } }
 
-    // An empty list is kept too: a halte the model has no figures for falls back to the no-schedule
-    // note, which offers no retry either.
     override suspend fun frequencies(stationId: String, day: ServiceDayName): Either<Failure, List<Frequency>> =
-        frequencies[stationId to day]?.right() ?: apiCallToFailure {
-            val (operator, code) = stationId.splitId()
-            service.getHeadway(operator, code, day.name).requireBody().map { it.toFrequency() }
-        }.onRight { frequencies[stationId to day] = it }
+        queries.fetch(frequenciesQuery(stationId, day)).mapOnDataThread { it.toFrequencies() }
 
-    override fun cachedStation(stationId: String): Station? = stations[stationId]
+    override fun observeStation(stationId: String): Flow<Query<Station>> =
+        queries.observe(stationQuery(stationId)).mapData { it.toStation() }
+
+    override fun observeTimetable(stationId: String, day: ServiceDayName): Flow<Query<List<LineTimetable>>> =
+        queries.observe(timetableQuery(stationId, day)).mapData { it.toLineTimetables() }
+
+    override fun observeFrequencies(stationId: String, day: ServiceDayName): Flow<Query<List<Frequency>>> =
+        queries.observe(frequenciesQuery(stationId, day)).mapData { it.toFrequencies() }
+
+    override fun cachedStation(stationId: String): Station? =
+        queries.peek(stationQuery(stationId))?.data?.toStation()
 
     override fun cachedTimetable(stationId: String, day: ServiceDayName): List<LineTimetable>? =
-        timetables[stationId to day]
+        queries.peek(timetableQuery(stationId, day))?.data?.toLineTimetables()
 
-    override fun cachedTransfers(stationId: String): List<Transfer>? = transfers[stationId]
+    override fun cachedTransfers(stationId: String): List<Transfer>? =
+        queries.peek(transfersQuery(stationId))?.data?.map { it.toTransfer() }
 
     override fun cachedFrequencies(stationId: String, day: ServiceDayName): List<Frequency>? =
-        frequencies[stationId to day]
+        queries.peek(frequenciesQuery(stationId, day))?.data?.toFrequencies()
+
+    private fun List<GroupedTimetable>.toLineTimetables(): List<LineTimetable> = map { it.toLineTimetable() }
+
+    private fun List<HeadwayRow>.toFrequencies(): List<Frequency> = map { it.toFrequency() }
 
     /** `KCI-MRI` to (`KCI`, `MRI`). */
     private fun String.splitId(): Pair<String, String> = substringBefore('-') to substringAfter('-')
+
+    private companion object {
+
+        const val STATION = "station"
+    }
 }
 
 /**
- * Holds the dictionary in memory once fetched: it is small and only changes with a deploy. A
- * failure is not cached, so the next call tries again.
+ * Serves the dictionary through the [QueryClient]: it is small and only changes with a deploy, so
+ * it is held a day at a time, on disk too.
  */
 @Singleton
 class LineRepositoryImpl @Inject constructor(
     private val service: CommuteService,
+    private val queries: QueryClient,
 ) : LineRepository {
 
-    private val mutex = Mutex()
-    @Volatile
-    private var cached: Map<String, LineInfo>? = null
+    private val linesQuery = QuerySpec(
+        key = queryKey("operators"),
+        serializer = ListSerializer(OperatorWithLines.serializer()),
+        policy = QueryPolicy.Static,
+    ) { etag -> service.getOperators(etag) }
 
-    override suspend fun lines(): Either<Failure, Map<String, LineInfo>> = mutex.withLock {
-        cached?.right() ?: apiCallToFailure {
-            service.getOperators().requireBody().toLineDictionary()
-        }.onRight { cached = it }
-    }
+    override suspend fun lines(): Either<Failure, Map<String, LineInfo>> =
+        queries.fetch(linesQuery).mapOnDataThread { it.toLineDictionary() }
 
-    override fun cachedLines(): Map<String, LineInfo>? = cached
+    override fun cachedLines(): Map<String, LineInfo>? = queries.peek(linesQuery)?.data?.toLineDictionary()
 }
+
+/** Maps a wire answer to the domain off the main thread: a board can hold thousands of departures. */
+private suspend fun <A, B> Either<Failure, A>.mapOnDataThread(transform: (A) -> B): Either<Failure, B> =
+    onDataThread { map(transform) }
+
+private fun <A, B> Flow<Query<A>>.mapData(transform: (A) -> B): Flow<Query<B>> =
+    map { it.map(transform) }.flowOn(Dispatchers.Default)

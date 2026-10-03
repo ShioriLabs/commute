@@ -11,6 +11,8 @@ android {
 dependencies {
     // Failure/Either in the repository signatures, ServiceDayName + service-day helpers → api.
     api(project(":core:common"))
+    // Query in the observe signatures, which the board is built from → api.
+    api(project(":core:query"))
     // LineCard: theme, colour ext, Spacers, CommutePreviewScaffold.
     implementation(project(":core:ui"))
 
