@@ -26,9 +26,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -224,6 +224,11 @@ private fun StationFeed(
     }
     val stuckCard = stuck?.let { current -> titleRows.firstOrNull { it.first == current.index }?.second }
     val stuckName = (stuckCard?.station as? UIState.Success)?.data?.name
+    // The title sliding into the bar while it pushes the current one out, if it has a name to show.
+    val incoming = stuck?.takeIf { it.pushOffset < 0 }
+        ?.let { current -> titleRows.firstOrNull { it.first > current.index } }
+        ?.takeIf { it.second.station is UIState.Success }
+    val incomingName = (incoming?.second?.station as? UIState.Success)?.data?.name
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -248,10 +253,10 @@ private fun StationFeed(
                 val station = card.station
                 if (station is UIState.Success) {
                     item(key = "saved-station-title:${card.stationId}", contentType = TITLE_ROW) {
-                        // The bar shows this title while it is the current one; drawn twice, the copy
-                        // in the list would blur behind the bar's. The bar's copy is then the one
-                        // that flies into the station page.
-                        val underBar = stuckName != null && stuck?.index == row
+                        // The bar shows this title while it is the current one, and while it slides
+                        // in to take over; drawn twice, the copy in the list would blur behind the
+                        // bar's. The bar's copy is then the one that flies into the station page.
+                        val underBar = (stuckName != null && stuck?.index == row) || incoming?.first == row
                         StationTitle(
                             stationId = card.stationId,
                             name = station.data.name,
@@ -292,11 +297,10 @@ private fun StationFeed(
             }
         }
 
-        // The bar's frost, behind it. With no title at the top yet (the offline banner is above them
-        // all) the bar is only the status bar, so neither the frost nor its resting fill covers the
-        // banner. While the next title pushes in, the frost gives way with the bar's bottom edge.
-        val barHeight = stuck?.let { statusBar + with(density) { (barTitleHeight + it.pushOffset).coerceAtLeast(0).toDp() } }
-            ?: statusBar
+        // The bar's frost, behind it, the same height throughout: only the names move. With no title
+        // at the top yet (the offline banner is above them all) the bar is only the status bar, so
+        // neither the frost nor its resting fill covers the banner.
+        val barHeight = if (stuck != null) statusBar + with(density) { barTitleHeight.toDp() } else statusBar
         FrostedTopChromeBackdrop(
             hazeState = hazeState,
             chromeHeight = barHeight,
@@ -307,7 +311,10 @@ private fun StationFeed(
         StuckTitleBar(
             stationId = stuckCard?.stationId,
             name = stuckName,
+            incomingStationId = incoming?.second?.stationId,
+            incomingName = incomingName,
             pushOffset = { stuck?.pushOffset ?: 0 },
+            titleHeight = { barTitleHeight },
             statusBar = statusBar,
             onTitleHeight = { barTitleHeight = it },
             // The bar covers the list's own copy of the title, so it takes the tap for it.
@@ -322,18 +329,23 @@ private fun StationFeed(
  * no surface of its own; the frost behind it ([FrostedTopChromeBackdrop]) blurs the cards passing
  * under it.
  *
+ * The bar holds still and only its names move: when the next station's title pushes in, the
+ * current name slides up and out of the bar, clipped where the status bar begins, while the next
+ * ([incomingName]) slides in beneath it, drawn sharp over the frost where its own row is.
+ *
  * Drawn over the list rather than as a sticky header in it: a sticky header pins to the very top of
  * the list, so to clear the clock every title would have to carry the status bar's height, and the
  * stations would sit that much further apart.
  *
- * When the next station's title pushes in, only the name moves, and the frost's bottom edge gives
- * way to the incoming title, so that title arrives sharp.
  */
 @Composable
 private fun StuckTitleBar(
     stationId: String?,
     name: String?,
+    incomingStationId: String?,
+    incomingName: String?,
     pushOffset: () -> Int,
+    titleHeight: () -> Int,
     statusBar: Dp,
     onTitleHeight: (Int) -> Unit,
     opened: Boolean,
@@ -357,15 +369,13 @@ private fun StuckTitleBar(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .layout { measurable, constraints ->
-                val placeable = measurable.measure(constraints)
-                // Never above the status bar: that part is the page itself, whatever is arriving.
-                val height = (placeable.height + pushOffset()).coerceIn(statusBarPx, placeable.height)
-                layout(placeable.width, height) {
-                    placeable.place(0, 0)
+            // Names leave and arrive below the status bar, never behind the clock. Open below: the
+            // incoming name runs past the bar's bottom while it is still on its way in.
+            .drawWithContent {
+                clipRect(top = statusBarPx.toFloat(), bottom = size.height + INCOMING_OVERHANG_PX) {
+                    this@drawWithContent.drawContent()
                 }
-            }
-            .clipToBounds(),
+            },
     ) {
         // Always laid out, so the bar's height is known before the first title reaches it.
         StationTitle(
@@ -382,8 +392,21 @@ private fun StuckTitleBar(
                     alpha = nameAlpha
                 },
         )
+        if (incomingStationId != null && incomingName != null) {
+            // Where its row in the list is: one title down, less however far it has pushed.
+            StationTitle(
+                stationId = incomingStationId,
+                name = incomingName,
+                topInset = statusBar,
+                shareName = false,
+                modifier = Modifier.graphicsLayer { translationY = (titleHeight() + pushOffset()).toFloat() },
+            )
+        }
     }
 }
+
+/** Room below the bar for the incoming name, which runs up to one title past it. */
+private const val INCOMING_OVERHANG_PX = 10_000f
 
 /** What covered the home screen last, saved so the way back can tell which it was. */
 private enum class CoveredBy { MORPH, PAGE }
