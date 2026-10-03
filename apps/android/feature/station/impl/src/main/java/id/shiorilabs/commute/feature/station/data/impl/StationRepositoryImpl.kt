@@ -10,6 +10,7 @@ import id.shiorilabs.commute.core.query.Query
 import id.shiorilabs.commute.core.query.QueryClient
 import id.shiorilabs.commute.core.query.QueryPolicy
 import id.shiorilabs.commute.core.query.QuerySpec
+import id.shiorilabs.commute.core.query.Refetched
 import id.shiorilabs.commute.core.query.queryKey
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
@@ -104,9 +105,8 @@ class StationRepositoryImpl @Inject constructor(
     override fun observeFrequencies(stationId: String, day: ServiceDayName): Flow<Query<List<Frequency>>> =
         queries.observe(frequenciesQuery(stationId, day)).mapData { it.toFrequencies() }
 
-    override suspend fun refresh(stationId: String) {
+    override suspend fun refresh(stationId: String): Refetched =
         queries.refetch(queryKey(STATION, stationId))
-    }
 
     override fun cachedStation(stationId: String): Station? =
         queries.peek(stationQuery(stationId))?.data?.toStation()

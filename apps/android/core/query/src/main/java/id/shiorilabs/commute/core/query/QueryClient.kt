@@ -14,7 +14,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -137,18 +136,23 @@ class QueryClient @Inject constructor(
 
     /**
      * [invalidate], then waits for the refetches it started: a pull to refresh, which holds its
-     * spinner until the answers are in. Returns at once offline, where nothing is asked.
+     * spinner until the answers are in, and then says what they found. Returns at once offline,
+     * where nothing is asked and every observed key counts as failed.
      */
-    suspend fun refetch(prefix: QueryKey) {
-        invalidateUnder(prefix).awaitAll()
-    }
-
-    private fun invalidateUnder(prefix: QueryKey): List<Deferred<Unit>> {
-        val matched = synchronized(cells) { cells.values.filter { it.key.isUnder(prefix) } }
-        return matched.mapNotNull { cell ->
-            cell.state.update { it.copy(invalidated = true) }
-            if (cell.observers.get() > 0) revalidate(cell) else null
+    suspend fun refetch(prefix: QueryKey): Refetched =
+        invalidateUnder(prefix).fold(Refetched()) { total, pending ->
+            total + when (pending?.await() ?: Outcome.FAILED) {
+                Outcome.CHANGED -> Refetched(changed = 1)
+                Outcome.UNCHANGED -> Refetched(unchanged = 1)
+                Outcome.FAILED -> Refetched(failed = 1)
+            }
         }
+
+    /** The observed keys' refetches, null for one that couldn't start (offline). */
+    private fun invalidateUnder(prefix: QueryKey): List<Deferred<Outcome>?> {
+        val matched = synchronized(cells) { cells.values.filter { it.key.isUnder(prefix) } }
+        matched.forEach { cell -> cell.state.update { it.copy(invalidated = true) } }
+        return matched.filter { it.observers.get() > 0 }.map { revalidate(it) }
     }
 
     /** Forgets every stored answer. Screens open now keep what they show until they reload. */
@@ -216,13 +220,13 @@ class QueryClient @Inject constructor(
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun revalidate(cell: Cell): Deferred<Unit>? {
+    private fun revalidate(cell: Cell): Deferred<Outcome>? {
         val spec = cell.spec as QuerySpec<Any?>? ?: return null
         return revalidate(cell, spec)
     }
 
     /** Starts [cell]'s fetch if its answer is due one, or joins the one running. */
-    private fun <T> revalidate(cell: Cell, spec: QuerySpec<T>): Deferred<Unit>? {
+    private fun <T> revalidate(cell: Cell, spec: QuerySpec<T>): Deferred<Outcome>? {
         if (!cell.state.value.needsFetch(spec, clock.instant())) {
             return synchronized(cell) { cell.inFlight?.takeIf { it.isActive } }
         }
@@ -238,7 +242,8 @@ class QueryClient @Inject constructor(
         }
     }
 
-    private suspend fun <T> runFetch(cell: Cell, spec: QuerySpec<T>) {
+    /** Fetches [cell]'s answer and holds it; says whether it differs from the one held before. */
+    private suspend fun <T> runFetch(cell: Cell, spec: QuerySpec<T>): Outcome {
         val key = spec.key.value
         val held = cell.state.value
         val etag = held.etag.takeIf { held.data != null }
@@ -246,10 +251,10 @@ class QueryClient @Inject constructor(
             .mapLeft(Throwable::toFailure)
             .getOrElse { failure ->
                 cell.state.update { it.copy(isFetching = false, failure = failure) }
-                return
+                return Outcome.FAILED
             }
         val now = clock.instant()
-        when (fetched) {
+        return when (fetched) {
             is Fetched.Body -> {
                 val body = withContext(io) { attempt { json.encodeToString(spec.serializer, fetched.data) } }
                 if (body != null) {
@@ -265,6 +270,8 @@ class QueryClient @Inject constructor(
                         invalidated = false,
                     )
                 }
+                // A full answer can still be the same one (a server that sent no ETag, say).
+                if (fetched.data == held.data) Outcome.UNCHANGED else Outcome.CHANGED
             }
             is Fetched.NotModified -> {
                 attempt { store.confirm(key, now.toEpochMilli(), fetched.etag) }
@@ -277,9 +284,13 @@ class QueryClient @Inject constructor(
                         invalidated = false,
                     )
                 }
+                Outcome.UNCHANGED
             }
         }
     }
+
+    /** What one fetch found. */
+    private enum class Outcome { CHANGED, UNCHANGED, FAILED }
 
     /** One key held in memory: its state, the fetch running for it, and who is watching. */
     private class Cell(val key: QueryKey) {
@@ -293,7 +304,7 @@ class QueryClient @Inject constructor(
         var spec: QuerySpec<*>? = null
 
         /** Guarded by the cell itself. */
-        var inFlight: Deferred<Unit>? = null
+        var inFlight: Deferred<Outcome>? = null
 
         fun isIdle(): Boolean = observers.get() == 0 && synchronized(this) { inFlight?.isActive != true }
     }

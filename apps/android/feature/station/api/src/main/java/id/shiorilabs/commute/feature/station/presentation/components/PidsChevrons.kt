@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -60,6 +61,61 @@ fun PidsChevrons(
             )
         }
     }
+}
+
+/**
+ * The chevrons as a progress meter, for a pull to refresh: dim at rest, each lighting in turn as
+ * [progress] runs from 0 to 1, as though the train were drawing in. [pulsing] ripples them as
+ * [PidsChevrons] does, for the wait once the pull has let go. [progress] is read at draw time, so
+ * a drag redraws without recomposing; nothing animates on its own unless [pulsing].
+ */
+@Composable
+fun PidsChevronsProgress(
+    progress: () -> Float,
+    pulsing: Boolean,
+    color: Color,
+    modifier: Modifier = Modifier,
+    fontSize: TextUnit = 16.sp,
+) {
+    Row(
+        modifier = modifier.clearAndSetSemantics { },
+        horizontalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
+        if (pulsing) {
+            val transition = rememberInfiniteTransition(label = "pidsChevronsProgress")
+            repeat(3) { index ->
+                val alpha by transition.animateFloat(
+                    initialValue = 1f,
+                    targetValue = 1f,
+                    animationSpec = pulse(index),
+                    label = "pidsChevronProgress$index",
+                )
+                Chevron(color, fontSize, Modifier.graphicsLayer { this.alpha = alpha })
+            }
+        } else {
+            repeat(3) { index ->
+                Chevron(color, fontSize, Modifier.graphicsLayer { alpha = litAlpha(progress(), index) })
+            }
+        }
+    }
+}
+
+/** How lit chevron [index] of three is at [progress]: dim until its third of the pull, then full. */
+internal fun litAlpha(progress: Float, index: Int): Float =
+    UNLIT_ALPHA + (1f - UNLIT_ALPHA) * (progress * 3 - index).coerceIn(0f, 1f)
+
+private const val UNLIT_ALPHA = 0.2f
+
+@Composable
+private fun Chevron(color: Color, fontSize: TextUnit, modifier: Modifier) {
+    Text(
+        text = "›",
+        modifier = modifier,
+        color = color,
+        fontSize = fontSize,
+        fontWeight = FontWeight.Black,
+        lineHeight = fontSize,
+    )
 }
 
 /**
