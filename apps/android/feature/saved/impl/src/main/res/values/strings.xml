@@ -24,5 +24,6 @@
     <string name="saved_retry">Coba Lagi</string>
 
     <!-- Error state -->
+    <string name="saved_offline_banner">Kamu sedang offline, data mungkin tidak up-to-date</string>
     <string name="saved_error_message">Gagal memuat stasiun tersimpan</string>
 </resources>
