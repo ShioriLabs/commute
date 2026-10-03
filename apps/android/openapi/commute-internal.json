@@ -26,6 +26,14 @@
       "description": "Stasiun, jadwalnya, dan transfer antar stasiun."
     },
     {
+      "name": "Lin",
+      "description": "Struktur lin, termasuk percabangan dan loop."
+    },
+    {
+      "name": "Pumpunan Moda",
+      "description": "Kompleks interchange yang menggabungkan beberapa stasiun."
+    },
+    {
       "name": "Operator",
       "description": "Operator transit dan lin yang mereka jalankan."
     },
@@ -210,6 +218,178 @@
           },
           "500": {
             "description": "Perhitungan tarif gagal (`DATABASE_ERROR`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "examples": [
+                        404
+                      ],
+                      "format": "double"
+                    },
+                    "error": {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "error"
+                  ],
+                  "title": "ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/hubs/{slug}": {
+      "get": {
+        "operationId": "getHubsBySlug",
+        "summary": "Detail pumpunan moda",
+        "description": "Satu pumpunan moda lengkap dengan stasiun-stasiun di dalamnya.",
+        "tags": [
+          "Pumpunan Moda"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "dukuh-atas"
+              ]
+            },
+            "description": "Kunci URL pumpunan moda, bisa diambil dari `/hubs`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "description": "Sama dengan HTTP status code-nya.",
+                      "examples": [
+                        200
+                      ],
+                      "format": "double"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Hub"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tidak ada pumpunan moda dengan slug tersebut.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "examples": [
+                        404
+                      ],
+                      "format": "double"
+                    },
+                    "error": {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "error"
+                  ],
+                  "title": "ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/lines/{operator}/{lineCode}": {
+      "get": {
+        "operationId": "getLinesByOperatorByLineCode",
+        "summary": "Detail lin",
+        "description": "Struktur lengkap satu lin, urut dari stasiun awal. Lin yang lurus cuma punya satu segmen `TRUNK`. Lin yang bercabang seperti loop Cikarang atau ramp Nambo punya segmen tambahan yang menunjukkan di mana cabangnya berpisah dan menyatu lagi.",
+        "tags": [
+          "Lin"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operator",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "KCI"
+              ]
+            },
+            "description": "Kode operator, misalnya `KCI`, `MRTJ`, `TJ`."
+          },
+          {
+            "in": "path",
+            "name": "lineCode",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "C"
+              ]
+            },
+            "description": "Kode lin, bisa diambil dari `/operators`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "description": "Sama dengan HTTP status code-nya.",
+                      "examples": [
+                        200
+                      ],
+                      "format": "double"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/LineDetail"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Operator atau lin-nya tidak ditemukan, atau lin-nya belum punya data topologi (`NO_TOPOLOGY`).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1329,6 +1509,105 @@
         "title": "HeadwayRow",
         "description": "Seberapa sering kendaraan lewat, bukan jadwal. Nggak bisa dipakai buat tahu kapan yang berikutnya datang."
       },
+      "Hub": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "examples": [
+              "HUB-DKA"
+            ]
+          },
+          "slug": {
+            "type": "string",
+            "description": "Kunci buat URL-nya. Bisa berubah sewaktu-waktu, jadi pakai `id` kalau butuh yang stabil.",
+            "examples": [
+              "dukuh-atas"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "examples": [
+              "Dukuh Atas"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "description": "`hub`: beberapa stasiun yang namanya berbeda tapi ada di satu kompleks, jadi pengelompokannya membawa informasi. `integrated`: buat penumpang ini satu tempat yang sama, terpisahnya cuma di data antar operator. Nilai yang dikenal saat ini: `hub`, `integrated`. Bisa bertambah.",
+            "examples": [
+              "hub"
+            ]
+          },
+          "heroImage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Foto kompleksnya, buat social card dan header halaman."
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "title": "Line key",
+              "description": "`OPERATOR:CODE`, dicocokkan ke kamus lin dari `/operators`.",
+              "examples": [
+                "KCI:C",
+                "MRTJ:M"
+              ]
+            },
+            "description": "Semua lin yang bisa dinaiki dari sini, sudah digabung dari seluruh stasiun anggotanya."
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StationRef"
+            },
+            "description": "Stasiun-stasiun yang ada di dalamnya, urut sesuai tampilan."
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "kind",
+          "heroImage",
+          "lines",
+          "members"
+        ],
+        "title": "Hub",
+        "description": "Beberapa stasiun yang dianggap satu tempat karena saling terhubung. Pumpunan moda sendiri tidak punya koordinat, yang punya stasiun-stasiun di dalamnya."
+      },
+      "Operator": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Operator code",
+            "description": "Operator transit. `KCI`: Commuter Line · `MRTJ`: MRT Jakarta · `LRTJ`: LRT Jakarta · `LRTJBDB`: LRT Jabodebek · `TJ`: TransJakarta · `APCGK`: Kalayang Bandara. `NUL` cuma placeholder internal dan tidak pernah muncul di response. Nilai yang dikenal saat ini: `KCI`, `MRTJ`, `LRTJ`, `LRTJBDB`, `TJ`, `APCGK`. Bisa bertambah.",
+            "examples": [
+              "KCI",
+              "MRTJ"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "examples": [
+              "Commuter Line"
+            ]
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "Operator",
+        "description": "Operator transit yang menjalankan lin dan stasiun."
+      },
       "TransitMode": {
         "type": "string",
         "title": "TransitMode",
@@ -1374,6 +1653,119 @@
         ],
         "title": "Line",
         "description": "Satu lin, dengan kode dan warna yang dipakai di roundel-nya."
+      },
+      "LineStation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "examples": [
+              "KCI-SUD"
+            ]
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "Nama tampilan."
+          },
+          "stationNumber": {
+            "type": "string",
+            "description": "Label posisi di sepanjang lin, misalnya `C13`.",
+            "examples": [
+              "C12"
+            ]
+          },
+          "isInterchange": {
+            "type": "boolean",
+            "description": "True kalau stasiun ini titik pindah ke lin lain."
+          },
+          "otherLines": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "title": "Line key",
+              "description": "`OPERATOR:CODE`, dicocokkan ke kamus lin dari `/operators`.",
+              "examples": [
+                "KCI:C",
+                "MRTJ:M"
+              ]
+            },
+            "description": "Lin lain dari operator yang SAMA yang berhenti di sini, berupa line key. Lin yang sedang dibuka tidak termasuk. Sambungan lintas operator ada di transfer stasiunnya."
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "stationNumber",
+          "isInterchange",
+          "otherLines"
+        ],
+        "title": "LineStation",
+        "description": "Satu stasiun di sepanjang lin, urut dari stasiun awal."
+      },
+      "LineSegment": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "`TRUNK`: jalur utama. `CONTINUATION`: cabang yang meneruskan jalur utama dan terbaca sebagai mainline. `RAMP`: cabang samping yang memisah. `LOOP`: cabang yang menyatu kembali ke jalur utama. Nilai yang dikenal saat ini: `TRUNK`, `CONTINUATION`, `RAMP`, `LOOP`. Bisa bertambah.",
+            "examples": [
+              "TRUNK"
+            ]
+          },
+          "joinsAtCode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Kode stasiun tempat cabang ini berpisah dari jalur utama; null buat `TRUNK`."
+          },
+          "stations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LineStation"
+            }
+          }
+        },
+        "required": [
+          "kind",
+          "joinsAtCode",
+          "stations"
+        ],
+        "title": "LineSegment",
+        "description": "Satu ruas lin. Lin lurus cuma punya satu ruas `TRUNK`; lin bercabang punya beberapa."
+      },
+      "LineDetail": {
+        "type": "object",
+        "properties": {
+          "operator": {
+            "$ref": "#/components/schemas/Operator"
+          },
+          "line": {
+            "$ref": "#/components/schemas/Line"
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LineSegment"
+            },
+            "description": "Struktur lin secara urut. Lin sederhana cuma punya satu `TRUNK`; lin bercabang menambah segmen lain."
+          }
+        },
+        "required": [
+          "operator",
+          "line",
+          "segments"
+        ],
+        "title": "LineDetail",
+        "description": "Struktur lengkap satu lin: segmen-segmennya, plus stasiun yang dilewati tiap segmen."
       },
       "FareStation": {
         "type": "object",

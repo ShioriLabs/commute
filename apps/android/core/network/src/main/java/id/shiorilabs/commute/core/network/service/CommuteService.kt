@@ -2,6 +2,8 @@ package id.shiorilabs.commute.core.network.service
 
 import id.shiorilabs.commute.core.model.models.GroupedTimetable
 import id.shiorilabs.commute.core.model.models.HeadwayRow
+import id.shiorilabs.commute.core.model.models.Hub
+import id.shiorilabs.commute.core.model.models.LineDetail
 import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.model.models.Station
@@ -60,6 +62,15 @@ interface CommuteService {
         day: String,
         ifNoneMatch: String? = null,
     ): Fetched<List<HeadwayRow>>
+
+    /** One hub, by its URL [slug] (`dukuh-atas`): its kind and its member stations, in display order. */
+    suspend fun getHub(slug: String, ifNoneMatch: String? = null): Fetched<Hub>
+
+    /**
+     * One line's topology: its trunk, then any branches and loops, each with its stations in order.
+     * Only lines with topology have one; the rest answer 404.
+     */
+    suspend fun getLine(operator: String, lineCode: String, ifNoneMatch: String? = null): Fetched<LineDetail>
 
     /** Every operator with its lines: the dictionary line keys resolve against. */
     suspend fun getOperators(ifNoneMatch: String? = null): Fetched<List<OperatorWithLines>>
