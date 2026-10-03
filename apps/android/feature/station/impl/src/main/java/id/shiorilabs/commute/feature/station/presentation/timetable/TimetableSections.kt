@@ -1,8 +1,8 @@
 package id.shiorilabs.commute.feature.station.presentation.timetable
 
 import id.shiorilabs.commute.core.time.restartsToday
-import id.shiorilabs.commute.core.time.serviceStartMinute
 import id.shiorilabs.commute.core.time.servicePosition
+import id.shiorilabs.commute.core.time.serviceStartMinute
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
 
 /** One departure in the full timetable. */

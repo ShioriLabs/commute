@@ -55,10 +55,10 @@ import id.shiorilabs.commute.feature.journey.domain.departureDays
 import id.shiorilabs.commute.feature.journey.domain.formatDepartureDay
 import id.shiorilabs.commute.feature.journey.domain.quantiseToSlot
 import id.shiorilabs.commute.feature.journey.domain.shiftBySlot
-import java.time.Instant
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
+import java.time.Instant
 
 private val RowHeight = 44.dp
 

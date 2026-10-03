@@ -6,16 +6,22 @@ import id.shiorilabs.commute.core.navigation.NavGraphContribution
 import id.shiorilabs.commute.core.navigation.NavGraphScope
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.ui.motion.sharedElementSourceMetadata
+import id.shiorilabs.commute.feature.journey.presentation.SavedRouteCard
 import id.shiorilabs.commute.feature.saved.presentation.SavedStationsScreen
 import javax.inject.Inject
 
-/** Contributes [Route.Home], the saved stations list, to the app back stack. */
-class SavedNavContribution @Inject constructor() : NavGraphContribution {
+/**
+ * Contributes [Route.Home], the pinned stations and pairs, to the app back stack. A pair's card is
+ * the journey feature's [SavedRouteCard], handed in here so home never depends on its internals.
+ */
+class SavedNavContribution @Inject constructor(
+    private val savedRouteCard: SavedRouteCard,
+) : NavGraphContribution {
 
     override fun EntryProviderScope<NavKey>.addEntries(scope: NavGraphScope) {
         // Its station names and line cards fly into the station page.
         entry<Route.Home>(metadata = sharedElementSourceMetadata()) {
-            SavedStationsScreen(innerPadding = scope.screenPadding)
+            SavedStationsScreen(innerPadding = scope.screenPadding, savedRouteCard = savedRouteCard)
         }
     }
 }
