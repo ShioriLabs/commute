@@ -14,6 +14,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -131,12 +132,22 @@ class QueryClient @Inject constructor(
      * what is held stays on screen until the answer replaces it.
      */
     fun invalidate(prefix: QueryKey) {
+        invalidateUnder(prefix)
+    }
+
+    /**
+     * [invalidate], then waits for the refetches it started: a pull to refresh, which holds its
+     * spinner until the answers are in. Returns at once offline, where nothing is asked.
+     */
+    suspend fun refetch(prefix: QueryKey) {
+        invalidateUnder(prefix).awaitAll()
+    }
+
+    private fun invalidateUnder(prefix: QueryKey): List<Deferred<Unit>> {
         val matched = synchronized(cells) { cells.values.filter { it.key.isUnder(prefix) } }
-        matched.forEach { cell ->
+        return matched.mapNotNull { cell ->
             cell.state.update { it.copy(invalidated = true) }
-            if (cell.observers.get() > 0) {
-                revalidate(cell)
-            }
+            if (cell.observers.get() > 0) revalidate(cell) else null
         }
     }
 
@@ -205,9 +216,9 @@ class QueryClient @Inject constructor(
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun revalidate(cell: Cell) {
-        val spec = cell.spec as QuerySpec<Any?>? ?: return
-        revalidate(cell, spec)
+    private fun revalidate(cell: Cell): Deferred<Unit>? {
+        val spec = cell.spec as QuerySpec<Any?>? ?: return null
+        return revalidate(cell, spec)
     }
 
     /** Starts [cell]'s fetch if its answer is due one, or joins the one running. */
