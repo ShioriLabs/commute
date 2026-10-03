@@ -37,8 +37,8 @@ import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
 import id.shiorilabs.commute.feature.journey.R
-import id.shiorilabs.commute.feature.journey.domain.JAKARTA
 import id.shiorilabs.commute.feature.journey.domain.FareSegment
+import id.shiorilabs.commute.feature.journey.domain.JAKARTA
 import id.shiorilabs.commute.feature.journey.domain.Journey
 import id.shiorilabs.commute.feature.journey.domain.JourneyLabel
 import id.shiorilabs.commute.feature.journey.domain.JourneyLeg
@@ -46,6 +46,7 @@ import id.shiorilabs.commute.feature.journey.domain.JourneyStop
 import id.shiorilabs.commute.feature.journey.domain.ServiceLine
 import id.shiorilabs.commute.feature.journey.domain.StationPair
 import id.shiorilabs.commute.feature.journey.domain.TripAnswer
+import id.shiorilabs.commute.feature.journey.presentation.components.SaveRouteButton
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import java.time.Instant
 
@@ -65,6 +66,7 @@ fun JourneyScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val picker by viewModel.picker.collectAsStateWithLifecycle()
     val pickerText by viewModel.pickerText.collectAsStateWithLifecycle()
+    val routeSaved by viewModel.routeSaved.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
     val context = LocalContext.current
     val shareTitle = stringResource(R.string.journey_share_title)
@@ -81,6 +83,8 @@ fun JourneyScreen(
         now = rememberJakartaNow().atZone(JAKARTA).toInstant(),
         innerPadding = innerPadding,
         actions = viewModel.panelActions(),
+        routeSaved = routeSaved,
+        onToggleSaveRoute = viewModel::onToggleSaveRoute,
         onClose = navigator::pop,
         onShare = { url ->
             val send = Intent(Intent.ACTION_SEND)
@@ -102,6 +106,8 @@ private fun JourneyContent(
     actions: FarePanelActions,
     onClose: () -> Unit,
     onShare: (String) -> Unit,
+    routeSaved: Boolean? = null,
+    onToggleSaveRoute: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -128,6 +134,10 @@ private fun JourneyContent(
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
             )
+            // Nothing until both ends are set, as the share beside it.
+            routeSaved?.let { saved ->
+                SaveRouteButton(saved = saved, onClick = onToggleSaveRoute)
+            }
             state.shareUrl?.let { url ->
                 CommuteIconButton(onClick = { onShare(url) }, modifier = Modifier.size(32.dp)) {
                     Icon(
