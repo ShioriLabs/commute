@@ -3,7 +3,7 @@ package id.shiorilabs.commute.feature.settings.presentation.managedata
 import id.shiorilabs.commute.core.datastore.FakePreferencesDataStore
 import id.shiorilabs.commute.core.datastore.RecentSearch
 import id.shiorilabs.commute.core.datastore.RecentSearchRepository
-import id.shiorilabs.commute.core.datastore.SavedStationsRepository
+import id.shiorilabs.commute.core.datastore.SavedRepository
 import id.shiorilabs.commute.core.type.UIState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -21,7 +21,7 @@ import org.junit.Test
 class ManageDataViewModelTest {
 
     private val recents = RecentSearchRepository(FakePreferencesDataStore())
-    private val saved = SavedStationsRepository(FakePreferencesDataStore())
+    private val saved = SavedRepository(FakePreferencesDataStore())
 
     @Before
     fun setUp() {
@@ -40,7 +40,7 @@ class ManageDataViewModelTest {
     fun `counts what is stored`() = runTest {
         recents.record(RecentSearch(RecentSearch.Type.STATION, "KCI-MRI"))
         recents.record(RecentSearch(RecentSearch.Type.HUB, "dukuh-atas"))
-        saved.save("KCI-MRI")
+        saved.toggleStation("KCI-MRI")
 
         assertEquals(StoredData(recentSearches = 2, savedStations = 1), ManageDataViewModel(recents, saved).counts())
     }
@@ -48,7 +48,7 @@ class ManageDataViewModelTest {
     @Test
     fun `clearing one kind leaves the other`() = runTest {
         recents.record(RecentSearch(RecentSearch.Type.STATION, "KCI-MRI"))
-        saved.save("KCI-MRI")
+        saved.toggleStation("KCI-MRI")
         val viewModel = ManageDataViewModel(recents, saved)
 
         viewModel.clearRecentSearches()

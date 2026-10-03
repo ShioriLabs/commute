@@ -37,4 +37,37 @@ class FarePreferencesRepositoryTest {
 
         assertEquals(listOf("C", "E", "D", "B"), repository.recentStationIds.first())
     }
+
+    @Test
+    fun `a checked pair moves to the front, once, and the list keeps five`() = runTest {
+        val repository = FarePreferencesRepository(FakePreferencesDataStore())
+
+        repository.recordRoute("A", "B")
+        repository.recordRoute("B", "A")
+        repository.recordRoute("A", "B")
+        assertEquals(listOf(RecentRoute("A", "B"), RecentRoute("B", "A")), repository.recentRoutes.first())
+
+        (1..10).forEach { repository.recordRoute("S$it", "X") }
+        assertEquals(5, repository.recentRoutes.first().size)
+        assertEquals(RecentRoute("S10", "X"), repository.recentRoutes.first().first())
+    }
+
+    @Test
+    fun `clearing recent pairs leaves the picked stations`() = runTest {
+        val repository = FarePreferencesRepository(FakePreferencesDataStore())
+        repository.recordStation("A")
+        repository.recordRoute("A", "B")
+
+        repository.clearRecentRoutes()
+
+        assertEquals(emptyList<RecentRoute>(), repository.recentRoutes.first())
+        assertEquals(listOf("A"), repository.recentStationIds.first())
+    }
+
+    @Test
+    fun `unreadable stored pairs read as none`() = runTest {
+        val store = FakePreferencesDataStore(preferencesOf(stringPreferencesKey("fare_recent_routes") to "{bad"))
+
+        assertEquals(emptyList<RecentRoute>(), FarePreferencesRepository(store).recentRoutes.first())
+    }
 }

@@ -6,7 +6,7 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
-import id.shiorilabs.commute.core.datastore.SavedStationsRepository
+import id.shiorilabs.commute.core.datastore.SavedRepository
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.time.serviceDayOf
 import id.shiorilabs.commute.core.type.UIState
@@ -32,7 +32,7 @@ class StationViewModel @AssistedInject constructor(
     @Assisted private val stationId: String,
     private val stationRepository: StationRepository,
     private val lineRepository: LineRepository,
-    private val savedStationsRepository: SavedStationsRepository,
+    private val savedRepository: SavedRepository,
     private val clock: Clock,
 ) : ViewModel() {
 
@@ -60,7 +60,7 @@ class StationViewModel @AssistedInject constructor(
     val state: StateFlow<StationUiState> = combine(
         board,
         lines,
-        savedStationsRepository.stations,
+        savedRepository.stationIds,
         transfers,
     ) { board, lines, saved, transfers ->
         StationUiState(
@@ -109,7 +109,7 @@ class StationViewModel @AssistedInject constructor(
     /** The pin in the header: saves the station to the home screen, or unsaves it. */
     fun onToggleSave() {
         viewModelScope.launch {
-            savedStationsRepository.toggle(stationId)
+            savedRepository.toggleStation(stationId)
         }
     }
 
