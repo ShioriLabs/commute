@@ -34,6 +34,12 @@ data class Journey(
     val walkDistanceM: Int,
     /** Only when every ride leg is timetabled, so never for a journey with TransJakarta in it. */
     val arrivalAt: Instant?,
+    /**
+     * When this route first runs again, set only when it is timetabled but tonight's service is
+     * over: the one reason besides a missing timetable that a journey comes back untimed. Home's
+     * saved pairs say "Udahan · mulai lagi" with it rather than offer a journey nobody can take.
+     */
+    val resumesAt: Instant? = null,
 )
 
 sealed interface JourneyLeg {
