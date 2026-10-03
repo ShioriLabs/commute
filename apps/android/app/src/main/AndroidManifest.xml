@@ -26,11 +26,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- A shared OTW link (the web's /fare) and a station's page or timetable
-                 (/stations/…) open here. Android only hands them over once the web publishes
+            <!-- A shared OTW link (the web's /fare), a station's page or timetable
+                 (/stations/…), a hub's page (/hubs/…) and a line's page (/lines/…) open here.
+                 Android only hands them over once the web publishes
                  /.well-known/assetlinks.json for this app; until then they stay in the browser
                  unless the rider turns on "Open supported links" in the app's settings. The web
-                 has no other pages under /stations/; one it adds later opens home here. -->
+                 has no other pages under these prefixes; one it adds later opens home here. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -39,6 +40,8 @@
                 <data android:host="commute.shiorilabs.id" />
                 <data android:path="/fare" />
                 <data android:pathPrefix="/stations/" />
+                <data android:pathPrefix="/hubs/" />
+                <data android:pathPrefix="/lines/" />
             </intent-filter>
         </activity>
     </application>
