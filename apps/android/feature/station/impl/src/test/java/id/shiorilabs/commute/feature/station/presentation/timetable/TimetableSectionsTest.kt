@@ -5,6 +5,8 @@ import id.shiorilabs.commute.feature.station.domain.DestinationTimetable
 import id.shiorilabs.commute.feature.station.domain.DirectionGroup
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TimetableSectionsTest {
@@ -58,5 +60,23 @@ class TimetableSectionsTest {
     @Test
     fun `before the first train of the day it is the first row`() {
         assertEquals(0, nearestIndex(section, hm(4, 10)))
+    }
+
+    @Test
+    fun `a departure within a minute either side is leaving now`() {
+        assertTrue(isDepartingNow(hm(8, 0), hm(7, 59)))
+        assertTrue(isDepartingNow(hm(8, 0), hm(8, 0)))
+        assertTrue(isDepartingNow(hm(8, 0), hm(8, 1)))
+        assertFalse(isDepartingNow(hm(8, 0), hm(7, 58)))
+        assertFalse(isDepartingNow(hm(8, 0), hm(8, 2)))
+    }
+
+    @Test
+    fun `leaving now holds across midnight`() {
+        assertTrue(isDepartingNow(hm(0, 0), hm(23, 59)))
+        assertTrue(isDepartingNow(hm(23, 59), hm(0, 0)))
+        // A past-midnight run written as 24:00 is the same train.
+        assertTrue(isDepartingNow(hm(24, 0), hm(0, 1)))
+        assertFalse(isDepartingNow(hm(0, 0), hm(12, 0)))
     }
 }
