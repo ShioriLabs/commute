@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.feature.station.domain
 
 import id.shiorilabs.commute.core.type.UIState
+import java.time.Instant
 
 /** A station and its departure board, as the home feed's cards and the station page show them. */
 data class StationBoard(
@@ -22,6 +23,13 @@ data class StationBoard(
      * Only a halte asks for it; everywhere else it stays [UIState.Idle].
      */
     val frequencies: UIState<List<Frequency>> = UIState.Idle,
+    /** When the oldest part shown was last confirmed with the API; null until one has been. */
+    val updatedAt: Instant? = null,
+    /**
+     * Whether a part shown is an old copy that couldn't be refreshed when it was due (offline, or
+     * the fetch failed): the screen says how old it is rather than pass it off as current.
+     */
+    val isOutdated: Boolean = false,
 ) {
 
     /** The same line on the next service day's board, or null where the board doesn't know it. */
