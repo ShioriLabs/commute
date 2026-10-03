@@ -57,6 +57,18 @@ fun timetableSections(timetable: List<LineTimetable>): List<TimetableSection> = 
 }
 
 /**
+ * Whether a departure at [rowMinute] leaves right about now: within a minute either side of
+ * [nowMinute], the web's `isImmediateDeparture`. Measured round the clock, so a 00:00 train is a
+ * minute from 23:59, not a day.
+ */
+fun isDepartingNow(rowMinute: Int, nowMinute: Int): Boolean {
+    val ahead = Math.floorMod(rowMinute - nowMinute, DAY_MINUTES)
+    return ahead <= 1 || ahead >= DAY_MINUTES - 1
+}
+
+internal const val DAY_MINUTES = 1440
+
+/**
  * The row of the next departure in [section] at [nowMinute], counting one that left within the last
  * minute as still next, as the web does. -1 once the day's service in that direction is over.
  *
