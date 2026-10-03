@@ -7,6 +7,7 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import id.shiorilabs.commute.core.datastore.FarePreferencesRepository
+import id.shiorilabs.commute.core.query.toUIState
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.feature.journey.data.JourneyRepository
 import id.shiorilabs.commute.feature.journey.domain.DEPARTURE_SLOT_MINUTES
@@ -84,21 +85,13 @@ class SavedRouteViewModel @AssistedInject constructor(
     private fun load(now: Instant) {
         loadedSlot = slotOf(now)
         load?.cancel()
-        // A refresh keeps the rows on screen until the new ones land.
-        val previous = mutableState.value.answer
-        mutableState.value = mutableState.value.copy(
-            answer = if (previous is UIState.Success) previous.copy(isRefreshing = true) else UIState.Loading,
-        )
         load = viewModelScope.launch {
             val criteria = farePreferences.criteria.first().toCriteria(now).copy(departure = Departure.Now)
-            val answer = journeyRepository.trips(fromId, toId, criteria).fold(
-                ifLeft = { failure ->
-                    // A failed refresh keeps the rows it had; only a first load says it failed.
-                    if (previous is UIState.Success) previous else UIState.Error(message = failure.message, cause = failure.cause)
-                },
-                ifRight = { UIState.Success(it) },
-            )
-            mutableState.value = mutableState.value.copy(answer = answer)
+            // The cache keeps the rows on screen while a refresh runs, and after one fails; only a
+            // first load with nothing held says it failed. Home's pull to refresh lands here too.
+            journeyRepository.observeTrips(fromId, toId, criteria).collect { query ->
+                mutableState.value = mutableState.value.copy(answer = query.toUIState())
+            }
         }
     }
 
