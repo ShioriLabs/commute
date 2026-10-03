@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -36,6 +37,7 @@ import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.feature.station.R
 import id.shiorilabs.commute.feature.station.domain.Amenity
+import kotlin.math.roundToInt
 
 // Tailwind's colours, as the web's station page uses them.
 private val Gray600 = Color(0xFF4B5563)
@@ -87,40 +89,51 @@ fun AmenityList(
 
 @Composable
 private fun AmenityRow(amenity: Amenity) {
+    val textStyle = MaterialTheme.typography.bodyLarge
+    // Half the capitals' height above the baseline: where the icon's middle goes, so it centres on
+    // the letters of the first line rather than on the line's box, which runs lower for descenders.
+    val capMiddle = with(LocalDensity.current) { (textStyle.fontSize.toPx() * CAP_HEIGHT_EM / 2).roundToInt() }
+    // Everything lines up on the first line's baseline: a wrapped name or detail hangs down from it.
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        AmenityIcon(amenity.type)
+        Box(modifier = Modifier.alignBy { it.measuredHeight / 2 + capMiddle }) {
+            AmenityIcon(amenity.type)
+        }
         // The name keeps its width and the detail wraps beside it: "Parkir" broken over two lines
         // reads worse than a long place name over two. Only a name past [AMENITY_NAME_MAX_FRACTION]
         // of the row wraps too, so a short detail is never squeezed to a few letters a line.
         Text(
             // A type newer than this build's labels still shows, as its raw name.
             text = AMENITY_LABELS[amenity.type] ?: amenity.type,
-            modifier = Modifier.layout { measurable, constraints ->
+            modifier = Modifier.alignByBaseline().layout { measurable, constraints ->
                 val maxWidth = (constraints.maxWidth * AMENITY_NAME_MAX_FRACTION).toInt()
                 val placeable = measurable.measure(
                     constraints.copy(minWidth = minOf(constraints.minWidth, maxWidth), maxWidth = maxWidth),
                 )
                 layout(placeable.width, placeable.height) { placeable.place(0, 0) }
             },
-            style = MaterialTheme.typography.bodyLarge,
+            style = textStyle,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground,
         )
         Text(
             text = amenity.text?.takeIf { it.isNotBlank() } ?: stringResource(R.string.station_amenity_available),
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier
+                .weight(1f)
+                .alignByBaseline(),
+            style = textStyle,
             color = Gray600,
             textAlign = TextAlign.End,
         )
     }
 }
+
+/** Plus Jakarta Sans's capital height, as a fraction of its size: 745 of 1000 units. */
+private const val CAP_HEIGHT_EM = 0.745f
 
 /** The most of a facility row its name takes before it wraps, leaving the rest to the detail. */
 private const val AMENITY_NAME_MAX_FRACTION = 0.6f
