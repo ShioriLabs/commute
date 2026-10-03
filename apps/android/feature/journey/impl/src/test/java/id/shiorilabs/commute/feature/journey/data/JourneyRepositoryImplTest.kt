@@ -2,6 +2,7 @@ package id.shiorilabs.commute.feature.journey.data
 
 import id.shiorilabs.commute.core.model.models.TripResult
 import id.shiorilabs.commute.core.network.testing.FakeCommuteService
+import id.shiorilabs.commute.core.query.testing.testQueryClient
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.feature.journey.data.impl.JourneyRepositoryImpl
 import id.shiorilabs.commute.feature.journey.domain.Departure
@@ -51,7 +52,7 @@ class JourneyRepositoryImplTest {
 
     @Test
     fun `every journey maps, labels and all`() = runTest {
-        val answer = JourneyRepositoryImpl(service(), clock).trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).getOrNull()!!
+        val answer = JourneyRepositoryImpl(service(), testQueryClient(backgroundScope, clock)).trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).getOrNull()!!
 
         assertEquals("Bogor", answer.from.name)
         assertEquals(9, answer.journeys.size)
@@ -62,7 +63,7 @@ class JourneyRepositoryImplTest {
 
     @Test
     fun `a timed journey carries its clock, an untimed one does not`() = runTest {
-        val journeys = JourneyRepositoryImpl(service(), clock).trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).getOrNull()!!.journeys
+        val journeys = JourneyRepositoryImpl(service(), testQueryClient(backgroundScope, clock)).trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).getOrNull()!!.journeys
 
         val timed = journeys[0]
         assertEquals(Instant.parse("2026-10-05T02:49:50Z"), timed.arrivalAt)
@@ -77,7 +78,7 @@ class JourneyRepositoryImplTest {
 
     @Test
     fun `a leg on shared track keeps every line, and a plain one names its own`() = runTest {
-        val journeys = JourneyRepositoryImpl(service(), clock).trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).getOrNull()!!.journeys
+        val journeys = JourneyRepositoryImpl(service(), testQueryClient(backgroundScope, clock)).trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).getOrNull()!!.journeys
 
         assertEquals(3, (journeys[3].legs[3] as JourneyLeg.Ride).serviceLines.size)
         val plain = journeys[0].legs.first() as JourneyLeg.Ride
@@ -96,7 +97,7 @@ class JourneyRepositoryImplTest {
                 fixture
             }
         }
-        val repository = JourneyRepositoryImpl(service, clock)
+        val repository = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
 
         repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria())
         assertEquals(FakeCommuteService.TripCriteria(null, null, null, null), sent)
@@ -113,7 +114,7 @@ class JourneyRepositoryImplTest {
     @Test
     fun `an answer for now is reused within its slot and asked again in the next`() = runTest {
         val service = service()
-        val repository = JourneyRepositoryImpl(service, clock)
+        val repository = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
 
         repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria())
         clock.now = Instant.parse("2026-10-05T01:19:00Z")
@@ -131,10 +132,38 @@ class JourneyRepositoryImplTest {
         val service = FakeCommuteService().apply {
             trips = { _, _, _ -> if (fail) throw IOException("offline") else fixture }
         }
-        val repository = JourneyRepositoryImpl(service, clock)
+        val repository = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
 
         assertTrue(repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).leftOrNull() is Failure.Network)
         fail = false
         assertTrue(repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).isRight())
+    }
+
+    @Test
+    fun `the last answer for now is still offered after its slot when the network fails`() = runTest {
+        var fail = false
+        val service = FakeCommuteService().apply {
+            trips = { _, _, _ -> if (fail) throw IOException("tunnel") else fixture }
+        }
+        val repository = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
+        repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria())
+
+        fail = true
+        clock.now = Instant.parse("2026-10-05T02:30:00Z")
+        val answer = repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria())
+
+        assertEquals(2, service.tripsCalls)
+        assertEquals(9, answer.getOrNull()?.journeys?.size)
+    }
+
+    @Test
+    fun `a picked departure is its own answer`() = runTest {
+        val service = service()
+        val repository = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
+
+        repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria())
+        repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria(departure = Departure.At(Instant.parse("2026-10-05T03:20:00Z"))))
+
+        assertEquals(2, service.tripsCalls)
     }
 }
