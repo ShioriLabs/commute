@@ -9,11 +9,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -27,9 +30,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import id.shiorilabs.commute.core.navigation.LocalNavigator
@@ -43,6 +43,7 @@ import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.components.ProblemPanel
 import id.shiorilabs.commute.core.ui.components.SkeletonBlock
 import id.shiorilabs.commute.core.ui.ext.RevealInsertedTop
+import id.shiorilabs.commute.core.ui.frost.FrostedTopChromeBackdrop
 import id.shiorilabs.commute.core.ui.network.rememberIsOffline
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
@@ -70,9 +71,6 @@ import java.time.LocalDateTime
 /** The page is white, not the app's tinted background, as on web. */
 private val StationBackground = Color.White
 
-/** The header's wash over the blur, the web's `bg-white/50 backdrop-blur`. */
-private val HeaderWash = Color(0x80FFFFFF)
-private val HeaderBlur = 8.dp
 
 /** Bekasi Timur, which carries the memorial. */
 private const val BEKASI_TIMUR_ID = "KCI-BKST"
@@ -140,6 +138,11 @@ private fun StationContent(
     onOpenStation: (stationId: String) -> Unit = {},
 ) {
     val hazeState = rememberHazeState()
+    val listState = rememberLazyListState()
+    // Off its rest position, the page has something under the header for the frost to blur.
+    val scrolled by remember {
+        derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0 }
+    }
     val unservedName = state.unserved?.let { stringResource(it.name) }
     val board = state.board
     val station = (board.station as? UIState.Success)?.data
@@ -168,27 +171,26 @@ private fun StationContent(
                 openedFromSearch = openedFromSearch,
                 topInset = innerPadding.calculateTopPadding(),
                 saveable = unservedName == null,
-                modifier = Modifier.hazeEffect(
-                    hazeState,
-                    HazeStyle(
-                        backgroundColor = StationBackground,
-                        tint = HazeTint(HeaderWash),
-                        blurRadius = HeaderBlur,
-                        noiseFactor = 0f,
-                    ),
-                ) {
-                    // Blur only what is behind the header, as CSS's backdrop-filter does.
-                    expandLayerBounds = false
-                },
             )
         }.map { it.measure(loose) }
         val headerHeight = header.maxOfOrNull { it.height } ?: 0
+
+        // Behind the header, which draws no surface of its own, and running a little past it.
+        val backdrop = subcompose(StationSlot.BACKDROP) {
+            FrostedTopChromeBackdrop(
+                hazeState = hazeState,
+                chromeHeight = headerHeight.toDp(),
+                surfaceColor = StationBackground,
+                scrolled = scrolled,
+            )
+        }.map { it.measure(loose) }
 
         val list = subcompose(StationSlot.LIST) {
             StationList(
                 state = state,
                 now = now,
                 offline = offline,
+                listState = listState,
                 hazeState = hazeState,
                 contentPadding = PaddingValues(
                     top = headerHeight.toDp() + 16.dp,
@@ -204,12 +206,13 @@ private fun StationContent(
 
         layout(constraints.maxWidth, constraints.maxHeight) {
             list.forEach { it.placeRelative(0, 0) }
+            backdrop.forEach { it.placeRelative(0, 0) }
             header.forEach { it.placeRelative(0, 0) }
         }
     }
 }
 
-private enum class StationSlot { HEADER, LIST }
+private enum class StationSlot { HEADER, BACKDROP, LIST }
 
 /**
  * Everything under the header: the actions and departures with the last trains, then the station's
@@ -220,6 +223,7 @@ private fun StationList(
     state: StationUiState,
     now: LocalDateTime,
     offline: Boolean,
+    listState: LazyListState,
     hazeState: HazeState,
     contentPadding: PaddingValues,
     onRetry: () -> Unit,
@@ -230,7 +234,6 @@ private fun StationList(
 ) {
     val board = state.board
     val station = (board.station as? UIState.Success)?.data
-    val listState = rememberLazyListState()
     val timetableShown = (board.timetable as? UIState.Success)?.data?.isNotEmpty() == true
     listState.RevealInsertedTop(offline && timetableShown)
 

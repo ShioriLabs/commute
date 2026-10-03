@@ -29,6 +29,10 @@ dependencies {
     implementation(libs.androidx.navigation3.ui)
     // Phosphor — icon set surfaced through the CommuteIcons design-system object.
     implementation(libs.phosphor.icons)
+    // The frost behind pinned headers. Every `hazeBlur` lives here; features only mark sources, and
+    // the backdrop takes their HazeState, hence api.
+    api(libs.haze)
+    implementation(libs.haze.blur)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 

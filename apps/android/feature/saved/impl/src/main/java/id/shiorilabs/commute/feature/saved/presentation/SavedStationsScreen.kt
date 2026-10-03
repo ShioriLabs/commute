@@ -27,9 +27,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
@@ -44,10 +41,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import id.shiorilabs.commute.core.navigation.LocalNavigator
@@ -57,6 +50,9 @@ import id.shiorilabs.commute.core.ui.components.CommuteEmptyState
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.ext.RevealInsertedTop
 import id.shiorilabs.commute.core.ui.ext.cardEntrance
+import id.shiorilabs.commute.core.ui.frost.FrostedTopChromeBackdrop
+import id.shiorilabs.commute.core.ui.layout.TitleSlot
+import id.shiorilabs.commute.core.ui.layout.stuckTitle
 import id.shiorilabs.commute.core.ui.network.rememberIsOffline
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
@@ -192,6 +188,11 @@ private fun StationFeed(
     val listState = rememberLazyListState()
     listState.RevealInsertedTop(offline)
     val hazeState = rememberHazeState()
+    val density = LocalDensity.current
+    // Off its rest position, the feed has something under the bar for the frost to blur.
+    val scrolled by remember {
+        derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0 }
+    }
     val statusBar = innerPadding.calculateTopPadding()
 
     // The rows, in list order, so a row index leads back to its station. A loaded station is a title
@@ -291,15 +292,23 @@ private fun StationFeed(
             }
         }
 
+        // The bar's frost, behind it. With no title at the top yet (the offline banner is above them
+        // all) the bar is only the status bar, so neither the frost nor its resting fill covers the
+        // banner. While the next title pushes in, the frost gives way with the bar's bottom edge.
+        val barHeight = stuck?.let { statusBar + with(density) { (barTitleHeight + it.pushOffset).coerceAtLeast(0).toDp() } }
+            ?: statusBar
+        FrostedTopChromeBackdrop(
+            hazeState = hazeState,
+            chromeHeight = barHeight,
+            surfaceColor = MaterialTheme.colorScheme.background,
+            scrolled = scrolled,
+        )
+
         StuckTitleBar(
             stationId = stuckCard?.stationId,
             name = stuckName,
             pushOffset = { stuck?.pushOffset ?: 0 },
-            // No title has reached the top yet: the offline banner is above them all, and the bar
-            // would only blur it.
-            shown = { stuck != null },
             statusBar = statusBar,
-            hazeState = hazeState,
             onTitleHeight = { barTitleHeight = it },
             // The bar covers the list's own copy of the title, so it takes the tap for it.
             opened = stuckCard != null && stuckCard.stationId == opened,
@@ -309,18 +318,16 @@ private fun StationFeed(
 }
 
 /**
- * The bar over the feed: the current station's name, blurred over the cards passing under it,
- * reaching up behind the status bar. Solid at its top edge and clearing to pure blur halfway down,
- * so behind the clock it reads as the page itself and the blur shows where the title is.
+ * The bar over the feed: the current station's name, reaching up behind the status bar. It draws
+ * no surface of its own; the frost behind it ([FrostedTopChromeBackdrop]) blurs the cards passing
+ * under it.
  *
  * Drawn over the list rather than as a sticky header in it: a sticky header pins to the very top of
  * the list, so to clear the clock every title would have to carry the status bar's height, and the
  * stations would sit that much further apart.
  *
- * When the next station's title pushes in, only the name moves. The background stays put and its
- * bottom edge gives way to the incoming title, so that title arrives sharp and the blur never jumps:
- * moving the whole bar would slide its blurred half up behind the clock and snap the solid top back
- * the moment the next station took over.
+ * When the next station's title pushes in, only the name moves, and the frost's bottom edge gives
+ * way to the incoming title, so that title arrives sharp.
  */
 @Composable
 private fun StuckTitleBar(
@@ -328,22 +335,11 @@ private fun StuckTitleBar(
     name: String?,
     pushOffset: () -> Int,
     statusBar: Dp,
-    hazeState: HazeState,
     onTitleHeight: (Int) -> Unit,
     opened: Boolean,
     onClick: (() -> Unit)?,
-    shown: () -> Boolean = { true },
 ) {
-    val background = MaterialTheme.colorScheme.background
-    val style = HazeStyle(
-        backgroundColor = background,
-        tint = HazeTint(TitleWash),
-        blurRadius = TitleBlur,
-        noiseFactor = 0f,
-    )
-    val density = LocalDensity.current
-    val statusBarPx = with(density) { statusBar.roundToPx() }
-    var fullHeight by remember { mutableIntStateOf(0) }
+    val statusBarPx = with(LocalDensity.current) { statusBar.roundToPx() }
 
     // The name fades on the feed's entrance curve when the bar gains or loses one, rather than
     // popping: the first time a station loads under the bar, and when the feed empties.
@@ -360,8 +356,6 @@ private fun StuckTitleBar(
 
     Box(
         modifier = Modifier
-            // Still laid out while hidden, so the title's height is known when one arrives.
-            .graphicsLayer { alpha = if (shown()) 1f else 0f }
             .fillMaxWidth()
             .layout { measurable, constraints ->
                 val placeable = measurable.measure(constraints)
@@ -371,23 +365,7 @@ private fun StuckTitleBar(
                     placeable.place(0, 0)
                 }
             }
-            .clipToBounds()
-            .hazeEffect(hazeState, style) {
-                // Blur only what is behind the bar, as CSS's backdrop-filter does. Haze's default
-                // also captures a blur radius around it, which tints the bar with cards still below.
-                expandLayerBounds = false
-            }
-            .drawBehind {
-                // Against the bar's full height, so the fade holds still while the bottom gives way.
-                drawRect(
-                    Brush.verticalGradient(
-                        0f to background,
-                        1f to background.copy(alpha = 0f),
-                        startY = 0f,
-                        endY = fullHeight * TITLE_FADE_END,
-                    ),
-                )
-            },
+            .clipToBounds(),
     ) {
         // Always laid out, so the bar's height is known before the first title reaches it.
         StationTitle(
@@ -398,10 +376,7 @@ private fun StuckTitleBar(
             opened = opened,
             onClick = onClick,
             modifier = Modifier
-                .onSizeChanged {
-                    fullHeight = it.height
-                    onTitleHeight(it.height - statusBarPx)
-                }
+                .onSizeChanged { onTitleHeight(it.height - statusBarPx) }
                 .graphicsLayer {
                     translationY = pushOffset().toFloat()
                     alpha = nameAlpha
@@ -441,15 +416,6 @@ private val NavRailClearance = 168.dp
 
 /** Between one station's last card and the next station's name, the web's `gap-5`. */
 private val StationGap = 20.dp
-
-/** A stuck title's wash over the blur, the web's `bg-rose-50/20`. */
-private val TitleWash = Color(0x33FFF1F2)
-
-/** The web's `backdrop-blur-2xl`. */
-private val TitleBlur = 40.dp
-
-/** How far down a title's bar its solid top has cleared to pure blur. */
-private const val TITLE_FADE_END = 0.5f
 
 /** The bar's name fading in or out, as long as a card's entrance. */
 private const val NAME_FADE_MILLIS = 300

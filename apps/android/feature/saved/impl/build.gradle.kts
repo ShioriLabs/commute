@@ -28,7 +28,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui.tooling.preview)
 
-    // Haze — the station names blur the feed scrolling under them.
+    // Haze: the feed is what the frost behind the pinned station name blurs.
     implementation(libs.haze)
 
     // ViewModel + viewModelScope.
