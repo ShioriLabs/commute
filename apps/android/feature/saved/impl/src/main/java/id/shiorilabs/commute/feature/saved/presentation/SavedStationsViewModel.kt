@@ -8,17 +8,20 @@ import id.shiorilabs.commute.core.datastore.SavedRepository
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.time.serviceDayOf
 import id.shiorilabs.commute.core.type.UIState
+import id.shiorilabs.commute.feature.journey.data.JourneyRepository
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationRepository
 import id.shiorilabs.commute.feature.station.data.board
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.StationBoard
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -31,10 +34,14 @@ class SavedStationsViewModel @Inject constructor(
     savedRepository: SavedRepository,
     private val stationRepository: StationRepository,
     private val lineRepository: LineRepository,
+    private val journeyRepository: JourneyRepository,
     private val clock: Clock,
 ) : ViewModel() {
 
     private val cards = MutableStateFlow<Map<String, StationBoard>>(emptyMap())
+
+    /** A pull to refresh in flight. */
+    private val refreshing = MutableStateFlow(false)
     private val loads = mutableMapOf<String, Job>()
     private val lines = MutableStateFlow<Map<String, LineInfo>>(emptyMap())
 
@@ -46,7 +53,13 @@ class SavedStationsViewModel @Inject constructor(
 
     private val saved = savedRepository.entries
 
-    val state: StateFlow<UIState<SavedStationsUiState>> = combine(saved, cards, names, lines) { saved, cards, names, lines ->
+    val state: StateFlow<UIState<SavedStationsUiState>> = combine(
+        saved,
+        cards,
+        names,
+        lines,
+        refreshing,
+    ) { saved, cards, names, lines, refreshing ->
         UIState.Success(
             SavedStationsUiState(
                 entries = saved.map { entry ->
@@ -61,6 +74,7 @@ class SavedStationsViewModel @Inject constructor(
                     }
                 },
                 lines = lines,
+                isRefreshing = refreshing,
             ),
         ) as UIState<SavedStationsUiState>
     }
@@ -103,6 +117,32 @@ class SavedStationsViewModel @Inject constructor(
         val day = serviceDayOf(now)
         if (loadedDay != null && loadedDay != day) {
             cards.value.keys.forEach { load(it, now) }
+        }
+    }
+
+    /**
+     * The feed's pull to refresh: every pinned station and pair asks again, whatever the age of what
+     * it holds (usually for a 304), and the spinner holds until they have all answered. What is on
+     * screen stays there meanwhile. Offline it ends at once, the caveat already up.
+     */
+    fun refresh() {
+        if (refreshing.value) return
+        refreshing.value = true
+        viewModelScope.launch {
+            try {
+                coroutineScope {
+                    for (entry in saved.first()) {
+                        launch {
+                            when (entry) {
+                                is SavedEntry.Station -> stationRepository.refresh(entry.stationId)
+                                is SavedEntry.Route -> journeyRepository.refresh(entry.fromId, entry.toId)
+                            }
+                        }
+                    }
+                }
+            } finally {
+                refreshing.value = false
+            }
         }
     }
 

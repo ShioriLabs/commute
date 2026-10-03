@@ -104,6 +104,10 @@ class StationRepositoryImpl @Inject constructor(
     override fun observeFrequencies(stationId: String, day: ServiceDayName): Flow<Query<List<Frequency>>> =
         queries.observe(frequenciesQuery(stationId, day)).mapData { it.toFrequencies() }
 
+    override suspend fun refresh(stationId: String) {
+        queries.refetch(queryKey(STATION, stationId))
+    }
+
     override fun cachedStation(stationId: String): Station? =
         queries.peek(stationQuery(stationId))?.data?.toStation()
 

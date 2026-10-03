@@ -14,6 +14,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -90,6 +93,7 @@ fun SavedStationsScreen(
         innerPadding = innerPadding,
         offline = offline,
         onRetry = viewModel::retry,
+        onRefresh = viewModel::refresh,
         onSearchClick = { navigator.goTo(Route.Search) },
         onSettingsClick = { navigator.goTo(Route.Settings) },
         onStationClick = { navigator.goTo(Route.Station(it)) },
@@ -105,6 +109,7 @@ private fun SavedStationsContent(
     innerPadding: PaddingValues,
     offline: Boolean = false,
     onRetry: (stationId: String) -> Unit = {},
+    onRefresh: () -> Unit = {},
     onSearchClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
     onStationClick: (stationId: String) -> Unit = {},
@@ -145,6 +150,7 @@ private fun SavedStationsContent(
                     innerPadding = innerPadding,
                     offline = offline,
                     onRetry = onRetry,
+                    onRefresh = onRefresh,
                     onStationClick = onStationClick,
                     onRouteClick = onRouteClick,
                     savedRouteCard = savedRouteCard,
@@ -210,6 +216,7 @@ private fun StationFeed(
     innerPadding: PaddingValues,
     offline: Boolean,
     onRetry: (stationId: String) -> Unit,
+    onRefresh: () -> Unit,
     onStationClick: (stationId: String) -> Unit,
     onRouteClick: (fromId: String, toId: String) -> Unit,
     savedRouteCard: SavedRouteCard,
@@ -280,7 +287,23 @@ private fun StationFeed(
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
+    val pullState = rememberPullToRefreshState()
+    PullToRefreshBox(
+        isRefreshing = feed.isRefreshing,
+        onRefresh = onRefresh,
+        modifier = Modifier.fillMaxSize(),
+        state = pullState,
+        // Over the bar and its frost, and clear of the status bar the list starts under.
+        indicator = {
+            PullToRefreshDefaults.Indicator(
+                state = pullState,
+                isRefreshing = feed.isRefreshing,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = statusBar),
+            )
+        },
+    ) {
         LazyColumn(
             state = listState,
             modifier = Modifier
