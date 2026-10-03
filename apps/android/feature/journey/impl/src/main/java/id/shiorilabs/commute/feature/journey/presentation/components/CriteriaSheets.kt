@@ -18,6 +18,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -47,10 +49,14 @@ internal fun SettingsSheet(onDismiss: () -> Unit, content: @Composable ColumnSco
 /** What a setting is and what it is set to; opens that setting's own sheet. */
 @Composable
 internal fun SettingRow(label: String, value: String, modified: Boolean, onClick: () -> Unit) {
+    val haptics = LocalHapticFeedback.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(role = Role.Button, onClick = onClick)
+            .clickable(role = Role.Button) {
+                haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                onClick()
+            }
             .padding(horizontal = 32.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -89,6 +95,7 @@ internal fun <T> ChoiceSheet(
     onDismiss: () -> Unit,
     icon: (@Composable (T) -> Unit)? = null,
 ) {
+    val haptics = LocalHapticFeedback.current
     CommuteBottomSheet(
         title = title,
         closeDescription = stringResource(R.string.journey_sheet_close, title.lowercase()),
@@ -102,6 +109,7 @@ internal fun <T> ChoiceSheet(
                         .fillMaxWidth()
                         .background(if (isSelected) Rose50 else Color.Transparent)
                         .selectable(selected = isSelected, role = Role.RadioButton) {
+                            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                             onSelect(option.value)
                             hide()
                         }

@@ -19,6 +19,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -129,8 +131,12 @@ fun SearchResultItem(
             }
         }
         if (stationId != null) {
+            val haptics = LocalHapticFeedback.current
             CommuteIconButton(
-                onClick = { onTogglePin(stationId) },
+                onClick = {
+                    haptics.performHapticFeedback(if (pinned) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn)
+                    onTogglePin(stationId)
+                },
                 modifier = Modifier.size(44.dp),
             ) {
                 Icon(
