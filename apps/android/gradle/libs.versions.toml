@@ -23,7 +23,7 @@ navigation3 = "1.1.6"
 # Hilt
 hilt = "2.60.1"
 # Blur — backdrop blur for sticky headers
-haze = "1.7.2"
+haze = "2.0.0"
 # Ktor
 ktor = "3.5.2"
 # OpenAPI model generator. 26.1.0 is published without a jar, so this stays on the last release
@@ -71,6 +71,8 @@ hilt-compiler = { group = "com.google.dagger", name = "hilt-android-compiler", v
 hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version = "1.4.0" }
 # Blur
 haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
+# Haze 2 split the blur effect (`hazeBlur`, `HazeBlurStyle`) out of the core artifact.
+haze-blur = { module = "dev.chrisbanes.haze:haze-blur", version.ref = "haze" }
 # Ktor
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }

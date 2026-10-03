@@ -1,4 +1,4 @@
-package id.shiorilabs.commute.feature.saved.presentation
+package id.shiorilabs.commute.core.ui.layout
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
