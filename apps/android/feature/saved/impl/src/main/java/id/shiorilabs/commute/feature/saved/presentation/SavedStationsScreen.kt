@@ -55,6 +55,7 @@ import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.ui.components.CommuteEmptyState
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
+import id.shiorilabs.commute.core.ui.ext.RevealInsertedTop
 import id.shiorilabs.commute.core.ui.ext.cardEntrance
 import id.shiorilabs.commute.core.ui.network.rememberIsOffline
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
@@ -189,6 +190,7 @@ private fun StationFeed(
         onStationClick(stationId)
     }
     val listState = rememberLazyListState()
+    listState.RevealInsertedTop(offline)
     val hazeState = rememberHazeState()
     val statusBar = innerPadding.calculateTopPadding()
 
@@ -293,6 +295,9 @@ private fun StationFeed(
             stationId = stuckCard?.stationId,
             name = stuckName,
             pushOffset = { stuck?.pushOffset ?: 0 },
+            // No title has reached the top yet: the offline banner is above them all, and the bar
+            // would only blur it.
+            shown = { stuck != null },
             statusBar = statusBar,
             hazeState = hazeState,
             onTitleHeight = { barTitleHeight = it },
@@ -327,6 +332,7 @@ private fun StuckTitleBar(
     onTitleHeight: (Int) -> Unit,
     opened: Boolean,
     onClick: (() -> Unit)?,
+    shown: () -> Boolean = { true },
 ) {
     val background = MaterialTheme.colorScheme.background
     val style = HazeStyle(
@@ -354,6 +360,8 @@ private fun StuckTitleBar(
 
     Box(
         modifier = Modifier
+            // Still laid out while hidden, so the title's height is known when one arrives.
+            .graphicsLayer { alpha = if (shown()) 1f else 0f }
             .fillMaxWidth()
             .layout { measurable, constraints ->
                 val placeable = measurable.measure(constraints)
