@@ -25,8 +25,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -35,8 +37,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -70,6 +74,9 @@ import id.shiorilabs.commute.feature.saved.presentation.components.RouteTitle
 import id.shiorilabs.commute.feature.saved.presentation.components.StationPlaceholder
 import id.shiorilabs.commute.feature.saved.presentation.components.StationTimetable
 import id.shiorilabs.commute.feature.saved.presentation.components.StationTitle
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import java.time.Instant
 import java.time.LocalDateTime
 
@@ -288,6 +295,17 @@ private fun StationFeed(
     }
 
     val pullState = rememberPullToRefreshState()
+    // A tick as the pull crosses the point where letting go refreshes, and again if it is pulled
+    // back and across once more: the platform's own pull. Not while a refresh already spins.
+    val haptics = LocalHapticFeedback.current
+    val refreshing by rememberUpdatedState(feed.isRefreshing)
+    LaunchedEffect(pullState) {
+        snapshotFlow { pullState.distanceFraction >= 1f }
+            .distinctUntilChanged()
+            .drop(1)
+            .filter { armed -> armed && !refreshing }
+            .collect { haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate) }
+    }
     PullToRefreshBox(
         isRefreshing = feed.isRefreshing,
         onRefresh = onRefresh,
