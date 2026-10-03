@@ -33,6 +33,8 @@ data class SavedStationsUiState(
     val entries: List<HomeEntry>,
     /** Keyed `OPERATOR:CODE`. Empty until it loads; the cards render grey until then. */
     val lines: Map<String, LineInfo>,
+    /** A pull to refresh is running: the spinner holds until every entry has answered. */
+    val isRefreshing: Boolean = false,
 ) {
 
     /** The pinned stations' boards alone, in order. */

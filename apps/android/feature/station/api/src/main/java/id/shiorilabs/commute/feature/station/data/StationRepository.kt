@@ -48,6 +48,13 @@ interface StationRepository {
         queryOnce(cachedFrequencies(stationId, day)) { frequencies(stationId, day) }
 
     /**
+     * Asks again for every part of [stationId] being observed (the station, its boards, a halte's
+     * frequencies), whatever their age, and returns once they are in (at once offline). A pull to
+     * refresh.
+     */
+    suspend fun refresh(stationId: String) = Unit
+
+    /**
      * The station as already loaded this session, without asking or reading the disk. A screen
      * opening onto data another one just loaded starts from it, rather than from a skeleton.
      */

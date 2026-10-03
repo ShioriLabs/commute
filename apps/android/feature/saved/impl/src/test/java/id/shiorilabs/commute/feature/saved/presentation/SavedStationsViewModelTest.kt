@@ -9,6 +9,9 @@ import id.shiorilabs.commute.core.time.JAKARTA
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
+import id.shiorilabs.commute.feature.journey.data.JourneyRepository
+import id.shiorilabs.commute.feature.journey.domain.JourneyCriteria
+import id.shiorilabs.commute.feature.journey.domain.TripAnswer
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationRepository
 import id.shiorilabs.commute.feature.station.domain.Frequency
@@ -16,6 +19,7 @@ import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.Station
 import id.shiorilabs.commute.feature.station.domain.Transfer
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -25,6 +29,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -50,6 +55,27 @@ class SavedStationsViewModelTest {
 
         override suspend fun frequencies(stationId: String, day: ServiceDayName): Either<Failure, List<Frequency>> =
             emptyList<Frequency>().right()
+
+        val refreshed = mutableListOf<String>()
+
+        /** Holds every refresh until completed, as the network would. */
+        var refreshAnswered = CompletableDeferred(Unit)
+
+        override suspend fun refresh(stationId: String) {
+            refreshed += stationId
+            refreshAnswered.await()
+        }
+    }
+
+    private class FakeJourneyRepository : JourneyRepository {
+        val refreshed = mutableListOf<Pair<String, String>>()
+
+        override suspend fun trips(fromId: String, toId: String, criteria: JourneyCriteria): Either<Failure, TripAnswer> =
+            error("Home asks for no trips itself: a pair's card does")
+
+        override suspend fun refresh(fromId: String, toId: String) {
+            refreshed += fromId to toId
+        }
     }
 
     private class FakeLineRepository : LineRepository {
@@ -62,6 +88,7 @@ class SavedStationsViewModelTest {
 
     private val saved = SavedRepository(FakePreferencesDataStore())
     private val stations = FakeStationRepository()
+    private val journeys = FakeJourneyRepository()
 
     @Before
     fun setUp() {
@@ -75,7 +102,7 @@ class SavedStationsViewModelTest {
 
     // A Wednesday morning: today and tomorrow both run the weekday board.
     private fun viewModel(clock: Clock = clockAt("2026-09-30T08:00:00")) =
-        SavedStationsViewModel(saved, stations, FakeLineRepository(), clock)
+        SavedStationsViewModel(saved, stations, FakeLineRepository(), journeys, clock)
 
     private suspend fun SavedStationsViewModel.loaded(): SavedStationsUiState =
         (state.first { it is UIState.Success && it.data.stationBoards.all { card -> card.timetable is UIState.Success } } as UIState.Success).data
@@ -113,6 +140,29 @@ class SavedStationsViewModelTest {
         assertEquals("Sudirman" to "Bogor", pair.fromName to pair.toName)
         // A pair's card asks for its own trips: no board is fetched for its stations.
         assertEquals(listOf("KCI-MRI"), stations.asked.map { it.first }.distinct())
+    }
+
+    @Test
+    fun `a pull to refresh asks every pinned station and pair again, and spins until they answer`() = runTest {
+        saved.toggleStation("KCI-MRI")
+        saved.toggleRoute("KCI-SUD", "KCI-BOO")
+        val viewModel = viewModel()
+        viewModel.loaded()
+        stations.refreshAnswered = CompletableDeferred()
+
+        viewModel.refresh()
+
+        assertTrue(viewModel.loaded().isRefreshing)
+        assertEquals(listOf("KCI-MRI"), stations.refreshed)
+        assertEquals(listOf("KCI-SUD" to "KCI-BOO"), journeys.refreshed)
+
+        // A second pull while the first runs is the same refresh.
+        viewModel.refresh()
+        assertEquals(listOf("KCI-MRI"), stations.refreshed)
+
+        stations.refreshAnswered.complete(Unit)
+
+        assertFalse(viewModel.loaded().isRefreshing)
     }
 
     @Test
