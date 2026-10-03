@@ -400,7 +400,7 @@ private fun LazyListScope.lastTrains(timetable: List<LineTimetable>, lines: Map<
             lineInfo = lines[line.lineKey],
             modifier = Modifier
                 .padding(horizontal = 16.dp)
-                .padding(top = if (index == 0) 0.dp else 8.dp),
+                .padding(top = if (index == 0) 0.dp else 16.dp),
         )
     }
 }
