@@ -31,13 +31,14 @@ private val IconGap = 8.dp
 
 /**
  * A caveat over a page: the data may be stale, or a station no longer has trains. Amber, with the
- * warning sign, as the web draws both. [linkLabel] adds a link under the message, lined up with
- * its text rather than the icon.
+ * warning sign, as the web draws both. [detail] adds a quieter line under the message (how old the
+ * data is, say), and [linkLabel] a link; both line up with its text rather than the icon.
  */
 @Composable
 fun NoticeBanner(
     message: String,
     modifier: Modifier = Modifier,
+    detail: String? = null,
     linkLabel: String? = null,
     onLinkClick: () -> Unit = {},
 ) {
@@ -62,6 +63,14 @@ fun NoticeBanner(
                 color = NoticeInk,
             )
         }
+        if (detail != null) {
+            Text(
+                text = detail,
+                modifier = Modifier.padding(start = IconSize + IconGap),
+                style = MaterialTheme.typography.bodyMedium,
+                color = NoticeInk,
+            )
+        }
         if (linkLabel != null) {
             Text(
                 text = linkLabel,
@@ -83,6 +92,7 @@ private fun NoticeBannerPreview() {
     CommutePreviewScaffold {
         NoticeBanner(
             message = "Kamu sedang offline, data mungkin tidak up-to-date",
+            detail = "Terakhir diperbarui 2 jam lalu",
             modifier = Modifier.padding(16.dp),
         )
     }
