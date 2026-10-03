@@ -34,29 +34,31 @@ import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.type.toFailure
+import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.components.ProblemPanel
 import id.shiorilabs.commute.core.ui.components.SkeletonBlock
+import id.shiorilabs.commute.core.ui.network.rememberIsOffline
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
 import id.shiorilabs.commute.feature.station.R
 import id.shiorilabs.commute.feature.station.domain.Amenity
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
-import id.shiorilabs.commute.feature.station.domain.lastTrains
 import id.shiorilabs.commute.feature.station.domain.Station
 import id.shiorilabs.commute.feature.station.domain.StationBoard
 import id.shiorilabs.commute.feature.station.domain.isTransJakarta
+import id.shiorilabs.commute.feature.station.domain.lastTrains
 import id.shiorilabs.commute.feature.station.presentation.components.AmenityList
 import id.shiorilabs.commute.feature.station.presentation.components.BekasiTimurMemorial
 import id.shiorilabs.commute.feature.station.presentation.components.HalteFrequencies
 import id.shiorilabs.commute.feature.station.presentation.components.LastTrainCard
 import id.shiorilabs.commute.feature.station.presentation.components.LastTrainsHeading
+import id.shiorilabs.commute.feature.station.presentation.components.LineCard
 import id.shiorilabs.commute.feature.station.presentation.components.OpenInMapsButton
 import id.shiorilabs.commute.feature.station.presentation.components.StationActions
 import id.shiorilabs.commute.feature.station.presentation.components.StationHeader
 import id.shiorilabs.commute.feature.station.presentation.components.TransferRow
 import id.shiorilabs.commute.feature.station.presentation.components.TransfersHeading
-import id.shiorilabs.commute.feature.station.presentation.components.LineCard
 import java.time.LocalDateTime
 
 /** The page is white, not the app's tinted background, as on web. */
@@ -90,6 +92,7 @@ fun StationScreen(
         stack.getOrNull(stack.indexOfLast { it is Route.Station && it.stationId == stationId } - 1) == Route.Search
     }
     val now = rememberJakartaNow()
+    val offline by rememberIsOffline()
     LaunchedEffect(now) {
         viewModel.onClockTick(now)
     }
@@ -97,6 +100,7 @@ fun StationScreen(
     StationContent(
         state = state,
         now = now,
+        offline = offline,
         innerPadding = innerPadding,
         placeholderTitle = placeholderTitle,
         placeholderLineKeys = placeholderLineKeys,
@@ -116,6 +120,7 @@ private fun StationContent(
     state: StationUiState,
     now: LocalDateTime,
     innerPadding: PaddingValues,
+    offline: Boolean = false,
     placeholderTitle: String? = null,
     placeholderLineKeys: List<String> = emptyList(),
     openedFromSearch: Boolean = false,
@@ -173,6 +178,7 @@ private fun StationContent(
             StationList(
                 state = state,
                 now = now,
+                offline = offline,
                 hazeState = hazeState,
                 contentPadding = PaddingValues(
                     top = headerHeight.toDp() + 16.dp,
@@ -202,6 +208,7 @@ private enum class StationSlot { HEADER, LIST }
 private fun StationList(
     state: StationUiState,
     now: LocalDateTime,
+    offline: Boolean,
     hazeState: HazeState,
     contentPadding: PaddingValues,
     onRetry: () -> Unit,
@@ -238,6 +245,7 @@ private fun StationList(
             board = board,
             lines = state.lines,
             now = now,
+            offline = offline,
             onRetry = onRetry,
             onOtw = onOtw,
             onOpenTimetable = onOpenTimetable,
@@ -300,6 +308,7 @@ private fun LazyListScope.departures(
     board: StationBoard,
     lines: Map<String, LineInfo>,
     now: LocalDateTime,
+    offline: Boolean,
     onRetry: () -> Unit,
     onOtw: () -> Unit,
     onOpenTimetable: () -> Unit,
@@ -332,6 +341,15 @@ private fun LazyListScope.departures(
 
         is UIState.Success -> when {
             timetable.data.isNotEmpty() -> {
+                // Over a board that may have been loaded before the connection went, as on the web.
+                if (offline) {
+                    item(key = "offline-banner") {
+                        NoticeBanner(
+                            message = stringResource(R.string.station_offline_banner),
+                            modifier = inset.padding(bottom = 16.dp),
+                        )
+                    }
+                }
                 item(key = "actions") {
                     StationActions(
                         onOtw = onOtw,

@@ -38,6 +38,7 @@ import com.adamglin.phosphoricons.duotone.Lockers
 import com.adamglin.phosphoricons.duotone.Plug
 import com.adamglin.phosphoricons.duotone.StarAndCrescent
 import com.adamglin.phosphoricons.duotone.Toilet
+import com.adamglin.phosphoricons.duotone.Warning
 import com.adamglin.phosphoricons.fill.Airplane
 import com.adamglin.phosphoricons.fill.Archive
 import com.adamglin.phosphoricons.fill.CheckCircle
@@ -74,6 +75,9 @@ object CommuteIcons {
 
     /** Opens the screen where pins are reordered. */
     val Edit: ImageVector = PhosphorIcons.Bold.PencilSimple
+
+    /** Heads an amber notice: offline, or a station no train calls at any more. */
+    val Warning: ImageVector = PhosphorIcons.Duotone.Warning
 
     /** A link that leaves the app. */
     val ExternalLink: ImageVector = PhosphorIcons.Bold.ArrowSquareOut
