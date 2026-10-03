@@ -64,6 +64,7 @@ import id.shiorilabs.commute.core.ui.layout.TitleSlot
 import id.shiorilabs.commute.core.ui.layout.stuckTitle
 import id.shiorilabs.commute.core.ui.network.rememberIsOffline
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
+import id.shiorilabs.commute.core.ui.startup.HoldStartupWhile
 import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
 import id.shiorilabs.commute.core.ui.time.updatedAgoText
 import id.shiorilabs.commute.feature.journey.presentation.SavedRouteCard
@@ -88,6 +89,8 @@ fun SavedStationsScreen(
     viewModel: SavedStationsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // The splash waits for the feed's first content rather than reveal its skeleton; the activity caps it.
+    HoldStartupWhile(waiting = (state as? UIState.Success)?.data?.isFirstContentLoading ?: true)
     val navigator = LocalNavigator.current
     val now = rememberJakartaNow()
     val offline by rememberIsOffline()
