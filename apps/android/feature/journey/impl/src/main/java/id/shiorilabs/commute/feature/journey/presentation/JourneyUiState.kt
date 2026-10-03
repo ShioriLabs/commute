@@ -51,6 +51,17 @@ data class JourneyUiState(
     val shareUrl: String? = null,
 )
 
+/** A pair search's "Rute terakhir" offers back, named from the station index. */
+data class RecentRouteRow(
+    /** `OPERATOR-CODE`. */
+    val fromId: String,
+    val toId: String,
+    val fromName: String,
+    val toName: String,
+    /** Pinned to home. */
+    val saved: Boolean,
+)
+
 /** The picker's list for what the rider has typed, and the quick picks above it. */
 data class PickerUiState(
     val query: String = "",

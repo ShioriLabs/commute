@@ -205,10 +205,9 @@ private fun Problem(text: String, onRetry: (() -> Unit)? = null) {
 
 /** "Buka halaman tarif": from search's tab to the OTW page for the same pair. */
 @Composable
-internal fun OpenFarePageLink(onClick: () -> Unit) {
+internal fun OpenFarePageLink(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Row(
-        modifier = Modifier
-            .padding(top = 16.dp)
+        modifier = modifier
             .fillMaxWidth()
             .background(Stone100, MaterialTheme.shapes.medium)
             .border(2.dp, Stone200, MaterialTheme.shapes.medium)
