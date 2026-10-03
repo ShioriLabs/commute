@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.feature.station.presentation.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +24,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -38,6 +40,7 @@ import id.shiorilabs.commute.core.ui.ext.Foreground
 import id.shiorilabs.commute.core.ui.ext.foreground
 import id.shiorilabs.commute.core.ui.ext.parseHexColor
 import id.shiorilabs.commute.core.ui.ext.tint
+import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.feature.station.api.R
 import id.shiorilabs.commute.feature.station.domain.Departure
@@ -81,6 +84,8 @@ private const val TABULAR = "tnum"
  * @param lineInfo the line's name and colour; null while the dictionary loads.
  * @param nextDayLine the same line on the next service day's board, for "mulai lagi" once a
  *   terminus has finished for the night.
+ * @param onHeaderClick opens the line's page from the card's name, which then trails a chevron, as
+ *   on the web's station page; null leaves the name plain, as on the home feed.
  */
 @Composable
 fun LineCard(
@@ -89,6 +94,7 @@ fun LineCard(
     now: LocalDateTime,
     modifier: Modifier = Modifier,
     nextDayLine: LineTimetable? = null,
+    onHeaderClick: (() -> Unit)? = null,
 ) {
     val groups = remember(line, nextDayLine, now) { upcomingGroups(line, nextDayLine, now) }
     if (groups.isEmpty()) {
@@ -116,13 +122,7 @@ fun LineCard(
                 .height(16.dp)
                 .background(lineColor),
         )
-        Text(
-            text = lineName,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
+        LineCardHeader(lineName, onHeaderClick)
         HorizontalDivider(thickness = 2.dp, color = divider)
         groups.forEachIndexed { index, group ->
             if (index > 0) {
@@ -134,6 +134,44 @@ fun LineCard(
             group.destinations.forEach { destination ->
                 DestinationRow(destination, lineColor, now)
             }
+        }
+    }
+}
+
+/** The line's name over the card, and with [onClick] a link to its page, chevron and all. */
+@Composable
+private fun LineCardHeader(lineName: String, onClick: (() -> Unit)?) {
+    val description = stringResource(R.string.line_card_open_line_description, lineName)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (onClick != null) {
+                    Modifier
+                        .clickable(role = Role.Button, onClick = onClick)
+                        .semantics(mergeDescendants = true) { contentDescription = description }
+                } else {
+                    Modifier
+                },
+            )
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = lineName,
+            modifier = Modifier.weight(1f, fill = false),
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        if (onClick != null) {
+            Icon(
+                imageVector = CommuteIcons.Chevron,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onBackground,
+            )
         }
     }
 }
