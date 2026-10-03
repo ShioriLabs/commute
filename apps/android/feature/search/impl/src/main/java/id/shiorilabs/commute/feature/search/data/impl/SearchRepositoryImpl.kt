@@ -1,36 +1,37 @@
 package id.shiorilabs.commute.feature.search.data.impl
 
 import arrow.core.Either
-import arrow.core.right
-import id.shiorilabs.commute.core.ext.apiCallToFailure
+import id.shiorilabs.commute.core.ext.onDataThread
+import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.network.service.CommuteService
+import id.shiorilabs.commute.core.query.QueryClient
+import id.shiorilabs.commute.core.query.QueryPolicy
+import id.shiorilabs.commute.core.query.QuerySpec
+import id.shiorilabs.commute.core.query.queryKey
 import id.shiorilabs.commute.core.type.Failure
-import id.shiorilabs.commute.core.type.requireBody
 import id.shiorilabs.commute.feature.search.data.SearchRepository
 import id.shiorilabs.commute.feature.search.domain.Searchable
 import id.shiorilabs.commute.feature.search.domain.toSearchables
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Holds the index in memory once fetched. Not persisted: the disk-backed cache that would let search
- * work offline is `:core:query`'s job, and it doesn't exist yet. A failure is not cached, so the
- * next call tries again.
+ * Serves the index through the [QueryClient], so search works offline from the copy last fetched.
+ * Two screens opening at once share one request. The index changes when an importer runs, so it is
+ * held as long as the stations themselves.
  */
 @Singleton
 class SearchRepositoryImpl @Inject constructor(
     private val service: CommuteService,
+    private val queries: QueryClient,
 ) : SearchRepository {
 
-    private val mutex = Mutex()
-    private var cached: List<Searchable>? = null
+    private val indexQuery = QuerySpec(
+        key = queryKey("searchables"),
+        serializer = SearchableIndex.serializer(),
+        policy = QueryPolicy.Topology,
+    ) { etag -> service.getSearchables(etag) }
 
-    // Under the lock so two screens opening at once share one request rather than racing two.
-    override suspend fun searchables(): Either<Failure, List<Searchable>> = mutex.withLock {
-        cached?.right() ?: apiCallToFailure {
-            service.getSearchables().requireBody().toSearchables()
-        }.onRight { cached = it }
-    }
+    override suspend fun searchables(): Either<Failure, List<Searchable>> =
+        queries.fetch(indexQuery).let { index -> onDataThread { index.map { it.toSearchables() } } }
 }
