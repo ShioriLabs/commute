@@ -5,6 +5,7 @@ import arrow.core.right
 import id.shiorilabs.commute.core.ext.apiCallToFailure
 import id.shiorilabs.commute.core.network.service.CommuteService
 import id.shiorilabs.commute.core.type.Failure
+import id.shiorilabs.commute.core.type.requireBody
 import id.shiorilabs.commute.feature.search.data.SearchRepository
 import id.shiorilabs.commute.feature.search.domain.Searchable
 import id.shiorilabs.commute.feature.search.domain.toSearchables
@@ -29,7 +30,7 @@ class SearchRepositoryImpl @Inject constructor(
     // Under the lock so two screens opening at once share one request rather than racing two.
     override suspend fun searchables(): Either<Failure, List<Searchable>> = mutex.withLock {
         cached?.right() ?: apiCallToFailure {
-            service.getSearchables().data.toSearchables()
+            service.getSearchables().requireBody().toSearchables()
         }.onRight { cached = it }
     }
 }

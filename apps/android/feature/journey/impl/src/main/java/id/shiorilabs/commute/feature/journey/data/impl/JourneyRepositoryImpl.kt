@@ -5,6 +5,7 @@ import arrow.core.right
 import id.shiorilabs.commute.core.ext.apiCallToFailure
 import id.shiorilabs.commute.core.network.service.CommuteService
 import id.shiorilabs.commute.core.type.Failure
+import id.shiorilabs.commute.core.type.requireBody
 import id.shiorilabs.commute.feature.journey.data.JourneyRepository
 import id.shiorilabs.commute.feature.journey.domain.Departure
 import id.shiorilabs.commute.feature.journey.domain.JourneyCriteria
@@ -49,7 +50,7 @@ class JourneyRepositoryImpl @Inject constructor(
                 at = params.at,
                 modes = params.modes,
                 walking = params.walking,
-            ).data.toTripAnswer()
+            ).requireBody().toTripAnswer()
         }.onRight { answer ->
             // Answers for slots the clock has left are never asked for again.
             if (answers.size >= MAX_ANSWERS) {

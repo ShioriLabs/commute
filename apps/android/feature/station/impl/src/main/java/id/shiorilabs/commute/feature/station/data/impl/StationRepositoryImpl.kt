@@ -6,6 +6,7 @@ import id.shiorilabs.commute.core.ext.apiCallToFailure
 import id.shiorilabs.commute.core.network.service.CommuteService
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
+import id.shiorilabs.commute.core.type.requireBody
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationRepository
 import id.shiorilabs.commute.feature.station.domain.Frequency
@@ -38,13 +39,13 @@ class StationRepositoryImpl @Inject constructor(
     override suspend fun station(stationId: String): Either<Failure, Station> =
         stations[stationId]?.right() ?: apiCallToFailure {
             val (operator, code) = stationId.splitId()
-            service.getStation(operator, code).data.toStation()
+            service.getStation(operator, code).requireBody().toStation()
         }.onRight { stations[stationId] = it }
 
     override suspend fun timetable(stationId: String, day: ServiceDayName): Either<Failure, List<LineTimetable>> =
         timetables[stationId to day]?.right() ?: apiCallToFailure {
             val (operator, code) = stationId.splitId()
-            service.getGroupedTimetable(operator, code, day.name).data.map { it.toLineTimetable() }
+            service.getGroupedTimetable(operator, code, day.name).requireBody().map { it.toLineTimetable() }
         }.onRight { lines ->
             // An empty board is offered a retry on screen, which has to actually ask again.
             if (lines.isNotEmpty()) {
@@ -57,7 +58,7 @@ class StationRepositoryImpl @Inject constructor(
     override suspend fun transfers(stationId: String): Either<Failure, List<Transfer>> =
         transfers[stationId]?.right() ?: apiCallToFailure {
             val (operator, code) = stationId.splitId()
-            service.getTransfers(operator, code).data.map { it.toTransfer() }
+            service.getTransfers(operator, code).requireBody().map { it.toTransfer() }
         }.onRight { transfers[stationId] = it }
 
     // An empty list is kept too: a halte the model has no figures for falls back to the no-schedule
@@ -65,7 +66,7 @@ class StationRepositoryImpl @Inject constructor(
     override suspend fun frequencies(stationId: String, day: ServiceDayName): Either<Failure, List<Frequency>> =
         frequencies[stationId to day]?.right() ?: apiCallToFailure {
             val (operator, code) = stationId.splitId()
-            service.getHeadway(operator, code, day.name).data.map { it.toFrequency() }
+            service.getHeadway(operator, code, day.name).requireBody().map { it.toFrequency() }
         }.onRight { frequencies[stationId to day] = it }
 
     override fun cachedStation(stationId: String): Station? = stations[stationId]
@@ -97,7 +98,7 @@ class LineRepositoryImpl @Inject constructor(
 
     override suspend fun lines(): Either<Failure, Map<String, LineInfo>> = mutex.withLock {
         cached?.right() ?: apiCallToFailure {
-            service.getOperators().data.toLineDictionary()
+            service.getOperators().requireBody().toLineDictionary()
         }.onRight { cached = it }
     }
 

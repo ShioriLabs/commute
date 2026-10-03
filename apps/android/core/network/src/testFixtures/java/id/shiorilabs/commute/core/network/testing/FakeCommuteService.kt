@@ -7,15 +7,25 @@ import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.model.models.Station
 import id.shiorilabs.commute.core.model.models.Transfer
 import id.shiorilabs.commute.core.model.models.TripResult
-import id.shiorilabs.commute.core.network.response.Response
 import id.shiorilabs.commute.core.network.service.CommuteService
+import id.shiorilabs.commute.core.type.Fetched
 
 /**
  * In-memory [CommuteService] for repository tests. Each endpoint answers from a settable lambda, so
  * a test states only the response (or the throw) it cares about; an endpoint left unset fails
  * loudly rather than returning something plausible.
+ *
+ * Every body goes out with [etag]. A call that sends it back as `If-None-Match` is answered
+ * [Fetched.NotModified] without running the endpoint's lambda, as the server's 304 would be.
  */
 class FakeCommuteService : CommuteService {
+
+    /** The ETag every answer carries; null sends none, so nothing is ever answered with a 304. */
+    var etag: String? = null
+
+    /** The `If-None-Match` the most recent call sent. */
+    var lastIfNoneMatch: String? = null
+        private set
 
     var searchables: suspend () -> SearchableIndex = { error("getSearchables was not stubbed") }
 
@@ -23,16 +33,24 @@ class FakeCommuteService : CommuteService {
     var searchablesCalls: Int = 0
         private set
 
-    override suspend fun getSearchables(): Response<SearchableIndex> {
+    override suspend fun getSearchables(ifNoneMatch: String?): Fetched<SearchableIndex> {
         searchablesCalls++
-        return Response(status = 200, data = searchables())
+        return answer(ifNoneMatch) { searchables() }
     }
 
     var station: suspend (operator: String, stationCode: String) -> Station =
         { _, _ -> error("getStation was not stubbed") }
 
+    /** How many times [getStation] was called — for asserting that a repository caches. */
+    var stationCalls: Int = 0
+        private set
+
     var groupedTimetable: suspend (operator: String, stationCode: String, day: String) -> List<GroupedTimetable> =
         { _, _, _ -> error("getGroupedTimetable was not stubbed") }
+
+    /** How many times [getGroupedTimetable] was called — for asserting that a repository caches. */
+    var groupedTimetableCalls: Int = 0
+        private set
 
     var transfers: suspend (operator: String, stationCode: String) -> List<Transfer> =
         { _, _ -> error("getTransfers was not stubbed") }
@@ -54,28 +72,43 @@ class FakeCommuteService : CommuteService {
     var operatorsCalls: Int = 0
         private set
 
-    override suspend fun getStation(operator: String, stationCode: String): Response<Station> =
-        Response(status = 200, data = station(operator, stationCode))
+    override suspend fun getStation(operator: String, stationCode: String, ifNoneMatch: String?): Fetched<Station> {
+        stationCalls++
+        return answer(ifNoneMatch) { station(operator, stationCode) }
+    }
 
     override suspend fun getGroupedTimetable(
         operator: String,
         stationCode: String,
         day: String,
-    ): Response<List<GroupedTimetable>> = Response(status = 200, data = groupedTimetable(operator, stationCode, day))
+        ifNoneMatch: String?,
+    ): Fetched<List<GroupedTimetable>> {
+        groupedTimetableCalls++
+        return answer(ifNoneMatch) { groupedTimetable(operator, stationCode, day) }
+    }
 
-    override suspend fun getTransfers(operator: String, stationCode: String): Response<List<Transfer>> {
+    override suspend fun getTransfers(
+        operator: String,
+        stationCode: String,
+        ifNoneMatch: String?,
+    ): Fetched<List<Transfer>> {
         transfersCalls++
-        return Response(status = 200, data = transfers(operator, stationCode))
+        return answer(ifNoneMatch) { transfers(operator, stationCode) }
     }
 
-    override suspend fun getHeadway(operator: String, stationCode: String, day: String): Response<List<HeadwayRow>> {
+    override suspend fun getHeadway(
+        operator: String,
+        stationCode: String,
+        day: String,
+        ifNoneMatch: String?,
+    ): Fetched<List<HeadwayRow>> {
         headwayCalls++
-        return Response(status = 200, data = headway(operator, stationCode, day))
+        return answer(ifNoneMatch) { headway(operator, stationCode, day) }
     }
 
-    override suspend fun getOperators(): Response<List<OperatorWithLines>> {
+    override suspend fun getOperators(ifNoneMatch: String?): Fetched<List<OperatorWithLines>> {
         operatorsCalls++
-        return Response(status = 200, data = operators())
+        return answer(ifNoneMatch) { operators() }
     }
 
     var trips: suspend (fromId: String, toId: String, criteria: TripCriteria) -> TripResult =
@@ -92,9 +125,20 @@ class FakeCommuteService : CommuteService {
         at: String?,
         modes: String?,
         walking: String?,
-    ): Response<TripResult> {
+        ifNoneMatch: String?,
+    ): Fetched<TripResult> {
         tripsCalls++
-        return Response(status = 200, data = trips(fromId, toId, TripCriteria(paymentMethod, at, modes, walking)))
+        return answer(ifNoneMatch) { trips(fromId, toId, TripCriteria(paymentMethod, at, modes, walking)) }
+    }
+
+    private suspend fun <T> answer(ifNoneMatch: String?, body: suspend () -> T): Fetched<T> {
+        lastIfNoneMatch = ifNoneMatch
+        val current = etag
+        return if (current != null && ifNoneMatch == current) {
+            Fetched.NotModified(current)
+        } else {
+            Fetched.Body(body(), current)
+        }
     }
 
     /** The optional query params of one [getTrips] call, as sent. */
