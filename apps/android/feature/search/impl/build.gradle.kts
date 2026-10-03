@@ -16,6 +16,8 @@ dependencies {
     implementation(project(":core:common"))
     // CommuteService + the generated SearchableIndex (via :core:model, api).
     implementation(project(":core:network"))
+    // QueryClient — the repository's cache, memory and disk.
+    implementation(project(":core:query"))
     // RecentSearchRepository, SavedRepository.
     implementation(project(":core:datastore"))
     // Route.Search + the NavGraphContribution/NavGraphScope contract.
@@ -46,5 +48,6 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(testFixtures(project(":core:network")))
+    testImplementation(testFixtures(project(":core:query")))
     testImplementation(testFixtures(project(":core:datastore")))
 }
