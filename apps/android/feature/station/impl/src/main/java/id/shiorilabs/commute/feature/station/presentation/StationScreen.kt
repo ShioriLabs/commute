@@ -37,7 +37,6 @@ import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.type.toFailure
-import id.shiorilabs.commute.core.ui.R as CoreUiR
 import id.shiorilabs.commute.core.ui.components.CommuteEmptyState
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.components.ProblemPanel
@@ -67,6 +66,7 @@ import id.shiorilabs.commute.feature.station.presentation.components.StationHead
 import id.shiorilabs.commute.feature.station.presentation.components.TransferRow
 import id.shiorilabs.commute.feature.station.presentation.components.TransfersHeading
 import java.time.LocalDateTime
+import id.shiorilabs.commute.core.ui.R as CoreUiR
 
 /** The page is white, not the app's tinted background, as on web. */
 private val StationBackground = Color.White

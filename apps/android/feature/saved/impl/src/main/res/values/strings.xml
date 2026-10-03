@@ -2,9 +2,9 @@
 <resources>
     <!-- Empty state -->
     <string name="saved_empty_illustration_description">Gambar peron stasiun dengan jembatan di atasnya</string>
-    <string name="saved_empty_title">Belum Ada Stasiun Disimpan</string>
+    <string name="saved_empty_title">Belum Ada Stasiun atau Rute Disimpan</string>
     <!-- %1$s is saved_nav_search_title, rendered in bold. -->
-    <string name="saved_empty_body">Klik tombol %1$s di bawah untuk cari jadwal, cek tarif &amp; simpan stasiun!</string>
+    <string name="saved_empty_body">Klik tombol %1$s di bawah untuk cari jadwal, cek tarif &amp; simpan stasiun atau rute!</string>
 
     <!-- Navigation rail -->
     <string name="saved_nav_rail_description">Navigasi utama</string>
@@ -16,7 +16,8 @@
     <string name="saved_nav_settings_description">Pengaturan aplikasi</string>
 
     <!-- Station cards. -->
-    <string name="saved_station_list_description">Daftar stasiun tersimpan</string>
+    <string name="saved_station_list_description">Daftar stasiun dan rute tersimpan</string>
+    <string name="saved_route_title_description">Rute %1$s ke %2$s</string>
     <string name="saved_station_failed">Gagal memuat stasiun ini</string>
     <string name="saved_station_offline">Tidak dapat memuat stasiun ini saat offline</string>
     <string name="saved_timetable_failed">Gagal memuat jadwal</string>
