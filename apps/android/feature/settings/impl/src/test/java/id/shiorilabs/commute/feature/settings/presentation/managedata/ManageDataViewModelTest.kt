@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.feature.settings.presentation.managedata
 
 import id.shiorilabs.commute.core.datastore.FakePreferencesDataStore
+import id.shiorilabs.commute.core.datastore.FarePreferencesRepository
 import id.shiorilabs.commute.core.datastore.RecentSearch
 import id.shiorilabs.commute.core.datastore.RecentSearchRepository
 import id.shiorilabs.commute.core.datastore.SavedRepository
@@ -22,6 +23,9 @@ class ManageDataViewModelTest {
 
     private val recents = RecentSearchRepository(FakePreferencesDataStore())
     private val saved = SavedRepository(FakePreferencesDataStore())
+    private val fares = FarePreferencesRepository(FakePreferencesDataStore())
+
+    private fun viewModel() = ManageDataViewModel(recents, saved, fares)
 
     @Before
     fun setUp() {
@@ -40,16 +44,19 @@ class ManageDataViewModelTest {
     fun `counts what is stored`() = runTest {
         recents.record(RecentSearch(RecentSearch.Type.STATION, "KCI-MRI"))
         recents.record(RecentSearch(RecentSearch.Type.HUB, "dukuh-atas"))
+        fares.recordRoute("KCI-SUD", "KCI-BOO")
         saved.toggleStation("KCI-MRI")
+        saved.toggleRoute("KCI-SUD", "KCI-BOO")
 
-        assertEquals(StoredData(recentSearches = 2, savedStations = 1), ManageDataViewModel(recents, saved).counts())
+        assertEquals(StoredData(recentSearches = 3, savedStations = 2), viewModel().counts())
     }
 
     @Test
     fun `clearing one kind leaves the other`() = runTest {
         recents.record(RecentSearch(RecentSearch.Type.STATION, "KCI-MRI"))
+        fares.recordRoute("KCI-SUD", "KCI-BOO")
         saved.toggleStation("KCI-MRI")
-        val viewModel = ManageDataViewModel(recents, saved)
+        val viewModel = viewModel()
 
         viewModel.clearRecentSearches()
         assertEquals(StoredData(recentSearches = 0, savedStations = 1), viewModel.counts())

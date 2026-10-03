@@ -23,6 +23,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -62,11 +63,11 @@ fun SavedStationsSettingsScreen(
 
 @Composable
 private fun SavedStationsSettingsContent(
-    state: UIState<List<SavedStationRow>>,
+    state: UIState<List<SavedRow>>,
     innerPadding: PaddingValues,
     onBack: () -> Unit = {},
-    onToggle: (stationId: String) -> Unit = {},
-    onMove: (stationId: String, offset: Int) -> Unit = { _, _ -> },
+    onToggle: (key: String) -> Unit = {},
+    onMove: (key: String, offset: Int) -> Unit = { _, _ -> },
 ) {
     SettingsPage(
         title = stringResource(R.string.settings_saved_title),
@@ -91,12 +92,20 @@ private fun SavedStationsSettingsContent(
                 color = MaterialTheme.colorScheme.onBackground,
             )
             else -> rows.forEach { row ->
-                key(row.id) {
-                    SavedStationRowItem(
-                        row = row,
-                        onToggle = { onToggle(row.id) },
-                        onMove = { offset -> onMove(row.id, offset) },
-                    )
+                key(row.key) {
+                    when (row) {
+                        is SavedRow.StationRow -> SavedStationRowItem(
+                            row = row,
+                            onToggle = { onToggle(row.key) },
+                            onMove = { offset -> onMove(row.key, offset) },
+                        )
+
+                        is SavedRow.RouteRow -> SavedRouteRowItem(
+                            row = row,
+                            onToggle = { onToggle(row.key) },
+                            onMove = { offset -> onMove(row.key, offset) },
+                        )
+                    }
                 }
             }
         }
@@ -105,7 +114,7 @@ private fun SavedStationsSettingsContent(
 
 @Composable
 private fun SavedStationRowItem(
-    row: SavedStationRow,
+    row: SavedRow.StationRow,
     onToggle: () -> Unit,
     onMove: (offset: Int) -> Unit,
 ) {
@@ -136,31 +145,117 @@ private fun SavedStationRowItem(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RowButton(
-                    icon = CommuteIcons.MoveUp,
-                    description = stringResource(R.string.settings_saved_move_up, station.name),
-                    enabled = !row.isFirst,
-                    onClick = { onMove(-1) },
-                )
-                RowButton(
-                    icon = CommuteIcons.MoveDown,
-                    description = stringResource(R.string.settings_saved_move_down, station.name),
-                    enabled = !row.isLast,
-                    onClick = { onMove(1) },
-                )
-                RowButton(
-                    icon = if (row.isSaved) CommuteIcons.Unpin else CommuteIcons.Pinned,
-                    description = stringResource(
-                        if (row.isSaved) R.string.settings_saved_unpin else R.string.settings_saved_pin,
-                        station.name,
-                    ),
-                    tint = if (row.isSaved) UnpinColor else MaterialTheme.colorScheme.onBackground,
-                    onClick = onToggle,
-                    modifier = Modifier.padding(start = 8.dp),
-                )
-            }
+            RowControls(row = row, name = station.name, onToggle = onToggle, onMove = onMove)
         }
+    }
+}
+
+/**
+ * A pinned pair, "Sudirman → Bogor" over its operators, one line or two joined when the ends are
+ * on different networks. A pair whose station didn't load still shows, by its ids, so it can be
+ * removed, as the web's does.
+ */
+@Composable
+private fun SavedRouteRowItem(
+    row: SavedRow.RouteRow,
+    onToggle: () -> Unit,
+    onMove: (offset: Int) -> Unit,
+) {
+    val from = (row.from as? UIState.Success)?.data
+    val to = (row.to as? UIState.Success)?.data
+    val missing = row.from is UIState.Error || row.to is UIState.Error
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = SettingsGutter, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        if (!missing && (from == null || to == null)) {
+            StationSkeleton(modifier = Modifier.weight(1f))
+            return@Row
+        }
+        val fromName = from?.name ?: row.fromId
+        val toName = to?.name ?: row.toId
+        Column(modifier = Modifier.weight(1f)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                RouteEnd(fromName, Modifier.weight(1f, fill = false))
+                Icon(
+                    imageVector = CommuteIcons.ArrowRight,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onBackground,
+                )
+                RouteEnd(toName, Modifier.weight(1f, fill = false))
+            }
+            Text(
+                text = if (from == null || to == null) {
+                    stringResource(R.string.settings_saved_route_missing)
+                } else {
+                    listOf(from.operator, to.operator).distinct().joinToString(" · ") { OPERATOR_NAMES[it] ?: it }
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        RowControls(
+            row = row,
+            name = stringResource(R.string.settings_saved_route_name, fromName, toName),
+            onToggle = onToggle,
+            onMove = onMove,
+        )
+    }
+}
+
+@Composable
+private fun RouteEnd(name: String, modifier: Modifier = Modifier) {
+    Text(
+        text = name,
+        modifier = modifier,
+        style = MaterialTheme.typography.titleMedium,
+        fontSize = 18.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onBackground,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+/** A row's reorder chevrons and pin, read out with the row's [name]. */
+@Composable
+private fun RowControls(
+    row: SavedRow,
+    name: String,
+    onToggle: () -> Unit,
+    onMove: (offset: Int) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        RowButton(
+            icon = CommuteIcons.MoveUp,
+            description = stringResource(R.string.settings_saved_move_up, name),
+            enabled = !row.isFirst,
+            onClick = { onMove(-1) },
+        )
+        RowButton(
+            icon = CommuteIcons.MoveDown,
+            description = stringResource(R.string.settings_saved_move_down, name),
+            enabled = !row.isLast,
+            onClick = { onMove(1) },
+        )
+        RowButton(
+            icon = if (row.isSaved) CommuteIcons.Unpin else CommuteIcons.Pinned,
+            description = stringResource(
+                if (row.isSaved) R.string.settings_saved_unpin else R.string.settings_saved_pin,
+                name,
+            ),
+            tint = if (row.isSaved) UnpinColor else MaterialTheme.colorScheme.onBackground,
+            onClick = onToggle,
+            modifier = Modifier.padding(start = 8.dp),
+        )
     }
 }
 
@@ -220,9 +315,19 @@ private fun SavedStationsSettingsContentPreview() {
         SavedStationsSettingsContent(
             state = UIState.Success(
                 listOf(
-                    SavedStationRow("KCI-MRI", isSaved = true, UIState.Success(manggarai), isFirst = true, isLast = false),
-                    SavedStationRow("MRTJ-BHI", isSaved = false, UIState.Success(bundaranHi), isFirst = false, isLast = false),
-                    SavedStationRow("KCI-THB", isSaved = true, UIState.Loading, isFirst = false, isLast = true),
+                    SavedRow.StationRow("KCI-MRI", isSaved = true, UIState.Success(manggarai), isFirst = true, isLast = false),
+                    SavedRow.RouteRow(
+                        key = "route:KCI-MRI>MRTJ-BHI",
+                        isSaved = true,
+                        fromId = "KCI-MRI",
+                        toId = "MRTJ-BHI",
+                        from = UIState.Success(manggarai),
+                        to = UIState.Success(bundaranHi),
+                        isFirst = false,
+                        isLast = false,
+                    ),
+                    SavedRow.StationRow("MRTJ-BHI", isSaved = false, UIState.Success(bundaranHi), isFirst = false, isLast = false),
+                    SavedRow.StationRow("KCI-THB", isSaved = true, UIState.Loading, isFirst = false, isLast = true),
                 ),
             ),
             innerPadding = PaddingValues(),
