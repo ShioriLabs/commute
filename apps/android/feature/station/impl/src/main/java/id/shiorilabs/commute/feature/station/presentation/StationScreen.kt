@@ -18,7 +18,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -34,6 +36,8 @@ import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.type.toFailure
+import id.shiorilabs.commute.core.ui.R as CoreUiR
+import id.shiorilabs.commute.core.ui.components.CommuteEmptyState
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.components.ProblemPanel
 import id.shiorilabs.commute.core.ui.components.SkeletonBlock
@@ -112,6 +116,7 @@ fun StationScreen(
         // Plans a trip here: OTW opens with this station as the destination, picking the origin.
         onOtw = { navigator.goTo(Route.Journey(toId = stationId)) },
         onOpenTimetable = { title -> navigator.goTo(Route.StationTimetable(stationId, title)) },
+        onOpenStation = { id -> navigator.goTo(Route.Station(id)) },
     )
 }
 
@@ -130,8 +135,10 @@ private fun StationContent(
     onOpenMaps: (Station) -> Unit = {},
     onOtw: () -> Unit = {},
     onOpenTimetable: (title: String?) -> Unit = {},
+    onOpenStation: (stationId: String) -> Unit = {},
 ) {
     val hazeState = rememberHazeState()
+    val unservedName = state.unserved?.let { stringResource(it.name) }
     val board = state.board
     val station = (board.station as? UIState.Success)?.data
 
@@ -154,10 +161,11 @@ private fun StationContent(
                 saved = state.saved,
                 onToggleSave = onToggleSave,
                 onClose = onClose,
-                placeholderTitle = placeholderTitle,
-                placeholderLineKeys = placeholderLineKeys,
+                placeholderTitle = unservedName ?: placeholderTitle,
+                placeholderLineKeys = if (unservedName != null) emptyList() else placeholderLineKeys,
                 openedFromSearch = openedFromSearch,
                 topInset = innerPadding.calculateTopPadding(),
+                saveable = unservedName == null,
                 modifier = Modifier.hazeEffect(
                     hazeState,
                     HazeStyle(
@@ -188,6 +196,7 @@ private fun StationContent(
                 onOpenMaps = onOpenMaps,
                 onOtw = onOtw,
                 onOpenTimetable = { onOpenTimetable(station?.name ?: placeholderTitle) },
+                onOpenStation = onOpenStation,
             )
         }.map { it.measure(constraints) }
 
@@ -215,6 +224,7 @@ private fun StationList(
     onOpenMaps: (Station) -> Unit,
     onOtw: () -> Unit,
     onOpenTimetable: () -> Unit,
+    onOpenStation: (stationId: String) -> Unit,
 ) {
     val board = state.board
     val station = (board.station as? UIState.Success)?.data
@@ -225,6 +235,29 @@ private fun StationList(
             .hazeSource(hazeState),
         contentPadding = contentPadding,
     ) {
+        state.unserved?.let { unserved ->
+            // Nothing was fetched: the notice is the page.
+            item(key = "unserved") {
+                UnservedNotice(unserved, Modifier.padding(horizontal = 16.dp))
+            }
+            return@LazyColumn
+        }
+
+        // Above everything, as on the web: it reframes the whole page. The name, lines and
+        // facilities below are still true of the building, but no train calls here.
+        state.retired?.let { retired ->
+            item(key = "retired") {
+                NoticeBanner(
+                    message = stringResource(retired.message),
+                    linkLabel = retired.redirect?.let { stringResource(it.label) },
+                    onLinkClick = { retired.redirect?.let { onOpenStation(it.stationId) } },
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 16.dp),
+                )
+            }
+        }
+
         val stationState = board.station
         if (stationState is UIState.Error) {
             // Nothing below can be drawn without the station, so one panel stands for it all.
@@ -421,6 +454,20 @@ private fun LazyListScope.lastTrains(timetable: List<LineTimetable>, lines: Map<
                 .padding(top = if (index == 0) 0.dp else 16.dp),
         )
     }
+}
+
+/** The web's EmptyState in its no-data form, worded for the station. */
+@Composable
+private fun UnservedNotice(unserved: UnservedStation, modifier: Modifier = Modifier) {
+    CommuteEmptyState(
+        illustration = painterResource(CoreUiR.drawable.img_search_empty),
+        illustrationDescription = stringResource(R.string.station_unserved_illustration_description),
+        title = stringResource(unserved.title),
+        body = AnnotatedString(stringResource(unserved.message)),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = 16.dp),
+    )
 }
 
 private fun UIState.Error.isOffline(): Boolean = cause?.toFailure() is Failure.Network
