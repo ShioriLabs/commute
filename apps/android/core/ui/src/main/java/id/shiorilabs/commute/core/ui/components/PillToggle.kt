@@ -14,6 +14,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -39,6 +41,7 @@ fun PillToggle(
     description: String,
     modifier: Modifier = Modifier,
 ) {
+    val haptics = LocalHapticFeedback.current
     Row(
         modifier = modifier
             .clip(CircleShape)
@@ -58,6 +61,7 @@ fun PillToggle(
                     .background(if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
                     .selectable(selected = isSelected, role = Role.Tab) {
                         if (!isSelected) {
+                            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                             onSelect(index)
                         }
                     }

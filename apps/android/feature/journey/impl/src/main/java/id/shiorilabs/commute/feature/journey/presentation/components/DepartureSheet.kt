@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -32,6 +33,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -52,10 +55,10 @@ import id.shiorilabs.commute.feature.journey.domain.departureDays
 import id.shiorilabs.commute.feature.journey.domain.formatDepartureDay
 import id.shiorilabs.commute.feature.journey.domain.quantiseToSlot
 import id.shiorilabs.commute.feature.journey.domain.shiftBySlot
+import java.time.Instant
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
-import java.time.Instant
 
 private val RowHeight = 44.dp
 
@@ -84,6 +87,11 @@ internal fun DepartureSheet(departure: Departure, onSelect: (Departure) -> Unit,
     }
     val local = draft.atZone(JAKARTA)
     val title = stringResource(R.string.journey_departure_title)
+    val haptics = LocalHapticFeedback.current
+    val nudge = { slots: Int ->
+        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+        draft = shiftBySlot(Departure.At(draft), slots, Instant.now())
+    }
 
     CommuteBottomSheet(
         title = title,
@@ -134,13 +142,14 @@ internal fun DepartureSheet(departure: Departure, onSelect: (Departure) -> Unit,
                 NudgeButton(
                     text = stringResource(R.string.journey_departure_earlier, DEPARTURE_SLOT_MINUTES),
                     leading = true,
-                    onClick = { draft = shiftBySlot(Departure.At(draft), -1, Instant.now()) },
+                    onClick = { nudge(-1) },
                 )
                 Text(
                     text = stringResource(R.string.journey_departure_now),
                     modifier = Modifier
                         .clip(MaterialTheme.shapes.small)
                         .clickable(role = Role.Button) {
+                            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
                             onSelect(Departure.Now)
                             hide()
                         }
@@ -152,7 +161,7 @@ internal fun DepartureSheet(departure: Departure, onSelect: (Departure) -> Unit,
                 NudgeButton(
                     text = stringResource(R.string.journey_departure_later, DEPARTURE_SLOT_MINUTES),
                     leading = false,
-                    onClick = { draft = shiftBySlot(Departure.At(draft), 1, Instant.now()) },
+                    onClick = { nudge(1) },
                 )
             }
 
@@ -164,6 +173,7 @@ internal fun DepartureSheet(departure: Departure, onSelect: (Departure) -> Unit,
                     .clip(MaterialTheme.shapes.medium)
                     .background(MaterialTheme.colorScheme.primary)
                     .clickable(role = Role.Button) {
+                        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
                         onSelect(Departure.At(draft))
                         hide()
                     }
@@ -212,6 +222,11 @@ private fun <T> WheelColumn(
 ) {
     val state = rememberLazyListState(initialFirstVisibleItemIndex = selected)
     val scope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
+    // Read where the wheel comes to rest, long after this composition: the selection by then is
+    // whatever the last settle, a nudge or another wheel made it.
+    val currentSelected by rememberUpdatedState(selected)
+    val currentOnSettle by rememberUpdatedState(onSettle)
 
     // Follow the selection when it moves from outside the wheel: a nudge, or another wheel.
     LaunchedEffect(selected) {
@@ -226,8 +241,9 @@ private fun <T> WheelColumn(
             .filter { scrolling -> !scrolling }
             .collect {
                 val settled = state.firstVisibleItemIndex.coerceIn(0, items.lastIndex)
-                if (settled != selected) {
-                    onSettle(settled)
+                if (settled != currentSelected) {
+                    haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+                    currentOnSettle(settled)
                 }
             }
     }
