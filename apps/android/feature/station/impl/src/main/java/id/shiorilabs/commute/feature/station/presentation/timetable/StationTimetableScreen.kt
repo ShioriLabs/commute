@@ -2,6 +2,7 @@ package id.shiorilabs.commute.feature.station.presentation.timetable
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +19,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -70,6 +71,7 @@ import id.shiorilabs.commute.feature.station.domain.directionalBaseName
 import id.shiorilabs.commute.feature.station.domain.formatClock
 import id.shiorilabs.commute.feature.station.domain.formatPlatformCode
 import id.shiorilabs.commute.feature.station.domain.joinLabels
+import id.shiorilabs.commute.feature.station.presentation.components.rememberPulseAlpha
 
 // Tailwind's colours, as the web's timetable page uses them.
 private val Slate100 = Color(0xFFF1F5F9)
@@ -81,8 +83,6 @@ private val Gray600 = Color(0xFF4B5563)
 
 /** The page is white, as the station page it opens from. */
 private val TimetableBackground = Color.White
-
-private const val DAY_MINUTES = 1440
 
 /**
  * A station's whole timetable for the day, the web's "Jadwal Lengkap": every departure, a section
@@ -352,7 +352,13 @@ private fun TimetableList(
             }
             section.rows.forEachIndexed { index, row ->
                 item(key = "row:${section.key}:${row.tripNumber ?: index}:${row.minute}") {
-                    DepartureRow(row = row, isNearest = index == nearestIndex, lineColor = lineColor)
+                    val isNearest = index == nearestIndex
+                    DepartureRow(
+                        row = row,
+                        isNearest = isNearest,
+                        imminent = isNearest && isDepartingNow(row.minute, nowMinute),
+                        lineColor = lineColor,
+                    )
                 }
             }
         }
@@ -449,13 +455,18 @@ private fun SectionHeader(
     }
 }
 
-/** One departure: where it goes, and when. The next one in its section is bold in the line's colour. */
+/**
+ * One departure: where it goes, and when. The next one in its section is bold in the line's colour,
+ * and pulses while it is [imminent], leaving within a minute.
+ */
 @Composable
 private fun DepartureRow(
     row: TimetableRow,
     isNearest: Boolean,
     lineColor: Color,
+    imminent: Boolean = false,
 ) {
+    val pulse = if (imminent) rememberPulseAlpha() else null
     Column {
         Row(
             modifier = Modifier
@@ -485,6 +496,7 @@ private fun DepartureRow(
             }
             Text(
                 text = formatClock(row.minute),
+                modifier = Modifier.graphicsLayer { alpha = pulse?.value ?: 1f },
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = if (isNearest) FontWeight.Bold else FontWeight.SemiBold,
                 color = if (isNearest) lineColor else Slate700,

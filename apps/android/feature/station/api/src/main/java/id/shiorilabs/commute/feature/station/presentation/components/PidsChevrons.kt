@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -60,6 +61,19 @@ fun PidsChevrons(
         }
     }
 }
+
+/**
+ * The same pulse as one chevron, for anything else that marks a departure leaving now: the full
+ * timetable's next row. Read it inside `graphicsLayer`, so the pulse redraws without recomposing.
+ */
+@Composable
+fun rememberPulseAlpha(): State<Float> =
+    rememberInfiniteTransition(label = "pulse").animateFloat(
+        initialValue = 1f,
+        targetValue = 1f,
+        animationSpec = pulse(0),
+        label = "pulseAlpha",
+    )
 
 private fun pulse(index: Int): InfiniteRepeatableSpec<Float> = infiniteRepeatable(
     animation = keyframes {
