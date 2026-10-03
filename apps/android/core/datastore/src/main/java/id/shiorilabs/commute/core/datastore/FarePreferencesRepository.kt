@@ -27,6 +27,12 @@ data class StoredFareCriteria(
 )
 
 /**
+ * [FarePreferencesRepository.criteria] as read once this session; [criteria] null meaning the rider
+ * never changed a setting, as in the flow.
+ */
+data class CriteriaSnapshot(val criteria: StoredFareCriteria?)
+
+/**
  * A pair the rider checked, the web's `RecentRoute`. Directional, like a saved pair: A→B and B→A
  * are two entries.
  */
@@ -49,10 +55,22 @@ class FarePreferencesRepository @Inject constructor(
 
     private val json = Json { ignoreUnknownKeys = true }
 
+    /** The criteria as last read or saved this session, for [cachedCriteria]. */
+    @Volatile
+    private var criteriaSnapshot: CriteriaSnapshot? = null
+
     /** `null` until the rider changes a setting: the caller's defaults apply. */
     val criteria: Flow<StoredFareCriteria?> = dataStore.data.map { prefs ->
-        prefs[CRITERIA_KEY]?.let { raw -> runCatching { json.decodeFromString<StoredFareCriteria>(raw) }.getOrNull() }
+        prefs[CRITERIA_KEY]
+            ?.let { raw -> runCatching { json.decodeFromString<StoredFareCriteria>(raw) }.getOrNull() }
+            .also { criteriaSnapshot = CriteriaSnapshot(it) }
     }
+
+    /**
+     * [criteria] as last read or saved this session, without reading the disk: for a screen that
+     * wants to paint what it already holds on its first frame. Null until they have been read once.
+     */
+    fun cachedCriteria(): CriteriaSnapshot? = criteriaSnapshot
 
     /** Station ids, newest first. */
     val recentStationIds: Flow<List<String>> = dataStore.data.map { prefs ->
@@ -67,6 +85,7 @@ class FarePreferencesRepository @Inject constructor(
         dataStore.edit { prefs ->
             prefs[CRITERIA_KEY] = json.encodeToString(criteria)
         }
+        criteriaSnapshot = CriteriaSnapshot(criteria)
     }
 
     /** Moves [stationId] to the front, as the web's `recordRecentPick` does, keeping [MAX_RECENT_STATIONS]. */
