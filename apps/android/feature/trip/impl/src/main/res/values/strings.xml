@@ -69,7 +69,6 @@
     <string name="trip_live_progress">%1$d persen perjalanan</string>
 
     <!-- The in-train board, after JR East's. -->
-    <string name="trip_pids_to">ke %1$s</string>
     <string name="trip_pids_minutes">mnt</string>
     <string name="trip_pids_board">Naik di</string>
     <string name="trip_pids_next">Berikutnya</string>
