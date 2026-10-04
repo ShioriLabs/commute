@@ -97,4 +97,10 @@ class DeepLinksTest {
         assertNull(routeForLink("http://commute.shiorilabs.id/fare"))
         assertNull(routeForLink("not a link"))
     }
+
+    @Test
+    fun `the trip notification's link opens the running trip`() {
+        assertEquals(Route.ActiveTrip, routeForLink(ACTIVE_TRIP_LINK))
+        assertNull(routeForLink("commute://trip/other"))
+    }
 }

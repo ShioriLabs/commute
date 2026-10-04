@@ -28,6 +28,10 @@ import id.shiorilabs.commute.feature.journey.domain.untilDepartureStale
 import id.shiorilabs.commute.feature.journey.domain.withLink
 import id.shiorilabs.commute.feature.search.data.SearchRepository
 import id.shiorilabs.commute.feature.station.data.LineRepository
+import id.shiorilabs.commute.feature.station.data.StationDirectory
+import id.shiorilabs.commute.feature.station.domain.nearbyStations
+import id.shiorilabs.commute.feature.journey.domain.nearbyPicks
+import id.shiorilabs.commute.core.location.LocationClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -65,6 +69,8 @@ class JourneyViewModel @AssistedInject constructor(
     private val farePreferences: FarePreferencesRepository,
     private val savedRepository: SavedRepository,
     private val clock: Clock,
+    private val location: LocationClient,
+    private val directory: StationDirectory,
 ) : ViewModel() {
 
     @AssistedFactory
@@ -93,6 +99,7 @@ class JourneyViewModel @AssistedInject constructor(
     private val trip = MutableStateFlow<TripState>(TripState.Idle)
     private val retries = MutableStateFlow(0)
     private val pickerQuery = MutableStateFlow("")
+    private val nearby = MutableStateFlow<NearbyPicks>(NearbyPicks.Idle)
 
     /**
      * What the rider has typed into the picker, straight back with no ranking in between. The field
@@ -157,16 +164,19 @@ class JourneyViewModel @AssistedInject constructor(
         pickerQuery,
         stations,
         farePreferences.recentStationIds,
-    ) { query, stations, recents -> Triple(query, stations, recents) }
+        nearby,
+    ) { query, stations, recents, nearby -> Pair(Triple(query, stations, recents), nearby) }
         // Ranking runs the fuzzy matcher over every station, so off the main thread, as search's
         // does; mapLatest drops a ranking still running when the next keystroke lands.
-        .mapLatest { (query, stations, recents) ->
+        .mapLatest { (ask, nearby) ->
+            val (query, stations, recents) = ask
             withContext(Dispatchers.Default) {
                 PickerUiState(
                     query = query,
                     stations = stations?.let { rankStations(it, query) }.orEmpty(),
                     quickPicks = stations?.let { quickPickStations(it, recents) }.orEmpty(),
                     loaded = stations != null,
+                    nearby = nearby,
                 )
             }
         }
@@ -188,11 +198,32 @@ class JourneyViewModel @AssistedInject constructor(
 
     fun openPicker(end: PairEnd) {
         pickerQuery.value = ""
+        nearby.value = NearbyPicks.Idle
         session.update { it.copy(picker = end) }
     }
 
     fun closePicker() {
         session.update { it.copy(picker = null) }
+    }
+
+    /**
+     * "Pakai lokasi kamu": one fix, then the stations around it. Only on the rider's tap, with the
+     * permission already asked for; without it there's simply no fix.
+     */
+    fun onUseLocation() {
+        viewModelScope.launch {
+            nearby.value = NearbyPicks.Locating
+            val fix = location.current()
+            val directory = directory.cached() ?: directory.all().getOrNull()
+            val pickable = stations.value
+            nearby.value = when {
+                fix == null || directory == null || pickable == null -> NearbyPicks.Unavailable
+                else -> nearbyPicks(nearbyStations(fix.point, directory, limit = NEARBY_PICKS), pickable)
+                    .takeIf { it.isNotEmpty() }
+                    ?.let(NearbyPicks::Found)
+                    ?: NearbyPicks.NoneNearby
+            }
+        }
     }
 
     fun onPickerQueryChange(query: String) {
@@ -320,5 +351,11 @@ class JourneyViewModel @AssistedInject constructor(
             delay(wait.toMillis())
             onResume()
         }
+    }
+
+    private companion object {
+
+        /** Enough to cover an interchange's stations and a halte or two, without scrolling. */
+        const val NEARBY_PICKS = 4
     }
 }

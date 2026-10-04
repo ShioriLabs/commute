@@ -28,6 +28,9 @@ interface CommuteService {
      */
     suspend fun getSearchables(ifNoneMatch: String? = null): Fetched<SearchableIndex>
 
+    /** Every searchable station, coordinates included. Routing-only stops are left out. */
+    suspend fun getStations(ifNoneMatch: String? = null): Fetched<List<Station>>
+
     /** One station. [operator] and [stationCode] are the two halves of its id (`KCI`, `MRI`). */
     suspend fun getStation(operator: String, stationCode: String, ifNoneMatch: String? = null): Fetched<Station>
 

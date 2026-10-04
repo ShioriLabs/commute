@@ -1,14 +1,25 @@
 package id.shiorilabs.commute.feature.journey.presentation.trip
 
+import android.Manifest
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
+import id.shiorilabs.commute.core.location.LocationPermissions
+import id.shiorilabs.commute.core.location.rememberLocationPermissionRequest
+import id.shiorilabs.commute.core.notification.rememberNotificationPermissionRequest
+import id.shiorilabs.commute.feature.journey.domain.TRIP_START_LEAD
+import id.shiorilabs.commute.feature.journey.domain.TripStart
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -92,6 +103,7 @@ fun TripScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val routeSaved by viewModel.routeSaved.collectAsStateWithLifecycle()
+    val tripStart by viewModel.tripStart.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
     val context = LocalContext.current
     val shareTitle = stringResource(R.string.journey_share_title)
@@ -101,6 +113,12 @@ fun TripScreen(
         innerPadding = innerPadding,
         routeSaved = routeSaved,
         onToggleSaveRoute = viewModel::onToggleSaveRoute,
+        tripStart = tripStart,
+        onStartTrip = {
+            viewModel.startTrip()
+            navigator.goTo(Route.ActiveTrip)
+        },
+        onOpenTrip = { navigator.goTo(Route.ActiveTrip) },
         onRetry = viewModel::retry,
         onClose = navigator::pop,
         // Back to the options this was picked from when they sit right behind; otherwise (a saved
@@ -139,6 +157,9 @@ private fun TripContent(
     onSeeOptions: () -> Unit,
     routeSaved: Boolean? = null,
     onToggleSaveRoute: () -> Unit = {},
+    tripStart: TripStart? = null,
+    onStartTrip: () -> Unit = {},
+    onOpenTrip: () -> Unit = {},
 ) {
     FrostedHeaderPage(
         surfaceColor = TripBackground,
@@ -174,8 +195,11 @@ private fun TripContent(
 
                     is TripPageState.Loaded -> Column(modifier = Modifier.padding(top = BodyTop)) {
                         TripActions(
+                            tripStart = tripStart,
                             routeSaved = routeSaved,
                             shareUrl = state.shareUrl,
+                            onStartTrip = onStartTrip,
+                            onOpenTrip = onOpenTrip,
                             onToggleSaveRoute = onToggleSaveRoute,
                             onShare = onShare,
                             modifier = Modifier.padding(bottom = 24.dp),
@@ -251,29 +275,34 @@ private fun TripHeader(state: TripUiState, innerPadding: PaddingValues, onClose:
 }
 
 /**
- * Pinning the pair to home and sharing the trip, as a row of buttons the way the station page offers
- * OTW and its timetable. Short labels to fit the pair side by side; TalkBack reads the longer ones.
+ * The page's one row of actions: "OTW!" filling it, then pinning the pair to home and sharing the
+ * trip as square icons. TalkBack reads each in full.
  */
 @Composable
 private fun TripActions(
+    tripStart: TripStart?,
     routeSaved: Boolean?,
     shareUrl: String?,
+    onStartTrip: () -> Unit,
+    onOpenTrip: () -> Unit,
     onToggleSaveRoute: () -> Unit,
     onShare: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (routeSaved == null && shareUrl == null) return
+    if (tripStart == null && routeSaved == null && shareUrl == null) return
     val haptics = LocalHapticFeedback.current
-    // As tall as each other, whatever their labels wrap to.
+    // As tall as each other: the icons are squares as tall as the OTW button.
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(IntrinsicSize.Min),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
     ) {
+        tripStart?.let {
+            TripStartButton(start = it, onStart = onStartTrip, onOpen = onOpenTrip, modifier = Modifier.weight(1f))
+        }
         routeSaved?.let { saved ->
-            TripActionButton(
-                text = stringResource(if (saved) R.string.journey_route_saved else R.string.journey_save_route_short),
+            TripIconButton(
                 description = stringResource(if (saved) R.string.journey_unsave_route else R.string.journey_save_route),
                 icon = if (saved) CommuteIcons.Pinned else CommuteIcons.Pin,
                 onClick = {
@@ -283,8 +312,7 @@ private fun TripActions(
             )
         }
         shareUrl?.let { url ->
-            TripActionButton(
-                text = stringResource(R.string.journey_share),
+            TripIconButton(
                 description = stringResource(R.string.journey_share_description),
                 icon = CommuteIcons.Share,
                 onClick = { onShare(url) },
@@ -293,14 +321,68 @@ private fun TripActions(
     }
 }
 
-/** The station page's secondary button: `p-4 rounded-xl text-sm font-bold` on slate, sharing its row. */
+/**
+ * Trip mode's way in: "OTW!", or "Lihat perjalanan" while this journey is the one being followed.
+ * The permissions it uses are asked for here, on the tap, and a refusal still starts the trip:
+ * without location it runs on the clock, without notifications it only shows in the app.
+ */
 @Composable
-private fun RowScope.TripActionButton(text: String, description: String, icon: ImageVector, onClick: () -> Unit) {
-    val content = MaterialTheme.colorScheme.primary
+private fun TripStartButton(start: TripStart, onStart: () -> Unit, onOpen: () -> Unit, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
+    val askLocation = rememberLocationPermissionRequest { onStart() }
+    val askNotifications = rememberNotificationPermissionRequest {
+        if (locationGranted(context)) onStart() else askLocation()
+    }
+    val begin = {
+        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+        when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !granted(context, Manifest.permission.POST_NOTIFICATIONS) ->
+                askNotifications()
+            !locationGranted(context) -> askLocation()
+            else -> onStart()
+        }
+    }
+    val enabled = start !is TripStart.TooEarly
+    val label = when (start) {
+        TripStart.Ready -> stringResource(R.string.journey_trip_start)
+        TripStart.Running -> stringResource(R.string.journey_trip_open)
+        is TripStart.TooEarly -> stringResource(R.string.journey_trip_too_early, formatClock(start.boardsAt.minus(TRIP_START_LEAD)))
+    }
+    val description = if (start == TripStart.Ready) stringResource(R.string.journey_trip_start_description) else label
+    val onClick = if (start == TripStart.Running) onOpen else begin
     Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (enabled) MaterialTheme.colorScheme.primary else Slate200)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .clearAndSetSemantics {
+                contentDescription = description
+                role = Role.Button
+                if (enabled) onClick { onClick(); true }
+            }
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val content = if (enabled) MaterialTheme.colorScheme.onPrimary else Slate500
+        Icon(imageVector = CommuteIcons.NavigationArrow, contentDescription = null, modifier = Modifier.size(20.dp), tint = content)
+        Text(text = label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = content)
+    }
+}
+
+private fun granted(context: Context, permission: String) =
+    ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+
+private fun locationGranted(context: Context) = LocationPermissions.any { granted(context, it) }
+
+/** A secondary action as a square on slate, as tall as the row it sits in. */
+@Composable
+private fun TripIconButton(description: String, icon: ImageVector, onClick: () -> Unit) {
+    Box(
         modifier = Modifier
-            .weight(1f)
             .fillMaxHeight()
+            .aspectRatio(1f, matchHeightConstraintsFirst = true)
             .clip(RoundedCornerShape(12.dp))
             .background(Slate200)
             .clickable(role = Role.Button, onClick = onClick)
@@ -308,13 +390,10 @@ private fun RowScope.TripActionButton(text: String, description: String, icon: I
                 contentDescription = description
                 role = Role.Button
                 onClick { onClick(); true }
-            }
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
+            },
+        contentAlignment = Alignment.Center,
     ) {
-        Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = content)
-        Text(text = text, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = content)
+        Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
     }
 }
 
