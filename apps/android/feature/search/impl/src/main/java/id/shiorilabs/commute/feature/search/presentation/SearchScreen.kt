@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -209,7 +210,17 @@ private fun SearchContent(
             otwContent(PaddingValues(start = 32.dp, end = 32.dp, bottom = insets.calculateBottomPadding() + 32.dp))
             return@Column
         }
+        // Each query's results start at the top. The list otherwise holds on to its first visible
+        // row by key, so once scrolled, a better match ranked in above that row stayed out of sight.
+        val listState = rememberLazyListState()
+        val resultsQuery = ((state as? UIState.Success)?.data?.results as? SearchResults.Found)?.query
+        LaunchedEffect(resultsQuery) {
+            if (resultsQuery != null) {
+                listState.scrollToItem(0)
+            }
+        }
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = WindowInsets.ime.union(WindowInsets.navigationBars).asPaddingValues(),
         ) {

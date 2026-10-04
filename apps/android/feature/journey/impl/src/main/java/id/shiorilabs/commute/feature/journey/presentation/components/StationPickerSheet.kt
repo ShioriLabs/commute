@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
@@ -116,7 +117,16 @@ internal fun StationPickerSheet(
                 .focusRequester(focusRequester),
         )
 
+        // Each query's results start at the top. The list otherwise holds on to its first visible
+        // row by key, and failing that its index: scrolled into the popular stations before typing,
+        // "sudirman" opened on its second result, BNI City, with Sudirman above, out of sight.
+        val listState = rememberLazyListState()
+        LaunchedEffect(picker.query) {
+            listState.scrollToItem(0)
+        }
+
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(top = 8.dp),
