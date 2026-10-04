@@ -6,12 +6,16 @@
     <string name="journey_trip_title">Perjalanan</string>
     <string name="journey_close_description">Tutup perjalanan</string>
     <string name="journey_share_description">Bagikan rute ini</string>
+    <!-- The trip page's buttons under its header; TalkBack reads the longer descriptions instead -->
+    <string name="journey_share">Bagikan</string>
+    <string name="journey_save_route_short">Simpan</string>
+    <string name="journey_route_saved">Tersimpan</string>
     <!-- The share sheet's title -->
     <string name="journey_share_title">Cek Tarif Commute</string>
     <!-- The journey the page was opened on is no longer in the answer -->
     <string name="journey_trip_gone">Rute ini sudah tidak tersedia untuk waktu yang dipilih</string>
     <string name="journey_trip_see_options">Lihat pilihan rute</string>
-    <!-- The pin under the result in search's OTW tab, and beside share on the trip page -->
+    <!-- The pin under the result in search's OTW tab, and beside share on the trip page (spoken there) -->
     <string name="journey_save_route">Simpan rute ini ke beranda</string>
     <string name="journey_unsave_route">Hapus rute ini dari beranda</string>
     <string name="journey_recent_routes">Rute terakhir</string>
@@ -66,7 +70,6 @@
     <!-- %1$d is the number of transfers -->
     <string name="journey_transfer_count">transit %1$dx</string>
     <!-- %1$s is the boarding time, %2$s the arrival, both like 07.14 -->
-    <string name="journey_departs_arrives">Berangkat %1$s, tiba %2$s</string>
     <!-- %1$s is a platform code like 3·4 -->
     <string name="journey_platform">Peron %1$s</string>
     <string name="journey_platform_description">Berangkat dari peron %1$s</string>

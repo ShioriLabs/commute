@@ -27,44 +27,37 @@ import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.feature.journey.R
 import id.shiorilabs.commute.feature.journey.domain.Journey
 import id.shiorilabs.commute.feature.journey.domain.JourneyStop
-import id.shiorilabs.commute.feature.journey.domain.formatClock
 import id.shiorilabs.commute.feature.journey.domain.formatDuration
 import id.shiorilabs.commute.feature.journey.domain.formatKm
 import id.shiorilabs.commute.feature.journey.domain.formatRupiah
+import id.shiorilabs.commute.feature.journey.domain.isLastTrain
 import id.shiorilabs.commute.feature.journey.domain.rides
 import id.shiorilabs.commute.feature.journey.domain.surchargedTransfers
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 
 /*
- * One journey in full, under its card on the trip page: the whole trip's clock, the timeline, the
- * recap, the fare breakdown and the disclaimer. The detail half of the web's `FareResultCard`.
+ * One journey in full, under the trip page's header (which carries its route bar, clock and fare):
+ * why it is offered, the timeline, the recap, the fare breakdown and the disclaimer. The detail half
+ * of the web's `FareResultCard`.
  */
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun JourneyDetail(journey: Journey, lines: Map<String, LineInfo>) {
-    val rides = journey.rides
-    val departureAt = rides.firstOrNull()?.departureAt
+    val departureAt = journey.rides.firstOrNull()?.departureAt
     val arrivalAt = journey.arrivalAt
     val surcharged = journey.surchargedTransfers
 
-    // The whole trip's clock, where it says more than the one ride's own times would.
-    if (departureAt != null && arrivalAt != null && rides.size > 1) {
-        VerticalSpacer(16.dp)
-        Text(
-            text = stringResource(R.string.journey_departs_arrives, formatClock(departureAt), formatClock(arrivalAt)),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = Slate700,
-        )
-    }
+    JourneyTags(journey = journey)
 
-    JourneyTimeline(legs = journey.legs, lines = lines, modifier = Modifier.padding(top = 24.dp))
+    val tagged = journey.isLastTrain || journey.labels.isNotEmpty()
+    JourneyTimeline(legs = journey.legs, lines = lines, modifier = Modifier.padding(top = if (tagged) 16.dp else 0.dp))
 
     FlowRow(
         modifier = Modifier.padding(top = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
     ) {
         if (departureAt != null && arrivalAt != null) {
             RecapText(formatDuration(departureAt, arrivalAt), strong = true)
@@ -72,6 +65,12 @@ internal fun JourneyDetail(journey: Journey, lines: Map<String, LineInfo>) {
         RecapText(stringResource(R.string.journey_transfer_count, journey.transferCount))
         journey.totalFare?.let { RecapText(formatRupiah(it), strong = true) }
         RecapText(formatKm(journey.totalDistanceM))
+        if (journey.walkDistanceM > 0) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(imageVector = CommuteIcons.Walk, contentDescription = null, modifier = Modifier.size(16.dp), tint = Slate500)
+                RecapText("${journey.walkDistanceM} m")
+            }
+        }
     }
 
     if (journey.segments.size + surcharged.size > 1) {
