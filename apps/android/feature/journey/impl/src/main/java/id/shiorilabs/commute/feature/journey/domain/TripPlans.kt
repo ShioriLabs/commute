@@ -8,8 +8,9 @@ import java.time.Duration
 import java.time.Instant
 
 /**
- * The journey as trip mode follows it, copied whole so it runs with no network. Stops carry no
- * coordinates here; trip mode places them from the station directory when it starts.
+ * The journey as trip mode follows it, copied whole so it runs with no network: each stop with its
+ * coordinates and its scheduled time where the API gave them. Trip mode fills in missing
+ * coordinates from the station directory when it starts.
  */
 fun Journey.toTripPlan(): TripPlan = TripPlan(
     legs.map { leg ->
@@ -19,9 +20,10 @@ fun Journey.toTripPlan(): TripPlan = TripPlan(
                 operator = leg.operator,
                 headsign = leg.headsign,
                 platformCode = leg.platformCode,
-                stops = leg.stops.map { it.toTripStop() },
+                stops = leg.stops.mapIndexed { i, stop -> stop.toTripStop(scheduledAt = leg.stopTimes.getOrNull(i)) },
                 departureAt = leg.departureAt,
                 arrivalAt = leg.arrivalAt,
+                tripId = leg.tripId,
             )
             is JourneyLeg.Transfer -> TripLeg.Transfer(
                 from = leg.from.toTripStop(),
@@ -33,7 +35,8 @@ fun Journey.toTripPlan(): TripPlan = TripPlan(
     },
 )
 
-private fun JourneyStop.toTripStop() = TripStop(id = id, name = name)
+private fun JourneyStop.toTripStop(scheduledAt: Instant? = null) =
+    TripStop(id = id, name = name, latitude = latitude, longitude = longitude, scheduledAt = scheduledAt)
 
 /** How long before boarding a trip can be started: time to get to the station. */
 val TRIP_START_LEAD: Duration = Duration.ofMinutes(30)

@@ -34,6 +34,28 @@ class TripPlansTest {
     }
 
     @Test
+    fun `the plan keeps each stop's place and time, and the run boarded`() {
+        val leg = ride("KCI:B", "KCI-MRI", "KCI-TEB", departureAt = departs, arrivalAt = departs.plusSeconds(180)).copy(
+            stops = listOf(JourneyStop("KCI-MRI", "Manggarai", -6.21, 106.8498), JourneyStop("KCI-TEB", "Tebet", -6.2262, 106.8584)),
+            stopTimes = listOf(departs, departs.plusSeconds(180)),
+            tripId = "1466",
+        )
+        val ride = journey(leg).toTripPlan().ride(0)
+
+        assertEquals(-6.2262, ride.stops[1].latitude!!, 1e-9)
+        assertEquals(listOf(departs, departs.plusSeconds(180)), ride.stops.map { it.scheduledAt })
+        assertEquals("1466", ride.tripId)
+    }
+
+    @Test
+    fun `a leg without stop times leaves its stops untimed`() {
+        val ride = timed.toTripPlan().ride(0)
+
+        assertEquals(listOf(null, null), ride.stops.map { it.scheduledAt })
+        assertEquals(null, ride.tripId)
+    }
+
+    @Test
     fun `a trip can start half an hour before boarding, not earlier`() {
         assertEquals(TripStart.Ready, tripStartFor(timed, route, null, departs.minusSeconds(30 * 60)))
         assertEquals(TripStart.TooEarly(departs), tripStartFor(timed, route, null, departs.minusSeconds(31 * 60)))

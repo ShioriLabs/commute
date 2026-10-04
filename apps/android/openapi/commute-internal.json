@@ -1823,6 +1823,22 @@
             "examples": [
               "Sudirman"
             ]
+          },
+          "latitude": {
+            "type": "number",
+            "description": "Lintang stasiun. Cuma ada kalau koordinat stasiunnya kami punya.",
+            "examples": [
+              -6.2026
+            ],
+            "format": "double"
+          },
+          "longitude": {
+            "type": "number",
+            "description": "Bujur stasiun. Cuma ada kalau koordinat stasiunnya kami punya.",
+            "examples": [
+              106.8233
+            ],
+            "format": "double"
           }
         },
         "required": [
@@ -1948,6 +1964,31 @@
           "lastService": {
             "description": "Ada dan bernilai `true` kalau ini kendaraan terakhir hari ini yang bisa dinaiki dari stasiun naik sampai stasiun turun tahap ini. Ketinggalan berarti tahap ini baru bisa dinaiki besok. Cuma ada di tahap yang jadwalnya kami punya.",
             "type": "boolean"
+          },
+          "stopTimes": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "description": "Jam kendaraan ada di tiap stasiun, urut sama dengan `stops`. Null kalau jamnya tidak tercatat. Cuma ada di tahap yang jadwalnya kami punya.",
+            "examples": [
+              [
+                "2026-09-07T07:14:00+07:00",
+                "2026-09-07T07:17:00+07:00",
+                "2026-09-07T07:31:00+07:00"
+              ]
+            ]
+          },
+          "tripId": {
+            "type": "string",
+            "description": "Penanda perjalanan kendaraan yang dinaiki. Jangan diurai, cuma buat membandingkan. Cuma ada di tahap yang jadwalnya kami punya."
           },
           "platformCode": {
             "type": "string",
