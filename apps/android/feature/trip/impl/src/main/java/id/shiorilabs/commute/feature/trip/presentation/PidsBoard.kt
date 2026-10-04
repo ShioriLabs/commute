@@ -166,7 +166,7 @@ private val LabelGap = 6.dp
 private val NameSize = 20.sp
 private val NextNameSize = 26.sp
 
-/** Plus Jakarta Sans' capitals, as a share of its size: what a name is centred on. */
+/** Plus Jakarta Sans' capitals, as a share of its size: what a name hangs by. */
 private const val CAP_HEIGHT = 0.7f
 
 /** Keeps a white bubble apart from a pale line (a yellow corridor) and the page around it. */
@@ -522,10 +522,10 @@ private fun Strip(pids: Pids, color: Color, source: String?) {
         val gap = with(density) { LabelGap.toPx() }
         val starts = pids.upcoming.mapIndexed { i, stop ->
             val (at, size) = bubbles[i]
-            // Half the capitals' height at the name's largest: its ink, not its line box. The tag
-            // under the stop to get off at hangs below, where the band never is.
-            val half = with(density) { (if (stop.next) NextNameSize else NameSize).toPx() } * CAP_HEIGHT / 2
-            maxOf(at.x + size / 2, loop.innerEdgeClearOf(at.y - half - slab)) + gap
+            // The name hangs from the bubble's centre line, and the band's edge only rises going
+            // right: clear of it at that line, the name is clear all the way down, and so is the
+            // tag under the stop to get off at.
+            maxOf(at.x + size / 2, loop.innerEdgeClearOf(at.y - slab)) + gap
         }
 
         Box(
@@ -757,20 +757,19 @@ private fun StopBubble(stop: PidsStop, size: Dp, modifier: Modifier) {
     }
 }
 
-/** A stop's name, its vertical centre on [centreY] (its bubble's), starting at [x]; "TURUN" under the stop to get off at. */
+/** A stop's name hanging from [centreY] (its bubble's centre), starting at [x]; "TURUN" under the stop to get off at. */
 @Composable
 private fun StopLabel(stop: PidsStop, x: Float, centreY: Float, maxWidth: Int) {
     val density = LocalDensity.current
-    // Centred optically: the middle of the name's capitals on the bubble's centre, measured from its
-    // baseline at the size it settled on. Its line box would centre the room a "g" might need, and
-    // set "Duren Kalibata" high.
-    var capHalf by remember { mutableFloatStateOf(0f) }
+    // The top of the name's capitals on the bubble's centre line, measured from its baseline at the
+    // size it settled on: its ink, not its line box, which has room above for accents.
+    var capHeight by remember { mutableFloatStateOf(0f) }
     Column(
         modifier = Modifier.layout { measurable, _ ->
             val placeable = measurable.measure(Constraints(maxWidth = maxWidth.coerceAtLeast(0)))
             val baseline = placeable[FirstBaseline].takeIf { it != AlignmentLine.Unspecified } ?: (placeable.height / 2)
             layout(placeable.width, placeable.height) {
-                placeable.place(x.roundToInt(), (centreY - baseline + capHalf).roundToInt())
+                placeable.place(x.roundToInt(), (centreY - baseline + capHeight).roundToInt())
             }
         },
     ) {
@@ -787,7 +786,7 @@ private fun StopLabel(stop: PidsStop, x: Float, centreY: Float, maxWidth: Int) {
             // Only past the smallest size does a name lose its end, and then visibly.
             overflow = TextOverflow.Ellipsis,
             autoSize = TextAutoSize.StepBased(minFontSize = 13.sp, maxFontSize = if (stop.next) NextNameSize else NameSize, stepSize = 1.sp),
-            onTextLayout = { layout -> capHalf = with(density) { layout.layoutInput.style.fontSize.toPx() } * CAP_HEIGHT / 2 },
+            onTextLayout = { layout -> capHeight = with(density) { layout.layoutInput.style.fontSize.toPx() } * CAP_HEIGHT },
         )
         if (stop.alighting) {
             Text(
