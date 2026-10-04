@@ -54,13 +54,11 @@ import id.shiorilabs.commute.feature.journey.domain.JAKARTA
 import id.shiorilabs.commute.feature.journey.domain.Journey
 import id.shiorilabs.commute.feature.journey.domain.JourneyStop
 import id.shiorilabs.commute.feature.journey.domain.TripAnswer
-import id.shiorilabs.commute.feature.journey.domain.boardingClock
 import id.shiorilabs.commute.feature.journey.domain.boardsAt
 import id.shiorilabs.commute.feature.journey.domain.formatClock
 import id.shiorilabs.commute.feature.journey.domain.formatDuration
 import id.shiorilabs.commute.feature.journey.domain.formatRupiah
 import id.shiorilabs.commute.feature.journey.domain.isLastTrain
-import id.shiorilabs.commute.feature.journey.domain.journeyKey
 import id.shiorilabs.commute.feature.journey.domain.resumeTimeOf
 import id.shiorilabs.commute.feature.journey.domain.rides
 import id.shiorilabs.commute.feature.journey.domain.upcomingJourneys
@@ -68,6 +66,7 @@ import id.shiorilabs.commute.feature.journey.presentation.SavedRouteCard
 import id.shiorilabs.commute.feature.journey.presentation.components.Amber700
 import id.shiorilabs.commute.feature.journey.presentation.components.Slate400
 import id.shiorilabs.commute.feature.journey.presentation.components.Slate500
+import id.shiorilabs.commute.feature.journey.presentation.trip.tripRoute
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.codeOfLineKey
 import java.time.Instant
@@ -79,7 +78,8 @@ private val FallbackLineColor = Color(0xFF94A3B8)
 /**
  * The web's `SavedRouteCard`: a saved pair's next boardings, dressed like a station's line card
  * (heavy top rule, tinted body) so the two read as one feed, in the colour of the line the soonest
- * row boards on. Each row opens the OTW page on that train.
+ * row boards on. Each row opens that train's trip page; with none left, the card opens the pair in
+ * search's OTW tab.
  */
 class SavedRouteCardImpl @Inject constructor() : SavedRouteCard {
 
@@ -107,14 +107,14 @@ class SavedRouteCardImpl @Inject constructor() : SavedRouteCard {
             state = state,
             now = now,
             onOpen = { journey ->
+                // The trip page asks with the card's own criteria, so lands on the card's answer.
+                val criteria = state.criteria
                 navigator.goTo(
-                    Route.Journey(
-                        fromId = fromId,
-                        toId = toId,
-                        journeyKey = journey?.let(::journeyKey),
-                        // Rows of one route share a key; the clock says which train was tapped.
-                        boardingClock = journey?.boardsAt?.let(::boardingClock),
-                    ),
+                    if (journey != null && criteria != null) {
+                        tripRoute(fromId, toId, journey, criteria)
+                    } else {
+                        Route.Otw(fromId = fromId, toId = toId)
+                    },
                 )
             },
             onRetry = viewModel::retry,

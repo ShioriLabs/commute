@@ -13,6 +13,7 @@ import androidx.navigation3.runtime.rememberNavBackStack
  *
  * - [goTo] — push a destination.
  * - [pop] — back one level; returns `false` at the root so the caller can let the system handle it.
+ * - [replace] — swap what's on screen for another destination, leaving nothing to come back to.
  */
 @Stable
 class CommuteNavigator(
@@ -29,6 +30,15 @@ class CommuteNavigator(
             return
         }
         backStack.add(key)
+    }
+
+    /** Puts [key] where the top of the stack was. At the root, pushes it instead: home stays. */
+    fun replace(key: Route) {
+        if (backStack.size <= 1) {
+            backStack.add(key)
+            return
+        }
+        backStack[backStack.lastIndex] = key
     }
 
     fun pop(): Boolean {

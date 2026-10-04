@@ -35,9 +35,6 @@ sealed interface TripState {
     data object Failed : TripState
 }
 
-/** Which of the two result pages shows: the web's `journey-pager.ts`. */
-enum class JourneyPage { OPTIONS, DETAIL }
-
 /** One end of the pair as the panel shows it. */
 data class PairEndpoint(
     val id: String,
@@ -53,14 +50,10 @@ data class JourneyUiState(
     val destination: PairEndpoint? = null,
     val criteria: JourneyCriteria = JourneyCriteria(),
     val trip: TripState = TripState.Idle,
-    val page: JourneyPage = JourneyPage.OPTIONS,
-    val selected: Int = 0,
     /** The end the station picker is open for, or `null` when it is closed. */
     val picker: PairEnd? = null,
     /** The line dictionary, keyed `OPERATOR:CODE`. Empty until it loads. */
     val lines: Map<String, LineInfo> = emptyMap(),
-    /** The web link for this pair and selected journey; `null` without both ends. */
-    val shareUrl: String? = null,
 )
 
 /** A pair search's "Rute terakhir" offers back, named from the station index. */

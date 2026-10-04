@@ -6,15 +6,15 @@ import id.shiorilabs.commute.core.navigation.NavGraphContribution
 import id.shiorilabs.commute.core.navigation.NavGraphScope
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.ui.motion.pageTransitionMetadata
-import id.shiorilabs.commute.feature.journey.presentation.JourneyScreen
+import id.shiorilabs.commute.feature.journey.presentation.trip.TripScreen
 import javax.inject.Inject
 
-/** Contributes [Route.Journey], OTW as a page: it slides in over the station or search it came from. */
+/** Contributes [Route.Trip], one journey in full: it slides in over the OTW tab or home it came from. */
 class JourneyNavContribution @Inject constructor() : NavGraphContribution {
 
     override fun EntryProviderScope<NavKey>.addEntries(scope: NavGraphScope) {
-        entry<Route.Journey>(metadata = pageTransitionMetadata()) { key ->
-            JourneyScreen(route = key, innerPadding = scope.screenPadding)
+        entry<Route.Trip>(metadata = pageTransitionMetadata()) { key ->
+            TripScreen(route = key, innerPadding = scope.screenPadding)
         }
     }
 }
