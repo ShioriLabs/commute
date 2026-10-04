@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -49,11 +48,12 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import java.time.Instant
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.sp
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
-import id.shiorilabs.commute.core.ui.ext.Foreground
-import id.shiorilabs.commute.core.ui.ext.foreground
 import id.shiorilabs.commute.core.ui.ext.parseHexColor
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.feature.journey.R
@@ -122,9 +122,10 @@ internal fun TransferIcon(bus: Boolean, modifier: Modifier = Modifier, tint: Col
 }
 
 /**
- * The journey leg by leg, down a rail in each line's colour: where to board, which line and which
- * way, when, how many stops (which open out), and where to get off; and between rides, the change or
- * the walk. The web's `JourneyTimeline`.
+ * The journey leg by leg, down a rail in each line's colour: where to board and from which platform,
+ * which line and which way, how many stops (which open out), and where to get off, each stop's time
+ * down the right where the timetable has one; and between rides, the change or the walk. The web's
+ * `JourneyTimeline` in its order, drawn as the live trip screen draws a ride.
  */
 @Composable
 internal fun JourneyTimeline(legs: List<JourneyLeg>, lines: Map<String, LineInfo>, modifier: Modifier = Modifier) {
@@ -151,7 +152,7 @@ private fun TimelineRow(
     modifier: Modifier = Modifier,
     cap: RailCap = RailCap.NONE,
     node: Color? = null,
-    tick: Boolean = false,
+    dot: Color? = null,
     content: @Composable () -> Unit,
 ) {
     Row(modifier = modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
@@ -173,15 +174,15 @@ private fun TimelineRow(
                         .border(4.dp, node, CircleShape),
                 )
             }
-            if (tick) {
-                // A tick across the rail, not a hole: gaps at this width read as a dashed line.
+            if (dot != null) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.CenterStart)
-                        .offset(x = RailCenter - RailWidth / 2)
-                        .size(width = RailWidth, height = 2.dp)
+                        .offset(x = RailCenter - 5.dp)
+                        .size(10.dp)
                         .clip(CircleShape)
-                        .background(Color.White),
+                        .background(Color.White)
+                        .border(3.dp, dot, CircleShape),
                 )
             }
         }
@@ -193,7 +194,6 @@ private fun TimelineRow(
 
 private enum class RailCap { NONE, START, END }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RideLeg(leg: JourneyLeg.Ride, lines: List<LegLine>, sameStationChange: Boolean) {
     var expanded by rememberSaveable(leg.from.id, leg.to.id, leg.line) { mutableStateOf(false) }
@@ -221,25 +221,16 @@ private fun RideLeg(leg: JourneyLeg.Ride, lines: List<LegLine>, sameStationChang
     }
 
     TimelineRow(rail = rail, cap = RailCap.START, node = legColor) {
-        FlowRow(
-            modifier = Modifier.padding(vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            itemVerticalAlignment = Alignment.CenterVertically,
-        ) {
+        StopLine(time = leg.departureAt) {
             Text(text = leg.from.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             leg.platformCode?.let { platform ->
                 val formatted = formatPlatformCode(platform)
                 val description = stringResource(R.string.journey_platform_description, formatted)
                 Text(
                     text = stringResource(R.string.journey_platform, formatted),
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(legColor.copy(alpha = 0.2f))
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                        .clearAndSetSemantics { contentDescription = description },
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Slate900,
+                    modifier = Modifier.clearAndSetSemantics { contentDescription = description },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Slate500,
                 )
             }
         }
@@ -247,46 +238,15 @@ private fun RideLeg(leg: JourneyLeg.Ride, lines: List<LegLine>, sameStationChang
 
     TimelineRow(rail = rail) {
         Column(
-            modifier = Modifier.padding(vertical = 8.dp),
+            modifier = Modifier.padding(vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                lines.forEach { line ->
-                    if (isBus) {
-                        LineRoundel(code = line.code, color = line.color, operator = leg.operator, size = RoundelSize.SM)
-                    } else {
-                        val color = parseHexColor(line.color)
-                        Text(
-                            text = line.name,
-                            modifier = Modifier
-                                .background(color, RoundedCornerShape(6.dp))
-                                .padding(horizontal = 12.dp, vertical = 4.dp),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (color.foreground() == Foreground.LIGHT) Color.White else Slate900,
-                        )
-                    }
-                }
-            }
-            if (lines.size > 1) {
-                RideNote(stringResource(if (isBus) R.string.journey_board_any_bus else R.string.journey_board_any_train))
-            }
-            if (directions.isNotEmpty()) {
-                RideNote(stringResource(R.string.journey_headsign, joinLabels(directions)))
-            }
-            val departureAt = leg.departureAt
-            val arrivalAt = leg.arrivalAt
-            // Only where the timetable covers this leg; TransJakarta publishes none, and a dash
-            // would read as a time we failed to fetch.
-            if (departureAt != null && arrivalAt != null) {
+            // Each line as the live trip names it: its roundel, then its name.
+            lines.forEach { line ->
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "${formatClock(departureAt)} - ${formatClock(arrivalAt)}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Slate700,
-                    )
-                    if (leg.lastService) {
+                    LineRoundel(code = line.code, color = line.color, operator = leg.operator, size = RoundelSize.SM)
+                    Text(text = line.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Slate900)
+                    if (leg.lastService && line == lines.first()) {
                         Text(
                             text = stringResource(R.string.journey_last_service),
                             modifier = Modifier
@@ -299,6 +259,12 @@ private fun RideLeg(leg: JourneyLeg.Ride, lines: List<LegLine>, sameStationChang
                         )
                     }
                 }
+            }
+            if (lines.size > 1) {
+                RideNote(stringResource(if (isBus) R.string.journey_board_any_bus else R.string.journey_board_any_train))
+            }
+            if (directions.isNotEmpty()) {
+                RideNote(stringResource(R.string.journey_headsign, joinLabels(directions)))
             }
             val summary = stringResource(R.string.journey_ride_summary, leg.stationCount - 1, formatKm(leg.distanceM))
             if (intermediate.isEmpty()) {
@@ -315,7 +281,7 @@ private fun RideLeg(leg: JourneyLeg.Ride, lines: List<LegLine>, sameStationChang
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(text = summary, style = MaterialTheme.typography.bodyMedium, color = Slate500)
+                    Text(text = summary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = Slate500)
                     Icon(
                         imageVector = CommuteIcons.MoveDown,
                         contentDescription = null,
@@ -336,26 +302,59 @@ private fun RideLeg(leg: JourneyLeg.Ride, lines: List<LegLine>, sameStationChang
         exit = shrinkVertically(tween(STOPS_REVEAL_MILLIS, easing = FastOutSlowInEasing), shrinkTowards = Alignment.Top),
     ) {
         Column {
-            intermediate.forEach { stop ->
-                TimelineRow(rail = rail, tick = true) {
-                    Text(
-                        text = stop.name,
-                        modifier = Modifier.padding(vertical = 4.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Slate600,
-                    )
+            intermediate.forEachIndexed { i, stop ->
+                TimelineRow(rail = rail, dot = legColor) {
+                    StopLine(time = leg.stopTimes.getOrNull(i + 1), padding = 6.dp) {
+                        Text(text = stop.name, style = MaterialTheme.typography.bodyMedium, color = Slate900)
+                    }
                 }
             }
         }
     }
 
     TimelineRow(rail = rail, cap = RailCap.END, node = legColor) {
-        Text(
-            text = leg.to.name,
-            modifier = Modifier.padding(vertical = 2.dp),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-        )
+        StopLine(time = leg.arrivalAt) {
+            Text(text = leg.to.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            val description = stringResource(R.string.journey_get_off_description)
+            Text(
+                text = stringResource(R.string.journey_get_off),
+                modifier = Modifier
+                    .padding(top = 2.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(MaterialTheme.colorScheme.primary)
+                    .padding(horizontal = 6.dp, vertical = 1.dp)
+                    .clearAndSetSemantics { contentDescription = description },
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimary,
+            )
+        }
+    }
+}
+
+/**
+ * A stop's line beside the rail: its name (and whatever goes under it) on the left, its time on the
+ * right in figures of one width, so the times line up down the ride. No time, no column: TransJakarta
+ * publishes none, and a dash would read as one we failed to fetch.
+ */
+@Composable
+private fun StopLine(time: Instant?, padding: Dp = 2.dp, content: @Composable () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = padding)
+            .semantics(mergeDescendants = true) {},
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) { content() }
+        time?.let {
+            Text(
+                text = formatClock(it),
+                modifier = Modifier.padding(start = 12.dp),
+                style = MaterialTheme.typography.labelLarge.merge(fontFeatureSettings = "tnum"),
+                color = Slate500,
+            )
+        }
     }
 }
 

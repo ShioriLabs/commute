@@ -61,4 +61,39 @@ class StopMarksTest {
         val arrived = ActiveTrip(plan, start.copy(legIndex = 2, phase = TripPhase.ARRIVED), origin)
         assertEquals(RideMarks(listOf(PASSED, PASSED, PASSED, HERE)), arrived.stopMarks()[2])
     }
+
+    @Test
+    fun `a short ride shows every stop`() {
+        assertEquals((0..6).map(TimelineRow::Stop), timelineRows(7, focus = 3, expanded = false))
+    }
+
+    @Test
+    fun `a long ride keeps its ends, the stops round the rider and the one before getting off`() {
+        // Manggarai to Depok, thirteen stops, the rider making for Cawang.
+        val rows = timelineRows(13, focus = 2, expanded = false)
+
+        assertEquals(
+            listOf(
+                TimelineRow.Stop(0), TimelineRow.Stop(1), TimelineRow.Stop(2), TimelineRow.Stop(3), TimelineRow.Stop(4),
+                TimelineRow.Folded(5, 10),
+                TimelineRow.Stop(11), TimelineRow.Stop(12),
+            ),
+            rows,
+        )
+        assertEquals(6, (rows[5] as TimelineRow.Folded).count)
+    }
+
+    @Test
+    fun `a lone stop between kept ones isn't folded`() {
+        // Kept: 0, 4 to 7 round the rider at 5, 9 and 10; 8 alone stays a stop.
+        val rows = timelineRows(11, focus = 5, expanded = false)
+
+        assertEquals(listOf(TimelineRow.Stop(0), TimelineRow.Folded(1, 3)), rows.take(2))
+        assertEquals(true, TimelineRow.Stop(8) in rows)
+    }
+
+    @Test
+    fun `opened, a long ride shows every stop`() {
+        assertEquals(13, timelineRows(13, focus = 2, expanded = true).size)
+    }
 }
