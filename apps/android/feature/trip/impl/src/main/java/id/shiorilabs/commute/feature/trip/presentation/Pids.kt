@@ -46,6 +46,11 @@ data class PidsStop(
  * @property stationId The big name's station, for the lines a rider can change to there.
  * @property changeTo The ride the plan changes onto at [station], when it is where the rider gets
  *   off and another ride follows.
+ * @property stopsLeft Stops still to come before getting off, the alighting stop counted: the whole
+ *   ride while waiting to board, `0` once arrived.
+ * @property minutesLeft Whole minutes until getting off, wait for the train included, when the
+ *   timetable or a fix can say; `null` there and once arrived.
+ * @property alightingAt When the ride should reach the stop to get off at, lateness included.
  */
 data class Pids(
     val ride: TripLeg.Ride,
@@ -55,6 +60,9 @@ data class Pids(
     val at: Instant?,
     val upcoming: List<PidsStop>,
     val changeTo: TripLeg.Ride?,
+    val stopsLeft: Int,
+    val minutesLeft: Int?,
+    val alightingAt: Instant?,
 )
 
 /** Stops ahead on the band: as many as a phone's height reads at a glance. */
@@ -77,7 +85,7 @@ internal fun ActiveTrip.pids(now: Instant): Pids {
 
     if (state.phase == TripPhase.ARRIVED) {
         val stop = ride.stops.last()
-        return Pids(ride, PidsLabel.ARRIVED, stop.name, stop.id, null, emptyList(), null)
+        return Pids(ride, PidsLabel.ARRIVED, stop.name, stop.id, null, emptyList(), null, stopsLeft = 0, minutesLeft = null, alightingAt = null)
     }
 
     val (label, focus) = when {
@@ -105,5 +113,9 @@ internal fun ActiveTrip.pids(now: Instant): Pids {
         at = expected(focus),
         upcoming = upcoming,
         changeTo = then?.takeIf { focus == last },
+        // Boarding, the stop stood at isn't one still to come.
+        stopsLeft = if (label == PidsLabel.BOARD) last else last - focus + 1,
+        minutesLeft = if (label == PidsLabel.ALIGHT_HERE) null else minutesTo(last),
+        alightingAt = expected(last),
     )
 }
