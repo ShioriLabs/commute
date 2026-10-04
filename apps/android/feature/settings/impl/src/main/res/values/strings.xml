@@ -67,6 +67,20 @@
     <string name="settings_location_permission_granted">Diizinkan</string>
     <string name="settings_location_permission_denied">Belum diizinkan</string>
 
+    <!-- Experimental: switches for trying the app out. Listed in debug builds, or after tapping the
+         version seven times. %1$d is how many taps are left. -->
+    <string name="settings_item_experimental">Experimental</string>
+    <string name="settings_experimental_title">Experimental</string>
+    <string name="settings_experimental_hint">Buat nyobain aplikasinya. Bisa bikin aneh-aneh, jadi pakai seperlunya aja</string>
+    <string name="settings_experimental_force_trip">Paksa OTW</string>
+    <string name="settings_experimental_force_trip_detail">Mulai perjalanan kapan aja, gak perlu nunggu 30 menit sebelum berangkat</string>
+    <string name="settings_experimental_frost_tuner">Frost Tuner</string>
+    <string name="settings_experimental_frost_tuner_detail">Tombol melayang buat ngatur efek frost di header</string>
+    <string name="settings_experimental_hide">Sembunyikan Menu Experimental</string>
+    <string name="settings_experimental_taps_left">%1$d ketukan lagi buat buka menu Experimental</string>
+    <string name="settings_experimental_opened">Menu Experimental udah kebuka</string>
+    <string name="settings_experimental_already_open">Menu Experimental udah kebuka kok</string>
+
     <!-- Legal & attributions -->
     <string name="settings_legal_title">Legal &amp; Atribusi</string>
     <string name="settings_legal_section_legal">Hal-Hal Legal</string>
