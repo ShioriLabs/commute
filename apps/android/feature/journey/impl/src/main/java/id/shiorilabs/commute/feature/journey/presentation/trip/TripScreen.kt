@@ -104,6 +104,7 @@ fun TripScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val routeSaved by viewModel.routeSaved.collectAsStateWithLifecycle()
     val tripStart by viewModel.tripStart.collectAsStateWithLifecycle()
+    val tripAsksLocation by viewModel.tripAsksLocation.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
     val context = LocalContext.current
     val shareTitle = stringResource(R.string.journey_share_title)
@@ -114,6 +115,7 @@ fun TripScreen(
         routeSaved = routeSaved,
         onToggleSaveRoute = viewModel::onToggleSaveRoute,
         tripStart = tripStart,
+        tripAsksLocation = tripAsksLocation,
         onStartTrip = {
             viewModel.startTrip()
             navigator.goTo(Route.ActiveTrip)
@@ -158,6 +160,7 @@ private fun TripContent(
     routeSaved: Boolean? = null,
     onToggleSaveRoute: () -> Unit = {},
     tripStart: TripStart? = null,
+    tripAsksLocation: Boolean = true,
     onStartTrip: () -> Unit = {},
     onOpenTrip: () -> Unit = {},
 ) {
@@ -196,6 +199,7 @@ private fun TripContent(
                     is TripPageState.Loaded -> Column(modifier = Modifier.padding(top = BodyTop)) {
                         TripActions(
                             tripStart = tripStart,
+                            asksLocation = tripAsksLocation,
                             routeSaved = routeSaved,
                             shareUrl = state.shareUrl,
                             onStartTrip = onStartTrip,
@@ -281,6 +285,7 @@ private fun TripHeader(state: TripUiState, innerPadding: PaddingValues, onClose:
 @Composable
 private fun TripActions(
     tripStart: TripStart?,
+    asksLocation: Boolean,
     routeSaved: Boolean?,
     shareUrl: String?,
     onStartTrip: () -> Unit,
@@ -299,7 +304,7 @@ private fun TripActions(
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
     ) {
         tripStart?.let {
-            TripStartButton(start = it, onStart = onStartTrip, onOpen = onOpenTrip, modifier = Modifier.weight(1f))
+            TripStartButton(start = it, asksLocation = asksLocation, onStart = onStartTrip, onOpen = onOpenTrip, modifier = Modifier.weight(1f))
         }
         routeSaved?.let { saved ->
             TripIconButton(
@@ -327,19 +332,25 @@ private fun TripActions(
  * without location it runs on the clock, without notifications it only shows in the app.
  */
 @Composable
-private fun TripStartButton(start: TripStart, onStart: () -> Unit, onOpen: () -> Unit, modifier: Modifier = Modifier) {
+private fun TripStartButton(
+    start: TripStart,
+    asksLocation: Boolean,
+    onStart: () -> Unit,
+    onOpen: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
     val askLocation = rememberLocationPermissionRequest { onStart() }
     val askNotifications = rememberNotificationPermissionRequest {
-        if (locationGranted(context)) onStart() else askLocation()
+        if (!asksLocation || locationGranted(context)) onStart() else askLocation()
     }
     val begin = {
         haptics.performHapticFeedback(HapticFeedbackType.Confirm)
         when {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !granted(context, Manifest.permission.POST_NOTIFICATIONS) ->
                 askNotifications()
-            !locationGranted(context) -> askLocation()
+            asksLocation && !locationGranted(context) -> askLocation()
             else -> onStart()
         }
     }
