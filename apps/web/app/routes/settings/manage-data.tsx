@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { createStore, get, keys as getAllKeys, clear } from 'idb-keyval'
 import { useMemo } from 'react'
 import { CaretLeftIcon, TrashIcon } from '@phosphor-icons/react'
-import { clearRecents } from 'utils/recents'
+import { clearRecentRoutes, clearRecents, readRecentRoutes, readRecents } from 'utils/recents'
 
 export function meta() {
   return [
@@ -68,19 +68,9 @@ export default function ManageDataSettingsPage() {
   const [isCacheSizeLoading, setIsCacheSizeLoading] = useState(true)
 
   useEffect(() => {
-    const recentlySearchedRaw = localStorage.getItem('recently-searched')
     const savedStationsRaw = localStorage.getItem('saved-stations')
 
-    if (recentlySearchedRaw) {
-      try {
-        const parsedRecentlySearched: string[] = JSON.parse(recentlySearchedRaw)
-        if (parsedRecentlySearched.length) {
-          setRecentlySearchedCount(parsedRecentlySearched.length)
-        }
-      } catch {
-        localStorage.setItem('recently-searched', JSON.stringify([]))
-      }
-    }
+    setRecentlySearchedCount(readRecents().length + readRecentRoutes().length)
 
     if (savedStationsRaw) {
       try {
@@ -112,11 +102,12 @@ export default function ManageDataSettingsPage() {
 
   const handleClearRecentlySearched = useCallback(() => {
     clearRecents()
+    clearRecentRoutes()
     setRecentlySearchedCount(0)
   }, [setRecentlySearchedCount])
 
   const handleClearSavedStation = useCallback(() => {
-    const confirmed = confirm('Yakin mau hapus semua stasiun disimpan?')
+    const confirmed = confirm('Yakin mau hapus semua stasiun dan rute disimpan?')
     if (confirmed) {
       localStorage.setItem('saved-stations', JSON.stringify([]))
       setSavedStationsCount(0)
@@ -157,8 +148,8 @@ export default function ManageDataSettingsPage() {
           showClearButton={recentlySearchedCount > 0}
         />
         <DataEntryItem
-          title="Stasiun Disimpan"
-          subtitle={savedStationsCount > 0 ? `${savedStationsCount} stasiun` : 'Tidak ada stasiun disimpan'}
+          title="Stasiun & Rute Disimpan"
+          subtitle={savedStationsCount > 0 ? `${savedStationsCount} item` : 'Tidak ada stasiun atau rute disimpan'}
           onClearButtonClick={handleClearSavedStation}
           showClearButton={savedStationsCount > 0}
         />

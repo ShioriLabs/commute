@@ -5,13 +5,14 @@ import { getForegroundColor, getTintFromColor } from 'utils/colors'
 import { filterBestTier, keywordScore, popularityTerm, SCORE_THRESHOLD } from 'utils/fuzzy-match'
 import type { Searchable } from '@commute/schemas'
 import { useSearchables } from '~/hooks/use-searchables'
-import { CaretRightIcon, MagnifyingGlassIcon, PencilSimpleIcon, PushPinIcon, XCircleIcon } from '@phosphor-icons/react'
+import { ArrowRightIcon, CaretRightIcon, MagnifyingGlassIcon, PencilSimpleIcon, PushPinIcon, XCircleIcon } from '@phosphor-icons/react'
 import clsx from 'clsx'
-import { clearRecents, readRecents, recordRecent, type RecentEntry } from 'utils/recents'
-import { readSavedStations, toggleSavedStation } from 'utils/saved-stations'
+import { clearRecentRoutes, clearRecents, readRecentRoutes, readRecents, recordRecent, type RecentEntry, type RecentRoute } from 'utils/recents'
+import { entryKey, isSavedRoute, readSavedEntries, readSavedStations, toggleSavedRoute, toggleSavedStation } from 'utils/saved-stations'
 import { buildFarePath } from 'utils/fare-url'
 import { readSearchMode, writeSearchMode, type SearchMode } from 'utils/search-mode'
 import FarePanel from '~/components/fare-sheet/fare-panel'
+import SaveRouteButton from '~/components/fare-sheet/save-route-button'
 import { useFareQuery } from '~/components/fare-sheet/use-fare-query'
 import SearchableItem from './searchable-item'
 import SearchModeToggle from './mode-toggle'
@@ -118,6 +119,71 @@ function RecentList({ items, searchables, savedIds, onClick, onToggleSave, onCle
   )
 }
 
+// Pairs checked on any fare surface, each a link to /fare with a pin that puts
+// it on home. Shown only while route mode has no complete pair, where it reads
+// as "pick up where you left off" rather than competing with a result.
+function RecentRouteList({ routes, searchables, savedKeys, onToggleSave, onClear }: {
+  routes: RecentRoute[]
+  searchables: Searchable[]
+  savedKeys: ReadonlySet<string>
+  onToggleSave: (route: RecentRoute) => void
+  onClear: () => void
+}) {
+  const names = useMemo(() => {
+    const index = new Map<string, string>()
+    for (const searchable of searchables) {
+      const id = searchable.data?.['station-id']
+      if (searchable.type === 'STATION' && id) index.set(id, searchable.title)
+    }
+    return index
+  }, [searchables])
+  const named = routes.filter(route => names.has(route.from) && names.has(route.to))
+  if (named.length === 0) return null
+
+  return (
+    <article className="mt-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-sm font-bold text-slate-500">Rute terakhir</h1>
+        <button type="button" onClick={onClear} className="text-sm font-bold text-[#F55875] cursor-pointer">
+          Hapus
+        </button>
+      </div>
+      <ul className="mt-1">
+        {named.map((route) => {
+          const saved = savedKeys.has(entryKey({ type: 'ROUTE', ...route }))
+          const label = `${names.get(route.from)} ke ${names.get(route.to)}`
+          return (
+            <li key={`${route.from}>${route.to}`} className="flex items-center gap-2">
+              <Link
+                to={buildFarePath(route.from, route.to) ?? '/fare'}
+                className="flex-grow min-w-0 py-3 flex items-center gap-2 font-semibold"
+              >
+                <span className="truncate">{names.get(route.from)}</span>
+                <ArrowRightIcon weight="bold" className="w-4 h-4 shrink-0 text-slate-500" />
+                <span className="truncate">{names.get(route.to)}</span>
+              </Link>
+              <button
+                type="button"
+                onClick={() => onToggleSave(route)}
+                aria-label={saved ? `Lepas pin rute ${label}` : `Pin rute ${label}`}
+                aria-pressed={saved}
+                // Same pin as the station rows (SearchableItem), so a pinned
+                // route and a pinned station read as the same state.
+                className={clsx(
+                  'shrink-0 w-11 h-11 rounded-full flex items-center justify-center cursor-pointer transition-colors duration-150 ease',
+                  saved ? 'text-[#F55875]' : 'text-slate-300 hover:text-slate-400'
+                )}
+              >
+                <PushPinIcon weight={saved ? 'fill' : 'bold'} className="w-6 h-6" />
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </article>
+  )
+}
+
 // All rail lines as colored chips linking to their line pages, grouped in a
 // single wrap. Fed by the index's LINE entries, which already exclude TJ (its
 // line-detail pages aren't built yet — no topology).
@@ -175,6 +241,8 @@ export default function SearchContent({ title, closeButton }: Props) {
   const deferredQuery = useDeferredValue(searchQuery)
   const [recentlySearched, setRecentlySearched] = useState<RecentEntry[]>([])
   const [savedStations, setSavedStations] = useState<string[]>([])
+  const [recentRoutes, setRecentRoutes] = useState<RecentRoute[]>([])
+  const [savedRouteKeys, setSavedRouteKeys] = useState<ReadonlySet<string>>(() => new Set())
   // Station mode is the correct first paint on the server and for a first-time
   // visitor, so the stored preference is read after mount (see the same pattern
   // in app/hooks/secret-features.ts useMapGlDebug).
@@ -190,6 +258,15 @@ export default function SearchContent({ title, closeButton }: Props) {
     fareQuery.destination?.id,
     fareQuery.criteria
   )
+
+  const pairComplete = !!fareQuery.pairFromId && !!fareQuery.pairToId
+  useEffect(() => {
+    // Re-read on each return to the empty state: the lookup just made, and any
+    // pin set on its result, both happened while this list was hidden.
+    if (mode !== 'FARE' || pairComplete) return
+    setRecentRoutes(readRecentRoutes())
+    setSavedRouteKeys(new Set(readSavedEntries().filter(isSavedRoute).map(entryKey)))
+  }, [mode, pairComplete])
 
   const handleModeChange = (next: SearchMode) => {
     setMode(next)
@@ -258,6 +335,7 @@ export default function SearchContent({ title, closeButton }: Props) {
   useEffect(() => {
     setRecentlySearched(readRecents())
     setSavedStations(readSavedStations())
+    setSavedRouteKeys(new Set(readSavedEntries().filter(isSavedRoute).map(entryKey)))
     const stored = readSearchMode()
     if (stored === 'FARE') {
       setMode('FARE')
@@ -317,6 +395,17 @@ export default function SearchContent({ title, closeButton }: Props) {
     if (!stationId) return
     haptic()
     setSavedStations(toggleSavedStation(stationId))
+  }, [])
+
+  const handleToggleSaveRoute = useCallback((route: RecentRoute) => {
+    haptic()
+    toggleSavedRoute(route.from, route.to)
+    setSavedRouteKeys(new Set(readSavedEntries().filter(isSavedRoute).map(entryKey)))
+  }, [])
+
+  const handleClearRecentRoutes = useCallback(() => {
+    clearRecentRoutes()
+    setRecentRoutes([])
   }, [])
 
   const handleClearRecents = useCallback(() => {
@@ -395,16 +484,34 @@ export default function SearchContent({ title, closeButton }: Props) {
                 query={fareQuery}
                 footer={fareSharePath
                   ? (
-                      <Link
-                        to={fareSharePath}
-                        className="mt-4 flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl bg-stone-100/80 border-2 border-stone-200/40 font-bold cursor-pointer"
-                      >
-                        Buka halaman tarif
-                        <CaretRightIcon weight="bold" className="w-4 h-4" />
-                      </Link>
+                      <div className="mt-4 flex gap-2">
+                        <Link
+                          to={fareSharePath}
+                          className="flex-grow flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-stone-100/80 border-2 border-stone-200/40 font-bold cursor-pointer"
+                        >
+                          Buka halaman tarif
+                          <CaretRightIcon weight="bold" className="w-4 h-4" />
+                        </Link>
+                        <SaveRouteButton
+                          fromId={fareQuery.pairFromId}
+                          toId={fareQuery.pairToId}
+                          className="shrink-0 w-[52px] flex items-center justify-center rounded-xl bg-stone-100/80 border-2 border-stone-200/40 cursor-pointer"
+                        />
+                      </div>
                     )
                   : null}
               />
+              {pairComplete
+                ? null
+                : (
+                    <RecentRouteList
+                      routes={recentRoutes}
+                      searchables={searchables}
+                      savedKeys={savedRouteKeys}
+                      onToggleSave={handleToggleSaveRoute}
+                      onClear={handleClearRecentRoutes}
+                    />
+                  )}
             </div>
           )
         : null}

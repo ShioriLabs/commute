@@ -4,6 +4,7 @@ import { buildFarePath } from 'utils/fare-url'
 import DetailSurface from './detail-surface'
 import FarePanel from './fare-sheet/fare-panel'
 import FareShareButton from './fare-sheet/fare-share-button'
+import SaveRouteButton from './fare-sheet/save-route-button'
 import type { FareQuery } from './fare-sheet/use-fare-query'
 
 interface MapFareSheetProps {
@@ -81,6 +82,7 @@ export default function MapFareSheet({
         <div className="flex gap-4 items-center justify-between">
           <h2 className="font-bold text-xl truncate">Cek Tarif</h2>
           <div className="flex gap-4 shrink-0">
+            <SaveRouteButton fromId={pairFromId} toId={pairToId} />
             <FareShareButton fromId={pairFromId} toId={pairToId} criteria={criteria} />
             <button
               type="button"

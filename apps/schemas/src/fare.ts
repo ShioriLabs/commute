@@ -4,7 +4,23 @@ import { LineKeySchema, OperatorCodeSchema } from './common'
 export const FareStationSchema = v.pipe(
   v.object({
     id: v.pipe(v.string(), v.metadata({ examples: ['KCI-SUD'] })),
-    name: v.pipe(v.string(), v.metadata({ examples: ['Sudirman'] }))
+    name: v.pipe(v.string(), v.metadata({ examples: ['Sudirman'] })),
+    /*
+     * Only /_internal/trips fills these, for the Android trip mode: it confirms
+     * where a rider is from a fix near a stop, and `/stations` lists only
+     * searchable stations, so the routing-only haltes had no coordinates to
+     * confirm against. Absent where the station row has none.
+     */
+    latitude: v.pipe(
+      v.optional(v.number()),
+      v.description('Lintang stasiun. Cuma ada kalau koordinat stasiunnya kami punya.'),
+      v.metadata({ examples: [-6.2026] })
+    ),
+    longitude: v.pipe(
+      v.optional(v.number()),
+      v.description('Bujur stasiun. Cuma ada kalau koordinat stasiunnya kami punya.'),
+      v.metadata({ examples: [106.8233] })
+    )
   }),
   v.title('FareStation'),
   v.description('Stasiun di dalam hasil pencarian tarif.'),
@@ -67,6 +83,23 @@ export const RideLegSchema = v.pipe(
     lastService: v.pipe(
       v.optional(v.literal(true)),
       v.description('Ada dan bernilai `true` kalau ini kendaraan terakhir hari ini yang bisa dinaiki dari stasiun naik sampai stasiun turun tahap ini. Ketinggalan berarti tahap ini baru bisa dinaiki besok. Cuma ada di tahap yang jadwalnya kami punya.')
+    ),
+    /*
+     * The boarded trip's time at every stop, index-aligned with `stops`, so a
+     * rider followed underground is placed by the schedule rather than by stop
+     * count. Per-request like the two stamps above, never cached. The ends
+     * always equal `departureAt` and `arrivalAt`; a null is a stop the trip
+     * passes without a recorded time, interpolated by the consumer, never
+     * filled with a guessed dwell here.
+     */
+    stopTimes: v.pipe(
+      v.optional(v.array(v.nullable(v.string()))),
+      v.description('Jam kendaraan ada di tiap stasiun, urut sama dengan `stops`. Null kalau jamnya tidak tercatat. Cuma ada di tahap yang jadwalnya kami punya.'),
+      v.metadata({ examples: [['2026-09-07T07:14:00+07:00', '2026-09-07T07:17:00+07:00', '2026-09-07T07:31:00+07:00']] })
+    ),
+    tripId: v.pipe(
+      v.optional(v.string()),
+      v.description('Penanda perjalanan kendaraan yang dinaiki. Jangan diurai, cuma buat membandingkan. Cuma ada di tahap yang jadwalnya kami punya.')
     ),
     /*
      * Optional for the same reason as the two above, but with a sharper edge:
@@ -178,6 +211,18 @@ export const FareJourneySchema = v.pipe(
       v.optional(v.string()),
       v.description('Jam sampai tujuan. Cuma ada kalau semua tahap naik kendaraannya punya jadwal, jadi kalau ada tahap yang pakai TransJakarta memang tidak muncul.'),
       v.metadata({ examples: ['2026-09-07T08:02:00+07:00'] })
+    ),
+    /*
+     * Separates the two reasons a journey comes back with no clock on it. A
+     * route the timetable never covers (TransJakarta, rail trips with gaps in
+     * their stop lists) carries nothing, as before. A route it does cover but
+     * where tonight's last train has gone carries this, so the UI can say the
+     * service is done rather than offer a journey nobody can take.
+     */
+    resumesAt: v.pipe(
+      v.optional(v.string()),
+      v.description('Jam berangkat pertama rute ini di hari layanan berikutnya. Cuma ada kalau rutenya punya jadwal tapi layanan hari ini sudah selesai.'),
+      v.metadata({ examples: ['2026-09-08T04:05:00+07:00'] })
     )
   }),
   v.title('FareJourney'),

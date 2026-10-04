@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { moveEntry, readSavedStations, toggleSavedStation } from './saved-stations'
+import { entryKey, isRouteSaved, moveEntry, readSavedEntries, readSavedStations, toggleSavedRoute, toggleSavedStation } from './saved-stations'
 
 // The station page and the search sheet both star through these, so the stored
 // shape has to survive a round trip and a corrupted value must read as empty.
@@ -37,6 +37,38 @@ describe('saved stations', () => {
     expect(readSavedStations()).toEqual([])
     store.set('saved-stations', '["KCI-MRI", 3, null]')
     expect(readSavedStations()).toEqual(['KCI-MRI'])
+  })
+})
+
+describe('saved routes', () => {
+  it('toggles a directional pair on and off', () => {
+    expect(toggleSavedRoute('KCI-BOO', 'KCI-SUD')).toBe(true)
+    expect(isRouteSaved('KCI-BOO', 'KCI-SUD')).toBe(true)
+    expect(isRouteSaved('KCI-SUD', 'KCI-BOO')).toBe(false)
+    expect(toggleSavedRoute('KCI-BOO', 'KCI-SUD')).toBe(false)
+    expect(readSavedEntries()).toEqual([])
+  })
+
+  it('keeps stations and pairs in one list, in saved order', () => {
+    toggleSavedStation('KCI-MRI')
+    toggleSavedRoute('KCI-BOO', 'KCI-SUD')
+    toggleSavedStation('MRTJ-DKA')
+    expect(readSavedEntries().map(entryKey)).toEqual(['KCI-MRI', 'ROUTE:KCI-BOO>KCI-SUD', 'MRTJ-DKA'])
+    expect(readSavedStations()).toEqual(['KCI-MRI', 'MRTJ-DKA'])
+  })
+
+  it('does not drop pairs when a station is toggled', () => {
+    toggleSavedRoute('KCI-BOO', 'KCI-SUD')
+    expect(toggleSavedStation('KCI-MRI')).toEqual(['KCI-MRI'])
+    expect(toggleSavedStation('KCI-MRI')).toEqual([])
+    expect(isRouteSaved('KCI-BOO', 'KCI-SUD')).toBe(true)
+  })
+
+  it('reads a legacy station-only list unchanged and drops malformed pairs', () => {
+    store.set('saved-stations', '["KCI-MRI","MRTJ-DKA"]')
+    expect(readSavedEntries()).toEqual(['KCI-MRI', 'MRTJ-DKA'])
+    store.set('saved-stations', '[{"type":"ROUTE","from":"A"},{"type":"ROUTE","from":"A","to":"B"},{"type":"X"}]')
+    expect(readSavedEntries()).toEqual([{ type: 'ROUTE', from: 'A', to: 'B' }])
   })
 })
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FareJourney, FareResultLeg } from '@commute/schemas'
-import { findJourneyByKey, journeyKey } from './journey-key'
+import { boardingClock, findJourneyByKey, journeyKey } from './journey-key'
 
 const station = (id: string) => ({ id, name: id })
 
@@ -102,5 +102,26 @@ describe('findJourneyByKey', () => {
 
   it('returns null when no key was shared', () => {
     expect(findJourneyByKey(rows, null)).toBeNull()
+  })
+})
+
+describe('findJourneyByKey with a boarding time', () => {
+  const rows = [
+    journey([ride('KCI:C', 'KCI-SUD', 'KCI-MRI', '2026-10-01T22:58:00+07:00')]),
+    journey([ride('KCI:C', 'KCI-SUD', 'KCI-MRI', '2026-10-01T23:13:00+07:00')]),
+    journey([ride('KCI:C', 'KCI-SUD', 'KCI-MRI', '2026-10-01T23:21:00+07:00')])
+  ]
+
+  it('picks the boarding of that route at that time', () => {
+    expect(findJourneyByKey(rows, 'C.SUD-MRI', '2321')).toBe(2)
+  })
+
+  it('falls back to the route\'s first boarding when that train is gone', () => {
+    expect(findJourneyByKey(rows, 'C.SUD-MRI', '2345')).toBe(0)
+  })
+
+  it('formats a boarding as WIB wall-clock digits', () => {
+    expect(boardingClock('2026-10-01T16:05:00Z')).toBe('2305')
+    expect(boardingClock('2026-10-01T17:10:00Z')).toBe('0010')
   })
 })

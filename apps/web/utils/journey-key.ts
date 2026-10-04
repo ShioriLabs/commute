@@ -70,6 +70,36 @@ export function journeyKey(journey: FareJourney): string {
     .join(LEG)
 }
 
+/** The boarding time of a journey's first timed ride, or null when untimed. */
+export function boardsAtOf(journey: FareJourney): string | null {
+  for (const leg of journey.legs) {
+    if (leg.type === 'RIDE' && leg.departureAt) return leg.departureAt
+  }
+  return null
+}
+
+/*
+ * A boarding as `HHMM` wall-clock WIB, for `?jt=`.
+ *
+ * The key above deliberately names no time, which is right for a shared link
+ * but wrong for home's saved-route rows: three rows of one route share a key,
+ * so every one of them opened on the earliest. `jt` is the extra fact those
+ * links carry. Clock digits rather than an instant because it only has to tell
+ * apart boardings of one route within one answer, and it stays legible in the
+ * address bar like the key does. `?at=` can't do this job: it rounds down to a
+ * 20-minute slot, which still lands on an earlier train.
+ */
+export function boardingClock(isoInstant: string): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    timeZone: 'Asia/Jakarta'
+  }).formatToParts(new Date(isoInstant))
+  const part = (type: string) => parts.find(p => p.type === type)?.value ?? '00'
+  return `${part('hour')}${part('minute')}`
+}
+
 /**
  * Which journey a shared key names, or `null` when none of them does.
  *
@@ -78,9 +108,20 @@ export function journeyKey(journey: FareJourney): string {
  * `modes` filter the recipient has set, a corridor that has since closed — and
  * the honest response is to show them what does run rather than an error about
  * a journey they never asked for by name. Callers fall back to the first row.
+ *
+ * With `boardsAt` (a `?jt=` clock), the boarding of that route at that time
+ * wins; if that train is no longer in the answer, the route's first boarding
+ * still beats falling back to an unrelated row.
  */
-export function findJourneyByKey(journeys: FareJourney[], key: string | null): number | null {
+export function findJourneyByKey(journeys: FareJourney[], key: string | null, boardsAt: string | null = null): number | null {
   if (!key) return null
+  if (boardsAt) {
+    const exact = journeys.findIndex((journey) => {
+      const at = boardsAtOf(journey)
+      return journeyKey(journey) === key && at !== null && boardingClock(at) === boardsAt
+    })
+    if (exact >= 0) return exact
+  }
   const index = journeys.findIndex(journey => journeyKey(journey) === key)
   return index >= 0 ? index : null
 }

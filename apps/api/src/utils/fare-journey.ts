@@ -109,6 +109,10 @@ export interface StationNamer {
   known: (id: string | null) => id is string
 }
 
+export interface StationNamerOptions {
+  coordinates?: boolean
+}
+
 /**
  * Build the name resolver from a fetched station list.
  *
@@ -116,9 +120,24 @@ export interface StationNamer {
  * scan per stop, per headsign, per segment endpoint was fine for a single
  * journey and is thousands of comparisons across five.
  */
-export function stationNamer(stations: { id: string, name: string }[]): StationNamer {
-  const byId = new Map(stations.map(s => [s.id, s.name]))
-  const ref = (id: string) => ({ id, name: byId.get(id) ?? id })
+export function stationNamer(
+  stations: { id: string, name: string, latitude?: number | null, longitude?: number | null }[],
+  /*
+   * Coordinates on every ref, for /_internal/trips only. Off by default so
+   * /fares, the public contract the OG card and the embed read, keeps its shape
+   * byte for byte.
+   */
+  { coordinates = false }: StationNamerOptions = {}
+): StationNamer {
+  const byId = new Map(stations.map(s => [s.id, s]))
+  // 5 decimals is ~1 m, far finer than the 80-250 m radius a stop is confirmed in.
+  const round = (degrees: number) => Math.round(degrees * 1e5) / 1e5
+  const ref = (id: string): FareResultStation => {
+    const station = byId.get(id)
+    const base = { id, name: station?.name ?? id }
+    if (!coordinates || station?.latitude == null || station.longitude == null) return base
+    return { ...base, latitude: round(station.latitude), longitude: round(station.longitude) }
+  }
   const known = (id: string | null): id is string => id !== null && byId.has(id)
   return { ref, known }
 }

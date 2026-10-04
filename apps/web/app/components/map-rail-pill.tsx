@@ -11,6 +11,7 @@ import { Link } from 'react-router'
 import { ArrowSquareOutIcon } from '@phosphor-icons/react'
 import { buildFarePath } from 'utils/fare-url'
 import FareShareButton from './fare-sheet/fare-share-button'
+import SaveRouteButton from './fare-sheet/save-route-button'
 import CriteriaBar from './fare-sheet/criteria/criteria-bar'
 import type { FareCriteria } from 'utils/fare-criteria'
 import { operatorOfLineKey, useLines } from '~/hooks/use-lines'
@@ -652,7 +653,8 @@ export default function MapRailPill({
                             * Renders nothing without a pair, so it costs no width
                             * on the empty card — see FareShareButton.
                             */}
-                          <span className="flex items-center justify-center w-9 h-9 text-slate-700 [&>button]:w-9 [&>button]:h-9 [&_svg]:w-4 [&_svg]:h-4">
+                          <span className="flex items-center text-slate-700 [&>button]:w-9 [&>button]:h-9 [&_svg]:w-4 [&_svg]:h-4">
+                            <SaveRouteButton fromId={pairFromId} toId={pairToId} />
                             <FareShareButton fromId={pairFromId} toId={pairToId} criteria={criteria} />
                           </span>
                           {/*

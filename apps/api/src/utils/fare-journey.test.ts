@@ -293,4 +293,27 @@ describe('stationNamer', () => {
     expect(known('KCI-NOPE')).toBe(false)
     expect(known(null)).toBe(false)
   })
+
+  // /fares is the public contract; coordinates are a /_internal/trips addition.
+  it('leaves coordinates off by default', () => {
+    const { ref } = stationNamer([{ id: 'KCI-SUD', name: 'Sudirman', latitude: -6.2026, longitude: 106.8233 }])
+    expect(ref('KCI-SUD')).toEqual({ id: 'KCI-SUD', name: 'Sudirman' })
+  })
+
+  it('adds coordinates rounded to 5 decimals when asked', () => {
+    const { ref } = stationNamer(
+      [{ id: 'KCI-SUD', name: 'Sudirman', latitude: -6.20260049, longitude: 106.823349 }],
+      { coordinates: true }
+    )
+    expect(ref('KCI-SUD')).toEqual({ id: 'KCI-SUD', name: 'Sudirman', latitude: -6.2026, longitude: 106.82335 })
+  })
+
+  it('omits coordinates the station row does not have', () => {
+    const { ref } = stationNamer(
+      [{ id: 'TJ-X', name: 'Halte X', latitude: null, longitude: null }],
+      { coordinates: true }
+    )
+    expect(ref('TJ-X')).toEqual({ id: 'TJ-X', name: 'Halte X' })
+    expect(ref('TJ-NOPE')).toEqual({ id: 'TJ-NOPE', name: 'TJ-NOPE' })
+  })
 })

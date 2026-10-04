@@ -253,7 +253,12 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
      * journey's set, and a query per journey would cost more than the search
      * that produced them.
      */
-    const namer = await hydrate([...new Set(plans.flatMap(p => p.stationIds))])
+    /*
+     * With coordinates, which /fares leaves off: the app's trip mode confirms a
+     * rider's stop from a fix near it, and routing-only haltes are absent from
+     * `/stations`, so this answer is the only place their coordinates reach it.
+     */
+    const namer = await hydrate([...new Set(plans.flatMap(p => p.stationIds))], { coordinates: true })
 
     return timing.measureSync('assemble', () => ({
       from: namer.ref(fromId),

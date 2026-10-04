@@ -26,7 +26,7 @@ export default function SettingsSheet() {
         <ul className="flex flex-col">
           <SettingsItem to="/settings/saved-stations">
             <PushPinSimpleIcon weight="fill" className="w-6 h-6" />
-            Stasiun Disimpan
+            Stasiun & Rute Disimpan
           </SettingsItem>
           <SettingsItem to="/settings/manage-data">
             <ArchiveIcon weight="fill" className="w-6 h-6" />
