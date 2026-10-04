@@ -1,15 +1,22 @@
 package id.shiorilabs.commute.feature.journey.presentation.trip
 
 import android.content.Intent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -17,12 +24,25 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -43,17 +63,24 @@ import id.shiorilabs.commute.feature.journey.domain.JourneyLabel
 import id.shiorilabs.commute.feature.journey.domain.JourneyLeg
 import id.shiorilabs.commute.feature.journey.domain.JourneyStop
 import id.shiorilabs.commute.feature.journey.domain.ServiceLine
+import id.shiorilabs.commute.feature.journey.domain.boardsAt
+import id.shiorilabs.commute.feature.journey.domain.formatClock
+import id.shiorilabs.commute.feature.journey.domain.formatRupiah
+import id.shiorilabs.commute.feature.journey.domain.routeBarSegments
 import id.shiorilabs.commute.feature.journey.presentation.Problem
 import id.shiorilabs.commute.feature.journey.presentation.ResultSkeleton
-import id.shiorilabs.commute.feature.journey.presentation.components.JourneyCard
 import id.shiorilabs.commute.feature.journey.presentation.components.JourneyDetail
-import id.shiorilabs.commute.feature.journey.presentation.components.SaveRouteButton
+import id.shiorilabs.commute.feature.journey.presentation.components.RouteBar
+import id.shiorilabs.commute.feature.journey.presentation.components.Slate200
+import id.shiorilabs.commute.feature.journey.presentation.components.Slate400
+import id.shiorilabs.commute.feature.journey.presentation.components.Slate500
+import id.shiorilabs.commute.feature.journey.presentation.components.legLines
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import java.time.Instant
 
 /**
- * One journey in full: its card, the timeline, the recap and the fare breakdown, under a pinned
- * header with the pin, share and close beside the title, frosted once the page scrolls under it.
+ * One journey in full: the timeline, the recap and the fare breakdown, under a pinned header that
+ * names the trip by its route bar, clock and fare, frosted once the page scrolls under it.
  */
 @Composable
 fun TripScreen(
@@ -115,45 +142,7 @@ private fun TripContent(
 ) {
     FrostedHeaderPage(
         surfaceColor = TripBackground,
-        header = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    // The status bar's height inside the header, so the frost reaches up behind it.
-                    .padding(top = innerPadding.calculateTopPadding())
-                    .padding(start = 32.dp, top = 32.dp, end = 32.dp, bottom = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = stringResource(R.string.journey_trip_title),
-                    modifier = Modifier
-                        .weight(1f)
-                        .semantics { heading() },
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                )
-                routeSaved?.let { saved ->
-                    SaveRouteButton(saved = saved, onClick = onToggleSaveRoute)
-                }
-                state.shareUrl?.let { url ->
-                    CommuteIconButton(onClick = { onShare(url) }, modifier = Modifier.size(32.dp)) {
-                        Icon(
-                            imageVector = CommuteIcons.Share,
-                            contentDescription = stringResource(R.string.journey_share_description),
-                            modifier = Modifier.size(24.dp),
-                        )
-                    }
-                }
-                CommuteIconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
-                    Icon(
-                        imageVector = CommuteIcons.Close,
-                        contentDescription = stringResource(R.string.journey_close_description),
-                        modifier = Modifier.size(24.dp),
-                    )
-                }
-            }
-        },
+        header = { TripHeader(state = state, innerPadding = innerPadding, onClose = onClose) },
     ) { headerHeight, listState, hazeState ->
         LazyColumn(
             state = listState,
@@ -184,6 +173,13 @@ private fun TripContent(
                     TripPageState.Failed -> Problem(text = stringResource(R.string.journey_failed), onRetry = onRetry, top = BodyTop)
 
                     is TripPageState.Loaded -> Column(modifier = Modifier.padding(top = BodyTop)) {
+                        TripActions(
+                            routeSaved = routeSaved,
+                            shareUrl = state.shareUrl,
+                            onToggleSaveRoute = onToggleSaveRoute,
+                            onShare = onShare,
+                            modifier = Modifier.padding(bottom = 24.dp),
+                        )
                         // From an old answer kept when a fresh one couldn't be had: its times may
                         // have moved on, so say how old it is.
                         if (trip.isOutdated) {
@@ -193,13 +189,160 @@ private fun TripContent(
                                 modifier = Modifier.padding(bottom = 24.dp),
                             )
                         }
-                        JourneyCard(journey = trip.journey, lines = state.lines)
                         JourneyDetail(journey = trip.journey, lines = state.lines)
                     }
                 }
             }
         }
     }
+}
+
+/**
+ * The journey's route bar where a title would be, with the close beside it and its clock and fare
+ * under it. Until there is a journey to draw, a plain title stands in.
+ */
+@Composable
+private fun TripHeader(state: TripUiState, innerPadding: PaddingValues, onClose: () -> Unit) {
+    val journey = (state.trip as? TripPageState.Loaded)?.journey
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            // The status bar's height inside the header, so the frost reaches up behind it.
+            .padding(top = innerPadding.calculateTopPadding())
+            .padding(start = 32.dp, top = 32.dp, end = 32.dp, bottom = 16.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (journey != null) {
+                RouteBar(
+                    segments = routeBarSegments(journey.legs) { legLines(it, state.lines) },
+                    plateColor = TripBackground,
+                    modifier = Modifier
+                        .weight(1f)
+                        .semantics { heading() },
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.journey_trip_title),
+                    modifier = Modifier
+                        .weight(1f)
+                        .semantics { heading() },
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            CommuteIconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    imageVector = CommuteIcons.Close,
+                    contentDescription = stringResource(R.string.journey_close_description),
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+        }
+
+        if (journey != null) {
+            TripSubtitle(journey, modifier = Modifier.padding(top = 4.dp))
+        }
+    }
+}
+
+/**
+ * Pinning the pair to home and sharing the trip, as a row of buttons the way the station page offers
+ * OTW and its timetable. Short labels to fit the pair side by side; TalkBack reads the longer ones.
+ */
+@Composable
+private fun TripActions(
+    routeSaved: Boolean?,
+    shareUrl: String?,
+    onToggleSaveRoute: () -> Unit,
+    onShare: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (routeSaved == null && shareUrl == null) return
+    val haptics = LocalHapticFeedback.current
+    // As tall as each other, whatever their labels wrap to.
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        routeSaved?.let { saved ->
+            TripActionButton(
+                text = stringResource(if (saved) R.string.journey_route_saved else R.string.journey_save_route_short),
+                description = stringResource(if (saved) R.string.journey_unsave_route else R.string.journey_save_route),
+                icon = if (saved) CommuteIcons.Pinned else CommuteIcons.Pin,
+                onClick = {
+                    haptics.performHapticFeedback(if (saved) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn)
+                    onToggleSaveRoute()
+                },
+            )
+        }
+        shareUrl?.let { url ->
+            TripActionButton(
+                text = stringResource(R.string.journey_share),
+                description = stringResource(R.string.journey_share_description),
+                icon = CommuteIcons.Share,
+                onClick = { onShare(url) },
+            )
+        }
+    }
+}
+
+/** The station page's secondary button: `p-4 rounded-xl text-sm font-bold` on slate, sharing its row. */
+@Composable
+private fun RowScope.TripActionButton(text: String, description: String, icon: ImageVector, onClick: () -> Unit) {
+    val content = MaterialTheme.colorScheme.primary
+    Row(
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxHeight()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Slate200)
+            .clickable(role = Role.Button, onClick = onClick)
+            .clearAndSetSemantics {
+                contentDescription = description
+                role = Role.Button
+                onClick { onClick(); true }
+            }
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = content)
+        Text(text = text, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = content)
+    }
+}
+
+/** When it leaves and arrives, then what it costs; just the fare where the journey isn't timed. */
+@Composable
+private fun TripSubtitle(journey: Journey, modifier: Modifier = Modifier) {
+    val boardsAt = journey.boardsAt
+    val arrivalAt = journey.arrivalAt
+    val fare = journey.totalFare?.let(::formatRupiah) ?: stringResource(R.string.journey_fare_unknown)
+    Text(
+        text = buildAnnotatedString {
+            if (boardsAt != null) {
+                append(formatClock(boardsAt))
+                if (arrivalAt != null) {
+                    withStyle(SpanStyle(color = Slate400)) { append(" → ") }
+                    append(formatClock(arrivalAt))
+                }
+                withStyle(SpanStyle(color = Slate400)) { append(" · ") }
+            }
+            append(fare)
+        },
+        modifier = modifier,
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = Slate500,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 private val previewJourney = run {
