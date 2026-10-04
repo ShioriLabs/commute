@@ -18,6 +18,11 @@ import id.shiorilabs.commute.feature.journey.domain.JourneyCriteria
 import id.shiorilabs.commute.feature.journey.domain.JourneyStop
 import id.shiorilabs.commute.feature.journey.domain.Modes
 import id.shiorilabs.commute.feature.journey.domain.PairEnd
+import id.shiorilabs.commute.core.geo.GeoPoint
+import id.shiorilabs.commute.core.location.Fix
+import id.shiorilabs.commute.core.location.testing.FakeLocationClient
+import id.shiorilabs.commute.feature.station.data.StationDirectory
+import id.shiorilabs.commute.feature.station.domain.Station
 import id.shiorilabs.commute.feature.journey.domain.PaymentMethod
 import id.shiorilabs.commute.feature.journey.domain.StationPair
 import id.shiorilabs.commute.feature.journey.domain.TripAnswer
@@ -105,6 +110,14 @@ class JourneyViewModelTest {
     private val journeys = FakeJourneyRepository()
     private val preferences = FarePreferencesRepository(FakePreferencesDataStore())
     private val saved = SavedRepository(FakePreferencesDataStore())
+    private val location = FakeLocationClient()
+    private val directory = object : StationDirectory {
+        override suspend fun all(): Either<Failure, List<Station>> = listOf(
+            Station("KCI-SUD", "Sudirman", "KCI", "SUD", emptyList(), latitude = -6.2024, longitude = 106.8237),
+            Station("KCI-MRI", "Manggarai", "KCI", "MRI", emptyList(), latitude = -6.2099, longitude = 106.8502),
+            Station("MRTJ-LBB", "Lebak Bulus Grab", "MRTJ", "LBB", emptyList(), latitude = -6.2895, longitude = 106.7744),
+        ).right()
+    }
 
     @Before
     fun setUp() {
@@ -117,7 +130,7 @@ class JourneyViewModelTest {
     }
 
     private fun TestScope.viewModel(seed: Route.Otw = Route.Otw()): JourneyViewModel {
-        val viewModel = JourneyViewModel(seed, journeys, FakeSearchRepository(), FakeLineRepository(), preferences, saved, clock)
+        val viewModel = JourneyViewModel(seed, journeys, FakeSearchRepository(), FakeLineRepository(), preferences, saved, clock, location, directory)
         // WhileSubscribed: the state only flows while someone collects it, as the screen does.
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.state.collect {} }
         return viewModel
@@ -301,5 +314,30 @@ class JourneyViewModelTest {
         viewModel.onResume()
 
         assertEquals(Departure.Now, viewModel.state.value.criteria.departure)
+    }
+
+    @Test
+    fun `using the rider's location offers the stations around them, nearest first`() = runTest {
+        location.currentFix = Fix(GeoPoint(-6.2030, 106.8240), 20f, now)
+        val viewModel = viewModel()
+        viewModel.picker.first { it.loaded }
+        viewModel.openPicker(PairEnd.ORIGIN)
+
+        viewModel.onUseLocation()
+
+        val nearby = viewModel.picker.first { it.nearby is NearbyPicks.Found }.nearby as NearbyPicks.Found
+        // Manggarai is about 3 km off: too far to walk to, so not "near".
+        assertEquals(listOf("KCI-SUD"), nearby.stations.map { it.first.id })
+    }
+
+    @Test
+    fun `without a fix the picker says so instead of guessing`() = runTest {
+        location.granted = false
+        val viewModel = viewModel()
+        viewModel.picker.first { it.loaded }
+
+        viewModel.onUseLocation()
+
+        assertEquals(NearbyPicks.Unavailable, viewModel.picker.first { it.nearby != NearbyPicks.Idle && it.nearby != NearbyPicks.Locating }.nearby)
     }
 }

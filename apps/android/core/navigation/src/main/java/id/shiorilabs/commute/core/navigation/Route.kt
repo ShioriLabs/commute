@@ -124,6 +124,13 @@ sealed interface Route : NavKey {
         val walking: String? = null,
     ) : Route
 
+    /**
+     * The trip being followed, live: opened from the trip notification, home's running-trip card and
+     * the trip page. Reads the stored trip, so it opens offline.
+     */
+    @Serializable
+    data object ActiveTrip : Route
+
     /** Settings, opened from the home screen's "Pengaturan" card. */
     @Serializable
     data object Settings : Route

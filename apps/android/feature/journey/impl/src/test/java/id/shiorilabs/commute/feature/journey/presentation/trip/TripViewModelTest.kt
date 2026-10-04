@@ -24,6 +24,11 @@ import id.shiorilabs.commute.feature.journey.domain.ride
 import id.shiorilabs.commute.feature.journey.domain.walk
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.domain.LineInfo
+import id.shiorilabs.commute.feature.journey.domain.TripStart
+import id.shiorilabs.commute.feature.trip.ActiveTrip
+import id.shiorilabs.commute.feature.trip.TripController
+import id.shiorilabs.commute.core.trip.RiderAction
+import id.shiorilabs.commute.core.trip.TripPlan
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -67,6 +72,19 @@ class TripViewModelTest {
         override suspend fun lines(): Either<Failure, Map<String, LineInfo>> = emptyMap<String, LineInfo>().right()
     }
 
+    private class FakeTripController : TripController {
+        override val active = MutableStateFlow<ActiveTrip?>(null)
+        val started = mutableListOf<Pair<TripPlan, Route.Trip>>()
+
+        override fun start(plan: TripPlan, origin: Route.Trip) {
+            started += plan to origin
+        }
+
+        override fun riderSaid(action: RiderAction) = Unit
+
+        override fun stop() = Unit
+    }
+
     private companion object {
         /** Two boardings of one route, at 09.00 and 09.15 WIB: they share the key `C.SUD-MRI`. */
         val early = journey(ride("KCI:C", "KCI-SUD", "KCI-MRI", departureAt = Instant.parse("2026-10-05T02:00:00Z")))
@@ -83,6 +101,7 @@ class TripViewModelTest {
     private val journeys = FakeJourneyRepository()
     private val preferences = FarePreferencesRepository(FakePreferencesDataStore())
     private val saved = SavedRepository(FakePreferencesDataStore())
+    private val trips = FakeTripController()
 
     @Before
     fun setUp() {
@@ -95,7 +114,7 @@ class TripViewModelTest {
     }
 
     private fun TestScope.viewModel(route: Route.Trip = trip): TripViewModel {
-        val viewModel = TripViewModel(route, journeys, FakeLineRepository(), preferences, saved, clock)
+        val viewModel = TripViewModel(route, journeys, FakeLineRepository(), preferences, saved, clock, trips)
         // WhileSubscribed: the state only flows while someone collects it, as the screen does.
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.state.collect {} }
         return viewModel
@@ -219,5 +238,19 @@ class TripViewModelTest {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.routeSaved.collect {} }
 
         assertNull(viewModel.routeSaved.value)
+    }
+
+    @Test
+    fun `starting the trip follows the loaded journey from this page`() = runTest {
+        val viewModel = viewModel()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.tripStart.collect {} }
+        // Boards at 09.00, thirteen minutes away.
+        assertEquals(TripStart.Ready, viewModel.tripStart.value)
+
+        viewModel.startTrip()
+
+        val (plan, origin) = trips.started.single()
+        assertEquals(trip, origin)
+        assertEquals(listOf("KCI-SUD", "KCI-MRI"), plan.destination.let { listOf(plan.ride(0).stops.first().id, it.id) })
     }
 }

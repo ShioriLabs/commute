@@ -81,6 +81,7 @@ features' `:api`; a `:core:*` module never depends on a feature or on `:app`.
 :core:navigation    → common                          Route, navigator, NavGraphContribution
 :core:trip          → model, common                   the trip engine. Pure Kotlin, no Android
 :core:notification  → common                          channels, permission handling
+:core:location      → common                          LocationManager fixes, permission request
 :core:query         → common                          stale-while-revalidate cache, persisted
 :core:network       → model, config, common           HttpClient, the one CommuteService
 :core:datastore     → common                          saved stations, saved cards, theme
@@ -309,7 +310,7 @@ should be generated from the same source so the two can't drift.
 
 | Permission | When | Why |
 |---|---|---|
-| Location (while in use) | only during an active trip | alight reminders |
+| Location (while in use) | an active trip; a tap on "Pakai lokasi kamu" or home's "Di dekat kamu" | alight reminders; nearest stations |
 | Foreground service (location) | same | keeps the trip running with the screen off |
 | Notifications | trip mode | alerts and the Live Update |
 | NFC | card screen only | reading a card's balance |

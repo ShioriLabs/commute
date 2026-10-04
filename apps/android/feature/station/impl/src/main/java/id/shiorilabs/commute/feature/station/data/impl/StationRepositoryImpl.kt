@@ -15,6 +15,7 @@ import id.shiorilabs.commute.core.query.queryKey
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.feature.station.data.LineRepository
+import id.shiorilabs.commute.feature.station.data.StationDirectory
 import id.shiorilabs.commute.feature.station.data.StationRepository
 import id.shiorilabs.commute.feature.station.domain.Frequency
 import id.shiorilabs.commute.feature.station.domain.LineInfo
@@ -153,6 +154,29 @@ class LineRepositoryImpl @Inject constructor(
         queries.fetch(linesQuery).mapOnDataThread { it.toLineDictionary() }
 
     override fun cachedLines(): Map<String, LineInfo>? = queries.peek(linesQuery)?.data?.toLineDictionary()
+}
+
+/**
+ * Serves every station in one list through the [QueryClient], held an hour at a time like the rest
+ * of the topology. About 13 KB on the wire, so it is fetched whole rather than per station.
+ */
+@Singleton
+class StationDirectoryImpl @Inject constructor(
+    private val service: CommuteService,
+    private val queries: QueryClient,
+) : StationDirectory {
+
+    private val stationsQuery = QuerySpec(
+        key = queryKey("stations"),
+        serializer = ListSerializer(StationDto.serializer()),
+        policy = QueryPolicy.Topology,
+        isUsable = { it.isNotEmpty() },
+    ) { etag -> service.getStations(etag) }
+
+    override suspend fun all(): Either<Failure, List<Station>> =
+        queries.fetch(stationsQuery).mapOnDataThread { rows -> rows.map { it.toStation() } }
+
+    override fun cached(): List<Station>? = queries.peek(stationsQuery)?.data?.map { it.toStation() }
 }
 
 /** Maps a wire answer to the domain off the main thread: a board can hold thousands of departures. */

@@ -9,6 +9,7 @@ import id.shiorilabs.commute.core.network.testing.FakeCommuteService
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.feature.station.data.impl.LineRepositoryImpl
+import id.shiorilabs.commute.feature.station.data.impl.StationDirectoryImpl
 import id.shiorilabs.commute.feature.station.data.impl.StationRepositoryImpl
 import id.shiorilabs.commute.feature.station.domain.Amenity
 import id.shiorilabs.commute.feature.station.domain.Departure
@@ -111,6 +112,23 @@ class StationRepositoryImplTest {
         assertEquals(2, service.stationCalls)
         // The 304 confirmed the stored body rather than writing it again.
         assertEquals(1, store.puts)
+    }
+
+    @Test
+    fun `the directory carries coordinates and is asked for once`() = runTest {
+        val service = FakeCommuteService().apply { stations = { fixture<List<Station>>("stations.json") } }
+        val directory = StationDirectoryImpl(service, queries())
+
+        val stations = directory.all().getOrNull()!!
+        directory.all()
+
+        val sudirman = stations.single { it.id == "KCI-SUD" }
+        assertEquals(-6.2027, sudirman.latitude!!, 0.001)
+        assertEquals(106.8233, sudirman.longitude!!, 0.001)
+        // A station without coordinates is still listed, just unplaceable.
+        assertTrue(stations.any { it.latitude == null })
+        assertEquals(stations, directory.cached())
+        assertEquals(1, service.stationsCalls)
     }
 
     @Test
