@@ -1,15 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The tracker while the position is the timetable's estimate: a hollow ring, so the bar doesn't
-     claim precision it doesn't have. -->
+<!-- The tracker while the position is the timetable's estimate: the same chevron in a pale pink, so
+     the bar doesn't claim precision it doesn't have. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M12,12m-10,0a10,10 0,1 1,20 0a10,10 0,1 1,-20 0" />
+        android:pathData="M9,5L16,12L9,19"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
     <path
-        android:fillColor="#FF94A3B8"
-        android:pathData="M12,4a8,8 0,1 0,0 16a8,8 0,1 0,0 -16zM12,7a5,5 0,1 1,0 10a5,5 0,1 1,0 -10z" />
+        android:pathData="M9,5L16,12L9,19"
+        android:strokeColor="#FFFBB6C3"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
 </vector>
