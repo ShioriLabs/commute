@@ -49,6 +49,7 @@ import com.adamglin.phosphoricons.fill.Database
 import com.adamglin.phosphoricons.fill.Files
 import com.adamglin.phosphoricons.fill.GearSix
 import com.adamglin.phosphoricons.fill.HandHeart
+import com.adamglin.phosphoricons.fill.Flask
 import com.adamglin.phosphoricons.fill.Info
 import com.adamglin.phosphoricons.fill.MapPin
 import com.adamglin.phosphoricons.fill.PushPin
@@ -144,6 +145,7 @@ object CommuteIcons {
     val DataPlatform: ImageVector = PhosphorIcons.Fill.Database
     val Support: ImageVector = PhosphorIcons.Fill.HandHeart
     val About: ImageVector = PhosphorIcons.Fill.Info
+    val Experimental: ImageVector = PhosphorIcons.Fill.Flask
 
     /** The Kalayang's roundel: an aircraft in place of a line code. */
     val Airplane: ImageVector = PhosphorIcons.Fill.Airplane

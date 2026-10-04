@@ -10,6 +10,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import id.shiorilabs.commute.core.navigation.LocalNavigator
@@ -19,7 +21,9 @@ import id.shiorilabs.commute.core.ui.debug.FrostTunerOverlay
 import id.shiorilabs.commute.core.ui.frost.FrostTuning
 import id.shiorilabs.commute.core.ui.frost.LocalFrostTuning
 import id.shiorilabs.commute.core.ui.theme.CommuteTheme
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.filterNotNull
 
 /**
@@ -27,13 +31,17 @@ import kotlinx.coroutines.flow.filterNotNull
  * opened over home, so back from it lands somewhere, and then cleared.
  */
 @Composable
-fun CommuteApp(pendingLink: MutableStateFlow<Route?> = MutableStateFlow(null)) {
+fun CommuteApp(
+    pendingLink: MutableStateFlow<Route?> = MutableStateFlow(null),
+    frostTuner: Flow<Boolean> = flowOf(false),
+) {
     CommuteTheme {
         val navigator = rememberCommuteNavigator()
         val screenPadding = WindowInsets.systemBars.asPaddingValues()
-        // The pinned headers' frost. Release builds never change it; debug builds tune it live from
-        // the frost tuner below.
+        // The pinned headers' frost, tuned live from the frost tuner below while it's switched on
+        // (Pengaturan → Experimental); otherwise never changed.
         val frostTuning = remember { FrostTuning() }
+        val showFrostTuner by frostTuner.collectAsState(initial = false)
 
         LaunchedEffect(navigator, pendingLink) {
             pendingLink.filterNotNull().collect { route ->
@@ -54,7 +62,7 @@ fun CommuteApp(pendingLink: MutableStateFlow<Route?> = MutableStateFlow(null)) {
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background),
                 )
-                if (BuildConfig.DEBUG) {
+                if (showFrostTuner) {
                     FrostTunerOverlay(tuning = frostTuning)
                 }
             }

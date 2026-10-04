@@ -7,6 +7,7 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import id.shiorilabs.commute.core.datastore.FarePreferencesRepository
+import id.shiorilabs.commute.core.datastore.DeveloperPreferencesRepository
 import id.shiorilabs.commute.core.datastore.LocationPreferencesRepository
 import id.shiorilabs.commute.core.datastore.SavedEntry
 import id.shiorilabs.commute.core.datastore.SavedRepository
@@ -57,6 +58,7 @@ class TripViewModel @AssistedInject constructor(
     private val clock: Clock,
     private val tripController: TripController,
     locationPreferences: LocationPreferencesRepository,
+    developerPreferences: DeveloperPreferencesRepository,
 ) : ViewModel() {
 
     @AssistedFactory
@@ -82,8 +84,13 @@ class TripViewModel @AssistedInject constructor(
      * Where "Mulai perjalanan" stands for the loaded journey, `null` until there is one. Looked at
      * again every half minute, so a page left open becomes startable when its train gets close.
      */
-    val tripStart: StateFlow<TripStart?> = combine(trip, tripController.active, minuteTicks()) { trip, active, now ->
-        (trip as? TripPageState.Loaded)?.let { tripStartFor(it.journey, route, active?.origin, now) }
+    val tripStart: StateFlow<TripStart?> = combine(
+        trip,
+        tripController.active,
+        minuteTicks(),
+        developerPreferences.forceTripStart,
+    ) { trip, active, now, force ->
+        (trip as? TripPageState.Loaded)?.let { tripStartFor(it.journey, route, active?.origin, now, force) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     /**

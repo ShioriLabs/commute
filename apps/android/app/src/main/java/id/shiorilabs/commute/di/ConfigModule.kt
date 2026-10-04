@@ -23,5 +23,6 @@ object ConfigModule {
     fun provideEnvironment(): Environment = Environment(
         apiBaseUrl = BuildConfig.API_BASE_URL,
         appVersion = BuildConfig.VERSION_NAME,
+        debug = BuildConfig.DEBUG,
     )
 }
