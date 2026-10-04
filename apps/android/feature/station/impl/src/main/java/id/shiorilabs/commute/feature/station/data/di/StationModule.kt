@@ -5,8 +5,10 @@ import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import id.shiorilabs.commute.feature.station.data.LineRepository
+import id.shiorilabs.commute.feature.station.data.StationDirectory
 import id.shiorilabs.commute.feature.station.data.StationRepository
 import id.shiorilabs.commute.feature.station.data.impl.LineRepositoryImpl
+import id.shiorilabs.commute.feature.station.data.impl.StationDirectoryImpl
 import id.shiorilabs.commute.feature.station.data.impl.StationRepositoryImpl
 
 @Module
@@ -18,4 +20,7 @@ abstract class StationModule {
 
     @Binds
     abstract fun bindLineRepository(impl: LineRepositoryImpl): LineRepository
+
+    @Binds
+    abstract fun bindStationDirectory(impl: StationDirectoryImpl): StationDirectory
 }

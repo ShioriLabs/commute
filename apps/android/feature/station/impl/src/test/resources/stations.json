@@ -1,0 +1,114 @@
+{
+  "status": 200,
+  "data": [
+    {
+      "id": "KCI-SUD",
+      "name": "Sudirman",
+      "officialName": "SUDIRMAN",
+      "code": "SUD",
+      "regionCode": "CGK",
+      "operator": "KCI",
+      "lines": [
+        "KCI:C"
+      ],
+      "amenities": [
+        {
+          "type": "TOILET",
+          "text": "Peron 1"
+        },
+        {
+          "type": "PRAYING_ROOM",
+          "text": "Peron 1"
+        },
+        {
+          "type": "NURSING_ROOM"
+        },
+        {
+          "type": "ESCALATOR_PAID"
+        },
+        {
+          "type": "CHARGING_STATION"
+        },
+        {
+          "type": "LOCKERS"
+        },
+        {
+          "type": "PARKING",
+          "text": "Gedung Transport Hub Dukuh Atas"
+        }
+      ],
+      "latitude": -6.2024,
+      "longitude": 106.8237,
+      "score": 79,
+      "searchable": true
+    },
+    {
+      "id": "MRTJ-DKA",
+      "name": "Dukuh Atas BNI",
+      "officialName": "Stasiun Dukuh Atas",
+      "code": "DKA",
+      "regionCode": "CGK",
+      "operator": "MRTJ",
+      "lines": [
+        "MRTJ:M"
+      ],
+      "amenities": [
+        {
+          "type": "TOILET"
+        },
+        {
+          "type": "TOILET_ACCESSIBLE"
+        },
+        {
+          "type": "ESCALATOR_PAID"
+        },
+        {
+          "type": "ELEVATOR_PAID"
+        },
+        {
+          "type": "ELEVATOR_UNPAID"
+        },
+        {
+          "type": "PRAYING_ROOM"
+        }
+      ],
+      "latitude": -6.2007,
+      "longitude": 106.8227,
+      "score": 62,
+      "searchable": true
+    },
+    {
+      "id": "TJ-H00001P",
+      "name": "Petukangan D'MASIV",
+      "officialName": "Petukangan D'MASIV",
+      "code": "H00001P",
+      "regionCode": "CGK",
+      "operator": "TJ",
+      "lines": [
+        "TJ:13",
+        "TJ:13B",
+        "TJ:13E",
+        "TJ:L13E"
+      ],
+      "amenities": [],
+      "latitude": -6.236466,
+      "longitude": 106.74786,
+      "score": 0,
+      "searchable": true
+    },
+    {
+      "id": "KCI-BBN",
+      "name": "Brambanan",
+      "officialName": "BRAMBANAN",
+      "code": "BBN",
+      "regionCode": "YIA",
+      "operator": "KCI",
+      "lines": [],
+      "amenities": [],
+      "latitude": null,
+      "longitude": null,
+      "score": 0,
+      "searchable": true
+    }
+  ]
+}

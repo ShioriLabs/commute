@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.journey.domain
 
+import id.shiorilabs.commute.feature.station.domain.NearbyStation
 import id.shiorilabs.commute.feature.search.domain.SCORE_THRESHOLD
 import id.shiorilabs.commute.feature.search.domain.SearchLine
 import id.shiorilabs.commute.feature.search.domain.Searchable
@@ -113,4 +114,19 @@ fun quickPickStations(stations: List<PickableStation>, recentIds: List<String>):
         }
     }
     return picks
+}
+
+/**
+ * The picker's rows for the stations near the rider, with their distances: each nearby station
+ * matched to its row by id, or by a directional twin folded into one. Stations the picker doesn't
+ * offer are left out.
+ */
+fun nearbyPicks(nearby: List<NearbyStation>, stations: List<PickableStation>): List<Pair<PickableStation, Int>> {
+    val byId = buildMap {
+        for (station in stations) {
+            put(station.id, station)
+            for (sibling in station.siblingIds) putIfAbsent(sibling, station)
+        }
+    }
+    return nearby.mapNotNull { near -> byId[near.station.id]?.let { it to near.distanceM } }.distinctBy { it.first.id }
 }
