@@ -12,14 +12,19 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
 import dagger.hilt.android.AndroidEntryPoint
+import id.shiorilabs.commute.core.datastore.DeveloperPreferencesRepository
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.navigation.routeForLink
 import id.shiorilabs.commute.core.ui.startup.LocalStartupGate
 import id.shiorilabs.commute.core.ui.startup.StartupGate
 import kotlinx.coroutines.flow.MutableStateFlow
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject
+    lateinit var developerPreferences: DeveloperPreferencesRepository
 
     /** A web link the app was opened with, waiting for the navigator to open it. */
     private val pendingLink = MutableStateFlow<Route?>(null)
@@ -45,7 +50,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             CompositionLocalProvider(LocalStartupGate provides startupGate) {
-                CommuteApp(pendingLink = pendingLink)
+                CommuteApp(pendingLink = pendingLink, frostTuner = developerPreferences.frostTuner)
             }
         }
     }

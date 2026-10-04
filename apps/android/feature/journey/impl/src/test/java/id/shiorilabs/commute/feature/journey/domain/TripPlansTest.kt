@@ -63,6 +63,11 @@ class TripPlansTest {
     }
 
     @Test
+    fun `forced, a journey can start hours before its train`() {
+        assertEquals(TripStart.Ready, tripStartFor(timed, route, null, departs.minusSeconds(4 * 60 * 60), force = true))
+    }
+
+    @Test
     fun `an untimed journey can start whenever`() {
         val untimed = journey(ride("TJ:1", "TJ-H1", "TJ-H4"))
         assertEquals(TripStart.Ready, tripStartFor(untimed, route, null, departs.minusSeconds(5 * 3600)))

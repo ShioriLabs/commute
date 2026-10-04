@@ -51,3 +51,11 @@ annotation class HomeDataStore
 @Qualifier
 @Retention(AnnotationRetention.RUNTIME)
 annotation class LocationDataStore
+
+/**
+ * Hilt [Qualifier] for the preferences [DataStore]<[Preferences]> backing the switches for trying
+ * the app out (Pengaturan → Developer, debug builds only).
+ */
+@Qualifier
+@Retention(AnnotationRetention.RUNTIME)
+annotation class DeveloperDataStore
