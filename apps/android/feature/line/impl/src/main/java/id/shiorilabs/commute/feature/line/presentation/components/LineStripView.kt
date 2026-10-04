@@ -22,7 +22,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -193,11 +192,12 @@ private fun StationRow(
 /**
  * The station's roundel riding the rail: its number stacked as the line's prefix over its position,
  * as the FDTJ map prints them. Filled with the line's colour at the strip's anchors (termini,
- * junctions) and ringed elsewhere, whatever the operator, so the anchors read at a glance; raised
- * off the rail where something happens (an anchor, an interchange).
+ * junctions) and ringed elsewhere, whatever the operator, so the anchors read at a glance.
  *
  * The web draws its own node here; the app uses the roundel, so a station number looks the same
- * wherever it is shown.
+ * wherever it is shown. Flat, unlike the web's `shadow-sm` on anchors and interchanges: Android
+ * lights an elevation shadow from above, so it pooled under the node, on the rail leaving it, as a
+ * dark band across the line.
  */
 @Composable
 private fun StationNode(
@@ -207,16 +207,14 @@ private fun StationNode(
     operator: String,
     modifier: Modifier = Modifier,
 ) {
-    val filled = kind == NodeKind.TERMINUS || kind == NodeKind.JUNCTION
-    val raised = filled || kind == NodeKind.INTERCHANGE
     LineRoundel(
         code = stationNumber,
         color = colorCode,
         operator = operator,
         size = NodeSize,
         station = true,
-        filled = filled,
-        modifier = modifier.then(if (raised) Modifier.shadow(1.dp, CircleShape) else Modifier),
+        filled = kind == NodeKind.TERMINUS || kind == NodeKind.JUNCTION,
+        modifier = modifier,
     )
 }
 
