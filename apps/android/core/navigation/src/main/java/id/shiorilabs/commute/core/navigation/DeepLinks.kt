@@ -11,8 +11,8 @@ private const val WEB_HOST = "commute.shiorilabs.id"
 
 /**
  * The screen a web link opens, or `null` for one the app has no screen for (the browser keeps
- * those): `/fare`, a shared OTW link with its pair, settings and journey, a station's page or its
- * full timetable, a hub's page and a line's page.
+ * those): `/fare`, a shared OTW link (see [fareRoute]), a station's page or its full timetable, a
+ * hub's page and a line's page.
  */
 fun routeForLink(link: String): Route? {
     val uri = runCatching { URI(link) }.getOrNull() ?: return null
@@ -27,22 +27,41 @@ fun routeForLink(link: String): Route? {
         path.startsWith("/lines/") -> return lineRoute(path)
     }
     return when (path) {
-        "/fare" -> {
-            val params = queryParams(uri.rawQuery)
-            Route.Journey(
-                fromId = params["from"]?.ifEmpty { null },
-                toId = params["to"]?.ifEmpty { null },
-                journeyKey = params["j"]?.ifEmpty { null },
-                boardingClock = params["jt"]?.ifEmpty { null },
-                paymentMethod = params["paymentMethod"],
-                at = params["at"],
-                modes = params["modes"],
-                walking = params["walking"],
-            )
-        }
+        "/fare" -> fareRoute(queryParams(uri.rawQuery))
 
         else -> null
     }
+}
+
+/**
+ * A shared `/fare` link: the journey it names, on its own page, when it names one between two
+ * stations; otherwise search's OTW tab with whatever of the pair it carries. The criteria travel
+ * either way.
+ */
+private fun fareRoute(params: Map<String, String>): Route {
+    val fromId = params["from"]?.ifEmpty { null }
+    val toId = params["to"]?.ifEmpty { null }
+    val journeyKey = params["j"]?.ifEmpty { null }
+    if (fromId != null && toId != null && journeyKey != null) {
+        return Route.Trip(
+            fromId = fromId,
+            toId = toId,
+            journeyKey = journeyKey,
+            boardingClock = params["jt"]?.ifEmpty { null },
+            paymentMethod = params["paymentMethod"],
+            at = params["at"],
+            modes = params["modes"],
+            walking = params["walking"],
+        )
+    }
+    return Route.Otw(
+        fromId = fromId,
+        toId = toId,
+        paymentMethod = params["paymentMethod"],
+        at = params["at"],
+        modes = params["modes"],
+        walking = params["walking"],
+    )
 }
 
 /**

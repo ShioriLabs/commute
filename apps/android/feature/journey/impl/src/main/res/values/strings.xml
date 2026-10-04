@@ -2,14 +2,16 @@
 <resources>
     <!-- Copy is the web's fare sheet, verbatim, so the two clients say the same thing. -->
 
-    <!-- The page -->
-    <string name="journey_title">Cek Tarif</string>
-    <string name="journey_close_description">Tutup halaman cek tarif</string>
+    <!-- The trip page: one journey in full, opened from an OTW option or a saved pair's row -->
+    <string name="journey_trip_title">Perjalanan</string>
+    <string name="journey_close_description">Tutup perjalanan</string>
     <string name="journey_share_description">Bagikan rute ini</string>
     <!-- The share sheet's title -->
     <string name="journey_share_title">Cek Tarif Commute</string>
-    <!-- Under the result in search's OTW tab -->
-    <string name="journey_open_page">Buka halaman tarif</string>
+    <!-- The journey the page was opened on is no longer in the answer -->
+    <string name="journey_trip_gone">Rute ini sudah tidak tersedia untuk waktu yang dipilih</string>
+    <string name="journey_trip_see_options">Lihat pilihan rute</string>
+    <!-- The pin under the result in search's OTW tab, and beside share on the trip page -->
     <string name="journey_save_route">Simpan rute ini ke beranda</string>
     <string name="journey_unsave_route">Hapus rute ini dari beranda</string>
     <string name="journey_recent_routes">Rute terakhir</string>
@@ -58,8 +60,6 @@
     <!-- Results -->
     <!-- %1$d is how many journeys there are to choose between -->
     <string name="journey_options">%1$d pilihan rute</string>
-    <string name="journey_detail">Rincian perjalanan</string>
-    <string name="journey_detail_back">Kembali ke pilihan rute</string>
     <string name="journey_fare_unknown">Tarif tidak tersedia</string>
     <string name="journey_last_train">Kereta terakhir</string>
     <string name="journey_last_service">Terakhir</string>

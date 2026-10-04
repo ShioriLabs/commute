@@ -72,19 +72,22 @@ private val SearchBackground = Color.White
 fun SearchScreen(
     innerPadding: PaddingValues,
     otwPanel: OtwPanel,
+    /** The pair search was opened with as [Route.Otw], or `null` from home's card. */
+    otwSeed: Route.Otw? = null,
     viewModel: SearchViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val query by viewModel.query.collectAsStateWithLifecycle()
-    val mode by viewModel.mode.collectAsStateWithLifecycle()
+    val storedMode by viewModel.mode.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
     val focusManager = LocalFocusManager.current
 
-    // Opened by the home screen's accent card, so this gathers back into its colour.
-    NavCardMorphTarget(
-        destination = Route.Search,
-        cardTint = MaterialTheme.colorScheme.primary,
-    ) {
+    // Opened with a pair, the OTW tab shows for this visit until the rider picks a tab, without
+    // touching the tab home's card remembers.
+    var seeded by rememberSaveable { mutableStateOf(otwSeed != null) }
+    val mode = if (seeded) SearchMode.FARE else storedMode
+
+    val content = @Composable {
         SearchContent(
             state = state,
             query = query,
@@ -93,9 +96,12 @@ fun SearchScreen(
             onModeChange = { next ->
                 // The OTW tab has no use for the station field's keyboard.
                 focusManager.clearFocus()
+                seeded = false
                 viewModel.onModeChange(next)
             },
-            otwContent = { padding -> otwPanel.Content(contentPadding = padding, modifier = Modifier.fillMaxSize()) },
+            otwContent = { padding ->
+                otwPanel.Content(seed = otwSeed, contentPadding = padding, modifier = Modifier.fillMaxSize())
+            },
             onQueryChange = viewModel::onQueryChange,
             onClose = {
                 // The keyboard would otherwise slide away against the collapsing screen.
@@ -118,7 +124,21 @@ fun SearchScreen(
                 focusManager.clearFocus()
                 navigator.goTo(Route.SettingsSavedStations)
             },
+            focusOnOpen = otwSeed == null,
         )
+    }
+
+    if (otwSeed == null) {
+        // Opened by the home screen's accent card, so this gathers back into its colour.
+        NavCardMorphTarget(
+            destination = Route.Search,
+            cardTint = MaterialTheme.colorScheme.primary,
+        ) {
+            content()
+        }
+    } else {
+        // Opened from a station's page or a saved pair: it slides in as any other page does.
+        content()
     }
 }
 

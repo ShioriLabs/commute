@@ -36,6 +36,8 @@ dependencies {
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.material3)
+    // Haze: the trip page is what the frost behind its pinned header blurs.
+    implementation(libs.haze)
     implementation(libs.androidx.compose.ui.tooling.preview)
 
     // ViewModel + viewModelScope.

@@ -7,14 +7,14 @@ import org.junit.Test
 class DeepLinksTest {
 
     @Test
-    fun `a shared fare link opens OTW with everything it carries`() {
+    fun `a shared fare link naming a journey opens it with everything it carries`() {
         val route = routeForLink(
             "https://commute.shiorilabs.id/fare?from=KCI-SUD&to=MRTJ-LBB&paymentMethod=QRIS_TAP" +
                 "&at=2026-10-05T03%3A20%3A00Z&modes=rail&walking=SLOW&j=C.SUD-MRI%7E_DKA",
         )
 
         assertEquals(
-            Route.Journey(
+            Route.Trip(
                 fromId = "KCI-SUD",
                 toId = "MRTJ-LBB",
                 journeyKey = "C.SUD-MRI~_DKA",
@@ -30,15 +30,24 @@ class DeepLinksTest {
     @Test
     fun `a saved pair's row link names the boarding too`() {
         assertEquals(
-            Route.Journey(fromId = "KCI-SUD", toId = "KCI-MRI", journeyKey = "C.SUD-MRI", boardingClock = "2321"),
+            Route.Trip(fromId = "KCI-SUD", toId = "KCI-MRI", journeyKey = "C.SUD-MRI", boardingClock = "2321"),
             routeForLink("https://commute.shiorilabs.id/fare?from=KCI-SUD&to=KCI-MRI&j=C.SUD-MRI&jt=2321"),
         )
     }
 
     @Test
-    fun `a station's OTW link carries only the destination`() {
-        assertEquals(Route.Journey(toId = "KCI-MRI"), routeForLink("https://commute.shiorilabs.id/fare?to=KCI-MRI"))
-        assertEquals(Route.Journey(), routeForLink("https://commute.shiorilabs.id/fare/"))
+    fun `a fare link without a journey opens the OTW tab with what it carries`() {
+        assertEquals(Route.Otw(toId = "KCI-MRI"), routeForLink("https://commute.shiorilabs.id/fare?to=KCI-MRI"))
+        assertEquals(Route.Otw(), routeForLink("https://commute.shiorilabs.id/fare/"))
+        assertEquals(
+            Route.Otw(fromId = "KCI-SUD", toId = "KCI-MRI", modes = "rail"),
+            routeForLink("https://commute.shiorilabs.id/fare?from=KCI-SUD&to=KCI-MRI&modes=rail"),
+        )
+    }
+
+    @Test
+    fun `a journey without both ends has nowhere to be found, so opens the OTW tab`() {
+        assertEquals(Route.Otw(toId = "KCI-MRI"), routeForLink("https://commute.shiorilabs.id/fare?to=KCI-MRI&j=C.SUD-MRI"))
     }
 
     @Test

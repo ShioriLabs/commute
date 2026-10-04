@@ -11,6 +11,7 @@ import id.shiorilabs.commute.core.query.toUIState
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.feature.journey.data.JourneyRepository
 import id.shiorilabs.commute.feature.journey.domain.DEPARTURE_SLOT_MINUTES
+import id.shiorilabs.commute.feature.journey.domain.JourneyCriteria
 import id.shiorilabs.commute.feature.journey.domain.TripAnswer
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.domain.LineInfo
@@ -28,6 +29,8 @@ data class SavedRouteUiState(
     val answer: UIState<TripAnswer> = UIState.Loading,
     /** Keyed `OPERATOR:CODE`. Empty until it loads. */
     val lines: Map<String, LineInfo> = emptyMap(),
+    /** What [answer] was asked with, for a row's trip page to ask the same. `null` until read. */
+    val criteria: JourneyCriteria? = null,
 )
 
 /**
@@ -87,11 +90,15 @@ class SavedRouteViewModel @AssistedInject constructor(
         // have been read to know which answer that is, as they will have on a warm start.
         if (mutableState.value.answer !is UIState.Success) {
             farePreferences.cachedCriteria()
-                ?.let { snapshot -> journeyRepository.cachedTrips(fromId, toId, snapshot.criteria.homeRouteCriteria(now)) }
-                ?.let { held -> mutableState.value = mutableState.value.copy(answer = UIState.Success(held)) }
+                ?.let { snapshot -> snapshot.criteria.homeRouteCriteria(now) }
+                ?.let { criteria -> journeyRepository.cachedTrips(fromId, toId, criteria)?.let { held -> criteria to held } }
+                ?.let { (criteria, held) ->
+                    mutableState.value = mutableState.value.copy(answer = UIState.Success(held), criteria = criteria)
+                }
         }
         load = viewModelScope.launch {
             val criteria = farePreferences.criteria.first().homeRouteCriteria(now)
+            mutableState.value = mutableState.value.copy(criteria = criteria)
             // The cache keeps the rows on screen while a refresh runs, and after one fails; only a
             // first load with nothing held says it failed. Home's pull to refresh lands here too.
             journeyRepository.observeTrips(fromId, toId, criteria).collect { query ->

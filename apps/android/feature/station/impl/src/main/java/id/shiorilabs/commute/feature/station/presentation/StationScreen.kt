@@ -118,7 +118,7 @@ fun StationScreen(
         onRetry = viewModel::retry,
         onOpenMaps = { station -> mapsUrl(station)?.let(uriHandler::openUri) },
         // Plans a trip here: OTW opens with this station as the destination, picking the origin.
-        onOtw = { navigator.goTo(Route.Journey(toId = stationId)) },
+        onOtw = { navigator.goTo(Route.Otw(toId = stationId)) },
         onOpenTimetable = { title -> navigator.goTo(Route.StationTimetable(stationId, title)) },
         onOpenStation = { id -> navigator.goTo(Route.Station(id)) },
         onOpenLine = { key -> lineRoute(key, state.lines)?.let(navigator::goTo) },
