@@ -38,8 +38,9 @@ import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.type.toFailure
 import id.shiorilabs.commute.core.ui.components.CommuteEmptyState
+import id.shiorilabs.commute.core.ui.components.LoadProblem
+import id.shiorilabs.commute.core.ui.components.LoadProblemState
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
-import id.shiorilabs.commute.core.ui.components.ProblemPanel
 import id.shiorilabs.commute.core.ui.components.SkeletonBlock
 import id.shiorilabs.commute.core.ui.ext.RevealInsertedTop
 import id.shiorilabs.commute.core.ui.frost.FrostedTopChromeBackdrop
@@ -276,13 +277,10 @@ private fun StationList(
 
         val stationState = board.station
         if (stationState is UIState.Error) {
-            // Nothing below can be drawn without the station, so one panel stands for it all.
+            // Nothing below can be drawn without the station, so one state stands for it all.
             item(key = "station-failed") {
-                ProblemPanel(
-                    message = stringResource(
-                        if (stationState.isOffline()) R.string.station_offline else R.string.station_failed,
-                    ),
-                    retryLabel = stringResource(R.string.station_retry),
+                LoadProblemState(
+                    problem = if (offline || stationState.isOffline()) LoadProblem.OFFLINE else LoadProblem.ERROR,
                     onRetry = onRetry,
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
@@ -295,6 +293,7 @@ private fun StationList(
             lines = state.lines,
             now = now,
             offline = offline,
+            retired = state.retired != null,
             onRetry = onRetry,
             onOtw = onOtw,
             onOpenTimetable = onOpenTimetable,
@@ -347,9 +346,10 @@ private fun StationList(
 }
 
 /**
- * The line cards, or what stands in for them: a skeleton while the board loads, a retry when it
- * failed, and for an empty board either a halte's frequencies (TransJakarta publishes no timetable)
- * or a retry.
+ * The line cards, or what stands in for them: a skeleton while the board loads, the web's empty
+ * state with a retry when it failed or the device is offline, and for an empty board a halte's
+ * frequencies (TransJakarta publishes no timetable), nothing at a [retired] station, or "Jadwal
+ * Tidak Tersedia".
  *
  * A list item per card rather than one item holding them all, so opening the page builds and
  * measures only the cards on screen. One item had the frame a station opens on lay out every card
@@ -361,6 +361,7 @@ private fun LazyListScope.departures(
     lines: Map<String, LineInfo>,
     now: LocalDateTime,
     offline: Boolean,
+    retired: Boolean,
     onRetry: () -> Unit,
     onOtw: () -> Unit,
     onOpenTimetable: () -> Unit,
@@ -382,11 +383,8 @@ private fun LazyListScope.departures(
         is UIState.Idle, is UIState.Loading -> skeleton()
 
         is UIState.Error -> item(key = "departures-failed") {
-            ProblemPanel(
-                message = stringResource(
-                    if (timetable.isOffline()) R.string.station_timetable_offline else R.string.station_timetable_failed,
-                ),
-                retryLabel = stringResource(R.string.station_retry),
+            LoadProblemState(
+                problem = if (offline || timetable.isOffline()) LoadProblem.OFFLINE else LoadProblem.ERROR,
                 onRetry = onRetry,
                 modifier = inset,
             )
@@ -435,6 +433,12 @@ private fun LazyListScope.departures(
                 lastTrains(timetable.data, lines)
             }
 
+            // Offline before anything else, as on the web: an empty board then says nothing about
+            // the station, and a retry once connected may well fill it.
+            offline -> item(key = "departures-offline") {
+                LoadProblemState(problem = LoadProblem.OFFLINE, onRetry = onRetry, modifier = inset)
+            }
+
             // A missing schedule is a fact about the operator, so trip planning stays on offer. The
             // skeleton holds while the frequencies load alongside the board, rather than flashing
             // the no-schedule note before they replace it.
@@ -454,13 +458,13 @@ private fun LazyListScope.departures(
                 }
             }
 
+            // A retired station has no schedule by definition, and its notice above already says
+            // so; "Jadwal Tidak Tersedia" under it would read as a failure, as the web notes.
+            retired -> Unit
+
+            // Loaded, and empty: no retry, which would only answer the same.
             else -> item(key = "departures-empty") {
-                ProblemPanel(
-                    message = stringResource(R.string.station_timetable_empty),
-                    retryLabel = stringResource(R.string.station_retry),
-                    onRetry = onRetry,
-                    modifier = inset,
-                )
+                LoadProblemState(problem = LoadProblem.NO_DATA, modifier = inset)
             }
         }
     }
