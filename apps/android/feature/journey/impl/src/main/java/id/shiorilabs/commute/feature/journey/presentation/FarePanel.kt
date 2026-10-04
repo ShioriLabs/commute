@@ -1,7 +1,6 @@
 package id.shiorilabs.commute.feature.journey.presentation
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,12 +22,14 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.components.SkeletonBlock
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.time.updatedAgoText
 import id.shiorilabs.commute.feature.journey.R
+import id.shiorilabs.commute.feature.journey.domain.Journey
 import id.shiorilabs.commute.feature.journey.domain.JourneyCriteria
 import id.shiorilabs.commute.feature.journey.domain.PairEnd
 import id.shiorilabs.commute.feature.journey.domain.PickableStation
@@ -40,29 +41,25 @@ import id.shiorilabs.commute.feature.journey.presentation.components.OptionPlate
 import id.shiorilabs.commute.feature.journey.presentation.components.Slate400
 import id.shiorilabs.commute.feature.journey.presentation.components.StationFields
 import id.shiorilabs.commute.feature.journey.presentation.components.StationPickerSheet
-import id.shiorilabs.commute.feature.journey.presentation.components.Stone100
-import id.shiorilabs.commute.feature.journey.presentation.components.Stone200
 import java.time.Instant
 
-/** What the panel can be asked to do. One object, so the two hosts wire it the same way. */
+/** What the panel can be asked to do. */
 internal class FarePanelActions(
     val onPick: (PairEnd) -> Unit,
     val onSwap: () -> Unit,
     val onCriteriaChange: (JourneyCriteria) -> Unit,
-    val onSelectJourney: (Int) -> Unit,
-    val onBackToOptions: () -> Unit,
+    val onSelectJourney: (Journey) -> Unit,
     val onRetry: () -> Unit,
     val onPickerQueryChange: (String) -> Unit,
     val onPickStation: (PickableStation) -> Unit,
     val onClosePicker: () -> Unit,
 )
 
-internal fun JourneyViewModel.panelActions() = FarePanelActions(
+internal fun JourneyViewModel.panelActions(onSelectJourney: (Journey) -> Unit) = FarePanelActions(
     onPick = ::openPicker,
     onSwap = ::onSwap,
     onCriteriaChange = ::onCriteriaChange,
-    onSelectJourney = ::onSelectJourney,
-    onBackToOptions = ::onBackToOptions,
+    onSelectJourney = onSelectJourney,
     onRetry = ::retry,
     onPickerQueryChange = ::onPickerQueryChange,
     onPickStation = ::onPick,
@@ -71,8 +68,8 @@ internal fun JourneyViewModel.panelActions() = FarePanelActions(
 
 /**
  * The OTW panel: the Dari/Ke fields, the settings, then the answer, with the station picker over it
- * when one end is being chosen. Rendered by the OTW page and by search's OTW tab, which scroll it.
- * The web's `FarePanel`. [footer] follows a loaded answer.
+ * when one end is being chosen. Rendered by search's OTW tab, which scrolls it. The web's
+ * `FarePanel`. [footer] follows a loaded answer.
  */
 @Composable
 internal fun FarePanel(
@@ -119,11 +116,8 @@ internal fun FarePanel(
                 }
                 JourneyResult(
                     journeys = trip.answer.journeys,
-                    page = state.page,
-                    selected = state.selected,
                     lines = state.lines,
                     onSelect = actions.onSelectJourney,
-                    onBack = actions.onBackToOptions,
                     modifier = Modifier.padding(top = 24.dp),
                 )
                 footer()
@@ -163,13 +157,13 @@ private fun EmptyPair() {
     }
 }
 
-/** A plate's outline, pulsing, while the answer is worked out. */
+/** A plate's outline, pulsing, while the answer is worked out. Also the trip page's loading. */
 @Composable
-private fun ResultSkeleton() {
+internal fun ResultSkeleton(top: Dp = 24.dp) {
     val description = stringResource(R.string.journey_loading_description)
     Column(
         modifier = Modifier
-            .padding(top = 24.dp)
+            .padding(top = top)
             .semantics { contentDescription = description },
     ) {
         Column(
@@ -190,12 +184,15 @@ private fun ResultSkeleton() {
     }
 }
 
-/** The web's amber notice. A failed load can be tried again here; a phone loses signal more often. */
+/**
+ * The web's amber notice. A failed load can be tried again here; a phone loses signal more often.
+ * [actionLabel] names the action, "Coba lagi" unless said otherwise.
+ */
 @Composable
-private fun Problem(text: String, onRetry: (() -> Unit)? = null) {
+internal fun Problem(text: String, onRetry: (() -> Unit)? = null, actionLabel: String? = null, top: Dp = 24.dp) {
     Column(
         modifier = Modifier
-            .padding(top = 24.dp)
+            .padding(top = top)
             .fillMaxWidth()
             .background(Amber100, MaterialTheme.shapes.medium)
             .padding(16.dp),
@@ -204,30 +201,12 @@ private fun Problem(text: String, onRetry: (() -> Unit)? = null) {
         Text(text = text, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = Amber950)
         if (onRetry != null) {
             Text(
-                text = stringResource(R.string.journey_retry),
+                text = actionLabel ?: stringResource(R.string.journey_retry),
                 modifier = Modifier.clickable(role = Role.Button, onClick = onRetry),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
             )
         }
-    }
-}
-
-/** "Buka halaman tarif": from search's tab to the OTW page for the same pair. */
-@Composable
-internal fun OpenFarePageLink(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(Stone100, MaterialTheme.shapes.medium)
-            .border(2.dp, Stone200, MaterialTheme.shapes.medium)
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(text = stringResource(R.string.journey_open_page), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-        Icon(imageVector = CommuteIcons.Chevron, contentDescription = null, modifier = Modifier.size(16.dp))
     }
 }

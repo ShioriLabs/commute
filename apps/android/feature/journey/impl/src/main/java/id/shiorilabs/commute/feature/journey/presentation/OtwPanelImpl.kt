@@ -1,11 +1,7 @@
 package id.shiorilabs.commute.feature.journey.presentation
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -21,7 +17,8 @@ import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
 import id.shiorilabs.commute.feature.journey.domain.JAKARTA
 import id.shiorilabs.commute.feature.journey.presentation.components.RecentRoutes
-import id.shiorilabs.commute.feature.journey.presentation.components.SaveRouteSquare
+import id.shiorilabs.commute.feature.journey.presentation.components.SaveRoutePlate
+import id.shiorilabs.commute.feature.journey.presentation.trip.tripRoute
 import javax.inject.Inject
 
 /** Keys the tab's ViewModel apart from any other on the search screen's entry. */
@@ -29,19 +26,19 @@ private const val OTW_PANEL_KEY = "otw-panel"
 
 /**
  * Search's OTW tab. Its ViewModel lives as long as the search screen, so switching tabs and back
- * keeps the pair; "Buka halaman tarif" opens the same pair as a page of its own.
+ * keeps the pair, as does a trip page opened from one of its options.
  */
 class OtwPanelImpl @Inject constructor() : OtwPanel {
 
     @Composable
-    override fun Content(contentPadding: PaddingValues, modifier: Modifier) {
+    override fun Content(seed: Route.Otw?, contentPadding: PaddingValues, modifier: Modifier) {
         val viewModel = hiltViewModel<JourneyViewModel, JourneyViewModel.Factory>(
             key = OTW_PANEL_KEY,
-            creationCallback = { factory -> factory.create(Route.Journey()) },
+            creationCallback = { factory -> factory.create(seed ?: Route.Otw()) },
         )
         val state by viewModel.state.collectAsStateWithLifecycle()
         val picker by viewModel.picker.collectAsStateWithLifecycle()
-    val pickerText by viewModel.pickerText.collectAsStateWithLifecycle()
+        val pickerText by viewModel.pickerText.collectAsStateWithLifecycle()
         val routeSaved by viewModel.routeSaved.collectAsStateWithLifecycle()
         val recentRoutes by viewModel.recentRoutes.collectAsStateWithLifecycle()
         val navigator = LocalNavigator.current
@@ -61,28 +58,29 @@ class OtwPanelImpl @Inject constructor() : OtwPanel {
                 picker = picker,
                 pickerText = pickerText,
                 now = rememberJakartaNow().atZone(JAKARTA).toInstant(),
-                actions = viewModel.panelActions(),
-                footer = {
-                    Row(
-                        modifier = Modifier
-                            .padding(top = 16.dp)
-                            .height(IntrinsicSize.Min),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        OpenFarePageLink(
-                            onClick = { navigator.goTo(Route.Journey(fromId = state.pair.fromId, toId = state.pair.toId)) },
-                            modifier = Modifier.weight(1f),
-                        )
-                        routeSaved?.let { saved ->
-                            SaveRouteSquare(saved = saved, onClick = viewModel::onToggleSaveRoute)
+                actions = viewModel.panelActions(
+                    onSelectJourney = { journey ->
+                        val fromId = state.pair.fromId
+                        val toId = state.pair.toId
+                        if (fromId != null && toId != null) {
+                            navigator.goTo(tripRoute(fromId, toId, journey, state.criteria))
                         }
+                    },
+                ),
+                footer = {
+                    routeSaved?.let { saved ->
+                        SaveRoutePlate(
+                            saved = saved,
+                            onClick = viewModel::onToggleSaveRoute,
+                            modifier = Modifier.padding(top = 16.dp),
+                        )
                     }
                 },
             )
             if (state.pair.fromId == null || state.pair.toId == null) {
                 RecentRoutes(
                     routes = recentRoutes,
-                    onOpen = { route -> navigator.goTo(Route.Journey(fromId = route.fromId, toId = route.toId)) },
+                    onOpen = viewModel::onOpenRecent,
                     onTogglePin = viewModel::onToggleRecentRoute,
                     onClear = viewModel::onClearRecentRoutes,
                     modifier = Modifier.padding(top = 24.dp),
