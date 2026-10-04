@@ -4,6 +4,20 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import androidx.compose.foundation.Canvas
+import kotlinx.coroutines.delay
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -28,7 +42,14 @@ import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -47,6 +68,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
@@ -59,6 +83,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
@@ -72,6 +97,8 @@ import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.ext.parseHexColor
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
+import id.shiorilabs.commute.core.ui.motion.IosSpringEasing
+import id.shiorilabs.commute.core.ui.motion.rememberReducedMotion
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.presentation.components.PidsChevrons
 import id.shiorilabs.commute.feature.trip.R
@@ -87,9 +114,30 @@ private val BoardInk = Color(0xFF0F172A)
 private val BoardMuted = Color(0xFF94A3B8)
 private val BoardDim = Color(0xFF64748B)
 private val PlainText = Color(0xFF0F172A)
+private val Hairline = Color(0x33FFFFFF)
+
+/** Figures of one width, so minutes and clocks don't shift as they tick. */
+private const val TABULAR = "tnum"
+
+/** The most lines marked before a station's name: more would crowd it out. */
+private const val STATION_LINES = 3
 
 /** The next stop's bubble, the display's yellow. */
 private val NextStop = Color(0xFFFBBF24)
+
+/** The band before its colour reaches it, top and side. */
+private val BandUnlit = Color(0xFFCBD5E1)
+private val BandUnlitSide = Color(0xFF94A3B8)
+
+private const val DRAW_IN_MILLIS = 1100
+
+/** The white edge round the rider's pink marker. */
+private val MarkerOutline = 2.dp
+
+/** One run of the rider's marker toward the next stop, and the shares of it spent fading in and out. */
+private const val TRAVEL_MILLIS = 1600
+private const val MARKER_FADE_IN = 0.12f
+private const val MARKER_FADE_OUT = 0.18f
 
 /** The band's width on the ground. */
 private val BandWidth = 40.dp
@@ -141,18 +189,18 @@ internal fun PidsBoard(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    DarkStatusBarIcons()
     val line = lines[pids.ride.line]
     val color = parseHexColor(line?.colorCode ?: "", BoardMuted)
+    DarkStatusBarIcons()
     Column(modifier = modifier.fillMaxWidth()) {
         // Over the strip: its band runs on up behind the plate.
-        Header(pids, copy, color, topInset, onClose, modifier = Modifier.zIndex(1f))
+        Header(pids, lines, stationLines, copy, topInset, onClose, modifier = Modifier.zIndex(1f))
         if (pids.upcoming.isNotEmpty()) Strip(pids, color, source)
         ChangePanel(pids, lines, stationLines, copy)
     }
 }
 
-/** Light icons over the dark band while the board shows; the app's dark ones again after. */
+/** Light icons over the dark plate while the board shows; the app's dark ones again after. */
 @Composable
 private fun DarkStatusBarIcons() {
     val view = LocalView.current
@@ -170,29 +218,65 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     else -> null
 }
 
+/**
+ * The plate over the band, after the long strip displays over train doors: the line's roundel,
+ * where it's headed and the minutes to the big name, then that name with the station's lines as
+ * roundels before it, as Singapore's MRT marks a station.
+ */
 @Composable
-private fun Header(pids: Pids, copy: TripCopy, color: Color, topInset: Dp, onClose: () -> Unit, modifier: Modifier = Modifier) {
+private fun Header(
+    pids: Pids,
+    lines: Map<String, LineInfo>,
+    stationLines: List<String>,
+    copy: TripCopy,
+    topInset: Dp,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val minutes = pids.upcoming.firstOrNull()?.minutes
+    val clock = pids.at?.let(::formatClock)
     Column(
         modifier = modifier
             .fillMaxWidth()
             .background(BoardInk)
             .padding(top = topInset)
-            .padding(start = 24.dp, top = 12.dp, end = 12.dp, bottom = 20.dp),
+            .padding(top = 4.dp, bottom = 16.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(modifier = Modifier.padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            val rideName = copy.rideName(pids.ride)
+            Roundel(pids.ride, lines, modifier = Modifier.semantics { contentDescription = rideName })
             Text(
-                text = copy.rideName(pids.ride),
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.labelLarge,
+                text = pids.ride.headsign?.let { stringResource(R.string.trip_pids_to, it) }.orEmpty(),
+                modifier = Modifier.padding(start = 10.dp).weight(1f),
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                color = BoardMuted,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            pids.at?.let {
-                Text(
-                    text = formatClock(it),
-                    modifier = Modifier.padding(end = 8.dp),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = BoardMuted,
+            // How long until the big name, by the close button: the minutes, or the clock without them.
+            when {
+                minutes != null -> Row(modifier = Modifier.padding(start = 8.dp)) {
+                    Text(
+                        text = minutes.toString(),
+                        modifier = Modifier.alignByBaseline(),
+                        style = MaterialTheme.typography.headlineSmall.merge(fontFeatureSettings = TABULAR),
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+                    Text(
+                        text = stringResource(R.string.trip_pids_minutes),
+                        modifier = Modifier.padding(start = 4.dp).alignByBaseline(),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = BoardMuted,
+                    )
+                }
+                clock != null -> Text(
+                    text = clock,
+                    modifier = Modifier.padding(start = 8.dp),
+                    style = MaterialTheme.typography.headlineSmall.merge(fontFeatureSettings = TABULAR),
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
                 )
             }
             CommuteIconButton(onClick = onClose, modifier = Modifier.size(40.dp)) {
@@ -204,62 +288,165 @@ private fun Header(pids: Pids, copy: TripCopy, color: Color, topInset: Dp, onClo
                 )
             }
         }
-        Row(
+        Box(
             modifier = Modifier
+                .padding(top = 4.dp)
                 .fillMaxWidth()
-                .padding(top = 8.dp)
-                .height(IntrinsicSize.Min),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            pids.ride.headsign?.let { headsign ->
-                Column(modifier = Modifier.width(88.dp), horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = stringResource(R.string.trip_pids_towards),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = BoardMuted,
-                    )
-                    Text(
-                        text = headsign,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp)
-                        .width(8.dp)
-                        .fillMaxHeight()
-                        .background(color),
+                .height(1.dp)
+                .background(Hairline),
+        )
+        Column(modifier = Modifier.padding(start = 20.dp, top = 12.dp, end = 20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = stringResource(pids.label.text),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = BoardMuted,
                 )
+                if (pids.label == PidsLabel.ALIGHT_HERE || pids.label == PidsLabel.ALIGHT_NEXT) {
+                    PidsChevrons(color = NextStop)
+                }
             }
-            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(modifier = Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                StationLines((listOf(pids.ride.line) + stationLines).distinct().take(STATION_LINES), lines)
+                StationName(pids.station, modifier = Modifier.weight(1f).padding(start = 10.dp))
+            }
+        }
+        // The plainer facts: the platform while waiting for it, and the clock (when the minutes are
+        // up by the close button) at the far end.
+        val platform = pids.ride.platformCode?.takeIf { pids.label == PidsLabel.BOARD }
+        val at = clock.takeIf { minutes != null }
+        if (platform != null || at != null) {
+            Row(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, top = 6.dp, end = 20.dp)) {
+                Text(
+                    text = platform?.let { stringResource(R.string.trip_platform, formatPlatform(it)) }.orEmpty(),
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = BoardMuted,
+                )
+                at?.let {
                     Text(
-                        text = stringResource(pids.label.text),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
+                        text = it,
+                        style = MaterialTheme.typography.labelLarge.merge(fontFeatureSettings = TABULAR),
                         color = BoardMuted,
                     )
-                    if (pids.label == PidsLabel.ALIGHT_HERE || pids.label == PidsLabel.ALIGHT_NEXT) {
-                        PidsChevrons(color = NextStop)
-                    }
                 }
-                BasicText(
-                    text = pids.station,
-                    modifier = Modifier.semantics { heading() },
-                    style = MaterialTheme.typography.headlineLarge.merge(color = Color.White, fontWeight = FontWeight.Bold, lineHeight = 52.sp),
-                    maxLines = 1,
-                    autoSize = TextAutoSize.StepBased(minFontSize = 24.sp, maxFontSize = 48.sp, stepSize = 2.sp),
-                )
             }
         }
     }
 }
 
-private val PidsLabel.text: Int
+/**
+ * The big name on one line, shrinking as far as it still reads big. A name too long even then
+ * ("Bandara Internasional Soekarno-Hatta") is split at its word breaks into lines that each fit, and
+ * they take turns sliding up into place, as Kaohsiung's metro displays page a long message. With
+ * animations off the lines swap without moving.
+ */
+@Composable
+private fun StationName(name: String, modifier: Modifier = Modifier) {
+    val style = MaterialTheme.typography.headlineLarge.merge(color = Color.White, fontWeight = FontWeight.Bold, lineHeight = 52.sp)
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val reducedMotion = rememberReducedMotion()
+    BoxWithConstraints(
+        modifier = modifier
+            .clipToBounds()
+            .clearAndSetSemantics {
+                heading()
+                contentDescription = name
+            },
+    ) {
+        val pages = remember(name, style, constraints.maxWidth, density) { namePages(measurer, name, style, constraints.maxWidth) }
+        if (pages == null) {
+            BasicText(
+                text = name,
+                style = style,
+                maxLines = 1,
+                autoSize = TextAutoSize.StepBased(minFontSize = NameMin, maxFontSize = NameMax, stepSize = 2.sp),
+            )
+            return@BoxWithConstraints
+        }
+        var page by remember(pages) { mutableIntStateOf(0) }
+        LaunchedEffect(pages) {
+            while (true) {
+                delay(NAME_PAGE_MILLIS)
+                page = (page + 1) % pages.lines.size
+            }
+        }
+        AnimatedContent(
+            targetState = page,
+            transitionSpec = {
+                if (reducedMotion) {
+                    EnterTransition.None togetherWith ExitTransition.None
+                } else {
+                    val move = tween<IntOffset>(NAME_SLIDE_MILLIS, easing = IosSpringEasing)
+                    val fade = tween<Float>(NAME_SLIDE_MILLIS, easing = IosSpringEasing)
+                    (slideInVertically(move) { it } + fadeIn(fade)) togetherWith (slideOutVertically(move) { -it } + fadeOut(fade))
+                }
+            },
+            contentAlignment = Alignment.CenterStart,
+            label = "stationNamePage",
+        ) { index ->
+            BasicText(text = pages.lines[index], style = style.merge(fontSize = pages.size), maxLines = 1, softWrap = false)
+        }
+    }
+}
+
+/** A long name's lines, each shown in turn, all at one [size]. */
+private class NamePages(val size: TextUnit, val lines: List<String>)
+
+/**
+ * How [name] splits to fit [width]: `null` when it fits whole on one line at [NameMin] or bigger.
+ * Otherwise the biggest size, down to [PageMin], whose lines break only between words and number
+ * no more than [NAME_PAGES_MAX]; failing that, the fewest lines at [PageMin], broken wherever.
+ */
+private fun namePages(measurer: TextMeasurer, name: String, style: TextStyle, width: Int): NamePages? {
+    val whole = measurer.measure(name, style.merge(fontSize = NameMin), maxLines = 1, softWrap = false)
+    if (whole.size.width <= width) return null
+    fun linesAt(size: TextUnit): List<String> {
+        val layout = measurer.measure(name, style.merge(fontSize = size), constraints = Constraints(maxWidth = width))
+        return (0 until layout.lineCount).map { name.substring(layout.getLineStart(it), layout.getLineEnd(it)) }
+    }
+    var size = NameMax.value
+    while (size >= PageMin.value) {
+        val lines = linesAt(size.sp)
+        // A break inside a word ("Internasi-onal") doesn't count as fitting.
+        val betweenWords = lines.dropLast(1).all { it.last().isWhitespace() || it.last() == '-' }
+        if (betweenWords && lines.size <= NAME_PAGES_MAX) return NamePages(size.sp, lines.map(String::trim))
+        size -= 2
+    }
+    return NamePages(PageMin, linesAt(PageMin).map(String::trim))
+}
+
+/** The big name's range on one line; below the least it splits into lines instead. */
+private val NameMin = 32.sp
+private val NameMax = 48.sp
+
+/** The least a split name's lines go, and the most lines it takes turns in. */
+private val PageMin = 26.sp
+private const val NAME_PAGES_MAX = 3
+
+/** How long each line of a split name holds, and how long it takes to slide up into place. */
+private const val NAME_PAGE_MILLIS = 2500L
+private const val NAME_SLIDE_MILLIS = 450
+
+/** The station's lines as roundels before its name, the ride's own first. */
+@Composable
+private fun StationLines(keys: List<String>, lines: Map<String, LineInfo>) {
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        keys.forEach { key ->
+            val info = lines[key]
+            LineRoundel(
+                code = info?.lineCode ?: key.substringAfter(':'),
+                color = info?.colorCode ?: "#94A3B8",
+                operator = key.substringBefore(':'),
+                size = RoundelSize.MD,
+            )
+        }
+    }
+}
+
+internal val PidsLabel.text: Int
     get() = when (this) {
         PidsLabel.BOARD -> R.string.trip_pids_board
         PidsLabel.NEXT -> R.string.trip_pids_next
@@ -278,6 +465,33 @@ private val PidsLabel.text: Int
 @Composable
 private fun Strip(pids: Pids, color: Color, source: String?) {
     val density = LocalDensity.current
+    // The band draws itself in, grey first and then the line's colour sweeping from the rider to the
+    // far end, as the display does each time it shows the stops ahead: on opening, and again when
+    // the next stop changes.
+    // With animations off, both hold still in their finished state: the band whole, the marker
+    // halfway to the stop.
+    val reducedMotion = rememberReducedMotion()
+    val drawIn = remember { Animatable(0f) }
+    LaunchedEffect(pids.station, reducedMotion) {
+        if (reducedMotion) {
+            drawIn.snapTo(1f)
+            return@LaunchedEffect
+        }
+        drawIn.snapTo(0f)
+        // The app's iOS spring: off at speed and settling as it goes, no ease-in to stall the start.
+        drawIn.animateTo(1f, tween(durationMillis = DRAW_IN_MILLIS, easing = IosSpringEasing))
+    }
+    // The rider's marker runs along the band toward the next stop, eases in short of its bubble and
+    // starts again: heading this way, over and over.
+    // Time runs evenly; the position eases off it, the fades don't. Fading by the eased position
+    // would leave the marker faint for half of every run, while it slows toward the stop.
+    val clock by rememberInfiniteTransition(label = "marker").animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(durationMillis = TRAVEL_MILLIS, easing = LinearEasing)),
+        label = "markerTravel",
+    )
+    val time = if (reducedMotion) 0.5f else clock
     val description = stringResource(R.string.trip_pids_description, pids.upcoming.joinToString { it.name })
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val width = with(density) { maxWidth.toPx() }
@@ -294,7 +508,8 @@ private fun Strip(pids: Pids, color: Color, source: String?) {
             )
         }
         val slab = with(density) { SlabDepth.toPx() }
-        val marker = loop.point(loop.markerAngle)
+        val outline = with(density) { MarkerOutline.toPx() }
+        val brand = MaterialTheme.colorScheme.primary
         val side = lerp(color, Color.Black, 0.3f)
 
         // Each stop's bubble on the band, nearest first.
@@ -327,20 +542,43 @@ private fun Strip(pids: Pids, color: Color, source: String?) {
                         clipRect(top = -size.height * 4, bottom = size.height) { this@drawWithContent.drawContent() }
                     },
             ) {
-                val top = loop.band()
-                translate(top = slab) { drawPath(top, side) }
-                drawPath(top, color)
-                // The rider: a chevron on the band pointing the way it goes.
-                val tangent = loop.tangent(loop.markerAngle)
+                // Grey underneath, the line's colour over it as far as the draw-in has reached.
+                val whole = loop.band()
+                translate(top = slab) { drawPath(whole, BandUnlitSide) }
+                drawPath(whole, BandUnlit)
+                val lit = loop.band(drawIn.value)
+                translate(top = slab) { drawPath(lit, side) }
+                drawPath(lit, color)
+                // The rider: a chevron on the band pointing the way it goes, from just in off the edge
+                // to just short of the next stop's bubble, fading in as it sets off and out as it
+                // arrives so the loop has no seam.
+                val s = loop.band * 0.36f
+                val reach = loop.angleShortOfNearest(bubbles.firstOrNull()?.second?.div(2) ?: 0f, gap = s)
+                val markerAngle = loop.markerAngle + (reach - loop.markerAngle) * IosSpringEasing.transform(time)
+                val marker = loop.point(markerAngle)
+                val tangent = loop.tangent(markerAngle)
                 val angle = Math.toDegrees(atan2(tangent.y, tangent.x).toDouble()).toFloat()
+                val alpha = when {
+                    reducedMotion -> 1f
+                    time < MARKER_FADE_IN -> time / MARKER_FADE_IN
+                    time > 1f - MARKER_FADE_OUT -> (1f - time) / MARKER_FADE_OUT
+                    else -> 1f
+                }
                 rotate(angle + 90f, pivot = marker) {
-                    val s = loop.band * 0.36f
                     val chevron = Path().apply {
                         moveTo(marker.x - s, marker.y + s * 0.6f)
                         lineTo(marker.x, marker.y - s * 0.6f)
                         lineTo(marker.x + s, marker.y + s * 0.6f)
                     }
-                    drawPath(chevron, BoardInk, style = Stroke(width = s * 0.7f, cap = StrokeCap.Round))
+                    // Brand pink, outlined in white so it holds up on any line's colour. Faded as one
+                    // layer, so the outline doesn't show through the pink on the way in and out.
+                    drawContext.canvas.saveLayer(
+                        Rect(marker, s * 2 + outline * 2),
+                        Paint().apply { this.alpha = alpha },
+                    )
+                    drawPath(chevron, Color.White, style = Stroke(width = s * 0.7f + outline * 2, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                    drawPath(chevron, brand, style = Stroke(width = s * 0.7f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                    drawContext.canvas.restore()
                 }
             }
 
@@ -401,7 +639,42 @@ private class GroundLoop(
     private fun angleAt(inset: Float) = acos((1 - (inset + offscreen) / radius).coerceIn(-1f, 1f))
 
     private val nearestAngle = angleAt(nearestIn)
+
+    /** The angle [gap] short of the nearest stop's bubble of radius [bubbleRadius], measured along the band. */
+    fun angleShortOfNearest(bubbleRadius: Float, gap: Float): Float {
+        val (dx, dy) = tangent(nearestAngle)
+        val perRadian = kotlin.math.sqrt(dx * dx + dy * dy)
+        return (nearestAngle - (bubbleRadius + gap) / perRadian).coerceAtLeast(markerAngle)
+    }
     val markerAngle = angleAt(markerIn)
+
+    /** Where the band's outer edge comes in over the left edge: the start of what can be seen of it. */
+    private val entryAngle by lazy { acos((cx / (radius + band / 2)).coerceIn(-1f, 1f)) }
+
+    /**
+     * The band from where it comes on screen to its far end, measured along it: each sample's
+     * distance from the start, so a share of the sweep turns into an angle at an even pace. On the
+     * squashed loop, equal angles aren't equal lengths.
+     */
+    private val lengths: FloatArray by lazy {
+        FloatArray(LENGTH_SAMPLES + 1).also { lengths ->
+            var previous = point(entryAngle)
+            for (i in 1..LENGTH_SAMPLES) {
+                val next = point(entryAngle + (FAR_ANGLE - entryAngle) * i / LENGTH_SAMPLES)
+                lengths[i] = lengths[i - 1] + (next - previous).getDistance()
+                previous = next
+            }
+        }
+    }
+
+    /** The angle [fraction] of the way along the band from where it comes on screen, by length. */
+    private fun angleAlongBand(fraction: Float): Float {
+        val target = lengths.last() * fraction.coerceIn(0f, 1f)
+        val i = lengths.indexOfFirst { it >= target }.coerceAtLeast(1)
+        val span = lengths[i] - lengths[i - 1]
+        val within = if (span > 0f) (target - lengths[i - 1]) / span else 0f
+        return entryAngle + (FAR_ANGLE - entryAngle) * (i - 1 + within) / LENGTH_SAMPLES
+    }
 
     private val nearestY = farthestTop + (PIDS_STOPS - 1) * pitch
     private val cy = nearestY + TILT * radius * sin(nearestAngle)
@@ -433,10 +706,16 @@ private class GroundLoop(
     /** The way the band runs at [angle], up and to the right. */
     fun tangent(angle: Float) = Offset(radius * sin(angle), -TILT * radius * cos(angle))
 
-    /** The band's top face, between the loop's inner and outer edges. */
-    fun band(): Path = Path().apply {
-        val steps = 160
-        val angles = (0..steps).map { NEAR_ANGLE + (FAR_ANGLE - NEAR_ANGLE) * it / steps }
+    /**
+     * The band's top face, between the loop's inner and outer edges: the whole of it, or its near
+     * [fraction] (by angle round the loop) while it draws in.
+     */
+    fun band(fraction: Float = 1f): Path = Path().apply {
+        // The sweep runs from where the band comes on screen to its far end, under the plate, at
+        // an even pace along it; the tail off the left edge comes lit from the start.
+        val far = if (fraction >= 1f) FAR_ANGLE else angleAlongBand(fraction.coerceAtLeast(0f))
+        val steps = maxOf(2, (160 * fraction).roundToInt())
+        val angles = (0..steps).map { NEAR_ANGLE + (far - NEAR_ANGLE) * it / steps }
         angles.forEachIndexed { i, a ->
             val (x, y) = point(a, radius + band / 2)
             if (i == 0) moveTo(x, y) else lineTo(x, y)
@@ -453,6 +732,7 @@ private class GroundLoop(
         const val TILT = 0.707f
         const val NEAR_ANGLE = -0.25f
         const val FAR_ANGLE = 1.2f
+        const val LENGTH_SAMPLES = 96
     }
 }
 
@@ -557,7 +837,7 @@ private fun ChangePanel(pids: Pids, lines: Map<String, LineInfo>, stationLines: 
                 Text(
                     text = listOfNotNull(
                         stringResource(R.string.trip_change, copy.rideName(change)),
-                        change.platformCode?.let { stringResource(R.string.trip_platform, it) },
+                        change.platformCode?.let { stringResource(R.string.trip_platform, formatPlatform(it)) },
                     ).joinToString(copy.separator),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
@@ -585,11 +865,12 @@ private fun ChangePanel(pids: Pids, lines: Map<String, LineInfo>, stationLines: 
 }
 
 @Composable
-private fun Roundel(ride: TripLeg.Ride, lines: Map<String, LineInfo>) {
+private fun Roundel(ride: TripLeg.Ride, lines: Map<String, LineInfo>, modifier: Modifier = Modifier) {
     val info = lines[ride.line]
     LineRoundel(
         code = info?.lineCode ?: ride.line.substringAfter(':'),
         color = info?.colorCode ?: "#94A3B8",
+        modifier = modifier,
         operator = ride.operator,
         size = RoundelSize.SM,
     )
