@@ -7,6 +7,9 @@ data class JourneyStop(
     /** `OPERATOR-CODE`. */
     val id: String,
     val name: String,
+    /** Where it is, when the API knows: trip mode confirms a rider's stop from a fix near it. */
+    val latitude: Double? = null,
+    val longitude: Double? = null,
 )
 
 /** The answer for one station pair: every journey worth choosing between, best first. */
@@ -71,6 +74,13 @@ sealed interface JourneyLeg {
         val lastService: Boolean,
         /** Field-verified boarding platform, stored bare (`3/4`). */
         val platformCode: String?,
+        /**
+         * The boarded trip's time at each of [stops], index-aligned; a `null` is a stop it passes
+         * with no recorded time. Empty when the leg isn't timetabled.
+         */
+        val stopTimes: List<Instant?> = emptyList(),
+        /** Which vehicle run this is, to compare and never to parse; only on a timetabled leg. */
+        val tripId: String? = null,
     ) : JourneyLeg
 
     data class Transfer(
