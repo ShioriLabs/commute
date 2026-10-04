@@ -160,7 +160,10 @@ design only depends on "an ongoing notification with segmented progress".
   minutes, about three minutes before instead. A rider who reaches the alighting
   stop without passing the one before (a sparse fix, a long sleep) gets "turun"
   only: a late "siap-siap" is skipped, not sent after the fact.
-- **No location permission → no foreground service.** A location-type service
+- **No location permission → no foreground service**, and the same when the
+  rider turns off "Posisi akurat saat OTW" in Pengaturan → Lokasi (mid-trip too:
+  the service stops and the trip carries on by the clock, and turning it back on
+  looks for the rider again). A location-type service
   can't start without it, and no other type honestly fits, so a clock-only trip
   runs on `setAndAllowWhileIdle` alarms with a plain ongoing notification. Doze
   may hold an alarm a few minutes; those alerts are estimates worded as such.
@@ -184,7 +187,8 @@ design only depends on "an ongoing notification with segmented progress".
 - **GPS elsewhere:** the OTW picker's "Pakai lokasi kamu" and home's "Di dekat
   kamu" (the two nearest unpinned stations with their boards, or a dismissible
   card asking first) take one fix each, only after a tap or with the permission
-  already granted. Home never asks on launch.
+  already granted. Home never asks on launch. Either can be turned off in
+  Pengaturan → Lokasi, and then isn't offered at all.
 
 ## Open questions
 

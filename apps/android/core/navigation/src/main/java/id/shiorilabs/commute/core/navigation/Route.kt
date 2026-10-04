@@ -143,6 +143,10 @@ sealed interface Route : NavKey {
     @Serializable
     data object SettingsManageData : Route
 
+    /** What the app may use the rider's location for. */
+    @Serializable
+    data object SettingsLocation : Route
+
     /** The legal documents and attributions, each a page below. */
     @Serializable
     data object SettingsLegal : Route

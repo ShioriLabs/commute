@@ -1,5 +1,7 @@
 package id.shiorilabs.commute.feature.trip.runtime
 
+import id.shiorilabs.commute.core.datastore.FakePreferencesDataStore
+import id.shiorilabs.commute.core.datastore.LocationPreferencesRepository
 import id.shiorilabs.commute.core.geo.GeoPoint
 import id.shiorilabs.commute.core.location.Fix
 import id.shiorilabs.commute.core.location.testing.FakeLocationClient
@@ -77,12 +79,14 @@ class TripControllerImplTest {
     private val store = FakeStore()
     private val runtime = FakeRuntime()
     private val location = FakeLocationClient()
+    private val locationPreferences = LocationPreferencesRepository(FakePreferencesDataStore())
 
     private fun TestScope.controller(at: Instant = NOW) = TripControllerImpl(
         store = store,
         runtime = runtime,
         locator = { it },
         location = location,
+        locationPreferences = locationPreferences,
         clock = Clock.fixed(at, ZoneOffset.UTC),
         scope = backgroundScope,
     )
@@ -112,6 +116,49 @@ class TripControllerImplTest {
         runCurrent()
 
         assertFalse(controller.active.value!!.state.hasLocation)
+        assertFalse(runtime.tracking)
+    }
+
+    @Test
+    fun `with trip fixes off in settings, the trip runs on the clock and no service starts`() = runTest {
+        locationPreferences.setTripFixes(false)
+        val controller = controller()
+        controller.start(plan, origin)
+        runCurrent()
+
+        assertFalse(controller.active.value!!.state.hasLocation)
+        assertFalse(runtime.tracking)
+    }
+
+    @Test
+    fun `turned off mid-trip, the trip carries on by the clock, and back on it follows again`() = runTest {
+        val controller = controller()
+        controller.start(plan, origin)
+        runCurrent()
+        assertTrue(runtime.tracking)
+
+        locationPreferences.setEnabled(false)
+        runCurrent()
+        assertFalse(runtime.tracking)
+        assertFalse(controller.active.value!!.state.hasLocation)
+
+        locationPreferences.setEnabled(true)
+        runCurrent()
+        assertTrue(runtime.tracking)
+        assertTrue(controller.active.value!!.state.hasLocation)
+    }
+
+    @Test
+    fun `opening the trip doesn't restart following when settings say no`() = runTest {
+        val controller = controller()
+        controller.start(plan, origin)
+        runCurrent()
+        locationPreferences.setTripFixes(false)
+        runCurrent()
+
+        controller.resumeTracking()
+        runCurrent()
+
         assertFalse(runtime.tracking)
     }
 
