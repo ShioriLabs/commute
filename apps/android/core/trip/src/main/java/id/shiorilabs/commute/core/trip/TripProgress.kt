@@ -81,11 +81,18 @@ fun TripState.expectedDepartureAt(plan: TripPlan): java.time.Instant? {
 }
 
 /**
- * When the current ride should reach its stop [stopIndex], lateness included: interpolated between
- * the ride's two timetabled ends. `null` on an untimed ride or once arrived.
+ * When the current ride should reach its stop [stopIndex], lateness included: its timetabled time
+ * there, or placed between the timed stops around it. `null` on an untimed ride or once arrived.
  */
 fun TripState.expectedAtStop(plan: TripPlan, stopIndex: Int): java.time.Instant? =
     expectedAt(plan, stopIndex.toDouble())
+
+/**
+ * When ride [legIndex] is timetabled at its stop [stopIndex], before any lateness: for a ride other
+ * than the one being followed, whose lateness says nothing about a different train. `null` untimed.
+ */
+fun TripPlan.scheduledAtStop(legIndex: Int, stopIndex: Int): java.time.Instant? =
+    RideClock(ride(legIndex)).scheduledAt(stopIndex.toDouble())
 
 /** As [expectedAtStop], for any point along the ride: `2.5` is halfway between its third and fourth stops. */
 fun TripState.expectedAt(plan: TripPlan, position: Double): java.time.Instant? {
