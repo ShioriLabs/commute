@@ -3,6 +3,7 @@ package id.shiorilabs.commute.feature.journey.presentation.trip
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
+import id.shiorilabs.commute.core.datastore.DeveloperPreferencesRepository
 import id.shiorilabs.commute.core.datastore.FakePreferencesDataStore
 import id.shiorilabs.commute.core.datastore.FarePreferencesRepository
 import id.shiorilabs.commute.core.datastore.LocationPreferencesRepository
@@ -115,7 +116,7 @@ class TripViewModelTest {
     }
 
     private fun TestScope.viewModel(route: Route.Trip = trip): TripViewModel {
-        val viewModel = TripViewModel(route, journeys, FakeLineRepository(), preferences, saved, clock, trips, LocationPreferencesRepository(FakePreferencesDataStore()))
+        val viewModel = TripViewModel(route, journeys, FakeLineRepository(), preferences, saved, clock, trips, LocationPreferencesRepository(FakePreferencesDataStore()), DeveloperPreferencesRepository(FakePreferencesDataStore()))
         // WhileSubscribed: the state only flows while someone collects it, as the screen does.
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.state.collect {} }
         return viewModel
