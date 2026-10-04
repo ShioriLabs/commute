@@ -32,6 +32,7 @@ import id.shiorilabs.commute.feature.station.data.StationDirectory
 import id.shiorilabs.commute.feature.station.domain.nearbyStations
 import id.shiorilabs.commute.feature.journey.domain.nearbyPicks
 import id.shiorilabs.commute.core.location.LocationClient
+import id.shiorilabs.commute.core.datastore.LocationPreferencesRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -71,6 +72,7 @@ class JourneyViewModel @AssistedInject constructor(
     private val clock: Clock,
     private val location: LocationClient,
     private val directory: StationDirectory,
+    private val locationPreferences: LocationPreferencesRepository,
 ) : ViewModel() {
 
     @AssistedFactory
@@ -160,11 +162,16 @@ class JourneyViewModel @AssistedInject constructor(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** "Pakai lokasi kamu" unless the rider turned it off in Pengaturan → Lokasi. */
+    private val nearbyOffered = combine(nearby, locationPreferences.use) { nearby, use ->
+        if (use.allowsPickerNearby) nearby else NearbyPicks.Off
+    }
+
     val picker: StateFlow<PickerUiState> = combine(
         pickerQuery,
         stations,
         farePreferences.recentStationIds,
-        nearby,
+        nearbyOffered,
     ) { query, stations, recents, nearby -> Pair(Triple(query, stations, recents), nearby) }
         // Ranking runs the fuzzy matcher over every station, so off the main thread, as search's
         // does; mapLatest drops a ranking still running when the next keystroke lands.
@@ -212,6 +219,7 @@ class JourneyViewModel @AssistedInject constructor(
      */
     fun onUseLocation() {
         viewModelScope.launch {
+            if (!locationPreferences.use.first().allowsPickerNearby) return@launch
             nearby.value = NearbyPicks.Locating
             val fix = location.current()
             val directory = directory.cached() ?: directory.all().getOrNull()

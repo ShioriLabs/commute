@@ -4,6 +4,7 @@ import arrow.core.Either
 import arrow.core.right
 import id.shiorilabs.commute.core.datastore.FakePreferencesDataStore
 import id.shiorilabs.commute.core.datastore.HomePreferencesRepository
+import id.shiorilabs.commute.core.datastore.LocationPreferencesRepository
 import id.shiorilabs.commute.core.datastore.SavedRepository
 import id.shiorilabs.commute.core.geo.GeoPoint
 import id.shiorilabs.commute.core.location.Fix
@@ -44,6 +45,7 @@ class NearbyViewModelTest {
     private val location = FakeLocationClient(currentFix = Fix(GeoPoint(-6.2020, 106.8233), 20f, now))
     private val saved = SavedRepository(FakePreferencesDataStore())
     private val home = HomePreferencesRepository(FakePreferencesDataStore())
+    private val locationPreferences = LocationPreferencesRepository(FakePreferencesDataStore())
 
     private val directory = object : StationDirectory {
         override suspend fun all(): Either<Failure, List<Station>> = listOf(sudirman, dukuhAtas, manggarai).right()
@@ -70,7 +72,7 @@ class NearbyViewModelTest {
     }
 
     private fun TestScope.viewModel(): NearbyViewModel {
-        val viewModel = NearbyViewModel(location, directory, stations, saved, home, Clock.fixed(now, ZoneOffset.ofHours(7)))
+        val viewModel = NearbyViewModel(location, directory, stations, saved, home, locationPreferences, Clock.fixed(now, ZoneOffset.ofHours(7)))
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.state.collect {} }
         return viewModel
     }
@@ -85,6 +87,28 @@ class NearbyViewModelTest {
         val shown = viewModel.state.first { it is NearbyUiState.Stations } as NearbyUiState.Stations
         // Sudirman is pinned, so it is already on home; Manggarai is too far to walk.
         assertEquals(listOf("MRTJ-DKA"), shown.boards.map { it.nearby.station.id })
+    }
+
+    @Test
+    fun `turned off in settings, home shows nothing and takes no fix`() = runTest {
+        locationPreferences.setHomeNearby(false)
+        val viewModel = viewModel()
+
+        viewModel.refresh()
+
+        assertEquals(NearbyUiState.Hidden, viewModel.state.value)
+        assertEquals(0, location.currentCalls)
+    }
+
+    @Test
+    fun `with every use of location off, home offers nothing either`() = runTest {
+        location.granted = false
+        locationPreferences.setEnabled(false)
+        val viewModel = viewModel()
+
+        viewModel.refresh()
+
+        assertEquals(NearbyUiState.Hidden, viewModel.state.value)
     }
 
     @Test

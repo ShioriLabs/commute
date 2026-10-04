@@ -139,7 +139,8 @@ internal fun StationPickerSheet(
                 .padding(top = 8.dp),
             contentPadding = WindowInsets.ime.union(WindowInsets.navigationBars).asPaddingValues(),
         ) {
-            if (text.length < MIN_QUERY_LENGTH) {
+            // Turned off in Pengaturan → Lokasi, the row isn't offered at all.
+            if (text.length < MIN_QUERY_LENGTH && picker.nearby != NearbyPicks.Off) {
                 item(key = "use-location") {
                     UseLocation(nearby = picker.nearby, onUseLocation = onUseLocation)
                 }

@@ -5,6 +5,7 @@ import arrow.core.left
 import arrow.core.right
 import id.shiorilabs.commute.core.datastore.FakePreferencesDataStore
 import id.shiorilabs.commute.core.datastore.FarePreferencesRepository
+import id.shiorilabs.commute.core.datastore.LocationPreferencesRepository
 import id.shiorilabs.commute.core.datastore.SavedEntry
 import id.shiorilabs.commute.core.datastore.SavedRepository
 import id.shiorilabs.commute.core.datastore.StoredFareCriteria
@@ -114,7 +115,7 @@ class TripViewModelTest {
     }
 
     private fun TestScope.viewModel(route: Route.Trip = trip): TripViewModel {
-        val viewModel = TripViewModel(route, journeys, FakeLineRepository(), preferences, saved, clock, trips)
+        val viewModel = TripViewModel(route, journeys, FakeLineRepository(), preferences, saved, clock, trips, LocationPreferencesRepository(FakePreferencesDataStore()))
         // WhileSubscribed: the state only flows while someone collects it, as the screen does.
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.state.collect {} }
         return viewModel

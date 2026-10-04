@@ -5,6 +5,7 @@ import arrow.core.left
 import arrow.core.right
 import id.shiorilabs.commute.core.datastore.FakePreferencesDataStore
 import id.shiorilabs.commute.core.datastore.FarePreferencesRepository
+import id.shiorilabs.commute.core.datastore.LocationPreferencesRepository
 import id.shiorilabs.commute.core.datastore.RecentRoute
 import id.shiorilabs.commute.core.datastore.SavedEntry
 import id.shiorilabs.commute.core.datastore.SavedRepository
@@ -111,6 +112,7 @@ class JourneyViewModelTest {
     private val preferences = FarePreferencesRepository(FakePreferencesDataStore())
     private val saved = SavedRepository(FakePreferencesDataStore())
     private val location = FakeLocationClient()
+    private val locationPreferences = LocationPreferencesRepository(FakePreferencesDataStore())
     private val directory = object : StationDirectory {
         override suspend fun all(): Either<Failure, List<Station>> = listOf(
             Station("KCI-SUD", "Sudirman", "KCI", "SUD", emptyList(), latitude = -6.2024, longitude = 106.8237),
@@ -130,7 +132,7 @@ class JourneyViewModelTest {
     }
 
     private fun TestScope.viewModel(seed: Route.Otw = Route.Otw()): JourneyViewModel {
-        val viewModel = JourneyViewModel(seed, journeys, FakeSearchRepository(), FakeLineRepository(), preferences, saved, clock, location, directory)
+        val viewModel = JourneyViewModel(seed, journeys, FakeSearchRepository(), FakeLineRepository(), preferences, saved, clock, location, directory, locationPreferences)
         // WhileSubscribed: the state only flows while someone collects it, as the screen does.
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.state.collect {} }
         return viewModel
@@ -328,6 +330,19 @@ class JourneyViewModelTest {
         val nearby = viewModel.picker.first { it.nearby is NearbyPicks.Found }.nearby as NearbyPicks.Found
         // Manggarai is about 3 km off: too far to walk to, so not "near".
         assertEquals(listOf("KCI-SUD"), nearby.stations.map { it.first.id })
+    }
+
+    @Test
+    fun `turned off in settings, the picker doesn't offer the rider's location or take a fix`() = runTest {
+        location.currentFix = Fix(GeoPoint(-6.2030, 106.8240), 20f, now)
+        locationPreferences.setPickerNearby(false)
+        val viewModel = viewModel()
+        viewModel.picker.first { it.loaded }
+
+        viewModel.onUseLocation()
+
+        assertEquals(NearbyPicks.Off, viewModel.picker.first { it.loaded }.nearby)
+        assertEquals(0, location.currentCalls)
     }
 
     @Test

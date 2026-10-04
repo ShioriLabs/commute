@@ -319,6 +319,11 @@ should be generated from the same source so the two can't drift.
   foreground service the rider started by tapping "Mulai perjalanan", and stops
   at arrival. That keeps the app out of the store's strictest review category
   and is also simply the honest scope.
+- **Every use of location can be turned off** in Pengaturan → Lokasi: one
+  switch over all of them, and each on its own (home's "Di dekat kamu", the
+  picker's "Pakai lokasi kamu", and fixes during a trip, without which a trip
+  runs by the clock). All on by default; they only narrow what the system's
+  permission allows, and the page links to that permission.
 - **Nothing leaves the device:** no location, no card data, no account.
   The only network traffic is the public API.
 - **No analytics by default.** If it's ever added, it's opt-in and documented.

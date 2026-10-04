@@ -7,6 +7,7 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import id.shiorilabs.commute.core.datastore.FarePreferencesRepository
+import id.shiorilabs.commute.core.datastore.LocationPreferencesRepository
 import id.shiorilabs.commute.core.datastore.SavedEntry
 import id.shiorilabs.commute.core.datastore.SavedRepository
 import id.shiorilabs.commute.core.navigation.Route
@@ -55,6 +56,7 @@ class TripViewModel @AssistedInject constructor(
     private val savedRepository: SavedRepository,
     private val clock: Clock,
     private val tripController: TripController,
+    locationPreferences: LocationPreferencesRepository,
 ) : ViewModel() {
 
     @AssistedFactory
@@ -83,6 +85,13 @@ class TripViewModel @AssistedInject constructor(
     val tripStart: StateFlow<TripStart?> = combine(trip, tripController.active, minuteTicks()) { trip, active, now ->
         (trip as? TripPageState.Loaded)?.let { tripStartFor(it.journey, route, active?.origin, now) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /**
+     * Whether starting a trip asks for location: not when "Posisi akurat saat OTW" is off in
+     * Pengaturan → Lokasi, as the trip would run by the clock anyway.
+     */
+    val tripAsksLocation: StateFlow<Boolean> = locationPreferences.use.map { it.allowsTripFixes }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
     /** Follows the loaded journey from now, in place of any trip already running. */
     fun startTrip() {

@@ -50,6 +50,7 @@ import com.adamglin.phosphoricons.fill.Files
 import com.adamglin.phosphoricons.fill.GearSix
 import com.adamglin.phosphoricons.fill.HandHeart
 import com.adamglin.phosphoricons.fill.Info
+import com.adamglin.phosphoricons.fill.MapPin
 import com.adamglin.phosphoricons.fill.PushPin
 import com.adamglin.phosphoricons.fill.PushPinSimple
 import com.adamglin.phosphoricons.fill.Ticket
@@ -138,6 +139,7 @@ object CommuteIcons {
     /* The settings page's rows, as the web's settings sheet draws them. */
     val SavedStations: ImageVector = PhosphorIcons.Fill.PushPinSimple
     val ManageData: ImageVector = PhosphorIcons.Fill.Archive
+    val Location: ImageVector = PhosphorIcons.Fill.MapPin
     val Legal: ImageVector = PhosphorIcons.Fill.Files
     val DataPlatform: ImageVector = PhosphorIcons.Fill.Database
     val Support: ImageVector = PhosphorIcons.Fill.HandHeart

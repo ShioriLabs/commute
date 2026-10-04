@@ -20,7 +20,14 @@ class FakeLocationClient(
 
     override fun hasPermission(): Boolean = granted
 
-    override suspend fun current(timeout: Duration): Fix? = if (granted) currentFix else null
+    /** How many one-shot fixes were asked for. */
+    var currentCalls = 0
+        private set
+
+    override suspend fun current(timeout: Duration): Fix? {
+        currentCalls++
+        return if (granted) currentFix else null
+    }
 
     override fun updates(mode: LocationMode): Flow<Fix> {
         modes += mode
