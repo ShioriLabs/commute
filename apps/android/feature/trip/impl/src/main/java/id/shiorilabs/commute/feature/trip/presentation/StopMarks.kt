@@ -47,6 +47,53 @@ internal fun ActiveTrip.stopMarks(): Map<Int, RideMarks> = plan.rideIndices.asso
     }
 }
 
+/** Whether the rider has got this far: the line up to a stop so marked is behind them. */
+internal val StopMark.reached: Boolean get() = this != StopMark.UPCOMING
+
+/** A line of a ride's timeline: one stop, or a run of stops folded into one tappable line. */
+sealed interface TimelineRow {
+
+    data class Stop(val index: Int) : TimelineRow
+
+    data class Folded(val first: Int, val last: Int) : TimelineRow {
+        val count: Int get() = last - first + 1
+    }
+}
+
+/** A ride with more stops than this folds the ones that don't matter yet. */
+const val TIMELINE_UNFOLDED_MAX = 7
+
+/**
+ * The rows of a ride with [count] stops: every one when it's short or [expanded]. Otherwise both
+ * ends, the stop before getting off, and the stops around [focus] (where the rider is, or the stop
+ * they're making for), each longer run between them folded into one row. A single stop is never
+ * folded: the row saying so would take its room.
+ */
+internal fun timelineRows(count: Int, focus: Int?, expanded: Boolean): List<TimelineRow> {
+    val last = count - 1
+    if (expanded || count <= TIMELINE_UNFOLDED_MAX) return (0..last).map(TimelineRow::Stop)
+    val keep = buildSet {
+        add(0)
+        add(last - 1)
+        add(last)
+        focus?.let { f -> addAll((f - 1..f + 2).filter { it in 0..last }) }
+    }
+    val rows = mutableListOf<TimelineRow>()
+    var i = 0
+    while (i <= last) {
+        if (i in keep) {
+            rows += TimelineRow.Stop(i)
+            i++
+            continue
+        }
+        var end = i
+        while (end + 1 <= last && end + 1 !in keep) end++
+        rows += if (end == i) TimelineRow.Stop(i) else TimelineRow.Folded(i, end)
+        i = end + 1
+    }
+    return rows
+}
+
 private fun markAt(i: Int, here: Int) = when {
     i < here -> StopMark.PASSED
     i == here -> StopMark.HERE

@@ -106,6 +106,7 @@ import id.shiorilabs.commute.core.ui.motion.IosSpringEasing
 import id.shiorilabs.commute.core.ui.motion.rememberReducedMotion
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.presentation.components.PidsChevrons
+import id.shiorilabs.commute.feature.station.domain.formatPlatformCode
 import id.shiorilabs.commute.feature.trip.R
 import kotlin.math.acos
 import kotlin.math.asin
@@ -315,7 +316,7 @@ private fun Header(
         if (platform != null || at != null) {
             Row(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, top = 6.dp, end = 20.dp)) {
                 Text(
-                    text = platform?.let { stringResource(R.string.trip_platform, formatPlatform(it)) }.orEmpty(),
+                    text = platform?.let { stringResource(R.string.trip_platform, formatPlatformCode(it)) }.orEmpty(),
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.labelLarge,
                     color = BoardMuted,
@@ -898,7 +899,7 @@ private fun ChangePanel(pids: Pids, lines: Map<String, LineInfo>, stationLines: 
                 Text(
                     text = listOfNotNull(
                         stringResource(R.string.trip_change, copy.rideName(change)),
-                        change.platformCode?.let { stringResource(R.string.trip_platform, formatPlatform(it)) },
+                        change.platformCode?.let { stringResource(R.string.trip_platform, formatPlatformCode(it)) },
                     ).joinToString(copy.separator),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
