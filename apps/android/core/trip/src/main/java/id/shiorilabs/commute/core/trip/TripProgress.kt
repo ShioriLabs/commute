@@ -84,8 +84,12 @@ fun TripState.expectedDepartureAt(plan: TripPlan): java.time.Instant? {
  * When the current ride should reach its stop [stopIndex], lateness included: interpolated between
  * the ride's two timetabled ends. `null` on an untimed ride or once arrived.
  */
-fun TripState.expectedAtStop(plan: TripPlan, stopIndex: Int): java.time.Instant? {
+fun TripState.expectedAtStop(plan: TripPlan, stopIndex: Int): java.time.Instant? =
+    expectedAt(plan, stopIndex.toDouble())
+
+/** As [expectedAtStop], for any point along the ride: `2.5` is halfway between its third and fourth stops. */
+fun TripState.expectedAt(plan: TripPlan, position: Double): java.time.Instant? {
     if (phase == TripPhase.ARRIVED) return null
     val ride = plan.ride(legIndex).takeIf { it.isTimed } ?: return null
-    return RideClock(ride).scheduledAt(stopIndex.toDouble())?.plusSeconds(clockOffsetS)
+    return RideClock(ride).scheduledAt(position)?.plusSeconds(clockOffsetS)
 }

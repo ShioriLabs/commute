@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.trip.runtime
 
+import android.util.Log
 import id.shiorilabs.commute.core.location.Fix
 import id.shiorilabs.commute.core.location.LocationClient
 import id.shiorilabs.commute.core.navigation.Route
@@ -54,6 +55,7 @@ class TripControllerImpl @Inject constructor(
     private val restored: Job = scope.launch {
         mutex.withLock {
             val trip = store.read() ?: return@withLock
+            Log.i(TAG, "restored ${trip.origin.journeyKey} at ${trip.state.phase}")
             _active.value = trip
             apply(trip, TripEngine.step(trip.plan, trip.state, TripEvent.Resumed(clock.instant())))
         }
@@ -68,6 +70,7 @@ class TripControllerImpl @Inject constructor(
             mutex.withLock {
                 if (_active.value != null) runtime.finish()
                 val step = TripEngine.start(placed, clock.instant(), hasLocation)
+                Log.i(TAG, "started ${origin.journeyKey}, location ${if (hasLocation) "on" else "off"}")
                 apply(ActiveTrip(placed, step.state, origin), step)
             }
             if (hasLocation && !runtime.startTracking()) send(TripEvent.LocationAvailability(false, clock.instant()))
@@ -118,6 +121,7 @@ class TripControllerImpl @Inject constructor(
 
         val finished = step.effects.filterIsInstance<TripEffect.Finished>().firstOrNull()
         if (finished != null) {
+            Log.i(TAG, "finished ${trip.origin.journeyKey}: ${finished.reason}")
             // A trip that ran out its time catches up in one step, alerts and all, hours late:
             // those would only be noise now.
             if (finished.reason != FinishReason.TIMED_OUT) alerts.forEach { runtime.alert(next, it) }
@@ -132,7 +136,10 @@ class TripControllerImpl @Inject constructor(
 
         _active.value = next
         store.write(next)
-        alerts.forEach { runtime.alert(next, it) }
+        alerts.forEach {
+            Log.i(TAG, "alert ${it.kind} on leg ${it.legIndex}${if (it.estimated) ", estimated" else ""}")
+            runtime.alert(next, it)
+        }
         if (TripEffect.AskStillOnRoute in step.effects) runtime.askStillOnRoute(next)
         runtime.showProgress(next)
         schedule(step.nextWakeAt)
@@ -154,5 +161,11 @@ class TripControllerImpl @Inject constructor(
             // In its own coroutine: the step it causes reschedules, cancelling this timer.
             scope.launch { tick() }
         }
+    }
+
+    private companion object {
+
+        /** `adb logcat -s CommuteTrip`: what a field test needs to tell why a trip did what it did. */
+        const val TAG = "CommuteTrip"
     }
 }

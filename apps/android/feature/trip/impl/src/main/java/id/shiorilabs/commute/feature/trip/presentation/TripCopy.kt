@@ -55,7 +55,8 @@ internal class TripCopy(private val resources: Resources, private val lines: Map
     /** How the position is known; `null` once arrived, when it no longer matters. */
     fun source(trip: ActiveTrip): String? = when {
         trip.state.phase == TripPhase.ARRIVED -> null
-        trip.state.resumed && trip.state.hasLocation -> resources.getString(R.string.trip_resumed)
+        trip.state.resumed && trip.state.hasLocation && trip.state.source != PositionSource.CONFIRMED ->
+            resources.getString(R.string.trip_resumed)
         else -> when (trip.state.source) {
             PositionSource.CONFIRMED -> resources.getString(R.string.trip_source_confirmed)
             PositionSource.ESTIMATED -> resources.getString(R.string.trip_source_estimated)
