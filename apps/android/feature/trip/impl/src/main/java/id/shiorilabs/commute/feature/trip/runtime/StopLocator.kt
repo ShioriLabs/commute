@@ -13,13 +13,20 @@ fun interface StopLocator {
 }
 
 /**
- * Places stops from the station directory, the cached copy first. A stop it doesn't list (a
- * routing-only halte) or one without coordinates stays unplaced: the engine times it by the clock.
- * Offline with nothing cached, the plan goes through as it came.
+ * Places the stops the trip answer left without coordinates, from the station directory, the cached
+ * copy first. A stop it doesn't list or has no coordinates for stays unplaced: the engine times it
+ * by the clock. Offline with nothing cached, the plan goes through as it came.
  */
 class DirectoryStopLocator @Inject constructor(private val directory: StationDirectory) : StopLocator {
 
     override suspend fun place(plan: TripPlan): TripPlan {
+        val stops = plan.legs.flatMap { leg ->
+            when (leg) {
+                is TripLeg.Ride -> leg.stops
+                is TripLeg.Transfer -> listOf(leg.from, leg.to)
+            }
+        }
+        if (stops.all { it.point != null }) return plan
         val stations = (directory.cached() ?: directory.all().getOrNull())?.associateBy { it.id } ?: return plan
         fun TripStop.placed(): TripStop {
             if (point != null) return this

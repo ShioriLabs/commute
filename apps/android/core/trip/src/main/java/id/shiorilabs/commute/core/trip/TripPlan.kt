@@ -51,6 +51,8 @@ sealed interface TripLeg {
         val departureAt: Instant? = null,
         @Serializable(with = InstantSerializer::class)
         val arrivalAt: Instant? = null,
+        /** The vehicle run boarded, as the API names it: only ever compared, for "still on my train?". */
+        val tripId: String? = null,
     ) : TripLeg {
 
         init {
@@ -82,6 +84,9 @@ data class TripStop(
     val name: String,
     val latitude: Double? = null,
     val longitude: Double? = null,
+    /** When the boarded trip is timetabled here; `null` untimed, or a stop passed with no recorded time. */
+    @Serializable(with = InstantSerializer::class)
+    val scheduledAt: Instant? = null,
 ) {
 
     /** Where the stop is, when the station data says. A stop without one can't be confirmed. */
