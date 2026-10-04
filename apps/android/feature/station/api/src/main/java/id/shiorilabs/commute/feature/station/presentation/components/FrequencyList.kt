@@ -16,7 +16,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -24,6 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.time.ServiceDayName
+import id.shiorilabs.commute.core.ui.components.CommuteEmptyState
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.ext.parseHexColor
@@ -40,6 +43,7 @@ import id.shiorilabs.commute.feature.station.domain.dayQualifier
 import id.shiorilabs.commute.feature.station.domain.dottedTime
 import id.shiorilabs.commute.feature.station.domain.groupByCorridor
 import id.shiorilabs.commute.feature.station.domain.headwayMinutes
+import id.shiorilabs.commute.core.ui.R as CoreUiR
 
 /** While the line dictionary is still loading: the row renders grey rather than blanking. */
 private val FallbackLineColor = Color(0xFF94A3B8)
@@ -234,28 +238,21 @@ private fun onlyLabel(qualifier: DayQualifier?): String = stringResource(
 )
 
 /**
- * An operator that publishes no timetable (TransJakarta). A fact about the operator, not a failure,
- * so it offers no retry.
+ * An operator that publishes no timetable (TransJakarta): the web's no-schedule state, a
+ * TransJakarta officer by an empty departure board over what to do instead. A fact about the
+ * operator, not a failure, so it offers no retry.
  */
 @Composable
 fun NoScheduleNote(modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.fillMaxWidth().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = stringResource(R.string.station_no_schedule_title),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
-        Text(
-            text = stringResource(R.string.station_no_schedule_message),
-            style = MaterialTheme.typography.bodyLarge,
-            color = Gray600,
-        )
-    }
+    CommuteEmptyState(
+        illustration = painterResource(CoreUiR.drawable.img_no_schedule),
+        illustrationDescription = stringResource(R.string.station_no_schedule_illustration_description),
+        title = stringResource(R.string.station_no_schedule_title),
+        body = AnnotatedString(stringResource(R.string.station_no_schedule_message)),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = 32.dp),
+    )
 }
 
 private val previewLines = mapOf(
