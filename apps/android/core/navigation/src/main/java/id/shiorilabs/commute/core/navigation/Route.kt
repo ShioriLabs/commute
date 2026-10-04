@@ -147,6 +147,10 @@ sealed interface Route : NavKey {
     @Serializable
     data object SettingsLocation : Route
 
+    /** Switches for trying the app out: debug builds, or after seven taps on the version. */
+    @Serializable
+    data object SettingsExperimental : Route
+
     /** The legal documents and attributions, each a page below. */
     @Serializable
     data object SettingsLegal : Route

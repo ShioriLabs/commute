@@ -9,6 +9,7 @@ import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.ui.morph.navCardMorphMetadata
 import id.shiorilabs.commute.core.ui.motion.pageTransitionMetadata
 import id.shiorilabs.commute.feature.settings.presentation.about.AboutScreen
+import id.shiorilabs.commute.feature.settings.presentation.experimental.ExperimentalScreen
 import id.shiorilabs.commute.feature.settings.presentation.home.SettingsScreen
 import id.shiorilabs.commute.feature.settings.presentation.legal.CreativeAssetsScreen
 import id.shiorilabs.commute.feature.settings.presentation.legal.DataAttributionsScreen
@@ -33,7 +34,7 @@ class SettingsNavContribution @Inject constructor(
 
     override fun EntryProviderScope<NavKey>.addEntries(scope: NavGraphScope) {
         entry<Route.Settings>(metadata = navCardMorphMetadata()) {
-            SettingsScreen(appVersion = environment.appVersion, innerPadding = scope.screenPadding)
+            SettingsScreen(appVersion = environment.appVersion, innerPadding = scope.screenPadding, debug = environment.debug)
         }
         entry<Route.SettingsSavedStations>(metadata = pageTransitionMetadata()) {
             SavedStationsSettingsScreen(innerPadding = scope.screenPadding)
@@ -43,6 +44,9 @@ class SettingsNavContribution @Inject constructor(
         }
         entry<Route.SettingsLocation>(metadata = pageTransitionMetadata()) {
             LocationSettingsScreen(innerPadding = scope.screenPadding)
+        }
+        entry<Route.SettingsExperimental>(metadata = pageTransitionMetadata()) {
+            ExperimentalScreen(innerPadding = scope.screenPadding, debug = environment.debug)
         }
         entry<Route.SettingsLegal>(metadata = pageTransitionMetadata()) {
             LegalScreen(innerPadding = scope.screenPadding)
