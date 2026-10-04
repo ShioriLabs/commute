@@ -4,14 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -51,7 +48,7 @@ private fun RoutePinIcon(saved: Boolean, modifier: Modifier = Modifier) {
     )
 }
 
-/** The pin beside share on the OTW page, filled while the pair is pinned. */
+/** The pin beside share on the trip page, filled while the pair is pinned. */
 @Composable
 internal fun SaveRouteButton(saved: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val haptics = LocalHapticFeedback.current
@@ -67,30 +64,41 @@ internal fun SaveRouteButton(saved: Boolean, onClick: () -> Unit, modifier: Modi
 }
 
 /**
- * The same pin as a square beside "Buka halaman tarif" in search's OTW tab, in that link's own
- * fill, as the web sets it.
+ * The same pin under the answer in search's OTW tab, as a plate that says what it does: the tab
+ * has no share or title row to sit beside. In "Rute terakhir"'s fill, as the web sets its square.
  */
 @Composable
-internal fun SaveRouteSquare(saved: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun SaveRoutePlate(saved: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val haptics = LocalHapticFeedback.current
-    Box(
+    Row(
         modifier = modifier
-            .width(52.dp)
-            .fillMaxHeight()
+            .fillMaxWidth()
             .background(Stone100, MaterialTheme.shapes.medium)
             .border(2.dp, Stone200, MaterialTheme.shapes.medium)
             .clickable(role = Role.Button) {
                 haptics.performHapticFeedback(if (saved) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn)
                 onClick()
-            },
-        contentAlignment = Alignment.Center,
+            }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        RoutePinIcon(saved, Modifier.size(24.dp))
+        Icon(
+            imageVector = if (saved) CommuteIcons.Pinned else CommuteIcons.Pin,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = if (saved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
+        )
+        Text(
+            text = stringResource(if (saved) R.string.journey_unsave_route else R.string.journey_save_route),
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }
 
 /**
- * "Rute terakhir": the pairs that last answered, each opening its OTW page, with a pin that puts
+ * "Rute terakhir": the pairs that last answered, each asked for again on tap, with a pin that puts
  * it on home. Shown only while the tab has no complete pair, where it reads as "pick up where you
  * left off" rather than competing with an answer.
  */

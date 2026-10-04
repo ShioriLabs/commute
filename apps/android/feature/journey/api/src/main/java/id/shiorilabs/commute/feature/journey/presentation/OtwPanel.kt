@@ -3,6 +3,7 @@ package id.shiorilabs.commute.feature.journey.presentation
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import id.shiorilabs.commute.core.navigation.Route
 
 /**
  * The OTW panel (Dari/Ke, settings and results), for the search screen's OTW tab.
@@ -13,6 +14,7 @@ import androidx.compose.ui.Modifier
  */
 interface OtwPanel {
 
+    /** [seed] is the pair and criteria search was opened with as [Route.Otw]; `null` from home. */
     @Composable
-    fun Content(contentPadding: PaddingValues, modifier: Modifier)
+    fun Content(seed: Route.Otw?, contentPadding: PaddingValues, modifier: Modifier)
 }
