@@ -70,6 +70,7 @@ private fun ManageDataContent(
     onClearOfflineData: () -> Unit = {},
 ) {
     var confirmingSavedStations by rememberSaveable { mutableStateOf(false) }
+    var confirmingOfflineData by rememberSaveable { mutableStateOf(false) }
 
     SettingsPage(
         title = stringResource(R.string.settings_data_title),
@@ -111,33 +112,51 @@ private fun ManageDataContent(
                     stringResource(R.string.settings_data_offline_empty)
                 },
                 canClear = data.offlineBytes > 0,
-                // Without asking: it is only copies, fetched again as stations are opened online.
-                onClear = onClearOfflineData,
+                // Asked first, as the web asks before clearing its cache: the copies come back as
+                // stations are opened online, but until then saved stations don't open offline.
+                onClear = { confirmingOfflineData = true },
             )
         }
     }
 
     if (confirmingSavedStations) {
-        AlertDialog(
-            onDismissRequest = { confirmingSavedStations = false },
-            text = { Text(stringResource(R.string.settings_data_clear_saved_confirm)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        confirmingSavedStations = false
-                        onClearSavedStations()
-                    },
-                ) {
-                    Text(stringResource(R.string.settings_data_confirm))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmingSavedStations = false }) {
-                    Text(stringResource(R.string.settings_data_cancel))
-                }
-            },
+        ConfirmClearDialog(
+            message = stringResource(R.string.settings_data_clear_saved_confirm),
+            onConfirm = onClearSavedStations,
+            onDismiss = { confirmingSavedStations = false },
         )
     }
+    if (confirmingOfflineData) {
+        ConfirmClearDialog(
+            message = stringResource(R.string.settings_data_clear_offline_confirm),
+            onConfirm = onClearOfflineData,
+            onDismiss = { confirmingOfflineData = false },
+        )
+    }
+}
+
+/** "Hapus" or "Batal" before clearing something that is slow or impossible to get back. */
+@Composable
+private fun ConfirmClearDialog(message: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        text = { Text(message) },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onDismiss()
+                    onConfirm()
+                },
+            ) {
+                Text(stringResource(R.string.settings_data_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.settings_data_cancel))
+            }
+        },
+    )
 }
 
 /** One kind of stored data: what it is, how much there is, and a button to clear it. */
