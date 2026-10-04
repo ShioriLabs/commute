@@ -45,6 +45,8 @@
     <string name="settings_data_offline_empty">Belum ada jadwal tersimpan untuk offline</string>
     <string name="settings_data_clear">Hapus %1$s</string>
     <string name="settings_data_clear_saved_confirm">Yakin mau hapus semua stasiun dan rute disimpan?</string>
+    <!-- The web's cache confirmation, naming the row as the app does. -->
+    <string name="settings_data_clear_offline_confirm">Yakin mau hapus data offline? Loading berikutnya bakal sedikit lebih lambat</string>
     <string name="settings_data_confirm">Hapus</string>
     <string name="settings_data_cancel">Batal</string>
 
