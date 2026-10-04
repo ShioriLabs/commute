@@ -17,11 +17,7 @@ import id.shiorilabs.commute.feature.journey.domain.JourneyCriteria
 import id.shiorilabs.commute.feature.journey.domain.PairEnd
 import id.shiorilabs.commute.feature.journey.domain.PickableStation
 import id.shiorilabs.commute.feature.journey.domain.StationPair
-import id.shiorilabs.commute.feature.journey.domain.TripAnswer
-import id.shiorilabs.commute.feature.journey.domain.fareShareUrl
-import id.shiorilabs.commute.feature.journey.domain.findJourneyByKey
 import id.shiorilabs.commute.feature.journey.domain.isStaleDeparture
-import id.shiorilabs.commute.feature.journey.domain.journeyKey
 import id.shiorilabs.commute.feature.journey.domain.quickPickStations
 import id.shiorilabs.commute.feature.journey.domain.rankStations
 import id.shiorilabs.commute.feature.journey.domain.resolveStationId
@@ -53,16 +49,16 @@ import kotlinx.coroutines.withContext
 import java.time.Clock
 
 /**
- * The OTW search: the pair, the settings, the answer and which of its pages shows. A port of the
- * web's `use-fare-query.ts` with `journey-pager.ts` folded in.
+ * The OTW search: the pair, the settings and the answer's options, each opening on its own trip page.
+ * A port of the web's `use-fare-query.ts`.
  *
- * [route] is how it was opened: a station's "OTW Ke Sini" brings only a destination, a shared link
- * may name a journey and criteria, and the search tab brings nothing.
+ * [seed] is how search was opened: a station's "OTW Ke Sini" brings only a destination, a shared
+ * link may bring criteria too, and home's "Mau ke mana?" brings nothing.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel(assistedFactory = JourneyViewModel.Factory::class)
 class JourneyViewModel @AssistedInject constructor(
-    @Assisted private val route: Route.Journey,
+    @Assisted private val seed: Route.Otw,
     private val journeyRepository: JourneyRepository,
     private val searchRepository: SearchRepository,
     private val lineRepository: LineRepository,
@@ -73,22 +69,20 @@ class JourneyViewModel @AssistedInject constructor(
 
     @AssistedFactory
     interface Factory {
-        fun create(route: Route.Journey): JourneyViewModel
+        fun create(seed: Route.Otw): JourneyViewModel
     }
 
     private data class Session(
         val pair: StationPair,
         val picker: PairEnd?,
-        val page: JourneyPage = JourneyPage.OPTIONS,
-        val selected: Int = 0,
     )
 
     // A to-only start is a rider who has just said where they are going, so the origin picker opens
     // straight away, once, as the web's /fare?to= does.
     private val session = MutableStateFlow(
         Session(
-            pair = StationPair(route.fromId, route.toId),
-            picker = if (route.toId != null && route.fromId == null) PairEnd.ORIGIN else null,
+            pair = StationPair(seed.fromId, seed.toId),
+            picker = if (seed.toId != null && seed.fromId == null) PairEnd.ORIGIN else null,
         ),
     )
 
@@ -107,29 +101,16 @@ class JourneyViewModel @AssistedInject constructor(
      */
     val pickerText: StateFlow<String> = pickerQuery.asStateFlow()
 
-    /** The journey a shared link named, and which boarding of it, honoured on the first answer only. */
-    private var sharedKey: String? = route.journeyKey
-    private var sharedBoarding: String? = route.boardingClock
-
     val state: StateFlow<JourneyUiState> = combine(session, criteria, trip, stations, lines) { session, criteria, trip, stations, lines ->
         val answer = (trip as? TripState.Loaded)?.answer
-        val effective = criteria ?: JourneyCriteria()
         JourneyUiState(
             pair = session.pair,
             origin = session.pair.fromId?.let { endpoint(it, stations, answer?.from?.takeIf { stop -> stop.id == it }?.name) },
             destination = session.pair.toId?.let { endpoint(it, stations, answer?.to?.takeIf { stop -> stop.id == it }?.name) },
-            criteria = effective,
+            criteria = criteria ?: JourneyCriteria(),
             trip = trip,
-            page = session.page,
-            selected = session.selected,
             picker = session.picker,
             lines = lines,
-            shareUrl = fareShareUrl(
-                session.pair.fromId,
-                session.pair.toId,
-                effective,
-                answer?.journeys?.getOrNull(session.selected)?.let(::journeyKey),
-            ),
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), JourneyUiState(pair = session.value.pair, picker = session.value.picker))
 
@@ -195,7 +176,7 @@ class JourneyViewModel @AssistedInject constructor(
         viewModelScope.launch {
             val now = clock.instant()
             criteria.value = farePreferences.criteria.first().toCriteria(now)
-                .withLink(route.paymentMethod, route.at, route.modes, route.walking, now)
+                .withLink(seed.paymentMethod, seed.at, seed.modes, seed.walking, now)
         }
         loadStations()
         if (lines.value.isEmpty()) {
@@ -245,6 +226,11 @@ class JourneyViewModel @AssistedInject constructor(
         viewModelScope.launch { savedRepository.toggleRoute(fromId, toId) }
     }
 
+    /** A recent pair, asked for here in place of whatever pair was on screen. */
+    fun onOpenRecent(route: RecentRouteRow) {
+        session.update { it.copy(pair = StationPair(route.fromId, route.toId), picker = null) }
+    }
+
     /** A recent pair's pin. */
     fun onToggleRecentRoute(route: RecentRouteRow) {
         viewModelScope.launch { savedRepository.toggleRoute(route.fromId, route.toId) }
@@ -253,14 +239,6 @@ class JourneyViewModel @AssistedInject constructor(
     /** The "Hapus" beside "Rute terakhir". */
     fun onClearRecentRoutes() {
         viewModelScope.launch { farePreferences.clearRecentRoutes() }
-    }
-
-    fun onSelectJourney(index: Int) {
-        session.update { it.copy(selected = index, page = JourneyPage.DETAIL) }
-    }
-
-    fun onBackToOptions() {
-        session.update { it.copy(page = JourneyPage.OPTIONS) }
     }
 
     fun retry() {
@@ -306,7 +284,6 @@ class JourneyViewModel @AssistedInject constructor(
                     return@collectLatest
                 }
                 trip.value = TripState.Loading
-                var shown: TripAnswer? = null
                 var recorded = false
                 // The last answer held for this ask comes first, however old, then a fresh one.
                 journeyRepository.observeTrips(fromId, toId, criteria).collect { query ->
@@ -320,12 +297,6 @@ class JourneyViewModel @AssistedInject constructor(
                         }
                         return@collect
                     }
-                    val previous = shown
-                    when {
-                        previous == null -> onAnswer(answer)
-                        previous != answer -> onRefreshedAnswer(previous, answer)
-                    }
-                    shown = answer
                     trip.value = TripState.Loaded(
                         answer = answer,
                         isRefreshing = query.isFetching,
@@ -340,35 +311,6 @@ class JourneyViewModel @AssistedInject constructor(
                     }
                 }
             }
-    }
-
-    /**
-     * Every new ask lands on its options: the selection is an ordinal into a list recomputed per
-     * request, so holding a rider on a detail through a change would swap the journey under them.
-     * The one exception is the first answer to a shared link whose route still runs.
-     */
-    private fun onAnswer(answer: TripAnswer) {
-        val shared = findJourneyByKey(answer.journeys, sharedKey, sharedBoarding)
-        sharedKey = null
-        sharedBoarding = null
-        session.update {
-            it.copy(
-                page = if (shared != null) JourneyPage.DETAIL else JourneyPage.OPTIONS,
-                selected = shared ?: 0,
-            )
-        }
-    }
-
-    /**
-     * A fresh answer replacing the held one for the same ask: the rider stays on the journey they
-     * were on, found again by its route, and only goes back to the options when it no longer runs.
-     */
-    private fun onRefreshedAnswer(previous: TripAnswer, answer: TripAnswer) {
-        session.update { current ->
-            val kept = previous.journeys.getOrNull(current.selected)
-                ?.let { findJourneyByKey(answer.journeys, journeyKey(it)) }
-            if (kept != null) current.copy(selected = kept) else current.copy(page = JourneyPage.OPTIONS, selected = 0)
-        }
     }
 
     /** A picked departure goes back to now once its slot ends, while the screen sits open. */

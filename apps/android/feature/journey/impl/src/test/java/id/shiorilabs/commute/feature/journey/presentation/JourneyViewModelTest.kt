@@ -116,8 +116,8 @@ class JourneyViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun TestScope.viewModel(route: Route.Journey = Route.Journey()): JourneyViewModel {
-        val viewModel = JourneyViewModel(route, journeys, FakeSearchRepository(), FakeLineRepository(), preferences, saved, clock)
+    private fun TestScope.viewModel(seed: Route.Otw = Route.Otw()): JourneyViewModel {
+        val viewModel = JourneyViewModel(seed, journeys, FakeSearchRepository(), FakeLineRepository(), preferences, saved, clock)
         // WhileSubscribed: the state only flows while someone collects it, as the screen does.
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.state.collect {} }
         return viewModel
@@ -125,7 +125,7 @@ class JourneyViewModelTest {
 
     @Test
     fun `a station's OTW opens the origin picker and waits for it`() = runTest {
-        val viewModel = viewModel(Route.Journey(toId = "MRTJ-LBB"))
+        val viewModel = viewModel(Route.Otw(toId = "MRTJ-LBB"))
 
         val state = viewModel.state.value
         assertEquals(PairEnd.ORIGIN, state.picker)
@@ -136,7 +136,7 @@ class JourneyViewModelTest {
 
     @Test
     fun `picking the origin asks for the trip and lands on its options`() = runTest {
-        val viewModel = viewModel(Route.Journey(toId = "MRTJ-LBB"))
+        val viewModel = viewModel(Route.Otw(toId = "MRTJ-LBB"))
         val sudirman = viewModel.picker.first { it.loaded }.stations.first { it.id == "KCI-SUD" }
 
         viewModel.onPick(sudirman)
@@ -145,13 +145,12 @@ class JourneyViewModelTest {
         assertNull(state.picker)
         assertEquals(StationPair("KCI-SUD", "MRTJ-LBB"), state.pair)
         assertEquals(2, (state.trip as TripState.Loaded).answer.journeys.size)
-        assertEquals(JourneyPage.OPTIONS, state.page)
         assertEquals(listOf("KCI-SUD"), preferences.recentStationIds.first())
     }
 
     @Test
     fun `picking the other end's station swaps the pair`() = runTest {
-        val viewModel = viewModel(Route.Journey(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
+        val viewModel = viewModel(Route.Otw(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
         val lebakBulus = viewModel.picker.first { it.loaded }.stations.first { it.id == "MRTJ-LBB" }
 
         viewModel.openPicker(PairEnd.ORIGIN)
@@ -164,7 +163,7 @@ class JourneyViewModelTest {
     fun `the first ask uses the rider's stored settings, not the defaults`() = runTest {
         preferences.saveCriteria(StoredFareCriteria(paymentMethod = "QRIS_TAP"))
 
-        viewModel(Route.Journey(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
+        viewModel(Route.Otw(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
 
         assertEquals(listOf(PaymentMethod.QRIS_TAP), journeys.asked.map { it.third.paymentMethod })
     }
@@ -173,7 +172,7 @@ class JourneyViewModelTest {
     fun `a link's settings beat the stored ones for the visit`() = runTest {
         preferences.saveCriteria(StoredFareCriteria(paymentMethod = "QRIS_TAP", modes = "all"))
 
-        viewModel(Route.Journey(fromId = "KCI-SUD", toId = "MRTJ-LBB", modes = "rail"))
+        viewModel(Route.Otw(fromId = "KCI-SUD", toId = "MRTJ-LBB", modes = "rail"))
 
         val asked = journeys.asked.single().third
         assertEquals(PaymentMethod.QRIS_TAP, asked.paymentMethod)
@@ -181,21 +180,19 @@ class JourneyViewModelTest {
     }
 
     @Test
-    fun `the held answer shows while it refreshes, and the fresh one keeps the rider's journey`() = runTest {
+    fun `the held answer shows while it refreshes, then the fresh one`() = runTest {
         val held = TripAnswer(JourneyStop("KCI-SUD", "From"), JourneyStop("MRTJ-LBB", "To"), listOf(direct, viaDukuhAtas))
         val answers = MutableStateFlow(Query(held, updatedAt = now, isFetching = true))
         journeys.observed = answers
-        val viewModel = viewModel(Route.Journey(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
+        val viewModel = viewModel(Route.Otw(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
         assertTrue((viewModel.state.value.trip as TripState.Loaded).isRefreshing)
-        viewModel.onSelectJourney(1)
 
         // The fresh answer orders them the other way round.
         answers.value = Query(held.copy(journeys = listOf(viaDukuhAtas, direct)), updatedAt = now)
 
-        val state = viewModel.state.value
-        assertEquals(JourneyPage.DETAIL, state.page)
-        assertEquals(0, state.selected)
-        assertFalse((state.trip as TripState.Loaded).isRefreshing)
+        val trip = viewModel.state.value.trip as TripState.Loaded
+        assertEquals(listOf(viaDukuhAtas, direct), trip.answer.journeys)
+        assertFalse(trip.isRefreshing)
     }
 
     @Test
@@ -203,7 +200,7 @@ class JourneyViewModelTest {
         val held = TripAnswer(JourneyStop("KCI-SUD", "From"), JourneyStop("MRTJ-LBB", "To"), listOf(direct))
         journeys.observed = flowOf(Query(held, updatedAt = now, failure = Failure.Network.NoConnection()))
 
-        val viewModel = viewModel(Route.Journey(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
+        val viewModel = viewModel(Route.Otw(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
 
         val trip = viewModel.state.value.trip as TripState.Loaded
         assertTrue(trip.isOutdated)
@@ -214,7 +211,7 @@ class JourneyViewModelTest {
     @Test
     fun `a 404 is no route, anything else a failure that can be retried`() = runTest {
         journeys.answer = { _, _ -> Failure.Remote(404).left() }
-        val viewModel = viewModel(Route.Journey(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
+        val viewModel = viewModel(Route.Otw(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
         assertEquals(TripState.NotFound, viewModel.state.value.trip)
 
         journeys.answer = { _, _ -> Failure.Network.NoConnection().left() }
@@ -228,7 +225,7 @@ class JourneyViewModelTest {
 
     @Test
     fun `the pin pins the pair on screen, one way only`() = runTest {
-        val viewModel = viewModel(Route.Journey(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
+        val viewModel = viewModel(Route.Otw(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.routeSaved.collect {} }
         assertEquals(false, viewModel.routeSaved.value)
 
@@ -243,7 +240,7 @@ class JourneyViewModelTest {
 
     @Test
     fun `there is no pin without both ends`() = runTest {
-        val viewModel = viewModel(Route.Journey(toId = "MRTJ-LBB"))
+        val viewModel = viewModel(Route.Otw(toId = "MRTJ-LBB"))
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.routeSaved.collect {} }
 
         assertNull(viewModel.routeSaved.value)
@@ -253,7 +250,7 @@ class JourneyViewModelTest {
 
     @Test
     fun `a pair that answered becomes a recent one, named, with its pin`() = runTest {
-        val viewModel = viewModel(Route.Journey(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
+        val viewModel = viewModel(Route.Otw(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.recentRoutes.collect {} }
         saved.toggleRoute("KCI-SUD", "MRTJ-LBB")
 
@@ -265,31 +262,29 @@ class JourneyViewModelTest {
     }
 
     @Test
+    fun `a recent pair is asked for in place of the one on screen`() = runTest {
+        val viewModel = viewModel(Route.Otw(toId = "KCI-MRI"))
+
+        viewModel.onOpenRecent(RecentRouteRow("KCI-SUD", "MRTJ-LBB", "Sudirman", "Lebak Bulus Grab", saved = false))
+
+        val state = viewModel.state.value
+        assertNull(state.picker)
+        assertEquals(StationPair("KCI-SUD", "MRTJ-LBB"), state.pair)
+        assertEquals("KCI-SUD" to "MRTJ-LBB", journeys.asked.last().let { it.first to it.second })
+    }
+
+    @Test
     fun `a pair that failed is not offered back`() = runTest {
         journeys.answer = { _, _ -> Failure.Remote(404).left() }
 
-        viewModel(Route.Journey(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
+        viewModel(Route.Otw(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
 
         assertEquals(emptyList<RecentRoute>(), preferences.recentRoutes.first())
     }
 
     @Test
-    fun `a shared journey opens on its detail, once`() = runTest {
-        val viewModel = viewModel(
-            Route.Journey(fromId = "KCI-SUD", toId = "MRTJ-LBB", journeyKey = "_DKA~M.DKA-LBB"),
-        )
-        assertEquals(JourneyPage.DETAIL, viewModel.state.value.page)
-        assertEquals(1, viewModel.state.value.selected)
-
-        // A new answer is a new list: back to the options.
-        viewModel.onCriteriaChange(JourneyCriteria(paymentMethod = PaymentMethod.QRIS_TAP))
-        assertEquals(JourneyPage.OPTIONS, viewModel.state.value.page)
-        assertEquals(0, viewModel.state.value.selected)
-    }
-
-    @Test
     fun `a changed setting is asked for and kept`() = runTest {
-        val viewModel = viewModel(Route.Journey(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
+        val viewModel = viewModel(Route.Otw(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
 
         viewModel.onCriteriaChange(JourneyCriteria(paymentMethod = PaymentMethod.QRIS_TAP))
 
@@ -299,24 +294,12 @@ class JourneyViewModelTest {
 
     @Test
     fun `a departure the clock overtook goes back to now on resume`() = runTest {
-        val viewModel = viewModel(Route.Journey(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
+        val viewModel = viewModel(Route.Otw(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
         // Picked for 08.00; the clock reads 08.47 by the time the screen comes back.
         viewModel.onCriteriaChange(JourneyCriteria(departure = Departure.At(Instant.parse("2026-10-05T01:00:00Z"))))
 
         viewModel.onResume()
 
         assertEquals(Departure.Now, viewModel.state.value.criteria.departure)
-    }
-
-    @Test
-    fun `the share link carries the selected journey`() = runTest {
-        val viewModel = viewModel(Route.Journey(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
-
-        viewModel.onSelectJourney(1)
-
-        assertEquals(
-            "https://commute.shiorilabs.id/fare?from=KCI-SUD&to=MRTJ-LBB&j=_DKA%7EM.DKA-LBB",
-            viewModel.state.value.shareUrl,
-        )
     }
 }
