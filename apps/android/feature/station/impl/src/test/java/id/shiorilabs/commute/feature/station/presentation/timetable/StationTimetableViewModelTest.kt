@@ -18,7 +18,10 @@ import id.shiorilabs.commute.feature.station.domain.Station
 import id.shiorilabs.commute.feature.station.domain.Transfer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import id.shiorilabs.commute.core.query.Query
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -28,6 +31,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import java.time.Clock
+import java.time.Instant
 import java.time.LocalDateTime
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -82,6 +86,22 @@ class StationTimetableViewModelTest {
 
         assertEquals(listOf(ServiceDayName.WD), stations.asked)
         assertEquals("Manggarai", state.title)
+    }
+
+    @Test
+    fun `a board that couldn't be refreshed is shown with its age, for the offline notice`() = runTest {
+        val confirmed = Instant.parse("2026-09-30T00:00:00Z")
+        val stations = object : StationRepository by FakeStationRepository(listOf(line("KCI:B"))) {
+            override fun observeTimetable(stationId: String, day: ServiceDayName): Flow<Query<List<LineTimetable>>> =
+                flowOf(Query(listOf(line("KCI:B")), updatedAt = confirmed, failure = Failure.Network.NoConnection()))
+        }
+
+        val state = StationTimetableViewModel("KCI-MRI", stations, FakeLineRepository(), clockAt("2026-09-30T08:00:00"))
+            .state.first { it.sections is UIState.Success }
+
+        assertEquals(true, state.isOutdated)
+        assertEquals(confirmed, state.updatedAt)
+        assertEquals(listOf("KCI:B"), state.lineKeys)
     }
 
     @Test

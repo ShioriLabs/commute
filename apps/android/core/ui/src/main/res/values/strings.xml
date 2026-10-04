@@ -5,4 +5,14 @@
     <string name="core_ui_updated_minutes_ago">Terakhir diperbarui %1$d menit lalu</string>
     <string name="core_ui_updated_hours_ago">Terakhir diperbarui %1$d jam lalu</string>
     <string name="core_ui_updated_days_ago">Terakhir diperbarui %1$d hari lalu</string>
+
+    <!-- LoadProblemState: the web's EmptyState copy, per mode. -->
+    <string name="core_ui_problem_offline_title">Jaringan Tidak Tersedia</string>
+    <string name="core_ui_problem_offline_message">Silakan coba lagi beberapa saat lagi saat jaringan Kamu tersambung</string>
+    <string name="core_ui_problem_error_title">Gagal Memuat Jadwal</string>
+    <string name="core_ui_problem_error_message">Terjadi kesalahan saat memuat data. Silakan coba lagi</string>
+    <string name="core_ui_problem_no_data_title">Jadwal Tidak Tersedia</string>
+    <string name="core_ui_problem_no_data_message">Silakan coba lagi beberapa saat lagi</string>
+    <string name="core_ui_problem_retry">Coba Lagi</string>
+    <string name="core_ui_problem_illustration_description">Gambar peron stasiun dengan jembatan di atasnya, dengan kaca pembesar bergambar tanda tanya di depannya</string>
 </resources>
