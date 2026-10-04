@@ -112,6 +112,12 @@ const changeSecondsAt = (paceMs: number, gated: boolean) =>
 export interface LegTiming {
   departureS: number
   arrivalS: number
+  /**
+   * The boarded trip's time at every stop of the leg, index-aligned with its
+   * `stationIds`: `[0]` is `departureS`, the last is `arrivalS`, and each stop
+   * between takes the same alighting rule as the last (see alightTimeOf).
+   */
+  stopsS: number[]
   /** The trip boarded, for tracing back to the feed. Never parsed here. */
   tripId: string
   /** Where that vehicle is signed for, when the feed says. See Trip.headsign. */
@@ -253,7 +259,7 @@ export function resolveDepartures(
      * same stops on another line is a different service, and boarding it would
      * report a vehicle the journey never said to take.
      */
-    let best: { trip: Trip, boardAt: number, alightAt: number } | null = null
+    let best: { trip: Trip, boardIndex: number, boardAt: number, alightAt: number } | null = null
     for (const pattern of trips.byLine.get(leg.lineCode) ?? []) {
       const board = boardingIndexFor(pattern, leg.stationIds)
       if (board < 0) continue
@@ -267,7 +273,7 @@ export function resolveDepartures(
        * already established both go far enough.
        */
       if (best === null || boardAt < best.boardAt) {
-        best = { trip, boardAt, alightAt: alightTimeOf(trip, board + leg.stationIds.length - 1) }
+        best = { trip, boardIndex: board, boardAt, alightAt: alightTimeOf(trip, board + leg.stationIds.length - 1) }
       }
     }
 
@@ -278,9 +284,11 @@ export function resolveDepartures(
       continue
     }
 
+    const { trip, boardIndex, boardAt } = best
     timings.push({
-      departureS: best.boardAt,
+      departureS: boardAt,
       arrivalS: best.alightAt,
+      stopsS: leg.stationIds.map((_, i) => (i === 0 ? boardAt : alightTimeOf(trip, boardIndex + i))),
       tripId: best.trip.id,
       ...(best.trip.headsign === undefined ? {} : { headsign: best.trip.headsign }),
       ...(hasLaterTrip(trips, leg, best.boardAt, dayMask) ? {} : { lastOfDay: true as const })

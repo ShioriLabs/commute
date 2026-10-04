@@ -5,7 +5,7 @@ import type { Bindings } from 'app'
 import { KVRepository } from 'db/repositories/kv'
 import { StationRepository } from 'db/repositories/stations'
 import { departureSlot, serviceDay } from 'utils/fare'
-import { stationNamer, type StationNamer } from 'utils/fare-journey'
+import { stationNamer, type StationNamer, type StationNamerOptions } from 'utils/fare-journey'
 import { Internal, NotFound, Ok } from 'utils/response'
 import { ServerTiming } from 'utils/server-timing'
 
@@ -87,7 +87,7 @@ export interface JourneyBuildTools {
   fromId: string
   toId: string
   /** Batched name lookup. Call with every station id the answer references. */
-  hydrate: (stationIds: string[]) => Promise<StationNamer>
+  hydrate: (stationIds: string[], options?: StationNamerOptions) => Promise<StationNamer>
 }
 
 /*
@@ -216,9 +216,9 @@ export async function handleJourneyRequest<T>(
       context,
       fromId,
       toId,
-      hydrate: async (stationIds) => {
+      hydrate: async (stationIds, options) => {
         const stations = await timing.measure('hydrate', () => stationRepository.getByIds(stationIds))
-        return stationNamer(stations)
+        return stationNamer(stations, options)
       }
     })
 

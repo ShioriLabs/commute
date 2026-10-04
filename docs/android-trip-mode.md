@@ -142,6 +142,7 @@ design only depends on "an ongoing notification with segmented progress".
 - Default lead time: alert one stop before, or N minutes before, or both.
 - **Per-stop times in the API.** A ride leg carries only its end times today.
   Exposing each stop's scheduled time (the data exists in the timetable)
-  would make underground estimates far better. Additive, so it can come later.
+  would make underground estimates far better. Additive, so it can come later;
+  proposed with stop coordinates in `trips-live-fields.md`.
 - Off-route: offer an automatic re-plan, or just ask.
 - Whether a trip can be started from the web app and handed to the phone.

@@ -105,6 +105,10 @@ function timeOnce(
       ...leg,
       departureAt: stamp(timing.departureS),
       arrivalAt: stamp(timing.arrivalS),
+      // Per-request for the same reason: the times at each stop and the trip's
+      // identity belong to the vehicle caught, not to the cached route.
+      stopTimes: timing.stopsS.map(stamp),
+      tripId: timing.tripId,
       ...(timing.headsign === undefined ? {} : { headsign: timing.headsign }),
       // Per-request like the stamps: whether this is the last train depends on
       // which train was caught, never on the cached route.

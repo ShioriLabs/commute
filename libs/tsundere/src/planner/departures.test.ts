@@ -77,6 +77,41 @@ describe('resolveDepartures', () => {
     expect(timing?.arrivalS).toBe(at(6, 12))
   })
 
+  describe('timing every stop', () => {
+    /*
+     * Boarded mid-pattern, so the slice offset is proven: FTM is index 1 of the
+     * pattern but index 0 of the leg.
+     */
+    it('lines the stop times up with the leg, ends matching its own', () => {
+      const [timing] = resolveDepartures(
+        [ride('M', ['MRTJ-FTM', 'MRTJ-BLA'])], index(mrt), { departureS: at(5), dayMask: ALL_DAYS }
+      )
+      expect(timing?.stopsS).toEqual([at(6, 10), at(6, 19)])
+      expect(timing?.stopsS[0]).toBe(timing?.departureS)
+      expect(timing?.stopsS.at(-1)).toBe(timing?.arrivalS)
+    })
+
+    it('takes a recorded arrival at a stop between the ends', () => {
+      const [timing] = resolveDepartures(
+        [ride('M', ['MRTJ-LBB', 'MRTJ-FTM', 'MRTJ-BLA'])], index(mrt), { departureS: at(5), dayMask: ALL_DAYS }
+      )
+      expect(timing?.stopsS).toEqual([at(6), at(6, 9), at(6, 19)])
+    })
+
+    // No arrivals at all (KCI): the departures stand, never an invented dwell.
+    it('falls back to departures where no arrival was recorded', () => {
+      const kci: TripPattern = {
+        lineCode: 'B',
+        stationIds: ['KCI-BOO', 'KCI-CLT', 'KCI-BJD'],
+        trips: [{ id: 'b1', dayMask: ALL_DAYS, departuresS: [at(6), at(6, 12), at(6, 20)] }]
+      }
+      const [timing] = resolveDepartures(
+        [ride('B', ['KCI-BOO', 'KCI-CLT', 'KCI-BJD'])], index(kci), { departureS: at(5), dayMask: ALL_DAYS }
+      )
+      expect(timing?.stopsS).toEqual([at(6), at(6, 12), at(6, 20)])
+    })
+  })
+
   it('carries the clock across a transfer at walking pace', () => {
     const feeder: TripPattern = {
       lineCode: 'C',
@@ -375,9 +410,9 @@ describe('journeyArrivalS', () => {
 
   it('reports the last ride leg\'s arrival when every ride is timed', () => {
     const timings = [
-      { departureS: at(6), arrivalS: at(6, 9), tripId: 'a' },
+      { departureS: at(6), arrivalS: at(6, 9), stopsS: [at(6), at(6, 9)], tripId: 'a' },
       null,
-      { departureS: at(6, 20), arrivalS: at(6, 40), tripId: 'b' }
+      { departureS: at(6, 20), arrivalS: at(6, 40), stopsS: [at(6, 20), at(6, 40)], tripId: 'b' }
     ]
     expect(journeyArrivalS(legs, timings)).toBe(at(6, 40))
   })
@@ -387,7 +422,7 @@ describe('journeyArrivalS', () => {
    * certain than the legs it came from.
    */
   it('reports nothing when any ride leg is untimed', () => {
-    const timings = [{ departureS: at(6), arrivalS: at(6, 9), tripId: 'a' }, null, null]
+    const timings = [{ departureS: at(6), arrivalS: at(6, 9), stopsS: [at(6), at(6, 9)], tripId: 'a' }, null, null]
     expect(journeyArrivalS(legs, timings)).toBeNull()
   })
 })

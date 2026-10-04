@@ -97,7 +97,7 @@ describe('retimeTrips after the last train', () => {
   // One train a day at 04:05; nothing after it.
   const timetabled = {
     timeJourney: (_legs: unknown, { departureS }: { departureS: number }) =>
-      departureS <= 4 * 3600 + 300 ? [{ departureS: 4 * 3600 + 300, arrivalS: 5 * 3600, tripId: 'T1' }] : [null],
+      departureS <= 4 * 3600 + 300 ? [{ departureS: 4 * 3600 + 300, arrivalS: 5 * 3600, stopsS: [4 * 3600 + 300, 5 * 3600], tripId: 'T1' }] : [null],
     journeyArrival: () => null
   } as unknown as Tsundere
   const untimetabled = { timeJourney: () => [null], journeyArrival: () => null } as unknown as Tsundere
@@ -121,5 +121,22 @@ describe('retimeTrips after the last train', () => {
     const [row] = retimeTrips(result, timetabled, late).journeys
     expect(row!.resumesAt).toBeUndefined()
     expect(row!.legs[0]!.type === 'RIDE' && row!.legs[0]!.departureAt).toBe('2026-10-02T04:05:00+07:00')
+  })
+
+  it('stamps every stop and the trip boarded on a timed leg', () => {
+    const late = { ...context, departureAt: new Date('2026-10-02T01:30:00+07:00') }
+    const leg = retimeTrips(result, timetabled, late).journeys[0]!.legs[0]!
+    if (leg.type !== 'RIDE') throw new Error('expected a ride')
+    expect(leg.stopTimes).toEqual(['2026-10-02T04:05:00+07:00', '2026-10-02T05:00:00+07:00'])
+    expect(leg.stopTimes![0]).toBe(leg.departureAt)
+    expect(leg.stopTimes!.at(-1)).toBe(leg.arrivalAt)
+    expect(leg.tripId).toBe('T1')
+  })
+
+  it('stamps neither on an untimed leg', () => {
+    const leg = retimeTrips(result, untimetabled, context).journeys[0]!.legs[0]!
+    if (leg.type !== 'RIDE') throw new Error('expected a ride')
+    expect(leg.stopTimes).toBeUndefined()
+    expect(leg.tripId).toBeUndefined()
   })
 })
