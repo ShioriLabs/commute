@@ -294,11 +294,12 @@ private fun NextTimes(departures: List<Departure>, lineColor: Color, now: LocalD
             )
         }
         if (departures.size > 1) {
+            val later = departures.drop(1).take(2).joinToString(", ") { formatClock(it.minute) }
+            val laterDescription = stringResource(R.string.line_card_then_description, later)
             Text(
-                text = stringResource(
-                    R.string.line_card_then,
-                    departures.drop(1).take(2).joinToString(", ") { formatClock(it.minute) },
-                ),
+                text = stringResource(R.string.line_card_then, later),
+                // Read out as the web's label has it, rather than the terse "lalu …" on screen.
+                modifier = Modifier.semantics { contentDescription = laterDescription },
                 style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = TABULAR),
                 color = Gray600,
             )
