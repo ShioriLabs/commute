@@ -8,13 +8,8 @@
     <string name="line_branch_description">Tampilkan rute arah %1$s</string>
     <string name="line_badge_description">Lihat %1$s</string>
 
-    <!-- States: the web's EmptyState, offline or failed. -->
-    <string name="line_offline_title">Jaringan Tidak Tersedia</string>
-    <string name="line_offline_body">Silakan coba lagi beberapa saat lagi saat jaringan Kamu tersambung</string>
+    <!-- States: the shared LoadProblemState, titled for a line when it failed. -->
     <string name="line_failed_title">Gagal Memuat Data</string>
-    <string name="line_failed_body">Terjadi kesalahan saat memuat data. Silakan coba lagi</string>
-    <string name="line_retry">Coba Lagi</string>
-    <string name="line_illustration_description">Gambar peron stasiun dengan jembatan di atasnya, dengan kaca pembesar bergambar tanda tanya di depannya</string>
     <string name="line_offline_banner">Kamu sedang offline, data mungkin tidak up-to-date</string>
     <string name="line_outdated_banner">Data belum bisa diperbarui, mungkin tidak up-to-date</string>
 </resources>

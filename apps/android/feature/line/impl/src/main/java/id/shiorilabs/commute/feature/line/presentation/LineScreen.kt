@@ -16,9 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -29,8 +27,8 @@ import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.type.toFailure
-import id.shiorilabs.commute.core.ui.components.CommuteButton
-import id.shiorilabs.commute.core.ui.components.CommuteEmptyState
+import id.shiorilabs.commute.core.ui.components.LoadProblem
+import id.shiorilabs.commute.core.ui.components.LoadProblemState
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.components.SkeletonBlock
 import id.shiorilabs.commute.core.ui.frost.FrostedHeaderPage
@@ -46,7 +44,6 @@ import id.shiorilabs.commute.feature.line.domain.lineStrip
 import id.shiorilabs.commute.feature.line.presentation.components.LineHeader
 import id.shiorilabs.commute.feature.line.presentation.components.LineStripView
 import id.shiorilabs.commute.feature.station.domain.LineInfo
-import id.shiorilabs.commute.core.ui.R as CoreUiR
 
 /** The page is white, as on the web, like the station page. */
 private val LineBackground = Color.White
@@ -137,8 +134,14 @@ private fun LineContent(
             when (val line = state.line) {
                 is UIState.Idle, is UIState.Loading -> item(key = "loading") { StripSkeleton() }
 
+                // The web's empty state, titled for a line rather than a schedule when it failed.
                 is UIState.Error -> item(key = "failed") {
-                    LineProblem(offline = line.isOffline(), onRetry = onRetry)
+                    val problem = if (offline || line.isOffline()) LoadProblem.OFFLINE else LoadProblem.ERROR
+                    LoadProblemState(
+                        problem = problem,
+                        onRetry = onRetry,
+                        title = if (problem == LoadProblem.ERROR) stringResource(R.string.line_failed_title) else null,
+                    )
                 }
 
                 is UIState.Success -> {
@@ -203,28 +206,6 @@ private fun StripSkeleton() {
 }
 
 private const val SKELETON_BARS = 8
-
-/** The web's EmptyState, offline or failed, with its retry. */
-@Composable
-private fun LineProblem(offline: Boolean, onRetry: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        CommuteEmptyState(
-            illustration = painterResource(CoreUiR.drawable.img_search_empty),
-            illustrationDescription = stringResource(R.string.line_illustration_description),
-            title = stringResource(if (offline) R.string.line_offline_title else R.string.line_failed_title),
-            body = AnnotatedString(
-                stringResource(if (offline) R.string.line_offline_body else R.string.line_failed_body),
-            ),
-        )
-        CommuteButton(text = stringResource(R.string.line_retry), onClick = onRetry)
-    }
-}
 
 private fun UIState.Error.isOffline(): Boolean = cause?.toFailure() is Failure.Network
 
