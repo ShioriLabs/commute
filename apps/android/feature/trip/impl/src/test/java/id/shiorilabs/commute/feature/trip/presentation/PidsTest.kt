@@ -35,6 +35,11 @@ class PidsTest {
         assertEquals(listOf(false, false, true), pids.upcoming.map { it.alighting })
         assertEquals(true, pids.upcoming.all { it.minutes != null })
         assertNull(pids.changeTo)
+        assertEquals(3, pids.stopsLeft)
+        // Minutes to getting off at Cawang, not to Manggarai.
+        assertEquals(pids.upcoming.last().minutes, pids.minutesLeft)
+        assertEquals(true, pids.minutesLeft!! > pids.upcoming.first().minutes!!)
+        assertEquals(true, pids.alightingAt!! > pids.at!!)
     }
 
     @Test
