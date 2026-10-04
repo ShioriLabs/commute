@@ -2,6 +2,7 @@ package id.shiorilabs.commute.core.ui.ext
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
+import id.shiorilabs.commute.core.ui.motion.IosSpringEasing
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
@@ -57,8 +58,7 @@ private val CardEntrance = Entrance(
     step = 45,
     maxIndex = 6,
     travel = 12.dp,
-    // The web's --ease-ios-spring.
-    easing = CubicBezierEasing(0.36f, 0.66f, 0.04f, 1f),
+    easing = IosSpringEasing,
 )
 
 private val NavEntrance = Entrance(

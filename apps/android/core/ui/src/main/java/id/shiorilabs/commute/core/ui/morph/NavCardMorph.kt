@@ -8,6 +8,7 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.SharedTransitionScope.ResizeMode.Companion.scaleToBounds
 import androidx.compose.animation.core.CubicBezierEasing
+import id.shiorilabs.commute.core.ui.motion.IosSpringEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateDp
 import androidx.compose.animation.core.animateFloat
@@ -69,7 +70,7 @@ const val NAV_CARD_MORPH_MILLIS = 250
  * The web's `--ease-ios-spring`: it overshoots its approach rather than crawling the last few
  * percent, which is what made `ease-out` read as a stall on landing.
  */
-private val MorphEasing = CubicBezierEasing(0.36f, 0.66f, 0.04f, 1f)
+private val MorphEasing = IosSpringEasing
 
 /** How sharply the tint gathers towards the card end of the morph. */
 private const val TINT_POWER = 4
