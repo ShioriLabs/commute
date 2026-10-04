@@ -7,6 +7,11 @@ plugins {
 
 android {
     namespace = "id.shiorilabs.commute.feature.trip"
+
+    // The controller logs its trip's life to logcat; on the JVM that's a no-op, not a crash.
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
