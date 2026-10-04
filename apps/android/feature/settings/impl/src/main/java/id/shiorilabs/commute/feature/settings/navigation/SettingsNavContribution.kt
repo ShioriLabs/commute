@@ -16,6 +16,7 @@ import id.shiorilabs.commute.feature.settings.presentation.legal.LegalScreen
 import id.shiorilabs.commute.feature.settings.presentation.legal.OssAttributionsScreen
 import id.shiorilabs.commute.feature.settings.presentation.legal.PrivacyPolicyScreen
 import id.shiorilabs.commute.feature.settings.presentation.legal.TermsScreen
+import id.shiorilabs.commute.feature.settings.presentation.location.LocationSettingsScreen
 import id.shiorilabs.commute.feature.settings.presentation.managedata.ManageDataScreen
 import id.shiorilabs.commute.feature.settings.presentation.savedstations.SavedStationsSettingsScreen
 import id.shiorilabs.commute.feature.settings.presentation.support.SupportScreen
@@ -39,6 +40,9 @@ class SettingsNavContribution @Inject constructor(
         }
         entry<Route.SettingsManageData>(metadata = pageTransitionMetadata()) {
             ManageDataScreen(innerPadding = scope.screenPadding)
+        }
+        entry<Route.SettingsLocation>(metadata = pageTransitionMetadata()) {
+            LocationSettingsScreen(innerPadding = scope.screenPadding)
         }
         entry<Route.SettingsLegal>(metadata = pageTransitionMetadata()) {
             LegalScreen(innerPadding = scope.screenPadding)

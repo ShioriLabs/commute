@@ -83,6 +83,9 @@ sealed interface NearbyPicks {
 
     data object Idle : NearbyPicks
 
+    /** Turned off in Pengaturan → Lokasi: the picker doesn't offer it. */
+    data object Off : NearbyPicks
+
     data object Locating : NearbyPicks
 
     /** Nearest first, with how far each is in metres. */
