@@ -1,6 +1,18 @@
 package id.shiorilabs.commute.feature.trip.presentation
 
 import androidx.compose.foundation.Canvas
+import id.shiorilabs.commute.feature.station.domain.formatPlatformCode
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.draw.rotate
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -86,6 +98,7 @@ fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel
 }
 
 private val PageBackground = Color.White
+private val Slate100 = Color(0xFFF1F5F9)
 private val Slate200 = Color(0xFFE2E8F0)
 private val Slate300 = Color(0xFFCBD5E1)
 private val Slate400 = Color(0xFF94A3B8)
@@ -160,10 +173,12 @@ private fun ActiveTripContent(
             when (leg) {
                 is TripLeg.Ride -> item(key = "ride-$index") {
                     RideBlock(
-                        ride = leg,
+                        trip = trip,
+                        legIndex = index,
                         line = state.lines[leg.line],
                         name = copy.rideName(leg),
                         marks = marks.getValue(index),
+                        now = now,
                         modifier = Modifier.padding(start = 32.dp, end = 32.dp, bottom = 16.dp),
                     )
                 }
@@ -173,17 +188,7 @@ private fun ActiveTripContent(
             }
         }
         item(key = "details") {
-            Text(
-                text = stringResource(R.string.trip_live_details),
-                modifier = Modifier
-                    .padding(start = 32.dp, top = 8.dp, end = 32.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable(role = Role.Button) { onDetails(trip) }
-                    .padding(vertical = 8.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            DetailsRow(onClick = { onDetails(trip) }, modifier = Modifier.padding(start = 32.dp, top = 8.dp, end = 32.dp))
         }
     }
 }
@@ -191,54 +196,95 @@ private fun ActiveTripContent(
 /** Often enough that "2" turns into "1" about when it should. */
 private const val CLOCK_TICK_MILLIS = 15_000L
 
+/**
+ * What the rider can tell the trip: the next step ("Udah naik", "Udah turun") as the one filled
+ * button when there is one, and stopping as a quieter outlined one beside it.
+ */
 @Composable
 private fun Actions(trip: ActiveTrip, onStop: () -> Unit, onSay: (RiderAction) -> Unit, modifier: Modifier = Modifier) {
     val ride = trip.plan.ride(trip.state.legIndex)
     val nearEnd = trip.state.phase == TripPhase.RIDING && trip.state.position >= ride.lastIndex - 1
+    val next = when {
+        trip.state.phase == TripPhase.WAITING_TO_BOARD -> R.string.trip_action_boarded to RiderAction.BOARDED
+        nearEnd -> R.string.trip_action_alighted to RiderAction.ALIGHTED
+        else -> null
+    }
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(IntrinsicSize.Min),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        when {
-            trip.state.phase == TripPhase.WAITING_TO_BOARD ->
-                ActionButton(stringResource(R.string.trip_action_boarded), CommuteIcons.Check) { onSay(RiderAction.BOARDED) }
-            nearEnd ->
-                ActionButton(stringResource(R.string.trip_action_alighted), CommuteIcons.Check) { onSay(RiderAction.ALIGHTED) }
+        next?.let { (text, action) ->
+            val content = MaterialTheme.colorScheme.onPrimary
+            ActionButton(
+                modifier = Modifier
+                    .weight(1f)
+                    .background(MaterialTheme.colorScheme.primary),
+                onClick = { onSay(action) },
+            ) {
+                Icon(imageVector = CommuteIcons.Check, contentDescription = null, modifier = Modifier.size(20.dp), tint = content)
+                Text(text = stringResource(text), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = content)
+            }
         }
-        ActionButton(stringResource(R.string.trip_action_stop), CommuteIcons.Close, onClick = onStop)
+        ActionButton(
+            modifier = (if (next == null) Modifier.weight(1f) else Modifier).border(1.5.dp, Slate200, ActionShape),
+            onClick = onStop,
+        ) {
+            Icon(imageVector = CommuteIcons.Close, contentDescription = null, modifier = Modifier.size(20.dp), tint = Slate500)
+            Text(text = stringResource(R.string.trip_action_stop), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = Slate500)
+        }
     }
 }
 
+private val ActionShape = RoundedCornerShape(12.dp)
+
 @Composable
-private fun RowScope.ActionButton(text: String, icon: ImageVector, onClick: () -> Unit) {
-    val content = MaterialTheme.colorScheme.primary
+private fun ActionButton(modifier: Modifier, onClick: () -> Unit, content: @Composable RowScope.() -> Unit) {
     Row(
         modifier = Modifier
-            .weight(1f)
             .fillMaxHeight()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Slate200)
+            .clip(ActionShape)
+            .then(modifier)
             .clickable(role = Role.Button, onClick = onClick)
             .padding(16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = content)
-        Text(text = text, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = content)
-    }
+        content = content,
+    )
 }
 
+/**
+ * One ride as a timeline in the board's terms: the line thick in its colour and grey behind the
+ * rider, the rider as the board's pink chevron (or a pink dot at a stop), the stop they're making
+ * for yellow, each stop's time down the right, and on a long ride the stops that don't matter yet
+ * folded into one line.
+ */
 @Composable
 private fun RideBlock(
-    ride: TripLeg.Ride,
+    trip: ActiveTrip,
+    legIndex: Int,
     line: LineInfo?,
     name: String,
     marks: RideMarks,
+    now: Instant,
     modifier: Modifier = Modifier,
 ) {
+    val ride = trip.plan.ride(legIndex)
     val color = parseHexColor(line?.colorCode ?: "", Slate400)
+    val current = legIndex == trip.state.legIndex && trip.state.phase != TripPhase.ARRIVED
+    val here = marks.marks.indexOf(StopMark.HERE).takeIf { it >= 0 }
+    // The stop the board names: the next one riding; boarding while waiting, unless the rider is
+    // seen there already and it's theirs as "Kamu di sini".
+    val next = when {
+        !current -> null
+        trip.state.phase == TripPhase.RIDING -> marks.marks.indexOf(StopMark.UPCOMING).takeIf { it >= 0 }
+        here == null -> 0
+        else -> null
+    }
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val rows = timelineRows(ride.stops.size, focus = if (current) here ?: marks.betweenAfter ?: next else null, expanded = expanded)
+
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.padding(bottom = 12.dp),
@@ -246,63 +292,127 @@ private fun RideBlock(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             LineRoundel(code = line?.lineCode ?: ride.line.substringAfter(':'), color = line?.colorCode ?: "#94A3B8", operator = ride.operator)
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(text = name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 ride.headsign?.let {
                     Text(text = stringResource(R.string.trip_headsign, it), style = MaterialTheme.typography.bodySmall, color = Slate500)
                 }
             }
+            ride.platformCode?.let {
+                Text(
+                    text = stringResource(R.string.trip_platform, formatPlatformCode(it)),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Slate500,
+                )
+            }
         }
-        ride.stops.forEachIndexed { i, stop ->
-            StopRow(
-                name = stop.name,
-                mark = marks.marks[i],
-                color = color,
-                first = i == 0,
-                last = i == ride.lastIndex,
-            )
-            if (marks.betweenAfter == i) OnTheWayRow(next = ride.stops[i + 1].name, color = color)
+        rows.forEach { row ->
+            when (row) {
+                is TimelineRow.Stop -> {
+                    val i = row.index
+                    StopRow(
+                        name = ride.stops[i].name,
+                        mark = marks.marks[i],
+                        next = i == next,
+                        at = trip.expectedAtStop(legIndex, i, now),
+                        color = color,
+                        first = i == 0,
+                        last = i == ride.lastIndex,
+                        topReached = i > 0 && marks.marks[i].reached,
+                        bottomReached = i < ride.lastIndex && (marks.marks[i + 1].reached || marks.betweenAfter == i),
+                    )
+                    if (marks.betweenAfter == i) OnTheWayRow(next = ride.stops[i + 1].name, color = color)
+                }
+                is TimelineRow.Folded -> FoldedRow(
+                    text = stringResource(if (ride.isBus) R.string.trip_live_more_haltes else R.string.trip_live_more_stations, row.count),
+                    color = if (marks.marks[row.last].reached) Slate300 else color,
+                    onClick = { expanded = true },
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun StopRow(name: String, mark: StopMark, color: Color, first: Boolean, last: Boolean) {
+private fun StopRow(
+    name: String,
+    mark: StopMark,
+    next: Boolean,
+    at: Instant?,
+    color: Color,
+    first: Boolean,
+    last: Boolean,
+    topReached: Boolean,
+    bottomReached: Boolean,
+) {
     val passed = mark == StopMark.PASSED
+    val alighting = last && !passed && mark != StopMark.HERE
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(IntrinsicSize.Min),
+            .height(IntrinsicSize.Min)
+            .semantics(mergeDescendants = true) {},
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Rail(color = if (passed) Slate300 else color, top = !first, bottom = !last) {
-            val size = if (mark == StopMark.HERE) 16.dp else 10.dp
-            Box(
-                modifier = Modifier
-                    .size(size)
-                    .clip(CircleShape)
-                    .background(if (mark == StopMark.HERE) Slate900 else PageBackground)
-                    .border(3.dp, if (passed) Slate300 else color, CircleShape),
-            )
+        Rail(
+            top = if (first) null else if (topReached) Slate300 else color,
+            bottom = if (last) null else if (bottomReached) Slate300 else color,
+        ) {
+            when {
+                mark == StopMark.HERE -> Dot(16.dp, fill = MaterialTheme.colorScheme.primary, ring = PageBackground)
+                next -> Dot(16.dp, fill = NextStopYellow, ring = PageBackground)
+                passed -> Dot(10.dp, fill = PageBackground, ring = Slate300)
+                last -> Dot(14.dp, fill = PageBackground, ring = color, ringWidth = 4.dp)
+                else -> Dot(10.dp, fill = PageBackground, ring = color)
+            }
         }
-        Column(modifier = Modifier.padding(vertical = 8.dp)) {
+        Column(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
             Text(
                 text = name,
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (first || last || mark == StopMark.HERE) FontWeight.Bold else FontWeight.Normal,
+                fontWeight = if (first || last || next || mark == StopMark.HERE) FontWeight.Bold else FontWeight.Normal,
                 color = if (passed) Slate400 else Slate900,
             )
             val label = when {
                 mark == StopMark.HERE -> R.string.trip_live_you_are_here
-                last -> R.string.trip_live_alight_here
-                first -> R.string.trip_live_board_here
+                next -> R.string.trip_pids_next
+                first && !passed -> R.string.trip_live_board_here
                 else -> null
             }
             label?.let { Text(text = stringResource(it), style = MaterialTheme.typography.labelSmall, color = Slate500) }
+            if (alighting) {
+                val description = stringResource(R.string.trip_live_alight_here)
+                Text(
+                    text = stringResource(R.string.trip_pids_get_off),
+                    modifier = Modifier
+                        .padding(top = 2.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(MaterialTheme.colorScheme.primary)
+                        .padding(horizontal = 6.dp, vertical = 1.dp)
+                        .clearAndSetSemantics { contentDescription = description },
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                )
+            }
+        }
+        at?.let {
+            Text(
+                text = formatClock(it),
+                modifier = Modifier.padding(start = 12.dp),
+                style = MaterialTheme.typography.labelLarge.merge(fontFeatureSettings = "tnum"),
+                fontWeight = if (next) FontWeight.Bold else FontWeight.Normal,
+                color = when {
+                    passed -> Slate400
+                    next -> Slate900
+                    else -> Slate500
+                },
+            )
         }
     }
 }
 
+/** The rider out between two stops: the board's pink chevron on the line, heading down it. */
 @Composable
 private fun OnTheWayRow(next: String, color: Color) {
     Row(
@@ -311,9 +421,7 @@ private fun OnTheWayRow(next: String, color: Color) {
             .height(IntrinsicSize.Min),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Rail(color = color, top = true, bottom = true) {
-            Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(Slate900))
-        }
+        Rail(top = Slate300, bottom = color) { RiderChevron() }
         Text(
             text = stringResource(R.string.trip_live_on_the_way, next),
             modifier = Modifier.padding(vertical = 6.dp),
@@ -324,22 +432,119 @@ private fun OnTheWayRow(next: String, color: Color) {
     }
 }
 
-/** The ride's line down the left, with [node] on it. */
+/** Stops folded away on a long ride, the line dotted past them; tapping opens the whole ride. */
 @Composable
-private fun Rail(color: Color, top: Boolean, bottom: Boolean, node: @Composable () -> Unit) {
+private fun FoldedRow(text: String, color: Color, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(role = Role.Button, onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(modifier = Modifier.width(RailWidth).fillMaxHeight(), contentAlignment = Alignment.Center) {
+            Canvas(modifier = Modifier.width(LineWidth).fillMaxHeight()) {
+                drawLine(
+                    color = color,
+                    start = Offset(size.width / 2, 0f),
+                    end = Offset(size.width / 2, size.height),
+                    strokeWidth = size.width,
+                    cap = StrokeCap.Round,
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(0f, size.width * 2), 0f),
+                )
+            }
+        }
+        Text(
+            text = text,
+            modifier = Modifier.padding(vertical = 10.dp),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = Slate500,
+        )
+        Icon(
+            imageVector = CommuteIcons.Chevron,
+            contentDescription = null,
+            modifier = Modifier.padding(start = 4.dp).size(12.dp).rotate(90f),
+            tint = Slate500,
+        )
+    }
+}
+
+/** The ride's line down the left, [top] and [bottom] of [node] each coloured, or left out at an end. */
+@Composable
+private fun Rail(top: Color?, bottom: Color?, node: @Composable () -> Unit) {
     Box(
         modifier = Modifier
-            .width(32.dp)
+            .width(RailWidth)
             .fillMaxHeight(),
         contentAlignment = Alignment.Center,
     ) {
         Column(modifier = Modifier.fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(modifier = Modifier.width(4.dp).weight(1f).background(if (top) color else Color.Transparent))
-            Box(modifier = Modifier.width(4.dp).weight(1f).background(if (bottom) color else Color.Transparent))
+            Box(modifier = Modifier.width(LineWidth).weight(1f).background(top ?: Color.Transparent))
+            Box(modifier = Modifier.width(LineWidth).weight(1f).background(bottom ?: Color.Transparent))
         }
         node()
     }
 }
+
+@Composable
+private fun Dot(size: Dp, fill: Color, ring: Color, ringWidth: Dp = 3.dp) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(fill)
+            .border(ringWidth, ring, CircleShape),
+    )
+}
+
+/** The board's marker, pink edged in white, pointing down the line. */
+@Composable
+private fun RiderChevron() {
+    val pink = MaterialTheme.colorScheme.primary
+    Canvas(modifier = Modifier.size(22.dp)) {
+        val s = size.minDimension * 0.3f
+        val c = center
+        val chevron = Path().apply {
+            moveTo(c.x - s, c.y - s * 0.6f)
+            lineTo(c.x, c.y + s * 0.6f)
+            lineTo(c.x + s, c.y - s * 0.6f)
+        }
+        drawPath(chevron, PageBackground, style = Stroke(width = s * 1.1f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        drawPath(chevron, pink, style = Stroke(width = s * 0.6f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+    }
+}
+
+/** The way to the journey's own page, as a row like the app's other links. */
+@Composable
+private fun DetailsRow(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(ActionShape)
+            .background(Slate100)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(R.string.trip_live_details),
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            color = Slate900,
+        )
+        Icon(imageVector = CommuteIcons.Chevron, contentDescription = null, modifier = Modifier.size(16.dp), tint = Slate400)
+    }
+}
+
+/** The timeline's column for the line, and the line's own width: the board's band, laid flat. */
+private val RailWidth = 32.dp
+private val LineWidth = 6.dp
+
+/** The board's yellow for the stop it names. */
+private val NextStopYellow = Color(0xFFFBBF24)
 
 @Composable
 private fun WalkRow(walk: TripLeg.Transfer, modifier: Modifier = Modifier) {

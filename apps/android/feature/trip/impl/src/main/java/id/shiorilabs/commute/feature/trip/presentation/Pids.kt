@@ -6,6 +6,8 @@ import id.shiorilabs.commute.core.trip.TripPhase
 import id.shiorilabs.commute.core.trip.expectedAt
 import id.shiorilabs.commute.core.trip.expectedAtStop
 import id.shiorilabs.commute.feature.trip.ActiveTrip
+import id.shiorilabs.commute.core.trip.scheduledAtStop
+import java.time.Duration
 import java.time.Instant
 import kotlin.math.floor
 
@@ -68,18 +70,33 @@ data class Pids(
 /** Stops ahead on the band: as many as a phone's height reads at a glance. */
 const val PIDS_STOPS = 4
 
+/**
+ * How late the ride being followed runs at [now], past what the trip already knows. The train can't
+ * be anywhere the rider isn't: if the timetable says it passed where they are already, it runs that
+ * late for every stop ahead. A train waited for on the platform after its time, too.
+ */
+internal fun ActiveTrip.slip(now: Instant): Duration = state.expectedAt(plan, state.position)
+    ?.let { Duration.between(it, now) }
+    ?.takeIf { !it.isNegative }
+    ?: Duration.ZERO
+
+/**
+ * When the trip should be at stop [stopIndex] of leg [legIndex]: on the ride being followed, the
+ * board's own reckoning, lateness included; on any other, its timetable. `null` untimed.
+ */
+internal fun ActiveTrip.expectedAtStop(legIndex: Int, stopIndex: Int, now: Instant): Instant? =
+    if (legIndex == state.legIndex && state.phase != TripPhase.ARRIVED) {
+        state.expectedAtStop(plan, stopIndex)?.plus(slip(now))
+    } else {
+        plan.scheduledAtStop(legIndex, stopIndex)
+    }
+
 internal fun ActiveTrip.pids(now: Instant): Pids {
     val ride = plan.ride(state.legIndex)
     val last = ride.lastIndex
     val then = plan.nextRideAfter(state.legIndex)?.let(plan::ride)
     val placeable = state.source != PositionSource.UNKNOWN
-    // The train can't be anywhere the rider isn't: if the timetable says it passed where they are
-    // already, it runs that late for every stop ahead. A train waited for on the platform after
-    // its time, too.
-    val slip = state.expectedAt(plan, state.position)
-        ?.let { java.time.Duration.between(it, now) }
-        ?.takeIf { !it.isNegative }
-        ?: java.time.Duration.ZERO
+    val slip = slip(now)
     fun expected(index: Int) = state.expectedAtStop(plan, index)?.plus(slip)
     fun minutesTo(index: Int) = expected(index)?.takeIf { placeable }?.let { minutesUntil(now, it) }
 
