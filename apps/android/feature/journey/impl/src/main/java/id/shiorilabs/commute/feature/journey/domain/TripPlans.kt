@@ -57,12 +57,14 @@ sealed interface TripStart {
  * Whether [journey], opened as [route], can start now. Untimed journeys can start whenever; a
  * running trip counts as this journey when it was started from the same pair, route and boarding.
  */
-fun tripStartFor(journey: Journey, route: Route.Trip, running: Route.Trip?, now: Instant): TripStart {
+fun tripStartFor(journey: Journey, route: Route.Trip, running: Route.Trip?, now: Instant, force: Boolean = false): TripStart {
     if (running != null && running.fromId == route.fromId && running.toId == route.toId &&
         running.journeyKey == route.journeyKey && running.boardingClock == route.boardingClock
     ) {
         return TripStart.Running
     }
+    // "Paksa OTW" (Pengaturan → Developer): try a journey out without waiting for its train.
+    if (force) return TripStart.Ready
     val boardsAt = boardsAtOf(journey) ?: return TripStart.Ready
     return if (Duration.between(now, boardsAt) > TRIP_START_LEAD) TripStart.TooEarly(boardsAt) else TripStart.Ready
 }
