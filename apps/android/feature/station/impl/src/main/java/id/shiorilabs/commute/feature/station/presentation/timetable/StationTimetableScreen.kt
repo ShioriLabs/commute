@@ -65,15 +65,19 @@ import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.type.toFailure
 import id.shiorilabs.commute.core.ui.components.CommuteIconButton
 import id.shiorilabs.commute.core.ui.components.LineRoundel
-import id.shiorilabs.commute.core.ui.components.ProblemPanel
+import id.shiorilabs.commute.core.ui.components.LoadProblem
+import id.shiorilabs.commute.core.ui.components.LoadProblemState
+import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.components.SkeletonBlock
 import id.shiorilabs.commute.core.ui.ext.parseHexColor
 import id.shiorilabs.commute.core.ui.frost.FrostedTopChromeBackdrop
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.layout.TitleSlot
 import id.shiorilabs.commute.core.ui.layout.stuckTitle
+import id.shiorilabs.commute.core.ui.network.rememberIsOffline
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
+import id.shiorilabs.commute.core.ui.time.updatedAgoText
 import id.shiorilabs.commute.feature.station.R
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.codeOfLineKey
@@ -114,11 +118,13 @@ fun StationTimetableScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
     val now = rememberJakartaNow()
+    val offline by rememberIsOffline()
 
     StationTimetableContent(
         state = state,
         nowMinute = minuteOfDay(now),
         innerPadding = innerPadding,
+        offline = offline,
         placeholderTitle = placeholderTitle,
         onClose = { navigator.pop() },
         onToggleLine = viewModel::onToggleLine,
@@ -131,6 +137,7 @@ private fun StationTimetableContent(
     state: StationTimetableUiState,
     nowMinute: Int,
     innerPadding: PaddingValues,
+    offline: Boolean = false,
     placeholderTitle: String? = null,
     onClose: () -> Unit = {},
     onToggleLine: (String) -> Unit = {},
@@ -154,27 +161,36 @@ private fun StationTimetableContent(
                     .height(288.dp),
             )
 
-            is UIState.Error -> ProblemPanel(
-                message = stringResource(
-                    if (sections.cause?.toFailure() is Failure.Network) {
-                        R.string.station_timetable_offline
-                    } else {
-                        R.string.station_timetable_failed
-                    },
-                ),
-                retryLabel = stringResource(R.string.station_retry),
+            // The web's empty state, offline first as there: with nothing to show, being offline
+            // is the likeliest reason, and a retry once connected the remedy.
+            is UIState.Error -> LoadProblemState(
+                problem = if (offline || sections.cause?.toFailure() is Failure.Network) {
+                    LoadProblem.OFFLINE
+                } else {
+                    LoadProblem.ERROR
+                },
                 onRetry = onRetry,
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(horizontal = 16.dp),
             )
 
             is UIState.Success -> if (sections.data.isEmpty()) {
-                ProblemPanel(
-                    message = stringResource(R.string.station_timetable_empty),
-                    retryLabel = stringResource(R.string.station_retry),
+                LoadProblemState(
+                    problem = if (offline) LoadProblem.OFFLINE else LoadProblem.NO_DATA,
                     onRetry = onRetry,
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp),
                 )
             } else {
+                // Over a board that may have been loaded before the connection went, as on the
+                // web, or one that couldn't be refreshed when it was due: either way, how old it is.
+                if (offline || state.isOutdated) {
+                    NoticeBanner(
+                        message = stringResource(
+                            if (offline) R.string.station_offline_banner else R.string.station_outdated_banner,
+                        ),
+                        detail = state.updatedAt?.let { updatedAgoText(it) },
+                        modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp),
+                    )
+                }
                 LineFilter(
                     lineKeys = state.lineKeys,
                     lines = state.lines,
