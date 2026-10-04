@@ -146,12 +146,16 @@ design only depends on "an ongoing notification with segmented progress".
   steps every event through one lock and carries out the effects, `TripService`
   only feeds fixes in and keeps the process alive. Location is `:core:location`,
   on the platform's own fused provider (no Play Services).
-- **Coordinates come from `GET /stations`** (all searchable stations, ~13 KB),
-  joined by stop id when the trip starts. Routing-only TJ haltes aren't in it;
-  those stops can't be confirmed and are timed by the clock. Stops are placed by
-  cumulative distance between their coordinates when every stop has them, by
-  stop count otherwise. `trips-live-fields.md` proposes the API fields that
-  would replace both.
+- **Coordinates and stop times come with the trip answer** (`trips-live-fields.md`):
+  every stop's `latitude`/`longitude`, routing-only TJ haltes included, and on a
+  timetabled leg the boarded trip's `stopTimes` and `tripId`, all copied into
+  the plan when the trip starts. The engine places the train by those times,
+  uneven hops and all. Where they're missing, it falls back: coordinates from
+  `GET /stations` (~13 KB, searchable stations only, joined by stop id), and an
+  untimed stop placed between the timed ones around it by cumulative distance
+  when every stop has coordinates, by stop count otherwise. Times that run
+  backwards are treated as a data slip, and the ride falls back to that spread
+  between its two ends.
 - **Lead time:** "siap-siap" one stop before; when that last hop is over five
   minutes, about three minutes before instead. A rider who reaches the alighting
   stop without passing the one before (a sparse fix, a long sleep) gets "turun"
@@ -186,9 +190,7 @@ design only depends on "an ongoing notification with segmented progress".
 
 - ~~Default lead time: alert one stop before, or N minutes before, or both.~~
   Settled: both, see "As built".
-- **Per-stop times in the API.** A ride leg carries only its end times today.
-  Exposing each stop's scheduled time (the data exists in the timetable)
-  would make underground estimates far better. Additive, so it can come later;
-  proposed with stop coordinates in `trips-live-fields.md`.
+- ~~**Per-stop times in the API.**~~ Settled: the trip answer carries them,
+  with stop coordinates, since 2026-10-04 (`trips-live-fields.md`).
 - Off-route: offer an automatic re-plan, or just ask.
 - Whether a trip can be started from the web app and handed to the phone.
