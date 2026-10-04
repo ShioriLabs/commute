@@ -172,7 +172,7 @@ design only depends on "an ongoing notification with segmented progress".
   refusal still starts the trip.
 - **The live screen is an in-train board**, after JR East's: a dark band naming the
   next station in big type (direction on the left, a line-colour stripe), over the
-  line's own colour carrying the next five stops, nearest at the bottom, each with
+  line's own colour carrying the next four stops, nearest at the bottom, each with
   "minutes away" when the clock or a fix can say and blank when nothing can. Line
   colour stays a line on white rather than filling the screen: white type on the
   paler lines (Cikarang, the yellow TJ corridors) doesn't read at a glance. Under

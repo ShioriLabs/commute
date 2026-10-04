@@ -30,9 +30,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.AlignmentLine
+import androidx.compose.ui.layout.FirstBaseline
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.zIndex
@@ -42,6 +49,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -49,9 +58,9 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -66,6 +75,8 @@ import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.presentation.components.PidsChevrons
 import id.shiorilabs.commute.feature.trip.R
+import kotlin.math.acos
+import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -80,9 +91,35 @@ private val PlainText = Color(0xFF0F172A)
 /** The next stop's bubble, the display's yellow. */
 private val NextStop = Color(0xFFFBBF24)
 
-private val StripHeight = 340.dp
-/** The band's width nearest the rider; it narrows with distance, and the bubbles with it. */
-private val BandWidth = 48.dp
+/** The band's width on the ground. */
+private val BandWidth = 40.dp
+
+/** The loop's radius as a multiple of the strip's width: big enough to stay steep where the stops are. */
+private const val LOOP_RADIUS = 1.8f
+
+/** The loop's near side this far off the left edge: the band comes in from out of bounds, never up out of the bottom. */
+private val LoopOffscreen = 40.dp
+
+/** The nearest stop's bubble and the rider's marker, this far in from the left edge. */
+private val NearestStopIn = 58.dp
+private val MarkerIn = 22.dp
+
+/** The stops' even vertical rhythm, and the farthest one's distance below the plate. */
+private val StopPitch = 42.dp
+private val FarthestStopTop = 40.dp
+
+/** Below the band's lower edge where it comes in off the left edge: the strip ends here. */
+private val EntryMargin = 12.dp
+
+/** How far the slab's side face shows below its top. */
+private val SlabDepth = 7.dp
+
+private val LabelGap = 6.dp
+private val NameSize = 20.sp
+private val NextNameSize = 26.sp
+
+/** Plus Jakarta Sans' capitals, as a share of its size: what a name is centred on. */
+private const val CAP_HEIGHT = 0.7f
 
 /** Keeps a white bubble apart from a pale line (a yellow corridor) and the page around it. */
 private val BubbleRing = Color(0x1F0F172A)
@@ -213,7 +250,7 @@ private fun Header(pids: Pids, copy: TripCopy, color: Color, topInset: Dp, onClo
                 BasicText(
                     text = pids.station,
                     modifier = Modifier.semantics { heading() },
-                    style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold, lineHeight = 52.sp),
+                    style = MaterialTheme.typography.headlineLarge.merge(color = Color.White, fontWeight = FontWeight.Bold, lineHeight = 52.sp),
                     maxLines = 1,
                     autoSize = TextAutoSize.StepBased(minFontSize = 24.sp, maxFontSize = 48.sp, stepSize = 2.sp),
                 )
@@ -232,145 +269,190 @@ private val PidsLabel.text: Int
     }
 
 /**
- * The band and its stops: a stretch of a loop seen from above and a little behind, as JR East draws
- * the Yamanote line. The band is an arc of a circle centred off to the right, rising up the left
- * and sweeping away under the plate, narrowing with distance, and the stops bunch up as they recede,
- * the nearest at the bottom with the rider's marker below it.
+ * The band and its stops: a stretch of a loop lying on the ground, seen from 45° above, as JR East
+ * draws the Yamanote line. The band comes in from off the left edge and sweeps away to the right under
+ * the plate, both its ends out of view. Orthographic, so nothing shrinks with
+ * distance; the band thins where it turns across the view, and a darker side face shows it as a
+ * slab on the ground. The nearest stop is at the bottom, the rider's marker below it.
  */
 @Composable
 private fun Strip(pids: Pids, color: Color, source: String?) {
     val density = LocalDensity.current
     val description = stringResource(R.string.trip_pids_description, pids.upcoming.joinToString { it.name })
-    BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(StripHeight)
-            .clearAndSetSemantics { contentDescription = description },
-    ) {
-        val arc = Arc(
-            width = with(density) { maxWidth.toPx() },
-            height = with(density) { maxHeight.toPx() },
-            nearBand = with(density) { BandWidth.toPx() },
-        )
-        val count = pids.upcoming.size
-        val angles = stopAngles(count)
-        val marker = arc.point(MARKER_ANGLE)
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val width = with(density) { maxWidth.toPx() }
+        val loop = with(density) {
+            GroundLoop(
+                width = width,
+                band = BandWidth.toPx(),
+                offscreen = LoopOffscreen.toPx(),
+                nearestIn = NearestStopIn.toPx(),
+                markerIn = MarkerIn.toPx(),
+                pitch = StopPitch.toPx(),
+                farthestTop = FarthestStopTop.toPx(),
+                entryMargin = EntryMargin.toPx(),
+            )
+        }
+        val slab = with(density) { SlabDepth.toPx() }
+        val marker = loop.point(loop.markerAngle)
+        val side = lerp(color, Color.Black, 0.3f)
 
-        Canvas(
+        // Each stop's bubble on the band, nearest first.
+        val bubbles = pids.upcoming.mapIndexed { i, stop ->
+            // The next stop's bubble stands proud of the band; the rest sit inside it.
+            loop.stop(i) to (if (stop.next) loop.band * 0.95f else loop.band * 0.7f)
+        }
+        // Each name beside its bubble, centred on it, starting where the band (its slab included)
+        // has climbed clear of the name's top: on the slant that's a little right of the bubble.
+        val gap = with(density) { LabelGap.toPx() }
+        val starts = pids.upcoming.mapIndexed { i, stop ->
+            val (at, size) = bubbles[i]
+            // Half the capitals' height at the name's largest: its ink, not its line box. The tag
+            // under the stop to get off at hangs below, where the band never is.
+            val half = with(density) { (if (stop.next) NextNameSize else NameSize).toPx() } * CAP_HEIGHT / 2
+            maxOf(at.x + size / 2, loop.innerEdgeClearOf(at.y - half - slab)) + gap
+        }
+
+        Box(
             modifier = Modifier
-                .matchParentSize()
-                // Below the strip is the page; above it the plate, which draws over the band.
-                .drawWithContent {
-                    clipRect(top = -size.height * 4, bottom = size.height) { this@drawWithContent.drawContent() }
-                },
+                .fillMaxWidth()
+                .height(with(density) { loop.height.toDp() })
+                .clearAndSetSemantics { contentDescription = description },
         ) {
-            drawPath(arc.band(), color)
-            // The rider: a chevron on the band pointing the way it goes.
-            val tangent = arc.tangent(MARKER_ANGLE)
-            val angle = Math.toDegrees(atan2(tangent.y, tangent.x).toDouble()).toFloat()
-            rotate(angle + 90f, pivot = marker) {
-                val s = arc.widthAt(MARKER_ANGLE) * 0.42f
-                val chevron = Path().apply {
-                    moveTo(marker.x - s, marker.y + s * 0.6f)
-                    lineTo(marker.x, marker.y - s * 0.6f)
-                    lineTo(marker.x + s, marker.y + s * 0.6f)
+            Canvas(
+                modifier = Modifier
+                    .matchParentSize()
+                    // Below the strip is the page; above it the plate, which draws over the band.
+                    .drawWithContent {
+                        clipRect(top = -size.height * 4, bottom = size.height) { this@drawWithContent.drawContent() }
+                    },
+            ) {
+                val top = loop.band()
+                translate(top = slab) { drawPath(top, side) }
+                drawPath(top, color)
+                // The rider: a chevron on the band pointing the way it goes.
+                val tangent = loop.tangent(loop.markerAngle)
+                val angle = Math.toDegrees(atan2(tangent.y, tangent.x).toDouble()).toFloat()
+                rotate(angle + 90f, pivot = marker) {
+                    val s = loop.band * 0.36f
+                    val chevron = Path().apply {
+                        moveTo(marker.x - s, marker.y + s * 0.6f)
+                        lineTo(marker.x, marker.y - s * 0.6f)
+                        lineTo(marker.x + s, marker.y + s * 0.6f)
+                    }
+                    drawPath(chevron, BoardInk, style = Stroke(width = s * 0.7f, cap = StrokeCap.Round))
                 }
-                drawPath(chevron, BoardInk, style = Stroke(width = s * 0.7f, cap = StrokeCap.Round))
+            }
+
+            pids.upcoming.forEachIndexed { i, stop ->
+                val (at, size) = bubbles[i]
+                StopBubble(
+                    stop = stop,
+                    size = with(density) { size.toDp() },
+                    modifier = Modifier.offset { IntOffset((at.x - size / 2).roundToInt(), (at.y - size / 2).roundToInt()) },
+                )
+                StopLabel(
+                    stop = stop,
+                    x = starts[i],
+                    centreY = at.y,
+                    maxWidth = (width - starts[i] - gap).roundToInt(),
+                )
+            }
+
+            source?.let {
+                Text(
+                    text = it,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 24.dp, bottom = 12.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = BoardDim,
+                )
             }
         }
-
-        pids.upcoming.forEachIndexed { i, stop ->
-            val angle = angles[i]
-            val point = arc.point(angle)
-            val band = arc.widthAt(angle)
-            // Bubbles sit inside the band and shrink with it; the next stop's stands proud of it.
-            val bubblePx = if (stop.next) band * 1.0f else band * 0.8f
-            val bubble = with(density) { bubblePx.toDp() }
-            StopBubble(
-                stop = stop,
-                size = bubble,
-                modifier = Modifier.offset { IntOffset((point.x - bubblePx / 2).roundToInt(), (point.y - bubblePx / 2).roundToInt()) },
-            )
-            StopName(
-                stop = stop,
-                // Nearest biggest, receding with the band.
-                size = (30 - i * 3).coerceAtLeast(17),
-                at = point,
-                clearance = band / 2,
-            )
-        }
-
-        source?.let {
-            Text(
-                text = it,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 24.dp, bottom = 12.dp),
-                style = MaterialTheme.typography.labelSmall,
-                color = BoardDim,
-            )
-        }
-    }
-}
-
-/** Where the rider's chevron sits, just inside the strip's bottom edge. */
-private const val MARKER_ANGLE = 0.07f
-
-/** The nearest stop's angle, and the gap to the next; each further gap shrinks by [RECEDE]. */
-private const val FIRST_STOP_ANGLE = 0.19f
-private const val FIRST_GAP = 0.165f
-private const val RECEDE = 0.88f
-
-/** The stops' angles along the arc, nearest first: closer together as they recede. */
-private fun stopAngles(count: Int): List<Float> {
-    var angle = FIRST_STOP_ANGLE
-    var gap = FIRST_GAP
-    return List(count) {
-        val at = angle
-        angle += gap
-        gap *= RECEDE
-        at
     }
 }
 
 /**
- * The loop the band is part of: a circle centred off the strip's bottom right, so its left side
- * rises out of the bottom edge almost upright and curves away to the right as it climbs. An angle
- * of 0 is the bottom edge; the band runs on past the strip's top to [FAR_ANGLE], under the plate.
+ * The loop on the ground, as seen from 45° up: a circle squashed to [TILT] of its height, and far
+ * bigger than the screen. Its upright near side lies off the strip's left edge and below it, so the
+ * band only ever comes in through the left edge; it climbs steeply where the stops are and sweeps
+ * right, on past the strip's top to [FAR_ANGLE], under the plate. The strip's [height] is whatever
+ * that leaves, down to just below where the band comes in.
+ *
+ * Stops are spaced evenly up the screen rather than evenly round the loop: projected, equal steps
+ * round it bunch the far stops together.
  */
-private class Arc(width: Float, private val height: Float, private val nearBand: Float) {
+private class GroundLoop(
+    width: Float,
+    val band: Float,
+    private val offscreen: Float,
+    nearestIn: Float,
+    markerIn: Float,
+    private val pitch: Float,
+    farthestTop: Float,
+    entryMargin: Float,
+) {
 
-    private val cx = width * 1.18f
-    private val radius = width * 1.07f
+    private val radius = width * LOOP_RADIUS
+    private val cx = radius - offscreen
 
-    fun point(angle: Float) = Offset(cx - radius * cos(angle), height - radius * sin(angle))
+    /** The angle round the loop at which the band's centre is [inset] in from the left edge. */
+    private fun angleAt(inset: Float) = acos((1 - (inset + offscreen) / radius).coerceIn(-1f, 1f))
+
+    private val nearestAngle = angleAt(nearestIn)
+    val markerAngle = angleAt(markerIn)
+
+    private val nearestY = farthestTop + (PIDS_STOPS - 1) * pitch
+    private val cy = nearestY + TILT * radius * sin(nearestAngle)
+
+    /** Down to just below where the band's lower edge comes in off the left edge. */
+    val height: Float = run {
+        val inner = radius - band / 2
+        cy - TILT * inner * sin(acos((cx / inner).coerceIn(-1f, 1f))) + entryMargin
+    }
+
+    fun point(angle: Float, r: Float = radius) = Offset(cx - r * cos(angle), cy - TILT * r * sin(angle))
+
+    /** Stop [index] (0 the nearest), a pitch above the one before it. */
+    fun stop(index: Int): Offset {
+        val y = nearestY - index * pitch
+        return point(asin(((cy - y) / (TILT * radius)).coerceIn(-1f, 1f)))
+    }
+
+    /**
+     * Where the band's inner (lower right) edge has climbed above [y]: anything right of this, below
+     * [y], is clear of the band. The edge only rises as it goes right, so one crossing settles it.
+     */
+    fun innerEdgeClearOf(y: Float): Float {
+        val r = radius - band / 2
+        val angle = asin(((cy - y) / (TILT * r)).coerceIn(0f, 1f))
+        return cx - r * cos(angle)
+    }
 
     /** The way the band runs at [angle], up and to the right. */
-    fun tangent(angle: Float) = Offset(radius * sin(angle), -radius * cos(angle))
+    fun tangent(angle: Float) = Offset(radius * sin(angle), -TILT * radius * cos(angle))
 
-    /** Narrower with distance: two fifths of its near width by the time it reaches the plate. */
-    fun widthAt(angle: Float) = nearBand * (1f - 0.6f * (angle / FAR_ANGLE).coerceIn(0f, 1f))
-
-    /** The band as one filled shape, its edges following the circle in and out by half its width. */
+    /** The band's top face, between the loop's inner and outer edges. */
     fun band(): Path = Path().apply {
-        val steps = 64
+        val steps = 160
         val angles = (0..steps).map { NEAR_ANGLE + (FAR_ANGLE - NEAR_ANGLE) * it / steps }
         angles.forEachIndexed { i, a ->
-            val r = radius + widthAt(a) / 2
-            val x = cx - r * cos(a)
-            val y = height - r * sin(a)
+            val (x, y) = point(a, radius + band / 2)
             if (i == 0) moveTo(x, y) else lineTo(x, y)
         }
         angles.asReversed().forEach { a ->
-            val r = radius - widthAt(a) / 2
-            lineTo(cx - r * cos(a), height - r * sin(a))
+            val (x, y) = point(a, radius - band / 2)
+            lineTo(x, y)
         }
         close()
     }
 
     private companion object {
-        const val NEAR_ANGLE = -0.12f
-        const val FAR_ANGLE = 1.3f
+        /** cos 45°: the ground seen from halfway between overhead and edge-on. */
+        const val TILT = 0.707f
+        const val NEAR_ANGLE = -0.25f
+        const val FAR_ANGLE = 1.2f
     }
 }
 
@@ -395,23 +477,37 @@ private fun StopBubble(stop: PidsStop, size: Dp, modifier: Modifier) {
     }
 }
 
+/** A stop's name, its vertical centre on [centreY] (its bubble's), starting at [x]; "TURUN" under the stop to get off at. */
 @Composable
-private fun StopName(stop: PidsStop, size: Int, at: Offset, clearance: Float) {
+private fun StopLabel(stop: PidsStop, x: Float, centreY: Float, maxWidth: Int) {
     val density = LocalDensity.current
-    // Clear of the band's outer edge.
-    val gap = with(density) { 12.dp.toPx() }
+    // Centred optically: the middle of the name's capitals on the bubble's centre, measured from its
+    // baseline at the size it settled on. Its line box would centre the room a "g" might need, and
+    // set "Duren Kalibata" high.
+    var capHalf by remember { mutableFloatStateOf(0f) }
     Column(
-        modifier = Modifier.offset {
-            IntOffset((at.x + clearance + gap).roundToInt(), (at.y - with(density) { (size * 0.75f).sp.toPx() }).roundToInt())
+        modifier = Modifier.layout { measurable, _ ->
+            val placeable = measurable.measure(Constraints(maxWidth = maxWidth.coerceAtLeast(0)))
+            val baseline = placeable[FirstBaseline].takeIf { it != AlignmentLine.Unspecified } ?: (placeable.height / 2)
+            layout(placeable.width, placeable.height) {
+                placeable.place(x.roundToInt(), (centreY - baseline + capHalf).roundToInt())
+            }
         },
     ) {
-        Text(
+        // A long name shrinks to the room it has rather than lose its end: "Pasar Minggu B…" is no use.
+        BasicText(
             text = stop.name,
-            fontSize = size.sp,
-            lineHeight = (size * 1.15f).sp,
-            fontWeight = if (stop.next || stop.alighting) FontWeight.Bold else FontWeight.SemiBold,
-            color = PlainText,
+            // On the theme's type, as BasicText alone falls back to the platform's.
+            style = MaterialTheme.typography.titleLarge.merge(
+                color = PlainText,
+                fontWeight = if (stop.next || stop.alighting) FontWeight.Bold else FontWeight.SemiBold,
+                lineHeight = if (stop.next) 30.sp else 24.sp,
+            ),
             maxLines = 1,
+            // Only past the smallest size does a name lose its end, and then visibly.
+            overflow = TextOverflow.Ellipsis,
+            autoSize = TextAutoSize.StepBased(minFontSize = 13.sp, maxFontSize = if (stop.next) NextNameSize else NameSize, stepSize = 1.sp),
+            onTextLayout = { layout -> capHalf = with(density) { layout.layoutInput.style.fontSize.toPx() } * CAP_HEIGHT / 2 },
         )
         if (stop.alighting) {
             Text(
@@ -435,6 +531,8 @@ private fun StopName(stop: PidsStop, size: Int, at: Offset, clearance: Float) {
  */
 @Composable
 private fun ChangePanel(pids: Pids, lines: Map<String, LineInfo>, stationLines: List<String>, copy: TripCopy) {
+    // Where the rider boards or has arrived there's nothing to change to: "Pindah di" would mislead.
+    if (pids.label == PidsLabel.BOARD || pids.label == PidsLabel.ARRIVED) return
     val change = pids.changeTo
     val others = stationLines.filter { it != pids.ride.line }
     if (change == null && others.isEmpty()) return
