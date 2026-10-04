@@ -53,6 +53,7 @@ internal class FarePanelActions(
     val onPickerQueryChange: (String) -> Unit,
     val onPickStation: (PickableStation) -> Unit,
     val onClosePicker: () -> Unit,
+    val onUseLocation: () -> Unit = {},
 )
 
 internal fun JourneyViewModel.panelActions(onSelectJourney: (Journey) -> Unit) = FarePanelActions(
@@ -64,6 +65,7 @@ internal fun JourneyViewModel.panelActions(onSelectJourney: (Journey) -> Unit) =
     onPickerQueryChange = ::onPickerQueryChange,
     onPickStation = ::onPick,
     onClosePicker = ::closePicker,
+    onUseLocation = ::onUseLocation,
 )
 
 /**
@@ -134,6 +136,7 @@ internal fun FarePanel(
             onQueryChange = actions.onPickerQueryChange,
             onPick = actions.onPickStation,
             onDismiss = actions.onClosePicker,
+            onUseLocation = actions.onUseLocation,
         )
     }
 }

@@ -13,12 +13,17 @@ import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.feature.journey.data.JourneyRepository
 import id.shiorilabs.commute.feature.journey.domain.JourneyCriteria
+import id.shiorilabs.commute.feature.journey.domain.TripStart
+import id.shiorilabs.commute.feature.journey.domain.toTripPlan
+import id.shiorilabs.commute.feature.journey.domain.tripStartFor
 import id.shiorilabs.commute.feature.journey.domain.fareShareUrl
 import id.shiorilabs.commute.feature.journey.domain.findJourneyByKey
 import id.shiorilabs.commute.feature.journey.domain.toCriteria
 import id.shiorilabs.commute.feature.journey.domain.toLinkParams
 import id.shiorilabs.commute.feature.journey.domain.withLink
 import id.shiorilabs.commute.feature.station.data.LineRepository
+import id.shiorilabs.commute.feature.trip.TripController
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -26,6 +31,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -48,6 +54,7 @@ class TripViewModel @AssistedInject constructor(
     private val farePreferences: FarePreferencesRepository,
     private val savedRepository: SavedRepository,
     private val clock: Clock,
+    private val tripController: TripController,
 ) : ViewModel() {
 
     @AssistedFactory
@@ -68,6 +75,27 @@ class TripViewModel @AssistedInject constructor(
             shareUrl = criteria?.let { fareShareUrl(route.fromId, route.toId, it, route.journeyKey) },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TripUiState())
+
+    /**
+     * Where "Mulai perjalanan" stands for the loaded journey, `null` until there is one. Looked at
+     * again every half minute, so a page left open becomes startable when its train gets close.
+     */
+    val tripStart: StateFlow<TripStart?> = combine(trip, tripController.active, minuteTicks()) { trip, active, now ->
+        (trip as? TripPageState.Loaded)?.let { tripStartFor(it.journey, route, active?.origin, now) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /** Follows the loaded journey from now, in place of any trip already running. */
+    fun startTrip() {
+        val journey = (trip.value as? TripPageState.Loaded)?.journey ?: return
+        tripController.start(journey.toTripPlan(), route)
+    }
+
+    private fun minuteTicks() = flow {
+        while (true) {
+            emit(clock.instant())
+            delay(TICK_MILLIS)
+        }
+    }
 
     /** Whether the pair is pinned to home: the pin beside share. `null` for a pair of one station. */
     val routeSaved: StateFlow<Boolean?> = savedRepository.entries
@@ -140,5 +168,10 @@ class TripViewModel @AssistedInject constructor(
                     }
                 }
             }
+    }
+
+    private companion object {
+
+        const val TICK_MILLIS = 30_000L
     }
 }

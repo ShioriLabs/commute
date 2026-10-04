@@ -32,4 +32,11 @@
     <string name="saved_refresh_failed_some">Sebagian jadwal belum bisa diperbarui</string>
     <string name="saved_refresh_failed_all">Jadwal belum bisa diperbarui</string>
     <string name="saved_error_message">Gagal memuat stasiun tersimpan</string>
+
+    <!-- "Near you": the stations around the rider, on home. -->
+    <string name="saved_nearby_title">Di dekat kamu</string>
+    <string name="saved_nearby_station">%1$s · %2$s</string>
+    <string name="saved_nearby_prompt_title">Lihat stasiun terdekat</string>
+    <string name="saved_nearby_prompt_body">Pakai lokasi kamu buat nampilin jadwal stasiun di sekitar</string>
+    <string name="saved_nearby_prompt_dismiss">Jangan tampilkan lagi</string>
 </resources>

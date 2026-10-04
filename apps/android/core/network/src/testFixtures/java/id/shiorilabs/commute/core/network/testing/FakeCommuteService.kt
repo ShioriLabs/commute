@@ -74,6 +74,17 @@ class FakeCommuteService : CommuteService {
     var operatorsCalls: Int = 0
         private set
 
+    var stations: suspend () -> List<Station> = { error("getStations was not stubbed") }
+
+    /** How many times [getStations] was called — for asserting that the directory is cached. */
+    var stationsCalls: Int = 0
+        private set
+
+    override suspend fun getStations(ifNoneMatch: String?): Fetched<List<Station>> {
+        stationsCalls++
+        return answer(ifNoneMatch) { stations() }
+    }
+
     override suspend fun getStation(operator: String, stationCode: String, ifNoneMatch: String?): Fetched<Station> {
         stationCalls++
         return answer(ifNoneMatch) { station(operator, stationCode) }
