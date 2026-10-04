@@ -16,6 +16,7 @@
     <string name="settings_close_description">Tutup halaman pengaturan</string>
     <string name="settings_item_saved_stations">Stasiun &amp; Rute Disimpan</string>
     <string name="settings_item_manage_data">Atur Data</string>
+    <string name="settings_item_location">Lokasi</string>
     <string name="settings_item_legal">Legal &amp; Atribusi</string>
     <string name="settings_item_data_platform">Commute Data Platform</string>
     <string name="settings_item_support">Dukung Commute</string>
@@ -49,6 +50,22 @@
     <string name="settings_data_clear_offline_confirm">Yakin mau hapus data offline? Loading berikutnya bakal sedikit lebih lambat</string>
     <string name="settings_data_confirm">Hapus</string>
     <string name="settings_data_cancel">Batal</string>
+
+    <!-- Location: what the app may use the rider's location for. -->
+    <string name="settings_location_title">Lokasi</string>
+    <string name="settings_location_hint">Lokasi GPS-mu gak bakal dikirim ke server Commute</string>
+    <string name="settings_location_enabled">Pakai Lokasi</string>
+    <string name="settings_location_enabled_detail">Matikan biar GPS kamu gak dipakai di fitur-fitur di bawah ini</string>
+    <string name="settings_location_section_uses">Dipakai untuk</string>
+    <string name="settings_location_home_nearby">Stasiun di Dekat Kamu</string>
+    <string name="settings_location_home_nearby_detail">Stasiun terdekat dan jadwalnya di beranda</string>
+    <string name="settings_location_picker_nearby">Pakai Lokasi Kamu</string>
+    <string name="settings_location_picker_nearby_detail">Cari stasiun terdekat waktu pilih stasiun asal atau tujuan</string>
+    <string name="settings_location_trip_fixes">Posisi Akurat Saat OTW</string>
+    <string name="settings_location_trip_fixes_detail">Posisimu jadi lebih mantep kalo pake GPS. Kalo mati, nanti pake waktu terjadwalnya doang</string>
+    <string name="settings_location_permission">Izin Lokasi di Sistem</string>
+    <string name="settings_location_permission_granted">Diizinkan</string>
+    <string name="settings_location_permission_denied">Belum diizinkan</string>
 
     <!-- Legal & attributions -->
     <string name="settings_legal_title">Legal &amp; Atribusi</string>

@@ -153,7 +153,7 @@ private fun ActiveTripContent(
         if (!trip.state.hasLocation) {
             item(key = "no-location") {
                 NoticeBanner(
-                    message = stringResource(R.string.trip_live_no_location),
+                    message = stringResource(if (state.tripFixesOff) R.string.trip_live_location_off else R.string.trip_live_no_location),
                     modifier = Modifier.padding(start = 32.dp, end = 32.dp, bottom = 24.dp),
                 )
             }

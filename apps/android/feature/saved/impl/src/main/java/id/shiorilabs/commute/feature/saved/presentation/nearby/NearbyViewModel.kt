@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import id.shiorilabs.commute.core.datastore.HomePreferencesRepository
+import id.shiorilabs.commute.core.datastore.LocationPreferencesRepository
 import id.shiorilabs.commute.core.datastore.SavedRepository
 import id.shiorilabs.commute.core.location.LocationClient
 import id.shiorilabs.commute.feature.station.data.StationDirectory
@@ -44,6 +45,7 @@ sealed interface NearbyUiState {
 /**
  * "Di dekat kamu" on home: the nearest stations the rider hasn't pinned, with their boards. Home
  * never asks for location on its own; without it the section is a card the rider can tap or close.
+ * Turned off in Pengaturan → Lokasi, there's no section at all, and no fix is taken.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -53,6 +55,7 @@ class NearbyViewModel @Inject constructor(
     private val stationRepository: StationRepository,
     private val savedRepository: SavedRepository,
     private val homePreferences: HomePreferencesRepository,
+    private val locationPreferences: LocationPreferencesRepository,
     private val clock: Clock,
 ) : ViewModel() {
 
@@ -68,8 +71,11 @@ class NearbyViewModel @Inject constructor(
         }
     }
 
-    val state: StateFlow<NearbyUiState> = combine(permitted, homePreferences.nearbyPromptDismissed, boards) { permitted, dismissed, boards ->
+    private val allowed = locationPreferences.use.map { it.allowsHomeNearby }
+
+    val state: StateFlow<NearbyUiState> = combine(allowed, permitted, homePreferences.nearbyPromptDismissed, boards) { allowed, permitted, dismissed, boards ->
         when {
+            !allowed -> NearbyUiState.Hidden
             !permitted -> if (dismissed) NearbyUiState.Hidden else NearbyUiState.Prompt
             boards.isEmpty() -> NearbyUiState.Hidden
             else -> NearbyUiState.Stations(boards)
@@ -81,6 +87,7 @@ class NearbyViewModel @Inject constructor(
         permitted.value = location.hasPermission()
         if (!permitted.value) return
         viewModelScope.launch {
+            if (!allowed.first()) return@launch
             val fix = location.current() ?: return@launch
             val stations = directory.cached() ?: directory.all().getOrNull() ?: return@launch
             val pinned = savedRepository.stationIds.first().toSet()

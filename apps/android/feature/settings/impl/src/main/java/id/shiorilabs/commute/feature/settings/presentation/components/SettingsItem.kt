@@ -2,6 +2,7 @@ package id.shiorilabs.commute.feature.settings.presentation.components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -24,8 +25,9 @@ import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 
 /**
- * A row of the settings list, the web's `SettingsItem`: an optional [icon], the [label], and a
- * chevron, or with [external] the external-link mark for a row that leaves the app.
+ * A row of the settings list, the web's `SettingsItem`: an optional [icon], the [label] (with a line
+ * of [detail] under it), and a chevron, or with [external] the external-link mark for a row that
+ * leaves the app.
  */
 @Composable
 internal fun SettingsItem(
@@ -33,6 +35,7 @@ internal fun SettingsItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
+    detail: String? = null,
     external: Boolean = false,
 ) {
     Row(
@@ -52,15 +55,19 @@ internal fun SettingsItem(
                 tint = MaterialTheme.colorScheme.onBackground,
             )
         }
-        Text(
-            text = label,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.titleMedium,
-            // The web's text-lg.
-            fontSize = 18.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleMedium,
+                // The web's text-lg.
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            detail?.let {
+                Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
         Icon(
             imageVector = if (external) CommuteIcons.ExternalLink else CommuteIcons.Chevron,
             contentDescription = null,
