@@ -20,6 +20,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -128,27 +129,7 @@ internal fun JourneyCard(
                         color = Slate700,
                     )
                 }
-                if (lastTrain || labels.isNotEmpty()) {
-                    val lastTrainText = stringResource(R.string.journey_last_train)
-                    val labelTexts = labels.map { it.text() }
-                    Text(
-                        text = buildAnnotatedString {
-                            if (lastTrain) {
-                                withStyle(SpanStyle(color = Amber700)) { append(lastTrainText) }
-                            }
-                            if (lastTrain && labelTexts.isNotEmpty()) {
-                                withStyle(SpanStyle(color = Slate400)) { append(" · ") }
-                            }
-                            withStyle(SpanStyle(color = Rose700)) { append(labelTexts.joinToString(" · ")) }
-                        },
-                        modifier = Modifier.weight(1f),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+                JourneyTags(journey = journey, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
             }
         }
 
@@ -173,6 +154,36 @@ internal fun JourneyCard(
             }
         }
     }
+}
+
+/**
+ * Why the journey is offered, led by a last-train warning: one line, or nothing when it has neither.
+ * On the option plate beside its fare, and atop the trip page's detail.
+ */
+@Composable
+internal fun JourneyTags(journey: Journey, modifier: Modifier = Modifier, textAlign: TextAlign? = null) {
+    val lastTrain = journey.isLastTrain
+    val labels = sortJourneyLabels(journey.labels).take(JOURNEY_LABELS_SHOWN)
+    if (!lastTrain && labels.isEmpty()) return
+    val lastTrainText = stringResource(R.string.journey_last_train)
+    val labelTexts = labels.map { it.text() }
+    Text(
+        text = buildAnnotatedString {
+            if (lastTrain) {
+                withStyle(SpanStyle(color = Amber700)) { append(lastTrainText) }
+            }
+            if (lastTrain && labelTexts.isNotEmpty()) {
+                withStyle(SpanStyle(color = Slate400)) { append(" · ") }
+            }
+            withStyle(SpanStyle(color = Rose700)) { append(labelTexts.joinToString(" · ")) }
+        },
+        modifier = modifier,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Bold,
+        textAlign = textAlign,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 @Composable
