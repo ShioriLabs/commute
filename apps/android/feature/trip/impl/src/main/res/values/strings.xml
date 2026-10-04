@@ -63,6 +63,9 @@
     <string name="trip_live_alight_here">Turun di sini</string>
     <string name="trip_live_you_are_here">Kamu di sini</string>
     <string name="trip_live_on_the_way">Lagi menuju %1$s</string>
+    <!-- A long ride's stops folded into one line of its timeline; tapping opens them. -->
+    <string name="trip_live_more_stations">%1$d stasiun lainnya</string>
+    <string name="trip_live_more_haltes">%1$d halte lainnya</string>
     <string name="trip_live_walk">Jalan %1$d m ke %2$s</string>
     <string name="trip_live_walk_corridor">Lewat %1$s</string>
     <string name="trip_live_no_location">Tanpa izin lokasi, posisi kamu diperkirakan dari jadwal aja.</string>

@@ -70,6 +70,9 @@
     <!-- %1$s is a platform code like 3·4 -->
     <string name="journey_platform">Peron %1$s</string>
     <string name="journey_platform_description">Berangkat dari peron %1$s</string>
+    <!-- The tag on a ride's last stop, as the live trip screen marks it. -->
+    <string name="journey_get_off">TURUN</string>
+    <string name="journey_get_off_description">Turun di sini</string>
     <string name="journey_board_any_train">Naik salah satu kereta</string>
     <string name="journey_board_any_bus">Naik salah satu bus</string>
     <!-- %1$s is where the service is headed -->
