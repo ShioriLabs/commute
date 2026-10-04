@@ -30,7 +30,7 @@ export class EdgeRepository extends Repository {
   async getGraphInputs() {
     const [edges, transfers] = await Promise.all([
       db(this.d1).selectFrom('edges').selectAll().where('lineCode', 'in', ROUTABLE_LINE_CODES).execute(),
-      db(this.d1).selectFrom('transfers').selectAll().where('dataType', '=', 'INTERNAL').execute()
+      db(this.d1).selectFrom('transfers_effective').selectAll().where('dataType', '=', 'INTERNAL').execute()
     ])
     return { edges, transfers }
   }

@@ -17,6 +17,7 @@ import { endpointsFor, getPlaceIndex } from 'utils/places'
 import { mergeInterlinedLegs } from 'utils/interlining'
 import { Ok } from 'utils/response'
 import { buildSearchableIndex } from 'utils/searchables'
+import { cacheVersion } from 'utils/data-version'
 
 /*
  * Endpoints shaped for commute.shiorilabs.id specifically.
@@ -41,7 +42,7 @@ export const searchablesKVKey = (apiVersion: string) => `searchables:${apiVersio
 app.get('/searchables', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
 
-  const kvKey = searchablesKVKey(c.env.API_VERSION)
+  const kvKey = searchablesKVKey(await cacheVersion(c.env))
 
   const cachedIndex = await kvRepository.get(kvKey)
   if (cachedIndex) {
@@ -165,7 +166,7 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
    */
   retime: async (result, c) => retimeTrips(
     result,
-    await getRouter(c.env.DB),
+    await getRouter(c.env.DB, await cacheVersion(c.env)),
     parseFareContext(c.req.query('paymentMethod'), c.req.query('at')),
     /*
      * The same preference the search ranks by, used here as a SPEED: how fast

@@ -4,13 +4,14 @@ import { Bindings } from 'app'
 import { KVRepository } from 'db/repositories/kv'
 import { getOperatorByCode } from 'utils/operator'
 import { searchablesKVKey } from './internal'
+import { cacheVersion } from 'utils/data-version'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
 app.delete('/stations/bust', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
 
-  const kvKey = `stations:${c.env.API_VERSION}`
+  const kvKey = `stations:${await cacheVersion(c.env)}`
   await kvRepository.del(kvKey)
 
   return c.json(
@@ -30,7 +31,7 @@ app.delete('/stations/:operator/bust', async (c) => {
 
   const kvRepository = new KVRepository(c.env.KV)
 
-  const kvKey = `stations:${operator.code}:${c.env.API_VERSION}`
+  const kvKey = `stations:${operator.code}:${await cacheVersion(c.env)}`
   await kvRepository.del(kvKey)
 
   return c.json(
@@ -51,7 +52,7 @@ app.delete('/stations/:operator/:stationCode/bust', async (c) => {
 
   const kvRepository = new KVRepository(c.env.KV)
 
-  const kvKey = `stations:${operator.code}-${stationCode}:${c.env.API_VERSION}`
+  const kvKey = `stations:${operator.code}-${stationCode}:${await cacheVersion(c.env)}`
 
   await kvRepository.del(kvKey)
 
@@ -73,7 +74,7 @@ app.delete('/stations/:operator/:stationCode/timetable/bust', async (c) => {
 
   const kvRepository = new KVRepository(c.env.KV)
 
-  const kvKey = `timetable:${operator.code}-${stationCode}:${c.env.API_VERSION}`
+  const kvKey = `timetable:${operator.code}-${stationCode}:${await cacheVersion(c.env)}`
 
   await kvRepository.del(kvKey)
 
@@ -95,7 +96,7 @@ app.delete('/lines/:operator/:lineCode/bust', async (c) => {
 
   const kvRepository = new KVRepository(c.env.KV)
 
-  const kvKey = `lines:${operator.code}-${lineCode}:${c.env.API_VERSION}`
+  const kvKey = `lines:${operator.code}-${lineCode}:${await cacheVersion(c.env)}`
   await kvRepository.del(kvKey)
 
   return c.json(
@@ -109,7 +110,7 @@ app.delete('/lines/:operator/:lineCode/bust', async (c) => {
 app.delete('/fares/:from/:to/bust', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
 
-  const kvKey = `fares:${c.req.param('from')}:${c.req.param('to')}:${c.env.API_VERSION}`
+  const kvKey = `fares:${c.req.param('from')}:${c.req.param('to')}:${await cacheVersion(c.env)}`
   await kvRepository.del(kvKey)
 
   return c.json(
@@ -123,7 +124,7 @@ app.delete('/fares/:from/:to/bust', async (c) => {
 app.delete('/hubs/bust', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
 
-  const kvKey = `hubs:${c.env.API_VERSION}`
+  const kvKey = `hubs:${await cacheVersion(c.env)}`
   await kvRepository.del(kvKey)
 
   return c.json(
@@ -139,7 +140,7 @@ app.delete('/hubs/:slug/bust', async (c) => {
 
   const kvRepository = new KVRepository(c.env.KV)
 
-  const kvKey = `hubs:${slug}:${c.env.API_VERSION}`
+  const kvKey = `hubs:${slug}:${await cacheVersion(c.env)}`
   await kvRepository.del(kvKey)
 
   return c.json(
@@ -158,7 +159,7 @@ app.delete('/hubs/:slug/bust', async (c) => {
 app.delete('/_internal/searchables/bust', async (c) => {
   const kvRepository = new KVRepository(c.env.KV)
 
-  const kvKey = searchablesKVKey(c.env.API_VERSION)
+  const kvKey = searchablesKVKey(await cacheVersion(c.env))
   await kvRepository.del(kvKey)
 
   return c.json(
@@ -184,8 +185,9 @@ app.delete('/:operator/:stationCode/timetable/grouped', async (c) => {
    * shape have separate entries — so both must go. This previously deleted a key
    * with no format segment, which matched neither and silently busted nothing.
    */
+  const version = await cacheVersion(c.env)
   const kvKeys = (['compact', 'full'] as const).map(
-    format => `timetable:${operator.code}-${stationCode}:grouped:${format}:${c.env.API_VERSION}`
+    format => `timetable:${operator.code}-${stationCode}:grouped:${format}:${version}`
   )
 
   await Promise.all(kvKeys.map(key => kvRepository.del(key)))

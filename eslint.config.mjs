@@ -34,6 +34,7 @@ export default defineConfig([
     // Session scratch space, git-ignored but still visible to eslint.
     '.remember/**/*',
     'apps/*/scratch/**/*',
+    'apps/admin/.wrangler/**/*',
     'apps/api/.wrangler/**/*',
     'apps/api/dist/**/*',
     'apps/data-platform/.wrangler/**/*',

@@ -6,6 +6,7 @@ import { NotFound, Ok } from 'utils/response'
 import * as v from 'valibot'
 import { doc, pathParam } from 'schemas/describe'
 import { HubSchema } from '@commute/schemas'
+import { cacheVersion } from 'utils/data-version'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -38,7 +39,7 @@ app.get(
     const kvRepository = new KVRepository(c.env.KV)
     const hubRepository = new HubRepository(c.env.DB)
 
-    const kvKey = `hubs:${c.env.API_VERSION}`
+    const kvKey = `hubs:${await cacheVersion(c.env)}`
 
     const cachedHubs = await kvRepository.get(kvKey)
     if (cachedHubs) {
@@ -81,7 +82,7 @@ app.get(
     const kvRepository = new KVRepository(c.env.KV)
     const hubRepository = new HubRepository(c.env.DB)
 
-    const kvKey = `hubs:${slug}:${c.env.API_VERSION}`
+    const kvKey = `hubs:${slug}:${await cacheVersion(c.env)}`
 
     const cachedHub = await kvRepository.get(kvKey)
     if (cachedHub) {

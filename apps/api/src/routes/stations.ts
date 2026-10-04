@@ -25,6 +25,7 @@ import type { HeadwayRow } from '@commute/schemas'
 import { DAY_HEADWAYS_S, DIRECTIONAL_HEADWAYS_S, HEADWAYS_S, LINE_DAY_MASK, LINE_TERMINI, STOP_HEADWAYS_S } from 'db/data/headways'
 import { serviceDay } from 'utils/fare'
 import { SERVICE_HOURS } from 'db/data/service-hours'
+import { cacheVersion } from 'utils/data-version'
 
 /*
  * The three day buckets, high bit first, matching how LINE_DAY_MASK is packed
@@ -92,7 +93,7 @@ app.get(
     const kvRepository = new KVRepository(c.env.KV)
     const stationRepository = new StationRepository(c.env.DB)
 
-    const kvKey = `stations:${c.env.API_VERSION}`
+    const kvKey = `stations:${await cacheVersion(c.env)}`
 
     const cachedStations = await kvRepository.get(kvKey)
     if (cachedStations) {
@@ -138,7 +139,7 @@ app.get(
     const kvRepository = new KVRepository(c.env.KV)
     const stationRepository = new StationRepository(c.env.DB)
 
-    const kvKey = `stations:${operator.code}:${c.env.API_VERSION}`
+    const kvKey = `stations:${operator.code}:${await cacheVersion(c.env)}`
 
     const cachedStations = await kvRepository.get(kvKey)
     if (cachedStations) {
@@ -186,7 +187,7 @@ app.get(
     const kvRepository = new KVRepository(c.env.KV)
     const stationRepository = new StationRepository(c.env.DB)
 
-    const kvKey = `stations:${operator.code}-${stationCode}:${c.env.API_VERSION}`
+    const kvKey = `stations:${operator.code}-${stationCode}:${await cacheVersion(c.env)}`
 
     const cachedStations = await kvRepository.get(kvKey)
     if (cachedStations) {
@@ -250,7 +251,7 @@ app.get(
      * caller who asked for the whole day, and a weekday board to a caller
      * asking about Saturday.
      */
-    const kvKey = `timetable:${operator.code}-${stationCode}:${day}:${windowCacheKey(window)}:${c.env.API_VERSION}`
+    const kvKey = `timetable:${operator.code}-${stationCode}:${day}:${windowCacheKey(window)}:${await cacheVersion(c.env)}`
 
     const cachedTimetable = await kvRepository.get(kvKey)
     if (cachedTimetable) {
@@ -330,7 +331,7 @@ app.get(
 
     const day = requestedDay(c.req.query('day'))
 
-    const kvKey = `timetable:${operator.code}-${stationCode}:${day}:grouped:${compactMode ? 'compact' : 'full'}:${windowCacheKey(window)}:${c.env.API_VERSION}`
+    const kvKey = `timetable:${operator.code}-${stationCode}:${day}:grouped:${compactMode ? 'compact' : 'full'}:${windowCacheKey(window)}:${await cacheVersion(c.env)}`
 
     const cachedTimetable = await kvRepository.get(kvKey)
     if (cachedTimetable) {
@@ -535,7 +536,7 @@ app.get(
 
     const day = requestedDay(c.req.query('day'))
 
-    const kvKey = `timetable:${operator.code}-${stationCode}:${day}:${lineCode}:${windowCacheKey(window)}:${c.env.API_VERSION}`
+    const kvKey = `timetable:${operator.code}-${stationCode}:${day}:${lineCode}:${windowCacheKey(window)}:${await cacheVersion(c.env)}`
 
     const cachedTimetable = await kvRepository.get(kvKey)
     if (cachedTimetable) {
@@ -595,7 +596,7 @@ app.get(
     const kvRepository = new KVRepository(c.env.KV)
     const stationRepository = new StationRepository(c.env.DB)
 
-    const kvKey = `transfers:${operator.code}-${stationCode}:${c.env.API_VERSION}`
+    const kvKey = `transfers:${operator.code}-${stationCode}:${await cacheVersion(c.env)}`
 
     const cachedTimetable = await kvRepository.get(kvKey)
     if (cachedTimetable) {
@@ -682,7 +683,7 @@ app.get(
     // The day is part of the key: frequencies differ by day, and some corridors
     // do not run at all, so a Saturday body served from a Tuesday key would show
     // a weekday-only line as though it were running.
-    const kvKey = `headway:${operator.code}-${stationCode}:${day}:${c.env.API_VERSION}`
+    const kvKey = `headway:${operator.code}-${stationCode}:${day}:${await cacheVersion(c.env)}`
     const cached = await kvRepository.get(kvKey)
     if (cached) return c.json(Ok(cached), 200)
 

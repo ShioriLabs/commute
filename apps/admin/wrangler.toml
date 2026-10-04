@@ -1,0 +1,42 @@
+name = "commute-admin"
+main = "src/app.tsx"
+dev.port = 3002
+compatibility_date = "2025-10-18"
+
+# The only way in is the Access-protected custom domain. A workers.dev URL
+# would be a second, unprotected door.
+workers_dev = false
+routes = [{ pattern = "admin.commute.shiorilabs.id", custom_domain = true }]
+
+[observability]
+enabled = true
+
+# Tailwind is compiled before every `wrangler dev` / deploy, and again when src/
+# changes under dev. The output is served as a static asset, so it sits behind
+# the same Access policy as the pages.
+[build]
+command = "pnpm build:css"
+watch_dir = "src"
+
+[assets]
+directory = "./public"
+
+# Same database and namespace as apps/api: admin writes the overrides the API
+# reads. `wrangler dev` shares apps/api's local state via --persist-to.
+[[d1_databases]]
+binding = "DB"
+database_name = "commute"
+database_id = "1d187383-95a3-4e34-aee8-7c99b45aeaa0"
+migrations_dir = "../api/src/db/migrations"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "000e0f51c09844f1b9f85ad26e068129"
+preview_id = "6cb9d95fe3324afeb9017776a11a0d4d"
+
+# Filled in by the user from Zero Trust > Access > Applications once the app
+# exists. Empty values fail closed (every request is 403). Local dev skips the
+# check via ACCESS_DEV_USER in .dev.vars (see .dev.vars.example).
+[vars]
+ACCESS_TEAM_DOMAIN = ""
+ACCESS_AUD = ""

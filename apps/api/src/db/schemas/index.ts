@@ -10,6 +10,9 @@ export interface Database {
   schedules: ScheduleSchema
   stationLines: StationLineSchema
   transfers: TransferSchema
+  // Imported transfers with published admin overrides applied (migration 0017).
+  // Read-only: write `transfers` (importers) or `transfer_overrides` (admin).
+  transfers_effective: TransferSchema
   edges: EdgeSchema
   hubs: HubSchema
   hubStations: HubStationSchema

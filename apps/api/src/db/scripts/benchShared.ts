@@ -57,7 +57,7 @@ export function loadNetwork() {
     `SELECT lineCode, fromStationId, toStationId, distance FROM edges WHERE lineCode IN (${codes})`
   )
   const transfers = query<{ fromStationId: string, toStationId: string | null, distance: number, noTap: number }>(
-    'SELECT fromStationId, toStationId, distance, noTap FROM transfers WHERE dataType = \'INTERNAL\''
+    'SELECT fromStationId, toStationId, distance, noTap FROM transfers_effective WHERE dataType = \'INTERNAL\''
   )
   const router = loadGraph({
     edges,

@@ -16,13 +16,14 @@ import { FareResultSchema, type FareResult } from '@commute/schemas'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
-// Graph inputs only change with deploys/reseeds; cache the loaded engine per
-// isolate. Rebuilding it per request would re-read every edge and transfer row.
-// Exported so /_internal/trips shares this instance rather than loading a second
-// copy of the same graph into the same isolate.
-let cachedRouter: Tsundere | null = null
-export async function getRouter(d1: D1Database): Promise<Tsundere> {
-  if (cachedRouter) return cachedRouter
+// Graph inputs only change with deploys/reseeds and admin publishes; cache the
+// loaded engine per isolate, keyed by cache version (API_VERSION + admin data
+// version) so a publish rebuilds it without a deploy. Rebuilding it per request
+// would re-read every edge and transfer row. Exported so /_internal/trips shares
+// this instance rather than loading a second copy of the same graph.
+let cachedRouter: { version: string, router: Tsundere } | null = null
+export async function getRouter(d1: D1Database, version: string): Promise<Tsundere> {
+  if (cachedRouter?.version === version) return cachedRouter.router
   const { edges, transfers } = await new EdgeRepository(d1).getGraphInputs()
   // Service breaks are authored in (operator, station) codes; the graph works
   // in `${operator}-${station}` DB ids. tsundere treats node ids as opaque, so
@@ -33,7 +34,7 @@ export async function getRouter(d1: D1Database): Promise<Tsundere> {
     fromStationId: `${b.operator}-${b.from}`,
     toStationId: `${b.operator}-${b.to}`
   }))
-  cachedRouter = loadGraph({
+  const router = loadGraph({
     edges,
     transfers,
     // Read by findRoutes only; /fares keeps the answer it has always given.
@@ -71,7 +72,8 @@ export async function getRouter(d1: D1Database): Promise<Tsundere> {
       }))
     }))
   })
-  return cachedRouter
+  cachedRouter = { version, router }
+  return router
 }
 
 /*

@@ -822,3 +822,10 @@ export const BOUND_FOR_STATION_ALIASES: Record<string, string> = {
   tanjungpriuk: 'TPK',
   undefinedparungpanjang: 'PRP'
 }
+
+/*
+ * KV key holding the id of the latest admin publish. The API folds it into
+ * every cache key (see apps/api/src/utils/data-version.ts) so a publish busts
+ * caches without a deploy. Written only by apps/admin.
+ */
+export const DATA_VERSION_KV_KEY = 'meta:dataVersion'

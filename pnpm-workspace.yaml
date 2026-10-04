@@ -2,6 +2,9 @@ packages:
   - apps/*
   - libs/*
 allowBuilds:
+  # @tailwindcss/cli (apps/admin) pulls it in for --watch, which we don't use;
+  # the prebuilt platform binary is enough.
+  '@parcel/watcher': false
   '@tailwindcss/oxide': true
   esbuild: true
   sharp: true

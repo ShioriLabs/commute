@@ -10,6 +10,7 @@ import { mapify } from 'utils/mapify'
 import { LineDetail } from 'models/line'
 import { doc, operatorParam, pathParam } from 'schemas/describe'
 import { LineDetailSchema } from '@commute/schemas'
+import { cacheVersion } from 'utils/data-version'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -45,7 +46,7 @@ app.get(
     }
 
     const kvRepository = new KVRepository(c.env.KV)
-    const kvKey = `lines:${operator.code}-${lineCode}:${c.env.API_VERSION}`
+    const kvKey = `lines:${operator.code}-${lineCode}:${await cacheVersion(c.env)}`
 
     const cachedDetail = await kvRepository.get<LineDetail>(kvKey)
     if (cachedDetail) {

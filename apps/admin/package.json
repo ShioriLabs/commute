@@ -1,0 +1,31 @@
+{
+  "name": "@commute/admin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Admin dashboard: drafts and publishes data overrides over the imported D1 tables.",
+  "scripts": {
+    "dev": "wrangler dev --persist-to ../api/.wrangler/state",
+    "build:css": "tailwindcss -i src/styles.css -o public/admin.css --minify",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint",
+    "lint:fix": "eslint --fix"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@commute/constants": "workspace:../constants",
+    "clsx": "^2.1.1",
+    "hono": "^4.12.32",
+    "jose": "^6.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250610.0",
+    "@tailwindcss/cli": "4.1.14",
+    "@types/node": "^24.0.0",
+    "tailwindcss": "4.1.14",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.9",
+    "wrangler": "^4.43.0"
+  }
+}

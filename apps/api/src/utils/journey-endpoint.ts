@@ -8,6 +8,7 @@ import { departureSlot, serviceDay } from 'utils/fare'
 import { stationNamer, type StationNamer } from 'utils/fare-journey'
 import { Internal, NotFound, Ok } from 'utils/response'
 import { ServerTiming } from 'utils/server-timing'
+import { cacheVersion } from 'utils/data-version'
 
 /*
  * The request pipeline both journey endpoints run.
@@ -150,7 +151,7 @@ export interface JourneyEndpointOptions<T> {
 
 export async function handleJourneyRequest<T>(
   c: Context<{ Bindings: Bindings }>,
-  getRouter: (db: D1Database) => Promise<Tsundere>,
+  getRouter: (db: D1Database, version: string) => Promise<Tsundere>,
   parseContext: (paymentMethodRaw?: string, atRaw?: string) => FareContext,
   { keyPrefix, scope, retime, build }: JourneyEndpointOptions<T>
 ) {
@@ -172,8 +173,9 @@ export async function handleJourneyRequest<T>(
    */
   const timing = new ServerTiming()
 
+  const version = await cacheVersion(c.env)
   const kvRepository = new KVRepository(c.env.KV)
-  const kvKey = journeyCacheKey(keyPrefix, fromId, toId, context, c.env.API_VERSION, scope?.(c))
+  const kvKey = journeyCacheKey(keyPrefix, fromId, toId, context, version, scope?.(c))
 
   const cached = await timing.measure('kv', () => kvRepository.get<JourneyOutcome<T>>(kvKey))
   if (cached) {
@@ -208,7 +210,7 @@ export async function handleJourneyRequest<T>(
     }
 
     // Cached per isolate, so this is ~0 on every request after the first.
-    const router = await timing.measure('graph', () => getRouter(c.env.DB))
+    const router = await timing.measure('graph', () => getRouter(c.env.DB, version))
 
     const result = await build({
       router,

@@ -1,0 +1,3 @@
+# Local dev only (wrangler dev reads this; it never deploys). Skips the
+# Cloudflare Access check and acts as this user.
+ACCESS_DEV_USER=dev@local

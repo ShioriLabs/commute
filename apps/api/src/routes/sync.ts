@@ -8,6 +8,7 @@ import { syncStations as syncStationsKCI, syncTimetable as syncTimetableKCI } fr
 import { syncStations as syncStationsMRTJ, syncTimetable as syncTimetableMRTJ } from 'operators/mrtj/sync'
 import { syncStations as syncStationsLRTJ, syncTimetable as syncTimetableLRTJ } from 'operators/lrtj/sync'
 import { searchablesKVKey } from './internal'
+import { cacheVersion } from 'utils/data-version'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -18,10 +19,10 @@ app.post('/:operator', async (c) => {
     return c.json(NotFound(`Unknown Operator Code: ${operatorCode}`), 404)
   }
 
-  const allKVKey = `stations:${c.env.API_VERSION}`
-  const kvKey = `stations:${operator.code}:${c.env.API_VERSION}`
+  const allKVKey = `stations:${await cacheVersion(c.env)}`
+  const kvKey = `stations:${operator.code}:${await cacheVersion(c.env)}`
   // The search index is derived from stations, so it goes stale on every sync.
-  const searchablesKey = searchablesKVKey(c.env.API_VERSION)
+  const searchablesKey = searchablesKVKey(await cacheVersion(c.env))
   try {
     const kvRepository = new KVRepository(c.env.KV)
 
@@ -70,12 +71,13 @@ app.post('/:operator/:stationCode/timetable', async (c) => {
     const kvRepository = new KVRepository(c.env.KV)
     const stationRepository = new StationRepository(c.env.DB)
 
-    const stationKVKey = `stations:${operator.code}-${stationCode}:${c.env.API_VERSION}`
-    const timetableKVKey = `timetable:${operator.code}-${stationCode}:${c.env.API_VERSION}`
+    const stationKVKey = `stations:${operator.code}-${stationCode}:${await cacheVersion(c.env)}`
+    const timetableKVKey = `timetable:${operator.code}-${stationCode}:${await cacheVersion(c.env)}`
     // Both wire formats are cached separately; a sync must drop both. The
     // single unsuffixed key used here before matched neither.
+    const version = await cacheVersion(c.env)
     const groupedTimetableKVKeys = (['compact', 'full'] as const).map(
-      format => `timetable:${operator.code}-${stationCode}:grouped:${format}:${c.env.API_VERSION}`
+      format => `timetable:${operator.code}-${stationCode}:grouped:${format}:${version}`
     )
 
     const checkStationResult = await stationRepository.checkIfExists(`${operator.code}-${stationCode}`)

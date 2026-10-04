@@ -364,7 +364,7 @@ export class StationRepository extends Repository {
 
   async getTransfersFromStationId(id: string) {
     const query = db(this.d1)
-      .selectFrom('transfers')
+      .selectFrom('transfers_effective')
       .selectAll()
       .where('fromStationId', '=', id)
 
