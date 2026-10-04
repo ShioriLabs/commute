@@ -2,6 +2,7 @@ package id.shiorilabs.commute.core.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -50,15 +51,23 @@ enum class RoundelSize(
     internal val compactText: Dp,
     internal val icon: Dp,
     /**
-     * A station number's prefix of more than one character, stacked over its position (which, like
-     * a one-letter prefix, takes [compactText]).
+     * A station number's prefix, stacked over its position (which takes [compactText]): about two
+     * thirds of the position's height, as the FDTJ map prints a "B" over its "08".
      */
     internal val prefixText: Dp,
     /** The Kalayang's aircraft standing in for that prefix. */
     internal val prefixIcon: Dp,
+    /** Between the prefix and the position: about a fifth of the position's height, as on the map. */
+    internal val stackGap: Dp,
 ) {
-    MD(diameter = 36.dp, ring = 5.dp, text = 16.dp, compactText = 14.dp, icon = 18.dp, prefixText = 8.dp, prefixIcon = 9.dp),
-    SM(diameter = 24.dp, ring = 3.dp, text = 11.dp, compactText = 9.dp, icon = 12.dp, prefixText = 6.dp, prefixIcon = 7.dp),
+    MD(
+        diameter = 36.dp, ring = 5.dp, text = 16.dp, compactText = 14.dp, icon = 18.dp,
+        prefixText = 10.dp, prefixIcon = 10.dp, stackGap = 2.dp,
+    ),
+    SM(
+        diameter = 24.dp, ring = 3.dp, text = 11.dp, compactText = 9.dp, icon = 12.dp,
+        prefixText = 6.5.dp, prefixIcon = 7.dp, stackGap = 1.25.dp,
+    ),
 }
 
 /**
@@ -111,7 +120,10 @@ fun LineRoundel(
         when {
             station -> {
                 val (prefix, position) = splitStationNumber(code)
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(size.stackGap),
+                ) {
                     // Sized to the prefix's slot, which the aircraft stands in for.
                     if (pictogram) {
                         Icon(
@@ -121,10 +133,7 @@ fun LineRoundel(
                             tint = ink,
                         )
                     } else if (prefix.isNotEmpty()) {
-                        // A single letter matches the position under it; a longer prefix ("TP", a
-                        // corridor's "13") would crowd the circle at that size, so it shrinks.
-                        val prefixSize = if (prefix.length == 1) size.compactText else size.prefixText
-                        RoundelText(prefix, prefixSize, compact = true, ink, stacked = true)
+                        RoundelText(prefix, size.prefixText, compact = true, ink, stacked = true)
                     }
                     RoundelText(position, size.compactText, compact = true, ink, stacked = true)
                 }
@@ -143,17 +152,17 @@ fun LineRoundel(
 }
 
 /**
- * How tall each line of a stacked station number lays out, as a share of its font size: about its
- * cap height. At the font's own height the prefix and the position sit apart by the room left for
- * descenders, which capitals and digits never use. A line height can't do this: Compose never
- * shrinks a single line below the font's own ascent and descent.
+ * How tall each line of a stacked station number lays out, as a share of its font size: PT Sans's
+ * cap height, which its digits share, so the gap between the lines is [RoundelSize.stackGap] and
+ * nothing else. At the font's own height the room it keeps for accents and descenders, which
+ * capitals and digits never use, would add to it. A line height can't do this: Compose never shrinks
+ * a single line below the font's own ascent and descent.
  */
-private const val STACKED_LINE_SHARE = 0.75f
+private const val STACKED_LINE_SHARE = 0.7f
 
 /**
  * [stacked] for a line of a station number, laid out [STACKED_LINE_SHARE] tall with its glyphs
- * centred, so they overhang the box only by the font's empty ascent and descent; otherwise the code
- * alone, at the font's own height.
+ * centred in it; otherwise the code alone, at the font's own height.
  */
 @Composable
 private fun RoundelText(
