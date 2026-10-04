@@ -17,7 +17,8 @@ import javax.inject.Inject
 class StationNavContribution @Inject constructor() : NavGraphContribution {
 
     override fun EntryProviderScope<NavKey>.addEntries(scope: NavGraphScope) {
-        entry<Route.Station>(metadata = pageTransitionMetadata()) { key ->
+        // Its name, roundels and line cards fly in from home and search.
+        entry<Route.Station>(metadata = pageTransitionMetadata(receivesSharedElements = true)) { key ->
             StationScreen(
                 stationId = key.stationId,
                 innerPadding = scope.screenPadding,
