@@ -37,35 +37,9 @@ import id.shiorilabs.commute.feature.journey.presentation.RecentRouteRow
  * its `RecentRouteList`.
  */
 
-/** The pin's icon and description for a pair that is, or isn't, pinned. */
-@Composable
-private fun RoutePinIcon(saved: Boolean, modifier: Modifier = Modifier) {
-    Icon(
-        imageVector = if (saved) CommuteIcons.Pinned else CommuteIcons.Pin,
-        contentDescription = stringResource(if (saved) R.string.journey_unsave_route else R.string.journey_save_route),
-        modifier = modifier,
-        tint = if (saved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
-    )
-}
-
-/** The pin beside share on the trip page, filled while the pair is pinned. */
-@Composable
-internal fun SaveRouteButton(saved: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val haptics = LocalHapticFeedback.current
-    CommuteIconButton(
-        onClick = {
-            haptics.performHapticFeedback(if (saved) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn)
-            onClick()
-        },
-        modifier = modifier.size(32.dp),
-    ) {
-        RoutePinIcon(saved, Modifier.size(24.dp))
-    }
-}
-
 /**
- * The same pin under the answer in search's OTW tab, as a plate that says what it does: the tab
- * has no share or title row to sit beside. In "Rute terakhir"'s fill, as the web sets its square.
+ * The pin under the answer in search's OTW tab, as a plate that says what it does. In "Rute
+ * terakhir"'s fill, as the web sets its square.
  */
 @Composable
 internal fun SaveRoutePlate(saved: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
