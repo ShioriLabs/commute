@@ -10,11 +10,18 @@ private const val UTF_8 = "UTF-8"
 private const val WEB_HOST = "commute.shiorilabs.id"
 
 /**
+ * The app's own link to the running trip, for the trip notification. Not a web page and not in the
+ * manifest's filters: only an explicit intent to the app carries it.
+ */
+const val ACTIVE_TRIP_LINK = "commute://trip/active"
+
+/**
  * The screen a web link opens, or `null` for one the app has no screen for (the browser keeps
  * those): `/fare`, a shared OTW link (see [fareRoute]), a station's page or its full timetable, a
  * hub's page and a line's page.
  */
 fun routeForLink(link: String): Route? {
+    if (link == ACTIVE_TRIP_LINK) return Route.ActiveTrip
     val uri = runCatching { URI(link) }.getOrNull() ?: return null
     if (uri.scheme != "https" || uri.host != WEB_HOST) {
         return null

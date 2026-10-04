@@ -129,6 +129,7 @@ const APP_PATHS = [
   '/hubs/{slug}',
   '/lines/{operator}/{lineCode}',
   '/operators',
+  '/stations',
   '/stations/{operator}/{stationCode}',
   '/stations/{operator}/{stationCode}/headway',
   '/stations/{operator}/{stationCode}/timetable/grouped',

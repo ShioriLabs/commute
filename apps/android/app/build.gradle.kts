@@ -54,6 +54,7 @@ dependencies {
     implementation(project(":core:network"))
     implementation(project(":core:query"))
     implementation(project(":core:notification"))
+    implementation(project(":core:location"))
     implementation(project(":core:trip"))
     implementation(project(":core:navigation"))
     implementation(project(":core:ui"))

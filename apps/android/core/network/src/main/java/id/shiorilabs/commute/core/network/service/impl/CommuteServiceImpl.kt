@@ -28,6 +28,9 @@ class CommuteServiceImpl @Inject constructor(
     override suspend fun getSearchables(ifNoneMatch: String?): Fetched<SearchableIndex> =
         client.get("_internal/searchables") { validator(ifNoneMatch) }.decodeFetched()
 
+    override suspend fun getStations(ifNoneMatch: String?): Fetched<List<Station>> =
+        client.get("stations") { validator(ifNoneMatch) }.decodeFetched()
+
     override suspend fun getStation(operator: String, stationCode: String, ifNoneMatch: String?): Fetched<Station> =
         client.get(stationPath(operator, stationCode)) { validator(ifNoneMatch) }.decodeFetched()
 

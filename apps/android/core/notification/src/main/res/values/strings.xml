@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="notification_channel_trip_progress">Perjalanan berjalan</string>
+    <string name="notification_channel_trip_progress_description">Progres perjalanan kamu di layar kunci, sampai tujuan.</string>
+    <string name="notification_channel_trip_alerts">Pengingat turun</string>
+    <string name="notification_channel_trip_alerts_description">Getar pas stasiun kamu udah dekat dan pas udah sampai.</string>
+</resources>
