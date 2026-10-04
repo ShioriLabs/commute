@@ -21,6 +21,7 @@
     <string name="line_card_at_description">Keberangkatan berikutnya pada %1$s</string>
     <!-- %1$s is a list of clock times, e.g. "17.52, 17.58". -->
     <string name="line_card_then">lalu %1$s</string>
+    <string name="line_card_then_description">Keberangkatan selanjutnya: %1$s</string>
     <string name="line_card_over">Udahan</string>
     <string name="line_card_restarts">mulai lagi %1$s</string>
     <string name="line_card_last">terakhir %1$s</string>
@@ -51,4 +52,5 @@
     <!-- Operators that publish no timetable (TransJakarta): not an error, so no retry. -->
     <string name="station_no_schedule_title">Jadwal Tidak Tersedia</string>
     <string name="station_no_schedule_message">Lihat papan keberangkatan atau tanyakan pramusapa</string>
+    <string name="station_no_schedule_illustration_description">Gambar petugas TransJakarta membungkuk di depan papan keberangkatan yang kosong</string>
 </resources>
