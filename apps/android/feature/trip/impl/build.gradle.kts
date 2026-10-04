@@ -21,6 +21,7 @@ dependencies {
     // The trip engine.
     implementation(project(":core:trip"))
     implementation(project(":core:location"))
+    implementation(project(":core:datastore"))
     implementation(project(":core:notification"))
     implementation(project(":core:common"))
     implementation(project(":core:navigation"))
@@ -46,4 +47,5 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(testFixtures(project(":core:location")))
+    testImplementation(testFixtures(project(":core:datastore")))
 }

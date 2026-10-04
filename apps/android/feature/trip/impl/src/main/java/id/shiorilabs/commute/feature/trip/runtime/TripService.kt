@@ -117,6 +117,9 @@ class TripService : Service() {
     }
 
     override fun onDestroy() {
+        // Stopped mid-trip (location turned off in settings, or gone), the trip carries on by the
+        // clock with its notification still up; a trip that ended has taken it down already.
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_DETACH)
         releaseWake()
         scope.cancel()
         super.onDestroy()

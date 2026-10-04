@@ -43,3 +43,11 @@ annotation class SearchModeDataStore
 @Qualifier
 @Retention(AnnotationRetention.RUNTIME)
 annotation class HomeDataStore
+
+/**
+ * Hilt [Qualifier] for the preferences [DataStore]<[Preferences]> backing what the rider lets the
+ * app use their location for (Pengaturan → Lokasi).
+ */
+@Qualifier
+@Retention(AnnotationRetention.RUNTIME)
+annotation class LocationDataStore

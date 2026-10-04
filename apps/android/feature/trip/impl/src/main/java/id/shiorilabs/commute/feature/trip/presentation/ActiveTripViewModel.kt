@@ -3,6 +3,7 @@ package id.shiorilabs.commute.feature.trip.presentation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import id.shiorilabs.commute.core.datastore.LocationPreferencesRepository
 import id.shiorilabs.commute.core.trip.RiderAction
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationDirectory
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -25,6 +27,8 @@ data class ActiveTripUiState(
     val lines: Map<String, LineInfo> = emptyMap(),
     /** Each station's lines, by station id: what the board offers to change to. Empty until read. */
     val stationLines: Map<String, List<String>> = emptyMap(),
+    /** "Posisi akurat saat OTW" is off in Pengaturan → Lokasi: the trip runs by the clock by choice. */
+    val tripFixesOff: Boolean = false,
 )
 
 @HiltViewModel
@@ -32,12 +36,19 @@ class ActiveTripViewModel @Inject constructor(
     private val controller: TripControllerImpl,
     private val lineRepository: LineRepository,
     private val directory: StationDirectory,
+    locationPreferences: LocationPreferencesRepository,
 ) : ViewModel() {
 
     private val lines = MutableStateFlow(lineRepository.cachedLines().orEmpty())
     private val stationLines = MutableStateFlow(directory.cached()?.toLineIndex().orEmpty())
 
-    val state: StateFlow<ActiveTripUiState> = combine(controller.active, lines, stationLines, ::ActiveTripUiState)
+    val state: StateFlow<ActiveTripUiState> = combine(
+        controller.active,
+        lines,
+        stationLines,
+        locationPreferences.use.map { !it.allowsTripFixes },
+        ::ActiveTripUiState,
+    )
         .stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(5_000),

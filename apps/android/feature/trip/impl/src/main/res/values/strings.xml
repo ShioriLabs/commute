@@ -69,6 +69,7 @@
     <string name="trip_live_walk">Jalan %1$d m ke %2$s</string>
     <string name="trip_live_walk_corridor">Lewat %1$s</string>
     <string name="trip_live_no_location">Tanpa izin lokasi, posisi kamu diperkirakan dari jadwal aja.</string>
+    <string name="trip_live_location_off">Posisi akurat saat OTW lagi dimatikan di Pengaturan, jadi posisi kamu diperkirakan dari jadwal aja.</string>
     <string name="trip_live_progress">%1$d persen perjalanan</string>
 
     <!-- The in-train board, after JR East's. -->

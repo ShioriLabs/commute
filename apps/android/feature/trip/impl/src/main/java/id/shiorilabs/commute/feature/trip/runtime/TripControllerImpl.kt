@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.feature.trip.runtime
 
 import android.util.Log
+import id.shiorilabs.commute.core.datastore.LocationPreferencesRepository
 import id.shiorilabs.commute.core.location.Fix
 import id.shiorilabs.commute.core.location.LocationClient
 import id.shiorilabs.commute.core.navigation.Route
@@ -20,6 +21,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -41,6 +46,7 @@ class TripControllerImpl @Inject constructor(
     private val runtime: TripRuntime,
     private val locator: StopLocator,
     private val location: LocationClient,
+    private val locationPreferences: LocationPreferencesRepository,
     private val clock: Clock,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) : TripController {
@@ -62,11 +68,29 @@ class TripControllerImpl @Inject constructor(
         resumeTracking()
     }
 
+    /**
+     * "Posisi akurat saat OTW" switched in Pengaturan → Lokasi during a trip: off, the trip carries
+     * on by the clock; back on, it looks for the rider again.
+     */
+    private val followsSettings: Job = scope.launch {
+        locationPreferences.use.map { it.allowsTripFixes }.distinctUntilChanged().drop(1).collect { allowed ->
+            if (allowed) {
+                resumeTracking()
+            } else {
+                runtime.stopTracking()
+                trackingLost()
+            }
+        }
+    }
+
+    /** Fixes along the way: the system's permission and the rider's own setting both allow them. */
+    private suspend fun mayTrack(): Boolean = location.hasPermission() && locationPreferences.use.first().allowsTripFixes
+
     override fun start(plan: TripPlan, origin: Route.Trip) {
         scope.launch {
             restored.join()
             val placed = locator.place(plan)
-            val hasLocation = location.hasPermission()
+            val hasLocation = mayTrack()
             mutex.withLock {
                 if (_active.value != null) runtime.finish()
                 val step = TripEngine.start(placed, clock.instant(), hasLocation)
@@ -92,7 +116,7 @@ class TripControllerImpl @Inject constructor(
     fun resumeTracking() {
         scope.launch {
             restored.join()
-            if (_active.value == null || !location.hasPermission()) return@launch
+            if (_active.value == null || !mayTrack()) return@launch
             if (runtime.startTracking()) send(TripEvent.LocationAvailability(true, clock.instant()))
         }
     }
