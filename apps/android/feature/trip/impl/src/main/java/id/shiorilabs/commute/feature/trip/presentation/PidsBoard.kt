@@ -4,6 +4,12 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.animation.core.updateTransition
+import androidx.compose.animation.AnimatedContent
 import kotlinx.coroutines.delay
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.text.TextStyle
@@ -16,7 +22,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -233,8 +238,9 @@ private fun Header(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val minutes = pids.upcoming.firstOrNull()?.minutes
-    val clock = pids.at?.let(::formatClock)
+    // The bubbles count down to each stop; the corner, and the clock under the name, to getting off.
+    val minutes = pids.minutesLeft
+    val clock = pids.alightingAt?.let(::formatClock)
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -246,7 +252,7 @@ private fun Header(
             val rideName = copy.rideName(pids.ride)
             Roundel(pids.ride, lines, modifier = Modifier.semantics { contentDescription = rideName })
             Text(
-                text = pids.ride.headsign?.let { stringResource(R.string.trip_pids_to, it) }.orEmpty(),
+                text = pids.ride.headsign?.let { stringResource(R.string.trip_headsign, it) }.orEmpty(),
                 modifier = Modifier.padding(start = 10.dp).weight(1f),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
@@ -254,7 +260,7 @@ private fun Header(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            // How long until the big name, by the close button: the minutes, or the clock without them.
+            // How long until getting off, by the close button: the minutes, or the clock without them.
             when {
                 minutes != null -> Row(modifier = Modifier.padding(start = 8.dp)) {
                     Text(
@@ -296,17 +302,7 @@ private fun Header(
                 .background(Hairline),
         )
         Column(modifier = Modifier.padding(start = 20.dp, top = 12.dp, end = 20.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = stringResource(pids.label.text),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = BoardMuted,
-                )
-                if (pids.label == PidsLabel.ALIGHT_HERE || pids.label == PidsLabel.ALIGHT_NEXT) {
-                    PidsChevrons(color = NextStop)
-                }
-            }
+            Eyebrow(pids)
             Row(modifier = Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                 StationLines((listOf(pids.ride.line) + stationLines).distinct().take(STATION_LINES), lines)
                 StationName(pids.station, modifier = Modifier.weight(1f).padding(start = 10.dp))
@@ -337,24 +333,54 @@ private fun Header(
 }
 
 /**
+ * The line over the big name. Waiting or riding with stops to go, it takes turns with where to get
+ * off and how many stops are left ("Berikutnya" ↔ "Turun di Depok · 7 stasiun lagi"), sliding up
+ * as the big name's lines do.
+ */
+@Composable
+private fun Eyebrow(pids: Pids) {
+    val label = stringResource(pids.label.text)
+    val ahead = pids.takeIf { it.label == PidsLabel.BOARD || it.label == PidsLabel.NEXT }?.let {
+        stringResource(
+            if (it.ride.isBus) R.string.trip_ride_to_halte else R.string.trip_ride_to_station,
+            it.ride.stops.last().name,
+            it.stopsLeft,
+        )
+    }
+    val pages = listOfNotNull(label, ahead)
+    val style = MaterialTheme.typography.titleSmall.merge(color = BoardMuted, fontWeight = FontWeight.Bold)
+    SlidingPages(
+        count = pages.size,
+        holdMillis = EYEBROW_PAGE_MILLIS,
+        fade = 3.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clearAndSetSemantics { contentDescription = pages.joinToString(". ") },
+    ) { page ->
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            BasicText(text = pages[page], style = style, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (page == 0 && (pids.label == PidsLabel.ALIGHT_HERE || pids.label == PidsLabel.ALIGHT_NEXT)) {
+                PidsChevrons(color = NextStop)
+            }
+        }
+    }
+}
+
+/**
  * The big name on one line, shrinking as far as it still reads big. A name too long even then
- * ("Bandara Internasional Soekarno-Hatta") is split at its word breaks into lines that each fit, and
- * they take turns sliding up into place, as Kaohsiung's metro displays page a long message. With
- * animations off the lines swap without moving.
+ * ("Bandara Internasional Soekarno-Hatta") is split at its word breaks into lines that each fit,
+ * and they take turns sliding up into place.
  */
 @Composable
 private fun StationName(name: String, modifier: Modifier = Modifier) {
     val style = MaterialTheme.typography.headlineLarge.merge(color = Color.White, fontWeight = FontWeight.Bold, lineHeight = 52.sp)
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
-    val reducedMotion = rememberReducedMotion()
     BoxWithConstraints(
-        modifier = modifier
-            .clipToBounds()
-            .clearAndSetSemantics {
-                heading()
-                contentDescription = name
-            },
+        modifier = modifier.clearAndSetSemantics {
+            heading()
+            contentDescription = name
+        },
     ) {
         val pages = remember(name, style, constraints.maxWidth, density) { namePages(measurer, name, style, constraints.maxWidth) }
         if (pages == null) {
@@ -364,32 +390,65 @@ private fun StationName(name: String, modifier: Modifier = Modifier) {
                 maxLines = 1,
                 autoSize = TextAutoSize.StepBased(minFontSize = NameMin, maxFontSize = NameMax, stepSize = 2.sp),
             )
-            return@BoxWithConstraints
-        }
-        var page by remember(pages) { mutableIntStateOf(0) }
-        LaunchedEffect(pages) {
-            while (true) {
-                delay(NAME_PAGE_MILLIS)
-                page = (page + 1) % pages.lines.size
+        } else {
+            SlidingPages(count = pages.lines.size, holdMillis = NAME_PAGE_MILLIS, fade = 8.dp) { page ->
+                BasicText(text = pages.lines[page], style = style.merge(fontSize = pages.size), maxLines = 1, softWrap = false)
             }
         }
-        AnimatedContent(
-            targetState = page,
-            transitionSpec = {
-                if (reducedMotion) {
-                    EnterTransition.None togetherWith ExitTransition.None
-                } else {
-                    val move = tween<IntOffset>(NAME_SLIDE_MILLIS, easing = IosSpringEasing)
-                    val fade = tween<Float>(NAME_SLIDE_MILLIS, easing = IosSpringEasing)
-                    (slideInVertically(move) { it } + fadeIn(fade)) togetherWith (slideOutVertically(move) { -it } + fadeOut(fade))
-                }
-            },
-            contentAlignment = Alignment.CenterStart,
-            label = "stationNamePage",
-        ) { index ->
-            BasicText(text = pages.lines[index], style = style.merge(fontSize = pages.size), maxLines = 1, softWrap = false)
+    }
+}
+
+/**
+ * [count] pages taking turns in one line's room, as Kaohsiung's metro displays page a long
+ * message: each holds for [holdMillis], then slides up out of the way as the next slides up into
+ * place, both softened over [fade] at the edges they cross. With animations off they swap without
+ * moving.
+ */
+@Composable
+private fun SlidingPages(
+    count: Int,
+    holdMillis: Long,
+    fade: Dp,
+    modifier: Modifier = Modifier,
+    content: @Composable (page: Int) -> Unit,
+) {
+    val reducedMotion = rememberReducedMotion()
+    var page by remember(count) { mutableIntStateOf(0) }
+    LaunchedEffect(count) {
+        if (count < 2) return@LaunchedEffect
+        while (true) {
+            delay(holdMillis)
+            page = (page + 1) % count
         }
     }
+    val transition = updateTransition(page.coerceAtMost(count - 1), label = "slidingPages")
+    val sliding = transition.currentState != transition.targetState
+    transition.AnimatedContent(
+        modifier = modifier
+            .clipToBounds()
+            // Offscreen, so the edges can be faded out of what's drawn, not painted over.
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            .drawWithContent {
+                drawContent()
+                if (sliding) {
+                    val edge = (fade.toPx() / size.height).coerceIn(0f, 0.5f)
+                    drawRect(
+                        brush = Brush.verticalGradient(0f to Color.Transparent, edge to Color.Black, 1f - edge to Color.Black, 1f to Color.Transparent),
+                        blendMode = BlendMode.DstIn,
+                    )
+                }
+            },
+        transitionSpec = {
+            if (reducedMotion) {
+                EnterTransition.None togetherWith ExitTransition.None
+            } else {
+                val move = tween<IntOffset>(PAGE_SLIDE_MILLIS, easing = IosSpringEasing)
+                val fadeSpec = tween<Float>(PAGE_SLIDE_MILLIS, easing = IosSpringEasing)
+                (slideInVertically(move) { it } + fadeIn(fadeSpec)) togetherWith (slideOutVertically(move) { -it } + fadeOut(fadeSpec))
+            }
+        },
+        contentAlignment = Alignment.CenterStart,
+    ) { index -> content(index) }
 }
 
 /** A long name's lines, each shown in turn, all at one [size]. */
@@ -426,9 +485,12 @@ private val NameMax = 48.sp
 private val PageMin = 26.sp
 private const val NAME_PAGES_MAX = 3
 
-/** How long each line of a split name holds, and how long it takes to slide up into place. */
+/** How long each line of a split name holds, and each turn of the line over it. */
 private const val NAME_PAGE_MILLIS = 2500L
-private const val NAME_SLIDE_MILLIS = 450
+private const val EYEBROW_PAGE_MILLIS = 4000L
+
+/** How long a page takes to slide up into place. */
+private const val PAGE_SLIDE_MILLIS = 450
 
 /** The station's lines as roundels before its name, the ride's own first. */
 @Composable
