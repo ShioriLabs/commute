@@ -65,4 +65,18 @@ class PidsTest {
         assertEquals("Bundaran HI", pids.station)
         assertEquals(minutes(0), pids.at)
     }
+
+    @Test
+    fun `a train still not left after its time counts down from now, not from the timetable`() {
+        // Still at Sudirman, confirmed, five minutes after the 08.10 was due out.
+        val held = riding(0.0, PositionSource.CONFIRMED).pids(minutes(15))
+
+        val minutes = held.upcoming.map { it.minutes!! }
+        // Manggarai is a third of the ride: about three of its ten minutes on from wherever "now" is.
+        assertEquals(true, minutes.first() >= 2)
+        assertEquals(minutes.sorted(), minutes)
+        assertEquals(true, held.at!! > minutes(15))
+    }
 }
+
+

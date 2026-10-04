@@ -86,7 +86,10 @@ object TripEngine {
             is TripEvent.Fix -> onFix(plan, state, event, effects)
             is TripEvent.Tick -> state
             is TripEvent.LocationAvailability -> state.copy(hasLocation = event.available)
-            is TripEvent.Resumed -> state.copy(resumed = true, confirmedAt = null)
+            // A fix from just before the restart still places the rider; an old one goes stale on
+            // its own. Dropping it would let the clock run them ahead, and alert, the moment the
+            // process came back.
+            is TripEvent.Resumed -> state.copy(resumed = true)
             is TripEvent.RiderSaid -> when (event.action) {
                 RiderAction.STOP -> {
                     effects += TripEffect.Finished(FinishReason.STOPPED)
