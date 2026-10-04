@@ -63,8 +63,24 @@ fun StoredFareCriteria?.toCriteria(now: Instant): JourneyCriteria {
 }
 
 /**
+ * The criteria spelled out in full, defaults included, as the app's own openers hand them to a
+ * page: laid over the rider's stored settings with [withLink], every field wins, so the page asks
+ * exactly what the opener showed. The web never writes `now` or `all`; only the app does.
+ */
+fun JourneyCriteria.toLinkParams(): TripQueryParams = TripQueryParams(
+    paymentMethod = paymentMethod.name,
+    at = when (val departure = departure) {
+        Departure.Now -> NOW
+        is Departure.At -> departure.instant.toString()
+    },
+    modes = if (modes == Modes.RAIL) "rail" else "all",
+    walking = walking.name,
+)
+
+/**
  * Criteria a shared link names, laid over the rider's own for that visit. Only what the link
  * carries changes; a value it carries but this version cannot read leaves the rider's own in place.
+ * `now` and `all` are the defaults [toLinkParams] spells out.
  */
 fun JourneyCriteria.withLink(
     paymentMethod: String?,
@@ -74,8 +90,12 @@ fun JourneyCriteria.withLink(
     now: Instant,
 ): JourneyCriteria = copy(
     paymentMethod = parsePaymentMethod(paymentMethod) ?: this.paymentMethod,
-    departure = parseDeparture(at, now)?.takeIf { it is Departure.At } ?: departure,
-    modes = if (modes == "rail") Modes.RAIL else this.modes,
+    departure = if (at == NOW) Departure.Now else parseDeparture(at, now)?.takeIf { it is Departure.At } ?: departure,
+    modes = when (modes) {
+        "rail" -> Modes.RAIL
+        "all" -> Modes.ALL
+        else -> this.modes
+    },
     walking = parseWalking(walking) ?: this.walking,
 )
 

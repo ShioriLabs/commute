@@ -51,6 +51,19 @@ class CriteriaCodecTest {
     }
 
     @Test
+    fun `criteria spelled out in full win over the rider's own, defaults included`() {
+        val own = JourneyCriteria(PaymentMethod.QRIS_TAP, Departure.At(later), Modes.RAIL, WalkingSpeed.SLOW)
+
+        listOf(
+            JourneyCriteria(),
+            JourneyCriteria(PaymentMethod.STORED_VALUE, Departure.At(later), Modes.ALL, WalkingSpeed.BRISK),
+        ).forEach { opened ->
+            val params = opened.toLinkParams()
+            assertEquals(opened, own.withLink(params.paymentMethod, params.at, params.modes, params.walking, now))
+        }
+    }
+
+    @Test
     fun `the share link matches the web's`() {
         assertEquals(
             "https://commute.shiorilabs.id/fare?from=KCI-SUD&to=MRTJ-LBB",

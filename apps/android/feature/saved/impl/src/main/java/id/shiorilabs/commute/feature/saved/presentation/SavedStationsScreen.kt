@@ -109,7 +109,7 @@ fun SavedStationsScreen(
         onSearchClick = { navigator.goTo(Route.Search) },
         onSettingsClick = { navigator.goTo(Route.Settings) },
         onStationClick = { navigator.goTo(Route.Station(it)) },
-        onRouteClick = { fromId, toId -> navigator.goTo(Route.Journey(fromId = fromId, toId = toId)) },
+        onRouteClick = { fromId, toId -> navigator.goTo(Route.Otw(fromId = fromId, toId = toId)) },
         savedRouteCard = savedRouteCard,
     )
 }

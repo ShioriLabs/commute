@@ -80,20 +80,39 @@ sealed interface Route : NavKey {
     ) : Route
 
     /**
-     * OTW: the routes and fares between two stations, the web's `/fare`. Opened from a station's
-     * "OTW Ke Sini" with only [toId], which opens the origin picker, from search's OTW tab with
-     * both, and from a shared `/fare` link.
+     * Search opened on its OTW tab with the pair already in: a station's "OTW Ke Sini" brings only
+     * [toId], which opens the origin picker; a saved pair's title on home and a shared `/fare` link
+     * without a journey bring both. The tab shows for this visit only; the stored choice is untouched.
      *
-     * The rest is what a shared link carries. [journeyKey] names the route the sender was looking
-     * at, opened straight on its detail if it still runs; the criteria are the link's raw query
-     * params, which beat the rider's stored settings for this visit only.
+     * The criteria are a shared link's raw query params, which beat the rider's stored settings for
+     * this visit only.
      */
     @Serializable
-    data class Journey(
+    data class Otw(
         /** `OPERATOR-CODE`. */
         val fromId: String? = null,
         val toId: String? = null,
-        val journeyKey: String? = null,
+        val paymentMethod: String? = null,
+        val at: String? = null,
+        val modes: String? = null,
+        val walking: String? = null,
+    ) : Route
+
+    /**
+     * One journey between two stations, in full: opened from an OTW option, a saved pair's row on
+     * home and a shared `/fare` link that names a journey.
+     *
+     * [journeyKey] names the route, and [boardingClock] which of its boardings; the page asks for the
+     * pair again under the criteria and finds the journey there. The criteria are raw link params
+     * laid over the rider's stored settings, which the app's own openers spell out in full so the
+     * page asks exactly what the opener showed.
+     */
+    @Serializable
+    data class Trip(
+        /** `OPERATOR-CODE`. */
+        val fromId: String,
+        val toId: String,
+        val journeyKey: String,
         /**
          * Which boarding of [journeyKey]'s route, as `HHmm` WIB: a link's `?jt=`, which home's saved
          * pairs add because their rows of one route share a key.

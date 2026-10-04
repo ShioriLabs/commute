@@ -13,6 +13,8 @@ dependencies {
     api(project(":core:common"))
     // Query in JourneyRepository.observeTrips → api.
     api(project(":core:query"))
+    // Route.Otw in OtwPanel's signature → api.
+    api(project(":core:navigation"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.runtime)
