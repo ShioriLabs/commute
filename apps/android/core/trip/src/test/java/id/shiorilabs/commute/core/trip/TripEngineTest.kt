@@ -339,5 +339,19 @@ class TripEngineTest {
         assertEquals(due.plusSeconds(run.state.clockOffsetS), run.state.expectedAtStop(bogorLine, 3))
         assertNull(Run(busway).state.expectedAtStop(busway, 2))
     }
+
+    @Test
+    fun `a restart a moment after a fix keeps the rider where the fix put them`() {
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(Places.MANGGARAI, 5.0)
+
+        // The process dies and comes back a minute later, the train by the timetable well along.
+        val resumed = TripEngine.step(bogorLine, run.state, TripEvent.Resumed(at(6)))
+
+        assertEquals(PositionSource.CONFIRMED, resumed.state.source)
+        assertEquals(0.0, resumed.state.position, 0.0)
+        assertTrue(resumed.effects.none { it is TripEffect.Alert })
+    }
 }
 

@@ -3,6 +3,7 @@ package id.shiorilabs.commute.feature.trip.presentation
 import id.shiorilabs.commute.core.trip.PositionSource
 import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripPhase
+import id.shiorilabs.commute.core.trip.expectedAt
 import id.shiorilabs.commute.core.trip.expectedAtStop
 import id.shiorilabs.commute.feature.trip.ActiveTrip
 import java.time.Instant
@@ -57,14 +58,22 @@ data class Pids(
 )
 
 /** Stops ahead on the band: as many as a phone's height reads at a glance. */
-const val PIDS_STOPS = 5
+const val PIDS_STOPS = 4
 
 internal fun ActiveTrip.pids(now: Instant): Pids {
     val ride = plan.ride(state.legIndex)
     val last = ride.lastIndex
     val then = plan.nextRideAfter(state.legIndex)?.let(plan::ride)
     val placeable = state.source != PositionSource.UNKNOWN
-    fun minutesTo(index: Int) = state.expectedAtStop(plan, index)?.takeIf { placeable }?.let { minutesUntil(now, it) }
+    // The train can't be anywhere the rider isn't: if the timetable says it passed where they are
+    // already, it runs that late for every stop ahead. A train waited for on the platform after
+    // its time, too.
+    val slip = state.expectedAt(plan, state.position)
+        ?.let { java.time.Duration.between(it, now) }
+        ?.takeIf { !it.isNegative }
+        ?: java.time.Duration.ZERO
+    fun expected(index: Int) = state.expectedAtStop(plan, index)?.plus(slip)
+    fun minutesTo(index: Int) = expected(index)?.takeIf { placeable }?.let { minutesUntil(now, it) }
 
     if (state.phase == TripPhase.ARRIVED) {
         val stop = ride.stops.last()
@@ -93,7 +102,7 @@ internal fun ActiveTrip.pids(now: Instant): Pids {
         label = label,
         station = stop.name,
         stationId = stop.id,
-        at = state.expectedAtStop(plan, focus),
+        at = expected(focus),
         upcoming = upcoming,
         changeTo = then?.takeIf { focus == last },
     )
