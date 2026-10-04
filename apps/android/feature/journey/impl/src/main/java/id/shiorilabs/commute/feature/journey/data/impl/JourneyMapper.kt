@@ -56,6 +56,9 @@ private fun FareRideLeg.toRide(): JourneyLeg.Ride = JourneyLeg.Ride(
     arrivalAt = arrivalAt?.toInstantOrNull(),
     lastService = lastService == true,
     platformCode = platformCode,
+    // Index-aligned with the stops or no use at all: a list that doesn't line up is dropped.
+    stopTimes = stopTimes?.takeIf { it.size == stops.size }?.map { it?.toInstantOrNull() }.orEmpty(),
+    tripId = tripId,
 )
 
 private fun FareTransferLeg.toTransfer(): JourneyLeg.Transfer = JourneyLeg.Transfer(
@@ -73,7 +76,7 @@ private fun FareSegmentDto.toSegment(): FareSegment = FareSegment(
     fare = fare?.roundToInt(),
 )
 
-private fun FareStationDto.toStop(): JourneyStop = JourneyStop(id = id, name = name)
+private fun FareStationDto.toStop(): JourneyStop = JourneyStop(id = id, name = name, latitude = latitude, longitude = longitude)
 
 /** The API stamps `+07:00`; a malformed time is dropped, as an untimed leg would be. */
 private fun String.toInstantOrNull(): Instant? = runCatching { OffsetDateTime.parse(this).toInstant() }.getOrNull()

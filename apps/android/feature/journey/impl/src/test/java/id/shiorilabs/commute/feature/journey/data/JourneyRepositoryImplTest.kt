@@ -77,6 +77,39 @@ class JourneyRepositoryImplTest {
     }
 
     @Test
+    fun `a timed leg carries every stop's place and time, and the run it is`() = runTest {
+        // Captured after the API grew the trip-mode fields: Manggarai to Depok, Sunday 23.47.
+        val live: TripResult = run {
+            val body = checkNotNull(javaClass.getResource("/trips_live_fields.json")).readText()
+            json.decodeFromJsonElement(json.parseToJsonElement(body).jsonObject.getValue("data"))
+        }
+        val service = FakeCommuteService().apply { trips = { _, _, _ -> live } }
+        val leg = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
+            .trips("KCI-MRI", "KCI-DP", JourneyCriteria()).getOrNull()!!
+            .journeys[0].legs[0] as JourneyLeg.Ride
+
+        assertEquals(13, leg.stops.size)
+        assertEquals(-6.2262, leg.stops[1].latitude!!, 1e-9)
+        assertEquals(106.8584, leg.stops[1].longitude!!, 1e-9)
+        assertEquals(leg.stops.size, leg.stopTimes.size)
+        assertEquals(leg.departureAt, leg.stopTimes.first())
+        assertEquals(Instant.parse("2026-10-04T16:56:00Z"), leg.stopTimes[1])
+        assertEquals(leg.arrivalAt, leg.stopTimes.last())
+        assertEquals("1466", leg.tripId)
+    }
+
+    @Test
+    fun `an answer from before the trip-mode fields maps without them`() = runTest {
+        val leg = JourneyRepositoryImpl(service(), testQueryClient(backgroundScope, clock))
+            .trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).getOrNull()!!
+            .journeys[0].legs[0] as JourneyLeg.Ride
+
+        assertTrue(leg.stopTimes.isEmpty())
+        assertNull(leg.tripId)
+        assertNull(leg.stops.first().latitude)
+    }
+
+    @Test
     fun `a leg on shared track keeps every line, and a plain one names its own`() = runTest {
         val journeys = JourneyRepositoryImpl(service(), testQueryClient(backgroundScope, clock)).trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).getOrNull()!!.journeys
 

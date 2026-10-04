@@ -1,9 +1,10 @@
 # Trips: fields for following a journey (design note)
 
-**Status:** built 2026-10-04, uncommitted and not deployed. Additive changes to `/_internal/trips/:from/:to`
-for the Android app's trip mode (`android-trip-mode.md`). The app ships without
-them first, on the fallbacks described below; this note is what to add to make
-it better, and what the app does with each field once it exists.
+**Status:** built and deployed 2026-10-04 (`API_VERSION` 20261004), and read
+by the Android app the same day. Additive changes to `/_internal/trips/:from/:to`
+for the Android app's trip mode (`android-trip-mode.md`). The app shipped without
+them first, on the fallbacks described below, and keeps those for answers
+without the fields; this note is what was added and what the app does with each.
 
 ## Why
 
