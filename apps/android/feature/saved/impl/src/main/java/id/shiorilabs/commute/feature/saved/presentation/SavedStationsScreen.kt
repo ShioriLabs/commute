@@ -1,6 +1,6 @@
 package id.shiorilabs.commute.feature.saved.presentation
 
-import androidx.compose.animation.core.CubicBezierEasing
+import id.shiorilabs.commute.core.ui.motion.IosSpringEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -714,9 +714,6 @@ private val StationGap = 20.dp
 
 /** The bar's name fading in or out, as long as a card's entrance. */
 private const val NAME_FADE_MILLIS = 300
-
-/** The web's --ease-ios-spring, the feed's own curve. */
-private val IosSpringEasing = CubicBezierEasing(0.36f, 0.66f, 0.04f, 1f)
 
 /**
  * The web's "Kamu sedang offline" caveat over the feed: what shows may be out of date. Online, the

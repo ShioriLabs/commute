@@ -31,14 +31,14 @@ internal class TripCopy(private val resources: Resources, private val lines: Map
     fun detail(trip: ActiveTrip, headline: Headline): String = when (headline) {
         is Headline.Board -> listOfNotNull(
             headline.ride.headsign?.let { resources.getString(R.string.trip_headsign, it) },
-            headline.ride.platformCode?.let { resources.getString(R.string.trip_platform, it) },
+            headline.ride.platformCode?.let { resources.getString(R.string.trip_platform, formatPlatform(it)) },
             headline.departsAt?.let { resources.getString(R.string.trip_departs_at, formatClock(it)) }
                 ?: resources.getString(R.string.trip_from_stop, headline.ride.stops.first().name),
         ).joinToString(separator)
         is Headline.Change -> listOfNotNull(
             headline.walk?.let { resources.getString(R.string.trip_walk_to, it.to.name, it.distanceM) },
             headline.ride.headsign?.let { resources.getString(R.string.trip_headsign, it) },
-            headline.ride.platformCode?.let { resources.getString(R.string.trip_platform, it) },
+            headline.ride.platformCode?.let { resources.getString(R.string.trip_platform, formatPlatform(it)) },
             headline.departsAt?.let { resources.getString(R.string.trip_departs_at, formatClock(it)) },
         ).joinToString(separator)
         is Headline.RideTo -> listOfNotNull(
