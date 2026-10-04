@@ -1,7 +1,8 @@
 # Android: trip mode (station reminders and Live Updates)
 
-**Status:** design note, not yet implemented. Part of `android-app.md`; the
-watch side is in `android-wear.md`.
+**Status:** built on the phone (2026-10-04), field testing outstanding. Part of
+`android-app.md`; the watch side is in `android-wear.md`. What the build settled
+is under "As built" at the end.
 
 ## Goal
 
@@ -137,9 +138,54 @@ design only depends on "an ongoing notification with segmented progress".
 5. Field testing on real journeys: one surface line, one underground, one with
    a TJ leg.
 
+## As built
+
+- **Modules.** The engine is `:core:trip` (`TripEngine.step`: state + event →
+  state, effects and the next clock wake), pure and unit-tested against
+  synthetic fix sequences. `:feature:trip:impl` runs it: `TripControllerImpl`
+  steps every event through one lock and carries out the effects, `TripService`
+  only feeds fixes in and keeps the process alive. Location is `:core:location`,
+  on the platform's own fused provider (no Play Services).
+- **Coordinates come from `GET /stations`** (all searchable stations, ~13 KB),
+  joined by stop id when the trip starts. Routing-only TJ haltes aren't in it;
+  those stops can't be confirmed and are timed by the clock. Stops are placed by
+  cumulative distance between their coordinates when every stop has them, by
+  stop count otherwise. `trips-live-fields.md` proposes the API fields that
+  would replace both.
+- **Lead time:** "siap-siap" one stop before; when that last hop is over five
+  minutes, about three minutes before instead. A rider who reaches the alighting
+  stop without passing the one before (a sparse fix, a long sleep) gets "turun"
+  only: a late "siap-siap" is skipped, not sent after the fact.
+- **No location permission → no foreground service.** A location-type service
+  can't start without it, and no other type honestly fits, so a clock-only trip
+  runs on `setAndAllowWhileIdle` alarms with a plain ongoing notification. Doze
+  may hold an alarm a few minutes; those alerts are estimates worded as such.
+  No exact-alarm permission is asked for.
+- **Restart from the background** gets no location (the system won't start a
+  location service from there), so the trip carries on by the clock, says
+  "Lanjut dari perkiraan", and starts tracking again when the rider opens it.
+- **Both location rates are satellite-grade**, 30 s mid-ride and 5 s within two
+  stops of getting off: cell and Wi-Fi fixes on a moving train rarely pass the
+  station match, so cheaper fixes cost battery and confirm nothing.
+- **Starting:** the trip page's "OTW!" button (TalkBack: "Mulai perjalanan"), from 30 minutes before boarding (untimed
+  journeys any time). Notifications, then location, are asked for on the tap; a
+  refusal still starts the trip.
+- **The live screen is an in-train board**, after JR East's: a dark band naming the
+  next station in big type (direction on the left, a line-colour stripe), over the
+  line's own colour carrying the next five stops, nearest at the bottom, each with
+  "minutes away" when the clock or a fix can say and blank when nothing can. Line
+  colour stays a line on white rather than filling the screen: white type on the
+  paler lines (Cikarang, the yellow TJ corridors) doesn't read at a glance. Under
+  it, where to change at the named station, then the whole trip's stop list.
+- **GPS elsewhere:** the OTW picker's "Pakai lokasi kamu" and home's "Di dekat
+  kamu" (the two nearest unpinned stations with their boards, or a dismissible
+  card asking first) take one fix each, only after a tap or with the permission
+  already granted. Home never asks on launch.
+
 ## Open questions
 
-- Default lead time: alert one stop before, or N minutes before, or both.
+- ~~Default lead time: alert one stop before, or N minutes before, or both.~~
+  Settled: both, see "As built".
 - **Per-stop times in the API.** A ride leg carries only its end times today.
   Exposing each stop's scheduled time (the data exists in the timetable)
   would make underground estimates far better. Additive, so it can come later;

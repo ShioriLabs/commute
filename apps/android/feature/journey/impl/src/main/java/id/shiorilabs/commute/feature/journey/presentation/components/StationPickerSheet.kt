@@ -62,7 +62,13 @@ import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.feature.journey.R
 import id.shiorilabs.commute.feature.journey.domain.PairEnd
 import id.shiorilabs.commute.feature.journey.domain.PickableStation
+import id.shiorilabs.commute.feature.journey.presentation.NearbyPicks
 import id.shiorilabs.commute.feature.journey.presentation.PickerUiState
+import id.shiorilabs.commute.core.location.LocationPermissions
+import id.shiorilabs.commute.core.location.rememberLocationPermissionRequest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.delay
 
 /** The query the picker starts matching at; below it, the quick picks show. */
@@ -90,6 +96,7 @@ internal fun StationPickerSheet(
     onQueryChange: (String) -> Unit,
     onPick: (PickableStation) -> Unit,
     onDismiss: () -> Unit,
+    onUseLocation: () -> Unit = {},
 ) {
     CommuteBottomSheet(
         title = stringResource(if (end == PairEnd.ORIGIN) R.string.journey_picker_from else R.string.journey_picker_to),
@@ -132,6 +139,23 @@ internal fun StationPickerSheet(
                 .padding(top = 8.dp),
             contentPadding = WindowInsets.ime.union(WindowInsets.navigationBars).asPaddingValues(),
         ) {
+            if (text.length < MIN_QUERY_LENGTH) {
+                item(key = "use-location") {
+                    UseLocation(nearby = picker.nearby, onUseLocation = onUseLocation)
+                }
+                (picker.nearby as? NearbyPicks.Found)?.stations?.let { nearby ->
+                    itemsIndexed(nearby, key = { _, it -> "nearby:${it.first.id}" }) { index, (station, distanceM) ->
+                        StationRow(
+                            station = station,
+                            query = "",
+                            selected = station.id == selectedId,
+                            onClick = { pick(station) },
+                            distanceM = distanceM,
+                            modifier = Modifier.rowEntrance(index),
+                        )
+                    }
+                }
+            }
             if (text.length < MIN_QUERY_LENGTH && picker.quickPicks.isNotEmpty()) {
                 item(key = "quick-picks") {
                     QuickPicks(stations = picker.quickPicks, onPick = pick)
@@ -198,6 +222,55 @@ private fun PickerField(query: String, onQueryChange: (String) -> Unit, modifier
     )
 }
 
+/**
+ * "Pakai lokasi kamu": the stations around the rider, on a tap. Location is asked for here, in
+ * context, and only once tapped; a refusal leaves a note rather than a dead row.
+ */
+@Composable
+private fun UseLocation(nearby: NearbyPicks, onUseLocation: () -> Unit) {
+    val context = LocalContext.current
+    val ask = rememberLocationPermissionRequest { granted -> if (granted) onUseLocation() }
+    val note = when (nearby) {
+        NearbyPicks.Locating -> stringResource(R.string.journey_picker_locating)
+        NearbyPicks.NoneNearby -> stringResource(R.string.journey_picker_none_nearby)
+        NearbyPicks.Unavailable -> stringResource(R.string.journey_picker_location_unavailable)
+        else -> null
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(role = Role.Button, enabled = nearby != NearbyPicks.Locating) {
+                val granted = LocationPermissions.any {
+                    ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+                }
+                if (granted) onUseLocation() else ask()
+            }
+            .padding(horizontal = 32.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = CommuteIcons.NavigationArrow,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.journey_picker_use_location),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            note?.let { Text(text = it, style = MaterialTheme.typography.bodySmall, color = Slate500) }
+        }
+    }
+}
+
+/** `350 m`, or `1,2 km` past a kilometre, the Indonesian way. */
+private fun formatDistance(metres: Int): String =
+    if (metres < 1000) "$metres m" else "%.1f km".format(java.util.Locale.forLanguageTag("id"), metres / 1000.0)
+
 @Composable
 private fun QuickPicks(stations: List<PickableStation>, onPick: (PickableStation) -> Unit) {
     Column {
@@ -255,6 +328,8 @@ private fun StationRow(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** How far it is, for a station offered as near the rider. */
+    distanceM: Int? = null,
 ) {
     val highlight = MaterialTheme.colorScheme.primary
     val title = remember(station.name, query, highlight) { station.name.highlightMatch(query, highlight) }
@@ -274,6 +349,7 @@ private fun StationRow(
                     append("  ")
                     withStyle(SpanStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Slate500)) {
                         append(OPERATOR_NAMES[station.operator] ?: station.operator)
+                        distanceM?.let { append(" · " + formatDistance(it)) }
                     }
                 },
                 style = MaterialTheme.typography.titleMedium,

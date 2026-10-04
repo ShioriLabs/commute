@@ -1,0 +1,63 @@
+package id.shiorilabs.commute.feature.trip.presentation
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
+import id.shiorilabs.commute.core.trip.RiderAction
+import id.shiorilabs.commute.feature.station.data.LineRepository
+import id.shiorilabs.commute.feature.station.data.StationDirectory
+import id.shiorilabs.commute.feature.station.domain.Station
+import id.shiorilabs.commute.feature.station.domain.LineInfo
+import id.shiorilabs.commute.feature.trip.ActiveTrip
+import id.shiorilabs.commute.feature.trip.runtime.TripControllerImpl
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+data class ActiveTripUiState(
+    /** `null` once the trip has ended (or there never was one). */
+    val trip: ActiveTrip?,
+    /** The line dictionary, keyed `OPERATOR:CODE`; empty until it loads. */
+    val lines: Map<String, LineInfo> = emptyMap(),
+    /** Each station's lines, by station id: what the board offers to change to. Empty until read. */
+    val stationLines: Map<String, List<String>> = emptyMap(),
+)
+
+@HiltViewModel
+class ActiveTripViewModel @Inject constructor(
+    private val controller: TripControllerImpl,
+    private val lineRepository: LineRepository,
+    private val directory: StationDirectory,
+) : ViewModel() {
+
+    private val lines = MutableStateFlow(lineRepository.cachedLines().orEmpty())
+    private val stationLines = MutableStateFlow(directory.cached()?.toLineIndex().orEmpty())
+
+    val state: StateFlow<ActiveTripUiState> = combine(controller.active, lines, stationLines, ::ActiveTripUiState)
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            ActiveTripUiState(controller.active.value, lines.value, stationLines.value),
+        )
+
+    init {
+        // Opened from the foreground: if the system stopped the location service while the app was
+        // away, this is where it may run again.
+        controller.resumeTracking()
+        viewModelScope.launch { lineRepository.lines().onRight { lines.value = it } }
+        if (stationLines.value.isEmpty()) {
+            viewModelScope.launch { directory.all().onRight { stationLines.value = it.toLineIndex() } }
+        }
+    }
+
+    fun say(action: RiderAction) = controller.riderSaid(action)
+
+    fun stop() = controller.stop()
+}
+
+private fun List<Station>.toLineIndex(): Map<String, List<String>> = associate { it.id to it.lineKeys }
+

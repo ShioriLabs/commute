@@ -218,10 +218,11 @@ Still unanswerable, and each for its own reason:
   than a plan-a-journey surface. This is now the largest purely-presentational gap, and it
   no longer depends on any engine work.
 - **Following the journey, not just planning it** — alight reminders, lock-screen
-  progress and a watch companion need a native app. Designed, not scheduled, in
-  `android-app.md` (with `android-trip-mode.md`). It consumes this planner through the
-  API and adds no engine work, but it does need the trips answer promoted from
-  `/_internal` to a public contract first.
+  progress and a watch companion need a native app. **The phone side is built**
+  (`android-trip-mode.md`); the watch is designed, not scheduled, in `android-wear.md`.
+  It consumes this planner through `/_internal/trips` and adds no engine work; the
+  fields that would sharpen it (stop coordinates, per-stop times) are proposed in
+  `trips-live-fields.md`.
 
 ## The spine — what carried over (nothing thrown away)
 

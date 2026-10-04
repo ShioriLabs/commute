@@ -1,0 +1,105 @@
+package id.shiorilabs.commute.feature.saved.presentation.nearby
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
+import id.shiorilabs.commute.core.datastore.HomePreferencesRepository
+import id.shiorilabs.commute.core.datastore.SavedRepository
+import id.shiorilabs.commute.core.location.LocationClient
+import id.shiorilabs.commute.feature.station.data.StationDirectory
+import id.shiorilabs.commute.feature.station.data.StationRepository
+import id.shiorilabs.commute.feature.station.data.board
+import id.shiorilabs.commute.feature.station.domain.NearbyStation
+import id.shiorilabs.commute.feature.station.domain.StationBoard
+import id.shiorilabs.commute.feature.station.domain.nearbyStations
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import java.time.Clock
+import java.time.LocalDateTime
+import javax.inject.Inject
+
+/** A station near the rider with its board, as home shows it. */
+data class NearbyBoard(val nearby: NearbyStation, val board: StationBoard)
+
+sealed interface NearbyUiState {
+
+    /** Nothing to show: no fix, nothing near, or the prompt was waved off. */
+    data object Hidden : NearbyUiState
+
+    /** Location isn't granted: a card offering "Lihat stasiun terdekat", which asks on a tap. */
+    data object Prompt : NearbyUiState
+
+    data class Stations(val boards: List<NearbyBoard>) : NearbyUiState
+}
+
+/**
+ * "Di dekat kamu" on home: the nearest stations the rider hasn't pinned, with their boards. Home
+ * never asks for location on its own; without it the section is a card the rider can tap or close.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+@HiltViewModel
+class NearbyViewModel @Inject constructor(
+    private val location: LocationClient,
+    private val directory: StationDirectory,
+    private val stationRepository: StationRepository,
+    private val savedRepository: SavedRepository,
+    private val homePreferences: HomePreferencesRepository,
+    private val clock: Clock,
+) : ViewModel() {
+
+    private val permitted = MutableStateFlow(location.hasPermission())
+    private val found = MutableStateFlow<List<NearbyStation>>(emptyList())
+
+    private val boards = found.flatMapLatest { nearby ->
+        if (nearby.isEmpty()) {
+            flowOf(emptyList())
+        } else {
+            val now = LocalDateTime.now(clock)
+            combine(nearby.map { near -> stationRepository.board(near.station.id, now).map { NearbyBoard(near, it) } }) { it.toList() }
+        }
+    }
+
+    val state: StateFlow<NearbyUiState> = combine(permitted, homePreferences.nearbyPromptDismissed, boards) { permitted, dismissed, boards ->
+        when {
+            !permitted -> if (dismissed) NearbyUiState.Hidden else NearbyUiState.Prompt
+            boards.isEmpty() -> NearbyUiState.Hidden
+            else -> NearbyUiState.Stations(boards)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), NearbyUiState.Hidden)
+
+    /** Looks again: home calls it as it comes back into view, the rider having likely moved. */
+    fun refresh() {
+        permitted.value = location.hasPermission()
+        if (!permitted.value) return
+        viewModelScope.launch {
+            val fix = location.current() ?: return@launch
+            val stations = directory.cached() ?: directory.all().getOrNull() ?: return@launch
+            val pinned = savedRepository.stationIds.first().toSet()
+            found.value = nearbyStations(fix.point, stations.filter { it.id !in pinned }, limit = SHOWN)
+        }
+    }
+
+    fun onPermissionResult(granted: Boolean) {
+        permitted.value = granted
+        if (granted) refresh()
+    }
+
+    fun dismissPrompt() {
+        viewModelScope.launch { homePreferences.dismissNearbyPrompt() }
+    }
+
+    private companion object {
+
+        /** Two: enough to cover "which entrance", few enough that home is still the rider's own. */
+        const val SHOWN = 2
+    }
+}

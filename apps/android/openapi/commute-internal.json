@@ -460,6 +460,48 @@
         }
       }
     },
+    "/stations": {
+      "get": {
+        "operationId": "getStations",
+        "summary": "Daftar semua stasiun",
+        "description": "Semua stasiun dari seluruh operator yang bisa dicari. Stasiun yang cuma dipakai buat routing tidak termasuk di sini. Isinya jarang berubah, jadi bisa di-cache di sisi kamu.",
+        "tags": [
+          "Stasiun"
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "description": "Sama dengan HTTP status code-nya.",
+                      "examples": [
+                        200
+                      ],
+                      "format": "double"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Station"
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stations/{operator}/{stationCode}": {
       "get": {
         "operationId": "getStationsByOperatorByStationCode",

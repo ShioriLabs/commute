@@ -74,4 +74,23 @@ data class PickerUiState(
     val quickPicks: List<PickableStation> = emptyList(),
     /** Whether the index is in: an empty list before then is not "not found". */
     val loaded: Boolean = false,
+    /** "Pakai lokasi kamu": the stations around the rider, once they've asked. */
+    val nearby: NearbyPicks = NearbyPicks.Idle,
 )
+
+/** The picker's stations near the rider, which it only looks for when asked. */
+sealed interface NearbyPicks {
+
+    data object Idle : NearbyPicks
+
+    data object Locating : NearbyPicks
+
+    /** Nearest first, with how far each is in metres. */
+    data class Found(val stations: List<Pair<PickableStation, Int>>) : NearbyPicks
+
+    /** Located, but nothing within walking distance. */
+    data object NoneNearby : NearbyPicks
+
+    /** No fix: location off, refused, or nothing answered in time. */
+    data object Unavailable : NearbyPicks
+}

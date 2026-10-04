@@ -30,6 +30,9 @@ dependencies {
     implementation(project(":core:datastore"))
     // LineRoundel, CommuteIcons, sheets, SkeletonBlock, ProblemPanel, previews.
     implementation(project(":core:ui"))
+    // "Mulai perjalanan" asks for both in context, and the picker's "Pakai lokasi kamu".
+    implementation(project(":core:location"))
+    implementation(project(":core:notification"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.runtime)
@@ -53,6 +56,7 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(testFixtures(project(":core:network")))
     testImplementation(testFixtures(project(":core:query")))
+    testImplementation(testFixtures(project(":core:location")))
     // FakePreferencesDataStore — backs FarePreferencesRepository in JourneyViewModelTest.
     testImplementation(testFixtures(project(":core:datastore")))
 }

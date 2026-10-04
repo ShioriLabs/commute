@@ -35,3 +35,11 @@ annotation class FarePreferencesDataStore
 @Qualifier
 @Retention(AnnotationRetention.RUNTIME)
 annotation class SearchModeDataStore
+
+/**
+ * Hilt [Qualifier] for the preferences [DataStore]<[Preferences]> backing home's own settings: for
+ * now, whether the rider waved off the "near you" prompt.
+ */
+@Qualifier
+@Retention(AnnotationRetention.RUNTIME)
+annotation class HomeDataStore

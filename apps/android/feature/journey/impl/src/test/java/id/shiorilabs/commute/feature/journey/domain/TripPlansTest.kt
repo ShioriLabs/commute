@@ -1,0 +1,54 @@
+package id.shiorilabs.commute.feature.journey.domain
+
+import id.shiorilabs.commute.core.navigation.Route
+import id.shiorilabs.commute.core.trip.TripLeg
+import org.junit.Assert.assertEquals
+import org.junit.Test
+import java.time.Instant
+
+class TripPlansTest {
+
+    private val departs = Instant.parse("2026-10-04T01:00:00Z")
+
+    private val timed = journey(
+        ride("MRTJ:M", "MRTJ-BHI", "MRTJ-DKA", departureAt = departs, arrivalAt = departs.plusSeconds(120)),
+        walk("MRTJ-DKA", "KCI-SUD", distanceM = 300, corridorLabel = "Terowongan"),
+        ride("KCI:B", "KCI-SUD", "KCI-MRI"),
+    )
+
+    private val route = Route.Trip(fromId = "MRTJ-BHI", toId = "KCI-MRI", journeyKey = "k", boardingClock = "0800")
+
+    @Test
+    fun `a journey becomes a plan leg for leg`() {
+        val plan = timed.toTripPlan()
+
+        assertEquals(3, plan.legs.size)
+        val first = plan.legs[0] as TripLeg.Ride
+        assertEquals("MRTJ:M", first.line)
+        assertEquals(listOf("MRTJ-BHI", "MRTJ-DKA"), first.stops.map { it.id })
+        assertEquals(departs, first.departureAt)
+        val walk = plan.legs[1] as TripLeg.Transfer
+        assertEquals(300, walk.distanceM)
+        assertEquals("Terowongan", walk.corridorLabel)
+        assertEquals(null, (plan.legs[2] as TripLeg.Ride).departureAt)
+    }
+
+    @Test
+    fun `a trip can start half an hour before boarding, not earlier`() {
+        assertEquals(TripStart.Ready, tripStartFor(timed, route, null, departs.minusSeconds(30 * 60)))
+        assertEquals(TripStart.TooEarly(departs), tripStartFor(timed, route, null, departs.minusSeconds(31 * 60)))
+        assertEquals(TripStart.Ready, tripStartFor(timed, route, null, departs.plusSeconds(600)))
+    }
+
+    @Test
+    fun `an untimed journey can start whenever`() {
+        val untimed = journey(ride("TJ:1", "TJ-H1", "TJ-H4"))
+        assertEquals(TripStart.Ready, tripStartFor(untimed, route, null, departs.minusSeconds(5 * 3600)))
+    }
+
+    @Test
+    fun `the running trip is this journey only on the same pair, route and boarding`() {
+        assertEquals(TripStart.Running, tripStartFor(timed, route, route.copy(at = "2026-10-04T08:00"), departs))
+        assertEquals(TripStart.Ready, tripStartFor(timed, route, route.copy(boardingClock = "0811"), departs))
+    }
+}

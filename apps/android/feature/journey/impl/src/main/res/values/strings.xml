@@ -7,9 +7,6 @@
     <string name="journey_close_description">Tutup perjalanan</string>
     <string name="journey_share_description">Bagikan rute ini</string>
     <!-- The trip page's buttons under its header; TalkBack reads the longer descriptions instead -->
-    <string name="journey_share">Bagikan</string>
-    <string name="journey_save_route_short">Simpan</string>
-    <string name="journey_route_saved">Tersimpan</string>
     <!-- The share sheet's title -->
     <string name="journey_share_title">Cek Tarif Commute</string>
     <!-- The journey the page was opened on is no longer in the answer -->
@@ -148,4 +145,16 @@
     <string name="journey_departure_later">%1$d mnt lagi</string>
     <string name="journey_departure_now">Sekarang</string>
     <string name="journey_departure_set">Atur</string>
+
+    <!-- Trip mode, from the trip page. -->
+    <string name="journey_trip_start">OTW!</string>
+    <string name="journey_trip_start_description">Mulai perjalanan</string>
+    <string name="journey_trip_open">Lihat perjalanan</string>
+    <string name="journey_trip_too_early">Bisa dimulai dari %1$s</string>
+
+    <!-- The picker's "near you". -->
+    <string name="journey_picker_use_location">Pakai lokasi kamu</string>
+    <string name="journey_picker_locating">Lagi cari lokasi kamu…</string>
+    <string name="journey_picker_none_nearby">Nggak ada stasiun dalam 1,5 km dari kamu</string>
+    <string name="journey_picker_location_unavailable">Lokasi kamu belum ketemu. Cek izin lokasi atau GPS-nya ya</string>
 </resources>
