@@ -37,6 +37,7 @@ rootProject.name = "Commute"
 
 include(":app")
 include(":baselineprofile")
+include(":baselineprofile-wear")
 include(":wear")
 include(":core:common")
 include(":core:model")
