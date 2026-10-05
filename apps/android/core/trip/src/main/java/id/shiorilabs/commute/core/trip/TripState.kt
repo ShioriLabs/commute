@@ -75,7 +75,19 @@ data class TripState(
      */
     @Serializable(with = InstantSerializer::class)
     val walkingSince: Instant? = null,
+    /**
+     * When the rider was seen at each stop, as epoch milliseconds keyed `leg:stop`: by a fix there
+     * while riding (the last one while the train waits, so about when it left; the first at the
+     * stop to get off at, when it got in), or by a tap of "Udah naik" or "Udah turun". A stop
+     * passed without either has none: the clock's guess isn't a sighting.
+     */
+    val stopTimes: Map<String, Long> = emptyMap(),
 )
+
+/** When the rider was seen at [stopIndex] of leg [legIndex], or `null` if they weren't. */
+fun TripState.seenAt(legIndex: Int, stopIndex: Int): Instant? = stopTimes[stopKey(legIndex, stopIndex)]?.let(Instant::ofEpochMilli)
+
+internal fun stopKey(legIndex: Int, stopIndex: Int) = "$legIndex:$stopIndex"
 
 sealed interface TripEvent {
 

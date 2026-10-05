@@ -65,6 +65,8 @@
     <string name="trip_mark_odd">Aneh</string>
     <string name="trip_mark_hint">Tandai pas keretanya jalan, berhenti, atau layarnya aneh</string>
     <string name="trip_mark_last">Ditandai: %1$s · %2$s</string>
+    <string name="trip_time_late">%1$s, telat %2$d menit dari jadwal %3$s</string>
+    <string name="trip_time_early">%1$s, %2$d menit lebih awal dari jadwal %3$s</string>
     <string name="trip_live_finished">Perjalanan udah selesai</string>
     <string name="trip_live_finished_detail">Mulai perjalanan baru dari halaman rute ya.</string>
     <string name="trip_done_arrived">Udah sampai di</string>

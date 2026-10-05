@@ -132,6 +132,10 @@ private val BoardDim = Color(0xFF64748B)
 private val PlainText = Color(0xFF0F172A)
 private val Hairline = Color(0x33FFFFFF)
 
+/** Off the timetable, on the dark plate: late in a soft red, early in a soft green. */
+private val BoardLate = Color(0xFFFB7185)
+private val BoardEarly = Color(0xFF34D399)
+
 /** Figures of one width, so minutes and clocks don't shift as they tick. */
 private const val TABULAR = "tnum"
 
@@ -381,7 +385,6 @@ private fun Plate(
     modifier: Modifier = Modifier,
 ) {
     val minutes = pids.minutesLeft
-    val clock = pids.alightingAt?.let(::formatClock)
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -403,7 +406,7 @@ private fun Plate(
         // The plainer facts: the platform while waiting for it, and the clock (when the minutes are
         // up by the close button) at the far end.
         val platform = pids.ride.platformCode?.takeIf { pids.label == PidsLabel.BOARD || pids.label == PidsLabel.WALK }
-        val at = clock.takeIf { minutes != null }
+        val at = pids.alightingAt.takeIf { minutes != null }
         if (platform != null || at != null) {
             Row(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, top = 6.dp, end = 20.dp)) {
                 Text(
@@ -413,10 +416,14 @@ private fun Plate(
                     color = BoardMuted,
                 )
                 at?.let {
-                    Text(
-                        text = it,
+                    TimetableTime(
+                        scheduled = pids.alightingScheduled,
+                        actual = it,
                         style = MaterialTheme.typography.labelLarge.merge(fontFeatureSettings = TABULAR),
                         color = BoardMuted,
+                        struck = BoardDim,
+                        late = BoardLate,
+                        early = BoardEarly,
                     )
                 }
             }
