@@ -10,7 +10,7 @@ import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Where the running trip is kept between process deaths. */
+/** Where the running trip, and the one that last ended, are kept between process deaths. */
 interface TripStore {
 
     fun read(): ActiveTrip?
@@ -18,6 +18,12 @@ interface TripStore {
     fun write(trip: ActiveTrip)
 
     fun clear()
+
+    fun readFinished(): FinishedTrip?
+
+    fun writeFinished(trip: FinishedTrip)
+
+    fun clearFinished()
 }
 
 /** Everything the trip does outside itself: notifications, alarms and the location service. */
@@ -55,6 +61,14 @@ class ActiveTripFileStore @Inject constructor(private val file: ActiveTripStore)
 
     override fun clear() {
         file.clear()
+    }
+
+    override fun readFinished(): FinishedTrip? = file.readFinished()
+
+    override fun writeFinished(trip: FinishedTrip) = file.writeFinished(trip)
+
+    override fun clearFinished() {
+        file.clearFinished()
     }
 }
 

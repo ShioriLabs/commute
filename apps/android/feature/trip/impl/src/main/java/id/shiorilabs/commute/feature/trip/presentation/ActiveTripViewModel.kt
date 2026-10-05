@@ -10,6 +10,7 @@ import id.shiorilabs.commute.feature.station.data.StationDirectory
 import id.shiorilabs.commute.feature.station.domain.Station
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.trip.ActiveTrip
+import id.shiorilabs.commute.feature.trip.runtime.FinishedTrip
 import id.shiorilabs.commute.feature.trip.runtime.TripControllerImpl
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -29,6 +30,8 @@ data class ActiveTripUiState(
     val stationLines: Map<String, List<String>> = emptyMap(),
     /** "Posisi akurat saat OTW" is off in Pengaturan → Lokasi: the trip runs by the clock by choice. */
     val tripFixesOff: Boolean = false,
+    /** The trip that just ended, while [trip] is `null`, for the page's last word on it. */
+    val finished: FinishedTrip? = null,
 )
 
 @HiltViewModel
@@ -48,12 +51,13 @@ class ActiveTripViewModel @Inject constructor(
         lines,
         stationLines,
         locationPreferences.use.map { !it.allowsTripFixes },
+        controller.finished,
         ::ActiveTripUiState,
     )
         .stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(5_000),
-            ActiveTripUiState(controller.active.value, lines.value, stationLines.value),
+            ActiveTripUiState(controller.active.value, lines.value, stationLines.value, finished = controller.finished.value),
         )
 
     init {
