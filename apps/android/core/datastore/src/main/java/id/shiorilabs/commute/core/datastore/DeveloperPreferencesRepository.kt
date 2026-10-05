@@ -31,6 +31,9 @@ class DeveloperPreferencesRepository @Inject constructor(
     /** "Tandai manual": buttons on the trip page for the rider to mark what the train is doing. */
     val manualMarks: Flow<Boolean> = dataStore.data.map { it[MANUAL_MARKS] == true }
 
+    /** "Tandai Peron": buttons for each platform's two ends passing the rider's window, to map platforms. */
+    val platformMarks: Flow<Boolean> = dataStore.data.map { it[PLATFORM_MARKS] == true }
+
     /** "Halaman PIDS": the board under the plate takes turns between the route and other pages. */
     val boardPages: Flow<Boolean> = dataStore.data.map { it[BOARD_PAGES] == true }
 
@@ -44,6 +47,8 @@ class DeveloperPreferencesRepository @Inject constructor(
     suspend fun setFrostTuner(enabled: Boolean) = set(FROST_TUNER, enabled)
 
     suspend fun setManualMarks(enabled: Boolean) = set(MANUAL_MARKS, enabled)
+
+    suspend fun setPlatformMarks(enabled: Boolean) = set(PLATFORM_MARKS, enabled)
 
     suspend fun setBoardPages(enabled: Boolean) = set(BOARD_PAGES, enabled)
 
@@ -59,6 +64,7 @@ class DeveloperPreferencesRepository @Inject constructor(
         val FORCE_TRIP_START = booleanPreferencesKey("force_trip_start")
         val FROST_TUNER = booleanPreferencesKey("frost_tuner")
         val MANUAL_MARKS = booleanPreferencesKey("manual_marks")
+        val PLATFORM_MARKS = booleanPreferencesKey("platform_marks")
         val BOARD_PAGES = booleanPreferencesKey("board_pages")
         val WATCH_AUTO_OPEN = booleanPreferencesKey("watch_auto_open")
     }

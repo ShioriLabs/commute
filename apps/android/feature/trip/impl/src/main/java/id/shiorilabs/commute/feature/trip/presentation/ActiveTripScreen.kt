@@ -103,6 +103,7 @@ import kotlin.math.roundToInt
 fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val manualMarks by viewModel.manualMarks.collectAsStateWithLifecycle()
+    val platformMarks by viewModel.platformMarks.collectAsStateWithLifecycle()
     val boardPages by viewModel.boardPages.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
 
@@ -118,6 +119,7 @@ fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel
         onOpenStation = { stop -> navigator.goTo(Route.Station(stop.id, title = stop.name)) },
         onRouteBack = { origin -> navigator.goTo(Route.Otw(fromId = origin.toId, toId = origin.fromId)) },
         manualMarks = manualMarks,
+        platformMarks = platformMarks,
         onMark = viewModel::mark,
         boardPages = boardPages,
     )
@@ -141,11 +143,13 @@ private fun ActiveTripContent(
     onOpenStation: (TripStop) -> Unit,
     onRouteBack: (Route.Trip) -> Unit,
     manualMarks: Boolean = false,
+    platformMarks: Boolean = false,
     onMark: (MarkKind, Pids) -> Unit = { _, _ -> },
     boardPages: Boolean = false,
 ) {
     val trip = state.trip
-    val marking = manualMarks && trip != null
+    val markRows = if (trip != null) markRows(manual = manualMarks, platform = platformMarks) else emptyList()
+    val marking = markRows.isNotEmpty()
     val context = LocalContext.current
     val copy = remember(context, state.lines) { TripCopy(context.resources, state.lines) }
     // The board's minutes count down between the trip's own updates.
@@ -171,7 +175,7 @@ private fun ActiveTripContent(
                 .background(PageBackground)
                 .onGloballyPositioned { listTop = it.positionInRoot().y },
             // Clear of the marks' bar, while it's up, as of the system bar.
-            contentPadding = PaddingValues(bottom = innerPadding.calculateBottomPadding() + 32.dp + if (marking) MarkBarHeight else 0.dp),
+            contentPadding = PaddingValues(bottom = innerPadding.calculateBottomPadding() + 32.dp + if (marking) markBarHeight(markRows.size) else 0.dp),
         ) {
             if (trip == null) {
                 val finished = state.finished
@@ -255,6 +259,7 @@ private fun ActiveTripContent(
         }
         if (marking) {
             MarkBar(
+                rows = markRows,
                 bottomInset = innerPadding.calculateBottomPadding(),
                 onMark = { kind -> trip?.let { onMark(kind, it.pids(Instant.now())) } },
                 modifier = Modifier.align(Alignment.BottomCenter),

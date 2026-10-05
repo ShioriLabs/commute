@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -41,18 +43,37 @@ enum class MarkKind(val key: String, val label: Int, val fill: Color, val ink: C
 
     /** What the page says is wrong right now. */
     ODD("odd", R.string.trip_mark_odd, Color(0xFFF59E0B), Color(0xFF0F172A)),
+
+    /** The start of a platform came level with the rider's window, the train coming in. */
+    PLATFORM_START("platform_start", R.string.trip_mark_platform_start, Color(0xFF2563EB), Color.White),
+
+    /** The end of the platform went past the rider's window, the train going out. */
+    PLATFORM_END("platform_end", R.string.trip_mark_platform_end, Color(0xFFDBEAFE), Color(0xFF1E3A8A)),
 }
 
-/** The bar's height above the bottom inset, which the page keeps clear under its last row. */
-internal val MarkBarHeight: Dp = 100.dp
+/**
+ * The bar's rows, top first: "Tandai Peron" puts the platform marks above, so the train marks stay
+ * nearest the thumb. Empty with neither switch on, and then there's no bar.
+ */
+internal fun markRows(manual: Boolean, platform: Boolean): List<List<MarkKind>> = buildList {
+    if (platform) add(listOf(MarkKind.PLATFORM_START, MarkKind.PLATFORM_END))
+    if (manual) add(listOf(MarkKind.MOVING, MarkKind.STOPPED, MarkKind.ODD))
+}
+
+/** The bar's height above the bottom inset for [rows], which the page keeps clear under its last row. */
+internal fun markBarHeight(rows: Int): Dp = 40.dp + MarkRowHeight * rows
+
+private val MarkRowHeight: Dp = 60.dp
 
 /**
  * "Tandai manual": three big buttons under the trip page, pressed when the train moves off, when it
- * stops, and when the page is wrong. Each tap is logged beside what the trip made of it; nothing
- * about the trip changes. A tap answers with a buzz, so it can be made without looking.
+ * stops, and when the page is wrong. "Tandai Peron" adds a row above for each platform's two ends as
+ * they pass the rider's window, which maps where platforms really are. Each tap is logged beside
+ * what the trip made of it; nothing about the trip changes. A tap answers with a buzz, so it can be
+ * made without looking.
  */
 @Composable
-internal fun MarkBar(bottomInset: Dp, onMark: (MarkKind) -> Unit, modifier: Modifier = Modifier) {
+internal fun MarkBar(rows: List<List<MarkKind>>, bottomInset: Dp, onMark: (MarkKind) -> Unit, modifier: Modifier = Modifier) {
     val haptics = LocalHapticFeedback.current
     var last by remember { mutableStateOf<Pair<MarkKind, Instant>?>(null) }
     Column(
@@ -64,37 +85,43 @@ internal fun MarkBar(bottomInset: Dp, onMark: (MarkKind) -> Unit, modifier: Modi
         Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFFE2E8F0)))
         Text(
             text = last?.let { (kind, at) -> stringResource(R.string.trip_mark_last, stringResource(kind.label), formatClockSeconds(at)) }
-                ?: stringResource(R.string.trip_mark_hint),
+                ?: stringResource(if (rows.size > 1) R.string.trip_mark_hint_platform else R.string.trip_mark_hint),
             modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp),
             style = MaterialTheme.typography.labelMedium,
             color = Color(0xFF64748B),
         )
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            MarkKind.entries.forEach { kind ->
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(52.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(kind.fill)
-                        .clickable(role = Role.Button) {
-                            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-                            last = kind to Instant.now()
-                            onMark(kind)
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = stringResource(kind.label),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = kind.ink,
-                    )
-                }
+        rows.forEach { row ->
+            Row(
+                modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                row.forEach { kind -> MarkButton(kind, onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                    last = kind to Instant.now()
+                    onMark(kind)
+                }) }
             }
         }
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun RowScope.MarkButton(kind: MarkKind, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .height(52.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(kind.fill)
+            .clickable(role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = stringResource(kind.label),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = kind.ink,
+        )
     }
 }
