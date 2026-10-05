@@ -77,7 +77,7 @@ import id.shiorilabs.commute.core.trip.RiderAction
 import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripPhase
 import id.shiorilabs.commute.core.trip.progress
-import id.shiorilabs.commute.core.ui.components.CommuteIconButton
+import id.shiorilabs.commute.core.ui.components.CommuteCloseButton
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.components.CommuteButton
@@ -652,13 +652,7 @@ private fun Finished(innerPadding: PaddingValues, onClose: () -> Unit) {
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
             )
-            CommuteIconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
-                Icon(
-                    imageVector = CommuteIcons.Close,
-                    contentDescription = stringResource(R.string.trip_live_close),
-                    modifier = Modifier.size(24.dp),
-                )
-            }
+            CommuteCloseButton(onClick = onClose, contentDescription = stringResource(R.string.trip_live_close))
         }
         Text(
             text = stringResource(R.string.trip_live_finished_detail),
