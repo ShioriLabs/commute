@@ -7,6 +7,7 @@ import id.shiorilabs.commute.core.location.LocationClient
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.query.di.ApplicationScope
 import id.shiorilabs.commute.core.trip.FinishReason
+import id.shiorilabs.commute.core.trip.InstantSerializer
 import id.shiorilabs.commute.core.trip.RiderAction
 import id.shiorilabs.commute.core.trip.TripEffect
 import id.shiorilabs.commute.core.trip.TripEngine
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.Serializable
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -55,11 +57,20 @@ class TripControllerImpl @Inject constructor(
     private val _active = MutableStateFlow<ActiveTrip?>(null)
     override val active: StateFlow<ActiveTrip?> = _active.asStateFlow()
 
+    private val _finished = MutableStateFlow<FinishedTrip?>(null)
+
+    /**
+     * The trip that last ended and how, until another starts or [FINISHED_KEPT] has passed: the
+     * trip page's last word on it, stored so it's there after the process has gone too.
+     */
+    val finished: StateFlow<FinishedTrip?> = _finished.asStateFlow()
+
     private var timer: Job? = null
 
     /** A trip stored by an earlier process carries on, from the clock until a fix confirms it. */
     private val restored: Job = scope.launch {
         mutex.withLock {
+            _finished.value = store.readFinished()?.takeIf { clock.instant().isBefore(it.at.plus(FINISHED_KEPT)) }
             val trip = store.read() ?: return@withLock
             Log.i(TAG, "restored ${trip.origin.journeyKey} at ${trip.state.phase}")
             _active.value = trip
@@ -93,6 +104,8 @@ class TripControllerImpl @Inject constructor(
             val hasLocation = mayTrack()
             mutex.withLock {
                 if (_active.value != null) runtime.finish()
+                _finished.value = null
+                store.clearFinished()
                 val step = TripEngine.start(placed, clock.instant(), hasLocation)
                 Log.i(TAG, "started ${origin.journeyKey}, location ${if (hasLocation) "on" else "off"}")
                 apply(ActiveTrip(placed, step.state, origin), step)
@@ -154,6 +167,10 @@ class TripControllerImpl @Inject constructor(
             runtime.stopTracking()
             runtime.finish()
             store.clear()
+            FinishedTrip(next, finished.reason, clock.instant()).also {
+                _finished.value = it
+                store.writeFinished(it)
+            }
             _active.value = null
             return
         }
@@ -193,3 +210,15 @@ class TripControllerImpl @Inject constructor(
         const val TAG = "CommuteTrip"
     }
 }
+
+/** A trip that has ended: as it stood at the end, why it ended, and when. */
+@Serializable
+data class FinishedTrip(
+    val trip: ActiveTrip,
+    val reason: FinishReason,
+    @Serializable(with = InstantSerializer::class)
+    val at: Instant,
+)
+
+/** How long a finished trip's summary stays: about the rest of a day out. */
+private val FINISHED_KEPT: Duration = Duration.ofHours(6)
