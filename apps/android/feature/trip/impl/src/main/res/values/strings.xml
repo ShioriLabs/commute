@@ -56,6 +56,7 @@
 
     <!-- The live trip screen. -->
     <string name="trip_live_close">Tutup</string>
+    <string name="trip_bar_open">buka perjalanan</string>
     <string name="trip_live_details">Lihat detail rute</string>
     <string name="trip_live_finished">Perjalanan udah selesai</string>
     <string name="trip_live_finished_detail">Mulai perjalanan baru dari halaman rute ya.</string>

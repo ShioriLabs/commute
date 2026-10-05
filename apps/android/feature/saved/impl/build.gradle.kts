@@ -22,8 +22,6 @@ dependencies {
     implementation(project(":feature:station:api"))
     // SavedRouteCard: a pinned pair's card, the journey feature's seam.
     implementation(project(":feature:journey:api"))
-    // The running trip's card at the top of the feed.
-    implementation(project(":feature:trip:api"))
     // "Di dekat kamu": one fix while home is open, asked for only from its card.
     implementation(project(":core:location"))
 
