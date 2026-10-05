@@ -25,7 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import id.shiorilabs.commute.core.ui.ext.parseHexColor
+import id.shiorilabs.commute.core.ui.ext.lineColorOf
 import id.shiorilabs.commute.core.ui.ext.tint
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.Gray500
@@ -57,7 +57,7 @@ fun LastTrainCard(
     lineInfo: LineInfo?,
     modifier: Modifier = Modifier,
 ) {
-    val lineColor = lineInfo?.colorCode?.let { parseHexColor(it) } ?: Slate400
+    val lineColor = lineColorOf(lineInfo?.colorCode)
     val divider = lineColor.tint(0.3f)
     val name = lineInfo?.name ?: line.lineKey
     val description = stringResource(R.string.station_last_trains_description, name)

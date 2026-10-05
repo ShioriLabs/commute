@@ -17,6 +17,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.animation.AnimatedContent
+import id.shiorilabs.commute.core.ui.ext.lineColorOf
 import kotlinx.coroutines.delay
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.text.TextStyle
@@ -111,7 +112,6 @@ import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.ui.components.CommuteIconButton
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
-import id.shiorilabs.commute.core.ui.ext.parseHexColor
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.motion.IosSpringEasing
 import id.shiorilabs.commute.core.ui.motion.rememberReducedMotion
@@ -213,7 +213,7 @@ internal fun PidsBoard(
     pages: Boolean = false,
 ) {
     val line = lines[pids.ride.line]
-    val color = parseHexColor(line?.colorCode ?: "", BoardMuted)
+    val color = lineColorOf(line?.colorCode)
     Column(modifier = modifier.fillMaxWidth()) {
         // Over the strip: its band runs on up behind the plate.
         Plate(pids, lines, stationLines, onNameMoved, modifier = Modifier.zIndex(1f))
