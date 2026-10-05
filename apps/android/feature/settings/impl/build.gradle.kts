@@ -24,6 +24,8 @@ dependencies {
     implementation(project(":core:ui"))
     // StationRepository — the saved stations page names each station.
     implementation(project(":feature:station:api"))
+    // The trip log, sent on from Experimental.
+    implementation(project(":feature:trip:api"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.runtime)
