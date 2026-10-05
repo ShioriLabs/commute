@@ -140,3 +140,66 @@ describe('retimeTrips after the last train', () => {
     expect(leg.tripId).toBeUndefined()
   })
 })
+
+/*
+ * Setiabudi to Dukuh Atas, which BK and CB both run. The search names BK; the
+ * CB that leaves first must be offered under its own roundel, and still count
+ * as the same route when the badges are handed out.
+ */
+describe('retimeTrips on a shared trunk', () => {
+  const station = (id: string) => ({ id, name: id })
+  const lrt: FareJourney = {
+    legs: [{
+      type: 'RIDE',
+      line: 'LRTJBDB:BK',
+      operator: 'LRTJBDB',
+      from: station('LRTJBDB-SET'),
+      to: station('LRTJBDB-DKA'),
+      stationCount: 2,
+      stops: [station('LRTJBDB-SET'), station('LRTJBDB-DKA')],
+      headsign: null,
+      distanceM: 1500
+    }],
+    segments: [],
+    totalFare: 5000,
+    totalDistanceM: 1500,
+    transferCount: 0,
+    labels: [],
+    boardings: 1,
+    walkDistanceM: 0
+  }
+  // A genuinely different way: a walk first, then the same ride.
+  const other: FareJourney = {
+    ...lrt,
+    totalFare: 9000,
+    legs: [{ type: 'TRANSFER', from: station('LRTJBDB-SET'), to: station('LRTJBDB-SET'), distanceM: 100 } as FareJourney['legs'][number], ...lrt.legs]
+  }
+  const result = { from: station('LRTJBDB-SET'), to: station('LRTJBDB-DKA'), journeys: [lrt] }
+  const context = { paymentMethod: 'KMT', departureAt: new Date('2026-10-05T18:40:00+07:00') } as unknown as FareContext
+
+  const hhmm = (h: number, m: number) => h * 3600 + m * 60
+  const trains = [
+    { departureS: hhmm(18, 41), lineCode: 'BK', tripId: 'bk1' },
+    { departureS: hhmm(18, 45), lineCode: 'CB', tripId: 'cb1' },
+    { departureS: hhmm(18, 49), lineCode: 'BK', tripId: 'bk2' }
+  ]
+  const router = {
+    timeJourney: (_legs: unknown, { departureS }: { departureS: number }) => {
+      const train = trains.find(t => t.departureS >= departureS)
+      return train ? [{ ...train, arrivalS: train.departureS + 180, stopsS: [train.departureS, train.departureS + 180] }] : [null]
+    },
+    journeyArrival: (_legs: unknown, timings: { arrivalS: number }[]) => timings[0]?.arrivalS ?? null
+  } as unknown as Tsundere
+
+  it('offers the other line\'s train under its own line', () => {
+    const lines = retimeTrips(result, router, context).journeys
+      .map(j => j.legs[0]!.type === 'RIDE' ? j.legs[0]!.line : null)
+    expect(lines).toEqual(['LRTJBDB:BK', 'LRTJBDB:CB', 'LRTJBDB:BK'])
+  })
+
+  it('still treats every boarding as one route for the badges', () => {
+    const rows = retimeTrips({ ...result, journeys: [lrt, other] }, router, context).journeys
+    // Two routes, so the cheaper one wins CHEAPEST on its first row only.
+    expect(rows.filter(j => j.labels.includes('CHEAPEST'))).toHaveLength(1)
+  })
+})

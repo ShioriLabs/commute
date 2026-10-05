@@ -101,8 +101,17 @@ function timeOnce(
      * per-request half, exactly like the two stamps beside it — the cached body
      * must keep the derivation, or one rider's train is served to the next.
      */
+    /*
+     * The line of the train actually caught. On a trunk two lines share the
+     * engine boards whichever leaves first, so a leg the search named BK can be
+     * ridden on a CB train, and the card must show the one the rider boards.
+     * Per-request like the headsign: the cached body keeps the search's line.
+     */
+    const prefix = leg.line.slice(0, leg.line.indexOf(':') + 1)
+    const boardedLine = timing.lineCode === undefined ? leg.line : `${prefix}${timing.lineCode}`
     return {
       ...leg,
+      ...(boardedLine === leg.line ? {} : { line: boardedLine }),
       departureAt: stamp(timing.departureS),
       arrivalAt: stamp(timing.arrivalS),
       // Per-request for the same reason: the times at each stop and the trip's
@@ -234,9 +243,11 @@ function relabel(journeys: FareJourney[]): FareJourney[] {
    * One representative row per route — the first, which after the arrival sort
    * is its soonest usable boarding. `routeKey` is the leg shape, so two
    * boardings of one route collapse and two genuinely different routes do not.
+   * Keyed on the operator rather than the line: a boarding on a shared trunk
+   * may carry the other line's code (see timeOnce) and is still the same route.
    */
   const routeKey = (j: FareJourney) => j.legs
-    .map(l => (l.type === 'RIDE' ? `${l.line}:${l.from.id}>${l.to.id}` : `~${l.to.id}`))
+    .map(l => (l.type === 'RIDE' ? `${l.operator}:${l.from.id}>${l.to.id}` : `~${l.to.id}`))
     .join('|')
   const firstOfRoute = new Map<string, number>()
   stripped.forEach((j, i) => {

@@ -123,6 +123,11 @@ export interface LegTiming {
   /** Where that vehicle is signed for, when the feed says. See Trip.headsign. */
   headsign?: string
   /**
+   * The line the boarded trip runs on. Usually the leg's own, but on a trunk
+   * two lines share it can be the other one — see candidatePatterns.
+   */
+  lineCode: string
+  /**
    * Nothing later on this line tonight goes from this boarding stop to this
    * alighting stop: miss it and the leg cannot be ridden until tomorrow.
    * Present only when true.
@@ -175,6 +180,33 @@ function boardingIndexFor(pattern: IndexedPattern, stationIds: readonly string[]
     if (pattern.stationIds[start + i] !== stationIds[i]) return -1
   }
   return start
+}
+
+/*
+ * Every pattern a rider on this leg could board.
+ *
+ * Not only the leg's own line. The search names ONE line per leg, but where
+ * lines share a trunk any of them carries the rider the same way: Setiabudi to
+ * Dukuh Atas is ridden on a Cibubur train exactly as on a Bekasi one, and
+ * looking only at the named line hid every other train (the 18:45 CB left
+ * before the 18:49 BK and was never offered). boardingIndexFor still requires
+ * the pattern to serve the leg's stops in order and back to back, so a train
+ * that branches off before the alighting stop is refused as before.
+ *
+ * Keyed on the boarding STOP, and station ids are operator-scoped, so this
+ * never crosses to another operator. Separately gated lines never swap in or
+ * out: KA Bandara shares KCI track but not its gates or its fare, so a leg on
+ * one is not ridden on the other.
+ */
+function candidatePatterns(
+  trips: TripIndex,
+  leg: Extract<RouteLeg, { type: 'RIDE' }>,
+  gatedLines: ReadonlySet<string> | undefined
+): IndexedPattern[] {
+  const gated = (line: string) => gatedLines?.has(line) ?? false
+  const legGated = gated(leg.lineCode)
+  return (trips.byStop.get(leg.stationIds[0]!) ?? []).filter(pattern =>
+    pattern.lineCode === leg.lineCode || (!legGated && !gated(pattern.lineCode)))
 }
 
 /*
@@ -254,13 +286,8 @@ export function resolveDepartures(
      */
     if (rodePrevious) clockS += changeSecondsAt(paceMs, crossesGate)
 
-    /*
-     * Only patterns on this leg's own line. A pattern that happens to serve the
-     * same stops on another line is a different service, and boarding it would
-     * report a vehicle the journey never said to take.
-     */
-    let best: { trip: Trip, boardIndex: number, boardAt: number, alightAt: number } | null = null
-    for (const pattern of trips.byLine.get(leg.lineCode) ?? []) {
+    let best: { trip: Trip, lineCode: string, boardIndex: number, boardAt: number, alightAt: number } | null = null
+    for (const pattern of candidatePatterns(trips, leg, gatedLines)) {
       const board = boardingIndexFor(pattern, leg.stationIds)
       if (board < 0) continue
       const trip = nextTrip(pattern, board, clockS, dayMask)
@@ -273,7 +300,7 @@ export function resolveDepartures(
        * already established both go far enough.
        */
       if (best === null || boardAt < best.boardAt) {
-        best = { trip, boardIndex: board, boardAt, alightAt: alightTimeOf(trip, board + leg.stationIds.length - 1) }
+        best = { trip, lineCode: pattern.lineCode, boardIndex: board, boardAt, alightAt: alightTimeOf(trip, board + leg.stationIds.length - 1) }
       }
     }
 
@@ -290,9 +317,11 @@ export function resolveDepartures(
       arrivalS: best.alightAt,
       stopsS: leg.stationIds.map((_, i) => (i === 0 ? boardAt : alightTimeOf(trip, boardIndex + i))),
       tripId: best.trip.id,
+      lineCode: best.lineCode,
       ...(best.trip.headsign === undefined ? {} : { headsign: best.trip.headsign }),
-      ...(hasLaterTrip(trips, leg, best.boardAt, dayMask) ? {} : { lastOfDay: true as const })
+      ...(hasLaterTrip(trips, leg, best.boardAt, dayMask, gatedLines) ? {} : { lastOfDay: true as const })
     })
+    previousLine = best.lineCode
     clockS = best.alightAt
     rodePrevious = true
   }
@@ -318,18 +347,19 @@ const nightTime = (s: number) => (s < NIGHT_END_S ? s + DAY_S : s)
  * Is there a later trip tonight that serves this leg?
  *
  * The same candidates the boarding scan considers, which is what makes "last"
- * honest: every pattern on the leg's line that goes far enough, on the same
- * days. A later short-turn that stops before the rider's alighting station
+ * honest: every pattern on any line sharing the run that goes far enough, on
+ * the same days. A later short-turn that stops before the rider's alighting station
  * does not count, because boardingIndexFor already refuses it.
  */
 function hasLaterTrip(
   trips: TripIndex,
   leg: Extract<RouteLeg, { type: 'RIDE' }>,
   boardAtS: number,
-  dayMask: number
+  dayMask: number,
+  gatedLines: ReadonlySet<string> | undefined
 ): boolean {
   const after = nightTime(boardAtS)
-  for (const pattern of trips.byLine.get(leg.lineCode) ?? []) {
+  for (const pattern of candidatePatterns(trips, leg, gatedLines)) {
     const board = boardingIndexFor(pattern, leg.stationIds)
     if (board < 0) continue
     for (const trip of pattern.trips) {
