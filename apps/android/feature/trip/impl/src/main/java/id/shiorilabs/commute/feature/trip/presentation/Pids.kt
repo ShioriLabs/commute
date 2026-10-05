@@ -16,6 +16,9 @@ enum class PidsLabel {
     /** Waiting to board: "Naik di". */
     BOARD,
 
+    /** Stopped at a station on the way, by a fix: "Sekarang di", until the train moves off. */
+    AT,
+
     /** "Berikutnya". */
     NEXT,
 
@@ -105,9 +108,13 @@ internal fun ActiveTrip.pids(now: Instant): Pids {
         return Pids(ride, PidsLabel.ARRIVED, stop.name, stop.id, null, emptyList(), null, stopsLeft = 0, minutesLeft = null, alightingAt = null)
     }
 
+    // A fix places the rider at a stop exactly, and holds there until one finds the train moving;
+    // the clock only ever passes through.
+    val stopped = state.source == PositionSource.CONFIRMED && state.position == floor(state.position)
     val (label, focus) = when {
         state.phase == TripPhase.WAITING_TO_BOARD -> PidsLabel.BOARD to 0
         state.position >= last -> PidsLabel.ALIGHT_HERE to last
+        stopped -> PidsLabel.AT to state.position.toInt()
         else -> {
             val next = (floor(state.position).toInt() + 1).coerceAtMost(last)
             (if (next == last) PidsLabel.ALIGHT_NEXT else PidsLabel.NEXT) to next
@@ -116,7 +123,7 @@ internal fun ActiveTrip.pids(now: Instant): Pids {
     val upcoming = (focus..minOf(last, focus + PIDS_STOPS - 1)).map { index ->
         PidsStop(
             name = ride.stops[index].name,
-            minutes = if (label == PidsLabel.ALIGHT_HERE) null else minutesTo(index),
+            minutes = if (label == PidsLabel.ALIGHT_HERE || (label == PidsLabel.AT && index == focus)) null else minutesTo(index),
             next = index == focus,
             alighting = index == last,
         )
@@ -130,8 +137,8 @@ internal fun ActiveTrip.pids(now: Instant): Pids {
         at = expected(focus),
         upcoming = upcoming,
         changeTo = then?.takeIf { focus == last },
-        // Boarding, the stop stood at isn't one still to come.
-        stopsLeft = if (label == PidsLabel.BOARD) last else last - focus + 1,
+        // Boarding or stopped, the stop stood at isn't one still to come.
+        stopsLeft = if (label == PidsLabel.BOARD || label == PidsLabel.AT) last - focus else last - focus + 1,
         minutesLeft = if (label == PidsLabel.ALIGHT_HERE) null else minutesTo(last),
         alightingAt = expected(last),
     )
