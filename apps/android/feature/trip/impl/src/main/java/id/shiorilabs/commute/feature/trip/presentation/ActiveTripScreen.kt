@@ -71,6 +71,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.trip.TripStop
+import id.shiorilabs.commute.core.trip.scheduledAtStop
+import id.shiorilabs.commute.core.trip.seenAt
 import id.shiorilabs.commute.core.trip.PositionSource
 import id.shiorilabs.commute.core.trip.RiderAction
 import id.shiorilabs.commute.core.trip.TripLeg
@@ -118,6 +120,9 @@ private val Slate300 = Color(0xFFCBD5E1)
 private val Slate400 = Color(0xFF94A3B8)
 private val Slate500 = Color(0xFF64748B)
 private val Slate900 = Color(0xFF0F172A)
+
+/** Ahead of the timetable: the rare train that's early. */
+private val OnTimeGreen = Color(0xFF059669)
 
 @Composable
 private fun ActiveTripContent(
@@ -367,7 +372,10 @@ private fun RideBlock(
                         name = ride.stops[i].name,
                         mark = marks.marks[i],
                         next = i == next,
-                        at = trip.expectedAtStop(legIndex, i, now),
+                        scheduled = trip.plan.scheduledAtStop(legIndex, i),
+                        // Seen there, or still to come: a stop passed unseen keeps its timetable.
+                        at = trip.state.seenAt(legIndex, i)
+                            ?: trip.expectedAtStop(legIndex, i, now).takeIf { marks.marks[i] != StopMark.PASSED },
                         color = color,
                         first = i == 0,
                         last = i == ride.lastIndex,
@@ -391,6 +399,7 @@ private fun StopRow(
     name: String,
     mark: StopMark,
     next: Boolean,
+    scheduled: Instant?,
     at: Instant?,
     color: Color,
     first: Boolean,
@@ -449,19 +458,23 @@ private fun StopRow(
                 )
             }
         }
-        at?.let {
-            Text(
-                text = formatClock(it),
-                modifier = Modifier.padding(start = 12.dp),
-                style = MaterialTheme.typography.labelLarge.merge(fontFeatureSettings = "tnum"),
+        TimetableTime(
+            scheduled = scheduled,
+            actual = at,
+            style = MaterialTheme.typography.labelLarge.merge(
+                fontFeatureSettings = "tnum",
                 fontWeight = if (next) FontWeight.Bold else FontWeight.Normal,
-                color = when {
-                    passed -> Slate400
-                    next -> Slate900
-                    else -> Slate500
-                },
-            )
-        }
+            ),
+            color = when {
+                passed -> Slate400
+                next -> Slate900
+                else -> Slate500
+            },
+            struck = Slate400,
+            late = MaterialTheme.colorScheme.primary,
+            early = OnTimeGreen,
+            modifier = Modifier.padding(start = 12.dp),
+        )
     }
 }
 

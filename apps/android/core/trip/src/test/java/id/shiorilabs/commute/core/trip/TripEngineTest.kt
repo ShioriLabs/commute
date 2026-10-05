@@ -119,6 +119,43 @@ class TripEngineTest {
     }
 
     @Test
+    fun `a fix at a stop records when the train was there, to its last fix while it waits`() {
+        val run = Run(bogorLine)
+        // On the platform at Manggarai a minute before the train: the rider was there, not it.
+        run.fix(Places.MANGGARAI, -1.0)
+        assertNull(run.state.seenAt(0, 0))
+
+        run.fix(Places.TEBET, 3.5)
+        run.fix(Places.TEBET, 4.0)
+        assertEquals(at(4.0), run.state.seenAt(0, 1))
+
+        // Between stops records nothing, and Cawang wasn't seen.
+        run.fix(between(Places.CAWANG, Places.DUREN_KALIBATA, 0.5), 7.0)
+        assertNull(run.state.seenAt(0, 2))
+        assertEquals(at(4.0), run.state.seenAt(0, 1))
+    }
+
+    @Test
+    fun `the stop to get off at keeps when the train got in`() {
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(between(Places.PASAR_MINGGU_BARU, Places.PASAR_MINGGU, 0.5), 14.0)
+        run.fix(Places.PASAR_MINGGU, 15.5)
+
+        assertEquals(at(15.5), run.state.seenAt(0, 5))
+    }
+
+    @Test
+    fun `boarding and getting off by a tap record their stops too`() {
+        val run = Run(withChange)
+        run.send(TripEvent.RiderSaid(RiderAction.BOARDED, at(0.5)))
+        assertEquals(at(0.5), run.state.seenAt(0, 0))
+
+        run.send(TripEvent.RiderSaid(RiderAction.ALIGHTED, at(2.5)))
+        assertEquals(at(2.5), run.state.seenAt(0, 1))
+    }
+
+    @Test
     fun `a fix on the way in to the last stop isn't arriving yet`() {
         val plan = TripPlan(listOf(ride(Places.MANGGARAI, Places.TEBET, Places.CAWANG, line = "KCI:B", departs = 0, arrives = 10)))
         val run = Run(plan)
