@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.feature.trip.presentation
 
 import id.shiorilabs.commute.core.trip.PositionSource
+import id.shiorilabs.commute.core.trip.minutesUntil
 import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripPhase
 import id.shiorilabs.commute.core.trip.expectedAt
