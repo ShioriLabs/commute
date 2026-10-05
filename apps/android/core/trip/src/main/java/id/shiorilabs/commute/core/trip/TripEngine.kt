@@ -106,7 +106,11 @@ object TripEngine {
                     val late = plan.ride(state.legIndex).departureAt
                         ?.let { Duration.between(it, now).seconds.coerceIn(0, MAX_LATE_S) }
                         ?: 0
-                    state.copy(phase = TripPhase.RIDING, clockOffsetS = late)
+                    state.copy(
+                        phase = TripPhase.RIDING,
+                        clockOffsetS = late,
+                        stopTimes = state.stopTimes + (stopKey(state.legIndex, 0) to now.toEpochMilli()),
+                    )
                 } else {
                     state
                 }
@@ -140,6 +144,15 @@ object TripEngine {
             } else {
                 state.clockOffsetS
             }
+            // At a stop, riding: when the train was there. The last fix while it waits, so about
+            // when it left; at the stop to get off at, the first, when it got in.
+            val stop = candidate.toInt().takeIf { phase == TripPhase.RIDING && candidate == floor(candidate) }
+            val key = stop?.let { stopKey(state.legIndex, it) }
+            val stopTimes = if (key == null || (stop == ride.lastIndex && key in state.stopTimes)) {
+                state.stopTimes
+            } else {
+                state.stopTimes + (key to fix.at.toEpochMilli())
+            }
             // Past the next station's first hop, or nearer it than where the walk started: there.
             val walked = state.walkingSince != null && (candidate > 0 || reachedAfterWalk(plan, state.legIndex, fix.point))
             return state.copy(
@@ -151,6 +164,7 @@ object TripEngine {
                 hasLocation = true,
                 resumed = false,
                 walkingSince = if (walked) null else state.walkingSince,
+                stopTimes = stopTimes,
             )
         }
 
@@ -350,7 +364,10 @@ object TripEngine {
         effects: MutableList<TripEffect>,
     ): TripState {
         val ride = plan.ride(state.legIndex)
-        var next = state.copy(position = ride.lastIndex.toDouble())
+        // Off by a tap or a fix: seen at the stop, unless a fix saw them get in already.
+        val alighted = stopKey(state.legIndex, ride.lastIndex)
+        val seen = if (estimated || alighted in state.stopTimes) state.stopTimes else state.stopTimes + (alighted to now.toEpochMilli())
+        var next = state.copy(position = ride.lastIndex.toDouble(), stopTimes = seen)
         fire(next, AlertKind.PREPARE, estimated, mutableListOf())?.let { next = it }
         fire(next, AlertKind.ALIGHT, estimated, effects)?.let { next = it }
 
