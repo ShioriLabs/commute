@@ -21,6 +21,9 @@ object TripEngine {
 
     /** Rail stations are long and fixes on a train are rough. */
     private const val RAIL_STOP_RADIUS_M = 250.0
+
+    /** About half a twelve-car train either side of the station's point: the train is in. */
+    private const val RAIL_AT_STOP_M = 150.0
     private const val RAIL_CORRIDOR_M = 400.0
     private const val RAIL_ACCURACY_GATE_M = 250f
     private const val RAIL_OFF_ROUTE_M = 1_000.0
@@ -28,6 +31,7 @@ object TripEngine {
 
     /** TransJakarta haltes are a few hundred metres apart, on the road itself. */
     private const val BUS_STOP_RADIUS_M = 100.0
+    private const val BUS_AT_STOP_M = 70.0
     private const val BUS_CORRIDOR_M = 150.0
     private const val BUS_ACCURACY_GATE_M = 100f
     private const val BUS_OFF_ROUTE_M = 500.0
@@ -170,7 +174,8 @@ object TripEngine {
 
     /**
      * Where along [ride] a fix at [point] puts the rider, looking only ahead of [from]: at a stop
-     * when within its radius, else projected onto the nearest hop it runs alongside.
+     * when the train is in (within [Tuning.atStop]), else projected onto the nearest hop it runs
+     * alongside, so one still rolling in is a little short of the stop rather than at it.
      */
     private fun locate(ride: TripLeg.Ride, from: Double, point: GeoPoint, tuning: Tuning): Double? {
         val start = floor(from).toInt().coerceIn(0, ride.lastIndex)
@@ -181,7 +186,7 @@ object TripEngine {
         for (i in start..end) {
             val stop = ride.stops[i].point ?: continue
             val d = distanceM(point, stop)
-            if (d <= tuning.stopRadius && d < bestStopDistance) {
+            if (d <= tuning.atStop && d < bestStopDistance) {
                 bestStop = i
                 bestStopDistance = d
             }
@@ -446,14 +451,15 @@ object TripEngine {
 
     private class Tuning(
         val stopRadius: Double,
+        val atStop: Double,
         val corridor: Double,
         val accuracyGate: Float,
         val offRoute: Double,
         val missed: Double,
     ) {
         companion object {
-            private val RAIL = Tuning(RAIL_STOP_RADIUS_M, RAIL_CORRIDOR_M, RAIL_ACCURACY_GATE_M, RAIL_OFF_ROUTE_M, RAIL_MISSED_M)
-            private val BUS = Tuning(BUS_STOP_RADIUS_M, BUS_CORRIDOR_M, BUS_ACCURACY_GATE_M, BUS_OFF_ROUTE_M, BUS_MISSED_M)
+            private val RAIL = Tuning(RAIL_STOP_RADIUS_M, RAIL_AT_STOP_M, RAIL_CORRIDOR_M, RAIL_ACCURACY_GATE_M, RAIL_OFF_ROUTE_M, RAIL_MISSED_M)
+            private val BUS = Tuning(BUS_STOP_RADIUS_M, BUS_AT_STOP_M, BUS_CORRIDOR_M, BUS_ACCURACY_GATE_M, BUS_OFF_ROUTE_M, BUS_MISSED_M)
 
             fun of(ride: TripLeg.Ride) = if (ride.isBus) BUS else RAIL
         }
