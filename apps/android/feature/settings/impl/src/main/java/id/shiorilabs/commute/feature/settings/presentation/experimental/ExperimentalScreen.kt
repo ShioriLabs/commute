@@ -43,6 +43,10 @@ class ExperimentalViewModel @Inject constructor(
     val frostTuner: StateFlow<Boolean> = preferences.frostTuner.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     val manualMarks: StateFlow<Boolean> = preferences.manualMarks.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    val watchAutoOpen: StateFlow<Boolean> = preferences.watchAutoOpen.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    fun setWatchAutoOpen(enabled: Boolean) = viewModelScope.launch { preferences.setWatchAutoOpen(enabled) }
+
     fun setForceTripStart(enabled: Boolean) = viewModelScope.launch { preferences.setForceTripStart(enabled) }
 
     fun setFrostTuner(enabled: Boolean) = viewModelScope.launch { preferences.setFrostTuner(enabled) }
@@ -69,6 +73,7 @@ fun ExperimentalScreen(
     val forceTripStart by viewModel.forceTripStart.collectAsStateWithLifecycle()
     val frostTuner by viewModel.frostTuner.collectAsStateWithLifecycle()
     val manualMarks by viewModel.manualMarks.collectAsStateWithLifecycle()
+    val watchAutoOpen by viewModel.watchAutoOpen.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
     val context = LocalContext.current
     val empty = stringResource(R.string.settings_experimental_trip_log_empty)
@@ -78,11 +83,13 @@ fun ExperimentalScreen(
         forceTripStart = forceTripStart,
         frostTuner = frostTuner,
         manualMarks = manualMarks,
+        watchAutoOpen = watchAutoOpen,
         canHide = !debug,
         onBack = { navigator.pop() },
         onForceTripStart = { viewModel.setForceTripStart(it) },
         onFrostTuner = { viewModel.setFrostTuner(it) },
         onManualMarks = { viewModel.setManualMarks(it) },
+        onWatchAutoOpen = { viewModel.setWatchAutoOpen(it) },
         onShareTripLog = {
             viewModel.shareTripLog { intent ->
                 if (intent != null) context.startActivity(intent) else Toast.makeText(context, empty, Toast.LENGTH_SHORT).show()
@@ -102,10 +109,12 @@ private fun ExperimentalContent(
     frostTuner: Boolean,
     canHide: Boolean,
     manualMarks: Boolean = false,
+    watchAutoOpen: Boolean = true,
     onBack: () -> Unit = {},
     onForceTripStart: (Boolean) -> Unit = {},
     onFrostTuner: (Boolean) -> Unit = {},
     onManualMarks: (Boolean) -> Unit = {},
+    onWatchAutoOpen: (Boolean) -> Unit = {},
     onShareTripLog: () -> Unit = {},
     onHide: () -> Unit = {},
 ) {
@@ -137,6 +146,12 @@ private fun ExperimentalContent(
             subtitle = stringResource(R.string.settings_experimental_manual_marks_detail),
             checked = manualMarks,
             onCheckedChange = onManualMarks,
+        )
+        SettingsSwitch(
+            title = stringResource(R.string.settings_experimental_watch_auto_open),
+            subtitle = stringResource(R.string.settings_experimental_watch_auto_open_detail),
+            checked = watchAutoOpen,
+            onCheckedChange = onWatchAutoOpen,
         )
         SettingsItem(
             label = stringResource(R.string.settings_experimental_trip_log),

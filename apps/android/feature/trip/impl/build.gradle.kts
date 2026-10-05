@@ -25,6 +25,8 @@ dependencies {
     // The trip as the watch gets it, over the Wearable Data Layer.
     implementation(project(":core:wearable"))
     implementation(libs.play.services.wearable)
+    // Opening the watch app as a trip starts.
+    implementation(libs.androidx.wear.remote.interactions)
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(project(":core:location"))
     implementation(project(":core:datastore"))
