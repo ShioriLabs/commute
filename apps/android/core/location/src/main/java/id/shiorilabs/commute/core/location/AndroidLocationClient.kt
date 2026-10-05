@@ -114,6 +114,7 @@ class AndroidLocationClient @Inject constructor(
         point = GeoPoint(latitude, longitude),
         accuracyM = if (hasAccuracy()) accuracy else Float.MAX_VALUE,
         at = instant(),
+        speedMps = if (hasSpeed()) speed else null,
     )
 
     private companion object {
