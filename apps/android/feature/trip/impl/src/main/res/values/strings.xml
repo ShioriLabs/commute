@@ -60,6 +60,11 @@
     <string name="trip_live_details">Lihat detail rute</string>
     <string name="trip_alert_rerouted_title">Naik yang %1$s aja</string>
     <string name="trip_alert_rerouted">Yang %1$s udah lewat. %2$s berikutnya berangkat %3$s dari %4$s.</string>
+    <string name="trip_mark_moving">Jalan</string>
+    <string name="trip_mark_stopped">Berhenti</string>
+    <string name="trip_mark_odd">Aneh</string>
+    <string name="trip_mark_hint">Tandai pas keretanya jalan, berhenti, atau layarnya aneh</string>
+    <string name="trip_mark_last">Ditandai: %1$s · %2$s</string>
     <string name="trip_live_finished">Perjalanan udah selesai</string>
     <string name="trip_live_finished_detail">Mulai perjalanan baru dari halaman rute ya.</string>
     <string name="trip_done_arrived">Udah sampai di</string>

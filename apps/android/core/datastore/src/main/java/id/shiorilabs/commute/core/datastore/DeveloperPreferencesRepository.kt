@@ -28,11 +28,16 @@ class DeveloperPreferencesRepository @Inject constructor(
     /** The floating frost tuner over every screen, for the pinned headers' frost. */
     val frostTuner: Flow<Boolean> = dataStore.data.map { it[FROST_TUNER] == true }
 
+    /** "Tandai manual": buttons on the trip page for the rider to mark what the train is doing. */
+    val manualMarks: Flow<Boolean> = dataStore.data.map { it[MANUAL_MARKS] == true }
+
     suspend fun setExperimentalUnlocked(unlocked: Boolean) = set(EXPERIMENTAL_UNLOCKED, unlocked)
 
     suspend fun setForceTripStart(enabled: Boolean) = set(FORCE_TRIP_START, enabled)
 
     suspend fun setFrostTuner(enabled: Boolean) = set(FROST_TUNER, enabled)
+
+    suspend fun setManualMarks(enabled: Boolean) = set(MANUAL_MARKS, enabled)
 
     private suspend fun set(key: Preferences.Key<Boolean>, value: Boolean) {
         dataStore.edit { it[key] = value }
@@ -43,5 +48,6 @@ class DeveloperPreferencesRepository @Inject constructor(
         val EXPERIMENTAL_UNLOCKED = booleanPreferencesKey("experimental_unlocked")
         val FORCE_TRIP_START = booleanPreferencesKey("force_trip_start")
         val FROST_TUNER = booleanPreferencesKey("frost_tuner")
+        val MANUAL_MARKS = booleanPreferencesKey("manual_marks")
     }
 }
