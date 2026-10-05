@@ -29,7 +29,7 @@ import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.ui.components.CommuteEmptyState
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
-import id.shiorilabs.commute.core.ui.ext.parseHexColor
+import id.shiorilabs.commute.core.ui.ext.lineColorOf
 import id.shiorilabs.commute.core.ui.ext.tint
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.Gray600
@@ -47,9 +47,6 @@ import id.shiorilabs.commute.feature.station.domain.dottedTime
 import id.shiorilabs.commute.feature.station.domain.groupByCorridor
 import id.shiorilabs.commute.feature.station.domain.headwayMinutes
 import id.shiorilabs.commute.core.ui.R as CoreUiR
-
-/** While the line dictionary is still loading: the row renders grey rather than blanking. */
-private val FallbackLineColor = Color(0xFF94A3B8)
 
 // Tailwind's greys, as the web's frequency card uses them.
 
@@ -126,7 +123,7 @@ private fun CorridorRows(rows: List<Frequency>, lineInfo: LineInfo?) {
     val first = rows.first()
     val lineCode = lineInfo?.lineCode ?: codeOfLineKey(first.lineKey)
     val lineName = lineInfo?.name ?: lineCode.ifEmpty { stringResource(R.string.line_card_fallback_name) }
-    val lineColor = lineInfo?.let { parseHexColor(it.colorCode) } ?: FallbackLineColor
+    val lineColor = lineColorOf(lineInfo?.colorCode)
     val inline = rows.size == 1 && first.boundFor == null
 
     Column(

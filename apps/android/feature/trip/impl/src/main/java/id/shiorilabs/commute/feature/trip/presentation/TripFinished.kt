@@ -49,7 +49,7 @@ import id.shiorilabs.commute.core.trip.TripStop
 import id.shiorilabs.commute.core.trip.progress
 import id.shiorilabs.commute.core.ui.components.CommuteIconButton
 import id.shiorilabs.commute.core.ui.components.LineRoundel
-import id.shiorilabs.commute.core.ui.ext.parseHexColor
+import id.shiorilabs.commute.core.ui.ext.lineColorOf
 import id.shiorilabs.commute.core.ui.components.CommuteButton
 import id.shiorilabs.commute.core.ui.components.CommuteButtonIcon
 import id.shiorilabs.commute.core.ui.components.CommuteButtonText
@@ -68,7 +68,6 @@ private val DoneTrack = Color(0xFF334155)
 private val DoneTile = Color(0xFFF1F5F9)
 private val DoneLine = Color(0xFFE2E8F0)
 private val DoneLabel = Color(0xFF64748B)
-private val DoneFallbackLine = Color(0xFF94A3B8)
 
 /**
  * The trip page's last word on a trip that has ended: the board's plate saying where the rider got
@@ -237,7 +236,7 @@ private fun RouteBand(rides: List<TripLeg.Ride>, lines: Map<String, LineInfo>, f
     LaunchedEffect(fraction) {
         if (reducedMotion) lit.snapTo(fraction) else lit.animateTo(fraction, tween(DRAW_IN_MILLIS, easing = IosSpringEasing))
     }
-    val colors = rides.map { ride -> lines[ride.line]?.colorCode?.let { parseHexColor(it, DoneFallbackLine) } ?: DoneFallbackLine }
+    val colors = rides.map { ride -> lineColorOf(lines[ride.line]?.colorCode) }
     val weights = rides.map { it.lastIndex.coerceAtLeast(1).toFloat() }
     Canvas(modifier = modifier) {
         val thickness = 8.dp.toPx()

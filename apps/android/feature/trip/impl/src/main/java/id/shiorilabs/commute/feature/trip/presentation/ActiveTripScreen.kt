@@ -1,12 +1,6 @@
 package id.shiorilabs.commute.feature.trip.presentation
 
 import androidx.compose.foundation.Canvas
-import id.shiorilabs.commute.core.ui.theme.Slate100
-import id.shiorilabs.commute.core.ui.theme.Slate200
-import id.shiorilabs.commute.core.ui.theme.Slate300
-import id.shiorilabs.commute.core.ui.theme.Slate400
-import id.shiorilabs.commute.core.ui.theme.Slate500
-import id.shiorilabs.commute.core.ui.theme.Slate900
 import id.shiorilabs.commute.feature.station.domain.formatPlatformCode
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -86,10 +80,16 @@ import id.shiorilabs.commute.core.trip.progress
 import id.shiorilabs.commute.core.ui.components.CommuteIconButton
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
-import id.shiorilabs.commute.core.ui.ext.parseHexColor
 import id.shiorilabs.commute.core.ui.components.CommuteButton
 import id.shiorilabs.commute.core.ui.components.CommuteButtonVariant
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
+import id.shiorilabs.commute.core.ui.ext.lineColorOf
+import id.shiorilabs.commute.core.ui.theme.Slate100
+import id.shiorilabs.commute.core.ui.theme.Slate200
+import id.shiorilabs.commute.core.ui.theme.Slate300
+import id.shiorilabs.commute.core.ui.theme.Slate400
+import id.shiorilabs.commute.core.ui.theme.Slate500
+import id.shiorilabs.commute.core.ui.theme.Slate900
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.trip.ActiveTrip
 import id.shiorilabs.commute.feature.trip.TripReminder
@@ -328,7 +328,7 @@ private fun RideBlock(
     modifier: Modifier = Modifier,
 ) {
     val ride = trip.plan.ride(legIndex)
-    val color = parseHexColor(line?.colorCode ?: "", Slate400)
+    val color = lineColorOf(line?.colorCode)
     val current = legIndex == trip.state.legIndex && trip.state.phase != TripPhase.ARRIVED
     val here = marks.marks.indexOf(StopMark.HERE).takeIf { it >= 0 }
     // The stop the board names: the next one riding; boarding while waiting, unless the rider is
