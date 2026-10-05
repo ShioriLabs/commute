@@ -7,9 +7,9 @@ import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
 import id.shiorilabs.commute.core.navigation.NavGraphContribution
 import id.shiorilabs.commute.core.startup.StartupWarmup
-import id.shiorilabs.commute.feature.trip.ActiveTripCard
+import id.shiorilabs.commute.feature.trip.ActiveTripBar
 import id.shiorilabs.commute.feature.trip.TripController
-import id.shiorilabs.commute.feature.trip.presentation.ActiveTripCardImpl
+import id.shiorilabs.commute.feature.trip.presentation.ActiveTripBarImpl
 import id.shiorilabs.commute.feature.trip.navigation.TripNavContribution
 import id.shiorilabs.commute.feature.trip.runtime.ActiveTripFileStore
 import id.shiorilabs.commute.feature.trip.runtime.AndroidTripRuntime
@@ -34,7 +34,7 @@ abstract class TripModule {
     abstract fun bindTripRuntime(impl: AndroidTripRuntime): TripRuntime
 
     @Binds
-    abstract fun bindActiveTripCard(impl: ActiveTripCardImpl): ActiveTripCard
+    abstract fun bindActiveTripBar(impl: ActiveTripBarImpl): ActiveTripBar
 
     @Binds
     abstract fun bindStopLocator(impl: DirectoryStopLocator): StopLocator

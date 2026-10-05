@@ -67,6 +67,8 @@ dependencies {
     implementation(project(":feature:line:impl"))
     implementation(project(":feature:saved:impl"))
     implementation(project(":feature:trip:impl"))
+    // The running trip's bar, pinned over every screen.
+    implementation(project(":feature:trip:api"))
     implementation(project(":feature:card:impl"))
     implementation(project(":feature:settings:impl"))
 

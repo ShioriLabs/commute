@@ -17,6 +17,7 @@ import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.navigation.routeForLink
 import id.shiorilabs.commute.core.ui.startup.LocalStartupGate
 import id.shiorilabs.commute.core.ui.startup.StartupGate
+import id.shiorilabs.commute.feature.trip.ActiveTripBar
 import kotlinx.coroutines.flow.MutableStateFlow
 import javax.inject.Inject
 
@@ -25,6 +26,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var developerPreferences: DeveloperPreferencesRepository
+
+    @Inject
+    lateinit var tripBar: ActiveTripBar
 
     /** A web link the app was opened with, waiting for the navigator to open it. */
     private val pendingLink = MutableStateFlow<Route?>(null)
@@ -50,7 +54,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             CompositionLocalProvider(LocalStartupGate provides startupGate) {
-                CommuteApp(pendingLink = pendingLink, frostTuner = developerPreferences.frostTuner)
+                CommuteApp(pendingLink = pendingLink, frostTuner = developerPreferences.frostTuner, tripBar = tripBar)
             }
         }
     }
