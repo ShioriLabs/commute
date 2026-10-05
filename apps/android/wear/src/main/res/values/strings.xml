@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- No trip: it starts on the phone. -->
+    <string name="idle_title">Belum ada perjalanan</string>
+    <string name="idle_detail">Mulai perjalanan di HP, nanti muncul di sini</string>
+    <string name="idle_open_phone">Buka di HP</string>
+
+    <!-- The trip's headline, as the phone's Live Update words it. -->
+    <string name="trip_board">Naik %1$s</string>
+    <string name="trip_change">Pindah ke %1$s</string>
+    <string name="trip_ride_to">Turun di %1$s</string>
+    <string name="trip_alight_now">Turun di %1$s</string>
+    <string name="trip_arrived">Udah sampai di %1$s</string>
+
+    <string name="trip_stations_left">%1$d stasiun lagi</string>
+    <string name="trip_haltes_left">%1$d halte lagi</string>
+    <string name="trip_headsign">arah %1$s</string>
+    <string name="trip_platform">Peron %1$s</string>
+    <string name="trip_departs_at">berangkat %1$s</string>
+    <string name="trip_departs_in">berangkat %1$d mnt lagi</string>
+    <string name="trip_alights_in">sampai sekitar %1$d mnt lagi</string>
+    <string name="trip_walk_to">Jalan ke %1$s, %2$d m</string>
+    <string name="trip_then_change">Lalu pindah ke %1$s</string>
+    <string name="trip_then_done">Ini tujuan kamu</string>
+
+    <string name="trip_source_estimated">Perkiraan dari jadwal</string>
+    <string name="trip_source_unknown">Posisi belum diketahui</string>
+
+    <!-- The Ongoing Activity's few characters. #t# is the countdown. -->
+    <string name="trip_chip_board">Naik</string>
+    <string name="trip_chip_board_timer">Naik #t#</string>
+    <string name="trip_chip_stops">%1$d lagi</string>
+    <string name="trip_chip_alight">Turun</string>
+
+    <string name="trip_action_boarded">Udah naik</string>
+    <string name="trip_action_alighted">Udah turun</string>
+    <string name="trip_action_still_on_route">Masih di rute ini</string>
+    <string name="trip_action_stop">Berhenti</string>
+    <string name="trip_ask_still_on_route">Posisi kamu jauh dari rute ini. Masih di rute?</string>
+    <string name="trip_stop_confirm">Berhentiin perjalanan?</string>
+    <string name="trip_send_failed">HP nggak terjangkau</string>
+
+    <string name="trip_channel">Perjalanan</string>
+</resources>

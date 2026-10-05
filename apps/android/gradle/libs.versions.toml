@@ -32,6 +32,13 @@ ktor = "3.5.2"
 # OpenAPI model generator. 26.1.0 is published without a jar, so this stays on the last release
 # that can be run.
 fabrikt = "26.0.1"
+# Wear OS — the watch app, and the Data Layer the phone talks to it over
+wearCompose = "1.7.0"
+wearOngoing = "1.1.0"
+wearRemoteInteractions = "1.2.0"
+playServicesWearable = "20.0.1"
+# Play services' wearable pulls in Fragment 1.1, too old for the activity result API.
+fragment = "1.8.9"
 # Testing
 junit = "4.13.2"
 junitVersion = "1.3.0"
@@ -89,6 +96,15 @@ ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 # OpenAPI model generator — run as a build-time tool by :core:model, never shipped.
 fabrikt = { module = "com.cjbooms:fabrikt", version.ref = "fabrikt" }
+# Wear OS
+androidx-wear-compose-material3 = { group = "androidx.wear.compose", name = "compose-material3", version.ref = "wearCompose" }
+androidx-wear-compose-foundation = { group = "androidx.wear.compose", name = "compose-foundation", version.ref = "wearCompose" }
+androidx-wear-compose-ui-tooling = { group = "androidx.wear.compose", name = "compose-ui-tooling", version.ref = "wearCompose" }
+androidx-wear-ongoing = { group = "androidx.wear", name = "wear-ongoing", version.ref = "wearOngoing" }
+androidx-wear-remote-interactions = { group = "androidx.wear", name = "wear-remote-interactions", version.ref = "wearRemoteInteractions" }
+play-services-wearable = { group = "com.google.android.gms", name = "play-services-wearable", version.ref = "playServicesWearable" }
+androidx-fragment = { group = "androidx.fragment", name = "fragment", version.ref = "fragment" }
+kotlinx-coroutines-play-services = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-play-services", version.ref = "coroutines" }
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }

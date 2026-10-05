@@ -26,6 +26,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- The watch's "Buka di HP": the app as it was left. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="home"
+                    android:scheme="commute" />
+            </intent-filter>
+
             <!-- A shared OTW link (the web's /fare), a station's page or timetable
                  (/stations/…), a hub's page (/hubs/…) and a line's page (/lines/…) open here.
                  Android only hands them over once the web publishes

@@ -1,0 +1,279 @@
+package id.shiorilabs.commute.wear
+
+import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
+import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
+import androidx.wear.compose.material3.AlertDialog
+import androidx.wear.compose.material3.AlertDialogDefaults
+import androidx.wear.compose.material3.AppScaffold
+import androidx.wear.compose.material3.Button
+import androidx.wear.compose.material3.EdgeButton
+import androidx.wear.compose.material3.FilledTonalButton
+import androidx.wear.compose.material3.MaterialTheme
+import androidx.wear.compose.material3.OpenOnPhoneDialog
+import androidx.wear.compose.material3.OpenOnPhoneDialogDefaults
+import androidx.wear.compose.material3.ScreenScaffold
+import androidx.wear.compose.material3.Text
+import androidx.wear.compose.material3.openOnPhoneDialogCurvedText
+import id.shiorilabs.commute.core.trip.Headline
+import id.shiorilabs.commute.core.trip.RiderAction
+import id.shiorilabs.commute.core.trip.TripPhase
+import id.shiorilabs.commute.core.trip.headline
+import id.shiorilabs.commute.core.trip.progress
+import id.shiorilabs.commute.core.wearable.WearTrip
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import java.time.Duration
+import java.time.Instant
+
+/** Before the Data Layer has answered: nothing is drawn, so "no trip" doesn't flash past a trip. */
+private object Loading
+
+@Composable
+fun WatchApp(trips: Flow<WearTrip?>, phone: PhoneLink) {
+    val loaded = remember(trips) { trips.map { it ?: NoTrip } }
+    val current by loaded.collectAsStateWithLifecycle(initialValue = Loading)
+    val now by rememberNow()
+    // The arrived trip the rider tapped away, by when it arrived.
+    var dismissedArrival by rememberSaveable { mutableStateOf<Long?>(null) }
+
+    MaterialTheme {
+        AppScaffold {
+            when (val trip = current) {
+                is WearTrip -> {
+                    val arrivedAt = trip.state.arrivedAt
+                    when {
+                        trip.finished == null -> TripScreen(trip, now, phone)
+                        arrivedAt != null && arrivedAt.toEpochMilli() != dismissedArrival &&
+                            now.isBefore(arrivedAt.plus(ARRIVED_SHOWN)) ->
+                            ArrivedScreen(trip) { dismissedArrival = arrivedAt.toEpochMilli() }
+                        else -> IdleScreen(phone)
+                    }
+                }
+                NoTrip -> IdleScreen(phone)
+                else -> Unit
+            }
+        }
+    }
+}
+
+private object NoTrip
+
+@Composable
+private fun IdleScreen(phone: PhoneLink) {
+    val scope = rememberCoroutineScope()
+    val listState = rememberTransformingLazyColumnState()
+    var opening by remember { mutableStateOf(false) }
+    val openOnPhone = stringResource(R.string.idle_open_phone)
+
+    ScreenScaffold(
+        scrollState = listState,
+        edgeButton = {
+            EdgeButton(onClick = {
+                opening = true
+                scope.launch { phone.openApp() }
+            }) { Text(openOnPhone) }
+        },
+    ) { padding ->
+        TransformingLazyColumn(state = listState, contentPadding = padding, modifier = Modifier.fillMaxSize()) {
+            item {
+                Text(
+                    stringResource(R.string.idle_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center,
+                )
+            }
+            item {
+                Text(
+                    stringResource(R.string.idle_detail),
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+
+    val style = OpenOnPhoneDialogDefaults.curvedTextStyle
+    val text = OpenOnPhoneDialogDefaults.text
+    OpenOnPhoneDialog(
+        visible = opening,
+        onDismissRequest = { opening = false },
+        curvedText = { openOnPhoneDialogCurvedText(text = text, style = style) },
+    )
+}
+
+@Composable
+private fun TripScreen(trip: WearTrip, now: Instant, phone: PhoneLink) {
+    val context = LocalContext.current
+    val resources = LocalResources.current
+    val scope = rememberCoroutineScope()
+    val listState = rememberTransformingLazyColumnState()
+    val copy = remember(resources, trip.lines) { WatchCopy(resources, trip.lines) }
+    val headline = trip.state.headline(trip.plan)
+    val progress = trip.state.progress(trip.plan)
+    val ride = trip.plan.ride(trip.state.legIndex)
+    var confirmingStop by remember { mutableStateOf(false) }
+    val failed = stringResource(R.string.trip_send_failed)
+
+    fun send(action: RiderAction) {
+        scope.launch {
+            if (!phone.send(action)) Toast.makeText(context, failed, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val primary = primaryAction(trip, headline)
+    // The tap the moment calls for sits under the headline, not in an edge button: one of those
+    // only grows in at the end of the list, and this list runs past the screen.
+    ScreenScaffold(scrollState = listState) { padding ->
+        Box(Modifier.fillMaxSize()) {
+            TripRing(
+                rideFractions = progress.rideFractions,
+                fraction = progress.fraction,
+                colors = trip.plan.rideIndices.map { index ->
+                    trip.lines[trip.plan.ride(index).line]?.color?.let(::Color) ?: MaterialTheme.colorScheme.primary
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+            TransformingLazyColumn(state = listState, contentPadding = padding, modifier = Modifier.fillMaxSize()) {
+                item { LineChip(copy.rideName(ride), trip.lines[ride.line]?.color?.let(::Color)) }
+                item {
+                    Text(
+                        copy.title(headline),
+                        style = MaterialTheme.typography.titleMedium,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+                copy.detail(trip.state, headline, now).takeIf { it.isNotEmpty() }?.let { detail ->
+                    item { Text(detail, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center) }
+                }
+                if (trip.state.askedStillOnRoute) {
+                    item {
+                        Text(
+                            stringResource(R.string.trip_ask_still_on_route),
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+                if (primary != null) {
+                    item {
+                        Button(onClick = { send(primary.action) }, modifier = Modifier.fillMaxWidth()) {
+                            Text(stringResource(primary.label))
+                        }
+                    }
+                }
+                copy.source(trip.state)?.let { source ->
+                    item {
+                        Text(
+                            source,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                item {
+                    FilledTonalButton(onClick = { confirmingStop = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.trip_action_stop))
+                    }
+                }
+            }
+        }
+    }
+
+    AlertDialog(
+        visible = confirmingStop,
+        onDismissRequest = { confirmingStop = false },
+        title = { Text(stringResource(R.string.trip_stop_confirm)) },
+        confirmButton = {
+            AlertDialogDefaults.ConfirmButton(onClick = {
+                confirmingStop = false
+                send(RiderAction.STOP)
+            })
+        },
+    )
+}
+
+@Composable
+private fun ArrivedScreen(trip: WearTrip, onDismiss: () -> Unit) {
+    val resources = LocalResources.current
+    val copy = remember(resources, trip.lines) { WatchCopy(resources, trip.lines) }
+    ScreenScaffold {
+        Box(
+            Modifier.fillMaxSize().clickable(onClick = onDismiss).padding(24.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                copy.title(Headline.Arrived(trip.plan.destination.name)),
+                style = MaterialTheme.typography.titleLarge,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+/** The ride's line, in its own colour. */
+@Composable
+private fun LineChip(name: String, color: Color?) {
+    val background = color ?: MaterialTheme.colorScheme.surfaceContainer
+    Text(
+        name,
+        style = MaterialTheme.typography.labelMedium,
+        color = if (color != null) Color.White else MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier
+            .background(background, RoundedCornerShape(50))
+            .padding(horizontal = 10.dp, vertical = 2.dp),
+    )
+}
+
+private class PrimaryAction(val action: RiderAction, val label: Int)
+
+/** The one tap the moment calls for, as the phone's Live Update offers it. */
+private fun primaryAction(trip: WearTrip, headline: Headline): PrimaryAction? = when {
+    trip.state.askedStillOnRoute -> PrimaryAction(RiderAction.STILL_ON_ROUTE, R.string.trip_action_still_on_route)
+    headline is Headline.AlightNow || (headline is Headline.RideTo && headline.stopsLeft <= 1) ->
+        PrimaryAction(RiderAction.ALIGHTED, R.string.trip_action_alighted)
+    trip.state.phase == TripPhase.WAITING_TO_BOARD -> PrimaryAction(RiderAction.BOARDED, R.string.trip_action_boarded)
+    else -> null
+}
+
+/** The watch's own clock, a few times a minute: minutes count down without waiting on the phone. */
+@Composable
+private fun rememberNow() = produceState(Instant.now()) {
+    while (true) {
+        delay(TICK_MS)
+        value = Instant.now()
+    }
+}
+
+private const val TICK_MS = 15_000L
+
+/** How long "udah sampai" stays up after the trip arrives. */
+private val ARRIVED_SHOWN: Duration = Duration.ofMinutes(5)

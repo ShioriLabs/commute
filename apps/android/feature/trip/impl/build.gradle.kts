@@ -22,6 +22,10 @@ dependencies {
     implementation(project(":feature:station:api"))
     // The trip engine.
     implementation(project(":core:trip"))
+    // The trip as the watch gets it, over the Wearable Data Layer.
+    implementation(project(":core:wearable"))
+    implementation(libs.play.services.wearable)
+    implementation(libs.kotlinx.coroutines.play.services)
     implementation(project(":core:location"))
     implementation(project(":core:datastore"))
     implementation(project(":core:notification"))
