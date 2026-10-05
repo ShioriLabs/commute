@@ -21,11 +21,7 @@ internal class TripCopy(private val resources: Resources, private val lines: Map
     fun title(headline: Headline): String = when (headline) {
         is Headline.Board -> resources.getString(R.string.trip_board, rideName(headline.ride))
         is Headline.Change -> resources.getString(R.string.trip_change, rideName(headline.ride))
-        is Headline.RideTo -> resources.getString(
-            if (headline.ride.isBus) R.string.trip_ride_to_halte else R.string.trip_ride_to_station,
-            headline.ride.stops.last().name,
-            headline.stopsLeft,
-        )
+        is Headline.RideTo -> resources.getString(R.string.trip_ride_to, headline.ride.stops.last().name)
         is Headline.AlightNow -> resources.getString(R.string.trip_alight_now, headline.ride.stops.last().name)
         is Headline.Arrived -> resources.getString(R.string.trip_arrived, headline.destination)
     }
@@ -43,9 +39,12 @@ internal class TripCopy(private val resources: Resources, private val lines: Map
             headline.ride.platformCode?.let { resources.getString(R.string.trip_platform, formatPlatformCode(it)) },
             headline.departsAt?.let { resources.getString(R.string.trip_departs_at, formatClock(it)) },
         ).joinToString(separator)
+        // Aboard, the line and its direction are the rider's own train: only how far is left.
         is Headline.RideTo -> listOfNotNull(
-            rideName(headline.ride),
-            headline.ride.headsign?.let { resources.getString(R.string.trip_headsign, it) },
+            resources.getString(
+                if (headline.ride.isBus) R.string.trip_haltes_left else R.string.trip_stations_left,
+                headline.stopsLeft,
+            ),
             headline.alightsAt?.takeIf { trip.state.source != PositionSource.UNKNOWN }
                 ?.let { resources.getString(R.string.trip_alights_around, formatClock(it)) },
         ).joinToString(separator)
