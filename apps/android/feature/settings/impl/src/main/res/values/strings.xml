@@ -76,6 +76,9 @@
     <string name="settings_experimental_force_trip_detail">Mulai perjalanan kapan aja, gak perlu nunggu 30 menit sebelum berangkat</string>
     <string name="settings_experimental_frost_tuner">Frost Tuner</string>
     <string name="settings_experimental_frost_tuner_detail">Tombol melayang buat ngatur efek frost di header</string>
+    <string name="settings_experimental_trip_log">Kirim Log Perjalanan</string>
+    <string name="settings_experimental_trip_log_detail">Catatan GPS dan langkah mode OTW dari perjalanan terakhir, buat dicek kalau ada yang aneh</string>
+    <string name="settings_experimental_trip_log_empty">Belum ada log perjalanan</string>
     <string name="settings_experimental_hide">Sembunyikan Menu Experimental</string>
     <string name="settings_experimental_taps_left">%1$d ketukan lagi buat buka menu Experimental</string>
     <string name="settings_experimental_opened">Menu Experimental udah kebuka</string>

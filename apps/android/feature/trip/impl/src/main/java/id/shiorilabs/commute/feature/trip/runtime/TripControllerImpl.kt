@@ -1,6 +1,5 @@
 package id.shiorilabs.commute.feature.trip.runtime
 
-import android.util.Log
 import id.shiorilabs.commute.core.datastore.LocationPreferencesRepository
 import id.shiorilabs.commute.core.location.Fix
 import id.shiorilabs.commute.core.location.LocationClient
@@ -13,6 +12,7 @@ import id.shiorilabs.commute.core.trip.TripEffect
 import id.shiorilabs.commute.core.trip.TripEngine
 import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripPhase
+import id.shiorilabs.commute.core.trip.TripState
 import id.shiorilabs.commute.core.trip.walkEndsAt
 import id.shiorilabs.commute.core.trip.TripEvent
 import id.shiorilabs.commute.core.trip.TripPlan
@@ -37,6 +37,7 @@ import kotlinx.serialization.Serializable
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import kotlin.math.floor
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -54,6 +55,7 @@ class TripControllerImpl @Inject constructor(
     private val location: LocationClient,
     private val locationPreferences: LocationPreferencesRepository,
     private val replanner: TripReplanner,
+    private val log: TripLog,
     private val clock: Clock,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) : TripController {
@@ -80,7 +82,7 @@ class TripControllerImpl @Inject constructor(
         mutex.withLock {
             _finished.value = store.readFinished()?.takeIf { clock.instant().isBefore(it.at.plus(FINISHED_KEPT)) }
             val trip = store.read() ?: return@withLock
-            Log.i(TAG, "restored ${trip.origin.journeyKey} at ${trip.state.phase}")
+            log.event("restored", mapOf("journey" to trip.origin.journeyKey, "phase" to trip.state.phase))
             _active.value = trip
             apply(trip, TripEngine.step(trip.plan, trip.state, TripEvent.Resumed(clock.instant())))
         }
@@ -115,7 +117,7 @@ class TripControllerImpl @Inject constructor(
                 _finished.value = null
                 store.clearFinished()
                 val step = TripEngine.start(placed, clock.instant(), hasLocation)
-                Log.i(TAG, "started ${origin.journeyKey}, location ${if (hasLocation) "on" else "off"}")
+                log.event("started", mapOf("journey" to origin.journeyKey, "location" to hasLocation))
                 apply(ActiveTrip(placed, step.state, origin), step)
             }
             if (hasLocation && !runtime.startTracking()) send(TripEvent.LocationAvailability(false, clock.instant()))
@@ -155,9 +157,42 @@ class TripControllerImpl @Inject constructor(
         restored.join()
         mutex.withLock {
             val trip = _active.value ?: return
-            apply(trip, TripEngine.step(trip.plan, trip.state, event))
+            val step = TripEngine.step(trip.plan, trip.state, event)
+            logStep(event, trip.state, step.state)
+            apply(trip, step)
         }
     }
+
+    /**
+     * What came in and where it left the trip: every fix and tap, and the clock's ticks only when
+     * they moved it on (another stop, phase or leg, or how it's known), so a ride reads stop by stop.
+     */
+    private fun logStep(event: TripEvent, before: TripState, after: TripState) {
+        val (name, facts) = when (event) {
+            is TripEvent.Fix -> "fix" to mapOf("lat" to event.point.latitude, "lon" to event.point.longitude, "acc" to event.accuracyM)
+            is TripEvent.RiderSaid -> "rider" to mapOf("action" to event.action)
+            is TripEvent.LocationAvailability -> "location" to mapOf("available" to event.available)
+            is TripEvent.Resumed -> "resumed" to emptyMap()
+            is TripEvent.Tick -> {
+                val moved = before.legIndex != after.legIndex || before.phase != after.phase ||
+                    before.source != after.source || floor(before.position) != floor(after.position)
+                if (!moved) return
+                "tick" to emptyMap()
+            }
+        }
+        log.event(name, facts + stateFacts(after))
+    }
+
+    /** Where a step left the trip, as the log keeps it. */
+    private fun stateFacts(state: TripState): Map<String, Any?> = mapOf(
+        "leg" to state.legIndex,
+        "phase" to state.phase,
+        "pos" to Math.round(state.position * 1000) / 1000.0,
+        "confirmed" to Math.round(state.confirmedPosition * 1000) / 1000.0,
+        "src" to state.source,
+        "offsetS" to state.clockOffsetS,
+        "walking" to (state.walkingSince != null),
+    )
 
     /** Carries out one step. Called with the lock held. */
     private fun apply(trip: ActiveTrip, step: TripStep) {
@@ -166,7 +201,7 @@ class TripControllerImpl @Inject constructor(
 
         val finished = step.effects.filterIsInstance<TripEffect.Finished>().firstOrNull()
         if (finished != null) {
-            Log.i(TAG, "finished ${trip.origin.journeyKey}: ${finished.reason}")
+            log.event("finished", mapOf("journey" to trip.origin.journeyKey, "reason" to finished.reason))
             // A trip that ran out its time catches up in one step, alerts and all, hours late:
             // those would only be noise now.
             if (finished.reason != FinishReason.TIMED_OUT) alerts.forEach { runtime.alert(next, it) }
@@ -186,7 +221,7 @@ class TripControllerImpl @Inject constructor(
         _active.value = next
         store.write(next)
         alerts.forEach {
-            Log.i(TAG, "alert ${it.kind} on leg ${it.legIndex}${if (it.estimated) ", estimated" else ""}")
+            log.event("alert", mapOf("kind" to it.kind, "leg" to it.legIndex, "estimated" to it.estimated))
             runtime.alert(next, it)
         }
         if (TripEffect.AskStillOnRoute in step.effects) runtime.askStillOnRoute(next)
@@ -216,7 +251,7 @@ class TripControllerImpl @Inject constructor(
                 ?.let { locator.place(it) }
                 ?.takeIf { it.legs.firstOrNull() is TripLeg.Ride }
             if (onward == null) {
-                Log.i(TAG, "missed leg ${state.legIndex} at $departs, nothing on offer")
+                log.event("missed", mapOf("leg" to state.legIndex, "departs" to departs, "onward" to null))
                 // Offline, say: ask again once it's had a while, on whatever step comes next.
                 delay(REPLAN_RETRY.toMillis())
                 if (replannedFor == key) replannedFor = null
@@ -231,7 +266,7 @@ class TripControllerImpl @Inject constructor(
                     return@withLock
                 }
                 val plan = TripPlan(current.plan.legs.take(state.legIndex) + onward.legs)
-                Log.i(TAG, "missed leg ${state.legIndex} at $departs, on to ${plan.ride(state.legIndex).departureAt}")
+                log.event("missed", mapOf("leg" to state.legIndex, "departs" to departs, "onward" to plan.ride(state.legIndex).departureAt))
                 val replanned = current.copy(plan = plan)
                 runtime.rerouted(replanned, departs)
                 apply(replanned, TripEngine.step(plan, current.state, TripEvent.Tick(clock.instant())))
@@ -258,9 +293,6 @@ class TripControllerImpl @Inject constructor(
     }
 
     private companion object {
-
-        /** `adb logcat -s CommuteTrip`: what a field test needs to tell why a trip did what it did. */
-        const val TAG = "CommuteTrip"
 
         /** A train a minute late is still worth running for; past that, look for the next. */
         val CATCH_GRACE: Duration = Duration.ofMinutes(1)
