@@ -1,7 +1,6 @@
 package id.shiorilabs.commute.feature.trip.presentation
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,7 +19,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -30,11 +28,12 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.ui.components.CommuteBottomSheet
+import id.shiorilabs.commute.core.ui.components.CommuteButton
+import id.shiorilabs.commute.core.ui.components.CommuteButtonVariant
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.feature.trip.R
 import id.shiorilabs.commute.feature.trip.TripReminder
 
-private val Slate200 = Color(0xFFE2E8F0)
 private val Slate500 = Color(0xFF64748B)
 private val Slate900 = Color(0xFF0F172A)
 
@@ -43,28 +42,19 @@ private val Rose50 = Color(0xFFFFF1F2)
 
 /**
  * "Tambah Pengingat" under the trip's actions, or the reminder already set; either opens the sheet
- * to choose one. Slate with pink, as the station page's timetable button.
+ * to choose one.
  */
 @Composable
 internal fun ReminderButton(reminder: TripReminder, onChange: (TripReminder) -> Unit, modifier: Modifier = Modifier) {
     var choosing by rememberSaveable { mutableStateOf(false) }
     val set = reminder != TripReminder.NONE
-    val tint = MaterialTheme.colorScheme.primary
-    ActionButton(
-        // Shaped here, not by ActionButton's clip: the caller's padding comes before this fill.
-        modifier = modifier
-            .fillMaxWidth()
-            .background(Slate200, ActionShape),
+    CommuteButton(
+        text = if (set) stringResource(R.string.trip_reminder_set, stringResource(reminder.label)) else stringResource(R.string.trip_reminder_add),
         onClick = { choosing = true },
-    ) {
-        Icon(imageVector = if (set) reminder.icon else CommuteIcons.Reminder, contentDescription = null, modifier = Modifier.size(20.dp), tint = tint)
-        Text(
-            text = if (set) stringResource(R.string.trip_reminder_set, stringResource(reminder.label)) else stringResource(R.string.trip_reminder_add),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Bold,
-            color = tint,
-        )
-    }
+        modifier = modifier.fillMaxWidth(),
+        variant = CommuteButtonVariant.Secondary,
+        leadingIcon = if (set) reminder.icon else CommuteIcons.Reminder,
+    )
     if (choosing) {
         ReminderSheet(selected = reminder, onSelect = onChange, onDismiss = { choosing = false })
     }
