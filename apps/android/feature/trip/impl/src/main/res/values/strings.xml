@@ -94,6 +94,7 @@
     <!-- The in-train board, after JR East's. -->
     <string name="trip_pids_minutes">mnt</string>
     <string name="trip_pids_board">Naik di</string>
+    <string name="trip_pids_at">Sekarang di</string>
     <string name="trip_pids_next">Berikutnya</string>
     <string name="trip_pids_alight_next">Berikutnya, turun di</string>
     <string name="trip_pids_alight_here">Turun di sini</string>

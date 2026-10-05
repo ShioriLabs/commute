@@ -43,6 +43,28 @@ class PidsTest {
     }
 
     @Test
+    fun `stopped at a station on the way, the board stays on it until the train moves off`() {
+        // A fix at Manggarai, 08.13.
+        val pids = riding(1.0, PositionSource.CONFIRMED).pids(minutes(13))
+
+        assertEquals(PidsLabel.AT, pids.label)
+        assertEquals("Manggarai", pids.station)
+        assertEquals(listOf("Manggarai", "Tebet", "Cawang"), pids.upcoming.map { it.name })
+        assertEquals(listOf(true, false, false), pids.upcoming.map { it.next })
+        // There already: no minutes on its bubble, and not one of the stops still to come.
+        assertNull(pids.upcoming.first().minutes)
+        assertEquals(2, pids.stopsLeft)
+        assertNull(pids.changeTo)
+
+        assertEquals(PidsLabel.NEXT, riding(1.1, PositionSource.CONFIRMED).pids(minutes(14)).label)
+    }
+
+    @Test
+    fun `the clock passing a station doesn't say the rider is at it`() {
+        assertEquals(PidsLabel.NEXT, riding(1.0).pids(minutes(13)).label)
+    }
+
+    @Test
     fun `the stop before getting off says so`() {
         assertEquals(PidsLabel.ALIGHT_NEXT, riding(2.4).pids(minutes(16)).label)
     }
@@ -73,14 +95,15 @@ class PidsTest {
 
     @Test
     fun `a train still not left after its time counts down from now, not from the timetable`() {
-        // Still at Sudirman, confirmed, five minutes after the 08.10 was due out.
+        // Still at Sudirman, confirmed, five minutes after the 08.10 was due out: the board stays on it.
         val held = riding(0.0, PositionSource.CONFIRMED).pids(minutes(15))
+        assertEquals(PidsLabel.AT, held.label)
 
-        val minutes = held.upcoming.map { it.minutes!! }
+        val minutes = held.upcoming.drop(1).map { it.minutes!! }
         // Manggarai is a third of the ride: about three of its ten minutes on from wherever "now" is.
         assertEquals(true, minutes.first() >= 2)
         assertEquals(minutes.sorted(), minutes)
-        assertEquals(true, held.at!! > minutes(15))
+        assertEquals(true, held.alightingAt!! > minutes(15))
     }
 }
 
