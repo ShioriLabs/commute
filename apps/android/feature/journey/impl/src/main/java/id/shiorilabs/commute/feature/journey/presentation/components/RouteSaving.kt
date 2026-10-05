@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.ui.components.CommuteIconButton
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
+import id.shiorilabs.commute.core.ui.theme.Slate300
+import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.feature.journey.R
 import id.shiorilabs.commute.feature.journey.presentation.RecentRouteRow
 

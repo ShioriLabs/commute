@@ -42,6 +42,11 @@ import id.shiorilabs.commute.core.ui.ext.parseHexColor
 import id.shiorilabs.commute.core.ui.ext.tint
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
+import id.shiorilabs.commute.core.ui.theme.Gray500
+import id.shiorilabs.commute.core.ui.theme.Gray600
+import id.shiorilabs.commute.core.ui.theme.Slate500
+import id.shiorilabs.commute.core.ui.theme.Slate700
+import id.shiorilabs.commute.core.ui.theme.Slate800
 import id.shiorilabs.commute.feature.station.api.R
 import id.shiorilabs.commute.feature.station.domain.Departure
 import id.shiorilabs.commute.feature.station.domain.DepartureLabel
@@ -64,11 +69,6 @@ import java.time.LocalDateTime
 private val FallbackLineColor = Color(0xFF94A3B8)
 
 // Tailwind's greys, as the web card uses them.
-private val Slate800 = Color(0xFF1E293B)
-private val Slate700 = Color(0xFF334155)
-private val Slate500 = Color(0xFF64748B)
-private val Gray600 = Color(0xFF4B5563)
-private val Gray500 = Color(0xFF6B7280)
 
 /** Departure times line up in columns: tabular figures. */
 private const val TABULAR = "tnum"
