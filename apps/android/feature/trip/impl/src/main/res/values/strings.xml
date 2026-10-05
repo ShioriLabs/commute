@@ -5,6 +5,10 @@
     <string name="trip_change">Pindah ke %1$s</string>
     <string name="trip_ride_to_station">Turun di %1$s · %2$d stasiun lagi</string>
     <string name="trip_ride_to_halte">Turun di %1$s · %2$d halte lagi</string>
+    <!-- The Live Update's title once aboard: the stops left are in its text. -->
+    <string name="trip_ride_to">Turun di %1$s</string>
+    <string name="trip_stations_left">%1$d stasiun lagi</string>
+    <string name="trip_haltes_left">%1$d halte lagi</string>
     <string name="trip_alight_now">Turun di %1$s</string>
     <string name="trip_arrived">Udah sampai di %1$s</string>
 
