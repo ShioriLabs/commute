@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import androidx.compose.ui.graphics.toArgb
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -17,6 +18,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import id.shiorilabs.commute.core.navigation.ACTIVE_TRIP_LINK
 import id.shiorilabs.commute.core.notification.NotificationChannels
 import id.shiorilabs.commute.core.trip.AlertKind
+import id.shiorilabs.commute.core.ui.theme.CommuteColors
 import id.shiorilabs.commute.core.trip.PositionSource
 import id.shiorilabs.commute.core.trip.TripEffect
 import id.shiorilabs.commute.core.trip.TripLeg
@@ -72,6 +74,7 @@ class TripNotifier @Inject constructor(
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setRequestPromotedOngoing(true)
             .setShortCriticalText(copy.chip(headline))
+            .setColor(chipColor(headline))
             .setStyle(progressStyle(trip, progress.fraction, progress.source))
             .addAction(0, context.getString(R.string.trip_action_stop), action(TripReceiver.ACTION_STOP))
 
@@ -196,8 +199,22 @@ class TripNotifier @Inject constructor(
 
     private fun rideName(ride: TripLeg.Ride): String = copy().rideName(ride)
 
-    private fun colorOf(ride: TripLeg.Ride): Int =
-        lines.cachedLines()?.get(ride.line)?.colorCode?.let { runCatching { it.toColorInt() }.getOrNull() } ?: FALLBACK_LINE
+    private fun colorOf(ride: TripLeg.Ride): Int = lineColorOrNull(ride) ?: FALLBACK_LINE
+
+    private fun lineColorOrNull(ride: TripLeg.Ride): Int? =
+        lines.cachedLines()?.get(ride.line)?.colorCode?.let { runCatching { it.toColorInt() }.getOrNull() }
+
+    /** The chip follows the line the headline is about: the one being ridden, or boarded next. */
+    private fun chipColor(headline: Headline): Int {
+        val ride = when (headline) {
+            is Headline.Board -> headline.ride
+            is Headline.Change -> headline.ride
+            is Headline.RideTo -> headline.ride
+            is Headline.AlightNow -> headline.ride
+            is Headline.Arrived -> null
+        }
+        return ride?.let(::lineColorOrNull) ?: BRAND
+    }
 
     private fun sep() = copy().separator
 
@@ -229,6 +246,7 @@ class TripNotifier @Inject constructor(
         private const val SEGMENT_UNIT = 100
 
         private val FALLBACK_LINE = 0xFF64748B.toInt()
+        private val BRAND = CommuteColors.primaryLight.toArgb()
         private val CHANGE_POINT = 0xFF0F172A.toInt()
     }
 }
