@@ -44,9 +44,11 @@ API.
 | Hub page | `/hubs/{slug}` |
 | Line page | `/lines/{operator}/{lineCode}` |
 | Saved stations | on device |
-| IC card balance | NFC, on device (`android-ic-balance.md`) |
 | Trip mode, Live Updates | `android-trip-mode.md` |
 | Wear companion | `android-wear.md` |
+
+IC card balance (`android-ic-balance.md`) is deferred past v1; its modules stay
+wired up with nothing in them.
 
 ## Architecture
 
@@ -339,12 +341,11 @@ should be generated from the same source so the two can't drift.
 
 ## Feature order
 
-1. **App shell + IC balance.** Search, station pages, results, saved stations,
-   and "enough for this trip?". It's small, useful on day one, and something
-   the PWA can't offer.
+1. **App shell.** Search, station pages, results, saved stations.
 2. **Trip mode.** Alight reminders and the Live Update, phone only.
 3. **Wear companion.** Mirrors trip mode; then a Tile.
 4. **Home-screen widget.** Next departures at a saved station.
+5. **IC balance.** "Enough for this trip?", deferred past v1.
 
 Each step ships on its own.
 
