@@ -13,8 +13,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -26,6 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.time.ServiceDayName
+import id.shiorilabs.commute.core.ui.components.CommuteCard
 import id.shiorilabs.commute.core.ui.components.CommuteEmptyState
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
@@ -86,16 +85,9 @@ fun FrequencyList(
 ) {
     val corridors = remember(frequencies) { groupByCorridor(frequencies) }
     val description = stringResource(R.string.frequency_description)
-    val shape = MaterialTheme.shapes.medium
 
     Column(modifier = modifier.semantics { contentDescription = description }) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .shadow(8.dp, shape)
-                .clip(shape)
-                .background(Color.White),
-        ) {
+        CommuteCard(color = Color.White) {
             corridors.forEachIndexed { index, rows ->
                 if (index > 0) {
                     HorizontalDivider(thickness = 2.dp, color = Color.White)
