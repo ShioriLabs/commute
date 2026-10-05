@@ -501,6 +501,18 @@ class TripEngineTest {
     }
 
     @Test
+    fun `stopping once arrived is arriving, not giving up`() {
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(Places.PASAR_MINGGU, 16.0)
+        assertEquals(TripPhase.ARRIVED, run.state.phase)
+
+        run.send(TripEvent.RiderSaid(RiderAction.STOP, at(16.5)))
+        assertTrue(TripEffect.Finished(FinishReason.ARRIVED) in run.effects)
+        assertFalse(TripEffect.Finished(FinishReason.STOPPED) in run.effects)
+    }
+
+    @Test
     fun `location is looked for harder on the approach`() {
         val run = Run(bogorLine)
         assertEquals(TripLocationMode.BALANCED, run.state.locationMode)

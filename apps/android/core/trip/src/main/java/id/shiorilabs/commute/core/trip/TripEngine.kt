@@ -108,8 +108,9 @@ object TripEngine {
             // process came back.
             is TripEvent.Resumed -> state.copy(resumed = true)
             is TripEvent.RiderSaid -> when (event.action) {
+                // Done with a trip that already got there is arriving, not giving up on it.
                 RiderAction.STOP -> {
-                    effects += TripEffect.Finished(FinishReason.STOPPED)
+                    effects += TripEffect.Finished(if (state.phase == TripPhase.ARRIVED) FinishReason.ARRIVED else FinishReason.STOPPED)
                     return TripStep(state.copy(locationMode = TripLocationMode.OFF), effects, null)
                 }
                 RiderAction.STILL_ON_ROUTE -> state.copy(offRouteStrikes = 0, askedStillOnRoute = false)
