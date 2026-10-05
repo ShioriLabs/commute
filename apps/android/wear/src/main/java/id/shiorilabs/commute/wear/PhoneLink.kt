@@ -23,6 +23,14 @@ class PhoneLink(context: Context) {
         true
     }.getOrDefault(false)
 
+    /** "Udah bangun" on the watch's alarm, so the phone doesn't ring too. */
+    suspend fun ackWake() {
+        runCatching {
+            val phone = phone() ?: return
+            Wearable.getMessageClient(app).sendMessage(phone.id, WearPaths.WAKE_ACK, ByteArray(0)).await()
+        }
+    }
+
     /** Opens the app on the phone, or its store listing there when it isn't installed. */
     suspend fun openApp() {
         runCatching {

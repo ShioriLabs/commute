@@ -6,8 +6,8 @@ import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationManagerCompat
 
 /**
- * The app's notification channels. Both belong to trip mode: the rider can silence one without the
- * other from the system settings, which is the point of having two.
+ * The app's notification channels. All belong to trip mode: the rider can silence one without the
+ * others from the system settings, which is the point of having several.
  */
 object NotificationChannels {
 
@@ -16,6 +16,12 @@ object NotificationChannels {
 
     /** "Siap-siap turun", "Turun di sini": meant to be felt in a pocket. */
     const val TRIP_ALERTS = "trip_alerts"
+
+    /**
+     * "Bangunkan Aku": getting off, as an alarm. The channel itself is silent and still: the app
+     * vibrates as an alarm does, which goes through silent mode where a notification's wouldn't.
+     */
+    const val TRIP_WAKE = "trip_wake"
 
     /** Two long and one short: distinct from a message, so the rider learns it means their stop. */
     val ALERT_VIBRATION = longArrayOf(0, 400, 200, 400, 200, 150)
@@ -37,6 +43,12 @@ object NotificationChannels {
                     .setDescription(context.getString(R.string.notification_channel_trip_alerts_description))
                     .setVibrationEnabled(true)
                     .setVibrationPattern(ALERT_VIBRATION)
+                    .build(),
+                NotificationChannelCompat.Builder(TRIP_WAKE, NotificationManager.IMPORTANCE_HIGH)
+                    .setName(context.getString(R.string.notification_channel_trip_wake))
+                    .setDescription(context.getString(R.string.notification_channel_trip_wake_description))
+                    .setSound(null, null)
+                    .setVibrationEnabled(false)
                     .build(),
             ),
         )

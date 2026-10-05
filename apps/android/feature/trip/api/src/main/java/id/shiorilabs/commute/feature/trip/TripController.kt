@@ -12,13 +12,34 @@ import kotlinx.serialization.Serializable
  *
  * @property origin The trip page it was started from, so "Lihat perjalanan" there can tell it is this
  *   journey, and the live screen can go back to the details.
+ * @property reminder How getting off is told, past the notification: this trip only.
  */
 @Serializable
 data class ActiveTrip(
     val plan: TripPlan,
     val state: TripState,
     val origin: Route.Trip,
+    val reminder: TripReminder = TripReminder.NONE,
 )
+
+/** "Tambah Pengingat": what the rider asked to be told as getting off comes up. */
+@Serializable
+enum class TripReminder {
+    /** The notification alone. */
+    NONE,
+
+    /**
+     * "Ingatkan Aku": one hard buzz with "Siap-siap turun", on the watch if one's in reach, else the
+     * phone, as an alarm's buzz, so it comes through silent mode.
+     */
+    PING,
+
+    /**
+     * "Bangunkan Aku", for a rider who means to sleep: an alarm until they say they're up, on the
+     * watch, and the phone too if the watch goes unanswered.
+     */
+    WAKE,
+}
 
 /**
  * Trip mode, for the screens that start and show it. One trip at a time: starting another replaces
@@ -34,6 +55,9 @@ interface TripController {
      * otherwise; the trip says which.
      */
     fun start(plan: TripPlan, origin: Route.Trip)
+
+    /** "Tambah Pengingat" on the running trip, or [TripReminder.NONE] to take it off. */
+    fun setReminder(reminder: TripReminder)
 
     /** "Udah naik", "Udah turun", "Masih di rute ini". */
     fun riderSaid(action: RiderAction)

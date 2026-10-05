@@ -11,6 +11,7 @@ import id.shiorilabs.commute.feature.station.data.StationDirectory
 import id.shiorilabs.commute.feature.station.domain.Station
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.trip.ActiveTrip
+import id.shiorilabs.commute.feature.trip.TripReminder
 import id.shiorilabs.commute.feature.trip.runtime.FinishedTrip
 import id.shiorilabs.commute.feature.trip.runtime.TripControllerImpl
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -75,6 +76,8 @@ class ActiveTripViewModel @Inject constructor(
     fun say(action: RiderAction) = controller.riderSaid(action)
 
     fun stop() = controller.stop()
+
+    fun setReminder(reminder: TripReminder) = controller.setReminder(reminder)
 
     /** "Tandai manual" in Pengaturan → Experimental: the bar of marks under the page. */
     val manualMarks: StateFlow<Boolean> = developerPreferences.manualMarks

@@ -48,4 +48,10 @@
     <string name="trip_channel">Perjalanan</string>
     <string name="trip_start_channel">Mulai OTW</string>
     <string name="trip_started">OTW dimulai</string>
+
+    <!-- "Bangunkan Aku": the alarm before getting off. -->
+    <string name="trip_wake_channel">Bangunkan Aku</string>
+    <string name="trip_wake_title">Bangun! Bentar lagi turun</string>
+    <string name="trip_wake_text">Turun di %1$s</string>
+    <string name="trip_action_awake">Udah bangun</string>
 </resources>
