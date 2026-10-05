@@ -28,6 +28,42 @@ object TripOngoing {
     private const val CHANNEL = "trip"
     private const val ID = 1
 
+    /** One buzz as a trip starts, which the ongoing notification itself never gives. */
+    private const val START_CHANNEL = "trip_start"
+    private const val START_ID = 2
+
+    /** How long "OTW dimulai" stays, if it isn't tapped: the app's open by then, or not wanted. */
+    private const val START_SHOWN_MS = 60_000L
+
+    /**
+     * Buzzes once for a trip that just started on the phone, with "OTW dimulai" and the headline: a
+     * tap away from the app should the phone not have been able to open it.
+     */
+    @SuppressLint("MissingPermission") // Checked just below; without it nothing is posted.
+    fun announceStart(context: Context, trip: WearTrip) {
+        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!granted) return
+        val manager = context.getSystemService(NotificationManager::class.java)
+        if (manager.getNotificationChannel(START_CHANNEL) == null) {
+            manager.createNotificationChannel(
+                NotificationChannel(START_CHANNEL, context.getString(R.string.trip_start_channel), NotificationManager.IMPORTANCE_HIGH),
+            )
+        }
+        val copy = WatchCopy(context.resources, trip.lines)
+        val notification = NotificationCompat.Builder(context, START_CHANNEL)
+            .setSmallIcon(R.drawable.ic_launcher_monochrome)
+            .setContentTitle(context.getString(R.string.trip_started))
+            .setContentText(copy.title(trip.state.headline(trip.plan)))
+            .setContentIntent(openApp(context))
+            .setAutoCancel(true)
+            .setTimeoutAfter(START_SHOWN_MS)
+            .setCategory(NotificationCompat.CATEGORY_NAVIGATION)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+        NotificationManagerCompat.from(context).notify(START_ID, notification)
+    }
+
     @SuppressLint("MissingPermission") // Checked just below; without it nothing is posted.
     fun show(context: Context, trip: WearTrip) {
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
@@ -38,12 +74,7 @@ object TripOngoing {
         val copy = WatchCopy(context.resources, trip.lines)
         val headline = trip.state.headline(trip.plan)
         val now = Instant.now()
-        val open = PendingIntent.getActivity(
-            context,
-            0,
-            Intent(context, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
+        val open = openApp(context)
         val builder = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_launcher_monochrome)
             .setContentTitle(copy.title(headline))
@@ -63,6 +94,13 @@ object TripOngoing {
 
         NotificationManagerCompat.from(context).notify(ID, builder.build())
     }
+
+    private fun openApp(context: Context): PendingIntent = PendingIntent.getActivity(
+        context,
+        0,
+        Intent(context, MainActivity::class.java),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
 
     fun hide(context: Context) {
         NotificationManagerCompat.from(context).cancel(ID)

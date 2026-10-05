@@ -20,6 +20,9 @@ object WearPaths {
     /** What the watch's "Buka di HP" opens: the phone app as it was left. */
     const val PHONE_LINK = "commute://home"
 
+    /** What the phone opens on the watch as a trip starts: the watch app's trip screen. */
+    const val WATCH_LINK = "commute://watch/trip"
+
     fun encodeAction(action: RiderAction): ByteArray = action.name.encodeToByteArray()
 
     /** `null` for a payload this version doesn't know. */
