@@ -5,6 +5,7 @@ import id.shiorilabs.commute.core.location.Fix
 import id.shiorilabs.commute.core.location.LocationClient
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.query.di.ApplicationScope
+import id.shiorilabs.commute.core.trip.AlertKind
 import id.shiorilabs.commute.core.trip.FinishReason
 import id.shiorilabs.commute.core.trip.InstantSerializer
 import id.shiorilabs.commute.core.trip.RiderAction
@@ -19,6 +20,7 @@ import id.shiorilabs.commute.core.trip.TripPlan
 import id.shiorilabs.commute.core.trip.TripStep
 import id.shiorilabs.commute.feature.trip.ActiveTrip
 import id.shiorilabs.commute.feature.trip.TripController
+import id.shiorilabs.commute.feature.trip.TripReminder
 import id.shiorilabs.commute.feature.trip.TripReplanner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -124,6 +126,21 @@ class TripControllerImpl @Inject constructor(
         }
     }
 
+    override fun setReminder(reminder: TripReminder) {
+        scope.launch {
+            restored.join()
+            mutex.withLock {
+                val trip = _active.value ?: return@withLock
+                if (trip.reminder == reminder) return@withLock
+                log.event("reminder", mapOf("kind" to reminder))
+                val next = trip.copy(reminder = reminder)
+                _active.value = next
+                store.write(next)
+                if (reminder != TripReminder.WAKE) runtime.stopWakingRider()
+            }
+        }
+    }
+
     override fun riderSaid(action: RiderAction) {
         scope.launch { say(action) }
     }
@@ -144,7 +161,11 @@ class TripControllerImpl @Inject constructor(
         }
     }
 
-    suspend fun say(action: RiderAction) = send(TripEvent.RiderSaid(action, clock.instant()))
+    suspend fun say(action: RiderAction) {
+        // Off the train, or done with it: whoever was being woken is up.
+        if (action == RiderAction.ALIGHTED || action == RiderAction.STOP) runtime.stopWakingRider()
+        send(TripEvent.RiderSaid(action, clock.instant()))
+    }
 
     suspend fun tick() = send(TripEvent.Tick(clock.instant()))
 
@@ -219,6 +240,8 @@ class TripControllerImpl @Inject constructor(
             // A trip that ran out its time catches up in one step, alerts and all, hours late:
             // those would only be noise now.
             if (finished.reason != FinishReason.TIMED_OUT) alerts.forEach { runtime.alert(next, it) }
+            // At the destination an alarm already ringing rings on until the rider says they're up.
+            if (finished.reason != FinishReason.ARRIVED) runtime.stopWakingRider()
             timer?.cancel()
             runtime.cancelWake()
             runtime.stopTracking()
@@ -237,6 +260,12 @@ class TripControllerImpl @Inject constructor(
         alerts.forEach {
             log.event("alert", mapOf("kind" to it.kind, "leg" to it.legIndex, "estimated" to it.estimated))
             runtime.alert(next, it)
+        }
+        // "Tambah Pengingat": the first word of getting off (a stop out, or at it if that came
+        // first) brings the reminder too.
+        if (next.reminder != TripReminder.NONE) {
+            alerts.firstOrNull { it.kind == AlertKind.PREPARE || it.kind == AlertKind.ALIGHT }
+                ?.let { runtime.remindRider(next, it.legIndex) }
         }
         if (TripEffect.AskStillOnRoute in step.effects) runtime.askStillOnRoute(next)
         runtime.showProgress(next)

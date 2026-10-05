@@ -6,6 +6,7 @@ import id.shiorilabs.commute.core.trip.TripPlan
 import id.shiorilabs.commute.core.wearable.WearPaths
 import id.shiorilabs.commute.feature.trip.ActiveTrip
 import id.shiorilabs.commute.feature.trip.TripController
+import id.shiorilabs.commute.feature.trip.TripReminder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.junit.Assert.assertEquals
@@ -18,6 +19,7 @@ class WearActionTest {
         var stopped = 0
         override val active: StateFlow<ActiveTrip?> = MutableStateFlow(null)
         override fun start(plan: TripPlan, origin: Route.Trip) = Unit
+        override fun setReminder(reminder: TripReminder) = Unit
         override fun riderSaid(action: RiderAction) {
             said += action
         }
