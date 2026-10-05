@@ -183,6 +183,20 @@ class TripControllerImpl @Inject constructor(
         log.event(name, facts + stateFacts(after))
     }
 
+    /**
+     * A rider's own note of what the train is doing ([kind]), with what the board showed then
+     * ([board]): logged beside the trip's reckoning for a field test to set them side by side.
+     * Changes nothing about the trip.
+     */
+    fun mark(kind: String, board: Map<String, Any?>) {
+        scope.launch {
+            mutex.withLock {
+                val state = _active.value?.state
+                log.event("mark", mapOf("kind" to kind) + board + (state?.let(::stateFacts) ?: emptyMap()))
+            }
+        }
+    }
+
     /** Where a step left the trip, as the log keeps it. */
     private fun stateFacts(state: TripState): Map<String, Any?> = mapOf(
         "leg" to state.legIndex,

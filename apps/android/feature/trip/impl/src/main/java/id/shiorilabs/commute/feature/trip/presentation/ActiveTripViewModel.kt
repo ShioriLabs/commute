@@ -3,6 +3,7 @@ package id.shiorilabs.commute.feature.trip.presentation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import id.shiorilabs.commute.core.datastore.DeveloperPreferencesRepository
 import id.shiorilabs.commute.core.datastore.LocationPreferencesRepository
 import id.shiorilabs.commute.core.trip.RiderAction
 import id.shiorilabs.commute.feature.station.data.LineRepository
@@ -40,6 +41,7 @@ class ActiveTripViewModel @Inject constructor(
     private val lineRepository: LineRepository,
     private val directory: StationDirectory,
     private val barState: TripBarState,
+    developerPreferences: DeveloperPreferencesRepository,
     locationPreferences: LocationPreferencesRepository,
 ) : ViewModel() {
 
@@ -73,6 +75,21 @@ class ActiveTripViewModel @Inject constructor(
     fun say(action: RiderAction) = controller.riderSaid(action)
 
     fun stop() = controller.stop()
+
+    /** "Tandai manual" in Pengaturan → Experimental: the bar of marks under the page. */
+    val manualMarks: StateFlow<Boolean> = developerPreferences.manualMarks
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** What the rider saw the train do, logged with what [pids] (the board then) said. */
+    fun mark(kind: MarkKind, pids: Pids) = controller.mark(
+        kind.key,
+        mapOf(
+            "boardLabel" to pids.label,
+            "boardStation" to pids.station,
+            "boardStopsLeft" to pids.stopsLeft,
+            "boardMinutesLeft" to pids.minutesLeft,
+        ),
+    )
 
     /** The board's big name went out of sight under the trip bar, or came back. */
     fun onBoardNameHidden(hidden: Boolean) {

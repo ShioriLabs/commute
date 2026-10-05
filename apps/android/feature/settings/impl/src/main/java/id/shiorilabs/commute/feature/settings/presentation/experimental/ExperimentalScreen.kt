@@ -41,10 +41,13 @@ class ExperimentalViewModel @Inject constructor(
 
     val forceTripStart: StateFlow<Boolean> = preferences.forceTripStart.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     val frostTuner: StateFlow<Boolean> = preferences.frostTuner.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val manualMarks: StateFlow<Boolean> = preferences.manualMarks.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     fun setForceTripStart(enabled: Boolean) = viewModelScope.launch { preferences.setForceTripStart(enabled) }
 
     fun setFrostTuner(enabled: Boolean) = viewModelScope.launch { preferences.setFrostTuner(enabled) }
+
+    fun setManualMarks(enabled: Boolean) = viewModelScope.launch { preferences.setManualMarks(enabled) }
 
     /** The trip log's share sheet, or `null` with nothing logged yet. */
     fun shareTripLog(onReady: (Intent?) -> Unit) = viewModelScope.launch { onReady(tripLog.share()) }
@@ -65,6 +68,7 @@ fun ExperimentalScreen(
 ) {
     val forceTripStart by viewModel.forceTripStart.collectAsStateWithLifecycle()
     val frostTuner by viewModel.frostTuner.collectAsStateWithLifecycle()
+    val manualMarks by viewModel.manualMarks.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
     val context = LocalContext.current
     val empty = stringResource(R.string.settings_experimental_trip_log_empty)
@@ -73,10 +77,12 @@ fun ExperimentalScreen(
         innerPadding = innerPadding,
         forceTripStart = forceTripStart,
         frostTuner = frostTuner,
+        manualMarks = manualMarks,
         canHide = !debug,
         onBack = { navigator.pop() },
         onForceTripStart = { viewModel.setForceTripStart(it) },
         onFrostTuner = { viewModel.setFrostTuner(it) },
+        onManualMarks = { viewModel.setManualMarks(it) },
         onShareTripLog = {
             viewModel.shareTripLog { intent ->
                 if (intent != null) context.startActivity(intent) else Toast.makeText(context, empty, Toast.LENGTH_SHORT).show()
@@ -95,9 +101,11 @@ private fun ExperimentalContent(
     forceTripStart: Boolean,
     frostTuner: Boolean,
     canHide: Boolean,
+    manualMarks: Boolean = false,
     onBack: () -> Unit = {},
     onForceTripStart: (Boolean) -> Unit = {},
     onFrostTuner: (Boolean) -> Unit = {},
+    onManualMarks: (Boolean) -> Unit = {},
     onShareTripLog: () -> Unit = {},
     onHide: () -> Unit = {},
 ) {
@@ -123,6 +131,12 @@ private fun ExperimentalContent(
             subtitle = stringResource(R.string.settings_experimental_frost_tuner_detail),
             checked = frostTuner,
             onCheckedChange = onFrostTuner,
+        )
+        SettingsSwitch(
+            title = stringResource(R.string.settings_experimental_manual_marks),
+            subtitle = stringResource(R.string.settings_experimental_manual_marks_detail),
+            checked = manualMarks,
+            onCheckedChange = onManualMarks,
         )
         SettingsItem(
             label = stringResource(R.string.settings_experimental_trip_log),
