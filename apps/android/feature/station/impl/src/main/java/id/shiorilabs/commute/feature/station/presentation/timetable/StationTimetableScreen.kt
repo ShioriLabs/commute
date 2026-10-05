@@ -76,6 +76,12 @@ import id.shiorilabs.commute.core.ui.layout.TitleSlot
 import id.shiorilabs.commute.core.ui.layout.stuckTitle
 import id.shiorilabs.commute.core.ui.network.rememberIsOffline
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
+import id.shiorilabs.commute.core.ui.theme.Gray600
+import id.shiorilabs.commute.core.ui.theme.Slate100
+import id.shiorilabs.commute.core.ui.theme.Slate400
+import id.shiorilabs.commute.core.ui.theme.Slate500
+import id.shiorilabs.commute.core.ui.theme.Slate700
+import id.shiorilabs.commute.core.ui.theme.Slate900
 import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
 import id.shiorilabs.commute.core.ui.time.updatedAgoText
 import id.shiorilabs.commute.feature.station.R
@@ -88,12 +94,6 @@ import id.shiorilabs.commute.feature.station.domain.joinLabels
 import id.shiorilabs.commute.feature.station.presentation.components.rememberPulseAlpha
 
 // Tailwind's colours, as the web's timetable page uses them.
-private val Slate100 = Color(0xFFF1F5F9)
-private val Slate400 = Color(0xFF94A3B8)
-private val Slate500 = Color(0xFF64748B)
-private val Slate700 = Color(0xFF334155)
-private val Slate900 = Color(0xFF0F172A)
-private val Gray600 = Color(0xFF4B5563)
 
 /** The page is white, as the station page it opens from. */
 private val TimetableBackground = Color.White

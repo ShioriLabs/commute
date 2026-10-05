@@ -48,6 +48,15 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import id.shiorilabs.commute.core.ui.theme.Amber100
+import id.shiorilabs.commute.core.ui.theme.Amber800
+import id.shiorilabs.commute.core.ui.theme.Rose300
+import id.shiorilabs.commute.core.ui.theme.Rose500
+import id.shiorilabs.commute.core.ui.theme.Rose700
+import id.shiorilabs.commute.core.ui.theme.Slate300
+import id.shiorilabs.commute.core.ui.theme.Slate500
+import id.shiorilabs.commute.core.ui.theme.Slate600
+import id.shiorilabs.commute.core.ui.theme.Slate900
 import java.time.Instant
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.semantics.semantics

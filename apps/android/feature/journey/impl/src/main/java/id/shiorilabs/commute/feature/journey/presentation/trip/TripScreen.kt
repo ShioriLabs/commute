@@ -9,6 +9,9 @@ import androidx.core.content.ContextCompat
 import id.shiorilabs.commute.core.location.LocationPermissions
 import id.shiorilabs.commute.core.location.rememberLocationPermissionRequest
 import id.shiorilabs.commute.core.notification.rememberNotificationPermissionRequest
+import id.shiorilabs.commute.core.ui.theme.Slate200
+import id.shiorilabs.commute.core.ui.theme.Slate400
+import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.feature.journey.domain.TRIP_START_LEAD
 import id.shiorilabs.commute.feature.journey.domain.TripStart
 import androidx.compose.foundation.background
@@ -86,9 +89,6 @@ import id.shiorilabs.commute.feature.journey.presentation.Problem
 import id.shiorilabs.commute.feature.journey.presentation.ResultSkeleton
 import id.shiorilabs.commute.feature.journey.presentation.components.JourneyDetail
 import id.shiorilabs.commute.feature.journey.presentation.components.RouteBar
-import id.shiorilabs.commute.feature.journey.presentation.components.Slate200
-import id.shiorilabs.commute.feature.journey.presentation.components.Slate400
-import id.shiorilabs.commute.feature.journey.presentation.components.Slate500
 import id.shiorilabs.commute.feature.journey.presentation.components.legLines
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import java.time.Instant

@@ -14,7 +14,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -27,14 +26,13 @@ import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
+import id.shiorilabs.commute.core.ui.theme.Gray600
 import id.shiorilabs.commute.feature.station.R
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.OPERATOR_TJ
 import id.shiorilabs.commute.feature.station.domain.Transfer
 import id.shiorilabs.commute.feature.station.domain.codeOfLineKey
 import id.shiorilabs.commute.feature.station.domain.sortLineKeysForDisplay
-
-private val Gray600 = Color(0xFF4B5563)
 
 /** The "Integrasi" heading, over the rows [TransferRow] draws one per transfer. */
 @Composable

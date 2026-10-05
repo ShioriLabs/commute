@@ -1,6 +1,12 @@
 package id.shiorilabs.commute.feature.trip.presentation
 
 import androidx.compose.foundation.Canvas
+import id.shiorilabs.commute.core.ui.theme.Slate100
+import id.shiorilabs.commute.core.ui.theme.Slate200
+import id.shiorilabs.commute.core.ui.theme.Slate300
+import id.shiorilabs.commute.core.ui.theme.Slate400
+import id.shiorilabs.commute.core.ui.theme.Slate500
+import id.shiorilabs.commute.core.ui.theme.Slate900
 import id.shiorilabs.commute.feature.station.domain.formatPlatformCode
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -119,12 +125,6 @@ fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel
 }
 
 private val PageBackground = Color.White
-private val Slate100 = Color(0xFFF1F5F9)
-private val Slate200 = Color(0xFFE2E8F0)
-private val Slate300 = Color(0xFFCBD5E1)
-private val Slate400 = Color(0xFF94A3B8)
-private val Slate500 = Color(0xFF64748B)
-private val Slate900 = Color(0xFF0F172A)
 
 /** Ahead of the timetable: the rare train that's early. */
 private val OnTimeGreen = Color(0xFF059669)
