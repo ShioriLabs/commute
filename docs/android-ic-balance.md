@@ -1,6 +1,7 @@
 # Android: IC card balance
 
-**Status:** design note, not yet implemented. Part of `android-app.md`.
+**Status:** design note, not yet implemented; deferred past v1. Part of
+`android-app.md`.
 
 ## Goal
 
