@@ -54,6 +54,7 @@ import id.shiorilabs.commute.core.ui.theme.Rose300
 import id.shiorilabs.commute.core.ui.theme.Rose500
 import id.shiorilabs.commute.core.ui.theme.Rose700
 import id.shiorilabs.commute.core.ui.theme.Slate300
+import id.shiorilabs.commute.core.ui.theme.Slate400
 import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.core.ui.theme.Slate600
 import id.shiorilabs.commute.core.ui.theme.Slate900
@@ -139,27 +140,66 @@ internal fun TransferIcon(bus: Boolean, modifier: Modifier = Modifier, tint: Col
 @Composable
 internal fun JourneyTimeline(legs: List<JourneyLeg>, lines: Map<String, LineInfo>, modifier: Modifier = Modifier) {
     Column(modifier = modifier.fillMaxWidth()) {
+        (legs.firstOrNull() as? JourneyLeg.Transfer)?.let { EndpointStop(it.from.name, RailCap.START) }
         legs.forEachIndexed { index, leg ->
             when (leg) {
                 is JourneyLeg.Ride -> {
                     val previous = legs.getOrNull(index - 1)
                     // Two rides through the same station: a change on the spot, not a walk.
                     val sameStationChange = previous is JourneyLeg.Ride && previous.to.id == leg.from.id
-                    RideLeg(leg, legLines(leg, lines), sameStationChange)
+                    RideLeg(
+                        leg = leg,
+                        lines = legLines(leg, lines),
+                        sameStationChange = sameStationChange,
+                        walkBefore = walkRail(previous),
+                        walkAfter = walkRail(legs.getOrNull(index + 1)),
+                    )
                 }
 
                 is JourneyLeg.Transfer -> TransferLeg(leg)
             }
         }
+        (legs.lastOrNull() as? JourneyLeg.Transfer)?.let { EndpointStop(it.to.name, RailCap.END) }
     }
 }
 
-/** One row of the timeline: the gutter with its rail, and the row's content beside it. */
+/**
+ * Where the trip starts or ends on foot. A ride draws its own two nodes, but a walk is only a row of
+ * text, so a trip that opens with one began at a station the timeline never named: Sudirman to Blok M
+ * BCA read as starting at Dukuh Atas BNI. Slate rather than a line's colour, no line running here:
+ * it is the walk's own rail, given an end.
+ */
+@Composable
+private fun EndpointStop(name: String, cap: RailCap) {
+    TimelineRow(rail = SolidColor(Slate300), cap = cap, node = Slate400) {
+        StopLine(time = null) {
+            Text(text = name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+/**
+ * The rail of the walk beside a ride, so the two meet at the ride's node. A ride's own rail starts
+ * and stops at its node's centre and a walk's only fills its own row, so the half-row between them
+ * was bare; the ride draws that half in the walk's colour, being the one that knows where its node
+ * sits.
+ */
+private fun walkRail(leg: JourneyLeg?): Brush? = when {
+    leg !is JourneyLeg.Transfer -> null
+    leg.corridorLabel != null && leg.fare != null -> SolidColor(Rose300)
+    else -> SolidColor(Slate300)
+}
+
+/**
+ * One row of the timeline: the gutter with its rail, and the row's content beside it. A [cap]ped rail
+ * runs from or to the row's middle; [beyondCap], if given, fills the half the cap leaves bare.
+ */
 @Composable
 private fun TimelineRow(
     rail: Brush?,
     modifier: Modifier = Modifier,
     cap: RailCap = RailCap.NONE,
+    beyondCap: Brush? = null,
     node: Color? = null,
     dot: Color? = null,
     content: @Composable () -> Unit,
@@ -168,8 +208,10 @@ private fun TimelineRow(
         Box(modifier = Modifier.width(Gutter).fillMaxHeight()) {
             if (rail != null) {
                 Column(modifier = Modifier.fillMaxHeight().offset(x = RailCenter - RailWidth / 2)) {
-                    Box(Modifier.width(RailWidth).weight(1f).then(if (cap == RailCap.START) Modifier else Modifier.background(rail)))
-                    Box(Modifier.width(RailWidth).weight(1f).then(if (cap == RailCap.END) Modifier else Modifier.background(rail)))
+                    val top = if (cap == RailCap.START) beyondCap else rail
+                    val bottom = if (cap == RailCap.END) beyondCap else rail
+                    Box(Modifier.width(RailWidth).weight(1f).then(if (top != null) Modifier.background(top) else Modifier))
+                    Box(Modifier.width(RailWidth).weight(1f).then(if (bottom != null) Modifier.background(bottom) else Modifier))
                 }
             }
             if (node != null) {
@@ -204,7 +246,13 @@ private fun TimelineRow(
 private enum class RailCap { NONE, START, END }
 
 @Composable
-private fun RideLeg(leg: JourneyLeg.Ride, lines: List<LegLine>, sameStationChange: Boolean) {
+private fun RideLeg(
+    leg: JourneyLeg.Ride,
+    lines: List<LegLine>,
+    sameStationChange: Boolean,
+    walkBefore: Brush?,
+    walkAfter: Brush?,
+) {
     var expanded by rememberSaveable(leg.from.id, leg.to.id, leg.line) { mutableStateOf(false) }
     val isBus = leg.operator == TRANSJAKARTA
     val legColor = parseHexColor(lines.firstOrNull()?.color ?: LINE_COLOR_FALLBACK)
@@ -229,7 +277,7 @@ private fun RideLeg(leg: JourneyLeg.Ride, lines: List<LegLine>, sameStationChang
         }
     }
 
-    TimelineRow(rail = rail, cap = RailCap.START, node = legColor) {
+    TimelineRow(rail = rail, cap = RailCap.START, beyondCap = walkBefore, node = legColor) {
         StopLine(time = leg.departureAt) {
             Text(text = leg.from.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             leg.platformCode?.let { platform ->
@@ -321,7 +369,7 @@ private fun RideLeg(leg: JourneyLeg.Ride, lines: List<LegLine>, sameStationChang
         }
     }
 
-    TimelineRow(rail = rail, cap = RailCap.END, node = legColor) {
+    TimelineRow(rail = rail, cap = RailCap.END, beyondCap = walkAfter, node = legColor) {
         StopLine(time = leg.arrivalAt) {
             Text(text = leg.to.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             val description = stringResource(R.string.journey_get_off_description)
@@ -376,10 +424,12 @@ private fun RideNote(text: String) {
 private fun TransferLeg(leg: JourneyLeg.Transfer) {
     val fare = leg.fare
     val corridor = leg.corridorLabel
+    // The breathing room is padding on the content, not on the row: outside the row, its rail can't
+    // reach, which left a gap at both ends of every walk.
     if (fare != null && corridor != null) {
-        TimelineRow(rail = SolidColor(Rose300), modifier = Modifier.padding(vertical = 8.dp)) {
+        TimelineRow(rail = SolidColor(Rose300)) {
             Row(
-                modifier = Modifier.padding(vertical = 6.dp),
+                modifier = Modifier.padding(vertical = 14.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.Top,
             ) {
@@ -412,9 +462,9 @@ private fun TransferLeg(leg: JourneyLeg.Transfer) {
         return
     }
 
-    TimelineRow(rail = SolidColor(Slate300), modifier = Modifier.padding(vertical = 8.dp)) {
+    TimelineRow(rail = SolidColor(Slate300)) {
         Row(
-            modifier = Modifier.padding(vertical = 6.dp),
+            modifier = Modifier.padding(vertical = 14.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
