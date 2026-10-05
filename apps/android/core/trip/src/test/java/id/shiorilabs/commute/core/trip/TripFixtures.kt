@@ -110,10 +110,11 @@ internal class Run(val plan: TripPlan, startAt: Instant = at(-2), hasLocation: B
         return step
     }
 
-    fun fix(point: GeoPoint, minutes: Double, accuracyM: Float = 20f) =
-        send(TripEvent.Fix(point, accuracyM, at(minutes)))
+    fun fix(point: GeoPoint, minutes: Double, accuracyM: Float = 20f, speedMps: Float? = null) =
+        send(TripEvent.Fix(point, accuracyM, at(minutes), speedMps))
 
-    fun fix(stop: TripStop, minutes: Double, accuracyM: Float = 20f) = fix(stop.here, minutes, accuracyM)
+    fun fix(stop: TripStop, minutes: Double, accuracyM: Float = 20f, speedMps: Float? = null) =
+        fix(stop.here, minutes, accuracyM, speedMps)
 
     fun tick(minutes: Double) = send(TripEvent.Tick(at(minutes)))
 
