@@ -353,8 +353,8 @@ private fun BarTitle(pids: Pids, collapsed: Boolean, modifier: Modifier = Modifi
     ) { showsName ->
         // Each side of the swap draws its own pages, so the one sliding out keeps what it said.
         val shown = pages(showsName)
-        SlidingPages(count = shown.size, holdMillis = EYEBROW_PAGE_MILLIS, fade = 3.dp, modifier = Modifier.fillMaxWidth()) { page ->
-            BasicText(text = shown[page], style = style, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        SlidingPages(pages = shown, holdMillis = EYEBROW_PAGE_MILLIS, fade = 3.dp, modifier = Modifier.fillMaxWidth()) { text ->
+            BasicText(text = text, style = style, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -432,17 +432,18 @@ private fun Eyebrow(pids: Pids) {
     }
     val pages = listOfNotNull(label, ahead)
     val style = MaterialTheme.typography.titleSmall.merge(color = BoardMuted, fontWeight = FontWeight.Bold)
+    val alighting = pids.label == PidsLabel.ALIGHT_HERE || pids.label == PidsLabel.ALIGHT_NEXT
     SlidingPages(
-        count = pages.size,
+        pages = pages,
         holdMillis = EYEBROW_PAGE_MILLIS,
         fade = 3.dp,
         modifier = Modifier
             .fillMaxWidth()
             .clearAndSetSemantics { contentDescription = pages.joinToString(". ") },
-    ) { page ->
+    ) { text ->
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            BasicText(text = pages[page], style = style, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (page == 0 && (pids.label == PidsLabel.ALIGHT_HERE || pids.label == PidsLabel.ALIGHT_NEXT)) {
+            BasicText(text = text, style = style, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (alighting && text == label) {
                 PidsChevrons(color = NextStop)
             }
         }
@@ -474,8 +475,8 @@ private fun StationName(name: String, modifier: Modifier = Modifier) {
                 autoSize = TextAutoSize.StepBased(minFontSize = NameMin, maxFontSize = NameMax, stepSize = 2.sp),
             )
         } else {
-            SlidingPages(count = pages.lines.size, holdMillis = NAME_PAGE_MILLIS, fade = 8.dp) { page ->
-                BasicText(text = pages.lines[page], style = style.merge(fontSize = pages.size), maxLines = 1, softWrap = false)
+            SlidingPages(pages = pages.lines, holdMillis = NAME_PAGE_MILLIS, fade = 8.dp) { line ->
+                BasicText(text = line, style = style.merge(fontSize = pages.size), maxLines = 1, softWrap = false)
             }
         }
     }
@@ -488,13 +489,14 @@ private fun StationName(name: String, modifier: Modifier = Modifier) {
  * moving.
  */
 @Composable
-private fun SlidingPages(
-    count: Int,
+private fun <T> SlidingPages(
+    pages: List<T>,
     holdMillis: Long,
     fade: Dp,
     modifier: Modifier = Modifier,
-    content: @Composable (page: Int) -> Unit,
+    content: @Composable (page: T) -> Unit,
 ) {
+    val count = pages.size
     var page by remember(count) { mutableIntStateOf(0) }
     LaunchedEffect(count) {
         if (count < 2) return@LaunchedEffect
@@ -503,7 +505,10 @@ private fun SlidingPages(
             page = (page + 1) % count
         }
     }
-    PageSlide(updateTransition(page.coerceAtMost(count - 1), label = "slidingPages"), fade, modifier, content)
+    // Slides between the pages themselves, not their places: one sliding out after the pages have
+    // changed (a line dropped as the stop to get off at comes up) still draws what it said.
+    val shown = page.coerceAtMost(count - 1)
+    PageSlide(updateTransition(IndexedValue(shown, pages[shown]), label = "slidingPages"), fade, modifier) { content(it.value) }
 }
 
 /** [transition]'s states as pages, each new one sliding up into place as [SlidingPages] does. */
