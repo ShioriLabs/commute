@@ -77,15 +77,28 @@ internal fun NearbyPromptCard(onResult: (Boolean) -> Unit, onDismiss: () -> Unit
     }
 }
 
-/** "DI DEKAT KAMU", over the nearby stations, set like the picker's section labels. */
+/** "DI DEKAT KAMU", over the nearby stations, in line with their names. */
 @Composable
 internal fun NearbyHeading(modifier: Modifier = Modifier) {
     SectionLabel(
         text = stringResource(R.string.saved_nearby_title),
-        modifier = modifier.padding(horizontal = 32.dp),
+        modifier = modifier.padding(horizontal = 16.dp),
     )
 }
 
-/** `350 m`, or `1,2 km` past a kilometre. */
-internal fun formatDistance(metres: Int): String =
-    if (metres < 1000) "$metres m" else "%.1f km".format(java.util.Locale.forLanguageTag("id"), metres / 1000.0)
+/**
+ * Nearer than this to a station's point, the rider is at it: a twelve-car platform runs about
+ * 120 m either side of it, and a fix wanders tens of metres anyway.
+ */
+private const val HERE_M = 100
+
+/** How far a nearby station is: "Kamu di sini" at it, else `350 m`, or `1,2 km` past a kilometre. */
+@Composable
+internal fun nearbyDistance(metres: Int): String =
+    if (metres < HERE_M) stringResource(R.string.saved_nearby_here) else formatDistance(metres)
+
+/** `350 m` to the nearest ten, a fix being no finer; or `1,2 km` past a kilometre. */
+internal fun formatDistance(metres: Int): String {
+    val rounded = (metres + 5) / 10 * 10
+    return if (rounded < 1000) "$rounded m" else "%.1f km".format(java.util.Locale.forLanguageTag("id"), rounded / 1000.0)
+}
