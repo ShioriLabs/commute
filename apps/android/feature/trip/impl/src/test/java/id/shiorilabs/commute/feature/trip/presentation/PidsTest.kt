@@ -84,6 +84,32 @@ class PidsTest {
         assertEquals(plan.ride(2), pids.changeTo)
     }
 
+    /** Off the MRT at Dukuh Atas at 08.02, walking the 300 m to Sudirman for the 08.10. */
+    private val walking = ActiveTrip(
+        plan,
+        start.copy(legIndex = 2, phase = TripPhase.WAITING_TO_BOARD, walkingSince = minutes(2)),
+        origin,
+    )
+
+    @Test
+    fun `off one ride with a walk to the next, the board says where to walk before where to board`() {
+        val pids = walking.pids(minutes(3))
+
+        assertEquals(PidsLabel.WALK, pids.label)
+        assertEquals("Sudirman", pids.station)
+        assertEquals(300, pids.walkM)
+        // 300 m at an easy pace, from 08.02: about four minutes of it left at 08.03.
+        assertEquals(4, pids.walkMinutes)
+        assertNull(pids.changeTo)
+    }
+
+    @Test
+    fun `there, or once the walk should be done, the board says where to board`() {
+        val there = ActiveTrip(walking.plan, walking.state.copy(walkingSince = null), origin)
+        assertEquals(PidsLabel.BOARD, there.pids(minutes(3)).label)
+        assertEquals(PidsLabel.BOARD, walking.pids(minutes(8)).label)
+    }
+
     @Test
     fun `waiting, the board names where to board`() {
         val pids = ActiveTrip(plan, start, origin).pids(NOW.minusSeconds(60))
