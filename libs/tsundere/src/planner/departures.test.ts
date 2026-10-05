@@ -319,6 +319,68 @@ describe('resolveDepartures', () => {
     })
   })
 
+  /*
+   * Setiabudi to Dukuh Atas is the shared LRT Jabodebek trunk: a Cibubur train
+   * carries the rider exactly as a Bekasi one does, so the leg the search named
+   * BK must still be offered the CB that leaves first.
+   */
+  describe('a trunk two lines share', () => {
+    const trunk = ['LRTJBDB-SET', 'LRTJBDB-DKA']
+    const bk: TripPattern = {
+      lineCode: 'BK',
+      stationIds: ['LRTJBDB-KUA', ...trunk],
+      trips: [{ id: 'bk', dayMask: ALL_DAYS, departuresS: [at(18, 46), at(18, 49), at(18, 52)] }]
+    }
+    const cb: TripPattern = {
+      lineCode: 'CB',
+      stationIds: ['LRTJBDB-KUN', ...trunk],
+      trips: [{ id: 'cb', dayMask: ALL_DAYS, departuresS: [at(18, 42), at(18, 45), at(18, 48)] }]
+    }
+
+    it('boards the other line when it leaves first, and says so', () => {
+      const [timing] = resolveDepartures(
+        [ride('BK', trunk)], index(bk, cb), { departureS: at(18, 40), dayMask: ALL_DAYS }
+      )
+      expect(timing?.tripId).toBe('cb')
+      expect(timing?.lineCode).toBe('CB')
+      expect(timing?.departureS).toBe(at(18, 45))
+    })
+
+    it('reports the leg\'s own line when that is the train caught', () => {
+      const [timing] = resolveDepartures(
+        [ride('BK', trunk)], index(bk, cb), { departureS: at(18, 46), dayMask: ALL_DAYS }
+      )
+      expect(timing?.lineCode).toBe('BK')
+    })
+
+    it('refuses the other line where it branches off before the alighting stop', () => {
+      const leg = [ride('BK', ['LRTJBDB-KUA', ...trunk])]
+      const [timing] = resolveDepartures(leg, index(bk, cb), { departureS: at(18, 40), dayMask: ALL_DAYS })
+      expect(timing?.tripId).toBe('bk')
+    })
+
+    it('does not call a train the last when the other line runs later', () => {
+      const [timing] = resolveDepartures(
+        [ride('CB', trunk)], index(bk, cb), { departureS: at(18, 40), dayMask: ALL_DAYS }
+      )
+      expect(timing?.tripId).toBe('cb')
+      expect(timing?.lastOfDay).toBeUndefined()
+    })
+
+    // A separately gated line shares the track but not the fare.
+    it('never swaps onto or off a separately gated line', () => {
+      const gatedLines = new Set(['CB'])
+      const onto = resolveDepartures(
+        [ride('BK', trunk)], index(bk, cb), { departureS: at(18, 40), dayMask: ALL_DAYS, gatedLines }
+      )
+      expect(onto[0]?.tripId).toBe('bk')
+      const off = resolveDepartures(
+        [ride('CB', trunk)], index(bk, cb), { departureS: at(18, 46), dayMask: ALL_DAYS, gatedLines }
+      )
+      expect(off[0]).toBeNull()
+    })
+  })
+
   it('respects the day mask', () => {
     const weekdayOnly: TripPattern = {
       ...mrt,
