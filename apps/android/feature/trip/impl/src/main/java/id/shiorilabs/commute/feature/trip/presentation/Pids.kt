@@ -76,6 +76,8 @@ data class Pids(
     val alightingAt: Instant?,
     val walkM: Int? = null,
     val walkMinutes: Int? = null,
+    /** When the timetable has the ride reaching the stop to get off at, to set [alightingAt] against. */
+    val alightingScheduled: Instant? = null,
 )
 
 
@@ -156,5 +158,6 @@ internal fun ActiveTrip.pids(now: Instant): Pids {
         alightingAt = expected(last),
         walkM = walk?.distanceM,
         walkMinutes = walkEnds?.let { minutesUntil(now, it) },
+        alightingScheduled = plan.scheduledAtStop(state.legIndex, last),
     )
 }
