@@ -71,7 +71,6 @@ import id.shiorilabs.commute.feature.journey.presentation.SavedRouteCard
 import id.shiorilabs.commute.feature.saved.R
 import id.shiorilabs.commute.feature.saved.presentation.components.ChevronPullIndicator
 import id.shiorilabs.commute.feature.saved.presentation.components.HomeNavRail
-import id.shiorilabs.commute.feature.trip.ActiveTripCard
 import id.shiorilabs.commute.feature.saved.presentation.nearby.NearbyHeading
 import id.shiorilabs.commute.feature.saved.presentation.nearby.NearbyPromptCard
 import id.shiorilabs.commute.feature.saved.presentation.nearby.NearbyUiState
@@ -93,12 +92,10 @@ import java.time.LocalDateTime
 fun SavedStationsScreen(
     innerPadding: PaddingValues,
     savedRouteCard: SavedRouteCard,
-    activeTripCard: ActiveTripCard,
     viewModel: SavedStationsViewModel = hiltViewModel(),
     nearbyViewModel: NearbyViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val tripShowing by activeTripCard.visible.collectAsStateWithLifecycle()
     val nearby by nearbyViewModel.state.collectAsStateWithLifecycle()
     // The rider has likely moved since home was last on screen.
     LifecycleResumeEffect(Unit) {
@@ -127,7 +124,6 @@ fun SavedStationsScreen(
         onStationClick = { navigator.goTo(Route.Station(it)) },
         onRouteClick = { fromId, toId -> navigator.goTo(Route.Otw(fromId = fromId, toId = toId)) },
         savedRouteCard = savedRouteCard,
-        activeTripCard = activeTripCard.takeIf { tripShowing },
         nearby = nearby,
         onNearbyPermission = nearbyViewModel::onPermissionResult,
         onDismissNearby = nearbyViewModel::dismissPrompt,
@@ -149,7 +145,6 @@ private fun SavedStationsContent(
     onRouteClick: (fromId: String, toId: String) -> Unit = { _, _ -> },
     savedRouteCard: SavedRouteCard = NoSavedRouteCard,
     /** The running trip's card, `null` while there is none. */
-    activeTripCard: ActiveTripCard? = null,
     nearby: NearbyUiState = NearbyUiState.Hidden,
     onNearbyPermission: (Boolean) -> Unit = {},
     onDismissNearby: () -> Unit = {},
@@ -172,7 +167,6 @@ private fun SavedStationsContent(
                         .fillMaxSize()
                         .padding(innerPadding),
                 ) {
-                    activeTripCard?.Content(Modifier.padding(start = 16.dp, top = 32.dp, end = 16.dp))
                     if (nearby is NearbyUiState.Prompt) {
                         NearbyPromptCard(
                             onResult = onNearbyPermission,
@@ -201,7 +195,6 @@ private fun SavedStationsContent(
                     onStationClick = onStationClick,
                     onRouteClick = onRouteClick,
                     savedRouteCard = savedRouteCard,
-                    activeTripCard = activeTripCard,
                     nearby = nearby,
                     onNearbyPermission = onNearbyPermission,
                     onDismissNearby = onDismissNearby,
@@ -272,7 +265,6 @@ private fun StationFeed(
     onStationClick: (stationId: String) -> Unit,
     onRouteClick: (fromId: String, toId: String) -> Unit,
     savedRouteCard: SavedRouteCard,
-    activeTripCard: ActiveTripCard?,
     nearby: NearbyUiState,
     onNearbyPermission: (Boolean) -> Unit,
     onDismissNearby: () -> Unit,
@@ -303,17 +295,16 @@ private fun StationFeed(
     // The rows, in list order, so a row index leads back to its entry. A loaded station is a title
     // row then its cards; one still loading, or failed, is a single placeholder row standing in for
     // its title. A pair is its title row then its card. Either way the first row of an entry is its
-    // title row. The running trip's card, the stations near the rider (a heading, then a title and
+    // title row. The stations near the rider (a heading, then a title and
     // a board each, or the card offering them) and the offline banner, while they show, are rows
     // above them all.
-    val tripShowing = activeTripCard != null
     val nearbyRows = when (nearby) {
         NearbyUiState.Hidden -> 0
         NearbyUiState.Prompt -> 1
         is NearbyUiState.Stations -> 1 + 2 * nearby.boards.size
     }
-    val titleRows = remember(feed.entries, noticeShown, tripShowing, nearbyRows) {
-        var row = (if (noticeShown) 1 else 0) + (if (tripShowing) 1 else 0) + nearbyRows
+    val titleRows = remember(feed.entries, noticeShown, nearbyRows) {
+        var row = (if (noticeShown) 1 else 0) + nearbyRows
         feed.entries.map { entry ->
             val titleRow = row
             row += when (entry) {
@@ -398,11 +389,6 @@ private fun StationFeed(
                 bottom = innerPadding.calculateBottomPadding() + NavRailClearance,
             ),
         ) {
-            activeTripCard?.let { card ->
-                item(key = "active-trip") {
-                    card.Content(Modifier.padding(start = 16.dp, top = 32.dp, end = 16.dp))
-                }
-            }
             when (nearby) {
                 NearbyUiState.Hidden -> Unit
                 NearbyUiState.Prompt -> item(key = "nearby-prompt") {

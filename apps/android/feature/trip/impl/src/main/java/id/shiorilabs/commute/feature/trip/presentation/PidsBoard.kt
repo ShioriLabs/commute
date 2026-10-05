@@ -9,6 +9,13 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.animation.core.updateTransition
+import androidx.compose.animation.core.Transition
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.animation.AnimatedContent
 import kotlinx.coroutines.delay
 import androidx.compose.ui.unit.TextUnit
@@ -56,6 +63,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
@@ -115,7 +125,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.roundToInt
 
-/** Near-black, like the band over a JR East display, and home's running-trip card. */
+/** Near-black, like the band over a JR East display. */
 private val BoardInk = Color(0xFF0F172A)
 private val BoardMuted = Color(0xFF94A3B8)
 private val BoardDim = Color(0xFF64748B)
@@ -191,29 +201,32 @@ internal fun PidsBoard(
     stationLines: List<String>,
     copy: TripCopy,
     source: String?,
-    topInset: Dp,
-    onClose: () -> Unit,
+    /** Where the big name's bottom edge is in the root, as the page scrolls; see [PidsBar]. */
+    onNameMoved: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val line = lines[pids.ride.line]
     val color = parseHexColor(line?.colorCode ?: "", BoardMuted)
-    DarkStatusBarIcons()
     Column(modifier = modifier.fillMaxWidth()) {
         // Over the strip: its band runs on up behind the plate.
-        Header(pids, lines, stationLines, copy, topInset, onClose, modifier = Modifier.zIndex(1f))
+        Plate(pids, lines, stationLines, onNameMoved, modifier = Modifier.zIndex(1f))
         if (pids.upcoming.isNotEmpty()) Strip(pids, color, source)
         ChangePanel(pids, lines, stationLines, copy)
     }
 }
 
-/** Light icons over the dark plate while the board shows; the app's dark ones again after. */
+/**
+ * Light icons over the dark bar while it's up; the app's dark ones again after. Set on every pass
+ * too, as the theme sets its own whenever it recomposes.
+ */
 @Composable
 private fun DarkStatusBarIcons() {
     val view = LocalView.current
-    DisposableEffect(view) {
-        val window = view.context.findActivity()?.window
-        val controller = window?.let { WindowCompat.getInsetsController(it, view) }
-        controller?.isAppearanceLightStatusBars = false
+    val controller = remember(view) {
+        view.context.findActivity()?.window?.let { WindowCompat.getInsetsController(it, view) }
+    }
+    SideEffect { controller?.isAppearanceLightStatusBars = false }
+    DisposableEffect(controller) {
         onDispose { controller?.isAppearanceLightStatusBars = true }
     }
 }
@@ -225,20 +238,25 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 }
 
 /**
- * The plate over the band, after the long strip displays over train doors: the line's roundel,
- * where it's headed and the minutes to the big name, then that name with the station's lines as
- * roundels before it, as Singapore's MRT marks a station.
+ * The bar over every screen while a trip runs, after the long strip displays over train doors: the
+ * line's roundel, where it's headed, and the minutes to getting off. On the trip page it is the top
+ * of the plate, pinned as the page scrolls under it, with a close button; anywhere else the whole
+ * bar opens the trip. Once the big name is out of sight ([collapsed], and always off the trip
+ * page), the name takes turns with where it's headed, so the bar still says where to go.
  */
 @Composable
-private fun Header(
+internal fun PidsBar(
     pids: Pids,
     lines: Map<String, LineInfo>,
-    stationLines: List<String>,
     copy: TripCopy,
     topInset: Dp,
+    collapsed: Boolean,
+    onTripPage: Boolean,
     onClose: () -> Unit,
+    onOpen: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    DarkStatusBarIcons()
     // The bubbles count down to each stop; the corner, and the clock under the name, to getting off.
     val minutes = pids.minutesLeft
     val clock = pids.alightingAt?.let(::formatClock)
@@ -247,21 +265,19 @@ private fun Header(
             .fillMaxWidth()
             .background(BoardInk)
             .padding(top = topInset)
-            .padding(top = 4.dp, bottom = 16.dp),
+            .padding(top = 4.dp),
     ) {
-        Row(modifier = Modifier.padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        val openLabel = stringResource(R.string.trip_bar_open)
+        Row(
+            modifier = Modifier
+                .clickable(enabled = !onTripPage, onClickLabel = openLabel, role = Role.Button, onClick = onOpen)
+                .padding(start = 20.dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             val rideName = copy.rideName(pids.ride)
             Roundel(pids.ride, lines, modifier = Modifier.semantics { contentDescription = rideName })
-            Text(
-                text = pids.ride.headsign?.let { stringResource(R.string.trip_headsign, it) }.orEmpty(),
-                modifier = Modifier.padding(start = 10.dp).weight(1f),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            // How long until getting off, by the close button: the minutes, or the clock without them.
+            BarTitle(pids, collapsed, modifier = Modifier.padding(start = 10.dp).weight(1f))
+            // How long until getting off, by the button: the minutes, or the clock without them.
             when {
                 minutes != null -> Row(modifier = Modifier.padding(start = 8.dp)) {
                     Text(
@@ -286,13 +302,20 @@ private fun Header(
                     color = Color.White,
                 )
             }
-            CommuteIconButton(onClick = onClose, modifier = Modifier.size(40.dp)) {
-                Icon(
-                    imageVector = CommuteIcons.Close,
-                    contentDescription = stringResource(R.string.trip_live_close),
-                    modifier = Modifier.size(24.dp),
-                    tint = Color.White,
-                )
+            if (onTripPage) {
+                CommuteIconButton(onClick = onClose, modifier = Modifier.size(40.dp)) {
+                    Icon(
+                        imageVector = CommuteIcons.Close,
+                        contentDescription = stringResource(R.string.trip_live_close),
+                        modifier = Modifier.size(24.dp),
+                        tint = Color.White,
+                    )
+                }
+            } else {
+                // The close button's room, so the minutes stay put going in and out of the trip.
+                Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                    Icon(imageVector = CommuteIcons.Chevron, contentDescription = null, modifier = Modifier.size(20.dp), tint = BoardMuted)
+                }
             }
         }
         Box(
@@ -302,9 +325,68 @@ private fun Header(
                 .height(1.dp)
                 .background(Hairline),
         )
+    }
+}
+
+/**
+ * The bar's line beside the roundel: where the ride is headed, and once the big name is out of
+ * sight, that name ("Naik di Cakung") first, then the two taking turns as the eyebrow does.
+ */
+@Composable
+private fun BarTitle(pids: Pids, collapsed: Boolean, modifier: Modifier = Modifier) {
+    val headsign = pids.ride.headsign?.let { stringResource(R.string.trip_headsign, it) }
+    val label = stringResource(pids.label.text)
+    val station = buildAnnotatedString {
+        withStyle(SpanStyle(color = BoardMuted)) { append(label) }
+        append(" ")
+        append(pids.station)
+    }
+    val style = MaterialTheme.typography.titleSmall.merge(color = Color.White, fontWeight = FontWeight.Bold)
+    fun pages(showsName: Boolean) =
+        if (showsName) listOfNotNull(station, headsign?.let(::AnnotatedString)) else listOf(AnnotatedString(headsign.orEmpty()))
+    PageSlide(
+        transition = updateTransition(collapsed, label = "barTitle"),
+        fade = 3.dp,
+        modifier = modifier
+            .fillMaxWidth()
+            .clearAndSetSemantics { contentDescription = pages(collapsed).joinToString(". ") },
+    ) { showsName ->
+        // Each side of the swap draws its own pages, so the one sliding out keeps what it said.
+        val shown = pages(showsName)
+        SlidingPages(count = shown.size, holdMillis = EYEBROW_PAGE_MILLIS, fade = 3.dp, modifier = Modifier.fillMaxWidth()) { page ->
+            BasicText(text = shown[page], style = style, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+/**
+ * The rest of the plate, under the bar: what's next and the big name, with the station's lines as
+ * roundels before it, as Singapore's MRT marks a station, then the platform and the clock.
+ */
+@Composable
+private fun Plate(
+    pids: Pids,
+    lines: Map<String, LineInfo>,
+    stationLines: List<String>,
+    onNameMoved: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val minutes = pids.minutesLeft
+    val clock = pids.alightingAt?.let(::formatClock)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(BoardInk)
+            .padding(bottom = 16.dp),
+    ) {
         Column(modifier = Modifier.padding(start = 20.dp, top = 12.dp, end = 20.dp)) {
             Eyebrow(pids)
-            Row(modifier = Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .padding(top = 2.dp)
+                    .onGloballyPositioned { onNameMoved(it.positionInRoot().y + it.size.height) },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 StationLines((listOf(pids.ride.line) + stationLines).distinct().take(STATION_LINES), lines)
                 StationName(pids.station, modifier = Modifier.weight(1f).padding(start = 10.dp))
             }
@@ -413,7 +495,6 @@ private fun SlidingPages(
     modifier: Modifier = Modifier,
     content: @Composable (page: Int) -> Unit,
 ) {
-    val reducedMotion = rememberReducedMotion()
     var page by remember(count) { mutableIntStateOf(0) }
     LaunchedEffect(count) {
         if (count < 2) return@LaunchedEffect
@@ -422,7 +503,18 @@ private fun SlidingPages(
             page = (page + 1) % count
         }
     }
-    val transition = updateTransition(page.coerceAtMost(count - 1), label = "slidingPages")
+    PageSlide(updateTransition(page.coerceAtMost(count - 1), label = "slidingPages"), fade, modifier, content)
+}
+
+/** [transition]'s states as pages, each new one sliding up into place as [SlidingPages] does. */
+@Composable
+private fun <S> PageSlide(
+    transition: Transition<S>,
+    fade: Dp,
+    modifier: Modifier = Modifier,
+    content: @Composable (S) -> Unit,
+) {
+    val reducedMotion = rememberReducedMotion()
     val sliding = transition.currentState != transition.targetState
     transition.AnimatedContent(
         modifier = modifier
@@ -449,7 +541,7 @@ private fun SlidingPages(
             }
         },
         contentAlignment = Alignment.CenterStart,
-    ) { index -> content(index) }
+    ) { state -> content(state) }
 }
 
 /** A long name's lines, each shown in turn, all at one [size]. */
