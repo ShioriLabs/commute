@@ -1,13 +1,13 @@
 package id.shiorilabs.commute.wear
 
 import android.widget.Toast
-import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,7 +25,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
+import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
 import androidx.wear.compose.material3.AlertDialog
 import androidx.wear.compose.material3.AlertDialogDefaults
@@ -63,7 +65,7 @@ fun WatchApp(trips: Flow<WearTrip?>, phone: PhoneLink) {
     // The arrived trip the rider tapped away, by when it arrived.
     var dismissedArrival by rememberSaveable { mutableStateOf<Long?>(null) }
 
-    MaterialTheme {
+    CommuteWatchTheme {
         AppScaffold {
             when (val trip = current) {
                 is WearTrip -> {
@@ -88,7 +90,8 @@ private object NoTrip
 @Composable
 private fun IdleScreen(phone: PhoneLink) {
     val scope = rememberCoroutineScope()
-    val listState = rememberTransformingLazyColumnState()
+    // Centred, as a few lines on a round face should be: the trip screen's list starts at the top.
+    val listState = rememberScalingLazyListState()
     var opening by remember { mutableStateOf(false) }
     val openOnPhone = stringResource(R.string.idle_open_phone)
 
@@ -101,12 +104,13 @@ private fun IdleScreen(phone: PhoneLink) {
             }) { Text(openOnPhone) }
         },
     ) { padding ->
-        TransformingLazyColumn(state = listState, contentPadding = padding, modifier = Modifier.fillMaxSize()) {
+        ScalingLazyColumn(state = listState, contentPadding = padding, modifier = Modifier.fillMaxSize()) {
             item {
                 Text(
                     stringResource(R.string.idle_title),
                     style = MaterialTheme.typography.titleMedium,
                     textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = IDLE_INSET),
                 )
             }
             item {
@@ -115,6 +119,7 @@ private fun IdleScreen(phone: PhoneLink) {
                     style = MaterialTheme.typography.bodySmall,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = IDLE_INSET),
                 )
             }
         }
@@ -162,7 +167,14 @@ private fun TripScreen(trip: WearTrip, now: Instant, phone: PhoneLink) {
                 modifier = Modifier.fillMaxSize(),
             )
             TransformingLazyColumn(state = listState, contentPadding = padding, modifier = Modifier.fillMaxSize()) {
-                item { LineChip(copy.rideName(ride), trip.lines[ride.line]?.color?.let(::Color)) }
+                item {
+                    LineRow(
+                        code = ride.line.substringAfter(':'),
+                        name = copy.rideName(ride),
+                        color = trip.lines[ride.line]?.color?.let(::Color),
+                        operator = ride.operator,
+                    )
+                }
                 item {
                     Text(
                         copy.title(headline),
@@ -179,7 +191,7 @@ private fun TripScreen(trip: WearTrip, now: Instant, phone: PhoneLink) {
                             stringResource(R.string.trip_ask_still_on_route),
                             style = MaterialTheme.typography.bodySmall,
                             textAlign = TextAlign.Center,
-                            color = MaterialTheme.colorScheme.error,
+                            color = MaterialTheme.colorScheme.tertiary,
                         )
                     }
                 }
@@ -239,18 +251,13 @@ private fun ArrivedScreen(trip: WearTrip, onDismiss: () -> Unit) {
     }
 }
 
-/** The ride's line, in its own colour. */
+/** The ride's line: its roundel, then its name, as the phone heads a ride. */
 @Composable
-private fun LineChip(name: String, color: Color?) {
-    val background = color ?: MaterialTheme.colorScheme.surfaceContainer
-    Text(
-        name,
-        style = MaterialTheme.typography.labelMedium,
-        color = if (color != null) Color.White else MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier
-            .background(background, RoundedCornerShape(50))
-            .padding(horizontal = 10.dp, vertical = 2.dp),
-    )
+private fun LineRow(code: String, name: String, color: Color?, operator: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Roundel(code, color ?: MaterialTheme.colorScheme.outline, operator)
+        Text(name, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }
 
 private class PrimaryAction(val action: RiderAction, val label: Int)
@@ -277,3 +284,6 @@ private const val TICK_MS = 15_000L
 
 /** How long "udah sampai" stays up after the trip arrives. */
 private val ARRIVED_SHOWN: Duration = Duration.ofMinutes(5)
+
+/** Keeps the idle screen's lines clear of the round edge. */
+private val IDLE_INSET = 12.dp
