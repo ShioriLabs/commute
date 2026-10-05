@@ -85,7 +85,6 @@ import id.shiorilabs.commute.core.ui.components.SectionLabel
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.ext.lineColorOf
 import id.shiorilabs.commute.core.ui.theme.Slate100
-import id.shiorilabs.commute.core.ui.theme.Slate200
 import id.shiorilabs.commute.core.ui.theme.Slate300
 import id.shiorilabs.commute.core.ui.theme.Slate400
 import id.shiorilabs.commute.core.ui.theme.Slate500
@@ -607,26 +606,39 @@ private val LineWidth = 6.dp
 /** The board's yellow for the stop it names. */
 private val NextStopYellow = Color(0xFFFBBF24)
 
+/**
+ * A walk between rides, set on the timeline as the trip details set it: a slate rail under the
+ * stops' rails and a quiet line beside it, rather than a plate that reads as a button.
+ */
 @Composable
 private fun WalkRow(walk: TripLeg.Transfer, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Slate200.copy(alpha = 0.5f))
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+            .height(IntrinsicSize.Min),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(imageVector = CommuteIcons.Walk, contentDescription = null, modifier = Modifier.size(20.dp), tint = Slate500)
-        Column {
-            Text(
-                text = stringResource(R.string.trip_live_walk, walk.distanceM, walk.to.name),
-                style = MaterialTheme.typography.bodyMedium,
-                color = Slate900,
+        Rail(top = Slate300, bottom = Slate300) {}
+        Row(
+            modifier = Modifier.padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Icon(
+                imageVector = CommuteIcons.Walk,
+                contentDescription = null,
+                modifier = Modifier.padding(top = 2.dp).size(14.dp),
+                tint = Slate500,
             )
-            walk.corridorLabel?.let {
-                Text(text = stringResource(R.string.trip_live_walk_corridor, it), style = MaterialTheme.typography.bodySmall, color = Slate500)
+            Column {
+                Text(
+                    text = stringResource(R.string.trip_live_walk, walk.distanceM, walk.to.name),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Slate500,
+                )
+                walk.corridorLabel?.let {
+                    Text(text = stringResource(R.string.trip_live_walk_corridor, it), style = MaterialTheme.typography.bodySmall, color = Slate500)
+                }
             }
         }
     }
