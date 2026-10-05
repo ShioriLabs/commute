@@ -192,7 +192,9 @@ private fun TripScreen(trip: WearTrip, now: Instant, phone: PhoneLink) {
                             copy.place(headline),
                             style = MaterialTheme.typography.titleLarge,
                             textAlign = TextAlign.Center,
-                            maxLines = 2,
+                            // One line, cut short: a sponsor's name ("Dukuh Atas Bank Syariah
+                            // Indonesia") wrapped to two and pushed the button off the screen.
+                            maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
@@ -288,10 +290,17 @@ private fun ArrivedScreen(trip: WearTrip, onDismiss: () -> Unit) {
     }
 }
 
-/** The ride's line: its roundel, then its name, as the phone heads a ride. */
+/**
+ * The ride's line: its roundel, then its name, as the phone heads a ride. Inset, as it sits up where
+ * the round screen is narrow: without it a long "arah …" ran off under the bezel, roundel and all.
+ */
 @Composable
 private fun LineRow(code: String, name: String, color: Color?, operator: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Row(
+        modifier = Modifier.padding(horizontal = HEADER_INSET),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
         Roundel(code, color ?: MaterialTheme.colorScheme.outline, operator)
         Text(
             name,
@@ -333,3 +342,6 @@ private val IDLE_INSET = 12.dp
 
 /** Keeps the trip's text clear of the ring round the edge. */
 private val TEXT_INSET = 8.dp
+
+/** Keeps the line row, near the top where the circle narrows, inside it. */
+private val HEADER_INSET = 28.dp
