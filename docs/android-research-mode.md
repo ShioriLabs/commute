@@ -22,6 +22,13 @@ on the phone labels the train's motion phase as it goes. After the trip:
 
 The ground truth is what the rider already taps: **Tandai manual** (Jalan /
 Berhenti / Aneh). "Aneh" is for the moment the label on screen looks wrong.
+**Tandai Peron** adds a row for each platform's two ends: "Peron mulai" as the
+start of the platform comes level with the rider's window, "Peron habis" as
+its end goes past. Against the fixes, these map where each platform runs along
+the line, in the same terms as the phone's own position. That is meant to
+replace one point and a fixed 150 m radius per station. Platforms don't move,
+so this is a survey: a ride or two per line, both ways, maps every station on
+it.
 
 ## What the data is for
 

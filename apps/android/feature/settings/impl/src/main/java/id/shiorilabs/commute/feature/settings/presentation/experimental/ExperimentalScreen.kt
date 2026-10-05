@@ -42,6 +42,7 @@ class ExperimentalViewModel @Inject constructor(
     val forceTripStart: StateFlow<Boolean> = preferences.forceTripStart.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     val frostTuner: StateFlow<Boolean> = preferences.frostTuner.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     val manualMarks: StateFlow<Boolean> = preferences.manualMarks.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val platformMarks: StateFlow<Boolean> = preferences.platformMarks.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     val boardPages: StateFlow<Boolean> = preferences.boardPages.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     val watchAutoOpen: StateFlow<Boolean> = preferences.watchAutoOpen.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
@@ -53,6 +54,8 @@ class ExperimentalViewModel @Inject constructor(
     fun setFrostTuner(enabled: Boolean) = viewModelScope.launch { preferences.setFrostTuner(enabled) }
 
     fun setManualMarks(enabled: Boolean) = viewModelScope.launch { preferences.setManualMarks(enabled) }
+
+    fun setPlatformMarks(enabled: Boolean) = viewModelScope.launch { preferences.setPlatformMarks(enabled) }
 
     fun setBoardPages(enabled: Boolean) = viewModelScope.launch { preferences.setBoardPages(enabled) }
 
@@ -76,6 +79,7 @@ fun ExperimentalScreen(
     val forceTripStart by viewModel.forceTripStart.collectAsStateWithLifecycle()
     val frostTuner by viewModel.frostTuner.collectAsStateWithLifecycle()
     val manualMarks by viewModel.manualMarks.collectAsStateWithLifecycle()
+    val platformMarks by viewModel.platformMarks.collectAsStateWithLifecycle()
     val boardPages by viewModel.boardPages.collectAsStateWithLifecycle()
     val watchAutoOpen by viewModel.watchAutoOpen.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
@@ -87,6 +91,7 @@ fun ExperimentalScreen(
         forceTripStart = forceTripStart,
         frostTuner = frostTuner,
         manualMarks = manualMarks,
+        platformMarks = platformMarks,
         boardPages = boardPages,
         watchAutoOpen = watchAutoOpen,
         canHide = !debug,
@@ -94,6 +99,7 @@ fun ExperimentalScreen(
         onForceTripStart = { viewModel.setForceTripStart(it) },
         onFrostTuner = { viewModel.setFrostTuner(it) },
         onManualMarks = { viewModel.setManualMarks(it) },
+        onPlatformMarks = { viewModel.setPlatformMarks(it) },
         onBoardPages = { viewModel.setBoardPages(it) },
         onWatchAutoOpen = { viewModel.setWatchAutoOpen(it) },
         onShareTripLog = {
@@ -115,12 +121,14 @@ private fun ExperimentalContent(
     frostTuner: Boolean,
     canHide: Boolean,
     manualMarks: Boolean = false,
+    platformMarks: Boolean = false,
     boardPages: Boolean = false,
     watchAutoOpen: Boolean = true,
     onBack: () -> Unit = {},
     onForceTripStart: (Boolean) -> Unit = {},
     onFrostTuner: (Boolean) -> Unit = {},
     onManualMarks: (Boolean) -> Unit = {},
+    onPlatformMarks: (Boolean) -> Unit = {},
     onBoardPages: (Boolean) -> Unit = {},
     onWatchAutoOpen: (Boolean) -> Unit = {},
     onShareTripLog: () -> Unit = {},
@@ -154,6 +162,12 @@ private fun ExperimentalContent(
             subtitle = stringResource(R.string.settings_experimental_manual_marks_detail),
             checked = manualMarks,
             onCheckedChange = onManualMarks,
+        )
+        SettingsSwitch(
+            title = stringResource(R.string.settings_experimental_platform_marks),
+            subtitle = stringResource(R.string.settings_experimental_platform_marks_detail),
+            checked = platformMarks,
+            onCheckedChange = onPlatformMarks,
         )
         SettingsSwitch(
             title = stringResource(R.string.settings_experimental_board_pages),
