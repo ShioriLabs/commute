@@ -63,7 +63,7 @@ import id.shiorilabs.commute.core.time.minuteOfDay
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.type.toFailure
-import id.shiorilabs.commute.core.ui.components.CommuteIconButton
+import id.shiorilabs.commute.core.ui.components.CommuteCloseButton
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.LoadProblem
 import id.shiorilabs.commute.core.ui.components.LoadProblemState
@@ -246,14 +246,11 @@ private fun TimetableHeader(
                 )
             }
         }
-        CommuteIconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
-            Icon(
-                imageVector = CommuteIcons.Close,
-                contentDescription = stringResource(R.string.station_timetable_close_description),
-                modifier = Modifier.size(24.dp),
-                tint = MaterialTheme.colorScheme.onBackground,
-            )
-        }
+        CommuteCloseButton(
+            onClick = onClose,
+            contentDescription = stringResource(R.string.station_timetable_close_description),
+            tint = MaterialTheme.colorScheme.onBackground,
+        )
     }
 }
 
