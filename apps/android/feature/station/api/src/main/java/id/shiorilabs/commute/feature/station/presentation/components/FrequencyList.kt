@@ -32,6 +32,9 @@ import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.ext.parseHexColor
 import id.shiorilabs.commute.core.ui.ext.tint
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
+import id.shiorilabs.commute.core.ui.theme.Gray600
+import id.shiorilabs.commute.core.ui.theme.Slate500
+import id.shiorilabs.commute.core.ui.theme.Slate700
 import id.shiorilabs.commute.feature.station.api.R
 import id.shiorilabs.commute.feature.station.domain.DayQualifier
 import id.shiorilabs.commute.feature.station.domain.Frequency
@@ -49,9 +52,6 @@ import id.shiorilabs.commute.core.ui.R as CoreUiR
 private val FallbackLineColor = Color(0xFF94A3B8)
 
 // Tailwind's greys, as the web's frequency card uses them.
-private val Slate700 = Color(0xFF334155)
-private val Slate500 = Color(0xFF64748B)
-private val Gray600 = Color(0xFF4B5563)
 
 /** The roundel's width and the gap after it: where a corridor's directions indent to. */
 private val NameColumnStart = 16.dp + 24.dp + 12.dp

@@ -31,14 +31,11 @@ import id.shiorilabs.commute.core.ui.components.CommuteBottomSheet
 import id.shiorilabs.commute.core.ui.components.CommuteButton
 import id.shiorilabs.commute.core.ui.components.CommuteButtonVariant
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
+import id.shiorilabs.commute.core.ui.theme.Rose50
+import id.shiorilabs.commute.core.ui.theme.Slate500
+import id.shiorilabs.commute.core.ui.theme.Slate900
 import id.shiorilabs.commute.feature.trip.R
 import id.shiorilabs.commute.feature.trip.TripReminder
-
-private val Slate500 = Color(0xFF64748B)
-private val Slate900 = Color(0xFF0F172A)
-
-/** The web's `bg-rose-50`: the chosen option's row, as the criteria sheets mark it. */
-private val Rose50 = Color(0xFFFFF1F2)
 
 /**
  * "Tambah Pengingat" under the trip's actions, or the reminder already set; either opens the sheet

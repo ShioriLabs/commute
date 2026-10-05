@@ -35,16 +35,16 @@ import id.shiorilabs.commute.core.ui.components.CommuteButtonText
 import id.shiorilabs.commute.core.ui.components.CommuteButtonVariant
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
+import id.shiorilabs.commute.core.ui.theme.Blue500
+import id.shiorilabs.commute.core.ui.theme.Gray600
+import id.shiorilabs.commute.core.ui.theme.Gray700
+import id.shiorilabs.commute.core.ui.theme.Green700
+import id.shiorilabs.commute.core.ui.theme.Slate200
 import id.shiorilabs.commute.feature.station.R
 import id.shiorilabs.commute.feature.station.domain.Amenity
 import kotlin.math.roundToInt
 
 // Tailwind's colours, as the web's station page uses them.
-private val Gray600 = Color(0xFF4B5563)
-private val Gray700 = Color(0xFF374151)
-private val Slate200 = Color(0xFFE2E8F0)
-private val Blue500 = Color(0xFF3B82F6)
-private val Green700 = Color(0xFF15803D)
 
 /** A section of the page under the departures: the web's `mt-8` and `px-4` heading. */
 @Composable
