@@ -28,7 +28,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -82,6 +81,8 @@ import id.shiorilabs.commute.core.ui.components.CommuteIconButton
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.ext.parseHexColor
+import id.shiorilabs.commute.core.ui.components.CommuteButton
+import id.shiorilabs.commute.core.ui.components.CommuteButtonVariant
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.trip.ActiveTrip
@@ -291,44 +292,24 @@ private fun Actions(trip: ActiveTrip, onStop: () -> Unit, onSay: (RiderAction) -
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         next?.let { (text, action) ->
-            val content = MaterialTheme.colorScheme.onPrimary
-            ActionButton(
-                modifier = Modifier
-                    .weight(1f)
-                    .background(MaterialTheme.colorScheme.primary),
+            CommuteButton(
+                text = stringResource(text),
                 onClick = { onSay(action) },
-            ) {
-                Icon(imageVector = CommuteIcons.Check, contentDescription = null, modifier = Modifier.size(20.dp), tint = content)
-                Text(text = stringResource(text), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = content)
-            }
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                leadingIcon = CommuteIcons.Check,
+            )
         }
-        val secondary = MaterialTheme.colorScheme.primary
-        ActionButton(
-            modifier = (if (next == null) Modifier.weight(1f) else Modifier).background(Slate200),
+        CommuteButton(
+            text = stringResource(R.string.trip_action_stop),
             onClick = onStop,
-        ) {
-            Icon(imageVector = CommuteIcons.Close, contentDescription = null, modifier = Modifier.size(20.dp), tint = secondary)
-            Text(text = stringResource(R.string.trip_action_stop), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = secondary)
-        }
+            modifier = (if (next == null) Modifier.weight(1f) else Modifier).fillMaxHeight(),
+            variant = CommuteButtonVariant.Secondary,
+            leadingIcon = CommuteIcons.Close,
+        )
     }
 }
 
 internal val ActionShape = RoundedCornerShape(12.dp)
-
-@Composable
-internal fun ActionButton(modifier: Modifier, onClick: () -> Unit, content: @Composable RowScope.() -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxHeight()
-            .clip(ActionShape)
-            .then(modifier)
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
-        content = content,
-    )
-}
 
 /**
  * One ride as a timeline in the board's terms: the line thick in its colour and grey behind the
