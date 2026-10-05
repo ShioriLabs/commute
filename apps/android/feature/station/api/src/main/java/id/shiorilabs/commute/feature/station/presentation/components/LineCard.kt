@@ -21,7 +21,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -36,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.fill.NavigationArrow
+import id.shiorilabs.commute.core.ui.components.CommuteCard
 import id.shiorilabs.commute.core.ui.ext.Foreground
 import id.shiorilabs.commute.core.ui.ext.foreground
 import id.shiorilabs.commute.core.ui.ext.lineColorOf
@@ -105,13 +105,9 @@ fun LineCard(
     val shape = MaterialTheme.shapes.medium
     val cardDescription = stringResource(R.string.line_card_description, lineName)
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .shadow(8.dp, shape)
-            .clip(shape)
-            .background(lineColor.tint(0.065f))
-            .semantics { contentDescription = cardDescription },
+    CommuteCard(
+        color = lineColor.tint(0.065f),
+        modifier = modifier.semantics { contentDescription = cardDescription },
     ) {
         Box(
             Modifier
