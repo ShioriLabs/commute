@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.wear
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -30,6 +31,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { WatchApp(trip, phone) }
+        onAwake(intent)
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -48,6 +50,18 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        onAwake(intent)
+    }
+
+    /** Opened from the alarm's card: it stops, and the phone needn't ring too. */
+    private fun onAwake(intent: Intent?) {
+        if (intent?.action != WatchAlarm.ACTION_AWAKE) return
+        WatchAlarm.silence(this)
+        lifecycleScope.launch { phone.ackWake() }
     }
 }
 

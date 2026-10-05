@@ -5,6 +5,8 @@
 
     <!-- The trip's Ongoing Activity on the watch face rides on a notification. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- "Ingatkan Aku" and "Bangunkan Aku": getting off buzzed as an alarm, through silent mode. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:icon="@mipmap/ic_launcher"
@@ -49,7 +51,20 @@
                     android:path="/trip/active"
                     android:scheme="wear" />
             </intent-filter>
+            <!-- The trip's reminder: "Ingatkan Aku"'s buzz, and "Bangunkan Aku" ringing and called off. -->
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data android:scheme="wear" />
+                <data android:host="*" />
+                <data android:pathPrefix="/trip/wake" />
+                <data android:path="/trip/ping" />
+            </intent-filter>
         </service>
+
+        <!-- "Udah bangun" on the watch's alarm. Only the app's own pending intent reaches it. -->
+        <receiver
+            android:name=".AwakeReceiver"
+            android:exported="false" />
     </application>
 
 </manifest>

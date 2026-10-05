@@ -41,6 +41,15 @@ interface TripRuntime {
     /** The trip is over: its notification goes. */
     fun finish()
 
+    /**
+     * The trip's reminder for getting off ride [legIndex]: a buzz, or an alarm on the watch and then
+     * the phone. Once per ride; a second call for the same one does nothing.
+     */
+    fun remindRider(trip: ActiveTrip, legIndex: Int)
+
+    /** The rider is awake (or the trip's over): any alarm stops, on the watch and the phone. */
+    fun stopWakingRider()
+
     fun wakeAt(at: Instant)
 
     fun cancelWake()
@@ -80,6 +89,7 @@ class AndroidTripRuntime @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val notifier: TripNotifier,
     private val alarms: TripAlarms,
+    private val waker: TripWaker,
 ) : TripRuntime {
 
     override fun showProgress(trip: ActiveTrip) = notifier.showProgress(trip)
@@ -91,6 +101,10 @@ class AndroidTripRuntime @Inject constructor(
     override fun rerouted(trip: ActiveTrip, missed: Instant) = notifier.rerouted(trip, missed)
 
     override fun finish() = notifier.finish()
+
+    override fun remindRider(trip: ActiveTrip, legIndex: Int) = waker.remind(trip, legIndex)
+
+    override fun stopWakingRider() = waker.stop()
 
     override fun wakeAt(at: Instant) = alarms.wakeAt(at)
 

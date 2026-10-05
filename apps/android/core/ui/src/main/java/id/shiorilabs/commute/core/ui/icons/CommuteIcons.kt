@@ -6,6 +6,10 @@ import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.Duotone
 import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.bold.ArrowBendDownRight
+import com.adamglin.phosphoricons.bold.BellSimpleSlash
+import com.adamglin.phosphoricons.bold.BellSimpleRinging
+import com.adamglin.phosphoricons.bold.BellSimple
+import com.adamglin.phosphoricons.bold.Alarm
 import com.adamglin.phosphoricons.bold.ArrowRight
 import com.adamglin.phosphoricons.bold.ArrowSquareOut
 import com.adamglin.phosphoricons.bold.ArrowsDownUp
@@ -129,6 +133,12 @@ object CommuteIcons {
     val Excluded: ImageVector = PhosphorIcons.Bold.Prohibit
     val Run: ImageVector = PhosphorIcons.Bold.PersonSimpleRun
     val Clock: ImageVector = PhosphorIcons.Bold.Clock
+
+    /** A trip's reminders: "Tambah Pengingat", "Ingatkan Aku", "Bangunkan Aku", none. */
+    val Reminder: ImageVector = PhosphorIcons.Bold.BellSimple
+    val ReminderPing: ImageVector = PhosphorIcons.Bold.BellSimpleRinging
+    val ReminderWake: ImageVector = PhosphorIcons.Bold.Alarm
+    val ReminderNone: ImageVector = PhosphorIcons.Bold.BellSimpleSlash
 
     /** The chosen row in a single-choice list. */
     val Selected: ImageVector = PhosphorIcons.Fill.CheckCircle
