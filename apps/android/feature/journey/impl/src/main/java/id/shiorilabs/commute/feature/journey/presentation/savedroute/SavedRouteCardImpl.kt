@@ -48,6 +48,9 @@ import id.shiorilabs.commute.core.ui.ext.parseHexColor
 import id.shiorilabs.commute.core.ui.ext.tint
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.startup.HoldStartupWhile
+import id.shiorilabs.commute.core.ui.theme.Amber700
+import id.shiorilabs.commute.core.ui.theme.Slate400
+import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
 import id.shiorilabs.commute.feature.journey.R
 import id.shiorilabs.commute.feature.journey.domain.JAKARTA
@@ -63,9 +66,6 @@ import id.shiorilabs.commute.feature.journey.domain.resumeTimeOf
 import id.shiorilabs.commute.feature.journey.domain.rides
 import id.shiorilabs.commute.feature.journey.domain.upcomingJourneys
 import id.shiorilabs.commute.feature.journey.presentation.SavedRouteCard
-import id.shiorilabs.commute.feature.journey.presentation.components.Amber700
-import id.shiorilabs.commute.feature.journey.presentation.components.Slate400
-import id.shiorilabs.commute.feature.journey.presentation.components.Slate500
 import id.shiorilabs.commute.feature.journey.presentation.trip.tripRoute
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.codeOfLineKey

@@ -18,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -29,6 +28,11 @@ import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.ui.ext.parseHexColor
 import id.shiorilabs.commute.core.ui.ext.tint
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
+import id.shiorilabs.commute.core.ui.theme.Gray500
+import id.shiorilabs.commute.core.ui.theme.Slate400
+import id.shiorilabs.commute.core.ui.theme.Slate600
+import id.shiorilabs.commute.core.ui.theme.Slate800
+import id.shiorilabs.commute.core.ui.theme.Slate900
 import id.shiorilabs.commute.feature.station.R
 import id.shiorilabs.commute.feature.station.domain.LastTrainDestination
 import id.shiorilabs.commute.feature.station.domain.LastTrainLine
@@ -36,11 +40,6 @@ import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.formatClock
 
 // Tailwind's colours, as the web's last-departures card uses them.
-private val Slate400 = Color(0xFF94A3B8)
-private val Slate600 = Color(0xFF475569)
-private val Slate800 = Color(0xFF1E293B)
-private val Slate900 = Color(0xFF0F172A)
-private val Gray500 = Color(0xFF6B7280)
 
 /** The "Kereta terakhir" heading, over the cards [LastTrainCard] draws one per line. */
 @Composable

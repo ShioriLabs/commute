@@ -28,6 +28,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import id.shiorilabs.commute.core.ui.components.CommuteBottomSheet
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
+import id.shiorilabs.commute.core.ui.theme.Pink800
+import id.shiorilabs.commute.core.ui.theme.Rose50
+import id.shiorilabs.commute.core.ui.theme.Slate400
+import id.shiorilabs.commute.core.ui.theme.Slate500
+import id.shiorilabs.commute.core.ui.theme.Slate900
 import id.shiorilabs.commute.feature.journey.R
 
 /** One option in a [ChoiceSheet]: its value, its name, and what picking it means. */

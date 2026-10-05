@@ -25,11 +25,11 @@ import androidx.compose.ui.unit.sp
 import id.shiorilabs.commute.core.location.rememberLocationPermissionRequest
 import id.shiorilabs.commute.core.ui.components.CommuteIconButton
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
+import id.shiorilabs.commute.core.ui.theme.Slate400
+import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.feature.saved.R
 
 private val PromptFill = Color(0xFFF1F5F9)
-private val Slate400 = Color(0xFF94A3B8)
-private val Slate500 = Color(0xFF64748B)
 
 /**
  * The offer to show stations near the rider, in place of the section while location isn't granted.
