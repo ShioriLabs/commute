@@ -69,6 +69,8 @@ import java.time.Instant
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import id.shiorilabs.commute.core.navigation.LocalNavigator
+import id.shiorilabs.commute.core.navigation.Route
+import id.shiorilabs.commute.core.trip.TripStop
 import id.shiorilabs.commute.core.trip.PositionSource
 import id.shiorilabs.commute.core.trip.RiderAction
 import id.shiorilabs.commute.core.trip.TripLeg
@@ -101,6 +103,8 @@ fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel
         onSay = viewModel::say,
         onDetails = { trip -> navigator.goTo(trip.origin) },
         onNameHidden = viewModel::onBoardNameHidden,
+        onOpenStation = { stop -> navigator.goTo(Route.Station(stop.id, title = stop.name)) },
+        onRouteBack = { origin -> navigator.goTo(Route.Otw(fromId = origin.toId, toId = origin.fromId)) },
     )
 }
 
@@ -121,6 +125,8 @@ private fun ActiveTripContent(
     onSay: (RiderAction) -> Unit,
     onDetails: (ActiveTrip) -> Unit,
     onNameHidden: (Boolean) -> Unit,
+    onOpenStation: (TripStop) -> Unit,
+    onRouteBack: (Route.Trip) -> Unit,
 ) {
     val trip = state.trip
     val context = LocalContext.current
@@ -149,7 +155,22 @@ private fun ActiveTripContent(
         contentPadding = PaddingValues(bottom = innerPadding.calculateBottomPadding() + 32.dp),
     ) {
         if (trip == null) {
-            item(key = "finished") { Finished(innerPadding, onClose) }
+            val finished = state.finished
+            if (finished == null) {
+                item(key = "finished") { Finished(innerPadding, onClose) }
+            } else {
+                item(key = "done") {
+                    TripFinished(
+                        finished = finished,
+                        lines = state.lines,
+                        copy = copy,
+                        topInset = innerPadding.calculateTopPadding(),
+                        onClose = onClose,
+                        onOpenStation = onOpenStation,
+                        onRouteBack = { onRouteBack(finished.trip.origin) },
+                    )
+                }
+            }
             return@LazyColumn
         }
         val pids = trip.pids(now)
@@ -253,10 +274,10 @@ private fun Actions(trip: ActiveTrip, onStop: () -> Unit, onSay: (RiderAction) -
     }
 }
 
-private val ActionShape = RoundedCornerShape(12.dp)
+internal val ActionShape = RoundedCornerShape(12.dp)
 
 @Composable
-private fun ActionButton(modifier: Modifier, onClick: () -> Unit, content: @Composable RowScope.() -> Unit) {
+internal fun ActionButton(modifier: Modifier, onClick: () -> Unit, content: @Composable RowScope.() -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxHeight()
