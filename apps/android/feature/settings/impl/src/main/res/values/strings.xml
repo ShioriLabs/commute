@@ -77,6 +77,8 @@
     <string name="settings_experimental_frost_tuner">Frost Tuner</string>
     <string name="settings_experimental_frost_tuner_detail">Tombol melayang buat ngatur efek frost di header</string>
     <string name="settings_experimental_manual_marks">Tandai Manual</string>
+    <string name="settings_experimental_platform_marks">Tandai Peron</string>
+    <string name="settings_experimental_platform_marks_detail">Tombol Peron mulai dan Peron habis di halaman perjalanan, buat nyatet kapan ujung peron lewat di samping jendela kamu. Buat memetakan peron, cukup sekali-dua kali per lin. Masuk ke log, gak ngubah perjalanannya</string>
     <string name="settings_experimental_manual_marks_detail">Tombol Jalan, Berhenti, dan Aneh di halaman perjalanan, buat nyatet kapan keretanya beneran jalan atau berhenti. Masuk ke log, gak ngubah perjalanannya</string>
     <string name="settings_experimental_board_pages">Halaman PIDS</string>
     <string name="settings_experimental_board_pages_detail">Papan di halaman perjalanan gantian nampilin rute sama halaman lain, kayak layar di kereta. Masih prototipe, isinya baru Halo dunia</string>
