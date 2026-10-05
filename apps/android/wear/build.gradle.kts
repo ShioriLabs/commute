@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.commute.android.application)
+    alias(libs.plugins.androidx.baselineprofile)
 }
 
 android {
@@ -39,4 +40,8 @@ dependencies {
     // Asking for the notification permission: Play services brings a Fragment too old for it.
     implementation(libs.androidx.fragment)
     implementation(libs.kotlinx.coroutines.play.services)
+    // Baseline Profile — ProfileInstaller applies the bundled profile on first run;
+    // :baselineprofile-wear generates it (see WearBaselineProfileGenerator).
+    implementation(libs.androidx.profileinstaller)
+    baselineProfile(project(":baselineprofile-wear"))
 }
