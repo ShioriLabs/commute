@@ -11,11 +11,15 @@ import id.shiorilabs.commute.core.trip.InstantSerializer
 import id.shiorilabs.commute.core.trip.RiderAction
 import id.shiorilabs.commute.core.trip.TripEffect
 import id.shiorilabs.commute.core.trip.TripEngine
+import id.shiorilabs.commute.core.trip.TripLeg
+import id.shiorilabs.commute.core.trip.TripPhase
+import id.shiorilabs.commute.core.trip.walkEndsAt
 import id.shiorilabs.commute.core.trip.TripEvent
 import id.shiorilabs.commute.core.trip.TripPlan
 import id.shiorilabs.commute.core.trip.TripStep
 import id.shiorilabs.commute.feature.trip.ActiveTrip
 import id.shiorilabs.commute.feature.trip.TripController
+import id.shiorilabs.commute.feature.trip.TripReplanner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -49,6 +53,7 @@ class TripControllerImpl @Inject constructor(
     private val locator: StopLocator,
     private val location: LocationClient,
     private val locationPreferences: LocationPreferencesRepository,
+    private val replanner: TripReplanner,
     private val clock: Clock,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) : TripController {
@@ -66,6 +71,9 @@ class TripControllerImpl @Inject constructor(
     val finished: StateFlow<FinishedTrip?> = _finished.asStateFlow()
 
     private var timer: Job? = null
+
+    /** The ride, by leg and departure, last re-planned for, so a missed train is asked about once. */
+    private var replannedFor: String? = null
 
     /** A trip stored by an earlier process carries on, from the clock until a fix confirms it. */
     private val restored: Job = scope.launch {
@@ -184,6 +192,51 @@ class TripControllerImpl @Inject constructor(
         if (TripEffect.AskStillOnRoute in step.effects) runtime.askStillOnRoute(next)
         runtime.showProgress(next)
         schedule(step.nextWakeAt)
+        replanIfMissed(next)
+    }
+
+    /**
+     * The ride being waited for leaves before the rider can be on it (still walking to it, or not
+     * aboard a minute after it was due): asks for the way on from its station, and takes it in
+     * place of the rest of the plan. Called with the lock held; the asking runs outside it.
+     */
+    private fun replanIfMissed(trip: ActiveTrip) {
+        val state = trip.state
+        if (state.phase != TripPhase.WAITING_TO_BOARD) return
+        val ride = trip.plan.ride(state.legIndex)
+        val departs = ride.departureAt ?: return
+        val now = clock.instant()
+        val readyAt = maxOf(now, state.walkEndsAt(trip.plan) ?: now)
+        if (!readyAt.isAfter(departs.plus(CATCH_GRACE))) return
+        val key = "${state.legIndex}@$departs"
+        if (key == replannedFor) return
+        replannedFor = key
+        scope.launch {
+            val onward = replanner.replan(ride.stops.first().id, trip.plan.destination.id, readyAt, ride.line)
+                ?.let { locator.place(it) }
+                ?.takeIf { it.legs.firstOrNull() is TripLeg.Ride }
+            if (onward == null) {
+                Log.i(TAG, "missed leg ${state.legIndex} at $departs, nothing on offer")
+                // Offline, say: ask again once it's had a while, on whatever step comes next.
+                delay(REPLAN_RETRY.toMillis())
+                if (replannedFor == key) replannedFor = null
+                return@launch
+            }
+            mutex.withLock {
+                val current = _active.value ?: return@withLock
+                // Moved on meanwhile (boarded after all, or already re-planned): leave it be.
+                if (current.plan != trip.plan || current.state.legIndex != state.legIndex ||
+                    current.state.phase != TripPhase.WAITING_TO_BOARD
+                ) {
+                    return@withLock
+                }
+                val plan = TripPlan(current.plan.legs.take(state.legIndex) + onward.legs)
+                Log.i(TAG, "missed leg ${state.legIndex} at $departs, on to ${plan.ride(state.legIndex).departureAt}")
+                val replanned = current.copy(plan = plan)
+                runtime.rerouted(replanned, departs)
+                apply(replanned, TripEngine.step(plan, current.state, TripEvent.Tick(clock.instant())))
+            }
+        }
     }
 
     /**
@@ -208,6 +261,12 @@ class TripControllerImpl @Inject constructor(
 
         /** `adb logcat -s CommuteTrip`: what a field test needs to tell why a trip did what it did. */
         const val TAG = "CommuteTrip"
+
+        /** A train a minute late is still worth running for; past that, look for the next. */
+        val CATCH_GRACE: Duration = Duration.ofMinutes(1)
+
+        /** How long before asking again when a re-plan found nothing. */
+        val REPLAN_RETRY: Duration = Duration.ofMinutes(2)
     }
 }
 

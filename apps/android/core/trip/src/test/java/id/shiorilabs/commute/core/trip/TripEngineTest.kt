@@ -210,6 +210,42 @@ class TripEngineTest {
     }
 
     @Test
+    fun `off at a change with a walk, the rider walks until a fix finds them at the next station`() {
+        val run = Run(withChange)
+        run.tick(0.0)
+        run.fix(Places.DUKUH_ATAS, 2.0)
+        assertEquals(at(2.0), run.state.walkingSince)
+
+        // Still by the station they got off at, though it's within reach of the next.
+        run.fix(Places.DUKUH_ATAS, 2.5)
+        assertEquals(at(2.0), run.state.walkingSince)
+
+        run.fix(Places.SUDIRMAN, 5.0)
+        assertNull(run.state.walkingSince)
+        assertEquals(TripPhase.WAITING_TO_BOARD, run.state.phase)
+    }
+
+    @Test
+    fun `a train that leaves while the rider is still walking to it isn't boarded by the clock`() {
+        val run = Run(withChange)
+        run.tick(0.0)
+        // Off the MRT late, at 08.09: 300 m to walk for the 08.10.
+        run.fix(Places.DUKUH_ATAS, 9.0)
+        run.tick(14.0)
+
+        assertEquals(TripPhase.WAITING_TO_BOARD, run.state.phase)
+    }
+
+    @Test
+    fun `a change at the same station is no walk`() {
+        val run = Run(withChange.copy(legs = withChange.legs.filterNot { it is TripLeg.Transfer }))
+        run.tick(0.0)
+        run.fix(Places.DUKUH_ATAS, 2.0)
+
+        assertNull(run.state.walkingSince)
+    }
+
+    @Test
     fun `a trip slept through catches up in one step without a late siap-siap`() {
         val run = Run(withChange, hasLocation = false)
         run.tick(20.0)

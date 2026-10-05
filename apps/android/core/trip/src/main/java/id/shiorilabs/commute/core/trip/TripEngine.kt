@@ -136,6 +136,8 @@ object TripEngine {
             } else {
                 state.clockOffsetS
             }
+            // Past the next station's first hop, or nearer it than where the walk started: there.
+            val walked = state.walkingSince != null && (candidate > 0 || reachedAfterWalk(plan, state.legIndex, fix.point))
             return state.copy(
                 phase = phase,
                 confirmedPosition = confirmed,
@@ -144,6 +146,7 @@ object TripEngine {
                 offRouteStrikes = 0,
                 hasLocation = true,
                 resumed = false,
+                walkingSince = if (walked) null else state.walkingSince,
             )
         }
 
@@ -203,6 +206,14 @@ object TripEngine {
         return bestHop
     }
 
+    /** Whether [point] is nearer the station the walk before ride [legIndex] goes to than the one it left. */
+    private fun reachedAfterWalk(plan: TripPlan, legIndex: Int, point: GeoPoint): Boolean {
+        val walk = plan.transferBefore(legIndex) ?: return true
+        val to = walk.to.point ?: return true
+        val from = walk.from.point ?: return true
+        return distanceM(point, to) < distanceM(point, from)
+    }
+
     /** Beyond the alighting stop, on the far side from the stop before it, and well clear of it. */
     private fun isPastAlighting(ride: TripLeg.Ride, point: GeoPoint, tuning: Tuning): Boolean {
         val alighting = ride.stops.last().point ?: return false
@@ -243,7 +254,10 @@ object TripEngine {
 
             if (state.phase == TripPhase.WAITING_TO_BOARD) {
                 val departs = ride.departureAt?.plus(offset)
-                if (ride.isTimed && !fresh && departs != null && !now.isBefore(departs)) {
+                // Seen off the ride before, and still walking to this one when it left: the rider
+                // can't be aboard, whatever the clock says.
+                val walkedPast = departs != null && state.confirmedAt != null && state.walkEndsAt(plan)?.isAfter(departs) == true
+                if (ride.isTimed && !fresh && departs != null && !now.isBefore(departs) && !walkedPast) {
                     state = state.copy(phase = TripPhase.RIDING)
                 } else {
                     state = state.copy(source = sourceOf(ride, fresh), position = state.confirmedPosition)
@@ -352,6 +366,9 @@ object TripEngine {
             confirmedAt = if (estimated) null else next.confirmedAt ?: now,
             offRouteStrikes = 0,
             askedStillOnRoute = false,
+            // Off when seen; by the clock, when the ride should have got in, not when that was noticed.
+            walkingSince = (if (estimated) ride.arrivalAt?.plusSeconds(state.clockOffsetS) ?: now else now)
+                .takeIf { plan.transferBefore(following) != null },
         )
     }
 

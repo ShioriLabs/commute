@@ -28,9 +28,11 @@ import id.shiorilabs.commute.feature.trip.ActiveTrip
 import id.shiorilabs.commute.feature.trip.R
 import id.shiorilabs.commute.feature.trip.presentation.Headline
 import id.shiorilabs.commute.feature.trip.presentation.TripCopy
+import id.shiorilabs.commute.feature.trip.presentation.formatClock
 import id.shiorilabs.commute.feature.trip.presentation.headline
 import id.shiorilabs.commute.feature.trip.presentation.minutesUntil
 import java.time.Clock
+import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.roundToInt
@@ -129,6 +131,19 @@ class TripNotifier @Inject constructor(
             .addAction(0, context.getString(R.string.trip_action_stop), action(TripReceiver.ACTION_STOP))
             .build()
         notify(ASK_ID, notification)
+    }
+
+    /** The ride waited for left at [missed]: which one to take instead, and when it goes. */
+    fun rerouted(trip: ActiveTrip, missed: Instant) {
+        val ride = trip.plan.ride(trip.state.legIndex)
+        val departs = ride.departureAt?.let(::formatClock) ?: return
+        notify(
+            ALERT_ID,
+            alertBuilder(
+                context.getString(R.string.trip_alert_rerouted_title, departs),
+                context.getString(R.string.trip_alert_rerouted, formatClock(missed), rideName(ride), departs, ride.stops.first().name),
+            ).build(),
+        )
     }
 
     /** The trip is over: the ongoing notification and any question about it go. Alerts stay. */
