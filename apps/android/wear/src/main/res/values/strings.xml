@@ -12,13 +12,18 @@
     <string name="trip_alight_now">Turun di %1$s</string>
     <string name="trip_arrived">Udah sampai di %1$s</string>
 
+    <!-- The small line over the place, and the place. -->
+    <string name="trip_lead_board">Naik</string>
+    <string name="trip_lead_change">Pindah ke</string>
+    <string name="trip_lead_alight">Turun di</string>
+    <string name="trip_lead_arrived">Udah sampai di</string>
+    <string name="trip_minutes">%1$d mnt</string>
+
     <string name="trip_stations_left">%1$d stasiun lagi</string>
     <string name="trip_haltes_left">%1$d halte lagi</string>
     <string name="trip_headsign">arah %1$s</string>
     <string name="trip_platform">Peron %1$s</string>
     <string name="trip_departs_at">berangkat %1$s</string>
-    <string name="trip_departs_in">berangkat %1$d mnt lagi</string>
-    <string name="trip_alights_in">sampai sekitar %1$d mnt lagi</string>
     <string name="trip_walk_to">Jalan ke %1$s, %2$d m</string>
     <string name="trip_then_change">Lalu pindah ke %1$s</string>
     <string name="trip_then_done">Ini tujuan kamu</string>

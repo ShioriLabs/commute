@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,7 +23,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
@@ -34,7 +40,8 @@ import androidx.wear.compose.material3.AlertDialogDefaults
 import androidx.wear.compose.material3.AppScaffold
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.EdgeButton
-import androidx.wear.compose.material3.FilledTonalButton
+import androidx.wear.compose.material3.ButtonDefaults
+import androidx.wear.compose.material3.CompactButton
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.OpenOnPhoneDialog
 import androidx.wear.compose.material3.OpenOnPhoneDialogDefaults
@@ -170,20 +177,45 @@ private fun TripScreen(trip: WearTrip, now: Instant, phone: PhoneLink) {
                 item {
                     LineRow(
                         code = ride.line.substringAfter(':'),
-                        name = copy.rideName(ride),
+                        name = copy.rideLabel(headline, ride),
                         color = trip.lines[ride.line]?.color?.let(::Color),
                         operator = ride.operator,
                     )
                 }
                 item {
-                    Text(
-                        copy.title(headline),
-                        style = MaterialTheme.typography.titleMedium,
-                        textAlign = TextAlign.Center,
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = TEXT_INSET)) {
+                        Text(
+                            copy.lead(headline),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            copy.place(headline),
+                            style = MaterialTheme.typography.titleLarge,
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
-                copy.detail(trip.state, headline, now).takeIf { it.isNotEmpty() }?.let { detail ->
-                    item { Text(detail, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center) }
+                val minutes = copy.minutes(trip.state, headline, now)
+                val detail = copy.detail(trip.state, headline, now)
+                if (minutes != null || detail.isNotEmpty()) {
+                    item {
+                        val accent = MaterialTheme.colorScheme.primary
+                        Text(
+                            buildAnnotatedString {
+                                if (minutes != null) {
+                                    withStyle(SpanStyle(color = accent, fontWeight = FontWeight.Bold)) { append(minutes) }
+                                    if (detail.isNotEmpty()) append(WatchCopy.SEPARATOR)
+                                }
+                                append(detail)
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = TEXT_INSET),
+                        )
+                    }
                 }
                 if (trip.state.askedStillOnRoute) {
                     item {
@@ -192,6 +224,7 @@ private fun TripScreen(trip: WearTrip, now: Instant, phone: PhoneLink) {
                             style = MaterialTheme.typography.bodySmall,
                             textAlign = TextAlign.Center,
                             color = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.padding(horizontal = TEXT_INSET),
                         )
                     }
                 }
@@ -211,8 +244,12 @@ private fun TripScreen(trip: WearTrip, now: Instant, phone: PhoneLink) {
                         )
                     }
                 }
+                // Rarely what's wanted, so small and last.
                 item {
-                    FilledTonalButton(onClick = { confirmingStop = true }, modifier = Modifier.fillMaxWidth()) {
+                    CompactButton(
+                        onClick = { confirmingStop = true },
+                        colors = ButtonDefaults.filledTonalButtonColors(),
+                    ) {
                         Text(stringResource(R.string.trip_action_stop))
                     }
                 }
@@ -256,7 +293,13 @@ private fun ArrivedScreen(trip: WearTrip, onDismiss: () -> Unit) {
 private fun LineRow(code: String, name: String, color: Color?, operator: String) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Roundel(code, color ?: MaterialTheme.colorScheme.outline, operator)
-        Text(name, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            name,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -287,3 +330,6 @@ private val ARRIVED_SHOWN: Duration = Duration.ofMinutes(5)
 
 /** Keeps the idle screen's lines clear of the round edge. */
 private val IDLE_INSET = 12.dp
+
+/** Keeps the trip's text clear of the ring round the edge. */
+private val TEXT_INSET = 8.dp
