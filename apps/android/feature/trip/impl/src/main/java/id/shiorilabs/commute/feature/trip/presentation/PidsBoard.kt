@@ -57,10 +57,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -70,6 +66,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.semantics.Role
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -158,6 +155,9 @@ private val MarkerOutline = 2.dp
 
 /** One run of the rider's marker toward the next stop, and the shares of it spent fading in and out. */
 private const val TRAVEL_MILLIS = 1600
+
+/** The wait after each marker step: the next frame after it is the second on 120 Hz, the next on 60. */
+private const val MARKER_STEP_MILLIS = 12L
 private const val MARKER_FADE_IN = 0.12f
 private const val MARKER_FADE_OUT = 0.18f
 
@@ -744,13 +744,17 @@ private fun Strip(
     // Time runs evenly; the position eases off it, the fades don't. Fading by the eased position
     // would leave the marker faint for half of every run, while it slows toward the stop.
     // Read only while drawing: the marker moves every frame, and reading it here would recompose
-    // the whole board with it.
-    val clock = rememberInfiniteTransition(label = "marker").animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(durationMillis = TRAVEL_MILLIS, easing = LinearEasing)),
-        label = "markerTravel",
-    )
+    // the whole board with it. It steps at about 60 a second rather than every frame of a 120 Hz
+    // display: it runs for as long as the board is open, and half the frames is half the drawing.
+    val clock = remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(reducedMotion) {
+        if (reducedMotion) return@LaunchedEffect
+        val start = withFrameMillis { it }
+        while (true) {
+            withFrameMillis { now -> clock.floatValue = (now - start) % TRAVEL_MILLIS / TRAVEL_MILLIS.toFloat() }
+            delay(MARKER_STEP_MILLIS)
+        }
+    }
     val description = stringResource(R.string.trip_pids_description, pids.upcoming.joinToString { it.name })
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val width = with(density) { maxWidth.toPx() }
