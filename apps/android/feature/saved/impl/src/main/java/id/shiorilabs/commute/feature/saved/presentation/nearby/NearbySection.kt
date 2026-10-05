@@ -21,9 +21,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import id.shiorilabs.commute.core.location.rememberLocationPermissionRequest
 import id.shiorilabs.commute.core.ui.components.CommuteIconButton
+import id.shiorilabs.commute.core.ui.components.SectionLabel
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.theme.Slate400
 import id.shiorilabs.commute.core.ui.theme.Slate500
@@ -80,13 +80,9 @@ internal fun NearbyPromptCard(onResult: (Boolean) -> Unit, onDismiss: () -> Unit
 /** "DI DEKAT KAMU", over the nearby stations, set like the picker's section labels. */
 @Composable
 internal fun NearbyHeading(modifier: Modifier = Modifier) {
-    Text(
-        text = stringResource(R.string.saved_nearby_title).uppercase(),
+    SectionLabel(
+        text = stringResource(R.string.saved_nearby_title),
         modifier = modifier.padding(horizontal = 32.dp),
-        fontSize = 12.sp,
-        fontWeight = FontWeight.Bold,
-        letterSpacing = 0.5.sp,
-        color = Slate400,
     )
 }
 
