@@ -149,10 +149,15 @@ class TripNotifier @Inject constructor(
         )
     }
 
-    /** The trip is over: the ongoing notification and any question about it go. Alerts stay. */
+    /**
+     * The trip is over: the ongoing notification, any question about it and its alerts go, so a
+     * "turun sekarang" or "kelewatan?" doesn't outlive the trip. On arrival that is once the trip
+     * has lingered at the station, so the last alert is still there while the rider gets off.
+     */
     fun finish() {
         manager.cancel(PROGRESS_ID)
         manager.cancel(ASK_ID)
+        manager.cancel(ALERT_ID)
     }
 
     private fun alertBuilder(title: String, text: String) =
