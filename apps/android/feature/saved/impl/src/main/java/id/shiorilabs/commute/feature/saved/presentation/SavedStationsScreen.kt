@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -57,6 +58,7 @@ import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.ui.components.CommuteEmptyState
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
+import id.shiorilabs.commute.core.ui.ext.RevealChangedTop
 import id.shiorilabs.commute.core.ui.ext.RevealInsertedTop
 import id.shiorilabs.commute.core.ui.ext.cardEntrance
 import id.shiorilabs.commute.core.ui.frost.FrostedTopChromeBackdrop
@@ -97,6 +99,7 @@ fun SavedStationsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val nearby by nearbyViewModel.state.collectAsStateWithLifecycle()
+    val raised by nearbyViewModel.raised.collectAsStateWithLifecycle()
     // The rider has likely moved since home was last on screen.
     LifecycleResumeEffect(Unit) {
         nearbyViewModel.refresh()
@@ -125,6 +128,7 @@ fun SavedStationsScreen(
         onRouteClick = { fromId, toId -> navigator.goTo(Route.Otw(fromId = fromId, toId = toId)) },
         savedRouteCard = savedRouteCard,
         nearby = nearby,
+        raised = raised,
         onNearbyPermission = nearbyViewModel::onPermissionResult,
         onDismissNearby = nearbyViewModel::dismissPrompt,
     )
@@ -146,6 +150,7 @@ private fun SavedStationsContent(
     savedRouteCard: SavedRouteCard = NoSavedRouteCard,
     /** The running trip's card, `null` while there is none. */
     nearby: NearbyUiState = NearbyUiState.Hidden,
+    raised: List<String> = emptyList(),
     onNearbyPermission: (Boolean) -> Unit = {},
     onDismissNearby: () -> Unit = {},
 ) {
@@ -196,6 +201,7 @@ private fun SavedStationsContent(
                     onRouteClick = onRouteClick,
                     savedRouteCard = savedRouteCard,
                     nearby = nearby,
+                    raised = raised,
                     onNearbyPermission = onNearbyPermission,
                     onDismissNearby = onDismissNearby,
                     coveredByPage = coveredByPage,
@@ -266,6 +272,7 @@ private fun StationFeed(
     onRouteClick: (fromId: String, toId: String) -> Unit,
     savedRouteCard: SavedRouteCard,
     nearby: NearbyUiState,
+    raised: List<String>,
     onNearbyPermission: (Boolean) -> Unit,
     onDismissNearby: () -> Unit,
     coveredByPage: Boolean,
@@ -295,17 +302,21 @@ private fun StationFeed(
     // The rows, in list order, so a row index leads back to its entry. A loaded station is a title
     // row then its cards; one still loading, or failed, is a single placeholder row standing in for
     // its title. A pair is its title row then its card. Either way the first row of an entry is its
-    // title row. The stations near the rider (a heading, then a title and
-    // a board each, or the card offering them) and the offline banner, while they show, are rows
-    // above them all.
+    // title row. What's pinned at the station the rider is at comes first; then the stations near
+    // the rider (a heading, then a title and a board each, or the card offering them) and the
+    // offline banner, while they show; then the rest.
     val nearbyRows = when (nearby) {
         NearbyUiState.Hidden -> 0
         NearbyUiState.Prompt -> 1
         is NearbyUiState.Stations -> 1 + 2 * nearby.boards.size
     }
-    val titleRows = remember(feed.entries, noticeShown, nearbyRows) {
-        var row = (if (noticeShown) 1 else 0) + nearbyRows
-        feed.entries.map { entry ->
+    val ordered = remember(feed.entries, raised) { raiseNearby(feed.entries, raised) }
+    // A fix lands after the feed is up: what it raises goes above the row on screen, where the list
+    // would otherwise keep following that row down.
+    listState.RevealChangedTop(ordered.front.firstOrNull()?.key)
+    val titleRows = remember(ordered, noticeShown, nearbyRows) {
+        var row = 0
+        fun rowsOf(entries: List<HomeEntry>) = entries.map { entry ->
             val titleRow = row
             row += when (entry) {
                 is HomeEntry.StationEntry -> if (entry.board.station is UIState.Success) 2 else 1
@@ -313,6 +324,9 @@ private fun StationFeed(
             }
             titleRow to entry
         }
+        val front = rowsOf(ordered.front)
+        row += (if (noticeShown) 1 else 0) + nearbyRows
+        front + rowsOf(ordered.rest)
     }
 
     var barTitleHeight by remember { mutableIntStateOf(0) }
@@ -389,51 +403,56 @@ private fun StationFeed(
                 bottom = innerPadding.calculateBottomPadding() + NavRailClearance,
             ),
         ) {
-            when (nearby) {
-                NearbyUiState.Hidden -> Unit
-                NearbyUiState.Prompt -> item(key = "nearby-prompt") {
-                    NearbyPromptCard(
-                        onResult = onNearbyPermission,
-                        onDismiss = onDismissNearby,
-                        modifier = Modifier.padding(start = 16.dp, top = 32.dp, end = 16.dp),
-                    )
-                }
-                is NearbyUiState.Stations -> {
-                    item(key = "nearby-heading") { NearbyHeading(Modifier.padding(top = 32.dp)) }
-                    nearby.boards.forEach { (near, card) ->
-                        val station = near.station
-                        item(key = "nearby-title:${station.id}") {
-                            StationTitle(
-                                stationId = station.id,
-                                name = stringResource(R.string.saved_nearby_station, station.name, formatDistance(near.distanceM)),
-                                // A pinned station of the same name below owns the flight home.
-                                shareName = false,
-                                onClick = { openStation(station.id) },
-                            )
-                        }
-                        item(key = "nearby:${station.id}") {
-                            StationTimetable(
-                                card = card,
-                                lineCount = station.lineKeys.size,
-                                lines = feed.lines,
-                                now = now,
-                                onRetry = {},
-                                modifier = Modifier.padding(bottom = StationGap),
-                            )
+            // Between what's raised and the rest.
+            val aboveRest: LazyListScope.() -> Unit = {
+                when (nearby) {
+                    NearbyUiState.Hidden -> Unit
+                    NearbyUiState.Prompt -> item(key = "nearby-prompt") {
+                        NearbyPromptCard(
+                            onResult = onNearbyPermission,
+                            onDismiss = onDismissNearby,
+                            modifier = Modifier.padding(start = 16.dp, top = 32.dp, end = 16.dp),
+                        )
+                    }
+                    is NearbyUiState.Stations -> {
+                        item(key = "nearby-heading") { NearbyHeading(Modifier.padding(top = 32.dp)) }
+                        nearby.boards.forEach { (near, card) ->
+                            val station = near.station
+                            item(key = "nearby-title:${station.id}") {
+                                StationTitle(
+                                    stationId = station.id,
+                                    name = stringResource(R.string.saved_nearby_station, station.name, formatDistance(near.distanceM)),
+                                    // A pinned station of the same name below owns the flight home.
+                                    shareName = false,
+                                    onClick = { openStation(station.id) },
+                                )
+                            }
+                            item(key = "nearby:${station.id}") {
+                                StationTimetable(
+                                    card = card,
+                                    lineCount = station.lineKeys.size,
+                                    lines = feed.lines,
+                                    now = now,
+                                    onRetry = {},
+                                    modifier = Modifier.padding(bottom = StationGap),
+                                )
+                            }
                         }
                     }
                 }
-            }
-            if (noticeShown) {
-                item(key = "offline-banner") {
-                    OfflineBanner(
-                        offline = offline,
-                        updatedAt = feed.oldestUpdate,
-                        modifier = Modifier.padding(top = 32.dp, bottom = StationGap),
-                    )
+                if (noticeShown) {
+                    item(key = "offline-banner") {
+                        OfflineBanner(
+                            offline = offline,
+                            updatedAt = feed.oldestUpdate,
+                            modifier = Modifier.padding(top = 32.dp, bottom = StationGap),
+                        )
+                    }
                 }
             }
+            if (ordered.front.isEmpty()) aboveRest()
             titleRows.forEachIndexed { index, (row, entry) ->
+                if (index == ordered.front.size && index > 0) aboveRest()
                 // The bar shows this title while it is the current one, and while it slides in to
                 // take over; drawn twice, the copy in the list would blur behind the bar's. The bar's
                 // copy is then the one that flies into the station page.
@@ -503,6 +522,7 @@ private fun StationFeed(
                     }
                 }
             }
+            if (ordered.front.isNotEmpty() && ordered.rest.isEmpty()) aboveRest()
         }
 
         // The bar's frost, behind it, the same height throughout: only the names move.
