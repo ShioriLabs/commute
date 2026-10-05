@@ -3,9 +3,43 @@
 
     <uses-feature android:name="android.hardware.type.watch" />
 
+    <!-- The trip's Ongoing Activity on the watch face rides on a notification. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:icon="@mipmap/ic_launcher"
         android:label="Commute"
-        android:roundIcon="@mipmap/ic_launcher_round" />
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@android:style/Theme.DeviceDefault">
+
+        <!-- The trip is started and run on the phone; the watch only follows it. -->
+        <meta-data
+            android:name="com.google.android.wearable.standalone"
+            android:value="false" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- The phone's trip changing while the app is closed: keeps the Ongoing Activity up. -->
+        <service
+            android:name=".TripListenerService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <data
+                    android:host="*"
+                    android:path="/trip/active"
+                    android:scheme="wear" />
+            </intent-filter>
+        </service>
+    </application>
 
 </manifest>
