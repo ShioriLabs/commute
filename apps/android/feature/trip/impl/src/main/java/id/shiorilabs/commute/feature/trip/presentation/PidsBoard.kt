@@ -432,7 +432,7 @@ private fun Plate(
 @Composable
 private fun Eyebrow(pids: Pids) {
     val label = stringResource(pids.label.text)
-    val ahead = pids.takeIf { it.label == PidsLabel.BOARD || it.label == PidsLabel.NEXT }?.let {
+    val ahead = pids.takeIf { it.label == PidsLabel.BOARD || it.label == PidsLabel.AT || it.label == PidsLabel.NEXT }?.let {
         stringResource(
             if (it.ride.isBus) R.string.trip_ride_to_halte else R.string.trip_ride_to_station,
             it.ride.stops.last().name,
@@ -618,6 +618,7 @@ internal fun StationLines(keys: List<String>, lines: Map<String, LineInfo>) {
 internal val PidsLabel.text: Int
     get() = when (this) {
         PidsLabel.BOARD -> R.string.trip_pids_board
+        PidsLabel.AT -> R.string.trip_pids_at
         PidsLabel.NEXT -> R.string.trip_pids_next
         PidsLabel.ALIGHT_NEXT -> R.string.trip_pids_alight_next
         PidsLabel.ALIGHT_HERE -> R.string.trip_pids_alight_here
