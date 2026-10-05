@@ -1,5 +1,6 @@
 [versions]
 zstdJni = "1.5.7-21"
+sentry = "8.59.0"
 # Build tools
 agp = "9.3.3"
 kotlin = "2.4.10"
@@ -50,6 +51,8 @@ profileinstaller = "1.4.1"
 [libraries]
 # zstd for the trip log's export, as the Android AAR (native, 16 KB pages).
 zstd-jni = { group = "com.github.luben", name = "zstd-jni", version.ref = "zstdJni" }
+# Crash and ANR reports (Java and native), sent to Sentry.
+sentry-android = { module = "io.sentry:sentry-android", version.ref = "sentry" }
 # KotlinX
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serializationJson" }
