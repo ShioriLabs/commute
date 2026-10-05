@@ -26,6 +26,16 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- The phone opening the app as a trip starts (WearPaths.WATCH_LINK). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="watch"
+                    android:scheme="commute" />
+            </intent-filter>
         </activity>
 
         <!-- The phone's trip changing while the app is closed: keeps the Ongoing Activity up. -->
