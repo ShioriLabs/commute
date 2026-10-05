@@ -57,6 +57,7 @@ import id.shiorilabs.commute.core.ui.components.CommuteBottomSheet
 import id.shiorilabs.commute.core.ui.components.HorizontalSpacer
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
+import id.shiorilabs.commute.core.ui.components.SectionLabel
 import id.shiorilabs.commute.core.ui.ext.rowEntrance
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.theme.Pink800
@@ -280,13 +281,9 @@ private fun formatDistance(metres: Int): String =
 @Composable
 private fun QuickPicks(stations: List<PickableStation>, onPick: (PickableStation) -> Unit) {
     Column {
-        Text(
-            text = stringResource(R.string.journey_picker_quick_picks).uppercase(),
+        SectionLabel(
+            text = stringResource(R.string.journey_picker_quick_picks),
             modifier = Modifier.padding(start = 32.dp, top = 4.dp, end = 32.dp),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 0.5.sp,
-            color = Slate400,
         )
         LazyRow(
             contentPadding = PaddingValues(start = 32.dp, top = 8.dp, end = 32.dp, bottom = 4.dp),
