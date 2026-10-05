@@ -2,8 +2,9 @@ package id.shiorilabs.commute.feature.saved.presentation.components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -24,6 +25,7 @@ import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.type.toFailure
 import id.shiorilabs.commute.core.ui.components.ProblemPanel
 import id.shiorilabs.commute.core.ui.components.SkeletonBlock
+import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.feature.saved.R
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
@@ -53,6 +55,8 @@ private const val MAX_SKELETON_LINES = 3
  * title flies into the page's header as a shared element, with [shareName] off for a copy hidden
  * behind the one doing it. [opened] marks the station whose page was last opened from here: its
  * "Stasiun" clips away as it flies out and back in as it lands home.
+ *
+ * [note] sits muted at the row's far end, on the title's baseline: how far a nearby station is.
  */
 @Composable
 fun StationTitle(
@@ -62,9 +66,10 @@ fun StationTitle(
     topInset: Dp = 0.dp,
     shareName: Boolean = true,
     opened: Boolean = false,
+    note: String? = null,
     onClick: (() -> Unit)? = null,
 ) {
-    Box(
+    Row(
         modifier = modifier
             .fillMaxWidth()
             .padding(top = topInset)
@@ -72,18 +77,32 @@ fun StationTitle(
             .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
             .padding(16.dp)
             .semantics(mergeDescendants = true) { heading() },
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        StationTitleText(
-            stationId = stationId,
-            name = name,
-            style = MaterialTheme.typography.titleLarge.copy(
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-            ),
-            showWords = true,
-            animateWords = shareName && opened,
-            shared = shareName,
-        )
+        // Wrapped, so the title keeps its own width for the flight while the note is pushed to the end.
+        Box(modifier = Modifier.weight(1f).alignByBaseline()) {
+            StationTitleText(
+                stationId = stationId,
+                name = name,
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                ),
+                showWords = true,
+                animateWords = shareName && opened,
+                shared = shareName,
+            )
+        }
+        if (note != null) {
+            Text(
+                text = note,
+                modifier = Modifier.alignByBaseline(),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Slate500,
+                maxLines = 1,
+            )
+        }
     }
 }
 
