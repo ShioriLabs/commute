@@ -93,6 +93,7 @@ import kotlin.math.roundToInt
 @Composable
 fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val manualMarks by viewModel.manualMarks.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
 
     ActiveTripContent(
@@ -105,6 +106,8 @@ fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel
         onNameHidden = viewModel::onBoardNameHidden,
         onOpenStation = { stop -> navigator.goTo(Route.Station(stop.id, title = stop.name)) },
         onRouteBack = { origin -> navigator.goTo(Route.Otw(fromId = origin.toId, toId = origin.fromId)) },
+        manualMarks = manualMarks,
+        onMark = viewModel::mark,
     )
 }
 
@@ -127,8 +130,11 @@ private fun ActiveTripContent(
     onNameHidden: (Boolean) -> Unit,
     onOpenStation: (TripStop) -> Unit,
     onRouteBack: (Route.Trip) -> Unit,
+    manualMarks: Boolean = false,
+    onMark: (MarkKind, Pids) -> Unit = { _, _ -> },
 ) {
     val trip = state.trip
+    val marking = manualMarks && trip != null
     val context = LocalContext.current
     val copy = remember(context, state.lines) { TripCopy(context.resources, state.lines) }
     // The board's minutes count down between the trip's own updates.
@@ -147,85 +153,95 @@ private fun ActiveTripContent(
     LaunchedEffect(nameHidden) { onNameHidden(nameHidden) }
     DisposableEffect(Unit) { onDispose { onNameHidden(false) } }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(PageBackground)
-            .onGloballyPositioned { listTop = it.positionInRoot().y },
-        contentPadding = PaddingValues(bottom = innerPadding.calculateBottomPadding() + 32.dp),
-    ) {
-        if (trip == null) {
-            val finished = state.finished
-            if (finished == null) {
-                item(key = "finished") { Finished(innerPadding, onClose) }
-            } else {
-                item(key = "done") {
-                    TripFinished(
-                        finished = finished,
-                        lines = state.lines,
-                        copy = copy,
-                        topInset = innerPadding.calculateTopPadding(),
-                        onClose = onClose,
-                        onOpenStation = onOpenStation,
-                        onRouteBack = { onRouteBack(finished.trip.origin) },
-                    )
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(PageBackground)
+                .onGloballyPositioned { listTop = it.positionInRoot().y },
+            // Clear of the marks' bar, while it's up, as of the system bar.
+            contentPadding = PaddingValues(bottom = innerPadding.calculateBottomPadding() + 32.dp + if (marking) MarkBarHeight else 0.dp),
+        ) {
+            if (trip == null) {
+                val finished = state.finished
+                if (finished == null) {
+                    item(key = "finished") { Finished(innerPadding, onClose) }
+                } else {
+                    item(key = "done") {
+                        TripFinished(
+                            finished = finished,
+                            lines = state.lines,
+                            copy = copy,
+                            topInset = innerPadding.calculateTopPadding(),
+                            onClose = onClose,
+                            onOpenStation = onOpenStation,
+                            onRouteBack = { onRouteBack(finished.trip.origin) },
+                        )
+                    }
                 }
+                return@LazyColumn
             }
-            return@LazyColumn
-        }
-        val pids = trip.pids(now)
-        item(key = "board") {
-            PidsBoard(
-                pids = pids,
-                lines = state.lines,
-                stationLines = state.stationLines[pids.stationId].orEmpty(),
-                copy = copy,
-                source = copy.source(trip),
-                onNameMoved = { nameBottom = it },
-            )
-        }
-        item(key = "actions") {
-            Actions(trip, onStop, onSay, modifier = Modifier.padding(start = 32.dp, top = 24.dp, end = 32.dp, bottom = 24.dp))
-        }
-        if (!trip.state.hasLocation) {
-            item(key = "no-location") {
-                NoticeBanner(
-                    message = stringResource(if (state.tripFixesOff) R.string.trip_live_location_off else R.string.trip_live_no_location),
-                    modifier = Modifier.padding(start = 32.dp, end = 32.dp, bottom = 24.dp),
+            val pids = trip.pids(now)
+            item(key = "board") {
+                PidsBoard(
+                    pids = pids,
+                    lines = state.lines,
+                    stationLines = state.stationLines[pids.stationId].orEmpty(),
+                    copy = copy,
+                    source = copy.source(trip),
+                    onNameMoved = { nameBottom = it },
                 )
             }
-        }
-        item(key = "all-stops") {
-            Text(
-                text = stringResource(R.string.trip_live_all_stops).uppercase(),
-                modifier = Modifier.padding(start = 32.dp, end = 32.dp, bottom = 12.dp),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.5.sp,
-                color = Slate400,
-            )
-        }
-        val marks = trip.stopMarks()
-        trip.plan.legs.forEachIndexed { index, leg ->
-            when (leg) {
-                is TripLeg.Ride -> item(key = "ride-$index") {
-                    RideBlock(
-                        trip = trip,
-                        legIndex = index,
-                        line = state.lines[leg.line],
-                        name = copy.rideName(leg),
-                        marks = marks.getValue(index),
-                        now = now,
-                        modifier = Modifier.padding(start = 32.dp, end = 32.dp, bottom = 16.dp),
+            item(key = "actions") {
+                Actions(trip, onStop, onSay, modifier = Modifier.padding(start = 32.dp, top = 24.dp, end = 32.dp, bottom = 24.dp))
+            }
+            if (!trip.state.hasLocation) {
+                item(key = "no-location") {
+                    NoticeBanner(
+                        message = stringResource(if (state.tripFixesOff) R.string.trip_live_location_off else R.string.trip_live_no_location),
+                        modifier = Modifier.padding(start = 32.dp, end = 32.dp, bottom = 24.dp),
                     )
                 }
-                is TripLeg.Transfer -> item(key = "walk-$index") {
-                    WalkRow(leg, modifier = Modifier.padding(start = 32.dp, end = 32.dp, bottom = 16.dp))
+            }
+            item(key = "all-stops") {
+                Text(
+                    text = stringResource(R.string.trip_live_all_stops).uppercase(),
+                    modifier = Modifier.padding(start = 32.dp, end = 32.dp, bottom = 12.dp),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp,
+                    color = Slate400,
+                )
+            }
+            val marks = trip.stopMarks()
+            trip.plan.legs.forEachIndexed { index, leg ->
+                when (leg) {
+                    is TripLeg.Ride -> item(key = "ride-$index") {
+                        RideBlock(
+                            trip = trip,
+                            legIndex = index,
+                            line = state.lines[leg.line],
+                            name = copy.rideName(leg),
+                            marks = marks.getValue(index),
+                            now = now,
+                            modifier = Modifier.padding(start = 32.dp, end = 32.dp, bottom = 16.dp),
+                        )
+                    }
+                    is TripLeg.Transfer -> item(key = "walk-$index") {
+                        WalkRow(leg, modifier = Modifier.padding(start = 32.dp, end = 32.dp, bottom = 16.dp))
+                    }
                 }
             }
+            item(key = "details") {
+                DetailsRow(onClick = { onDetails(trip) }, modifier = Modifier.padding(start = 32.dp, top = 8.dp, end = 32.dp))
+            }
         }
-        item(key = "details") {
-            DetailsRow(onClick = { onDetails(trip) }, modifier = Modifier.padding(start = 32.dp, top = 8.dp, end = 32.dp))
+        if (marking) {
+            MarkBar(
+                bottomInset = innerPadding.calculateBottomPadding(),
+                onMark = { kind -> trip?.let { onMark(kind, it.pids(Instant.now())) } },
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
         }
     }
 }
