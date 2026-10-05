@@ -1,11 +1,16 @@
 package id.shiorilabs.commute.feature.trip.wear
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.core.graphics.toColorInt
+import androidx.core.net.toUri
+import androidx.wear.remote.interactions.RemoteActivityHelper
+import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.PutDataRequest
 import com.google.android.gms.wearable.Wearable
 import dagger.hilt.android.qualifiers.ApplicationContext
+import id.shiorilabs.commute.core.datastore.DeveloperPreferencesRepository
 import id.shiorilabs.commute.core.query.di.ApplicationScope
 import id.shiorilabs.commute.core.trip.FinishReason
 import id.shiorilabs.commute.core.trip.TripState
@@ -19,11 +24,15 @@ import id.shiorilabs.commute.feature.trip.runtime.TripControllerImpl
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.time.Clock
 import java.time.Duration
+import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -34,12 +43,16 @@ import kotlin.math.roundToLong
  * (for the watch's "udah sampai"), and nothing once it is stopped. The Data Layer only sends an item
  * that changed, and the trip is trimmed to what the watch draws, so a fix that moves nothing it
  * shows sends nothing.
+ *
+ * A trip just started also opens the watch app, as Maps opens its navigation there, unless
+ * "Buka Otomatis di Jam" is off.
  */
 @Singleton
 class WearTripSync @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val controller: TripControllerImpl,
     private val lines: LineRepository,
+    private val developer: DeveloperPreferencesRepository,
     private val clock: Clock,
     @param:ApplicationScope private val scope: CoroutineScope,
 ) {
@@ -51,10 +64,33 @@ class WearTripSync @Inject constructor(
     /** Follows the trip from now on; once per process, whoever asks first. */
     fun start() {
         if (!started.compareAndSet(false, true)) return
-        scope.launch {
-            combine(controller.active, controller.finished, ::forWatch)
-                .distinctUntilChanged()
-                .collectLatest(::publish)
+        val trips = combine(controller.active, controller.finished, ::forWatch)
+            .distinctUntilChanged()
+            .shareIn(scope, SharingStarted.Eagerly, replay = 1)
+        scope.launch { trips.collectLatest(::publish) }
+        // Not collectLatest: the trip's next step lands within moments of its start, and mustn't
+        // cancel the opening.
+        scope.launch { trips.collect(::openIfJustStarted) }
+    }
+
+    /** The start of the trip the watch app was last opened for, so each trip opens it once. */
+    private var openedFor: Instant? = null
+
+    private suspend fun openIfJustStarted(trip: WearTrip?) {
+        if (trip == null || trip.finished != null) return
+        val startedAt = trip.state.startedAt
+        if (!justStarted(startedAt, openedFor, clock.instant())) return
+        openedFor = startedAt
+        if (!developer.watchAutoOpen.first()) return
+        runCatching {
+            val watches = Wearable.getCapabilityClient(context)
+                .getCapability(WearPaths.WEAR_CAPABILITY, CapabilityClient.FILTER_REACHABLE)
+                .await()
+                .nodes
+            if (watches.isEmpty()) return@runCatching
+            val intent = Intent(Intent.ACTION_VIEW, WearPaths.WATCH_LINK.toUri()).addCategory(Intent.CATEGORY_BROWSABLE)
+            val helper = RemoteActivityHelper(context)
+            watches.forEach { helper.startRemoteActivity(intent, it.id) }
         }
     }
 
@@ -95,6 +131,16 @@ class WearTripSync @Inject constructor(
         val ARRIVED_KEPT: Duration = Duration.ofMinutes(10)
     }
 }
+
+/**
+ * Whether a trip that started at [startedAt] should open the watch app now: one it wasn't opened for
+ * yet ([openedFor]), started within [OPEN_WITHIN]. Not a trip picked back up as the app restarts
+ * mid-ride, which would open it again out of nowhere.
+ */
+internal fun justStarted(startedAt: Instant, openedFor: Instant?, now: Instant): Boolean =
+    startedAt != openedFor && Duration.between(startedAt, now) < OPEN_WITHIN
+
+private val OPEN_WITHIN: Duration = Duration.ofMinutes(1)
 
 /**
  * The state as the watch needs it: the engine's own bookkeeping dropped, and the position to a

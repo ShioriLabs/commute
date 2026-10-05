@@ -78,6 +78,8 @@
     <string name="settings_experimental_frost_tuner_detail">Tombol melayang buat ngatur efek frost di header</string>
     <string name="settings_experimental_manual_marks">Tandai Manual</string>
     <string name="settings_experimental_manual_marks_detail">Tombol Jalan, Berhenti, dan Aneh di halaman perjalanan, buat nyatet kapan keretanya beneran jalan atau berhenti. Masuk ke log, gak ngubah perjalanannya</string>
+    <string name="settings_experimental_watch_auto_open">Buka Otomatis di Jam</string>
+    <string name="settings_experimental_watch_auto_open_detail">Pas mulai OTW, aplikasi Commute di jam langsung kebuka</string>
     <string name="settings_experimental_trip_log">Kirim Log Perjalanan</string>
     <string name="settings_experimental_trip_log_detail">Catatan GPS dan langkah mode OTW dari perjalanan terakhir, buat dicek kalau ada yang aneh</string>
     <string name="settings_experimental_trip_log_empty">Belum ada log perjalanan</string>
