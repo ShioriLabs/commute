@@ -53,6 +53,7 @@ import id.shiorilabs.commute.core.ui.components.CommuteButton
 import id.shiorilabs.commute.core.ui.components.CommuteButtonIcon
 import id.shiorilabs.commute.core.ui.components.CommuteButtonText
 import id.shiorilabs.commute.core.ui.components.CommuteButtonVariant
+import id.shiorilabs.commute.core.ui.components.SectionLabel
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.motion.IosSpringEasing
 import id.shiorilabs.commute.core.ui.motion.rememberReducedMotion
@@ -91,12 +92,9 @@ internal fun TripFinished(
     Column(modifier = Modifier.fillMaxWidth()) {
         Plate(finished.reason, destination, rides, lines, fraction, plan.ride(plan.rideIndices.first()).stops.first(), topInset, onClose)
         Figures(finished, rides, modifier = Modifier.padding(start = 20.dp, top = 24.dp, end = 20.dp))
-        Text(
-            text = stringResource(R.string.trip_done_summary).uppercase(),
+        SectionLabel(
+            text = stringResource(R.string.trip_done_summary),
             modifier = Modifier.padding(start = 32.dp, top = 32.dp, end = 32.dp, bottom = 12.dp),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 0.5.sp,
             color = DoneMuted,
         )
         Column(
