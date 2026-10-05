@@ -119,6 +119,21 @@ class TripEngineTest {
     }
 
     @Test
+    fun `a fix on the way in to the last stop isn't arriving yet`() {
+        val plan = TripPlan(listOf(ride(Places.MANGGARAI, Places.TEBET, Places.CAWANG, line = "KCI:B", departs = 0, arrives = 10)))
+        val run = Run(plan)
+        run.tick(0.0)
+        // About 185 m short of Cawang, still rolling in.
+        run.fix(between(Places.TEBET, Places.CAWANG, 0.9), 8.0)
+
+        assertEquals(TripPhase.RIDING, run.state.phase)
+        assertEquals(1.9, run.state.position, 0.05)
+
+        run.fix(Places.CAWANG, 9.0)
+        assertEquals(TripPhase.ARRIVED, run.state.phase)
+    }
+
+    @Test
     fun `a fix between stations places the rider part way along the hop`() {
         val run = Run(bogorLine)
         run.tick(0.0)
