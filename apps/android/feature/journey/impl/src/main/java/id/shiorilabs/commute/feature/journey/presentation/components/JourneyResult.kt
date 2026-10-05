@@ -16,6 +16,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.feature.journey.R
 import id.shiorilabs.commute.feature.journey.domain.Journey
 import id.shiorilabs.commute.feature.station.domain.LineInfo

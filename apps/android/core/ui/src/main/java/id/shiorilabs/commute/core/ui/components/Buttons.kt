@@ -21,7 +21,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -30,6 +29,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
+import id.shiorilabs.commute.core.ui.theme.Slate200
+import id.shiorilabs.commute.core.ui.theme.Slate500
 
 /*
  * Material's buttons draw their own ripple rather than the theme's indication, so they can't take
@@ -136,12 +137,6 @@ fun CommuteButtonIcon(icon: ImageVector, modifier: Modifier = Modifier, contentD
 }
 
 private val ButtonShape = RoundedCornerShape(12.dp)
-
-/** The web's slate-200: the secondary button, and any button that can't be pressed yet. */
-private val Slate200 = Color(0xFFE2E8F0)
-
-/** The web's slate-500: a disabled button's label. */
-private val Slate500 = Color(0xFF64748B)
 
 @Preview(showBackground = true)
 @Composable

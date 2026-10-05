@@ -34,6 +34,9 @@ import androidx.compose.ui.zIndex
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
+import id.shiorilabs.commute.core.ui.theme.Slate300
+import id.shiorilabs.commute.core.ui.theme.Slate400
+import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.feature.journey.R
 import id.shiorilabs.commute.feature.journey.presentation.PairEndpoint
 import id.shiorilabs.commute.feature.search.domain.SearchLine
