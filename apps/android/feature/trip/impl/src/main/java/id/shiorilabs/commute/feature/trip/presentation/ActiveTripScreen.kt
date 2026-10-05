@@ -96,6 +96,7 @@ import kotlin.math.roundToInt
 fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val manualMarks by viewModel.manualMarks.collectAsStateWithLifecycle()
+    val boardPages by viewModel.boardPages.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
 
     ActiveTripContent(
@@ -110,6 +111,7 @@ fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel
         onRouteBack = { origin -> navigator.goTo(Route.Otw(fromId = origin.toId, toId = origin.fromId)) },
         manualMarks = manualMarks,
         onMark = viewModel::mark,
+        boardPages = boardPages,
     )
 }
 
@@ -137,6 +139,7 @@ private fun ActiveTripContent(
     onRouteBack: (Route.Trip) -> Unit,
     manualMarks: Boolean = false,
     onMark: (MarkKind, Pids) -> Unit = { _, _ -> },
+    boardPages: Boolean = false,
 ) {
     val trip = state.trip
     val marking = manualMarks && trip != null
@@ -195,6 +198,7 @@ private fun ActiveTripContent(
                     copy = copy,
                     source = copy.source(trip),
                     onNameMoved = { nameBottom = it },
+                    pages = boardPages,
                 )
             }
             item(key = "actions") {
