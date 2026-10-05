@@ -1,8 +1,10 @@
 package id.shiorilabs.commute.feature.trip.presentation
 
+import id.shiorilabs.commute.core.trip.Headline
 import id.shiorilabs.commute.core.trip.TripEngine
 import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripPhase
+import id.shiorilabs.commute.core.trip.minutesUntil
 import id.shiorilabs.commute.feature.trip.ActiveTrip
 import id.shiorilabs.commute.feature.trip.NOW
 import id.shiorilabs.commute.feature.trip.minutes

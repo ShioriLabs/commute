@@ -26,11 +26,11 @@ import id.shiorilabs.commute.core.trip.progress
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.trip.ActiveTrip
 import id.shiorilabs.commute.feature.trip.R
-import id.shiorilabs.commute.feature.trip.presentation.Headline
+import id.shiorilabs.commute.core.trip.Headline
 import id.shiorilabs.commute.feature.trip.presentation.TripCopy
 import id.shiorilabs.commute.feature.trip.presentation.formatClock
 import id.shiorilabs.commute.feature.trip.presentation.headline
-import id.shiorilabs.commute.feature.trip.presentation.minutesUntil
+import id.shiorilabs.commute.core.trip.minutesUntil
 import java.time.Clock
 import java.time.Instant
 import javax.inject.Inject
