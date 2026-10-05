@@ -65,7 +65,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.chrisbanes.haze.hazeSource
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.navigation.Route
-import id.shiorilabs.commute.core.ui.components.CommuteIconButton
+import id.shiorilabs.commute.core.ui.components.CommuteCloseButton
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.frost.FrostedHeaderPage
 import id.shiorilabs.commute.core.ui.components.CommuteButton
@@ -267,13 +267,10 @@ private fun TripHeader(state: TripUiState, innerPadding: PaddingValues, onClose:
                     fontWeight = FontWeight.Bold,
                 )
             }
-            CommuteIconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
-                Icon(
-                    imageVector = CommuteIcons.Close,
-                    contentDescription = stringResource(R.string.journey_close_description),
-                    modifier = Modifier.size(24.dp),
-                )
-            }
+            CommuteCloseButton(
+                onClick = onClose,
+                contentDescription = stringResource(R.string.journey_close_description),
+            )
         }
 
         if (journey != null) {

@@ -6,9 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,9 +20,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.type.UIState
-import id.shiorilabs.commute.core.ui.components.CommuteIconButton
+import id.shiorilabs.commute.core.ui.components.CommuteCloseButton
 import id.shiorilabs.commute.core.ui.components.SkeletonBlock
-import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.feature.hub.R
 import id.shiorilabs.commute.feature.hub.domain.Hub
@@ -93,14 +90,11 @@ fun HubHeader(
                 )
             }
         }
-        CommuteIconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
-            Icon(
-                imageVector = CommuteIcons.Close,
-                contentDescription = stringResource(R.string.hub_close_description),
-                modifier = Modifier.size(24.dp),
-                tint = MaterialTheme.colorScheme.onBackground,
-            )
-        }
+        CommuteCloseButton(
+            onClick = onClose,
+            contentDescription = stringResource(R.string.hub_close_description),
+            tint = MaterialTheme.colorScheme.onBackground,
+        )
     }
 }
 

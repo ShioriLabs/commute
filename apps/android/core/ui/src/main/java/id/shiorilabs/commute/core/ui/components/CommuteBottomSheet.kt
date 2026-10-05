@@ -7,10 +7,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -22,7 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import kotlinx.coroutines.launch
 
 /** The web's `bg-slate-950/25` scrim. */
@@ -82,13 +79,7 @@ fun CommuteBottomSheet(
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                 )
-                CommuteIconButton(onClick = hide, modifier = Modifier.size(32.dp)) {
-                    Icon(
-                        imageVector = CommuteIcons.Close,
-                        contentDescription = closeDescription,
-                        modifier = Modifier.size(24.dp),
-                    )
-                }
+                CommuteCloseButton(onClick = hide, contentDescription = closeDescription)
             }
             content(hide)
         }
