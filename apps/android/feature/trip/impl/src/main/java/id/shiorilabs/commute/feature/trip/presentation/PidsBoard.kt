@@ -3,7 +3,7 @@ package id.shiorilabs.commute.feature.trip.presentation
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Brush
@@ -78,6 +78,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.AlignmentLine
 import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.zIndex
@@ -742,13 +743,14 @@ private fun Strip(
     // starts again: heading this way, over and over.
     // Time runs evenly; the position eases off it, the fades don't. Fading by the eased position
     // would leave the marker faint for half of every run, while it slows toward the stop.
-    val clock by rememberInfiniteTransition(label = "marker").animateFloat(
+    // Read only while drawing: the marker moves every frame, and reading it here would recompose
+    // the whole board with it.
+    val clock = rememberInfiniteTransition(label = "marker").animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(durationMillis = TRAVEL_MILLIS, easing = LinearEasing)),
         label = "markerTravel",
     )
-    val time = if (reducedMotion) 0.5f else clock
     val description = stringResource(R.string.trip_pids_description, pids.upcoming.joinToString { it.name })
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val width = with(density) { maxWidth.toPx() }
@@ -791,53 +793,60 @@ private fun Strip(
                 .height(with(density) { loop.height.toDp() })
                 .clearAndSetSemantics { contentDescription = description },
         ) {
-            Canvas(
+            Spacer(
                 modifier = Modifier
                     .matchParentSize()
                     // Below the strip is the page; above it the plate, which draws over the band.
                     .drawWithContent {
                         clipRect(top = -size.height * 4, bottom = size.height) { this@drawWithContent.drawContent() }
-                    },
-            ) {
-                // Grey underneath, the line's colour over it as far as the draw-in has reached.
-                val whole = loop.band()
-                translate(top = slab) { drawPath(whole, BandUnlitSide) }
-                drawPath(whole, BandUnlit)
-                val lit = loop.band(drawIn.value)
-                translate(top = slab) { drawPath(lit, side) }
-                drawPath(lit, color)
-                // The rider: a chevron on the band pointing the way it goes, from just in off the edge
-                // to just short of the next stop's bubble, fading in as it sets off and out as it
-                // arrives so the loop has no seam.
-                val s = loop.band * 0.36f
-                val reach = loop.angleShortOfNearest(bubbles.firstOrNull()?.second?.div(2) ?: 0f, gap = s)
-                val markerAngle = loop.markerAngle + (reach - loop.markerAngle) * IosSpringEasing.transform(time)
-                val marker = loop.point(markerAngle)
-                val tangent = loop.tangent(markerAngle)
-                val angle = Math.toDegrees(atan2(tangent.y, tangent.x).toDouble()).toFloat()
-                val alpha = when {
-                    reducedMotion -> 1f
-                    time < MARKER_FADE_IN -> time / MARKER_FADE_IN
-                    time > 1f - MARKER_FADE_OUT -> (1f - time) / MARKER_FADE_OUT
-                    else -> 1f
-                }
-                rotate(angle + 90f, pivot = marker) {
-                    val chevron = Path().apply {
-                        moveTo(marker.x - s, marker.y + s * 0.6f)
-                        lineTo(marker.x, marker.y - s * 0.6f)
-                        lineTo(marker.x + s, marker.y + s * 0.6f)
                     }
-                    // Brand pink, outlined in white so it holds up on any line's colour. Faded as one
-                    // layer, so the outline doesn't show through the pink on the way in and out.
-                    drawContext.canvas.saveLayer(
-                        Rect(marker, s * 2 + outline * 2),
-                        Paint().apply { this.alpha = alpha },
-                    )
-                    drawPath(chevron, Color.White, style = Stroke(width = s * 0.7f + outline * 2, cap = StrokeCap.Round, join = StrokeJoin.Round))
-                    drawPath(chevron, brand, style = Stroke(width = s * 0.7f, cap = StrokeCap.Round, join = StrokeJoin.Round))
-                    drawContext.canvas.restore()
-                }
-            }
+                    // The band's paths are built once, and again only while the draw-in moves them;
+                    // a new path each frame would be tessellated afresh each frame.
+                    .drawWithCache {
+                        // Grey underneath, the line's colour over it as far as the draw-in has reached.
+                        val whole = loop.band()
+                        val lit = loop.band(drawIn.value)
+                        val s = loop.band * 0.36f
+                        val reach = loop.angleShortOfNearest(bubbles.firstOrNull()?.second?.div(2) ?: 0f, gap = s)
+                        val outlineStroke = Stroke(width = s * 0.7f + outline * 2, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                        val fillStroke = Stroke(width = s * 0.7f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                        val chevron = Path()
+                        val fade = Paint()
+                        onDrawBehind {
+                            translate(top = slab) { drawPath(whole, BandUnlitSide) }
+                            drawPath(whole, BandUnlit)
+                            translate(top = slab) { drawPath(lit, side) }
+                            drawPath(lit, color)
+                            // The rider: a chevron on the band pointing the way it goes, from just in off
+                            // the edge to just short of the next stop's bubble, fading in as it sets off
+                            // and out as it arrives so the loop has no seam.
+                            val time = if (reducedMotion) 0.5f else clock.value
+                            val markerAngle = loop.markerAngle + (reach - loop.markerAngle) * IosSpringEasing.transform(time)
+                            val marker = loop.point(markerAngle)
+                            val tangent = loop.tangent(markerAngle)
+                            val angle = Math.toDegrees(atan2(tangent.y, tangent.x).toDouble()).toFloat()
+                            fade.alpha = when {
+                                reducedMotion -> 1f
+                                time < MARKER_FADE_IN -> time / MARKER_FADE_IN
+                                time > 1f - MARKER_FADE_OUT -> (1f - time) / MARKER_FADE_OUT
+                                else -> 1f
+                            }
+                            rotate(angle + 90f, pivot = marker) {
+                                chevron.reset()
+                                chevron.moveTo(marker.x - s, marker.y + s * 0.6f)
+                                chevron.lineTo(marker.x, marker.y - s * 0.6f)
+                                chevron.lineTo(marker.x + s, marker.y + s * 0.6f)
+                                // Brand pink, outlined in white so it holds up on any line's colour. Faded
+                                // as one layer, so the outline doesn't show through the pink on the way in
+                                // and out.
+                                drawContext.canvas.saveLayer(Rect(marker, s * 2 + outline * 2), fade)
+                                drawPath(chevron, Color.White, style = outlineStroke)
+                                drawPath(chevron, brand, style = fillStroke)
+                                drawContext.canvas.restore()
+                            }
+                        }
+                    },
+            )
 
             pids.upcoming.forEachIndexed { i, stop ->
                 val (at, size) = bubbles[i]
