@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -230,7 +229,8 @@ private fun TripScreen(trip: WearTrip, now: Instant, phone: PhoneLink) {
                 }
                 if (primary != null) {
                     item {
-                        Button(onClick = { send(primary.action) }, modifier = Modifier.fillMaxWidth()) {
+                        // As wide as its word: a full-width button runs into the round edge down here.
+                        Button(onClick = { send(primary.action) }) {
                             Text(stringResource(primary.label))
                         }
                     }
