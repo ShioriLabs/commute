@@ -55,6 +55,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.animateFloat
@@ -208,16 +209,85 @@ internal fun PidsBoard(
     /** Where the big name's bottom edge is in the root, as the page scrolls; see [PidsBar]. */
     onNameMoved: (Float) -> Unit,
     modifier: Modifier = Modifier,
+    /** "Halaman PIDS" in Experimental: the route takes turns with other pages; see [BoardPages]. */
+    pages: Boolean = false,
 ) {
     val line = lines[pids.ride.line]
     val color = parseHexColor(line?.colorCode ?: "", BoardMuted)
     Column(modifier = modifier.fillMaxWidth()) {
         // Over the strip: its band runs on up behind the plate.
         Plate(pids, lines, stationLines, onNameMoved, modifier = Modifier.zIndex(1f))
-        if (pids.upcoming.isNotEmpty()) Strip(pids, color, source)
+        if (pids.upcoming.isNotEmpty()) {
+            if (pages) BoardPages(pids, color, source) else Strip(pids, color, source)
+        }
         ChangePanel(pids, lines, stationLines, copy)
     }
 }
+
+/** What the area under the plate shows in its turn: the route, and (for now) a placeholder. */
+private enum class BoardPage { ROUTE, HELLO }
+
+/**
+ * The area under the plate taking turns between pages, as a real display moves between the route
+ * and its other screens. It keeps the route's height throughout, so nothing below it moves; the
+ * route draws itself in again each time it comes back round.
+ */
+@Composable
+private fun BoardPages(pids: Pids, color: Color, source: String?) {
+    val pages = BoardPage.entries
+    var turn by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(BOARD_PAGE_MILLIS)
+            turn++
+        }
+    }
+    val page = pages[turn % pages.size]
+    val reducedMotion = rememberReducedMotion()
+    val fadeSpec = tween<Float>(if (reducedMotion) 0 else BOARD_FADE_MILLIS)
+    val routeAlpha by animateFloatAsState(if (page == BoardPage.ROUTE) 1f else 0f, fadeSpec, label = "routeAlpha")
+    val helloAlpha by animateFloatAsState(if (page == BoardPage.HELLO) 1f else 0f, fadeSpec, label = "helloAlpha")
+    Box(modifier = Modifier.fillMaxWidth()) {
+        // Laid out always, for the height; only shown in its turn.
+        Strip(
+            pids = pids,
+            color = color,
+            source = source,
+            replay = turn / pages.size,
+            modifier = Modifier.graphicsLayer { alpha = routeAlpha },
+        )
+        if (helloAlpha > 0f) {
+            HelloPage(modifier = Modifier.matchParentSize().graphicsLayer { alpha = helloAlpha })
+        }
+    }
+}
+
+/** A stand-in for the display's other screens, to try the turns out with. */
+@Composable
+private fun HelloPage(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.padding(horizontal = 32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = "Halo, dunia!",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = PlainText,
+        )
+        Text(
+            text = "Hello, world!",
+            modifier = Modifier.padding(top = 4.dp),
+            style = MaterialTheme.typography.titleMedium,
+            color = BoardDim,
+        )
+    }
+}
+
+/** How long each page under the plate holds, and how long they take to cross-fade. */
+private const val BOARD_PAGE_MILLIS = 8000L
+private const val BOARD_FADE_MILLIS = 400
 
 /**
  * Light icons over a dark surface while it's up; the app's dark ones again once the last such
@@ -645,7 +715,14 @@ internal val PidsLabel.text: Int
  * slab on the ground. The nearest stop is at the bottom, the rider's marker below it.
  */
 @Composable
-private fun Strip(pids: Pids, color: Color, source: String?) {
+private fun Strip(
+    pids: Pids,
+    color: Color,
+    source: String?,
+    /** Bumped each time the route comes back round on the board, to draw it in again. */
+    replay: Int = 0,
+    modifier: Modifier = Modifier,
+) {
     val density = LocalDensity.current
     // The band draws itself in, grey first and then the line's colour sweeping from the rider to the
     // far end, as the display does each time it shows the stops ahead: on opening, and again when
@@ -654,7 +731,7 @@ private fun Strip(pids: Pids, color: Color, source: String?) {
     // halfway to the stop.
     val reducedMotion = rememberReducedMotion()
     val drawIn = remember { Animatable(0f) }
-    LaunchedEffect(pids.station, reducedMotion) {
+    LaunchedEffect(pids.station, reducedMotion, replay) {
         if (reducedMotion) {
             drawIn.snapTo(1f)
             return@LaunchedEffect
@@ -675,7 +752,7 @@ private fun Strip(pids: Pids, color: Color, source: String?) {
     )
     val time = if (reducedMotion) 0.5f else clock
     val description = stringResource(R.string.trip_pids_description, pids.upcoming.joinToString { it.name })
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val width = with(density) { maxWidth.toPx() }
         val loop = with(density) {
             GroundLoop(
