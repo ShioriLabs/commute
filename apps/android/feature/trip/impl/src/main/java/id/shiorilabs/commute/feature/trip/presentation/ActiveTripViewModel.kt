@@ -83,6 +83,10 @@ class ActiveTripViewModel @Inject constructor(
     val manualMarks: StateFlow<Boolean> = developerPreferences.manualMarks
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    /** "Tandai Peron" in Pengaturan → Experimental: a row of platform marks above the others. */
+    val platformMarks: StateFlow<Boolean> = developerPreferences.platformMarks
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     /** "Halaman PIDS" in Pengaturan → Experimental: the board takes turns between pages. */
     val boardPages: StateFlow<Boolean> = developerPreferences.boardPages
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)

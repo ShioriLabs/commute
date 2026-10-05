@@ -82,6 +82,9 @@
     <string name="trip_mark_stopped">Berhenti</string>
     <string name="trip_mark_odd">Aneh</string>
     <string name="trip_mark_hint">Tandai pas keretanya jalan, berhenti, atau layarnya aneh</string>
+    <string name="trip_mark_hint_platform">Peron: tandai pas ujung peron lewat di samping jendela kamu</string>
+    <string name="trip_mark_platform_start">Peron mulai</string>
+    <string name="trip_mark_platform_end">Peron habis</string>
     <string name="trip_mark_last">Ditandai: %1$s · %2$s</string>
     <string name="trip_time_late">%1$s, telat %2$d menit dari jadwal %3$s</string>
     <string name="trip_time_early">%1$s, %2$d menit lebih awal dari jadwal %3$s</string>
