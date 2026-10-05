@@ -19,7 +19,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -44,7 +43,7 @@ import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.ProblemPanel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.components.SkeletonBlock
-import id.shiorilabs.commute.core.ui.ext.parseHexColor
+import id.shiorilabs.commute.core.ui.ext.lineColorOf
 import id.shiorilabs.commute.core.ui.ext.tint
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.startup.HoldStartupWhile
@@ -71,9 +70,6 @@ import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.codeOfLineKey
 import java.time.Instant
 import javax.inject.Inject
-
-/** The colour of a line the dictionary doesn't know yet, the web's `LINE_COLOR_FALLBACK`. */
-private val FallbackLineColor = Color(0xFF94A3B8)
 
 /**
  * The web's `SavedRouteCard`: a saved pair's next boardings, dressed like a station's line card
@@ -164,7 +160,7 @@ private fun RouteBoard(
     // Coloured by the soonest row, or once the night is over by the route that starts again, so an
     // ended card keeps its line's colour instead of greying.
     val lead = rows.firstOrNull() ?: answer.journeys.firstOrNull { it.resumesAt != null }
-    val lineColor = lead?.rides?.firstOrNull()?.let { lines[it.line] }?.let { parseHexColor(it.colorCode) } ?: FallbackLineColor
+    val lineColor = lineColorOf(lead?.rides?.firstOrNull()?.let { lines[it.line] }?.colorCode)
     val divider = lineColor.tint(0.3f)
     val shape = MaterialTheme.shapes.medium
     val description = stringResource(R.string.journey_saved_route_rows_description, answer.from.name, answer.to.name)

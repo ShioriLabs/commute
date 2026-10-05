@@ -38,7 +38,7 @@ import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.fill.NavigationArrow
 import id.shiorilabs.commute.core.ui.ext.Foreground
 import id.shiorilabs.commute.core.ui.ext.foreground
-import id.shiorilabs.commute.core.ui.ext.parseHexColor
+import id.shiorilabs.commute.core.ui.ext.lineColorOf
 import id.shiorilabs.commute.core.ui.ext.tint
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
@@ -64,9 +64,6 @@ import id.shiorilabs.commute.feature.station.domain.isImminentDeparture
 import id.shiorilabs.commute.feature.station.domain.joinLabels
 import id.shiorilabs.commute.feature.station.domain.upcomingGroups
 import java.time.LocalDateTime
-
-/** While the line dictionary is still loading: the card renders grey rather than blanking. */
-private val FallbackLineColor = Color(0xFF94A3B8)
 
 // Tailwind's greys, as the web card uses them.
 
@@ -103,7 +100,7 @@ fun LineCard(
 
     val lineName = lineInfo?.name
         ?: codeOfLineKey(line.lineKey).ifEmpty { stringResource(R.string.line_card_fallback_name) }
-    val lineColor = lineInfo?.let { parseHexColor(it.colorCode) } ?: FallbackLineColor
+    val lineColor = lineColorOf(lineInfo?.colorCode)
     val divider = lineColor.tint(0.3f)
     val shape = MaterialTheme.shapes.medium
     val cardDescription = stringResource(R.string.line_card_description, lineName)
