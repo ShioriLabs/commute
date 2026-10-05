@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.core.ui.ext
 
 import androidx.compose.ui.graphics.Color
+import id.shiorilabs.commute.core.ui.theme.Slate400
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -21,6 +22,13 @@ class ColorExtTest {
     fun `falls back on malformed input`() {
         assertEquals(Color.Magenta, parseHexColor("#12345", fallback = Color.Magenta))
         assertEquals(Color.Magenta, parseHexColor("#GGGGGG", fallback = Color.Magenta))
+    }
+
+    @Test
+    fun `a line without a usable colour is slate`() {
+        assertEquals(Color(0xFF25B8EB), lineColorOf("#25B8EB"))
+        assertEquals(Slate400, lineColorOf(null))
+        assertEquals(Slate400, lineColorOf("#GGGGGG"))
     }
 
     // Same answers as utils/colors.ts getForegroundColor on the web.
