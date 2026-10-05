@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- No trip: it starts on the phone. -->
-    <string name="idle_title">Belum ada perjalanan</string>
-    <string name="idle_detail">Mulai perjalanan di HP, nanti muncul di sini</string>
+    <string name="idle_title">Belom OTW nih</string>
+    <string name="idle_detail">Mulai OTW dulu di HP, baru nanti muncul di sini</string>
     <string name="idle_open_phone">Buka di HP</string>
 
     <!-- The trip's headline, as the phone's Live Update words it. -->
