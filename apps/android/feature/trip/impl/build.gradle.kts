@@ -15,6 +15,8 @@ android {
 }
 
 dependencies {
+    // The trip log, shared as .ndjson.zst.
+    implementation(variantOf(libs.zstd.jni) { artifactType("aar") })
     implementation(project(":feature:trip:api"))
     // LineRepository: a ride's line name and colour, for the Live Update's segments and the screen.
     implementation(project(":feature:station:api"))

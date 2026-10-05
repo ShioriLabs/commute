@@ -116,6 +116,7 @@ class TripControllerImplTest {
         location = location,
         locationPreferences = locationPreferences,
         replanner = replanner,
+        log = { _, _ -> },
         clock = Clock.fixed(at, ZoneOffset.UTC),
         scope = backgroundScope,
     )
