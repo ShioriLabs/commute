@@ -62,7 +62,6 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import java.time.Instant
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -82,6 +81,7 @@ import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.components.CommuteButton
 import id.shiorilabs.commute.core.ui.components.CommuteButtonVariant
+import id.shiorilabs.commute.core.ui.components.SectionLabel
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.ext.lineColorOf
 import id.shiorilabs.commute.core.ui.theme.Slate100
@@ -226,13 +226,9 @@ private fun ActiveTripContent(
                 }
             }
             item(key = "all-stops") {
-                Text(
-                    text = stringResource(R.string.trip_live_all_stops).uppercase(),
+                SectionLabel(
+                    text = stringResource(R.string.trip_live_all_stops),
                     modifier = Modifier.padding(start = 32.dp, end = 32.dp, bottom = 12.dp),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.5.sp,
-                    color = Slate400,
                 )
             }
             val marks = trip.stopMarks()
