@@ -76,6 +76,12 @@ data class TripState(
     @Serializable(with = InstantSerializer::class)
     val walkingSince: Instant? = null,
     /**
+     * Where along the current ride the last fix fell while waiting to board, `null` before one has.
+     * A fix further on boards the rider only if they got there faster than anyone walks: beside the
+     * line isn't on it.
+     */
+    val sightedPosition: Double? = null,
+    /**
      * When the rider was seen at each stop, as epoch milliseconds keyed `leg:stop`: by a fix there
      * while riding (the last one while the train waits, so about when it left; the first at the
      * stop to get off at, when it got in), or by a tap of "Udah naik" or "Udah turun". A stop
@@ -93,8 +99,8 @@ sealed interface TripEvent {
 
     val at: Instant
 
-    /** A location reading. */
-    data class Fix(val point: GeoPoint, val accuracyM: Float, override val at: Instant) : TripEvent
+    /** A location reading; [speedMps] the satellites' own, when they gave one. */
+    data class Fix(val point: GeoPoint, val accuracyM: Float, override val at: Instant, val speedMps: Float? = null) : TripEvent
 
     /** Time passing, with nothing else to say. */
     data class Tick(override val at: Instant) : TripEvent

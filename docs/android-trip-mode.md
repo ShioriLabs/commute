@@ -11,7 +11,7 @@ arrive, the phone tells them what matters at the moment it matters, with the
 screen off:
 
 - where to stand before boarding (`best-car-position.md`);
-- **"Siap-siap, stasiun berikutnya kamu turun"** one stop before;
+- **"Siap-siap, stasiun berikutnya kamu turun"** as the train leaves the stop before;
 - **"Turun di sini"** on arrival, with the exit to take
   (`points-of-interest.md`);
 - at a transfer: where to walk, which platform, how long until the next train.
@@ -66,7 +66,7 @@ estimate much better underground; see Open questions.
 | Alert | Fires when | If only estimated |
 |---|---|---|
 | Boarding hint | trip start, and at each transfer | same |
-| "Siap-siap turun" | progress reaches the stop before the alighting stop | softer wording: "sekitar 2 menit lagi, cek papan stasiun ya" |
+| "Siap-siap turun" | progress leaves the stop before the alighting stop | softer wording: "sekitar 2 menit lagi, cek papan stasiun ya" |
 | "Turun di sini" | progress reaches the alighting stop | same softer wording |
 | Transfer | right after alighting | same |
 | "Kamu kelewatan?" | a fix lands past the alighting stop | only fires on a fix |
@@ -126,6 +126,8 @@ design only depends on "an ongoing notification with segmented progress".
 | Phone has no location permission | trip mode still runs on the clock alone, labelled estimated throughout |
 | TJ leg | no times; GPS-only. With a fix it works like rail; without one, it's `UNKNOWN` |
 | Battery saver kills location | treated as no fixes: clock-only |
+| Rider waits (or works) beside the line, part way along the first hop | not boarded: a fix boards only after moving along the ride faster than walking (2 m/s) and further than its own accuracy since the last one |
+| A change whose station sits beside the next line (LRT Dukuh Atas by the KCI out of Sudirman) | the walk ends only nearer the station it goes to, not on the first fix that falls along the next line |
 
 ## Build order
 
@@ -156,8 +158,17 @@ design only depends on "an ongoing notification with segmented progress".
   when every stop has coordinates, by stop count otherwise. Times that run
   backwards are treated as a data slip, and the ride falls back to that spread
   between its two ends.
-- **Lead time:** "siap-siap" one stop before; when that last hop is over five
-  minutes, about three minutes before instead. A rider who reaches the alighting
+- **Lead time:** "siap-siap" as the train leaves the stop before, not as it gets
+  there: a train held there (six minutes at Cakung in the first field test)
+  would otherwise warn far too early. By the clock alone it leaves at that
+  stop's time. When that last hop is over five minutes, about three minutes
+  before instead.
+- **"Sekarang di":** a fix inside a station's 150 m radius is at the station
+  only once the satellites' own speed shows the train under 6 m/s (about 20 km/h,
+  5–10 s from standing at KRL braking); faster, it
+  is still rolling in (just short of it) or already pulling out (just past).
+  The stop to get off at is reached on the way in, however fast, so "turun"
+  comes early. A fix without a speed is taken at its word. A rider who reaches the alighting
   stop without passing the one before (a sparse fix, a long sleep) gets "turun"
   only: a late "siap-siap" is skipped, not sent after the fact.
 - **No location permission → no foreground service**, and the same when the

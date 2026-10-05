@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.core.trip
 
+import id.shiorilabs.commute.core.geo.GeoPoint
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -12,7 +13,7 @@ class TripEngineTest {
     private fun alert(kind: AlertKind, leg: Int = 0, estimated: Boolean) = TripEffect.Alert(kind, leg, estimated)
 
     @Test
-    fun `a surface ride followed by fixes alerts once a stop before and once at it`() {
+    fun `a surface ride followed by fixes alerts once leaving the stop before and once at it`() {
         val run = Run(bogorLine)
 
         run.fix(Places.MANGGARAI, -1.0)
@@ -32,6 +33,9 @@ class TripEngineTest {
         assertTrue(run.alerts().isEmpty())
 
         run.fix(Places.PASAR_MINGGU_BARU, 15.0)
+        assertTrue(run.alerts().isEmpty())
+
+        run.fix(between(Places.PASAR_MINGGU_BARU, Places.PASAR_MINGGU, 0.2), 16.0)
         assertEquals(listOf(alert(AlertKind.PREPARE, estimated = false)), run.alerts())
 
         run.fix(Places.PASAR_MINGGU, 20.0)
@@ -100,11 +104,12 @@ class TripEngineTest {
         assertEquals(2.0, run.state.confirmedPosition, 0.0)
 
         run.fix(Places.PASAR_MINGGU_BARU, 15.0)
+        run.fix(between(Places.PASAR_MINGGU_BARU, Places.PASAR_MINGGU, 0.1), 15.1)
         run.fix(between(Places.DUREN_KALIBATA, Places.PASAR_MINGGU_BARU, 0.9), 15.2)
         run.fix(Places.PASAR_MINGGU_BARU, 15.4)
 
         assertEquals(listOf(alert(AlertKind.PREPARE, estimated = false)), run.alerts())
-        assertEquals(4.0, run.state.confirmedPosition, 0.0)
+        assertEquals(4.1, run.state.confirmedPosition, 0.01)
     }
 
     @Test
@@ -171,6 +176,71 @@ class TripEngineTest {
     }
 
     @Test
+    fun `a train still running fast by a station on the way isn't at it until it is about to stop`() {
+        val run = Run(bogorLine)
+        run.tick(0.0)
+
+        // In Tebet's radius at 50 km/h, then just past its point still braking from 30: rolling in.
+        run.fix(Places.TEBET, 4.0, speedMps = 14f)
+        assertTrue(run.state.position < 1.0)
+        run.fix(between(Places.TEBET, Places.CAWANG, 0.03), 4.1, speedMps = 8.5f)
+        assertTrue(run.state.position < 1.0)
+        assertNull(run.state.seenAt(0, 1))
+
+        // Down to about 20 km/h, five to ten seconds from standing: in, as the board should say.
+        run.fix(between(Places.TEBET, Places.CAWANG, 0.03), 4.2, speedMps = 5.5f)
+        assertEquals(1.0, run.state.position, 0.0)
+        assertEquals(at(4.2), run.state.seenAt(0, 1))
+    }
+
+    @Test
+    fun `a train pulling out of a station on the way has left it`() {
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(Places.TEBET, 4.0, speedMps = 0f)
+
+        run.fix(between(Places.TEBET, Places.CAWANG, 0.05), 5.0, speedMps = 8f)
+        assertTrue(run.state.position > 1.0)
+    }
+
+    @Test
+    fun `the stop to get off at is reached on the way in, however fast`() {
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(between(Places.PASAR_MINGGU_BARU, Places.PASAR_MINGGU, 0.5), 14.0, speedMps = 18f)
+
+        run.fix(Places.PASAR_MINGGU, 15.0, speedMps = 13f)
+        assertEquals(alert(AlertKind.ALIGHT, estimated = false), run.alerts().last())
+        assertEquals(TripPhase.ARRIVED, run.state.phase)
+    }
+
+    @Test
+    fun `siap-siap waits for the train to leave the stop before, not to reach it`() {
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(Places.DUREN_KALIBATA, 11.0)
+
+        // In at Pasar Minggu Baru, and held there.
+        run.fix(Places.PASAR_MINGGU_BARU, 13.0, speedMps = 0f)
+        run.fix(Places.PASAR_MINGGU_BARU, 15.0, speedMps = 0f)
+        assertTrue(run.alerts().none { it.kind == AlertKind.PREPARE })
+
+        run.fix(between(Places.PASAR_MINGGU_BARU, Places.PASAR_MINGGU, 0.15), 15.5, speedMps = 10f)
+        assertEquals(listOf(alert(AlertKind.PREPARE, estimated = false)), run.alerts())
+    }
+
+    @Test
+    fun `a one-stop ride says siap-siap as the train leaves, not at boarding`() {
+        val plan = TripPlan(listOf(ride(Places.MANGGARAI, Places.TEBET, line = "KCI:B", departs = 0, arrives = 3)))
+        val run = Run(plan)
+        run.send(TripEvent.RiderSaid(RiderAction.BOARDED, at(-0.5)))
+        assertTrue(run.alerts().none { it.kind == AlertKind.PREPARE })
+
+        run.fix(between(Places.MANGGARAI, Places.TEBET, 0.1), 0.5, speedMps = 9f)
+        assertEquals(listOf(alert(AlertKind.PREPARE, estimated = false)), run.alerts())
+    }
+
+    @Test
     fun `a fix between stations places the rider part way along the hop`() {
         val run = Run(bogorLine)
         run.tick(0.0)
@@ -223,6 +293,7 @@ class TripEngineTest {
         assertEquals(0.6, run.state.position, 0.05)
 
         run.fix(Places.HALTE_3, 7.0)
+        run.fix(between(Places.HALTE_3, Places.HALTE_4, 0.3), 8.0)
         assertEquals(listOf(alert(AlertKind.PREPARE, estimated = false)), run.alerts())
         run.fix(Places.HALTE_4, 9.0)
         assertEquals(TripPhase.ARRIVED, run.state.phase)
@@ -275,6 +346,57 @@ class TripEngineTest {
         run.fix(Places.SUDIRMAN, 5.0)
         assertNull(run.state.walkingSince)
         assertEquals(TripPhase.WAITING_TO_BOARD, run.state.phase)
+    }
+
+    @Test
+    fun `beside the next line by the station they got off at is still walking`() {
+        val run = Run(withChange)
+        run.tick(0.0)
+        run.fix(Places.DUKUH_ATAS, 2.0)
+
+        // North-east of Dukuh Atas, nearer it than Sudirman, yet just along the line out of Sudirman.
+        run.fix(GeoPoint(-6.1995, 106.8250), 2.5)
+        assertEquals(at(2.0), run.state.walkingSince)
+        assertEquals(0.0, run.state.confirmedPosition, 0.0)
+    }
+
+    @Test
+    fun `seen moving along the next ride after the walk, the rider is on it`() {
+        val run = Run(withChange)
+        run.tick(0.0)
+        run.fix(Places.DUKUH_ATAS, 2.0)
+
+        run.fix(between(Places.SUDIRMAN, Places.MANGGARAI, 0.4), 11.0)
+        run.fix(between(Places.SUDIRMAN, Places.MANGGARAI, 0.6), 11.5)
+        assertNull(run.state.walkingSince)
+        assertEquals(TripPhase.RIDING, run.state.phase)
+    }
+
+    @Test
+    fun `standing beside the line part way along the first hop isn't boarding`() {
+        val run = Run(bogorLine)
+        val office = between(Places.MANGGARAI, Places.TEBET, 0.4)
+
+        run.fix(office, -1.0)
+        run.fix(office, -0.5)
+        // A rough fix a little further along, a moment later: the fix wandered, not the rider.
+        run.fix(between(Places.MANGGARAI, Places.TEBET, 0.45), -0.45, accuracyM = 200f)
+        run.fix(office, 0.5)
+
+        assertEquals(TripPhase.WAITING_TO_BOARD, run.state.phase)
+        assertEquals(0.0, run.state.confirmedPosition, 0.0)
+    }
+
+    @Test
+    fun `a rider first seen part way along, moving at train speed, is aboard`() {
+        val run = Run(bogorLine)
+
+        run.fix(between(Places.MANGGARAI, Places.TEBET, 0.4), -1.0)
+        assertEquals(TripPhase.WAITING_TO_BOARD, run.state.phase)
+
+        run.fix(between(Places.MANGGARAI, Places.TEBET, 0.6), -0.5)
+        assertEquals(TripPhase.RIDING, run.state.phase)
+        assertEquals(0.6, run.state.confirmedPosition, 0.01)
     }
 
     @Test

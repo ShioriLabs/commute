@@ -37,14 +37,27 @@ object TripEngine {
     private const val BUS_OFF_ROUTE_M = 500.0
     private const val BUS_MISSED_M = 300.0
 
+    /**
+     * Slower than this by a station, by the satellites' own speed, the train is stopping there; faster,
+     * it is still rolling in or already pulling out. About 20 km/h: braking at a KRL's 0.8–1 m/s², five
+     * to ten seconds from standing, so "Sekarang di" lands just before the train does.
+     */
+    private const val STOPPING_M_PER_S = 6.0
+
+    /** How far short of a station a train still rolling in through its radius is put. */
+    private const val ROLLING_IN = 0.01
+
     /** How many stops ahead a fix may place the rider: far enough for a long gap, not a loop's far side. */
     private const val LOOKAHEAD_STOPS = 6
 
     /** A fix this far behind the confirmed point is jitter, and still counts as "on the route here". */
     private const val JITTER = 0.25
 
-    /** Past this along the first hop, the rider is on the vehicle. */
+    /** Past this along the first hop, and seen getting there at [RIDING_M_PER_S], the rider is on the vehicle. */
     private const val BOARDED_AT = 0.3
+
+    /** Faster than anyone walks (about 7 km/h); slower than a train pulling out or a bus in traffic. */
+    private const val RIDING_M_PER_S = 2.0
 
     /** Consecutive far-off fixes before asking whether the rider is still on this route. */
     private const val OFF_ROUTE_STRIKES = 3
@@ -55,7 +68,7 @@ object TripEngine {
     /** After the clock says the vehicle arrived, how long before the trip moves on without a fix. */
     val ALIGHT_GRACE: Duration = Duration.ofMinutes(2)
 
-    /** A final hop longer than this gets its "siap-siap" by time instead of one stop before. */
+    /** A final hop longer than this gets its "siap-siap" by time instead of on leaving the stop before. */
     val LONG_HOP: Duration = Duration.ofMinutes(5)
     val PREPARE_LEAD: Duration = Duration.ofMinutes(3)
 
@@ -132,12 +145,24 @@ object TripEngine {
         val tuning = Tuning.of(ride)
         if (fix.accuracyM > tuning.accuracyGate) return state.copy(hasLocation = true)
 
-        val candidate = locate(ride, state.confirmedPosition, fix.point, tuning)
+        val candidate = locate(ride, state.confirmedPosition, fix, tuning)
         if (candidate != null && candidate >= state.confirmedPosition - JITTER) {
+            // Seen near the line but not aboard: the fix says where they are, not how far they've
+            // come. A walk ends only nearer the station it goes to, as a change can run beside the
+            // next line out of the station it left.
+            if (state.phase == TripPhase.WAITING_TO_BOARD && !boards(ride, state, candidate, fix)) {
+                val walked = state.walkingSince != null && reachedAfterWalk(plan, state.legIndex, fix.point)
+                return state.copy(
+                    sightedPosition = candidate,
+                    confirmedAt = fix.at,
+                    offRouteStrikes = 0,
+                    hasLocation = true,
+                    resumed = false,
+                    walkingSince = if (walked) null else state.walkingSince,
+                )
+            }
             val confirmed = max(candidate, state.confirmedPosition)
-            var phase = state.phase
-            if (phase == TripPhase.WAITING_TO_BOARD && confirmed >= BOARDED_AT) phase = TripPhase.RIDING
-            val offset = if (phase == TripPhase.RIDING && candidate > 0 && candidate >= state.confirmedPosition) {
+            val offset = if (candidate > 0 && candidate >= state.confirmedPosition) {
                 RideClock(ride).scheduledAt(candidate)
                     ?.let { Duration.between(it, fix.at).seconds.coerceIn(MAX_EARLY_S, MAX_LATE_S) }
                     ?: state.clockOffsetS
@@ -146,24 +171,24 @@ object TripEngine {
             }
             // At a stop, riding: when the train was there. The last fix while it waits, so about
             // when it left; at the stop to get off at, the first, when it got in.
-            val stop = candidate.toInt().takeIf { phase == TripPhase.RIDING && candidate == floor(candidate) }
+            val stop = candidate.toInt().takeIf { candidate == floor(candidate) }
             val key = stop?.let { stopKey(state.legIndex, it) }
             val stopTimes = if (key == null || (stop == ride.lastIndex && key in state.stopTimes)) {
                 state.stopTimes
             } else {
                 state.stopTimes + (key to fix.at.toEpochMilli())
             }
-            // Past the next station's first hop, or nearer it than where the walk started: there.
-            val walked = state.walkingSince != null && (candidate > 0 || reachedAfterWalk(plan, state.legIndex, fix.point))
+            // On the ride: whatever walk came before it is over.
             return state.copy(
-                phase = phase,
+                phase = TripPhase.RIDING,
                 confirmedPosition = confirmed,
                 confirmedAt = fix.at,
                 clockOffsetS = offset,
                 offRouteStrikes = 0,
                 hasLocation = true,
                 resumed = false,
-                walkingSince = if (walked) null else state.walkingSince,
+                walkingSince = null,
+                sightedPosition = null,
                 stopTimes = stopTimes,
             )
         }
@@ -187,11 +212,16 @@ object TripEngine {
     }
 
     /**
-     * Where along [ride] a fix at [point] puts the rider, looking only ahead of [from]: at a stop
-     * when the train is in (within [Tuning.atStop]), else projected onto the nearest hop it runs
-     * alongside, so one still rolling in is a little short of the stop rather than at it.
+     * Where along [ride] [fix] puts the rider, looking only ahead of [from]: at a stop when the train
+     * is in (within [Tuning.atStop]), else projected onto the nearest hop it runs alongside, so one
+     * still rolling in is a little short of the stop rather than at it.
+     *
+     * A station on the way is only "in" once the train has slowed there: at speed it is still rolling
+     * in, short of it, or pulling out, past it. The stop to get off at is in as soon as it's reached,
+     * when "turun" is most use; and a fix without a speed is taken at its word.
      */
-    private fun locate(ride: TripLeg.Ride, from: Double, point: GeoPoint, tuning: Tuning): Double? {
+    private fun locate(ride: TripLeg.Ride, from: Double, fix: TripEvent.Fix, tuning: Tuning): Double? {
+        val point = fix.point
         val start = floor(from).toInt().coerceIn(0, ride.lastIndex)
         val end = min(ride.lastIndex, start + LOOKAHEAD_STOPS)
 
@@ -205,8 +235,19 @@ object TripEngine {
                 bestStopDistance = d
             }
         }
-        if (bestStop != null) return bestStop.toDouble()
+        if (bestStop != null) {
+            val moving = fix.speedMps != null && fix.speedMps >= STOPPING_M_PER_S
+            if (!moving || bestStop == ride.lastIndex) return bestStop.toDouble()
+            val along = alongHops(ride, start, end, point, tuning)
+            if (bestStop <= from) return along
+            val short = bestStop - ROLLING_IN
+            return if (along == null) short else min(along, short)
+        }
+        return alongHops(ride, start, end, point, tuning)
+    }
 
+    /** [point] projected onto the nearest hop from stop [start] to stop [end] it runs alongside. */
+    private fun alongHops(ride: TripLeg.Ride, start: Int, end: Int, point: GeoPoint, tuning: Tuning): Double? {
         var bestHop: Double? = null
         var bestOffTrack = Double.MAX_VALUE
         for (k in start until end) {
@@ -223,6 +264,33 @@ object TripEngine {
             }
         }
         return bestHop
+    }
+
+    /**
+     * Whether a rider waiting for [ride], last seen at [TripState.sightedPosition], is aboard now
+     * [candidate] puts them past [BOARDED_AT]: they came further than the fix could wander, and
+     * faster than walking.
+     */
+    private fun boards(ride: TripLeg.Ride, state: TripState, candidate: Double, fix: TripEvent.Fix): Boolean {
+        if (candidate < BOARDED_AT) return false
+        val from = state.sightedPosition ?: return false
+        val since = state.confirmedAt ?: return false
+        val seconds = Duration.between(since, fix.at).toMillis() / 1000.0
+        val moved = metresAlong(ride, from, candidate)
+        return seconds > 0 && moved > fix.accuracyM && moved / seconds >= RIDING_M_PER_S
+    }
+
+    /** How far [ride] runs from position [from] on to [to]; hops without both stops' coordinates count nothing. */
+    private fun metresAlong(ride: TripLeg.Ride, from: Double, to: Double): Double {
+        var metres = 0.0
+        var k = floor(from).toInt().coerceAtLeast(0)
+        while (k < ride.lastIndex && k < to) {
+            val a = ride.stops[k].point
+            val b = ride.stops[k + 1].point
+            if (a != null && b != null) metres += (min(to, k + 1.0) - max(from, k.toDouble())) * distanceM(a, b)
+            k++
+        }
+        return metres
     }
 
     /** Whether [point] is nearer the station the walk before ride [legIndex] goes to than the one it left. */
@@ -331,8 +399,9 @@ object TripEngine {
     }
 
     /**
-     * "Siap-siap": one stop before the alighting stop, or, when that last hop is long, about three
-     * minutes before reaching it.
+     * "Siap-siap": as the train leaves the stop before the one to get off at, or, when that last hop
+     * is long, about three minutes before reaching it. A train held at the stop before (seen there
+     * by a fix) hasn't left; by the clock alone, it leaves as it gets there.
      */
     private fun prepareIfDue(
         ride: TripLeg.Ride,
@@ -342,16 +411,18 @@ object TripEngine {
         effects: MutableList<TripEffect>,
     ): TripState {
         if (prepareKey(state.legIndex) in state.firedAlerts) return state
-        if (state.position < ride.lastIndex - 1) return state
-        val hopStart = clock.scheduledAt((ride.lastIndex - 1).toDouble())
+        val before = (ride.lastIndex - 1).toDouble()
+        val hopStart = clock.scheduledAt(before)
+        val left = state.position > before || (
+            state.position == before && state.source != PositionSource.CONFIRMED &&
+                hopStart != null && !now.isBefore(hopStart.plusSeconds(state.clockOffsetS))
+            )
+        if (!left) return state
         val hopEnd = clock.scheduledAt(ride.lastIndex.toDouble())
-        val due = if (hopStart != null && hopEnd != null && Duration.between(hopStart, hopEnd) > LONG_HOP) {
+        if (hopStart != null && hopEnd != null && Duration.between(hopStart, hopEnd) > LONG_HOP) {
             val atPosition = clock.scheduledAt(state.position)!!
-            Duration.between(atPosition, hopEnd) <= PREPARE_LEAD
-        } else {
-            true
+            if (Duration.between(atPosition, hopEnd) > PREPARE_LEAD) return state
         }
-        if (!due) return state
         return fire(state, AlertKind.PREPARE, estimated = state.source != PositionSource.CONFIRMED, effects) ?: state
     }
 
@@ -391,6 +462,7 @@ object TripEngine {
             // Off when seen; by the clock, when the ride should have got in, not when that was noticed.
             walkingSince = (if (estimated) ride.arrivalAt?.plusSeconds(state.clockOffsetS) ?: now else now)
                 .takeIf { plan.transferBefore(following) != null },
+            sightedPosition = null,
         )
     }
 

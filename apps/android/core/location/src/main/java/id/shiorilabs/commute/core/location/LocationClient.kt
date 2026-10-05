@@ -11,6 +11,8 @@ data class Fix(
     /** Radius of 68% confidence, in metres. */
     val accuracyM: Float,
     val at: Instant,
+    /** Ground speed in metres a second, as the satellites measured it; `null` when they didn't. */
+    val speedMps: Float? = null,
 )
 
 /** How hard to look: more often and more precisely costs battery. */
