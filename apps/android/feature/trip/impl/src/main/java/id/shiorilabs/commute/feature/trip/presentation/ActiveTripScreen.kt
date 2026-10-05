@@ -13,6 +13,12 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -94,6 +100,7 @@ fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel
         onStop = viewModel::stop,
         onSay = viewModel::say,
         onDetails = { trip -> navigator.goTo(trip.origin) },
+        onNameHidden = viewModel::onBoardNameHidden,
     )
 }
 
@@ -113,6 +120,7 @@ private fun ActiveTripContent(
     onStop: () -> Unit,
     onSay: (RiderAction) -> Unit,
     onDetails: (ActiveTrip) -> Unit,
+    onNameHidden: (Boolean) -> Unit,
 ) {
     val trip = state.trip
     val context = LocalContext.current
@@ -125,26 +133,34 @@ private fun ActiveTripContent(
         }
     }
 
+    // The app's trip bar, over the page, folds the big name into itself once the name has
+    // scrolled up under it: past the list's top edge, where the bar ends.
+    var listTop by remember { mutableFloatStateOf(0f) }
+    var nameBottom by remember { mutableFloatStateOf(Float.POSITIVE_INFINITY) }
+    val nameHidden by remember { derivedStateOf { nameBottom <= listTop } }
+    LaunchedEffect(nameHidden) { onNameHidden(nameHidden) }
+    DisposableEffect(Unit) { onDispose { onNameHidden(false) } }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(PageBackground),
+            .background(PageBackground)
+            .onGloballyPositioned { listTop = it.positionInRoot().y },
         contentPadding = PaddingValues(bottom = innerPadding.calculateBottomPadding() + 32.dp),
     ) {
         if (trip == null) {
             item(key = "finished") { Finished(innerPadding, onClose) }
             return@LazyColumn
         }
+        val pids = trip.pids(now)
         item(key = "board") {
-            val pids = trip.pids(now)
             PidsBoard(
                 pids = pids,
                 lines = state.lines,
                 stationLines = state.stationLines[pids.stationId].orEmpty(),
                 copy = copy,
                 source = copy.source(trip),
-                topInset = innerPadding.calculateTopPadding(),
-                onClose = onClose,
+                onNameMoved = { nameBottom = it },
             )
         }
         item(key = "actions") {
@@ -194,7 +210,7 @@ private fun ActiveTripContent(
 }
 
 /** Often enough that "2" turns into "1" about when it should. */
-private const val CLOCK_TICK_MILLIS = 15_000L
+internal const val CLOCK_TICK_MILLIS = 15_000L
 
 /**
  * What the rider can tell the trip: the next step ("Udah naik", "Udah turun") as the one filled

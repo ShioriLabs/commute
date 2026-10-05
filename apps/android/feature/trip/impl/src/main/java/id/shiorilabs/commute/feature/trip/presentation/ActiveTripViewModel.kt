@@ -36,6 +36,7 @@ class ActiveTripViewModel @Inject constructor(
     private val controller: TripControllerImpl,
     private val lineRepository: LineRepository,
     private val directory: StationDirectory,
+    private val barState: TripBarState,
     locationPreferences: LocationPreferencesRepository,
 ) : ViewModel() {
 
@@ -68,6 +69,11 @@ class ActiveTripViewModel @Inject constructor(
     fun say(action: RiderAction) = controller.riderSaid(action)
 
     fun stop() = controller.stop()
+
+    /** The board's big name went out of sight under the trip bar, or came back. */
+    fun onBoardNameHidden(hidden: Boolean) {
+        barState.boardNameHidden = hidden
+    }
 }
 
 private fun List<Station>.toLineIndex(): Map<String, List<String>> = associate { it.id to it.lineKeys }
