@@ -17,8 +17,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -39,6 +37,7 @@ import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.type.toFailure
+import id.shiorilabs.commute.core.ui.components.CommuteCard
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.ProblemPanel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
@@ -162,16 +161,11 @@ private fun RouteBoard(
     val lead = rows.firstOrNull() ?: answer.journeys.firstOrNull { it.resumesAt != null }
     val lineColor = lineColorOf(lead?.rides?.firstOrNull()?.let { lines[it.line] }?.colorCode)
     val divider = lineColor.tint(0.3f)
-    val shape = MaterialTheme.shapes.medium
     val description = stringResource(R.string.journey_saved_route_rows_description, answer.from.name, answer.to.name)
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .shadow(8.dp, shape)
-            .clip(shape)
-            .background(lineColor.tint(0.065f))
-            .semantics { contentDescription = description },
+    CommuteCard(
+        color = lineColor.tint(0.065f),
+        modifier = modifier.semantics { contentDescription = description },
     ) {
         Box(
             Modifier
