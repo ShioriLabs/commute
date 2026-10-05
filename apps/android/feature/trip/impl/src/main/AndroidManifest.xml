@@ -8,6 +8,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <!-- The trip notification as a Live Update on the lock screen and in the status bar. -->
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+    <!-- "Ingatkan Aku" and "Bangunkan Aku": getting off buzzed as an alarm, through silent mode. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Held at most ten minutes, from "siap-siap" to "turun", so the alert can't be late. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
@@ -22,16 +24,16 @@
             android:name=".runtime.TripReceiver"
             android:exported="false" />
 
-        <!-- The watch's buttons on the trip it mirrors. -->
+        <!-- The watch's buttons on the trip it mirrors, and "Udah bangun" on its alarm. -->
         <service
             android:name=".wear.WearActionService"
             android:exported="true">
             <intent-filter>
                 <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
-                <data
-                    android:host="*"
-                    android:path="/trip/action"
-                    android:scheme="wear" />
+                <data android:scheme="wear" />
+                <data android:host="*" />
+                <data android:path="/trip/action" />
+                <data android:path="/trip/wake/ack" />
             </intent-filter>
         </service>
 

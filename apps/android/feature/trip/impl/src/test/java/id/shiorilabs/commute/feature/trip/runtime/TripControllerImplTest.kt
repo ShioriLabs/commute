@@ -15,6 +15,7 @@ import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripPhase
 import id.shiorilabs.commute.core.trip.TripPlan
 import id.shiorilabs.commute.feature.trip.ActiveTrip
+import id.shiorilabs.commute.feature.trip.TripReminder
 import id.shiorilabs.commute.feature.trip.CAWANG
 import id.shiorilabs.commute.feature.trip.MANGGARAI
 import id.shiorilabs.commute.feature.trip.SUDIRMAN
@@ -65,6 +66,8 @@ class TripControllerImplTest {
         var asked = 0
         var wakeAt: Instant? = null
         val rerouted = mutableListOf<Instant>()
+        val reminded = mutableListOf<Pair<Int, TripReminder>>()
+        var wakingStopped = 0
 
         override fun showProgress(trip: ActiveTrip) {
             progressShown++
@@ -80,6 +83,12 @@ class TripControllerImplTest {
         }
         override fun finish() {
             finished++
+        }
+        override fun remindRider(trip: ActiveTrip, legIndex: Int) {
+            reminded += legIndex to trip.reminder
+        }
+        override fun stopWakingRider() {
+            wakingStopped++
         }
         override fun wakeAt(at: Instant) {
             wakeAt = at
@@ -214,6 +223,48 @@ class TripControllerImplTest {
         assertFalse(runtime.alerts.last().estimated)
         assertEquals(2, controller.active.value!!.state.legIndex)
         assertEquals(PositionSource.CONFIRMED, controller.active.value!!.state.source)
+    }
+
+    @Test
+    fun `with a reminder set, getting off brings it too`() = runTest {
+        val controller = controller()
+        controller.start(plan, origin)
+        runCurrent()
+        controller.setReminder(TripReminder.WAKE)
+        runCurrent()
+
+        controller.onFix(Fix(GeoPoint(DUKUH_ATAS.latitude!!, DUKUH_ATAS.longitude!!), 15f, NOW.plusSeconds(120)))
+
+        assertEquals(listOf(0 to TripReminder.WAKE), runtime.reminded)
+        assertEquals(TripReminder.WAKE, store.trip!!.reminder)
+    }
+
+    @Test
+    fun `without it, getting off is only the notification`() = runTest {
+        val controller = controller()
+        controller.start(plan, origin)
+        runCurrent()
+
+        controller.onFix(Fix(GeoPoint(DUKUH_ATAS.latitude!!, DUKUH_ATAS.longitude!!), 15f, NOW.plusSeconds(120)))
+
+        assertEquals(AlertKind.ALIGHT, runtime.alerts.last().kind)
+        assertTrue(runtime.reminded.isEmpty())
+    }
+
+    @Test
+    fun `getting off, or changing the reminder, stops the alarm`() = runTest {
+        val controller = controller()
+        controller.start(plan, origin)
+        runCurrent()
+        controller.setReminder(TripReminder.WAKE)
+        runCurrent()
+
+        controller.say(RiderAction.ALIGHTED)
+        assertEquals(1, runtime.wakingStopped)
+
+        controller.setReminder(TripReminder.PING)
+        runCurrent()
+        assertEquals(2, runtime.wakingStopped)
     }
 
     /** Off the MRT at Dukuh Atas late, at 08.09, with 300 m to walk for the 08.10 from Sudirman. */

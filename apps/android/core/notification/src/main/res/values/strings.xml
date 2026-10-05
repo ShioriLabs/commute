@@ -4,4 +4,6 @@
     <string name="notification_channel_trip_progress_description">Progres perjalanan kamu di layar kunci, sampai tujuan.</string>
     <string name="notification_channel_trip_alerts">Pengingat turun</string>
     <string name="notification_channel_trip_alerts_description">Getar pas stasiun kamu udah dekat dan pas udah sampai.</string>
+    <string name="notification_channel_trip_wake">Bangunkan Aku</string>
+    <string name="notification_channel_trip_wake_description">Alarm sebelum turun, buat yang ketiduran di jalan. Getar terus sampai kamu bilang udah bangun.</string>
 </resources>

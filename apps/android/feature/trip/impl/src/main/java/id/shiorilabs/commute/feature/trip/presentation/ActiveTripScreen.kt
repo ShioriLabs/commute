@@ -85,6 +85,7 @@ import id.shiorilabs.commute.core.ui.ext.parseHexColor
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.trip.ActiveTrip
+import id.shiorilabs.commute.feature.trip.TripReminder
 import id.shiorilabs.commute.feature.trip.R
 import kotlin.math.roundToInt
 
@@ -105,6 +106,7 @@ fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel
         onClose = navigator::pop,
         onStop = viewModel::stop,
         onSay = viewModel::say,
+        onReminder = viewModel::setReminder,
         onDetails = { trip -> navigator.goTo(trip.origin) },
         onNameHidden = viewModel::onBoardNameHidden,
         onOpenStation = { stop -> navigator.goTo(Route.Station(stop.id, title = stop.name)) },
@@ -133,6 +135,7 @@ private fun ActiveTripContent(
     onClose: () -> Unit,
     onStop: () -> Unit,
     onSay: (RiderAction) -> Unit,
+    onReminder: (TripReminder) -> Unit,
     onDetails: (ActiveTrip) -> Unit,
     onNameHidden: (Boolean) -> Unit,
     onOpenStation: (TripStop) -> Unit,
@@ -202,7 +205,16 @@ private fun ActiveTripContent(
                 )
             }
             item(key = "actions") {
-                Actions(trip, onStop, onSay, modifier = Modifier.padding(start = 32.dp, top = 24.dp, end = 32.dp, bottom = 24.dp))
+                Actions(trip, onStop, onSay, modifier = Modifier.padding(start = 32.dp, top = 24.dp, end = 32.dp, bottom = 16.dp))
+            }
+            if (trip.state.phase != TripPhase.ARRIVED) {
+                item(key = "reminder") {
+                    ReminderButton(
+                        reminder = trip.reminder,
+                        onChange = onReminder,
+                        modifier = Modifier.padding(start = 32.dp, end = 32.dp, bottom = 24.dp),
+                    )
+                }
             }
             if (!trip.state.hasLocation) {
                 item(key = "no-location") {
@@ -259,8 +271,9 @@ private fun ActiveTripContent(
 internal const val CLOCK_TICK_MILLIS = 15_000L
 
 /**
- * What the rider can tell the trip: the next step ("Udah naik", "Udah turun") as the one filled
- * button when there is one, and stopping as a quieter outlined one beside it.
+ * What the rider can tell the trip: the next step ("Udah naik", "Udah turun") as the pink button
+ * when there is one, and stopping as the slate one beside it, as the station page sets its
+ * timetable beside "OTW Ke Sini".
  */
 @Composable
 private fun Actions(trip: ActiveTrip, onStop: () -> Unit, onSay: (RiderAction) -> Unit, modifier: Modifier = Modifier) {
@@ -289,12 +302,13 @@ private fun Actions(trip: ActiveTrip, onStop: () -> Unit, onSay: (RiderAction) -
                 Text(text = stringResource(text), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = content)
             }
         }
+        val secondary = MaterialTheme.colorScheme.primary
         ActionButton(
-            modifier = (if (next == null) Modifier.weight(1f) else Modifier).border(1.5.dp, Slate200, ActionShape),
+            modifier = (if (next == null) Modifier.weight(1f) else Modifier).background(Slate200),
             onClick = onStop,
         ) {
-            Icon(imageVector = CommuteIcons.Close, contentDescription = null, modifier = Modifier.size(20.dp), tint = Slate500)
-            Text(text = stringResource(R.string.trip_action_stop), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = Slate500)
+            Icon(imageVector = CommuteIcons.Close, contentDescription = null, modifier = Modifier.size(20.dp), tint = secondary)
+            Text(text = stringResource(R.string.trip_action_stop), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = secondary)
         }
     }
 }

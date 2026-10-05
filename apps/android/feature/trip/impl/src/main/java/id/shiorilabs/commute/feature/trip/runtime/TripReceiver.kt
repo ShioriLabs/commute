@@ -22,6 +22,9 @@ class TripReceiver : BroadcastReceiver() {
     lateinit var controller: TripControllerImpl
 
     @Inject
+    lateinit var waker: TripWaker
+
+    @Inject
     @ApplicationScope
     lateinit var scope: CoroutineScope
 
@@ -35,6 +38,7 @@ class TripReceiver : BroadcastReceiver() {
                     ACTION_ALIGHTED -> controller.say(RiderAction.ALIGHTED)
                     ACTION_BOARDED -> controller.say(RiderAction.BOARDED)
                     ACTION_STILL_ON_ROUTE -> controller.say(RiderAction.STILL_ON_ROUTE)
+                    ACTION_AWAKE -> waker.stop()
                 }
             } finally {
                 pending.finish()
@@ -49,6 +53,7 @@ class TripReceiver : BroadcastReceiver() {
         const val ACTION_ALIGHTED = "id.shiorilabs.commute.trip.ALIGHTED"
         const val ACTION_BOARDED = "id.shiorilabs.commute.trip.BOARDED"
         const val ACTION_STILL_ON_ROUTE = "id.shiorilabs.commute.trip.STILL_ON_ROUTE"
+        const val ACTION_AWAKE = "id.shiorilabs.commute.trip.AWAKE"
 
         fun pendingIntent(context: Context, action: String): PendingIntent = PendingIntent.getBroadcast(
             context,

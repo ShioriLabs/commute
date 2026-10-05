@@ -3,16 +3,26 @@ package id.shiorilabs.commute.wear
 import android.content.Context
 import androidx.core.content.edit
 import com.google.android.gms.wearable.DataEventBuffer
+import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.WearableListenerService
+import id.shiorilabs.commute.core.wearable.WearPaths
 import id.shiorilabs.commute.core.wearable.WearTrip
 import java.time.Duration
 import java.time.Instant
 
 /**
- * Keeps the trip's Ongoing Activity in step with the phone, whether or not the app is open, and
- * buzzes once as a new trip comes in.
+ * Keeps the trip's Ongoing Activity in step with the phone, whether or not the app is open, buzzes
+ * once as a new trip comes in, and buzzes or rings the trip's reminder when the phone says to.
  */
 class TripListenerService : WearableListenerService() {
+
+    override fun onMessageReceived(event: MessageEvent) {
+        when (event.path) {
+            WearPaths.PING -> WatchAlarm.ping(this)
+            WearPaths.WAKE -> WatchAlarm.ring(this, event.data.decodeToString())
+            WearPaths.WAKE_STOP -> WatchAlarm.silence(this)
+        }
+    }
 
     override fun onDataChanged(events: DataEventBuffer) {
         val change = events.latestTrip() ?: return

@@ -11,6 +11,18 @@ object WearPaths {
     /** A tap on the watch, a message whose payload is a [RiderAction]'s name. */
     const val ACTION = "/trip/action"
 
+    /** Phone to watch: "Ingatkan Aku", one hard buzz. */
+    const val PING = "/trip/ping"
+
+    /** Phone to watch: wake the rider, a message whose payload is the stop to get off at. */
+    const val WAKE = "/trip/wake"
+
+    /** Phone to watch: the rider is up (said so on the phone, or got off): the alarm stops. */
+    const val WAKE_STOP = "/trip/wake/stop"
+
+    /** Watch to phone: "Udah bangun" on the watch, so the phone needn't join in. */
+    const val WAKE_ACK = "/trip/wake/ack"
+
     /** Declared by the phone app, so the watch can tell it is installed and where to send taps. */
     const val PHONE_CAPABILITY = "commute_phone"
 
