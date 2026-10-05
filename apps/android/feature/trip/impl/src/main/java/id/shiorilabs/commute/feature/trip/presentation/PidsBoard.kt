@@ -109,7 +109,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import id.shiorilabs.commute.core.trip.TripLeg
-import id.shiorilabs.commute.core.ui.components.CommuteIconButton
+import id.shiorilabs.commute.core.ui.components.CommuteCloseButton
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
@@ -386,14 +386,12 @@ internal fun PidsBar(
                 )
             }
             if (onTripPage) {
-                CommuteIconButton(onClick = onClose, modifier = Modifier.size(40.dp)) {
-                    Icon(
-                        imageVector = CommuteIcons.Close,
-                        contentDescription = stringResource(R.string.trip_live_close),
-                        modifier = Modifier.size(24.dp),
-                        tint = Color.White,
-                    )
-                }
+                CommuteCloseButton(
+                    onClick = onClose,
+                    contentDescription = stringResource(R.string.trip_live_close),
+                    size = 40.dp,
+                    tint = Color.White,
+                )
             } else {
                 // The close button's room, so the minutes stay put going in and out of the trip.
                 Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {

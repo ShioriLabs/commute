@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,7 +46,7 @@ import id.shiorilabs.commute.core.trip.FinishReason
 import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripStop
 import id.shiorilabs.commute.core.trip.progress
-import id.shiorilabs.commute.core.ui.components.CommuteIconButton
+import id.shiorilabs.commute.core.ui.components.CommuteCloseButton
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.ext.lineColorOf
 import id.shiorilabs.commute.core.ui.components.CommuteButton
@@ -155,14 +154,12 @@ private fun Plate(
             .padding(top = 4.dp, bottom = 24.dp),
     ) {
         Box(modifier = Modifier.fillMaxWidth().padding(end = 8.dp), contentAlignment = Alignment.CenterEnd) {
-            CommuteIconButton(onClick = onClose, modifier = Modifier.size(40.dp)) {
-                Icon(
-                    imageVector = CommuteIcons.Close,
-                    contentDescription = stringResource(R.string.trip_live_close),
-                    modifier = Modifier.size(24.dp),
-                    tint = Color.White,
-                )
-            }
+            CommuteCloseButton(
+                onClick = onClose,
+                contentDescription = stringResource(R.string.trip_live_close),
+                size = 40.dp,
+                tint = Color.White,
+            )
         }
         Column(modifier = Modifier.padding(horizontal = 20.dp)) {
             val eyebrow = stringResource(

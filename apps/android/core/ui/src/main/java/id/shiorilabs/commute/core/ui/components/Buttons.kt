@@ -21,11 +21,13 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
@@ -54,6 +56,28 @@ fun CommuteIconButton(
         contentAlignment = Alignment.Center,
     ) {
         content()
+    }
+}
+
+/**
+ * The ✕ that closes a page or a sheet: a 24dp Close icon in a [size] button, [tint] taken from
+ * around it unless the page is dark.
+ */
+@Composable
+fun CommuteCloseButton(
+    onClick: () -> Unit,
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+    size: Dp = 32.dp,
+    tint: Color = LocalContentColor.current,
+) {
+    CommuteIconButton(onClick = onClick, modifier = modifier.size(size)) {
+        Icon(
+            imageVector = CommuteIcons.Close,
+            contentDescription = contentDescription,
+            modifier = Modifier.size(24.dp),
+            tint = tint,
+        )
     }
 }
 
