@@ -35,6 +35,9 @@ interface TripRuntime {
 
     fun askStillOnRoute(trip: ActiveTrip)
 
+    /** The ride waited for left at [missed] without the rider; [trip] now waits for the next. */
+    fun rerouted(trip: ActiveTrip, missed: Instant)
+
     /** The trip is over: its notification goes. */
     fun finish()
 
@@ -84,6 +87,8 @@ class AndroidTripRuntime @Inject constructor(
     override fun alert(trip: ActiveTrip, alert: TripEffect.Alert) = notifier.alert(trip, alert)
 
     override fun askStillOnRoute(trip: ActiveTrip) = notifier.askStillOnRoute(trip)
+
+    override fun rerouted(trip: ActiveTrip, missed: Instant) = notifier.rerouted(trip, missed)
 
     override fun finish() = notifier.finish()
 

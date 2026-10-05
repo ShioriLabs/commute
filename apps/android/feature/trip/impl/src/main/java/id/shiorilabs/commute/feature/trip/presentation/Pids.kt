@@ -7,12 +7,16 @@ import id.shiorilabs.commute.core.trip.expectedAt
 import id.shiorilabs.commute.core.trip.expectedAtStop
 import id.shiorilabs.commute.feature.trip.ActiveTrip
 import id.shiorilabs.commute.core.trip.scheduledAtStop
+import id.shiorilabs.commute.core.trip.walkEndsAt
 import java.time.Duration
 import java.time.Instant
 import kotlin.math.floor
 
 /** What the board's small line over the big name says. */
 enum class PidsLabel {
+    /** Off one ride, walking to the station the next leaves from: "Jalan kaki ke". */
+    WALK,
+
     /** Waiting to board: "Naik di". */
     BOARD,
 
@@ -56,6 +60,8 @@ data class PidsStop(
  * @property minutesLeft Whole minutes until getting off, wait for the train included, when the
  *   timetable or a fix can say; `null` there and once arrived.
  * @property alightingAt When the ride should reach the stop to get off at, lateness included.
+ * @property walkM The walk to [station], while [label] is [PidsLabel.WALK].
+ * @property walkMinutes About how much of that walk is left, in whole minutes.
  */
 data class Pids(
     val ride: TripLeg.Ride,
@@ -68,7 +74,10 @@ data class Pids(
     val stopsLeft: Int,
     val minutesLeft: Int?,
     val alightingAt: Instant?,
+    val walkM: Int? = null,
+    val walkMinutes: Int? = null,
 )
+
 
 /** Stops ahead on the band: as many as a phone's height reads at a glance. */
 const val PIDS_STOPS = 4
@@ -111,7 +120,11 @@ internal fun ActiveTrip.pids(now: Instant): Pids {
     // A fix places the rider at a stop exactly, and holds there until one finds the train moving;
     // the clock only ever passes through.
     val stopped = state.source == PositionSource.CONFIRMED && state.position == floor(state.position)
+    // Walking to the next station: till a fix finds the rider there, or the walk should be done.
+    val walkEnds = state.walkEndsAt(plan)?.takeIf { now.isBefore(it) }
+    val walk = walkEnds?.let { plan.transferBefore(state.legIndex) }
     val (label, focus) = when {
+        walk != null -> PidsLabel.WALK to 0
         state.phase == TripPhase.WAITING_TO_BOARD -> PidsLabel.BOARD to 0
         state.position >= last -> PidsLabel.ALIGHT_HERE to last
         stopped -> PidsLabel.AT to state.position.toInt()
@@ -138,8 +151,10 @@ internal fun ActiveTrip.pids(now: Instant): Pids {
         upcoming = upcoming,
         changeTo = then?.takeIf { focus == last },
         // Boarding or stopped, the stop stood at isn't one still to come.
-        stopsLeft = if (label == PidsLabel.BOARD || label == PidsLabel.AT) last - focus else last - focus + 1,
+        stopsLeft = if (label == PidsLabel.WALK || label == PidsLabel.BOARD || label == PidsLabel.AT) last - focus else last - focus + 1,
         minutesLeft = if (label == PidsLabel.ALIGHT_HERE) null else minutesTo(last),
         alightingAt = expected(last),
+        walkM = walk?.distanceM,
+        walkMinutes = walkEnds?.let { minutesUntil(now, it) },
     )
 }

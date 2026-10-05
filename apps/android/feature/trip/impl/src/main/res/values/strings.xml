@@ -58,6 +58,8 @@
     <string name="trip_live_close">Tutup</string>
     <string name="trip_bar_open">buka perjalanan</string>
     <string name="trip_live_details">Lihat detail rute</string>
+    <string name="trip_alert_rerouted_title">Naik yang %1$s aja</string>
+    <string name="trip_alert_rerouted">Yang %1$s udah lewat. %2$s berikutnya berangkat %3$s dari %4$s.</string>
     <string name="trip_live_finished">Perjalanan udah selesai</string>
     <string name="trip_live_finished_detail">Mulai perjalanan baru dari halaman rute ya.</string>
     <string name="trip_done_arrived">Udah sampai di</string>
@@ -93,6 +95,8 @@
 
     <!-- The in-train board, after JR East's. -->
     <string name="trip_pids_minutes">mnt</string>
+    <string name="trip_pids_walk">Jalan kaki ke</string>
+    <string name="trip_pids_walk_ahead">%1$d m, sekitar %2$d mnt jalan</string>
     <string name="trip_pids_board">Naik di</string>
     <string name="trip_pids_at">Sekarang di</string>
     <string name="trip_pids_next">Berikutnya</string>

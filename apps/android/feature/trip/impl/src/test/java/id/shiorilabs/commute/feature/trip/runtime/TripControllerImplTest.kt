@@ -11,8 +11,16 @@ import id.shiorilabs.commute.core.trip.PositionSource
 import id.shiorilabs.commute.core.trip.RiderAction
 import id.shiorilabs.commute.core.trip.TripEffect
 import id.shiorilabs.commute.core.trip.TripEngine
+import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripPhase
+import id.shiorilabs.commute.core.trip.TripPlan
 import id.shiorilabs.commute.feature.trip.ActiveTrip
+import id.shiorilabs.commute.feature.trip.CAWANG
+import id.shiorilabs.commute.feature.trip.MANGGARAI
+import id.shiorilabs.commute.feature.trip.SUDIRMAN
+import id.shiorilabs.commute.feature.trip.TEBET
+import id.shiorilabs.commute.feature.trip.TripReplanner
+import id.shiorilabs.commute.feature.trip.minutes
 import id.shiorilabs.commute.feature.trip.DUKUH_ATAS
 import id.shiorilabs.commute.feature.trip.NOW
 import id.shiorilabs.commute.feature.trip.origin
@@ -56,6 +64,7 @@ class TripControllerImplTest {
         var tracking = false
         var asked = 0
         var wakeAt: Instant? = null
+        val rerouted = mutableListOf<Instant>()
 
         override fun showProgress(trip: ActiveTrip) {
             progressShown++
@@ -65,6 +74,9 @@ class TripControllerImplTest {
         }
         override fun askStillOnRoute(trip: ActiveTrip) {
             asked++
+        }
+        override fun rerouted(trip: ActiveTrip, missed: Instant) {
+            rerouted += missed
         }
         override fun finish() {
             finished++
@@ -89,12 +101,21 @@ class TripControllerImplTest {
     private val location = FakeLocationClient()
     private val locationPreferences = LocationPreferencesRepository(FakePreferencesDataStore())
 
+    /** What the journey planner offers on, and what it was asked. */
+    private var onward: TripPlan? = null
+    private val asked = mutableListOf<String>()
+    private val replanner = TripReplanner { fromId, toId, _, line ->
+        asked += "$fromId>$toId on $line"
+        onward
+    }
+
     private fun TestScope.controller(at: Instant = NOW) = TripControllerImpl(
         store = store,
         runtime = runtime,
         locator = { it },
         location = location,
         locationPreferences = locationPreferences,
+        replanner = replanner,
         clock = Clock.fixed(at, ZoneOffset.UTC),
         scope = backgroundScope,
     )
@@ -192,6 +213,58 @@ class TripControllerImplTest {
         assertFalse(runtime.alerts.last().estimated)
         assertEquals(2, controller.active.value!!.state.legIndex)
         assertEquals(PositionSource.CONFIRMED, controller.active.value!!.state.source)
+    }
+
+    /** Off the MRT at Dukuh Atas late, at 08.09, with 300 m to walk for the 08.10 from Sudirman. */
+    private fun walkingToAMissedTrain() = ActiveTrip(
+        plan,
+        TripEngine.start(plan, NOW.minusSeconds(120), hasLocation = true).state.copy(
+            legIndex = 2,
+            phase = TripPhase.WAITING_TO_BOARD,
+            confirmedAt = minutes(9),
+            walkingSince = minutes(9),
+        ),
+        origin,
+    )
+
+    private val nextTrain = TripLeg.Ride("KCI:B", "KCI", "Manggarai", "2", listOf(SUDIRMAN, MANGGARAI, TEBET, CAWANG), minutes(20), minutes(30))
+
+    @Test
+    fun `a train missed at a change is swapped for the next, and the rider told`() = runTest {
+        store.trip = walkingToAMissedTrain()
+        onward = TripPlan(listOf(nextTrain))
+        val controller = controller(at = minutes(13))
+        runCurrent()
+
+        assertEquals(listOf("KCI-SUD>KCI-CW on KCI:B"), asked)
+        val trip = controller.active.value!!
+        assertEquals(plan.legs.take(2), trip.plan.legs.take(2))
+        assertEquals(minutes(20), trip.plan.ride(2).departureAt)
+        assertEquals(TripPhase.WAITING_TO_BOARD, trip.state.phase)
+        assertEquals(listOf(minutes(10)), runtime.rerouted)
+        assertEquals(trip.plan, store.trip!!.plan)
+    }
+
+    @Test
+    fun `nothing on offer leaves the trip as it was`() = runTest {
+        store.trip = walkingToAMissedTrain()
+        val controller = controller(at = minutes(13))
+        runCurrent()
+
+        assertEquals(1, asked.size)
+        assertEquals(plan, controller.active.value!!.plan)
+        assertEquals(emptyList<Instant>(), runtime.rerouted)
+    }
+
+    @Test
+    fun `a train still to be caught isn't re-planned`() = runTest {
+        // Off at 08.02 instead: there in good time for the 08.10, which is just leaving.
+        val early = walkingToAMissedTrain()
+        store.trip = early.copy(state = early.state.copy(confirmedAt = minutes(2), walkingSince = minutes(2)))
+        controller(at = minutes(10))
+        runCurrent()
+
+        assertEquals(emptyList<String>(), asked)
     }
 
     @Test
