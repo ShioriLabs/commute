@@ -13,6 +13,13 @@ android {
         applicationId = "id.shiorilabs.commute"
         versionCode = 1
         versionName = "1.0"
+
+        // Where crash reports go. A DSN only lets an app send events, so it is no secret.
+        buildConfigField(
+            "String",
+            "SENTRY_DSN",
+            "\"https://c4849a383dbd72106bc5dc6e5370fc45@o576669.ingest.us.sentry.io/4512204724961280\"",
+        )
     }
 
     // One flavor, `production`, from the `commute.android.application` convention, as is signing.
@@ -71,6 +78,9 @@ dependencies {
     implementation(project(":feature:trip:api"))
     implementation(project(":feature:card:impl"))
     implementation(project(":feature:settings:impl"))
+
+    // Crash reports.
+    implementation(libs.sentry.android)
 
     // AndroidX
     implementation(libs.androidx.core.ktx)
