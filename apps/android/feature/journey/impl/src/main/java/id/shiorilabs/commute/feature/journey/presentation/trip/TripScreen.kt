@@ -36,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -377,7 +378,15 @@ private fun TripStartButton(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val content = if (enabled) MaterialTheme.colorScheme.onPrimary else Slate500
-        Icon(imageVector = CommuteIcons.NavigationArrow, contentDescription = null, modifier = Modifier.size(20.dp), tint = content)
+        Icon(
+            imageVector = CommuteIcons.NavigationArrow,
+            contentDescription = null,
+            // Mirrored to point right, as the station page's "OTW Ke Sini" draws it.
+            modifier = Modifier
+                .size(20.dp)
+                .scale(scaleX = -1f, scaleY = 1f),
+            tint = content,
+        )
         Text(text = label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = content)
     }
 }
