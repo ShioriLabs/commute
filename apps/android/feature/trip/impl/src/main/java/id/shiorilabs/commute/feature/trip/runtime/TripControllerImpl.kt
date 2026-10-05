@@ -169,7 +169,7 @@ class TripControllerImpl @Inject constructor(
 
     suspend fun tick() = send(TripEvent.Tick(clock.instant()))
 
-    suspend fun onFix(fix: Fix) = send(TripEvent.Fix(fix.point, fix.accuracyM, fix.at))
+    suspend fun onFix(fix: Fix) = send(TripEvent.Fix(fix.point, fix.accuracyM, fix.at, fix.speedMps))
 
     /** The service couldn't run (refused, or location went away): carry on by the clock. */
     suspend fun trackingLost() = send(TripEvent.LocationAvailability(false, clock.instant()))
@@ -190,7 +190,7 @@ class TripControllerImpl @Inject constructor(
      */
     private fun logStep(event: TripEvent, before: TripState, after: TripState) {
         val (name, facts) = when (event) {
-            is TripEvent.Fix -> "fix" to mapOf("lat" to event.point.latitude, "lon" to event.point.longitude, "acc" to event.accuracyM)
+            is TripEvent.Fix -> "fix" to mapOf("lat" to event.point.latitude, "lon" to event.point.longitude, "acc" to event.accuracyM, "speed" to event.speedMps)
             is TripEvent.RiderSaid -> "rider" to mapOf("action" to event.action)
             is TripEvent.LocationAvailability -> "location" to mapOf("available" to event.available)
             is TripEvent.Resumed -> "resumed" to emptyMap()
