@@ -47,7 +47,7 @@ object TripOngoing {
         val builder = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_launcher_monochrome)
             .setContentTitle(copy.title(headline))
-            .setContentText(copy.detail(trip.state, headline, now))
+            .setContentText(copy.summary(trip.state, headline, now))
             .setContentIntent(open)
             .setCategory(NotificationCompat.CATEGORY_NAVIGATION)
             .setOngoing(true)
