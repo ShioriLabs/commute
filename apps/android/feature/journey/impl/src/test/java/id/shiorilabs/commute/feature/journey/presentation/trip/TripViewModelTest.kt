@@ -29,6 +29,7 @@ import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.journey.domain.TripStart
 import id.shiorilabs.commute.feature.trip.ActiveTrip
 import id.shiorilabs.commute.feature.trip.TripController
+import id.shiorilabs.commute.feature.trip.TripReminder
 import id.shiorilabs.commute.core.trip.RiderAction
 import id.shiorilabs.commute.core.trip.TripPlan
 import kotlinx.coroutines.Dispatchers
@@ -82,6 +83,7 @@ class TripViewModelTest {
             started += plan to origin
         }
 
+        override fun setReminder(reminder: TripReminder) = Unit
         override fun riderSaid(action: RiderAction) = Unit
 
         override fun stop() = Unit
