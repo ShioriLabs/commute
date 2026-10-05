@@ -163,7 +163,13 @@ design only depends on "an ongoing notification with segmented progress".
   would otherwise warn far too early. By the clock alone it leaves at that
   stop's time. When that last hop is over five minutes, about three minutes
   before instead.
-- **"Sekarang di":** a fix inside a station's 150 m radius is at the station
+- **A station's radius** is half the longest train on its line plus 30 m for
+  GPS error, since the phone can be anywhere along a stopped train: 150 m for
+  a 12-car KRL, 130 m on the Rangkasbitung and Tangerang lines (10 cars only),
+  90 m for the 6-car MRT, about 80 m for the 6-car LRT Jabodebek, about 57 m
+  for LRT Jakarta's 4 cars (two 2-car sets of 13.7 m cars). A line not listed in `Trains.kt` keeps 150 m. Platform
+  extents from Tandai Peron are meant to replace this.
+- **"Sekarang di":** a fix inside a station's radius is at the station
   only once the satellites' own speed shows the train under 6 m/s (about 20 km/h,
   5–10 s from standing at KRL braking); faster, it
   is still rolling in (just short of it) or already pulling out (just past).
