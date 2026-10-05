@@ -74,6 +74,7 @@ class NearbyViewModelTest {
     private fun TestScope.viewModel(): NearbyViewModel {
         val viewModel = NearbyViewModel(location, directory, stations, saved, home, locationPreferences, Clock.fixed(now, ZoneOffset.ofHours(7)))
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.state.collect {} }
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.raised.collect {} }
         return viewModel
     }
 
@@ -87,6 +88,31 @@ class NearbyViewModelTest {
         val shown = viewModel.state.first { it is NearbyUiState.Stations } as NearbyUiState.Stations
         // Sudirman is pinned, so it is already on home; Manggarai is too far to walk.
         assertEquals(listOf("MRTJ-DKA"), shown.boards.map { it.nearby.station.id })
+    }
+
+    @Test
+    fun `a pinned station the rider is at is raised to the top of home, not shown in this section`() = runTest {
+        saved.toggleStation("KCI-SUD")
+        saved.toggleStation("KCI-MRI")
+        val viewModel = viewModel()
+
+        viewModel.refresh()
+
+        // Manggarai is pinned too, but a few kilometres off.
+        assertEquals(listOf("KCI-SUD"), viewModel.raised.first { it.isNotEmpty() })
+        val shown = viewModel.state.first { it is NearbyUiState.Stations } as NearbyUiState.Stations
+        assertEquals(listOf("MRTJ-DKA"), shown.boards.map { it.nearby.station.id })
+    }
+
+    @Test
+    fun `turned off in settings, nothing is raised either`() = runTest {
+        saved.toggleStation("KCI-SUD")
+        locationPreferences.setHomeNearby(false)
+        val viewModel = viewModel()
+
+        viewModel.refresh()
+
+        assertEquals(emptyList<String>(), viewModel.raised.value)
     }
 
     @Test
