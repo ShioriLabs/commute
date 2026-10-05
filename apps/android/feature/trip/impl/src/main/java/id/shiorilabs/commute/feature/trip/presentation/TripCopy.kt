@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.feature.trip.presentation
 
 import android.content.res.Resources
+import id.shiorilabs.commute.core.trip.Headline
 import id.shiorilabs.commute.core.trip.PositionSource
 import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripPhase
