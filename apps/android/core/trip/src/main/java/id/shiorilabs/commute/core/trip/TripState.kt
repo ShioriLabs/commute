@@ -69,6 +69,12 @@ data class TripState(
     val arrivedAt: Instant? = null,
     /** Picked up again after the service was killed, and nothing has confirmed the position since. */
     val resumed: Boolean = false,
+    /**
+     * Off one ride at a change that crosses to another station, when the rider got off: walking
+     * there until a fix finds them nearer it than the one they left. `null` otherwise.
+     */
+    @Serializable(with = InstantSerializer::class)
+    val walkingSince: Instant? = null,
 )
 
 sealed interface TripEvent {

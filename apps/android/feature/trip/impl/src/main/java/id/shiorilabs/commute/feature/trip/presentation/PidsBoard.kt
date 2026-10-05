@@ -402,7 +402,7 @@ private fun Plate(
         }
         // The plainer facts: the platform while waiting for it, and the clock (when the minutes are
         // up by the close button) at the far end.
-        val platform = pids.ride.platformCode?.takeIf { pids.label == PidsLabel.BOARD }
+        val platform = pids.ride.platformCode?.takeIf { pids.label == PidsLabel.BOARD || pids.label == PidsLabel.WALK }
         val at = clock.takeIf { minutes != null }
         if (platform != null || at != null) {
             Row(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, top = 6.dp, end = 20.dp)) {
@@ -432,12 +432,16 @@ private fun Plate(
 @Composable
 private fun Eyebrow(pids: Pids) {
     val label = stringResource(pids.label.text)
-    val ahead = pids.takeIf { it.label == PidsLabel.BOARD || it.label == PidsLabel.AT || it.label == PidsLabel.NEXT }?.let {
-        stringResource(
-            if (it.ride.isBus) R.string.trip_ride_to_halte else R.string.trip_ride_to_station,
-            it.ride.stops.last().name,
-            it.stopsLeft,
-        )
+    val ahead = if (pids.label == PidsLabel.WALK && pids.walkM != null && pids.walkMinutes != null) {
+        stringResource(R.string.trip_pids_walk_ahead, pids.walkM, pids.walkMinutes)
+    } else {
+        pids.takeIf { it.label == PidsLabel.BOARD || it.label == PidsLabel.AT || it.label == PidsLabel.NEXT }?.let {
+            stringResource(
+                if (it.ride.isBus) R.string.trip_ride_to_halte else R.string.trip_ride_to_station,
+                it.ride.stops.last().name,
+                it.stopsLeft,
+            )
+        }
     }
     val pages = listOfNotNull(label, ahead)
     val style = MaterialTheme.typography.titleSmall.merge(color = BoardMuted, fontWeight = FontWeight.Bold)
@@ -617,6 +621,7 @@ internal fun StationLines(keys: List<String>, lines: Map<String, LineInfo>) {
 
 internal val PidsLabel.text: Int
     get() = when (this) {
+        PidsLabel.WALK -> R.string.trip_pids_walk
         PidsLabel.BOARD -> R.string.trip_pids_board
         PidsLabel.AT -> R.string.trip_pids_at
         PidsLabel.NEXT -> R.string.trip_pids_next
@@ -981,7 +986,7 @@ private fun StopLabel(stop: PidsStop, x: Float, centreY: Float, maxWidth: Int) {
 @Composable
 private fun ChangePanel(pids: Pids, lines: Map<String, LineInfo>, stationLines: List<String>, copy: TripCopy) {
     // Where the rider boards or has arrived there's nothing to change to: "Pindah di" would mislead.
-    if (pids.label == PidsLabel.BOARD || pids.label == PidsLabel.ARRIVED) return
+    if (pids.label == PidsLabel.WALK || pids.label == PidsLabel.BOARD || pids.label == PidsLabel.ARRIVED) return
     val change = pids.changeTo
     val others = stationLines.filter { it != pids.ride.line }
     if (change == null && others.isEmpty()) return
