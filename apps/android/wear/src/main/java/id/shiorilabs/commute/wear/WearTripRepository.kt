@@ -21,7 +21,9 @@ class WearTripRepository(context: Context) {
 
     val trip: Flow<WearTrip?> = callbackFlow {
         val listener = DataClient.OnDataChangedListener { events -> events.latestTrip()?.let { trySend(it.trip) } }
-        client.addListener(listener).await()
+        // Not awaited: the stored trip is read alongside registering, not after it, which costs the
+        // first frame a few hundred milliseconds on a watch.
+        client.addListener(listener)
         send(current())
         awaitClose { client.removeListener(listener) }
     }
