@@ -125,8 +125,8 @@ sealed interface Route : NavKey {
     ) : Route
 
     /**
-     * The trip being followed, live: opened from the trip notification, home's running-trip card and
-     * the trip page. Reads the stored trip, so it opens offline.
+     * The trip being followed, live: opened from the trip notification, the trip bar over every
+     * screen and the trip page. Reads the stored trip, so it opens offline.
      */
     @Serializable
     data object ActiveTrip : Route
