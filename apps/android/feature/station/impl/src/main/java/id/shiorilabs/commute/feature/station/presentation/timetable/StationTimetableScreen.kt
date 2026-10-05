@@ -69,7 +69,7 @@ import id.shiorilabs.commute.core.ui.components.LoadProblem
 import id.shiorilabs.commute.core.ui.components.LoadProblemState
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.components.SkeletonBlock
-import id.shiorilabs.commute.core.ui.ext.parseHexColor
+import id.shiorilabs.commute.core.ui.ext.lineColorOf
 import id.shiorilabs.commute.core.ui.frost.FrostedTopChromeBackdrop
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.layout.TitleSlot
@@ -409,7 +409,7 @@ private fun TimetableList(
         ) {
             sections.forEach { section ->
                 val info = lines[section.lineKey]
-                val lineColor = info?.colorCode?.let { parseHexColor(it) } ?: Slate400
+                val lineColor = lineColorOf(info?.colorCode)
                 val nearestIndex = nearest[section.key] ?: -1
                 item(key = "header:${section.key}", contentType = SECTION_HEADER) {
                     // The pinned copy stands for it while it is at the top; drawn twice, the list's
@@ -452,7 +452,7 @@ private fun TimetableList(
             SectionHeader(
                 section = section,
                 info = info,
-                lineColor = info?.colorCode?.let { parseHexColor(it) } ?: Slate400,
+                lineColor = lineColorOf(info?.colorCode),
                 modifier = Modifier.graphicsLayer { translationY = (stuck?.pushOffset ?: 0).toFloat() },
             )
         }

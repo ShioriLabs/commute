@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.core.ui.ext
 
 import androidx.compose.ui.graphics.Color
+import id.shiorilabs.commute.core.ui.theme.Slate400
 import kotlin.math.roundToInt
 
 /**
@@ -17,6 +18,13 @@ fun parseHexColor(hex: String, fallback: Color = Color.Gray): Color {
     val rgb = digits.toLongOrNull(16) ?: return fallback
     return Color(0xFF000000 or rgb)
 }
+
+/**
+ * A line's colour from its [colorCode], or slate when there is none yet (the line dictionary still
+ * loading) or it doesn't parse: the web's `LINE_COLOR_FALLBACK`, so a card renders grey rather than
+ * blanking.
+ */
+fun lineColorOf(colorCode: String?): Color = colorCode?.let { parseHexColor(it, Slate400) } ?: Slate400
 
 /** Which text colour reads on a background. */
 enum class Foreground {
