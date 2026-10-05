@@ -216,20 +216,29 @@ internal fun PidsBoard(
 }
 
 /**
- * Light icons over the dark bar while it's up; the app's dark ones again after. Set on every pass
- * too, as the theme sets its own whenever it recomposes.
+ * Light icons over a dark surface while it's up; the app's dark ones again once the last such
+ * surface has gone, so the trip bar leaving as the finished page's plate arrives can't darken
+ * them under the plate. Set on every pass too, as the theme sets its own whenever it recomposes.
  */
 @Composable
-private fun DarkStatusBarIcons() {
+internal fun DarkStatusBarIcons() {
     val view = LocalView.current
     val controller = remember(view) {
         view.context.findActivity()?.window?.let { WindowCompat.getInsetsController(it, view) }
     }
     SideEffect { controller?.isAppearanceLightStatusBars = false }
     DisposableEffect(controller) {
-        onDispose { controller?.isAppearanceLightStatusBars = true }
+        darkSurfaces++
+        controller?.isAppearanceLightStatusBars = false
+        onDispose {
+            darkSurfaces--
+            if (darkSurfaces == 0) controller?.isAppearanceLightStatusBars = true
+        }
     }
 }
+
+/** How many dark surfaces are up under the status bar. Only touched on the main thread. */
+private var darkSurfaces = 0
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
@@ -456,7 +465,7 @@ private fun Eyebrow(pids: Pids) {
  * and they take turns sliding up into place.
  */
 @Composable
-private fun StationName(name: String, modifier: Modifier = Modifier) {
+internal fun StationName(name: String, modifier: Modifier = Modifier) {
     val style = MaterialTheme.typography.headlineLarge.merge(color = Color.White, fontWeight = FontWeight.Bold, lineHeight = 52.sp)
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
@@ -592,7 +601,7 @@ private const val PAGE_SLIDE_MILLIS = 450
 
 /** The station's lines as roundels before its name, the ride's own first. */
 @Composable
-private fun StationLines(keys: List<String>, lines: Map<String, LineInfo>) {
+internal fun StationLines(keys: List<String>, lines: Map<String, LineInfo>) {
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         keys.forEach { key ->
             val info = lines[key]

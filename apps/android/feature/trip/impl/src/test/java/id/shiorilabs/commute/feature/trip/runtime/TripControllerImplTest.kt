@@ -6,6 +6,7 @@ import id.shiorilabs.commute.core.geo.GeoPoint
 import id.shiorilabs.commute.core.location.Fix
 import id.shiorilabs.commute.core.location.testing.FakeLocationClient
 import id.shiorilabs.commute.core.trip.AlertKind
+import id.shiorilabs.commute.core.trip.FinishReason
 import id.shiorilabs.commute.core.trip.PositionSource
 import id.shiorilabs.commute.core.trip.RiderAction
 import id.shiorilabs.commute.core.trip.TripEffect
@@ -31,13 +32,20 @@ import java.time.ZoneOffset
 
 class TripControllerImplTest {
 
-    private class FakeStore(var trip: ActiveTrip? = null) : TripStore {
+    private class FakeStore(var trip: ActiveTrip? = null, var finished: FinishedTrip? = null) : TripStore {
         override fun read() = trip
         override fun write(trip: ActiveTrip) {
             this.trip = trip
         }
         override fun clear() {
             trip = null
+        }
+        override fun readFinished() = finished
+        override fun writeFinished(trip: FinishedTrip) {
+            finished = trip
+        }
+        override fun clearFinished() {
+            finished = null
         }
     }
 
@@ -199,6 +207,45 @@ class TripControllerImplTest {
         assertNull(runtime.wakeAt)
         assertFalse(runtime.tracking)
         assertEquals(1, runtime.finished)
+    }
+
+    @Test
+    fun `a trip that ends is kept, with how it ended, until the next starts`() = runTest {
+        val controller = controller()
+        controller.start(plan, origin)
+        runCurrent()
+        val last = controller.active.value!!
+
+        controller.say(RiderAction.STOP)
+
+        val finished = controller.finished.value!!
+        assertEquals(FinishReason.STOPPED, finished.reason)
+        assertEquals(last.plan, finished.trip.plan)
+        assertEquals(NOW, finished.at)
+        assertEquals(finished, store.finished)
+
+        controller.start(plan, origin)
+        runCurrent()
+        assertNull(controller.finished.value)
+        assertNull(store.finished)
+    }
+
+    @Test
+    fun `an ended trip comes back after the process died, but not the next day`() = runTest {
+        controller().apply {
+            start(plan, origin)
+            runCurrent()
+            say(RiderAction.STOP)
+        }
+        val stored = store.finished!!
+
+        val soon = controller(NOW.plusSeconds(3_600))
+        runCurrent()
+        assertEquals(stored, soon.finished.value)
+
+        val tomorrow = controller(NOW.plusSeconds(86_400))
+        runCurrent()
+        assertNull(tomorrow.finished.value)
     }
 
     @Test
