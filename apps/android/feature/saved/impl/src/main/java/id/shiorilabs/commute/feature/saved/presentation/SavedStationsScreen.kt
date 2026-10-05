@@ -77,7 +77,7 @@ import id.shiorilabs.commute.feature.saved.presentation.nearby.NearbyHeading
 import id.shiorilabs.commute.feature.saved.presentation.nearby.NearbyPromptCard
 import id.shiorilabs.commute.feature.saved.presentation.nearby.NearbyUiState
 import id.shiorilabs.commute.feature.saved.presentation.nearby.NearbyViewModel
-import id.shiorilabs.commute.feature.saved.presentation.nearby.formatDistance
+import id.shiorilabs.commute.feature.saved.presentation.nearby.nearbyDistance
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import id.shiorilabs.commute.feature.saved.presentation.components.RefreshNoticeHost
 import id.shiorilabs.commute.feature.saved.presentation.components.RouteTitle
@@ -311,9 +311,16 @@ private fun StationFeed(
         is NearbyUiState.Stations -> 1 + 2 * nearby.boards.size
     }
     val ordered = remember(feed.entries, raised) { raiseNearby(feed.entries, raised) }
-    // A fix lands after the feed is up: what it raises goes above the row on screen, where the list
-    // would otherwise keep following that row down.
-    listState.RevealChangedTop(ordered.front.firstOrNull()?.key)
+    // A fix lands after the feed is up: what it raises, or the stations near the rider with nothing
+    // raised, goes above the row on screen, where the list would otherwise keep following that row
+    // down.
+    listState.RevealChangedTop(
+        ordered.front.firstOrNull()?.key ?: when (nearby) {
+            NearbyUiState.Hidden -> null
+            NearbyUiState.Prompt -> "nearby-prompt"
+            is NearbyUiState.Stations -> "nearby-heading"
+        },
+    )
     val titleRows = remember(ordered, noticeShown, nearbyRows) {
         var row = 0
         fun rowsOf(entries: List<HomeEntry>) = entries.map { entry ->
@@ -421,7 +428,8 @@ private fun StationFeed(
                             item(key = "nearby-title:${station.id}") {
                                 StationTitle(
                                     stationId = station.id,
-                                    name = stringResource(R.string.saved_nearby_station, station.name, formatDistance(near.distanceM)),
+                                    name = station.name,
+                                    note = nearbyDistance(near.distanceM),
                                     // A pinned station of the same name below owns the flight home.
                                     shareName = false,
                                     onClick = { openStation(station.id) },
