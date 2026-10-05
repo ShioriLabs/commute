@@ -240,6 +240,51 @@ class TripEngineTest {
         assertEquals(listOf(alert(AlertKind.PREPARE, estimated = false)), run.alerts())
     }
 
+    /** A ride of one 2 km hop south on [line], and a fix [metres] short of its end, coming in from the north. */
+    private fun arrivingOn(line: String, metres: Double): Run {
+        val from = TripStop("A", "A", -6.2000, 106.8300)
+        val to = TripStop("B", "B", -6.2000 - 2_000 / 110_574.0, 106.8300)
+        val run = Run(TripPlan(listOf(ride(from, to, line = line, departs = 0, arrives = 4))))
+        run.tick(0.0)
+        run.fix(GeoPoint(to.latitude!! + metres / 110_574.0, to.longitude!!), 3.0)
+        return run
+    }
+
+    @Test
+    fun `a twelve-car KRL is in within 150 m of the station`() {
+        assertEquals(TripPhase.ARRIVED, arrivingOn("KCI:C", 140.0).state.phase)
+    }
+
+    @Test
+    fun `a ten-car KRL on the Rangkasbitung or Tangerang line is in within 130 m`() {
+        assertEquals(TripPhase.RIDING, arrivingOn("KCI:R", 140.0).state.phase)
+        assertEquals(TripPhase.RIDING, arrivingOn("KCI:T", 140.0).state.phase)
+        assertEquals(TripPhase.ARRIVED, arrivingOn("KCI:T", 120.0).state.phase)
+    }
+
+    @Test
+    fun `a six-car MRT is in within 90 m`() {
+        assertEquals(TripPhase.RIDING, arrivingOn("MRTJ:M", 100.0).state.phase)
+        assertEquals(TripPhase.ARRIVED, arrivingOn("MRTJ:M", 80.0).state.phase)
+    }
+
+    @Test
+    fun `a six-car LRT Jabodebek is in within about 80 m`() {
+        assertEquals(TripPhase.RIDING, arrivingOn("LRTJBDB:BK", 95.0).state.phase)
+        assertEquals(TripPhase.ARRIVED, arrivingOn("LRTJBDB:BK", 70.0).state.phase)
+    }
+
+    @Test
+    fun `a four-car LRT Jakarta is in within about 57 m`() {
+        assertEquals(TripPhase.RIDING, arrivingOn("LRTJ:S", 70.0).state.phase)
+        assertEquals(TripPhase.ARRIVED, arrivingOn("LRTJ:S", 50.0).state.phase)
+    }
+
+    @Test
+    fun `a line whose trains aren't known keeps the 150 m of the longest`() {
+        assertEquals(TripPhase.ARRIVED, arrivingOn("APCGK:A", 140.0).state.phase)
+    }
+
     @Test
     fun `a fix between stations places the rider part way along the hop`() {
         val run = Run(bogorLine)

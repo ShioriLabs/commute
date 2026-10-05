@@ -22,7 +22,13 @@ object TripEngine {
     /** Rail stations are long and fixes on a train are rough. */
     private const val RAIL_STOP_RADIUS_M = 250.0
 
-    /** About half a twelve-car train either side of the station's point: the train is in. */
+    /**
+     * Half the longest train either side of the station's point, and this for the fixes' own error:
+     * the train is in. A twelve-car KRL comes to 150 m.
+     */
+    private const val RAIL_AT_STOP_SLACK_M = 30.0
+
+    /** A line whose trains aren't known gets the longest's radius, a twelve-car KRL's. */
     private const val RAIL_AT_STOP_M = 150.0
     private const val RAIL_CORRIDOR_M = 400.0
     private const val RAIL_ACCURACY_GATE_M = 250f
@@ -548,10 +554,13 @@ object TripEngine {
         val missed: Double,
     ) {
         companion object {
-            private val RAIL = Tuning(RAIL_STOP_RADIUS_M, RAIL_AT_STOP_M, RAIL_CORRIDOR_M, RAIL_ACCURACY_GATE_M, RAIL_OFF_ROUTE_M, RAIL_MISSED_M)
+            private fun rail(atStop: Double) = Tuning(RAIL_STOP_RADIUS_M, atStop, RAIL_CORRIDOR_M, RAIL_ACCURACY_GATE_M, RAIL_OFF_ROUTE_M, RAIL_MISSED_M)
             private val BUS = Tuning(BUS_STOP_RADIUS_M, BUS_AT_STOP_M, BUS_CORRIDOR_M, BUS_ACCURACY_GATE_M, BUS_OFF_ROUTE_M, BUS_MISSED_M)
 
-            fun of(ride: TripLeg.Ride) = if (ride.isBus) BUS else RAIL
+            fun of(ride: TripLeg.Ride) = when {
+                ride.isBus -> BUS
+                else -> rail(longestTrainM(ride)?.let { it / 2 + RAIL_AT_STOP_SLACK_M } ?: RAIL_AT_STOP_M)
+            }
         }
     }
 }
