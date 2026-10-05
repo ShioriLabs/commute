@@ -77,7 +77,7 @@ class TripNotifier @Inject constructor(
             headline is Headline.AlightNow ||
                 (headline is Headline.RideTo && headline.stopsLeft <= 1) ->
                 builder.addAction(0, context.getString(R.string.trip_action_alighted), action(TripReceiver.ACTION_ALIGHTED))
-            trip.state.phase == TripPhase.WAITING_TO_BOARD && !trip.plan.ride(trip.state.legIndex).isTimed ->
+            trip.state.phase == TripPhase.WAITING_TO_BOARD ->
                 builder.addAction(0, context.getString(R.string.trip_action_boarded), action(TripReceiver.ACTION_BOARDED))
         }
         return builder.build()
