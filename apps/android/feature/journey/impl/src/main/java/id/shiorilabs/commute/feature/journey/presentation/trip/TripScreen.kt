@@ -65,6 +65,9 @@ import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.ui.components.CommuteIconButton
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.frost.FrostedHeaderPage
+import id.shiorilabs.commute.core.ui.components.CommuteButton
+import id.shiorilabs.commute.core.ui.components.CommuteButtonIcon
+import id.shiorilabs.commute.core.ui.components.CommuteButtonText
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.time.updatedAgoText
@@ -363,31 +366,18 @@ private fun TripStartButton(
     }
     val description = if (start == TripStart.Ready) stringResource(R.string.journey_trip_start_description) else label
     val onClick = if (start == TripStart.Running) onOpen else begin
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (enabled) MaterialTheme.colorScheme.primary else Slate200)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .clearAndSetSemantics {
-                contentDescription = description
-                role = Role.Button
-                if (enabled) onClick { onClick(); true }
-            }
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
+    CommuteButton(
+        onClick = onClick,
+        modifier = modifier.clearAndSetSemantics {
+            contentDescription = description
+            role = Role.Button
+            if (enabled) onClick { onClick(); true }
+        },
+        enabled = enabled,
     ) {
-        val content = if (enabled) MaterialTheme.colorScheme.onPrimary else Slate500
-        Icon(
-            imageVector = CommuteIcons.NavigationArrow,
-            contentDescription = null,
-            // Mirrored to point right, as the station page's "OTW Ke Sini" draws it.
-            modifier = Modifier
-                .size(20.dp)
-                .scale(scaleX = -1f, scaleY = 1f),
-            tint = content,
-        )
-        Text(text = label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = content)
+        // Mirrored to point right, as the station page's "OTW Ke Sini" draws it.
+        CommuteButtonIcon(CommuteIcons.NavigationArrow, modifier = Modifier.scale(scaleX = -1f, scaleY = 1f))
+        CommuteButtonText(label)
     }
 }
 

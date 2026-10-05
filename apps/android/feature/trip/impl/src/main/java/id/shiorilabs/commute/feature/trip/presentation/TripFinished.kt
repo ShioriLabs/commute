@@ -50,6 +50,10 @@ import id.shiorilabs.commute.core.trip.progress
 import id.shiorilabs.commute.core.ui.components.CommuteIconButton
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.ext.parseHexColor
+import id.shiorilabs.commute.core.ui.components.CommuteButton
+import id.shiorilabs.commute.core.ui.components.CommuteButtonIcon
+import id.shiorilabs.commute.core.ui.components.CommuteButtonText
+import id.shiorilabs.commute.core.ui.components.CommuteButtonVariant
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.motion.IosSpringEasing
 import id.shiorilabs.commute.core.ui.motion.rememberReducedMotion
@@ -112,45 +116,21 @@ internal fun TripFinished(
             modifier = Modifier.padding(start = 20.dp, top = 24.dp, end = 20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            val content = MaterialTheme.colorScheme.onPrimary
             val lastRide = rides.last()
-            ActionButton(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Min)
-                    .background(MaterialTheme.colorScheme.primary),
-                onClick = { onOpenStation(destination) },
-            ) {
-                Icon(
-                    imageVector = if (lastRide.isBus) CommuteIcons.Bus else CommuteIcons.Train,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = content,
-                )
-                Text(
-                    text = stringResource(if (lastRide.isBus) R.string.trip_done_open_halte else R.string.trip_done_open_station, destination.name),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = content,
+            CommuteButton(onClick = { onOpenStation(destination) }, modifier = Modifier.fillMaxWidth()) {
+                CommuteButtonIcon(if (lastRide.isBus) CommuteIcons.Bus else CommuteIcons.Train)
+                CommuteButtonText(
+                    stringResource(if (lastRide.isBus) R.string.trip_done_open_halte else R.string.trip_done_open_station, destination.name),
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            ActionButton(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Min)
-                    .border(1.5.dp, DoneLine, ActionShape),
+            CommuteButton(
+                text = stringResource(R.string.trip_done_route_back),
                 onClick = onRouteBack,
-            ) {
-                Icon(imageVector = CommuteIcons.Swap, contentDescription = null, modifier = Modifier.size(20.dp), tint = DoneLabel)
-                Text(
-                    text = stringResource(R.string.trip_done_route_back),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = DoneLabel,
-                )
-            }
+                modifier = Modifier.fillMaxWidth(),
+                variant = CommuteButtonVariant.Secondary,
+                leadingIcon = CommuteIcons.Swap,
+            )
         }
     }
 }
