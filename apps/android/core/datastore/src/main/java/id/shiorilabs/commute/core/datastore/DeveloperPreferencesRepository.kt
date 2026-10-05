@@ -31,6 +31,9 @@ class DeveloperPreferencesRepository @Inject constructor(
     /** "Tandai manual": buttons on the trip page for the rider to mark what the train is doing. */
     val manualMarks: Flow<Boolean> = dataStore.data.map { it[MANUAL_MARKS] == true }
 
+    /** "Buka Otomatis di Jam": starting a trip opens the watch app. On until switched off. */
+    val watchAutoOpen: Flow<Boolean> = dataStore.data.map { it[WATCH_AUTO_OPEN] != false }
+
     suspend fun setExperimentalUnlocked(unlocked: Boolean) = set(EXPERIMENTAL_UNLOCKED, unlocked)
 
     suspend fun setForceTripStart(enabled: Boolean) = set(FORCE_TRIP_START, enabled)
@@ -38,6 +41,8 @@ class DeveloperPreferencesRepository @Inject constructor(
     suspend fun setFrostTuner(enabled: Boolean) = set(FROST_TUNER, enabled)
 
     suspend fun setManualMarks(enabled: Boolean) = set(MANUAL_MARKS, enabled)
+
+    suspend fun setWatchAutoOpen(enabled: Boolean) = set(WATCH_AUTO_OPEN, enabled)
 
     private suspend fun set(key: Preferences.Key<Boolean>, value: Boolean) {
         dataStore.edit { it[key] = value }
@@ -49,5 +54,6 @@ class DeveloperPreferencesRepository @Inject constructor(
         val FORCE_TRIP_START = booleanPreferencesKey("force_trip_start")
         val FROST_TUNER = booleanPreferencesKey("frost_tuner")
         val MANUAL_MARKS = booleanPreferencesKey("manual_marks")
+        val WATCH_AUTO_OPEN = booleanPreferencesKey("watch_auto_open")
     }
 }
