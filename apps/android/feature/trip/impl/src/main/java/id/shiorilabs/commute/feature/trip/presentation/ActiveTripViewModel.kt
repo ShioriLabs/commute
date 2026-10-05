@@ -80,6 +80,10 @@ class ActiveTripViewModel @Inject constructor(
     val manualMarks: StateFlow<Boolean> = developerPreferences.manualMarks
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    /** "Halaman PIDS" in Pengaturan → Experimental: the board takes turns between pages. */
+    val boardPages: StateFlow<Boolean> = developerPreferences.boardPages
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     /** What the rider saw the train do, logged with what [pids] (the board then) said. */
     fun mark(kind: MarkKind, pids: Pids) = controller.mark(
         kind.key,
