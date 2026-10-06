@@ -27,7 +27,7 @@ export default function TermsConditionsSettingsPage() {
         </div>
         <div className="mt-8 px-8 text-sm max-w-3xl mx-auto">
           <p className="text-sm font-semibold">
-            Efektif Sejak 15 Juni 2025
+            Efektif Sejak 6 Oktober 2026
           </p>
           <br />
           <br />
@@ -60,7 +60,7 @@ export default function TermsConditionsSettingsPage() {
           </p><br />
           <h2 className="font-bold text-base">3. Data dan Privasi</h2>
           <p>
-            Kami tidak mengumpulkan data pribadi Anda secara langsung. Informasi non-pribadi seperti IP dan browser mungkin dikumpulkan secara anonim oleh <b>Cloudflare Web Analytics</b>.<br />
+            Kami tidak mengumpulkan data pribadi Anda secara langsung. Informasi non-pribadi seperti data penggunaan, catatan server, dan laporan galat mungkin dikumpulkan secara anonim oleh Mitra Kami, <b>Cloudflare</b> dan <b>Sentry</b>. Lokasi Anda diolah di perangkat dan tidak dikirim ke server Kami.<br />
             Lihat <Link to="/settings/legal/privacy-policy" className="font-semibold text-blue-500">Kebijakan Privasi</Link> untuk info lebih lanjut.
           </p><br />
           <h2 className="font-bold text-base">4. Batasan Tanggung Jawab</h2>
