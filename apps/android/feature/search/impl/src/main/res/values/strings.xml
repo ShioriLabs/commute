@@ -18,6 +18,9 @@
     <string name="search_idle_hint">Stasiun yang kamu cari bakal muncul di sini</string>
     <string name="search_lines">Lin</string>
 
+    <!-- A station row's OTW button. %1$s is the station's name. -->
+    <string name="search_otw">OTW ke %1$s</string>
+
     <!-- Pins. %1$s is the station's name. -->
     <string name="search_pin">Pin %1$s</string>
     <string name="search_unpin">Lepas pin %1$s</string>
