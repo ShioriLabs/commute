@@ -71,10 +71,13 @@ class NearbyViewModelTest {
         Dispatchers.resetMain()
     }
 
+    private val lookup = NearbyLookup(location, directory, saved, locationPreferences, Clock.fixed(now, ZoneOffset.UTC))
+
     private fun TestScope.viewModel(): NearbyViewModel {
-        val viewModel = NearbyViewModel(location, directory, stations, saved, home, locationPreferences, Clock.fixed(now, ZoneOffset.ofHours(7)))
+        val viewModel = NearbyViewModel(location, lookup, stations, home, locationPreferences, Clock.fixed(now, ZoneOffset.ofHours(7)))
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.state.collect {} }
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.raised.collect {} }
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.settled.collect {} }
         return viewModel
     }
 
@@ -166,5 +169,49 @@ class NearbyViewModelTest {
         viewModel.onPermissionResult(true)
 
         assertEquals(2, (viewModel.state.first { it is NearbyUiState.Stations } as NearbyUiState.Stations).boards.size)
+    }
+
+    @Test
+    fun `what the splash's look found is what home opens on, without looking again`() = runTest {
+        lookup.look()
+        val viewModel = viewModel()
+
+        viewModel.refresh()
+
+        val shown = viewModel.state.first { it is NearbyUiState.Stations } as NearbyUiState.Stations
+        assertEquals(listOf("KCI-SUD", "MRTJ-DKA"), shown.boards.map { it.nearby.station.id })
+        assertEquals(true, viewModel.settled.value)
+        assertEquals(1, location.currentCalls)
+    }
+
+    @Test
+    fun `home is unsettled until a look has finished`() = runTest {
+        val viewModel = viewModel()
+        assertEquals(false, viewModel.settled.value)
+
+        viewModel.refresh()
+
+        assertEquals(true, viewModel.settled.first { it })
+    }
+
+    @Test
+    fun `a look that finds no fix still settles home, with nothing to show`() = runTest {
+        location.currentFix = null
+        val viewModel = viewModel()
+
+        viewModel.refresh()
+
+        assertEquals(true, viewModel.settled.first { it })
+        assertEquals(NearbyUiState.Hidden, viewModel.state.value)
+    }
+
+    @Test
+    fun `without location, or with it turned off for home, there is nothing to wait for`() = runTest {
+        location.granted = false
+        assertEquals(true, viewModel().settled.first { it })
+
+        location.granted = true
+        locationPreferences.setHomeNearby(false)
+        assertEquals(true, viewModel().settled.first { it })
     }
 }
