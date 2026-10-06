@@ -111,11 +111,8 @@ internal fun DocumentBullets(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onBackground,
                 )
-                Text(
-                    text = item,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
+                // HTML, as the web's <li>: a bullet can open with a bold label.
+                HtmlText(item)
             }
         }
     }
