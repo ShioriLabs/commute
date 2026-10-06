@@ -3,6 +3,7 @@ package id.shiorilabs.commute.feature.journey.domain
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.trip.TripLeg
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 import java.time.Instant
 
@@ -31,6 +32,33 @@ class TripPlansTest {
         assertEquals(300, walk.distanceM)
         assertEquals("Terowongan", walk.corridorLabel)
         assertEquals(null, (plan.legs[2] as TripLeg.Ride).departureAt)
+    }
+
+    @Test
+    fun `haltes several routes serve keep every route, and say which way only when they agree`() {
+        // Setiabudi Integritas to Karet Kuningan on 2026-10-06: planned on 4D, ridden on an L13E.
+        val leg = ride("TJ:4D", "TJ-H00215P", "TJ-H00098P").copy(
+            headsign = "Kuningan",
+            serviceLines = listOf(
+                ServiceLine("TJ:4D", "Kuningan"),
+                ServiceLine("TJ:6", "Ragunan"),
+                ServiceLine("TJ:L13E", "Kuningan"),
+            ),
+        )
+        val ride = journey(leg).toTripPlan().ride(0)
+
+        assertEquals(listOf("TJ:4D", "TJ:6", "TJ:L13E"), ride.lineKeys)
+        assertEquals(2, ride.otherLines)
+        assertNull(ride.sharedHeadsign)
+        assertEquals("Kuningan", ride.copy(serviceLines = ride.serviceLines.filter { it.line != "TJ:6" }).sharedHeadsign)
+    }
+
+    @Test
+    fun `a ride only its own line runs keeps no list`() {
+        val ride = timed.toTripPlan().ride(0)
+
+        assertEquals(emptyList<Any>(), ride.serviceLines)
+        assertEquals(0, ride.otherLines)
     }
 
     @Test
