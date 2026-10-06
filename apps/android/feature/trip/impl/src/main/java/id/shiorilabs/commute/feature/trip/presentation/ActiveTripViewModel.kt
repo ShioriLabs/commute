@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import id.shiorilabs.commute.core.datastore.DeveloperPreferencesRepository
 import id.shiorilabs.commute.core.datastore.LocationPreferencesRepository
+import id.shiorilabs.commute.core.datastore.OtwPreferencesRepository
 import id.shiorilabs.commute.core.trip.RiderAction
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationDirectory
@@ -44,6 +45,7 @@ class ActiveTripViewModel @Inject constructor(
     private val barState: TripBarState,
     developerPreferences: DeveloperPreferencesRepository,
     locationPreferences: LocationPreferencesRepository,
+    otwPreferences: OtwPreferencesRepository,
 ) : ViewModel() {
 
     private val lines = MutableStateFlow(lineRepository.cachedLines().orEmpty())
@@ -90,6 +92,10 @@ class ActiveTripViewModel @Inject constructor(
     /** "Halaman PIDS" in Pengaturan → Experimental: the board takes turns between pages. */
     val boardPages: StateFlow<Boolean> = developerPreferences.boardPages
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** "Diagram ala Layar Kereta Jepang" in Pengaturan → OTW: the board draws the stops ahead on its curved strip. */
+    val pidsDiagram: StateFlow<Boolean> = otwPreferences.pidsDiagram
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
     /** What the rider saw the train do, logged with what [pids] (the board then) said. */
     fun mark(kind: MarkKind, pids: Pids) = controller.mark(

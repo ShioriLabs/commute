@@ -147,6 +147,10 @@ sealed interface Route : NavKey {
     @Serializable
     data object SettingsLocation : Route
 
+    /** How the trip page shows a trip under way. */
+    @Serializable
+    data object SettingsOtw : Route
+
     /** Switches for trying the app out: debug builds, or after seven taps on the version. */
     @Serializable
     data object SettingsExperimental : Route
