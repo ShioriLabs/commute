@@ -356,6 +356,81 @@ class TripControllerImplTest {
         assertEquals(emptyList<String>(), asked)
     }
 
+    /** On Sudirman's platform for the 08.10, seen there a minute after it was due. */
+    private fun onThePlatform() = ActiveTrip(
+        plan,
+        TripEngine.start(plan, NOW, hasLocation = true).state.copy(
+            legIndex = 2,
+            phase = TripPhase.WAITING_TO_BOARD,
+            source = PositionSource.CONFIRMED,
+            confirmedAt = minutes(11),
+            sightedPosition = 0.0,
+        ),
+        origin,
+    )
+
+    private val sudirmanToManggarai = GeoPoint(
+        SUDIRMAN.latitude!! + (MANGGARAI.latitude!! - SUDIRMAN.latitude!!) * 0.2,
+        SUDIRMAN.longitude!! + (MANGGARAI.longitude!! - SUDIRMAN.longitude!!) * 0.2,
+    )
+
+    @Test
+    fun `a train past its time while the rider waits on its platform is swapped for the next, quietly`() = runTest {
+        store.trip = onThePlatform()
+        onward = TripPlan(listOf(nextTrain))
+        val controller = controller(at = minutes(11).plusSeconds(30))
+        runCurrent()
+
+        assertEquals(minutes(20), controller.active.value!!.plan.ride(2).departureAt)
+        assertEquals(emptyList<Pair<Int, Instant>>(), runtime.rerouted)
+    }
+
+    @Test
+    fun `seen aboard before the next train could have left, the rider is on the late one it replaced`() = runTest {
+        store.trip = onThePlatform()
+        onward = TripPlan(listOf(nextTrain))
+        val controller = controller(at = minutes(11).plusSeconds(30))
+        runCurrent()
+
+        // The 08.10, three minutes late: 600 m out at 08.13.
+        controller.onFix(Fix(sudirmanToManggarai, 10f, minutes(13), speedMps = 12f))
+
+        val trip = controller.active.value!!
+        assertEquals(plan, trip.plan)
+        assertEquals(TripPhase.RIDING, trip.state.phase)
+        // Late against the 08.10, not pinned early against the 08.20.
+        assertTrue(trip.state.clockOffsetS in 60L..240L)
+        assertNull(trip.replaced)
+    }
+
+    @Test
+    fun `boarding before the next train by a tap takes back the late one too`() = runTest {
+        store.trip = onThePlatform()
+        onward = TripPlan(listOf(nextTrain))
+        val controller = controller(at = minutes(13))
+        runCurrent()
+
+        controller.say(RiderAction.BOARDED)
+
+        assertEquals(plan, controller.active.value!!.plan)
+    }
+
+    @Test
+    fun `seen aboard when the next train leaves, the rider is on it`() = runTest {
+        store.trip = onThePlatform()
+        onward = TripPlan(listOf(nextTrain))
+        val controller = controller(at = minutes(11).plusSeconds(30))
+        runCurrent()
+
+        controller.onFix(Fix(GeoPoint(SUDIRMAN.latitude!!, SUDIRMAN.longitude!!), 10f, minutes(20), speedMps = 0f))
+        controller.onFix(Fix(sudirmanToManggarai, 10f, minutes(21), speedMps = 12f))
+
+        val trip = controller.active.value!!
+        assertEquals(minutes(20), trip.plan.ride(2).departureAt)
+        assertEquals(TripPhase.RIDING, trip.state.phase)
+        assertNull(trip.replaced)
+    }
+
     @Test
     fun `nothing on offer leaves the trip as it was`() = runTest {
         store.trip = walkingToAMissedTrain()
