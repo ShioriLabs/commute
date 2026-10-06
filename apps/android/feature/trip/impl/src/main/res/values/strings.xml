@@ -20,6 +20,8 @@
     <string name="trip_walk_to">Jalan ke %1$s, %2$d m</string>
     <string name="trip_alights_around">sampai sekitar %1$s</string>
     <string name="trip_then_change">Lalu pindah ke %1$s</string>
+    <string name="trip_then_change_at">Lalu pindah ke %1$s, berangkat %2$s</string>
+    <string name="trip_then_missed">" (yang %1$s nggak kekejar)"</string>
     <string name="trip_then_done">Ini tujuan kamu</string>
     <string name="trip_separator">" · "</string>
 
@@ -78,6 +80,7 @@
     <string name="trip_live_details">Lihat detail rute</string>
     <string name="trip_alert_rerouted_title">Naik yang %1$s aja</string>
     <string name="trip_alert_rerouted">Yang %1$s udah lewat. %2$s berikutnya berangkat %3$s dari %4$s.</string>
+    <string name="trip_alert_rerouted_ahead">Soalnya yang %1$s nggak kekejar. %2$s berikutnya berangkat %3$s dari %4$s.</string>
     <string name="trip_mark_moving">Jalan</string>
     <string name="trip_mark_stopped">Berhenti</string>
     <string name="trip_mark_odd">Aneh</string>
