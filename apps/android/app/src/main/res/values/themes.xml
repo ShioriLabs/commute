@@ -1,17 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.Commute" parent="android:Theme.Material.Light.NoActionBar">
+    <style name="Base.Theme.Commute" parent="android:Theme.Material.Light.NoActionBar">
         <!-- Drawn until the first Compose frame; a hardcoded white here is a flash against the
              app's own background. -->
         <item name="android:windowBackground">@color/window_background</item>
-
-        <!-- The launch splash: the wordmark's letters rising in, on the same background as the
-             home screen it hands over to. It leaves as soon as the app has drawn, even mid-reveal. -->
-        <item name="android:windowSplashScreenBackground">@color/window_background</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_wordmark_animated</item>
-        <!-- The reveal's length with its lead-in (splash_wordmark_animated), which Android 12
-             times the icon by. -->
-        <item name="android:windowSplashScreenAnimationDuration">760</item>
     </style>
+
+    <!-- Before Android 12 there is no splash to dress: the window background stands in for it. The
+         splash itself is in values-v31. -->
+    <style name="Theme.Commute" parent="Base.Theme.Commute" />
 </resources>
