@@ -101,33 +101,39 @@
     <string name="settings_legal_item_data">Atribusi Data</string>
     <string name="settings_legal_item_oss">Atribusi Kode Sumber Terbuka</string>
     <string name="settings_legal_item_creative">Atribusi Aset Kreatif</string>
-    <string name="settings_legal_effective">Efektif Sejak 15 Juni 2025</string>
+    <string name="settings_legal_effective">Efektif Sejak 6 Oktober 2026</string>
 
     <!-- Privacy policy -->
     <string name="settings_privacy_title">Kebijakan Privasi</string>
-    <string name="settings_privacy_intro"><![CDATA[<b>Shiori Labs</b> (selanjutnya \"Kami\") berkomitmen untuk menjaga privasi Anda sebagai pengguna aplikasi <b>Commute</b> (selanjutnya \"Aplikasi\").<br>Kami tidak mengumpulkan data pribadi Anda secara langsung, namun Mitra analitik Kami mungkin menyimpan data non-pribadi untuk keperluan analitik.<br>Kebijakan Privasi ini menjelaskan bagaimana Kami dan Mitra analitik Kami mengumpulkan, menggunakan, menyimpan, dan melindungi informasi pribadi Anda saat menggunakan Aplikasi.]]></string>
+    <string name="settings_privacy_intro"><![CDATA[<b>Shiori Labs</b> (selanjutnya \"Kami\") berkomitmen untuk menjaga privasi Anda sebagai pengguna <b>Commute</b> (selanjutnya \"Aplikasi\"), baik situs web commute.shiorilabs.id maupun aplikasi Android dan Wear OS-nya.<br>Aplikasi tidak memerlukan akun, dan Kami tidak mengumpulkan data yang dapat mengidentifikasi Anda secara langsung.<br>Kebijakan Privasi ini menjelaskan informasi apa saja yang dikumpulkan saat Anda menggunakan Aplikasi, untuk apa informasi tersebut digunakan, serta bagaimana informasi tersebut disimpan dan dilindungi.]]></string>
     <string name="settings_privacy_collected_title">1. Informasi yang Kami Kumpulkan</string>
-    <string name="settings_privacy_collected_body"><![CDATA[Kami tidak mengumpulkan informasi identitas pribadi secara langsung. Namun, Kami menggunakan <i>platform</i> <b>Cloudflare Web Analytics</b> dari Cloudflare (selanjutnya \"Mitra Kami\" atau \"Cloudflare\") yang secara otomatis mengumpulkan informasi non-pribadi seperti:]]></string>
-    <string name="settings_privacy_collected_1">Alamat IP</string>
-    <string name="settings_privacy_collected_2">Informasi perangkat dan browser Anda</string>
-    <string name="settings_privacy_collected_3">Sistem operasi</string>
-    <string name="settings_privacy_collected_4">Negara asal berdasarkan IP</string>
-    <string name="settings_privacy_collected_5">Halaman yang dikunjungi dan waktu kunjungan</string>
-    <string name="settings_privacy_collected_outro">Data ini dikumpulkan secara anonim dan digunakan hanya untuk keperluan analisis lalu lintas dan performa situs.</string>
-    <string name="settings_privacy_use_title">2. Penggunaan Data</string>
-    <string name="settings_privacy_use_body">Kami menggunakan data yang dikumpulkan oleh Mitra Kami untuk hal-hal seperti:</string>
-    <string name="settings_privacy_use_1">Analisis halaman yang sering dikunjungi</string>
-    <string name="settings_privacy_use_2">Meningkatkan performa dan stabilitas Aplikasi</string>
-    <string name="settings_privacy_use_3">Mengatur prioritas jalan berkembangnya Aplikasi</string>
-    <string name="settings_privacy_use_4">Melindungi Aplikasi dari serangan siber</string>
+    <string name="settings_privacy_collected_body">Informasi berikut dikumpulkan secara otomatis, tanpa nama, email, maupun ID yang terkait dengan Anda:</string>
+    <string name="settings_privacy_collected_1"><![CDATA[<b>Analitik situs web.</b> Di situs web, <i>platform</i> <b>Cloudflare Web Analytics</b> dari Cloudflare mencatat halaman yang dikunjungi dan waktu kunjungan, informasi perangkat dan browser, sistem operasi, alamat IP, serta negara asal berdasarkan alamat IP.]]></string>
+    <string name="settings_privacy_collected_2"><![CDATA[<b>Catatan server.</b> Saat situs web maupun aplikasi meminta jadwal, rute, atau tarif, server Kami mencatat data yang diminta (misalnya stasiun atau rute), versi aplikasi atau jenis browser, dan negara asal berdasarkan alamat IP. Alamat IP hanya dipakai sesaat untuk membatasi permintaan yang berlebihan dan tidak disimpan.]]></string>
+    <string name="settings_privacy_collected_3"><![CDATA[<b>Laporan galat.</b> Saat aplikasi Android berhenti mendadak atau tidak merespons, laporan galat dikirim ke <b>Sentry</b>. Laporan ini berisi rincian teknis galat, versi aplikasi, model perangkat, versi sistem operasi, kondisi perangkat (seperti memori, penyimpanan, dan baterai), bahasa dan zona waktu, serta negara asal berdasarkan koneksi, tanpa ID pengguna maupun ID perangkat.]]></string>
+    <string name="settings_privacy_collected_outro">Cloudflare dan Sentry (selanjutnya \"Mitra Kami\") mengolah data tersebut atas nama Kami.</string>
+    <string name="settings_privacy_location_title">2. Lokasi</string>
+    <string name="settings_privacy_location_body">Aplikasi Android meminta izin lokasi hanya saat Anda memakai fitur yang membutuhkannya. Lokasi Anda diolah di perangkat Anda sendiri dan tidak pernah dikirim ke server Kami.</string>
+    <string name="settings_privacy_location_1"><![CDATA[<b>Di dekat kamu.</b> Lokasi dibaca saat beranda dibuka, untuk menampilkan stasiun terdekat.]]></string>
+    <string name="settings_privacy_location_2"><![CDATA[<b>OTW.</b> Selama perjalanan berjalan, Aplikasi membaca lokasi untuk mengetahui posisi Anda di rute dan mengingatkan Anda sebelum turun, termasuk saat Aplikasi tidak sedang dibuka. Selama itu, notifikasi perjalanan selalu tampil. Pembacaan lokasi berhenti saat perjalanan selesai.]]></string>
+    <string name="settings_privacy_location_3"><![CDATA[<b>Catatan perjalanan.</b> Aplikasi menyimpan catatan teknis perjalanan OTW, termasuk posisi GPS, di perangkat Anda untuk membantu Kami menyempurnakan mode OTW. Catatan ini dibatasi sekitar 1 MB (bagian terlama terhapus otomatis), tidak ikut dicadangkan ke akun Google Anda, dan hanya keluar dari perangkat jika Anda sendiri membagikannya.]]></string>
+    <string name="settings_privacy_location_4"><![CDATA[<b>Jam tangan.</b> Jika Anda memasangkan jam tangan Wear OS, status perjalanan dikirim langsung dari ponsel ke jam tangan Anda.]]></string>
+    <string name="settings_privacy_location_outro">Anda dapat mematikan penggunaan lokasi kapan saja melalui menu Pengaturan di Aplikasi atau pengaturan perangkat Anda.</string>
+    <string name="settings_privacy_use_title">3. Penggunaan Data</string>
+    <string name="settings_privacy_use_body">Kami menggunakan data yang dikumpulkan untuk hal-hal seperti:</string>
+    <string name="settings_privacy_use_1">Menampilkan jadwal, rute, dan tarif yang Anda minta</string>
+    <string name="settings_privacy_use_2">Analisis halaman dan fitur yang sering digunakan</string>
+    <string name="settings_privacy_use_3">Menemukan dan memperbaiki galat, serta meningkatkan performa dan stabilitas Aplikasi</string>
+    <string name="settings_privacy_use_4">Mengatur prioritas jalan berkembangnya Aplikasi</string>
+    <string name="settings_privacy_use_5">Melindungi Aplikasi dari serangan siber dan penyalahgunaan</string>
     <string name="settings_privacy_use_outro">Kami tidak akan menggunakan data tersebut untuk tujuan iklan, pelacakan, maupun menjualnya kepada pihak ketiga.</string>
-    <string name="settings_privacy_storage_title">3. Penyimpanan dan Keamanan</string>
-    <string name="settings_privacy_storage_body"><![CDATA[Semua data analitik disimpan oleh Cloudflare dan tunduk pada <a href=\"https://www.cloudflare.com/privacypolicy/\">Kebijakan Privasi Cloudflare</a>. Kami tidak menyimpan data pengguna secara lokal di server Kami.]]></string>
-    <string name="settings_privacy_rights_title">4. Hak Pengguna</string>
-    <string name="settings_privacy_rights_body">Karena data dikumpulkan secara anonim dan tidak dapat dikaitkan langsung dengan identitas individu, Kami tidak menyimpan atau memproses data pribadi yang dapat diminta, diubah, atau dihapus oleh Pengguna.</string>
-    <string name="settings_privacy_changes_title">5. Perubahan Kebijakan</string>
+    <string name="settings_privacy_storage_title">4. Penyimpanan dan Keamanan</string>
+    <string name="settings_privacy_storage_body"><![CDATA[Semua data dikirim melalui koneksi terenkripsi (HTTPS). Data analitik dan catatan server disimpan oleh Cloudflare dan tunduk pada <a href=\"https://www.cloudflare.com/privacypolicy/\">Kebijakan Privasi Cloudflare</a>; catatan server hanya disimpan selama beberapa hari. Laporan galat disimpan oleh Sentry dan tunduk pada <a href=\"https://sentry.io/privacy/\">Kebijakan Privasi Sentry</a>, dan terhapus otomatis paling lama 90 hari. Selain itu, Kami tidak menyimpan data pengguna di server Kami.]]></string>
+    <string name="settings_privacy_rights_title">5. Hak Pengguna</string>
+    <string name="settings_privacy_rights_body"><![CDATA[Karena Aplikasi tidak memakai akun dan data di atas tidak dapat dikaitkan dengan identitas Anda, Kami tidak dapat menemukan, mengubah, atau menghapus data milik orang tertentu atas permintaan. Data tersebut terhapus otomatis sesuai masa simpan di atas.<br>Data yang tersimpan di perangkat Anda, seperti stasiun dan rute yang disimpan serta catatan perjalanan, dapat Anda hapus kapan saja dengan menghapus data Aplikasi atau mencopot Aplikasi.]]></string>
+    <string name="settings_privacy_changes_title">6. Perubahan Kebijakan</string>
     <string name="settings_privacy_changes_body">Kebijakan ini dapat diperbarui sewaktu-waktu tanpa pemberitahuan pasti. Perubahan signifikan akan diumumkan melalui Aplikasi dan halaman ini.</string>
-    <string name="settings_privacy_contact_title">6. Informasi Kontak</string>
+    <string name="settings_privacy_contact_title">7. Informasi Kontak</string>
     <string name="settings_privacy_contact_body"><![CDATA[Jika Anda memiliki pertanyaan mengenai privasi atau kebijakan ini, silakan hubungi Kami melalui:<br>Email: <a href=\"mailto:hai@shiorilabs.id\">hai@shiorilabs.id</a>]]></string>
 
     <!-- Terms & conditions -->
@@ -143,7 +149,7 @@
     <string name="settings_terms_license_support">Kami dengan senang hati mendukung penggunaan dan kontribusi dari para Pengguna, selama mengikuti ketentuan lisensi tersebut.</string>
     <string name="settings_terms_license_warning"><![CDATA[<b>PERINGATAN:</b> Lisensi hanya berlaku pada kode sumber Aplikasi ini. Untuk ketentuan penggunaan Data, silakan cek <a href=\"route:data-attributions\">Atribusi Data</a>. Untuk ketentuan penggunaan Aset Kreatif (termasuk, tapi tidak terbatas pada, gambar <i>clipart</i>), silakan cek <a href=\"route:creative-assets\">Atribusi Aset Kreatif</a>]]></string>
     <string name="settings_terms_privacy_title">3. Data dan Privasi</string>
-    <string name="settings_terms_privacy_body"><![CDATA[Kami tidak mengumpulkan data pribadi Anda secara langsung. Informasi non-pribadi seperti IP dan browser mungkin dikumpulkan secara anonim oleh <b>Cloudflare Web Analytics</b>.<br>Lihat <a href=\"route:privacy-policy\">Kebijakan Privasi</a> untuk info lebih lanjut.]]></string>
+    <string name="settings_terms_privacy_body"><![CDATA[Kami tidak mengumpulkan data pribadi Anda secara langsung. Informasi non-pribadi seperti data penggunaan, catatan server, dan laporan galat mungkin dikumpulkan secara anonim oleh Mitra Kami, <b>Cloudflare</b> dan <b>Sentry</b>. Lokasi Anda diolah di perangkat dan tidak dikirim ke server Kami.<br>Lihat <a href=\"route:privacy-policy\">Kebijakan Privasi</a> untuk info lebih lanjut.]]></string>
     <string name="settings_terms_liability_title">4. Batasan Tanggung Jawab</string>
     <string name="settings_terms_liability_body"><![CDATA[Aplikasi ini disediakan <b>sebagaimana adanya (as-is)</b> tanpa jaminan. Kami <b>tidak bertanggung jawab atas kerugian atau kerusakan</b> yang timbul akibat penggunaan Aplikasi ini, baik secara langsung maupun tidak langsung.]]></string>
     <string name="settings_terms_changes_title">5. Perubahan Aplikasi</string>
