@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="GradleMigrationSettings" migrationVersion="1" />
   <component name="GradleSettings">
     <option name="linkedExternalProjectsSettings">
       <GradleProjectSettings>
@@ -21,12 +22,15 @@
           <set>
             <option value="$PROJECT_DIR$" />
             <option value="$PROJECT_DIR$/app" />
+            <option value="$PROJECT_DIR$/baselineprofile" />
+            <option value="$PROJECT_DIR$/baselineprofile-wear" />
             <option value="$PROJECT_DIR$/build-logic" />
             <option value="$PROJECT_DIR$/build-logic/convention" />
             <option value="$PROJECT_DIR$/core" />
             <option value="$PROJECT_DIR$/core/common" />
             <option value="$PROJECT_DIR$/core/config" />
             <option value="$PROJECT_DIR$/core/datastore" />
+            <option value="$PROJECT_DIR$/core/location" />
             <option value="$PROJECT_DIR$/core/model" />
             <option value="$PROJECT_DIR$/core/navigation" />
             <option value="$PROJECT_DIR$/core/network" />
@@ -34,16 +38,22 @@
             <option value="$PROJECT_DIR$/core/query" />
             <option value="$PROJECT_DIR$/core/trip" />
             <option value="$PROJECT_DIR$/core/ui" />
+            <option value="$PROJECT_DIR$/core/wearable" />
             <option value="$PROJECT_DIR$/feature" />
             <option value="$PROJECT_DIR$/feature/card" />
             <option value="$PROJECT_DIR$/feature/card/api" />
             <option value="$PROJECT_DIR$/feature/card/impl" />
+            <option value="$PROJECT_DIR$/feature/hub" />
+            <option value="$PROJECT_DIR$/feature/hub/impl" />
             <option value="$PROJECT_DIR$/feature/journey" />
             <option value="$PROJECT_DIR$/feature/journey/api" />
             <option value="$PROJECT_DIR$/feature/journey/impl" />
+            <option value="$PROJECT_DIR$/feature/line" />
+            <option value="$PROJECT_DIR$/feature/line/impl" />
             <option value="$PROJECT_DIR$/feature/saved" />
             <option value="$PROJECT_DIR$/feature/saved/impl" />
             <option value="$PROJECT_DIR$/feature/search" />
+            <option value="$PROJECT_DIR$/feature/search/api" />
             <option value="$PROJECT_DIR$/feature/search/impl" />
             <option value="$PROJECT_DIR$/feature/settings" />
             <option value="$PROJECT_DIR$/feature/settings/impl" />
