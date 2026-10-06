@@ -17,6 +17,7 @@
     <string name="settings_item_saved_stations">Stasiun &amp; Rute Disimpan</string>
     <string name="settings_item_manage_data">Atur Data</string>
     <string name="settings_item_location">Lokasi</string>
+    <string name="settings_item_otw">OTW</string>
     <string name="settings_item_legal">Legal &amp; Atribusi</string>
     <string name="settings_item_data_platform">Commute Data Platform</string>
     <string name="settings_item_support">Dukung Commute</string>
@@ -66,6 +67,10 @@
     <string name="settings_location_permission">Izin Lokasi di Sistem</string>
     <string name="settings_location_permission_granted">Diizinkan</string>
     <string name="settings_location_permission_denied">Belum diizinkan</string>
+
+    <string name="settings_otw_title">OTW</string>
+    <string name="settings_otw_pids_diagram">Diagram ala Layar Kereta Jepang</string>
+    <string name="settings_otw_pids_diagram_detail">Tampilkan diagram perjalanan ala Jepang di atas linimasa perjalanan</string>
 
     <!-- Experimental: switches for trying the app out. Listed in debug builds, or after tapping the
          version seven times. %1$d is how many taps are left. -->
