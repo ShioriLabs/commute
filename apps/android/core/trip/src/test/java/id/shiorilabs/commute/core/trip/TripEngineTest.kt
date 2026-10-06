@@ -204,6 +204,43 @@ class TripEngineTest {
     }
 
     @Test
+    fun `a train crawling out after standing at a station has left it, two fixes on`() {
+        // Jatinegara on 2026-10-06: out at 2 to 4 m/s, held "there" until 235 m out.
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(Places.TEBET, 4.0, speedMps = 0.3f)
+
+        run.fix(between(Places.TEBET, Places.CAWANG, 0.02), 5.0, speedMps = 2.1f)
+        assertEquals(1.0, run.state.position, 0.0)
+        run.fix(between(Places.TEBET, Places.CAWANG, 0.05), 5.1, speedMps = 3.3f)
+        assertTrue(run.state.position > 1.0)
+    }
+
+    @Test
+    fun `a train still braking through a station's point hasn't left it`() {
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        // In at 5.5 m/s, then on past the point at a walking-plus pace before it ever stands.
+        run.fix(between(Places.TEBET, Places.CAWANG, 0.01), 4.0, speedMps = 5.5f)
+        run.fix(between(Places.TEBET, Places.CAWANG, 0.03), 4.05, speedMps = 3.5f)
+        run.fix(between(Places.TEBET, Places.CAWANG, 0.05), 4.1, speedMps = 2.2f)
+
+        assertEquals(1.0, run.state.position, 0.0)
+    }
+
+    @Test
+    fun `a train creeping up the platform after standing hasn't left it`() {
+        // Manggarai on 2026-10-06: stood, crept on at 2 m/s while still short of the point, stood again.
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(between(Places.TEBET, Places.MANGGARAI, 0.06), 4.0, speedMps = 0.5f)
+        run.fix(between(Places.TEBET, Places.MANGGARAI, 0.05), 4.1, speedMps = 2.1f)
+        run.fix(between(Places.TEBET, Places.MANGGARAI, 0.04), 4.15, speedMps = 2.4f)
+
+        assertEquals(1.0, run.state.position, 0.0)
+    }
+
+    @Test
     fun `the stop to get off at is reached on the way in, however fast`() {
         val run = Run(bogorLine)
         run.tick(0.0)
