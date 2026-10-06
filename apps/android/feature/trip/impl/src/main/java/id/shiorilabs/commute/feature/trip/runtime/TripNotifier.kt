@@ -34,6 +34,7 @@ import id.shiorilabs.commute.feature.trip.presentation.formatClock
 import id.shiorilabs.commute.feature.trip.presentation.headline
 import id.shiorilabs.commute.core.trip.minutesUntil
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -52,6 +53,15 @@ class TripNotifier @Inject constructor(
 ) {
 
     private val manager = NotificationManagerCompat.from(context)
+
+    /** A ride of this trip swapped for a later one: its leg, and when the one missed left. */
+    private class Reroute(val startedAt: Instant, val legIndex: Int, val missed: Instant)
+
+    /** The last "Turun di sini": for which trip and ride, how sure, and when. */
+    private class Alighted(val startedAt: Instant, val legIndex: Int, val estimated: Boolean, val at: Instant)
+
+    private var reroute: Reroute? = null
+    private var alighted: Alighted? = null
 
     /** The ongoing notification for [trip], also what the foreground service starts with. */
     fun progress(trip: ActiveTrip): Notification {
@@ -105,15 +115,10 @@ class TripNotifier @Inject constructor(
                 context.getString(R.string.trip_alert_prepare_title) to context.getString(stops, alighting)
             }
             AlertKind.ALIGHT -> {
-                val then = trip.plan.nextRideAfter(alert.legIndex)?.let(trip.plan::ride)
-                val next = then?.let { context.getString(R.string.trip_then_change, rideName(it)) }
-                    ?: context.getString(R.string.trip_then_done)
-                if (alert.estimated) {
-                    context.getString(R.string.trip_alert_alight_estimated_title) to
-                        context.getString(R.string.trip_alert_alight_estimated, alighting) + sep() + next
-                } else {
-                    context.getString(R.string.trip_alert_alight_title) to alighting + sep() + next
-                }
+                alighted = Alighted(trip.state.startedAt, alert.legIndex, alert.estimated, clock.instant())
+                // Any word of a change missed is in this one now.
+                manager.cancel(REROUTE_ID)
+                alight(trip, alert.legIndex, alert.estimated)
             }
             AlertKind.MISSED ->
                 context.getString(R.string.trip_alert_missed_title) to context.getString(R.string.trip_alert_missed, alighting)
@@ -136,17 +141,60 @@ class TripNotifier @Inject constructor(
         notify(ASK_ID, notification)
     }
 
-    /** The ride waited for left at [missed]: which one to take instead, and when it goes. */
-    fun rerouted(trip: ActiveTrip, missed: Instant) {
-        val ride = trip.plan.ride(trip.state.legIndex)
+    /**
+     * Ride [legIndex], leaving at [missed], was swapped for a later one. Still aboard the ride before:
+     * which one to take instead, and when, as a notice of its own beside the alerts. Just off it, with
+     * "Turun di sini" still up: that alert takes the news, quietly, rather than being replaced by it.
+     */
+    fun rerouted(trip: ActiveTrip, legIndex: Int, missed: Instant) {
+        reroute = Reroute(trip.state.startedAt, legIndex, missed)
+        val ride = trip.plan.ride(legIndex)
         val departs = ride.departureAt?.let(::formatClock) ?: return
+        val previous = trip.plan.rideIndices.lastOrNull { it < legIndex }
+        val justOff = alighted?.takeIf {
+            it.startedAt == trip.state.startedAt && it.legIndex == previous &&
+                Duration.between(it.at, clock.instant()) < JUST_OFF
+        }
+        if (justOff != null && previous != null) {
+            val (title, text) = alight(trip, previous, justOff.estimated)
+            notify(ALERT_ID, alertBuilder(title, text).setOnlyAlertOnce(true).build())
+            return
+        }
+        val text = if (trip.state.phase == TripPhase.RIDING) R.string.trip_alert_rerouted_ahead else R.string.trip_alert_rerouted
         notify(
-            ALERT_ID,
+            REROUTE_ID,
             alertBuilder(
                 context.getString(R.string.trip_alert_rerouted_title, departs),
-                context.getString(R.string.trip_alert_rerouted, formatClock(missed), rideName(ride), departs, ride.stops.first().name),
+                context.getString(text, formatClock(missed), rideName(ride), departs, ride.stops.first().name),
             ).build(),
         )
+    }
+
+    /**
+     * "Turun di sini" for ride [legIndex]: where, and what then. A change names the ride and when it
+     * leaves, and the one it stands in for when that was missed.
+     */
+    private fun alight(trip: ActiveTrip, legIndex: Int, estimated: Boolean): Pair<String, String> {
+        val alighting = trip.plan.ride(legIndex).stops.last().name
+        val thenIndex = trip.plan.nextRideAfter(legIndex)
+        val next = thenIndex?.let { index ->
+            val then = trip.plan.ride(index)
+            val departs = then.departureAt?.let(::formatClock)
+            val missed = reroute?.takeIf { it.startedAt == trip.state.startedAt && it.legIndex == index }
+                ?.let { context.getString(R.string.trip_then_missed, formatClock(it.missed)) }
+                .orEmpty()
+            if (departs == null) {
+                context.getString(R.string.trip_then_change, rideName(then))
+            } else {
+                context.getString(R.string.trip_then_change_at, rideName(then), departs) + missed
+            }
+        } ?: context.getString(R.string.trip_then_done)
+        return if (estimated) {
+            context.getString(R.string.trip_alert_alight_estimated_title) to
+                context.getString(R.string.trip_alert_alight_estimated, alighting) + sep() + next
+        } else {
+            context.getString(R.string.trip_alert_alight_title) to alighting + sep() + next
+        }
     }
 
     /**
@@ -158,6 +206,9 @@ class TripNotifier @Inject constructor(
         manager.cancel(PROGRESS_ID)
         manager.cancel(ASK_ID)
         manager.cancel(ALERT_ID)
+        manager.cancel(REROUTE_ID)
+        reroute = null
+        alighted = null
     }
 
     private fun alertBuilder(title: String, text: String) =
@@ -246,6 +297,10 @@ class TripNotifier @Inject constructor(
         const val PROGRESS_ID = 41
         private const val ALERT_ID = 42
         private const val ASK_ID = 43
+        private const val REROUTE_ID = 44
+
+        /** How long after "Turun di sini" news of a missed change goes into it instead of its own. */
+        private val JUST_OFF: Duration = Duration.ofMinutes(3)
 
         /** Segment lengths are in stops; this keeps a one-stop ride a visible share of the bar. */
         private const val SEGMENT_UNIT = 100
