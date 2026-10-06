@@ -14,7 +14,7 @@ class AndroidLibraryConventionPlugin : Plugin<Project> {
             }
 
             defaultConfig {
-                minSdk = 31
+                minSdk = 29
             }
 
             compileOptions {
