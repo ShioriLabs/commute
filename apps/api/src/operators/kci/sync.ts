@@ -59,14 +59,44 @@ export async function syncStations(d1: D1Database, token?: string) {
   return stations
 }
 
+/*
+ * One station's board from a KCI schedules response, or null when the response
+ * is not a success.
+ *
+ * Split from the fetch so a saved response converts exactly as a live one does.
+ * kci.id now blocks non-browser clients on its schedule paths, so a board can
+ * arrive as a dump taken in a real browser (see generateTimetableFromDumpSQL)
+ * as well as from /sync, and both must produce the same rows.
+ *
+ * `stationCode` is OURS, not the feed's: every id written stays on it so a KCI
+ * rename never reaches the database. See FEED_STATION_CODES.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function toTimetableRows(stationCode: string, json: any): NewSchedule[] | null {
+  if (json?.status !== 200 || !Array.isArray(json.data)) return null
+
+  const timetable: NewSchedule[] = []
+
+  for (const schedule of json.data) {
+    // The feed occasionally prefixes dest with a literal "undefined "
+    // (seen on R-line Parung Panjang workings).
+    const dest = String(schedule.dest ?? '').replace(/^undefined\s+/i, '')
+    timetable.push({
+      id: `${OPERATORS.KCI.code}-${stationCode}-${schedule.train_id}`,
+      stationId: `${OPERATORS.KCI.code}-${stationCode}`,
+      tripNumber: schedule.train_id,
+      boundFor: tryGetFormattedName(dest, dest),
+      estimatedDeparture: schedule.time_est,
+      estimatedArrival: schedule.dest_time,
+      lineCode: getLineInfoFromAPIName(schedule.ka_name ?? '')?.lineCode ?? 'NUL'
+    })
+  }
+
+  return timetable
+}
+
 export async function syncTimetable(d1: D1Database, stationCode: string, token?: string) {
-  /*
-   * Ask the feed for ITS code, store against OURS.
-   *
-   * KCI renames stations without notice (TTI -> THI, GGL -> GRG), and every id
-   * written below stays on `stationCode` so a rename never reaches the database.
-   * See FEED_STATION_CODES.
-   */
+  // Ask the feed for ITS code; toTimetableRows stores against OURS.
   const feedStationCode = toFeedStationCode(stationCode)
   const response = await fetch(
     `https://kci.id/api/krl/schedules?stationid=${feedStationCode}&timefrom=00:00&timeto=23:59`,
@@ -80,31 +110,8 @@ export async function syncTimetable(d1: D1Database, stationCode: string, token?:
     return []
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const json = await response.json<any>()
-
-  if (json.status !== 200) {
-    return []
-  }
-
-  const timetable: NewSchedule[] = []
-
-  for (const schedule of json.data) {
-    // The feed occasionally prefixes dest with a literal "undefined "
-    // (seen on R-line Parung Panjang workings).
-    const dest = String(schedule.dest ?? '').replace(/^undefined\s+/i, '')
-    const transformedSchedule: NewSchedule = {
-      id: `${OPERATORS.KCI.code}-${stationCode}-${schedule.train_id}`,
-      stationId: `${OPERATORS.KCI.code}-${stationCode}`,
-      tripNumber: schedule.train_id,
-      boundFor: tryGetFormattedName(dest, dest),
-      estimatedDeparture: schedule.time_est,
-      estimatedArrival: schedule.dest_time,
-      lineCode: getLineInfoFromAPIName(schedule.ka_name ?? '')?.lineCode ?? 'NUL'
-    }
-
-    timetable.push(transformedSchedule)
-  }
+  const timetable = toTimetableRows(stationCode, await response.json())
+  if (!timetable) return []
 
   /*
    * Every day: the KCI feed carries no day dimension at all — it answers for

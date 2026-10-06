@@ -14,6 +14,7 @@
     "start": "wrangler dev",
     "generate:lrtjbdbtimetable": "tsx ./src/operators/lrtjbdb/generateTimetableSQL.ts",
     "generate:basoetta-timetable": "tsx ./src/operators/kci/generateBasoettaTimetableSQL.ts",
+    "generate:kci-timetable": "tsx ./src/operators/kci/generateTimetableFromDumpSQL.ts",
     "generate:apcgk-timetable": "tsx ./src/operators/apcgk/generateTimetableSQL.ts",
     "generate:lrtj-timetable": "tsx ./src/operators/lrtj/generateTimetableSQL.ts",
     "generate:stationcoords": "tsx ./src/db/scripts/generateLatLngSQL.ts",

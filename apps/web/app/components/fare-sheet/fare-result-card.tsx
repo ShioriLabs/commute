@@ -78,9 +78,48 @@ function Node({ color }: { color: string }) {
   )
 }
 
+/*
+ * Where the trip starts or ends on foot.
+ *
+ * A ride draws its own two dots, but a walk is only a row of text, so a trip
+ * that opens with one began at a station the timeline never named: Sudirman to
+ * Blok M BCA read as starting at Dukuh Atas BNI, and the station the rider
+ * typed was nowhere on it. Slate rather than a line colour, because no line
+ * runs here — it is the walk's own rail, given an end.
+ */
+function EndpointStop({ name, cap }: { name: string, cap: 'START' | 'END' }) {
+  return (
+    <li className={`relative grid ${FARE_GUTTER_CLASS}`}>
+      <div className="relative">
+        <Rail style={{ backgroundColor: 'var(--color-slate-300)' }} cap={cap} />
+        <Node color="var(--color-slate-400)" />
+      </div>
+      <b className="text-lg py-0.5">{name}</b>
+    </li>
+  )
+}
+
 // One ride leg: board node, line-colored connector carrying the service card
 // (line pill, headsign, expandable intermediate stops), alight node.
-function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSameStationTransfer: boolean }) {
+/*
+ * The walk's rail colour beside a ride, so the two can meet at the node.
+ *
+ * A ride's own rail starts and stops at its node's centre, and a walk's rail
+ * only fills its own row, so the half-row between them was bare and every walk
+ * floated free of the dots it joins. The ride draws that half in the walk's
+ * colour, because the ride is the one that knows where its node sits.
+ */
+const walkRailColor = (leg: FareResultLeg | undefined): string | null => {
+  if (leg?.type !== 'TRANSFER') return null
+  return leg.corridorLabel != null && leg.fare != null ? 'var(--color-rose-300)' : 'var(--color-slate-300)'
+}
+
+function RideLeg({ leg, isSameStationTransfer, walkBefore, walkAfter }: {
+  leg: FareResultRideLeg
+  isSameStationTransfer: boolean
+  walkBefore: string | null
+  walkAfter: string | null
+}) {
   const [expanded, setExpanded] = useState(false)
   const legLines = useLegLines()
   // Optional-chained against a stale API during deploy skew.
@@ -123,6 +162,7 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
         : null}
       <div className={`relative grid ${FARE_GUTTER_CLASS}`}>
         <div className="relative">
+          {walkBefore ? <Rail style={{ backgroundColor: walkBefore }} cap="END" /> : null}
           <Rail style={railStyle} cap="START" />
           <Node color={legColor} />
         </div>
@@ -275,6 +315,7 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
       <div className={`relative grid ${FARE_GUTTER_CLASS}`}>
         <div className="relative">
           <Rail style={railStyle} cap="END" />
+          {walkAfter ? <Rail style={{ backgroundColor: walkAfter }} cap="START" /> : null}
           <Node color={legColor} />
         </div>
         <b className="text-lg py-0.5">{leg.to.name}</b>
@@ -287,8 +328,11 @@ function RideLeg({ leg, isSameStationTransfer }: { leg: FareResultRideLeg, isSam
 // connectors carrying the service card, walks as full-width cards that break
 // the rail (TfL Go-style).
 export function JourneyTimeline({ legs }: { legs: FareResultLeg[] }) {
+  const first = legs[0]
+  const last = legs.at(-1)
   return (
     <ol className="mt-6 flex flex-col">
+      {first?.type === 'TRANSFER' ? <EndpointStop name={first.from.name} cap="START" /> : null}
       {legs.map((leg, index) => {
         // Two consecutive rides through the same station = same-station
         // interchange (no walk leg): bridge the islands with a grey rail.
@@ -298,18 +342,26 @@ export function JourneyTimeline({ legs }: { legs: FareResultLeg[] }) {
           && previous.to.id === leg.from.id
 
         if (leg.type === 'RIDE') {
-          return <RideLeg key={index} leg={leg} isSameStationTransfer={isSameStationTransfer} />
+          return (
+            <RideLeg
+              key={index}
+              leg={leg}
+              isSameStationTransfer={isSameStationTransfer}
+              walkBefore={walkRailColor(previous ?? undefined)}
+              walkAfter={walkRailColor(legs[index + 1])}
+            />
+          )
         }
 
         // Paid corridor (e.g. Dukuh Atas via KCI Sudirman): a transfer that
         // crosses a paid area, so it reads as a ticketed step, not a free walk.
         if (leg.corridorLabel != null && leg.fare != null) {
           return (
-            <li key={index} className={`relative grid ${FARE_GUTTER_CLASS} my-2`}>
+            <li key={index} className={`relative grid ${FARE_GUTTER_CLASS}`}>
               <div className="relative">
                 <Rail style={{ backgroundColor: 'var(--color-rose-300)' }} />
               </div>
-              <div className="flex items-start gap-1.5 text-sm py-1.5">
+              <div className="flex items-start gap-1.5 text-sm py-3.5">
                 <TicketIcon weight="fill" className="w-3.5 h-3.5 shrink-0 mt-0.5 text-rose-500" />
                 <div className="flex flex-col">
                   <span className="text-rose-700">
@@ -330,12 +382,17 @@ export function JourneyTimeline({ legs }: { legs: FareResultLeg[] }) {
           )
         }
 
+        /*
+         * The breathing room is padding on the text, not a margin on the row: a
+         * margin sits outside the row, where its rail cannot reach, and left a
+         * gap at both ends of every walk.
+         */
         return (
-          <li key={index} className={`relative grid ${FARE_GUTTER_CLASS} my-2`}>
+          <li key={index} className={`relative grid ${FARE_GUTTER_CLASS}`}>
             <div className="relative">
               <Rail style={{ backgroundColor: 'var(--color-slate-300)' }} />
             </div>
-            <div className="flex items-center gap-1.5 text-sm text-slate-500 py-1.5">
+            <div className="flex items-center gap-1.5 text-sm text-slate-500 py-3.5">
               <PersonSimpleWalkIcon weight="bold" className="w-3.5 h-3.5" />
               <span>
                 Transit ke
@@ -347,6 +404,7 @@ export function JourneyTimeline({ legs }: { legs: FareResultLeg[] }) {
           </li>
         )
       })}
+      {last?.type === 'TRANSFER' ? <EndpointStop name={last.to.name} cap="END" /> : null}
     </ol>
   )
 }
