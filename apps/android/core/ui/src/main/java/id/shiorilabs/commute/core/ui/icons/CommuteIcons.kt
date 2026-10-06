@@ -59,6 +59,7 @@ import com.adamglin.phosphoricons.fill.MapPin
 import com.adamglin.phosphoricons.fill.PushPin
 import com.adamglin.phosphoricons.fill.PushPinSimple
 import com.adamglin.phosphoricons.fill.Ticket
+import com.adamglin.phosphoricons.fill.TrainSimple
 import com.adamglin.phosphoricons.fill.Trash
 import com.adamglin.phosphoricons.fill.XCircle
 
@@ -151,6 +152,7 @@ object CommuteIcons {
     val SavedStations: ImageVector = PhosphorIcons.Fill.PushPinSimple
     val ManageData: ImageVector = PhosphorIcons.Fill.Archive
     val Location: ImageVector = PhosphorIcons.Fill.MapPin
+    val Otw: ImageVector = PhosphorIcons.Fill.TrainSimple
     val Legal: ImageVector = PhosphorIcons.Fill.Files
     val DataPlatform: ImageVector = PhosphorIcons.Fill.Database
     val Support: ImageVector = PhosphorIcons.Fill.HandHeart

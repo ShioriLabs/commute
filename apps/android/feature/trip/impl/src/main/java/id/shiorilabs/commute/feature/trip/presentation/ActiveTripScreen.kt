@@ -105,6 +105,7 @@ fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel
     val manualMarks by viewModel.manualMarks.collectAsStateWithLifecycle()
     val platformMarks by viewModel.platformMarks.collectAsStateWithLifecycle()
     val boardPages by viewModel.boardPages.collectAsStateWithLifecycle()
+    val pidsDiagram by viewModel.pidsDiagram.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
 
     ActiveTripContent(
@@ -122,6 +123,7 @@ fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel
         platformMarks = platformMarks,
         onMark = viewModel::mark,
         boardPages = boardPages,
+        pidsDiagram = pidsDiagram,
     )
 }
 
@@ -146,6 +148,7 @@ private fun ActiveTripContent(
     platformMarks: Boolean = false,
     onMark: (MarkKind, Pids) -> Unit = { _, _ -> },
     boardPages: Boolean = false,
+    pidsDiagram: Boolean = true,
 ) {
     val trip = state.trip
     val markRows = if (trip != null) markRows(manual = manualMarks, platform = platformMarks) else emptyList()
@@ -206,6 +209,7 @@ private fun ActiveTripContent(
                     source = copy.source(trip),
                     onNameMoved = { nameBottom = it },
                     pages = boardPages,
+                    diagram = pidsDiagram,
                 )
             }
             item(key = "actions") {
