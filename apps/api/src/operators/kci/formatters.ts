@@ -66,6 +66,18 @@ export function toFeedStationCode(stationCode: string): string {
   return FEED_STATION_CODES[stationCode] ?? stationCode
 }
 
+const OUR_STATION_CODES: Record<string, string> = Object.fromEntries(
+  Object.entries(FEED_STATION_CODES).map(([ours, feed]) => [feed, ours])
+)
+
+/**
+ * Our station code, given the one the KCI feed uses. The inverse of
+ * toFeedStationCode, for input keyed by the feed (a browser dump of the API).
+ */
+export function fromFeedStationCode(feedStationCode: string): string {
+  return OUR_STATION_CODES[feedStationCode] ?? feedStationCode
+}
+
 // For mapping API line names to our line codes
 const WELL_KNOWN_LINE_KEY: Record<string, Line> = {
   'COMMUTER LINE CIKARANG': CIKARANG_LINE,
