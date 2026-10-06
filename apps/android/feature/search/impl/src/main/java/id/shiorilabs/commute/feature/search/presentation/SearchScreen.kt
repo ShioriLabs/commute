@@ -119,6 +119,15 @@ fun SearchScreen(
                 }
             },
             onTogglePin = viewModel::onToggleSave,
+            // Straight to the station page's "OTW Ke Sini", recorded as a recent search as the trip
+            // through the station page would have been.
+            onOtw = { station ->
+                station.stationId?.let { stationId ->
+                    viewModel.onResultClick(station)
+                    focusManager.clearFocus()
+                    navigator.goTo(Route.Otw(toId = stationId))
+                }
+            },
             onClearRecents = viewModel::onClearRecents,
             onEditPins = {
                 focusManager.clearFocus()
@@ -155,6 +164,7 @@ private fun SearchContent(
     onRetry: () -> Unit,
     onResultClick: (Searchable) -> Unit,
     onTogglePin: (stationId: String) -> Unit,
+    onOtw: (Searchable.Station) -> Unit,
     onClearRecents: () -> Unit,
     onEditPins: () -> Unit = {},
     focusOnOpen: Boolean = true,
@@ -265,6 +275,7 @@ private fun SearchContent(
                             savedStationIds = state.data.savedStationIds,
                             onClick = { openFrom(SOURCE_RECENT, it) },
                             onTogglePin = onTogglePin,
+                            onOtw = onOtw,
                             onClearRecents = onClearRecents,
                             opened = opened,
                         )
@@ -281,6 +292,7 @@ private fun SearchContent(
                                 onClick = { openFrom(SOURCE_RESULT, searchable) },
                                 pinned = searchable.isPinned(state.data.savedStationIds),
                                 onTogglePin = onTogglePin,
+                                onOtw = { (searchable as? Searchable.Station)?.let(onOtw) },
                                 // Keyed rows, so a row that stays across a keystroke keeps its
                                 // place and only the newcomers rise in.
                                 modifier = Modifier.rowEntrance(index),
@@ -328,6 +340,7 @@ private fun LazyListScope.idleContent(
     savedStationIds: Set<String>,
     onClick: (Searchable) -> Unit,
     onTogglePin: (stationId: String) -> Unit,
+    onOtw: (Searchable.Station) -> Unit,
     onClearRecents: () -> Unit,
     opened: String?,
 ) {
@@ -345,6 +358,7 @@ private fun LazyListScope.idleContent(
                 onClick = { onClick(searchable) },
                 pinned = searchable.isPinned(savedStationIds),
                 onTogglePin = onTogglePin,
+                onOtw = { (searchable as? Searchable.Station)?.let(onOtw) },
                 modifier = Modifier.rowEntrance(index),
                 showDivider = index < idle.recents.lastIndex,
                 shared = opened == "$SOURCE_RECENT:${searchable.key}",
@@ -419,6 +433,7 @@ private fun SearchIdlePreview() {
             onRetry = {},
             onResultClick = {},
             onTogglePin = {},
+            onOtw = {},
             onClearRecents = {},
             focusOnOpen = false,
         )
@@ -447,6 +462,7 @@ private fun SearchResultsPreview() {
             onRetry = {},
             onResultClick = {},
             onTogglePin = {},
+            onOtw = {},
             onClearRecents = {},
             focusOnOpen = false,
         )
