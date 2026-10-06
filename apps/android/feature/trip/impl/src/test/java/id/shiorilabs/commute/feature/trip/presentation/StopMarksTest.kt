@@ -38,8 +38,22 @@ class StopMarksTest {
     }
 
     @Test
-    fun `nearly at the next stop counts as there`() {
-        assertEquals(RideMarks(listOf(PASSED, PASSED, HERE, UPCOMING)), on(2, 1.9).stopMarks()[2])
+    fun `nearly at the next stop is still on the way to it, as the board says`() {
+        // Buaran to Klender on 2026-10-06: "Kamu di sini" at Klender 400 m out, under "Berikutnya".
+        assertEquals(RideMarks(listOf(PASSED, PASSED, UPCOMING, UPCOMING), betweenAfter = 1), on(2, 1.9).stopMarks()[2])
+    }
+
+    @Test
+    fun `the clock passes through a stop, it doesn't stop there`() {
+        assertEquals(
+            RideMarks(listOf(PASSED, PASSED, UPCOMING, UPCOMING), betweenAfter = 1),
+            on(2, 1.0, PositionSource.ESTIMATED).stopMarks()[2],
+        )
+    }
+
+    @Test
+    fun `at the stop to get off at, it is here however the trip knows`() {
+        assertEquals(RideMarks(listOf(PASSED, PASSED, PASSED, HERE)), on(2, 3.0, PositionSource.ESTIMATED).stopMarks()[2])
     }
 
     @Test
