@@ -5,11 +5,12 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
-import android.location.LocationListener
 import android.location.LocationManager
-import android.location.LocationRequest
-import android.os.CancellationSignal
+import android.os.Build
 import androidx.core.content.ContextCompat
+import androidx.core.location.LocationListenerCompat
+import androidx.core.location.LocationManagerCompat
+import androidx.core.location.LocationRequestCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import id.shiorilabs.commute.core.geo.GeoPoint
 import kotlinx.coroutines.channels.awaitClose
@@ -28,7 +29,7 @@ import kotlin.coroutines.resume
 /**
  * [LocationClient] on the platform's own [LocationManager]: its fused provider where the device has
  * one, so there is no Play Services dependency and nothing about the rider's location leaves the
- * phone.
+ * phone. Requests go through the AndroidX compat wrappers, which carry them back to Android 10.
  */
 @Singleton
 class AndroidLocationClient @Inject constructor(
@@ -51,16 +52,27 @@ class AndroidLocationClient @Inject constructor(
             ?.takeIf { Duration.between(it.instant(), clock.instant()) < RECENT && it.accuracy <= RECENT_ACCURACY_M }
             ?.let { return it.toFix() }
 
+        // A single satellite-grade update rather than getCurrentLocation, whose compat form takes no
+        // request and so no quality.
         return withTimeoutOrNull(timeout.toMillis()) {
             suspendCancellableCoroutine { continuation ->
-                val signal = CancellationSignal()
-                continuation.invokeOnCancellation { signal.cancel() }
-                val request = LocationRequest.Builder(0L)
-                    .setQuality(LocationRequest.QUALITY_HIGH_ACCURACY)
+                val request = LocationRequestCompat.Builder(0L)
+                    .setQuality(LocationRequestCompat.QUALITY_HIGH_ACCURACY)
                     .setDurationMillis(timeout.toMillis())
+                    .setMaxUpdates(1)
                     .build()
-                manager.getCurrentLocation(provider, request, signal, context.mainExecutor) { location ->
-                    continuation.resume(location?.toFix())
+                val listener = object : LocationListenerCompat {
+                    override fun onLocationChanged(location: Location) {
+                        LocationManagerCompat.removeUpdates(manager, this)
+                        if (continuation.isActive) continuation.resume(location.toFix())
+                    }
+                }
+                continuation.invokeOnCancellation { LocationManagerCompat.removeUpdates(manager, listener) }
+                try {
+                    LocationManagerCompat.requestLocationUpdates(manager, provider, request, context.mainExecutor, listener)
+                } catch (_: SecurityException) {
+                    // Revoked between the check and the request: no fix, as documented.
+                    continuation.resume(null)
                 }
             }
         }
@@ -73,33 +85,34 @@ class AndroidLocationClient @Inject constructor(
         val provider = provider(manager) ?: return emptyFlow()
 
         val request = when (mode) {
-            LocationMode.PRECISE -> LocationRequest.Builder(PRECISE_INTERVAL.toMillis())
-                .setQuality(LocationRequest.QUALITY_HIGH_ACCURACY)
+            LocationMode.PRECISE -> LocationRequestCompat.Builder(PRECISE_INTERVAL.toMillis())
+                .setQuality(LocationRequestCompat.QUALITY_HIGH_ACCURACY)
                 .setMinUpdateIntervalMillis(PRECISE_INTERVAL.toMillis() / 2)
             // Satellite-grade too, only less often: cell and Wi-Fi fixes on a moving train are
             // rarely within the few hundred metres a station match needs, so cheaper fixes would
             // cost battery and confirm nothing.
-            LocationMode.BALANCED -> LocationRequest.Builder(BALANCED_INTERVAL.toMillis())
-                .setQuality(LocationRequest.QUALITY_HIGH_ACCURACY)
+            LocationMode.BALANCED -> LocationRequestCompat.Builder(BALANCED_INTERVAL.toMillis())
+                .setQuality(LocationRequestCompat.QUALITY_HIGH_ACCURACY)
                 .setMinUpdateIntervalMillis(PRECISE_INTERVAL.toMillis())
         }.build()
 
         return callbackFlow {
-            val listener = LocationListener { location -> trySend(location.toFix()) }
+            val listener = LocationListenerCompat { location -> trySend(location.toFix()) }
             try {
-                manager.requestLocationUpdates(provider, request, context.mainExecutor, listener)
+                LocationManagerCompat.requestLocationUpdates(manager, provider, request, context.mainExecutor, listener)
             } catch (_: SecurityException) {
                 // Revoked between the check and the request: no fixes, as documented.
                 close()
                 return@callbackFlow
             }
-            awaitClose { manager.removeUpdates(listener) }
+            awaitClose { LocationManagerCompat.removeUpdates(manager, listener) }
         }
     }
 
-    /** The fused provider where the device has it, else satellites, else the network. */
+    /** The fused provider where the device has it (Android 12 on), else satellites, else the network. */
     private fun provider(manager: LocationManager): String? = when {
-        manager.hasProvider(LocationManager.FUSED_PROVIDER) -> LocationManager.FUSED_PROVIDER
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && manager.hasProvider(LocationManager.FUSED_PROVIDER) ->
+            LocationManager.FUSED_PROVIDER
         manager.isProviderEnabled(LocationManager.GPS_PROVIDER) -> LocationManager.GPS_PROVIDER
         manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER) -> LocationManager.NETWORK_PROVIDER
         else -> null

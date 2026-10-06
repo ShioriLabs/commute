@@ -48,7 +48,12 @@ class TripWaker @Inject constructor(
 ) {
 
     private val vibrator: Vibrator by lazy {
-        context.getSystemService(VibratorManager::class.java).defaultVibrator
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            context.getSystemService(VibratorManager::class.java).defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Vibrator::class.java)
+        }
     }
 
     /** The ride last reminded about, as `startedAt:leg`, so each ride is reminded about once. */
