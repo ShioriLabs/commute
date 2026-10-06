@@ -59,3 +59,11 @@ annotation class LocationDataStore
 @Qualifier
 @Retention(AnnotationRetention.RUNTIME)
 annotation class DeveloperDataStore
+
+/**
+ * Hilt [Qualifier] for the preferences [DataStore]<[Preferences]> backing how the trip page shows a
+ * trip under way (Pengaturan → OTW).
+ */
+@Qualifier
+@Retention(AnnotationRetention.RUNTIME)
+annotation class OtwDataStore

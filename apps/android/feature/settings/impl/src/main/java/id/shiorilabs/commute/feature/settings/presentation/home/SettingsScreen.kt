@@ -121,6 +121,11 @@ private fun SettingsContent(
             onClick = { onOpen(Route.SettingsLocation) },
         )
         SettingsItem(
+            label = stringResource(R.string.settings_item_otw),
+            icon = CommuteIcons.Otw,
+            onClick = { onOpen(Route.SettingsOtw) },
+        )
+        SettingsItem(
             label = stringResource(R.string.settings_item_legal),
             icon = CommuteIcons.Legal,
             onClick = { onOpen(Route.SettingsLegal) },
