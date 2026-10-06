@@ -34,11 +34,18 @@ internal fun ActiveTrip.stopMarks(): Map<Int, RideMarks> = plan.rideIndices.asso
         }
         else -> {
             val behind = floor(state.position).toInt().coerceAtMost(stops - 1)
-            val fraction = state.position - behind
-            when {
-                fraction < AT_STOP -> RideMarks(List(stops) { i -> markAt(i, behind) })
-                fraction > 1 - AT_STOP -> RideMarks(List(stops) { i -> markAt(i, behind + 1) })
-                else -> RideMarks(
+            // At a stop as the board above says it: the stop to get off at once there, a stop on
+            // the way only where a fix has the train standing. Nearly there is still on the way, and
+            // the clock only ever passes through.
+            val at = when {
+                behind == stops - 1 -> behind
+                state.source == PositionSource.CONFIRMED && state.position == floor(state.position) -> behind
+                else -> null
+            }
+            if (at != null) {
+                RideMarks(List(stops) { i -> markAt(i, at) })
+            } else {
+                RideMarks(
                     List(stops) { i -> if (i <= behind) StopMark.PASSED else StopMark.UPCOMING },
                     betweenAfter = behind,
                 )
@@ -99,6 +106,3 @@ private fun markAt(i: Int, here: Int) = when {
     i == here -> StopMark.HERE
     else -> StopMark.UPCOMING
 }
-
-/** Within this share of a hop from a stop, the rider is at that stop. */
-private const val AT_STOP = 0.15
