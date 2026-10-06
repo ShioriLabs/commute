@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -55,7 +56,8 @@ private val RowInset = 32.dp
 /**
  * One search result or recent search: the title with the matched part in the brand colour and its
  * subtitle, the roundels of the lines serving it (or a line's own pill) underneath, and for a
- * station a pin that saves it to the home screen.
+ * station an OTW button that plans a trip there, as the station page's "OTW Ke Sini" does, and a
+ * pin that saves it to the home screen.
  *
  * Rows are separated by a hairline that starts at the text edge and runs off the right, rather than
  * boxed in; [showDivider] is false on the last row.
@@ -71,6 +73,7 @@ fun SearchResultItem(
     onClick: () -> Unit,
     pinned: Boolean,
     onTogglePin: (stationId: String) -> Unit,
+    onOtw: (stationId: String) -> Unit,
     modifier: Modifier = Modifier,
     showDivider: Boolean = true,
     shared: Boolean = false,
@@ -131,6 +134,20 @@ fun SearchResultItem(
             }
         }
         if (stationId != null) {
+            CommuteIconButton(
+                onClick = { onOtw(stationId) },
+                modifier = Modifier.size(44.dp),
+            ) {
+                // Mirrored to point right, as the station page draws it.
+                Icon(
+                    imageVector = CommuteIcons.NavigationArrow,
+                    contentDescription = stringResource(R.string.search_otw, searchable.title),
+                    modifier = Modifier
+                        .size(24.dp)
+                        .scale(scaleX = -1f, scaleY = 1f),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
             val haptics = LocalHapticFeedback.current
             CommuteIconButton(
                 onClick = {
@@ -201,6 +218,7 @@ private fun SearchResultItemPreview() {
             onClick = {},
             pinned = true,
             onTogglePin = {},
+            onOtw = {},
         )
     }
 }
