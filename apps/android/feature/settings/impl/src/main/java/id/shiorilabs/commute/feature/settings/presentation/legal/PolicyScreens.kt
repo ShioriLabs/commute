@@ -17,9 +17,8 @@ import id.shiorilabs.commute.feature.settings.presentation.components.HtmlText
 import id.shiorilabs.commute.feature.settings.presentation.components.SettingsPage
 
 /*
- * The privacy policy and the terms, word for word as the web has them. They name Cloudflare Web
- * Analytics, which only the web runs; the app collects nothing, and the documents are kept the
- * same on both until they are revised together.
+ * The privacy policy and the terms, word for word as the web has them: one pair of documents for
+ * the site and the app alike, so they are revised together, the web's first.
  */
 
 @Composable
@@ -48,12 +47,22 @@ private fun PrivacyPolicyContent(
                         stringResource(R.string.settings_privacy_collected_1),
                         stringResource(R.string.settings_privacy_collected_2),
                         stringResource(R.string.settings_privacy_collected_3),
-                        stringResource(R.string.settings_privacy_collected_4),
-                        stringResource(R.string.settings_privacy_collected_5),
                     ),
                 )
             }
             HtmlText(stringResource(R.string.settings_privacy_collected_outro))
+            DocumentSection(stringResource(R.string.settings_privacy_location_title)) {
+                HtmlText(stringResource(R.string.settings_privacy_location_body))
+                DocumentBullets(
+                    listOf(
+                        stringResource(R.string.settings_privacy_location_1),
+                        stringResource(R.string.settings_privacy_location_2),
+                        stringResource(R.string.settings_privacy_location_3),
+                        stringResource(R.string.settings_privacy_location_4),
+                    ),
+                )
+            }
+            HtmlText(stringResource(R.string.settings_privacy_location_outro))
             DocumentSection(stringResource(R.string.settings_privacy_use_title)) {
                 HtmlText(stringResource(R.string.settings_privacy_use_body))
                 DocumentBullets(
@@ -62,6 +71,7 @@ private fun PrivacyPolicyContent(
                         stringResource(R.string.settings_privacy_use_2),
                         stringResource(R.string.settings_privacy_use_3),
                         stringResource(R.string.settings_privacy_use_4),
+                        stringResource(R.string.settings_privacy_use_5),
                     ),
                 )
             }
