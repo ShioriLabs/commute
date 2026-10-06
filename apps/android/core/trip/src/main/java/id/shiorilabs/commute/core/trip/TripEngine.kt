@@ -59,7 +59,7 @@ object TripEngine {
     /** A fix this far behind the confirmed point is jitter, and still counts as "on the route here". */
     private const val JITTER = 0.25
 
-    /** Past this along the first hop, and seen getting there at [RIDING_M_PER_S], the rider is on the vehicle. */
+    /** Past this along the first hop, and seen getting there at [RIDING_M_PER_S], a rider still walking from the last ride is on the vehicle. */
     private const val BOARDED_AT = 0.3
 
     /** Faster than anyone walks (about 7 km/h); slower than a train pulling out or a bus in traffic. */
@@ -169,7 +169,7 @@ object TripEngine {
             // Seen near the line but not aboard: the fix says where they are, not how far they've
             // come. A walk ends only nearer the station it goes to, as a change can run beside the
             // next line out of the station it left.
-            if (state.phase == TripPhase.WAITING_TO_BOARD && !boards(ride, state, candidate, fix)) {
+            if (state.phase == TripPhase.WAITING_TO_BOARD && !boards(ride, state, candidate, fix, tuning)) {
                 val walked = state.walkingSince != null && reachedAfterWalk(plan, state.legIndex, fix.point)
                 return tracked.copy(
                     sightedPosition = candidate,
@@ -313,11 +313,18 @@ object TripEngine {
 
     /**
      * Whether a rider waiting for [ride], last seen at [TripState.sightedPosition], is aboard now
-     * [candidate] puts them past [BOARDED_AT]: they came further than the fix could wander, and
-     * faster than walking.
+     * [candidate] puts them past the platform's end: they came further than the fix could wander,
+     * faster than walking, and the satellites, when they say, have them moving too. Setiabudi's LRT
+     * was 140 m out at 5 m/s, a sixth of its hop, when a third was asked for.
+     *
+     * Still walking from the last ride, only [BOARDED_AT] of the hop will do: the station walked
+     * from can lie beside this line, past its platform (Dukuh Atas LRT is 270 m along the KRL out
+     * of Sudirman), where one rough fix leaping on would otherwise board them.
      */
-    private fun boards(ride: TripLeg.Ride, state: TripState, candidate: Double, fix: TripEvent.Fix): Boolean {
-        if (candidate < BOARDED_AT) return false
+    private fun boards(ride: TripLeg.Ride, state: TripState, candidate: Double, fix: TripEvent.Fix, tuning: Tuning): Boolean {
+        val pastPlatform = if (state.walkingSince != null) candidate >= BOARDED_AT else metresAlong(ride, 0.0, candidate) > tuning.atStop
+        if (!pastPlatform) return false
+        if (fix.speedMps != null && fix.speedMps < RIDING_M_PER_S) return false
         val from = state.sightedPosition ?: return false
         val since = state.confirmedAt ?: return false
         val seconds = Duration.between(since, fix.at).toMillis() / 1000.0

@@ -22,6 +22,11 @@ internal object Places {
 
     val SUDIRMAN = stop("KCI-SUD", "Sudirman", -6.2024, 106.8237)
 
+    // LRT Jabodebek, Setiabudi to Dukuh Atas: one hop of about 710 m. Dukuh Atas sits about 270 m
+    // along the Commuter Line out of Sudirman, and 330 m from Sudirman itself.
+    val LRT_SETIABUDI = stop("LRTJBDB-SET", "Setiabudi", -6.2092, 106.8302)
+    val LRT_DUKUH_ATAS = stop("LRTJBDB-DKA", "Dukuh Atas BSI", -6.2047, 106.8256)
+
     // TransJakarta haltes, about 500 m apart.
     val HALTE_1 = stop("TJ-H1", "Halte Satu", -6.2000, 106.8300)
     val HALTE_2 = stop("TJ-H2", "Halte Dua", -6.2045, 106.8300)
@@ -91,6 +96,15 @@ internal val withChange = TripPlan(
         ride(Places.BUNDARAN_HI, Places.DUKUH_ATAS, line = "MRTJ:M", departs = 0, arrives = 2),
         TripLeg.Transfer(Places.DUKUH_ATAS, Places.SUDIRMAN, distanceM = 300),
         ride(Places.SUDIRMAN, Places.MANGGARAI, line = "KCI:B", departs = 10, arrives = 15),
+    ),
+)
+
+/** The LRT from Setiabudi to Dukuh Atas, a walk to Sudirman, then the Commuter Line to Manggarai. */
+internal val lrtThenKrl = TripPlan(
+    listOf(
+        ride(Places.LRT_SETIABUDI, Places.LRT_DUKUH_ATAS, line = "LRTJBDB:BK", departs = 0, arrives = 2),
+        TripLeg.Transfer(Places.LRT_DUKUH_ATAS, Places.SUDIRMAN, distanceM = 330),
+        ride(Places.SUDIRMAN, Places.MANGGARAI, line = "KCI:C", departs = 10, arrives = 15),
     ),
 )
 
