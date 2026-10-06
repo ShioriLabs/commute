@@ -56,6 +56,7 @@ data class PidsStop(
  * @property stationId The big name's station, for the lines a rider can change to there.
  * @property changeTo The ride the plan changes onto at [station], when it is where the rider gets
  *   off and another ride follows.
+ * @property changeWalk The walk to where [changeTo] leaves from, when that's another station.
  * @property stopsLeft Stops still to come before getting off, the alighting stop counted: the whole
  *   ride while waiting to board, `0` once arrived.
  * @property minutesLeft Whole minutes until getting off, wait for the train included, when the
@@ -72,6 +73,7 @@ data class Pids(
     val at: Instant?,
     val upcoming: List<PidsStop>,
     val changeTo: TripLeg.Ride?,
+    val changeWalk: TripLeg.Transfer? = null,
     val stopsLeft: Int,
     val minutesLeft: Int?,
     val alightingAt: Instant?,
@@ -153,6 +155,7 @@ internal fun ActiveTrip.pids(now: Instant): Pids {
         at = expected(focus),
         upcoming = upcoming,
         changeTo = then?.takeIf { focus == last },
+        changeWalk = plan.nextRideAfter(state.legIndex)?.let(plan::transferBefore)?.takeIf { focus == last },
         // Boarding or stopped, the stop stood at isn't one still to come.
         stopsLeft = if (label == PidsLabel.WALK || label == PidsLabel.BOARD || label == PidsLabel.AT) last - focus else last - focus + 1,
         minutesLeft = if (label == PidsLabel.ALIGHT_HERE) null else minutesTo(last),
