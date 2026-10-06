@@ -482,6 +482,39 @@ class TripEngineTest {
     }
 
     @Test
+    fun `a rider pulling out of the station is aboard once past the platform, however long the hop`() {
+        // Setiabudi on 2026-10-06: standing on the platform, then 140 m out at 5 m/s, a sixth of the hop.
+        val run = Run(lrtThenKrl)
+        run.fix(GeoPoint(-6.209087, 106.830283), 1.0, accuracyM = 4f, speedMps = 0f)
+        run.fix(GeoPoint(-6.207960, 106.829877), 1.02, accuracyM = 6f, speedMps = 5.08f)
+
+        assertEquals(TripPhase.RIDING, run.state.phase)
+    }
+
+    @Test
+    fun `a fix leaping past the platform while the satellites say standing isn't boarding`() {
+        val run = Run(lrtThenKrl)
+        run.fix(GeoPoint(-6.209087, 106.830283), -1.0, accuracyM = 4f, speedMps = 0f)
+        run.fix(GeoPoint(-6.207960, 106.829877), -0.98, accuracyM = 6f, speedMps = 0.3f)
+
+        assertEquals(TripPhase.WAITING_TO_BOARD, run.state.phase)
+    }
+
+    @Test
+    fun `still walking from a station beside the next line, a fix leaping along it isn't boarding`() {
+        val run = Run(lrtThenKrl)
+        run.tick(0.0)
+        run.fix(Places.LRT_DUKUH_ATAS, 2.0, speedMps = 0f)
+        // About 270 m along the Commuter Line out of Sudirman, then a rough fix 150 m on: past
+        // Sudirman's platform, and still nearer Dukuh Atas.
+        run.fix(Places.LRT_DUKUH_ATAS, 2.5)
+        run.fix(GeoPoint(-6.205078, 106.826905), 2.58, accuracyM = 30f)
+
+        assertEquals(TripPhase.WAITING_TO_BOARD, run.state.phase)
+        assertEquals(2, run.state.legIndex)
+    }
+
+    @Test
     fun `a train that leaves while the rider is still walking to it isn't boarded by the clock`() {
         val run = Run(withChange)
         run.tick(0.0)
