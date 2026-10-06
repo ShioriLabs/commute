@@ -366,7 +366,7 @@ private fun RideRow(ride: TripLeg.Ride, lines: Map<String, LineInfo>, copy: Trip
                 fontWeight = FontWeight.Bold,
                 color = DoneInk,
             )
-            val way = listOfNotNull(copy.rideName(ride), ride.headsign?.let { stringResource(R.string.trip_headsign, it) })
+            val way = listOfNotNull(copy.rideName(ride), rideDirection(ride))
             Text(text = way.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = DoneLabel)
         }
         val departs = ride.departureAt

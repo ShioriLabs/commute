@@ -416,7 +416,7 @@ internal fun PidsBar(
  */
 @Composable
 private fun BarTitle(pids: Pids, collapsed: Boolean, modifier: Modifier = Modifier) {
-    val headsign = pids.ride.headsign?.let { stringResource(R.string.trip_headsign, it) }
+    val headsign = rideDirection(pids.ride)
     val label = stringResource(pids.label.text)
     val station = buildAnnotatedString {
         withStyle(SpanStyle(color = BoardMuted)) { append(label) }
@@ -472,6 +472,10 @@ private fun Plate(
                 StationName(pids.station, modifier = Modifier.weight(1f).padding(start = 10.dp))
             }
         }
+        // Still to board, on haltes several routes serve (or shared track): whichever comes first.
+        if ((pids.label == PidsLabel.BOARD || pids.label == PidsLabel.WALK) && pids.ride.otherLines > 0) {
+            AnyLine(pids.ride, lines)
+        }
         // The plainer facts: the platform while waiting for it, and the clock (when the minutes are
         // up by the close button) at the far end.
         val platform = pids.ride.platformCode?.takeIf { pids.label == PidsLabel.BOARD || pids.label == PidsLabel.WALK }
@@ -495,6 +499,38 @@ private fun Plate(
                         early = BoardEarly,
                     )
                 }
+            }
+        }
+    }
+}
+
+/** [TripCopy.direction], read where there's no copy to hand. */
+@Composable
+internal fun rideDirection(ride: TripLeg.Ride): String? = ride.sharedHeadsign?.let { stringResource(R.string.trip_headsign, it) }
+    ?: ride.takeIf { it.otherLines > 0 }?.let { stringResource(R.string.trip_via, it.stops.last().name) }
+
+/** "Naik salah satu bus", and the roundel of every line that will do, the planned one first. */
+@Composable
+private fun AnyLine(ride: TripLeg.Ride, lines: Map<String, LineInfo>) {
+    Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, top = 8.dp, end = 20.dp)) {
+        Text(
+            text = stringResource(if (ride.isBus) R.string.trip_board_any_bus else R.string.trip_board_any_train),
+            style = MaterialTheme.typography.labelLarge,
+            color = BoardMuted,
+        )
+        FlowRow(
+            modifier = Modifier.padding(top = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            ride.lineKeys.forEach { key ->
+                val info = lines[key]
+                LineRoundel(
+                    code = info?.lineCode ?: key.substringAfter(':'),
+                    color = info?.colorCode ?: "#94A3B8",
+                    operator = key.substringBefore(':'),
+                    size = RoundelSize.SM,
+                )
             }
         }
     }

@@ -3,6 +3,7 @@ package id.shiorilabs.commute.feature.journey.domain
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripPlan
+import id.shiorilabs.commute.core.trip.TripServiceLine
 import id.shiorilabs.commute.core.trip.TripStop
 import java.time.Duration
 import java.time.Instant
@@ -24,6 +25,10 @@ fun Journey.toTripPlan(): TripPlan = TripPlan(
                 departureAt = leg.departureAt,
                 arrivalAt = leg.arrivalAt,
                 tripId = leg.tripId,
+                serviceLines = leg.serviceLines
+                    .takeIf { services -> services.any { it.line != leg.line } }
+                    ?.map { TripServiceLine(it.line, it.headsign) }
+                    .orEmpty(),
             )
             is JourneyLeg.Transfer -> TripLeg.Transfer(
                 from = leg.from.toTripStop(),

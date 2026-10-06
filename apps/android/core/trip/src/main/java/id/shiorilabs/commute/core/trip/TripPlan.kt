@@ -33,6 +33,14 @@ data class TripPlan(
     fun transferBefore(index: Int): TripLeg.Transfer? = legs.getOrNull(index - 1) as? TripLeg.Transfer
 }
 
+/** One line that runs a ride's stops, and where it heads. */
+@Serializable
+data class TripServiceLine(
+    /** `OPERATOR:CODE`. */
+    val line: String,
+    val headsign: String? = null,
+)
+
 @Serializable
 sealed interface TripLeg {
 
@@ -53,6 +61,12 @@ sealed interface TripLeg {
         val arrivalAt: Instant? = null,
         /** The vehicle run boarded, as the API names it: only ever compared, for "still on my train?". */
         val tripId: String? = null,
+        /**
+         * Every line the rider can take for this ride, [line] first: haltes several TransJakarta
+         * routes serve in turn, or an interlined stretch of track. Empty when it's [line] alone, as
+         * for a trip stored before this was kept.
+         */
+        val serviceLines: List<TripServiceLine> = emptyList(),
     ) : TripLeg {
 
         init {
@@ -65,6 +79,18 @@ sealed interface TripLeg {
 
         /** TransJakarta haltes sit closer together than stations and are matched more tightly. */
         val isBus: Boolean get() = operator == "TJ"
+
+        /** Every line that will do, [line] first, keyed `OPERATOR:CODE`. */
+        val lineKeys: List<String> get() = (listOf(line) + serviceLines.map { it.line }).distinct()
+
+        /** How many lines besides [line] will do. */
+        val otherLines: Int get() = lineKeys.size - 1
+
+        /**
+         * Where the ride heads, when every line that will do heads there: an L13E boarded for a 4D
+         * isn't going the 4D's way, so with lines that part ways there is no saying.
+         */
+        val sharedHeadsign: String? get() = headsign?.takeIf { serviceLines.all { it.headsign == null || it.headsign == headsign } }
     }
 
     @Serializable

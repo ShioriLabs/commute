@@ -16,7 +16,23 @@ import id.shiorilabs.commute.feature.trip.R
  */
 internal class TripCopy(private val resources: Resources, private val lines: Map<String, LineInfo>) {
 
-    fun rideName(ride: TripLeg.Ride): String = lines[ride.line]?.name ?: ride.line.substringAfter(':')
+    /**
+     * The ride's line, and how many others will do: "4D +4 lainnya" for haltes five routes serve. A
+     * bus route goes by its code there, its name ("Pulo Gadung – Kuningan") being far too long.
+     */
+    fun rideName(ride: TripLeg.Ride): String {
+        val code = ride.line.substringAfter(':')
+        val name = lines[ride.line]?.name ?: code
+        if (ride.otherLines == 0) return name
+        return resources.getString(R.string.trip_ride_more, if (ride.isBus) code else name, ride.otherLines)
+    }
+
+    /**
+     * Which way the ride goes: "arah" its terminus when every line that will do heads there; with
+     * lines that part ways (an L13E for a 4D), "via" the stop to get off at, which all of them reach.
+     */
+    fun direction(ride: TripLeg.Ride): String? = ride.sharedHeadsign?.let { resources.getString(R.string.trip_headsign, it) }
+        ?: ride.takeIf { it.otherLines > 0 }?.let { resources.getString(R.string.trip_via, it.stops.last().name) }
 
     fun title(headline: Headline): String = when (headline) {
         is Headline.Board -> resources.getString(R.string.trip_board, rideName(headline.ride))
@@ -28,14 +44,14 @@ internal class TripCopy(private val resources: Resources, private val lines: Map
 
     fun detail(trip: ActiveTrip, headline: Headline): String = when (headline) {
         is Headline.Board -> listOfNotNull(
-            headline.ride.headsign?.let { resources.getString(R.string.trip_headsign, it) },
+            direction(headline.ride),
             headline.ride.platformCode?.let { resources.getString(R.string.trip_platform, formatPlatformCode(it)) },
             headline.departsAt?.let { resources.getString(R.string.trip_departs_at, formatClock(it)) }
                 ?: resources.getString(R.string.trip_from_stop, headline.ride.stops.first().name),
         ).joinToString(separator)
         is Headline.Change -> listOfNotNull(
             headline.walk?.let { resources.getString(R.string.trip_walk_to, it.to.name, it.distanceM) },
-            headline.ride.headsign?.let { resources.getString(R.string.trip_headsign, it) },
+            direction(headline.ride),
             headline.ride.platformCode?.let { resources.getString(R.string.trip_platform, formatPlatformCode(it)) },
             headline.departsAt?.let { resources.getString(R.string.trip_departs_at, formatClock(it)) },
         ).joinToString(separator)
