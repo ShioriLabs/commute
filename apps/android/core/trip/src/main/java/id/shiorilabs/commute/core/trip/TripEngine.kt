@@ -65,6 +65,15 @@ object TripEngine {
     /** Faster than anyone walks (about 7 km/h); slower than a train pulling out or a bus in traffic. */
     private const val RIDING_M_PER_S = 2.0
 
+    /** Slower than this, by the satellites, the train is standing still. */
+    private const val STANDING_M_PER_S = 1.0
+
+    /**
+     * Fixes in a row at [RIDING_M_PER_S] or more, after standing at a stop, that take a train out of
+     * it while still slower than [STOPPING_M_PER_S]: one could be a jolt; two is the train leaving.
+     */
+    private const val PULLING_OUT_FIXES = 2
+
     /** Consecutive far-off fixes before asking whether the rider is still on this route. */
     private const val OFF_ROUTE_STRIKES = 3
 
@@ -152,14 +161,17 @@ object TripEngine {
         val tuning = Tuning.of(ride)
         if (fix.accuracyM > tuning.accuracyGate) return state.copy(hasLocation = true)
 
-        val candidate = locate(ride, state.confirmedPosition, fix, tuning)
+        val located = locate(ride, state.confirmedPosition, fix, tuning)
+        val pullOut = pullOut(ride, state, fix, located, tuning)
+        val tracked = state.copy(stoodAt = pullOut.stoodAt, pullingOutFixes = pullOut.fixes)
+        val candidate = pullOut.leftTo ?: located
         if (candidate != null && candidate >= state.confirmedPosition - JITTER) {
             // Seen near the line but not aboard: the fix says where they are, not how far they've
             // come. A walk ends only nearer the station it goes to, as a change can run beside the
             // next line out of the station it left.
             if (state.phase == TripPhase.WAITING_TO_BOARD && !boards(ride, state, candidate, fix)) {
                 val walked = state.walkingSince != null && reachedAfterWalk(plan, state.legIndex, fix.point)
-                return state.copy(
+                return tracked.copy(
                     sightedPosition = candidate,
                     confirmedAt = fix.at,
                     offRouteStrikes = 0,
@@ -186,7 +198,7 @@ object TripEngine {
                 state.stopTimes + (key to fix.at.toEpochMilli())
             }
             // On the ride: whatever walk came before it is over.
-            return state.copy(
+            return tracked.copy(
                 phase = TripPhase.RIDING,
                 confirmedPosition = confirmed,
                 confirmedAt = fix.at,
@@ -200,22 +212,48 @@ object TripEngine {
             )
         }
 
-        if (state.phase != TripPhase.RIDING) return state.copy(hasLocation = true)
+        if (state.phase != TripPhase.RIDING) return tracked.copy(hasLocation = true)
 
         if (isPastAlighting(ride, fix.point, tuning) && max(state.position, state.confirmedPosition) >= ride.lastIndex - 1) {
-            fire(state, AlertKind.MISSED, estimated = false, effects)?.let { return it.copy(hasLocation = true) }
-            return state.copy(hasLocation = true)
+            fire(tracked, AlertKind.MISSED, estimated = false, effects)?.let { return it.copy(hasLocation = true) }
+            return tracked.copy(hasLocation = true)
         }
 
         if (distanceFromRide(ride, fix.point) > tuning.offRoute) {
             val strikes = state.offRouteStrikes + 1
             if (strikes >= OFF_ROUTE_STRIKES && !state.askedStillOnRoute) {
                 effects += TripEffect.AskStillOnRoute
-                return state.copy(offRouteStrikes = strikes, askedStillOnRoute = true, hasLocation = true)
+                return tracked.copy(offRouteStrikes = strikes, askedStillOnRoute = true, hasLocation = true)
             }
-            return state.copy(offRouteStrikes = strikes, hasLocation = true)
+            return tracked.copy(offRouteStrikes = strikes, hasLocation = true)
         }
-        return state.copy(hasLocation = true)
+        return tracked.copy(hasLocation = true)
+    }
+
+    /** What [pullOut] makes of a fix: the stop being watched, the fixes counted, where it left to. */
+    private class PullOut(val stoodAt: String?, val fixes: Int, val leftTo: Double?)
+
+    /**
+     * Watches a train at a stop on the way for leaving it slower than [STOPPING_M_PER_S]: seen
+     * standing there, then [PULLING_OUT_FIXES] fixes in a row moving at a train's pace, and past the
+     * stop's point, it has left, and [PullOut.leftTo] is where along the next hop. A fix without a
+     * speed says nothing either way. Jatinegara held a train crawling out until 235 m on without it.
+     * The stop is the one the train was at, or, for the fix that brings it in, the one [located] there.
+     */
+    private fun pullOut(ride: TripLeg.Ride, state: TripState, fix: TripEvent.Fix, located: Double?, tuning: Tuning): PullOut {
+        if (state.phase != TripPhase.RIDING) return PullOut(null, 0, null)
+        val here = located?.takeIf { it == floor(it) && it > state.confirmedPosition }
+            ?: state.confirmedPosition.takeIf { it == floor(it) }
+        val stop = here?.toInt()?.takeIf { it < ride.lastIndex } ?: return PullOut(null, 0, null)
+        val key = stopKey(state.legIndex, stop)
+        val watching = state.stoodAt.takeIf { it == key }
+        val speed = fix.speedMps ?: return PullOut(watching, if (watching == null) 0 else state.pullingOutFixes, null)
+        if (speed < STANDING_M_PER_S) return PullOut(key, 0, null)
+        if (watching == null || speed < RIDING_M_PER_S) return PullOut(watching, 0, null)
+        val fixes = state.pullingOutFixes + 1
+        if (fixes < PULLING_OUT_FIXES) return PullOut(key, fixes, null)
+        val along = alongHops(ride, stop, min(ride.lastIndex, stop + LOOKAHEAD_STOPS), fix.point, tuning)
+        return PullOut(key, fixes, along?.takeIf { it > stop })
     }
 
     /**

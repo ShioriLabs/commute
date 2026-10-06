@@ -88,6 +88,14 @@ data class TripState(
      * passed without either has none: the clock's guess isn't a sighting.
      */
     val stopTimes: Map<String, Long> = emptyMap(),
+    /**
+     * The stop (`leg:stop`) the train was last seen standing at, and how many fixes since have had
+     * it moving at a train's pace: a train out of a stop slower than "pulling out" speed has left it
+     * after two in a row, once past the stop's point. One still braking in hasn't stood there yet;
+     * one creeping up the platform after standing is still short of the point.
+     */
+    val stoodAt: String? = null,
+    val pullingOutFixes: Int = 0,
 )
 
 /** When the rider was seen at [stopIndex] of leg [legIndex], or `null` if they weren't. */
