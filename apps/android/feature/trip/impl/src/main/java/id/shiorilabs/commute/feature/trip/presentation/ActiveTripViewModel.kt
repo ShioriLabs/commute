@@ -93,9 +93,12 @@ class ActiveTripViewModel @Inject constructor(
     val boardPages: StateFlow<Boolean> = developerPreferences.boardPages
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
-    /** "Diagram ala Layar Kereta Jepang" in Pengaturan → OTW: the board draws the stops ahead on its curved strip. */
+    /**
+     * "Diagram ala Layar Kereta Jepang" in Pengaturan → OTW: the board draws the stops ahead on its
+     * curved strip. Starts from what the app read as it started; unread, off, as the strip would draw in anyway.
+     */
     val pidsDiagram: StateFlow<Boolean> = otwPreferences.pidsDiagram
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), otwPreferences.cachedPidsDiagram ?: false)
 
     /** What the rider saw the train do, logged with what [pids] (the board then) said. */
     fun mark(kind: MarkKind, pids: Pids) = controller.mark(
