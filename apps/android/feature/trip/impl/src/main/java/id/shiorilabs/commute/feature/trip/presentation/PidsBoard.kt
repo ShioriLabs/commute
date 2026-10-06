@@ -1076,7 +1076,8 @@ private fun StopLabel(stop: PidsStop, x: Float, centreY: Float, maxWidth: Int) {
 
 /**
  * The display's "乗換えのご案内": at the station the board names, the ride the plan changes onto
- * there, or else the other lines a rider could change to.
+ * there, or else the other lines a rider could change to. A change that leaves from another
+ * station says to walk there first: "Pindah di Sudirman" for an LRT out of Dukuh Atas misled.
  */
 @Composable
 private fun ChangePanel(pids: Pids, lines: Map<String, LineInfo>, stationLines: List<String>, copy: TripCopy) {
@@ -1090,8 +1091,13 @@ private fun ChangePanel(pids: Pids, lines: Map<String, LineInfo>, stationLines: 
             .fillMaxWidth()
             .padding(PaddingValues(start = 32.dp, end = 32.dp, top = 8.dp)),
     ) {
+        val walk = pids.changeWalk
         Text(
-            text = stringResource(R.string.trip_pids_change_at, pids.station),
+            text = if (walk != null) {
+                stringResource(R.string.trip_pids_change_walk, walk.distanceM, walk.to.name)
+            } else {
+                stringResource(R.string.trip_pids_change_at, pids.station)
+            },
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
             color = BoardDim,
