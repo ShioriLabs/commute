@@ -1,9 +1,7 @@
 package id.shiorilabs.commute.feature.trip.runtime
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.os.Build
 import android.os.VibrationAttributes
@@ -12,7 +10,6 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
 import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.Wearable
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -116,9 +113,7 @@ class TripWaker @Inject constructor(
 
     @SuppressLint("MissingPermission") // Checked just below; without it the buzz still comes.
     private fun showAlarm(stop: String) {
-        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
-            PackageManager.PERMISSION_GRANTED
-        if (!granted) return
+        if (!NotificationChannels.allowed(context)) return
         NotificationChannels.ensure(context)
         val notification = NotificationCompat.Builder(context, NotificationChannels.TRIP_WAKE)
             .setSmallIcon(R.drawable.ic_stat_trip)
