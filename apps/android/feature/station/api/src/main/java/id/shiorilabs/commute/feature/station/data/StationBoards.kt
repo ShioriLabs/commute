@@ -57,10 +57,12 @@ fun StationRepository.board(stationId: String, now: LocalDateTime): Flow<Station
 
 /**
  * The API answers a halte's timetable with a 404 ("not available yet"), so for TransJakarta a
- * failed board is the empty one it really is, as the web treats it: its frequencies stand in.
+ * board with none held is the empty one it really is, as the web treats it: its frequencies stand
+ * in. Not loading while it's asked for either: nothing is held to show, and waiting on an answer
+ * that is a 404 would only hold the board (and the splash, for one home opens on) on the network.
  */
 private fun Query<List<LineTimetable>>.toBoardState(halte: Boolean): UIState<List<LineTimetable>> =
-    if (halte && data == null && failure != null) UIState.Success(emptyList()) else toUIState()
+    if (halte && data == null) UIState.Success(emptyList()) else toUIState()
 
 /**
  * [stationId]'s board for the service day running at [now] from what has already been loaded this

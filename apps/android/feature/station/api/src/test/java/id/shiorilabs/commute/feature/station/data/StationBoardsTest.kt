@@ -196,6 +196,20 @@ class StationBoardsTest {
     }
 
     @Test
+    fun `a halte's timetable still being asked for doesn't hold its board`() = runTest {
+        val fake = FakeStationRepository().apply { station = halte.right() }
+        val repository = object : StationRepository by fake {
+            override fun observeTimetable(stationId: String, day: ServiceDayName) =
+                flowOf(Query<List<LineTimetable>>(isFetching = true))
+        }
+
+        val board = repository.board("TJ-H00001P", LocalDateTime.parse("2026-09-30T08:00:00")).toList().last()
+
+        assertEquals(emptyList<LineTimetable>(), (board.timetable as UIState.Success).data)
+        assertTrue(board.frequencies is UIState.Success)
+    }
+
+    @Test
     fun `a halte's failed frequencies fail on their own`() = runTest {
         val repository = FakeStationRepository().apply {
             station = halte.right()
