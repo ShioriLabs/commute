@@ -22,6 +22,7 @@ import id.shiorilabs.commute.core.trip.TripEvent
 import id.shiorilabs.commute.core.trip.TripPlan
 import id.shiorilabs.commute.core.trip.TripStep
 import id.shiorilabs.commute.feature.trip.ActiveTrip
+import id.shiorilabs.commute.feature.trip.ReplacedPlan
 import id.shiorilabs.commute.feature.trip.TripController
 import id.shiorilabs.commute.feature.trip.TripReminder
 import id.shiorilabs.commute.feature.trip.TripReplanner
@@ -180,11 +181,29 @@ class TripControllerImpl @Inject constructor(
     private suspend fun send(event: TripEvent) {
         restored.join()
         mutex.withLock {
-            val trip = _active.value ?: return
-            val step = TripEngine.step(trip.plan, trip.state, event)
-            logStep(event, trip.state, step.state)
+            val before = _active.value ?: return
+            val (trip, step) = boardedEarlier(before, event, TripEngine.step(before.plan, before.state, event))
+            logStep(event, before.state, step.state)
             apply(trip, step)
         }
+    }
+
+    /**
+     * Boarded a ride that was swapped for a later one: well before the later one could have left
+     * (seen that far ahead of it, or "Udah naik" before it was due), the rider is on the one it
+     * replaced, which ran late. Back to that plan then, the lateness measured against it. Either way
+     * the swap is settled.
+     */
+    private fun boardedEarlier(trip: ActiveTrip, event: TripEvent, step: TripStep): Pair<ActiveTrip, TripStep> {
+        val replaced = trip.replaced ?: return trip to step
+        val leg = replaced.legIndex
+        val waiting = trip.state.legIndex == leg && trip.state.phase == TripPhase.WAITING_TO_BOARD
+        if (trip.state.legIndex > leg) return trip.copy(replaced = null) to step
+        if (!waiting || (step.state.legIndex == leg && step.state.phase == TripPhase.WAITING_TO_BOARD)) return trip to step
+        val untilDue = trip.plan.ride(leg).departureAt?.let { Duration.between(event.at, it).seconds } ?: 0
+        if (maxOf(-step.state.clockOffsetS, untilDue) < EARLIER_TRAIN.seconds) return trip.copy(replaced = null) to step
+        log.event("earlier", mapOf("leg" to leg, "departs" to replaced.plan.ride(leg).departureAt))
+        return trip.copy(plan = replaced.plan, replaced = null) to TripEngine.step(replaced.plan, trip.state, event)
     }
 
     /**
@@ -279,7 +298,8 @@ class TripControllerImpl @Inject constructor(
     /**
      * The ride being waited for leaves before the rider can be on it (still walking to it, or not
      * aboard a minute after it was due): asks for the way on from its station, and takes it in
-     * place of the rest of the plan. Called with the lock held; the asking runs outside it.
+     * place of the rest of the plan, telling the rider unless they're [onPlatform]. The plan it
+     * replaces is kept for [boardedEarlier]. Called with the lock held; the asking runs outside it.
      *
      * Or, ahead of that, the next ride will have left by the time the late one aboard gets in and
      * the rider walks across: asked while still riding, within [EARLY_REPLAN] of getting in, so they
@@ -323,16 +343,32 @@ class TripControllerImpl @Inject constructor(
                     (current.state.legIndex == legIndex && current.state.phase != TripPhase.WAITING_TO_BOARD)
                 if (current.plan != trip.plan || boarded) return@withLock
                 val plan = TripPlan(current.plan.legs.take(legIndex) + onward.legs)
+                val told = !onPlatform(state)
                 log.event(
                     "missed",
-                    mapOf("leg" to legIndex, "departs" to departs, "onward" to plan.ride(legIndex).departureAt, "aboard" to (state.phase == TripPhase.RIDING)),
+                    mapOf(
+                        "leg" to legIndex,
+                        "departs" to departs,
+                        "onward" to plan.ride(legIndex).departureAt,
+                        "aboard" to (state.phase == TripPhase.RIDING),
+                        "told" to told,
+                    ),
                 )
-                val replanned = current.copy(plan = plan)
-                runtime.rerouted(replanned, legIndex, departs)
+                val replanned = current.copy(plan = plan, replaced = current.replaced ?: ReplacedPlan(current.plan, legIndex))
+                if (told) runtime.rerouted(replanned, legIndex, departs)
                 apply(replanned, TripEngine.step(plan, current.state, TripEvent.Tick(clock.instant())))
             }
         }
     }
+
+    /**
+     * Seen at the station of the ride being waited for, and not walking to it: whatever comes next
+     * is what they'll take, the train being late, gone, or let go full. A swap is no news to them;
+     * the board shows it, and [boardedEarlier] puts it back if the late one turns up.
+     */
+    private fun onPlatform(state: TripState): Boolean =
+        state.phase == TripPhase.WAITING_TO_BOARD && state.walkingSince == null &&
+            state.source == PositionSource.CONFIRMED && state.sightedPosition == 0.0
 
     /**
      * Ticks at [at] twice over: a timer for while the process is awake, and an alarm for when it
@@ -365,6 +401,12 @@ class TripControllerImpl @Inject constructor(
 
         /** How long before asking again when a re-plan found nothing. */
         val REPLAN_RETRY: Duration = Duration.ofMinutes(2)
+
+        /**
+         * Boarded this far ahead of the train a ride was swapped for, it's the one before. Trains
+         * don't leave two minutes early; tonight's were five and six ahead.
+         */
+        val EARLIER_TRAIN: Duration = Duration.ofMinutes(2)
     }
 }
 
