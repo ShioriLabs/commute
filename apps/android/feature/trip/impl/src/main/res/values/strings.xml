@@ -14,6 +14,10 @@
 
     <!-- The line under it. -->
     <string name="trip_headsign">arah %1$s</string>
+    <string name="trip_ride_more">%1$s +%2$d lainnya</string>
+    <string name="trip_via">via %1$s</string>
+    <string name="trip_board_any_bus">Naik salah satu bus</string>
+    <string name="trip_board_any_train">Naik salah satu kereta</string>
     <string name="trip_platform">Peron %1$s</string>
     <string name="trip_departs_at">berangkat %1$s</string>
     <string name="trip_from_stop">dari %1$s</string>

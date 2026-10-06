@@ -351,8 +351,8 @@ private fun RideBlock(
             LineRoundel(code = line?.lineCode ?: ride.line.substringAfter(':'), color = line?.colorCode ?: "#94A3B8", operator = ride.operator)
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                ride.headsign?.let {
-                    Text(text = stringResource(R.string.trip_headsign, it), style = MaterialTheme.typography.bodySmall, color = Slate500)
+                rideDirection(ride)?.let {
+                    Text(text = it, style = MaterialTheme.typography.bodySmall, color = Slate500)
                 }
             }
             ride.platformCode?.let {

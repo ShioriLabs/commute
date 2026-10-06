@@ -19,7 +19,20 @@ import java.time.format.DateTimeFormatter
  */
 class WatchCopy(private val resources: Resources, private val lines: Map<String, WearLine>) {
 
-    fun rideName(ride: TripLeg.Ride): String = lines[ride.line]?.name ?: ride.line.substringAfter(':')
+    /**
+     * The ride's line, and how many others will do: "4D +4 lainnya" for haltes five routes serve. A
+     * bus route goes by its code there, its name ("Pulo Gadung – Kuningan") being far too long.
+     */
+    fun rideName(ride: TripLeg.Ride): String {
+        val code = ride.line.substringAfter(':')
+        val name = lines[ride.line]?.name ?: code
+        if (ride.otherLines == 0) return name
+        return resources.getString(R.string.trip_ride_more, if (ride.isBus) code else name, ride.otherLines)
+    }
+
+    /** "arah" the terminus when every line that will do heads there; else "via" the stop to get off at. */
+    fun direction(ride: TripLeg.Ride): String? = ride.sharedHeadsign?.let { resources.getString(R.string.trip_headsign, it) }
+        ?: ride.takeIf { it.otherLines > 0 }?.let { resources.getString(R.string.trip_via, it.stops.last().name) }
 
     fun title(headline: Headline): String = when (headline) {
         is Headline.Board -> resources.getString(R.string.trip_board, rideName(headline.ride))
@@ -54,7 +67,7 @@ class WatchCopy(private val resources: Resources, private val lines: Map<String,
      */
     fun rideLabel(headline: Headline, ride: TripLeg.Ride): String = when (headline) {
         is Headline.Board, is Headline.Change ->
-            ride.headsign?.let { resources.getString(R.string.trip_headsign, it) } ?: rideName(ride)
+            direction(ride) ?: rideName(ride)
         else -> rideName(ride)
     }
 
