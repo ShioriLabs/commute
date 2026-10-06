@@ -8,12 +8,15 @@ import id.shiorilabs.commute.core.query.di.ApplicationScope
 import id.shiorilabs.commute.core.trip.AlertKind
 import id.shiorilabs.commute.core.trip.FinishReason
 import id.shiorilabs.commute.core.trip.InstantSerializer
+import id.shiorilabs.commute.core.trip.PositionSource
 import id.shiorilabs.commute.core.trip.RiderAction
 import id.shiorilabs.commute.core.trip.TripEffect
 import id.shiorilabs.commute.core.trip.TripEngine
 import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripPhase
 import id.shiorilabs.commute.core.trip.TripState
+import id.shiorilabs.commute.core.trip.expectedAlightingAt
+import id.shiorilabs.commute.core.trip.nextRideReadyAt
 import id.shiorilabs.commute.core.trip.walkEndsAt
 import id.shiorilabs.commute.core.trip.TripEvent
 import id.shiorilabs.commute.core.trip.TripPlan
@@ -277,16 +280,29 @@ class TripControllerImpl @Inject constructor(
      * The ride being waited for leaves before the rider can be on it (still walking to it, or not
      * aboard a minute after it was due): asks for the way on from its station, and takes it in
      * place of the rest of the plan. Called with the lock held; the asking runs outside it.
+     *
+     * Or, ahead of that, the next ride will have left by the time the late one aboard gets in and
+     * the rider walks across: asked while still riding, within [EARLY_REPLAN] of getting in, so they
+     * know at their seat, not on the platform. Only on lateness a fix saw on the move; a late
+     * "Udah naik" tap would read as a late train.
      */
     private fun replanIfMissed(trip: ActiveTrip) {
         val state = trip.state
-        if (state.phase != TripPhase.WAITING_TO_BOARD) return
-        val ride = trip.plan.ride(state.legIndex)
-        val departs = ride.departureAt ?: return
         val now = clock.instant()
-        val readyAt = maxOf(now, state.walkEndsAt(trip.plan) ?: now)
+        val (legIndex, readyAt) = when (state.phase) {
+            TripPhase.WAITING_TO_BOARD -> state.legIndex to maxOf(now, state.walkEndsAt(trip.plan) ?: now)
+            TripPhase.RIDING -> {
+                if (state.source != PositionSource.CONFIRMED || state.confirmedPosition <= 0.0) return
+                val getsIn = state.expectedAlightingAt(trip.plan) ?: return
+                if (getsIn.isAfter(now.plus(EARLY_REPLAN))) return
+                state.nextRideReadyAt(trip.plan) ?: return
+            }
+            else -> return
+        }
+        val ride = trip.plan.ride(legIndex)
+        val departs = ride.departureAt ?: return
         if (!readyAt.isAfter(departs.plus(CATCH_GRACE))) return
-        val key = "${state.legIndex}@$departs"
+        val key = "$legIndex@$departs"
         if (key == replannedFor) return
         replannedFor = key
         scope.launch {
@@ -294,7 +310,7 @@ class TripControllerImpl @Inject constructor(
                 ?.let { locator.place(it) }
                 ?.takeIf { it.legs.firstOrNull() is TripLeg.Ride }
             if (onward == null) {
-                log.event("missed", mapOf("leg" to state.legIndex, "departs" to departs, "onward" to null))
+                log.event("missed", mapOf("leg" to legIndex, "departs" to departs, "onward" to null))
                 // Offline, say: ask again once it's had a while, on whatever step comes next.
                 delay(REPLAN_RETRY.toMillis())
                 if (replannedFor == key) replannedFor = null
@@ -302,16 +318,17 @@ class TripControllerImpl @Inject constructor(
             }
             mutex.withLock {
                 val current = _active.value ?: return@withLock
-                // Moved on meanwhile (boarded after all, or already re-planned): leave it be.
-                if (current.plan != trip.plan || current.state.legIndex != state.legIndex ||
-                    current.state.phase != TripPhase.WAITING_TO_BOARD
-                ) {
-                    return@withLock
-                }
-                val plan = TripPlan(current.plan.legs.take(state.legIndex) + onward.legs)
-                log.event("missed", mapOf("leg" to state.legIndex, "departs" to departs, "onward" to plan.ride(state.legIndex).departureAt))
+                // Moved on meanwhile (boarded it after all, or already re-planned): leave it be.
+                val boarded = current.state.legIndex > legIndex ||
+                    (current.state.legIndex == legIndex && current.state.phase != TripPhase.WAITING_TO_BOARD)
+                if (current.plan != trip.plan || boarded) return@withLock
+                val plan = TripPlan(current.plan.legs.take(legIndex) + onward.legs)
+                log.event(
+                    "missed",
+                    mapOf("leg" to legIndex, "departs" to departs, "onward" to plan.ride(legIndex).departureAt, "aboard" to (state.phase == TripPhase.RIDING)),
+                )
                 val replanned = current.copy(plan = plan)
-                runtime.rerouted(replanned, departs)
+                runtime.rerouted(replanned, legIndex, departs)
                 apply(replanned, TripEngine.step(plan, current.state, TripEvent.Tick(clock.instant())))
             }
         }
@@ -339,6 +356,12 @@ class TripControllerImpl @Inject constructor(
 
         /** A train a minute late is still worth running for; past that, look for the next. */
         val CATCH_GRACE: Duration = Duration.ofMinutes(1)
+
+        /**
+         * How soon before the late ride gets in a missed change is asked about from aboard it: near
+         * enough that its lateness won't be made up, early enough to sit with the news.
+         */
+        val EARLY_REPLAN: Duration = Duration.ofMinutes(10)
 
         /** How long before asking again when a re-plan found nothing. */
         val REPLAN_RETRY: Duration = Duration.ofMinutes(2)
