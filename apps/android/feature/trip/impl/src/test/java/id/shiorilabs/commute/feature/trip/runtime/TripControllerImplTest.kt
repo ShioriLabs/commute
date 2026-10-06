@@ -65,7 +65,7 @@ class TripControllerImplTest {
         var tracking = false
         var asked = 0
         var wakeAt: Instant? = null
-        val rerouted = mutableListOf<Instant>()
+        val rerouted = mutableListOf<Pair<Int, Instant>>()
         val reminded = mutableListOf<Pair<Int, TripReminder>>()
         var wakingStopped = 0
 
@@ -78,8 +78,8 @@ class TripControllerImplTest {
         override fun askStillOnRoute(trip: ActiveTrip) {
             asked++
         }
-        override fun rerouted(trip: ActiveTrip, missed: Instant) {
-            rerouted += missed
+        override fun rerouted(trip: ActiveTrip, legIndex: Int, missed: Instant) {
+            rerouted += legIndex to missed
         }
         override fun finish() {
             finished++
@@ -267,6 +267,20 @@ class TripControllerImplTest {
         assertEquals(2, runtime.wakingStopped)
     }
 
+    /** Aboard the 08.00 MRT from Bundaran HI, said to be [lateS] late, but not yet seen on the move. */
+    private fun aboardTheMrt(lateS: Long) = ActiveTrip(
+        plan,
+        TripEngine.start(plan, NOW, hasLocation = true).state.copy(
+            phase = TripPhase.RIDING,
+            clockOffsetS = lateS,
+            source = PositionSource.CONFIRMED,
+            confirmedAt = minutes(2),
+        ),
+        origin,
+    )
+
+    private val halfwayToDukuhAtas = GeoPoint((-6.1913 + DUKUH_ATAS.latitude!!) / 2, (106.8230 + DUKUH_ATAS.longitude!!) / 2)
+
     /** Off the MRT at Dukuh Atas late, at 08.09, with 300 m to walk for the 08.10 from Sudirman. */
     private fun walkingToAMissedTrain() = ActiveTrip(
         plan,
@@ -293,8 +307,53 @@ class TripControllerImplTest {
         assertEquals(plan.legs.take(2), trip.plan.legs.take(2))
         assertEquals(minutes(20), trip.plan.ride(2).departureAt)
         assertEquals(TripPhase.WAITING_TO_BOARD, trip.state.phase)
-        assertEquals(listOf(minutes(10)), runtime.rerouted)
+        assertEquals(listOf(2 to minutes(10)), runtime.rerouted)
         assertEquals(trip.plan, store.trip!!.plan)
+    }
+
+    @Test
+    fun `a change a late train won't make is re-planned while still aboard it`() = runTest {
+        // Seen halfway at 08.06, five minutes late: in at 08.07, at Sudirman about 08.11.30, a minute
+        // and a half after the 08.10 has gone.
+        onward = TripPlan(listOf(nextTrain))
+        store.trip = aboardTheMrt(lateS = 300)
+        val controller = controller(at = minutes(6))
+        runCurrent()
+        controller.onFix(Fix(halfwayToDukuhAtas, 15f, minutes(6), speedMps = 15f))
+        runCurrent()
+
+        assertEquals(listOf("KCI-SUD>KCI-CW on KCI:B"), asked)
+        val trip = controller.active.value!!
+        assertEquals(TripPhase.RIDING, trip.state.phase)
+        assertEquals(0, trip.state.legIndex)
+        assertEquals(plan.legs.take(2), trip.plan.legs.take(2))
+        assertEquals(minutes(20), trip.plan.ride(2).departureAt)
+        assertEquals(listOf(2 to minutes(10)), runtime.rerouted)
+    }
+
+    @Test
+    fun `a late train still in time for the change isn't re-planned`() = runTest {
+        // Two minutes late: at Sudirman about 08.08.30, in good time for the 08.10.
+        store.trip = aboardTheMrt(lateS = 120)
+        val controller = controller(at = minutes(3))
+        runCurrent()
+        controller.onFix(Fix(halfwayToDukuhAtas, 15f, minutes(3), speedMps = 15f))
+        runCurrent()
+
+        assertEquals(0, controller.active.value!!.state.legIndex)
+        assertEquals(emptyList<String>(), asked)
+    }
+
+    @Test
+    fun `lateness only the boarding tap suggests doesn't re-plan ahead`() = runTest {
+        // "Udah naik" at 08.06 for the 08.00: the train may have run late, or the tap did. No fix
+        // has seen it on the move yet.
+        store.trip = aboardTheMrt(lateS = 360)
+        val controller = controller(at = minutes(6))
+        runCurrent()
+
+        assertEquals(0, controller.active.value!!.state.legIndex)
+        assertEquals(emptyList<String>(), asked)
     }
 
     @Test
