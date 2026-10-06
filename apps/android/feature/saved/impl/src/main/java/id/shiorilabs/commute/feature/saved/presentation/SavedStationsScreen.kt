@@ -58,7 +58,6 @@ import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.ui.components.CommuteEmptyState
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
-import id.shiorilabs.commute.core.ui.ext.RevealChangedTop
 import id.shiorilabs.commute.core.ui.ext.RevealInsertedTop
 import id.shiorilabs.commute.core.ui.ext.cardEntrance
 import id.shiorilabs.commute.core.ui.frost.FrostedTopChromeBackdrop
@@ -100,13 +99,16 @@ fun SavedStationsScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val nearby by nearbyViewModel.state.collectAsStateWithLifecycle()
     val raised by nearbyViewModel.raised.collectAsStateWithLifecycle()
+    val nearbySettled by nearbyViewModel.settled.collectAsStateWithLifecycle()
     // The rider has likely moved since home was last on screen.
     LifecycleResumeEffect(Unit) {
         nearbyViewModel.refresh()
         onPauseOrDispose {}
     }
-    // The splash waits for the feed's first content rather than reveal its skeleton; the activity caps it.
-    HoldStartupWhile(waiting = (state as? UIState.Success)?.data?.isFirstContentLoading ?: true)
+    // The splash waits for the feed's first content rather than reveal its skeleton, and for the
+    // stations near the rider, which would otherwise push the feed down as they land. The activity
+    // caps it.
+    HoldStartupWhile(waiting = ((state as? UIState.Success)?.data?.isFirstContentLoading ?: true) || !nearbySettled)
     val navigator = LocalNavigator.current
     val now = rememberJakartaNow()
     val offline by rememberIsOffline()
@@ -311,16 +313,9 @@ private fun StationFeed(
         is NearbyUiState.Stations -> 1 + 2 * nearby.boards.size
     }
     val ordered = remember(feed.entries, raised) { raiseNearby(feed.entries, raised) }
-    // A fix lands after the feed is up: what it raises, or the stations near the rider with nothing
-    // raised, goes above the row on screen, where the list would otherwise keep following that row
-    // down.
-    listState.RevealChangedTop(
-        ordered.front.firstOrNull()?.key ?: when (nearby) {
-            NearbyUiState.Hidden -> null
-            NearbyUiState.Prompt -> "nearby-prompt"
-            is NearbyUiState.Stations -> "nearby-heading"
-        },
-    )
+    // A fix that lands after the feed is up (the splash waits for one, but only so long) puts what
+    // it raises, or the stations near the rider, above the row on screen. The list keeps its place
+    // by that row, so nothing the rider is reading moves; they're there on scrolling up.
     val titleRows = remember(ordered, noticeShown, nearbyRows) {
         var row = 0
         fun rowsOf(entries: List<HomeEntry>) = entries.map { entry ->
@@ -418,12 +413,20 @@ private fun StationFeed(
                         NearbyPromptCard(
                             onResult = onNearbyPermission,
                             onDismiss = onDismissNearby,
-                            modifier = Modifier.padding(start = 16.dp, top = 32.dp, end = 16.dp),
+                            modifier = Modifier
+                                .cardEntrance(0)
+                                .padding(start = 16.dp, top = 32.dp, end = 16.dp),
                         )
                     }
                     is NearbyUiState.Stations -> {
-                        item(key = "nearby-heading") { NearbyHeading(Modifier.padding(top = 32.dp)) }
-                        nearby.boards.forEach { (near, card) ->
+                        item(key = "nearby-heading") {
+                            NearbyHeading(
+                                Modifier
+                                    .cardEntrance(0)
+                                    .padding(top = 32.dp),
+                            )
+                        }
+                        nearby.boards.forEachIndexed { index, (near, card) ->
                             val station = near.station
                             item(key = "nearby-title:${station.id}") {
                                 StationTitle(
@@ -433,6 +436,7 @@ private fun StationFeed(
                                     // A pinned station of the same name below owns the flight home.
                                     shareName = false,
                                     onClick = { openStation(station.id) },
+                                    modifier = Modifier.cardEntrance(index),
                                 )
                             }
                             item(key = "nearby:${station.id}") {
@@ -442,7 +446,9 @@ private fun StationFeed(
                                     lines = feed.lines,
                                     now = now,
                                     onRetry = {},
-                                    modifier = Modifier.padding(bottom = StationGap),
+                                    modifier = Modifier
+                                        .cardEntrance(index)
+                                        .padding(bottom = StationGap),
                                 )
                             }
                         }

@@ -27,20 +27,3 @@ fun LazyListState.RevealInsertedTop(inserted: Boolean) {
     }
     SideEffect { previous[0] = inserted }
 }
-
-/**
- * As [RevealInsertedTop], for a top row that can change rather than only appear: whenever [top]
- * (the first row's key, or `null` for the list's usual first row) changes, a list resting at the
- * top stays at the top, showing the new first row instead of following the old one down.
- */
-@Composable
-fun LazyListState.RevealChangedTop(top: Any?) {
-    val previous = remember { arrayOf(top) }
-    if (top != previous[0]) {
-        val atTop = Snapshot.withoutReadObservation { firstVisibleItemIndex == 0 && firstVisibleItemScrollOffset == 0 }
-        if (atTop) {
-            requestScrollToItem(0)
-        }
-    }
-    SideEffect { previous[0] = top }
-}
