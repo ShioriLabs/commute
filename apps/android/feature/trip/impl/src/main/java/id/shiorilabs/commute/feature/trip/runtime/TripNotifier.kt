@@ -1,17 +1,14 @@
 package id.shiorilabs.commute.feature.trip.runtime
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.IconCompat
 import androidx.core.graphics.toColorInt
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -287,9 +284,7 @@ class TripNotifier @Inject constructor(
 
     @SuppressLint("MissingPermission") // Checked just above; without it nothing is posted.
     private fun notify(id: Int, notification: Notification) {
-        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
-            PackageManager.PERMISSION_GRANTED
-        if (granted) manager.notify(id, notification)
+        if (NotificationChannels.allowed(context)) manager.notify(id, notification)
     }
 
     companion object {
