@@ -1,7 +1,7 @@
 package id.shiorilabs.commute.feature.saved.presentation
 
 import id.shiorilabs.commute.core.ui.motion.IosSpringEasing
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
@@ -60,6 +61,7 @@ import id.shiorilabs.commute.core.ui.components.CommuteEmptyState
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.ext.RevealInsertedTop
 import id.shiorilabs.commute.core.ui.ext.cardEntrance
+import id.shiorilabs.commute.core.ui.ext.KeepTopUntilDrawn
 import id.shiorilabs.commute.core.ui.frost.FrostedTopChromeBackdrop
 import id.shiorilabs.commute.core.ui.layout.TitleSlot
 import id.shiorilabs.commute.core.ui.layout.stuckTitle
@@ -313,9 +315,20 @@ private fun StationFeed(
         is NearbyUiState.Stations -> 1 + 2 * nearby.boards.size
     }
     val ordered = remember(feed.entries, raised) { raiseNearby(feed.entries, raised) }
-    // A fix that lands after the feed is up (the splash waits for one, but only so long) puts what
-    // it raises, or the stations near the rider, above the row on screen. The list keeps its place
-    // by that row, so nothing the rider is reading moves; they're there on scrolling up.
+    // What a fix raises, or the stations near the rider, go above the feed. Landing under the
+    // splash, they're where home opens; landing after it (the splash waits for a fix, but only so
+    // long), above the row on screen, which the list keeps its place by: nothing the rider is
+    // reading moves, and they're there on scrolling up.
+    // Set on the list's first draw, which a held splash holds back: until then nothing is on screen.
+    val firstDraw = remember { booleanArrayOf(false) }
+    listState.KeepTopUntilDrawn(
+        ordered.front.firstOrNull()?.key ?: when (nearby) {
+            NearbyUiState.Hidden -> null
+            NearbyUiState.Prompt -> "nearby-prompt"
+            is NearbyUiState.Stations -> "nearby-heading"
+        },
+        drawn = { firstDraw[0] },
+    )
     val titleRows = remember(ordered, noticeShown, nearbyRows) {
         var row = 0
         fun rowsOf(entries: List<HomeEntry>) = entries.map { entry ->
@@ -396,6 +409,7 @@ private fun StationFeed(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
+                .drawBehind { firstDraw[0] = true }
                 .hazeSource(hazeState)
                 .semantics { contentDescription = listDescription },
             // Under the status bar at rest, and clear of the rail at the bottom, which sits over the
@@ -557,6 +571,7 @@ private fun StationFeed(
             // The bar covers the list's own copy of the title, so it takes the tap for it.
             opened = (stuckTitle as? BarTitle.Station)?.stationId?.let { it == opened } == true,
             onClick = stuckTitle?.let { title -> { openTitle(title) } },
+            drawn = { firstDraw[0] },
         )
 
         // What the pull found, just under the bar, over whatever the feed is showing.
@@ -595,18 +610,25 @@ private fun StuckTitleBar(
     onTitleHeight: (Int) -> Unit,
     opened: Boolean,
     onClick: (() -> Unit)?,
+    drawn: () -> Boolean,
 ) {
     val density = LocalDensity.current
     val statusBarPx = with(density) { statusBar.roundToPx() }
     val fadePx = with(density) { NAME_FADE.toPx() }
 
     // The name fades on the feed's entrance curve when the bar gains or loses one, rather than
-    // popping: the first time a station loads under the bar, and when the feed empties.
-    val nameAlpha by animateFloatAsState(
-        targetValue = if (title == null) 0f else 1f,
-        animationSpec = tween(NAME_FADE_MILLIS, easing = IosSpringEasing),
-        label = "stuckTitleName",
-    )
+    // popping: the first time a station loads under the bar, and when the feed empties. Before the
+    // feed has drawn it takes its place at once: a name gained and lost under the splash, as the
+    // list settles on what it opens on, never shows.
+    val nameAlpha = remember { Animatable(if (title == null) 0f else 1f) }
+    LaunchedEffect(title == null) {
+        val target = if (title == null) 0f else 1f
+        if (drawn()) {
+            nameAlpha.animateTo(target, tween(NAME_FADE_MILLIS, easing = IosSpringEasing))
+        } else {
+            nameAlpha.snapTo(target)
+        }
+    }
     // The last title shown, kept through the fade out.
     var shownTitle by remember { mutableStateOf(title) }
     if (title != null) {
@@ -625,7 +647,7 @@ private fun StuckTitleBar(
                 .onSizeChanged { onTitleHeight(it.height - statusBarPx) }
                 .graphicsLayer {
                     translationY = pushOffset().toFloat()
-                    alpha = nameAlpha
+                    alpha = nameAlpha.value
                     // Its own layer, for the mask below to cut alpha from.
                     compositingStrategy = CompositingStrategy.Offscreen
                 }

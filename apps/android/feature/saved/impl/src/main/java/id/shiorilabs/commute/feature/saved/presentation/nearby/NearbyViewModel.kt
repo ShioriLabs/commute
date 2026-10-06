@@ -6,6 +6,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import id.shiorilabs.commute.core.datastore.HomePreferencesRepository
 import id.shiorilabs.commute.core.datastore.LocationPreferencesRepository
 import id.shiorilabs.commute.core.location.LocationClient
+import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.feature.station.data.StationRepository
 import id.shiorilabs.commute.feature.station.data.board
 import id.shiorilabs.commute.feature.station.domain.NearbyStation
@@ -89,13 +90,15 @@ class NearbyViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
-     * Whether [state] and [raised] have shown what the first look found, or that there's nothing to
-     * look for: home holds the splash until then, so the section is in place as home opens rather
-     * than pushing the feed down once it's up. Once settled it stays so; later looks only refine.
+     * Whether [state] and [raised] show what the first look found, its boards loaded, or that there's
+     * nothing to look for: home holds the splash until then, so the section is in place as home
+     * opens rather than pushing the feed down, or swapping skeletons for boards, once it's up. Once
+     * settled it stays so; later looks only refine.
      */
     val settled: StateFlow<Boolean> =
         combine(allowed, permitted, lookup.settled, lookup.result, boards) { allowed, permitted, settled, result, boards ->
-            !allowed || !permitted || (settled && boards.map { it.nearby } == result.found)
+            !allowed || !permitted ||
+                (settled && boards.map { it.nearby } == result.found && boards.none { it.board.isLoading })
         }.scan(false) { was, now -> was || now }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
@@ -115,3 +118,7 @@ class NearbyViewModel @Inject constructor(
         viewModelScope.launch { homePreferences.dismissNearbyPrompt() }
     }
 }
+
+/** Whether any part of the board is still being read: its station, its timetable, or a halte's frequencies. */
+private val StationBoard.isLoading: Boolean
+    get() = station is UIState.Loading || timetable is UIState.Loading || frequencies is UIState.Loading

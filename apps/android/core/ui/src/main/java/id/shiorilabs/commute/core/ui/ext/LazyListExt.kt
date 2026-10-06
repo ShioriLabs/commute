@@ -27,3 +27,18 @@ fun LazyListState.RevealInsertedTop(inserted: Boolean) {
     }
     SideEffect { previous[0] = inserted }
 }
+
+/**
+ * Keeps the list at its top while [top] (the first row's key) changes before it has [drawn]: rows
+ * that land while a held splash still hides the screen are part of the first frame, so it opens
+ * on them rather than on the row that happened to be first when the list was first laid out.
+ * Once drawn, a change leaves the list where it is.
+ */
+@Composable
+fun LazyListState.KeepTopUntilDrawn(top: Any?, drawn: () -> Boolean) {
+    val previous = remember { arrayOf(top) }
+    if (top != previous[0] && !drawn()) {
+        requestScrollToItem(0)
+    }
+    SideEffect { previous[0] = top }
+}
