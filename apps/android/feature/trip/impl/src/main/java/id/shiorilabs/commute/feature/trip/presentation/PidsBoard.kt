@@ -212,13 +212,15 @@ internal fun PidsBoard(
     modifier: Modifier = Modifier,
     /** "Halaman PIDS" in Experimental: the route takes turns with other pages; see [BoardPages]. */
     pages: Boolean = false,
+    /** "Diagram ala Layar Kereta Jepang" in Pengaturan → OTW: off, the plate stands alone, without the curved [Strip] of stops ahead. */
+    diagram: Boolean = true,
 ) {
     val line = lines[pids.ride.line]
     val color = lineColorOf(line?.colorCode)
     Column(modifier = modifier.fillMaxWidth()) {
         // Over the strip: its band runs on up behind the plate.
         Plate(pids, lines, stationLines, onNameMoved, modifier = Modifier.zIndex(1f))
-        if (pids.upcoming.isNotEmpty()) {
+        if (diagram && pids.upcoming.isNotEmpty()) {
             if (pages) BoardPages(pids, color, source) else Strip(pids, color, source)
         }
         ChangePanel(pids, lines, stationLines, copy)
