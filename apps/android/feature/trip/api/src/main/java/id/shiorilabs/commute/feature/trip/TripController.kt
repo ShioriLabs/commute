@@ -13,6 +13,8 @@ import kotlinx.serialization.Serializable
  * @property origin The trip page it was started from, so "Lihat perjalanan" there can tell it is this
  *   journey, and the live screen can go back to the details.
  * @property reminder How getting off is told, past the notification: this trip only.
+ * @property replaced The plan as it was before a ride was swapped for a later one, until the rider
+ *   boards: the train it was swapped from may only have run late, and the rider be on it.
  */
 @Serializable
 data class ActiveTrip(
@@ -20,7 +22,12 @@ data class ActiveTrip(
     val state: TripState,
     val origin: Route.Trip,
     val reminder: TripReminder = TripReminder.NONE,
+    val replaced: ReplacedPlan? = null,
 )
+
+/** [plan] before ride [legIndex] was swapped for a later one. */
+@Serializable
+data class ReplacedPlan(val plan: TripPlan, val legIndex: Int)
 
 /** "Tambah Pengingat": what the rider asked to be told as getting off comes up. */
 @Serializable
