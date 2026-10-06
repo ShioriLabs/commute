@@ -54,6 +54,10 @@ object NotificationChannels {
         )
     }
 
-    /** Whether notifications can be shown at all (permission and the app-wide switch). */
+    /**
+     * Whether notifications can be shown at all (permission and the app-wide switch). Use this
+     * rather than checking `POST_NOTIFICATIONS`, which only exists from Android 13: on 12 the check
+     * always reads as denied, though notifications are allowed.
+     */
     fun allowed(context: Context): Boolean = NotificationManagerCompat.from(context).areNotificationsEnabled()
 }
