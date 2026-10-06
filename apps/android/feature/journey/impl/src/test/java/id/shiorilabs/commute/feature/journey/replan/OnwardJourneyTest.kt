@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.journey.replan
 
+import id.shiorilabs.commute.feature.journey.domain.Departure
 import id.shiorilabs.commute.feature.journey.domain.journey
 import id.shiorilabs.commute.feature.journey.domain.ride
 import id.shiorilabs.commute.feature.journey.domain.walk
@@ -25,6 +26,18 @@ class OnwardJourneyTest {
         .copy(arrivalAt = at("03:10"))
     private val walkingFirst = journey(walk("LRTJ-DKA", "MRTJ-DKA"), ride("MRTJ:M", "MRTJ-DKA", "MRTJ-STB", departureAt = at("03:06")))
         .copy(arrivalAt = at("03:08"))
+
+    @Test
+    fun `ready within the slot it is now, the search asks from now`() {
+        // 10.05 and 10.11 are both in the 10.00 slot: the home cards' answer covers it.
+        assertEquals(Departure.Now, replanDeparture(readyAt = at("03:11"), now = at("03:05")))
+    }
+
+    @Test
+    fun `ready in a later slot, the search asks from that slot`() {
+        // Aboard at 09.58 (the 09.40 slot), at the LRT by 10.11: "now" would list trains from 09.40.
+        assertEquals(Departure.At(at("03:00")), replanDeparture(readyAt = at("03:11"), now = at("02:58")))
+    }
 
     @Test
     fun `the train that left is passed over for one the rider can still take`() {
