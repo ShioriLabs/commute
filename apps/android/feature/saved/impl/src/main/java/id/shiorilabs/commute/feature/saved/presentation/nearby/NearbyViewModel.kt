@@ -72,6 +72,9 @@ class NearbyViewModel @Inject constructor(
 
     private val allowed = locationPreferences.use.map { it.allowsHomeNearby }
 
+    /** Whether home looks for the stations near the rider at all: allowed in settings, and permitted. */
+    private val looking = combine(allowed, permitted) { allowed, permitted -> allowed && permitted }
+
     val state: StateFlow<NearbyUiState> = combine(allowed, permitted, homePreferences.nearbyPromptDismissed, boards) { allowed, permitted, dismissed, boards ->
         when {
             !allowed -> NearbyUiState.Hidden
@@ -92,13 +95,13 @@ class NearbyViewModel @Inject constructor(
     /**
      * Whether [state] and [raised] show what the first look found, its boards loaded, or that there's
      * nothing to look for: home holds the splash until then, so the section is in place as home
-     * opens rather than pushing the feed down, or swapping skeletons for boards, once it's up. Once
-     * settled it stays so; later looks only refine.
+     * opens rather than pushing the feed down, or swapping skeletons for boards, once it's up. Read
+     * off [state] and [raised] themselves, not what they're made from, so it can't run ahead of
+     * what home shows. Once settled it stays so; later looks only refine.
      */
     val settled: StateFlow<Boolean> =
-        combine(allowed, permitted, lookup.settled, lookup.result, boards) { allowed, permitted, settled, result, boards ->
-            !allowed || !permitted ||
-                (settled && boards.map { it.nearby } == result.found && boards.none { it.board.isLoading })
+        combine(looking, lookup.settled, lookup.result, state, raised) { looking, looked, result, state, raised ->
+            !looking || looked && raised == result.atPinned && state.shows(result.found)
         }.scan(false) { was, now -> was || now }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
@@ -122,3 +125,10 @@ class NearbyViewModel @Inject constructor(
 /** Whether any part of the board is still being read: its station, its timetable, or a halte's frequencies. */
 private val StationBoard.isLoading: Boolean
     get() = station is UIState.Loading || timetable is UIState.Loading || frequencies is UIState.Loading
+
+/** Whether this shows [found]: each with its board loaded, or nothing when nothing was found. */
+private fun NearbyUiState.shows(found: List<NearbyStation>): Boolean = when (this) {
+    is NearbyUiState.Stations -> boards.map { it.nearby } == found && boards.none { it.board.isLoading }
+    NearbyUiState.Hidden -> found.isEmpty()
+    NearbyUiState.Prompt -> true
+}
