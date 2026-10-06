@@ -82,6 +82,8 @@ class PidsTest {
         assertEquals(PidsLabel.ALIGHT_HERE, pids.label)
         assertEquals("Dukuh Atas BNI", pids.station)
         assertEquals(plan.ride(2), pids.changeTo)
+        // It leaves from Sudirman, 300 m on foot: the board says to walk, not to change here.
+        assertEquals(plan.legs[1], pids.changeWalk)
     }
 
     /** Off the MRT at Dukuh Atas at 08.02, walking the 300 m to Sudirman for the 08.10. */
