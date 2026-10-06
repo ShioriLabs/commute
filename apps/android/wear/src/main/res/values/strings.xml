@@ -7,14 +7,14 @@
 
     <!-- The trip's headline, as the phone's Live Update words it. -->
     <string name="trip_board">Naik %1$s</string>
-    <string name="trip_change">Pindah ke %1$s</string>
+    <string name="trip_change">Transit ke %1$s</string>
     <string name="trip_ride_to">Turun di %1$s</string>
     <string name="trip_alight_now">Turun di %1$s</string>
     <string name="trip_arrived">Udah sampai di %1$s</string>
 
     <!-- The small line over the place, and the place. -->
     <string name="trip_lead_board">Naik</string>
-    <string name="trip_lead_change">Pindah ke</string>
+    <string name="trip_lead_change">Transit ke</string>
     <string name="trip_lead_alight">Turun di</string>
     <string name="trip_lead_arrived">Udah sampai di</string>
     <string name="trip_minutes">%1$d mnt</string>
@@ -25,7 +25,7 @@
     <string name="trip_platform">Peron %1$s</string>
     <string name="trip_departs_at">berangkat %1$s</string>
     <string name="trip_walk_to">Jalan ke %1$s, %2$d m</string>
-    <string name="trip_then_change">Lalu pindah ke %1$s</string>
+    <string name="trip_then_change">Lalu transit ke %1$s</string>
     <string name="trip_then_done">Ini tujuan kamu</string>
 
     <string name="trip_source_estimated">Perkiraan dari jadwal</string>
