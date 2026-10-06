@@ -24,6 +24,7 @@ import id.shiorilabs.commute.feature.station.domain.Station
 import id.shiorilabs.commute.feature.station.domain.Transfer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.builtins.ListSerializer
@@ -177,6 +178,9 @@ class StationDirectoryImpl @Inject constructor(
         queries.fetch(stationsQuery).mapOnDataThread { rows -> rows.map { it.toStation() } }
 
     override fun cached(): List<Station>? = queries.peek(stationsQuery)?.data?.map { it.toStation() }
+
+    override suspend fun stored(): List<Station>? =
+        queries.observe(stationsQuery).first().data?.let { rows -> onDataThread { rows.map { it.toStation() } } }
 }
 
 /** Maps a wire answer to the domain off the main thread: a board can hold thousands of departures. */

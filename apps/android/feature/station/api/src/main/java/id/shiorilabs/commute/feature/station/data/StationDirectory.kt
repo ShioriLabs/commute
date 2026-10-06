@@ -15,4 +15,10 @@ interface StationDirectory {
 
     /** The directory if it has been loaded, without asking. */
     fun cached(): List<Station>? = null
+
+    /**
+     * The directory as held, from memory or disk, however old, without waiting on the network
+     * (a stale one goes on refreshing on its own); `null` when it has never been fetched.
+     */
+    suspend fun stored(): List<Station>? = cached()
 }
