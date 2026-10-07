@@ -26,6 +26,7 @@ import id.shiorilabs.commute.feature.trip.ReplacedPlan
 import id.shiorilabs.commute.feature.trip.TripController
 import id.shiorilabs.commute.feature.trip.TripReminder
 import id.shiorilabs.commute.feature.trip.TripReplanner
+import kotlinx.coroutines.CompletableJob
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -83,16 +84,28 @@ class TripControllerImpl @Inject constructor(
     /** The ride, by leg and departure, last re-planned for, so a missed train is asked about once. */
     private var replannedFor: String? = null
 
-    /** A trip stored by an earlier process carries on, from the clock until a fix confirms it. */
-    private val restored: Job = scope.launch {
-        mutex.withLock {
-            _finished.value = store.readFinished()?.takeIf { clock.instant().isBefore(it.at.plus(FINISHED_KEPT)) }
-            val trip = store.read() ?: return@withLock
-            log.event("restored", mapOf("journey" to trip.origin.journeyKey, "phase" to trip.state.phase))
-            _active.value = trip
-            apply(trip, TripEngine.step(trip.plan, trip.state, TripEvent.Resumed(clock.instant())))
+    /**
+     * A trip stored by an earlier process carries on, from the clock until a fix confirms it.
+     * Made before the restore is launched: on a thread pool the restore can be done, and what it
+     * started already waiting on this, before the constructor gets past the launch.
+     */
+    private val restored: CompletableJob = Job()
+
+    init {
+        scope.launch {
+            try {
+                mutex.withLock {
+                    _finished.value = store.readFinished()?.takeIf { clock.instant().isBefore(it.at.plus(FINISHED_KEPT)) }
+                    val trip = store.read() ?: return@withLock
+                    log.event("restored", mapOf("journey" to trip.origin.journeyKey, "phase" to trip.state.phase))
+                    _active.value = trip
+                    apply(trip, TripEngine.step(trip.plan, trip.state, TripEvent.Resumed(clock.instant())))
+                }
+            } finally {
+                restored.complete()
+            }
+            resumeTracking()
         }
-        resumeTracking()
     }
 
     /**
