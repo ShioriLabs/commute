@@ -48,7 +48,7 @@ May 2025 it breaks the two halves out separately:
 | Tanah Abang | 1,314,359 | 1,252,660 | 82,807 |
 | Sudirman | — | 1,006,102 | 32,455 (arrivals only) |
 
-Against the anchors: Bogor 99,047 (2.6% apart), Tanah Abang 89,126 (7.1%, and our period spans the
+Against the anchors: Bogor 99,047 (2.6% apart; the 2025 anchor, since refreshed to 101,942 from H1 2026), Tanah Abang 89,126 (7.1%, and our period spans the
 busier months), Sudirman's arrivals doubled ≈64,910 against 67,543 (3.9%). Bogor's departures alone
 are 50,535/day, within 3% of the Sem I boardings series. Both series are exactly what they looked
 like, and the in-out figures are departures + arrivals.
@@ -186,15 +186,36 @@ busiest member station.
   the table of why the two layers stay separate: habit is invisible to structure and shows up only
   in measurement. **Refresh if Karet closes** and its traffic is redirected here.
 
+  **Karet closed on 1 Sep 2026; refresh pending.** KCI's first-week figures for Sudirman Baru
+  are 13,450 boarding + 9,860 alighting a day (≈23,310 in+out, up more than 300% on ~8k
+  before the transfer). Day 1 was 13,856 + 10,829. Sudirman itself rose 11% for boarding and
+  7% for alighting, and Tanah Abang 9% for boarding. The 2,408 anchor in `ridership.ts` is now about
+  10x too low. Wait for a figure from after the transfer settles, not just the first week,
+  before replacing it. Sources: news copies of KCI's "Volume pengguna meningkat… Sudirman Baru"
+  release (idxchannel.com, koran-jakarta.com); kci.id returns 403 to non-browser clients.
+
+## Anchor refreshes
+
+- **Bogor, 2026-10-07:** 99,047 (Jan–Nov 2025) → **101,942** (Jan–Jun 2026: 9,371,057 gate in
+  + 9,080,405 gate out over 181 days, Antara, 27 Jul 2026). Same in-out metric as before.
+  The score moves 85 → 86. The same release gives the Bogor line at 392 trips a day (D1 has
+  376) and 431,368 riders a day, about 45% of all KRL ridership.
+- **Basoetta (line A), noted 2026-10-07, not applied:** Q1 2026 had 640,510 riders (+23.8% on
+  517,166), about 7,117 a day against the 6,155 behind the `LINE_CAPACITY` override, or ~111 a train
+  over 64 trips instead of ~96. That's still nowhere near a 12-car KRL, so the override stands. Commuter Line Merak
+  Q1 2026: 1,134,514 (+11.7%), ~12,600 a day; Merak stations still have no `stationLines`.
+- The time-of-day findings gathered alongside it (KCI calibration, station roles, day types) are
+  in `station-density.md` under "Measured inputs". This column stays the static all-day figure.
+
 ## Runbook
 
 ```bash
-# 1. regenerate (must be --remote; the local D1 is stale)
+# 1. regenerate (--remote unless the local D1 was just synced from prod)
 pnpm --filter api generate:station-scores -- --remote
 
 # 2. review the diff and the printed summary
 git diff apps/api/src/db/scripts/station_scores.sql
-grep -cE "score = (1[0-9][0-9]|[2-9][0-9][0-9])" apps/api/src/db/scripts/station_scores.sql  # 0
+grep -cE "score = (10[1-9]|1[1-9][0-9]|[2-9][0-9][0-9])" apps/api/src/db/scripts/station_scores.sql  # 0 (100 = STATION_SCORE_MAX is allowed)
 
 # 3. apply — AFTER any TJ reseed, see below
 wrangler d1 execute commute --local  --file=src/db/scripts/station_scores.sql
