@@ -1,6 +1,7 @@
 [versions]
 zstdJni = "1.5.7-21"
 sentry = "8.59.0"
+sentryGradle = "6.23.0"
 # Build tools
 agp = "9.3.3"
 kotlin = "2.4.10"
@@ -141,3 +142,5 @@ kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+# Uploads R8 mappings so Sentry shows release crashes deobfuscated.
+sentry-android = { id = "io.sentry.android.gradle", version.ref = "sentryGradle" }
