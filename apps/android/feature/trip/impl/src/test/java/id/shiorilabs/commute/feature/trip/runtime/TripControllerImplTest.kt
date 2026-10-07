@@ -26,7 +26,10 @@ import id.shiorilabs.commute.feature.trip.DUKUH_ATAS
 import id.shiorilabs.commute.feature.trip.NOW
 import id.shiorilabs.commute.feature.trip.origin
 import id.shiorilabs.commute.feature.trip.plan
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.plus
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -118,7 +121,7 @@ class TripControllerImplTest {
         onward
     }
 
-    private fun TestScope.controller(at: Instant = NOW) = TripControllerImpl(
+    private fun TestScope.controller(at: Instant = NOW, scope: CoroutineScope = backgroundScope) = TripControllerImpl(
         store = store,
         runtime = runtime,
         locator = { it },
@@ -127,7 +130,7 @@ class TripControllerImplTest {
         replanner = replanner,
         log = { _, _ -> },
         clock = Clock.fixed(at, ZoneOffset.UTC),
-        scope = backgroundScope,
+        scope = scope,
     )
 
     @Test
@@ -535,5 +538,18 @@ class TripControllerImplTest {
         assertNull(store.trip)
         // Hours late, its "turun" would only be noise.
         assertTrue(runtime.alerts.isEmpty())
+    }
+
+    @Test
+    fun `a restore that finishes before the controller is built still picks up`() = runTest {
+        val started = TripEngine.start(plan, NOW, hasLocation = true)
+        store.trip = ActiveTrip(plan, started.state, origin)
+
+        // As on a thread pool: the restore runs to its end before the constructor has moved on.
+        val controller = controller(at = NOW.plusSeconds(60), scope = backgroundScope + UnconfinedTestDispatcher(testScheduler))
+        runCurrent()
+
+        assertNotNull(controller.active.value)
+        assertTrue(runtime.tracking)
     }
 }
