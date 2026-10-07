@@ -10,9 +10,10 @@ UPDATE stations SET score = 50, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-BJ
 UPDATE stations SET score = 77, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-BKS'; -- measured
 UPDATE stations SET score = 46, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-BKST';
 UPDATE stations SET score = 30, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-BOI';
-UPDATE stations SET score = 85, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-BOO'; -- measured
-UPDATE stations SET score = 39, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-BPR';
-UPDATE stations SET score = 46, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-BUA';
+UPDATE stations SET score = 86, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-BOO'; -- measured
+UPDATE stations SET score = 36, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-BPR';
+UPDATE stations SET score = 13, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-BST';
+UPDATE stations SET score = 49, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-BUA';
 UPDATE stations SET score = 47, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-CBN';
 UPDATE stations SET score = 37, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-CC';
 UPDATE stations SET score = 0, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-CE';
@@ -40,20 +41,20 @@ UPDATE stations SET score = 47, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-GD
 UPDATE stations SET score = 36, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-GGL';
 UPDATE stations SET score = 46, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-GST';
 UPDATE stations SET score = 0, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-GW';
-UPDATE stations SET score = 79, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-JAKK';
+UPDATE stations SET score = 87, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-JAKK';
 UPDATE stations SET score = 47, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-JAY';
 UPDATE stations SET score = 0, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-JBU';
 UPDATE stations SET score = 19, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-JIS';
 UPDATE stations SET score = 37, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-JMU';
 UPDATE stations SET score = 0, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-JN';
-UPDATE stations SET score = 55, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-JNG';
+UPDATE stations SET score = 62, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-JNG';
 UPDATE stations SET score = 37, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-JTK';
-UPDATE stations SET score = 50, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-JUA';
-UPDATE stations SET score = 46, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-KAT';
+UPDATE stations SET score = 58, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-JUA';
+UPDATE stations SET score = 43, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-KAT';
 UPDATE stations SET score = 43, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-KBY';
 UPDATE stations SET score = 30, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-KDS';
 UPDATE stations SET score = 0, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-KEN';
-UPDATE stations SET score = 49, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-KLD';
+UPDATE stations SET score = 52, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-KLD';
 UPDATE stations SET score = 46, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-KLDB';
 UPDATE stations SET score = 46, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-KMO';
 UPDATE stations SET score = 46, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-KMT';
@@ -106,7 +107,7 @@ UPDATE stations SET score = 46, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-TL
 UPDATE stations SET score = 33, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-TNG';
 UPDATE stations SET score = 47, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-TNT';
 UPDATE stations SET score = 0, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-TOJB';
-UPDATE stations SET score = 25, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-TPK';
+UPDATE stations SET score = 33, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-TPK';
 UPDATE stations SET score = 30, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-TTI';
 UPDATE stations SET score = 47, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-UI';
 UPDATE stations SET score = 47, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-UP';
@@ -114,45 +115,61 @@ UPDATE stations SET score = 0, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-WJ'
 UPDATE stations SET score = 0, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-WLT';
 UPDATE stations SET score = 0, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-WT';
 UPDATE stations SET score = 0, updatedAt = CURRENT_TIMESTAMP WHERE id = 'KCI-YK';
-UPDATE stations SET score = 5, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJ-BVS';
-UPDATE stations SET score = 5, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJ-BVU';
-UPDATE stations SET score = 5, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJ-EQS';
-UPDATE stations SET score = 8, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJ-PGD';
-UPDATE stations SET score = 8, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJ-PUM';
-UPDATE stations SET score = 11, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJ-VEL';
-UPDATE stations SET score = 23, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-BEK';
-UPDATE stations SET score = 43, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-CIL';
-UPDATE stations SET score = 23, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-CK1';
-UPDATE stations SET score = 23, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-CK2';
+UPDATE stations SET score = 0, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJ-BVS';
+UPDATE stations SET score = 0, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJ-BVU';
+UPDATE stations SET score = 0, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJ-EQS';
+UPDATE stations SET score = 0, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJ-KYM';
+UPDATE stations SET score = 0, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJ-MAT';
+UPDATE stations SET score = 13, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJ-MGI';
+UPDATE stations SET score = 3, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJ-PGD';
+UPDATE stations SET score = 0, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJ-PKA';
+UPDATE stations SET score = 3, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJ-PUM';
+UPDATE stations SET score = 0, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJ-RWM';
+UPDATE stations SET score = 3, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJ-VEL';
+UPDATE stations SET score = 31, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-BEK';
+UPDATE stations SET score = 58, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-CIL';
+UPDATE stations SET score = 31, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-CK1';
+UPDATE stations SET score = 31, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-CK2';
 UPDATE stations SET score = 52, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-CKK'; -- measured
-UPDATE stations SET score = 23, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-CRC';
-UPDATE stations SET score = 43, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-CWG';
+UPDATE stations SET score = 31, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-CRC';
+UPDATE stations SET score = 51, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-CWG';
 UPDATE stations SET score = 61, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-DKA'; -- measured
-UPDATE stations SET score = 23, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-HAL';
+UPDATE stations SET score = 31, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-HAL';
 UPDATE stations SET score = 58, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-HAR'; -- measured
-UPDATE stations SET score = 23, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-JBU';
-UPDATE stations SET score = 26, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-JTM';
-UPDATE stations SET score = 26, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-KAM';
+UPDATE stations SET score = 31, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-JBU';
+UPDATE stations SET score = 34, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-JTM';
+UPDATE stations SET score = 34, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-KAM';
 UPDATE stations SET score = 54, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-KUA'; -- measured
-UPDATE stations SET score = 43, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-PAN';
-UPDATE stations SET score = 43, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-RAS';
-UPDATE stations SET score = 43, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-SET';
-UPDATE stations SET score = 26, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-TMI';
+UPDATE stations SET score = 58, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-PAN';
+UPDATE stations SET score = 58, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-RAS';
+UPDATE stations SET score = 58, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-SET';
+UPDATE stations SET score = 34, updatedAt = CURRENT_TIMESTAMP WHERE id = 'LRTJBDB-TMI';
 UPDATE stations SET score = 54, updatedAt = CURRENT_TIMESTAMP WHERE id = 'MRTJ-BHI'; -- measured
-UPDATE stations SET score = 35, updatedAt = CURRENT_TIMESTAMP WHERE id = 'MRTJ-BLA';
+UPDATE stations SET score = 45, updatedAt = CURRENT_TIMESTAMP WHERE id = 'MRTJ-BLA';
 UPDATE stations SET score = 56, updatedAt = CURRENT_TIMESTAMP WHERE id = 'MRTJ-BLM'; -- measured
-UPDATE stations SET score = 35, updatedAt = CURRENT_TIMESTAMP WHERE id = 'MRTJ-BNH';
-UPDATE stations SET score = 35, updatedAt = CURRENT_TIMESTAMP WHERE id = 'MRTJ-CPR';
+UPDATE stations SET score = 45, updatedAt = CURRENT_TIMESTAMP WHERE id = 'MRTJ-BNH';
+UPDATE stations SET score = 45, updatedAt = CURRENT_TIMESTAMP WHERE id = 'MRTJ-CPR';
 UPDATE stations SET score = 62, updatedAt = CURRENT_TIMESTAMP WHERE id = 'MRTJ-DKA'; -- measured
-UPDATE stations SET score = 35, updatedAt = CURRENT_TIMESTAMP WHERE id = 'MRTJ-FTM';
-UPDATE stations SET score = 35, updatedAt = CURRENT_TIMESTAMP WHERE id = 'MRTJ-HJN';
+UPDATE stations SET score = 45, updatedAt = CURRENT_TIMESTAMP WHERE id = 'MRTJ-FTM';
+UPDATE stations SET score = 45, updatedAt = CURRENT_TIMESTAMP WHERE id = 'MRTJ-HJN';
 UPDATE stations SET score = 50, updatedAt = CURRENT_TIMESTAMP WHERE id = 'MRTJ-IST'; -- measured
 UPDATE stations SET score = 54, updatedAt = CURRENT_TIMESTAMP WHERE id = 'MRTJ-LBB'; -- measured
-UPDATE stations SET score = 35, updatedAt = CURRENT_TIMESTAMP WHERE id = 'MRTJ-SNY';
-UPDATE stations SET score = 52, updatedAt = CURRENT_TIMESTAMP WHERE id = 'MRTJ-SSM';
-UPDATE stations SET score = 35, updatedAt = CURRENT_TIMESTAMP WHERE id = 'MRTJ-STB';
+UPDATE stations SET score = 45, updatedAt = CURRENT_TIMESTAMP WHERE id = 'MRTJ-SNY';
+UPDATE stations SET score = 61, updatedAt = CURRENT_TIMESTAMP WHERE id = 'MRTJ-SSM';
+UPDATE stations SET score = 45, updatedAt = CURRENT_TIMESTAMP WHERE id = 'MRTJ-STB';
 
-UPDATE hubs SET score = 52, updatedAt = CURRENT_TIMESTAMP WHERE id = 'HUB-CSW';
+UPDATE hubs SET score = 13, updatedAt = CURRENT_TIMESTAMP WHERE id = 'HUB-BST';
+UPDATE hubs SET score = 58, updatedAt = CURRENT_TIMESTAMP WHERE id = 'HUB-CIL';
+UPDATE hubs SET score = 61, updatedAt = CURRENT_TIMESTAMP WHERE id = 'HUB-CSW';
 UPDATE hubs SET score = 61, updatedAt = CURRENT_TIMESTAMP WHERE id = 'HUB-CW';
 UPDATE hubs SET score = 79, updatedAt = CURRENT_TIMESTAMP WHERE id = 'HUB-DKA';
+UPDATE hubs SET score = 87, updatedAt = CURRENT_TIMESTAMP WHERE id = 'HUB-JAKK';
+UPDATE hubs SET score = 62, updatedAt = CURRENT_TIMESTAMP WHERE id = 'HUB-JNG';
+UPDATE hubs SET score = 58, updatedAt = CURRENT_TIMESTAMP WHERE id = 'HUB-JUA';
+UPDATE hubs SET score = 54, updatedAt = CURRENT_TIMESTAMP WHERE id = 'HUB-KUA';
+UPDATE hubs SET score = 95, updatedAt = CURRENT_TIMESTAMP WHERE id = 'HUB-MRI';
+UPDATE hubs SET score = 58, updatedAt = CURRENT_TIMESTAMP WHERE id = 'HUB-PAN';
+UPDATE hubs SET score = 58, updatedAt = CURRENT_TIMESTAMP WHERE id = 'HUB-RAS';
 UPDATE hubs SET score = 62, updatedAt = CURRENT_TIMESTAMP WHERE id = 'HUB-SEN';
+UPDATE hubs SET score = 58, updatedAt = CURRENT_TIMESTAMP WHERE id = 'HUB-SET';
+UPDATE hubs SET score = 33, updatedAt = CURRENT_TIMESTAMP WHERE id = 'HUB-TPK';

@@ -71,12 +71,13 @@ export const RIDERSHIP_ANCHORS: RidershipAnchor[] = [
   // --- KCI ------------------------------------------------------------------
   // Busiest-by-gate top five, Jan-Nov 2025. Boardings-heavy termini dominate;
   // the interchanges that dominate by transfer volume are conspicuously absent.
+  // Bogor refreshed from its own H1 2026 release; the rest are still Jan-Nov 2025.
   {
     stationId: 'KCI-BOO',
-    gatePerDay: 99_047, // 33,081,659 / 334
-    period: '2025-01/11',
-    published: '33.081.659 transaksi gate in-out (Jan-Nov 2025)',
-    source: KCI_SOURCE
+    gatePerDay: 101_942, // 18,451,462 / 181
+    period: '2026-01/06',
+    published: '18.451.462 pergerakan: 9.371.057 gate in + 9.080.405 gate out (Jan-Jun 2026)',
+    source: 'https://www.antaranews.com/berita/5668091/peron-6-7-dan-8-stasiun-bogor-layani-sf12-kai-lanjutkan-pengembangan-peron-dan-akses-ke-bogor-paledang'
   },
   {
     stationId: 'KCI-THB',
