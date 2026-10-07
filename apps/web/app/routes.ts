@@ -41,6 +41,7 @@ export default [
     route('settings/legal/creative-assets-attributions', 'routes/settings/legal/creative-assets-attributions.tsx'),
     route('settings/legal/data-attributions', 'routes/settings/legal/data-attributions.tsx'),
     route('settings/about', 'routes/settings/about.tsx'),
-    route('settings/support', 'routes/settings/support.tsx')
+    route('settings/support', 'routes/settings/support.tsx'),
+    route('settings/android-closed-test', 'routes/settings/android-closed-test.tsx')
   ])
 ] satisfies RouteConfig
