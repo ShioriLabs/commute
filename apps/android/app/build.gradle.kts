@@ -1,7 +1,11 @@
+import id.shiorilabs.commute.buildlogic.invoke
+import id.shiorilabs.commute.buildlogic.loadSecrets
+
 plugins {
     alias(libs.plugins.commute.android.application)
     alias(libs.plugins.commute.android.hilt)
     alias(libs.plugins.androidx.baselineprofile)
+    alias(libs.plugins.sentry.android)
 }
 
 android {
@@ -50,6 +54,30 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
+}
+
+// Only for R8's mapping: every minified build gets an id that its crash reports carry, and with
+// SENTRY_AUTH_TOKEN (an org token) in the environment or secret.properties, its mapping goes up to
+// Sentry so those reports read as the source does. Without the token the build still works;
+// build/outputs/mapping can be uploaded later with sentry-cli. Nothing else of the plugin's: the SDK
+// is our own dependency, and the app isn't instrumented.
+val sentryAuthToken = providers.environmentVariable("SENTRY_AUTH_TOKEN").orNull?.takeIf { it.isNotBlank() }
+    ?: loadSecrets()("SENTRY_AUTH_TOKEN").takeIf { it.isNotEmpty() }
+
+sentry {
+    org.set("shiori-labs")
+    projectName.set("commute-android")
+    authToken.set(sentryAuthToken)
+
+    includeProguardMapping.set(true)
+    autoUploadProguardMapping.set(sentryAuthToken != null)
+    // Builds for measuring and for the Baseline Profile never reach riders.
+    ignoredBuildTypes.set(setOf("debug", "benchmarkRelease", "nonMinifiedRelease"))
+
+    autoInstallation.enabled.set(false)
+    tracingInstrumentation.enabled.set(false)
+    includeDependenciesReport.set(false)
+    telemetry.set(false)
 }
 
 dependencies {
