@@ -28,15 +28,26 @@ class OnwardJourneyTest {
         .copy(arrivalAt = at("03:08"))
 
     @Test
-    fun `ready within the slot it is now, the search asks from now`() {
-        // 10.05 and 10.11 are both in the 10.00 slot: the home cards' answer covers it.
-        assertEquals(Departure.Now, replanDeparture(readyAt = at("03:11"), now = at("03:05")))
+    fun `ready later in the slot it is now, the search asks from when they are ready`() {
+        // 10.05 and 10.11 are both in the 10.00 slot, but "now" lists three trains from 10.05, all gone by 10.11.
+        assertEquals(Departure.At(at("03:11")), replanDeparture(readyAt = at("03:11"), now = at("03:05")))
     }
 
     @Test
-    fun `ready in a later slot, the search asks from that slot`() {
-        // Aboard at 09.58 (the 09.40 slot), at the LRT by 10.11: "now" would list trains from 09.40.
-        assertEquals(Departure.At(at("03:00")), replanDeparture(readyAt = at("03:11"), now = at("02:58")))
+    fun `ready in a later slot, the search asks from when they are ready, not the slot`() {
+        // Aboard at 09.58, at the LRT by 10.11: from 10.00 the three trains could all leave before then.
+        assertEquals(Departure.At(at("03:11")), replanDeparture(readyAt = at("03:11"), now = at("02:58")))
+    }
+
+    @Test
+    fun `the search asks to the minute`() {
+        val readyAt = Instant.parse("2026-10-05T03:11:33.253564Z")
+        assertEquals(Departure.At(at("03:11")), replanDeparture(readyAt = readyAt, now = at("03:05")))
+    }
+
+    @Test
+    fun `ready already, the search asks from now`() {
+        assertEquals(Departure.At(at("03:05")), replanDeparture(readyAt = at("03:02"), now = at("03:05")))
     }
 
     @Test
