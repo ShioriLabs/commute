@@ -171,7 +171,7 @@ object TripEngine {
 
         val located = locate(ride, state.confirmedPosition, fix, tuning)
         val pullOut = pullOut(ride, state, fix, located, tuning)
-        val tracked = state.copy(stoodAt = pullOut.stoodAt, pullingOutFixes = pullOut.fixes)
+        val tracked = state.copy(stoodAt = pullOut.stoodAt, pullingOutFixes = pullOut.fixes, pullingOutSpeed = pullOut.speed)
         val candidate = pullOut.leftTo ?: located
         if (candidate != null && candidate >= state.confirmedPosition - JITTER) {
             // Seen near the line but not aboard: the fix says where they are, not how far they've
@@ -246,7 +246,7 @@ object TripEngine {
     }
 
     /** What [pullOut] makes of a fix: the stop being watched, the fixes counted, where it left to. */
-    private class PullOut(val stoodAt: String?, val fixes: Int, val leftTo: Double?)
+    private class PullOut(val stoodAt: String?, val fixes: Int, val leftTo: Double?, val speed: Float? = null)
 
     /**
      * Watches a train at a stop on the way for leaving it slower than [STOPPING_M_PER_S]: seen
@@ -262,13 +262,17 @@ object TripEngine {
         val stop = here?.toInt()?.takeIf { it < ride.lastIndex } ?: return PullOut(null, 0, null)
         val key = stopKey(state.legIndex, stop)
         val watching = state.stoodAt.takeIf { it == key }
-        val speed = fix.speedMps ?: return PullOut(watching, if (watching == null) 0 else state.pullingOutFixes, null)
+        val speed = fix.speedMps ?: return PullOut(watching, if (watching == null) 0 else state.pullingOutFixes, null, state.pullingOutSpeed.takeIf { watching != null })
         if (speed < STANDING_M_PER_S) return PullOut(key, 0, null)
         if (watching == null || speed < RIDING_M_PER_S) return PullOut(watching, 0, null)
-        val fixes = state.pullingOutFixes + 1
-        if (fixes < PULLING_OUT_FIXES) return PullOut(key, fixes, null)
+        // Slower than the last, it's still braking in: a train pulling out gathers speed. Setiabudi's
+        // MRT read 3.6, 3.0, 2.9 m/s coming in underground after one stray 0.6, and "siap-siap" came
+        // as the doors opened.
+        val slowing = state.pullingOutSpeed?.let { speed < it } == true
+        val fixes = if (slowing) 0 else state.pullingOutFixes + 1
+        if (fixes < PULLING_OUT_FIXES) return PullOut(key, fixes, null, speed)
         val along = alongHops(ride, stop, min(ride.lastIndex, stop + LOOKAHEAD_STOPS), fix.point, tuning)
-        return PullOut(key, fixes, along?.takeIf { it > stop })
+        return PullOut(key, fixes, along?.takeIf { it > stop }, speed)
     }
 
     /**
