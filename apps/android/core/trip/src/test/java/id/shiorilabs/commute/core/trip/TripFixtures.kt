@@ -33,6 +33,12 @@ internal object Places {
     val HALTE_3 = stop("TJ-H3", "Halte Tiga", -6.2090, 106.8300)
     val HALTE_4 = stop("TJ-H4", "Halte Empat", -6.2135, 106.8300)
 
+    // L13E toward CSW, where they are: the road from Underpass Kuningan runs down Mampang to Tendean
+    // and back east to Tegal Mampang (1.4 km against a 645 m hop), under the hop on to CSW 1.
+    val UNDERPASS_KUNINGAN = stop("TJ-H00115P", "Underpass Kuningan", -6.234731, 106.82902)
+    val TEGAL_MAMPANG = stop("TJ-H00246P", "Tegal Mampang", -6.240213, 106.83102)
+    val CSW_1 = stop("TJ-H00041P", "CSW 1", -6.23994, 106.79843)
+
     private fun stop(id: String, name: String, lat: Double, lon: Double) = TripStop(id, name, lat, lon)
 }
 
@@ -88,6 +94,11 @@ internal val mrt = TripPlan(
 /** Four haltes on one corridor, no timetable. */
 internal val busway = TripPlan(
     listOf(ride(Places.HALTE_1, Places.HALTE_2, Places.HALTE_3, Places.HALTE_4, line = "TJ:1")),
+)
+
+/** L13E's last three haltes, untimed. */
+internal val toCsw = TripPlan(
+    listOf(ride(Places.UNDERPASS_KUNINGAN, Places.TEGAL_MAMPANG, Places.CSW_1, line = "TJ:L13E")),
 )
 
 /** MRT to Dukuh Atas, a walk to Sudirman, then the Commuter Line on to Manggarai. */

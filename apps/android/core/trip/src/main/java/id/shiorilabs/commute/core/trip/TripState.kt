@@ -96,6 +96,12 @@ data class TripState(
      */
     val stoodAt: String? = null,
     val pullingOutFixes: Int = 0,
+    /**
+     * On a bus, the furthest-back point fixes have put the rider since they first landed past a halte
+     * it was never seen near, `null` otherwise. They count only once one comes far enough on from it:
+     * a road doubling back to a halte runs along the next hop the wrong way.
+     */
+    val passingFrom: Double? = null,
 )
 
 /** When the rider was seen at [stopIndex] of leg [legIndex], or `null` if they weren't. */
