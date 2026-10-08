@@ -45,6 +45,7 @@ class ExperimentalViewModel @Inject constructor(
     val platformMarks: StateFlow<Boolean> = preferences.platformMarks.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     val boardPages: StateFlow<Boolean> = preferences.boardPages.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     val imuSpeed: StateFlow<Boolean> = preferences.imuSpeed.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val yishunPids: StateFlow<Boolean> = preferences.yishunPids.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     val watchAutoOpen: StateFlow<Boolean> = preferences.watchAutoOpen.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
@@ -61,6 +62,8 @@ class ExperimentalViewModel @Inject constructor(
     fun setBoardPages(enabled: Boolean) = viewModelScope.launch { preferences.setBoardPages(enabled) }
 
     fun setImuSpeed(enabled: Boolean) = viewModelScope.launch { preferences.setImuSpeed(enabled) }
+
+    fun setYishunPids(enabled: Boolean) = viewModelScope.launch { preferences.setYishunPids(enabled) }
 
     /** The trip log's share sheet, or `null` with nothing logged yet. */
     fun shareTripLog(onReady: (Intent?) -> Unit) = viewModelScope.launch { onReady(tripLog.share()) }
@@ -85,6 +88,7 @@ fun ExperimentalScreen(
     val platformMarks by viewModel.platformMarks.collectAsStateWithLifecycle()
     val boardPages by viewModel.boardPages.collectAsStateWithLifecycle()
     val imuSpeed by viewModel.imuSpeed.collectAsStateWithLifecycle()
+    val yishunPids by viewModel.yishunPids.collectAsStateWithLifecycle()
     val watchAutoOpen by viewModel.watchAutoOpen.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
     val context = LocalContext.current
@@ -98,6 +102,7 @@ fun ExperimentalScreen(
         platformMarks = platformMarks,
         boardPages = boardPages,
         imuSpeed = imuSpeed,
+        yishunPids = yishunPids,
         watchAutoOpen = watchAutoOpen,
         canHide = !debug,
         onBack = { navigator.pop() },
@@ -107,6 +112,7 @@ fun ExperimentalScreen(
         onPlatformMarks = { viewModel.setPlatformMarks(it) },
         onBoardPages = { viewModel.setBoardPages(it) },
         onImuSpeed = { viewModel.setImuSpeed(it) },
+        onYishunPids = { viewModel.setYishunPids(it) },
         onWatchAutoOpen = { viewModel.setWatchAutoOpen(it) },
         onShareTripLog = {
             viewModel.shareTripLog { intent ->
@@ -130,6 +136,7 @@ private fun ExperimentalContent(
     platformMarks: Boolean = false,
     boardPages: Boolean = false,
     imuSpeed: Boolean = false,
+    yishunPids: Boolean = false,
     watchAutoOpen: Boolean = true,
     onBack: () -> Unit = {},
     onForceTripStart: (Boolean) -> Unit = {},
@@ -138,6 +145,7 @@ private fun ExperimentalContent(
     onPlatformMarks: (Boolean) -> Unit = {},
     onBoardPages: (Boolean) -> Unit = {},
     onImuSpeed: (Boolean) -> Unit = {},
+    onYishunPids: (Boolean) -> Unit = {},
     onWatchAutoOpen: (Boolean) -> Unit = {},
     onShareTripLog: () -> Unit = {},
     onHide: () -> Unit = {},
@@ -182,6 +190,12 @@ private fun ExperimentalContent(
             subtitle = stringResource(R.string.settings_experimental_board_pages_detail),
             checked = boardPages,
             onCheckedChange = onBoardPages,
+        )
+        SettingsSwitch(
+            title = stringResource(R.string.settings_experimental_yishun_pids),
+            subtitle = stringResource(R.string.settings_experimental_yishun_pids_detail),
+            checked = yishunPids,
+            onCheckedChange = onYishunPids,
         )
         SettingsSwitch(
             title = stringResource(R.string.settings_experimental_imu_speed),

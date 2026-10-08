@@ -81,6 +81,8 @@ data class Pids(
     val walkMinutes: Int? = null,
     /** When the timetable has the ride reaching the stop to get off at, to set [alightingAt] against. */
     val alightingScheduled: Instant? = null,
+    /** The index along [ride] of the stop the big name is about. */
+    val focus: Int = 0,
 )
 
 
@@ -108,18 +110,26 @@ internal fun ActiveTrip.expectedAtStop(legIndex: Int, stopIndex: Int, now: Insta
         plan.scheduledAtStop(legIndex, stopIndex)
     }
 
+/**
+ * Whole minutes until the ride being followed reaches its stop [index], lateness included, when the
+ * timetable or a fix can say; `null` untimed or with nothing to place the rider by.
+ */
+internal fun ActiveTrip.minutesToStop(index: Int, now: Instant): Int? {
+    if (state.source == PositionSource.UNKNOWN) return null
+    return state.expectedAtStop(plan, index)?.plus(slip(now))?.let { minutesUntil(now, it) }
+}
+
 internal fun ActiveTrip.pids(now: Instant): Pids {
     val ride = plan.ride(state.legIndex)
     val last = ride.lastIndex
     val then = plan.nextRideAfter(state.legIndex)?.let(plan::ride)
-    val placeable = state.source != PositionSource.UNKNOWN
     val slip = slip(now)
     fun expected(index: Int) = state.expectedAtStop(plan, index)?.plus(slip)
-    fun minutesTo(index: Int) = expected(index)?.takeIf { placeable }?.let { minutesUntil(now, it) }
+    fun minutesTo(index: Int) = minutesToStop(index, now)
 
     if (state.phase == TripPhase.ARRIVED) {
         val stop = ride.stops.last()
-        return Pids(ride, PidsLabel.ARRIVED, stop.name, stop.id, null, emptyList(), null, stopsLeft = 0, minutesLeft = null, alightingAt = null)
+        return Pids(ride, PidsLabel.ARRIVED, stop.name, stop.id, null, emptyList(), null, stopsLeft = 0, minutesLeft = null, alightingAt = null, focus = last)
     }
 
     // A fix places the rider at a stop exactly, and holds there until one finds the train moving;
@@ -163,5 +173,6 @@ internal fun ActiveTrip.pids(now: Instant): Pids {
         walkM = walk?.distanceM,
         walkMinutes = walkEnds?.let { minutesUntil(now, it) },
         alightingScheduled = plan.scheduledAtStop(state.legIndex, last),
+        focus = focus,
     )
 }
