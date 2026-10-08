@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -22,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -69,8 +72,8 @@ private const val NAME_ANGLE_DEG = 50f
 private val LineY = 150.dp
 private val StripHeight = 214.dp
 private val LineThickness = 6.dp
-private val PillHeight = 20.dp
-private val PillMinWidth = 30.dp
+/** A stop on the line: a circle, as Jakarta's lines mark their stations, not SMRT's code pills. */
+private val DotSize = 30.dp
 private val SlotWidth = 44.dp
 private val StripStart = 16.dp
 
@@ -102,32 +105,34 @@ private fun Modifier.leaning(): Modifier = graphicsLayer {
 
 /**
  * The light band across the stop in focus, at [x]: laid out exactly as its name is and turned the
- * same way, so it runs along the name whatever the slant, on down through the pill to the line.
+ * same way, so it runs along the name whatever the slant. Rounded at both ends, it starts round the
+ * stop's circle on the line and stops short of the strip's top.
  */
 @Composable
 private fun FocusBand(x: Dp) {
-    val rise = LineY - PillHeight / 2 - NameGap
+    val rise = LineY - DotSize / 2 - NameGap
+    val angle = Math.toRadians(NAME_ANGLE_DEG.toDouble())
+    // The circle's centre, along the name's slant from where the name rises.
+    val toCircle = (x - nameStartOf(x)) * cos(angle).toFloat() - (LineY - rise) * sin(angle).toFloat()
+    val start = toCircle - DotSize / 2 - 4.dp
+    val end = rise / sin(angle).toFloat() - BandHalf
     Box(
         modifier = Modifier
             .offset(x = nameStartOf(x), y = rise - NameHeight)
-            .width(BandLength)
+            .width(end)
             .height(NameHeight)
             .leaning()
             .drawBehind {
                 val half = BandHalf.toPx()
-                val back = BandBack.toPx()
-                drawRect(
+                drawRoundRect(
                     color = YishunBand,
-                    topLeft = Offset(-back, size.height / 2 - half),
-                    size = Size(size.width + back, half * 2),
+                    topLeft = Offset(start.toPx(), size.height / 2 - half),
+                    size = Size(size.width - start.toPx(), half * 2),
+                    cornerRadius = CornerRadius(half),
                 )
             },
     )
 }
-
-/** Far enough along the slant to reach the strip's top, and back behind the name to below the line. */
-private val BandLength = 260.dp
-private val BandBack = 45.dp
 
 /** Figures of one width, so minutes don't shift as they tick. */
 private const val TABULAR = "tnum"
@@ -260,7 +265,7 @@ private fun Strip(strip: YishunStrip, pids: Pids, lines: Map<String, LineInfo>, 
                 is Slot.Gap -> Text(
                     text = stringResource(R.string.trip_yishun_skipped, slot.skipped),
                     modifier = Modifier
-                        .offset(x = x - SlotWidth / 2, y = LineY + 8.dp)
+                        .offset(x = x - SlotWidth / 2, y = LineY + 6.dp)
                         .width(SlotWidth),
                     style = MaterialTheme.typography.labelMedium.merge(fontFeatureSettings = TABULAR),
                     fontWeight = FontWeight.Bold,
@@ -294,7 +299,7 @@ private fun StopMarks(
 ) {
     // The name leans from just above the pill's left edge: as long as fits under the top and short of the right.
     val angle = Math.toRadians(NAME_ANGLE_DEG.toDouble())
-    val rise = LineY - PillHeight / 2 - NameGap
+    val rise = LineY - DotSize / 2 - NameGap
     val nameStart = nameStartOf(x)
     val byHeight = rise / sin(angle).toFloat()
     val byWidth = (stripWidth - nameStart - 4.dp) / cos(angle).toFloat()
@@ -318,29 +323,30 @@ private fun StopMarks(
         stop.passed -> YishunPassed
         else -> color
     }
-    val text = when {
-        stop.passed -> "·"
-        else -> stop.minutes?.toString().orEmpty()
+    // Passed, an empty grey circle; ahead, the minutes, set smaller as they run to more figures.
+    val text = if (stop.passed) "" else stop.minutes?.toString().orEmpty()
+    val figures = when {
+        text.length >= 4 -> 8.5.sp
+        text.length == 3 -> 10.sp
+        else -> 12.sp
     }
     Box(
         modifier = Modifier
-            .offset(x = x - SlotWidth / 2, y = LineY - PillHeight / 2)
+            .offset(x = x - SlotWidth / 2, y = LineY - DotSize / 2)
             .width(SlotWidth),
         contentAlignment = Alignment.Center,
     ) {
         Box(
             modifier = Modifier
-                .height(PillHeight)
-                .widthIn(min = PillMinWidth)
-                .background(fill, RoundedCornerShape(8.dp))
+                .size(DotSize)
+                .background(fill, CircleShape)
                 // The stop to get off at ringed in white; the rest kept apart from the line by the panel's ink.
-                .border(2.dp, if (stop.last) Color.White else YishunInk, RoundedCornerShape(8.dp))
-                .padding(horizontal = 6.dp),
+                .border(2.dp, if (stop.last) Color.White else YishunInk, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = text,
-                style = MaterialTheme.typography.labelMedium.merge(fontFeatureSettings = TABULAR),
+                style = MaterialTheme.typography.labelMedium.merge(fontFeatureSettings = TABULAR).copy(fontSize = figures, letterSpacing = (-0.3).sp),
                 fontWeight = FontWeight.ExtraBold,
                 color = when {
                     stop.focus -> YishunInk
@@ -354,7 +360,7 @@ private fun StopMarks(
 
     Column(
         modifier = Modifier
-            .offset(x = x - TagWidth / 2, y = LineY + PillHeight / 2 + 4.dp)
+            .offset(x = x - TagWidth / 2, y = LineY + DotSize / 2 + 4.dp)
             .width(TagWidth),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(3.dp),
