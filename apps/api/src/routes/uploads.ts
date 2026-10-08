@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { Bindings } from 'app'
 import { wibIsoString } from 'utils/fare'
-import { BadRequest, LengthRequired, PayloadTooLarge, UnsupportedMediaType } from 'utils/response'
+import { BadRequest, LengthRequired, PayloadTooLarge, ServiceUnavailable, UnsupportedMediaType } from 'utils/response'
 
 /*
  * Anonymous trip-log uploads from the Android app's trip mode.
@@ -21,6 +21,18 @@ import { BadRequest, LengthRequired, PayloadTooLarge, UnsupportedMediaType } fro
  * - CORS still allows only GET, so a third-party page cannot get past the
  *   preflight and turn its visitors' browsers into uploaders.
  *
+ * Uploads are only accepted while UPLOADS_FLAG_KEY in KV reads `open`, so
+ * collection can be switched on and off without a deploy:
+ *
+ *   wrangler kv key put --binding KV config:trip-uploads open --remote
+ *   wrangler kv key delete --binding KV config:trip-uploads --remote
+ *
+ * Under `wrangler dev` the binding is the preview namespace, so open it locally
+ * with `--local --preview` instead of `--remote`.
+ *
+ * A missing key means closed, so a fresh environment accepts nothing until
+ * someone opens it on purpose.
+ *
  * Nothing that identifies the uploader is stored: no IP, no User-Agent, no
  * country. requestLog() never logs an IP, and this handler never logs the key.
  *
@@ -34,6 +46,16 @@ export const MAX_TRIP_LOG_BYTES = 1_048_576
 
 /** Every zstd frame starts with this (RFC 8878 §3.1.1). */
 const ZSTD_MAGIC = [0x28, 0xb5, 0x2f, 0xfd]
+
+/** KV key whose value must be exactly `open` for uploads to be accepted. */
+export const UPLOADS_FLAG_KEY = 'config:trip-uploads'
+
+/*
+ * Edge-cached for a minute, so a flip takes up to that long to reach every
+ * colo. In exchange, a burst of uploads costs one KV read per colo, not one
+ * per request.
+ */
+const UPLOADS_FLAG_CACHE_TTL = 60
 
 const APP_VERSION_PATTERN = /^[\w.+-]{1,32}$/
 
@@ -74,6 +96,12 @@ async function readCapped(body: ReadableStream<Uint8Array> | null, limit: number
 }
 
 app.post('/trips', async (c) => {
+  // First, so a closed endpoint costs a KV read and nothing else.
+  const flag = await c.env.KV.get(UPLOADS_FLAG_KEY, { cacheTtl: UPLOADS_FLAG_CACHE_TTL })
+  if (flag !== 'open') {
+    return c.json(ServiceUnavailable('UPLOADS_CLOSED', 'Trip uploads are not being accepted right now'), 503)
+  }
+
   /*
    * The cap only binds when reading is refused up front, so a body with no
    * declared length is refused rather than read speculatively.
