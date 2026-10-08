@@ -229,6 +229,26 @@ class TripEngineTest {
     }
 
     @Test
+    fun `a train slowing past a station's point after one standing reading is still coming in`() {
+        // Setiabudi's MRT on 2026-10-08, underground: one stray 0.6 m/s, then 3.6, 3.0, 2.9 braking in.
+        val run = Run(mrt)
+        run.send(TripEvent.RiderSaid(RiderAction.BOARDED, at(0)))
+        run.fix(Places.BENHIL, 7.0, speedMps = 0.6f)
+        run.fix(between(Places.BENHIL, Places.ISTORA, 0.01), 7.1, speedMps = 3.6f)
+        run.fix(between(Places.BENHIL, Places.ISTORA, 0.02), 7.2, speedMps = 3.0f)
+        run.fix(between(Places.BENHIL, Places.ISTORA, 0.03), 7.3, speedMps = 2.9f)
+        assertEquals(3.0, run.state.position, 0.0)
+        assertTrue(run.alerts().none { it.kind == AlertKind.PREPARE })
+
+        // Stood, then away gathering speed.
+        run.fix(between(Places.BENHIL, Places.ISTORA, 0.03), 7.8, speedMps = 0.4f)
+        run.fix(between(Places.BENHIL, Places.ISTORA, 0.04), 8.0, speedMps = 2.5f)
+        run.fix(between(Places.BENHIL, Places.ISTORA, 0.05), 8.1, speedMps = 4.0f)
+        assertTrue(run.state.position > 3.0)
+        assertEquals(listOf(alert(AlertKind.PREPARE, estimated = false)), run.alerts().filter { it.kind == AlertKind.PREPARE })
+    }
+
+    @Test
     fun `a train creeping up the platform after standing hasn't left it`() {
         // Manggarai on 2026-10-06: stood, crept on at 2 m/s while still short of the point, stood again.
         val run = Run(bogorLine)
