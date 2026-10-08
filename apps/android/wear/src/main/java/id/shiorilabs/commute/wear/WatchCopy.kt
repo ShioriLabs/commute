@@ -21,12 +21,13 @@ class WatchCopy(private val resources: Resources, private val lines: Map<String,
 
     /**
      * The ride's line, and how many others will do: "4D +4 lainnya" for haltes five routes serve. A
-     * bus route goes by its code there, its name ("Pulo Gadung – Kuningan") being far too long.
+     * bus route goes by its code, "Koridor L13E", its name ("Puri Beta – Flyover Kuningan") being far
+     * too long for a round screen.
      */
     fun rideName(ride: TripLeg.Ride): String {
         val code = ride.line.substringAfter(':')
         val name = lines[ride.line]?.name ?: code
-        if (ride.otherLines == 0) return name
+        if (ride.otherLines == 0) return if (ride.isBus) resources.getString(R.string.trip_corridor, code) else name
         return resources.getString(R.string.trip_ride_more, if (ride.isBus) code else name, ride.otherLines)
     }
 
@@ -63,9 +64,15 @@ class WatchCopy(private val resources: Resources, private val lines: Map<String,
 
     /**
      * The ride's own line over the headline: its direction while it's still to be caught, so the
-     * line's name isn't said twice, and its name once aboard.
+     * line's name isn't said twice, and its name once aboard. One bus route is "Kor L13E" there
+     * throughout, beside its roundel.
      */
-    fun rideLabel(headline: Headline, ride: TripLeg.Ride): String = when (headline) {
+    fun rideLabel(headline: Headline, ride: TripLeg.Ride): String = when {
+        ride.isBus && ride.otherLines == 0 -> resources.getString(R.string.trip_corridor_short, ride.line.substringAfter(':'))
+        else -> rideLabelOf(headline, ride)
+    }
+
+    private fun rideLabelOf(headline: Headline, ride: TripLeg.Ride): String = when (headline) {
         is Headline.Board, is Headline.Change ->
             direction(ride) ?: rideName(ride)
         else -> rideName(ride)
