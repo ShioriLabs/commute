@@ -178,3 +178,6 @@ scratch/
 
 # Local D1 snapshots taken before a remote apply. Never committed.
 .backups/
+
+# Brainstorm mockups
+.superpowers/
