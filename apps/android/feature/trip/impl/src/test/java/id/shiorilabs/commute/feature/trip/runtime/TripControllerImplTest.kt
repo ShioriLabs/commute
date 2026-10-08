@@ -15,6 +15,7 @@ import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripPhase
 import id.shiorilabs.commute.core.trip.TripPlan
 import id.shiorilabs.commute.feature.trip.ActiveTrip
+import id.shiorilabs.commute.feature.trip.ReplacedPlan
 import id.shiorilabs.commute.feature.trip.TripReminder
 import id.shiorilabs.commute.feature.trip.CAWANG
 import id.shiorilabs.commute.feature.trip.MANGGARAI
@@ -402,6 +403,33 @@ class TripControllerImplTest {
         assertEquals(plan, trip.plan)
         assertEquals(TripPhase.RIDING, trip.state.phase)
         // Late against the 08.10, not pinned early against the 08.20.
+        assertTrue(trip.state.clockOffsetS in 60L..240L)
+        assertNull(trip.replaced)
+    }
+
+    @Test
+    fun `swapped twice, the rider seen aboard early is on the train swapped last, not the first`() = runTest {
+        // The 08.10 already swapped for the 08.20; on the platform still at 08.21.30, that one's
+        // swapped for the 08.30.
+        val afterOne = TripPlan(plan.legs.take(2) + nextTrain)
+        val waiting = onThePlatform()
+        store.trip = waiting.copy(
+            plan = afterOne,
+            state = waiting.state.copy(confirmedAt = minutes(21)),
+            replaced = ReplacedPlan(plan, 2),
+        )
+        onward = TripPlan(listOf(nextTrain.copy(departureAt = minutes(30), arrivalAt = minutes(40))))
+        val controller = controller(at = minutes(21).plusSeconds(30))
+        runCurrent()
+        assertEquals(minutes(30), controller.active.value!!.plan.ride(2).departureAt)
+
+        // The 08.20, three minutes late: 600 m out at 08.23.
+        controller.onFix(Fix(sudirmanToManggarai, 10f, minutes(23), speedMps = 12f))
+
+        val trip = controller.active.value!!
+        assertEquals(afterOne, trip.plan)
+        assertEquals(TripPhase.RIDING, trip.state.phase)
+        // Late against the 08.20, not thirteen minutes against the 08.10.
         assertTrue(trip.state.clockOffsetS in 60L..240L)
         assertNull(trip.replaced)
     }
