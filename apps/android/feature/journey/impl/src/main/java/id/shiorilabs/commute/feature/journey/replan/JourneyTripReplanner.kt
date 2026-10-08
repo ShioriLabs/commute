@@ -6,13 +6,13 @@ import id.shiorilabs.commute.feature.journey.data.JourneyRepository
 import id.shiorilabs.commute.feature.journey.domain.Departure
 import id.shiorilabs.commute.feature.journey.domain.Journey
 import id.shiorilabs.commute.feature.journey.domain.JourneyLeg
-import id.shiorilabs.commute.feature.journey.domain.quantiseToSlot
 import id.shiorilabs.commute.feature.journey.domain.toTripPlan
 import id.shiorilabs.commute.feature.journey.presentation.savedroute.homeRouteCriteria
 import id.shiorilabs.commute.feature.trip.TripReplanner
 import kotlinx.coroutines.flow.first
 import java.time.Clock
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 
 /**
@@ -35,14 +35,13 @@ class JourneyTripReplanner @Inject constructor(
 }
 
 /**
- * When to ask the journeys from: "now", as a pinned pair's card does and sharing its answer, while
- * [readyAt] is still in the slot it is now; else the slot the rider will be ready in. Asked from aboard
- * a late train, that can be the next slot, whose trains "now" might not reach.
+ * When to ask the journeys from: the minute the rider can be there, or now if that's gone by. The API
+ * offers only a few trains of each route, counted from the time asked; asked from "now" or the start
+ * of the slot, a rider ready 15 minutes on found every one of them already left (09.41 to 09.58, nine
+ * empty answers in a row, all from the one cached "now").
  */
-internal fun replanDeparture(readyAt: Instant, now: Instant): Departure {
-    val slot = quantiseToSlot(readyAt)
-    return if (slot.isAfter(quantiseToSlot(now))) Departure.At(slot) else Departure.Now
-}
+internal fun replanDeparture(readyAt: Instant, now: Instant): Departure =
+    Departure.At(maxOf(readyAt, now).truncatedTo(ChronoUnit.MINUTES))
 
 /**
  * Of [journeys], the one a rider at [fromId] from [readyAt] can still take that arrives first: its
