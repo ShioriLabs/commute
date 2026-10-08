@@ -382,6 +382,49 @@ class TripEngineTest {
     }
 
     @Test
+    fun `a bus doubling back to a halte under the next hop isn't put past it`() {
+        // The 2026-10-08 ride, minutes from 18.26.
+        val run = Run(toCsw, startAt = at(0))
+        run.send(TripEvent.RiderSaid(RiderAction.BOARDED, at(0)))
+        run.fix(GeoPoint(-6.235754, 106.828080), 2.4, accuracyM = 5f, speedMps = 3.5f)
+        // Down Mampang, then south and east beside Tendean, along the hop to CSW the wrong way.
+        run.fix(GeoPoint(-6.239674, 106.825963), 9.2, accuracyM = 4f, speedMps = 3.3f)
+        run.fix(GeoPoint(-6.239962, 106.827650), 10.2, accuracyM = 13f, speedMps = 1.3f)
+        assertTrue(run.state.confirmedPosition < 1.0)
+        assertTrue(run.alerts().isEmpty())
+
+        // Queued into Tegal Mampang, then away west on the elevated busway.
+        run.fix(GeoPoint(-6.240049, 106.830875), 14.2, accuracyM = 3f, speedMps = 0.6f)
+        assertEquals(1.0, run.state.confirmedPosition, 0.0)
+        assertTrue(run.alerts().isEmpty())
+        run.fix(GeoPoint(-6.240198, 106.828631), 25.4, accuracyM = 4f, speedMps = 9.4f)
+        assertEquals(listOf(alert(AlertKind.PREPARE, estimated = false)), run.alerts())
+        run.fix(GeoPoint(-6.239851, 106.799049), 30.8, accuracyM = 7f, speedMps = 5.3f)
+        assertEquals(TripPhase.ARRIVED, run.state.phase)
+    }
+
+    @Test
+    fun `a bus seen past a halte it was never near counts once it carries on`() {
+        val run = Run(busway, startAt = at(0))
+        run.send(TripEvent.RiderSaid(RiderAction.BOARDED, at(0)))
+        run.fix(between(Places.HALTE_1, Places.HALTE_2, 0.5), 1.0, speedMps = 8f)
+        // 250 m short of Halte Dua, then past it: held until the next shows it 200 m on.
+        run.fix(between(Places.HALTE_2, Places.HALTE_3, 0.2), 2.0, speedMps = 8f)
+        assertEquals(0.5, run.state.confirmedPosition, 0.01)
+        run.fix(between(Places.HALTE_2, Places.HALTE_3, 0.6), 2.5, speedMps = 8f)
+        assertEquals(1.6, run.state.confirmedPosition, 0.01)
+    }
+
+    @Test
+    fun `a bus seen near a halte and then past it is past it`() {
+        val run = Run(busway, startAt = at(0))
+        run.send(TripEvent.RiderSaid(RiderAction.BOARDED, at(0)))
+        run.fix(between(Places.HALTE_1, Places.HALTE_2, 0.85), 1.0, speedMps = 8f)
+        run.fix(between(Places.HALTE_2, Places.HALTE_3, 0.2), 1.5, speedMps = 8f)
+        assertEquals(1.2, run.state.confirmedPosition, 0.01)
+    }
+
+    @Test
     fun `a busway ride without location gives its one honest notice and waits for the rider`() {
         val run = Run(busway, hasLocation = false)
         assertEquals(listOf(alert(AlertKind.NO_REMINDERS, estimated = true)), run.alerts())
