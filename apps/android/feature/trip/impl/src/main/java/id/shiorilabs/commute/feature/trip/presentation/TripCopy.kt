@@ -18,12 +18,13 @@ internal class TripCopy(private val resources: Resources, private val lines: Map
 
     /**
      * The ride's line, and how many others will do: "4D +4 lainnya" for haltes five routes serve. A
-     * bus route goes by its code there, its name ("Pulo Gadung – Kuningan") being far too long.
+     * bus route goes by its code, "Koridor L13E", its name ("Puri Beta – Flyover Kuningan") being far
+     * too long.
      */
     fun rideName(ride: TripLeg.Ride): String {
         val code = ride.line.substringAfter(':')
         val name = lines[ride.line]?.name ?: code
-        if (ride.otherLines == 0) return name
+        if (ride.otherLines == 0) return if (ride.isBus) resources.getString(R.string.trip_corridor, code) else name
         return resources.getString(R.string.trip_ride_more, if (ride.isBus) code else name, ride.otherLines)
     }
 

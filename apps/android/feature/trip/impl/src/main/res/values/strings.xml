@@ -15,6 +15,9 @@
     <!-- The line under it. -->
     <string name="trip_headsign">arah %1$s</string>
     <string name="trip_ride_more">%1$s +%2$d lainnya</string>
+    <!-- A TransJakarta route by its code: its name, and the board's bar beside the roundel. -->
+    <string name="trip_corridor">Koridor %1$s</string>
+    <string name="trip_corridor_short">Kor %1$s</string>
     <string name="trip_via">via %1$s</string>
     <string name="trip_board_any_bus">Naik salah satu bus</string>
     <string name="trip_board_any_train">Naik salah satu kereta</string>
