@@ -122,8 +122,7 @@ fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel
         manualMarks = manualMarks,
         platformMarks = platformMarks,
         onMark = viewModel::mark,
-        boardPages = boardPages,
-        pidsDiagram = pidsDiagram,
+        pidsStyle = PidsStyle.BekasiRailway(diagram = pidsDiagram, pages = boardPages),
     )
 }
 
@@ -147,8 +146,7 @@ private fun ActiveTripContent(
     manualMarks: Boolean = false,
     platformMarks: Boolean = false,
     onMark: (MarkKind, Pids) -> Unit = { _, _ -> },
-    boardPages: Boolean = false,
-    pidsDiagram: Boolean = true,
+    pidsStyle: PidsStyle = PidsStyle.BekasiRailway(),
 ) {
     val trip = state.trip
     val markRows = if (trip != null) markRows(manual = manualMarks, platform = platformMarks) else emptyList()
@@ -202,14 +200,13 @@ private fun ActiveTripContent(
             val pids = trip.pids(now)
             item(key = "board") {
                 PidsBoard(
+                    style = pidsStyle,
                     pids = pids,
                     lines = state.lines,
                     stationLines = state.stationLines[pids.stationId].orEmpty(),
                     copy = copy,
                     source = copy.source(trip),
                     onNameMoved = { nameBottom = it },
-                    pages = boardPages,
-                    diagram = pidsDiagram,
                 )
             }
             item(key = "actions") {
