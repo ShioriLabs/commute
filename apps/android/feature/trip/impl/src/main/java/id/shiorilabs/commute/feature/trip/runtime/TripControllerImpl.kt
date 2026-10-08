@@ -367,7 +367,9 @@ class TripControllerImpl @Inject constructor(
                         "told" to told,
                     ),
                 )
-                val replanned = current.copy(plan = plan, replaced = current.replaced ?: ReplacedPlan(current.plan, legIndex))
+                // The plan just swapped out, not the first: swapped again and again on a platform,
+                // a rider boarding early is on the train before this one, not the one at the start.
+                val replanned = current.copy(plan = plan, replaced = ReplacedPlan(current.plan, legIndex))
                 if (told) runtime.rerouted(replanned, legIndex, departs)
                 apply(replanned, TripEngine.step(plan, current.state, TripEvent.Tick(clock.instant())))
             }
