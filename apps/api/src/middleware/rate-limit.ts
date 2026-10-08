@@ -56,7 +56,13 @@ export const RATE_LIMITS = {
    * and the easiest to deliberately miss cache on. Tighter, but still far above
    * what planning a journey costs.
    */
-  FARE: 120
+  FARE: 120,
+  /**
+   * Anonymous trip-log writes (routes/uploads.ts). A rider finishes a few trips
+   * a day; ten a minute leaves room for a phone flushing a backlog after being
+   * offline, and caps what one address can push into R2 at ~10 MB/min.
+   */
+  UPLOAD: 10
 } as const
 
 export type RateLimitClass = keyof typeof RATE_LIMITS
@@ -97,10 +103,19 @@ export const EXEMPT_ORIGINS = new Set([
  */
 export function rateLimit(limitClass: RateLimitClass) {
   return createMiddleware<{ Bindings: Bindings }>(async (c, next) => {
+    /*
+     * Writes get no exemption. Forging an Origin is free, and for a read that
+     * only costs a cache hit, but for an upload it would lift the cap on what
+     * one address can store.
+     */
     const origin = c.req.header('Origin')
-    if (origin && EXEMPT_ORIGINS.has(origin)) return next()
+    if (limitClass !== 'UPLOAD' && origin && EXEMPT_ORIGINS.has(origin)) return next()
 
-    const limiter = limitClass === 'FARE' ? c.env.RATE_LIMIT_FARE : c.env.RATE_LIMIT_DEFAULT
+    const limiter = {
+      DEFAULT: c.env.RATE_LIMIT_DEFAULT,
+      FARE: c.env.RATE_LIMIT_FARE,
+      UPLOAD: c.env.RATE_LIMIT_UPLOAD
+    }[limitClass]
     if (!limiter) return next()
 
     /*

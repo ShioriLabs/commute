@@ -36,3 +36,33 @@ export function Internal(errorCode: string = 'INTERNAL', message: string = 'Inte
     }
   }
 }
+
+export function LengthRequired(errorCode: string = 'LENGTH_REQUIRED', message: string = 'Content-Length is required'): StandardResponse {
+  return {
+    status: 411,
+    error: {
+      code: errorCode,
+      message
+    }
+  }
+}
+
+export function PayloadTooLarge(errorCode: string = 'PAYLOAD_TOO_LARGE', message: string = 'Payload too large'): StandardResponse {
+  return {
+    status: 413,
+    error: {
+      code: errorCode,
+      message
+    }
+  }
+}
+
+export function UnsupportedMediaType(errorCode: string = 'UNSUPPORTED_MEDIA_TYPE', message: string = 'Body must be a zstd frame'): StandardResponse {
+  return {
+    status: 415,
+    error: {
+      code: errorCode,
+      message
+    }
+  }
+}

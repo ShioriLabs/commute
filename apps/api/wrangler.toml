@@ -40,3 +40,17 @@ simple = { limit = 600, period = 60 }
 name = "RATE_LIMIT_FARE"
 namespace_id = "1002"
 simple = { limit = 120, period = 60 }
+
+# Anonymous trip-log uploads (src/routes/uploads.ts). Writes are the one thing
+# here that costs storage, so the limit is per IP and ignores the Origin
+# exemption.
+[[ratelimits]]
+name = "RATE_LIMIT_UPLOAD"
+namespace_id = "1003"
+simple = { limit = 10, period = 60 }
+
+# Trip-mode GPS traces from the Android app, keyed trips/YYYY/MM/DD/<uuid>.ndjson.zst.
+# Create once with: wrangler r2 bucket create commute-trip-logs
+[[r2_buckets]]
+binding = "TRIP_LOGS"
+bucket_name = "commute-trip-logs"

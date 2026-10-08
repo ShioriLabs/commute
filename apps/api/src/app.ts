@@ -8,6 +8,7 @@ import lines from './routes/lines'
 import fares from './routes/fares'
 import operatorRoutes from './routes/operators'
 import internalRoutes from './routes/internal'
+import uploads from './routes/uploads'
 import { cacheControl, MAX_AGE } from './middleware/cache-control'
 import { rateLimit } from './middleware/rate-limit'
 import { requestLog } from './middleware/request-log'
@@ -28,6 +29,8 @@ export interface Bindings {
   KCI_API_TOKEN: string
   RATE_LIMIT_DEFAULT?: RateLimiter
   RATE_LIMIT_FARE?: RateLimiter
+  RATE_LIMIT_UPLOAD?: RateLimiter
+  TRIP_LOGS: R2Bucket
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -46,9 +49,13 @@ app.use('*', requestLog())
  * precisely because CORS would not have protected them. Abuse is bounded by
  * rateLimit() below, which is origin-independent.
  *
- * `GET` and `OPTIONS` only. Nothing mounted mutates. A mutating route added
- * later must carry its own credentials rather than inherit trust from an origin
- * header a client controls.
+ * `GET` and `OPTIONS` only. The one mounted write, `POST /uploads/trips`, is
+ * anonymous by design and bounded by validation and its own limiter rather than
+ * by credentials (see routes/uploads.ts). Leaving POST out of this list is part
+ * of that: the native app never preflights, and a third-party page cannot get
+ * past the preflight to upload from its visitors' browsers. Any other mutating
+ * route must carry its own credentials rather than inherit trust from an
+ * origin header a client controls.
  */
 app.use('*', cors({
   origin: '*',
@@ -92,6 +99,8 @@ app.use('/fares/*', rateLimit('FARE'), cacheControl(MAX_AGE.FARE))
  * is strictly better than the nothing it carried before.
  */
 app.use('/_internal/*', rateLimit('FARE'), cacheControl(MAX_AGE.FARE))
+// A write: no cacheControl, and a limiter that ignores the Origin exemption.
+app.use('/uploads/*', rateLimit('UPLOAD'))
 
 app.route('stations', stations)
 app.route('hubs', hubs)
@@ -114,6 +123,8 @@ app.route('operators', operatorRoutes)
  */
 // Shaped for commute.shiorilabs.id only — see routes/internal.ts.
 app.route('_internal', internalRoutes)
+// Anonymous trip-log uploads from the Android app — see routes/uploads.ts.
+app.route('uploads', uploads)
 
 /*
  * Machine-readable description of the public read API.
@@ -194,7 +205,7 @@ app.get('/openapi.json', openAPIRouteHandler(app, {
   // sync and cache are unmounted rather than excluded, but the patterns stay:
   // they cost nothing and mean remounting the handlers cannot silently publish
   // twelve mutating routes into the public document.
-  exclude: [/^\/sync/, /^\/cache/, /^\/_internal/]
+  exclude: [/^\/sync/, /^\/cache/, /^\/_internal/, /^\/uploads/]
 }))
 
 /*

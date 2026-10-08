@@ -89,7 +89,7 @@ function registeredRoutes() {
       // Documentation endpoints describe the API; they are not part of it.
       .filter(route => route.path !== '/openapi.json')
       // Mutations and internal endpoints are deliberately undocumented.
-      .filter(route => !/^\/(sync|cache|_internal)\b/.test(route.path))
+      .filter(route => !/^\/(sync|cache|_internal|uploads)\b/.test(route.path))
       // Hono writes `:param`; OpenAPI writes `{param}`.
       .map(route => route.path.replace(/:(\w+)/g, '{$1}'))
   )]
@@ -153,19 +153,20 @@ describe('maintenance routes', () => {
     expect(res.status).toBe(404)
   })
 
-  it('registers no mutating route at all', () => {
+  // The anonymous trip-log upload is the one deliberate write (routes/uploads.ts).
+  it('registers no mutating route but the trip-log upload', () => {
     const routes = (app as unknown as { routes: { method: string, path: string }[] }).routes
     const mutating = routes
       .filter(r => ['POST', 'PUT', 'PATCH', 'DELETE'].includes(r.method))
       .map(r => `${r.method} ${r.path}`)
-    expect(mutating, `unexpected mutating routes: ${mutating.join(', ')}`).toEqual([])
+    expect(mutating, `unexpected mutating routes: ${mutating.join(', ')}`).toEqual(['POST /uploads/trips'])
   })
 })
 
 describe('what must never be published', () => {
   // These mutate data or are shaped for one consumer. Publishing them would
   // invite exactly the traffic they are not built for.
-  it.each(['sync', 'cache', '_internal'])('leaks no %s route', (segment) => {
+  it.each(['sync', 'cache', '_internal', 'uploads'])('leaks no %s route', (segment) => {
     const leaked = Object.keys(spec.paths).filter(path => path.includes(segment))
     expect(leaked).toEqual([])
   })
