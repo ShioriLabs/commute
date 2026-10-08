@@ -106,6 +106,7 @@ fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel
     val platformMarks by viewModel.platformMarks.collectAsStateWithLifecycle()
     val boardPages by viewModel.boardPages.collectAsStateWithLifecycle()
     val pidsDiagram by viewModel.pidsDiagram.collectAsStateWithLifecycle()
+    val motion by viewModel.motion.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
 
     ActiveTripContent(
@@ -122,6 +123,7 @@ fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel
         manualMarks = manualMarks,
         platformMarks = platformMarks,
         onMark = viewModel::mark,
+        motion = motion,
         pidsStyle = PidsStyle.BekasiRailway(diagram = pidsDiagram, pages = boardPages),
     )
 }
@@ -146,11 +148,13 @@ private fun ActiveTripContent(
     manualMarks: Boolean = false,
     platformMarks: Boolean = false,
     onMark: (MarkKind, Pids) -> Unit = { _, _ -> },
+    motion: MotionStripState? = null,
     pidsStyle: PidsStyle = PidsStyle.BekasiRailway(),
 ) {
     val trip = state.trip
     val markRows = if (trip != null) markRows(manual = manualMarks, platform = platformMarks) else emptyList()
     val marking = markRows.isNotEmpty()
+    val strip = motion.takeIf { trip != null }
     val context = LocalContext.current
     val copy = remember(context, state.lines) { TripCopy(context.resources, state.lines) }
     // The board's minutes count down between the trip's own updates.
@@ -175,8 +179,12 @@ private fun ActiveTripContent(
                 .fillMaxSize()
                 .background(PageBackground)
                 .onGloballyPositioned { listTop = it.positionInRoot().y },
-            // Clear of the marks' bar, while it's up, as of the system bar.
-            contentPadding = PaddingValues(bottom = innerPadding.calculateBottomPadding() + 32.dp + if (marking) markBarHeight(markRows.size) else 0.dp),
+            // Clear of the marks' bar and the motion strip, while they're up, as of the system bar.
+            contentPadding = PaddingValues(
+                bottom = innerPadding.calculateBottomPadding() + 32.dp +
+                    (if (marking) markBarHeight(markRows.size) else 0.dp) +
+                    (if (strip != null) MotionStripHeight else 0.dp),
+            ),
         ) {
             if (trip == null) {
                 val finished = state.finished
@@ -258,13 +266,17 @@ private fun ActiveTripContent(
                 DetailsRow(onClick = { onDetails(trip) }, modifier = Modifier.padding(start = 32.dp, top = 8.dp, end = 32.dp))
             }
         }
-        if (marking) {
-            MarkBar(
-                rows = markRows,
-                bottomInset = innerPadding.calculateBottomPadding(),
-                onMark = { kind -> trip?.let { onMark(kind, it.pids(Instant.now())) } },
-                modifier = Modifier.align(Alignment.BottomCenter),
-            )
+        Column(modifier = Modifier.align(Alignment.BottomCenter)) {
+            if (strip != null) {
+                MotionStrip(state = strip, bottomInset = if (marking) 0.dp else innerPadding.calculateBottomPadding())
+            }
+            if (marking) {
+                MarkBar(
+                    rows = markRows,
+                    bottomInset = innerPadding.calculateBottomPadding(),
+                    onMark = { kind -> trip?.let { onMark(kind, it.pids(Instant.now())) } },
+                )
+            }
         }
     }
 }
