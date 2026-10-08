@@ -128,6 +128,10 @@ class AndroidLocationClient @Inject constructor(
         accuracyM = if (hasAccuracy()) accuracy else Float.MAX_VALUE,
         at = instant(),
         speedMps = if (hasSpeed()) speed else null,
+        speedAccMps = if (hasSpeedAccuracy()) speedAccuracyMetersPerSecond else null,
+        bearingDeg = if (hasBearing()) bearing else null,
+        bearingAccDeg = if (hasBearingAccuracy()) bearingAccuracyDegrees else null,
+        elapsedNanos = elapsedRealtimeNanos,
     )
 
     private companion object {

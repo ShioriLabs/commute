@@ -7,6 +7,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.ServiceCompat
 import dagger.hilt.android.AndroidEntryPoint
+import id.shiorilabs.commute.core.datastore.DeveloperPreferencesRepository
 import id.shiorilabs.commute.core.location.LocationClient
 import id.shiorilabs.commute.core.location.LocationMode
 import id.shiorilabs.commute.core.trip.AlertKind
@@ -18,6 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
@@ -40,6 +42,12 @@ class TripService : Service() {
 
     @Inject
     lateinit var location: LocationClient
+
+    @Inject
+    lateinit var motion: MotionTracker
+
+    @Inject
+    lateinit var developerPreferences: DeveloperPreferencesRepository
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var wakeLock: PowerManager.WakeLock? = null
@@ -83,8 +91,8 @@ class TripService : Service() {
                     when (mode) {
                         null -> stopSelf()
                         TripLocationMode.OFF -> emptyFlow<Unit>().collect {}
-                        TripLocationMode.PRECISE -> location.updates(LocationMode.PRECISE).collect { controller.onFix(it) }
-                        TripLocationMode.BALANCED -> location.updates(LocationMode.BALANCED).collect { controller.onFix(it) }
+                        TripLocationMode.PRECISE -> location.updates(LocationMode.PRECISE).collect { motion.onFix(it); controller.onFix(it) }
+                        TripLocationMode.BALANCED -> location.updates(LocationMode.BALANCED).collect { motion.onFix(it); controller.onFix(it) }
                     }
                 }
         }
@@ -94,7 +102,16 @@ class TripService : Service() {
                 .distinctUntilChanged()
                 .collect { approaching -> if (approaching) holdWake() else releaseWake() }
         }
+        scope.launch {
+            combine(controller.active, developerPreferences.imuSpeed) { trip, on -> on && trip != null && ridingATrain(trip) }
+                .distinctUntilChanged()
+                .collect { riding -> if (riding) motion.start() else motion.stop() }
+        }
     }
+
+    /** "Kecepatan IMU" runs only aboard a train: where the speed underground is worth knowing. */
+    private fun ridingATrain(trip: ActiveTrip): Boolean =
+        trip.state.phase == TripPhase.RIDING && !trip.plan.ride(trip.state.legIndex).isBus
 
     /** Between "siap-siap" and "turun": the stretch where an alert late by a doze is a missed stop. */
     private fun onFinalApproach(trip: ActiveTrip): Boolean {
@@ -121,6 +138,7 @@ class TripService : Service() {
         // clock with its notification still up; a trip that ended has taken it down already.
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_DETACH)
         releaseWake()
+        motion.stop()
         scope.cancel()
         super.onDestroy()
     }
