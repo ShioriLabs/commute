@@ -66,3 +66,13 @@ export function UnsupportedMediaType(errorCode: string = 'UNSUPPORTED_MEDIA_TYPE
     }
   }
 }
+
+export function ServiceUnavailable(errorCode: string = 'SERVICE_UNAVAILABLE', message: string = 'Service unavailable'): StandardResponse {
+  return {
+    status: 503,
+    error: {
+      code: errorCode,
+      message
+    }
+  }
+}

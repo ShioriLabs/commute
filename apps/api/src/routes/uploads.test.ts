@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import app from 'app'
 import type { Bindings } from 'app'
 
-import { MAX_TRIP_LOG_BYTES, tripLogKey } from './uploads'
+import { MAX_TRIP_LOG_BYTES, tripLogKey, UPLOADS_FLAG_KEY } from './uploads'
 
 /*
  * The upload is anonymous, so its validation is the whole of its security.
@@ -25,17 +25,22 @@ const fakeBucket = (puts: Put[] = []) => ({
   }
 }) as unknown as R2Bucket
 
+/** KV holding only the uploads flag; `null` means the key is absent. */
+const fakeKV = (flag: string | null) => ({
+  get: async (key: string) => (key === UPLOADS_FLAG_KEY ? flag : null)
+}) as unknown as KVNamespace
+
 const zstd = (size = 64) => {
   const bytes = new Uint8Array(size)
   bytes.set([0x28, 0xb5, 0x2f, 0xfd])
   return bytes
 }
 
-const upload = (body: BodyInit | null, headers: Record<string, string> = {}, puts: Put[] = []) =>
+const upload = (body: BodyInit | null, headers: Record<string, string> = {}, puts: Put[] = [], flag: string | null = 'open') =>
   app.fetch(
     // `duplex` is what Node requires to send a stream body; Workers ignore it.
     new Request('http://localhost/uploads/trips', { method: 'POST', body, headers, duplex: 'half' } as RequestInit),
-    { TRIP_LOGS: fakeBucket(puts) } as unknown as Bindings
+    { TRIP_LOGS: fakeBucket(puts), KV: fakeKV(flag) } as unknown as Bindings
   )
 
 const withLength = (bytes: Uint8Array, extra: Record<string, string> = {}) => ({
@@ -53,6 +58,23 @@ const streamOf = (bytes: Uint8Array, chunk = 64 * 1024) => new ReadableStream<Ui
 })
 
 describe('POST /uploads/trips', () => {
+  /*
+   * Closed is the default. A fresh environment, or one where the key was
+   * deleted, must refuse before reading a byte.
+   */
+  it.each([
+    ['the flag is absent', null],
+    ['the flag is anything but open', 'closed'],
+    ['the flag is a near miss', 'Open']
+  ])('refuses with 503 when %s', async (_, flag) => {
+    const puts: Put[] = []
+    const body = zstd()
+    const res = await upload(body, withLength(body), puts, flag)
+    expect(res.status).toBe(503)
+    expect(await res.json()).toMatchObject({ error: { code: 'UPLOADS_CLOSED' } })
+    expect(puts).toHaveLength(0)
+  })
+
   it('stores the bytes under a server-chosen dated key and returns its id', async () => {
     const puts: Put[] = []
     const body = zstd()
@@ -134,7 +156,7 @@ describe('POST /uploads/trips', () => {
   })
 
   it('has no GET', async () => {
-    const res = await app.request('/uploads/trips', {}, { TRIP_LOGS: fakeBucket() })
+    const res = await app.request('/uploads/trips', {}, { TRIP_LOGS: fakeBucket(), KV: fakeKV('open') })
     expect(res.status).toBe(404)
   })
 })
