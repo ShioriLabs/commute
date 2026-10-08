@@ -74,6 +74,14 @@ object TripEngine {
      */
     private const val PULLING_OUT_FIXES = 2
 
+    /**
+     * How far on along the route fixes must carry a bus past a halte it was never seen near before
+     * they're believed. Hops are straight lines and roads aren't: L13E reaches Tegal Mampang down
+     * Mampang and back east along Tendean, under the hop on to CSW, and one fix there put the bus a
+     * halte on and sent "siap-siap" 22 minutes early. Heading the wrong way, it never gets on.
+     */
+    private const val PASSING_PROGRESS_M = 100.0
+
     /** Consecutive far-off fixes before asking whether the rider is still on this route. */
     private const val OFF_ROUTE_STRIKES = 3
 
@@ -180,6 +188,12 @@ object TripEngine {
                     walkingSince = if (walked) null else state.walkingSince,
                 )
             }
+            if (state.phase == TripPhase.RIDING && ride.isBus && passesUnseenStop(ride, state.confirmedPosition, candidate, tuning)) {
+                val from = state.passingFrom?.let { min(it, candidate) } ?: candidate
+                if (metresAlong(ride, from, candidate) < PASSING_PROGRESS_M) {
+                    return tracked.copy(passingFrom = from, hasLocation = true)
+                }
+            }
             val confirmed = max(candidate, state.confirmedPosition)
             val offset = if (candidate > 0 && candidate >= state.confirmedPosition) {
                 RideClock(ride).scheduledAt(candidate)
@@ -209,6 +223,7 @@ object TripEngine {
                 walkingSince = null,
                 sightedPosition = null,
                 stopTimes = stopTimes,
+                passingFrom = null,
             )
         }
 
@@ -330,6 +345,16 @@ object TripEngine {
         val seconds = Duration.between(since, fix.at).toMillis() / 1000.0
         val moved = metresAlong(ride, from, candidate)
         return seconds > 0 && moved > fix.accuracyM && moved / seconds >= RIDING_M_PER_S
+    }
+
+    /**
+     * Whether [to] lies beyond a stop the rider at [from] was never near: more than a stop's radius
+     * short of the next one, and now past it rather than at it.
+     */
+    private fun passesUnseenStop(ride: TripLeg.Ride, from: Double, to: Double, tuning: Tuning): Boolean {
+        if (to == floor(to)) return false
+        val next = floor(from).toInt() + 1
+        return next < to && metresAlong(ride, from, next.toDouble()) > tuning.stopRadius
     }
 
     /** How far [ride] runs from position [from] on to [to]; hops without both stops' coordinates count nothing. */
@@ -515,6 +540,7 @@ object TripEngine {
             walkingSince = (if (estimated) ride.arrivalAt?.plusSeconds(state.clockOffsetS) ?: now else now)
                 .takeIf { plan.transferBefore(following) != null },
             sightedPosition = null,
+            passingFrom = null,
         )
     }
 
