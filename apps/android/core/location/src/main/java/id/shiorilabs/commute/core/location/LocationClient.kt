@@ -13,6 +13,14 @@ data class Fix(
     val at: Instant,
     /** Ground speed in metres a second, as the satellites measured it; `null` when they didn't. */
     val speedMps: Float? = null,
+    /** How far [speedMps] may be off, in metres a second (68%). */
+    val speedAccMps: Float? = null,
+    /** Direction of travel, degrees clockwise from true north; `null` when the satellites didn't say. */
+    val bearingDeg: Float? = null,
+    /** How far [bearingDeg] may be off, in degrees (68%). */
+    val bearingAccDeg: Float? = null,
+    /** When it was taken on the monotonic clock motion sensors also stamp with (`elapsedRealtimeNanos`). */
+    val elapsedNanos: Long? = null,
 )
 
 /** How hard to look: more often and more precisely costs battery. */

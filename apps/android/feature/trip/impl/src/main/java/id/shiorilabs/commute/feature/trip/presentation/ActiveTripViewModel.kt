@@ -14,6 +14,7 @@ import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.trip.ActiveTrip
 import id.shiorilabs.commute.feature.trip.TripReminder
 import id.shiorilabs.commute.feature.trip.runtime.FinishedTrip
+import id.shiorilabs.commute.feature.trip.runtime.MotionTracker
 import id.shiorilabs.commute.feature.trip.runtime.TripControllerImpl
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -43,6 +44,7 @@ class ActiveTripViewModel @Inject constructor(
     private val lineRepository: LineRepository,
     private val directory: StationDirectory,
     private val barState: TripBarState,
+    motionTracker: MotionTracker,
     developerPreferences: DeveloperPreferencesRepository,
     locationPreferences: LocationPreferencesRepository,
     otwPreferences: OtwPreferencesRepository,
@@ -92,6 +94,10 @@ class ActiveTripViewModel @Inject constructor(
     /** "Halaman PIDS" in Pengaturan → Experimental: the board takes turns between pages. */
     val boardPages: StateFlow<Boolean> = developerPreferences.boardPages
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** "Kecepatan IMU" in Pengaturan → Experimental: the satellites' speed beside the motion sensors'. */
+    internal val motion: StateFlow<MotionStripState?> = combine(developerPreferences.imuSpeed, motionTracker.live, ::motionStrip)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /**
      * "Diagram ala Layar Kereta Jepang" in Pengaturan → OTW: the board draws the stops ahead on its

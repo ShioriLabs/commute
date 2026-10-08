@@ -87,6 +87,8 @@
     <string name="settings_experimental_manual_marks_detail">Tombol Jalan, Berhenti, dan Aneh di halaman perjalanan, buat nyatet kapan keretanya beneran jalan atau berhenti. Masuk ke log, gak ngubah perjalanannya</string>
     <string name="settings_experimental_board_pages">Halaman PIDS</string>
     <string name="settings_experimental_board_pages_detail">Papan di halaman perjalanan gantian nampilin rute sama halaman lain, kayak layar di kereta. Masih prototipe, isinya baru Halo dunia</string>
+    <string name="settings_experimental_imu_speed">Kecepatan IMU</string>
+    <string name="settings_experimental_imu_speed_detail">Bandingin kecepatan GPS sama perkiraan sensor gerak di halaman perjalanan, pas naik kereta. Lumayan makan baterai</string>
     <string name="settings_experimental_watch_auto_open">Buka Otomatis di Jam</string>
     <string name="settings_experimental_watch_auto_open_detail">Pas mulai OTW, aplikasi Commute di jam langsung kebuka</string>
     <string name="settings_experimental_trip_log">Kirim Log Perjalanan</string>
