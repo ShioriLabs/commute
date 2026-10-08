@@ -1,11 +1,13 @@
 package id.shiorilabs.commute.feature.trip
 
 import id.shiorilabs.commute.core.navigation.Route
+import id.shiorilabs.commute.core.trip.InstantSerializer
 import id.shiorilabs.commute.core.trip.RiderAction
 import id.shiorilabs.commute.core.trip.TripPlan
 import id.shiorilabs.commute.core.trip.TripState
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
+import java.time.Instant
 
 /**
  * The trip the rider is following, with where it stands.
@@ -25,9 +27,19 @@ data class ActiveTrip(
     val replaced: ReplacedPlan? = null,
 )
 
-/** [plan] before ride [legIndex] was swapped for a later one. */
+/**
+ * [plan] before ride [legIndex] was swapped for a later one.
+ *
+ * @property untold The departure of the first train swapped away while the rider rode on, far
+ *   enough out to not be told yet; `null` once told, or for a swap that's never told.
+ */
 @Serializable
-data class ReplacedPlan(val plan: TripPlan, val legIndex: Int)
+data class ReplacedPlan(
+    val plan: TripPlan,
+    val legIndex: Int,
+    @Serializable(with = InstantSerializer::class)
+    val untold: Instant? = null,
+)
 
 /** "Tambah Pengingat": what the rider asked to be told as getting off comes up. */
 @Serializable
