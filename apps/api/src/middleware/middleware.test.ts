@@ -210,6 +210,26 @@ describe('rateLimit', () => {
     expect(seen).toEqual(['DEFAULT:local'])
   })
 
+  /*
+   * Origin is free to forge. For a write, honouring it would lift the cap on
+   * what one address can store.
+   */
+  it('does not exempt our own origins from the upload limit', async () => {
+    const a = app(rateLimit('UPLOAD'))
+    const res = await withEnv(a, '/ok', { RATE_LIMIT_UPLOAD: limiter(false) }, {
+      headers: { Origin: 'https://commute.shiorilabs.id' }
+    })
+    expect(res.status).toBe(429)
+  })
+
+  it('keys uploads on their own binding', async () => {
+    const seen: string[] = []
+    await withEnv(app(rateLimit('UPLOAD')), '/ok', { RATE_LIMIT_UPLOAD: limiter(true, seen) }, {
+      headers: { 'CF-Connecting-IP': '203.0.113.7' }
+    })
+    expect(seen).toEqual(['UPLOAD:203.0.113.7'])
+  })
+
   it('prices fares tighter than ordinary reads', () => {
     expect(RATE_LIMITS.FARE).toBeLessThan(RATE_LIMITS.DEFAULT)
   })
