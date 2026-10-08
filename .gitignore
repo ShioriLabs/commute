@@ -183,3 +183,6 @@ scratch/
 # (hundreds of MB, reproducible from apps/shirase/scripts). They go to R2, not git.
 apps/shirase/.tools/
 apps/shirase/data/
+
+# Brainstorm mockups
+.superpowers/

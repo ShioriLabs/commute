@@ -18,6 +18,9 @@ internal sealed interface PidsStyle {
         /** "Halaman PIDS" in Experimental: the strip takes turns with other pages. */
         val pages: Boolean = false,
     ) : PidsStyle
+
+    /** "PIDS Yishun" in Experimental: SMRT's strip map, a straight line of the stops near the rider and the one to get off at. */
+    data object Yishun : PidsStyle
 }
 
 /** The trip page's board, in [style]. */
@@ -33,9 +36,14 @@ internal fun PidsBoard(
     /** Where the big name's bottom edge is in the root, as the page scrolls; see [PidsBar]. */
     onNameMoved: (Float) -> Unit,
     modifier: Modifier = Modifier,
+    /** [PidsStyle.Yishun]'s stops; see [yishunStrip]. */
+    strip: YishunStrip? = null,
+    /** Every station's lines, keyed by station id, for [PidsStyle.Yishun]'s roundels under each stop. */
+    allStationLines: Map<String, List<String>> = emptyMap(),
 ) {
     when (style) {
         is PidsStyle.BekasiRailway -> BekasiRailwayBoard(style, pids, lines, stationLines, copy, source, onNameMoved, modifier)
+        PidsStyle.Yishun -> YishunBoard(pids, strip, lines, allStationLines, copy, source, onNameMoved, modifier)
     }
 }
 
@@ -54,6 +62,7 @@ internal fun PidsBar(
     modifier: Modifier = Modifier,
 ) {
     when (style) {
-        is PidsStyle.BekasiRailway -> BekasiRailwayBar(pids, lines, copy, topInset, collapsed, onTripPage, onClose, onOpen, modifier)
+        // Yishun keeps the same bar: it's already the dark band SMRT's panel sits under.
+        is PidsStyle.BekasiRailway, PidsStyle.Yishun -> BekasiRailwayBar(pids, lines, copy, topInset, collapsed, onTripPage, onClose, onOpen, modifier)
     }
 }
