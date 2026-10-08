@@ -96,6 +96,8 @@ data class TripState(
      */
     val stoodAt: String? = null,
     val pullingOutFixes: Int = 0,
+    /** The speed of the last of those fixes: one slower than it is braking in, and starts the count again. */
+    val pullingOutSpeed: Float? = null,
     /**
      * On a bus, the furthest-back point fixes have put the rider since they first landed past a halte
      * it was never seen near, `null` otherwise. They count only once one comes far enough on from it:
