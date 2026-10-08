@@ -315,9 +315,10 @@ class TripControllerImpl @Inject constructor(
      * replaces is kept for [boardedEarlier]. Called with the lock held; the asking runs outside it.
      *
      * Or, ahead of that, the next ride will have left by the time the late one aboard gets in and
-     * the rider walks across: asked while still riding, within [EARLY_REPLAN] of getting in, so they
-     * know at their seat, not on the platform. Only on lateness a fix saw on the move; a late
-     * "Udah naik" tap would read as a late train.
+     * the rider walks across: swapped from aboard as soon as a fix shows it, so the board never
+     * shows a change already lost. Told only within [EARLY_REPLAN] of getting in ([tellSwap]), and
+     * taken back untold if the train makes up the time ([takeBack]). Only on lateness a fix saw on
+     * the move; a late "Udah naik" tap would read as a late train.
      */
     private fun replanIfMissed(trip: ActiveTrip) {
         val state = trip.state
@@ -326,12 +327,12 @@ class TripControllerImpl @Inject constructor(
             TripPhase.WAITING_TO_BOARD -> state.legIndex to maxOf(now, state.walkEndsAt(trip.plan) ?: now)
             TripPhase.RIDING -> {
                 if (state.source != PositionSource.CONFIRMED || state.confirmedPosition <= 0.0) return
-                val getsIn = state.expectedAlightingAt(trip.plan) ?: return
-                if (getsIn.isAfter(now.plus(EARLY_REPLAN))) return
                 state.nextRideReadyAt(trip.plan) ?: return
             }
             else -> return
         }
+        if (takeBack(trip, legIndex, readyAt)) return
+        tellSwap(trip, legIndex, now)
         val ride = trip.plan.ride(legIndex)
         val departs = ride.departureAt ?: return
         if (!readyAt.isAfter(departs.plus(CATCH_GRACE))) return
@@ -343,7 +344,7 @@ class TripControllerImpl @Inject constructor(
                 ?.let { locator.place(it) }
                 ?.takeIf { it.legs.firstOrNull() is TripLeg.Ride }
             if (onward == null) {
-                log.event("missed", mapOf("leg" to legIndex, "departs" to departs, "onward" to null))
+                log.event("missed", mapOf("leg" to legIndex, "departs" to departs, "ready" to readyAt, "onward" to null))
                 // Offline, say: ask again once it's had a while, on whatever step comes next.
                 delay(REPLAN_RETRY.toMillis())
                 if (replannedFor == key) replannedFor = null
@@ -356,21 +357,25 @@ class TripControllerImpl @Inject constructor(
                     (current.state.legIndex == legIndex && current.state.phase != TripPhase.WAITING_TO_BOARD)
                 if (current.plan != trip.plan || boarded) return@withLock
                 val plan = TripPlan(current.plan.legs.take(legIndex) + onward.legs)
-                val told = !onPlatform(state)
+                val told = tells(current.plan, state, now)
+                val aboard = state.phase == TripPhase.RIDING
+                // The first train lost and not yet told of, while riding on: told of when it's near.
+                val untold = (current.replaced?.untold ?: departs).takeIf { aboard && !told }
                 log.event(
                     "missed",
                     mapOf(
                         "leg" to legIndex,
                         "departs" to departs,
+                        "ready" to readyAt,
                         "onward" to plan.ride(legIndex).departureAt,
-                        "aboard" to (state.phase == TripPhase.RIDING),
+                        "aboard" to aboard,
                         "told" to told,
                     ),
                 )
                 // The plan just swapped out, not the first: swapped again and again on a platform,
                 // a rider boarding early is on the train before this one, not the one at the start.
-                val replanned = current.copy(plan = plan, replaced = ReplacedPlan(current.plan, legIndex))
-                if (told) runtime.rerouted(replanned, legIndex, departs)
+                val replanned = current.copy(plan = plan, replaced = ReplacedPlan(current.plan, legIndex, untold))
+                if (told) runtime.rerouted(replanned, legIndex, current.replaced?.untold ?: departs)
                 apply(replanned, TripEngine.step(plan, current.state, TripEvent.Tick(clock.instant())))
             }
         }
@@ -384,6 +389,46 @@ class TripControllerImpl @Inject constructor(
     private fun onPlatform(state: TripState): Boolean =
         state.phase == TripPhase.WAITING_TO_BOARD && state.walkingSince == null &&
             state.source == PositionSource.CONFIRMED && state.sightedPosition == 0.0
+
+    /**
+     * Whether a swap is news to tell the rider now: waiting, unless [onPlatform]; aboard, within
+     * [EARLY_REPLAN] of getting in, near enough that the lateness won't be made up.
+     */
+    private fun tells(plan: TripPlan, state: TripState, now: Instant): Boolean = when (state.phase) {
+        TripPhase.WAITING_TO_BOARD -> !onPlatform(state)
+        TripPhase.RIDING -> state.expectedAlightingAt(plan)?.isAfter(now.plus(EARLY_REPLAN)) != true
+        else -> false
+    }
+
+    /**
+     * Swapped untold from aboard, and the train has made up the time: ride [legIndex] can be caught
+     * after all ([readyAt] no later than it leaves), so it's back, without asking. A swap the rider
+     * was told of stays; [boardedEarlier] still takes it back if they make the train regardless.
+     * Called with the lock held.
+     */
+    private fun takeBack(trip: ActiveTrip, legIndex: Int, readyAt: Instant): Boolean {
+        val replaced = trip.replaced ?: return false
+        if (trip.state.phase != TripPhase.RIDING || replaced.legIndex != legIndex || replaced.untold == null) return false
+        val departs = replaced.plan.ride(legIndex).departureAt ?: return false
+        if (readyAt.isAfter(departs)) return false
+        log.event("caught", mapOf("leg" to legIndex, "departs" to departs, "ready" to readyAt))
+        // Missed again later, it's asked about again.
+        replannedFor = null
+        apply(trip.copy(plan = replaced.plan, replaced = null), TripEngine.step(replaced.plan, trip.state, TripEvent.Tick(clock.instant())))
+        return true
+    }
+
+    /** A swap made untold from aboard, now near enough to [tells]: told, of the first train lost. */
+    private fun tellSwap(trip: ActiveTrip, legIndex: Int, now: Instant) {
+        val replaced = trip.replaced?.takeIf { it.legIndex == legIndex } ?: return
+        val missed = replaced.untold ?: return
+        if (!tells(trip.plan, trip.state, now)) return
+        log.event("told", mapOf("leg" to legIndex, "departs" to missed, "onward" to trip.plan.ride(legIndex).departureAt))
+        val told = trip.copy(replaced = replaced.copy(untold = null))
+        _active.value = told
+        store.write(told)
+        runtime.rerouted(told, legIndex, missed)
+    }
 
     /**
      * Ticks at [at] twice over: a timer for while the process is awake, and an alarm for when it
@@ -409,8 +454,8 @@ class TripControllerImpl @Inject constructor(
         val CATCH_GRACE: Duration = Duration.ofMinutes(1)
 
         /**
-         * How soon before the late ride gets in a missed change is asked about from aboard it: near
-         * enough that its lateness won't be made up, early enough to sit with the news.
+         * How soon before the late ride gets in a missed change is told from aboard it: near enough
+         * that its lateness won't be made up, early enough to sit with the news.
          */
         val EARLY_REPLAN: Duration = Duration.ofMinutes(10)
 

@@ -41,6 +41,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Clock
 import java.time.Instant
+import java.time.ZoneId
 import java.time.ZoneOffset
 
 class TripControllerImplTest {
@@ -122,7 +123,17 @@ class TripControllerImplTest {
         onward
     }
 
-    private fun TestScope.controller(at: Instant = NOW, scope: CoroutineScope = backgroundScope) = TripControllerImpl(
+    private class MutableClock(var now: Instant) : Clock() {
+        override fun instant(): Instant = now
+        override fun getZone(): ZoneId = ZoneOffset.UTC
+        override fun withZone(zone: ZoneId?): Clock = this
+    }
+
+    private fun TestScope.controller(
+        at: Instant = NOW,
+        scope: CoroutineScope = backgroundScope,
+        clock: Clock = Clock.fixed(at, ZoneOffset.UTC),
+    ) = TripControllerImpl(
         store = store,
         runtime = runtime,
         locator = { it },
@@ -130,7 +141,7 @@ class TripControllerImplTest {
         locationPreferences = locationPreferences,
         replanner = replanner,
         log = { _, _ -> },
-        clock = Clock.fixed(at, ZoneOffset.UTC),
+        clock = clock,
         scope = scope,
     )
 
@@ -333,6 +344,76 @@ class TripControllerImplTest {
         assertEquals(plan.legs.take(2), trip.plan.legs.take(2))
         assertEquals(minutes(20), trip.plan.ride(2).departureAt)
         assertEquals(listOf(2 to minutes(10)), runtime.rerouted)
+    }
+
+    /** The MRT to Dukuh Atas taking 40 minutes, 08.00 to 08.40, for the 08.50 from Sudirman. */
+    private val longRide = TripPlan(
+        listOf(plan.legs[0].let { it as TripLeg.Ride }.copy(arrivalAt = minutes(40)), plan.legs[1], nextTrain.copy(departureAt = minutes(50), arrivalAt = minutes(60))),
+    )
+
+    private fun alongTheMrt(fraction: Double) = GeoPoint(
+        -6.1913 + (DUKUH_ATAS.latitude!! + 6.1913) * fraction,
+        106.8230 + (DUKUH_ATAS.longitude!! - 106.8230) * fraction,
+    )
+
+    /** Aboard [longRide], on time when last seen. */
+    private fun aboardTheLongRide() = ActiveTrip(
+        longRide,
+        TripEngine.start(longRide, NOW, hasLocation = true).state.copy(
+            phase = TripPhase.RIDING,
+            source = PositionSource.CONFIRMED,
+            confirmedAt = minutes(2),
+        ),
+        origin,
+    )
+
+    @Test
+    fun `a change lost well out is swapped quietly, and told of once near`() = runTest {
+        // Halfway at 08.27, seven minutes late: in at 08.47, at Sudirman 08.51.30, past the 08.50.
+        store.trip = aboardTheLongRide()
+        onward = TripPlan(listOf(nextTrain.copy(departureAt = minutes(60), arrivalAt = minutes(70))))
+        val clock = MutableClock(minutes(27))
+        val controller = controller(clock = clock)
+        runCurrent()
+        controller.onFix(Fix(alongTheMrt(0.5), 15f, minutes(27), speedMps = 15f))
+        runCurrent()
+
+        val swapped = controller.active.value!!
+        assertEquals(minutes(60), swapped.plan.ride(2).departureAt)
+        assertEquals(minutes(50), swapped.replaced!!.untold)
+        assertEquals(emptyList<Pair<Int, Instant>>(), runtime.rerouted)
+
+        // Three quarters along at 08.38, still late: in within ten minutes, so told, of the 08.50.
+        clock.now = minutes(38)
+        controller.onFix(Fix(alongTheMrt(0.75), 15f, minutes(38), speedMps = 15f))
+        clock.now = minutes(39)
+        controller.onFix(Fix(alongTheMrt(0.8), 15f, minutes(39), speedMps = 15f))
+
+        assertEquals(listOf(2 to minutes(50)), runtime.rerouted)
+        assertEquals(minutes(60), controller.active.value!!.plan.ride(2).departureAt)
+        assertNull(store.trip!!.replaced!!.untold)
+    }
+
+    @Test
+    fun `a train that makes up the time gets its change back, untold`() = runTest {
+        store.trip = aboardTheLongRide()
+        onward = TripPlan(listOf(nextTrain.copy(departureAt = minutes(60), arrivalAt = minutes(70))))
+        val clock = MutableClock(minutes(27))
+        val controller = controller(clock = clock)
+        runCurrent()
+        controller.onFix(Fix(alongTheMrt(0.5), 15f, minutes(27), speedMps = 15f))
+        runCurrent()
+        assertEquals(minutes(60), controller.active.value!!.plan.ride(2).departureAt)
+
+        // Three quarters along at 08.31, a minute late: at Sudirman 08.45.30, in time for the 08.50.
+        clock.now = minutes(31)
+        controller.onFix(Fix(alongTheMrt(0.75), 15f, minutes(31), speedMps = 15f))
+
+        val trip = controller.active.value!!
+        assertEquals(longRide, trip.plan)
+        assertNull(trip.replaced)
+        assertEquals(1, asked.size)
+        assertEquals(emptyList<Pair<Int, Instant>>(), runtime.rerouted)
     }
 
     @Test
