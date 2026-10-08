@@ -107,6 +107,7 @@ fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel
     val boardPages by viewModel.boardPages.collectAsStateWithLifecycle()
     val pidsDiagram by viewModel.pidsDiagram.collectAsStateWithLifecycle()
     val motion by viewModel.motion.collectAsStateWithLifecycle()
+    val yishunPids by viewModel.yishunPids.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
 
     ActiveTripContent(
@@ -124,7 +125,7 @@ fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel
         platformMarks = platformMarks,
         onMark = viewModel::mark,
         motion = motion,
-        pidsStyle = PidsStyle.BekasiRailway(diagram = pidsDiagram, pages = boardPages),
+        pidsStyle = if (yishunPids) PidsStyle.Yishun else PidsStyle.BekasiRailway(diagram = pidsDiagram, pages = boardPages),
     )
 }
 
@@ -215,6 +216,8 @@ private fun ActiveTripContent(
                     copy = copy,
                     source = copy.source(trip),
                     onNameMoved = { nameBottom = it },
+                    strip = if (pidsStyle == PidsStyle.Yishun) trip.yishunStrip(pids, now) else null,
+                    allStationLines = state.stationLines,
                 )
             }
             item(key = "actions") {
