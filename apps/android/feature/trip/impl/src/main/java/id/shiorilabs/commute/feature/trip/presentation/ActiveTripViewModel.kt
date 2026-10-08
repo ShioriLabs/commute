@@ -95,6 +95,10 @@ class ActiveTripViewModel @Inject constructor(
     val boardPages: StateFlow<Boolean> = developerPreferences.boardPages
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    /** "PIDS Yishun" in Pengaturan → Experimental: the board after SMRT's strip map instead of JR East's. */
+    val yishunPids: StateFlow<Boolean> = developerPreferences.yishunPids
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     /** "Kecepatan IMU" in Pengaturan → Experimental: the satellites' speed beside the motion sensors'. */
     internal val motion: StateFlow<MotionStripState?> = combine(developerPreferences.imuSpeed, motionTracker.live, ::motionStrip)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)

@@ -96,6 +96,10 @@
     <string name="trip_mark_platform_end">Peron habis</string>
     <string name="trip_mark_last">Ditandai: %1$s · %2$s</string>
 
+    <!-- "PIDS Yishun" (Experimental): the stop to get off at, and the stops the strip leaves out. -->
+    <string name="trip_yishun_alight">TURUN</string>
+    <string name="trip_yishun_skipped">+%1$d</string>
+
     <!-- "Kecepatan IMU" (Experimental): the satellites' speed beside the motion sensors'. -->
     <string name="trip_motion_gps">GPS</string>
     <string name="trip_motion_imu">IMU</string>
