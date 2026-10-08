@@ -23,8 +23,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -47,7 +47,6 @@ import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.trip.R
 import kotlin.math.cos
 import kotlin.math.sin
-import kotlin.math.tan
 
 /** SMRT's panel: a deep navy, a touch bluer than the JR board's ink. */
 private val YishunInk = Color(0xFF0F1B2D)
@@ -76,15 +75,59 @@ private val SlotWidth = 44.dp
 private val StripStart = 16.dp
 
 /** Room past the last pill for its name to lean into. */
-private val StripEnd = 28.dp
+private val StripEnd = 56.dp
 private val NameGap = 6.dp
 private const val TRANSFER_ROUNDELS = 2
 
 /** Room under a pill for "Turun" and the roundels, wider than the pill's own slot. */
 private val TagWidth = 72.dp
 
-/** Where a stop's name rises from, for its pill centred at [x]: just above the pill's left edge. */
-private fun nameStartOf(x: Dp): Dp = x - PillMinWidth / 2 + 4.dp
+/** A name's box, fixed so its slant and the band's can be worked out from it. */
+private val NameHeight = 20.dp
+
+/** The band's half width, across its slant: wide enough to take in the pill under the name too. */
+private val BandHalf = 22.dp
+
+/**
+ * Where a stop's name rises from, for its pill centred at [x]: up and to the right of it, as on
+ * SMRT's strip, so the slant through the name's middle comes down through the pill.
+ */
+private fun nameStartOf(x: Dp): Dp = x + 20.dp
+
+/** Turned up to [NAME_ANGLE_DEG] about the box's bottom-left corner, as every name and the band are. */
+private fun Modifier.leaning(): Modifier = graphicsLayer {
+    rotationZ = -NAME_ANGLE_DEG
+    transformOrigin = TransformOrigin(0f, 1f)
+}
+
+/**
+ * The light band across the stop in focus, at [x]: laid out exactly as its name is and turned the
+ * same way, so it runs along the name whatever the slant, on down through the pill to the line.
+ */
+@Composable
+private fun FocusBand(x: Dp) {
+    val rise = LineY - PillHeight / 2 - NameGap
+    Box(
+        modifier = Modifier
+            .offset(x = nameStartOf(x), y = rise - NameHeight)
+            .width(BandLength)
+            .height(NameHeight)
+            .leaning()
+            .drawBehind {
+                val half = BandHalf.toPx()
+                val back = BandBack.toPx()
+                drawRect(
+                    color = YishunBand,
+                    topLeft = Offset(-back, size.height / 2 - half),
+                    size = Size(size.width + back, half * 2),
+                )
+            },
+    )
+}
+
+/** Far enough along the slant to reach the strip's top, and back behind the name to below the line. */
+private val BandLength = 260.dp
+private val BandBack = 45.dp
 
 /** Figures of one width, so minutes don't shift as they tick. */
 private const val TABULAR = "tnum"
@@ -184,7 +227,7 @@ private fun Strip(strip: YishunStrip, pids: Pids, lines: Map<String, LineInfo>, 
         val focusAt = slots.indexOfFirst { it is Slot.Stop && it.stop.focus }
         val firstBehind = (strip.stops.first().index > 0)
 
-        // The line, the band behind the stop in focus, and the dashed stretch the "+N" stands for.
+        // The line, dashed where the "+N" stands for the stops left out.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -192,43 +235,24 @@ private fun Strip(strip: YishunStrip, pids: Pids, lines: Map<String, LineInfo>, 
                 .drawBehind {
                     val y = LineY.toPx()
                     val thick = LineThickness.toPx()
-                    if (focusAt >= 0) {
-                        // Along the focus stop's name: through where it rises from, at its slant.
-                        val run = 1f / tan(Math.toRadians(NAME_ANGLE_DEG.toDouble())).toFloat()
-                        val rise = (LineY - PillHeight / 2 - NameGap).toPx()
-                        // A name's middle runs through about where it rises from, its height spread either side.
-                        val from = nameStartOf(centre(focusAt)).toPx()
-                        val bottom = y + 14.dp.toPx()
-                        val half = 17.dp.toPx()
-                        fun across(atY: Float) = from + (rise - atY) * run
-                        val band = Path().apply {
-                            moveTo(across(bottom) - half, bottom)
-                            lineTo(across(bottom) + half, bottom)
-                            lineTo(across(0f) + half, 0f)
-                            lineTo(across(0f) - half, 0f)
-                            close()
-                        }
-                        drawPath(band, YishunBand)
-                    }
                     // Into the strip from the left when there are stops behind it.
                     if (firstBehind) {
                         drawLine(YishunPassed, Offset(0f, y), Offset(centre(0).toPx(), y), thick)
                     }
                     for (i in 0 until slots.lastIndex) {
-                        val a = centre(i).toPx()
-                        val b = centre(i + 1).toPx()
                         val gap = slots[i] is Slot.Gap || slots[i + 1] is Slot.Gap
                         val passed = (slots[i + 1] as? Slot.Stop)?.stop?.let { it.passed || it.focus } == true
                         drawLine(
                             color = if (passed) YishunPassed else color,
-                            start = Offset(a, y),
-                            end = Offset(b, y),
+                            start = Offset(centre(i).toPx(), y),
+                            end = Offset(centre(i + 1).toPx(), y),
                             strokeWidth = thick,
                             pathEffect = if (gap) PathEffect.dashPathEffect(floatArrayOf(thick * 1.2f, thick)) else null,
                         )
                     }
                 },
         )
+        if (focusAt >= 0) FocusBand(centre(focusAt))
 
         slots.forEachIndexed { i, slot ->
             val x = centre(i)
@@ -278,12 +302,10 @@ private fun StopMarks(
     Text(
         text = stop.name,
         modifier = Modifier
-            .offset(x = nameStart, y = rise - 18.dp)
+            .offset(x = nameStart, y = rise - NameHeight)
+            .height(NameHeight)
             .widthIn(max = nameMax)
-            .graphicsLayer {
-                rotationZ = -NAME_ANGLE_DEG
-                transformOrigin = TransformOrigin(0f, 1f)
-            },
+            .leaning(),
         style = MaterialTheme.typography.labelLarge.copy(fontSize = if (stop.focus) 14.sp else 12.5.sp, lineHeight = 18.sp),
         fontWeight = if (stop.focus) FontWeight.ExtraBold else FontWeight.Bold,
         color = if (stop.passed) YishunPassedText else Color.White,
