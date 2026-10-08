@@ -70,6 +70,7 @@ class ActiveTripBarImpl @Inject constructor(
         val onTripPage = navigator.currentKey == Route.ActiveTrip
 
         PidsBar(
+            style = PidsStyle.BekasiRailway(),
             pids = current.pids(now),
             lines = names,
             copy = copy,
