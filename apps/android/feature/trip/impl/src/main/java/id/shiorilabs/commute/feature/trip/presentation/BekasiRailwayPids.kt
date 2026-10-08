@@ -356,18 +356,12 @@ internal fun BekasiRailwayBar(
 }
 
 /**
- * The bar's line beside the roundel: where the ride is headed (one bus route by its corridor, "Kor
- * L13E"), and once the big name is out of sight, that name ("Naik di Cakung") first, then the two
- * taking turns as the eyebrow does.
+ * The bar's line beside the roundel: where the ride is headed, and once the big name is out of
+ * sight, that name ("Naik di Cakung") first, then the two taking turns as the eyebrow does.
  */
 @Composable
 private fun BarTitle(pids: Pids, collapsed: Boolean, modifier: Modifier = Modifier) {
-    val ride = pids.ride
-    val headsign = if (ride.isBus && ride.otherLines == 0) {
-        stringResource(R.string.trip_corridor_short, ride.line.substringAfter(':'))
-    } else {
-        rideDirection(ride)
-    }
+    val headsign = rideDirection(pids.ride)
     val label = stringResource(pids.label.text)
     val station = buildAnnotatedString {
         withStyle(SpanStyle(color = BoardMuted)) { append(label) }
