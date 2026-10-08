@@ -37,6 +37,9 @@ class DeveloperPreferencesRepository @Inject constructor(
     /** "Halaman PIDS": the board under the plate takes turns between the route and other pages. */
     val boardPages: Flow<Boolean> = dataStore.data.map { it[BOARD_PAGES] == true }
 
+    /** "Kecepatan IMU": riding a train, the motion sensors' speed beside the satellites', on the trip page. */
+    val imuSpeed: Flow<Boolean> = dataStore.data.map { it[IMU_SPEED] == true }
+
     /** "Buka Otomatis di Jam": starting a trip opens the watch app. On until switched off. */
     val watchAutoOpen: Flow<Boolean> = dataStore.data.map { it[WATCH_AUTO_OPEN] != false }
 
@@ -52,6 +55,8 @@ class DeveloperPreferencesRepository @Inject constructor(
 
     suspend fun setBoardPages(enabled: Boolean) = set(BOARD_PAGES, enabled)
 
+    suspend fun setImuSpeed(enabled: Boolean) = set(IMU_SPEED, enabled)
+
     suspend fun setWatchAutoOpen(enabled: Boolean) = set(WATCH_AUTO_OPEN, enabled)
 
     private suspend fun set(key: Preferences.Key<Boolean>, value: Boolean) {
@@ -66,6 +71,7 @@ class DeveloperPreferencesRepository @Inject constructor(
         val MANUAL_MARKS = booleanPreferencesKey("manual_marks")
         val PLATFORM_MARKS = booleanPreferencesKey("platform_marks")
         val BOARD_PAGES = booleanPreferencesKey("board_pages")
+        val IMU_SPEED = booleanPreferencesKey("imu_speed")
         val WATCH_AUTO_OPEN = booleanPreferencesKey("watch_auto_open")
     }
 }

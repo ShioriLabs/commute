@@ -44,6 +44,7 @@ class ExperimentalViewModel @Inject constructor(
     val manualMarks: StateFlow<Boolean> = preferences.manualMarks.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     val platformMarks: StateFlow<Boolean> = preferences.platformMarks.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     val boardPages: StateFlow<Boolean> = preferences.boardPages.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val imuSpeed: StateFlow<Boolean> = preferences.imuSpeed.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     val watchAutoOpen: StateFlow<Boolean> = preferences.watchAutoOpen.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
@@ -58,6 +59,8 @@ class ExperimentalViewModel @Inject constructor(
     fun setPlatformMarks(enabled: Boolean) = viewModelScope.launch { preferences.setPlatformMarks(enabled) }
 
     fun setBoardPages(enabled: Boolean) = viewModelScope.launch { preferences.setBoardPages(enabled) }
+
+    fun setImuSpeed(enabled: Boolean) = viewModelScope.launch { preferences.setImuSpeed(enabled) }
 
     /** The trip log's share sheet, or `null` with nothing logged yet. */
     fun shareTripLog(onReady: (Intent?) -> Unit) = viewModelScope.launch { onReady(tripLog.share()) }
@@ -81,6 +84,7 @@ fun ExperimentalScreen(
     val manualMarks by viewModel.manualMarks.collectAsStateWithLifecycle()
     val platformMarks by viewModel.platformMarks.collectAsStateWithLifecycle()
     val boardPages by viewModel.boardPages.collectAsStateWithLifecycle()
+    val imuSpeed by viewModel.imuSpeed.collectAsStateWithLifecycle()
     val watchAutoOpen by viewModel.watchAutoOpen.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
     val context = LocalContext.current
@@ -93,6 +97,7 @@ fun ExperimentalScreen(
         manualMarks = manualMarks,
         platformMarks = platformMarks,
         boardPages = boardPages,
+        imuSpeed = imuSpeed,
         watchAutoOpen = watchAutoOpen,
         canHide = !debug,
         onBack = { navigator.pop() },
@@ -101,6 +106,7 @@ fun ExperimentalScreen(
         onManualMarks = { viewModel.setManualMarks(it) },
         onPlatformMarks = { viewModel.setPlatformMarks(it) },
         onBoardPages = { viewModel.setBoardPages(it) },
+        onImuSpeed = { viewModel.setImuSpeed(it) },
         onWatchAutoOpen = { viewModel.setWatchAutoOpen(it) },
         onShareTripLog = {
             viewModel.shareTripLog { intent ->
@@ -123,6 +129,7 @@ private fun ExperimentalContent(
     manualMarks: Boolean = false,
     platformMarks: Boolean = false,
     boardPages: Boolean = false,
+    imuSpeed: Boolean = false,
     watchAutoOpen: Boolean = true,
     onBack: () -> Unit = {},
     onForceTripStart: (Boolean) -> Unit = {},
@@ -130,6 +137,7 @@ private fun ExperimentalContent(
     onManualMarks: (Boolean) -> Unit = {},
     onPlatformMarks: (Boolean) -> Unit = {},
     onBoardPages: (Boolean) -> Unit = {},
+    onImuSpeed: (Boolean) -> Unit = {},
     onWatchAutoOpen: (Boolean) -> Unit = {},
     onShareTripLog: () -> Unit = {},
     onHide: () -> Unit = {},
@@ -174,6 +182,12 @@ private fun ExperimentalContent(
             subtitle = stringResource(R.string.settings_experimental_board_pages_detail),
             checked = boardPages,
             onCheckedChange = onBoardPages,
+        )
+        SettingsSwitch(
+            title = stringResource(R.string.settings_experimental_imu_speed),
+            subtitle = stringResource(R.string.settings_experimental_imu_speed_detail),
+            checked = imuSpeed,
+            onCheckedChange = onImuSpeed,
         )
         SettingsSwitch(
             title = stringResource(R.string.settings_experimental_watch_auto_open),
