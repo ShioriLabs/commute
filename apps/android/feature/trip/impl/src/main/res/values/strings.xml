@@ -93,6 +93,18 @@
     <string name="trip_mark_platform_start">Peron mulai</string>
     <string name="trip_mark_platform_end">Peron habis</string>
     <string name="trip_mark_last">Ditandai: %1$s · %2$s</string>
+
+    <!-- "Kecepatan IMU" (Experimental): the satellites' speed beside the motion sensors'. -->
+    <string name="trip_motion_gps">GPS</string>
+    <string name="trip_motion_imu">IMU</string>
+    <string name="trip_motion_kmh">%1$d km/j</string>
+    <string name="trip_motion_aged">%1$s · %2$d dtk</string>
+    <string name="trip_motion_accel">%1$s m/s²</string>
+    <string name="trip_motion_none">—</string>
+    <string name="trip_motion_still">%1$s · diam</string>
+    <string name="trip_motion_aligning">Lagi nyelarasin arah...</string>
+    <string name="trip_motion_waiting">Kecepatan IMU nyala pas naik kereta</string>
+    <string name="trip_motion_unavailable">HP ini gak punya sensor gerak yang dibutuhin</string>
     <string name="trip_time_late">%1$s, telat %2$d menit dari jadwal %3$s</string>
     <string name="trip_time_early">%1$s, %2$d menit lebih awal dari jadwal %3$s</string>
     <string name="trip_live_finished">Perjalanan udah selesai</string>
