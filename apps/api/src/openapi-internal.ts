@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { generateSpecs } from 'hono-openapi'
-import { SearchableIndexSchema, TripResultSchema } from '@commute/schemas'
+import { SearchableIndexSchema, TrackShapesSchema, TripResultSchema } from '@commute/schemas'
 import app, { documentation } from './app'
 import { doc, pathParam, queryParam } from './schemas/describe'
 
@@ -41,6 +41,18 @@ export async function buildInternalDocument() {
       description: 'Semua yang bisa dicari dalam satu response: stasiun, pumpunan moda, dan lin, plus kamus lin yang dirujuk tiap entri.',
       tag: 'Internal',
       data: SearchableIndexSchema
+    }),
+    c => c.body(null)
+  )
+
+  // Described, never called: the real handler is routes/internal.ts.
+  described.get(
+    '/_internal/track-shapes',
+    doc({
+      summary: 'Bentuk jalur antarstasiun',
+      description: 'Bentuk jalur fisik tiap pasangan stasiun berurutan, buat mode perjalanan di aplikasi Android. Satu file untuk seluruh jaringan; jarang berubah, jadi simpan dan validasi ulang dengan ETag.',
+      tag: 'Internal',
+      data: TrackShapesSchema
     }),
     c => c.body(null)
   )

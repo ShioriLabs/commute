@@ -7,6 +7,7 @@ import id.shiorilabs.commute.core.model.models.LineDetail
 import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.model.models.Station
+import id.shiorilabs.commute.core.model.models.TrackShapes
 import id.shiorilabs.commute.core.model.models.Transfer
 import id.shiorilabs.commute.core.model.models.TripResult
 import id.shiorilabs.commute.core.network.ext.decodeFetched
@@ -27,6 +28,9 @@ class CommuteServiceImpl @Inject constructor(
 
     override suspend fun getSearchables(ifNoneMatch: String?): Fetched<SearchableIndex> =
         client.get("_internal/searchables") { validator(ifNoneMatch) }.decodeFetched()
+
+    override suspend fun getTrackShapes(ifNoneMatch: String?): Fetched<TrackShapes> =
+        client.get("_internal/track-shapes") { validator(ifNoneMatch) }.decodeFetched()
 
     override suspend fun getStations(ifNoneMatch: String?): Fetched<List<Station>> =
         client.get("stations") { validator(ifNoneMatch) }.decodeFetched()

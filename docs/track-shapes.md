@@ -1,8 +1,9 @@
 # Track shapes for trip mode
 
 **Status:** built 2026-10-09, not deployed. `GET /_internal/track-shapes`, for
-the Android app's trip mode (`android-trip-mode.md`). The app side is not
-built yet.
+the Android app's trip mode (`android-trip-mode.md`). The app side is built:
+`DirectoryStopLocator` copies each hop's shape into the plan as a trip starts,
+and `TripEngine` projects fixes onto it.
 
 ## Why
 
