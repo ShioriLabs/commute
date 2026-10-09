@@ -11,6 +11,8 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.draw.rotate
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
@@ -157,6 +159,9 @@ private fun ActiveTripContent(
     val marking = markRows.isNotEmpty()
     val strip = motion.takeIf { trip != null }
     val context = LocalContext.current
+    val density = LocalDensity.current
+    // The marks' bar and the motion strip under the page, with the system bar when they sit on it.
+    var overlayHeight by remember { mutableStateOf(0.dp) }
     val copy = remember(context, state.lines) { TripCopy(context.resources, state.lines) }
     // The board's minutes count down between the trip's own updates.
     val now by produceState(Instant.now()) {
@@ -181,11 +186,7 @@ private fun ActiveTripContent(
                 .background(PageBackground)
                 .onGloballyPositioned { listTop = it.positionInRoot().y },
             // Clear of the marks' bar and the motion strip, while they're up, as of the system bar.
-            contentPadding = PaddingValues(
-                bottom = innerPadding.calculateBottomPadding() + 32.dp +
-                    (if (marking) markBarHeight(markRows.size) else 0.dp) +
-                    (if (strip != null) MotionStripHeight else 0.dp),
-            ),
+            contentPadding = PaddingValues(bottom = maxOf(innerPadding.calculateBottomPadding(), overlayHeight) + 32.dp),
         ) {
             if (trip == null) {
                 val finished = state.finished
@@ -269,7 +270,11 @@ private fun ActiveTripContent(
                 DetailsRow(onClick = { onDetails(trip) }, modifier = Modifier.padding(start = 32.dp, top = 8.dp, end = 32.dp))
             }
         }
-        Column(modifier = Modifier.align(Alignment.BottomCenter)) {
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .onSizeChanged { overlayHeight = with(density) { it.height.toDp() } },
+        ) {
             if (strip != null) {
                 MotionStrip(state = strip, bottomInset = if (marking) 0.dp else innerPadding.calculateBottomPadding())
             }

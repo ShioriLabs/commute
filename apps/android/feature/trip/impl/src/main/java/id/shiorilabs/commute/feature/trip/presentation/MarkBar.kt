@@ -60,11 +60,6 @@ internal fun markRows(manual: Boolean, platform: Boolean): List<List<MarkKind>> 
     if (manual) add(listOf(MarkKind.MOVING, MarkKind.STOPPED, MarkKind.ODD))
 }
 
-/** The bar's height above the bottom inset for [rows], which the page keeps clear under its last row. */
-internal fun markBarHeight(rows: Int): Dp = 40.dp + MarkRowHeight * rows
-
-private val MarkRowHeight: Dp = 60.dp
-
 /**
  * "Tandai manual": three big buttons under the trip page, pressed when the train moves off, when it
  * stops, and when the page is wrong. "Tandai Peron" adds a row above for each platform's two ends as
