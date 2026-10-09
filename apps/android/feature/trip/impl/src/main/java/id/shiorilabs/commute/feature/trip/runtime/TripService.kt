@@ -103,9 +103,15 @@ class TripService : Service() {
                 .collect { approaching -> if (approaching) holdWake() else releaseWake() }
         }
         scope.launch {
-            combine(controller.active, developerPreferences.imuSpeed) { trip, on -> on && trip != null && ridingATrain(trip) }
-                .distinctUntilChanged()
-                .collect { riding -> if (riding) motion.start() else motion.stop() }
+            // The train being ridden, by leg: each leg is a recording of its own.
+            combine(controller.active, developerPreferences.imuSpeed) { trip, on ->
+                trip?.takeIf { on && ridingATrain(it) }?.let { it.state.legIndex to it.plan.ride(it.state.legIndex) }
+            }
+                .distinctUntilChanged { a, b -> a?.first == b?.first }
+                .collect { riding ->
+                    motion.stop()
+                    riding?.let { (_, ride) -> motion.start(ride) }
+                }
         }
     }
 

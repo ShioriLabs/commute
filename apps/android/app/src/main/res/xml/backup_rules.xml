@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     Auto Backup before Android 12, kept in step with data_extraction_rules.xml: everything but the
-    trip log, which holds where the rider was.
+    trip log and the sensor recordings, which hold where the rider was.
 -->
 <full-backup-content>
     <exclude domain="file" path="trip_log.ndjson" />
+    <exclude domain="file" path="sensors/" />
 </full-backup-content>
