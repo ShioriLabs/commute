@@ -117,11 +117,11 @@ describe('summarizeFares — JakLingko journey cap', () => {
 
   it('does NOT cap a KCI + LRTJBDB journey (neither is integrated)', () => {
     // Both operators sit outside JakLingko, so no cap despite being multimodal.
-    // KCI 22000m = 3000; LRTJBDB 90000m off-peak Sat capped at 10000.
+    // KCI 22000m = 3000; LRTJBDB DKA->JTM (20000 on the table) off-peak Sat capped at 10000.
     const s = summarizeFares([
       ride('KCI', 'C', 'KCI-BKS', 'KCI-SUDB', 22000),
       walk('KCI-SUDB', 'LRTJBDB-DKA', 400),
-      ride('LRTJBDB', 'BK', 'LRTJBDB-DKA', 'LRTJBDB-JATB', 90000)
+      ride('LRTJBDB', 'BK', 'LRTJBDB-DKA', 'LRTJBDB-JTM', 90000)
     ], jaklingko)
     expect(s.totalFare).toBe(13000) // 3000 + 10000, uncapped
   })
@@ -155,7 +155,7 @@ describe('summarizeFares — JakLingko journey cap', () => {
 
 describe('summarizeFares — Dukuh Atas priced corridor', () => {
   // MRT → free walk → paid corridor (KCI-SUD↔LRTJBDB-DKA) → LRT.
-  // MRT DKA→BHI = 3000; LRTJBDB 900m (off-peak Sat) = 5000.
+  // MRT DKA→BHI = 3000; LRTJBDB DKA→SET (off-peak Sat) = 5000.
   const corridorJourney = (): RouteLeg[] => [
     ride('MRTJ', 'M', 'MRTJ-BHI', 'MRTJ-DKA', 800),
     walk('MRTJ-DKA', 'KCI-SUD', 90), // free
@@ -185,14 +185,14 @@ describe('summarizeFares — Dukuh Atas priced corridor', () => {
 
   it('drops the surcharge when the rider transits KCI-SUD by KCI train (Kranji → LRT shape)', () => {
     // KCI ride into KCI-SUD → corridor → LRT ride: already inside Sudirman's
-    // gates, so no passerby surcharge. KCI 17500m = 3000; LRTJBDB 900m off-peak = 5000.
+    // gates, so no passerby surcharge. KCI 17500m = 3000; LRTJBDB DKA->RAS = 5700.
     const s = summarizeFares([
       ride('KCI', 'C', 'KCI-KRI', 'KCI-SUD', 17500),
       walk('KCI-SUD', 'LRTJBDB-DKA', 310), // corridor, but no surcharge (prev is a KCI ride)
       ride('LRTJBDB', 'BK', 'LRTJBDB-DKA', 'LRTJBDB-RAS', 900)
     ], { paymentMethod: 'STORED_VALUE', departureAt: ctx.departureAt })
     expect(s.surchargedTransfers).toHaveLength(0)
-    expect(s.totalFare).toBe(3000 + 5000) // no corridor fee
+    expect(s.totalFare).toBe(3000 + 5700) // no corridor fee
     expect(s.transferCount).toBe(1)
   })
 })
