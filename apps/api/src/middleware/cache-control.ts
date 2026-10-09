@@ -91,6 +91,12 @@ function isLocalDev(url: string): boolean {
  * freshness. Errors are never cached: a 404 for a station that is about to be
  * imported should not stick to a client for an hour.
  *
+ * Where two registrations match one path, the more specific one wins. Hono runs
+ * middleware as an onion, so the broad group's `cacheControl` (registered
+ * first) finishes last; left alone it would overwrite the specific one, which
+ * is how timetables quietly got /stations' hour instead of their half hour.
+ * Hence the bail-out below on a header an inner registration already set.
+ *
  * Disabled entirely on localhost. These TTLs are hours to a day, which is right
  * for data that changes when an importer runs — and wrong for a developer who
  * has just changed the code that produces it. A ten-minute browser cache on
@@ -106,6 +112,8 @@ export function cacheControl(maxAge: number) {
     await next()
 
     if (c.res.status !== 200) return
+    // A more specific registration, nested inside this one, already decided.
+    if (c.res.headers.has('Cache-Control')) return
 
     if (isLocalDev(c.req.url)) {
       c.res.headers.set('Cache-Control', 'no-store')
