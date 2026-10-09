@@ -82,6 +82,45 @@
         }
       }
     },
+    "/_internal/track-shapes": {
+      "get": {
+        "operationId": "getInternalTrackShapes",
+        "summary": "Bentuk jalur antarstasiun",
+        "description": "Bentuk jalur fisik tiap pasangan stasiun berurutan, buat mode perjalanan di aplikasi Android. Satu file untuk seluruh jaringan; jarang berubah, jadi simpan dan validasi ulang dengan ETag.",
+        "tags": [
+          "Internal"
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "description": "Sama dengan HTTP status code-nya.",
+                      "examples": [
+                        200
+                      ],
+                      "format": "double"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TrackShapes"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/_internal/trips/{from}/{to}": {
       "get": {
         "operationId": "getInternalTripsByFromByTo",
@@ -2458,6 +2497,44 @@
           "items"
         ],
         "title": "SearchableIndex"
+      },
+      "TrackShapes": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "description": "Berubah setiap kali ada bentuk jalur yang berubah. Bandingkan saja, jangan diurai.",
+            "examples": [
+              "3f9a1c07"
+            ]
+          },
+          "attribution": {
+            "type": "string",
+            "description": "Atribusi sumber data yang wajib ikut ditampilkan."
+          },
+          "shapes": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Bentuk jalur tiap pasangan stasiun berurutan, dengan key `{dari}>{ke}` pakai id stasiun. Nilainya encoded polyline Google, presisi 5. Pasangan yang tidak ada berarti bentuknya belum kami punya, jadi pakai garis lurus.",
+            "examples": [
+              {
+                "KCI-MRI>KCI-TEB": "v_ve@yfmjS..."
+              }
+            ]
+          }
+        },
+        "required": [
+          "version",
+          "attribution",
+          "shapes"
+        ],
+        "title": "TrackShapes",
+        "description": "Bentuk jalur fisik antarstasiun untuk semua tahap perjalanan naik kendaraan."
       },
       "FareJourneyLabel": {
         "type": "string",

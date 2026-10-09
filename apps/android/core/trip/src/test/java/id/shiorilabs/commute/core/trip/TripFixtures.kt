@@ -145,3 +145,34 @@ internal class Run(val plan: TripPlan, startAt: Instant = at(-2), hasLocation: B
 
     fun alerts(): List<TripEffect.Alert> = effects.filterIsInstance<TripEffect.Alert>()
 }
+
+/** [points] as the API's track shapes write them: Google's encoded polyline, precision 5. */
+internal fun encodePolyline(vararg points: GeoPoint): String {
+    val out = StringBuilder()
+    var lat = 0
+    var lng = 0
+    fun put(delta: Int) {
+        var v = if (delta < 0) (delta shl 1).inv() else delta shl 1
+        while (v >= 0x20) {
+            out.append(((0x20 or (v and 0x1f)) + 63).toChar())
+            v = v shr 5
+        }
+        out.append((v + 63).toChar())
+    }
+    for (p in points) {
+        val iLat = Math.round(p.latitude * 1e5).toInt()
+        val iLng = Math.round(p.longitude * 1e5).toInt()
+        put(iLat - lat)
+        put(iLng - lng)
+        lat = iLat
+        lng = iLng
+    }
+    return out.toString()
+}
+
+/** [this] with its hops' shapes, one per hop, `null` for the straight line. */
+internal fun TripPlan.shaped(vararg hops: List<GeoPoint>?) = TripPlan(
+    legs.map { leg ->
+        if (leg is TripLeg.Ride) leg.copy(hopShapes = hops.map { it?.let { points -> encodePolyline(*points.toTypedArray()) } }) else leg
+    },
+)

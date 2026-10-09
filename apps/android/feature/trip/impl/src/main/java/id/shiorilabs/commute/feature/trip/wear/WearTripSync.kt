@@ -13,6 +13,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import id.shiorilabs.commute.core.datastore.DeveloperPreferencesRepository
 import id.shiorilabs.commute.core.query.di.ApplicationScope
 import id.shiorilabs.commute.core.trip.FinishReason
+import id.shiorilabs.commute.core.trip.TripLeg
+import id.shiorilabs.commute.core.trip.TripPlan
 import id.shiorilabs.commute.core.trip.TripState
 import id.shiorilabs.commute.core.wearable.WearLine
 import id.shiorilabs.commute.core.wearable.WearPaths
@@ -109,8 +111,12 @@ class WearTripSync @Inject constructor(
             val color = runCatching { line.colorCode.toColorInt() }.getOrNull() ?: return@mapNotNull null
             key to WearLine(line.name, color)
         }.toMap()
-        return WearTrip(plan, state.forWatch(), names, finished)
+        return WearTrip(plan.withoutShapes(), state.forWatch(), names, finished)
     }
+
+    /** The watch only draws the trip; the hops' shapes are for placing fixes, on the phone alone. */
+    private fun TripPlan.withoutShapes(): TripPlan =
+        TripPlan(legs.map { leg -> if (leg is TripLeg.Ride) leg.copy(hopShapes = emptyList()) else leg })
 
     private suspend fun publish(trip: WearTrip?) {
         // No Wear OS app on the phone, or no Play services: there is no watch to tell.

@@ -19,11 +19,14 @@ import id.shiorilabs.commute.feature.trip.navigation.TripNavContribution
 import id.shiorilabs.commute.feature.trip.runtime.ActiveTripFileStore
 import id.shiorilabs.commute.feature.trip.runtime.AndroidTripRuntime
 import id.shiorilabs.commute.feature.trip.runtime.DirectoryStopLocator
+import id.shiorilabs.commute.feature.trip.runtime.QueryTrackShapeSource
 import id.shiorilabs.commute.feature.trip.runtime.StopLocator
+import id.shiorilabs.commute.feature.trip.runtime.TrackShapeSource
 import id.shiorilabs.commute.feature.trip.runtime.TripControllerImpl
 import id.shiorilabs.commute.feature.trip.runtime.TripRuntime
 import id.shiorilabs.commute.feature.trip.runtime.TripStore
 import id.shiorilabs.commute.feature.trip.startup.ActiveTripWarmup
+import id.shiorilabs.commute.feature.trip.startup.TrackShapesWarmup
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -54,8 +57,15 @@ abstract class TripModule {
     abstract fun bindStopLocator(impl: DirectoryStopLocator): StopLocator
 
     @Binds
+    abstract fun bindTrackShapeSource(impl: QueryTrackShapeSource): TrackShapeSource
+
+    @Binds
     @IntoSet
     abstract fun bindActiveTripWarmup(impl: ActiveTripWarmup): StartupWarmup
+
+    @Binds
+    @IntoSet
+    abstract fun bindTrackShapesWarmup(impl: TrackShapesWarmup): StartupWarmup
 
     @Binds
     @IntoSet
