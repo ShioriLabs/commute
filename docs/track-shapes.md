@@ -26,7 +26,7 @@ minutes early.
 
 ```ts
 {
-  version: 'e322fed5',            // changes whenever any shape does
+  version: '1ce9fb7e',            // changes whenever any shape does
   attribution: 'Rail: © OpenStreetMap contributors, ODbL-1.0 …',
   shapes: {
     'KCI-BPR>KCI-BST': '…',       // Google encoded polyline, precision 5
@@ -43,13 +43,13 @@ minutes early.
   TransJakarta is directed, since a bus can take a different street each way.
 - **A missing key means no shape.** Keep the straight line for that hop. This
   covers the hops TransJakarta's poster overrides add, which aren't in GTFS,
-  and any TJ cut whose ends land more than 150 m from its halte.
+  and any halte the generator couldn't place within 150 m of its trip's shape.
 - **Hops past stops without calling are one key.** LRTJ Rawamangun →
   Manggarai (past Pramuka, Matraman, Proklamasi) and KRL Kemayoran → Gang
   Sentiong southbound (past Pasar Senen) are stitched from every segment they
   cover, exactly as `edges` prices them.
-- **Size:** about 190 KB raw for the whole network (3,176 shapes: 257 rail,
-  2,919 TJ); compressed in transit.
+- **Size:** about 188 KB raw for the whole network (3,092 shapes: 257 rail,
+  2,835 TJ), 84 KB gzipped in transit.
 
 **Coverage** of the hops the router can ride: rail 271 of 271, TransJakarta 948
 of 997. All but one of the TJ gaps are poster-override corridors (3F, 4, 4D,
@@ -85,6 +85,19 @@ below 100% means a hop's segment is missing from `data/geometry`.
 
 - **Rail:** `apps/api/src/db/data/geometry/*.geojson`, traced along
   OpenStreetMap rails by `generateTrackGeometry.ts`.
-- **TransJakarta:** GTFS `shapes.txt`, cut at each halte by
-  `shape_dist_traveled`. Where trip variants disagree on a pair, the shortest
-  cut wins, the same rule that picks the edge distance.
+- **TransJakarta:** GTFS `shapes.txt`, cut at each halte. Where trip variants
+  disagree on a pair, the shortest cut wins, the same rule that picks the edge
+  distance.
+  - The cut points come from `shape_dist_traveled` when the feed fills it on
+    both the shape and every stop of the trip.
+  - Otherwise, the generator measures the shape and places each halte on it
+    itself, searching forward only so a loop route's second pass lands on the
+    second visit.
+  - The 2026-07-24 export, the current one, leaves the column empty in both
+    files, so every TJ shape today comes from that fallback. Ends land a median
+    10 m (p95 31 m, max 100 m) from the haltes in the database.
+
+  The shapes are also a check on `edges`. Shape length matches the priced
+  distance on most edges (median ratio 0.999). The 55 edges where the shape is
+  more than 25% longer are all priced at exactly the straight line between the
+  haltes, i.e. haversine fallbacks (corridors 2/2A around Monas among them).
