@@ -147,6 +147,7 @@ class MotionTracker @Inject constructor(
             "imu",
             mapOf(
                 "v" to readout.imuSpeedMps?.let(::round2),
+                "raw" to readout.rawSpeedMps?.let(::round2),
                 "a" to readout.aLongMps2?.let(::round2),
                 "gnss" to gnss,
                 "aligned" to readout.aligned,
