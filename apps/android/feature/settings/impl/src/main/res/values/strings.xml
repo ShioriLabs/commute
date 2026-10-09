@@ -96,6 +96,9 @@
     <string name="settings_experimental_trip_log">Kirim Log Perjalanan</string>
     <string name="settings_experimental_trip_log_detail">Catatan GPS dan langkah mode OTW dari perjalanan terakhir, buat dicek kalau ada yang aneh</string>
     <string name="settings_experimental_trip_log_empty">Belum ada log perjalanan</string>
+    <string name="settings_experimental_sensor_data">Kirim Data Sensor</string>
+    <string name="settings_experimental_sensor_data_detail">Rekaman sensor gerak 50 Hz, GPS, sama perkiraan kecepatan tiap naik kereta pas Kecepatan IMU nyala. Temennya log perjalanan</string>
+    <string name="settings_experimental_sensor_data_empty">Belum ada data sensor. Nyalain Kecepatan IMU terus naik kereta dulu</string>
     <string name="settings_experimental_hide">Sembunyikan Menu Experimental</string>
     <string name="settings_experimental_taps_left">%1$d ketukan lagi buat buka menu Experimental</string>
     <string name="settings_experimental_opened">Menu Experimental udah kebuka</string>

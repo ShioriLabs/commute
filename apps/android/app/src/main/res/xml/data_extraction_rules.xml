@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    What Android may copy off the phone (Android 12+). Everything but the trip log: it holds where the
-    rider was, fix by fix, and the privacy policy says it leaves only when the rider shares it.
+    What Android may copy off the phone (Android 12+). Everything but the trip log and the sensor
+    recordings: they hold where the rider was, fix by fix, and leave only when the rider shares them.
 -->
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="file" path="trip_log.ndjson" />
+        <exclude domain="file" path="sensors/" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="file" path="trip_log.ndjson" />
+        <exclude domain="file" path="sensors/" />
     </device-transfer>
 </data-extraction-rules>

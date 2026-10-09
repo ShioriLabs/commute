@@ -37,7 +37,7 @@
             </intent-filter>
         </service>
 
-        <!-- The trip log, shared from Pengaturan → Experimental. -->
+        <!-- The trip log and sensor recordings, shared from Pengaturan → Experimental. -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.triplog"
