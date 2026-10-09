@@ -85,6 +85,18 @@ export default function DataAttributionsSettingsPage() {
                 </p>
               </article>
             </li>
+            <li>
+              <article>
+                <h1 className="font-semibold">OpenStreetMap</h1>
+                <a href="https://www.openstreetmap.org/copyright" target="_blank" className="text-blue-500">https://www.openstreetmap.org/copyright</a>
+                <p>
+                  Jalur fisik rel KRL Commuter Line, MRT Jakarta, LRT Jakarta, LRT Jabodebek, dan Kalayang Bandara kami telusuri dari data OpenStreetMap untuk menghitung jarak antarstasiun. Data turunan ini tersedia di bawah Open Database License (ODbL).
+                </p>
+                <p>
+                  © OpenStreetMap contributors
+                </p>
+              </article>
+            </li>
           </ul><br />
           <p>
             Meskipun Kami mengumpulkan data melalui sumber resmi tersebut, Jadwal perjalanan transportasi tersebut dapat berubah sewaktu-waktu. Silakan cek laman dan sosial media para operator tersebut untuk memastikan jadwal terkini. <br /><br />

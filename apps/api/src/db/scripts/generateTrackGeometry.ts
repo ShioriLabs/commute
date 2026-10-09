@@ -27,6 +27,11 @@ import { stopLists } from '../../utils/edgeChain'
  * shipping, never before measuring — simplification cuts curves and shortens
  * the distance.
  *
+ * The traced geometry is derived from OpenStreetMap data, © OpenStreetMap
+ * contributors, available under the Open Database License (ODbL 1.0,
+ * https://www.openstreetmap.org/copyright). Every output file carries that
+ * attribution, and so must anything that ships it.
+ *
  * The raw OSM extract is cached beside this script (gitignored); pass
  * --refresh to re-download it. Run:
  *   pnpm --filter api generate:track-geometry [--refresh]
@@ -43,6 +48,13 @@ const OVERPASS_URLS = [
 // Jabodetabek, from Rangkasbitung to Cikarang and Bogor to Tanjung Priok.
 const BBOX = '-6.75,106.15,-5.95,107.25'
 const OVERPASS_QUERY = `[out:json][timeout:180];way["railway"~"^(rail|light_rail|subway)$"](${BBOX});out body qt;>;out skel qt;`
+
+// Foreign members on each FeatureCollection, so the ODbL notice travels with
+// the data rather than living only in this script.
+const OSM_ATTRIBUTION = [
+  `"attribution":${JSON.stringify('© OpenStreetMap contributors')}`,
+  `"license":${JSON.stringify('ODbL-1.0 (https://www.openstreetmap.org/copyright)')}`
+].join(',')
 
 const MODE: Record<string, string> = {
   KCI: 'rail',
@@ -422,7 +434,7 @@ async function main(): Promise<void> {
     const file = `${OUTPUT_DIR}/${operator.toLowerCase()}.geojson`
     // One feature per line keeps diffs readable when a single segment is redrawn.
     const body = features.map(f => JSON.stringify(f)).join(',\n')
-    fs.writeFileSync(file, `{"type":"FeatureCollection","features":[\n${body}\n]}\n`)
+    fs.writeFileSync(file, `{"type":"FeatureCollection",${OSM_ATTRIBUTION},"features":[\n${body}\n]}\n`)
     console.log(`Wrote ${features.length} segments to ${file}`)
   }
 
