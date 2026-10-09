@@ -1,6 +1,5 @@
 package id.shiorilabs.commute.core.trip
 
-import id.shiorilabs.commute.core.geo.distanceM
 import java.time.Duration
 import java.time.Instant
 import kotlin.math.floor
@@ -71,14 +70,14 @@ internal class RideClock(private val ride: TripLeg.Ride) {
         return ride.departureAt!!.plusMillis(offsets[i] + ((clamped - i) * (offsets[i + 1] - offsets[i])).toLong())
     }
 
-    /** Cumulative weight at each stop: distance from the boarding stop, or the stop index. */
+    /** Cumulative weight at each stop: distance from the boarding stop, along the track where known, or the stop index. */
     private fun weights(): DoubleArray {
-        val points = ride.stops.map { it.point }
-        val byIndex = DoubleArray(points.size) { it.toDouble() }
-        if (points.any { it == null }) return byIndex
-        val cumulative = DoubleArray(points.size)
-        for (i in 1 until points.size) cumulative[i] = cumulative[i - 1] + distanceM(points[i - 1]!!, points[i]!!)
+        val byIndex = DoubleArray(ride.stops.size) { it.toDouble() }
+        val hops = (0 until ride.lastIndex).map { ride.hopLengthM(it) }
+        if (hops.any { it == null }) return byIndex
+        val cumulative = DoubleArray(ride.stops.size)
+        for (i in 1 until ride.stops.size) cumulative[i] = cumulative[i - 1] + hops[i - 1]!!
         // Two stops at one spot would make a zero-length hop no clock can cross.
-        return if (cumulative.last() > 0 && (1 until points.size).all { cumulative[it] > cumulative[it - 1] }) cumulative else byIndex
+        return if (cumulative.last() > 0 && (1 until ride.stops.size).all { cumulative[it] > cumulative[it - 1] }) cumulative else byIndex
     }
 }

@@ -7,6 +7,7 @@ import id.shiorilabs.commute.core.model.models.LineDetail
 import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.model.models.Station
+import id.shiorilabs.commute.core.model.models.TrackShapes
 import id.shiorilabs.commute.core.model.models.Transfer
 import id.shiorilabs.commute.core.model.models.TripResult
 import id.shiorilabs.commute.core.network.service.CommuteService
@@ -39,6 +40,11 @@ class FakeCommuteService : CommuteService {
         searchablesCalls++
         return answer(ifNoneMatch) { searchables() }
     }
+
+    var trackShapes: suspend () -> TrackShapes = { error("getTrackShapes was not stubbed") }
+
+    override suspend fun getTrackShapes(ifNoneMatch: String?): Fetched<TrackShapes> =
+        answer(ifNoneMatch) { trackShapes() }
 
     var station: suspend (operator: String, stationCode: String) -> Station =
         { _, _ -> error("getStation was not stubbed") }
