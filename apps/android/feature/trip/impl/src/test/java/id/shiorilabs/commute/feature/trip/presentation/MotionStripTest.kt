@@ -10,6 +10,7 @@ class MotionStripTest {
 
     private val readout = MotionReadout(
         imuSpeedMps = 11.4,
+        rawSpeedMps = 10.2,
         aLongMps2 = -0.82,
         aligned = true,
         still = false,
@@ -33,10 +34,10 @@ class MotionStripTest {
     }
 
     @Test
-    fun `running, both speeds in km per hour and the fix's age in seconds`() {
+    fun `running, the speeds in km per hour and the fix's age in seconds`() {
         val live = MotionLive(readout, unavailable = false, nowNanos = 13_400_000_000L)
         assertEquals(
-            MotionStripState.Reading(gpsKmh = 42, gpsAgeS = 3, imuKmh = 41, accelMps2 = -0.82, aligned = true, still = false),
+            MotionStripState.Reading(gpsKmh = 42, gpsAgeS = 3, imuKmh = 41, rawKmh = 37, accelMps2 = -0.82, aligned = true, still = false),
             motionStrip(enabled = true, live = live),
         )
     }
