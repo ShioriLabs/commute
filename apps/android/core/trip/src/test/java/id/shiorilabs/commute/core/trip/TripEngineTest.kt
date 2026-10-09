@@ -436,6 +436,43 @@ class TripEngineTest {
     }
 
     @Test
+    fun `a bus held short of a halte it was never near is still where it was seen`() {
+        val run = Run(busway, startAt = at(0))
+        run.send(TripEvent.RiderSaid(RiderAction.BOARDED, at(0)))
+        run.fix(between(Places.HALTE_1, Places.HALTE_2, 0.5), 1.0, speedMps = 8f)
+        run.fix(between(Places.HALTE_2, Places.HALTE_3, 0.2), 3.5, speedMps = 8f)
+        run.tick(5.0)
+        assertEquals(PositionSource.CONFIRMED, run.state.source)
+        assertEquals(0.5, run.state.confirmedPosition, 0.01)
+    }
+
+    @Test
+    fun `a bus down a road its straight hops don't follow stays placed`() {
+        // A friend's 2026-10-08 ride, minutes from 19.03: Underpass Kuningan, down Mampang 350 m off
+        // the straight hop, east along Tendean under the hop to CSW, into Tegal Mampang.
+        val run = Run(toCsw, startAt = at(0))
+        run.send(TripEvent.RiderSaid(RiderAction.BOARDED, at(0)))
+        run.fix(GeoPoint(-6.23504, 106.82931), 0.63, accuracyM = 11f, speedMps = 2.2f)
+        run.fix(GeoPoint(-6.23529, 106.82808), 3.13, accuracyM = 12f, speedMps = 1.8f)
+        val placed = run.state.confirmedPosition
+        listOf(
+            GeoPoint(-6.23592, 106.82795) to 3.63, GeoPoint(-6.23636, 106.82767) to 4.13,
+            GeoPoint(-6.23733, 106.82697) to 5.08, GeoPoint(-6.23766, 106.82677) to 5.63,
+            GeoPoint(-6.23768, 106.82679) to 6.12, GeoPoint(-6.23825, 106.82645) to 6.62,
+            GeoPoint(-6.23929, 106.82616) to 7.12, GeoPoint(-6.23997, 106.82658) to 7.62,
+            GeoPoint(-6.24007, 106.82774) to 8.13, GeoPoint(-6.24017, 106.82839) to 9.13,
+            GeoPoint(-6.24016, 106.82937) to 10.13,
+        ).forEach { (point, minutes) ->
+            run.fix(point, minutes, accuracyM = 8f, speedMps = 1.5f)
+            assertEquals("at $minutes", PositionSource.CONFIRMED, run.state.source)
+            assertEquals("at $minutes", placed, run.state.confirmedPosition, 0.0)
+        }
+        run.fix(GeoPoint(-6.24001, 106.83098), 10.9, accuracyM = 6f, speedMps = 0f)
+        assertEquals(1.0, run.state.confirmedPosition, 0.0)
+        assertTrue(run.alerts().isEmpty())
+    }
+
+    @Test
     fun `a bus seen near a halte and then past it is past it`() {
         val run = Run(busway, startAt = at(0))
         run.send(TripEvent.RiderSaid(RiderAction.BOARDED, at(0)))

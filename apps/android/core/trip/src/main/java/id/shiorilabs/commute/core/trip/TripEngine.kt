@@ -191,7 +191,8 @@ object TripEngine {
             if (state.phase == TripPhase.RIDING && ride.isBus && passesUnseenStop(ride, state.confirmedPosition, candidate, tuning)) {
                 val from = state.passingFrom?.let { min(it, candidate) } ?: candidate
                 if (metresAlong(ride, from, candidate) < PASSING_PROGRESS_M) {
-                    return tracked.copy(passingFrom = from, hasLocation = true)
+                    // Not past it yet, but plainly still aboard: the board stays where it was.
+                    return tracked.copy(passingFrom = from, confirmedAt = fix.at, hasLocation = true)
                 }
             }
             val confirmed = max(candidate, state.confirmedPosition)
@@ -242,6 +243,10 @@ object TripEngine {
             }
             return tracked.copy(offRouteStrikes = strikes, hasLocation = true)
         }
+        // A bus's road bends away from its straight hops (L13E runs 350 m off one down Mampang), and
+        // an untimed ride has no clock to fall back on: near the route, it's still where it was. A
+        // train's would hand over to the timetable, which knows more than a held position.
+        if (ride.isBus) return tracked.copy(confirmedAt = fix.at, hasLocation = true)
         return tracked.copy(hasLocation = true)
     }
 
