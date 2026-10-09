@@ -180,6 +180,7 @@
     <string name="settings_data_attr_lrtjbdb_body">Kami secara manual mengumpulkan jadwal yang dipublikasikan melalui Instagram Stories dan papan pengumuman stasiun. Transkripsi dari tangkapan layar dilakukan dengan bantuan teknologi kecerdasan buatan seperti OpenAI ChatGPT dan Anthropic Claude.</string>
     <string name="settings_data_attr_fdtj_name">Peta Integrasi Transportasi Jakarta</string>
     <string name="settings_data_attr_fdtj_body">Peta integrasi transportasi umum Jakarta dibuat dan dipublikasikan oleh Forum Diskusi Transportasi Jakarta (FDTJ). Kami menampilkan peta tersebut dalam bentuk yang sama dengan publikasi resmi sebagai referensi visual bagi pengguna.</string>
+    <string name="settings_data_attr_osm_body">Jalur fisik rel KRL Commuter Line, MRT Jakarta, LRT Jakarta, LRT Jabodebek, dan Kalayang Bandara kami telusuri dari data OpenStreetMap, untuk menghitung jarak antarstasiun dan mengikuti posisi kamu saat OTW. Data turunan ini tersedia di bawah Open Database License (ODbL).</string>
     <string name="settings_data_attr_outro"><![CDATA[Meskipun Kami mengumpulkan data melalui sumber resmi tersebut, Jadwal perjalanan transportasi tersebut dapat berubah sewaktu-waktu. Silakan cek laman dan sosial media para operator tersebut untuk memastikan jadwal terkini.<br><br>Operator transportasi yang ingin menyediakan akses data resmi atau memiliki pertanyaan mengenai penggunaan data dapat menghubungi kami di <a href=\"mailto:hai@shiorilabs.id\">hai@shiorilabs.id</a>.]]></string>
 
     <!-- Open-source attributions -->

@@ -33,6 +33,9 @@ dependencies {
     implementation(project(":core:notification"))
     implementation(project(":core:common"))
     implementation(project(":core:navigation"))
+    // The track shapes a trip's hops are followed along.
+    implementation(project(":core:network"))
+    implementation(project(":core:model"))
     // @ApplicationScope: the trip outlives every screen.
     implementation(project(":core:query"))
     // LineRoundel, FrostedHeaderPage, icons, previews.

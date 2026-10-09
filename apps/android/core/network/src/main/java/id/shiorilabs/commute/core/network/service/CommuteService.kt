@@ -7,6 +7,7 @@ import id.shiorilabs.commute.core.model.models.LineDetail
 import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.model.models.Station
+import id.shiorilabs.commute.core.model.models.TrackShapes
 import id.shiorilabs.commute.core.model.models.Transfer
 import id.shiorilabs.commute.core.model.models.TripResult
 import id.shiorilabs.commute.core.type.Fetched
@@ -27,6 +28,12 @@ interface CommuteService {
      * reference sent once in a dictionary.
      */
     suspend fun getSearchables(ifNoneMatch: String? = null): Fetched<SearchableIndex>
+
+    /**
+     * The real shape of every hop a ride can contain, keyed `{from}>{to}` by station id, for trip
+     * mode to place a rider on the track rather than the straight line between two stops.
+     */
+    suspend fun getTrackShapes(ifNoneMatch: String? = null): Fetched<TrackShapes>
 
     /** Every searchable station, coordinates included. Routing-only stops are left out. */
     suspend fun getStations(ifNoneMatch: String? = null): Fetched<List<Station>>

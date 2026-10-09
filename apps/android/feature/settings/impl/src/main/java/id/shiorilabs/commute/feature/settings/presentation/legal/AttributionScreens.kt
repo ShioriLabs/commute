@@ -73,6 +73,13 @@ private fun DataAttributionsContent(
                     body = stringResource(R.string.settings_data_attr_fdtj_body),
                     owner = "© FDTJ",
                 )
+                AttributionEntry(
+                    name = "OpenStreetMap",
+                    url = "https://www.openstreetmap.org/copyright",
+                    body = stringResource(R.string.settings_data_attr_osm_body),
+                    owner = "© OpenStreetMap contributors",
+                    licenseUrl = "https://opendatacommons.org/licenses/odbl/1-0/",
+                )
             }
             HtmlText(stringResource(R.string.settings_data_attr_outro))
         }

@@ -44,3 +44,63 @@ fun project(point: GeoPoint, from: GeoPoint, to: GeoPoint): Projection {
     val dy = py - t * by
     return Projection(fraction = t, offTrackM = sqrt(dx * dx + dy * dy))
 }
+
+/** How far a path runs, end to end, in metres. */
+fun pathLengthM(path: List<GeoPoint>): Double {
+    var metres = 0.0
+    for (i in 1 until path.size) metres += distanceM(path[i - 1], path[i])
+    return metres
+}
+
+/**
+ * Where [point] falls along [path]: projected onto its nearest segment, with
+ * [Projection.fraction] the share of the path's length up to that point. A path too short to have a
+ * length is the straight line between its ends.
+ */
+fun projectOnPath(point: GeoPoint, path: List<GeoPoint>): Projection {
+    val total = pathLengthM(path)
+    if (path.size < 2 || total == 0.0) return project(point, path.first(), path.last())
+    var before = 0.0
+    var bestAlong = 0.0
+    var bestOffTrack = Double.MAX_VALUE
+    for (i in 1 until path.size) {
+        val segment = distanceM(path[i - 1], path[i])
+        val projection = project(point, path[i - 1], path[i])
+        if (projection.offTrackM < bestOffTrack) {
+            bestOffTrack = projection.offTrackM
+            bestAlong = before + projection.fraction * segment
+        }
+        before += segment
+    }
+    return Projection(fraction = (bestAlong / total).coerceIn(0.0, 1.0), offTrackM = bestOffTrack)
+}
+
+/**
+ * Decodes Google's encoded polyline format (latitude first, then longitude, each a zig-zag varint
+ * delta in 5-bit chunks), as the API's track shapes are written.
+ * https://developers.google.com/maps/documentation/utilities/polylinealgorithm
+ */
+fun decodePolyline(encoded: String, precision: Int = 5): List<GeoPoint> {
+    val factor = Math.pow(10.0, precision.toDouble())
+    val out = mutableListOf<GeoPoint>()
+    var i = 0
+    var lat = 0
+    var lng = 0
+    fun next(): Int {
+        var shift = 0
+        var result = 0
+        var b: Int
+        do {
+            b = encoded[i++].code - 63
+            result = result or ((b and 0x1f) shl shift)
+            shift += 5
+        } while (b >= 0x20)
+        return if (result and 1 != 0) (result shr 1).inv() else result shr 1
+    }
+    while (i < encoded.length) {
+        lat += next()
+        lng += next()
+        out += GeoPoint(lat / factor, lng / factor)
+    }
+    return out
+}
