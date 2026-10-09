@@ -155,7 +155,7 @@ internal fun JourneyCard(
                 }
             }
             if (headsign != null) {
-                MetaText(headsign, modifier = Modifier.weight(1f, fill = false))
+                MetaText(stringResource(R.string.journey_headsign, headsign), modifier = Modifier.weight(1f, fill = false))
             }
         }
     }
