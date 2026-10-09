@@ -117,3 +117,6 @@ change.
   late; the app learns that only from a fix.
 - **A trip-mode endpoint.** The trip answer the rider chose is what trip mode
   follows; a second request shape would let the two disagree.
+- **Track shapes per leg.** The real shape of each hop is served once, as a
+  separate prebaked file the app caches, rather than on every trip answer:
+  see `track-shapes.md`.

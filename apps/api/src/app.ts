@@ -99,6 +99,12 @@ app.use('/fares/*', rateLimit('FARE'), cacheControl(MAX_AGE.FARE))
  * is strictly better than the nothing it carried before.
  */
 app.use('/_internal/*', rateLimit('FARE'), cacheControl(MAX_AGE.FARE))
+/*
+ * Compiled into the worker like lines.ts, so it changes only on a deploy: a
+ * day at the edge, and the app revalidates with the ETag for a bodyless 304.
+ * DEFAULT rather than FARE limiting, since it does no routing work.
+ */
+app.use('/_internal/track-shapes', rateLimit('DEFAULT'), cacheControl(MAX_AGE.STATIC))
 // A write: no cacheControl, and a limiter that ignores the Origin exemption.
 app.use('/uploads/*', rateLimit('UPLOAD'))
 
