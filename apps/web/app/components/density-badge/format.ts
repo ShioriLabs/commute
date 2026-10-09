@@ -9,6 +9,14 @@ const WORDS = ['lengang', 'ramai', 'padat', 'sangat padat'] as const
 
 const word = (level: number) => WORDS[Math.min(Math.max(level, 0), WORDS.length - 1)]!
 
+/** The legend sheet's rows, one per level, named the same way the label names them. */
+export const DENSITY_LEGEND = [
+  { level: 0, name: 'Lengang' },
+  { level: 1, name: 'Ramai' },
+  { level: 2, name: 'Padat' },
+  { level: 3, name: 'Sangat padat' }
+] as const
+
 /*
  * An open range is spelled out rather than collapsed to its top end: the model
  * is unsure there, and "padat sampai sangat padat" says so in the rider's terms.

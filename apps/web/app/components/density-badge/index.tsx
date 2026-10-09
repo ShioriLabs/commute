@@ -1,38 +1,54 @@
-import clsx from 'clsx'
-import { UsersThreeIcon } from '@phosphor-icons/react'
+import { useState } from 'react'
 import type { DensityRange } from '@commute/schemas'
+import CrowdIcon from './crowd-icon'
+import DensityLegendSheet from './legend-sheet'
 import { densityLabel } from './format'
 
 /*
- * "Biasanya padat jam segini": the forecast crowding for this hour.
+ * The forecast crowding for this hour: "Perkiraan Keramaian" then icons, one
+ * when the model is sure (`min === max`), `min ~ max` when it isn't. Plain text
+ * on the page, right-aligned, so it reads as a hint rather than a headline.
  *
- * A four-step meter, one step per level. Steps up to `min` are solid; steps
- * from there to `max` are faint, because that is the part the model is unsure
- * of. Status colours, never line colours, so it can't be mistaken for a
- * LineRoundel; and the label is always there, so nothing rests on colour alone.
+ * The words ("Biasanya padat jam segini") are the tooltip on hover and the
+ * button's accessible name, so a screen reader and a mouse get them without
+ * the badge spending a row on them. Tapping opens the legend, which is how a
+ * touch rider learns what the icons mean.
  */
-const STEP_COLORS = ['bg-emerald-500', 'bg-amber-400', 'bg-orange-500', 'bg-rose-600'] as const
-
 export default function DensityBadge({ range }: { range: DensityRange | null }) {
+  // Bumped per opening and used as the sheet's key: re-opening during the close
+  // animation is otherwise a silent no-op (memory: bottom-sheet-reopen-race).
+  const [opening, setOpening] = useState(0)
+  const [open, setOpen] = useState(false)
   const label = densityLabel(range)
   if (!range || !label) return null
   return (
-    <div className="flex flex-row items-center gap-3 rounded-xl bg-slate-100 px-4 py-3 mb-4 text-slate-700">
-      <UsersThreeIcon weight="duotone" className="w-5 h-5 shrink-0" aria-hidden />
-      <span className="flex flex-row items-end gap-0.5 shrink-0" aria-hidden>
-        {STEP_COLORS.map((color, level) => (
-          <span
-            key={color}
-            className={clsx(
-              'w-1.5 rounded-sm',
-              ['h-2', 'h-3', 'h-4', 'h-5'][level],
-              level <= range.max ? color : 'bg-slate-300',
-              level > range.min && level <= range.max && 'opacity-40'
-            )}
-          />
-        ))}
-      </span>
-      <span className="text-sm font-semibold">{label}</span>
+    <div className="flex flex-row justify-end mb-4">
+      <button
+        type="button"
+        // Starts with the visible words, so a voice-control rider can say what they see.
+        aria-label={`Perkiraan Keramaian: ${label}`}
+        onClick={() => {
+          setOpening(n => n + 1)
+          setOpen(true)
+        }}
+        className="group relative flex flex-row items-center gap-1.5 text-slate-500 cursor-pointer"
+      >
+        <span className="text-sm font-semibold mr-0.5">Perkiraan Keramaian</span>
+        <CrowdIcon level={range.min} className="w-5 h-5" />
+        {range.min !== range.max && (
+          <>
+            <span className="text-sm font-semibold" aria-hidden>~</span>
+            <CrowdIcon level={range.max} className="w-5 h-5" />
+          </>
+        )}
+        <span
+          role="tooltip"
+          className="pointer-events-none absolute right-0 top-full mt-2 z-10 hidden whitespace-nowrap rounded-lg bg-slate-800 px-2.5 py-1.5 text-xs font-semibold text-white group-hover:block group-focus-visible:block"
+        >
+          {label}
+        </span>
+      </button>
+      <DensityLegendSheet key={opening} open={open} onClose={() => setOpen(false)} />
     </div>
   )
 }

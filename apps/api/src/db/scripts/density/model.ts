@@ -49,14 +49,21 @@ export const LEVEL_THRESHOLDS = [60, 120, 340] as const
  * published ridership anchor has its volume pinned, so only the curve and role
  * are guesses. MRT Jakarta's anchors don't say whether they count taps in or in
  * and out (ridership.ts header), so their top end also allows the 2x that
- * reading would add. A station estimated from its score inherits that score's
- * log-scale error too, which is easily 2× either way.
+ * reading would add. A press-release station rests on one Friday's morning
+ * count (releases agree to ~5–12%) scaled to a day by a share that runs 0.55–0.80
+ * across the stations it was checked on. A station estimated from its score has
+ * its network total pinned (density/volume.ts) but its share of it is a guess,
+ * easily 2× either way.
  */
 export const UNCERTAINTY_BAND = {
   anchored: { lo: 0.75, hi: 1.33 },
   anchoredMetricUnstated: { lo: 0.75, hi: 2.66 },
+  release: { lo: 0.65, hi: 1.5 },
   scored: { lo: 0.5, hi: 2 }
 } as const
+
+/** Where a station's daily volume came from; picks its UNCERTAINTY_BAND. See density/volume.ts. */
+export type VolumeSource = keyof typeof UNCERTAINTY_BAND
 
 /** An hour needs at least this fraction of the station's peak departures to get a level. */
 const MIN_SERVICE_FRACTION = 0.25
@@ -91,8 +98,9 @@ export function levelOf(load: number): Level {
 export interface StationInput {
   stationId: string
   operator: keyof typeof CAPACITY
-  anchor?: RidershipAnchor
-  score: number
+  /** Boardings on a normal weekday, transfers included (density/volume.ts). */
+  boardings: number
+  source: VolumeSource
   rideMin?: number
   /** Per hour, in trains of the operator's usual stock (see LINE_CAPACITY). */
   departures: Record<DayBucket, number[]>
@@ -110,18 +118,13 @@ export function stationCurve(input: StationInput, day: DayBucket): Curve {
   return withAmShare(shifted, amShareFor(b, day))
 }
 
-function bandFor(input: StationInput) {
-  if (!input.anchor) return UNCERTAINTY_BAND.scored
-  return input.operator === 'MRTJ' ? UNCERTAINTY_BAND.anchoredMetricUnstated : UNCERTAINTY_BAND.anchored
-}
-
 export function hourlyLevels(input: StationInput, day: DayBucket): LevelRange[] {
   const deps = input.departures[day]
   const peak = Math.max(...deps)
   if (peak === 0) return new Array(24).fill(null)
   const b = roleWeight(input.stationId, day, input.rideMin)
-  const riders = boardingsPerDay(input.anchor, input.score) * dayLevel(b, day)
-  const band = bandFor(input)
+  const riders = input.boardings * dayLevel(b, day)
+  const band = UNCERTAINTY_BAND[input.source]
   return stationCurve(input, day).map((share, h): LevelRange => {
     const n = deps[h] ?? 0
     if (n < peak * MIN_SERVICE_FRACTION || n < MIN_DEPARTURES) return null

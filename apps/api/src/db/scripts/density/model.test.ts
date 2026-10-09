@@ -4,7 +4,7 @@ import { boardingsPerDay, hourlyLevels, levelOf, LEVEL_THRESHOLDS, type LevelRan
 const flat = (n: number, from = 5, to = 23) => Array.from({ length: 24 }, (_, h) => h >= from && h < to ? n : 0)
 
 const input = (over: Partial<StationInput> = {}): StationInput => ({
-  stationId: 'KCI-XXX', operator: 'KCI', score: 60, rideMin: 40,
+  stationId: 'KCI-XXX', operator: 'KCI', boardings: boardingsPerDay(undefined, 60), source: 'scored', rideMin: 40,
   departures: { WD: flat(20), SAT: flat(18), SUN: flat(18) },
   ...over
 })
@@ -58,27 +58,25 @@ describe('hourlyLevels', () => {
 
   it('always has min ≤ max', () => {
     for (const day of ['WD', 'SAT', 'SUN'] as const) {
-      for (const l of hourlyLevels(input({ rideMin: 0, score: 90 }), day)) {
+      for (const l of hourlyLevels(input({ rideMin: 0, boardings: boardingsPerDay(undefined, 90) }), day)) {
         if (l) expect(l.min).toBeLessThanOrEqual(l.max)
       }
     }
   })
 
-  it('is at least as uncertain for a score-only station as for an anchored twin', () => {
-    const score = 70
-    const twin = { stationId: 'KCI-XXX', period: 'test', published: 'test', source: 'test', gatePerDay: 2 * boardingsPerDay(undefined, score) }
-    const scored = hourlyLevels(input({ score }), 'WD')
-    const anchored = hourlyLevels(input({ score, anchor: twin }), 'WD')
-    expect(width(scored)).toBeGreaterThanOrEqual(width(anchored))
+  it('is widest for a score-only station, then a release count, then an anchor', () => {
+    const at = (source: StationInput['source']) => width(hourlyLevels(input({ boardings: 40_000, source }), 'WD'))
+    expect(at('scored')).toBeGreaterThanOrEqual(at('release'))
+    expect(at('release')).toBeGreaterThanOrEqual(at('anchored'))
   })
 
   it('is busier in the evening peak than at midday for a business station', () => {
-    const levels = hourlyLevels(input({ rideMin: 0, score: 90 }), 'WD')
+    const levels = hourlyLevels(input({ rideMin: 0, boardings: boardingsPerDay(undefined, 90) }), 'WD')
     expect(levels[18]!.max).toBeGreaterThan(levels[11]!.max)
   })
 
   it('is never busier at the weekend than on a weekday for a business station', () => {
-    const s = input({ rideMin: 0, score: 90 })
+    const s = input({ rideMin: 0, boardings: boardingsPerDay(undefined, 90) })
     expect(maxOf(hourlyLevels(s, 'SAT'))).toBeLessThanOrEqual(maxOf(hourlyLevels(s, 'WD')))
   })
 })
