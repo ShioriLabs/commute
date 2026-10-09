@@ -52,6 +52,17 @@ internal class SensorRecording(
         flushIfDue(out, nanos)
     }
 
+    /** A raw sensor's sample, [name] at [nanos]: its [values] as `v`. */
+    fun vector(name: String, nanos: Long, values: FloatArray) {
+        val out = writer ?: return
+        text.setLength(0)
+        text.append("{\"ev\":\"").append(name).append("\",\"n\":").append(nanos).append(",\"v\":")
+        floats(values)
+        text.append("}\n")
+        out.append(text)
+        flushIfDue(out, nanos)
+    }
+
     /** Any other reading: [name] at [nanos], with [fields]. */
     fun event(name: String, nanos: Long, fields: Map<String, Any?>) {
         val out = writer ?: return
