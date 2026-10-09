@@ -20,11 +20,12 @@ import {
 } from 'utils/directions'
 import * as v from 'valibot'
 import { doc, operatorParam, pathParam, queryParam, stationCodeParam, timeWindowParams } from 'schemas/describe'
-import { CompactGroupedTimetableSchema, GroupedTimetableSchema, HeadwayRowSchema, ScheduleSchema, StationSchema, TransferSchema } from '@commute/schemas'
-import type { HeadwayRow } from '@commute/schemas'
+import { CompactGroupedTimetableSchema, GroupedTimetableSchema, HeadwayRowSchema, ScheduleSchema, StationDensitySchema, StationSchema, TransferSchema } from '@commute/schemas'
+import type { DensityRange, HeadwayRow, StationDensity } from '@commute/schemas'
 import { DAY_HEADWAYS_S, DIRECTIONAL_HEADWAYS_S, HEADWAYS_S, LINE_DAY_MASK, LINE_TERMINI, STOP_HEADWAYS_S } from 'db/data/headways'
 import { serviceDay } from 'utils/fare'
 import { SERVICE_HOURS } from 'db/data/service-hours'
+import { DENSITY_LEVELS } from 'db/data/density'
 
 /*
  * The three day buckets, high bit first, matching how LINE_DAY_MASK is packed
@@ -838,6 +839,59 @@ app.get(
     c.executionCtx.waitUntil(kvRepository.set(kvKey, rows))
 
     return c.json(Ok(rows), 200)
+  }
+)
+
+/*
+ * Forecast crowding for one station, hour by hour, for one day type.
+ *
+ * Pure lookup into the generated DENSITY_LEVELS, so there is no KV entry: the
+ * module is in memory and versioned with the deploy. The station lookup is only
+ * there to tell an unknown code (404) from a known station we have no estimate
+ * for (24 nulls). A TJ halte is the second case, not an error.
+ */
+app.get(
+  '/:operator/:stationCode/density',
+  doc({
+    summary: 'Perkiraan kepadatan stasiun per jam',
+    description: 'Seberapa padat stasiun ini BIASANYA di tiap jam, buat hari yang diminta. Ini perkiraan dari jadwal kereta, data penumpang yang dipublikasikan operator, dan pola jam sibuk. BUKAN pantauan live, jadi bisa meleset pas ada kejadian khusus.\n\nSkalanya 0 lengang, 1 ramai, 2 padat, 3 sangat padat. Tiap jam dikasih rentang `min` sampai `max` karena modelnya nggak bisa yakin persis: stasiun yang data penumpangnya dipublikasikan rentangnya lebih sempit daripada yang cuma diperkirakan.\n\nSementara cuma stasiun kereta (KCI, MRT, LRT Jakarta, LRT Jabodebek). Halte TransJakarta dapat `null` semua.',
+    tag: 'Stasiun',
+    data: StationDensitySchema,
+    parameters: [
+      operatorParam,
+      stationCodeParam,
+      dayParam
+    ],
+    errors: { 404: 'Kode operator atau stasiun tidak ditemukan.' }
+  }),
+  async (c) => {
+    const operatorCode = c.req.param('operator')
+    const stationCode = c.req.param('stationCode')
+    const operator = getOperatorByCode(operatorCode)
+    if (!operator) {
+      return c.json(NotFound('UNKNOWN_OPERATOR', `Unknown Operator Code: ${operatorCode}`), 404)
+    }
+
+    const day = requestedDay(c.req.query('day'))
+    const stationID = `${operator.code}-${stationCode}`
+    const station = await new StationRepository(c.env.DB).getById(stationID)
+    if (station === null) {
+      return c.json(NotFound('UNKNOWN_STATION', `Unknown Station Code ${stationCode} in Operator ${operator.code}`), 404)
+    }
+
+    // Two 24-character digit strings, '-' where there is no estimate.
+    const levels = DENSITY_LEVELS[stationID]?.[day]
+    const rangeAt = (hour: number): DensityRange | null => {
+      const min = levels?.min[hour]
+      const max = levels?.max[hour]
+      if (min === undefined || max === undefined || min === '-' || max === '-') return null
+      return { min: Number(min), max: Number(max) }
+    }
+    const body: StationDensity = {
+      day,
+      hours: Array.from({ length: 24 }, (_, hour) => ({ hour, level: rangeAt(hour) }))
+    }
+    return c.json(Ok(body), 200)
   }
 )
 

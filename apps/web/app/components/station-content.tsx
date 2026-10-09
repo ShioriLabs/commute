@@ -24,12 +24,15 @@ import type { Station } from '@commute/schemas'
 import type { CompactLineGroupedTimetable } from '@commute/schemas'
 import type { Transfer } from '@commute/schemas'
 import type { HeadwayRow } from '@commute/schemas'
+import type { StationDensity } from '@commute/schemas'
 import { directionalBaseName } from 'utils/directional-stations'
 import LineCard from '~/components/line-card'
 import LastDepartures from '~/components/last-departures'
 import LineRoundel from '~/components/line-roundel'
 import EmptyState from '~/components/empty-state'
 import FrequencyList from '~/components/frequency-card'
+import DensityBadge from '~/components/density-badge'
+import { currentHourRange } from '~/components/density-badge/format'
 import ExitLink from '~/components/exit-link'
 import { fetcher } from 'utils/fetcher'
 import { normalizeGroupedTimetable } from 'utils/timetable-shim'
@@ -222,6 +225,16 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
       : null,
   [operator, code, day]
   )
+  /*
+   * Rail only, the mirror of headwayUrl: the density model has no TransJakarta
+   * estimate (no usable departures per hour), so TJ pages skip the request.
+   */
+  const densityUrl = useMemo(() =>
+    operator !== 'TJ'
+      ? new URL(`/stations/${operator}/${code}/density?day=${day}`, import.meta.env.VITE_API_BASE_URL).href
+      : null,
+  [operator, code, day]
+  )
 
   const station = useSWR<StandardResponse<Station>>(unserved ? null : stationUrl, fetcher, swrConfig)
   const timetable = useSWR<StandardResponse<CompactLineGroupedTimetable>>(unserved ? null : timetableUrl, fetcher, swrConfig)
@@ -229,6 +242,7 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
   const nextDayLine = useNextDayTimetable(operator, code)
   const transfers = useSWR<StandardResponse<Transfer[]>>(unserved ? null : transfersUrl, fetcher, swrConfig)
   const headway = useSWR<StandardResponse<HeadwayRow[]>>(unserved ? null : headwayUrl, fetcher, swrConfig)
+  const density = useSWR<StandardResponse<StationDensity>>(unserved ? null : densityUrl, fetcher, swrConfig)
   // Line keys on stations and transfers resolve through the dictionary.
   const { lines: resolveLines } = useLines()
   const networkStatus = useNetworkStatus()
@@ -316,6 +330,7 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
                   Kamu sedang offline, data mungkin tidak up-to-date
                 </div>
               )}
+              <DensityBadge range={currentHourRange(density.data?.data, new Date())} />
               <div className="flex flex-row gap-2">
                 {otwButton}
                 <PaneLink
