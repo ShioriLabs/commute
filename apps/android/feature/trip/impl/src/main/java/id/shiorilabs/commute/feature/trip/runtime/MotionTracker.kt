@@ -85,7 +85,15 @@ class MotionTracker @Inject constructor(
             haveQuat = false
         }
         lastFixNanos = SystemClock.elapsedRealtimeNanos()
-        recorder.start(ride, listOf(accel, rotation))
+        // Recorded beside them, debug builds only: the accelerometer with gravity in, and the gyroscope,
+        // to check offline whether linear acceleration's own gravity estimate soaks up a train's
+        // steady pull (an S23 saw almost none of it on 2026-10-09).
+        val raw = if (recorder.enabled) {
+            listOfNotNull(sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER), sensors.getDefaultSensor(Sensor.TYPE_GYROSCOPE))
+        } else {
+            emptyList()
+        }
+        recorder.start(ride, listOf(accel, rotation) + raw)
         val handler = HandlerThread(THREAD).also { it.start(); thread = it }.let { Handler(it.looper) }
         val events = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
@@ -99,6 +107,8 @@ class MotionTracker @Inject constructor(
                             estimator?.onImu(event.timestamp, event.values, quat)
                             recorder.imu(event.timestamp, event.values, quat)
                         }
+                        Sensor.TYPE_ACCELEROMETER -> recorder.accelerometer(event.timestamp, event.values)
+                        Sensor.TYPE_GYROSCOPE -> recorder.gyroscope(event.timestamp, event.values)
                     }
                 }
             }
@@ -107,6 +117,7 @@ class MotionTracker @Inject constructor(
         }
         sensors.registerListener(events, rotation, SAMPLING_US, handler)
         sensors.registerListener(events, accel, SAMPLING_US, handler)
+        raw.forEach { sensors.registerListener(events, it, SAMPLING_US, handler) }
         listener = events
 
         wakeLock = context.getSystemService(PowerManager::class.java)

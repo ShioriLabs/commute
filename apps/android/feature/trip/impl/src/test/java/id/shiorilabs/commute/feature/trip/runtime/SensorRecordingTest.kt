@@ -53,6 +53,19 @@ class SensorRecordingTest {
     }
 
     @Test
+    fun `a raw sensor's sample is a line of its own`() {
+        val recording = recording()
+        recording.start("20261009-095512-KCI-C", header)
+        recording.vector("acc", 5L, floatArrayOf(0.4f, 9.8f, -0.1f))
+        recording.stop()
+
+        val line = lines(recording.files().single())[1]
+        assertEquals("acc", line["ev"]!!.jsonPrimitive.content)
+        assertEquals(5L, line["n"]!!.jsonPrimitive.long)
+        assertEquals(listOf(0.4f, 9.8f, -0.1f), line["v"]!!.jsonArray.map { it.jsonPrimitive.float })
+    }
+
+    @Test
     fun `readings reach the file every few seconds, not only at the end`() {
         val recording = recording()
         recording.start("20261009-095512-KCI-C", header)
