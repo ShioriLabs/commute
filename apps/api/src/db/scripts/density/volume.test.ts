@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { RidershipAnchor } from '../../data/ridership'
-import type { ReleaseCount } from '../../data/release-counts'
+import type { ReleaseCount, ReleaseTransit } from '../../data/release-counts'
 import { boardingsPerDay } from './model'
-import { DESTINATION_SHARE_BEFORE_CUTOFF, KCI_WEEKDAY_RIDERS, ORIGIN_SHARE_BEFORE_CUTOFF, releaseBoardings, resolveVolumes, UNRANKED_MAX_GATE_BOARDINGS, type VolumeStation } from './volume'
+import { DESTINATION_SHARE_BEFORE_CUTOFF, KCI_WEEKDAY_RIDERS, ORIGIN_SHARE_BEFORE_08, ORIGIN_SHARE_BEFORE_CUTOFF, releaseBoardings, resolveVolumes, UNRANKED_MAX_GATE_BOARDINGS, type VolumeStation } from './volume'
 
 const anchor = (stationId: string, gatePerDay: number, transitPerDay?: number): RidershipAnchor =>
   ({ stationId, gatePerDay, transitPerDay, period: 'test', published: 'test', source: 'test' })
@@ -16,6 +16,11 @@ describe('releaseBoardings', () => {
     expect(releaseBoardings(release('X', 13_000, 'boarding'))).toBeCloseTo(13_000 / ORIGIN_SHARE_BEFORE_CUTOFF)
     // A destination's day of alightings is matched by a day of boardings on the way home.
     expect(releaseBoardings(release('X', 17_000, 'alighting'))).toBeCloseTo(17_000 / DESTINATION_SHARE_BEFORE_CUTOFF)
+  })
+
+  it('uses the smaller mid-peak share for an 08:00 origin count', () => {
+    expect(releaseBoardings({ ...release('X', 11_220, 'boarding'), cutoffHour: 8 })).toBeCloseTo(11_220 / ORIGIN_SHARE_BEFORE_08)
+    expect(ORIGIN_SHARE_BEFORE_08).toBeLessThan(ORIGIN_SHARE_BEFORE_CUTOFF)
   })
 })
 
@@ -65,6 +70,19 @@ describe('resolveVolumes', () => {
     const total = many.reduce((sum, s) => sum + out.get(s.id)!.boardings, 0)
     expect(total).toBeCloseTo(KCI_WEEKDAY_RIDERS, -1)
     expect(out.get('KCI-S0')!.boardings).toBeLessThanOrEqual(UNRANKED_MAX_GATE_BOARDINGS)
+  })
+
+  it('adds released transfers on top, outside the network total and the ceiling', () => {
+    const transit = (stationId: string, transitPerDay: number): ReleaseTransit => ({ stationId, transitPerDay, published: 'test', source: 'test' })
+    const fillers = Array.from({ length: 150 }, (_, i) => station(`KCI-F${i}`, 40))
+    const hub = [station('KCI-HUB', 95), ...fillers]
+    const without = resolveVolumes(hub, new Map(), new Map(), new Map())
+    const withTransit = resolveVolumes(hub, new Map(), new Map(), new Map([['KCI-HUB', transit('KCI-HUB', 13_000)]]))
+    expect(withTransit.get('KCI-HUB')!.boardings).toBeCloseTo(without.get('KCI-HUB')!.boardings + 13_000)
+    expect(withTransit.get('KCI-F0')!.boardings).toBeCloseTo(without.get('KCI-F0')!.boardings)
+    // An anchor that already carries transfers isn't counted twice.
+    const anchored = resolveVolumes([station('KCI-A', 95)], new Map([['KCI-A', anchor('KCI-A', 20_000, 50_000)]]), new Map(), new Map([['KCI-A', transit('KCI-A', 13_000)]]))
+    expect(anchored.get('KCI-A')!.boardings).toBe(60_000)
   })
 
   it('stops at the ceiling for everyone when too few stations are left to reach the total', () => {
