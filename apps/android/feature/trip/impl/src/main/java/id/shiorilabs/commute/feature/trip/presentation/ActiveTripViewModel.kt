@@ -44,7 +44,7 @@ class ActiveTripViewModel @Inject constructor(
     private val lineRepository: LineRepository,
     private val directory: StationDirectory,
     private val barState: TripBarState,
-    motionTracker: MotionTracker,
+    private val motionTracker: MotionTracker,
     developerPreferences: DeveloperPreferencesRepository,
     locationPreferences: LocationPreferencesRepository,
     otwPreferences: OtwPreferencesRepository,
@@ -111,15 +111,18 @@ class ActiveTripViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), otwPreferences.cachedPidsDiagram ?: false)
 
     /** What the rider saw the train do, logged with what [pids] (the board then) said. */
-    fun mark(kind: MarkKind, pids: Pids) = controller.mark(
-        kind.key,
-        mapOf(
-            "boardLabel" to pids.label,
-            "boardStation" to pids.station,
-            "boardStopsLeft" to pids.stopsLeft,
-            "boardMinutesLeft" to pids.minutesLeft,
-        ),
-    )
+    fun mark(kind: MarkKind, pids: Pids) {
+        controller.mark(
+            kind.key,
+            mapOf(
+                "boardLabel" to pids.label,
+                "boardStation" to pids.station,
+                "boardStopsLeft" to pids.stopsLeft,
+                "boardMinutesLeft" to pids.minutesLeft,
+            ),
+        )
+        motionTracker.mark(kind.key)
+    }
 
     /** The board's big name went out of sight under the trip bar, or came back. */
     fun onBoardNameHidden(hidden: Boolean) {

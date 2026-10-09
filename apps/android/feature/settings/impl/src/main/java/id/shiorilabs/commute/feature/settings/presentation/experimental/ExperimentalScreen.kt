@@ -26,6 +26,7 @@ import id.shiorilabs.commute.feature.settings.presentation.components.SettingsGu
 import id.shiorilabs.commute.feature.settings.presentation.components.SettingsItem
 import id.shiorilabs.commute.feature.settings.presentation.components.SettingsPage
 import id.shiorilabs.commute.feature.settings.presentation.components.SettingsSwitch
+import id.shiorilabs.commute.feature.trip.SensorDataExport
 import id.shiorilabs.commute.feature.trip.TripLogExport
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -37,6 +38,7 @@ import javax.inject.Inject
 class ExperimentalViewModel @Inject constructor(
     private val preferences: DeveloperPreferencesRepository,
     private val tripLog: TripLogExport,
+    private val sensorData: SensorDataExport,
 ) : ViewModel() {
 
     val forceTripStart: StateFlow<Boolean> = preferences.forceTripStart.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
@@ -68,6 +70,9 @@ class ExperimentalViewModel @Inject constructor(
     /** The trip log's share sheet, or `null` with nothing logged yet. */
     fun shareTripLog(onReady: (Intent?) -> Unit) = viewModelScope.launch { onReady(tripLog.share()) }
 
+    /** The sensor recordings' share sheet, or `null` with none recorded yet. */
+    fun shareSensorData(onReady: (Intent?) -> Unit) = viewModelScope.launch { onReady(sensorData.share()) }
+
     /** Takes the page back out of settings; the seven taps bring it back. */
     fun hide() = viewModelScope.launch { preferences.setExperimentalUnlocked(false) }
 }
@@ -93,6 +98,7 @@ fun ExperimentalScreen(
     val navigator = LocalNavigator.current
     val context = LocalContext.current
     val empty = stringResource(R.string.settings_experimental_trip_log_empty)
+    val noSensorData = stringResource(R.string.settings_experimental_sensor_data_empty)
 
     ExperimentalContent(
         innerPadding = innerPadding,
@@ -105,6 +111,7 @@ fun ExperimentalScreen(
         yishunPids = yishunPids,
         watchAutoOpen = watchAutoOpen,
         canHide = !debug,
+        sensorData = debug,
         onBack = { navigator.pop() },
         onForceTripStart = { viewModel.setForceTripStart(it) },
         onFrostTuner = { viewModel.setFrostTuner(it) },
@@ -117,6 +124,11 @@ fun ExperimentalScreen(
         onShareTripLog = {
             viewModel.shareTripLog { intent ->
                 if (intent != null) context.startActivity(intent) else Toast.makeText(context, empty, Toast.LENGTH_SHORT).show()
+            }
+        },
+        onShareSensorData = {
+            viewModel.shareSensorData { intent ->
+                if (intent != null) context.startActivity(intent) else Toast.makeText(context, noSensorData, Toast.LENGTH_SHORT).show()
             }
         },
         onHide = {
@@ -132,6 +144,7 @@ private fun ExperimentalContent(
     forceTripStart: Boolean,
     frostTuner: Boolean,
     canHide: Boolean,
+    sensorData: Boolean = false,
     manualMarks: Boolean = false,
     platformMarks: Boolean = false,
     boardPages: Boolean = false,
@@ -148,6 +161,7 @@ private fun ExperimentalContent(
     onYishunPids: (Boolean) -> Unit = {},
     onWatchAutoOpen: (Boolean) -> Unit = {},
     onShareTripLog: () -> Unit = {},
+    onShareSensorData: () -> Unit = {},
     onHide: () -> Unit = {},
 ) {
     SettingsPage(
@@ -214,6 +228,14 @@ private fun ExperimentalContent(
             detail = stringResource(R.string.settings_experimental_trip_log_detail),
             onClick = onShareTripLog,
         )
+        // Debug builds only: a release never records the sensors, unlocked menu or not.
+        if (sensorData) {
+            SettingsItem(
+                label = stringResource(R.string.settings_experimental_sensor_data),
+                detail = stringResource(R.string.settings_experimental_sensor_data_detail),
+                onClick = onShareSensorData,
+            )
+        }
         if (canHide) {
             SettingsItem(
                 label = stringResource(R.string.settings_experimental_hide),
