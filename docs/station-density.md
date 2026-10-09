@@ -140,11 +140,19 @@ Departures are counted in trains of the operator's usual stock, so an airport-li
 departure counts as 0.15 of a KRL. Interchanges (Manggarai, Duri, Tanah Abang, Dukuh Atas MRT)
 carry a mixed role override.
 
-**Known gap:** a station without an anchor gets its volume by inverting its score, but an unanchored
-score is a capped service-and-structure estimate, not demand. Busy unanchored stations read far
-too quiet: Tebet comes out at ~4.6k boardings a day (Lengang all day) against ~19.4k alighting by
-13:00 in KCI's release. The widened band doesn't reach that far. The fix is more anchors (the
-"by 13:00" release figures in the table above) or a separate demand estimate. See Next data.
+**Volumes without an annual anchor** (`db/scripts/density/volume.ts`). Best source first: an
+annual anchor (ridership.ts); otherwise a KCI press-release count (`db/data/release-counts.ts`:
+Tebet, Gondangdia, Juanda, Palmerah, Sudimara, Tangerang, Bekasi Timur), scaled from its cut-off
+to a day; otherwise the inverted score, which for KCI is rescaled (×2.45 as of 2026-10-09) so the
+network's gate boardings add up to the ~1.08M weekday median, with no score-only station above
+30.2k (half of Bekasi's 60,407 gate taps, fifth in KCI's top five, which none of them made). Without
+that ceiling Jakarta Kota came out at ~119k, above Bogor. Inverted as-is, an unanchored score
+had put Tebet at ~4.6k a day (Lengang all day) against ~19.4k arriving by 13:00. Release counts stay
+out of ridership.ts: they are one Friday's morning each, and there they would reorder search.
+
+**Remaining gap:** among score-only stations the score still decides who gets what share, and it
+barely tracks demand. Depok, Depok Baru, Pasar Minggu and UI all sit at score 47 and get ~11.4k each,
+which is likely low for Depok. More published counts are the fix; the queue is under "Press-release deep dive".
 
 ### Runbook
 
@@ -523,6 +531,40 @@ kci.id returns 403 to non-browser clients, so the text was read in a browser.
 Station-level figures add roughly ±20–30% on top until station roles are modelled.
 
 ### Next data to look for
+
+#### Press-release deep dive (queued 2026-10-09)
+
+Stations whose volume is still a guess, ranked by how much a wrong guess costs riders. "Now" is
+what `density/volume.ts` gives on a weekday as of 2026-10-09: score-only stations share what the
+anchors leave of KCI's ~1.08M (×2.45), capped at 30.2k because none of them is in KCI's top five
+by gate. "Peak" is the generated weekday range at the station's busiest hour.
+
+| # | Station | Now (boardings/day) | Peak | Why it's on the list | Look for |
+|---|---|---|---|---|---|
+| 1 | **Depok Baru** (DPB) | 11.4k, score 47 | 0~1 | BPS *Kota Depok Dalam Angka 2019* reportedly lists 11,713,906 departing passengers for 2018 (~32k/day), unverified (BPS 403s for us). Maps shows it busy | The BPS table "Jumlah Penumpang Kereta Api Menurut Stasiun Keberangkatan" (2019 ed., p.205, and newer editions) |
+| 2 | **Depok** (DP) | 11.4k, score 47 | 0~1 | Same BPS table. Maps shows it busy | Same BPS table |
+| 3 | **Jakarta Kota** (JAKK) | 30.2k (at the ceiling) | 1~3 | The score inversion put it at ~119k before the ceiling. No figure at all, and the terminus + Kota Tua leisure mix makes the role a guess too | Any station count; holiday/Angleb releases (leisure destination), "stasiun tujuan" lists |
+| 4 | **Duri** (DU) | 30.2k (at the ceiling) | 0~2 | Tangerang-line ↔ loop interchange: most of its crowd is *transfers*, which have no figure (Manggarai and Tanah Abang have `transitPerDay`) | "transit" / "transfer" volume at Duri |
+| 5 | **Pasar Senen** (PSE) | 28.9k, score 62 | 3~3 at 06h | Probably *over*stated: the score counts the intercity terminal. Sangat Padat at 06h is suspicious | KRL-only gate counts; Angleb releases separate KRL from long-distance |
+| 6 | **Jatinegara** (JNG) | 28.9k, score 62 | 1~3 | Same terminal effect as Senen, plus Cikarang-line transfers | KRL gate counts, transit volume |
+| 7 | **Cawang** (CW) | 27.2k, score 61 | 0~2 | Angleb 2026 release: 277,456 for the period, measure unstated (boarding or in+out) | The same release's wording, or another Cawang figure with a stated measure |
+| 8 | **Cikarang** (CKR) | 12.9k, score 49 | 2~3 | Angleb 2026: 337,049, more than Cawang, measure unstated. Probably *under*stated now | Same as Cawang |
+| 9 | **Rangkasbitung** (RK) | 7.4k, score 40 | 2~3 | Angleb 2026: 236,634, measure unstated. Thin service makes any volume error loud | Same; BPS *Lebak Dalam Angka* |
+| 10 | **Serpong, Rawa Buntu, Pondok Ranji, Parung Panjang** | 6.1k each, score 37 | 0~1/0~2 | Big BSD/Tangsel origins that all collapse to one score, so they read as small halts | BPS *Tangerang Selatan / Kab. Bogor Dalam Angka*; Rangkasbitung-line releases |
+| 11 | **Bojonggede, Pasar Minggu, Kranji** | 10.7–13.7k | 0~1/0~2 | Bojonggede and Kranji are big origins/junctions; Pasar Minggu shares score 47 with half the Bogor line | BPS *Kab. Bogor / Kota Bekasi Dalam Angka*; WFH-Friday "hingga 11.00" releases |
+| 12 | **Pondok Cina, UI** | 11.4k each | 0~1 | Campus stations; the Depok BPS table should cover them for free | Same BPS table as #1 |
+| 13 | **Tanjung Priok** (TPK) | 4.8k, score 33 | 1~3 at 06h | A thin-service artefact more than a volume one: few trains make a small volume look full. Check before trusting the 3 | Any count; otherwise widen MIN_DEPARTURES |
+
+**Where these numbers usually are:**
+- **Semester / annual "stasiun terpadat" lists** (top five by gate; e.g. Kompas, 14 Jul 2025 for H1 2025). Anything new in the top five becomes an anchor in `ridership.ts`.
+- **WFH-Friday, Ramadan and protest-day releases** with "hingga pukul 11.00 / 13.00" per-station counts. Normal-day ones go in `release-counts.ts`; protest days don't.
+- **Angleb / holiday releases** with per-station period totals. Usable only once the measure (boarding or in+out) is stated.
+- **BPS "Dalam Angka" yearbooks** (kota/kabupaten), transport chapter: annual departing passengers per station. That's an annual boardings figure, so stronger than a release. Note the year and scale it to 2026 by checking Citayam (anchored) or the systemwide total in the same edition.
+- kci.id, commuterline.id and bps.go.id block automated fetches (403), so these need a browser.
+
+**What to record for each figure:** station, exact number as printed, period or cut-off hour,
+measure (gate in+out, boarding/"naik", alighting/"turun", "pengguna"), the day's circumstances
+(WFH, holiday, protest), and the URL.
 
 - **Evening figures are rare,** because KCI publishes releases around midday, so the cutoffs are 10:00–14:00.
   Ways to get at the evening without one:

@@ -40,6 +40,11 @@ describe('density calibration', () => {
     expect(high('MRTJ-DKA', 'WD', 12)).toBeLessThanOrEqual(1)
   })
 
+  it('Tebet is not a quiet station at the weekday evening peak (KCI release: ~19.4k arriving by 13:00, as many as Gondangdia)', () => {
+    expect(high('KCI-TEB', 'WD', 17)).toBeGreaterThanOrEqual(2)
+    expect(low('KCI-TEB', 'WD', 17)).toBeGreaterThanOrEqual(1)
+  })
+
   it('nothing has an estimate at 03h on any day', () => {
     for (const days of Object.values(DENSITY_LEVELS)) {
       for (const d of Object.values(days)) {

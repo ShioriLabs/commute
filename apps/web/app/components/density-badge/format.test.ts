@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { StationDensity } from '@commute/schemas'
-import { currentHourRange, densityHour, densityLabel } from './format'
+import { currentHourRange, DENSITY_LEGEND, densityHour, densityLabel } from './format'
 
 const density = (day: StationDensity['day']): StationDensity => ({
   day,
@@ -36,6 +36,15 @@ describe('densityLabel', () => {
 
   it('renders nothing for a null range', () => {
     expect(densityLabel(null)).toBeNull()
+  })
+})
+
+describe('DENSITY_LEGEND', () => {
+  it('has one row per level, in order, with the same names the label uses', () => {
+    expect(DENSITY_LEGEND.map(r => r.level)).toEqual([0, 1, 2, 3])
+    for (const row of DENSITY_LEGEND) {
+      expect(densityLabel({ min: row.level, max: row.level })).toBe(`Biasanya ${row.name.toLowerCase()} jam segini`)
+    }
   })
 })
 
