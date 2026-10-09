@@ -15,9 +15,14 @@ class MotionEstimatorTest {
     /**
      * A KRL hop through a phone tilted in a pocket, its game frame turned 70° from north: 30 s at the
      * platform, away at 0.8 m/s² to 20 m/s, a minute's cruise, braking at 1 m/s² to a stop, 30 s there.
-     * Fixes every 5 s outside [blackout], the seconds of the ride with none (a tunnel).
+     * Fixes every 5 s outside [blackout], the seconds of the ride with none (a tunnel); from [liesFrom]
+     * on, they read [lie] m/s fast.
      */
-    private class Ride(private val blackout: ClosedFloatingPointRange<Double>? = null) {
+    private class Ride(
+        private val blackout: ClosedFloatingPointRange<Double>? = null,
+        private val liesFrom: Double = Double.MAX_VALUE,
+        private val lie: Double = 0.0,
+    ) {
         val estimator = MotionEstimator()
         private val random = Random(7)
         private val bearing = Math.toRadians(30.0)
@@ -58,7 +63,8 @@ class MotionEstimatorTest {
                 if (t >= nextFix - 1e-9) {
                     nextFix += 5.0
                     if (blackout == null || t !in blackout) {
-                        val measured = max(0.0, speed + random.nextGaussian() * 0.2).toFloat()
+                        val told = if (t >= liesFrom) lie else 0.0
+                        val measured = max(0.0, speed + told + random.nextGaussian() * 0.2).toFloat()
                         estimator.onGnss(nanos, measured, 0.3f, if (speed >= 1) 30f else null, 5f)
                     }
                 }
@@ -74,6 +80,7 @@ class MotionEstimatorTest {
         ride.run(until = 25.0)
         val readout = ride.estimator.readout()
         assertNull(readout.imuSpeedMps)
+        assertNull(readout.rawSpeedMps)
         assertTrue(readout.still)
     }
 
@@ -111,6 +118,31 @@ class MotionEstimatorTest {
         val stopped = ride.estimator.readout()
         assertTrue("still at ${stopped.imuSpeedMps}", stopped.imuSpeedMps!! < 0.5)
         assertTrue(stopped.still)
+    }
+
+    @Test
+    fun `the raw speed is the sensors' own, whatever the fixes say`() {
+        // From mid-cruise the fixes read 5 m/s fast: the filtered speed goes with them, the raw doesn't.
+        val ride = Ride(liesFrom = 70.0, lie = 5.0)
+        var raw = 0.0
+        var filtered = 0.0
+        ride.run(until = 110.0) { t ->
+            if (abs(t - 110) < 0.01) {
+                raw = ride.estimator.readout().rawSpeedMps!!
+                filtered = ride.estimator.readout().imuSpeedMps!!
+            }
+        }
+        assertEquals("raw at $raw, filtered at $filtered", 20.0, raw, 2.0)
+        assertTrue("filtered at $filtered", filtered > 23.0)
+    }
+
+    @Test
+    fun `the raw speed comes back to nothing at the platform`() {
+        val ride = Ride(blackout = 69.0..200.0)
+        var braking = 0.0
+        ride.run(until = 165.0) { t -> if (abs(t - 125) < 0.01) braking = ride.estimator.readout().rawSpeedMps!! }
+        assertEquals(10.0, braking, 2.0)
+        assertTrue("stopped at ${ride.estimator.readout().rawSpeedMps}", ride.estimator.readout().rawSpeedMps!! < 0.5)
     }
 
     private companion object {

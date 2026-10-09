@@ -103,6 +103,7 @@
     <!-- "Kecepatan IMU" (Experimental): the satellites' speed beside the motion sensors'. -->
     <string name="trip_motion_gps">GPS</string>
     <string name="trip_motion_imu">IMU</string>
+    <string name="trip_motion_raw">Raw IMU</string>
     <string name="trip_motion_kmh">%1$d km/j</string>
     <string name="trip_motion_aged">%1$s · %2$d dtk</string>
     <string name="trip_motion_accel">%1$s m/s²</string>
