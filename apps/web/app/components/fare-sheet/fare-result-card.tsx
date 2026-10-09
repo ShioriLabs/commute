@@ -782,7 +782,7 @@ function JourneyDetail({ journey }: { journey: FareJourney }) {
         : null}
 
       <p className="mt-6 text-xs text-slate-400">
-        Estimasi berdasarkan tarif resmi per Juli 2026. Tarif LRT Jabodebek memakai batas atas jam sibuk; di luar jam sibuk dan akhir pekan bisa lebih murah
+        Estimasi berdasarkan tarif resmi per Oktober 2026. Tarif LRT Jabodebek mengikuti waktu berangkat: maksimal Rp20.000 pada jam sibuk (Senin–Jumat 06.00–08.59 dan 16.00–19.59), dan maksimal Rp10.000 di luar jam sibuk, akhir pekan, serta hari libur
       </p>
     </>
   )
