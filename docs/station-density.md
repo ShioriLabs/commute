@@ -1,6 +1,8 @@
 # Station density (design note)
 
-**Status:** design note — not yet built. Measured inputs gathered 2026-10-07 (see
+**Status:** Phase 1 (rail, station page, web) implemented per docs/station-density-plan.md, with the
+0–3 range changes described under "Levels and range (as built)"; Android board and per-train load (Phase 2)
+not started. Measured inputs gathered 2026-10-07 (see
 "Measured inputs" below); they replace the hand-authored curve. The temporal companion to
 `station-score.md`: that column says how busy a station is *in general*; this says
 how busy it is *right now*. Renders as a crowding badge on the station page and on
@@ -122,6 +124,37 @@ Dukuh Atas BNI at its peak, ~155). `score × load` does not.
 Mask any hour with under a quarter of the station's peak departures. Ratios there come from a
 handful of trains (KCI 03h comes out at 3.2 from 11 departures and taps made before the
 first train).
+
+### Levels and range (as built)
+
+Four levels, `0 Lengang · 1 Ramai · 2 Padat · 3 Sangat Padat`, and every hour is a **range** `min~max`
+rather than one level. The range is the model's uncertainty: the hour's boardings per departure are
+scaled down and up by a band (`UNCERTAINTY_BAND` in `db/scripts/density/model.ts`) and each end is
+levelled. The band is tight for stations with a published ridership anchor, wider for MRT Jakarta
+anchors (their metric is unstated, ridership.ts header), and widest for score-derived stations. An hour
+with no or thin service (under a quarter of peak departures, or a single train) is `null`, never
+Lengang.
+
+Thresholds are in **riders per departure** (60 / 120 / 340), as above, not shares of a train.
+Departures are counted in trains of the operator's usual stock, so an airport-line (KA Bandara)
+departure counts as 0.15 of a KRL. Interchanges (Manggarai, Duri, Tanah Abang, Dukuh Atas MRT)
+carry a mixed role override.
+
+**Known gap:** a station without an anchor gets its volume by inverting its score, but an unanchored
+score is a capped service-and-structure estimate, not demand. Busy unanchored stations read far
+too quiet: Tebet comes out at ~4.6k boardings a day (Lengang all day) against ~19.4k alighting by
+13:00 in KCI's release. The widened band doesn't reach that far. The fix is more anchors (the
+"by 13:00" release figures in the table above) or a separate demand estimate. See Next data.
+
+### Runbook
+
+```
+pnpm --filter api generate:density -- --remote   # the user runs it; local D1 is stale
+pnpm --filter api exec vitest run src/db/data/density.calibration.test.ts
+# then bump API_VERSION so KV-cached station responses refresh
+```
+
+`--persist-to <dir>` reads a local D1 kept outside `.wrangler/` (e.g. a migrated copy).
 
 ### Sources
 
