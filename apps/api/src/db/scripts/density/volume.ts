@@ -1,5 +1,5 @@
 import { RIDERSHIP_BY_STATION_ID, type RidershipAnchor } from '../../data/ridership'
-import { RELEASE_COUNTS_BY_STATION_ID, type ReleaseCount } from '../../data/release-counts'
+import { RELEASE_COUNTS_BY_STATION_ID, RELEASE_TRANSIT_BY_STATION_ID, type ReleaseCount, type ReleaseTransit } from '../../data/release-counts'
 import { boardingsPerDay, type CAPACITY, type VolumeSource } from './model'
 
 /*
@@ -13,6 +13,10 @@ import { boardingsPerDay, type CAPACITY, type VolumeSource } from './model'
  *    is a capped service-and-structure estimate, not demand, and inverted as-is
  *    it put Tebet at ~4.6k a day against ~19.4k arriving by 13:00. The score
  *    still decides each station's share; the total decides the level.
+ *
+ * Transfers from a release (RELEASE_TRANSIT) are added last, on top of
+ * whichever of those applied: they aren't gate traffic, so they sit outside
+ * the network total and the ceiling.
  */
 
 /*
@@ -25,6 +29,14 @@ import { boardingsPerDay, type CAPACITY, type VolumeSource } from './model'
  */
 export const ORIGIN_SHARE_BEFORE_CUTOFF = 0.65
 export const DESTINATION_SHARE_BEFORE_CUTOFF = 0.85
+
+/*
+ * An 08:00 count is mid-peak, so it covers far less of an origin's day. The
+ * 21 Sep 2026 release (Monday, normal schedule) counted anchored stations too:
+ * Citayam 12,115 of ~31.0k (0.39), Bekasi 11,248 of ~30.2k (0.37). Bogor's 0.26
+ * is left out, for the same reason as above: its afternoon is leisure traffic.
+ */
+export const ORIGIN_SHARE_BEFORE_08 = 0.38
 
 /*
  * KRL riders on a weekday: the median of KCI's daily series, Jan–May 2026
@@ -53,13 +65,15 @@ export interface VolumeStation {
 }
 
 export function releaseBoardings(r: ReleaseCount): number {
-  return r.count / (r.kind === 'boarding' ? ORIGIN_SHARE_BEFORE_CUTOFF : DESTINATION_SHARE_BEFORE_CUTOFF)
+  if (r.kind === 'alighting') return r.count / DESTINATION_SHARE_BEFORE_CUTOFF
+  return r.count / (r.cutoffHour === 8 ? ORIGIN_SHARE_BEFORE_08 : ORIGIN_SHARE_BEFORE_CUTOFF)
 }
 
 export function resolveVolumes(
   stations: VolumeStation[],
   anchors: ReadonlyMap<string, RidershipAnchor> = RIDERSHIP_BY_STATION_ID,
-  releases: ReadonlyMap<string, ReleaseCount> = RELEASE_COUNTS_BY_STATION_ID
+  releases: ReadonlyMap<string, ReleaseCount> = RELEASE_COUNTS_BY_STATION_ID,
+  transits: ReadonlyMap<string, ReleaseTransit> = RELEASE_TRANSIT_BY_STATION_ID
 ): Map<string, Volume> {
   const out = new Map<string, Volume>()
   const scaled: VolumeStation[] = []
@@ -96,7 +110,7 @@ export function resolveVolumes(
     const over = pool.filter(s => out.get(s.id)!.boardings * factor > UNRANKED_MAX_GATE_BOARDINGS)
     if (!over.length) {
       for (const s of pool) out.get(s.id)!.boardings *= factor
-      return out
+      break
     }
     for (const s of over) {
       out.get(s.id)!.boardings = UNRANKED_MAX_GATE_BOARDINGS
@@ -104,4 +118,11 @@ export function resolveVolumes(
     }
     pool = pool.filter(s => !over.includes(s))
   }
+
+  for (const s of stations) {
+    const transit = transits.get(s.id)
+    // An anchor's own transfer figure, where it has one, already counted them.
+    if (transit && anchors.get(s.id)?.transitPerDay === undefined) out.get(s.id)!.boardings += transit.transitPerDay
+  }
+  return out
 }
