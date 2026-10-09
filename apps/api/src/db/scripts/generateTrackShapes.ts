@@ -46,6 +46,10 @@ const SIMPLIFY_M = 3
 // Harmoni came out 1.5 km off in the 2026-06-29 feed.
 const MAX_END_OFFSET_M = 150
 
+// How far past a matched stop the shape must carry on before placeStops stops
+// looking for a closer match: well beyond any halte's own platform and road.
+const LEAVE_STOP_M = 2_000
+
 const ATTRIBUTION = 'Rail: © OpenStreetMap contributors, ODbL-1.0 (https://www.openstreetmap.org/copyright). TransJakarta: TransJakarta GTFS.'
 
 export const shapeKey = (from: string, to: string): string => `${from}>${to}`
@@ -149,6 +153,55 @@ export function cutShape(shape: ShapePoint[], from: number, to: number): LngLat[
   return [at(from), ...inner, at(to)]
 }
 
+/** Distance along a shape, measured, for a feed that leaves shape_dist_traveled empty. */
+export function measureShape(points: LngLat[]): ShapePoint[] {
+  let dist = 0
+  return points.map(([lng, lat], i) => {
+    if (i > 0) dist += haversineMeters(points[i - 1]![1], points[i - 1]![0], lat, lng)
+    return { lng, lat, dist }
+  })
+}
+
+/*
+ * Where along `shape` each stop sits, in metres, for a feed whose stop_times
+ * carry no shape_dist_traveled (the 2026-07-24 export has none at all).
+ *
+ * Forward only: each stop is searched for from where the last one landed, so a
+ * route that passes the same road twice (a loop, an out-and-back) places its
+ * second visit on the second pass. The search stops once it has a match within
+ * MAX_END_OFFSET_M and the shape has wandered well away from the stop again.
+ * A stop with no match that close is null and does not advance the search: its
+ * two hops go without a shape rather than being cut somewhere wrong.
+ */
+export function placeStops(shape: ShapePoint[], stops: (LngLat | null)[]): (number | null)[] {
+  let from = 0
+  let floor = 0
+  return stops.map((stop) => {
+    if (!stop) return null
+    const kx = Math.cos((stop[1] * Math.PI) / 180) * 111_320
+    const ky = 110_574
+    let best: { offset: number, dist: number, index: number } | null = null
+    for (let i = from; i < shape.length - 1; i++) {
+      const a = shape[i]!
+      const b = shape[i + 1]!
+      const bx = (b.lng - a.lng) * kx
+      const by = (b.lat - a.lat) * ky
+      const px = (stop[0] - a.lng) * kx
+      const py = (stop[1] - a.lat) * ky
+      const lengthSq = bx * bx + by * by
+      const t = lengthSq === 0 ? 0 : Math.max(0, Math.min(1, (px * bx + py * by) / lengthSq))
+      const offset = Math.hypot(px - t * bx, py - t * by)
+      const dist = a.dist + t * (b.dist - a.dist)
+      if (dist >= floor && (!best || offset < best.offset)) best = { offset, dist, index: i }
+      if (best && best.offset <= MAX_END_OFFSET_M && offset > best.offset + LEAVE_STOP_M) break
+    }
+    if (!best || best.offset > MAX_END_OFFSET_M) return null
+    from = best.index
+    floor = best.dist
+    return best.dist
+  })
+}
+
 function loadFeed(file: string): Record<string, string>[] {
   return parseCSV(fs.readFileSync(`${FEED_DIR}/${file}`, 'utf-8'))
 }
@@ -180,31 +233,59 @@ function tjShapes(): { shapes: Map<string, { coords: LngLat[], length: number }>
     return at ? haversineMeters(at[1], at[0], p[1], p[0]) : 0
   }
 
-  const rawShapes = new Map<string, { seq: number, point: ShapePoint }[]>()
+  /*
+   * The feed's own distances are used only when a shape and every stop on a
+   * trip carry them, since they must share one scale. Otherwise the shape is
+   * measured and the stops placed on it (measureShape, placeStops): the
+   * 2026-07-24 export dropped shape_dist_traveled from both files.
+   */
+  const rawShapes = new Map<string, { seq: number, point: LngLat, dist: number | null }[]>()
   for (const p of loadFeed('shapes.txt')) {
-    if (p.shape_dist_traveled === '') continue
     const list = rawShapes.get(p.shape_id!) ?? []
-    list.push({ seq: Number(p.shape_pt_sequence), point: { lng: Number(p.shape_pt_lon), lat: Number(p.shape_pt_lat), dist: Number(p.shape_dist_traveled) } })
+    list.push({ seq: Number(p.shape_pt_sequence), point: [Number(p.shape_pt_lon), Number(p.shape_pt_lat)], dist: p.shape_dist_traveled === '' ? null : Number(p.shape_dist_traveled) })
     rawShapes.set(p.shape_id!, list)
   }
-  const shapes = new Map<string, ShapePoint[]>()
-  for (const [id, list] of rawShapes) shapes.set(id, list.sort((a, b) => a.seq - b.seq).map(p => p.point))
+  const shapes = new Map<string, { points: ShapePoint[], fromFeed: boolean }>()
+  for (const [id, list] of rawShapes) {
+    list.sort((a, b) => a.seq - b.seq)
+    const fromFeed = list.every(p => p.dist != null)
+    shapes.set(id, {
+      points: fromFeed ? list.map(p => ({ lng: p.point[0], lat: p.point[1], dist: p.dist! })) : measureShape(list.map(p => p.point)),
+      fromFeed
+    })
+  }
 
-  const stopTimes = new Map<string, { seq: number, stop: string, dist: number | null }[]>()
+  const stopTimes = new Map<string, { seq: number, stop: string, at: LngLat | null, dist: number | null }[]>()
   for (const r of loadFeed('stop_times.txt')) {
     if (!tripShape.has(r.trip_id!)) continue
     const list = stopTimes.get(r.trip_id!) ?? []
-    list.push({ seq: Number(r.stop_sequence), stop: stopParent.get(r.stop_id!) ?? r.stop_id!, dist: r.shape_dist_traveled === '' ? null : Number(r.shape_dist_traveled) })
+    const parent = stopParent.get(r.stop_id!) ?? r.stop_id!
+    list.push({
+      seq: Number(r.stop_sequence),
+      stop: parent,
+      // The platform's own position where the feed has one: it sits on the bus's side of the road.
+      at: stopAt.get(r.stop_id!) ?? stopAt.get(parent) ?? null,
+      dist: r.shape_dist_traveled === '' ? null : Number(r.shape_dist_traveled)
+    })
     stopTimes.set(r.trip_id!, list)
   }
 
   const isHalte = (stop: string) => stop.startsWith('H') || stop.startsWith('B')
   const out = new Map<string, { coords: LngLat[], length: number }>()
   const rejected = new Set<string>()
+  let placed = 0
   for (const [tripId, list] of stopTimes) {
-    const shape = shapes.get(tripShape.get(tripId)!)
-    if (!shape) continue
+    const shapeEntry = shapes.get(tripShape.get(tripId)!)
+    if (!shapeEntry) continue
+    const shape = shapeEntry.points
     list.sort((a, b) => a.seq - b.seq)
+    if (!shapeEntry.fromFeed || list.some(r => r.dist == null)) {
+      const dists = placeStops(shape, list.map(r => r.at))
+      list.forEach((r, i) => {
+        r.dist = dists[i]!
+      })
+      placed++
+    }
     for (let i = 1; i < list.length; i++) {
       const a = list[i - 1]!
       const b = list[i]!
@@ -222,6 +303,7 @@ function tjShapes(): { shapes: Map<string, { coords: LngLat[], length: number }>
       if (!existing || length < existing.length) out.set(key, { coords, length })
     }
   }
+  if (placed > 0) console.log(`Placed haltes on the shape for ${placed} of ${stopTimes.size} TJ trips (no shape_dist_traveled in the feed).`)
   // A pair another trip cut cleanly is fine; only report the ones left without.
   return { shapes: out, rejected: [...rejected].filter(k => !out.has(k)) }
 }

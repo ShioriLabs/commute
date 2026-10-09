@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LineTopology } from '../data/topology'
-import { cutShape, indexSegments, railShapes, stitch, type Segment } from './generateTrackShapes'
+import { cutShape, indexSegments, measureShape, placeStops, railShapes, stitch, type Segment } from './generateTrackShapes'
 
 /*
  * A four-stop line A-B-C-D, each segment a two-point trace stored in the
@@ -87,5 +87,40 @@ describe('cutShape', () => {
     expect(cutShape(shape, 100, 100)).toBeNull()
     expect(cutShape(shape, 150, 50)).toBeNull()
     expect(cutShape(shape, 50, 250)).toBeNull()
+  })
+})
+
+describe('measureShape', () => {
+  it('measures cumulative metres along the points', () => {
+    // 0.001 degrees of latitude is ~110.6 m.
+    const measured = measureShape([[106.8, -6.2], [106.8, -6.201], [106.8, -6.202]])
+    expect(measured[0]!.dist).toBe(0)
+    expect(measured[1]!.dist).toBeCloseTo(111.2, 0)
+    expect(measured[2]!.dist).toBeCloseTo(222.4, 0)
+  })
+})
+
+describe('placeStops', () => {
+  // An out-and-back along one street: east 1.1 km, then back west on the same road.
+  const outAndBack = measureShape([[106.8, -6.2], [106.81, -6.2], [106.8, -6.2]])
+
+  it('places each stop where the shape passes it', () => {
+    const [a, b] = placeStops(outAndBack, [[106.8, -6.2], [106.805, -6.2001]])
+    expect(a).toBeCloseTo(0, 0)
+    expect(b).toBeCloseTo(outAndBack[1]!.dist / 2, -1)
+  })
+
+  it('puts a stop passed twice on the later pass once the route has gone beyond it', () => {
+    // Out to the far end, then the same mid-street stop again on the way back.
+    const [, far, back] = placeStops(outAndBack, [[106.8, -6.2], [106.81, -6.2], [106.805, -6.2]])
+    expect(back!).toBeGreaterThan(far!)
+    expect(back).toBeCloseTo(outAndBack[1]!.dist * 1.5, -1)
+  })
+
+  it('leaves a stop far from the shape unplaced, without moving the search on', () => {
+    const [a, off, b] = placeStops(outAndBack, [[106.8, -6.2], [106.805, -6.21], [106.805, -6.2]])
+    expect(a).toBeCloseTo(0, 0)
+    expect(off).toBeNull()
+    expect(b).toBeCloseTo(outAndBack[1]!.dist / 2, -1)
   })
 })
