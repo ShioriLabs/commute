@@ -172,6 +172,7 @@ pnpm --filter api exec vitest run src/db/data/density.calibration.test.ts
 | D1 `schedules` (weekday `dayMask & 0b100`) | rail departures per hour, per station | departures, not capacity (KCI runs 8-, 10- and 12-car sets) |
 | TJ GTFS `frequencies.txt` | vehicles per hour | flat 05–22: **no peak timetable**, so useless as a TJ denominator |
 | KAI daily ridership PDF, 1 Jan–31 May 2026 | KRL daily totals | the "Jumlah" row is **May's** total, not the grand total. It's KCI's own series: the Basoetta figure for 17 Mar (10,465) matches the release exactly. KRL release totals differ from it by 1–5% (Lebaran +2.4%, Q1 +1.3%, May −4.6%) |
+| BPS *Statistik Komuter Jabodetabek 2023* (survey; Tabel 19, 21 on pp. 36, 38) | when commuters leave home and get back, by kota/kabupaten: before 06:00 Kab. Bekasi 25.9%, Kab. Bogor 24.2%, Kota Depok 19.3%, Kota Tangerang 11.0%, Jakarta Pusat 7.9%; home at 20:00 or later Kota Depok 25.5% | all modes (public transport is only 19.5% of commuters, Tabel 27, with no KRL split), regional not per station, 2023. **A check on the ride-time shift and the evening, not an input.** Kota Tangerang leaving late despite the distance is the one result that doesn't fit; check the Tangerang line's morning against it |
 | KCI press releases (below) | systemwide and per-station counts "by 13:00" | one day each, often unusual days |
 
 ### How much of each operator JakLingko covers
