@@ -43,6 +43,8 @@ data class MotionTuning(
     val biasNoise: Double = 0.01,
     /** Speed variance of a zero-velocity update, (m/s)². */
     val stillSpeedVariance: Double = 0.0025,
+    /** How long the raw speed's bias is averaged over while standing, in seconds. */
+    val rawBiasS: Double = 5.0,
     /** A gap between motion samples longer than this, in seconds, is a gap, not a step. */
     val maxImuGapS: Double = 0.5,
 )
@@ -51,6 +53,11 @@ data class MotionTuning(
 data class MotionReadout(
     /** The train's speed from the motion sensors, kept honest by the satellites; `null` until aligned. */
     val imuSpeedMps: Double?,
+    /**
+     * The sensors' speed on their own: the forward acceleration, less what it read standing, summed
+     * up, never pulled to a fix's speed, and put to zero only standing; `null` until aligned.
+     */
+    val rawSpeedMps: Double?,
     /** Forward acceleration, positive pulling away and negative braking; `null` until aligned. */
     val aLongMps2: Double?,
     /** Whether the phone's frame has been lined up with the way the train goes. */
@@ -105,6 +112,8 @@ class MotionEstimator(private val tuning: MotionTuning = MotionTuning()) {
     private var p11 = 0.01
 
     private var aLong = 0.0
+    private var raw: Double? = null
+    private var rawBias = 0.0
     private var still = false
 
     private var lastGnssSpeed: Float? = null
@@ -137,18 +146,25 @@ class MotionEstimator(private val tuning: MotionTuning = MotionTuning()) {
 
         val fe = forwardEast
         val fn = forwardNorth
+        var forward: Double? = null
         if (aligned && fe != null && fn != null) {
             val east = x * cos(theta) - y * sin(theta)
             val north = x * sin(theta) + y * cos(theta)
-            val forward = east * fe + north * fn
+            forward = east * fe + north * fn
             aLong += (forward - aLong) * (dt / (tuning.smoothingS + dt))
+            // From where the filter had it when forward was first known, then the sensors alone: a
+            // fix's speed would teach the filter's bias too, so the raw keeps its own, from standing.
+            raw = max(0.0, (raw ?: speed) + (forward - rawBias) * dt)
             predict(forward, dt)
         } else {
             // Which way is forward isn't known yet, so neither is what the speed did: the next fix
             // must count for more than a platform's worth of standing still.
             p00 += tuning.unalignedAccel * tuning.unalignedAccel * dt
         }
-        if (still) zeroIfStanding(nanos)
+        if (still && zeroIfStanding(nanos) && forward != null) {
+            raw = 0.0
+            rawBias += (forward - rawBias) * (dt / (tuning.rawBiasS + dt))
+        }
     }
 
     /** One fix: its speed and bearing where it gave them, how rough it was, and when it came. */
@@ -197,6 +213,7 @@ class MotionEstimator(private val tuning: MotionTuning = MotionTuning()) {
         val ready = aligned && forwardEast != null
         return MotionReadout(
             imuSpeedMps = speed.takeIf { ready },
+            rawSpeedMps = raw.takeIf { ready },
             aLongMps2 = aLong.takeIf { ready },
             aligned = ready,
             still = still,
@@ -261,12 +278,13 @@ class MotionEstimator(private val tuning: MotionTuning = MotionTuning()) {
 
     /**
      * Standing, by the satellites or, with none to ask, when the estimate is near zero already: a
-     * smooth cruise in a tunnel is steady too, and must not be put to a stop.
+     * smooth cruise in a tunnel is steady too, and must not be put to a stop. Whether it was.
      */
-    private fun zeroIfStanding(nanos: Long) {
+    private fun zeroIfStanding(nanos: Long): Boolean {
         val heard = lastGnssNanos?.takeIf { (nanos - it) / 1e9 <= tuning.gnssFreshS }?.let { lastGnssSpeed }
         val standing = if (heard != null) heard < tuning.standingMps else speed < tuning.stillUnheardMps
         if (standing) update(0.0, tuning.stillSpeedVariance)
+        return standing
     }
 
     private companion object {
