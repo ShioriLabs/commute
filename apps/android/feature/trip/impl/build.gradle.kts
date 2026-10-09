@@ -37,6 +37,8 @@ dependencies {
     implementation(project(":core:query"))
     // LineRoundel, FrostedHeaderPage, icons, previews.
     implementation(project(":core:ui"))
+    // Environment.debug: the sensor recordings are a debug build's alone.
+    implementation(project(":core:config"))
 
     implementation(libs.androidx.core.ktx)
     implementation(platform(libs.androidx.compose.bom))
