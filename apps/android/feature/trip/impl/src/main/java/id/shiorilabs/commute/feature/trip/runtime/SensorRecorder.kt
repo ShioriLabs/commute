@@ -37,7 +37,8 @@ class SensorRecorder @Inject constructor(
     environment: Environment,
 ) : SensorDataExport {
 
-    private val enabled = environment.debug
+    /** Debug builds only; [MotionTracker] reads the raw sensors only for a recording. */
+    val enabled = environment.debug
     private val lock = Any()
     private val recording = SensorRecording(File(context.filesDir, DIR), compress = { ZstdOutputStream(it, COMPRESSION_LEVEL) })
 
@@ -75,6 +76,11 @@ class SensorRecorder @Inject constructor(
     }
 
     fun imu(nanos: Long, accel: FloatArray, quat: FloatArray) = write { recording.imu(nanos, accel, quat) }
+
+    /** The accelerometer with gravity in, to set against linear acceleration's own gravity estimate. */
+    fun accelerometer(nanos: Long, values: FloatArray) = write { recording.vector("acc", nanos, values) }
+
+    fun gyroscope(nanos: Long, values: FloatArray) = write { recording.vector("gyro", nanos, values) }
 
     fun fix(nanos: Long, fix: Fix) = write {
         recording.event(
