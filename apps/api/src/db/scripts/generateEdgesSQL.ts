@@ -4,10 +4,18 @@ import { haversineMeters } from '../../utils/geo'
 import { chainHops, stopLists, type Hop } from '../../utils/edgeChain'
 
 // Emits directed edge rows (both directions per adjacency) for the `edges` table.
-// Distance = real track km where the topology has cumulative km on both stops,
-// else haversine from the live station lat/lng. Apply with:
+// Distance, per pair of consecutive stops, from the first source that has it:
+//   1. published chainage, where the topology has cumM on both stops
+//   2. traced track length from data/geometry (generateTrackGeometry.ts)
+//   3. haversine from the live station lat/lng
+// Chainage outranks the trace even though the trace is the truer physical
+// length: KCI prices on its own chainage, and the trace runs 2-3% long, which
+// is enough to tip a fare over a 10km step — Bogor -> Manggarai is 44.1km of
+// chainage (Rp 5,000, as published) but 45.4km of track (Rp 6,000).
+// Apply with:
 //   wrangler d1 execute commute --local --file=src/db/scripts/edges.sql
 const OUTPUT_SQL_PATH = `${__dirname}/edges.sql`
+const GEOMETRY_DIR = `${__dirname}/../data/geometry`
 const STATIONS_URL = 'https://api.commute.shiorilabs.id/stations'
 
 interface Coord { lat: number, lng: number }
@@ -23,6 +31,22 @@ async function loadCoords(): Promise<Map<string, Coord>> {
   return map
 }
 
+// Traced track length by unordered station-id pair. Geometry is stored once
+// per physical segment, so either direction of an edge finds it.
+function loadTrackLengths(): Map<string, number> {
+  const lengths = new Map<string, number>()
+  for (const file of fs.readdirSync(GEOMETRY_DIR).filter(f => f.endsWith('.geojson'))) {
+    const json = JSON.parse(fs.readFileSync(`${GEOMETRY_DIR}/${file}`, 'utf-8')) as {
+      features: { properties: { from: string, to: string, lengthM: number } }[]
+    }
+    for (const { properties: p } of json.features) lengths.set(pairKey(p.from, p.to), p.lengthM)
+  }
+  return lengths
+}
+
+const pairKey = (a: string, b: string): string => [a, b].sort().join('|')
+const trackLengths = loadTrackLengths()
+
 const out: string[] = []
 const missingCoords = new Set<string>()
 const srcCounts: Record<string, number> = {}
@@ -37,6 +61,8 @@ function distance(line: LineTopology, a: Stop, b: Stop, coords: Map<string, Coor
   if (a.cumM != null && b.cumM != null) {
     return { m: Math.abs(a.cumM - b.cumM), src: 'track' }
   }
+  const traced = trackLengths.get(pairKey(`${line.operator}-${a.station}`, `${line.operator}-${b.station}`))
+  if (traced != null) return { m: traced, src: 'geometry' }
   const ca = coords.get(`${line.operator}-${a.station}`)
   const cb = coords.get(`${line.operator}-${b.station}`)
   if (ca && cb) return { m: Math.round(haversineMeters(ca.lat, ca.lng, cb.lat, cb.lng)), src: 'haversine' }

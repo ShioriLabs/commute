@@ -18,7 +18,8 @@ import { oneWayTurns } from '../../utils/edgeChain'
  * `cumM` is the cumulative distance from the line origin, in METRES (to match
  * transfers.distance), where Wikipedia publishes it (KCI B/R/T/TP). Consecutive
  * stops with cumM on both ends get a real track distance (the difference);
- * everything else falls back to haversine from station lat/lng.
+ * without it, a traced segment from data/geometry; failing both, haversine
+ * from station lat/lng.
  *
  * Special structures:
  *   - Cikarang (C) is a lollipop: a stick (Cikarang->Jatinegara) plus a loop branch

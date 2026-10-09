@@ -1,6 +1,7 @@
 import { FareContext, HOLIDAYS, Operator, OPERATORS, SURCHARGED_CORRIDORS, SurchargedCorridor } from '@commute/constants'
 import { getAirportFare } from 'operators/kci/airportFares'
 import { APT_CGK_LINE } from 'operators/kci/lines'
+import { getLRTJBDBFare } from 'operators/lrtjbdb/fares'
 import { getMRTJFare } from 'operators/mrtj/fares'
 import { TJ_FLAT_FARE } from 'operators/tj/fares'
 import type { RouteLeg } from '@commute/tsundere'
@@ -12,10 +13,11 @@ import type { RouteLeg } from '@commute/tsundere'
  *    Except line A (KA Bandara): a per-pair table to/from BST
  *    (operators/kci/airportFares.ts), behind its own gates.
  *  - LRTJ (LRT Jakarta): flat 5000.
- *  - LRTJBDB (LRT Jabodebek, KM 67/2023 jo. KM 70/2024): 5000 for the first
- *    km + 700 per started km, capped. The cap is time-dependent: 20000 at peak
- *    (weekday 07:00–09:00 & 16:00–19:00 WIB), 10000 off-peak/weekends. The cap
- *    is chosen from context.departureAt via fareTimeBucket.
+ *  - LRTJBDB (LRT Jabodebek, KM 67/2023 jo. KM 70/2024): published OD matrix
+ *    (operators/lrtjbdb/fares.ts), capped. The matrix is the peak tariff; the
+ *    cap is time-dependent: 20000 at peak (weekday 06:00–08:59 & 16:00–19:59
+ *    WIB), 10000 off-peak, weekends and public holidays. The cap is chosen from
+ *    context.departureAt via fareTimeBucket. Re-verified 2026-10-09.
  *  - MRTJ: published OD matrix (operators/mrtj/fares.ts).
  *  - TJ (TransJakarta): flat 3500 (TJ_FLAT_FARE). JakLingko integration caps the
  *    whole journey at JAKLINGKO_JOURNEY_CAP — handled at the journey level in
@@ -43,7 +45,8 @@ export interface FareSegmentInput {
 
 /*
  * Coarse time bucket for fare purposes. LRT Jabodebek's cap is peak on weekdays
- * 07:00–09:00 and 16:00–19:00, off-peak otherwise (incl. weekends). Bucketing to
+ * 06:00–08:59 and 16:00–19:59, off-peak otherwise — including weekends and
+ * public holidays, which the operator exempts from peak pricing. Bucketing to
  * peak|offpeak — rather than raw time — keeps the fare cache small while staying
  * correct once the cap goes time-dependent (step 2). Times are WIB (UTC+7).
  */
@@ -63,11 +66,10 @@ export function wib(date: Date): Date {
 }
 
 export function fareTimeBucket(date: Date): FareTimeBucket {
-  const local = wib(date)
-  const day = local.getUTCDay() // 0 Sun … 6 Sat, in WIB after the shift
-  if (day === 0 || day === 6) return 'offpeak'
-  const hour = local.getUTCHours()
-  const isPeak = (hour >= 7 && hour < 9) || (hour >= 16 && hour < 19)
+  // serviceDay already folds holidays into SUN, so anything not WD is off-peak.
+  if (serviceDay(date) !== 'WD') return 'offpeak'
+  const hour = wib(date).getUTCHours()
+  const isPeak = (hour >= 6 && hour < 9) || (hour >= 16 && hour < 20)
   return isPeak ? 'peak' : 'offpeak'
 }
 
@@ -173,7 +175,8 @@ export function calculateSegmentFare(segment: FareSegmentInput, context: FareCon
       const cap = fareTimeBucket(context.departureAt) === 'peak'
         ? LRTJBDB_FARE_CAP_PEAK
         : LRTJBDB_FARE_CAP_OFFPEAK
-      return Math.min(cap, 5000 + Math.max(0, Math.ceil((distanceM - 1000) / 1000)) * 700)
+      const fare = getLRTJBDBFare(segment.fromStationCode, segment.toStationCode)
+      return fare == null ? null : Math.min(cap, fare)
     }
     case OPERATORS.MRTJ.code:
       return getMRTJFare(segment.fromStationCode, segment.toStationCode)

@@ -59,26 +59,35 @@ describe('TJ flat fare', () => {
   })
 })
 
-describe('LRTJBDB distance fare with cap', () => {
-  it('charges 5000 for the first km', () => {
-    expect(fare('LRTJBDB', 900)).toBe(5000)
+describe('LRTJBDB matrix fare with cap', () => {
+  it('prices from the official matrix, not the edge distance', () => {
+    // Dukuh Atas -> Pancoran is 8500 on the published table; the 5549m of
+    // traced track would price it at 9200 and the old haversine at 7800.
+    expect(fare('LRTJBDB', 5549, 'DKA', 'PAN', peakCtx)).toBe(8500)
+    expect(fare('LRTJBDB', 1, 'DKA', 'PAN', peakCtx)).toBe(8500)
   })
 
-  it('adds 700 per started km after the first', () => {
-    expect(fare('LRTJBDB', 2500)).toBe(6400) // 5000 + 2*700
+  it('is direction-agnostic', () => {
+    expect(fare('LRTJBDB', 0, 'PAN', 'DKA', peakCtx)).toBe(8500)
   })
 
-  it('caps at the peak ceiling during peak hours', () => {
-    expect(fare('LRTJBDB', 90000, 'X', 'Y', peakCtx)).toBe(LRTJBDB_FARE_CAP_PEAK) // 20000
+  it('takes the peak table as published during peak hours', () => {
+    expect(fare('LRTJBDB', 0, 'DKA', 'HAR', peakCtx)).toBe(LRTJBDB_FARE_CAP_PEAK) // 20000
+    expect(fare('LRTJBDB', 0, 'HAR', 'CWG', peakCtx)).toBe(14800)
   })
 
   it('caps at the lower off-peak ceiling off-peak', () => {
-    expect(fare('LRTJBDB', 90000, 'X', 'Y', offpeakCtx)).toBe(LRTJBDB_FARE_CAP_OFFPEAK) // 10000
+    expect(fare('LRTJBDB', 0, 'DKA', 'HAR', offpeakCtx)).toBe(LRTJBDB_FARE_CAP_OFFPEAK) // 10000
+    expect(fare('LRTJBDB', 0, 'HAR', 'CWG', offpeakCtx)).toBe(LRTJBDB_FARE_CAP_OFFPEAK)
   })
 
   it('below both caps, the fare is the same regardless of time (only the ceiling moves)', () => {
-    expect(fare('LRTJBDB', 2500, 'X', 'Y', peakCtx)).toBe(6400)
-    expect(fare('LRTJBDB', 2500, 'X', 'Y', offpeakCtx)).toBe(6400)
+    expect(fare('LRTJBDB', 0, 'DKA', 'KUA', peakCtx)).toBe(7100)
+    expect(fare('LRTJBDB', 0, 'DKA', 'KUA', offpeakCtx)).toBe(7100)
+  })
+
+  it('returns null for a pair missing from the matrix', () => {
+    expect(fare('LRTJBDB', 2500, 'X', 'Y', peakCtx)).toBeNull()
   })
 })
 
@@ -121,7 +130,7 @@ describe('fare context (payment method inert; departure time affects LRT cap)', 
   it('payment method alone does not change the LRT cap (only time does)', () => {
     // Same peak instant, differing only in payment method → identical until step 4.
     const storedValuePeak: FareContext = { paymentMethod: 'STORED_VALUE', departureAt: jaklingkoPeak.departureAt }
-    expect(fare('LRTJBDB', 90000, 'X', 'Y', jaklingkoPeak)).toBe(fare('LRTJBDB', 90000, 'X', 'Y', storedValuePeak))
+    expect(fare('LRTJBDB', 0, 'DKA', 'HAR', jaklingkoPeak)).toBe(fare('LRTJBDB', 0, 'DKA', 'HAR', storedValuePeak))
   })
 })
 
@@ -131,10 +140,25 @@ describe('fareTimeBucket', () => {
     expect(fareTimeBucket(new Date('2026-07-20T17:30:00+07:00'))).toBe('peak') // Mon 17:30
   })
 
+  it('uses the operator\'s published edges: 06:00-08:59 and 16:00-19:59', () => {
+    expect(fareTimeBucket(new Date('2026-07-20T05:59:00+07:00'))).toBe('offpeak')
+    expect(fareTimeBucket(new Date('2026-07-20T06:00:00+07:00'))).toBe('peak')
+    expect(fareTimeBucket(new Date('2026-07-20T08:59:00+07:00'))).toBe('peak')
+    expect(fareTimeBucket(new Date('2026-07-20T09:00:00+07:00'))).toBe('offpeak')
+    expect(fareTimeBucket(new Date('2026-07-20T15:59:00+07:00'))).toBe('offpeak')
+    expect(fareTimeBucket(new Date('2026-07-20T16:00:00+07:00'))).toBe('peak')
+    expect(fareTimeBucket(new Date('2026-07-20T19:59:00+07:00'))).toBe('peak')
+    expect(fareTimeBucket(new Date('2026-07-20T20:00:00+07:00'))).toBe('offpeak')
+  })
+
   it('is off-peak midday, late night, and weekends', () => {
     expect(fareTimeBucket(new Date('2026-07-20T12:00:00+07:00'))).toBe('offpeak') // Mon midday
     expect(fareTimeBucket(new Date('2026-07-20T22:00:00+07:00'))).toBe('offpeak') // Mon night
     expect(fareTimeBucket(new Date('2026-07-18T08:00:00+07:00'))).toBe('offpeak') // Sat morning
+  })
+
+  it('is off-peak all day on a weekday public holiday', () => {
+    expect(fareTimeBucket(new Date('2026-05-01T08:00:00+07:00'))).toBe('offpeak') // Fri, Hari Buruh
   })
 })
 

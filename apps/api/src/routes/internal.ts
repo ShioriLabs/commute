@@ -16,6 +16,7 @@ import { ridesAirportPairsOnly, withAirportExclusion } from 'utils/airport'
 import { endpointsFor, getPlaceIndex } from 'utils/places'
 import { mergeInterlinedLegs } from 'utils/interlining'
 import { Ok } from 'utils/response'
+import { TRACK_SHAPES } from 'db/data/trackShapes.generated'
 import { buildSearchableIndex } from 'utils/searchables'
 
 /*
@@ -72,6 +73,14 @@ app.get('/searchables', async (c) => {
     200
   )
 })
+
+/*
+ * The real shape of every hop a ride leg can contain, for the Android trip
+ * mode to place a rider on track rather than on the straight line between two
+ * stops. Prebaked by db/scripts/generateTrackShapes.ts and compiled in, so
+ * there is nothing to look up: see docs/track-shapes.md.
+ */
+app.get('/track-shapes', c => c.json(Ok(TRACK_SHAPES), 200))
 
 /** KV key for a trip answer. Distinct namespace from `fares:` — different shape. */
 export const tripCacheKey = (fromId: string, toId: string, context: FareContext, apiVersion: string): string =>

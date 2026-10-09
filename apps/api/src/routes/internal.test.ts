@@ -116,3 +116,33 @@ describe('/_internal cache headers', () => {
     expect(second.status).toBe(304)
   })
 })
+
+describe('/_internal/track-shapes', () => {
+  // cacheControl is off on localhost, so name the deployed host (see middleware.test.ts).
+  const url = 'https://api.commute.shiorilabs.id/_internal/track-shapes'
+  const env = {} as Bindings
+
+  it('serves the prebaked shapes', async () => {
+    const res = await app.request(url, {}, env)
+    expect(res.status).toBe(200)
+    const body = await res.json() as { data: { version: string, shapes: Record<string, string> } }
+    expect(body.data.version).toMatch(/^[0-9a-f]{8}$/)
+    expect(body.data.shapes['KCI-BPR>KCI-BST']).toBeTypeOf('string')
+  })
+
+  /*
+   * It sits under `/_internal/*`, whose FARE cache is ten minutes. The shapes
+   * only change on a deploy, so the path-specific STATIC registration has to be
+   * the one that lands, or every app revalidates six times an hour for nothing.
+   */
+  it('is cached for a day, not the ten minutes the rest of /_internal gets', async () => {
+    const res = await app.request(url, {}, env)
+    expect(res.headers.get('Cache-Control')).toBe('public, max-age=86400, s-maxage=86400')
+  })
+
+  it('answers a revalidation with a bodyless 304', async () => {
+    const etag = (await app.request(url, {}, env)).headers.get('ETag')!
+    const res = await app.request(url, { headers: { 'If-None-Match': etag } }, env)
+    expect(res.status).toBe(304)
+  })
+})

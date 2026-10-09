@@ -68,6 +68,23 @@ describe('cacheControl', () => {
     expect(await res.json()).toEqual({ status: 200, data: { hello: 'world' } })
   })
 
+  /*
+   * A broad group and a specific path under it: the specific TTL must land.
+   * The broad middleware finishes last, so without the bail-out it overwrote
+   * the specific one, and timetables were served /stations' hour.
+   */
+  it('lets a more specific registration win over a broader one', async () => {
+    const a = new Hono()
+    a.use('/stations/*', cacheControl(MAX_AGE.TOPOLOGY))
+    a.use('/stations/:operator/:code/timetable/*', cacheControl(MAX_AGE.TIMETABLE))
+    a.get('/stations/:operator/:code/timetable/today', c => c.json({ ok: true }))
+    a.get('/stations/:operator/:code', c => c.json({ ok: true }))
+    const timetable = await a.request(`${DEPLOYED}/stations/KCI/MRI/timetable/today`)
+    expect(timetable.headers.get('Cache-Control')).toBe(`public, max-age=${MAX_AGE.TIMETABLE}, s-maxage=${MAX_AGE.TIMETABLE}`)
+    const station = await a.request(`${DEPLOYED}/stations/KCI/MRI`)
+    expect(station.headers.get('Cache-Control')).toBe(`public, max-age=${MAX_AGE.TOPOLOGY}, s-maxage=${MAX_AGE.TOPOLOGY}`)
+  })
+
   it('produces different ETags for different bodies', async () => {
     const a = new Hono()
     a.use('*', cacheControl(MAX_AGE.STATIC))
@@ -208,6 +225,26 @@ describe('rateLimit', () => {
     const seen: string[] = []
     await withEnv(app(rateLimit('DEFAULT')), '/ok', { RATE_LIMIT_DEFAULT: limiter(true, seen) })
     expect(seen).toEqual(['DEFAULT:local'])
+  })
+
+  /*
+   * Origin is free to forge. For a write, honouring it would lift the cap on
+   * what one address can store.
+   */
+  it('does not exempt our own origins from the upload limit', async () => {
+    const a = app(rateLimit('UPLOAD'))
+    const res = await withEnv(a, '/ok', { RATE_LIMIT_UPLOAD: limiter(false) }, {
+      headers: { Origin: 'https://commute.shiorilabs.id' }
+    })
+    expect(res.status).toBe(429)
+  })
+
+  it('keys uploads on their own binding', async () => {
+    const seen: string[] = []
+    await withEnv(app(rateLimit('UPLOAD')), '/ok', { RATE_LIMIT_UPLOAD: limiter(true, seen) }, {
+      headers: { 'CF-Connecting-IP': '203.0.113.7' }
+    })
+    expect(seen).toEqual(['UPLOAD:203.0.113.7'])
   })
 
   it('prices fares tighter than ordinary reads', () => {

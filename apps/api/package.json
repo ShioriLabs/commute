@@ -20,6 +20,8 @@
     "generate:stationcoords": "tsx ./src/db/scripts/generateLatLngSQL.ts",
     "generate:stationcodes": "tsx ./src/db/scripts/generateStationCodesSQL.ts",
     "generate:edges": "tsx ./src/db/scripts/generateEdgesSQL.ts",
+    "generate:track-geometry": "tsx ./src/db/scripts/generateTrackGeometry.ts",
+    "generate:track-shapes": "tsx ./src/db/scripts/generateTrackShapes.ts",
     "generate:headways": "tsx ./src/db/scripts/generateHeadways.ts",
     "generate:service-hours": "tsx ./src/db/scripts/generateServiceHours.ts",
     "generate:trips": "tsx ./src/db/scripts/generateTrips.ts",
