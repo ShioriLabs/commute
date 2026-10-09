@@ -14,6 +14,11 @@
     public *** auto(...);
 }
 
+# zstd-jni's native code looks up its streams' fields (srcPos, dstPos, nativePtr) by name, and the
+# AAR ships no consumer rules. Renamed, the first lookup leaves a NoSuchFieldError pending, the
+# next one aborts the process inside ART, and sharing the trip log crashes the app.
+-keep class com.github.luben.zstd.** { *; }
+
 # Strip verbose and debug logcat calls from release, including those bundled libraries make
 # unconditionally. Only VERBOSE/DEBUG: WARN and ERROR are worth keeping in a bug report, and Log.i is
 # left alone because a stripped call whose argument does real work would change behaviour.
