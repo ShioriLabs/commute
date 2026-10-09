@@ -617,7 +617,7 @@ export function JourneyCardFace({ journey, onSelect }: {
           * form is in the timeline a tap away.
           */}
         {headsign
-          ? <span className="truncate min-w-0">{ headsign }</span>
+          ? <span className="truncate min-w-0">arah { headsign }</span>
           : null}
       </div>
     </>
