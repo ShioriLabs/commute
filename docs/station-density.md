@@ -545,7 +545,7 @@ by gate. "Peak" is the generated weekday range at the station's busiest hour.
 | 1 | **Depok Baru** (DPB) | 11.4k, score 47 | 0~1 | BPS *Kota Depok Dalam Angka 2019* reportedly lists 11,713,906 departing passengers for 2018 (~32k/day), unverified (BPS 403s for us). Maps shows it busy | The BPS table "Jumlah Penumpang Kereta Api Menurut Stasiun Keberangkatan" (2019 ed., p.205, and newer editions) |
 | 2 | **Depok** (DP) | 11.4k, score 47 | 0~1 | Same BPS table. Maps shows it busy | Same BPS table |
 | 3 | **Jakarta Kota** (JAKK) | 30.2k (at the ceiling) | 1~3 | The score inversion put it at ~119k before the ceiling. No figure at all, and the terminus + Kota Tua leisure mix makes the role a guess too | Any station count; holiday/Angleb releases (leisure destination), "stasiun tujuan" lists |
-| 4 | ~~**Duri** (DU)~~ | 30.2k (ceiling) + **54.3k transit** | 2~3 most of the day | **Transit settled 2026-10-09:** two releases put Duri's transfers at 0.42 (Sun 24 Mar 2024, full day) and 0.34 (Wed 1 Jan 2025, by 13:30) of Manggarai's, same day. 0.34 × Manggarai's 158k weekday average = 54.3k. The 7 Oct 2026 escalator release's "13 ribu lebih" can't be a full day's transfers against those and is set aside as a narrower count | A Duri *gate* count (the 30.2k is still the ceiling guess) |
+| 4 | ~~**Duri** (DU)~~ | 30.2k (ceiling) + **70k transit** | 2~3 most of the day | **Transit settled 2026-10-09:** "rata-rata … 70 ribu orang per hari", KCI's H1 2025 average ([KCI](https://www.kci.id/informasi-publik/berita/meningkat-6-13-persen-kai-commuter-layani-166-4-juta-pengguna-commuter-line-jabodetabek-pada-semester-i-2025-jadi-dampak-positif-dari-1-063-perjalanan-commuter-line-jabodetabek-per-hari-di-gapeka-2025)). It brackets the same-day ratios to Manggarai (0.34, 0.42 → 0.43) and retires the 2026 escalator release's "13 ribu lebih" as a narrower count | A Duri *gate* count (the 30.2k is still the ceiling guess) |
 | 5 | **Pasar Senen** (PSE) | 28.9k, score 62 | 3~3 at 06h | Probably *over*stated: the score counts the intercity terminal. Sangat Padat at 06h is suspicious | KRL-only gate counts; Angleb releases separate KRL from long-distance |
 | 6 | **Jatinegara** (JNG) | 28.9k, score 62 | 1~3 | Same terminal effect as Senen, plus Cikarang-line transfers | KRL gate counts, transit volume |
 | 7 | **Cawang** (CW) | 27.2k, score 61 | 0~2 | Angleb 2026 release: 277,456 for the period, measure unstated (boarding or in+out) | The same release's wording, or another Cawang figure with a stated measure |
@@ -570,6 +570,17 @@ counts printed beside them: Manggarai's is 83% of its 2024 weekend average. **Ka
 weekday floor** (`RELEASE_TRANSIT`); Duri's conflicts with the 2026 figure (row 4). Its by-14:00 *alighting*
 counts (Tanah Abang 30,223, Bogor 9,244, Tebet 6,984, Depok Baru 5,750, Sudirman 5,696) are a Ramadan Sunday's
 shopping crowd: useful for checking the SUN curve's shape, not as weekday volume.
+
+**H1 2025 semester release** ([KCI](https://www.kci.id/informasi-publik/berita/meningkat-6-13-persen-kai-commuter-layani-166-4-juta-pengguna-commuter-line-jabodetabek-pada-semester-i-2025-jadi-dampak-positif-dari-1-063-perjalanan-commuter-line-jabodetabek-per-hari-di-gapeka-2025)). The best kind of release: half-year averages.
+- **Transfers per day:** Manggarai 160–162k, Tanah Abang 130k, **Duri 70k** (now in `RELEASE_TRANSIT`).
+- **June 2025 departures** (boardings) confirm that half of gate in+out is boardings, as `boardingsPerDay`
+  assumes: Bogor 1,530,425 → 51.0k/day vs anchor 51.0k; Sudirman 1,015,771 → 33.9k vs 33.8k; Tanah Abang
+  1,278,052 → 42.6k vs 44.6k.
+- **Left as is (user decision, 2026-10-09):** refreshing Manggarai's (158k → 161k) and Tanah Abang's (155k → 130k) `transitPerDay`
+  in `ridership.ts`. Those anchors also feed the station score, and Tanah Abang dropping to 219k total puts it
+  below `DEMAND_CEIL` (250k), so its score falls from 100 to 98 and `generateStationScoresSQL.test.ts` (top
+  anchor = 100) fails. Deciding that is a search-ranking change: lower `DEMAND_CEIL`, or accept 98 and update
+  the test, then regenerate `station_scores.sql`.
 
 **New Year's Day 2025 release** ([KCI](https://www.kci.id/informasi-publik/berita/kai-commuter-catat-rapor-positif-layani-1-2-juta-pengguna-commuter-line-jelang-tahun-baru-2025)):
 transfers by 13:30 on Wed 1 Jan 2025, Manggarai 67,723, Tanah Abang 41,407, Duri 23,275, Kampung Bandan 16,327.
