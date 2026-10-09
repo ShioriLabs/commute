@@ -142,6 +142,10 @@ apps/api/src/db/scripts/file_gtfs/
 apps/api/src/db/scripts/file_gtfs.prev/
 file_gtfs.zip
 
+# OpenStreetMap rail extract cached by generateTrackGeometry.ts (~2.5MB).
+# Re-download with `pnpm --filter api generate:track-geometry --refresh`.
+apps/api/src/db/scripts/osm_rail.json
+
 # TransJakarta poster scans + transcriptions — local scratch for authoring the
 # TJ topology overrides; the data lives in topology.tj.overrides.ts + its test.
 refresh-images/
