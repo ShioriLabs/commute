@@ -1,8 +1,10 @@
 package id.shiorilabs.commute.core.trip
 
 import id.shiorilabs.commute.core.geo.GeoPoint
+import id.shiorilabs.commute.core.geo.Projection
 import id.shiorilabs.commute.core.geo.distanceM
 import id.shiorilabs.commute.core.geo.project
+import id.shiorilabs.commute.core.geo.projectOnPath
 import java.time.Duration
 import java.time.Instant
 import kotlin.math.floor
@@ -76,7 +78,7 @@ object TripEngine {
 
     /**
      * How far on along the route fixes must carry a bus past a halte it was never seen near before
-     * they're believed. Hops are straight lines and roads aren't: L13E reaches Tegal Mampang down
+     * they're believed. A hop without a shape is a straight line and roads aren't: L13E reaches Tegal Mampang down
      * Mampang and back east along Tendean, under the hop on to CSW, and one fix there put the bus a
      * halte on and sent "siap-siap" 22 minutes early. Heading the wrong way, it never gets on.
      */
@@ -315,14 +317,12 @@ object TripEngine {
         return alongHops(ride, start, end, point, tuning)
     }
 
-    /** [point] projected onto the nearest hop from stop [start] to stop [end] it runs alongside. */
+    /** [point] projected onto the nearest hop from stop [start] to stop [end] it runs alongside, along its shape where it has one. */
     private fun alongHops(ride: TripLeg.Ride, start: Int, end: Int, point: GeoPoint, tuning: Tuning): Double? {
         var bestHop: Double? = null
         var bestOffTrack = Double.MAX_VALUE
         for (k in start until end) {
-            val a = ride.stops[k].point ?: continue
-            val b = ride.stops[k + 1].point ?: continue
-            val projection = project(point, a, b)
+            val projection = hop(ride, k, point) ?: continue
             // Beyond either end of the hop is only "on it" within a stop's radius, or a fix just past
             // the alighting station would read as arriving there.
             val atEnd = projection.fraction <= 0.0 || projection.fraction >= 1.0
@@ -366,14 +366,23 @@ object TripEngine {
         return next < to && metresAlong(ride, from, next.toDouble()) > tuning.stopRadius
     }
 
-    /** How far [ride] runs from position [from] on to [to]; hops without both stops' coordinates count nothing. */
+    /**
+     * [point] projected onto hop [k] of [ride]: onto the hop's real shape when the plan carries one,
+     * else the straight line between its stops; `null` when it has neither.
+     */
+    private fun hop(ride: TripLeg.Ride, k: Int, point: GeoPoint): Projection? {
+        ride.hopPaths[k]?.let { return projectOnPath(point, it) }
+        val a = ride.stops[k].point ?: return null
+        val b = ride.stops[k + 1].point ?: return null
+        return project(point, a, b)
+    }
+
+    /** How far [ride] runs from position [from] on to [to]; hops without both stops' coordinates or a shape count nothing. */
     private fun metresAlong(ride: TripLeg.Ride, from: Double, to: Double): Double {
         var metres = 0.0
         var k = floor(from).toInt().coerceAtLeast(0)
         while (k < ride.lastIndex && k < to) {
-            val a = ride.stops[k].point
-            val b = ride.stops[k + 1].point
-            if (a != null && b != null) metres += (min(to, k + 1.0) - max(from, k.toDouble())) * distanceM(a, b)
+            ride.hopLengthM(k)?.let { metres += (min(to, k + 1.0) - max(from, k.toDouble())) * it }
             k++
         }
         return metres
@@ -398,12 +407,9 @@ object TripEngine {
     /** The distance from [point] to the nearest stop or hop of the whole ride. */
     private fun distanceFromRide(ride: TripLeg.Ride, point: GeoPoint): Double {
         var best = Double.MAX_VALUE
-        val points = ride.stops.map { it.point }
-        for (i in points.indices) {
-            val p = points[i] ?: continue
-            best = min(best, distanceM(point, p))
-            val q = points.getOrNull(i + 1) ?: continue
-            best = min(best, project(point, p, q).offTrackM)
+        for (i in ride.stops.indices) {
+            ride.stops[i].point?.let { best = min(best, distanceM(point, it)) }
+            if (i < ride.lastIndex) hop(ride, i, point)?.let { best = min(best, it.offTrackM) }
         }
         return best
     }

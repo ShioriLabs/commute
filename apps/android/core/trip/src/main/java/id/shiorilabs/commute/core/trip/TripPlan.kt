@@ -1,6 +1,9 @@
 package id.shiorilabs.commute.core.trip
 
 import id.shiorilabs.commute.core.geo.GeoPoint
+import id.shiorilabs.commute.core.geo.decodePolyline
+import id.shiorilabs.commute.core.geo.distanceM
+import id.shiorilabs.commute.core.geo.pathLengthM
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.Instant
@@ -67,10 +70,30 @@ sealed interface TripLeg {
          * for a trip stored before this was kept.
          */
         val serviceLines: List<TripServiceLine> = emptyList(),
+        /**
+         * The real shape of each hop, `stops[k]` to `stops[k + 1]`, as an encoded polyline from
+         * the API's track shapes; `null` for a hop it has none for, and empty when none were to be
+         * had (offline, or a trip stored before this was kept). Without one, a hop is the straight
+         * line between its stops.
+         */
+        val hopShapes: List<String?> = emptyList(),
     ) : TripLeg {
 
         init {
             require(stops.size >= 2) { "A ride goes somewhere" }
+        }
+
+        /** [hopShapes] decoded, once; a delegate, so it isn't stored with the plan. */
+        val hopPaths: List<List<GeoPoint>?> by lazy {
+            List(lastIndex) { k -> hopShapes.getOrNull(k)?.let(::decodePolyline)?.takeIf { it.size >= 2 } }
+        }
+
+        /** The length of hop [k] in metres: along its shape when it has one, else straight. */
+        fun hopLengthM(k: Int): Double? {
+            hopPaths[k]?.let { return pathLengthM(it) }
+            val a = stops[k].point ?: return null
+            val b = stops[k + 1].point ?: return null
+            return distanceM(a, b)
         }
 
         val isTimed: Boolean get() = departureAt != null && arrivalAt != null && arrivalAt > departureAt
