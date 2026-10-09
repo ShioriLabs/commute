@@ -1,10 +1,8 @@
 package id.shiorilabs.commute.feature.journey.presentation.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -23,69 +21,15 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import id.shiorilabs.commute.core.ui.components.CommuteBottomSheet
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
-import id.shiorilabs.commute.core.ui.theme.Pink800
 import id.shiorilabs.commute.core.ui.theme.Rose50
-import id.shiorilabs.commute.core.ui.theme.Slate400
 import id.shiorilabs.commute.core.ui.theme.Slate500
-import id.shiorilabs.commute.core.ui.theme.Slate900
 import id.shiorilabs.commute.feature.journey.R
 
 /** One option in a [ChoiceSheet]: its value, its name, and what picking it means. */
 internal data class Choice<T>(val value: T, val label: String, val description: String)
-
-/** The settings list behind the criteria chip: every standing setting, one row each. */
-@Composable
-internal fun SettingsSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    val title = stringResource(R.string.journey_settings)
-    CommuteBottomSheet(
-        title = title,
-        closeDescription = stringResource(R.string.journey_sheet_close, title.lowercase()),
-        onDismiss = onDismiss,
-    ) {
-        content()
-    }
-}
-
-/** What a setting is and what it is set to; opens that setting's own sheet. */
-@Composable
-internal fun SettingRow(label: String, value: String, modified: Boolean, onClick: () -> Unit) {
-    val haptics = LocalHapticFeedback.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(role = Role.Button) {
-                haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
-                onClick()
-            }
-            .padding(horizontal = 32.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = label.uppercase(),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 0.5.sp,
-                color = Slate400,
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = if (modified) Pink800 else Slate900,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Icon(imageVector = CommuteIcons.Chevron, contentDescription = null, modifier = Modifier.size(16.dp), tint = Slate400)
-    }
-}
 
 /**
  * One single-choice sheet for every setting: each option with what it means, the chosen one ticked.

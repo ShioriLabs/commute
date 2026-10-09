@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -57,8 +56,8 @@ import id.shiorilabs.commute.feature.journey.domain.WalkingSpeed
 import id.shiorilabs.commute.feature.journey.domain.formatDepartureLabel
 import java.time.Instant
 
-/** Which criteria sheet is up; one at a time, so the list closing as a setting opens is one change. */
-internal enum class OpenCriterion { ALL, DEPARTURE, PAYMENT, MODES, WALKING }
+/** Which criteria sheet is up; one at a time. */
+internal enum class OpenCriterion { DEPARTURE, PAYMENT, MODES, WALKING }
 
 @Composable
 internal fun PaymentMethod.label(): String = stringResource(
@@ -128,7 +127,7 @@ internal fun WalkingSpeed.description(): String = stringResource(
 /**
  * The settings under the Dari/Ke fields: one segmented chip showing what each standing setting is
  * set to, a segment tinted only when it is off its default, and the departure on the right. Each
- * opens a sheet. The web's `CriteriaBar`.
+ * segment opens its own setting's sheet, as the departure does. The web's `CriteriaBar`.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -156,31 +155,28 @@ internal fun CriteriaBar(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        val settingsDescription = stringResource(
-            R.string.journey_settings_description,
-            criteria.paymentMethod.label(),
-            criteria.modes.label(),
-            criteria.walking.label(),
-        )
         Row(
             modifier = Modifier
                 .height(IntrinsicSize.Min)
                 .clip(CircleShape)
                 .background(Color.White)
-                .border(2.dp, Stone200, CircleShape)
-                .clickable { openSheet(OpenCriterion.ALL) }
-                .clearAndSetSemantics {
-                    contentDescription = settingsDescription
-                    role = Role.Button
-                },
+                .border(2.dp, Stone200, CircleShape),
         ) {
-            ChipSegment(modified = criteria.paymentMethod != defaults.paymentMethod) { tint ->
+            ChipSegment(
+                modified = criteria.paymentMethod != defaults.paymentMethod,
+                description = stringResource(R.string.journey_setting_description, stringResource(R.string.journey_payment), criteria.paymentMethod.label()),
+                onClick = { openSheet(OpenCriterion.PAYMENT) },
+            ) { tint ->
                 Icon(imageVector = CommuteIcons.Payment, contentDescription = null, modifier = Modifier.size(16.dp), tint = tint)
                 ChipText(criteria.paymentMethod.shortLabel(), tint)
             }
             VerticalDivider(thickness = 2.dp, color = Stone200)
             // A yes/no, so it reads as a mark: "Tanpa TransJakarta" would set the chip's width alone.
-            ChipSegment(modified = criteria.modes != defaults.modes) { tint ->
+            ChipSegment(
+                modified = criteria.modes != defaults.modes,
+                description = stringResource(R.string.journey_setting_description, stringResource(R.string.journey_modes), criteria.modes.label()),
+                onClick = { openSheet(OpenCriterion.MODES) },
+            ) { tint ->
                 Icon(imageVector = CommuteIcons.Bus, contentDescription = null, modifier = Modifier.size(16.dp), tint = tint)
                 Icon(
                     imageVector = if (criteria.modes == Modes.ALL) CommuteIcons.Check else CommuteIcons.Excluded,
@@ -190,7 +186,11 @@ internal fun CriteriaBar(
                 )
             }
             VerticalDivider(thickness = 2.dp, color = Stone200)
-            ChipSegment(modified = criteria.walking != defaults.walking) { tint ->
+            ChipSegment(
+                modified = criteria.walking != defaults.walking,
+                description = stringResource(R.string.journey_setting_description, stringResource(R.string.journey_walking), criteria.walking.label()),
+                onClick = { openSheet(OpenCriterion.WALKING) },
+            ) { tint ->
                 WalkingIcon(speed = criteria.walking, height = 16.dp, tint = tint, reserve = false)
                 ChipText(criteria.walking.shortLabel(), tint)
             }
@@ -223,18 +223,23 @@ internal fun CriteriaBar(
     CriteriaSheets(
         open = open,
         criteria = criteria,
-        onOpen = { open = it },
         onClose = { open = null },
         onChange = onChange,
     )
 }
 
+/** One setting in the chip, opening its own sheet; [description] is what it is set to, spoken. */
 @Composable
-private fun ChipSegment(modified: Boolean, content: @Composable (tint: Color) -> Unit) {
+private fun ChipSegment(modified: Boolean, description: String, onClick: () -> Unit, content: @Composable (tint: Color) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxHeight()
             .background(if (modified) Rose100 else Color.Transparent)
+            .clickable(onClick = onClick)
+            .clearAndSetSemantics {
+                contentDescription = description
+                role = Role.Button
+            }
             .padding(horizontal = 12.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -285,41 +290,16 @@ internal fun WalkingIcon(speed: WalkingSpeed, height: Dp, tint: Color, modifier:
     }
 }
 
-/** The settings list, a sheet per setting, and the departure wheels. Only [open] is ever up. */
+/** A sheet per setting, and the departure wheels. Only [open] is ever up. */
 @Composable
 private fun CriteriaSheets(
     open: OpenCriterion?,
     criteria: JourneyCriteria,
-    onOpen: (OpenCriterion) -> Unit,
     onClose: () -> Unit,
     onChange: (JourneyCriteria) -> Unit,
 ) {
-    val defaults = JourneyCriteria()
     when (open) {
         null -> Unit
-        OpenCriterion.ALL -> SettingsSheet(onDismiss = onClose) {
-            Column(modifier = Modifier.padding(bottom = 32.dp)) {
-                SettingRow(
-                    label = stringResource(R.string.journey_payment),
-                    value = criteria.paymentMethod.label(),
-                    modified = criteria.paymentMethod != defaults.paymentMethod,
-                    onClick = { onOpen(OpenCriterion.PAYMENT) },
-                )
-                SettingRow(
-                    label = stringResource(R.string.journey_modes),
-                    value = criteria.modes.label(),
-                    modified = criteria.modes != defaults.modes,
-                    onClick = { onOpen(OpenCriterion.MODES) },
-                )
-                SettingRow(
-                    label = stringResource(R.string.journey_walking),
-                    value = criteria.walking.label(),
-                    modified = criteria.walking != defaults.walking,
-                    onClick = { onOpen(OpenCriterion.WALKING) },
-                )
-            }
-        }
-
         OpenCriterion.PAYMENT -> ChoiceSheet(
             title = stringResource(R.string.journey_payment),
             options = PaymentMethod.entries.map { Choice(it, it.label(), it.description()) },
