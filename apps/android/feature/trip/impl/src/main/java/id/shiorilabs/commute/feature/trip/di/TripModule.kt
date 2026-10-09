@@ -8,8 +8,10 @@ import dagger.multibindings.IntoSet
 import id.shiorilabs.commute.core.navigation.NavGraphContribution
 import id.shiorilabs.commute.core.startup.StartupWarmup
 import id.shiorilabs.commute.feature.trip.ActiveTripBar
+import id.shiorilabs.commute.feature.trip.SensorDataExport
 import id.shiorilabs.commute.feature.trip.TripLogExport
 import id.shiorilabs.commute.feature.trip.runtime.FileTripLog
+import id.shiorilabs.commute.feature.trip.runtime.SensorRecorder
 import id.shiorilabs.commute.feature.trip.runtime.TripLog
 import id.shiorilabs.commute.feature.trip.TripController
 import id.shiorilabs.commute.feature.trip.presentation.ActiveTripBarImpl
@@ -44,6 +46,9 @@ abstract class TripModule {
 
     @Binds
     abstract fun bindTripLogExport(impl: FileTripLog): TripLogExport
+
+    @Binds
+    abstract fun bindSensorDataExport(impl: SensorRecorder): SensorDataExport
 
     @Binds
     abstract fun bindStopLocator(impl: DirectoryStopLocator): StopLocator

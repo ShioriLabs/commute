@@ -67,7 +67,7 @@ class FileTripLog @Inject constructor(
         val now = clock.instant()
         val copy = File(dir, "commute-trip-${NAME_STAMP.format(now)}.ndjson.zst")
         ZstdOutputStream(copy.outputStream(), COMPRESSION_LEVEL).use { out ->
-            out.write(line(STAMP.format(now), "device", device()).encodeToByteArray())
+            out.write(line(STAMP.format(now), "device", deviceFacts(context)).encodeToByteArray())
             out.write(log)
         }
         val uri = FileProvider.getUriForFile(context, "${context.packageName}$AUTHORITY_SUFFIX", copy)
@@ -78,19 +78,6 @@ class FileTripLog @Inject constructor(
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             .apply { clipData = ClipData.newRawUri(copy.name, uri) }
         Intent.createChooser(send, null)
-    }
-
-    /** Which build, on which phone: what a log read later can't tell by itself. */
-    private fun device(): Map<String, Any?> {
-        val app = runCatching { context.packageManager.getPackageInfo(context.packageName, 0) }.getOrNull()
-        return mapOf(
-            "app" to app?.versionName,
-            "package" to context.packageName,
-            "maker" to Build.MANUFACTURER,
-            "model" to Build.MODEL,
-            "android" to Build.VERSION.RELEASE,
-            "sdk" to Build.VERSION.SDK_INT,
-        )
     }
 
     companion object {
@@ -111,9 +98,24 @@ class FileTripLog @Inject constructor(
         /** zstd's own default: a log of repeated keys shrinks a lot even at this. */
         private const val COMPRESSION_LEVEL = 3
 
-        private val STAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX").withZone(ZoneId.of("Asia/Jakarta"))
         private val NAME_STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmm").withZone(ZoneId.of("Asia/Jakarta"))
     }
+}
+
+/** When, as the trip log and the sensor recordings write it: WIB, to the millisecond. */
+internal val STAMP: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX").withZone(ZoneId.of("Asia/Jakarta"))
+
+/** Which build, on which phone: what a log read later can't tell by itself. */
+internal fun deviceFacts(context: Context): Map<String, Any?> {
+    val app = runCatching { context.packageManager.getPackageInfo(context.packageName, 0) }.getOrNull()
+    return mapOf(
+        "app" to app?.versionName,
+        "package" to context.packageName,
+        "maker" to Build.MANUFACTURER,
+        "model" to Build.MODEL,
+        "android" to Build.VERSION.RELEASE,
+        "sdk" to Build.VERSION.SDK_INT,
+    )
 }
 
 /** One NDJSON line: when (`t`, WIB), what (`ev`), then [fields] as JSON values. */

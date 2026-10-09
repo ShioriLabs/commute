@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The trip log's shared copy, and nothing else. -->
+<!-- The trip log's shared copy and the sensor recordings, and nothing else. -->
 <paths>
     <cache-path name="logs" path="logs/" />
+    <files-path name="sensors" path="sensors/" />
 </paths>

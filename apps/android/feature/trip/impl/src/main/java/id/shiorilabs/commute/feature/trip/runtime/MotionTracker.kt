@@ -12,6 +12,7 @@ import android.os.SystemClock
 import dagger.hilt.android.qualifiers.ApplicationContext
 import id.shiorilabs.commute.core.location.Fix
 import id.shiorilabs.commute.core.query.di.ApplicationScope
+import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.research.MotionEstimator
 import id.shiorilabs.commute.core.trip.research.MotionReadout
 import kotlinx.coroutines.CoroutineScope
@@ -33,7 +34,8 @@ data class MotionLive(val readout: MotionReadout?, val unavailable: Boolean, val
  * "Kecepatan IMU" (Experimental): the motion sensors read at 50 Hz while a train is ridden, through
  * a [MotionEstimator] the trip's fixes keep honest, so the trip page can set its speed beside the
  * satellites'. Nothing the trip decides reads it. Each fix, and every few seconds without one (a
- * tunnel), it writes an `imu` line to the trip log, to set against the rider's marks afterwards.
+ * tunnel), it writes an `imu` line to the trip log, to set against the rider's marks afterwards;
+ * every sample, fix and estimate also goes to the leg's [SensorRecorder] file.
  *
  * The sensors aren't wake-up sensors: with the CPU asleep their samples are lost, so a partial wake
  * lock is held while it runs. That's the battery the switch warns of.
@@ -42,6 +44,7 @@ data class MotionLive(val readout: MotionReadout?, val unavailable: Boolean, val
 class MotionTracker @Inject constructor(
     @ApplicationContext private val context: Context,
     private val log: TripLog,
+    private val recorder: SensorRecorder,
     @ApplicationScope private val scope: CoroutineScope,
 ) {
 
@@ -62,7 +65,8 @@ class MotionTracker @Inject constructor(
     private var lastLineNanos = 0L
     private var toldUnavailable = false
 
-    fun start() {
+    /** Starts reading for [ride], recording it, unless it's running already. */
+    fun start(ride: TripLeg.Ride) {
         if (estimator != null || _live.value?.unavailable == true) return
         val sensors = context.getSystemService(SensorManager::class.java)
         val accel = sensors?.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
@@ -81,6 +85,7 @@ class MotionTracker @Inject constructor(
             haveQuat = false
         }
         lastFixNanos = SystemClock.elapsedRealtimeNanos()
+        recorder.start(ride, listOf(accel, rotation))
         val handler = HandlerThread(THREAD).also { it.start(); thread = it }.let { Handler(it.looper) }
         val events = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
@@ -90,7 +95,10 @@ class MotionTracker @Inject constructor(
                             SensorManager.getQuaternionFromVector(quat, event.values)
                             haveQuat = true
                         }
-                        Sensor.TYPE_LINEAR_ACCELERATION -> if (haveQuat) estimator?.onImu(event.timestamp, event.values, quat)
+                        Sensor.TYPE_LINEAR_ACCELERATION -> if (haveQuat) {
+                            estimator?.onImu(event.timestamp, event.values, quat)
+                            recorder.imu(event.timestamp, event.values, quat)
+                        }
                     }
                 }
             }
@@ -110,6 +118,7 @@ class MotionTracker @Inject constructor(
                 val now = SystemClock.elapsedRealtimeNanos()
                 val readout = synchronized(lock) { estimator?.readout() } ?: break
                 _live.value = MotionLive(readout, unavailable = false, nowNanos = now)
+                recorder.estimate(now, readout)
                 if (now - lastFixNanos >= QUIET_NANOS && now - lastLineNanos >= LINE_NANOS) line(readout, gnss = null, fix = false, now)
                 delay(EMIT_MILLIS)
             }
@@ -126,6 +135,7 @@ class MotionTracker @Inject constructor(
         wakeLock?.takeIf { it.isHeld }?.release()
         wakeLock = null
         synchronized(lock) { estimator = null }
+        recorder.stop()
         _live.value = null
     }
 
@@ -138,7 +148,13 @@ class MotionTracker @Inject constructor(
             estimator.readout()
         }
         lastFixNanos = nanos
+        recorder.fix(nanos, fix)
         line(readout, gnss = fix.speedMps, fix = true, nanos)
+    }
+
+    /** A mark the rider tapped, into the recording while one runs. */
+    fun mark(kind: String) {
+        if (synchronized(lock) { estimator } != null) recorder.mark(kind)
     }
 
     private fun line(readout: MotionReadout, gnss: Float?, fix: Boolean, nanos: Long) {
