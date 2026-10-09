@@ -104,9 +104,8 @@
     <string name="journey_label_shortest_wait">Sering lewat</string>
 
     <!-- Settings -->
-    <string name="journey_settings">Pengaturan</string>
-    <!-- %1$s, %2$s and %3$s are the payment method, networks and walking speed -->
-    <string name="journey_settings_description">Pengaturan tarif: %1$s, %2$s, %3$s</string>
+    <!-- A chip segment, spoken: %1$s is the setting, %2$s what it is set to -->
+    <string name="journey_setting_description">%1$s: %2$s</string>
     <!-- %1$s is the departure as the chip shows it, lowercased -->
     <string name="journey_departure_description">Berangkat %1$s</string>
     <string name="journey_payment">Pembayaran</string>
