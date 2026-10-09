@@ -59,6 +59,10 @@ class CommuteApplication : Application() {
             options.dsn = BuildConfig.SENTRY_DSN
             options.environment = BuildConfig.BUILD_TYPE
             options.isEnableAutoSessionTracking = false
+            // A native crash inside the runtime reaches sentry-native as a bare abort(), without
+            // its message or the threads' stacks; Android's tombstone, read on the next launch,
+            // has both.
+            options.isTombstoneEnabled = true
             options.beforeSend = SentryOptions.BeforeSendCallback { event, _ ->
                 // Sentry fills in a random per-install ID as the user and as the device's ID; drop
                 // both.
