@@ -67,19 +67,14 @@ export interface ReleaseTransit {
 
 export const RELEASE_TRANSIT: ReleaseTransit[] = [
   {
-    // Tangerang line ↔ loop. Scaled from Manggarai, not counted directly: two
-    // releases give Duri's transfers beside Manggarai's on the same day, and both
-    // put Duri at a third or more of them, 0.42 on Sun 24 Mar 2024 (51,954 of
-    // 124,092, full day) and 0.34 on Wed 1 Jan 2025 (23,275 of 67,723, by 13:30).
-    // The lower ratio × Manggarai's weekday average (158,000, ridership.ts) is
-    // 54,301. That overrules the 7 Oct 2026 escalator release's "13 ribu lebih"
-    // (https://www.kci.id/informasi-publik/berita/kai-commuter-pastikan-perbaikan-eskalator-stasiun-duri-sesuai-dengan-aspek-keselamatan-dan-keamanan-pengguna),
-    // which can't be a full day's transfers against these and is probably a
-    // narrower count (one direction, or one interchange).
+    // Tangerang line ↔ loop. KCI's H1 2025 average, stated outright. It settles
+    // the earlier conflict: the 7 Oct 2026 escalator release's "13 ribu lebih"
+    // was a narrower count, and the same-day ratios to Manggarai (0.34 on New
+    // Year's Day 2025, 0.42 on a Ramadan Sunday 2024) bracket this (0.43).
     stationId: 'KCI-DU',
-    transitPerDay: Math.round(158_000 * 23_275 / 67_723),
-    published: 'transit Duri 23.275 vs Manggarai 67.723 hingga pukul 13.30 (Rabu 1/1/2025); 51.954 vs 124.092 (Minggu 24/3/2024)',
-    source: 'https://www.kci.id/informasi-publik/berita/kai-commuter-catat-rapor-positif-layani-1-2-juta-pengguna-commuter-line-jelang-tahun-baru-2025'
+    transitPerDay: 70_000,
+    published: 'Stasiun Duri rata-rata tercatat sebanyak 70 ribu orang per hari (transit, Semester I 2025)',
+    source: 'https://www.kci.id/informasi-publik/berita/meningkat-6-13-persen-kai-commuter-layani-166-4-juta-pengguna-commuter-line-jabodetabek-pada-semester-i-2025-jadi-dampak-positif-dari-1-063-perjalanan-commuter-line-jabodetabek-per-hari-di-gapeka-2025'
   },
   {
     // A floor: the larger of two holiday counts, so a weekday is at least this.
