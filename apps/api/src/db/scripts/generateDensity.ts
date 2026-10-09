@@ -1,11 +1,11 @@
 import * as fs from 'node:fs'
 import { execFileSync } from 'node:child_process'
-import { RIDERSHIP_BY_STATION_ID } from '../data/ridership'
 import { TRIP_PATTERNS } from '../data/trips'
 import { DAY_MASK } from '../schemas/schedules'
 import { rideMinutesToCore } from './density/ride-time'
 import { CAPACITY, hourlyLevels, LINE_CAPACITY, type LevelRange, type StationInput } from './density/model'
 import type { DayBucket } from './density/roles'
+import { resolveVolumes } from './density/volume'
 
 /*
  * Generates db/data/density.ts: a forecast crowding range (0 Lengang, 1 Ramai,
@@ -46,10 +46,12 @@ function main() {
   // Departures in trains of the operator's usual stock, so a 300-seat airport
   // train counts as 0.15 of a KRL rather than as a whole one (LINE_CAPACITY).
   const byStation = new Map<string, Record<DayBucket, number[]>>()
+  const linesAt = new Map<string, Set<string>>()
   for (const r of deps) {
     const id = String(r.stationId)
     const operator = operatorOf.get(id)
     if (!operator) continue
+    linesAt.set(id, (linesAt.get(id) ?? new Set()).add(String(r.lineCode)))
     const weight = (LINE_CAPACITY[String(r.lineCode)] ?? CAPACITY[operator]) / CAPACITY[operator]
     if (!byStation.has(id)) byStation.set(id, { WD: new Array(24).fill(0), SAT: new Array(24).fill(0), SUN: new Array(24).fill(0) })
     for (const day of DAYS) {
@@ -62,6 +64,16 @@ function main() {
   }
 
   const ride = rideMinutesToCore(TRIP_PATTERNS)
+  // Only stations with a board share the network total; one with no trains
+  // can't be absorbing riders.
+  const volumes = resolveVolumes(stations
+    .filter(s => byStation.has(String(s.id)))
+    .map(s => ({
+      id: String(s.id),
+      operator: String(s.operator) as StationInput['operator'],
+      score: Number(s.score ?? 0),
+      airportOnly: [...linesAt.get(String(s.id)) ?? []].every(line => line === 'A')
+    })))
   const lines: string[] = []
   for (const s of stations) {
     const id = String(s.id)
@@ -70,8 +82,7 @@ function main() {
     const input: StationInput = {
       stationId: id,
       operator: String(s.operator) as StationInput['operator'],
-      anchor: RIDERSHIP_BY_STATION_ID.get(id),
-      score: Number(s.score ?? 0),
+      ...volumes.get(id)!,
       rideMin: ride.get(id),
       departures
     }
