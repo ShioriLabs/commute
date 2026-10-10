@@ -33,6 +33,14 @@ import { BadRequest, LengthRequired, PayloadTooLarge, ServiceUnavailable, Unsupp
  * A missing key means closed, so a fresh environment accepts nothing until
  * someone opens it on purpose.
  *
+ * Objects expire TRIP_LOG_RETENTION_DAYS after upload. The bucket deletes
+ * them, not this Worker, through a lifecycle rule on the `trips/` prefix:
+ *
+ *   wrangler r2 bucket lifecycle add commute-trip-logs expire-trips trips/ --expire-days 7
+ *   wrangler r2 bucket lifecycle list commute-trip-logs
+ *
+ * Anything worth keeping for analysis has to be copied out within that window.
+ *
  * Nothing that identifies the uploader is stored: no IP, no User-Agent, no
  * country. requestLog() never logs an IP, and this handler never logs the key.
  *
@@ -43,6 +51,14 @@ const app = new Hono<{ Bindings: Bindings }>()
 
 /** A GPS trace for one trip compresses to well under this. */
 export const MAX_TRIP_LOG_BYTES = 1_048_576
+
+/*
+ * Enforced by the bucket's lifecycle rule (see above), not by this Worker, so
+ * changing it here alone only changes the `expiresAt` the client is told.
+ */
+export const TRIP_LOG_RETENTION_DAYS = 7
+
+const DAY_MS = 86_400_000
 
 /** Every zstd frame starts with this (RFC 8878 §3.1.1). */
 const ZSTD_MAGIC = [0x28, 0xb5, 0x2f, 0xfd]
@@ -132,7 +148,13 @@ app.post('/trips', async (c) => {
     customMetadata
   })
 
-  return c.json({ status: 201, data: { id } }, 201)
+  /*
+   * R2 deletes expired objects asynchronously, up to a day after they become
+   * eligible, so this is "deleted no earlier than", not an exact time.
+   */
+  const expiresAt = wibIsoString(new Date(now.getTime() + TRIP_LOG_RETENTION_DAYS * DAY_MS))
+
+  return c.json({ status: 201, data: { id, expiresAt } }, 201)
 })
 
 export default app
