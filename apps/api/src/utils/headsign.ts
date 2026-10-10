@@ -1,22 +1,16 @@
 import { Operator } from '@commute/constants'
 import { LineTopology } from 'db/data/topology'
-import { getLineGraph } from 'utils/directions'
+import { LOOP_DISCRIMINATORS, getLineGraph } from 'utils/directions'
 import { chainHops, stopLists } from 'utils/edgeChain'
 import { findTopology } from 'utils/topology'
+import { memoize } from 'utils/memo'
 
 // Mid-loop service termini. Cikarang-loop trains terminate at Kampung Bandan
 // (via Pasar Senen) or Angke (via Manggarai), not at a graph terminus, so the
 // direction walk must stop there instead of circling out the mouth. Service
-// knowledge in the spirit of LOOP_DISCRIMINATORS in utils/directions.ts.
+// knowledge, kept beside LOOP_DISCRIMINATORS in utils/directions.ts.
 const LOOP_SERVICE_TERMINI: Record<string, string[]> = {
   'KCI:C': ['KPB', 'AK']
-}
-
-// The loop's two sides. A leg that enters the loop through its mouth needs a
-// via to tell the rider which train to board — both sides depart the same way
-// at the mouth. Mirrors LOOP_DISCRIMINATORS in utils/directions.ts.
-const LOOP_VIA_DISCRIMINATORS: Record<string, [string, string]> = {
-  'KCI:C': ['MRI', 'PSE']
 }
 
 export interface Headsign {
@@ -45,17 +39,15 @@ function buildTrunkSpine(topology: LineTopology): string[] {
 // forward and give up at a phantom fork.
 const bridgedStopsCache = new Map<string, Map<string, string[]>>()
 function bridgedStops(lineKey: string, topology: LineTopology): Map<string, string[]> {
-  let bridged = bridgedStopsCache.get(lineKey)
-  if (!bridged) {
-    bridged = new Map()
+  return memoize(bridgedStopsCache, lineKey, () => {
+    const bridged = new Map<string, string[]>()
     if (!topology.pathReverse) {
       for (const hop of stopLists(topology).flatMap(chainHops)) {
         if (hop.via.length > 0) bridged.set(`${hop.from.station}>${hop.to.station}`, hop.via.map(stop => stop.station))
       }
     }
-    bridgedStopsCache.set(lineKey, bridged)
-  }
-  return bridged
+    return bridged
+  })
 }
 
 // The terminus a leg's train heads toward, found by extending the leg's
@@ -95,7 +87,9 @@ export function computeHeadsignCode(
     if (!serviceTermini.has(code) || loopInterior.has(stationCodes[0]!)) {
       return { code, viaCode: null }
     }
-    const via = (LOOP_VIA_DISCRIMINATORS[lineKey] ?? [])
+    // Entering through the mouth, both sides of the loop depart the same way,
+    // so the via is what tells the rider which train to board.
+    const via = (LOOP_DISCRIMINATORS[lineKey] ?? [])
       .find(discriminator => discriminator !== code && visited.has(discriminator))
     return { code, viaCode: via ?? null }
   }

@@ -6,6 +6,7 @@ import {
 } from '@commute/constants'
 import { TOPOLOGY, LineTopology } from 'db/data/topology'
 import { GroupingSchedule } from 'db/schemas/schedules'
+import { memoize } from 'utils/memo'
 
 // A terminus needs this much daily service to define a group's spine (and thus
 // its label). Rare diversions (3 late-night Jakarta Kota trains) must not own
@@ -18,7 +19,7 @@ const LABEL_MAX_LEADING_STOPS = 2
 // The Cikarang loop's two sides, used to derive the canonical via from a
 // walked path. The raw API via string only exists at Bekasi-interlining
 // stations; via-less Angke trains must still merge with "via Manggarai" ones.
-const LOOP_DISCRIMINATORS: Record<string, [string, string]> = {
+export const LOOP_DISCRIMINATORS: Record<string, [string, string]> = {
   'KCI:C': ['MRI', 'PSE']
 }
 
@@ -66,13 +67,7 @@ export function buildLineGraph(topology: LineTopology): LineGraph {
 const lineGraphCache = new Map<string, LineGraph>()
 
 export function getLineGraph(operator: Operator, lineCode: string, topology: LineTopology): LineGraph {
-  const key = `${operator}:${lineCode}`
-  let graph = lineGraphCache.get(key)
-  if (!graph) {
-    graph = buildLineGraph(topology)
-    lineGraphCache.set(key, graph)
-  }
-  return graph
+  return memoize(lineGraphCache, `${operator}:${lineCode}`, () => buildLineGraph(topology))
 }
 
 export function bfsPath(
