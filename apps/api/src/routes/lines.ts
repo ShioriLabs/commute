@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { StationRepository } from 'db/repositories/stations'
 import { KVRepository } from 'db/repositories/kv'
-import { NotFound, Ok } from 'utils/response'
+import { NotFound, Ok, UnknownOperator } from 'utils/response'
 import { Bindings } from 'app'
 import { getOperatorByCode } from 'utils/operator'
 import { getLineByOperator } from 'utils/line'
@@ -31,12 +31,12 @@ app.get(
 
     const operator = getOperatorByCode(operatorCode)
     if (!operator) {
-      return c.json(NotFound(`Unknown Operator Code: ${operatorCode}`), 404)
+      return c.json(UnknownOperator(operatorCode), 404)
     }
 
     const line = getLineByOperator(operator.code, lineCode)
     if (!line) {
-      return c.json(NotFound(`Unknown Line Code: ${operator.code}:${lineCode}`), 404)
+      return c.json(NotFound('UNKNOWN_LINE', `Unknown Line Code: ${operator.code}:${lineCode}`), 404)
     }
 
     const topology = findTopology(operator.code, lineCode)

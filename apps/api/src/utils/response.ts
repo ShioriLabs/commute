@@ -76,3 +76,11 @@ export function ServiceUnavailable(errorCode: string = 'SERVICE_UNAVAILABLE', me
     }
   }
 }
+
+export function UnknownOperator(operatorCode: string): StandardResponse {
+  return NotFound('UNKNOWN_OPERATOR', `Unknown Operator Code: ${operatorCode}`)
+}
+
+export function UnknownStation(stationCode: string, operatorCode: string): StandardResponse {
+  return NotFound('UNKNOWN_STATION', `Unknown Station Code ${stationCode} in Operator ${operatorCode}`)
+}
