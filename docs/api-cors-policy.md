@@ -20,8 +20,8 @@ needed a deploy here before it could make a single request.
 ## What this is not
 
 Not access control. That distinction is stated where it matters most:
-`routes/sync.ts` and `routes/cache.ts` are unmounted precisely because CORS
-would not have protected them.
+`routes/sync.ts` is unmounted precisely because CORS would not have protected
+it.
 
 Abuse is bounded by `rateLimit()`, which is origin-independent and therefore
 unaffected by the open policy, and by the `cacheControl()` TTLs plus KV

@@ -45,8 +45,8 @@ app.use('*', requestLog())
  * Open CORS, deliberately. Every mounted route is read-only public data. See
  * docs/api-cors-policy.md for why an allowlist was rejected.
  *
- * This is not access control — routes/sync.ts and routes/cache.ts are unmounted
- * precisely because CORS would not have protected them. Abuse is bounded by
+ * This is not access control — routes/sync.ts is unmounted precisely because
+ * CORS would not have protected it. Abuse is bounded by
  * rateLimit() below, which is origin-independent.
  *
  * `GET` and `OPTIONS` only. The one mounted write, `POST /uploads/trips`, is
@@ -115,17 +115,19 @@ app.route('fares', fares)
 app.route('operators', operatorRoutes)
 
 /*
- * routes/sync.ts and routes/cache.ts are NOT mounted.
+ * routes/sync.ts is NOT mounted.
  *
- * They are operational tooling — re-importing an operator's stations and
- * timetables, and busting KV entries — and they were reachable by anyone with
- * curl: twelve mutating routes taking no credentials at all. CORS does nothing
- * here; it restrains browsers, not clients.
+ * It is operational tooling — re-importing an operator's stations and
+ * timetables — and it was reachable by anyone with curl, taking no credentials
+ * at all. CORS does nothing here; it restrains browsers, not clients.
  *
  * The handlers stay in the repo because the work they do is still needed. To
- * run a sync, mount them again for as long as it takes, or give them a shared
+ * run a sync, mount it again for as long as it takes, or give it a shared
  * secret first (KCI_API_TOKEN is the pattern already in this worker). Leaving
- * them mounted and unauthenticated was the one option worth ruling out.
+ * it mounted and unauthenticated was the one option worth ruling out.
+ *
+ * There are no KV bust routes: an API_VERSION bump is how every cached family
+ * is invalidated, and the admin app owns anything finer-grained than that.
  */
 // Shaped for commute.shiorilabs.id only — see routes/internal.ts.
 app.route('_internal', internalRoutes)
@@ -137,8 +139,8 @@ app.route('uploads', uploads)
  *
  * Only the read routes are described. `/_internal` is deliberately absent: it is
  * shaped around one consumer's screen and its response may change without
- * notice. The sync and cache routes are not merely undocumented — they are not
- * mounted at all (see above).
+ * notice. The sync routes are not merely undocumented — they are not mounted at
+ * all (see above).
  */
 app.get('/openapi.json', openAPIRouteHandler(app, {
   documentation: {
@@ -208,9 +210,9 @@ app.get('/openapi.json', openAPIRouteHandler(app, {
   },
   excludeStaticFile: true,
   // Mutations and internal endpoints stay out of the published surface.
-  // sync and cache are unmounted rather than excluded, but the patterns stay:
-  // they cost nothing and mean remounting the handlers cannot silently publish
-  // twelve mutating routes into the public document.
+  // sync is unmounted rather than excluded, and /cache no longer exists, but the
+  // patterns stay: they cost nothing and mean remounting or adding such routes
+  // cannot silently publish mutating endpoints into the public document.
   exclude: [/^\/sync/, /^\/cache/, /^\/_internal/, /^\/uploads/]
 }))
 

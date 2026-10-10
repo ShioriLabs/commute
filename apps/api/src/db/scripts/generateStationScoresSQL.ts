@@ -37,7 +37,7 @@ import { TOPOLOGY } from '../data/topology'
  * Reads the DB via `wrangler d1 execute --json`; emits an UPDATE seed. Apply:
  *   pnpm --filter api generate:station-scores -- --remote
  *   wrangler d1 execute commute --remote --file=src/db/scripts/station_scores.sql
- * Then bump API_VERSION in wrangler.toml — routes/cache.ts is not mounted, so a
+ * Then bump API_VERSION in wrangler.toml — there are no KV bust routes, so a
  * version bump is the only way to clear the five KV families that carry score.
  */
 
