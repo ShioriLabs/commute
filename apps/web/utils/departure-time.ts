@@ -13,8 +13,11 @@
  * them as instants, which is the same contract `at` has always had.
  */
 
-/** Must match the API's DEPARTURE_SLOT_MINUTES, which keys the journey cache. */
-export const DEPARTURE_SLOT_MINUTES = 20
+import { DEPARTURE_SLOT_MINUTES } from '@commute/constants'
+
+// Re-exported so the picker and saved-route card keep importing the grid from
+// here, next to the helpers that quantise to it.
+export { DEPARTURE_SLOT_MINUTES }
 
 /** How many days ahead the picker offers, today included. */
 const DAYS_OFFERED = 7
