@@ -115,6 +115,76 @@ class TrackShapeTest {
         assertTrue(run.alerts().isEmpty())
     }
 
+    // Setiabudi Integritas to Bundaran HI Astra on 6A, as the API shapes it: 2.1 km up Sudirman and
+    // round the roundabout, ending where the bus stops, 91 m short of the halte's point.
+    private val toBundaranHi = TripPlan(
+        listOf(ride(Places.SETIABUDI_INTEGRITAS, Places.BUNDARAN_HI_ASTRA, line = "TJ:6A")),
+    )
+    private val sudirman = listOf(
+        GeoPoint(-6.20918, 106.83013), GeoPoint(-6.2085, 106.82994), GeoPoint(-6.20771, 106.82965),
+        GeoPoint(-6.20715, 106.82938), GeoPoint(-6.20494, 106.82808), GeoPoint(-6.20462, 106.82794),
+        GeoPoint(-6.20425, 106.82785), GeoPoint(-6.20364, 106.82784), GeoPoint(-6.2026, 106.8279),
+        GeoPoint(-6.20181, 106.82801), GeoPoint(-6.20075, 106.82805), GeoPoint(-6.19964, 106.82822),
+        GeoPoint(-6.19939, 106.82745), GeoPoint(-6.19916, 106.82707), GeoPoint(-6.19881, 106.82664),
+        GeoPoint(-6.19755, 106.82546), GeoPoint(-6.19543, 106.82368), GeoPoint(-6.19539, 106.8235),
+        GeoPoint(-6.1955, 106.82299), GeoPoint(-6.19538, 106.8227), GeoPoint(-6.19516, 106.82254),
+        GeoPoint(-6.19489, 106.82252), GeoPoint(-6.19471, 106.82259), GeoPoint(-6.19432, 106.82292),
+        GeoPoint(-6.19384, 106.82295),
+    )
+
+    // An S23's fixes on 2026-10-09 as the bus came round into the halte: it stopped at 19.10.26,
+    // 99 m from the point, and was only within 70 m of it creeping up at 19.11.01.
+    private fun Run.intoBundaranHi(until: Double, after: Double = 0.0) {
+        listOf(
+            Triple(GeoPoint(-6.1953676, 106.8228028), 10.07, 0.1f),
+            Triple(GeoPoint(-6.1947222, 106.8226755), 10.15, 6.4f),
+            Triple(GeoPoint(-6.1944923, 106.8228387), 10.2, 7.2f),
+            Triple(GeoPoint(-6.1943329, 106.8229422), 10.25, 6.7f),
+            Triple(GeoPoint(-6.1939083, 106.8228933), 10.43, 0.5f),
+            Triple(GeoPoint(-6.1939074, 106.8228674), 10.57, 0f),
+        ).filter { it.second > after && it.second <= until }.forEach { (point, minutes, speed) -> fix(point, minutes, accuracyM = 6f, speedMps = speed) }
+    }
+
+    @Test
+    fun `a bus is at the halte it gets off at once it's that close along the road`() {
+        val run = Run(toBundaranHi.shaped(sudirman), startAt = at(0))
+        run.send(TripEvent.RiderSaid(RiderAction.BOARDED, at(0)))
+        run.fix(GeoPoint(-6.20075, 106.82805), 5.0, accuracyM = 6f, speedMps = 10f)
+
+        run.intoBundaranHi(until = 10.2)
+        assertEquals(TripPhase.RIDING, run.state.phase)
+
+        run.intoBundaranHi(until = 10.25, after = 10.2)
+        assertEquals(TripPhase.ARRIVED, run.state.phase)
+        assertEquals(AlertKind.ALIGHT, run.alerts().last().kind)
+    }
+
+    @Test
+    fun `without its shape the bus is only at the halte near its point`() {
+        val run = Run(toBundaranHi, startAt = at(0))
+        run.send(TripEvent.RiderSaid(RiderAction.BOARDED, at(0)))
+        run.fix(GeoPoint(-6.20075, 106.82805), 5.0, accuracyM = 6f, speedMps = 10f)
+
+        run.intoBundaranHi(until = 10.57)
+
+        assertEquals(TripPhase.RIDING, run.state.phase)
+    }
+
+    @Test
+    fun `a halte on the way isn't reached early along the road`() {
+        // The same road, but the rider rides on past Bundaran HI Astra.
+        val past = TripPlan(
+            listOf(ride(Places.SETIABUDI_INTEGRITAS, Places.BUNDARAN_HI_ASTRA, Places.HALTE_1, line = "TJ:6A")),
+        ).shaped(sudirman, null)
+        val run = Run(past, startAt = at(0))
+        run.send(TripEvent.RiderSaid(RiderAction.BOARDED, at(0)))
+        run.fix(GeoPoint(-6.20075, 106.82805), 5.0, accuracyM = 6f, speedMps = 10f)
+
+        run.intoBundaranHi(until = 10.25)
+
+        assertTrue(run.state.confirmedPosition < 1.0)
+    }
+
     @Test
     fun `a plan stored before shapes were kept still decodes, straight`() {
         val json = Json { ignoreUnknownKeys = true }
