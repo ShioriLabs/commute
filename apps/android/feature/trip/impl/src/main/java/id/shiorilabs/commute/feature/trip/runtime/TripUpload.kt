@@ -144,6 +144,7 @@ internal object TripUploadRedactor {
         val events = slice(lines.mapNotNull(::parse), finished.trip.origin.journeyKey) ?: return null
 
         val kept = mutableListOf<String>()
+        var firstKeptAt: String? = null
         // Where the trip stood as of the last line that said: lines without a place go by it.
         var at: Placed? = null
         for (event in events) {
@@ -154,10 +155,12 @@ internal object TripUploadRedactor {
             val placed = at ?: continue
             if (name !in KEPT_EVENTS || !placed.visible) continue
             if (name == "fix" && !window.onTrack(event)) continue
+            if (firstKeptAt == null) firstKeptAt = event["t"]?.jsonPrimitive?.contentOrNull
             kept += rewrite(event, name, placed, window).toString() + "\n"
         }
-        if (kept.isEmpty()) return null
-        val stamp = events.first()["t"]?.jsonPrimitive?.contentOrNull ?: return null
+        // Stamped as the first line sent, not as the trip started: that was at a stop cut off, and
+        // how long before the first stop kept it was would say how much was cut.
+        val stamp = firstKeptAt ?: return null
         return listOf(window.planLine(stamp)) + kept
     }
 
