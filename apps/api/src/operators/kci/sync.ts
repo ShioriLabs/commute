@@ -4,7 +4,6 @@ import { DAY_MASK_ALL } from 'db/schemas/schedules'
 import { NewStation } from 'db/schemas/stations'
 import { getLineInfoFromAPIName, toFeedStationCode, tryGetFormattedName } from './formatters'
 import { NewSchedule } from 'db/schemas/schedules'
-import { chunkArray } from 'utils/chunk'
 
 const STATION_REGION_LOOKUP: Record<number, typeof REGIONS[keyof typeof REGIONS]> = {
   0: REGIONS.CGK,
@@ -52,9 +51,7 @@ export async function syncStations(d1: D1Database, token?: string) {
   }
 
   // Save to database
-  for (const chunk of chunkArray(stations, 10)) {
-    await new StationRepository(d1).insertMany(chunk)
-  }
+  await new StationRepository(d1).insertMany(stations)
 
   return stations
 }

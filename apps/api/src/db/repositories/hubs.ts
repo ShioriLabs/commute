@@ -81,12 +81,7 @@ export class HubRepository extends Repository {
       .orderBy('score desc')
       .execute()
 
-    const assembled = []
-    for (const hub of hubs) {
-      assembled.push(await this.assemble(hub))
-    }
-
-    return assembled
+    return Promise.all(hubs.map(hub => this.assemble(hub)))
   }
 
   /*
