@@ -7,6 +7,7 @@ import { LINES as LRTJBDB_LINES } from 'operators/lrtjbdb/lines'
 import { LINES as TJ_LINES } from 'operators/tj/lines'
 import { LINES as APCGK_LINES } from 'operators/apcgk/lines'
 import { Line } from 'models/line'
+import { lineKey } from 'utils/ids'
 
 /*
  * Every line carries a mode, defaulting to its operator's.
@@ -29,7 +30,7 @@ const withMode = (operator: Operator, lines: readonly Line[]): readonly Line[] =
  * reaching back through it for this would close a cycle.
  */
 const LINES_WITH_TOPOLOGY = new Set(
-  TOPOLOGY.map(topology => `${topology.operator}:${topology.lineCode}`)
+  TOPOLOGY.map(topology => lineKey(topology.operator, topology.lineCode))
 )
 
 /*
@@ -48,7 +49,7 @@ const LINES_WITH_TOPOLOGY = new Set(
 const withSearchable = (operator: Operator, lines: readonly Line[]): readonly Line[] =>
   lines.map(line => ({
     ...line,
-    searchable: LINES_WITH_TOPOLOGY.has(`${operator}:${line.lineCode}`)
+    searchable: LINES_WITH_TOPOLOGY.has(lineKey(operator, line.lineCode))
   }))
 
 const describe = (operator: Operator, lines: readonly Line[]): readonly Line[] =>
@@ -68,10 +69,10 @@ export const LINE_LOOKUP_TABLE: Map<string, Line> = new Map()
 
 for (const [operator, lines] of Object.entries(ALL_LINES)) {
   for (const line of lines) {
-    LINE_LOOKUP_TABLE.set(`${operator}:${line.lineCode}`, line)
+    LINE_LOOKUP_TABLE.set(lineKey(operator, line.lineCode), line)
   }
 }
 
 export function getLineByOperator(operator: Operator, lineCode: string) {
-  return LINE_LOOKUP_TABLE.get(`${operator}:${lineCode}`) ?? null
+  return LINE_LOOKUP_TABLE.get(lineKey(operator, lineCode)) ?? null
 }

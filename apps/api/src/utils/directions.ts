@@ -7,6 +7,7 @@ import {
 import { TOPOLOGY, LineTopology } from 'db/data/topology'
 import { GroupingSchedule } from 'db/schemas/schedules'
 import { memoize } from 'utils/memo'
+import { lineKey } from 'utils/ids'
 
 // A terminus needs this much daily service to define a group's spine (and thus
 // its label). Rare diversions (3 late-night Jakarta Kota trains) must not own
@@ -67,7 +68,7 @@ export function buildLineGraph(topology: LineTopology): LineGraph {
 const lineGraphCache = new Map<string, LineGraph>()
 
 export function getLineGraph(operator: Operator, lineCode: string, topology: LineTopology): LineGraph {
-  return memoize(lineGraphCache, `${operator}:${lineCode}`, () => buildLineGraph(topology))
+  return memoize(lineGraphCache, lineKey(operator, lineCode), () => buildLineGraph(topology))
 }
 
 export function bfsPath(
@@ -207,7 +208,7 @@ export function groupDirections(params: {
 
   const graph = topology ? getLineGraph(operator, lineCode, topology) : null
   const hasViaSplitEntries = entries.some(entry => entry.via !== null)
-  const discriminators = LOOP_DISCRIMINATORS[`${operator}:${lineCode}`]
+  const discriminators = LOOP_DISCRIMINATORS[lineKey(operator, lineCode)]
 
   const synthetic: DirectionGroupCore[] = []
   const walkedGroups = new Map<string, WalkedDestination[]>()

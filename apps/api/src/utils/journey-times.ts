@@ -17,6 +17,7 @@ import type { FareJourney, FareResultLeg, TripResult } from '@commute/schemas'
 import { atSecondsOfDay, serviceDay, secondsSinceLocalMidnight, wibIsoString } from 'utils/fare'
 import { DAY_MASK } from 'db/schemas/schedules'
 import { SEPARATELY_GATED_LINES, type FareContext } from '@commute/constants'
+import { lineCodeOf } from 'utils/ids'
 
 /** The 3-bit mask the trips carry, for the day the rider is travelling. */
 const dayMaskFor = (at: Date): number => DAY_MASK[serviceDay(at)]
@@ -36,7 +37,7 @@ function toRouteLegs(legs: readonly FareResultLeg[]): RouteLeg[] {
     ? {
         type: 'RIDE',
         // The wire carries `operator:lineCode`; the engine wants the bare code.
-        lineCode: leg.line.slice(leg.line.indexOf(':') + 1),
+        lineCode: lineCodeOf(leg.line),
         operator: leg.operator,
         fromStationId: leg.from.id,
         toStationId: leg.to.id,

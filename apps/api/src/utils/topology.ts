@@ -1,6 +1,7 @@
 import type { Operator, OPERATORS } from '@commute/constants'
 import { TOPOLOGY, type Branch, type LineTopology, type Stop } from 'db/data/topology'
 import type { Line, LineDetail, LineDetailSegment, LineDetailStation, LineSegmentKind } from 'models/line'
+import { lineKey } from 'utils/ids'
 
 export function findTopology(operator: Operator, lineCode: string): LineTopology | null {
   return TOPOLOGY.find(t => t.operator === operator && t.lineCode === lineCode) ?? null
@@ -222,7 +223,7 @@ export function buildLineDetail(
     }
     // Line keys, matching Station.lines. `distanceFromOriginM` is gone: it was
     // a v2 hook nothing ever read.
-    const currentKey = `${topology.operator}:${line.lineCode}`
+    const currentKey = lineKey(topology.operator, line.lineCode)
     const otherLines = station.lines.filter(key => key !== currentKey)
     return {
       id: station.id,

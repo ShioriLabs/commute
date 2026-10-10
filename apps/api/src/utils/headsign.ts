@@ -4,6 +4,7 @@ import { LOOP_DISCRIMINATORS, getLineGraph } from 'utils/directions'
 import { chainHops, stopLists } from 'utils/edgeChain'
 import { findTopology } from 'utils/topology'
 import { memoize } from 'utils/memo'
+import { lineKey } from 'utils/ids'
 
 // Mid-loop service termini. Cikarang-loop trains terminate at Kampung Bandan
 // (via Pasar Senen) or Angke (via Manggarai), not at a graph terminus, so the
@@ -68,8 +69,8 @@ export function computeHeadsignCode(
   let current = stationCodes[stationCodes.length - 1]!
   if (!graph.adjacency.has(current)) return null
 
-  const lineKey = `${operator}:${lineCode}`
-  const serviceTermini = new Set(LOOP_SERVICE_TERMINI[lineKey] ?? [])
+  const key = lineKey(operator, lineCode)
+  const serviceTermini = new Set(LOOP_SERVICE_TERMINI[key] ?? [])
   const loopInterior = new Set(
     (topology.branches ?? [])
       .filter(branch => branch.closeTo)
@@ -77,7 +78,7 @@ export function computeHeadsignCode(
   )
   const spine = buildTrunkSpine(topology)
   const visited = new Set(stationCodes)
-  const bridged = bridgedStops(lineKey, topology)
+  const bridged = bridgedStops(key, topology)
   for (let i = 1; i < stationCodes.length; i++) {
     for (const code of bridged.get(`${stationCodes[i - 1]}>${stationCodes[i]}`) ?? []) visited.add(code)
   }
@@ -89,7 +90,7 @@ export function computeHeadsignCode(
     }
     // Entering through the mouth, both sides of the loop depart the same way,
     // so the via is what tells the rider which train to board.
-    const via = (LOOP_DISCRIMINATORS[lineKey] ?? [])
+    const via = (LOOP_DISCRIMINATORS[key] ?? [])
       .find(discriminator => discriminator !== code && visited.has(discriminator))
     return { code, viaCode: via ?? null }
   }

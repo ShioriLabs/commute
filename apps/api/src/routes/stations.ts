@@ -29,6 +29,7 @@ import { DAY_HEADWAYS_S, DIRECTIONAL_HEADWAYS_S, HEADWAYS_S, LINE_DAY_MASK, LINE
 import { serviceDay } from 'utils/fare'
 import { SERVICE_HOURS } from 'db/data/service-hours'
 import { memoize } from 'utils/memo'
+import { lineCodeOf, lineKey } from 'utils/ids'
 
 /*
  * The three day buckets, high bit first, matching how LINE_DAY_MASK is packed
@@ -391,11 +392,11 @@ app.get(
         })
         // A line key rather than its denormalised name/colour: the same
         // dictionary from /operators resolves it, as everywhere else.
-        const lineKey = `${operator.code}:${line.lineCode}`
+        const groupLine = lineKey(operator.code, line.lineCode)
 
         if (compactMode) {
           timetable.push({
-            line: lineKey,
+            line: groupLine,
             timetable: groups.map(group => ({
               ...groupShell(group),
               destinations: group.destinations.map(destination => ({
@@ -407,7 +408,7 @@ app.get(
           })
         } else {
           timetable.push({
-            line: lineKey,
+            line: groupLine,
             timetable: groups.map(group => ({
               ...groupShell(group),
               destinations: group.destinations.map(destination => ({
@@ -590,7 +591,7 @@ app.get(
      * split actually applies at this station.
      */
     const splitLines = station.lines.filter((key) => {
-      const lineCode = key.slice(key.indexOf(':') + 1)
+      const lineCode = lineCodeOf(key)
       return DIRECTIONAL_HEADWAYS_S[`${lineCode}@${station.id}@F`] !== undefined
         || DIRECTIONAL_HEADWAYS_S[`${lineCode}@${station.id}@R`] !== undefined
     })
@@ -598,7 +599,7 @@ app.get(
     if (splitLines.length > 0) {
       const ids = new Set<string>()
       for (const key of splitLines) {
-        const t = LINE_TERMINI[key.slice(key.indexOf(':') + 1)]
+        const t = LINE_TERMINI[lineCodeOf(key)]
         if (t) {
           ids.add(t.F)
           ids.add(t.R)
@@ -631,7 +632,7 @@ app.get(
 
     const rows: HeadwayRow[] = []
     for (const key of station.lines) {
-      const lineCode = key.slice(key.indexOf(':') + 1)
+      const lineCode = lineCodeOf(key)
       const days = daysOf(lineCode)
 
       /*

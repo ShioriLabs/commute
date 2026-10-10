@@ -1,6 +1,7 @@
 import { isSeparatelyGated, type Operator } from '@commute/constants'
 import { TOPOLOGY } from 'db/data/topology'
 import type { RouteLeg } from '@commute/tsundere'
+import { stationCodeOf } from 'utils/ids'
 
 /*
  * Operators that run interlined services — distinct service lines sharing a
@@ -45,8 +46,6 @@ export function findInterliningLineCodes(operator: Operator, stationCodes: strin
     .map(topology => topology.lineCode)
 }
 
-const stationCode = (operator: string, stationId: string) => stationId.slice(operator.length + 1)
-
 /*
  * The router splits legs on every lineCode change, even at a shared trunk node
  * with no walk — so a one-seat ride whose train runs across the fork looks like
@@ -71,7 +70,7 @@ export function mergeInterlinedLegs(legs: RouteLeg[]): RouteLeg[] {
     ) {
       const combinedIds = [...last.stationIds, ...leg.stationIds.slice(1)]
       const operator = last.operator as Operator
-      const codes = combinedIds.map(id => stationCode(operator, id))
+      const codes = combinedIds.map(id => stationCodeOf(operator, id))
       const [throughLine] = findInterliningLineCodes(operator, codes)
       if (throughLine) {
         merged[merged.length - 1] = {
