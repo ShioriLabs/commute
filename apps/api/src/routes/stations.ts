@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import { StationRepository } from 'db/repositories/stations'
-import { BadRequest, Internal, NotFound, Ok, UnknownOperator, UnknownStation } from 'utils/response'
+import { InvalidTimeRange, Internal, NotFound, Ok, TimetableNotAvailable, UnknownOperator, UnknownStation } from 'utils/response'
 import { Bindings } from 'app'
 import { KVRepository } from 'db/repositories/kv'
 import { readThrough } from 'utils/read-through'
@@ -79,6 +80,71 @@ async function getNameIndex(operator: Operator, stationRepository: StationReposi
     nameIndexCache.set(operator, index)
   }
   return index
+}
+
+/*
+ * The flat departures list, optionally narrowed to one line. `/timetable` and
+ * `/timetable/:line` are the same query; they differ in the key segment, in
+ * which existence check runs, and in whether the station's `timetableSynced`
+ * flag is consulted (a line-scoped request answers from its own station-line
+ * row instead).
+ */
+async function flatTimetable(c: Context<{ Bindings: Bindings }>, lineCode?: string): Promise<Response> {
+  const operatorCode = c.req.param('operator') as string
+  const stationCode = c.req.param('stationCode') as string
+  const operator = getOperatorByCode(operatorCode)
+  if (!operator) {
+    return c.json(UnknownOperator(operatorCode), 404)
+  }
+
+  const window = parseTimeWindow(c.req.query('from'), c.req.query('to'))
+  if (window === 'invalid') {
+    return c.json(InvalidTimeRange(), 400)
+  }
+
+  const day = requestedDay(c.req.query('day'))
+
+  const stationRepository = new StationRepository(c.env.DB)
+  const stationID = `${operator.code}-${stationCode}`
+
+  /*
+   * The window and the day are both part of the key. Caching a filtered body
+   * under the plain key would serve a morning-only timetable to the next
+   * caller who asked for the whole day, and a weekday board to a caller
+   * asking about Saturday.
+   */
+  const kvKey = `timetable:${stationID}:${day}:${lineCode === undefined ? '' : `${lineCode}:`}${windowCacheKey(window)}:${c.env.API_VERSION}`
+
+  return readThrough(
+    c,
+    kvKey,
+    async () => {
+      let departures: Schedule[]
+
+      if (lineCode === undefined) {
+        const checkStationResult = await stationRepository.checkIfExists(stationID)
+        if (!checkStationResult.exists || checkStationResult.station === null) return c.json(UnknownStation(stationCode, operator.code), 404)
+
+        if (checkStationResult.station.timetableSynced === 0) {
+          return c.json(TimetableNotAvailable(stationCode, operator.code), 404)
+        }
+
+        departures = await stationRepository.getTimetableFromStationId(checkStationResult.station.id, DAY_BIT[day])
+      } else {
+        const checkIfLineExists = await stationRepository.checkIfLineExists(stationID, lineCode)
+        if (!checkIfLineExists.exists || checkIfLineExists.line === null) return c.json(NotFound('UNKNOWN_LINE', `Unknown Line Code ${lineCode} in Station ID ${stationID}`), 404)
+
+        departures = await stationRepository.getTimetableFromStationId(
+          checkIfLineExists.line.stationId,
+          DAY_BIT[day],
+          checkIfLineExists.line.lineCode
+        )
+      }
+
+      return window ? filterByWindow(departures, window) : departures
+    },
+    timetable => timetable.length > 0
+  )
 }
 
 app.get(
@@ -169,51 +235,7 @@ app.get(
       404: 'Kode operator atau stasiun tidak ditemukan.'
     }
   }),
-  async (c) => {
-    const operatorCode = c.req.param('operator')
-    const stationCode = c.req.param('stationCode')
-    const operator = getOperatorByCode(operatorCode)
-    if (!operator) {
-      return c.json(UnknownOperator(operatorCode), 404)
-    }
-
-    const window = parseTimeWindow(c.req.query('from'), c.req.query('to'))
-    if (window === 'invalid') {
-      return c.json(BadRequest('INVALID_TIME_RANGE', 'Use HH:MM in 24-hour local time, e.g. from=06:00&to=09:00.'), 400)
-    }
-
-    const day = requestedDay(c.req.query('day'))
-
-    const stationRepository = new StationRepository(c.env.DB)
-
-    /*
-     * The window and the day are both part of the key. Caching a filtered body
-     * under the plain key would serve a morning-only timetable to the next
-     * caller who asked for the whole day, and a weekday board to a caller
-     * asking about Saturday.
-     */
-    const kvKey = `timetable:${operator.code}-${stationCode}:${day}:${windowCacheKey(window)}:${c.env.API_VERSION}`
-
-    return readThrough(
-      c,
-      kvKey,
-      async () => {
-        const checkStationResult = await stationRepository.checkIfExists(`${operator.code}-${stationCode}`)
-        if (!checkStationResult.exists || checkStationResult.station === null) return c.json(UnknownStation(stationCode, operator.code), 404)
-
-        if (checkStationResult.station.timetableSynced === 0) {
-          return c.json(
-            NotFound('TIMETABLE_NOT_AVAILABLE', `Timetable for Station ${stationCode} in Operator ${operator.code} is not available yet. Please try again later.`),
-            404
-          )
-        }
-
-        const allDepartures = await stationRepository.getTimetableFromStationId(checkStationResult.station.id, DAY_BIT[day])
-        return window ? filterByWindow(allDepartures, window) : allDepartures
-      },
-      timetable => timetable.length > 0
-    )
-  }
+  c => flatTimetable(c)
 )
 
 app.get(
@@ -246,7 +268,7 @@ app.get(
 
     const window = parseTimeWindow(c.req.query('from'), c.req.query('to'))
     if (window === 'invalid') {
-      return c.json(BadRequest('INVALID_TIME_RANGE', 'Use HH:MM in 24-hour local time, e.g. from=06:00&to=09:00.'), 400)
+      return c.json(InvalidTimeRange(), 400)
     }
 
     const stationRepository = new StationRepository(c.env.DB)
@@ -275,10 +297,7 @@ app.get(
       if (!checkStationResult.value.exists || checkStationResult.value.station === null) return c.json(UnknownStation(stationCode, operator.code), 404)
 
       if (checkStationResult.value.station.timetableSynced === 0) {
-        return c.json(
-          NotFound('TIMETABLE_NOT_AVAILABLE', `Timetable for Station ${stationCode} in Operator ${operator.code} is not available yet. Please try again later.`),
-          404
-        )
+        return c.json(TimetableNotAvailable(stationCode, operator.code), 404)
       }
 
       if (schedules.value.length === 0) {
@@ -426,43 +445,7 @@ app.get(
       404: 'Kode operator, stasiun, atau lin tidak ditemukan.'
     }
   }),
-  async (c) => {
-    const operatorCode = c.req.param('operator')
-    const stationCode = c.req.param('stationCode')
-    const lineCode = c.req.param('line')
-    const operator = getOperatorByCode(operatorCode)
-    if (!operator) {
-      return c.json(UnknownOperator(operatorCode), 404)
-    }
-
-    const window = parseTimeWindow(c.req.query('from'), c.req.query('to'))
-    if (window === 'invalid') {
-      return c.json(BadRequest('INVALID_TIME_RANGE', 'Use HH:MM in 24-hour local time, e.g. from=06:00&to=09:00.'), 400)
-    }
-
-    const stationRepository = new StationRepository(c.env.DB)
-
-    const day = requestedDay(c.req.query('day'))
-
-    const kvKey = `timetable:${operator.code}-${stationCode}:${day}:${lineCode}:${windowCacheKey(window)}:${c.env.API_VERSION}`
-
-    return readThrough(
-      c,
-      kvKey,
-      async () => {
-        const checkIfLineExists = await stationRepository.checkIfLineExists(`${operator.code}-${stationCode}`, lineCode)
-        if (!checkIfLineExists.exists || checkIfLineExists.line === null) return c.json(NotFound('UNKNOWN_LINE', `Unknown Line Code ${lineCode} in Station ID ${operator.code}-${stationCode}`), 404)
-
-        const lineDepartures = await stationRepository.getTimetableFromStationId(
-          checkIfLineExists.line.stationId,
-          DAY_BIT[day],
-          checkIfLineExists.line.lineCode
-        )
-        return window ? filterByWindow(lineDepartures, window) : lineDepartures
-      },
-      timetable => timetable.length > 0
-    )
-  }
+  c => flatTimetable(c, c.req.param('line'))
 )
 
 app.get(
