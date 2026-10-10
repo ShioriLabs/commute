@@ -51,6 +51,9 @@ simple = { limit = 10, period = 60 }
 
 # Trip-mode GPS traces from the Android app, keyed trips/YYYY/MM/DD/<uuid>.ndjson.zst.
 # Create once with: wrangler r2 bucket create commute-trip-logs
+# Then expire uploads after 7 days (TRIP_LOG_RETENTION_DAYS; lifecycle rules
+# are bucket config and can't be declared here):
+#   wrangler r2 bucket lifecycle add commute-trip-logs expire-trips trips/ --expire-days 7
 [[r2_buckets]]
 binding = "TRIP_LOGS"
 bucket_name = "commute-trip-logs"
