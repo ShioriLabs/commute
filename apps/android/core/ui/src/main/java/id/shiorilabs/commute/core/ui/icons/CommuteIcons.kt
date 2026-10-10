@@ -32,6 +32,7 @@ import com.adamglin.phosphoricons.bold.PushPinSlash
 import com.adamglin.phosphoricons.bold.ShareNetwork
 import com.adamglin.phosphoricons.bold.SlidersHorizontal
 import com.adamglin.phosphoricons.bold.TrainSimple
+import com.adamglin.phosphoricons.bold.UploadSimple
 import com.adamglin.phosphoricons.bold.Wheelchair
 import com.adamglin.phosphoricons.bold.X
 import com.adamglin.phosphoricons.duotone.Baby
@@ -147,6 +148,9 @@ object CommuteIcons {
     /** Clears stored data. */
     val Delete: ImageVector = PhosphorIcons.Fill.Trash
     val Share: ImageVector = PhosphorIcons.Bold.ShareNetwork
+
+    /** Sends something of the rider's to Commute, as a trip's log. */
+    val Upload: ImageVector = PhosphorIcons.Bold.UploadSimple
 
     /* The settings page's rows, as the web's settings sheet draws them. */
     val SavedStations: ImageVector = PhosphorIcons.Fill.PushPinSimple

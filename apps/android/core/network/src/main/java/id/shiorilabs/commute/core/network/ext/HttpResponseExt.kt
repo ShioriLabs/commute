@@ -30,6 +30,13 @@ internal suspend inline fun <reified T> HttpResponse.decodeOrThrow(): T {
     }
 }
 
+/** Throws [ApiException] on a non-2xx status, for a request whose answer has nothing to read. */
+internal suspend fun HttpResponse.throwUnlessSuccess() {
+    if (!status.isSuccess()) {
+        throw ApiException(status = status.value, message = errorMessage())
+    }
+}
+
 /**
  * [decodeOrThrow] for a request that may have sent `If-None-Match`: a 304 is
  * [Fetched.NotModified], and a 2xx is the envelope's `data` with the response's ETag.

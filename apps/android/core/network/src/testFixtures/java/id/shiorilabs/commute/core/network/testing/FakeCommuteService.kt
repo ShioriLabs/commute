@@ -173,6 +173,10 @@ class FakeCommuteService : CommuteService {
         return answer(ifNoneMatch) { trips(fromId, toId, TripCriteria(paymentMethod, at, modes, walking)) }
     }
 
+    var tripLogUpload: suspend (body: ByteArray, appVersion: String) -> Unit = { _, _ -> error("uploadTripLog was not stubbed") }
+
+    override suspend fun uploadTripLog(body: ByteArray, appVersion: String) = tripLogUpload(body, appVersion)
+
     private suspend fun <T> answer(ifNoneMatch: String?, body: suspend () -> T): Fetched<T> {
         lastIfNoneMatch = ifNoneMatch
         val current = etag

@@ -60,6 +60,7 @@ import id.shiorilabs.commute.core.ui.motion.rememberReducedMotion
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.trip.R
 import id.shiorilabs.commute.feature.trip.runtime.FinishedTrip
+import id.shiorilabs.commute.feature.trip.runtime.TripUploadRedactor
 import java.time.Duration
 
 private val DoneInk = Color(0xFF0F172A)
@@ -83,6 +84,9 @@ internal fun TripFinished(
     onClose: () -> Unit,
     onOpenStation: (TripStop) -> Unit,
     onRouteBack: () -> Unit,
+    upload: TripUploadState = TripUploadState.IDLE,
+    onUpload: () -> Unit = {},
+    onPrivacyPolicy: () -> Unit = {},
 ) {
     val plan = finished.trip.plan
     val rides = plan.rideIndices.map(plan::ride)
@@ -126,6 +130,16 @@ internal fun TripFinished(
                 modifier = Modifier.fillMaxWidth(),
                 variant = CommuteButtonVariant.Secondary,
                 leadingIcon = CommuteIcons.Swap,
+            )
+        }
+        val canUpload = remember(finished) { TripUploadRedactor.eligible(finished) }
+        if (canUpload || finished.uploaded) {
+            TripUploadPrompt(
+                uploaded = finished.uploaded,
+                state = upload,
+                onUpload = onUpload,
+                onPrivacyPolicy = onPrivacyPolicy,
+                modifier = Modifier.padding(start = 20.dp, top = 32.dp, end = 20.dp),
             )
         }
     }
