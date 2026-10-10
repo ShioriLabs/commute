@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import app from 'app'
 import type { Bindings } from 'app'
 
-import { MAX_TRIP_LOG_BYTES, tripLogKey, UPLOADS_FLAG_KEY } from './uploads'
+import { MAX_TRIP_LOG_BYTES, TRIP_LOG_RETENTION_DAYS, tripLogKey, UPLOADS_FLAG_KEY } from './uploads'
 
 /*
  * The upload is anonymous, so its validation is the whole of its security.
@@ -81,7 +81,7 @@ describe('POST /uploads/trips', () => {
     const res = await upload(body, withLength(body), puts)
 
     expect(res.status).toBe(201)
-    const { data } = await res.json() as { data: { id: string } }
+    const { data } = await res.json() as { data: { id: string, expiresAt: string } }
     expect(data.id).toMatch(/^[0-9a-f-]{36}$/)
 
     expect(puts).toHaveLength(1)
@@ -89,6 +89,9 @@ describe('POST /uploads/trips', () => {
     expect(puts[0]!.bytes).toEqual(body)
     expect(puts[0]!.options.sha256).toBeDefined()
     expect(puts[0]!.options.httpMetadata).toEqual({ contentType: 'application/zstd' })
+
+    const receivedAt = Date.parse(puts[0]!.options.customMetadata!.receivedAt!)
+    expect(Date.parse(data.expiresAt) - receivedAt).toBe(TRIP_LOG_RETENTION_DAYS * 86_400_000)
   })
 
   it('stores nothing that identifies the uploader', async () => {
