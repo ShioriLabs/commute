@@ -314,7 +314,19 @@ object TripEngine {
             val short = bestStop - ROLLING_IN
             return if (along == null) short else min(along, short)
         }
-        return alongHops(ride, start, end, point, tuning)
+        return alongHops(ride, start, end, point, tuning)?.let { reachedAlongShape(ride, it, tuning) }
+    }
+
+    /**
+     * [along], or the stop to get off at once [along] is within [Tuning.atStop] of it along the last
+     * hop's shape. A shape ends where the line stops at the station, which needn't be its point:
+     * 6A stops 91 m short of Bundaran HI Astra's, and sat there 35 s before "turun" came.
+     */
+    private fun reachedAlongShape(ride: TripLeg.Ride, along: Double, tuning: Tuning): Double {
+        val last = ride.lastIndex - 1
+        if (along < last || ride.hopPaths[last] == null) return along
+        val left = (ride.lastIndex - along) * (ride.hopLengthM(last) ?: return along)
+        return if (left <= tuning.atStop) ride.lastIndex.toDouble() else along
     }
 
     /** [point] projected onto the nearest hop from stop [start] to stop [end] it runs alongside, along its shape where it has one. */

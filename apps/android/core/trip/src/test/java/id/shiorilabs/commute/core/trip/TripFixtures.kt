@@ -39,6 +39,11 @@ internal object Places {
     val TEGAL_MAMPANG = stop("TJ-H00246P", "Tegal Mampang", -6.240213, 106.83102)
     val CSW_1 = stop("TJ-H00041P", "CSW 1", -6.23994, 106.79843)
 
+    // 6A up Sudirman and round the roundabout to Bundaran HI Astra, whose point lies 91 m north of
+    // where the 6A stops at it.
+    val SETIABUDI_INTEGRITAS = stop("TJ-H00215P", "Setiabudi Integritas", -6.209189, 106.830237)
+    val BUNDARAN_HI_ASTRA = stop("TJ-H00022P", "Bundaran HI Astra", -6.193021, 106.823)
+
     private fun stop(id: String, name: String, lat: Double, lon: Double) = TripStop(id, name, lat, lon)
 }
 
