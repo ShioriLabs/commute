@@ -84,3 +84,11 @@ export function UnknownOperator(operatorCode: string): StandardResponse {
 export function UnknownStation(stationCode: string, operatorCode: string): StandardResponse {
   return NotFound('UNKNOWN_STATION', `Unknown Station Code ${stationCode} in Operator ${operatorCode}`)
 }
+
+export function TimetableNotAvailable(stationCode: string, operatorCode: string): StandardResponse {
+  return NotFound('TIMETABLE_NOT_AVAILABLE', `Timetable for Station ${stationCode} in Operator ${operatorCode} is not available yet. Please try again later.`)
+}
+
+export function InvalidTimeRange(): StandardResponse {
+  return BadRequest('INVALID_TIME_RANGE', 'Use HH:MM in 24-hour local time, e.g. from=06:00&to=09:00.')
+}
