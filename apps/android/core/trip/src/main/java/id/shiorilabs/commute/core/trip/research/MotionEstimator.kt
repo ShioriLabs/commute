@@ -47,6 +47,22 @@ data class MotionTuning(
     val rawBiasS: Double = 5.0,
     /** A gap between motion samples longer than this, in seconds, is a gap, not a step. */
     val maxImuGapS: Double = 0.5,
+    /** How fast gravity settles on what the accelerometer reads while the phone lies still on a standing train, in seconds. */
+    val gravitySettleS: Double = 1.0,
+    /**
+     * How slowly gravity drifts toward what the accelerometer reads at any time, in seconds: long
+     * beside a pull, short beside the gyroscope's drift. Off until a ride with the phone in a pocket
+     * says what it should be; a hand-held ride on 2026-10-09 favoured none.
+     */
+    val gravityFollowS: Double = Double.POSITIVE_INFINITY,
+    /** A pull this hard, m/s², smoothed, soon after standing, is the train setting off... */
+    val pullMps2: Double = 0.2,
+    /** ...when it lasts this long, in seconds... */
+    val pullS: Double = 3.0,
+    /** ...and starts within this long of standing, in seconds... */
+    val pullAfterStandingS: Double = 20.0,
+    /** ...with the phone turning no faster than this, rad/s, so a hand moving it isn't one (held, it turns at 0.25). */
+    val pullQuietGyro: Double = 0.5,
 )
 
 /** What [MotionEstimator] makes of the ride so far. Speeds in m/s, acceleration in m/s². */
@@ -74,10 +90,17 @@ data class MotionReadout(
  * angle, with the satellites where there are any (`docs/android-research-mode.md`, steps 1 to 4).
  * Pure and fed in time order, so a synthetic ride or a recorded one replays the same.
  *
- * Linear acceleration is turned into the game frame by the game rotation vector (gyro and
+ * Gravity is its own: turned with the phone by the gyroscope, and set to what the accelerometer
+ * reads only while the train stands: on average between two fixes that both say so, in a hand that's
+ * never still, or as it reads lying still. The phone's fusion (linear acceleration, the game rotation
+ * vector's tilt) settles toward a train's steady pull and takes it for gravity: an S23 read
+ * 0.0 ± 0.1 m/s² of a 0.5 m/s² pull out of a station on 2026-10-09, leaning 3° into it.
+ *
+ * The acceleration less gravity is turned into the game frame by the game rotation vector (gyro and
  * accelerometer only: a train's motors make the compass useless), and its horizontal part lined up
  * with true north by comparing what the sensors say the speed did between two fixes with what the
- * satellites say it did. Forward is the satellites' last bearing at speed, held through a tunnel.
+ * satellites say it did. Forward is the satellites' last bearing at speed, held through a tunnel;
+ * with none yet (an underground platform), the way the train first pulls after standing.
  * The speed is a two-state Kalman filter over speed and the accelerometer's bias: predicted by the
  * forward acceleration, corrected by each fix, and put to zero when the train is plainly standing.
  */
@@ -109,7 +132,9 @@ class MotionEstimator(private val tuning: MotionTuning = MotionTuning()) {
     private var bias = 0.0
     private var p00 = 100.0
     private var p01 = 0.0
-    private var p11 = 0.01
+    // The accelerometer's own error is gravity's now, so little is left for the bias: given as much
+    // room as before, it learned a fix's noise and ran 4 m/s fast after a minute and a half blind.
+    private var p11 = 0.0025
 
     private var aLong = 0.0
     private var raw: Double? = null
@@ -121,13 +146,93 @@ class MotionEstimator(private val tuning: MotionTuning = MotionTuning()) {
 
     private val window = ArrayDeque<DoubleArray>()
 
+    // The latest game rotation vector, [w, x, y, z].
+    private val quat = FloatArray(4)
+    private var haveQuat = false
+
+    // Gravity in the phone's frame, m/s², as the accelerometer reads it standing; and the gyroscope's
+    // last sample, for the turn since.
+    private var gravity: DoubleArray? = null
+    private var lastGyroNanos: Long? = null
+    private var gyroRate = 0.0
+    private var settling = false
+
+    // The acceleration less gravity since the last fix, summed in the game frame where a hand's
+    // turning averages out, and how long over: what gravity is off by, if the train stood throughout.
+    private var residualX = 0.0
+    private var residualY = 0.0
+    private var residualZ = 0.0
+    private var residualS = 0.0
+    private var lastFixStood = false
+
+    // The way the train pulled off from standing, in the game frame: forward with no satellites.
+    private var stoodNanos: Long? = null
+    private var pullX = 0.0
+    private var pullY = 0.0
+    private var pullSince: Long? = null
+    private var pullSumX = 0.0
+    private var pullSumY = 0.0
+    private var axisX: Double? = null
+    private var axisY: Double? = null
+
     val aligned: Boolean get() = evidence >= tuning.alignEvidenceMps
 
+    /** The game rotation vector as `[w, x, y, z]`: which way the phone's frame is turned. */
+    fun onRotation(quat: FloatArray) {
+        quat.copyInto(this.quat)
+        haveQuat = true
+    }
+
+    /** One gyroscope sample, rad/s in the phone's frame, at [nanos] on the monotonic clock: gravity turns with it. */
+    fun onGyroscope(nanos: Long, rate: FloatArray) {
+        val last = lastGyroNanos
+        lastGyroNanos = nanos
+        val g = gravity ?: return
+        if (last == null) return
+        val dt = (nanos - last) / 1e9
+        if (dt <= 0 || dt > tuning.maxImuGapS) return
+        val wx = rate[0].toDouble()
+        val wy = rate[1].toDouble()
+        val wz = rate[2].toDouble()
+        // A vector fixed in the world, seen from a phone turning at ω, turns at -ω × it. A step along
+        // the tangent lengthens it a little each time, so it's put back to its length: in a hand
+        // turning at 1 rad/s, gravity had doubled within minutes.
+        val length = sqrt(g[0] * g[0] + g[1] * g[1] + g[2] * g[2])
+        val cx = wy * g[2] - wz * g[1]
+        val cy = wz * g[0] - wx * g[2]
+        val cz = wx * g[1] - wy * g[0]
+        g[0] -= cx * dt
+        g[1] -= cy * dt
+        g[2] -= cz * dt
+        val stretched = sqrt(g[0] * g[0] + g[1] * g[1] + g[2] * g[2])
+        if (stretched > 0) for (i in 0..2) g[i] *= length / stretched
+        gyroRate += (sqrt(wx * wx + wy * wy + wz * wz) - gyroRate) * (dt / (tuning.smoothingS + dt))
+    }
+
     /**
-     * One motion sample: [accel] the linear acceleration in the phone's frame (gravity removed), and
-     * [quat] the game rotation vector as `[w, x, y, z]`, both at [nanos] on the monotonic clock.
+     * One accelerometer sample, gravity in, m/s² in the phone's frame, at [nanos] on the monotonic
+     * clock. Until the train is first seen standing, gravity is where the rotation vector puts it.
      */
-    fun onImu(nanos: Long, accel: FloatArray, quat: FloatArray) {
+    fun onAccelerometer(nanos: Long, accel: FloatArray) {
+        if (!haveQuat) return
+        val a = DoubleArray(3) { accel[it].toDouble() }
+        val g = gravity ?: fusedGravity(quat).also { gravity = it }
+        val last = lastImuNanos
+        val linear = DoubleArray(3) { a[it] - g[it] }
+        step(nanos, FloatArray(3) { linear[it].toFloat() })
+        val dt = last?.let { (nanos - it) / 1e9 } ?: return
+        if (dt <= 0 || dt > tuning.maxImuGapS) return
+        val game = toGame(linear, quat)
+        residualX += game[0] * dt
+        residualY += game[1] * dt
+        residualZ += game[2] * dt
+        residualS += dt
+        val follow = if (settling) tuning.gravitySettleS else tuning.gravityFollowS
+        for (i in 0..2) g[i] += (a[i] - g[i]) * (dt / (follow + dt))
+    }
+
+    /** One motion sample: [accel] the acceleration less gravity in the phone's frame, at [nanos]. */
+    private fun step(nanos: Long, accel: FloatArray) {
         val last = lastImuNanos
         lastImuNanos = nanos
         if (last == null) return
@@ -135,6 +240,8 @@ class MotionEstimator(private val tuning: MotionTuning = MotionTuning()) {
         if (dt <= 0) return
         if (dt > tuning.maxImuGapS) {
             dvUnbroken = false
+            residualS = 0.0
+            lastFixStood = false
             window.clear()
             return
         }
@@ -143,14 +250,22 @@ class MotionEstimator(private val tuning: MotionTuning = MotionTuning()) {
         dvX += x * dt
         dvY += y * dt
         still = judgeStill(nanos, x, y)
+        settling = still && stands(nanos)
+        learnPull(nanos, x, y, dt)
 
         val fe = forwardEast
         val fn = forwardNorth
+        val ax = axisX
+        val ay = axisY
         var forward: Double? = null
         if (aligned && fe != null && fn != null) {
             val east = x * cos(theta) - y * sin(theta)
             val north = x * sin(theta) + y * cos(theta)
             forward = east * fe + north * fn
+        } else if (ax != null && ay != null) {
+            forward = x * ax + y * ay
+        }
+        if (forward != null) {
             aLong += (forward - aLong) * (dt / (tuning.smoothingS + dt))
             // From where the filter had it when forward was first known, then the sensors alone: a
             // fix's speed would teach the filter's bias too, so the raw keeps its own, from standing.
@@ -161,9 +276,45 @@ class MotionEstimator(private val tuning: MotionTuning = MotionTuning()) {
             // must count for more than a platform's worth of standing still.
             p00 += tuning.unalignedAccel * tuning.unalignedAccel * dt
         }
-        if (still && zeroIfStanding(nanos) && forward != null) {
+        val standing = still && zeroIfStanding(nanos)
+        if (standing || settling) stoodNanos = nanos
+        if (standing && forward != null) {
             raw = 0.0
             rawBias += (forward - rawBias) * (dt / (tuning.rawBiasS + dt))
+        }
+    }
+
+    /**
+     * Out of a station a train only ever pulls forward: a steady pull soon after standing, the phone
+     * held still, is the way the train goes, learnt again each time it sets off. What it gained
+     * while the pull was being made sure of is speed already.
+     */
+    private fun learnPull(nanos: Long, x: Double, y: Double, dt: Double) {
+        pullX += (x - pullX) * (dt / (tuning.smoothingS + dt))
+        pullY += (y - pullY) * (dt / (tuning.smoothingS + dt))
+        val fresh = stoodNanos?.let { (nanos - it) / 1e9 <= tuning.pullAfterStandingS } == true
+        if (!fresh || still || gyroRate > tuning.pullQuietGyro || hypot(pullX, pullY) < tuning.pullMps2) {
+            pullSince = null
+            return
+        }
+        val since = pullSince ?: nanos.also {
+            pullSince = it
+            pullSumX = 0.0
+            pullSumY = 0.0
+        }
+        pullSumX += x * dt
+        pullSumY += y * dt
+        if ((nanos - since) / 1e9 < tuning.pullS) return
+        val gained = hypot(pullSumX, pullSumY)
+        // Learnt before, the old axis has been carrying the speed meanwhile.
+        val first = axisX == null
+        axisX = pullSumX / gained
+        axisY = pullSumY / gained
+        stoodNanos = null
+        pullSince = null
+        if (first && !(aligned && forwardEast != null)) {
+            raw = (raw ?: 0.0) + gained
+            speed += gained
         }
     }
 
@@ -175,6 +326,8 @@ class MotionEstimator(private val tuning: MotionTuning = MotionTuning()) {
         }
         val good = accuracyM <= tuning.gnssAccuracyM && speedMps != null
         val bearing = bearingDeg?.let { Math.toRadians(it.toDouble()) }
+        // A fix with no speed, or too rough to trust one, says nothing either way: the sum runs on.
+        if (good) settleBetweenFixes(nanos, stood = speedMps!! < tuning.standingMps)
 
         if (good && bearing != null && speedMps!! > tuning.headingMps) {
             forwardEast = sin(bearing)
@@ -209,8 +362,26 @@ class MotionEstimator(private val tuning: MotionTuning = MotionTuning()) {
         }
     }
 
+    /**
+     * Two fixes in a row standing: the train stood between them, so what the accelerometer read over
+     * the gap, less gravity, is how far off gravity is. Each fix starts the sum again.
+     */
+    private fun settleBetweenFixes(nanos: Long, stood: Boolean) {
+        val g = gravity
+        if (stood && lastFixStood && g != null && residualS >= 1.0 && residualS <= tuning.maxPairS) {
+            val off = toPhone(doubleArrayOf(residualX / residualS, residualY / residualS, residualZ / residualS), quat)
+            for (i in 0..2) g[i] += off[i]
+        }
+        if (stood) stoodNanos = lastImuNanos ?: nanos
+        lastFixStood = stood
+        residualX = 0.0
+        residualY = 0.0
+        residualZ = 0.0
+        residualS = 0.0
+    }
+
     fun readout(): MotionReadout {
-        val ready = aligned && forwardEast != null
+        val ready = (aligned && forwardEast != null) || axisX != null
         return MotionReadout(
             imuSpeedMps = speed.takeIf { ready },
             rawSpeedMps = raw.takeIf { ready },
@@ -281,13 +452,50 @@ class MotionEstimator(private val tuning: MotionTuning = MotionTuning()) {
      * smooth cruise in a tunnel is steady too, and must not be put to a stop. Whether it was.
      */
     private fun zeroIfStanding(nanos: Long): Boolean {
-        val heard = lastGnssNanos?.takeIf { (nanos - it) / 1e9 <= tuning.gnssFreshS }?.let { lastGnssSpeed }
-        val standing = if (heard != null) heard < tuning.standingMps else speed < tuning.stillUnheardMps
+        val standing = stands(nanos)
         if (standing) update(0.0, tuning.stillSpeedVariance)
         return standing
     }
 
+    /** Standing by a fresh fix, or with none to ask, slow enough by the estimate to be. */
+    private fun stands(nanos: Long): Boolean {
+        val heard = lastGnssNanos?.takeIf { (nanos - it) / 1e9 <= tuning.gnssFreshS }?.let { lastGnssSpeed }
+        return if (heard != null) heard < tuning.standingMps else speed < tuning.stillUnheardMps
+    }
+
     private companion object {
+
+        const val G = 9.80665
+
+        /**
+         * Gravity where the rotation vector [quat] `[w, x, y, z]` puts it in the phone's frame. As strong
+         * as standard gravity: one sample's own strength is a jolt as often as not (10.6 against 9.75).
+         */
+        fun fusedGravity(quat: FloatArray): DoubleArray = toPhone(doubleArrayOf(0.0, 0.0, G), quat)
+
+        /** [v] in the phone's frame turned into the game frame by [quat] `[w, x, y, z]`. */
+        fun toGame(v: DoubleArray, quat: FloatArray): DoubleArray = rotate(v, quat, inverse = false)
+
+        /** [v] in the game frame turned into the phone's by [quat] `[w, x, y, z]`. */
+        fun toPhone(v: DoubleArray, quat: FloatArray): DoubleArray = rotate(v, quat, inverse = true)
+
+        private fun rotate(v: DoubleArray, quat: FloatArray, inverse: Boolean): DoubleArray {
+            val w = quat[0].toDouble()
+            val x = quat[1].toDouble()
+            val y = quat[2].toDouble()
+            val z = quat[3].toDouble()
+            val n = sqrt(w * w + x * x + y * y + z * z).takeIf { it > 0 } ?: 1.0
+            val qw = w / n
+            val qx = x / n
+            val qy = y / n
+            val qz = z / n
+            val r = arrayOf(
+                doubleArrayOf(1 - 2 * (qy * qy + qz * qz), 2 * (qx * qy - qw * qz), 2 * (qx * qz + qw * qy)),
+                doubleArrayOf(2 * (qx * qy + qw * qz), 1 - 2 * (qx * qx + qz * qz), 2 * (qy * qz - qw * qx)),
+                doubleArrayOf(2 * (qx * qz - qw * qy), 2 * (qy * qz + qw * qx), 1 - 2 * (qx * qx + qy * qy)),
+            )
+            return DoubleArray(3) { i -> (0..2).sumOf { j -> (if (inverse) r[j][i] else r[i][j]) * v[j] } }
+        }
 
         /** [accel] in the phone's frame turned into the game frame by [quat] `[w, x, y, z]`: its east-ish and north-ish parts. */
         fun horizontal(accel: FloatArray, quat: FloatArray): Pair<Double, Double> {

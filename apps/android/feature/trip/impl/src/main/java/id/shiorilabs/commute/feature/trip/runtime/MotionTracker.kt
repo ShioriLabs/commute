@@ -69,12 +69,13 @@ class MotionTracker @Inject constructor(
     fun start(ride: TripLeg.Ride) {
         if (estimator != null || _live.value?.unavailable == true) return
         val sensors = context.getSystemService(SensorManager::class.java)
-        val accel = sensors?.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
+        val accel = sensors?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        val gyro = sensors?.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
         val rotation = sensors?.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
-        if (sensors == null || accel == null || rotation == null) {
+        if (sensors == null || accel == null || gyro == null || rotation == null) {
             if (!toldUnavailable) {
                 toldUnavailable = true
-                log.event("imu", mapOf("unavailable" to true, "accel" to (accel != null), "rotation" to (rotation != null)))
+                log.event("imu", mapOf("unavailable" to true, "accel" to (accel != null), "gyro" to (gyro != null), "rotation" to (rotation != null)))
             }
             _live.value = MotionLive(null, unavailable = true, nowNanos = SystemClock.elapsedRealtimeNanos())
             return
@@ -85,15 +86,10 @@ class MotionTracker @Inject constructor(
             haveQuat = false
         }
         lastFixNanos = SystemClock.elapsedRealtimeNanos()
-        // Recorded beside them, debug builds only: the accelerometer with gravity in, and the gyroscope,
-        // to check offline whether linear acceleration's own gravity estimate soaks up a train's
-        // steady pull (an S23 saw almost none of it on 2026-10-09).
-        val raw = if (recorder.enabled) {
-            listOfNotNull(sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER), sensors.getDefaultSensor(Sensor.TYPE_GYROSCOPE))
-        } else {
-            emptyList()
-        }
-        recorder.start(ride, listOf(accel, rotation) + raw)
+        // Recorded beside them, debug builds only: the phone's own linear acceleration, to set the
+        // estimator's gravity against the fusion's that soaked up a train's pull on 2026-10-09.
+        val linear = sensors.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)?.takeIf { recorder.enabled }
+        recorder.start(ride, listOfNotNull(linear, rotation, accel, gyro))
         val handler = HandlerThread(THREAD).also { it.start(); thread = it }.let { Handler(it.looper) }
         val events = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
@@ -102,22 +98,24 @@ class MotionTracker @Inject constructor(
                         Sensor.TYPE_GAME_ROTATION_VECTOR -> {
                             SensorManager.getQuaternionFromVector(quat, event.values)
                             haveQuat = true
+                            estimator?.onRotation(quat)
                         }
-                        Sensor.TYPE_LINEAR_ACCELERATION -> if (haveQuat) {
-                            estimator?.onImu(event.timestamp, event.values, quat)
-                            recorder.imu(event.timestamp, event.values, quat)
+                        Sensor.TYPE_LINEAR_ACCELERATION -> if (haveQuat) recorder.imu(event.timestamp, event.values, quat)
+                        Sensor.TYPE_ACCELEROMETER -> {
+                            estimator?.onAccelerometer(event.timestamp, event.values)
+                            recorder.accelerometer(event.timestamp, event.values)
                         }
-                        Sensor.TYPE_ACCELEROMETER -> recorder.accelerometer(event.timestamp, event.values)
-                        Sensor.TYPE_GYROSCOPE -> recorder.gyroscope(event.timestamp, event.values)
+                        Sensor.TYPE_GYROSCOPE -> {
+                            estimator?.onGyroscope(event.timestamp, event.values)
+                            recorder.gyroscope(event.timestamp, event.values)
+                        }
                     }
                 }
             }
 
             override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) = Unit
         }
-        sensors.registerListener(events, rotation, SAMPLING_US, handler)
-        sensors.registerListener(events, accel, SAMPLING_US, handler)
-        raw.forEach { sensors.registerListener(events, it, SAMPLING_US, handler) }
+        listOfNotNull(rotation, gyro, accel, linear).forEach { sensors.registerListener(events, it, SAMPLING_US, handler) }
         listener = events
 
         wakeLock = context.getSystemService(PowerManager::class.java)
