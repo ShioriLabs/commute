@@ -159,7 +159,13 @@
     <!-- A long ride's stops folded into one line of its timeline; tapping opens them. -->
     <string name="trip_live_more_stations">%1$d stasiun lainnya</string>
     <string name="trip_live_more_haltes">%1$d halte lainnya</string>
-    <string name="trip_live_walk">Jalan %1$d m ke %2$s</string>
+    <!-- A walk between rides, as the trip details word it. %1$s is the station walked to. -->
+    <string name="trip_live_transfer_to">Transit ke %1$s</string>
+    <!-- %1$d is metres walked -->
+    <string name="trip_live_transfer_walk">(Jalan kaki ±%1$dm)</string>
+    <!-- Two rides through one station: a change on the spot, not a walk. -->
+    <string name="trip_live_change_train">Pindah kereta</string>
+    <string name="trip_live_change_bus">Pindah bus</string>
     <string name="trip_live_walk_corridor">Lewat %1$s</string>
     <string name="trip_live_no_location">Tanpa izin lokasi, posisi kamu diperkirakan dari jadwal aja.</string>
     <string name="trip_live_location_off">Posisi akurat saat OTW lagi dimatikan di Pengaturan, jadi posisi kamu diperkirakan dari jadwal aja.</string>
