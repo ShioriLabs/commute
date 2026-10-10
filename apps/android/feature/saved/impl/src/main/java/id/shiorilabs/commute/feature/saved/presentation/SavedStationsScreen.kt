@@ -306,9 +306,9 @@ private fun StationFeed(
     // The rows, in list order, so a row index leads back to its entry. A loaded station is a title
     // row then its cards; one still loading, or failed, is a single placeholder row standing in for
     // its title. A pair is its title row then its card. Either way the first row of an entry is its
-    // title row. What's pinned at the station the rider is at comes first; then the stations near
-    // the rider (a heading, then a title and a board each, or the card offering them) and the
-    // offline banner, while they show; then the rest.
+    // title row. The offline banner, while it shows, is first of all, as it speaks for every board
+    // under it; then what's pinned at the station the rider is at; then the stations near the rider
+    // (a heading, then a title and a board each, or the card offering them); then the rest.
     val nearbyRows = when (nearby) {
         NearbyUiState.Hidden -> 0
         NearbyUiState.Prompt -> 1
@@ -322,7 +322,7 @@ private fun StationFeed(
     // Set on the list's first draw, which a held splash holds back: until then nothing is on screen.
     val firstDraw = remember { booleanArrayOf(false) }
     listState.KeepTopUntilDrawn(
-        ordered.front.firstOrNull()?.key ?: when (nearby) {
+        "offline-banner".takeIf { noticeShown } ?: ordered.front.firstOrNull()?.key ?: when (nearby) {
             NearbyUiState.Hidden -> null
             NearbyUiState.Prompt -> "nearby-prompt"
             is NearbyUiState.Stations -> "nearby-heading"
@@ -330,7 +330,7 @@ private fun StationFeed(
         drawn = { firstDraw[0] },
     )
     val titleRows = remember(ordered, noticeShown, nearbyRows) {
-        var row = 0
+        var row = if (noticeShown) 1 else 0
         fun rowsOf(entries: List<HomeEntry>) = entries.map { entry ->
             val titleRow = row
             row += when (entry) {
@@ -340,7 +340,7 @@ private fun StationFeed(
             titleRow to entry
         }
         val front = rowsOf(ordered.front)
-        row += (if (noticeShown) 1 else 0) + nearbyRows
+        row += nearbyRows
         front + rowsOf(ordered.rest)
     }
 
@@ -419,6 +419,17 @@ private fun StationFeed(
                 bottom = innerPadding.calculateBottomPadding() + NavRailClearance,
             ),
         ) {
+            // First, so RevealInsertedTop has it to bring into view when it turns up on a screen
+            // already open.
+            if (noticeShown) {
+                item(key = "offline-banner") {
+                    OfflineBanner(
+                        offline = offline,
+                        updatedAt = feed.oldestUpdate,
+                        modifier = Modifier.padding(top = 32.dp, bottom = StationGap),
+                    )
+                }
+            }
             // Between what's raised and the rest.
             val aboveRest: LazyListScope.() -> Unit = {
                 when (nearby) {
@@ -466,15 +477,6 @@ private fun StationFeed(
                                 )
                             }
                         }
-                    }
-                }
-                if (noticeShown) {
-                    item(key = "offline-banner") {
-                        OfflineBanner(
-                            offline = offline,
-                            updatedAt = feed.oldestUpdate,
-                            modifier = Modifier.padding(top = 32.dp, bottom = StationGap),
-                        )
                     }
                 }
             }
