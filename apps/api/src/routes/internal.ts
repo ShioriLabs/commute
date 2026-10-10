@@ -2,7 +2,6 @@ import { Hono } from 'hono'
 import type { FareContext } from '@commute/constants'
 import { Bindings } from 'app'
 import { HubRepository } from 'db/repositories/hubs'
-import { KVRepository } from 'db/repositories/kv'
 import { StationRepository } from 'db/repositories/stations'
 import type { TripResult } from '@commute/schemas'
 import { weightsForWalking, type RankWeights, type WalkingPreference } from '@commute/tsundere'
@@ -16,6 +15,7 @@ import { ridesAirportPairsOnly, withAirportExclusion } from 'utils/airport'
 import { endpointsFor, getPlaceIndex } from 'utils/places'
 import { mergeInterlinedLegs } from 'utils/interlining'
 import { Ok } from 'utils/response'
+import { readThrough } from 'utils/read-through'
 import { TRACK_SHAPES } from 'db/data/trackShapes.generated'
 import { buildSearchableIndex } from 'utils/searchables'
 
@@ -40,37 +40,21 @@ export const searchablesKVKey = (apiVersion: string) => `searchables:${apiVersio
  * of mostly-unused station columns and re-derived this index on every mount.
  */
 app.get('/searchables', async (c) => {
-  const kvRepository = new KVRepository(c.env.KV)
-
-  const kvKey = searchablesKVKey(c.env.API_VERSION)
-
-  const cachedIndex = await kvRepository.get(kvKey)
-  if (cachedIndex) {
-    return c.json(
-      Ok(cachedIndex),
-      200
-    )
-  }
-
   const stationRepository = new StationRepository(c.env.DB)
   const hubRepository = new HubRepository(c.env.DB)
 
-  const [stations, hubs] = await Promise.all([
-    stationRepository.getAll(),
-    hubRepository.getAll()
-  ])
+  return readThrough(
+    c,
+    searchablesKVKey(c.env.API_VERSION),
+    async () => {
+      const [stations, hubs] = await Promise.all([
+        stationRepository.getAll(),
+        hubRepository.getAll()
+      ])
 
-  const index = buildSearchableIndex(stations, hubs)
-
-  if (index.items.length > 0) {
-    c.executionCtx.waitUntil(
-      kvRepository.set(kvKey, index)
-    )
-  }
-
-  return c.json(
-    Ok(index),
-    200
+      return buildSearchableIndex(stations, hubs)
+    },
+    index => index.items.length > 0
   )
 })
 

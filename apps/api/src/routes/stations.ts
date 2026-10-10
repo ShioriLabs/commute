@@ -3,6 +3,7 @@ import { StationRepository } from 'db/repositories/stations'
 import { BadRequest, Internal, NotFound, Ok, UnknownOperator, UnknownStation } from 'utils/response'
 import { Bindings } from 'app'
 import { KVRepository } from 'db/repositories/kv'
+import { readThrough } from 'utils/read-through'
 import { getOperatorByCode } from 'utils/operator'
 import { Line } from 'models/line'
 import { CompactLineGroupedTimetable, GroupingSchedule, LineGroupedTimetable, Schedule } from 'db/schemas/schedules'
@@ -89,32 +90,13 @@ app.get(
     data: v.array(StationSchema)
   }),
   async (c) => {
-    const kvRepository = new KVRepository(c.env.KV)
     const stationRepository = new StationRepository(c.env.DB)
 
-    const kvKey = `stations:${c.env.API_VERSION}`
-
-    const cachedStations = await kvRepository.get(kvKey)
-    if (cachedStations) {
-      return c.json(
-        Ok(cachedStations),
-        200
-      )
-    }
-
-    const stations = await stationRepository.getAll()
-
-    if (stations.length > 0) {
-      c.executionCtx.waitUntil(
-        kvRepository.set(kvKey, stations)
-      )
-    }
-
-    return c.json(
-      Ok(
-        stations
-      ),
-      200
+    return readThrough(
+      c,
+      `stations:${c.env.API_VERSION}`,
+      () => stationRepository.getAll(),
+      stations => stations.length > 0
     )
   }
 )
@@ -135,32 +117,13 @@ app.get(
       return c.json(UnknownOperator(operatorCode), 404)
     }
 
-    const kvRepository = new KVRepository(c.env.KV)
     const stationRepository = new StationRepository(c.env.DB)
 
-    const kvKey = `stations:${operator.code}:${c.env.API_VERSION}`
-
-    const cachedStations = await kvRepository.get(kvKey)
-    if (cachedStations) {
-      return c.json(
-        Ok(cachedStations),
-        200
-      )
-    }
-
-    const stations = await stationRepository.getAllByOperator(operator.code)
-
-    if (stations.length > 0) {
-      c.executionCtx.waitUntil(
-        kvRepository.set(kvKey, stations)
-      )
-    }
-
-    return c.json(
-      Ok(
-        stations
-      ),
-      200
+    return readThrough(
+      c,
+      `stations:${operator.code}:${c.env.API_VERSION}`,
+      () => stationRepository.getAllByOperator(operator.code),
+      stations => stations.length > 0
     )
   }
 )
@@ -183,33 +146,13 @@ app.get(
       return c.json(UnknownOperator(operatorCode), 404)
     }
 
-    const kvRepository = new KVRepository(c.env.KV)
     const stationRepository = new StationRepository(c.env.DB)
 
-    const kvKey = `stations:${operator.code}-${stationCode}:${c.env.API_VERSION}`
+    return readThrough(c, `stations:${operator.code}-${stationCode}:${c.env.API_VERSION}`, async () => {
+      const station = await stationRepository.getById(`${operator.code}-${stationCode}`)
 
-    const cachedStations = await kvRepository.get(kvKey)
-    if (cachedStations) {
-      return c.json(
-        Ok(cachedStations),
-        200
-      )
-    }
-
-    const station = await stationRepository.getById(`${operator.code}-${stationCode}`)
-
-    if (!station) return c.json(UnknownStation(stationCode, operator.code), 404)
-
-    c.executionCtx.waitUntil(
-      kvRepository.set(kvKey, station)
-    )
-
-    return c.json(
-      Ok(
-        station
-      ),
-      200
-    )
+      return station ?? c.json(UnknownStation(stationCode, operator.code), 404)
+    })
   }
 )
 
@@ -241,7 +184,6 @@ app.get(
 
     const day = requestedDay(c.req.query('day'))
 
-    const kvRepository = new KVRepository(c.env.KV)
     const stationRepository = new StationRepository(c.env.DB)
 
     /*
@@ -252,42 +194,24 @@ app.get(
      */
     const kvKey = `timetable:${operator.code}-${stationCode}:${day}:${windowCacheKey(window)}:${c.env.API_VERSION}`
 
-    const cachedTimetable = await kvRepository.get(kvKey)
-    if (cachedTimetable) {
-      return c.json(
-        Ok(cachedTimetable),
-        200
-      )
-    }
+    return readThrough(
+      c,
+      kvKey,
+      async () => {
+        const checkStationResult = await stationRepository.checkIfExists(`${operator.code}-${stationCode}`)
+        if (!checkStationResult.exists || checkStationResult.station === null) return c.json(UnknownStation(stationCode, operator.code), 404)
 
-    const checkStationResult = await stationRepository.checkIfExists(`${operator.code}-${stationCode}`)
-    if (!checkStationResult.exists || checkStationResult.station === null) return c.json(UnknownStation(stationCode, operator.code), 404)
+        if (checkStationResult.station.timetableSynced === 0) {
+          return c.json(
+            NotFound('TIMETABLE_NOT_AVAILABLE', `Timetable for Station ${stationCode} in Operator ${operator.code} is not available yet. Please try again later.`),
+            404
+          )
+        }
 
-    if (checkStationResult.station!.timetableSynced === 0) {
-      return c.json(
-        NotFound('TIMETABLE_NOT_AVAILABLE', `Timetable for Station ${stationCode} in Operator ${operator.code} is not available yet. Please try again later.`),
-        404
-      )
-    }
-
-    const allDepartures = await stationRepository.getTimetableFromStationId(checkStationResult.station!.id, DAY_BIT[day])
-    const timetable = window ? filterByWindow(allDepartures, window) : allDepartures
-    if (timetable.length === 0) {
-      return c.json(
-        Ok([]),
-        200
-      )
-    }
-
-    c.executionCtx.waitUntil(
-      kvRepository.set(kvKey, timetable)
-    )
-
-    return c.json(
-      Ok(
-        timetable
-      ),
-      200
+        const allDepartures = await stationRepository.getTimetableFromStationId(checkStationResult.station.id, DAY_BIT[day])
+        return window ? filterByWindow(allDepartures, window) : allDepartures
+      },
+      timetable => timetable.length > 0
     )
   }
 )
@@ -325,181 +249,167 @@ app.get(
       return c.json(BadRequest('INVALID_TIME_RANGE', 'Use HH:MM in 24-hour local time, e.g. from=06:00&to=09:00.'), 400)
     }
 
-    const kvRepository = new KVRepository(c.env.KV)
     const stationRepository = new StationRepository(c.env.DB)
 
     const day = requestedDay(c.req.query('day'))
 
     const kvKey = `timetable:${operator.code}-${stationCode}:${day}:grouped:${compactMode ? 'compact' : 'full'}:${windowCacheKey(window)}:${c.env.API_VERSION}`
 
-    const cachedTimetable = await kvRepository.get(kvKey)
-    if (cachedTimetable) {
-      return c.json(
-        Ok(cachedTimetable),
-        200
-      )
-    }
+    return readThrough(c, kvKey, async () => {
+      // optimistic check, fails slower but faster happy path
+      const stationID = `${operator.code}-${stationCode}`
+      const [
+        checkStationResult,
+        schedules
+      ] = await Promise.allSettled([
+        stationRepository.checkIfExists(stationID),
+        // Compact mode only needs the grouping/compact columns; full mode embeds
+        // whole Schedule rows in the response, so keep selectAll there.
+        compactMode
+          ? stationRepository.getGroupingTimetableFromStationId(stationID, DAY_BIT[day])
+          : stationRepository.getTimetableFromStationId(stationID, DAY_BIT[day])
+      ])
 
-    // optimistic check, fails slower but faster happy path
-    const stationID = `${operator.code}-${stationCode}`
-    const [
-      checkStationResult,
-      schedules
-    ] = await Promise.allSettled([
-      stationRepository.checkIfExists(stationID),
-      // Compact mode only needs the grouping/compact columns; full mode embeds
-      // whole Schedule rows in the response, so keep selectAll there.
-      compactMode
-        ? stationRepository.getGroupingTimetableFromStationId(stationID, DAY_BIT[day])
-        : stationRepository.getTimetableFromStationId(stationID, DAY_BIT[day])
-    ])
+      if (checkStationResult.status === 'rejected' || schedules.status === 'rejected') return c.json(Internal('DATABASE_ERROR', 'Can\'t connect to database, please try again later.'), 500)
 
-    if (checkStationResult.status === 'rejected' || schedules.status === 'rejected') return c.json(Internal('DATABASE_ERROR', 'Can\'t connect to database, please try again later.'), 500)
+      if (!checkStationResult.value.exists || checkStationResult.value.station === null) return c.json(UnknownStation(stationCode, operator.code), 404)
 
-    if (!checkStationResult.value.exists || checkStationResult.value.station === null) return c.json(UnknownStation(stationCode, operator.code), 404)
+      if (checkStationResult.value.station.timetableSynced === 0) {
+        return c.json(
+          NotFound('TIMETABLE_NOT_AVAILABLE', `Timetable for Station ${stationCode} in Operator ${operator.code} is not available yet. Please try again later.`),
+          404
+        )
+      }
 
-    if (checkStationResult.value.station.timetableSynced === 0) {
-      return c.json(
-        NotFound('TIMETABLE_NOT_AVAILABLE', `Timetable for Station ${stationCode} in Operator ${operator.code} is not available yet. Please try again later.`),
-        404
-      )
-    }
+      if (schedules.value.length === 0) {
+        return c.json(
+          Ok([]),
+          200
+        )
+      }
 
-    if (schedules.value.length === 0) {
-      return c.json(
-        Ok([]),
-        200
-      )
-    }
+      const isBekasiInterliningStation = operator.code === OPERATORS.KCI.code && CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES.has(stationCode)
+      const lineGroups: Map<string, { line: Line, boundForGroups: Map<string, GroupingSchedule[]> }> = new Map()
 
-    const isBekasiInterliningStation = operator.code === OPERATORS.KCI.code && CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES.has(stationCode)
-    const lineGroups: Map<string, { line: Line, boundForGroups: Map<string, GroupingSchedule[]> }> = new Map()
+      for (const schedule of schedules.value) {
+        const line = getLineByOperator(operator.code, schedule.lineCode)
+        if (!line) continue
 
-    for (const schedule of schedules.value) {
-      const line = getLineByOperator(operator.code, schedule.lineCode)
-      if (!line) continue
-
-      let lineGroup = lineGroups.get(line.lineCode)
-      if (!lineGroup) {
-        lineGroup = {
-          line,
-          boundForGroups: new Map()
+        let lineGroup = lineGroups.get(line.lineCode)
+        if (!lineGroup) {
+          lineGroup = {
+            line,
+            boundForGroups: new Map()
+          }
+          lineGroups.set(line.lineCode, lineGroup)
         }
-        lineGroups.set(line.lineCode, lineGroup)
-      }
 
-      let via: string | null = null
+        let via: string | null = null
 
-      if (isBekasiInterliningStation && schedule.boundFor === 'Kampung Bandan') {
-        const trainNo = schedule.tripNumber ?? ''
-        if (trainNo !== '') {
-          if (trainNo.startsWith('6')) via = 'Pasar Senen'
-          else via = 'Manggarai'
+        if (isBekasiInterliningStation && schedule.boundFor === 'Kampung Bandan') {
+          const trainNo = schedule.tripNumber ?? ''
+          if (trainNo !== '') {
+            if (trainNo.startsWith('6')) via = 'Pasar Senen'
+            else via = 'Manggarai'
+          }
+        }
+
+        const boundForKey = via ? `${schedule.boundFor}:${via}` : schedule.boundFor
+        const boundForSchedules = lineGroup.boundForGroups.get(boundForKey)
+        if (boundForSchedules) {
+          boundForSchedules.push(schedule)
+        } else {
+          lineGroup.boundForGroups.set(boundForKey, [schedule])
         }
       }
 
-      const boundForKey = via ? `${schedule.boundFor}:${via}` : schedule.boundFor
-      const boundForSchedules = lineGroup.boundForGroups.get(boundForKey)
-      if (boundForSchedules) {
-        boundForSchedules.push(schedule)
-      } else {
-        lineGroup.boundForGroups.set(boundForKey, [schedule])
-      }
-    }
+      // Direction derivation is KCI-only (per-line topology walks). Other
+      // operators keep one group per boundFor — same shape, unchanged rendering.
+      const isKCI = operator.code === OPERATORS.KCI.code
+      const nameIndex = isKCI ? await getNameIndex(operator.code, stationRepository) : null
+      const membershipCount = isKCI ? getMembershipCount(operator.code) : new Map<string, number>()
 
-    // Direction derivation is KCI-only (per-line topology walks). Other
-    // operators keep one group per boundFor — same shape, unchanged rendering.
-    const isKCI = operator.code === OPERATORS.KCI.code
-    const nameIndex = isKCI ? await getNameIndex(operator.code, stationRepository) : null
-    const membershipCount = isKCI ? getMembershipCount(operator.code) : new Map<string, number>()
+      /*
+       * One array typed as the union of both shapes. Declaring it via a ternary
+       * gave `A[] | B[]`, which TypeScript narrows to `A[] & B[]` at the push —
+       * an impossible intersection. The element union is what we actually mean:
+       * every entry is one shape or the other, chosen by compactMode.
+       */
+      const timetable: (LineGroupedTimetable[number] | CompactLineGroupedTimetable[number])[] = []
 
-    /*
-     * One array typed as the union of both shapes. Declaring it via a ternary
-     * gave `A[] | B[]`, which TypeScript narrows to `A[] & B[]` at the push —
-     * an impossible intersection. The element union is what we actually mean:
-     * every entry is one shape or the other, chosen by compactMode.
-     */
-    const timetable: (LineGroupedTimetable[number] | CompactLineGroupedTimetable[number])[] = []
+      /*
+       * Applied per destination, after grouping.
+       *
+       * Grouping runs over the full day on purpose: directions and platforms are
+       * derived by walking topology across all of a line's departures, so
+       * narrowing the input first would make a board's shape depend on the
+       * window — a rider asking for 06:00–09:00 could lose a direction entirely
+       * because its only trips fall outside. Filtering here keeps the board's
+       * structure stable and empties the departure lists instead.
+       */
+      const inWindow = <T extends { estimatedDeparture: unknown }>(rows: T[]): T[] =>
+        window ? filterByWindow(rows, window) : rows
 
-    /*
-     * Applied per destination, after grouping.
-     *
-     * Grouping runs over the full day on purpose: directions and platforms are
-     * derived by walking topology across all of a line's departures, so
-     * narrowing the input first would make a board's shape depend on the
-     * window — a rider asking for 06:00–09:00 could lose a direction entirely
-     * because its only trips fall outside. Filtering here keeps the board's
-     * structure stable and empties the departure lists instead.
-     */
-    const inWindow = <T extends { estimatedDeparture: unknown }>(rows: T[]): T[] =>
-      window ? filterByWindow(rows, window) : rows
+      for (const { line, boundForGroups } of lineGroups.values()) {
+        const entries: BoundForEntry[] = Array.from(boundForGroups.entries()).map(([key, schedules]) => {
+          const [boundFor, via] = key.split(':')
+          return { boundFor: boundFor!, via: via || null, schedules }
+        })
 
-    for (const { line, boundForGroups } of lineGroups.values()) {
-      const entries: BoundForEntry[] = Array.from(boundForGroups.entries()).map(([key, schedules]) => {
-        const [boundFor, via] = key.split(':')
-        return { boundFor: boundFor!, via: via || null, schedules }
-      })
+        const groups = isKCI
+          ? groupDirections({
+              operator: operator.code,
+              lineCode: line.lineCode,
+              stationCode,
+              topology: findTopology(operator.code, line.lineCode),
+              entries,
+              nameIndex,
+              lineMembershipCount: membershipCount
+            })
+          : entries.map(syntheticGroup)
 
-      const groups = isKCI
-        ? groupDirections({
-            operator: operator.code,
-            lineCode: line.lineCode,
-            stationCode,
-            topology: findTopology(operator.code, line.lineCode),
-            entries,
-            nameIndex,
-            lineMembershipCount: membershipCount
+        // Shared per-group fields; only `schedules` differs between the two
+        // wire formats, so the split happens once at the destination level.
+        const groupShell = (group: typeof groups[number]) => ({
+          key: group.key,
+          label: group.label,
+          platformCode: group.nextHopCode
+            ? PLATFORM_CODES[`${stationID}:${line.lineCode}:${group.nextHopCode}`] ?? null
+            : null
+        })
+        // A line key rather than its denormalised name/colour: the same
+        // dictionary from /operators resolves it, as everywhere else.
+        const lineKey = `${operator.code}:${line.lineCode}`
+
+        if (compactMode) {
+          timetable.push({
+            line: lineKey,
+            timetable: groups.map(group => ({
+              ...groupShell(group),
+              destinations: group.destinations.map(destination => ({
+                boundFor: destination.boundFor,
+                via: destination.via,
+                schedules: mapSchedule(inWindow(destination.schedules), true)
+              }))
+            }))
           })
-        : entries.map(syntheticGroup)
-
-      // Shared per-group fields; only `schedules` differs between the two
-      // wire formats, so the split happens once at the destination level.
-      const groupShell = (group: typeof groups[number]) => ({
-        key: group.key,
-        label: group.label,
-        platformCode: group.nextHopCode
-          ? PLATFORM_CODES[`${stationID}:${line.lineCode}:${group.nextHopCode}`] ?? null
-          : null
-      })
-      // A line key rather than its denormalised name/colour: the same
-      // dictionary from /operators resolves it, as everywhere else.
-      const lineKey = `${operator.code}:${line.lineCode}`
-
-      if (compactMode) {
-        timetable.push({
-          line: lineKey,
-          timetable: groups.map(group => ({
-            ...groupShell(group),
-            destinations: group.destinations.map(destination => ({
-              boundFor: destination.boundFor,
-              via: destination.via,
-              schedules: mapSchedule(inWindow(destination.schedules), true)
+        } else {
+          timetable.push({
+            line: lineKey,
+            timetable: groups.map(group => ({
+              ...groupShell(group),
+              destinations: group.destinations.map(destination => ({
+                boundFor: destination.boundFor,
+                via: destination.via,
+                schedules: mapSchedule(inWindow(destination.schedules) as Schedule[], false)
+              }))
             }))
-          }))
-        })
-      } else {
-        timetable.push({
-          line: lineKey,
-          timetable: groups.map(group => ({
-            ...groupShell(group),
-            destinations: group.destinations.map(destination => ({
-              boundFor: destination.boundFor,
-              via: destination.via,
-              schedules: mapSchedule(inWindow(destination.schedules) as Schedule[], false)
-            }))
-          }))
-        })
+          })
+        }
       }
-    }
 
-    c.executionCtx.waitUntil(
-      kvRepository.set(kvKey, timetable)
-    )
-
-    return c.json(
-      Ok(timetable),
-      200
-    )
+      return timetable
+    })
   }
 )
 
@@ -530,46 +440,27 @@ app.get(
       return c.json(BadRequest('INVALID_TIME_RANGE', 'Use HH:MM in 24-hour local time, e.g. from=06:00&to=09:00.'), 400)
     }
 
-    const kvRepository = new KVRepository(c.env.KV)
     const stationRepository = new StationRepository(c.env.DB)
 
     const day = requestedDay(c.req.query('day'))
 
     const kvKey = `timetable:${operator.code}-${stationCode}:${day}:${lineCode}:${windowCacheKey(window)}:${c.env.API_VERSION}`
 
-    const cachedTimetable = await kvRepository.get(kvKey)
-    if (cachedTimetable) {
-      return c.json(
-        Ok(cachedTimetable),
-        200
-      )
-    }
+    return readThrough(
+      c,
+      kvKey,
+      async () => {
+        const checkIfLineExists = await stationRepository.checkIfLineExists(`${operator.code}-${stationCode}`, lineCode)
+        if (!checkIfLineExists.exists || checkIfLineExists.line === null) return c.json(NotFound('UNKNOWN_LINE', `Unknown Line Code ${lineCode} in Station ID ${operator.code}-${stationCode}`), 404)
 
-    const checkIfLineExists = await stationRepository.checkIfLineExists(`${operator.code}-${stationCode}`, lineCode)
-    if (!checkIfLineExists.exists || checkIfLineExists.line === null) return c.json(NotFound('UNKNOWN_LINE', `Unknown Line Code ${lineCode} in Station ID ${operator.code}-${stationCode}`), 404)
-
-    const lineDepartures = await stationRepository.getTimetableFromStationId(
-      checkIfLineExists.line!.stationId,
-      DAY_BIT[day],
-      checkIfLineExists.line!.lineCode
-    )
-    const timetable = window ? filterByWindow(lineDepartures, window) : lineDepartures
-    if (timetable.length === 0) {
-      return c.json(
-        Ok([]),
-        200
-      )
-    }
-
-    c.executionCtx.waitUntil(
-      kvRepository.set(kvKey, timetable)
-    )
-
-    return c.json(
-      Ok(
-        timetable
-      ),
-      200
+        const lineDepartures = await stationRepository.getTimetableFromStationId(
+          checkIfLineExists.line.stationId,
+          DAY_BIT[day],
+          checkIfLineExists.line.lineCode
+        )
+        return window ? filterByWindow(lineDepartures, window) : lineDepartures
+      },
+      timetable => timetable.length > 0
     )
   }
 )
@@ -592,44 +483,31 @@ app.get(
       return c.json(UnknownOperator(operatorCode), 404)
     }
 
-    const kvRepository = new KVRepository(c.env.KV)
     const stationRepository = new StationRepository(c.env.DB)
 
     const kvKey = `transfers:${operator.code}-${stationCode}:${c.env.API_VERSION}`
 
-    const cachedTimetable = await kvRepository.get(kvKey)
-    if (cachedTimetable) {
-      return c.json(
-        Ok(cachedTimetable),
-        200
-      )
-    }
+    // Caches the result even when it's empty (the default). A station having no
+    // transfers is a stable topological fact, so re-running both D1 queries on
+    // every request is wasted work; without caching, no-transfer stations never
+    // get a KV hit.
+    return readThrough(c, kvKey, async () => {
+      // optimistic check, fails slower but faster happy path
+      const stationID = `${operator.code}-${stationCode}`
+      const [
+        checkStationResult,
+        transfers
+      ] = await Promise.allSettled([
+        stationRepository.checkIfExists(stationID),
+        stationRepository.getTransfersFromStationId(stationID)
+      ])
 
-    // optimistic check, fails slower but faster happy path
-    const stationID = `${operator.code}-${stationCode}`
-    const [
-      checkStationResult,
-      transfers
-    ] = await Promise.allSettled([
-      stationRepository.checkIfExists(stationID),
-      stationRepository.getTransfersFromStationId(stationID)
-    ])
+      if (checkStationResult.status === 'rejected' || transfers.status === 'rejected') return c.json(Internal('DATABASE_ERROR', 'Can\'t connect to database, please try again later.'), 500)
 
-    if (checkStationResult.status === 'rejected' || transfers.status === 'rejected') return c.json(Internal('DATABASE_ERROR', 'Can\'t connect to database, please try again later.'), 500)
+      if (!checkStationResult.value.exists || checkStationResult.value.station === null) return c.json(UnknownStation(stationCode, operator.code), 404)
 
-    if (!checkStationResult.value.exists || checkStationResult.value.station === null) return c.json(UnknownStation(stationCode, operator.code), 404)
-
-    // Cache the result even when it's empty. A station having no transfers is a
-    // stable topological fact, so re-running both D1 queries on every request is
-    // wasted work; without caching here, no-transfer stations never get a KV hit.
-    c.executionCtx.waitUntil(
-      kvRepository.set(kvKey, transfers.value)
-    )
-
-    return c.json(
-      Ok(transfers.value),
-      200
-    )
+      return transfers.value
+    })
   }
 )
 
