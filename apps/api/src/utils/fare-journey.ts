@@ -5,6 +5,7 @@ import { calculateTransferFare, resolveCorridorMerges, type CorridorMerge } from
 import { summarizeFares, type FareSummary } from 'utils/fare-summary'
 import { computeHeadsignCode } from 'utils/headsign'
 import { findInterliningLineCodes, mergeInterlinedLegs } from 'utils/interlining'
+import { lineKey, stationCodeOf } from 'utils/ids'
 
 /*
  * Turning one routed journey into the shape the API returns.
@@ -81,7 +82,7 @@ export function planJourney(
   const legLines = legs.map((leg): LegLineMeta | null => {
     if (leg.type !== 'RIDE') return null
     const operator = leg.operator as Operator
-    const codes = leg.stationIds.map(id => id.slice(operator.length + 1))
+    const codes = leg.stationIds.map(id => stationCodeOf(operator, id))
     const interlining = findInterliningLineCodes(operator, codes)
     const lineCodes = interlining.length >= 2 ? interlining : [leg.lineCode]
     return {
@@ -180,7 +181,7 @@ export function assembleJourney(plan: JourneyPlan, namer: StationNamer, context:
   const platformCodeOf = (leg: RouteLeg & { type: 'RIDE' }): string | undefined => {
     const nextHopId = leg.stationIds[1]
     if (!nextHopId) return undefined
-    const nextHopCode = nextHopId.slice(leg.operator.length + 1)
+    const nextHopCode = stationCodeOf(leg.operator, nextHopId)
     return PLATFORM_CODES[`${leg.fromStationId}:${leg.lineCode}:${nextHopCode}`]
   }
 
@@ -214,7 +215,7 @@ export function assembleJourney(plan: JourneyPlan, namer: StationNamer, context:
     // Line keys; name and colour resolve against /operators like everywhere
     // else, so the leg no longer carries three denormalised line fields.
     const serviceLines: FareResultLineRef[] = meta.lines.map(l => ({
-      line: `${leg.operator}:${l.lineCode}`,
+      line: lineKey(leg.operator, l.lineCode),
       headsign: headsignName(l.headsign)
     }))
     // On interlined track the router's line pick is arbitrary; present the

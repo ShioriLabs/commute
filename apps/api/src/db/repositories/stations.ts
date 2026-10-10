@@ -8,6 +8,7 @@ import { chunkArray } from 'utils/chunk'
 import { getLineByOperator } from 'utils/line'
 import { mapify } from 'utils/mapify'
 import { getOperatorByCode } from 'utils/operator'
+import { lineKey } from 'utils/ids'
 
 /*
  * The public Station shape.
@@ -54,11 +55,6 @@ export interface StationRef {
   code: string
   operator: Operator
   lines: string[]
-}
-
-/** Dictionary key for a line; qualified because codes collide across operators. */
-export function lineKey(operator: Operator, lineCode: string): string {
-  return `${operator}:${lineCode}`
 }
 
 export function toStationRef(station: PublicStation): StationRef {
