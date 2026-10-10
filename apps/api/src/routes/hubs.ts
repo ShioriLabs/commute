@@ -1,8 +1,8 @@
 import { Hono } from 'hono'
 import { Bindings } from 'app'
 import { HubRepository } from 'db/repositories/hubs'
-import { KVRepository } from 'db/repositories/kv'
-import { NotFound, Ok } from 'utils/response'
+import { NotFound } from 'utils/response'
+import { readThrough } from 'utils/read-through'
 import * as v from 'valibot'
 import { doc, pathParam } from 'schemas/describe'
 import { HubSchema } from '@commute/schemas'
@@ -35,32 +35,13 @@ app.get(
     data: v.array(HubSchema)
   }),
   async (c) => {
-    const kvRepository = new KVRepository(c.env.KV)
     const hubRepository = new HubRepository(c.env.DB)
 
-    const kvKey = `hubs:${c.env.API_VERSION}`
-
-    const cachedHubs = await kvRepository.get(kvKey)
-    if (cachedHubs) {
-      return c.json(
-        Ok(cachedHubs),
-        200
-      )
-    }
-
-    const hubs = (await hubRepository.getAll()).map(toPublicHub)
-
-    if (hubs.length > 0) {
-      c.executionCtx.waitUntil(
-        kvRepository.set(kvKey, hubs)
-      )
-    }
-
-    return c.json(
-      Ok(
-        hubs
-      ),
-      200
+    return readThrough(
+      c,
+      `hubs:${c.env.API_VERSION}`,
+      async () => (await hubRepository.getAll()).map(toPublicHub),
+      hubs => hubs.length > 0
     )
   }
 )
@@ -78,35 +59,15 @@ app.get(
   async (c) => {
     const slug = c.req.param('slug')
 
-    const kvRepository = new KVRepository(c.env.KV)
     const hubRepository = new HubRepository(c.env.DB)
 
-    const kvKey = `hubs:${slug}:${c.env.API_VERSION}`
-
-    const cachedHub = await kvRepository.get(kvKey)
-    if (cachedHub) {
-      return c.json(
-        Ok(cachedHub),
-        200
-      )
-    }
-
-    const found = await hubRepository.getBySlug(slug)
-    if (!found) {
-      return c.json(NotFound(`Unknown Hub: ${slug}`), 404)
-    }
-    const hub = toPublicHub(found)
-
-    c.executionCtx.waitUntil(
-      kvRepository.set(kvKey, hub)
-    )
-
-    return c.json(
-      Ok(
-        hub
-      ),
-      200
-    )
+    return readThrough(c, `hubs:${slug}:${c.env.API_VERSION}`, async () => {
+      const found = await hubRepository.getBySlug(slug)
+      if (!found) {
+        return c.json(NotFound('UNKNOWN_HUB', `Unknown Hub: ${slug}`), 404)
+      }
+      return toPublicHub(found)
+    })
   }
 )
 

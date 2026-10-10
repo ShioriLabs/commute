@@ -136,9 +136,10 @@ describe('coverage', () => {
 })
 
 /*
- * The sync and cache handlers exist in the repo but are NOT mounted: twelve
- * mutating routes that took no credentials at all, reachable by anyone with
- * curl. CORS restrains browsers, not clients, so it was never a control here.
+ * The sync handlers exist in the repo but are NOT mounted: mutating routes that
+ * took no credentials at all, reachable by anyone with curl. CORS restrains
+ * browsers, not clients, so it was never a control here. The /cache bust routes
+ * were deleted outright; the paths stay asserted so they cannot quietly return.
  *
  * This asserts they are unreachable rather than merely undocumented — the
  * difference between "we didn't advertise it" and "it isn't there".

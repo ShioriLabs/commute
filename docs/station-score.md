@@ -230,10 +230,9 @@ Rail is safe — `StationRepository.insertMany` upserts an explicit column list 
 `score`. Apply the score seed *after* any TJ reseed.
 
 **Cache.** Score flows into five KV families: `searchables:{V}`, `stations:{V}`,
-`stations:{OP}:{V}`, `hubs:{V}`, `hubs:{slug}:{V}`. `routes/cache.ts` is deliberately not mounted
-(`app.ts` — the bust routes were unauthenticated mutating endpoints), so `DELETE
-/_internal/searchables/bust` is unreachable. Bumping `API_VERSION` busts all five in one edit and
-is what the repo already does.
+`stations:{OP}:{V}`, `hubs:{V}`, `hubs:{slug}:{V}`. There are no bust routes: the old
+`routes/cache.ts` set was unauthenticated mutating endpoints and has been deleted. Bumping
+`API_VERSION` busts all five in one edit and is what the repo already does.
 
 **Refresh cadence.** Half-yearly for KCI, monthly for MRT Jakarta. Stale anchors still beat none:
 they move slowly, and this feeds a ranking rather than a readout.

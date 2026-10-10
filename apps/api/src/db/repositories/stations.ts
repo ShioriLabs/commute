@@ -8,6 +8,7 @@ import { chunkArray } from 'utils/chunk'
 import { getLineByOperator } from 'utils/line'
 import { mapify } from 'utils/mapify'
 import { getOperatorByCode } from 'utils/operator'
+import { lineKey } from 'utils/ids'
 
 /*
  * The public Station shape.
@@ -54,11 +55,6 @@ export interface StationRef {
   code: string
   operator: Operator
   lines: string[]
-}
-
-/** Dictionary key for a line; qualified because codes collide across operators. */
-export function lineKey(operator: Operator, lineCode: string): string {
-  return `${operator}:${lineCode}`
 }
 
 export function toStationRef(station: PublicStation): StationRef {
@@ -121,6 +117,15 @@ function mapStationRow<T extends {
   }
 }
 
+type StationRow = Parameters<typeof mapStationRow>[0]
+
+// Rows whose operator no longer resolves are dropped rather than surfaced.
+function toPublicStations(rows: StationRow[]): PublicStation[] {
+  return rows
+    .map(row => mapStationRow(row))
+    .filter((station): station is PublicStation => station !== null)
+}
+
 export class StationRepository extends Repository {
   private d1: D1Database
 
@@ -164,26 +169,23 @@ export class StationRepository extends Repository {
       .select(['linesSubquery.lines'])
   }
 
-  async getAll(page?: number, limit?: number) {
-    // Topology-only stops (TJ feeders) are routable but not listed; they stay
-    // reachable via getById/getByIds (detail pages, transfers, fare legs).
+  // Topology-only stops (TJ feeders) are routable but not listed; they stay
+  // reachable via getById/getByIds (detail pages, transfers, fare legs).
+  private async listSearchable(operator?: Operator) {
     let query = this.stationsQuery().where('stations.searchable', '=', 1)
-    if (page && limit) {
-      query = query.limit(limit).offset((page - 1) * limit)
+    if (operator) {
+      query = query.where('operator', '=', operator)
     }
 
-    const stations = await query.execute()
-    return stations.map(station => mapStationRow(station)).filter((station): station is NonNullable<typeof station> => station !== null)
+    return toPublicStations(await query.execute())
   }
 
-  async getAllByOperator(operator: Operator, page?: number, limit?: number) {
-    let query = this.stationsQuery().where('operator', '=', operator).where('stations.searchable', '=', 1)
-    if (page && limit) {
-      query = query.limit(limit).offset((page - 1) * limit)
-    }
+  getAll() {
+    return this.listSearchable()
+  }
 
-    const stations = await query.execute()
-    return stations.map(station => mapStationRow(station)).filter((station): station is NonNullable<typeof station> => station !== null)
+  getAllByOperator(operator: Operator) {
+    return this.listSearchable(operator)
   }
 
   async getById(id: string) {
@@ -203,16 +205,10 @@ export class StationRepository extends Repository {
    * worth of latency rather than N.
    */
   async getByIds(ids: string[]) {
-    const CHUNK = 40
-    const chunks: string[][] = []
-    for (let i = 0; i < ids.length; i += CHUNK) chunks.push(ids.slice(i, i + CHUNK))
-
     const results = await Promise.all(
-      chunks.map(chunk => this.stationsQuery(chunk).where('id', 'in', chunk).execute())
+      chunkArray(ids, 40).map(chunk => this.stationsQuery(chunk).where('id', 'in', chunk).execute())
     )
-    return results.flat()
-      .map(station => mapStationRow(station))
-      .filter((station): station is NonNullable<typeof station> => station !== null)
+    return toPublicStations(results.flat())
   }
 
   async checkIfExists(id: string, operator?: Operator) {
@@ -268,19 +264,23 @@ export class StationRepository extends Repository {
     return data
   }
 
+  // Chunked to stay under D1's bound-parameter limit; one statement per chunk,
+  // in order, as every operator sync did before this lived here.
   async insertMany(data: NewStation[]) {
-    await db(this.d1)
-      .insertInto('stations').values(data)
-      .onConflict((oc) => {
-        return oc.column('id').doUpdateSet(eb => ({
-          name: eb.ref('excluded.name'),
-          formattedName: eb.ref('excluded.formattedName'),
-          region: eb.ref('excluded.region'),
-          operator: eb.ref('excluded.operator'),
-          updatedAt: sql`CURRENT_TIMESTAMP`
-        }))
-      })
-      .executeTakeFirstOrThrow()
+    for (const chunk of chunkArray(data, 10)) {
+      await db(this.d1)
+        .insertInto('stations').values(chunk)
+        .onConflict((oc) => {
+          return oc.column('id').doUpdateSet(eb => ({
+            name: eb.ref('excluded.name'),
+            formattedName: eb.ref('excluded.formattedName'),
+            region: eb.ref('excluded.region'),
+            operator: eb.ref('excluded.operator'),
+            updatedAt: sql`CURRENT_TIMESTAMP`
+          }))
+        })
+        .executeTakeFirstOrThrow()
+    }
 
     return data
   }
@@ -319,30 +319,29 @@ export class StationRepository extends Repository {
    * on equality would return only boards whose days are exactly the day asked
    * about, which is almost never what is wanted — an every-day board would
    * vanish from every single-day query.
+   *
+   * Only the lines this station actually serves (per stationLines). KAI's feed
+   * lists passage times for trains that pass through without stopping (e.g.
+   * Soekarno-Hatta trains at Kalideres); those lines aren't in stationLines, so
+   * this keeps them out of the timetable across resyncs.
    */
-  async getTimetableFromStationId(id: string, dayMask: number, line?: string, page?: number, limit?: number) {
-    let query = db(this.d1)
+  private timetableQuery(id: string, dayMask: number) {
+    return db(this.d1)
       .selectFrom('schedules')
-      .selectAll()
       .where('stationId', '=', id)
       .where(sql<boolean>`("dayMask" & ${sql.lit(dayMask)}) != 0`)
-      // Only the lines this station actually serves (per stationLines). KAI's
-      // feed lists passage times for trains that pass through without stopping
-      // (e.g. Soekarno-Hatta trains at Kalideres); those lines aren't in
-      // stationLines, so this keeps them out of the timetable across resyncs.
       .where('lineCode', 'in', eb =>
         eb.selectFrom('stationLines').select('stationLines.lineCode').where('stationLines.stationId', '=', id))
       .orderBy('estimatedDeparture asc')
+  }
+
+  async getTimetableFromStationId(id: string, dayMask: number, line?: string) {
+    let query = this.timetableQuery(id, dayMask).selectAll()
     if (line) {
       query = query.where('lineCode', '=', line)
     }
 
-    if (page && limit) {
-      query = query.limit(limit).offset((page - 1) * limit)
-    }
-
-    const timetable = await query.execute()
-    return timetable
+    return await query.execute()
   }
 
   // Projected variant for the grouped-timetable compact path: selects only the
@@ -350,16 +349,9 @@ export class StationRepository extends Repository {
   // marshal fewer bytes from D1. Same filtering/ordering as
   // getTimetableFromStationId. See GroupingSchedule.
   async getGroupingTimetableFromStationId(id: string, dayMask: number) {
-    const timetable = await db(this.d1)
-      .selectFrom('schedules')
+    return await this.timetableQuery(id, dayMask)
       .select(['id', 'lineCode', 'boundFor', 'estimatedDeparture', 'tripNumber'])
-      .where('stationId', '=', id)
-      .where(sql<boolean>`("dayMask" & ${sql.lit(dayMask)}) != 0`)
-      .where('lineCode', 'in', eb =>
-        eb.selectFrom('stationLines').select('stationLines.lineCode').where('stationLines.stationId', '=', id))
-      .orderBy('estimatedDeparture asc')
       .execute()
-    return timetable
   }
 
   async getTransfersFromStationId(id: string) {

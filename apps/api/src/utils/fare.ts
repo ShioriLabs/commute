@@ -1,4 +1,4 @@
-import { FareContext, HOLIDAYS, Operator, OPERATORS, SURCHARGED_CORRIDORS, SurchargedCorridor } from '@commute/constants'
+import { DEPARTURE_SLOT_MINUTES, FareContext, HOLIDAYS, Operator, OPERATORS, SURCHARGED_CORRIDORS, SurchargedCorridor } from '@commute/constants'
 import { getAirportFare } from 'operators/kci/airportFares'
 import { APT_CGK_LINE } from 'operators/kci/lines'
 import { getLRTJBDBFare } from 'operators/lrtjbdb/fares'
@@ -72,9 +72,6 @@ export function fareTimeBucket(date: Date): FareTimeBucket {
   const isPeak = (hour >= 6 && hour < 9) || (hour >= 16 && hour < 20)
   return isPeak ? 'peak' : 'offpeak'
 }
-
-/** How coarsely a departure time is quantised for cache purposes, in minutes. */
-export const DEPARTURE_SLOT_MINUTES = 20
 
 /**
  * A departure time as a quantised local slot, e.g. `0840`.

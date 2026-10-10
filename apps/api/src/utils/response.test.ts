@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Internal, NotFound, Ok } from 'utils/response'
+import { Internal, NotFound, Ok, UnknownOperator, UnknownStation } from 'utils/response'
 
 describe('Ok', () => {
   it('wraps data with status 200 and no error', () => {
@@ -46,6 +46,24 @@ describe('Internal', () => {
     expect(Internal('DB_DOWN', 'Database unavailable')).toEqual({
       status: 500,
       error: { code: 'DB_DOWN', message: 'Database unavailable' }
+    })
+  })
+})
+
+describe('UnknownOperator', () => {
+  it('carries the symbolic code, not the sentence', () => {
+    expect(UnknownOperator('XYZ')).toEqual({
+      status: 404,
+      error: { code: 'UNKNOWN_OPERATOR', message: 'Unknown Operator Code: XYZ' }
+    })
+  })
+})
+
+describe('UnknownStation', () => {
+  it('names the station and operator in the message only', () => {
+    expect(UnknownStation('SUD', 'KCI')).toEqual({
+      status: 404,
+      error: { code: 'UNKNOWN_STATION', message: 'Unknown Station Code SUD in Operator KCI' }
     })
   })
 })

@@ -253,6 +253,18 @@ export const HUB_KIND_LABEL: Record<HubKind, string> = {
  */
 export const STATION_SCORE_MAX = 100
 
+/**
+ * How coarsely a departure time is quantised for cache purposes, in minutes.
+ *
+ * The API keys journey answers on this grid (`departureSlot`), and the web's
+ * departure picker offers only times on it. The two used to hold separate
+ * copies with a "must match" comment, which meant a drift would have the
+ * picker offering minutes the cache cannot tell apart, with nothing to flag
+ * it. 60 must divide evenly by it: the picker builds its minute wheel from
+ * `60 / DEPARTURE_SLOT_MINUTES` steps.
+ */
+export const DEPARTURE_SLOT_MINUTES = 20
+
 export type TransferDataType = 'INTERNAL' | 'EXTERNAL'
 
 /**

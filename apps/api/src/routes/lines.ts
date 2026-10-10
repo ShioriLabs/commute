@@ -1,13 +1,12 @@
 import { Hono } from 'hono'
 import { StationRepository } from 'db/repositories/stations'
-import { KVRepository } from 'db/repositories/kv'
-import { NotFound, Ok } from 'utils/response'
+import { NotFound, UnknownOperator } from 'utils/response'
+import { readThrough } from 'utils/read-through'
 import { Bindings } from 'app'
 import { getOperatorByCode } from 'utils/operator'
 import { getLineByOperator } from 'utils/line'
 import { buildLineDetail, collectStationIds, findTopology } from 'utils/topology'
 import { mapify } from 'utils/mapify'
-import { LineDetail } from 'models/line'
 import { doc, operatorParam, pathParam } from 'schemas/describe'
 import { LineDetailSchema } from '@commute/schemas'
 
@@ -31,12 +30,12 @@ app.get(
 
     const operator = getOperatorByCode(operatorCode)
     if (!operator) {
-      return c.json(NotFound(`Unknown Operator Code: ${operatorCode}`), 404)
+      return c.json(UnknownOperator(operatorCode), 404)
     }
 
     const line = getLineByOperator(operator.code, lineCode)
     if (!line) {
-      return c.json(NotFound(`Unknown Line Code: ${operator.code}:${lineCode}`), 404)
+      return c.json(NotFound('UNKNOWN_LINE', `Unknown Line Code: ${operator.code}:${lineCode}`), 404)
     }
 
     const topology = findTopology(operator.code, lineCode)
@@ -44,31 +43,14 @@ app.get(
       return c.json(NotFound('NO_TOPOLOGY', `No topology data for line ${operator.code}:${lineCode}`), 404)
     }
 
-    const kvRepository = new KVRepository(c.env.KV)
-    const kvKey = `lines:${operator.code}-${lineCode}:${c.env.API_VERSION}`
-
-    const cachedDetail = await kvRepository.get<LineDetail>(kvKey)
-    if (cachedDetail) {
-      return c.json(
-        Ok(cachedDetail),
-        200
-      )
-    }
-
     const stationRepository = new StationRepository(c.env.DB)
-    const stations = await stationRepository.getByIds(collectStationIds(topology))
-    const stationsById = mapify(stations, station => station.id)
 
-    const detail = buildLineDetail(topology, line, operator, stationsById)
+    return readThrough(c, `lines:${operator.code}-${lineCode}:${c.env.API_VERSION}`, async () => {
+      const stations = await stationRepository.getByIds(collectStationIds(topology))
+      const stationsById = mapify(stations, station => station.id)
 
-    c.executionCtx.waitUntil(
-      kvRepository.set(kvKey, detail)
-    )
-
-    return c.json(
-      Ok(detail),
-      200
-    )
+      return buildLineDetail(topology, line, operator, stationsById)
+    })
   }
 )
 

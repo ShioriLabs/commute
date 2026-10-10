@@ -93,11 +93,6 @@ describe('StationRepository.getAll (row mapping)', () => {
     expect(row?.lines).toEqual(['KCI:C'])
     expect(row?.amenities).toEqual([])
   })
-
-  it('accepts pagination params', async () => {
-    terminalResults.push([])
-    await expect(repo().getAll(2, 10)).resolves.toEqual([])
-  })
 })
 
 describe('StationRepository.getAllByOperator (row mapping)', () => {
@@ -118,11 +113,6 @@ describe('StationRepository.getAllByOperator (row mapping)', () => {
     ])
     await expect(repo().getAllByOperator('KCI')).resolves.toEqual([])
   })
-
-  it('accepts pagination params', async () => {
-    terminalResults.push([])
-    await expect(repo().getAllByOperator('KCI', 1, 5)).resolves.toEqual([])
-  })
 })
 
 describe('StationRepository read passthroughs', () => {
@@ -132,10 +122,10 @@ describe('StationRepository read passthroughs', () => {
     await expect(repo().getNameIndexRowsByOperator('KCI')).resolves.toBe(rows)
   })
 
-  it('getTimetableFromStationId returns rows (with line + pagination filters)', async () => {
+  it('getTimetableFromStationId returns rows (with a line filter)', async () => {
     const rows = [{ id: 's1', lineCode: 'C' }]
     terminalResults.push(rows)
-    await expect(repo().getTimetableFromStationId('KCI-BOO', DAY_MASK.WD, 'C', 1, 10)).resolves.toBe(rows)
+    await expect(repo().getTimetableFromStationId('KCI-BOO', DAY_MASK.WD, 'C')).resolves.toBe(rows)
   })
 
   it('getTimetableFromStationId works without optional filters', async () => {
@@ -237,6 +227,21 @@ describe('StationRepository write methods', () => {
     terminalResults.push({})
     const data = [{ id: 'KCI-BOO' }] as never
     await expect(repo().insertMany(data)).resolves.toBe(data)
+  })
+
+  it('insertMany issues one statement per chunk of 10', async () => {
+    const data = Array.from({ length: 23 }, (_, i) => ({ id: `KCI-${i}` })) as never
+    // Each executeTakeFirstOrThrow consumes one queued result: 23 rows is 3 chunks,
+    // so of 4 queued, exactly one must be left.
+    terminalResults.push({}, {}, {}, {})
+    await repo().insertMany(data)
+    expect(terminalResults).toHaveLength(1)
+  })
+
+  it('insertMany with no rows issues no statement', async () => {
+    terminalResults.push({})
+    await expect(repo().insertMany([] as never)).resolves.toEqual([])
+    expect(terminalResults).toHaveLength(1)
   })
 
   it('update returns the data', async () => {

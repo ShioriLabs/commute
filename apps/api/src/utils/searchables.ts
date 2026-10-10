@@ -1,6 +1,7 @@
 import { HUB_KIND_LABEL, Operator, OPERATORS } from '@commute/constants'
 import { Line } from 'models/line'
 import { ALL_LINES } from 'utils/line'
+import { lineKey } from 'utils/ids'
 
 /*
  * The prebuilt search index behind GET /_internal/searchables.
@@ -131,15 +132,6 @@ const ARAH_SUFFIX = /\s+Arah\s+(Utara|Selatan|Timur|Barat)$/i
 /** "Kali Grogol Arah Utara" -> "Kali Grogol"; other names pass through. */
 export function directionalBaseName(name: string): string {
   return name.replace(ARAH_SUFFIX, '')
-}
-
-/*
- * Dictionary key for a line. Operator-qualified because line codes are only
- * unique per operator — KCI's "C" and a TJ corridor could collide, and a hub's
- * lines span operators by definition.
- */
-export function lineKey(operator: Operator, lineCode: string): string {
-  return `${operator}:${lineCode}`
 }
 
 function lowercasedKeywords(values: (string | null | undefined)[]): string[] {
