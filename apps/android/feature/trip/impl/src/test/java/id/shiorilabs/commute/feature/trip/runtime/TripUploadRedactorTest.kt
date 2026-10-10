@@ -52,7 +52,11 @@ class TripUploadRedactorTest {
         return FinishedTrip(ActiveTrip(plan, state, origin), reason, minutes(40))
     }
 
-    private fun event(name: String, fields: Map<String, Any?>) = line("2026-10-04T08:00:00.000+07:00", name, fields).trimEnd('\n')
+    /** Each line a second after the one before, so a stamp says which line it came from. */
+    private var second = 0
+
+    private fun event(name: String, fields: Map<String, Any?>) =
+        line("2026-10-04T08:00:%02d.000+07:00".format(second++ % 60), name, fields).trimEnd('\n')
 
     /** A fix at [stop] (or nudged off it by [northM]), as the trip's step logged it. */
     private fun fix(leg: Int, pos: Double, stop: TripStop, northM: Double = 0.0, phase: TripPhase = TripPhase.RIDING) = event(
@@ -122,6 +126,13 @@ class TripUploadRedactorTest {
         assertEquals(listOf(2, 2), sent.takeLast(2).map { it.getValue("leg").jsonPrimitive.int })
         assertEquals(listOf(0.0, 1.0), sent.takeLast(2).map { it.pos() })
         assertTrue(sent.none { "journey" in it })
+    }
+
+    @Test
+    fun `the plan is stamped as the first line sent, not as the trip started at the stop cut`() {
+        val sent = parsed(TripUploadRedactor.redact(tripLines, finished(), oneEach))
+
+        assertEquals(sent[1].getValue("t"), sent[0].getValue("t"))
     }
 
     @Test
