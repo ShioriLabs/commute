@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { StationRepository } from 'db/repositories/stations'
-import { BadRequest, Internal, NotFound, Ok } from 'utils/response'
+import { BadRequest, Internal, NotFound, Ok, UnknownOperator, UnknownStation } from 'utils/response'
 import { Bindings } from 'app'
 import { KVRepository } from 'db/repositories/kv'
 import { getOperatorByCode } from 'utils/operator'
@@ -132,7 +132,7 @@ app.get(
     const operatorCode = c.req.param('operator')
     const operator = getOperatorByCode(operatorCode)
     if (!operator) {
-      return c.json(NotFound(`Unknown Operator Code: ${operatorCode}`), 404)
+      return c.json(UnknownOperator(operatorCode), 404)
     }
 
     const kvRepository = new KVRepository(c.env.KV)
@@ -180,7 +180,7 @@ app.get(
     const stationCode = c.req.param('stationCode')
     const operator = getOperatorByCode(operatorCode)
     if (!operator) {
-      return c.json(NotFound(`Unknown Operator Code: ${operatorCode}`), 404)
+      return c.json(UnknownOperator(operatorCode), 404)
     }
 
     const kvRepository = new KVRepository(c.env.KV)
@@ -198,7 +198,7 @@ app.get(
 
     const station = await stationRepository.getById(`${operator.code}-${stationCode}`)
 
-    if (!station) return c.json(NotFound(`Unknown Station Code ${stationCode} in Operator ${operator.code}`), 404)
+    if (!station) return c.json(UnknownStation(stationCode, operator.code), 404)
 
     c.executionCtx.waitUntil(
       kvRepository.set(kvKey, station)
@@ -231,7 +231,7 @@ app.get(
     const stationCode = c.req.param('stationCode')
     const operator = getOperatorByCode(operatorCode)
     if (!operator) {
-      return c.json(NotFound(`Unknown Operator Code: ${operatorCode}`), 404)
+      return c.json(UnknownOperator(operatorCode), 404)
     }
 
     const window = parseTimeWindow(c.req.query('from'), c.req.query('to'))
@@ -261,11 +261,11 @@ app.get(
     }
 
     const checkStationResult = await stationRepository.checkIfExists(`${operator.code}-${stationCode}`)
-    if (!checkStationResult.exists || checkStationResult.station === null) return c.json(NotFound(`Unknown Station Code ${stationCode} in Operator ${operator.code}`), 404)
+    if (!checkStationResult.exists || checkStationResult.station === null) return c.json(UnknownStation(stationCode, operator.code), 404)
 
     if (checkStationResult.station!.timetableSynced === 0) {
       return c.json(
-        NotFound(`Timetable for Station ${stationCode} in Operator ${operator.code} is not available yet. Please try again later.`),
+        NotFound('TIMETABLE_NOT_AVAILABLE', `Timetable for Station ${stationCode} in Operator ${operator.code} is not available yet. Please try again later.`),
         404
       )
     }
@@ -317,7 +317,7 @@ app.get(
     const compactMode = c.req.query('compact') === '1'
     const operator = getOperatorByCode(operatorCode)
     if (!operator) {
-      return c.json(NotFound(`Unknown Operator Code: ${operatorCode}`), 404)
+      return c.json(UnknownOperator(operatorCode), 404)
     }
 
     const window = parseTimeWindow(c.req.query('from'), c.req.query('to'))
@@ -354,13 +354,13 @@ app.get(
         : stationRepository.getTimetableFromStationId(stationID, DAY_BIT[day])
     ])
 
-    if (checkStationResult.status === 'rejected' || schedules.status === 'rejected') return c.json(Internal('DATABASE_ERROR', 'Can\'t connect to database, please try again later.'))
+    if (checkStationResult.status === 'rejected' || schedules.status === 'rejected') return c.json(Internal('DATABASE_ERROR', 'Can\'t connect to database, please try again later.'), 500)
 
-    if (!checkStationResult.value.exists || checkStationResult.value.station === null) return c.json(NotFound(`Unknown Station Code ${stationCode} in Operator ${operator.code}`), 404)
+    if (!checkStationResult.value.exists || checkStationResult.value.station === null) return c.json(UnknownStation(stationCode, operator.code), 404)
 
     if (checkStationResult.value.station.timetableSynced === 0) {
       return c.json(
-        NotFound(`Timetable for Station ${stationCode} in Operator ${operator.code} is not available yet. Please try again later.`),
+        NotFound('TIMETABLE_NOT_AVAILABLE', `Timetable for Station ${stationCode} in Operator ${operator.code} is not available yet. Please try again later.`),
         404
       )
     }
@@ -522,7 +522,7 @@ app.get(
     const lineCode = c.req.param('line')
     const operator = getOperatorByCode(operatorCode)
     if (!operator) {
-      return c.json(NotFound(`Unknown Operator Code: ${operatorCode}`), 404)
+      return c.json(UnknownOperator(operatorCode), 404)
     }
 
     const window = parseTimeWindow(c.req.query('from'), c.req.query('to'))
@@ -546,7 +546,7 @@ app.get(
     }
 
     const checkIfLineExists = await stationRepository.checkIfLineExists(`${operator.code}-${stationCode}`, lineCode)
-    if (!checkIfLineExists.exists || checkIfLineExists.line === null) return c.json(NotFound(`Unknown Line Code ${lineCode} in Station ID ${operator.code}-${stationCode}`), 404)
+    if (!checkIfLineExists.exists || checkIfLineExists.line === null) return c.json(NotFound('UNKNOWN_LINE', `Unknown Line Code ${lineCode} in Station ID ${operator.code}-${stationCode}`), 404)
 
     const lineDepartures = await stationRepository.getTimetableFromStationId(
       checkIfLineExists.line!.stationId,
@@ -589,7 +589,7 @@ app.get(
     const stationCode = c.req.param('stationCode')
     const operator = getOperatorByCode(operatorCode)
     if (!operator) {
-      return c.json(NotFound('UNKNOWN_OPERATOR', `Unknown Operator Code: ${operatorCode}`), 404)
+      return c.json(UnknownOperator(operatorCode), 404)
     }
 
     const kvRepository = new KVRepository(c.env.KV)
@@ -615,9 +615,9 @@ app.get(
       stationRepository.getTransfersFromStationId(stationID)
     ])
 
-    if (checkStationResult.status === 'rejected' || transfers.status === 'rejected') return c.json(Internal('DATABASE_ERROR', 'Can\'t connect to database, please try again later.'))
+    if (checkStationResult.status === 'rejected' || transfers.status === 'rejected') return c.json(Internal('DATABASE_ERROR', 'Can\'t connect to database, please try again later.'), 500)
 
-    if (!checkStationResult.value.exists || checkStationResult.value.station === null) return c.json(NotFound('UNKNOWN_STATION', `Unknown Station Code ${stationCode} in Operator ${operator.code}`), 404)
+    if (!checkStationResult.value.exists || checkStationResult.value.station === null) return c.json(UnknownStation(stationCode, operator.code), 404)
 
     // Cache the result even when it's empty. A station having no transfers is a
     // stable topological fact, so re-running both D1 queries on every request is
@@ -666,7 +666,7 @@ app.get(
     const stationCode = c.req.param('stationCode')
     const operator = getOperatorByCode(operatorCode)
     if (!operator) {
-      return c.json(NotFound('UNKNOWN_OPERATOR', `Unknown Operator Code: ${operatorCode}`), 404)
+      return c.json(UnknownOperator(operatorCode), 404)
     }
 
     /*
@@ -689,7 +689,7 @@ app.get(
     const stationID = `${operator.code}-${stationCode}`
     const station = await stationRepository.getById(stationID)
     if (station === null) {
-      return c.json(NotFound('UNKNOWN_STATION', `Unknown Station Code ${stationCode} in Operator ${operator.code}`), 404)
+      return c.json(UnknownStation(stationCode, operator.code), 404)
     }
 
     /*

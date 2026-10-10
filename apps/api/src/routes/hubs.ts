@@ -93,7 +93,7 @@ app.get(
 
     const found = await hubRepository.getBySlug(slug)
     if (!found) {
-      return c.json(NotFound(`Unknown Hub: ${slug}`), 404)
+      return c.json(NotFound('UNKNOWN_HUB', `Unknown Hub: ${slug}`), 404)
     }
     const hub = toPublicHub(found)
 

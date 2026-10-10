@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { StationRepository } from 'db/repositories/stations'
-import { Internal, NotFound, Ok } from 'utils/response'
+import { Internal, Ok, UnknownOperator, UnknownStation } from 'utils/response'
 import { Bindings } from 'app'
 import { KVRepository } from 'db/repositories/kv'
 import { getOperatorByCode } from 'utils/operator'
@@ -15,7 +15,7 @@ app.post('/:operator', async (c) => {
   const operatorCode = c.req.param('operator')
   const operator = getOperatorByCode(operatorCode)
   if (!operator) {
-    return c.json(NotFound(`Unknown Operator Code: ${operatorCode}`), 404)
+    return c.json(UnknownOperator(operatorCode), 404)
   }
 
   const allKVKey = `stations:${c.env.API_VERSION}`
@@ -63,7 +63,7 @@ app.post('/:operator/:stationCode/timetable', async (c) => {
   const stationCode = c.req.param('stationCode')
   const operator = getOperatorByCode(operatorCode)
   if (!operator) {
-    return c.json(NotFound(`Unknown Operator Code: ${operatorCode}`), 404)
+    return c.json(UnknownOperator(operatorCode), 404)
   }
 
   try {
@@ -79,7 +79,7 @@ app.post('/:operator/:stationCode/timetable', async (c) => {
     )
 
     const checkStationResult = await stationRepository.checkIfExists(`${operator.code}-${stationCode}`)
-    if (!checkStationResult.exists || checkStationResult.station === null) return c.json(NotFound(`Unknown Station Code ${stationCode} in Operator ${operator.code}`), 404)
+    if (!checkStationResult.exists || checkStationResult.station === null) return c.json(UnknownStation(stationCode, operator.code), 404)
 
     switch (operator.code) {
       case 'KCI':

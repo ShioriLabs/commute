@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { NotFound, Ok } from 'utils/response'
+import { Ok, UnknownOperator } from 'utils/response'
 import { Bindings } from 'app'
 import { KVRepository } from 'db/repositories/kv'
 import { getOperatorByCode } from 'utils/operator'
@@ -25,7 +25,7 @@ app.delete('/stations/:operator/bust', async (c) => {
   const operatorCode = c.req.param('operator')
   const operator = getOperatorByCode(operatorCode)
   if (!operator) {
-    return c.json(NotFound(`Unknown Operator Code: ${operatorCode}`), 404)
+    return c.json(UnknownOperator(operatorCode), 404)
   }
 
   const kvRepository = new KVRepository(c.env.KV)
@@ -46,7 +46,7 @@ app.delete('/stations/:operator/:stationCode/bust', async (c) => {
   const stationCode = c.req.param('stationCode')
   const operator = getOperatorByCode(operatorCode)
   if (!operator) {
-    return c.json(NotFound(`Unknown Operator Code: ${operatorCode}`), 404)
+    return c.json(UnknownOperator(operatorCode), 404)
   }
 
   const kvRepository = new KVRepository(c.env.KV)
@@ -68,7 +68,7 @@ app.delete('/stations/:operator/:stationCode/timetable/bust', async (c) => {
   const stationCode = c.req.param('stationCode')
   const operator = getOperatorByCode(operatorCode)
   if (!operator) {
-    return c.json(NotFound(`Unknown Operator Code: ${operatorCode}`), 404)
+    return c.json(UnknownOperator(operatorCode), 404)
   }
 
   const kvRepository = new KVRepository(c.env.KV)
@@ -90,7 +90,7 @@ app.delete('/lines/:operator/:lineCode/bust', async (c) => {
   const lineCode = c.req.param('lineCode')
   const operator = getOperatorByCode(operatorCode)
   if (!operator) {
-    return c.json(NotFound(`Unknown Operator Code: ${operatorCode}`), 404)
+    return c.json(UnknownOperator(operatorCode), 404)
   }
 
   const kvRepository = new KVRepository(c.env.KV)
@@ -174,7 +174,7 @@ app.delete('/:operator/:stationCode/timetable/grouped', async (c) => {
   const stationCode = c.req.param('stationCode')
   const operator = getOperatorByCode(operatorCode)
   if (!operator) {
-    return c.json(NotFound(`Unknown Operator Code: ${operatorCode}`), 404)
+    return c.json(UnknownOperator(operatorCode), 404)
   }
 
   const kvRepository = new KVRepository(c.env.KV)
