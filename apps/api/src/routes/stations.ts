@@ -7,7 +7,8 @@ import { KVRepository } from 'db/repositories/kv'
 import { readThrough } from 'utils/read-through'
 import { getOperatorByCode } from 'utils/operator'
 import { Line } from 'models/line'
-import { CompactLineGroupedTimetable, GroupingSchedule, LineGroupedTimetable, Schedule } from 'db/schemas/schedules'
+import { CompactLineGroupedTimetable, DAY_MASK, GroupingSchedule, LineGroupedTimetable, Schedule } from 'db/schemas/schedules'
+import { DAY_S } from '@commute/tsundere'
 import { getLineByOperator } from 'utils/line'
 import { CIKARANG_LOOP_LINE_INTERLINING_STATION_CODES, OPERATORS, Operator, PLATFORM_CODES } from '@commute/constants'
 import { filterByWindow, mapSchedule, parseTimeWindow, windowCacheKey } from 'utils/schedules'
@@ -27,13 +28,13 @@ import type { HeadwayRow } from '@commute/schemas'
 import { DAY_HEADWAYS_S, DIRECTIONAL_HEADWAYS_S, HEADWAYS_S, LINE_DAY_MASK, LINE_TERMINI, STOP_HEADWAYS_S } from 'db/data/headways'
 import { serviceDay } from 'utils/fare'
 import { SERVICE_HOURS } from 'db/data/service-hours'
+import { memoize } from 'utils/memo'
 
 /*
  * The three day buckets, high bit first, matching how LINE_DAY_MASK is packed
  * in the generated headways file: WD (Mon-Fri), SAT, SUN.
  */
 const DAY_ORDER = ['WD', 'SAT', 'SUN'] as const
-const DAY_SECONDS = 86400
 type ServiceDayName = (typeof DAY_ORDER)[number]
 
 /*
@@ -46,9 +47,6 @@ function requestedDay(raw: string | undefined): ServiceDayName {
   const upper = raw?.toUpperCase()
   return upper === 'WD' || upper === 'SAT' || upper === 'SUN' ? upper : serviceDay(new Date())
 }
-
-/** The stored `schedules.dayMask` bit for a day. Mirrors DAY_MASK. */
-const DAY_BIT: Record<ServiceDayName, number> = { WD: 0b100, SAT: 0b010, SUN: 0b001 }
 
 const dayParam = queryParam(
   'day',
@@ -65,12 +63,7 @@ const membershipCountCache = new Map<Operator, Map<string, number>>()
 const nameIndexCache = new Map<Operator, StationNameIndex>()
 
 function getMembershipCount(operator: Operator) {
-  let counts = membershipCountCache.get(operator)
-  if (!counts) {
-    counts = buildLineMembershipCount(operator)
-    membershipCountCache.set(operator, counts)
-  }
-  return counts
+  return memoize(membershipCountCache, operator, () => buildLineMembershipCount(operator))
 }
 
 async function getNameIndex(operator: Operator, stationRepository: StationRepository) {
@@ -129,14 +122,14 @@ async function flatTimetable(c: Context<{ Bindings: Bindings }>, lineCode?: stri
           return c.json(TimetableNotAvailable(stationCode, operator.code), 404)
         }
 
-        departures = await stationRepository.getTimetableFromStationId(checkStationResult.station.id, DAY_BIT[day])
+        departures = await stationRepository.getTimetableFromStationId(checkStationResult.station.id, DAY_MASK[day])
       } else {
         const checkIfLineExists = await stationRepository.checkIfLineExists(stationID, lineCode)
         if (!checkIfLineExists.exists || checkIfLineExists.line === null) return c.json(NotFound('UNKNOWN_LINE', `Unknown Line Code ${lineCode} in Station ID ${stationID}`), 404)
 
         departures = await stationRepository.getTimetableFromStationId(
           checkIfLineExists.line.stationId,
-          DAY_BIT[day],
+          DAY_MASK[day],
           checkIfLineExists.line.lineCode
         )
       }
@@ -288,8 +281,8 @@ app.get(
         // Compact mode only needs the grouping/compact columns; full mode embeds
         // whole Schedule rows in the response, so keep selectAll there.
         compactMode
-          ? stationRepository.getGroupingTimetableFromStationId(stationID, DAY_BIT[day])
-          : stationRepository.getTimetableFromStationId(stationID, DAY_BIT[day])
+          ? stationRepository.getGroupingTimetableFromStationId(stationID, DAY_MASK[day])
+          : stationRepository.getTimetableFromStationId(stationID, DAY_MASK[day])
       ])
 
       if (checkStationResult.status === 'rejected' || schedules.status === 'rejected') return c.json(Internal('DATABASE_ERROR', 'Can\'t connect to database, please try again later.'), 500)
@@ -632,7 +625,7 @@ app.get(
       const window = byDay?.[day] ?? byDay?.ALL
       if (!window) return {}
       const [startS, endS] = window
-      if (startS === 0 && endS >= DAY_SECONDS - 60) return { serviceHours: { allDay: true } }
+      if (startS === 0 && endS >= DAY_S - 60) return { serviceHours: { allDay: true } }
       return { serviceHours: { start: hhmm(startS), end: hhmm(endS) } }
     }
 

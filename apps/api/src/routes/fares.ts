@@ -13,6 +13,7 @@ import { airportExclusion } from 'utils/airport'
 import { secondsSinceLocalMidnight, serviceDay } from 'utils/fare'
 import { doc, pathParam, queryParam } from 'schemas/describe'
 import { FareResultSchema, type FareResult } from '@commute/schemas'
+import { memoize } from 'utils/memo'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -84,17 +85,16 @@ export async function getRouter(d1: D1Database): Promise<Tsundere> {
  */
 const serviceHoursCache = new Map<ServiceDay, Map<string, ServiceWindow>>()
 function serviceHoursMap(day: ServiceDay = 'ALL'): Map<string, ServiceWindow> {
-  const cached = serviceHoursCache.get(day)
-  if (cached) return cached
-  const resolved = new Map<string, ServiceWindow>()
-  for (const [line, byDay] of Object.entries(SERVICE_HOURS)) {
-    // Specific day first, then the every-day window. A line with neither is
-    // left out, which leaves it always boardable.
-    const window = (day === 'ALL' ? undefined : byDay[day]) ?? byDay.ALL
-    if (window) resolved.set(line, window)
-  }
-  serviceHoursCache.set(day, resolved)
-  return resolved
+  return memoize(serviceHoursCache, day, () => {
+    const resolved = new Map<string, ServiceWindow>()
+    for (const [line, byDay] of Object.entries(SERVICE_HOURS)) {
+      // Specific day first, then the every-day window. A line with neither is
+      // left out, which leaves it always boardable.
+      const window = (day === 'ALL' ? undefined : byDay[day]) ?? byDay.ALL
+      if (window) resolved.set(line, window)
+    }
+    return resolved
+  })
 }
 
 /*
@@ -106,17 +106,16 @@ function serviceHoursMap(day: ServiceDay = 'ALL'): Map<string, ServiceWindow> {
  */
 const headwaysCache = new Map<ServiceDay, Map<string, number>>()
 function headwaysFor(day: ServiceDay): Map<string, number> {
-  const cached = headwaysCache.get(day)
-  if (cached) return cached
-  const base = new Map([...Object.entries(HEADWAYS_S), ...Object.entries(STOP_HEADWAYS_S)])
-  if (day !== 'ALL') {
-    const prefix = `${day}:`
-    for (const [key, seconds] of Object.entries(DAY_HEADWAYS_S)) {
-      if (key.startsWith(prefix)) base.set(key.slice(prefix.length), seconds)
+  return memoize(headwaysCache, day, () => {
+    const base = new Map([...Object.entries(HEADWAYS_S), ...Object.entries(STOP_HEADWAYS_S)])
+    if (day !== 'ALL') {
+      const prefix = `${day}:`
+      for (const [key, seconds] of Object.entries(DAY_HEADWAYS_S)) {
+        if (key.startsWith(prefix)) base.set(key.slice(prefix.length), seconds)
+      }
     }
-  }
-  headwaysCache.set(day, base)
-  return base
+    return base
+  })
 }
 
 /*
@@ -133,15 +132,13 @@ function headwaysFor(day: ServiceDay): Map<string, number> {
  */
 const openingTimesCache = new Map<ServiceDay, number[]>()
 function openingTimes(day: ServiceDay): number[] {
-  const cached = openingTimesCache.get(day)
-  if (cached) return cached
-  const opens = new Set<number>()
-  for (const window of serviceHoursMap(day).values()) {
-    if (window[0] !== 0) opens.add(window[0])
-  }
-  const sorted = [...opens].sort((a, b) => a - b)
-  openingTimesCache.set(day, sorted)
-  return sorted
+  return memoize(openingTimesCache, day, () => {
+    const opens = new Set<number>()
+    for (const window of serviceHoursMap(day).values()) {
+      if (window[0] !== 0) opens.add(window[0])
+    }
+    return [...opens].sort((a, b) => a - b)
+  })
 }
 
 /**
