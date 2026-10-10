@@ -103,4 +103,11 @@ interface CommuteService {
         walking: String? = null,
         ifNoneMatch: String? = null,
     ): Fetched<TripResult>
+
+    /**
+     * Hands one trip mode log ([body]: zstd-compressed NDJSON) to the API's anonymous
+     * `uploads/trips`, from build [appVersion]. Sent once, never retried: each try would be stored
+     * as an upload of its own. A 503 is the API not taking uploads just now.
+     */
+    suspend fun uploadTripLog(body: ByteArray, appVersion: String)
 }
