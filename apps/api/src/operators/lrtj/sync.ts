@@ -2,7 +2,6 @@ import { LRTJ_STATION_CODES, OPERATORS, REGIONS } from '@commute/constants'
 import { StationRepository } from 'db/repositories/stations'
 import { DAY_MASK_ALL } from 'db/schemas/schedules'
 import { NewStation } from 'db/schemas/stations'
-import { chunkArray } from 'utils/chunk'
 import { parseHTML } from 'linkedom'
 import { NewSchedule } from 'db/schemas/schedules'
 
@@ -37,9 +36,7 @@ export async function syncStations(d1: D1Database) {
   })
 
   // Save to database
-  for (const chunk of chunkArray(stations, 10)) {
-    await new StationRepository(d1).insertMany(chunk)
-  }
+  await new StationRepository(d1).insertMany(stations)
 
   return stations
 }

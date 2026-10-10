@@ -3,7 +3,6 @@ import { StationRepository } from 'db/repositories/stations'
 import { DAY_MASK, DAY_MASK_WEEKEND } from 'db/schemas/schedules'
 import { NewStation } from 'db/schemas/stations'
 import { MRTJDatumRow, buildStationTimetable, cleanDisplayName, isStationRow, resolveTerminusNames, synthesizeTripNumbers } from 'operators/mrtj/datum'
-import { chunkArray } from 'utils/chunk'
 
 // NOTE: dev-looking host, but it is what the production jakartamrt.co.id
 // bundle calls (the old /val/stasiuns endpoint now serves an SPA shell).
@@ -49,9 +48,7 @@ export async function syncStations(d1: D1Database) {
   }
 
   // Save to database
-  for (const chunk of chunkArray(stations, 10)) {
-    await new StationRepository(d1).insertMany(chunk)
-  }
+  await new StationRepository(d1).insertMany(stations)
 
   return stations
 }
