@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import id.shiorilabs.commute.core.ui.components.TransferIcon
 import id.shiorilabs.commute.core.ui.components.VerticalSpacer
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.theme.Amber700

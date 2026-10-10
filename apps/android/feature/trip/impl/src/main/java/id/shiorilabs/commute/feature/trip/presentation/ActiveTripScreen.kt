@@ -2,8 +2,6 @@ package id.shiorilabs.commute.feature.trip.presentation
 
 import androidx.compose.foundation.Canvas
 import id.shiorilabs.commute.feature.station.domain.formatPlatformCode
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.StrokeCap
@@ -22,7 +20,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,7 +36,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -55,6 +51,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -79,7 +76,18 @@ import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripPhase
 import id.shiorilabs.commute.core.trip.progress
 import id.shiorilabs.commute.core.ui.components.CommuteCloseButton
+import id.shiorilabs.commute.core.ui.components.GetOffBadge
 import id.shiorilabs.commute.core.ui.components.LineRoundel
+import id.shiorilabs.commute.core.ui.components.RoundelSize
+import id.shiorilabs.commute.core.ui.components.StationNode
+import id.shiorilabs.commute.core.ui.components.StopNode
+import id.shiorilabs.commute.core.ui.components.TimelineGutter
+import id.shiorilabs.commute.core.ui.components.TimelineLineWidth
+import id.shiorilabs.commute.core.ui.components.TimelineNode
+import id.shiorilabs.commute.core.ui.components.TimelineRow
+import id.shiorilabs.commute.core.ui.components.TimelineStopLine
+import id.shiorilabs.commute.core.ui.components.TimelineStopName
+import id.shiorilabs.commute.core.ui.components.TransferIcon
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.components.CommuteButton
 import id.shiorilabs.commute.core.ui.components.CommuteButtonVariant
@@ -90,6 +98,7 @@ import id.shiorilabs.commute.core.ui.theme.Slate100
 import id.shiorilabs.commute.core.ui.theme.Slate300
 import id.shiorilabs.commute.core.ui.theme.Slate400
 import id.shiorilabs.commute.core.ui.theme.Slate500
+import id.shiorilabs.commute.core.ui.theme.Slate600
 import id.shiorilabs.commute.core.ui.theme.Slate900
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.trip.ActiveTrip
@@ -258,7 +267,10 @@ private fun ActiveTripContent(
                 )
             }
             val marks = trip.stopMarks()
-            trip.plan.legs.forEachIndexed { index, leg ->
+            val legs = trip.plan.legs
+            // One rail down the whole trip, as the trip details draw it: the rides and the walks
+            // between them meet, with no gap.
+            legs.forEachIndexed { index, leg ->
                 when (leg) {
                     is TripLeg.Ride -> item(key = "ride-$index") {
                         RideBlock(
@@ -268,16 +280,19 @@ private fun ActiveTripContent(
                             name = copy.rideName(leg),
                             marks = marks.getValue(index),
                             now = now,
-                            modifier = Modifier.padding(start = 32.dp, end = 32.dp, bottom = 16.dp),
+                            sameStationChange = isSameStationChange(legs.getOrNull(index - 1), leg),
+                            before = railBeside(legs.getOrNull(index - 1), leg, after = false),
+                            after = railBeside(legs.getOrNull(index + 1), leg, after = true),
+                            modifier = Modifier.padding(horizontal = 32.dp),
                         )
                     }
                     is TripLeg.Transfer -> item(key = "walk-$index") {
-                        WalkRow(leg, modifier = Modifier.padding(start = 32.dp, end = 32.dp, bottom = 16.dp))
+                        WalkRow(leg, modifier = Modifier.padding(horizontal = 32.dp))
                     }
                 }
             }
             item(key = "details") {
-                DetailsRow(onClick = { onDetails(trip) }, modifier = Modifier.padding(start = 32.dp, top = 8.dp, end = 32.dp))
+                DetailsRow(onClick = { onDetails(trip) }, modifier = Modifier.padding(start = 32.dp, top = 24.dp, end = 32.dp))
             }
         }
         Column(
@@ -343,10 +358,12 @@ private fun Actions(trip: ActiveTrip, onStop: () -> Unit, onSay: (RiderAction) -
 internal val ActionShape = RoundedCornerShape(12.dp)
 
 /**
- * One ride as a timeline in the board's terms: the line thick in its colour and grey behind the
- * rider, the rider as the board's pink chevron (or a pink dot at a stop), the stop they're making
- * for yellow, each stop's time down the right, and on a long ride the stops that don't matter yet
- * folded into one line.
+ * One ride as a timeline, laid out as the trip details lay one out (the line named on the rail under
+ * where to board, the ends' big rings, "TURUN" at the last) and coloured in the board's terms: the line
+ * grey behind the rider, the rider as the board's pink chevron (or a pink dot at a stop), the stop
+ * they're making for yellow, each stop's time down the right, and on a long ride the stops that don't
+ * matter yet folded into one line. [before] and [after] are the rails of what comes either side, so
+ * the walks meet the ride's ends.
  */
 @Composable
 private fun RideBlock(
@@ -356,6 +373,9 @@ private fun RideBlock(
     name: String,
     marks: RideMarks,
     now: Instant,
+    sameStationChange: Boolean,
+    before: Color?,
+    after: Color?,
     modifier: Modifier = Modifier,
 ) {
     val ride = trip.plan.ride(legIndex)
@@ -372,28 +392,11 @@ private fun RideBlock(
     }
     var expanded by rememberSaveable { mutableStateOf(false) }
     val rows = timelineRows(ride.stops.size, focus = if (current) here ?: marks.betweenAfter ?: next else null, expanded = expanded)
+    // The line below stop i: grey once the rider is past it.
+    fun railAfter(i: Int) = if (marks.marks[i + 1].reached || marks.betweenAfter == i) Slate300 else color
 
     Column(modifier = modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(bottom = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            LineRoundel(code = line?.lineCode ?: ride.line.substringAfter(':'), color = line?.colorCode ?: "#94A3B8", operator = ride.operator)
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                rideDirection(ride)?.let {
-                    Text(text = it, style = MaterialTheme.typography.bodySmall, color = Slate500)
-                }
-            }
-            ride.platformCode?.let {
-                Text(
-                    text = stringResource(R.string.trip_platform, formatPlatformCode(it)),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = Slate500,
-                )
-            }
-        }
+        if (sameStationChange) ChangeRow(bus = ride.isBus)
         rows.forEach { row ->
             when (row) {
                 is TimelineRow.Stop -> {
@@ -409,9 +412,24 @@ private fun RideBlock(
                         color = color,
                         first = i == 0,
                         last = i == ride.lastIndex,
-                        topReached = i > 0 && marks.marks[i].reached,
-                        bottomReached = i < ride.lastIndex && (marks.marks[i + 1].reached || marks.betweenAfter == i),
+                        platform = ride.platformCode.takeIf { i == 0 },
+                        top = when {
+                            i == 0 -> before
+                            marks.marks[i].reached -> Slate300
+                            else -> color
+                        },
+                        bottom = if (i == ride.lastIndex) after else railAfter(i),
                     )
+                    if (i == 0) {
+                        RideHeader(
+                            code = line?.lineCode ?: ride.line.substringAfter(':'),
+                            colorCode = line?.colorCode ?: "#94A3B8",
+                            operator = ride.operator,
+                            name = name,
+                            direction = rideDirection(ride),
+                            rail = railAfter(0),
+                        )
+                    }
                     if (marks.betweenAfter == i) OnTheWayRow(next = ride.stops[i + 1].name, color = color)
                 }
                 is TimelineRow.Folded -> FoldedRow(
@@ -419,6 +437,44 @@ private fun RideBlock(
                     color = if (marks.marks[row.last].reached) Slate300 else color,
                     onClick = { expanded = true },
                 )
+            }
+        }
+    }
+}
+
+/** Two rides through the same station: a change on the spot, not a walk, as the trip details show it. */
+@Composable
+private fun ChangeRow(bus: Boolean) {
+    TimelineRow(rail = SolidColor(Slate300)) {
+        Row(
+            modifier = Modifier.padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TransferIcon(bus = bus, modifier = Modifier.size(14.dp))
+            Text(
+                text = stringResource(if (bus) R.string.trip_live_change_bus else R.string.trip_live_change_train),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Slate500,
+            )
+        }
+    }
+}
+
+/** The ride's line on the rail under where to board, as the trip details name it, and which way. */
+@Composable
+private fun RideHeader(code: String, colorCode: String, operator: String, name: String, direction: String?, rail: Color) {
+    TimelineRow(rail = SolidColor(rail)) {
+        Column(
+            modifier = Modifier.padding(vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                LineRoundel(code = code, color = colorCode, operator = operator, size = RoundelSize.SM)
+                Text(text = name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Slate900)
+            }
+            direction?.let {
+                Text(text = it, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = Slate600)
             }
         }
     }
@@ -434,35 +490,51 @@ private fun StopRow(
     color: Color,
     first: Boolean,
     last: Boolean,
-    topReached: Boolean,
-    bottomReached: Boolean,
+    platform: String?,
+    top: Color?,
+    bottom: Color?,
 ) {
     val passed = mark == StopMark.PASSED
     val alighting = last && !passed && mark != StopMark.HERE
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(IntrinsicSize.Min)
-            .semantics(mergeDescendants = true) {},
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Rail(
-            top = if (first) null else if (topReached) Slate300 else color,
-            bottom = if (last) null else if (bottomReached) Slate300 else color,
-        ) {
+    val end = first || last
+    val ring = if (passed) Slate300 else color
+    TimelineRow(
+        top = top?.let(::SolidColor),
+        bottom = bottom?.let(::SolidColor),
+        node = {
             when {
-                mark == StopMark.HERE -> Dot(16.dp, fill = MaterialTheme.colorScheme.primary, ring = PageBackground)
-                next -> Dot(16.dp, fill = NextStopYellow, ring = PageBackground)
-                passed -> Dot(10.dp, fill = PageBackground, ring = Slate300)
-                last -> Dot(14.dp, fill = PageBackground, ring = color, ringWidth = 4.dp)
-                else -> Dot(10.dp, fill = PageBackground, ring = color)
+                mark == StopMark.HERE -> TimelineNode(16.dp, fill = MaterialTheme.colorScheme.primary, ring = PageBackground)
+                next -> TimelineNode(16.dp, fill = NextStopYellow, ring = PageBackground)
+                end -> StationNode(ring = ring, fill = PageBackground)
+                else -> StopNode(ring = ring, fill = PageBackground)
             }
-        }
-        Column(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
-            Text(
+        },
+    ) {
+        TimelineStopLine(
+            padding = if (end) 2.dp else 6.dp,
+            trailing = {
+                TimetableTime(
+                    scheduled = scheduled,
+                    actual = at,
+                    style = MaterialTheme.typography.labelLarge.merge(
+                        fontFeatureSettings = "tnum",
+                        fontWeight = if (next) FontWeight.Bold else FontWeight.Normal,
+                    ),
+                    color = when {
+                        passed -> Slate400
+                        next -> Slate900
+                        else -> Slate500
+                    },
+                    struck = Slate400,
+                    late = MaterialTheme.colorScheme.primary,
+                    early = OnTimeGreen,
+                )
+            },
+        ) {
+            TimelineStopName(
                 text = name,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (first || last || next || mark == StopMark.HERE) FontWeight.Bold else FontWeight.Normal,
+                style = if (end) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium,
+                fontWeight = if (end || next || mark == StopMark.HERE) FontWeight.Bold else FontWeight.SemiBold,
                 color = if (passed) Slate400 else Slate900,
             )
             val label = when {
@@ -471,53 +543,28 @@ private fun StopRow(
                 first && !passed -> R.string.trip_live_board_here
                 else -> null
             }
-            label?.let { Text(text = stringResource(it), style = MaterialTheme.typography.labelSmall, color = Slate500) }
+            // The platform under where to board, as the trip details put it, beside what the board says.
+            val notes = listOfNotNull(
+                platform?.let { stringResource(R.string.trip_platform, formatPlatformCode(it)) },
+                label?.let { stringResource(it) },
+            )
+            if (notes.isNotEmpty()) {
+                Text(text = notes.joinToString(" · "), style = MaterialTheme.typography.labelMedium, color = Slate500)
+            }
             if (alighting) {
-                val description = stringResource(R.string.trip_live_alight_here)
-                Text(
+                GetOffBadge(
                     text = stringResource(R.string.trip_pids_get_off),
-                    modifier = Modifier
-                        .padding(top = 2.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(MaterialTheme.colorScheme.primary)
-                        .padding(horizontal = 6.dp, vertical = 1.dp)
-                        .clearAndSetSemantics { contentDescription = description },
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimary,
+                    description = stringResource(R.string.trip_live_alight_here),
                 )
             }
         }
-        TimetableTime(
-            scheduled = scheduled,
-            actual = at,
-            style = MaterialTheme.typography.labelLarge.merge(
-                fontFeatureSettings = "tnum",
-                fontWeight = if (next) FontWeight.Bold else FontWeight.Normal,
-            ),
-            color = when {
-                passed -> Slate400
-                next -> Slate900
-                else -> Slate500
-            },
-            struck = Slate400,
-            late = MaterialTheme.colorScheme.primary,
-            early = OnTimeGreen,
-            modifier = Modifier.padding(start = 12.dp),
-        )
     }
 }
 
 /** The rider out between two stops: the board's pink chevron on the line, heading down it. */
 @Composable
 private fun OnTheWayRow(next: String, color: Color) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(IntrinsicSize.Min),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Rail(top = Slate300, bottom = color) { RiderChevron() }
+    TimelineRow(top = SolidColor(Slate300), bottom = SolidColor(color), node = { RiderChevron() }) {
         Text(
             text = stringResource(R.string.trip_live_on_the_way, next),
             modifier = Modifier.padding(vertical = 6.dp),
@@ -539,8 +586,8 @@ private fun FoldedRow(text: String, color: Color, onClick: () -> Unit) {
             .clickable(role = Role.Button, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(modifier = Modifier.width(RailWidth).fillMaxHeight(), contentAlignment = Alignment.Center) {
-            Canvas(modifier = Modifier.width(LineWidth).fillMaxHeight()) {
+        Box(modifier = Modifier.width(TimelineGutter).fillMaxHeight(), contentAlignment = Alignment.Center) {
+            Canvas(modifier = Modifier.width(TimelineLineWidth).fillMaxHeight()) {
                 drawLine(
                     color = color,
                     start = Offset(size.width / 2, 0f),
@@ -567,32 +614,20 @@ private fun FoldedRow(text: String, color: Color, onClick: () -> Unit) {
     }
 }
 
-/** The ride's line down the left, [top] and [bottom] of [node] each coloured, or left out at an end. */
-@Composable
-private fun Rail(top: Color?, bottom: Color?, node: @Composable () -> Unit) {
-    Box(
-        modifier = Modifier
-            .width(RailWidth)
-            .fillMaxHeight(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(modifier = Modifier.fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(modifier = Modifier.width(LineWidth).weight(1f).background(top ?: Color.Transparent))
-            Box(modifier = Modifier.width(LineWidth).weight(1f).background(bottom ?: Color.Transparent))
-        }
-        node()
-    }
-}
+/** Two rides back to back at one station: no walk between them, a change where they meet. */
+private fun isSameStationChange(previous: TripLeg?, ride: TripLeg.Ride): Boolean =
+    previous is TripLeg.Ride && previous.stops.last().id == ride.stops.first().id
 
-@Composable
-private fun Dot(size: Dp, fill: Color, ring: Color, ringWidth: Dp = 3.dp) {
-    Box(
-        modifier = Modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(fill)
-            .border(ringWidth, ring, CircleShape),
-    )
+/**
+ * The rail of what comes beside a ride, [after] it or before, so the two meet at the ride's end: a
+ * walk's, or a same-station change's. With nothing beside it, the ride's line just ends.
+ */
+private fun railBeside(neighbour: TripLeg?, ride: TripLeg.Ride, after: Boolean): Color? = when (neighbour) {
+    is TripLeg.Transfer -> Slate300
+    is TripLeg.Ride -> Slate300.takeIf {
+        if (after) isSameStationChange(ride, neighbour) else isSameStationChange(neighbour, ride)
+    }
+    null -> null
 }
 
 /** The board's marker, pink edged in white, pointing down the line. */
@@ -635,40 +670,31 @@ private fun DetailsRow(onClick: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
-/** The timeline's column for the line, and the line's own width: the board's band, laid flat. */
-private val RailWidth = 32.dp
-private val LineWidth = 6.dp
-
 /** The board's yellow for the stop it names. */
 private val NextStopYellow = Color(0xFFFBBF24)
 
 /**
- * A walk between rides, set on the timeline as the trip details set it: a slate rail under the
- * stops' rails and a quiet line beside it, rather than a plate that reads as a button.
+ * A walk between rides, set on the timeline as the trip details set it: a slate rail between the
+ * rides' ends and a quiet line beside it, rather than a plate that reads as a button.
  */
 @Composable
 private fun WalkRow(walk: TripLeg.Transfer, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(IntrinsicSize.Min),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Rail(top = Slate300, bottom = Slate300) {}
+    TimelineRow(rail = SolidColor(Slate300), modifier = modifier) {
         Row(
-            modifier = Modifier.padding(vertical = 6.dp),
+            modifier = Modifier.padding(vertical = 14.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.Top,
         ) {
             Icon(
                 imageVector = CommuteIcons.Walk,
                 contentDescription = null,
-                modifier = Modifier.padding(top = 2.dp).size(14.dp),
+                modifier = Modifier.padding(top = 3.dp).size(14.dp),
                 tint = Slate500,
             )
             Column {
+                val distance = if (walk.distanceM > 0) " " + stringResource(R.string.trip_live_transfer_walk, walk.distanceM) else ""
                 Text(
-                    text = stringResource(R.string.trip_live_walk, walk.distanceM, walk.to.name),
+                    text = stringResource(R.string.trip_live_transfer_to, walk.to.name) + distance,
                     style = MaterialTheme.typography.bodyMedium,
                     color = Slate500,
                 )
