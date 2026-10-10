@@ -1,6 +1,7 @@
 name = "commute-og"
 main = "src/app.ts"
 dev.port = 3001
+dev.inspector_port = 9230
 compatibility_date = "2025-10-18"
 compatibility_flags = ["nodejs_compat"]
 
