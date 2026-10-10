@@ -7,23 +7,16 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -37,7 +30,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -60,9 +52,15 @@ import id.shiorilabs.commute.core.ui.theme.Slate600
 import id.shiorilabs.commute.core.ui.theme.Slate900
 import java.time.Instant
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.sp
 import id.shiorilabs.commute.core.ui.components.LineRoundel
+import id.shiorilabs.commute.core.ui.components.GetOffBadge
+import id.shiorilabs.commute.core.ui.components.StationNode
+import id.shiorilabs.commute.core.ui.components.StopNode
+import id.shiorilabs.commute.core.ui.components.TimelineRow
+import id.shiorilabs.commute.core.ui.components.TimelineStopLine
+import id.shiorilabs.commute.core.ui.components.TimelineStopName
+import id.shiorilabs.commute.core.ui.components.TransferIcon
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.ext.parseHexColor
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
@@ -84,10 +82,6 @@ private const val TRANSJAKARTA = "TJ"
 private const val STOPS_REVEAL_MILLIS = 300
 private const val CHEVRON_TURN_MILLIS = 150
 
-/** The gutter the rail runs down, and where its centre sits: the web's fare timeline grid. */
-private val Gutter = 28.dp
-private val RailCenter = 14.dp
-
 /** The lines that run a ride, resolved against the dictionary; a key it lacks still shows its code. */
 internal fun legLines(ride: JourneyLeg.Ride, lines: Map<String, LineInfo>): List<LegLine> =
     ride.serviceLines.map { service ->
@@ -101,65 +95,38 @@ internal fun legLines(ride: JourneyLeg.Ride, lines: Map<String, LineInfo>): List
         )
     }
 
-/** A vehicle with the swap arrows on it: a change, by train or by bus. The web's `TransferIcon`. */
-@Composable
-internal fun TransferIcon(bus: Boolean, modifier: Modifier = Modifier, tint: Color = Slate500) {
-    Box(modifier = modifier) {
-        Icon(
-            imageVector = if (bus) CommuteIcons.Bus else CommuteIcons.Train,
-            contentDescription = null,
-            modifier = Modifier.fillMaxWidth().fillMaxHeight(),
-            tint = tint,
-        )
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .offset(x = 2.dp, y = 1.dp)
-                .fillMaxWidth(0.65f)
-                .fillMaxHeight(0.65f)
-                .clip(CircleShape)
-                .background(tint),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = CommuteIcons.Swap,
-                contentDescription = null,
-                modifier = Modifier.fillMaxWidth(0.8f).fillMaxHeight(0.8f),
-                tint = Color.White,
-            )
-        }
-    }
-}
-
 /**
  * The journey leg by leg, down a rail in each line's colour: where to board and from which platform,
  * which line and which way, how many stops (which open out), and where to get off, each stop's time
  * down the right where the timetable has one; and between rides, the change or the walk. The web's
- * `JourneyTimeline` in its order, drawn as the live trip screen draws a ride.
+ * `JourneyTimeline` in its order, on the timeline parts the live trip screen draws its rides with.
  */
 @Composable
 internal fun JourneyTimeline(legs: List<JourneyLeg>, lines: Map<String, LineInfo>, modifier: Modifier = Modifier) {
     Column(modifier = modifier.fillMaxWidth()) {
-        (legs.firstOrNull() as? JourneyLeg.Transfer)?.let { EndpointStop(it.from.name, RailCap.START) }
+        (legs.firstOrNull() as? JourneyLeg.Transfer)?.let { EndpointStop(it.from.name, start = true) }
         legs.forEachIndexed { index, leg ->
             when (leg) {
                 is JourneyLeg.Ride -> {
                     val previous = legs.getOrNull(index - 1)
+                    val following = legs.getOrNull(index + 1)
                     // Two rides through the same station: a change on the spot, not a walk.
                     val sameStationChange = previous is JourneyLeg.Ride && previous.to.id == leg.from.id
+                    val changeAfter = following is JourneyLeg.Ride && following.from.id == leg.to.id
                     RideLeg(
                         leg = leg,
                         lines = legLines(leg, lines),
                         sameStationChange = sameStationChange,
-                        walkBefore = walkRail(previous),
-                        walkAfter = walkRail(legs.getOrNull(index + 1)),
+                        // The change's slate rail runs on to the nodes either side, as a walk's does.
+                        walkBefore = walkRail(previous) ?: SolidColor(Slate300).takeIf { sameStationChange },
+                        walkAfter = walkRail(following) ?: SolidColor(Slate300).takeIf { changeAfter },
                     )
                 }
 
                 is JourneyLeg.Transfer -> TransferLeg(leg)
             }
         }
-        (legs.lastOrNull() as? JourneyLeg.Transfer)?.let { EndpointStop(it.to.name, RailCap.END) }
+        (legs.lastOrNull() as? JourneyLeg.Transfer)?.let { EndpointStop(it.to.name, start = false) }
     }
 }
 
@@ -170,10 +137,11 @@ internal fun JourneyTimeline(legs: List<JourneyLeg>, lines: Map<String, LineInfo
  * it is the walk's own rail, given an end.
  */
 @Composable
-private fun EndpointStop(name: String, cap: RailCap) {
-    TimelineRow(rail = SolidColor(Slate300), cap = cap, node = Slate400) {
-        StopLine(time = null) {
-            Text(text = name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+private fun EndpointStop(name: String, start: Boolean) {
+    val walk = SolidColor(Slate300)
+    TimelineRow(top = walk.takeUnless { start }, bottom = walk.takeIf { start }, node = { StationNode(Slate400) }) {
+        TimelineStopLine {
+            TimelineStopName(text = name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -189,61 +157,6 @@ private fun walkRail(leg: JourneyLeg?): Brush? = when {
     leg.corridorLabel != null && leg.fare != null -> SolidColor(Rose300)
     else -> SolidColor(Slate300)
 }
-
-/**
- * One row of the timeline: the gutter with its rail, and the row's content beside it. A [cap]ped rail
- * runs from or to the row's middle; [beyondCap], if given, fills the half the cap leaves bare.
- */
-@Composable
-private fun TimelineRow(
-    rail: Brush?,
-    modifier: Modifier = Modifier,
-    cap: RailCap = RailCap.NONE,
-    beyondCap: Brush? = null,
-    node: Color? = null,
-    dot: Color? = null,
-    content: @Composable () -> Unit,
-) {
-    Row(modifier = modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-        Box(modifier = Modifier.width(Gutter).fillMaxHeight()) {
-            if (rail != null) {
-                Column(modifier = Modifier.fillMaxHeight().offset(x = RailCenter - RailWidth / 2)) {
-                    val top = if (cap == RailCap.START) beyondCap else rail
-                    val bottom = if (cap == RailCap.END) beyondCap else rail
-                    Box(Modifier.width(RailWidth).weight(1f).then(if (top != null) Modifier.background(top) else Modifier))
-                    Box(Modifier.width(RailWidth).weight(1f).then(if (bottom != null) Modifier.background(bottom) else Modifier))
-                }
-            }
-            if (node != null) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .offset(x = RailCenter - 8.dp)
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .background(Color.White)
-                        .border(4.dp, node, CircleShape),
-                )
-            }
-            if (dot != null) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .offset(x = RailCenter - 5.dp)
-                        .size(10.dp)
-                        .clip(CircleShape)
-                        .background(Color.White)
-                        .border(3.dp, dot, CircleShape),
-                )
-            }
-        }
-        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-            content()
-        }
-    }
-}
-
-private enum class RailCap { NONE, START, END }
 
 @Composable
 private fun RideLeg(
@@ -277,9 +190,9 @@ private fun RideLeg(
         }
     }
 
-    TimelineRow(rail = rail, cap = RailCap.START, beyondCap = walkBefore, node = legColor) {
+    TimelineRow(top = walkBefore, bottom = rail, node = { StationNode(legColor) }) {
         StopLine(time = leg.departureAt) {
-            Text(text = leg.from.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            TimelineStopName(text = leg.from.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             leg.platformCode?.let { platform ->
                 val formatted = formatPlatformCode(platform)
                 val description = stringResource(R.string.journey_platform_description, formatted)
@@ -360,59 +273,47 @@ private fun RideLeg(
     ) {
         Column {
             intermediate.forEachIndexed { i, stop ->
-                TimelineRow(rail = rail, dot = legColor) {
+                TimelineRow(top = rail, bottom = rail, node = { StopNode(legColor) }) {
                     StopLine(time = leg.stopTimes.getOrNull(i + 1), padding = 6.dp) {
-                        Text(text = stop.name, style = MaterialTheme.typography.bodyMedium, color = Slate900)
+                        TimelineStopName(
+                            text = stop.name,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Slate900,
+                        )
                     }
                 }
             }
         }
     }
 
-    TimelineRow(rail = rail, cap = RailCap.END, beyondCap = walkAfter, node = legColor) {
+    TimelineRow(top = rail, bottom = walkAfter, node = { StationNode(legColor) }) {
         StopLine(time = leg.arrivalAt) {
-            Text(text = leg.to.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            val description = stringResource(R.string.journey_get_off_description)
-            Text(
+            TimelineStopName(text = leg.to.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            GetOffBadge(
                 text = stringResource(R.string.journey_get_off),
-                modifier = Modifier
-                    .padding(top = 2.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(MaterialTheme.colorScheme.primary)
-                    .padding(horizontal = 6.dp, vertical = 1.dp)
-                    .clearAndSetSemantics { contentDescription = description },
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimary,
+                description = stringResource(R.string.journey_get_off_description),
             )
         }
     }
 }
 
-/**
- * A stop's line beside the rail: its name (and whatever goes under it) on the left, its time on the
- * right in figures of one width, so the times line up down the ride. No time, no column: TransJakarta
- * publishes none, and a dash would read as one we failed to fetch.
- */
+/** A stop's line with its time, in figures of one width so the times line up down the ride. */
 @Composable
 private fun StopLine(time: Instant?, padding: Dp = 2.dp, content: @Composable () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = padding)
-            .semantics(mergeDescendants = true) {},
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) { content() }
-        time?.let {
-            Text(
-                text = formatClock(it),
-                modifier = Modifier.padding(start = 12.dp),
-                style = MaterialTheme.typography.labelLarge.merge(fontFeatureSettings = "tnum"),
-                color = Slate500,
-            )
-        }
-    }
+    TimelineStopLine(
+        trailing = time?.let {
+            {
+                Text(
+                    text = formatClock(it),
+                    style = MaterialTheme.typography.labelLarge.merge(fontFeatureSettings = "tnum"),
+                    color = Slate500,
+                )
+            }
+        },
+        padding = padding,
+        content = content,
+    )
 }
 
 @Composable
