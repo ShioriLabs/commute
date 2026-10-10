@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.settings.presentation.legal
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -38,7 +39,7 @@ private fun PrivacyPolicyContent(
         onBack = onBack,
     ) {
         DocumentBody {
-            EffectiveDate()
+            EffectiveDate(R.string.settings_privacy_effective)
             HtmlText(stringResource(R.string.settings_privacy_intro))
             DocumentSection(stringResource(R.string.settings_privacy_collected_title)) {
                 HtmlText(stringResource(R.string.settings_privacy_collected_body))
@@ -145,11 +146,11 @@ private fun TermsContent(
     }
 }
 
-/** The date both documents took effect, over their text. */
+/** The date a document took effect, over its text: both share one until either changes alone. */
 @Composable
-private fun EffectiveDate() {
+private fun EffectiveDate(@StringRes date: Int = R.string.settings_legal_effective) {
     Text(
-        text = stringResource(R.string.settings_legal_effective),
+        text = stringResource(date),
         style = MaterialTheme.typography.bodyMedium,
         fontWeight = FontWeight.SemiBold,
         color = MaterialTheme.colorScheme.onBackground,

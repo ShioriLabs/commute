@@ -253,6 +253,19 @@ class TripControllerImpl @Inject constructor(
         }
     }
 
+    /** The trip that ended at [at] had its log uploaded: its last page thanks the rider instead of asking. */
+    fun markUploaded(at: Instant) {
+        scope.launch {
+            mutex.withLock {
+                val finished = _finished.value?.takeIf { it.at == at && !it.uploaded } ?: return@withLock
+                finished.copy(uploaded = true).also {
+                    _finished.value = it
+                    store.writeFinished(it)
+                }
+            }
+        }
+    }
+
     /** Where a step left the trip, as the log keeps it. */
     private fun stateFacts(state: TripState): Map<String, Any?> = mapOf(
         "leg" to state.legIndex,
@@ -477,6 +490,8 @@ data class FinishedTrip(
     val reason: FinishReason,
     @Serializable(with = InstantSerializer::class)
     val at: Instant,
+    /** The rider sent its log from the last page ("Upload OTW Ini"): once is enough. */
+    val uploaded: Boolean = false,
 )
 
 /** How long a finished trip's summary stays: about the rest of a day out. */

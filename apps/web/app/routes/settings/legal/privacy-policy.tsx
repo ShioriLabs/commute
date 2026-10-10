@@ -26,7 +26,7 @@ export default function PrivacyPolicySettingsPage() {
         </div>
         <div className="mt-8 px-8 text-sm max-w-3xl mx-auto">
           <p className="text-sm font-semibold">
-            Efektif Sejak 6 Oktober 2026
+            Efektif Sejak 10 Oktober 2026
           </p>
           <br />
           <br />
@@ -50,7 +50,7 @@ export default function PrivacyPolicySettingsPage() {
           <ul className="list-disc ml-4 mt-1">
             <li><b>Di dekat kamu.</b> Lokasi dibaca saat beranda dibuka, untuk menampilkan stasiun terdekat.</li>
             <li><b>OTW.</b> Selama perjalanan berjalan, Aplikasi membaca lokasi untuk mengetahui posisi Anda di rute dan mengingatkan Anda sebelum turun, termasuk saat Aplikasi tidak sedang dibuka. Selama itu, notifikasi perjalanan selalu tampil. Pembacaan lokasi berhenti saat perjalanan selesai.</li>
-            <li><b>Catatan perjalanan.</b> Aplikasi menyimpan catatan teknis perjalanan OTW, termasuk posisi GPS, di perangkat Anda untuk membantu Kami menyempurnakan mode OTW. Catatan ini dibatasi sekitar 1 MB (bagian terlama terhapus otomatis), tidak ikut dicadangkan ke akun Google Anda, dan hanya keluar dari perangkat jika Anda sendiri membagikannya.</li>
+            <li><b>Catatan perjalanan.</b> Aplikasi menyimpan catatan teknis perjalanan OTW, termasuk posisi GPS, di perangkat Anda untuk membantu Kami menyempurnakan mode OTW. Catatan ini dibatasi sekitar 1 MB (bagian terlama terhapus otomatis), tidak ikut dicadangkan ke akun Google Anda, dan hanya keluar dari perangkat jika Anda sendiri membagikannya atau mengunggahnya. Jika Anda memilih <i>Upload OTW Ini</i> di ringkasan perjalanan, hanya catatan perjalanan tersebut yang dikirim ke Kami, beserta tipe perangkat, versi Android, dan versi Aplikasi. Satu sampai dua halte atau stasiun di awal dan di akhir perjalanan, beserta posisi di sekitarnya, dipotong sebelum dikirim. Unggahan tidak disertai akun atau ID perangkat, Kami tidak menyimpan alamat IP Anda, dan unggahan terhapus otomatis 7 hari setelah diterima.</li>
             <li><b>Jam tangan.</b> Jika Anda memasangkan jam tangan Wear OS, status perjalanan dikirim langsung dari ponsel ke jam tangan Anda.</li>
           </ul><br />
           <p>Anda dapat mematikan penggunaan lokasi kapan saja melalui menu Pengaturan di Aplikasi atau pengaturan perangkat Anda.</p>
