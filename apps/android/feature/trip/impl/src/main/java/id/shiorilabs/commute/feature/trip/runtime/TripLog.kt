@@ -60,6 +60,11 @@ class FileTripLog @Inject constructor(
         file.writeBytes(tail.copyOfRange(from, tail.size))
     }
 
+    /** Every line kept, oldest first: for [TripUploader] to pick one trip's out of. */
+    internal fun lines(): List<String> = synchronized(lock) {
+        runCatching { if (file.exists()) file.readLines() else emptyList() }.getOrDefault(emptyList())
+    }
+
     override suspend fun share(): Intent? = withContext(Dispatchers.IO) {
         val log = synchronized(lock) { file.takeIf { it.exists() && it.length() > 0 }?.readBytes() } ?: return@withContext null
         val dir = File(context.cacheDir, SHARED_DIR).apply { mkdirs() }
