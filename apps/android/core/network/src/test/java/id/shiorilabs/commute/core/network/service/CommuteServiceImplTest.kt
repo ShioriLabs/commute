@@ -10,7 +10,10 @@ import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
+import io.ktor.http.content.OutgoingContent
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import kotlinx.coroutines.test.runTest
@@ -99,5 +102,22 @@ class CommuteServiceImplTest {
 
         assertTrue(thrown is ApiException)
         assertEquals(404, (thrown as ApiException).status)
+    }
+
+    @Test
+    fun `a trip log goes up once, as zstd, with the app's version`() = runTest {
+        val service = service { respond(content = "", status = HttpStatusCode.ServiceUnavailable) }
+        val body = byteArrayOf(0x28, 0xb5.toByte(), 0x2f, 0xfd.toByte(), 1, 2, 3)
+
+        val thrown = runCatching { service.uploadTripLog(body, appVersion = "1.2.3") }.exceptionOrNull()
+
+        assertEquals(503, (thrown as ApiException).status)
+        // Not retried: a second try would be stored as a second upload.
+        val request = requests.single()
+        assertEquals(HttpMethod.Post, request.method)
+        assertEquals("/uploads/trips", request.url.encodedPath)
+        assertEquals("1.2.3", request.headers["X-App-Version"])
+        assertEquals(ContentType("application", "zstd"), request.body.contentType)
+        assertTrue(body.contentEquals((request.body as OutgoingContent.ByteArrayContent).bytes()))
     }
 }

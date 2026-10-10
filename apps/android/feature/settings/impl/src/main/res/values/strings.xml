@@ -114,6 +114,7 @@
     <string name="settings_legal_item_oss">Atribusi Kode Sumber Terbuka</string>
     <string name="settings_legal_item_creative">Atribusi Aset Kreatif</string>
     <string name="settings_legal_effective">Efektif Sejak 6 Oktober 2026</string>
+    <string name="settings_privacy_effective">Efektif Sejak 10 Oktober 2026</string>
 
     <!-- Privacy policy -->
     <string name="settings_privacy_title">Kebijakan Privasi</string>
@@ -128,7 +129,7 @@
     <string name="settings_privacy_location_body">Aplikasi Android meminta izin lokasi hanya saat Anda memakai fitur yang membutuhkannya. Lokasi Anda diolah di perangkat Anda sendiri dan tidak pernah dikirim ke server Kami.</string>
     <string name="settings_privacy_location_1"><![CDATA[<b>Di dekat kamu.</b> Lokasi dibaca saat beranda dibuka, untuk menampilkan stasiun terdekat.]]></string>
     <string name="settings_privacy_location_2"><![CDATA[<b>OTW.</b> Selama perjalanan berjalan, Aplikasi membaca lokasi untuk mengetahui posisi Anda di rute dan mengingatkan Anda sebelum turun, termasuk saat Aplikasi tidak sedang dibuka. Selama itu, notifikasi perjalanan selalu tampil. Pembacaan lokasi berhenti saat perjalanan selesai.]]></string>
-    <string name="settings_privacy_location_3"><![CDATA[<b>Catatan perjalanan.</b> Aplikasi menyimpan catatan teknis perjalanan OTW, termasuk posisi GPS, di perangkat Anda untuk membantu Kami menyempurnakan mode OTW. Catatan ini dibatasi sekitar 1 MB (bagian terlama terhapus otomatis), tidak ikut dicadangkan ke akun Google Anda, dan hanya keluar dari perangkat jika Anda sendiri membagikannya.]]></string>
+    <string name="settings_privacy_location_3"><![CDATA[<b>Catatan perjalanan.</b> Aplikasi menyimpan catatan teknis perjalanan OTW, termasuk posisi GPS, di perangkat Anda untuk membantu Kami menyempurnakan mode OTW. Catatan ini dibatasi sekitar 1 MB (bagian terlama terhapus otomatis), tidak ikut dicadangkan ke akun Google Anda, dan hanya keluar dari perangkat jika Anda sendiri membagikannya atau mengunggahnya. Jika Anda memilih <i>Upload OTW Ini</i> di ringkasan perjalanan, hanya catatan perjalanan tersebut yang dikirim ke Kami, beserta tipe perangkat, versi Android, dan versi Aplikasi. Satu sampai dua halte atau stasiun di awal dan di akhir perjalanan, beserta posisi di sekitarnya, dipotong sebelum dikirim. Unggahan tidak disertai akun atau ID perangkat, Kami tidak menyimpan alamat IP Anda, dan unggahan terhapus otomatis 7 hari setelah diterima.]]></string>
     <string name="settings_privacy_location_4"><![CDATA[<b>Jam tangan.</b> Jika Anda memasangkan jam tangan Wear OS, status perjalanan dikirim langsung dari ponsel ke jam tangan Anda.]]></string>
     <string name="settings_privacy_location_outro">Anda dapat mematikan penggunaan lokasi kapan saja melalui menu Pengaturan di Aplikasi atau pengaturan perangkat Anda.</string>
     <string name="settings_privacy_use_title">3. Penggunaan Data</string>

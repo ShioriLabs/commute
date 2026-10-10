@@ -16,9 +16,12 @@ import id.shiorilabs.commute.feature.trip.TripReminder
 import id.shiorilabs.commute.feature.trip.runtime.FinishedTrip
 import id.shiorilabs.commute.feature.trip.runtime.MotionTracker
 import id.shiorilabs.commute.feature.trip.runtime.TripControllerImpl
+import id.shiorilabs.commute.feature.trip.runtime.TripUploader
+import id.shiorilabs.commute.feature.trip.runtime.UploadResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -45,6 +48,7 @@ class ActiveTripViewModel @Inject constructor(
     private val directory: StationDirectory,
     private val barState: TripBarState,
     private val motionTracker: MotionTracker,
+    private val uploader: TripUploader,
     developerPreferences: DeveloperPreferencesRepository,
     locationPreferences: LocationPreferencesRepository,
     otwPreferences: OtwPreferencesRepository,
@@ -82,6 +86,28 @@ class ActiveTripViewModel @Inject constructor(
     fun stop() = controller.stop()
 
     fun setReminder(reminder: TripReminder) = controller.setReminder(reminder)
+
+    private val _upload = MutableStateFlow(TripUploadState.IDLE)
+
+    /** "Upload OTW Ini" on the last page: how sending the finished trip's log is going. */
+    internal val upload: StateFlow<TripUploadState> = _upload.asStateFlow()
+
+    /** Sends the finished trip's log, ends cut, once the rider has read what goes and said yes. */
+    fun upload() {
+        val finished = controller.finished.value ?: return
+        if (finished.uploaded || _upload.value == TripUploadState.SENDING) return
+        _upload.value = TripUploadState.SENDING
+        viewModelScope.launch {
+            val result = uploader.upload(finished)
+            if (result == UploadResult.SENT) controller.markUploaded(finished.at)
+            _upload.value = when (result) {
+                UploadResult.SENT -> TripUploadState.SENT
+                UploadResult.CLOSED -> TripUploadState.CLOSED
+                UploadResult.EMPTY -> TripUploadState.EMPTY
+                UploadResult.FAILED -> TripUploadState.FAILED
+            }
+        }
+    }
 
     /** "Tandai manual" in Pengaturan → Experimental: the bar of marks under the page. */
     val manualMarks: StateFlow<Boolean> = developerPreferences.manualMarks

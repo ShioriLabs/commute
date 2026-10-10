@@ -110,6 +110,7 @@ fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel
     val pidsDiagram by viewModel.pidsDiagram.collectAsStateWithLifecycle()
     val motion by viewModel.motion.collectAsStateWithLifecycle()
     val yishunPids by viewModel.yishunPids.collectAsStateWithLifecycle()
+    val upload by viewModel.upload.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
 
     ActiveTripContent(
@@ -128,6 +129,9 @@ fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel
         onMark = viewModel::mark,
         motion = motion,
         pidsStyle = if (yishunPids) PidsStyle.Yishun else PidsStyle.BekasiRailway(diagram = pidsDiagram, pages = boardPages),
+        upload = upload,
+        onUpload = viewModel::upload,
+        onPrivacyPolicy = { navigator.goTo(Route.SettingsPrivacyPolicy) },
     )
 }
 
@@ -153,6 +157,9 @@ private fun ActiveTripContent(
     onMark: (MarkKind, Pids) -> Unit = { _, _ -> },
     motion: MotionStripState? = null,
     pidsStyle: PidsStyle = PidsStyle.BekasiRailway(),
+    upload: TripUploadState = TripUploadState.IDLE,
+    onUpload: () -> Unit = {},
+    onPrivacyPolicy: () -> Unit = {},
 ) {
     val trip = state.trip
     val markRows = if (trip != null) markRows(manual = manualMarks, platform = platformMarks) else emptyList()
@@ -202,6 +209,9 @@ private fun ActiveTripContent(
                             onClose = onClose,
                             onOpenStation = onOpenStation,
                             onRouteBack = { onRouteBack(finished.trip.origin) },
+                            upload = upload,
+                            onUpload = onUpload,
+                            onPrivacyPolicy = onPrivacyPolicy,
                         )
                     }
                 }

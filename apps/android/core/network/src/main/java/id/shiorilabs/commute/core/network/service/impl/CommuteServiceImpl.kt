@@ -11,14 +11,20 @@ import id.shiorilabs.commute.core.model.models.TrackShapes
 import id.shiorilabs.commute.core.model.models.Transfer
 import id.shiorilabs.commute.core.model.models.TripResult
 import id.shiorilabs.commute.core.network.ext.decodeFetched
+import id.shiorilabs.commute.core.network.ext.throwUnlessSuccess
 import id.shiorilabs.commute.core.network.service.CommuteService
 import id.shiorilabs.commute.core.type.Fetched
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.retry
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
+import io.ktor.http.contentType
 import io.ktor.http.encodeURLPathPart
 import javax.inject.Inject
 
@@ -95,6 +101,15 @@ class CommuteServiceImpl @Inject constructor(
             parameter("walking", walking)
             validator(ifNoneMatch)
         }.decodeFetched()
+
+    override suspend fun uploadTripLog(body: ByteArray, appVersion: String) {
+        client.post("uploads/trips") {
+            retry { noRetry() }
+            contentType(ContentType("application", "zstd"))
+            header("X-App-Version", appVersion)
+            setBody(body)
+        }.throwUnlessSuccess()
+    }
 
     private fun stationPath(operator: String, stationCode: String): String =
         "stations/${operator.encodeURLPathPart()}/${stationCode.encodeURLPathPart()}"
