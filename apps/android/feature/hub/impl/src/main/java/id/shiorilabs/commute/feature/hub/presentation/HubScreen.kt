@@ -23,11 +23,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.chrisbanes.haze.hazeSource
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.navigation.Route
+import id.shiorilabs.commute.core.navigation.hubWebLink
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.type.toFailure
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.components.ProblemPanel
+import id.shiorilabs.commute.core.ui.components.ReportIssueLink
 import id.shiorilabs.commute.core.ui.components.SkeletonBlock
 import id.shiorilabs.commute.core.ui.frost.FrostedHeaderPage
 import id.shiorilabs.commute.core.ui.network.rememberIsOffline
@@ -64,6 +66,7 @@ fun HubScreen(
 
     HubContent(
         state = state,
+        slug = slug,
         innerPadding = innerPadding,
         offline = offline,
         placeholderTitle = placeholderTitle,
@@ -78,6 +81,7 @@ fun HubScreen(
 @Composable
 private fun HubContent(
     state: HubUiState,
+    slug: String,
     innerPadding: PaddingValues,
     offline: Boolean = false,
     placeholderTitle: String? = null,
@@ -143,6 +147,13 @@ private fun HubContent(
                             onClick = { onOpenStation(member) },
                         )
                     }
+                    item(key = "report-issue") {
+                        // In line with the members' names.
+                        ReportIssueLink(
+                            page = hubWebLink(slug),
+                            modifier = Modifier.padding(start = 32.dp, top = 32.dp, end = 32.dp),
+                        )
+                    }
                 }
             }
         }
@@ -199,6 +210,7 @@ private val previewLines = mapOf(
 private fun HubContentPreview() {
     CommutePreviewScaffold {
         HubContent(
+            slug = "dukuh-atas",
             state = HubUiState(hub = UIState.Success(previewHub), lines = previewLines),
             innerPadding = PaddingValues(),
         )
@@ -210,6 +222,7 @@ private fun HubContentPreview() {
 private fun HubContentLoadingPreview() {
     CommutePreviewScaffold {
         HubContent(
+            slug = "dukuh-atas",
             state = HubUiState(hub = UIState.Loading, lines = emptyMap()),
             innerPadding = PaddingValues(),
             placeholderTitle = "Dukuh Atas",

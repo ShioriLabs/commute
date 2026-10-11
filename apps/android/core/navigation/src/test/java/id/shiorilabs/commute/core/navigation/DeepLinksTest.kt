@@ -99,6 +99,16 @@ class DeepLinksTest {
     }
 
     @Test
+    fun `a station's and a hub's web links open the same pages`() {
+        assertEquals("https://commute.shiorilabs.id/stations/KCI/MRI", stationWebLink("KCI-MRI"))
+        assertEquals("https://commute.shiorilabs.id/hubs/dukuh-atas", hubWebLink("dukuh-atas"))
+        listOf("KCI-MRI", "TJ-H00001P", "MRTJ-DKA").forEach { id ->
+            assertEquals(Route.Station(id), routeForLink(stationWebLink(id)))
+        }
+        assertEquals(Route.Hub("dukuh-atas"), routeForLink(hubWebLink("dukuh-atas")))
+    }
+
+    @Test
     fun `the trip notification's link opens the running trip`() {
         assertEquals(Route.ActiveTrip, routeForLink(ACTIVE_TRIP_LINK))
         assertNull(routeForLink("commute://trip/other"))

@@ -62,6 +62,7 @@ import com.adamglin.phosphoricons.fill.PushPinSimple
 import com.adamglin.phosphoricons.fill.Ticket
 import com.adamglin.phosphoricons.fill.TrainSimple
 import com.adamglin.phosphoricons.fill.Trash
+import com.adamglin.phosphoricons.fill.WarningCircle
 import com.adamglin.phosphoricons.fill.XCircle
 
 /**
@@ -151,6 +152,9 @@ object CommuteIcons {
 
     /** Sends something of the rider's to Commute, as a trip's log. */
     val Upload: ImageVector = PhosphorIcons.Bold.UploadSimple
+
+    /** "Laporkan masalah", under a detail page and in settings. */
+    val ReportIssue: ImageVector = PhosphorIcons.Fill.WarningCircle
 
     /* The settings page's rows, as the web's settings sheet draws them. */
     val SavedStations: ImageVector = PhosphorIcons.Fill.PushPinSimple
