@@ -34,6 +34,7 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.navigation.Route
+import id.shiorilabs.commute.core.navigation.stationWebLink
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.type.toFailure
@@ -41,6 +42,7 @@ import id.shiorilabs.commute.core.ui.components.CommuteEmptyState
 import id.shiorilabs.commute.core.ui.components.LoadProblem
 import id.shiorilabs.commute.core.ui.components.LoadProblemState
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
+import id.shiorilabs.commute.core.ui.components.ReportIssueLink
 import id.shiorilabs.commute.core.ui.components.SkeletonBlock
 import id.shiorilabs.commute.core.ui.ext.RevealInsertedTop
 import id.shiorilabs.commute.core.ui.frost.FrostedTopChromeBackdrop
@@ -257,6 +259,7 @@ private fun StationList(
             item(key = "unserved") {
                 UnservedNotice(unserved, Modifier.padding(horizontal = 16.dp))
             }
+            reportIssue(board.stationId)
             return@LazyColumn
         }
 
@@ -342,6 +345,18 @@ private fun StationList(
                 )
             }
         }
+
+        reportIssue(station.id)
+    }
+}
+
+/** "Laporkan masalah" closing the page, lined up with the sections' headings. */
+private fun LazyListScope.reportIssue(stationId: String) {
+    item(key = "report-issue") {
+        ReportIssueLink(
+            page = stationWebLink(stationId),
+            modifier = Modifier.padding(start = 32.dp, top = 32.dp, end = 32.dp),
+        )
     }
 }
 
