@@ -17,6 +17,13 @@ sealed interface Route : NavKey {
     @Serializable
     data object Home : Route
 
+    /**
+     * The closed test's welcome page: the root of the back stack in home's place until the rider
+     * goes past it, once, on first open.
+     */
+    @Serializable
+    data object Onboarding : Route
+
     /** Station search, opened from the home screen's "Mau ke mana?" card. */
     @Serializable
     data object Search : Route

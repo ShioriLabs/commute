@@ -106,6 +106,7 @@ dependencies {
     implementation(project(":feature:trip:api"))
     implementation(project(":feature:card:impl"))
     implementation(project(":feature:settings:impl"))
+    implementation(project(":feature:onboarding:impl"))
 
     // Crash reports.
     implementation(libs.sentry.android)
