@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -46,14 +48,15 @@ import id.shiorilabs.commute.core.tripcopy.R as CopyR
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.ext.lineColorOf
+import id.shiorilabs.commute.core.ui.theme.Slate900
 import id.shiorilabs.commute.core.ui.theme.TABULAR
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.trip.R
 import kotlin.math.cos
 import kotlin.math.sin
 
-/** The panel: a deep navy. */
-private val YishunInk = Color(0xFF00142B)
+/** The panel: the top bar's slate, so the two read as one. */
+private val YishunInk = Slate900
 private val YishunMuted = Color(0xFF9FB0C8)
 
 /** The line behind the rider, and its stops: SMRT greys out what's been passed. */
@@ -98,8 +101,8 @@ private val BandCap = 8.dp
 /** How far back up the slant the band runs from the name: off the strip's top-left edge. */
 private val BandReach = 400.dp
 
-/** Where a stop's name ends, for its circle centred at [x]: just above it, a touch to its right. */
-private fun nameEndX(x: Dp): Dp = x + 6.dp
+/** Where a stop's name ends, for its circle centred at [x]: just above it, a touch to its left. */
+private fun nameEndX(x: Dp): Dp = x - 6.dp
 private val NameEndY = LineY - DotSize / 2 - NameGap
 
 /** The longest a name at [x] can be and stay on the strip: short of its top and its left edge. */
@@ -305,19 +308,27 @@ private fun StopMarks(
     lines: Map<String, LineInfo>,
 ) {
     // The name comes down to its stop, its end just above the circle.
-    Text(
+    // A long name steps down in size before it loses its end, to a floor where it is still legible.
+    BasicText(
         text = stop.name,
         modifier = Modifier.nameBox(x),
-        style = MaterialTheme.typography.labelLarge.copy(fontSize = if (stop.focus) 14.sp else 12.5.sp, lineHeight = 18.sp),
-        fontWeight = if (stop.focus) FontWeight.ExtraBold else FontWeight.Bold,
-        color = when {
-            stop.focus -> YishunInk
-            stop.passed -> YishunPassedText
-            else -> Color.White
-        },
-        textAlign = TextAlign.End,
+        style = MaterialTheme.typography.labelLarge.merge(
+            color = when {
+                stop.focus -> YishunInk
+                stop.passed -> YishunPassedText
+                else -> Color.White
+            },
+            fontWeight = if (stop.focus) FontWeight.ExtraBold else FontWeight.Bold,
+            textAlign = TextAlign.End,
+            lineHeight = 18.sp,
+        ),
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
+        autoSize = TextAutoSize.StepBased(
+            minFontSize = 9.sp,
+            maxFontSize = if (stop.focus) 14.sp else 12.5.sp,
+            stepSize = 0.5.sp,
+        ),
     )
 
     val fill = when {
