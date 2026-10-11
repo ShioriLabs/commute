@@ -9,11 +9,13 @@ import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.rememberNavBackStack
 
 /**
- * The app's navigation state: one back stack rooted at [Route.Home].
+ * The app's navigation state: one back stack, rooted at [Route.Home] (or, on first open, at
+ * [Route.Onboarding] until the rider goes past it).
  *
  * - [goTo] — push a destination.
  * - [pop] — back one level; returns `false` at the root so the caller can let the system handle it.
  * - [replace] — swap what's on screen for another destination, leaving nothing to come back to.
+ * - [startOver] — make a destination the new root, dropping everything under it.
  */
 @Stable
 class CommuteNavigator(
@@ -41,6 +43,17 @@ class CommuteNavigator(
         backStack[backStack.lastIndex] = key
     }
 
+    /**
+     * Makes [key] the stack's only entry, so back from it leaves the app. Pushed before what was
+     * under it goes, so the stack is never empty in between.
+     */
+    fun startOver(key: Route) {
+        backStack.add(key)
+        while (backStack.size > 1) {
+            backStack.removeAt(0)
+        }
+    }
+
     fun pop(): Boolean {
         if (backStack.size <= 1) {
             return false
@@ -52,11 +65,12 @@ class CommuteNavigator(
 
 /**
  * Creates a [CommuteNavigator] whose back stack survives configuration changes and process death
- * ([rememberNavBackStack] persists the serializable keys).
+ * ([rememberNavBackStack] persists the serializable keys). [start] is the root of a fresh stack; a
+ * restored stack keeps its own.
  */
 @Composable
-fun rememberCommuteNavigator(): CommuteNavigator {
-    val backStack = rememberNavBackStack(Route.Home)
+fun rememberCommuteNavigator(start: Route = Route.Home): CommuteNavigator {
+    val backStack = rememberNavBackStack(start)
     return remember(backStack) { CommuteNavigator(backStack) }
 }
 

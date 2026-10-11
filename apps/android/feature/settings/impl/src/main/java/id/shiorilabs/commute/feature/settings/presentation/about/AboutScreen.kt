@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.navigation.LocalNavigator
+import id.shiorilabs.commute.core.ui.R as CoreUiR
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.feature.settings.R
 import id.shiorilabs.commute.feature.settings.presentation.components.HtmlText
@@ -53,7 +54,7 @@ private fun AboutContent(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Image(
-                painter = painterResource(R.drawable.img_logotype),
+                painter = painterResource(CoreUiR.drawable.img_logotype),
                 contentDescription = stringResource(R.string.settings_about_logotype_description),
                 modifier = Modifier.height(48.dp),
             )
