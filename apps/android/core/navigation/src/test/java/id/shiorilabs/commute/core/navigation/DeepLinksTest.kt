@@ -113,4 +113,10 @@ class DeepLinksTest {
         assertEquals(Route.ActiveTrip, routeForLink(ACTIVE_TRIP_LINK))
         assertNull(routeForLink("commute://trip/other"))
     }
+
+    @Test
+    fun `the OTW web link opens the OTW tab, with the pair when it has one`() {
+        assertEquals(Route.Otw(), routeForLink(fareWebLink()))
+        assertEquals(Route.Otw(fromId = "KCI-MRI", toId = "KCI-JNG"), routeForLink(fareWebLink("KCI-MRI", "KCI-JNG")))
+    }
 }

@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Commute</string>
+    <!-- Launcher shortcut: opens search's OTW tab. -->
+    <string name="shortcut_otw">OTW</string>
 </resources>

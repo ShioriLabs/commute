@@ -110,6 +110,13 @@ fun stationWebLink(stationId: String): String =
 /** The web page of the hub [slug] (`dukuh-atas`): `/hubs/dukuh-atas`, which opens it here too. */
 fun hubWebLink(slug: String): String = "https://$WEB_HOST/hubs/$slug"
 
+/**
+ * The web's OTW page (`/fare`), with the pair filled in when both ends are given: opens search's OTW
+ * tab here. Station ids are upper case letters, digits and `-`, so they need no escaping.
+ */
+fun fareWebLink(fromId: String? = null, toId: String? = null): String =
+    if (fromId != null && toId != null) "https://$WEB_HOST/fare?from=$fromId&to=$toId" else "https://$WEB_HOST/fare"
+
 /** The first value of each query param, decoded. */
 private fun queryParams(rawQuery: String?): Map<String, String> {
     if (rawQuery.isNullOrEmpty()) {
