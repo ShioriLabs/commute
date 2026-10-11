@@ -8,6 +8,7 @@ import id.shiorilabs.commute.core.datastore.RecentSearchRepository
 import id.shiorilabs.commute.core.datastore.SavedRepository
 import id.shiorilabs.commute.core.datastore.SearchMode
 import id.shiorilabs.commute.core.datastore.SearchModeRepository
+import id.shiorilabs.commute.core.ext.WhileUiSubscribed
 import id.shiorilabs.commute.core.ext.toLoading
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.type.toUserMessage
@@ -88,7 +89,7 @@ class SearchViewModel @Inject constructor(
         }
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
+        started = WhileUiSubscribed,
         initialValue = UIState.Loading,
     )
 

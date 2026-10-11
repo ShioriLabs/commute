@@ -15,6 +15,7 @@ import com.google.android.gms.wearable.Wearable
 import dagger.hilt.android.qualifiers.ApplicationContext
 import id.shiorilabs.commute.core.notification.NotificationChannels
 import id.shiorilabs.commute.core.query.di.ApplicationScope
+import id.shiorilabs.commute.core.tripcopy.R as CopyR
 import id.shiorilabs.commute.core.wearable.WearPaths
 import id.shiorilabs.commute.feature.trip.ActiveTrip
 import id.shiorilabs.commute.feature.trip.R
@@ -122,14 +123,14 @@ class TripWaker @Inject constructor(
         NotificationChannels.ensure(context)
         val notification = NotificationCompat.Builder(context, NotificationChannels.TRIP_WAKE)
             .setSmallIcon(R.drawable.ic_stat_trip)
-            .setContentTitle(context.getString(R.string.trip_wake_title))
-            .setContentText(context.getString(R.string.trip_wake_text, stop))
+            .setContentTitle(context.getString(CopyR.string.trip_wake_title))
+            .setContentText(context.getString(CopyR.string.trip_wake_text, stop))
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .setContentIntent(TripReceiver.pendingIntent(context, TripReceiver.ACTION_AWAKE))
-            .addAction(0, context.getString(R.string.trip_action_awake), TripReceiver.pendingIntent(context, TripReceiver.ACTION_AWAKE))
+            .addAction(0, context.getString(CopyR.string.trip_action_awake), TripReceiver.pendingIntent(context, TripReceiver.ACTION_AWAKE))
             .build()
         NotificationManagerCompat.from(context).notify(ALARM_ID, notification)
     }

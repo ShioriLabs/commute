@@ -60,9 +60,8 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.time.minuteOfDay
-import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
-import id.shiorilabs.commute.core.type.toFailure
+import id.shiorilabs.commute.core.type.isOffline
 import id.shiorilabs.commute.core.ui.components.CommuteCloseButton
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.LoadProblem
@@ -164,7 +163,7 @@ private fun StationTimetableContent(
             // The web's empty state, offline first as there: with nothing to show, being offline
             // is the likeliest reason, and a retry once connected the remedy.
             is UIState.Error -> LoadProblemState(
-                problem = if (offline || sections.cause?.toFailure() is Failure.Network) {
+                problem = if (offline || sections.isOffline()) {
                     LoadProblem.OFFLINE
                 } else {
                     LoadProblem.ERROR

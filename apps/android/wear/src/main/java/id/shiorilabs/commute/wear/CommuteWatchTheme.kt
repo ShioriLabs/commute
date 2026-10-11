@@ -3,14 +3,12 @@ package id.shiorilabs.commute.wear
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material3.ColorScheme
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Typography
+import id.shiorilabs.commute.core.font.PlusJakartaSansFontFamily
 
 /**
  * The phone's palette turned out for a watch: black behind everything, as an OLED face wants, the
@@ -44,24 +42,6 @@ private val CommuteWatchColors = ColorScheme(
     onBackground = Color(0xFFF8FAFC),
 )
 
-private fun plusJakartaSans(weight: FontWeight) = Font(
-    resId = R.font.plus_jakarta_sans,
-    weight = weight,
-    variationSettings = FontVariation.Settings(FontVariation.weight(weight.weight)),
-)
-
-/**
- * Plus Jakarta Sans, the phone's and the web's face; the same variable file as `:core:ui`'s, each
- * weight an instance of it.
- */
-private val PlusJakartaSans = FontFamily(
-    plusJakartaSans(FontWeight.Normal),
-    plusJakartaSans(FontWeight.Medium),
-    plusJakartaSans(FontWeight.SemiBold),
-    plusJakartaSans(FontWeight.Bold),
-    plusJakartaSans(FontWeight.ExtraBold),
-)
-
 /**
  * Wear's type scale in Plus Jakarta Sans. Every Wear style names the watch's own Roboto Flex, which
  * `defaultFontFamily` doesn't override, so each is set here; and untracked, as the phone sets it,
@@ -69,7 +49,7 @@ private val PlusJakartaSans = FontFamily(
  * watch's own.
  */
 private val CommuteWatchTypography = Typography().run {
-    fun TextStyle.commute() = copy(fontFamily = PlusJakartaSans, letterSpacing = 0.sp)
+    fun TextStyle.commute() = copy(fontFamily = PlusJakartaSansFontFamily, letterSpacing = 0.sp)
     Typography(
         displayLarge = displayLarge.commute(),
         displayMedium = displayMedium.commute(),

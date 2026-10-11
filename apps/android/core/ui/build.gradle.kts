@@ -11,6 +11,8 @@ dependencies {
     api(project(":core:navigation"))
     // UIState/Failure surface through the shared components.
     api(project(":core:common"))
+    // Plus Jakarta Sans and the roundel faces.
+    implementation(project(":core:font"))
     implementation(project(":core:datastore"))
 
     // Compose UI + design system.

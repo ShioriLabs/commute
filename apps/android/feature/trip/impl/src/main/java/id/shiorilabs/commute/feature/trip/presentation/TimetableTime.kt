@@ -12,6 +12,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextDecoration
+import id.shiorilabs.commute.core.time.formatClock
 import id.shiorilabs.commute.feature.trip.R
 import java.time.Instant
 import kotlin.math.abs

@@ -9,6 +9,7 @@ import androidx.core.content.ContextCompat
 import id.shiorilabs.commute.core.location.LocationPermissions
 import id.shiorilabs.commute.core.location.rememberLocationPermissionRequest
 import id.shiorilabs.commute.core.notification.rememberNotificationPermissionRequest
+import id.shiorilabs.commute.core.time.formatClock
 import id.shiorilabs.commute.core.ui.theme.Slate200
 import id.shiorilabs.commute.core.ui.theme.Slate400
 import id.shiorilabs.commute.core.ui.theme.Slate500
@@ -83,7 +84,6 @@ import id.shiorilabs.commute.feature.journey.domain.JourneyLeg
 import id.shiorilabs.commute.feature.journey.domain.JourneyStop
 import id.shiorilabs.commute.feature.journey.domain.ServiceLine
 import id.shiorilabs.commute.feature.journey.domain.boardsAt
-import id.shiorilabs.commute.feature.journey.domain.formatClock
 import id.shiorilabs.commute.feature.journey.domain.formatRupiah
 import id.shiorilabs.commute.feature.journey.domain.routeBarSegments
 import id.shiorilabs.commute.feature.journey.presentation.Problem

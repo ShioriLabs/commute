@@ -1,10 +1,10 @@
 package id.shiorilabs.commute.feature.journey.domain
 
+import id.shiorilabs.commute.core.time.JAKARTA
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
@@ -17,8 +17,6 @@ import java.util.Locale
  * Jakarta's wall clock throughout, as every other clock in the app is: a rider abroad planning a
  * Jakarta trip reads the times off Jakarta's platform signs.
  */
-
-val JAKARTA: ZoneId = ZoneId.of("Asia/Jakarta")
 
 /** How many days ahead the picker offers, today included. */
 private const val DAYS_OFFERED = 7L

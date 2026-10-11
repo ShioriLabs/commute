@@ -20,9 +20,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
-import id.shiorilabs.commute.core.type.toFailure
+import id.shiorilabs.commute.core.type.isOffline
 import id.shiorilabs.commute.core.ui.components.ProblemPanel
 import id.shiorilabs.commute.core.ui.components.SkeletonBlock
 import id.shiorilabs.commute.core.ui.theme.Slate500
@@ -117,7 +116,7 @@ fun StationPlaceholder(
     modifier: Modifier = Modifier,
 ) {
     if (station is UIState.Error) {
-        val offline = station.cause?.toFailure() is Failure.Network
+        val offline = station.isOffline()
         ProblemPanel(
             message = stringResource(if (offline) R.string.saved_station_offline else R.string.saved_station_failed),
             retryLabel = stringResource(R.string.saved_retry),

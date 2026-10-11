@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import id.shiorilabs.commute.core.datastore.HomePreferencesRepository
 import id.shiorilabs.commute.core.datastore.LocationPreferencesRepository
+import id.shiorilabs.commute.core.ext.WhileUiSubscribed
 import id.shiorilabs.commute.core.location.LocationClient
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.feature.station.data.StationRepository
@@ -13,7 +14,6 @@ import id.shiorilabs.commute.feature.station.domain.NearbyStation
 import id.shiorilabs.commute.feature.station.domain.StationBoard
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -82,7 +82,7 @@ class NearbyViewModel @Inject constructor(
             boards.isEmpty() -> NearbyUiState.Hidden
             else -> NearbyUiState.Stations(boards)
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), NearbyUiState.Hidden)
+    }.stateIn(viewModelScope, WhileUiSubscribed, NearbyUiState.Hidden)
 
     /**
      * The stations the rider is at, nearest first, that home has pinned or starts a pinned pair
@@ -90,7 +90,7 @@ class NearbyViewModel @Inject constructor(
      */
     val raised: StateFlow<List<String>> = combine(allowed, permitted, lookup.result) { allowed, permitted, result ->
         if (allowed && permitted) result.atPinned else emptyList()
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    }.stateIn(viewModelScope, WhileUiSubscribed, emptyList())
 
     /**
      * Whether [state] and [raised] show what the first look found, its boards loaded, or that there's
@@ -103,7 +103,7 @@ class NearbyViewModel @Inject constructor(
         combine(looking, lookup.settled, lookup.result, state, raised) { looking, looked, result, state, raised ->
             !looking || looked && raised == result.atPinned && state.shows(result.found)
         }.scan(false) { was, now -> was || now }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+            .stateIn(viewModelScope, WhileUiSubscribed, false)
 
     /** Looks again: home calls it as it comes back into view, the rider having likely moved. */
     fun refresh() {

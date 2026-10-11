@@ -6,17 +6,18 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import id.shiorilabs.commute.core.ext.WhileUiSubscribed
 import id.shiorilabs.commute.core.query.Query
 import id.shiorilabs.commute.core.query.toUIState
 import id.shiorilabs.commute.core.time.serviceDayOf
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationRepository
+import id.shiorilabs.commute.feature.station.data.loadInto
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
@@ -84,7 +85,7 @@ class StationTimetableViewModel @AssistedInject constructor(
 
     val state: StateFlow<StationTimetableUiState> = combine(title, sections, lines, excluded, ::uiState).stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
+        started = WhileUiSubscribed,
         initialValue = uiState(title.value, sections.value, lines.value, excluded.value),
     )
 
@@ -116,7 +117,7 @@ class StationTimetableViewModel @AssistedInject constructor(
 
     private fun loadLines() {
         viewModelScope.launch {
-            lineRepository.lines().onRight { lines.value = it }
+            lineRepository.loadInto(lines)
         }
     }
 

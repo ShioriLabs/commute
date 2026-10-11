@@ -14,7 +14,9 @@ import androidx.core.graphics.toColorInt
 import dagger.hilt.android.qualifiers.ApplicationContext
 import id.shiorilabs.commute.core.navigation.ACTIVE_TRIP_LINK
 import id.shiorilabs.commute.core.notification.NotificationChannels
+import id.shiorilabs.commute.core.time.formatClock
 import id.shiorilabs.commute.core.trip.AlertKind
+import id.shiorilabs.commute.core.tripcopy.R as CopyR
 import id.shiorilabs.commute.core.ui.theme.CommuteColors
 import id.shiorilabs.commute.core.trip.PositionSource
 import id.shiorilabs.commute.core.trip.TripEffect
@@ -27,7 +29,6 @@ import id.shiorilabs.commute.feature.trip.ActiveTrip
 import id.shiorilabs.commute.feature.trip.R
 import id.shiorilabs.commute.core.trip.Headline
 import id.shiorilabs.commute.feature.trip.presentation.TripCopy
-import id.shiorilabs.commute.feature.trip.presentation.formatClock
 import id.shiorilabs.commute.feature.trip.presentation.headline
 import id.shiorilabs.commute.core.trip.minutesUntil
 import java.time.Clock
@@ -83,14 +84,14 @@ class TripNotifier @Inject constructor(
             .setShortCriticalText(copy.chip(headline))
             .setColor(chipColor(headline))
             .setStyle(progressStyle(trip, progress.fraction, progress.source))
-            .addAction(0, context.getString(R.string.trip_action_stop), action(TripReceiver.ACTION_STOP))
+            .addAction(0, context.getString(CopyR.string.trip_action_stop), action(TripReceiver.ACTION_STOP))
 
         when {
             headline is Headline.AlightNow ||
                 (headline is Headline.RideTo && headline.stopsLeft <= 1) ->
-                builder.addAction(0, context.getString(R.string.trip_action_alighted), action(TripReceiver.ACTION_ALIGHTED))
+                builder.addAction(0, context.getString(CopyR.string.trip_action_alighted), action(TripReceiver.ACTION_ALIGHTED))
             trip.state.phase == TripPhase.WAITING_TO_BOARD ->
-                builder.addAction(0, context.getString(R.string.trip_action_boarded), action(TripReceiver.ACTION_BOARDED))
+                builder.addAction(0, context.getString(CopyR.string.trip_action_boarded), action(TripReceiver.ACTION_BOARDED))
         }
         return builder.build()
     }
@@ -132,8 +133,8 @@ class TripNotifier @Inject constructor(
             context.getString(R.string.trip_ask_still_on_route_title),
             context.getString(R.string.trip_ask_still_on_route, rideName(ride)),
         )
-            .addAction(0, context.getString(R.string.trip_action_still_on_route), action(TripReceiver.ACTION_STILL_ON_ROUTE))
-            .addAction(0, context.getString(R.string.trip_action_stop), action(TripReceiver.ACTION_STOP))
+            .addAction(0, context.getString(CopyR.string.trip_action_still_on_route), action(TripReceiver.ACTION_STILL_ON_ROUTE))
+            .addAction(0, context.getString(CopyR.string.trip_action_stop), action(TripReceiver.ACTION_STOP))
             .build()
         notify(ASK_ID, notification)
     }
@@ -181,11 +182,11 @@ class TripNotifier @Inject constructor(
                 ?.let { context.getString(R.string.trip_then_missed, formatClock(it.missed)) }
                 .orEmpty()
             if (departs == null) {
-                context.getString(R.string.trip_then_change, rideName(then))
+                context.getString(CopyR.string.trip_then_change, rideName(then))
             } else {
                 context.getString(R.string.trip_then_change_at, rideName(then), departs) + missed
             }
-        } ?: context.getString(R.string.trip_then_done)
+        } ?: context.getString(CopyR.string.trip_then_done)
         return if (estimated) {
             context.getString(R.string.trip_alert_alight_estimated_title) to
                 context.getString(R.string.trip_alert_alight_estimated, alighting) + sep() + next

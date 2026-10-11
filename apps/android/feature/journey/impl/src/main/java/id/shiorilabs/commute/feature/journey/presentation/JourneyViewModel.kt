@@ -9,6 +9,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import id.shiorilabs.commute.core.datastore.FarePreferencesRepository
 import id.shiorilabs.commute.core.datastore.SavedEntry
 import id.shiorilabs.commute.core.datastore.SavedRepository
+import id.shiorilabs.commute.core.ext.WhileUiSubscribed
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.feature.journey.data.JourneyRepository
@@ -29,6 +30,7 @@ import id.shiorilabs.commute.feature.journey.domain.withLink
 import id.shiorilabs.commute.feature.search.data.SearchRepository
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationDirectory
+import id.shiorilabs.commute.feature.station.data.loadInto
 import id.shiorilabs.commute.feature.station.domain.nearbyStations
 import id.shiorilabs.commute.feature.journey.domain.nearbyPicks
 import id.shiorilabs.commute.core.location.LocationClient
@@ -37,7 +39,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -121,7 +122,7 @@ class JourneyViewModel @AssistedInject constructor(
             picker = session.picker,
             lines = lines,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), JourneyUiState(pair = session.value.pair, picker = session.value.picker))
+    }.stateIn(viewModelScope, WhileUiSubscribed, JourneyUiState(pair = session.value.pair, picker = session.value.picker))
 
     /**
      * Whether the pair on screen is pinned to home: the pin beside share. `null` until both ends are
@@ -135,7 +136,7 @@ class JourneyViewModel @AssistedInject constructor(
         val fromId = pair.fromId
         val toId = pair.toId
         if (fromId == null || toId == null || fromId == toId) null else SavedEntry.Route(fromId, toId) in entries
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    }.stateIn(viewModelScope, WhileUiSubscribed, null)
 
     /**
      * The pairs that last answered, for search's "Rute terakhir": named from the station index, so
@@ -160,7 +161,7 @@ class JourneyViewModel @AssistedInject constructor(
                 saved = SavedEntry.Route(route.fromId, route.toId) in entries,
             )
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.stateIn(viewModelScope, WhileUiSubscribed, emptyList())
 
     /** "Pakai lokasi kamu" unless the rider turned it off in Pengaturan → Lokasi. */
     private val nearbyOffered = combine(nearby, locationPreferences.use) { nearby, use ->
@@ -187,7 +188,7 @@ class JourneyViewModel @AssistedInject constructor(
                 )
             }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PickerUiState())
+        .stateIn(viewModelScope, WhileUiSubscribed, PickerUiState())
 
     init {
         viewModelScope.launch {
@@ -197,7 +198,7 @@ class JourneyViewModel @AssistedInject constructor(
         }
         loadStations()
         if (lines.value.isEmpty()) {
-            viewModelScope.launch { lineRepository.lines().onRight { lines.value = it } }
+            viewModelScope.launch { lineRepository.loadInto(lines) }
         }
         viewModelScope.launch { fetchTrips() }
         viewModelScope.launch { followDeparture() }

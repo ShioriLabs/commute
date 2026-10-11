@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.station.domain
 
+import id.shiorilabs.commute.core.constants.OPERATOR_TJ
 import id.shiorilabs.commute.core.time.ServiceDayName
 import kotlin.math.roundToInt
 
@@ -8,9 +9,6 @@ import kotlin.math.roundToInt
  * floor under one: a frequency, never an arrival. Ports of the web's `components/frequency-card`;
  * keep them in step.
  */
-
-/** TransJakarta's operator code, the one operator that publishes no timetable. */
-const val OPERATOR_TJ = "TJ"
 
 /** Whether [stationId] (`TJ-H00001`) is a TransJakarta halte. */
 fun isTransJakarta(stationId: String): Boolean = stationId.substringBefore('-') == OPERATOR_TJ
