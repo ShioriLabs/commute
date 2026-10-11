@@ -55,7 +55,7 @@
 
     <!-- Location: what the app may use the rider's location for. -->
     <string name="settings_location_title">Lokasi</string>
-    <string name="settings_location_hint">Lokasi GPS-mu gak bakal dikirim ke server Commute</string>
+    <string name="settings_location_hint">Lokasi GPS-mu gak bakal dikirim ke server Commute (kecuali di halaman selesai OTW ketika kamu pilih upload)</string>
     <string name="settings_location_enabled">Pakai Lokasi</string>
     <string name="settings_location_enabled_detail">Matikan biar GPS kamu gak dipakai di fitur-fitur di bawah ini</string>
     <string name="settings_location_section_uses">Dipakai untuk</string>
