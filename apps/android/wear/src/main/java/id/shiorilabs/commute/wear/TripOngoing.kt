@@ -15,6 +15,7 @@ import androidx.wear.ongoing.OngoingActivity
 import androidx.wear.ongoing.Status
 import id.shiorilabs.commute.core.trip.Headline
 import id.shiorilabs.commute.core.trip.headline
+import id.shiorilabs.commute.core.tripcopy.R as CopyR
 import id.shiorilabs.commute.core.wearable.WearTrip
 import java.time.Instant
 
@@ -120,9 +121,9 @@ object TripOngoing {
                 .build()
         }
         val text = when (headline) {
-            is Headline.Board, is Headline.Change -> context.getString(R.string.trip_chip_board)
-            is Headline.RideTo -> context.getString(R.string.trip_chip_stops, headline.stopsLeft)
-            is Headline.AlightNow, is Headline.Arrived -> context.getString(R.string.trip_chip_alight)
+            is Headline.Board, is Headline.Change -> context.getString(CopyR.string.trip_chip_board)
+            is Headline.RideTo -> context.getString(CopyR.string.trip_chip_stops, headline.stopsLeft)
+            is Headline.AlightNow, is Headline.Arrived -> context.getString(CopyR.string.trip_chip_alight)
         }
         return Status.forPart(Status.TextPart(text))
     }

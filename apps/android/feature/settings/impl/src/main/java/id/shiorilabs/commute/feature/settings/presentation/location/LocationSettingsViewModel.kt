@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import id.shiorilabs.commute.core.datastore.LocationPreferencesRepository
 import id.shiorilabs.commute.core.datastore.LocationUse
-import kotlinx.coroutines.flow.SharingStarted
+import id.shiorilabs.commute.core.ext.WhileUiSubscribed
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -18,7 +18,7 @@ class LocationSettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     /** `null` until read off disk, so no switch shows the wrong way round for a frame. */
-    val use: StateFlow<LocationUse?> = preferences.use.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    val use: StateFlow<LocationUse?> = preferences.use.stateIn(viewModelScope, WhileUiSubscribed, null)
 
     fun setEnabled(enabled: Boolean) = viewModelScope.launch { preferences.setEnabled(enabled) }
 

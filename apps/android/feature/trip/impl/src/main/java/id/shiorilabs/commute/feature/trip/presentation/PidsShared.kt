@@ -37,6 +37,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -55,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import id.shiorilabs.commute.core.trip.TripLeg
+import id.shiorilabs.commute.core.tripcopy.tripDirection
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.motion.IosSpringEasing
@@ -98,8 +101,11 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 
 /** [TripCopy.direction], read where there's no copy to hand. */
 @Composable
-internal fun rideDirection(ride: TripLeg.Ride): String? = ride.sharedHeadsign?.let { stringResource(R.string.trip_headsign, it) }
-    ?: ride.takeIf { it.otherLines > 0 }?.let { stringResource(R.string.trip_via, it.stops.last().name) }
+internal fun rideDirection(ride: TripLeg.Ride): String? {
+    // Read, so the words follow a change of locale as stringResource's do.
+    LocalConfiguration.current
+    return tripDirection(LocalContext.current.resources, ride)
+}
 
 /**
  * The big name on one line, shrinking as far as it still reads big. A name too long even then

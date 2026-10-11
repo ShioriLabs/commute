@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import id.shiorilabs.commute.core.time.formatClockSeconds
 import id.shiorilabs.commute.feature.trip.R
 import java.time.Instant
 

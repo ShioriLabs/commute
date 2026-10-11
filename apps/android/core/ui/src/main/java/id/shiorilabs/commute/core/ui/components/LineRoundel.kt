@@ -24,13 +24,15 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import id.shiorilabs.commute.core.constants.OPERATOR_APCGK
+import id.shiorilabs.commute.core.constants.OPERATOR_TJ
 import id.shiorilabs.commute.core.ui.ext.Foreground
 import id.shiorilabs.commute.core.ui.ext.foreground
 import id.shiorilabs.commute.core.ui.ext.parseHexColor
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
-import id.shiorilabs.commute.core.ui.theme.RoundelFontFamily
-import id.shiorilabs.commute.core.ui.theme.RoundelNarrowFontFamily
+import id.shiorilabs.commute.core.font.RoundelFontFamily
+import id.shiorilabs.commute.core.font.RoundelNarrowFontFamily
 import kotlin.math.roundToInt
 
 /** The text colour on a roundel's white face, and on a pale filled one. */
@@ -203,8 +205,6 @@ private fun RoundelText(
     )
 }
 
-private const val OPERATOR_TJ = "TJ"
-private const val OPERATOR_APCGK = "APCGK"
 
 @Preview(showBackground = true)
 @Composable

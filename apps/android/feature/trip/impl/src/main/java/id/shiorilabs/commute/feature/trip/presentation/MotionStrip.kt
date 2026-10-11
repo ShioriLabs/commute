@@ -19,6 +19,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import id.shiorilabs.commute.core.ui.theme.TABULAR
 import id.shiorilabs.commute.feature.trip.R
 import id.shiorilabs.commute.feature.trip.runtime.MotionLive
 import java.util.Locale
@@ -137,7 +138,7 @@ private fun Cell(text: String, label: String? = null) {
             }
             append(text)
         },
-        style = MaterialTheme.typography.labelMedium.merge(fontFeatureSettings = "tnum"),
+        style = MaterialTheme.typography.labelMedium.merge(fontFeatureSettings = TABULAR),
         color = Value,
         maxLines = 1,
     )

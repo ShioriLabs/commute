@@ -40,6 +40,8 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import id.shiorilabs.commute.core.constants.OPERATOR_TJ
+import id.shiorilabs.commute.core.time.formatClock
 import id.shiorilabs.commute.core.ui.theme.Amber100
 import id.shiorilabs.commute.core.ui.theme.Amber800
 import id.shiorilabs.commute.core.ui.theme.Rose300
@@ -50,6 +52,7 @@ import id.shiorilabs.commute.core.ui.theme.Slate400
 import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.core.ui.theme.Slate600
 import id.shiorilabs.commute.core.ui.theme.Slate900
+import id.shiorilabs.commute.core.ui.theme.TABULAR
 import java.time.Instant
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
@@ -68,7 +71,6 @@ import id.shiorilabs.commute.feature.journey.R
 import id.shiorilabs.commute.feature.journey.domain.JourneyLeg
 import id.shiorilabs.commute.feature.journey.domain.LINE_COLOR_FALLBACK
 import id.shiorilabs.commute.feature.journey.domain.LegLine
-import id.shiorilabs.commute.feature.journey.domain.formatClock
 import id.shiorilabs.commute.feature.journey.domain.formatKm
 import id.shiorilabs.commute.feature.journey.domain.formatRupiah
 import id.shiorilabs.commute.feature.station.domain.LineInfo
@@ -76,7 +78,6 @@ import id.shiorilabs.commute.feature.station.domain.codeOfLineKey
 import id.shiorilabs.commute.feature.station.domain.formatPlatformCode
 import id.shiorilabs.commute.feature.station.domain.joinLabels
 
-private const val TRANSJAKARTA = "TJ"
 
 /** The web's `duration-300` on the stops' reveal, and Tailwind's default 150 ms on the chevron. */
 private const val STOPS_REVEAL_MILLIS = 300
@@ -167,7 +168,7 @@ private fun RideLeg(
     walkAfter: Brush?,
 ) {
     var expanded by rememberSaveable(leg.from.id, leg.to.id, leg.line) { mutableStateOf(false) }
-    val isBus = leg.operator == TRANSJAKARTA
+    val isBus = leg.operator == OPERATOR_TJ
     val legColor = parseHexColor(lines.firstOrNull()?.color ?: LINE_COLOR_FALLBACK)
     val rail = trackBrush(lines.map { it.color }, vertical = true)
     val intermediate = leg.stops.drop(1).dropLast(1)
@@ -306,7 +307,7 @@ private fun StopLine(time: Instant?, padding: Dp = 2.dp, content: @Composable ()
             {
                 Text(
                     text = formatClock(it),
-                    style = MaterialTheme.typography.labelLarge.merge(fontFeatureSettings = "tnum"),
+                    style = MaterialTheme.typography.labelLarge.merge(fontFeatureSettings = TABULAR),
                     color = Slate500,
                 )
             }

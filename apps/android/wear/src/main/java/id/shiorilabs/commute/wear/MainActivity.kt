@@ -11,7 +11,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import kotlinx.coroutines.flow.SharingStarted
+import id.shiorilabs.commute.core.ext.WhileUiSubscribed
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.launch
 
@@ -22,7 +22,7 @@ class MainActivity : ComponentActivity() {
      * seconds past the app leaving the screen, so a glance back doesn't reconnect.
      */
     private val trip by lazy {
-        WearTripRepository(this).trip.shareIn(lifecycleScope, SharingStarted.WhileSubscribed(SHARE_GRACE_MS), replay = 1)
+        WearTripRepository(this).trip.shareIn(lifecycleScope, WhileUiSubscribed, replay = 1)
     }
     private val phone by lazy { PhoneLink(this) }
 
@@ -64,5 +64,3 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch { phone.ackWake() }
     }
 }
-
-private const val SHARE_GRACE_MS = 5_000L
