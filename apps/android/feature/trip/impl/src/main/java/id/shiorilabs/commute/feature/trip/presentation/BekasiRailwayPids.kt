@@ -9,7 +9,10 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
+import id.shiorilabs.commute.core.time.formatClock
+import id.shiorilabs.commute.core.tripcopy.R as CopyR
 import id.shiorilabs.commute.core.ui.ext.lineColorOf
+import id.shiorilabs.commute.core.ui.theme.TABULAR
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.foundation.background
@@ -110,9 +113,6 @@ private val Hairline = Color(0x33FFFFFF)
 /** Off the timetable, on the dark plate: late in a soft red, early in a soft green. */
 private val BoardLate = Color(0xFFFB7185)
 private val BoardEarly = Color(0xFF34D399)
-
-/** Figures of one width, so minutes and clocks don't shift as they tick. */
-private const val TABULAR = "tnum"
 
 /** The most lines marked before a station's name: more would crowd it out. */
 private const val STATION_LINES = 3
@@ -428,7 +428,7 @@ private fun Plate(
         if (platform != null || at != null) {
             Row(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, top = 6.dp, end = 20.dp)) {
                 Text(
-                    text = platform?.let { stringResource(R.string.trip_platform, formatPlatformCode(it)) }.orEmpty(),
+                    text = platform?.let { stringResource(CopyR.string.trip_platform, formatPlatformCode(it)) }.orEmpty(),
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.labelLarge,
                     color = BoardMuted,
@@ -448,7 +448,6 @@ private fun Plate(
         }
     }
 }
-
 
 /** "Naik salah satu bus", and the roundel of every line that will do, the planned one first. */
 @Composable
@@ -515,8 +514,6 @@ private fun Eyebrow(pids: Pids) {
         }
     }
 }
-
-
 
 /**
  * The band and its stops: a stretch of a loop lying on the ground, seen from 45° above, as JR East
@@ -923,8 +920,8 @@ private fun ChangePanel(pids: Pids, lines: Map<String, LineInfo>, stationLines: 
                 Roundel(change, lines)
                 Text(
                     text = listOfNotNull(
-                        stringResource(R.string.trip_change, copy.rideName(change)),
-                        change.platformCode?.let { stringResource(R.string.trip_platform, formatPlatformCode(it)) },
+                        stringResource(CopyR.string.trip_change, copy.rideName(change)),
+                        change.platformCode?.let { stringResource(CopyR.string.trip_platform, formatPlatformCode(it)) },
                     ).joinToString(copy.separator),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,

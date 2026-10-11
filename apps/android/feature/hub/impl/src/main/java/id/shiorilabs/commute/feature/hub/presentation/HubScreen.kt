@@ -24,9 +24,8 @@ import dev.chrisbanes.haze.hazeSource
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.navigation.hubWebLink
-import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
-import id.shiorilabs.commute.core.type.toFailure
+import id.shiorilabs.commute.core.type.isOffline
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.components.ProblemPanel
 import id.shiorilabs.commute.core.ui.components.ReportIssueLink
@@ -186,7 +185,6 @@ private fun MemberSkeleton() {
     }
 }
 
-private fun UIState.Error.isOffline(): Boolean = cause?.toFailure() is Failure.Network
 
 private val previewHub = Hub(
     slug = "dukuh-atas",

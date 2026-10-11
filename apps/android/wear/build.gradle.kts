@@ -20,7 +20,11 @@ dependencies {
     // The phone's running trip, as it crosses over, and the trip maths to draw it.
     implementation(project(":core:wearable"))
     implementation(project(":core:trip"))
+    // The words a ride is named in, shared with the phone.
+    implementation(project(":core:tripcopy"))
     implementation(project(":core:common"))
+    // Plus Jakarta Sans and the roundel faces, the phone's own files.
+    implementation(project(":core:font"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

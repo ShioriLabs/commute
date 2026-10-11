@@ -54,3 +54,6 @@ sealed interface UIState<out T> {
  * user's retry instead.
  */
 fun UIState<*>.isSettled(): Boolean = this is UIState.Success<*> || this is UIState.Error
+
+/** Whether this failure came from having no usable connection, rather than from the server. */
+fun UIState.Error.isOffline(): Boolean = cause?.toFailure() is Failure.Network

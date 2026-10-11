@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import id.shiorilabs.commute.core.time.formatClock
 import id.shiorilabs.commute.core.trip.FinishReason
 import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripStop
@@ -57,6 +58,7 @@ import id.shiorilabs.commute.core.ui.components.SectionLabel
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.motion.IosSpringEasing
 import id.shiorilabs.commute.core.ui.motion.rememberReducedMotion
+import id.shiorilabs.commute.core.ui.theme.TABULAR
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.trip.R
 import id.shiorilabs.commute.feature.trip.runtime.FinishedTrip
@@ -345,7 +347,7 @@ private fun Figure(value: String, label: String, modifier: Modifier = Modifier) 
             .semantics(mergeDescendants = true) {},
     ) {
         // Shrinks to fit a narrow tile ("Langsung") rather than cut it off.
-        val style = MaterialTheme.typography.titleLarge.merge(color = DoneInk, fontWeight = FontWeight.Bold, fontFeatureSettings = "tnum")
+        val style = MaterialTheme.typography.titleLarge.merge(color = DoneInk, fontWeight = FontWeight.Bold, fontFeatureSettings = TABULAR)
         BasicText(
             text = value,
             style = style,
@@ -388,7 +390,7 @@ private fun RideRow(ride: TripLeg.Ride, lines: Map<String, LineInfo>, copy: Trip
         if (departs != null && arrives != null) {
             Text(
                 text = "${formatClock(departs)}–${formatClock(arrives)}",
-                style = MaterialTheme.typography.bodySmall.merge(fontFeatureSettings = "tnum"),
+                style = MaterialTheme.typography.bodySmall.merge(fontFeatureSettings = TABULAR),
                 color = DoneLabel,
             )
         }
