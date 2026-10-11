@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="onboarding_logotype">Commute</string>
+    <string name="onboarding_title">Selamat datang di Commute Closed Test!</string>
+    <string name="onboarding_notice">Aplikasi ini masih dalam pengembangan, dan versi final mungkin akan berbeda dengan saat ini</string>
+    <!-- %1$s and %2$s are onboarding_privacy_policy and onboarding_terms, each a link. -->
+    <string name="onboarding_consent">Dengan melanjutkan, kamu setuju dengan %1$s dan %2$s dari Commute</string>
+    <string name="onboarding_privacy_policy">Kebijakan Privasi</string>
+    <string name="onboarding_terms">Syarat &amp; Ketentuan</string>
+    <string name="onboarding_continue">Lanjut</string>
+</resources>

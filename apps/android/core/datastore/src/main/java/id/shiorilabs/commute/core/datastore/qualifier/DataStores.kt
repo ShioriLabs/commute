@@ -67,3 +67,11 @@ annotation class DeveloperDataStore
 @Qualifier
 @Retention(AnnotationRetention.RUNTIME)
 annotation class OtwDataStore
+
+/**
+ * Hilt [Qualifier] for the preferences [DataStore]<[Preferences]> backing what the rider has been
+ * shown on first open: for now, the closed test's welcome page.
+ */
+@Qualifier
+@Retention(AnnotationRetention.RUNTIME)
+annotation class OnboardingDataStore
