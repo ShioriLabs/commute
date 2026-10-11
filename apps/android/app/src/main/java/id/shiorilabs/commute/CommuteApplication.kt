@@ -7,6 +7,7 @@ import io.sentry.android.core.SentryAndroid
 import id.shiorilabs.commute.core.query.QueryClient
 import id.shiorilabs.commute.core.query.di.ApplicationScope
 import id.shiorilabs.commute.core.startup.StartupWarmup
+import id.shiorilabs.commute.shortcuts.AppShortcuts
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.joinAll
@@ -15,6 +16,9 @@ import javax.inject.Inject
 
 @HiltAndroidApp
 class CommuteApplication : Application() {
+
+    @Inject
+    lateinit var appShortcuts: AppShortcuts
 
     @Inject
     lateinit var queryClient: QueryClient
@@ -30,6 +34,7 @@ class CommuteApplication : Application() {
         // Before anything else, so a crash while the app is put together is reported too.
         initCrashReporting()
         super.onCreate()
+        appShortcuts.start()
         applicationScope.launch {
             // First thing, while the splash plays: read what the first screen shows into memory, so
             // it is there when the screen asks, rather than asked for once the screen has drawn.

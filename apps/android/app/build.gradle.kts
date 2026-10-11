@@ -96,6 +96,7 @@ dependencies {
 
     // Features — each contributes its own nav entries; nothing here references their screens.
     implementation(project(":feature:search:impl"))
+    implementation(project(":feature:station:api"))
     implementation(project(":feature:station:impl"))
     implementation(project(":feature:journey:impl"))
     implementation(project(":feature:hub:impl"))
@@ -110,6 +111,7 @@ dependencies {
 
     // Crash reports.
     implementation(libs.sentry.android)
+    implementation(libs.arrow.core)
 
     // AndroidX
     implementation(libs.androidx.core.ktx)
@@ -128,4 +130,6 @@ dependencies {
     // generates it (`./gradlew :app:generateProductionReleaseBaselineProfile`).
     implementation(libs.androidx.profileinstaller)
     baselineProfile(project(":baselineprofile"))
+
+    testImplementation(libs.junit)
 }
