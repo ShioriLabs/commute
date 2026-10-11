@@ -20,6 +20,7 @@
     <string name="settings_item_otw">OTW</string>
     <string name="settings_item_legal">Legal &amp; Atribusi</string>
     <string name="settings_item_data_platform">Commute Data Platform</string>
+    <string name="settings_item_report_issue">Laporkan Masalah</string>
     <string name="settings_item_support">Dukung Commute</string>
     <string name="settings_item_about">Tentang Commute</string>
 

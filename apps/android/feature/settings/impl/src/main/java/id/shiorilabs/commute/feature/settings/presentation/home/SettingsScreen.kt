@@ -21,6 +21,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.navigation.Route
+import id.shiorilabs.commute.core.ui.components.reportIssueUrl
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.morph.NavCardMorphTarget
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
@@ -84,6 +85,8 @@ fun SettingsScreen(
             onClose = { navigator.pop() },
             onOpen = navigator::goTo,
             onOpenDataPlatform = { uriHandler.openUri(DATA_PLATFORM_URL) },
+            // About the app as a whole, so no page goes with it.
+            onReportIssue = { uriHandler.openUri(reportIssueUrl()) },
         )
     }
 }
@@ -97,6 +100,7 @@ private fun SettingsContent(
     onClose: () -> Unit = {},
     onOpen: (Route) -> Unit = {},
     onOpenDataPlatform: () -> Unit = {},
+    onReportIssue: () -> Unit = {},
 ) {
     SettingsPage(
         title = stringResource(R.string.settings_title),
@@ -135,6 +139,12 @@ private fun SettingsContent(
             icon = CommuteIcons.DataPlatform,
             external = true,
             onClick = onOpenDataPlatform,
+        )
+        SettingsItem(
+            label = stringResource(R.string.settings_item_report_issue),
+            icon = CommuteIcons.ReportIssue,
+            external = true,
+            onClick = onReportIssue,
         )
         SettingsItem(
             label = stringResource(R.string.settings_item_support),

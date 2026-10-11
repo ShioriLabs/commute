@@ -67,6 +67,7 @@ import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.ui.components.CommuteCloseButton
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
+import id.shiorilabs.commute.core.ui.components.ReportIssueLink
 import id.shiorilabs.commute.core.ui.frost.FrostedHeaderPage
 import id.shiorilabs.commute.core.ui.components.CommuteButton
 import id.shiorilabs.commute.core.ui.components.CommuteButtonIcon
@@ -222,6 +223,7 @@ private fun TripContent(
                             )
                         }
                         JourneyDetail(journey = trip.journey, lines = state.lines)
+                        ReportIssueLink(page = state.shareUrl, modifier = Modifier.padding(top = 32.dp))
                     }
                 }
             }

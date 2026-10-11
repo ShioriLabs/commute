@@ -103,6 +103,13 @@ private fun lineRoute(path: String): Route? {
     return Route.Line(operator.uppercase(), lineCode)
 }
 
+/** The web page of the station [stationId] (`KCI-MRI`): `/stations/KCI/MRI`, which opens it here too. */
+fun stationWebLink(stationId: String): String =
+    "https://$WEB_HOST/stations/${stationId.substringBefore('-')}/${stationId.substringAfter('-')}"
+
+/** The web page of the hub [slug] (`dukuh-atas`): `/hubs/dukuh-atas`, which opens it here too. */
+fun hubWebLink(slug: String): String = "https://$WEB_HOST/hubs/$slug"
+
 /** The first value of each query param, decoded. */
 private fun queryParams(rawQuery: String?): Map<String, String> {
     if (rawQuery.isNullOrEmpty()) {
