@@ -13,6 +13,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
 import dagger.hilt.android.AndroidEntryPoint
 import id.shiorilabs.commute.core.datastore.DeveloperPreferencesRepository
+import id.shiorilabs.commute.core.datastore.OnboardingPreferencesRepository
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.navigation.routeForLink
 import id.shiorilabs.commute.core.ui.startup.LocalStartupGate
@@ -26,6 +27,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var developerPreferences: DeveloperPreferencesRepository
+
+    @Inject
+    lateinit var onboardingPreferences: OnboardingPreferencesRepository
 
     @Inject
     lateinit var tripBar: ActiveTripBar
@@ -54,7 +58,12 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             CompositionLocalProvider(LocalStartupGate provides startupGate) {
-                CommuteApp(pendingLink = pendingLink, frostTuner = developerPreferences.frostTuner, tripBar = tripBar)
+                CommuteApp(
+                    pendingLink = pendingLink,
+                    onboardingDone = onboardingPreferences.completed,
+                    frostTuner = developerPreferences.frostTuner,
+                    tripBar = tripBar,
+                )
             }
         }
     }
