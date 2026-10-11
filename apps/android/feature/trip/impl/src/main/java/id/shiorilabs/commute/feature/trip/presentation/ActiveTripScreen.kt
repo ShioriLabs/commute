@@ -1,6 +1,8 @@
 package id.shiorilabs.commute.feature.trip.presentation
 
 import androidx.compose.foundation.Canvas
+import id.shiorilabs.commute.core.tripcopy.R as CopyR
+import id.shiorilabs.commute.core.ui.theme.TABULAR
 import id.shiorilabs.commute.feature.station.domain.formatPlatformCode
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeJoin
@@ -327,8 +329,8 @@ private fun Actions(trip: ActiveTrip, onStop: () -> Unit, onSay: (RiderAction) -
     val ride = trip.plan.ride(trip.state.legIndex)
     val nearEnd = trip.state.phase == TripPhase.RIDING && trip.state.position >= ride.lastIndex - 1
     val next = when {
-        trip.state.phase == TripPhase.WAITING_TO_BOARD -> R.string.trip_action_boarded to RiderAction.BOARDED
-        nearEnd -> R.string.trip_action_alighted to RiderAction.ALIGHTED
+        trip.state.phase == TripPhase.WAITING_TO_BOARD -> CopyR.string.trip_action_boarded to RiderAction.BOARDED
+        nearEnd -> CopyR.string.trip_action_alighted to RiderAction.ALIGHTED
         else -> null
     }
     Row(
@@ -346,7 +348,7 @@ private fun Actions(trip: ActiveTrip, onStop: () -> Unit, onSay: (RiderAction) -
             )
         }
         CommuteButton(
-            text = stringResource(R.string.trip_action_stop),
+            text = stringResource(CopyR.string.trip_action_stop),
             onClick = onStop,
             modifier = (if (next == null) Modifier.weight(1f) else Modifier).fillMaxHeight(),
             variant = CommuteButtonVariant.Secondary,
@@ -517,7 +519,7 @@ private fun StopRow(
                     scheduled = scheduled,
                     actual = at,
                     style = MaterialTheme.typography.labelLarge.merge(
-                        fontFeatureSettings = "tnum",
+                        fontFeatureSettings = TABULAR,
                         fontWeight = if (next) FontWeight.Bold else FontWeight.Normal,
                     ),
                     color = when {
@@ -545,7 +547,7 @@ private fun StopRow(
             }
             // The platform under where to board, as the trip details put it, beside what the board says.
             val notes = listOfNotNull(
-                platform?.let { stringResource(R.string.trip_platform, formatPlatformCode(it)) },
+                platform?.let { stringResource(CopyR.string.trip_platform, formatPlatformCode(it)) },
                 label?.let { stringResource(it) },
             )
             if (notes.isNotEmpty()) {

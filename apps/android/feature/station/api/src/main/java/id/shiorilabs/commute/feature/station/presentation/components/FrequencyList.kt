@@ -38,7 +38,7 @@ import id.shiorilabs.commute.feature.station.api.R
 import id.shiorilabs.commute.feature.station.domain.DayQualifier
 import id.shiorilabs.commute.feature.station.domain.Frequency
 import id.shiorilabs.commute.feature.station.domain.LineInfo
-import id.shiorilabs.commute.feature.station.domain.OPERATOR_TJ
+import id.shiorilabs.commute.core.constants.OPERATOR_TJ
 import id.shiorilabs.commute.feature.station.domain.ServiceHours
 import id.shiorilabs.commute.feature.station.domain.codeOfLineKey
 import id.shiorilabs.commute.feature.station.domain.dayQualifier

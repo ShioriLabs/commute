@@ -12,6 +12,7 @@ import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.Station
 import id.shiorilabs.commute.feature.station.domain.Transfer
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
  * Stations and their boards. Answers are cached, on disk too, so the suspend calls answer at once
@@ -81,4 +82,9 @@ interface LineRepository {
 
     /** The dictionary if it has been loaded this session, without asking. */
     fun cachedLines(): Map<String, LineInfo>? = null
+}
+
+/** Loads the line dictionary into [target], which keeps what it held when the lookup fails. */
+suspend fun LineRepository.loadInto(target: MutableStateFlow<Map<String, LineInfo>>) {
+    lines().onRight { target.value = it }
 }

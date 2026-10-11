@@ -1,9 +1,33 @@
-package id.shiorilabs.commute.core.ui.theme
+package id.shiorilabs.commute.core.font
 
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
-import id.shiorilabs.commute.core.ui.R
+
+/*
+ * The app's faces, bundled once for the phone and the watch both.
+ */
+
+private fun plusJakartaSans(weight: FontWeight) = Font(
+    resId = R.font.plus_jakarta_sans,
+    weight = weight,
+    variationSettings = FontVariation.Settings(FontVariation.weight(weight.weight)),
+)
+
+/**
+ * Plus Jakarta Sans, the UI face on web too. One variable-weight file is bundled and each weight
+ * below is an instance of it, so adding a weight costs no download size. There is no italic: the
+ * family has a separate italic file that is not bundled, and `FontStyle.Italic` would fall back to
+ * a synthetic slant.
+ */
+val PlusJakartaSansFontFamily = FontFamily(
+    plusJakartaSans(FontWeight.Normal),
+    plusJakartaSans(FontWeight.Medium),
+    plusJakartaSans(FontWeight.SemiBold),
+    plusJakartaSans(FontWeight.Bold),
+    plusJakartaSans(FontWeight.ExtraBold),
+)
 
 /*
  * PT Sans is the face the Jak Lingko wayfinding standard specifies for roundels, and it is used

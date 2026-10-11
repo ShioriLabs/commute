@@ -15,7 +15,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
-import id.shiorilabs.commute.feature.journey.domain.JAKARTA
+import id.shiorilabs.commute.core.time.JAKARTA
 import id.shiorilabs.commute.feature.journey.presentation.components.RecentRoutes
 import id.shiorilabs.commute.feature.journey.presentation.components.SaveRoutePlate
 import id.shiorilabs.commute.feature.journey.presentation.trip.tripRoute

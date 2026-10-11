@@ -34,9 +34,9 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.navigation.Route
-import id.shiorilabs.commute.core.type.Failure
+import id.shiorilabs.commute.core.time.formatClock
 import id.shiorilabs.commute.core.type.UIState
-import id.shiorilabs.commute.core.type.toFailure
+import id.shiorilabs.commute.core.type.isOffline
 import id.shiorilabs.commute.core.ui.components.CommuteCard
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.ProblemPanel
@@ -51,12 +51,11 @@ import id.shiorilabs.commute.core.ui.theme.Slate400
 import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
 import id.shiorilabs.commute.feature.journey.R
-import id.shiorilabs.commute.feature.journey.domain.JAKARTA
+import id.shiorilabs.commute.core.time.JAKARTA
 import id.shiorilabs.commute.feature.journey.domain.Journey
 import id.shiorilabs.commute.feature.journey.domain.JourneyStop
 import id.shiorilabs.commute.feature.journey.domain.TripAnswer
 import id.shiorilabs.commute.feature.journey.domain.boardsAt
-import id.shiorilabs.commute.feature.journey.domain.formatClock
 import id.shiorilabs.commute.feature.journey.domain.formatDuration
 import id.shiorilabs.commute.feature.journey.domain.formatRupiah
 import id.shiorilabs.commute.feature.journey.domain.isLastTrain
@@ -136,7 +135,7 @@ private fun SavedRouteCardContent(
 
         is UIState.Error -> ProblemPanel(
             message = stringResource(
-                if (answer.cause?.toFailure() is Failure.Network) R.string.journey_saved_route_offline else R.string.journey_saved_route_failed,
+                if (answer.isOffline()) R.string.journey_saved_route_offline else R.string.journey_saved_route_failed,
             ),
             retryLabel = stringResource(R.string.journey_saved_route_retry),
             onRetry = onRetry,

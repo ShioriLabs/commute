@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.core.trip
 
+import id.shiorilabs.commute.core.constants.OPERATOR_TJ
 import id.shiorilabs.commute.core.geo.GeoPoint
 import id.shiorilabs.commute.core.geo.decodePolyline
 import id.shiorilabs.commute.core.geo.distanceM
@@ -101,7 +102,7 @@ sealed interface TripLeg {
         val lastIndex: Int get() = stops.lastIndex
 
         /** TransJakarta haltes sit closer together than stations and are matched more tightly. */
-        val isBus: Boolean get() = operator == "TJ"
+        val isBus: Boolean get() = operator == OPERATOR_TJ
 
         /** Every line that will do, [line] first, keyed `OPERATOR:CODE`. */
         val lineKeys: List<String> get() = (listOf(line) + serviceLines.map { it.line }).distinct()
