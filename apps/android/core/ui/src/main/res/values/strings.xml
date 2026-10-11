@@ -15,4 +15,8 @@
     <string name="core_ui_problem_no_data_message">Silakan coba lagi beberapa saat lagi</string>
     <string name="core_ui_problem_retry">Coba Lagi</string>
     <string name="core_ui_problem_illustration_description">Gambar peron stasiun dengan jembatan di atasnya, dengan kaca pembesar bergambar tanda tanya di depannya</string>
+
+    <!-- ReportIssueLink: the Tally feedback form, from the bottom of a detail page. -->
+    <string name="core_ui_report_issue">Laporkan masalah</string>
+    <string name="core_ui_report_issue_description">Laporkan masalah, membuka formulir di browser</string>
 </resources>
