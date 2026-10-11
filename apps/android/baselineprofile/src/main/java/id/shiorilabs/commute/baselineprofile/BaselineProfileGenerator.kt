@@ -18,7 +18,8 @@ import org.junit.runner.RunWith
  * and ProfileInstaller applies them on first run, so the app's own code is compiled ahead of time
  * rather than interpreted until the JIT catches up.
  *
- * The journey walks what a rider does: cold start onto the home feed, then search for a station,
+ * The journey walks what a rider does: cold start, past the welcome screen a fresh install opens
+ * on, onto the home feed, then search for a station,
  * open it and plan a trip there with OTW, then open a saved station from the feed through its
  * shared-element transition. It doesn't
  * rely on the device's saved stations; the search path finds its own. Every step past launch is
@@ -42,6 +43,13 @@ class BaselineProfileGenerator {
         ) {
             pressHome()
             startActivityAndWait()
+
+            // A fresh install opens on the welcome screen; later iterations go straight to home.
+            runCatching {
+                device.wait(Until.hasObject(By.text(WELCOME_CONTINUE)), WELCOME_TIMEOUT_MS)
+                device.findObject(By.text(WELCOME_CONTINUE))?.click()
+                device.waitForIdle()
+            }
 
             // The feed loads after launch; scroll it once it does, if there is anything saved.
             runCatching {
@@ -111,6 +119,10 @@ class BaselineProfileGenerator {
     private companion object {
         /** How long to wait for a screen's content to appear. */
         const val CONTENT_TIMEOUT_MS = 5_000L
+
+        /** The welcome screen's button (onboarding_continue), and how long to look for it. */
+        const val WELCOME_CONTINUE = "Lanjut"
+        const val WELCOME_TIMEOUT_MS = 2_000L
 
         /** Fling passes down a station page: enough to reach its facilities. */
         const val STATION_SCROLL_PASSES = 2
