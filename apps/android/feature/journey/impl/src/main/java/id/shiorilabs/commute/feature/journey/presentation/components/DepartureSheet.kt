@@ -52,7 +52,7 @@ import id.shiorilabs.commute.feature.journey.domain.DEPARTURE_HOURS
 import id.shiorilabs.commute.feature.journey.domain.DEPARTURE_MINUTES
 import id.shiorilabs.commute.feature.journey.domain.DEPARTURE_SLOT_MINUTES
 import id.shiorilabs.commute.feature.journey.domain.Departure
-import id.shiorilabs.commute.feature.journey.domain.JAKARTA
+import id.shiorilabs.commute.core.time.JAKARTA
 import id.shiorilabs.commute.feature.journey.domain.composeDeparture
 import id.shiorilabs.commute.feature.journey.domain.departureDays
 import id.shiorilabs.commute.feature.journey.domain.formatDepartureDay

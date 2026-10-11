@@ -24,9 +24,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.chrisbanes.haze.hazeSource
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.navigation.Route
-import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
-import id.shiorilabs.commute.core.type.toFailure
+import id.shiorilabs.commute.core.type.isOffline
 import id.shiorilabs.commute.core.ui.components.LoadProblem
 import id.shiorilabs.commute.core.ui.components.LoadProblemState
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
@@ -207,7 +206,6 @@ private fun StripSkeleton() {
 
 private const val SKELETON_BARS = 8
 
-private fun UIState.Error.isOffline(): Boolean = cause?.toFailure() is Failure.Network
 
 private val previewLine = LineDetail(
     operator = "KCI",

@@ -1,5 +1,7 @@
 package id.shiorilabs.commute.feature.station.domain
 
+import id.shiorilabs.commute.core.constants.OPERATOR_TJ
+
 /*
  * How a station's lines and name are presented. Ports of the web's `app/utils/lines.ts` and
  * `utils/directional-stations.ts`; keep them in step.

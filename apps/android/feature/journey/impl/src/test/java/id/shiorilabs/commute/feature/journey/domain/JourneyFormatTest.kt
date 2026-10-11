@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.journey.domain
 
+import id.shiorilabs.commute.core.time.formatClock
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.time.Instant

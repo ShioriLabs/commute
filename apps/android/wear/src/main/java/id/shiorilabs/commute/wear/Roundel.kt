@@ -12,19 +12,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.wear.compose.material3.Text
-
-/** PT Sans, inside roundels only, as Jak Lingko's wayfinding standard and the phone's roundels have it. */
-private val RoundelFont = FontFamily(Font(R.font.pt_sans_bold, FontWeight.Bold))
-
-/** The standard's face for a code of two or more characters sharing one circle. */
-private val RoundelNarrowFont = FontFamily(Font(R.font.pt_sans_narrow_bold, FontWeight.Bold))
+import id.shiorilabs.commute.core.constants.OPERATOR_TJ
+import id.shiorilabs.commute.core.font.RoundelFontFamily
+import id.shiorilabs.commute.core.font.RoundelNarrowFontFamily
 
 private val RoundelInk = Color(0xFF0F172A)
 
@@ -53,7 +48,7 @@ fun Roundel(code: String, color: Color, operator: String, modifier: Modifier = M
         Text(
             code,
             style = TextStyle(
-                fontFamily = if (compact) RoundelNarrowFont else RoundelFont,
+                fontFamily = if (compact) RoundelNarrowFontFamily else RoundelFontFamily,
                 fontWeight = FontWeight.Bold,
                 fontSize = fontSize,
                 lineHeight = 1.em,
@@ -70,4 +65,3 @@ private fun Color.wantsDarkInk(): Boolean = (0.299f * red + 0.587f * green + 0.1
 
 private val DIAMETER = 24.dp
 private val RING = 3.dp
-private const val OPERATOR_TJ = "TJ"

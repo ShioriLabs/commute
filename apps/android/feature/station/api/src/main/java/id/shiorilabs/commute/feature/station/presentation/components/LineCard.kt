@@ -47,6 +47,7 @@ import id.shiorilabs.commute.core.ui.theme.Gray600
 import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.core.ui.theme.Slate700
 import id.shiorilabs.commute.core.ui.theme.Slate800
+import id.shiorilabs.commute.core.ui.theme.TABULAR
 import id.shiorilabs.commute.feature.station.api.R
 import id.shiorilabs.commute.feature.station.domain.Departure
 import id.shiorilabs.commute.feature.station.domain.DepartureLabel
@@ -66,9 +67,6 @@ import id.shiorilabs.commute.feature.station.domain.upcomingGroups
 import java.time.LocalDateTime
 
 // Tailwind's greys, as the web card uses them.
-
-/** Departure times line up in columns: tabular figures. */
-private const val TABULAR = "tnum"
 
 /**
  * One line's departures from a station, as the home feed and the station page show them: the line's

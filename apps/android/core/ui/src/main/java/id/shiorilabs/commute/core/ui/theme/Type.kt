@@ -2,32 +2,9 @@ package id.shiorilabs.commute.core.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import id.shiorilabs.commute.core.ui.R
-
-private fun plusJakartaSans(weight: FontWeight) = Font(
-    resId = R.font.plus_jakarta_sans,
-    weight = weight,
-    variationSettings = FontVariation.Settings(FontVariation.weight(weight.weight)),
-)
-
-/**
- * Plus Jakarta Sans, the UI face on web too. One variable-weight file is bundled and each weight
- * below is an instance of it, so adding a weight costs no download size. There is no italic: the
- * family has a separate italic file that is not bundled, and `FontStyle.Italic` would fall back to
- * a synthetic slant.
- */
-val PlusJakartaSansFontFamily = FontFamily(
-    plusJakartaSans(FontWeight.Normal),
-    plusJakartaSans(FontWeight.Medium),
-    plusJakartaSans(FontWeight.SemiBold),
-    plusJakartaSans(FontWeight.Bold),
-    plusJakartaSans(FontWeight.ExtraBold),
-)
+import id.shiorilabs.commute.core.font.PlusJakartaSansFontFamily
 
 // Default Material 3 typography values
 val baseline = Typography()
@@ -61,3 +38,6 @@ val AppTypography = Typography(
     labelMedium = baseline.labelMedium.commute(),
     labelSmall = baseline.labelSmall.commute(),
 )
+
+/** OpenType `tnum`: figures of one width, so a clock or a count doesn't shift as it changes. */
+const val TABULAR = "tnum"

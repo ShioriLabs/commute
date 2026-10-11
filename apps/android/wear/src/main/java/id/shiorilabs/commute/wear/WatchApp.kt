@@ -52,6 +52,7 @@ import id.shiorilabs.commute.core.trip.RiderAction
 import id.shiorilabs.commute.core.trip.TripPhase
 import id.shiorilabs.commute.core.trip.headline
 import id.shiorilabs.commute.core.trip.progress
+import id.shiorilabs.commute.core.tripcopy.R as CopyR
 import id.shiorilabs.commute.core.wearable.WearTrip
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -252,7 +253,7 @@ private fun TripScreen(trip: WearTrip, now: Instant, phone: PhoneLink) {
                         onClick = { confirmingStop = true },
                         colors = ButtonDefaults.filledTonalButtonColors(),
                     ) {
-                        Text(stringResource(R.string.trip_action_stop))
+                        Text(stringResource(CopyR.string.trip_action_stop))
                     }
                 }
             }
@@ -316,10 +317,10 @@ private class PrimaryAction(val action: RiderAction, val label: Int)
 
 /** The one tap the moment calls for, as the phone's Live Update offers it. */
 private fun primaryAction(trip: WearTrip, headline: Headline): PrimaryAction? = when {
-    trip.state.askedStillOnRoute -> PrimaryAction(RiderAction.STILL_ON_ROUTE, R.string.trip_action_still_on_route)
+    trip.state.askedStillOnRoute -> PrimaryAction(RiderAction.STILL_ON_ROUTE, CopyR.string.trip_action_still_on_route)
     headline is Headline.AlightNow || (headline is Headline.RideTo && headline.stopsLeft <= 1) ->
-        PrimaryAction(RiderAction.ALIGHTED, R.string.trip_action_alighted)
-    trip.state.phase == TripPhase.WAITING_TO_BOARD -> PrimaryAction(RiderAction.BOARDED, R.string.trip_action_boarded)
+        PrimaryAction(RiderAction.ALIGHTED, CopyR.string.trip_action_alighted)
+    trip.state.phase == TripPhase.WAITING_TO_BOARD -> PrimaryAction(RiderAction.BOARDED, CopyR.string.trip_action_boarded)
     else -> null
 }
 

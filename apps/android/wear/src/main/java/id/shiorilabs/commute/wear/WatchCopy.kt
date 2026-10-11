@@ -1,16 +1,17 @@
 package id.shiorilabs.commute.wear
 
 import android.content.res.Resources
+import id.shiorilabs.commute.core.time.formatClock
 import id.shiorilabs.commute.core.trip.Headline
 import id.shiorilabs.commute.core.trip.PositionSource
 import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripPhase
 import id.shiorilabs.commute.core.trip.TripState
 import id.shiorilabs.commute.core.trip.minutesUntil
+import id.shiorilabs.commute.core.tripcopy.R as CopyR
+import id.shiorilabs.commute.core.tripcopy.TripWording
 import id.shiorilabs.commute.core.wearable.WearLine
 import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 /**
  * The trip in words on the watch: the phone's Live Update wording, shortened for a round screen,
@@ -19,29 +20,13 @@ import java.time.format.DateTimeFormatter
  */
 class WatchCopy(private val resources: Resources, private val lines: Map<String, WearLine>) {
 
-    /**
-     * The ride's line, and how many others will do: "4D +4 lainnya" for haltes five routes serve. A
-     * bus route goes by its code, "Koridor L13E", its name ("Puri Beta – Flyover Kuningan") being far
-     * too long for a round screen.
-     */
-    fun rideName(ride: TripLeg.Ride): String {
-        val code = ride.line.substringAfter(':')
-        val name = lines[ride.line]?.name ?: code
-        if (ride.otherLines == 0) return if (ride.isBus) resources.getString(R.string.trip_corridor, code) else name
-        return resources.getString(R.string.trip_ride_more, if (ride.isBus) code else name, ride.otherLines)
-    }
+    private val wording = TripWording(resources) { lines[it]?.name }
 
-    /** "arah" the terminus when every line that will do heads there; else "via" the stop to get off at. */
-    fun direction(ride: TripLeg.Ride): String? = ride.sharedHeadsign?.let { resources.getString(R.string.trip_headsign, it) }
-        ?: ride.takeIf { it.otherLines > 0 }?.let { resources.getString(R.string.trip_via, it.stops.last().name) }
+    fun rideName(ride: TripLeg.Ride): String = wording.rideName(ride)
 
-    fun title(headline: Headline): String = when (headline) {
-        is Headline.Board -> resources.getString(R.string.trip_board, rideName(headline.ride))
-        is Headline.Change -> resources.getString(R.string.trip_change, rideName(headline.ride))
-        is Headline.RideTo -> resources.getString(R.string.trip_ride_to, headline.ride.stops.last().name)
-        is Headline.AlightNow -> resources.getString(R.string.trip_alight_now, headline.ride.stops.last().name)
-        is Headline.Arrived -> resources.getString(R.string.trip_arrived, headline.destination)
-    }
+    fun direction(ride: TripLeg.Ride): String? = wording.direction(ride)
+
+    fun title(headline: Headline): String = wording.title(headline)
 
     /** The small line over [place]: what to do there. */
     fun lead(headline: Headline): String = resources.getString(
@@ -99,23 +84,23 @@ class WatchCopy(private val resources: Resources, private val lines: Map<String,
         is Headline.Board -> listOfNotNull(
             platform(headline.ride),
             headline.departsAt?.takeIf { minutes(state, headline, now) == null }
-                ?.let { resources.getString(R.string.trip_departs_at, formatClock(it)) },
+                ?.let { resources.getString(CopyR.string.trip_departs_at, formatClock(it)) },
         )
         is Headline.Change -> listOfNotNull(
-            headline.walk?.let { resources.getString(R.string.trip_walk_to, it.to.name, it.distanceM) },
+            headline.walk?.let { resources.getString(CopyR.string.trip_walk_to, it.to.name, it.distanceM) },
             platform(headline.ride),
             headline.departsAt?.takeIf { minutes(state, headline, now) == null }
-                ?.let { resources.getString(R.string.trip_departs_at, formatClock(it)) },
+                ?.let { resources.getString(CopyR.string.trip_departs_at, formatClock(it)) },
         )
         is Headline.RideTo -> listOf(
             resources.getString(
-                if (headline.ride.isBus) R.string.trip_haltes_left else R.string.trip_stations_left,
+                if (headline.ride.isBus) CopyR.string.trip_haltes_left else CopyR.string.trip_stations_left,
                 headline.stopsLeft,
             ),
         )
         is Headline.AlightNow -> listOf(
-            headline.then?.let { resources.getString(R.string.trip_then_change, rideName(it)) }
-                ?: resources.getString(R.string.trip_then_done),
+            headline.then?.let { resources.getString(CopyR.string.trip_then_change, rideName(it)) }
+                ?: resources.getString(CopyR.string.trip_then_done),
         )
         is Headline.Arrived -> emptyList()
     }.joinToString(SEPARATOR)
@@ -128,13 +113,13 @@ class WatchCopy(private val resources: Resources, private val lines: Map<String,
     /** How the position is known, when it isn't from GPS; `null` once arrived. */
     fun source(state: TripState): String? = when {
         state.phase == TripPhase.ARRIVED -> null
-        state.source == PositionSource.ESTIMATED -> resources.getString(R.string.trip_source_estimated)
-        state.source == PositionSource.UNKNOWN -> resources.getString(R.string.trip_source_unknown)
+        state.source == PositionSource.ESTIMATED -> resources.getString(CopyR.string.trip_source_estimated)
+        state.source == PositionSource.UNKNOWN -> resources.getString(CopyR.string.trip_source_unknown)
         else -> null
     }
 
     private fun platform(ride: TripLeg.Ride): String? =
-        ride.platformCode?.let { resources.getString(R.string.trip_platform, it.replace(PLATFORM_SLASH, "·")) }
+        ride.platformCode?.let { resources.getString(CopyR.string.trip_platform, it.replace(PLATFORM_SLASH, "·")) }
 
     companion object {
 
@@ -143,8 +128,3 @@ class WatchCopy(private val resources: Resources, private val lines: Map<String,
         private val PLATFORM_SLASH = Regex("\\s*/\\s*")
     }
 }
-
-private val CLOCK: DateTimeFormatter = DateTimeFormatter.ofPattern("HH.mm").withZone(ZoneId.of("Asia/Jakarta"))
-
-/** `08.11`, the way the phone writes a time, in WIB wherever the watch is. */
-fun formatClock(at: Instant): String = CLOCK.format(at)

@@ -14,6 +14,7 @@ import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import id.shiorilabs.commute.core.tripcopy.R as CopyR
 
 /**
  * "Bangunkan Aku" on the wrist: the phone says the rider's stop is near, and the watch rings as an
@@ -74,13 +75,13 @@ object WatchAlarm {
         )
         val notification = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_launcher_monochrome)
-            .setContentTitle(context.getString(R.string.trip_wake_title))
-            .setContentText(context.getString(R.string.trip_wake_text, stop))
+            .setContentTitle(context.getString(CopyR.string.trip_wake_title))
+            .setContentText(context.getString(CopyR.string.trip_wake_text, stop))
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setOngoing(true)
             .setContentIntent(open)
-            .addAction(0, context.getString(R.string.trip_action_awake), awake)
+            .addAction(0, context.getString(CopyR.string.trip_action_awake), awake)
             .build()
         NotificationManagerCompat.from(context).notify(ID, notification)
     }

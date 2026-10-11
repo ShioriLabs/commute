@@ -6,9 +6,11 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import id.shiorilabs.commute.core.datastore.DeveloperPreferencesRepository
 import id.shiorilabs.commute.core.datastore.LocationPreferencesRepository
 import id.shiorilabs.commute.core.datastore.OtwPreferencesRepository
+import id.shiorilabs.commute.core.ext.WhileUiSubscribed
 import id.shiorilabs.commute.core.trip.RiderAction
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationDirectory
+import id.shiorilabs.commute.feature.station.data.loadInto
 import id.shiorilabs.commute.feature.station.domain.Station
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.trip.ActiveTrip
@@ -19,7 +21,6 @@ import id.shiorilabs.commute.feature.trip.runtime.TripControllerImpl
 import id.shiorilabs.commute.feature.trip.runtime.TripUploader
 import id.shiorilabs.commute.feature.trip.runtime.UploadResult
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
@@ -67,7 +68,7 @@ class ActiveTripViewModel @Inject constructor(
     )
         .stateIn(
             viewModelScope,
-            SharingStarted.WhileSubscribed(5_000),
+            WhileUiSubscribed,
             ActiveTripUiState(controller.active.value, lines.value, stationLines.value, finished = controller.finished.value),
         )
 
@@ -75,7 +76,7 @@ class ActiveTripViewModel @Inject constructor(
         // Opened from the foreground: if the system stopped the location service while the app was
         // away, this is where it may run again.
         controller.resumeTracking()
-        viewModelScope.launch { lineRepository.lines().onRight { lines.value = it } }
+        viewModelScope.launch { lineRepository.loadInto(lines) }
         if (stationLines.value.isEmpty()) {
             viewModelScope.launch { directory.all().onRight { stationLines.value = it.toLineIndex() } }
         }
@@ -111,30 +112,30 @@ class ActiveTripViewModel @Inject constructor(
 
     /** "Tandai manual" in Pengaturan → Experimental: the bar of marks under the page. */
     val manualMarks: StateFlow<Boolean> = developerPreferences.manualMarks
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+        .stateIn(viewModelScope, WhileUiSubscribed, false)
 
     /** "Tandai Peron" in Pengaturan → Experimental: a row of platform marks above the others. */
     val platformMarks: StateFlow<Boolean> = developerPreferences.platformMarks
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+        .stateIn(viewModelScope, WhileUiSubscribed, false)
 
     /** "Halaman PIDS" in Pengaturan → Experimental: the board takes turns between pages. */
     val boardPages: StateFlow<Boolean> = developerPreferences.boardPages
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+        .stateIn(viewModelScope, WhileUiSubscribed, false)
 
     /** "PIDS Yishun" in Pengaturan → Experimental: the board after SMRT's strip map instead of JR East's. */
     val yishunPids: StateFlow<Boolean> = developerPreferences.yishunPids
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+        .stateIn(viewModelScope, WhileUiSubscribed, false)
 
     /** "Kecepatan IMU" in Pengaturan → Experimental: the satellites' speed beside the motion sensors'. */
     internal val motion: StateFlow<MotionStripState?> = combine(developerPreferences.imuSpeed, motionTracker.live, ::motionStrip)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+        .stateIn(viewModelScope, WhileUiSubscribed, null)
 
     /**
      * "Diagram ala Layar Kereta Jepang" in Pengaturan → OTW: the board draws the stops ahead on its
      * curved strip. Starts from what the app read as it started; unread, off, as the strip would draw in anyway.
      */
     val pidsDiagram: StateFlow<Boolean> = otwPreferences.pidsDiagram
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), otwPreferences.cachedPidsDiagram ?: false)
+        .stateIn(viewModelScope, WhileUiSubscribed, otwPreferences.cachedPidsDiagram ?: false)
 
     /** What the rider saw the train do, logged with what [pids] (the board then) said. */
     fun mark(kind: MarkKind, pids: Pids) {

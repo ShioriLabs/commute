@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import id.shiorilabs.commute.core.datastore.SavedEntry
 import id.shiorilabs.commute.core.datastore.SavedRepository
+import id.shiorilabs.commute.core.ext.WhileUiSubscribed
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.time.serviceDayOf
 import id.shiorilabs.commute.core.type.UIState
@@ -13,6 +14,7 @@ import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationRepository
 import id.shiorilabs.commute.feature.station.data.board
 import id.shiorilabs.commute.feature.station.data.cachedBoard
+import id.shiorilabs.commute.feature.station.data.loadInto
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.StationBoard
 import kotlinx.coroutines.Job
@@ -20,7 +22,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
@@ -78,14 +79,14 @@ class SavedStationsViewModel @Inject constructor(
         .catch { emit(UIState.Error(cause = it)) }
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
+            started = WhileUiSubscribed,
             initialValue = heldEntries?.let { feed(it, cards.value, names.value, lines.value, pull.value) } ?: UIState.Loading,
         )
 
     init {
         if (lines.value.isEmpty()) {
             viewModelScope.launch {
-                lineRepository.lines().onRight { lines.value = it }
+                lineRepository.loadInto(lines)
             }
         }
 
@@ -184,7 +185,7 @@ class SavedStationsViewModel @Inject constructor(
         load(stationId)
         if (lines.value.isEmpty()) {
             viewModelScope.launch {
-                lineRepository.lines().onRight { lines.value = it }
+                lineRepository.loadInto(lines)
             }
         }
     }

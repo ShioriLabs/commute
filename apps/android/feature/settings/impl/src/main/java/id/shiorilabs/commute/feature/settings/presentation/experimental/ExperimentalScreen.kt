@@ -19,6 +19,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import id.shiorilabs.commute.core.datastore.DeveloperPreferencesRepository
+import id.shiorilabs.commute.core.ext.WhileUiSubscribed
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.feature.settings.R
@@ -28,7 +29,6 @@ import id.shiorilabs.commute.feature.settings.presentation.components.SettingsPa
 import id.shiorilabs.commute.feature.settings.presentation.components.SettingsSwitch
 import id.shiorilabs.commute.feature.trip.SensorDataExport
 import id.shiorilabs.commute.feature.trip.TripLogExport
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -41,15 +41,15 @@ class ExperimentalViewModel @Inject constructor(
     private val sensorData: SensorDataExport,
 ) : ViewModel() {
 
-    val forceTripStart: StateFlow<Boolean> = preferences.forceTripStart.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
-    val frostTuner: StateFlow<Boolean> = preferences.frostTuner.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
-    val manualMarks: StateFlow<Boolean> = preferences.manualMarks.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
-    val platformMarks: StateFlow<Boolean> = preferences.platformMarks.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
-    val boardPages: StateFlow<Boolean> = preferences.boardPages.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
-    val imuSpeed: StateFlow<Boolean> = preferences.imuSpeed.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
-    val yishunPids: StateFlow<Boolean> = preferences.yishunPids.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val forceTripStart: StateFlow<Boolean> = preferences.forceTripStart.stateIn(viewModelScope, WhileUiSubscribed, false)
+    val frostTuner: StateFlow<Boolean> = preferences.frostTuner.stateIn(viewModelScope, WhileUiSubscribed, false)
+    val manualMarks: StateFlow<Boolean> = preferences.manualMarks.stateIn(viewModelScope, WhileUiSubscribed, false)
+    val platformMarks: StateFlow<Boolean> = preferences.platformMarks.stateIn(viewModelScope, WhileUiSubscribed, false)
+    val boardPages: StateFlow<Boolean> = preferences.boardPages.stateIn(viewModelScope, WhileUiSubscribed, false)
+    val imuSpeed: StateFlow<Boolean> = preferences.imuSpeed.stateIn(viewModelScope, WhileUiSubscribed, false)
+    val yishunPids: StateFlow<Boolean> = preferences.yishunPids.stateIn(viewModelScope, WhileUiSubscribed, false)
 
-    val watchAutoOpen: StateFlow<Boolean> = preferences.watchAutoOpen.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+    val watchAutoOpen: StateFlow<Boolean> = preferences.watchAutoOpen.stateIn(viewModelScope, WhileUiSubscribed, true)
 
     fun setWatchAutoOpen(enabled: Boolean) = viewModelScope.launch { preferences.setWatchAutoOpen(enabled) }
 

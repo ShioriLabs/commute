@@ -4,7 +4,6 @@ import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.time.Duration
 import java.time.Instant
-import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /*
@@ -14,14 +13,10 @@ import java.util.Locale
 
 private val SYMBOLS = DecimalFormatSymbols(Locale.forLanguageTag("id-ID"))
 
-private val CLOCK = DateTimeFormatter.ofPattern("HH.mm").withZone(JAKARTA)
-
 fun formatRupiah(amount: Int): String = "Rp" + DecimalFormat("#,##0", SYMBOLS).format(amount)
 
 /** One decimal at most: kilometres are what a rider reads, and a second decimal is noise. */
 fun formatKm(distanceM: Int): String = DecimalFormat("#,##0.#", SYMBOLS).format(distanceM / 1000.0) + " km"
-
-fun formatClock(instant: Instant): String = CLOCK.format(instant)
 
 /**
  * How long a journey takes, from two published times: `45 mnt`, `1 j 5 mnt`. Empty when the times

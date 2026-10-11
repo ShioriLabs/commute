@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import id.shiorilabs.commute.core.datastore.DeveloperPreferencesRepository
-import kotlinx.coroutines.flow.SharingStarted
+import id.shiorilabs.commute.core.ext.WhileUiSubscribed
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -17,7 +17,7 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     val experimentalUnlocked: StateFlow<Boolean> =
-        developerPreferences.experimentalUnlocked.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+        developerPreferences.experimentalUnlocked.stateIn(viewModelScope, WhileUiSubscribed, false)
 
     fun unlockExperimental() = viewModelScope.launch { developerPreferences.setExperimentalUnlocked(true) }
 }

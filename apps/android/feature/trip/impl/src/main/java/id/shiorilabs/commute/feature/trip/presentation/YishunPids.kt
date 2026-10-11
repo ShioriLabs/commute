@@ -42,9 +42,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import id.shiorilabs.commute.core.tripcopy.R as CopyR
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.ext.lineColorOf
+import id.shiorilabs.commute.core.ui.theme.TABULAR
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.trip.R
 import kotlin.math.cos
@@ -144,9 +146,6 @@ private fun FocusBand(x: Dp) {
     )
 }
 
-/** Figures of one width, so minutes don't shift as they tick. */
-private const val TABULAR = "tnum"
-
 /**
  * [PidsStyle.Yishun]'s in-train display, after SMRT's strip map: the big name, then the ride across
  * the width as a straight line, stops on it as circles (minutes ahead, grey behind), their names
@@ -191,7 +190,7 @@ internal fun YishunBoard(
         }
         pids.changeTo?.let { then ->
             Text(
-                text = stringResource(R.string.trip_then_change, copy.rideName(then)),
+                text = stringResource(CopyR.string.trip_then_change, copy.rideName(then)),
                 modifier = Modifier.padding(start = 20.dp, top = 4.dp, end = 20.dp),
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,

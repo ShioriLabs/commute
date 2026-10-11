@@ -11,6 +11,7 @@ import id.shiorilabs.commute.core.datastore.DeveloperPreferencesRepository
 import id.shiorilabs.commute.core.datastore.LocationPreferencesRepository
 import id.shiorilabs.commute.core.datastore.SavedEntry
 import id.shiorilabs.commute.core.datastore.SavedRepository
+import id.shiorilabs.commute.core.ext.WhileUiSubscribed
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.feature.journey.data.JourneyRepository
@@ -24,10 +25,10 @@ import id.shiorilabs.commute.feature.journey.domain.toCriteria
 import id.shiorilabs.commute.feature.journey.domain.toLinkParams
 import id.shiorilabs.commute.feature.journey.domain.withLink
 import id.shiorilabs.commute.feature.station.data.LineRepository
+import id.shiorilabs.commute.feature.station.data.loadInto
 import id.shiorilabs.commute.feature.trip.TripController
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -78,7 +79,7 @@ class TripViewModel @AssistedInject constructor(
             lines = lines,
             shareUrl = criteria?.let { fareShareUrl(route.fromId, route.toId, it, route.journeyKey) },
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TripUiState())
+    }.stateIn(viewModelScope, WhileUiSubscribed, TripUiState())
 
     /**
      * Where "Mulai perjalanan" stands for the loaded journey, `null` until there is one. Looked at
@@ -91,14 +92,14 @@ class TripViewModel @AssistedInject constructor(
         developerPreferences.forceTripStart,
     ) { trip, active, now, force ->
         (trip as? TripPageState.Loaded)?.let { tripStartFor(it.journey, route, active?.origin, now, force) }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    }.stateIn(viewModelScope, WhileUiSubscribed, null)
 
     /**
      * Whether starting a trip asks for location: not when "Posisi akurat saat OTW" is off in
      * Pengaturan → Lokasi, as the trip would run by the clock anyway.
      */
     val tripAsksLocation: StateFlow<Boolean> = locationPreferences.use.map { it.allowsTripFixes }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+        .stateIn(viewModelScope, WhileUiSubscribed, true)
 
     /** Follows the loaded journey from now, in place of any trip already running. */
     fun startTrip() {
@@ -116,7 +117,7 @@ class TripViewModel @AssistedInject constructor(
     /** Whether the pair is pinned to home: the pin beside share. `null` for a pair of one station. */
     val routeSaved: StateFlow<Boolean?> = savedRepository.entries
         .map { entries -> if (route.fromId == route.toId) null else SavedEntry.Route(route.fromId, route.toId) in entries }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+        .stateIn(viewModelScope, WhileUiSubscribed, null)
 
     init {
         viewModelScope.launch {
@@ -125,7 +126,7 @@ class TripViewModel @AssistedInject constructor(
                 .withLink(route.paymentMethod, route.at, route.modes, route.walking, now)
         }
         if (lines.value.isEmpty()) {
-            viewModelScope.launch { lineRepository.lines().onRight { lines.value = it } }
+            viewModelScope.launch { lineRepository.loadInto(lines) }
         }
         viewModelScope.launch { fetchTrip() }
     }

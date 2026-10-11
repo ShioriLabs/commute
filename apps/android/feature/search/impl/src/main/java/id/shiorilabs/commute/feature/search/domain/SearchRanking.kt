@@ -1,5 +1,7 @@
 package id.shiorilabs.commute.feature.search.domain
 
+import id.shiorilabs.commute.core.constants.OPERATOR_TJ
+
 /** Queries shorter than this show the idle rails instead of results, as on web. */
 const val MIN_QUERY_LENGTH = 2
 
@@ -46,7 +48,7 @@ fun rankSearchables(searchables: List<Searchable>, query: String): List<Searchab
         }
 
         val isStation = searchable is Searchable.Station
-        val isTransJakarta = searchable is Searchable.Station && searchable.operator == "TJ"
+        val isTransJakarta = searchable is Searchable.Station && searchable.operator == OPERATOR_TJ
         Scored(
             searchable = searchable,
             score = finalScore,

@@ -35,9 +35,8 @@ import dev.chrisbanes.haze.rememberHazeState
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.navigation.stationWebLink
-import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
-import id.shiorilabs.commute.core.type.toFailure
+import id.shiorilabs.commute.core.type.isOffline
 import id.shiorilabs.commute.core.ui.components.CommuteEmptyState
 import id.shiorilabs.commute.core.ui.components.LoadProblem
 import id.shiorilabs.commute.core.ui.components.LoadProblemState
@@ -54,7 +53,7 @@ import id.shiorilabs.commute.feature.station.R
 import id.shiorilabs.commute.feature.station.domain.Amenity
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
-import id.shiorilabs.commute.feature.station.domain.OPERATOR_TJ
+import id.shiorilabs.commute.core.constants.OPERATOR_TJ
 import id.shiorilabs.commute.feature.station.domain.Station
 import id.shiorilabs.commute.feature.station.domain.StationBoard
 import id.shiorilabs.commute.feature.station.domain.codeOfLineKey
@@ -519,7 +518,6 @@ private fun UnservedNotice(unserved: UnservedStation, modifier: Modifier = Modif
     )
 }
 
-private fun UIState.Error.isOffline(): Boolean = cause?.toFailure() is Failure.Network
 
 /**
  * Whether the line keyed [lineKey] (`KCI:B`) has a page to open. The web gives TransJakarta

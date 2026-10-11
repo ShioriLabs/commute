@@ -22,6 +22,8 @@ dependencies {
     implementation(project(":feature:station:api"))
     // The trip engine.
     implementation(project(":core:trip"))
+    // The words a ride is named in, shared with the watch.
+    implementation(project(":core:tripcopy"))
     // The trip as the watch gets it, over the Wearable Data Layer.
     implementation(project(":core:wearable"))
     implementation(libs.play.services.wearable)
