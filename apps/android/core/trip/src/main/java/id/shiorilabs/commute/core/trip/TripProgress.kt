@@ -66,9 +66,10 @@ fun TripState.progress(plan: TripPlan): TripProgress {
 
 /**
  * How late the ride runs, for the stops still ahead: never negative. A train running early is no
- * reason to promise the next station sooner, as it may well wait out its time there.
+ * reason to promise the next station sooner, as it may well wait out its time there: a KCI train
+ * ahead of time is often held for an intercity or the airport train to pass.
  */
-private val TripState.lateS: Long get() = maxOf(clockOffsetS, 0L)
+internal val TripState.lateS: Long get() = maxOf(clockOffsetS, 0L)
 
 /**
  * When the current ride should reach its alighting stop, lateness included; `null` when it has no
