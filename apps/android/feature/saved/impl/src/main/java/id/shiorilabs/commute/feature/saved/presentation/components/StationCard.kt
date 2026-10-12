@@ -52,8 +52,8 @@ private const val MAX_SKELETON_LINES = 3
  *
  * [onClick] opens the station's page; the whole row is the target, not just the title's width. The
  * title flies into the page's header as a shared element, with [shareName] off for a copy hidden
- * behind the one doing it. [opened] marks the station whose page was last opened from here: its
- * "Stasiun" clips away as it flies out and back in as it lands home.
+ * behind the one doing it. [opened] is no longer used: with no "Stasiun" before the name there is
+ * no word to clip in and out as the page opens; kept so callers need not change.
  *
  * [note] sits muted at the row's far end, on the title's baseline: how far a nearby station is.
  */
@@ -87,8 +87,6 @@ fun StationTitle(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground,
                 ),
-                showWords = true,
-                animateWords = shareName && opened,
                 shared = shareName,
             )
         }
