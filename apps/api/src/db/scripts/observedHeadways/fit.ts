@@ -41,8 +41,10 @@ export const MIN_STOP_ARRIVALS = 30
  * A stop seen less than this often relative to its line-direction's average is
  * more likely a detection artefact (an origin terminal where the next stop never
  * changes, a halte the 30s sampling keeps skipping) than a real 3x headway, so
- * it gets no factor and consumers fall back to GTFS for it. Judgment call: 32 of
- * 919 stops on the 2026-10-12 data. Revisit once arrivals are validated.
+ * it gets no factor. The runtime then gives it its line's observed level when the
+ * schedule does not call it rarer, and the scaled schedule otherwise
+ * (utils/observedHeadways.ts). Judgment call: 32 of 919 stops on the 2026-10-12
+ * data. Revisit once arrivals are validated.
  */
 export const MIN_STOP_FACTOR = 0.3
 /** Pseudo-arrivals pulling a stop factor towards its line-direction's mean. */

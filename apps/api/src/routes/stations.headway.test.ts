@@ -428,21 +428,25 @@ describe('/stations/:operator/:code/headway with observed values', () => {
     expect(row!.headwayS!).toBeGreaterThan(STOP_HEADWAYS_S[modelled.lineStop]!)
   })
 
-  it('interpolates an hour the model did not measure, from the same line-direction\'s neighbours', async () => {
-    const hour = Array.from({ length: 24 }, (_, h) => h).find(h =>
-      OBSERVED_PROFILE_S[`WD:${h}:${modelled.line}@F`] === undefined
-      && modelled.dirs.every(d => OBSERVED_PROFILE_INTERP_S[`WD:${h}:${modelled.line}@${d}`] !== undefined))
-    if (hour === undefined) return // this fit has no blind hour with both directions interpolated
+  // Fixtures are chosen from the generated file. If a refit leaves no suitable
+  // hour, the test is reported as SKIPPED rather than passing without asserting.
+  const interpolatedHour = Array.from({ length: 24 }, (_, h) => h).find(h =>
+    OBSERVED_PROFILE_S[`WD:${h}:${modelled.line}@F`] === undefined
+    && modelled.dirs.every(d => OBSERVED_PROFILE_INTERP_S[`WD:${h}:${modelled.line}@${d}`] !== undefined))
+
+  it.skipIf(interpolatedHour === undefined)('interpolates an hour the model did not measure, from the same line-direction\'s neighbours', async () => {
+    const hour = interpolatedHour!
     const [row] = await fetchRow(hour)
     expect(row).toMatchObject({ basis: 'INTERPOLATED', scheduledS: STOP_HEADWAYS_S[modelled.lineStop] })
   })
 
-  it('scales the schedule value where there is no profile of any kind', async () => {
-    const hour = Array.from({ length: 24 }, (_, h) => h).find(h =>
-      modelled.dirs.every(d => OBSERVED_PROFILE_S[`WD:${h}:${modelled.line}@${d}`] === undefined
-        && OBSERVED_PROFILE_INTERP_S[`WD:${h}:${modelled.line}@${d}`] === undefined)
-      && OBSERVED_GTFS_SCALE[`WD:${h}`] !== undefined)
-    if (hour === undefined) return
+  const scaledHour = Array.from({ length: 24 }, (_, h) => h).find(h =>
+    modelled.dirs.every(d => OBSERVED_PROFILE_S[`WD:${h}:${modelled.line}@${d}`] === undefined
+      && OBSERVED_PROFILE_INTERP_S[`WD:${h}:${modelled.line}@${d}`] === undefined)
+    && OBSERVED_GTFS_SCALE[`WD:${h}`] !== undefined)
+
+  it.skipIf(scaledHour === undefined)('scales the schedule value where there is no profile of any kind', async () => {
+    const hour = scaledHour!
     const [row] = await fetchRow(hour)
     expect(row).toMatchObject({
       basis: 'SCALED',

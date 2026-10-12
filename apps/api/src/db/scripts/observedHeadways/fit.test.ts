@@ -208,6 +208,26 @@ describe('renderOverlay', () => {
     expect(text).toContain('export const OBSERVED_STOP_FACTOR')
   })
 
+  it('writes a file that still parses when a key contains a quote or a backslash', () => {
+    // A line code or station id is data from the topology; it must not be able to
+    // break out of the string literal it is written into.
+    const nasty = buildPool(days)
+    const model = fitFactorised(nasty)
+    model.factor.set('T@TJ-O\'Brien\\path@F', 1.1)
+    const text = renderOverlay({ ...base, model, vouched: new Set([column('WD', 10)]) })
+    expect(text).toContain('\'T@TJ-O\\\'Brien\\\\path@F\': 1.1')
+
+    // Evaluate the generated module: strip the TS-only syntax and read the object back.
+    const js = text
+      .replace(/^\/\*[\s\S]*?\*\/\n/, '')
+      .replace(/export const (\w+): Record<string, number> = /g, 'var $1 = ')
+      .replace(/export const OBSERVED_META = /, 'var OBSERVED_META = ')
+      .replace(/ as const\n$/, '\n')
+      .replace(/\/\*\*[\s\S]*?\*\//g, '')
+    const read = new Function(`${js}\nreturn OBSERVED_STOP_FACTOR`) as () => Record<string, number>
+    expect(read()['T@TJ-O\'Brien\\path@F']).toBe(1.1)
+  })
+
   it('is deterministic', () => {
     const vouched = new Set([column('WD', 10), column('WD', 11)])
     expect(renderOverlay({ ...base, vouched })).toBe(renderOverlay({ ...base, vouched }))

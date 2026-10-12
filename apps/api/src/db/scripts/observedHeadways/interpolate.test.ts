@@ -137,4 +137,30 @@ describe('rejectConflicting', () => {
     // Hour 2 conflicts and is in the leading span; hour 22 agrees and is in the trailing one.
     expect(rejectedColumns).toEqual([column('WD', 2)])
   })
+
+  describe('sparse cells', () => {
+    // 7F has no scheduled service 09:30-14:00; the fit sees that column as healthy and
+    // gives 7F no profile there, and the neighbours would fill it with ~19 minutes.
+    const interpolated = hours('7F@F', { 12: 1100 })
+    const noReference = new Map<string, number>()
+
+    it('drops a cell in a column that had data but where the line-direction has no model value', () => {
+      const result = rejectConflicting(interpolated, noReference, measuredAround(11, 14), new Set([column('WD', 12)]))
+      expect(result.sparseVetoed).toBe(1)
+      expect(result.accepted.size).toBe(0)
+    })
+
+    it('keeps the same cell in a column with no data (a truly blind hour)', () => {
+      const result = rejectConflicting(interpolated, noReference, measuredAround(11, 14), new Set())
+      expect(result.sparseVetoed).toBe(0)
+      expect(result.accepted.size).toBe(1)
+    })
+
+    it('does not count a cell that has a model value of its own as sparse', () => {
+      const reference = hours('7F@F', { 12: 1000 })
+      const result = rejectConflicting(interpolated, reference, measuredAround(11, 14), new Set([column('WD', 12)]))
+      expect(result.sparseVetoed).toBe(0)
+      expect(result.accepted.size).toBe(1)
+    })
+  })
 })

@@ -10,20 +10,23 @@
  *
  * where the profile is the headway at an average stop of that line-direction
  * and the factor (mean 1 per line-direction) says how much more or less often
- * than average this stop is served. A stop with no factor has no observed
- * value: use headways.ts for it. Hour is the WIB hour of day;
+ * than average this stop is served. A stop with no factor takes its
+ * line-direction's profile at factor 1 where the schedule does not call it
+ * rarer, and the scaled schedule otherwise. Hour is the WIB hour of day;
  * dayType is WD (Mon-Fri) or WE (Sat+Sun pooled — too few weekends yet to split).
  *
  * It is the RATE headway: healthy time divided by arrivals, what "every N
  * minutes" means. Bunching makes the wait a rider experiences longer than half
  * of it; the pooled CV is kept in OBSERVED_CV_PROFILE for that decision.
  *
- * Cells are ABSENT, and a consumer must fall back to headways.ts, when they
- * fail the floors (fewer than 3 days with 15 healthy minutes, or under 30
- * pooled arrivals) or when the backtest does not vouch for their (dayType,
- * hour): at least 100 held-out buckets, and a lower median error than GTFS
- * scaled by a per-hour factor. The upstream relay is almost never healthy in
- * the weekday rush hours, so those hours have nothing to fit or to validate.
+ * A profile cell is ABSENT when it fails the floors (fewer than 3 days with 15
+ * healthy minutes, or under 30 pooled arrivals) or when the backtest does not
+ * vouch for its (dayType, hour): at least 100 held-out buckets, and a lower
+ * median error than GTFS scaled by a per-hour factor. A consumer then reads,
+ * in order, OBSERVED_PROFILE_INTERP_S, the scaled schedule below, and
+ * finally headways.ts as it was. The upstream relay is almost never healthy
+ * in the weekday rush hours, so those hours have nothing to fit or to
+ * validate.
  *
  * Hours present, WIB: weekday 00 05 06 08 10 12 13 14 15 16 19 20 21 22 23; weekend 00 01 05 06 07 10 11 12 13 14 21 22 23.
  *
@@ -36,8 +39,11 @@
  *      unvouched values contradict the interpolation by more than 1.3x in the
  *      median: those are hours that WERE observed, across a service-regime
  *      change (overnight), so a line between the neighbours would be wrong.
- *      The hours between two measured hours are judged together, and a single
- *      cell more than 2x from the model's own value is dropped on its own.
+ *      The hours between two measured hours are judged together, a single
+ *      cell more than 2x from the model's own value is dropped on its own,
+ *      and a line-direction the model saw in a column that had data but found
+ *      too few arrivals to fit (it barely ran there) is not filled from its
+ *      busier neighbours.
  *   2. OBSERVED_GTFS_SCALE (pooled per-stop schedule values) and
  *      OBSERVED_GTFS_SCALE_DIR (directional ones): the schedule value
  *      (headways.ts) times the column's scale, for what is left, never above
@@ -2545,7 +2551,6 @@ export const OBSERVED_PROFILE_INTERP_S: Record<string, number> = {
   'WD:11:6V@R': 965,
   'WD:11:7@F': 580,
   'WD:11:7@R': 541,
-  'WD:11:7F@R': 1331,
   'WD:11:8@F': 428,
   'WD:11:8@R': 402,
   'WD:11:9@F': 449,
@@ -2570,10 +2575,6 @@ export const OBSERVED_PROFILE_INTERP_S: Record<string, number> = {
   'WD:11:14@R': 697,
   'WD:11:L13E@F': 589,
   'WD:11:L13E@R': 560,
-  'WD:12:7F@F': 1028,
-  'WD:12:7F@R': 1231,
-  'WD:13:7F@F': 1192,
-  'WD:13:7F@R': 1132,
   'WD:17:1@F': 190,
   'WD:17:1@R': 180,
   'WD:17:2@F': 273,
@@ -2686,24 +2687,6 @@ export const OBSERVED_PROFILE_INTERP_S: Record<string, number> = {
   'WD:18:14@R': 632,
   'WD:18:L13E@F': 529,
   'WD:18:L13E@R': 540,
-  'WD:22:9A@F': 1417,
-  'WD:23:3H@F': 1664,
-  'WD:23:3H@R': 1995,
-  'WD:23:4D@F': 1616,
-  'WD:23:6A@R': 3360,
-  'WD:23:6B@R': 3600,
-  'WD:23:6V@R': 1636,
-  'WD:23:7F@F': 2203,
-  'WD:23:7F@R': 1076,
-  'WD:23:9A@F': 1417,
-  'WD:23:9A@R': 1299,
-  'WD:23:13B@F': 1491,
-  'WE:5:4D@R': 1674,
-  'WE:5:6V@F': 2667,
-  'WE:5:9N@F': 1200,
-  'WE:5:9N@R': 1168,
-  'WE:7:9N@F': 1200,
-  'WE:7:9N@R': 1168,
   'WE:8:1@F': 207,
   'WE:8:1@R': 160,
   'WE:8:2@F': 297,
@@ -2812,11 +2795,6 @@ export const OBSERVED_PROFILE_INTERP_S: Record<string, number> = {
   'WE:9:13E@R': 715,
   'WE:9:14@F': 705,
   'WE:9:14@R': 758,
-  'WE:11:7F@R': 1155,
-  'WE:12:7F@F': 1150,
-  'WE:12:7F@R': 1220,
-  'WE:13:7F@F': 1043,
-  'WE:13:7F@R': 1285,
   'WE:15:1@F': 185,
   'WE:15:1@R': 191,
   'WE:15:2@F': 469,
@@ -3144,26 +3122,7 @@ export const OBSERVED_PROFILE_INTERP_S: Record<string, number> = {
   'WE:20:13E@F': 892,
   'WE:20:13E@R': 888,
   'WE:20:14@F': 867,
-  'WE:20:14@R': 832,
-  'WE:22:9A@F': 3600,
-  'WE:23:2A@F': 2031,
-  'WE:23:3F@F': 2769,
-  'WE:23:3H@F': 2090,
-  'WE:23:3H@R': 1920,
-  'WE:23:4D@F': 2314,
-  'WE:23:5C@F': 1368,
-  'WE:23:6A@R': 3600,
-  'WE:23:6B@R': 3600,
-  'WE:23:6V@R': 2168,
-  'WE:23:7F@F': 2667,
-  'WE:23:7F@R': 1227,
-  'WE:23:9A@F': 3600,
-  'WE:23:9A@R': 2810,
-  'WE:23:9C@F': 1430,
-  'WE:23:10H@F': 1800,
-  'WE:23:13B@F': 1800,
-  'WE:23:13B@R': 851,
-  'WE:23:13E@F': 2165
+  'WE:20:14@R': 832
 }
 
 /** Schedule-to-observed multiplier per `${dayType}:${hour}`: the fallback where the profile is absent. */
