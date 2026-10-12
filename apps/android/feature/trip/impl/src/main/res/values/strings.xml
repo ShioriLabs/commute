@@ -96,10 +96,6 @@
     <string name="trip_done_on_the_way">di jalan</string>
     <string name="trip_done_stations">stasiun dilewati</string>
     <string name="trip_done_haltes">halte dilewati</string>
-    <string name="trip_done_changes">%1$d×</string>
-    <string name="trip_done_changes_label">transit</string>
-    <string name="trip_done_direct">Langsung</string>
-    <string name="trip_done_direct_label">tanpa transit</string>
     <string name="trip_done_summary">Ringkasan</string>
     <string name="trip_done_ride">%1$s → %2$s</string>
     <string name="trip_done_open_station">Lihat Stasiun %1$s</string>
