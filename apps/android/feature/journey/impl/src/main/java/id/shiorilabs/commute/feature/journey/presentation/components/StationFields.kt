@@ -102,7 +102,8 @@ private fun StationField(label: String, endpoint: PairEndpoint?, onClick: () -> 
             .background(Stone100)
             .clickable(role = Role.Button, onClick = onClick)
             // Clear of the swap button on the right.
-            .padding(start = 16.dp, top = 10.dp, end = 64.dp, bottom = 10.dp),
+            // 14dp + the card's 2dp border puts the label on the page's 16dp gutter's text line.
+            .padding(start = 14.dp, top = 10.dp, end = 64.dp, bottom = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
