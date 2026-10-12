@@ -198,7 +198,7 @@ describe('vouchedColumns', () => {
 describe('renderOverlay', () => {
   const pool = buildPool(days)
   const model = fitFactorised(pool)
-  const base = { model, pool, modelName: 'M2 factorised', range: { from: '20261005', to: '20261009' }, dayCounts: { WD: 5, WE: 0 }, backtestLines: ['Leave-one-day-out: test'], scales: [], interpolated: new Map() }
+  const base = { model, pool, modelName: 'M2 factorised', range: { from: '20261005', to: '20261009' }, dayCounts: { WD: 5, WE: 0 }, backtestLines: ['Leave-one-day-out: test'], scales: [], interpolated: new Map(), rejectedColumns: [] }
 
   it('writes sorted, clamped profile cells for vouched columns only', () => {
     const text = renderOverlay({ ...base, vouched: new Set([column('WD', 10)]) })
@@ -211,5 +211,52 @@ describe('renderOverlay', () => {
   it('is deterministic', () => {
     const vouched = new Set([column('WD', 10), column('WD', 11)])
     expect(renderOverlay({ ...base, vouched })).toBe(renderOverlay({ ...base, vouched }))
+  })
+})
+
+describe('backtest pairwise stats', () => {
+  // M0-like model that abstains on a stop; the shipped model predicts everywhere.
+  const dayWithThinStop = (date: string, healthy = 3600): DayAggregate => {
+    const base = day(date, TRUTH, healthy)
+    // A stop with only 4 arrivals a day: enough for a truth bucket, never enough for pooled (>= 5 over the others)
+    // unless several days are pooled, so give it exactly the truth threshold.
+    return { ...base, keys: { ...base.keys, 'T@TJ-THIN@F': { 10: [4, 0, 0, 0] } } }
+  }
+
+  it('scores the shipped model over buckets it and the baseline both predicted, not only those every model did', () => {
+    const history = dates.slice(0, 4).map(d => dayWithThinStop(d))
+    const shipped = { name: 'shipped', fit: () => ({ headway: () => 300 }) }
+    // Abstains on the thin stop, as a pooled model does.
+    const abstains = { name: 'abstains', fit: () => ({ headway: (key: string) => key.includes('THIN') ? undefined : 300 }) }
+    const baseline = { name: 'baseline', fit: () => ({ headway: () => 600 }) }
+    const result = backtest(history, [shipped, abstains, baseline], () => 300, 'loo', undefined, { model: 'shipped', baseline: 'baseline' })
+    const all = result.byColumn[column('WD', 10)]!.n
+    const pair = result.pair![column('WD', 10)]!.n
+    // The thin stop is in the pairwise count but not in the all-model intersection.
+    expect(pair).toBeGreaterThan(all)
+  })
+
+  it('vouches a column from the pairwise stats, and only once it has enough buckets', () => {
+    // 30 stops x 5 days leave-one-out = 150 buckets in the one column: past the bar.
+    const stops = Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`S${i}`, 1]))
+    const wide: Truth = { hours: { 10: 300 }, factors: stops }
+    const history = dates.map(d => day(d, wide))
+    const good = { name: 'good', fit: () => ({ headway: () => 300 }) }
+    const bad = { name: 'bad', fit: () => ({ headway: () => 3000 }) }
+
+    const result = backtest(history, [good, bad], () => 300, 'loo', undefined, { model: 'good', baseline: 'bad' })
+    const row = result.pair![column('WD', 10)]!
+    expect(row.n).toBe(150)
+    expect(row.model).toBeLessThan(row.baseline)
+    expect([...vouchedColumns(result, 'good', 'bad')]).toEqual([column('WD', 10)])
+
+    // A model that does not beat its baseline is not vouched, however many buckets.
+    const worse = backtest(history, [bad, good], () => 300, 'loo', undefined, { model: 'bad', baseline: 'good' })
+    expect(vouchedColumns(worse, 'bad', 'good').size).toBe(0)
+
+    // And a column short of the bar is not vouched even when the model wins every bucket.
+    const few = backtest(dates.map(d => day(d, TRUTH)), [good, bad], () => 300, 'loo', undefined, { model: 'good', baseline: 'bad' })
+    expect(few.pair![column('WD', 10)]!.n).toBeLessThan(100)
+    expect(vouchedColumns(few, 'good', 'bad').size).toBe(0)
   })
 })

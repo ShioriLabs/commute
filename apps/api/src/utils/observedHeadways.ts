@@ -2,6 +2,7 @@ import { LINE_TERMINI } from '../db/data/headways'
 import {
   OBSERVED_GTFS_CAP_S,
   OBSERVED_GTFS_SCALE,
+  OBSERVED_GTFS_SCALE_DIR,
   OBSERVED_PROFILE_INTERP_S,
   OBSERVED_PROFILE_S,
   OBSERVED_STOP_FACTOR
@@ -30,6 +31,9 @@ import { memoize } from './memo'
  *                              curve across a day stays continuous instead of
  *                              reverting to the schedule's most optimistic number
  *                              at the busiest hours.
+ *   OBSERVED_GTFS_SCALE_DIR    the same for the schedule's DIRECTIONAL values, which
+ *                              run longer than the pooled per-stop ones, so each
+ *                              scale is measured against what it multiplies.
  *   OBSERVED_GTFS_CAP_S        ceiling for that scaled value per column: observed
  *                              headways saturate, so a multiplier alone overshoots
  *                              for lines whose schedule value is already long.
@@ -158,6 +162,18 @@ export function observedLineHeadway(lineCode: string, day: ServiceDay, hour: num
 }
 
 /**
+ * The observed headway of one direction of a line at an average stop: the
+ * profile with no stop factor. What a stop the fit gave no factor (an origin
+ * terminal, a halte the sampling barely sees) is read as: the line-direction's
+ * own level, rather than the schedule scaled by a global multiplier.
+ */
+export function observedLineDirHeadway(lineCode: string, dir: Direction, day: ServiceDay, hour: number): Observed | undefined {
+  const profile = getIndex().profiles.get(columnId(day, hour))?.get(`${lineCode}@${dir}`)
+  if (profile === undefined) return undefined
+  return { seconds: clampHeadway(profile.seconds), interpolated: profile.interpolated }
+}
+
+/**
  * The schedule value scaled to this hour, or undefined where there is no scale.
  *
  * `tj` says the line is a TransJakarta one. It defaults to "is a corridor in
@@ -166,16 +182,20 @@ export function observedLineHeadway(lineCode: string, day: ServiceDay, hour: num
  * integration and feeder lines that never route (and so were never observed)
  * move with the corridors beside them on a halte card instead of staying at
  * the schedule's optimistic number.
+ *
+ * `directional` says the schedule value is one of the per-direction ones, which
+ * the pooled scale was not measured against.
  */
 export function scaledHeadway(
   scheduleS: number,
   lineCode: string,
   day: ServiceDay,
   hour: number,
-  tj: boolean = isTjLine(lineCode)
+  tj: boolean = isTjLine(lineCode),
+  directional = false
 ): number | undefined {
   const column = columnId(day, hour)
-  const scale = OBSERVED_GTFS_SCALE[column]
+  const scale = (directional ? OBSERVED_GTFS_SCALE_DIR[column] : undefined) ?? OBSERVED_GTFS_SCALE[column]
   if (scale === undefined || !tj) return undefined
   const cap = OBSERVED_GTFS_CAP_S[column]
   const scaled = cap === undefined ? scheduleS * scale : Math.min(scheduleS * scale, cap)
@@ -217,6 +237,24 @@ export function plannerHeadways(day: ServiceDay, hour: number, enabled: boolean)
       const observed = observedStopHeadway(lineOf(lineStop), lineStop.slice(lineStop.indexOf('@') + 1), day, hour)
       if (observed !== undefined) out.set(lineStop, observed.seconds)
     }
+    // A stop of an observed corridor the factor table does not cover takes its
+    // line's observed level, not the scaled schedule: the fit drops origin
+    // terminals and barely-seen haltes as detection artefacts, and the scaled
+    // schedule is the most pessimistic thing it could then give them.
+    //
+    // Two limits, both of which the first version of this lacked. It applies
+    // only to a stop with NO factor (a stop that has one but no profile at this
+    // hour keeps its scaled value, the same rule the endpoint uses), and never
+    // to a stop the schedule itself calls rarer than its line: a branch served
+    // by one variant is not made to look like the trunk (12@TJ-H00261S: 3600s in
+    // the schedule, 982s at line level).
+    for (const [key, scheduleS] of base) {
+      if (!key.includes('@') || idx.stops.has(key)) continue
+      const line = lineOf(key)
+      if (!isTjLine(line)) continue
+      const level = observedLineHeadway(line, day, hour)
+      if (level !== undefined && level.seconds >= scheduleS) out.set(key, level.seconds)
+    }
     return out
   })
 }
@@ -257,11 +295,28 @@ export function resolveHeadway(input: ResolveInput): { headwayS: number | null, 
   if (kind === 'dir' && dir) observed = observedDirHeadway(lineCode, stationId, dir, day, hour)
   else if (kind === 'stop') observed = observedStopHeadway(lineCode, stationId, day, hour)
   else observed = observedLineHeadway(lineCode, day, hour)
+
+  // No stop factor for this stop on a corridor that was observed: the line's own
+  // level at this hour (factor 1), before falling to the scaled schedule. Only
+  // where that is NOT shorter than the schedule says this stop is: the fit drops
+  // stops for being rare as well as for being artefacts, and a branch halte the
+  // schedule puts at an hour must not be priced as the trunk.
+  if (observed === undefined && isTjLine(lineCode) && kind !== 'line') {
+    const hasFactor = kind === 'dir' && dir
+      ? OBSERVED_STOP_FACTOR[`${lineCode}@${stationId}@${dir}`] !== undefined
+      : getIndex().stops.has(`${lineCode}@${stationId}`)
+    if (!hasFactor) {
+      const level = kind === 'dir' && dir
+        ? observedLineDirHeadway(lineCode, dir, day, hour)
+        : observedLineHeadway(lineCode, day, hour)
+      if (level !== undefined && level.seconds >= nominalS) observed = level
+    }
+  }
   if (observed !== undefined) {
     return { headwayS: observed.seconds, basis: observed.interpolated ? 'INTERPOLATED' : 'OBSERVED' }
   }
 
-  const scaled = scaledHeadway(nominalS, lineCode, day, hour, tj)
+  const scaled = scaledHeadway(nominalS, lineCode, day, hour, tj, kind === 'dir')
   if (scaled !== undefined) return { headwayS: scaled, basis: 'SCALED' }
   return { headwayS: nominalS, basis: 'SCHEDULE' }
 }

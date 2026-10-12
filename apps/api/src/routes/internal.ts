@@ -10,7 +10,7 @@ import { wibIsoString } from 'utils/fare'
 import { assembleJourney, planJourney } from 'utils/fare-journey'
 import { handleJourneyRequest, journeyCacheKey } from 'utils/journey-endpoint'
 import { retimeTrips } from 'utils/journey-times'
-import { observedHeadwaysEnabled } from 'utils/observedFlag'
+import { observedHeadwaysEnabledFor } from 'utils/observedFlag'
 import { summarizeFares } from 'utils/fare-summary'
 import { ridesAirportPairsOnly, withAirportExclusion } from 'utils/airport'
 import { endpointsFor, getPlaceIndex } from 'utils/places'
@@ -181,7 +181,7 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
        * sends requests to a separate namespace and flipping it back finds the
        * warm entries again instead of 20 hours of the wrong regime.
        */
-      observedHeadwaysEnabled() ? null : 'obs-off'
+      observedHeadwaysEnabledFor(c.req.raw) ? null : 'obs-off'
     ].filter(Boolean)
     return parts.length > 0 ? parts.join('+') : undefined
   },
@@ -191,6 +191,8 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
    * routing is ever going to dominate a request, it is here rather than there.
    */
   build: async ({ router, timing, context, fromId, toId, hydrate }) => {
+    // The same captured value the cache scope above keyed this body on.
+    const observed = observedHeadwaysEnabledFor(c.req.raw)
     /*
      * Each endpoint as the whole place it belongs to (utils/places.ts): a rider
      * asking for LRT Rasuna Said has arrived at the TJ halte stacked on it, and
@@ -205,7 +207,7 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
        * running at all and how often they come. Omitting these is what the
        * search did before service hours existed.
        */
-      ...timeOptions(context),
+      ...timeOptions(context, observed),
       /*
        * Lines the rider will not board. Boarding-only, so a walk between two
        * haltes is still offered and a ride already under way is never cut.
@@ -238,7 +240,7 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
      * so the probe sits behind both conditions rather than on the hot path.
      */
     if (routed.length === 0) {
-      const reopening = timing.measureSync('reopen', () => nextServiceAt(router, fromId, toId, context, excluded, endpoints))
+      const reopening = timing.measureSync('reopen', () => nextServiceAt(router, fromId, toId, context, excluded, endpoints, observed))
       if (!reopening) return null
       return {
         outcome: 'CLOSED' as const,
