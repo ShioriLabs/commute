@@ -50,7 +50,7 @@ private val PinIdle = Color(0xFFCBD5E1)
 /** The hairline between rows, `bg-stone-200/70`. */
 private val Hairline = Color(0xB3E7E5E4)
 
-/** Where the text, and so the hairline, starts. */
+/** Where the text starts. */
 private val RowInset = 32.dp
 
 /**
@@ -59,7 +59,7 @@ private val RowInset = 32.dp
  * station an OTW button that plans a trip there, as the station page's "OTW Ke Sini" does, and a
  * pin that saves it to the home screen.
  *
- * Rows are separated by a hairline that starts at the text edge and runs off the right, rather than
+ * Rows are separated by a hairline that runs the screen's full width, rather than
  * boxed in; [showDivider] is false on the last row.
  *
  * @param pinned whether the station is saved; ignored for hubs and lines, which can't be.
@@ -89,7 +89,7 @@ fun SearchResultItem(
             .drawBehind {
                 if (showDivider) {
                     val y = size.height - 0.5.dp.toPx()
-                    drawLine(Hairline, Offset(RowInset.toPx(), y), Offset(size.width, y), 1.dp.toPx())
+                    drawLine(Hairline, Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
                 }
             }
             .padding(start = RowInset, end = 16.dp),
