@@ -582,7 +582,11 @@ app.get(
     const enabled = observedHeadwaysEnabled()
     const resolve = (entries: CachedHeadwayRow[]): HeadwayRow[] => entries.map(({ row, kind, lineCode, dir }) => {
       const { headwayS, basis } = resolveHeadway({
-        nominalS: row.headwayS, kind, lineCode, stationId: stationID, dir, day, hour, enabled
+        nominalS: row.headwayS, kind, lineCode, stationId: stationID, dir, day, hour, enabled,
+        // `OPERATOR:CODE`. Lets integration and feeder lines that never route
+        // take the scale fallback, which the bare line code cannot tell apart
+        // from a rail line.
+        tj: row.line.startsWith('TJ:')
       })
       // Unchanged schedule number (rail, a line that does not run, the kill
       // switch off): the row is exactly what it was before observed values

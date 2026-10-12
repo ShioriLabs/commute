@@ -33,8 +33,10 @@
  *      interpolated between its nearest measured hours (at most 8h apart; held
  *      for at most 2h past the first or last). Same key format as the profile.
  *   2. OBSERVED_GTFS_SCALE: the schedule value (headways.ts) times the
- *      column's scale, for what is left. Columns the backtest vouched for
- *      carry a measured scale; the rest are interpolated (see scaleMeasured).
+ *      column's scale, for what is left, never above OBSERVED_GTFS_CAP_S for
+ *      that column (observed headways saturate; see scale.ts) and never below
+ *      the schedule value itself. Columns the backtest vouched for carry a
+ *      measured scale; the rest are interpolated (see scaleMeasured).
  *
  * Profile values are clamped to the same [120, 3600] seconds as headways.ts.
  * Read by utils/observedHeadways.ts (planner and station headway endpoint).
@@ -3534,6 +3536,58 @@ export const OBSERVED_GTFS_SCALE: Record<string, number> = {
   'WE:21': 3.983,
   'WE:22': 5.65,
   'WE:23': 9.517
+}
+
+/** Ceiling for the scaled schedule value per `${dayType}:${hour}`: the 90th percentile of the measured line-level headways. */
+export const OBSERVED_GTFS_CAP_S: Record<string, number> = {
+  'WD:0': 2758,
+  'WD:1': 2468,
+  'WD:2': 2179,
+  'WD:3': 1890,
+  'WD:4': 1601,
+  'WD:5': 1312,
+  'WD:6': 690,
+  'WD:7': 686,
+  'WD:8': 681,
+  'WD:9': 769,
+  'WD:10': 858,
+  'WD:11': 925,
+  'WD:12': 991,
+  'WD:13': 979,
+  'WD:14': 984,
+  'WD:15': 806,
+  'WD:16': 726,
+  'WD:17': 758,
+  'WD:18': 791,
+  'WD:19': 824,
+  'WD:20': 807,
+  'WD:21': 990,
+  'WD:22': 1639,
+  'WD:23': 5511,
+  'WE:0': 1733,
+  'WE:1': 2674,
+  'WE:2': 2851,
+  'WE:3': 3027,
+  'WE:4': 3204,
+  'WE:5': 3381,
+  'WE:6': 1679,
+  'WE:7': 1362,
+  'WE:8': 1166,
+  'WE:9': 970,
+  'WE:10': 775,
+  'WE:11': 773,
+  'WE:12': 761,
+  'WE:13': 780,
+  'WE:14': 843,
+  'WE:15': 892,
+  'WE:16': 941,
+  'WE:17': 991,
+  'WE:18': 1040,
+  'WE:19': 1089,
+  'WE:20': 1138,
+  'WE:21': 1188,
+  'WE:22': 2005,
+  'WE:23': 5385
 }
 
 /** Diagnostic: CV of consecutive headways, pooled over a line-direction's stops. Same keys as the profile (where a CV exists). */

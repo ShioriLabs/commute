@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { DAY_HEADWAYS_S, DIRECTIONAL_HEADWAYS_S, HEADWAYS_S, LINE_TERMINI, STOP_HEADWAYS_S } from 'db/data/headways'
-import { OBSERVED_GTFS_SCALE, OBSERVED_PROFILE_INTERP_S, OBSERVED_PROFILE_S, OBSERVED_STOP_FACTOR } from 'db/data/headways.observed'
+import { OBSERVED_GTFS_CAP_S, OBSERVED_GTFS_SCALE, OBSERVED_PROFILE_INTERP_S, OBSERVED_PROFILE_S, OBSERVED_STOP_FACTOR } from 'db/data/headways.observed'
 import { SERVICE_HOURS } from 'db/data/service-hours'
 import { clampHeadway } from 'utils/headwayBounds'
 
@@ -381,6 +381,13 @@ describe('/stations/:operator/:code/headway', () => {
 describe('/stations/:operator/:code/headway with observed values', () => {
   const column = 'WD:12'
 
+  /** The scaled fallback: scale, capped, never below the schedule value, clamped. */
+  const scaledExpected = (scheduleS: number, col: string) => {
+    const scaled = scheduleS * OBSERVED_GTFS_SCALE[col]!
+    const cap = OBSERVED_GTFS_CAP_S[col]
+    return clampHeadway(Math.max(scheduleS, cap === undefined ? scaled : Math.min(scaled, cap)))
+  }
+
   /** A line-stop that is not split by direction, has both directions modelled, and a profile at WD:12. */
   const modelled = (() => {
     const byStop = new Map<string, string[]>()
@@ -440,7 +447,7 @@ describe('/stations/:operator/:code/headway with observed values', () => {
     expect(row).toMatchObject({
       basis: 'SCALED',
       scheduledS: STOP_HEADWAYS_S[modelled.lineStop],
-      headwayS: clampHeadway(STOP_HEADWAYS_S[modelled.lineStop]! * OBSERVED_GTFS_SCALE[`WD:${hour}`]!)
+      headwayS: scaledExpected(STOP_HEADWAYS_S[modelled.lineStop]!, `WD:${hour}`)
     })
   })
 
@@ -459,6 +466,25 @@ describe('/stations/:operator/:code/headway with observed values', () => {
     expect(new Set(puts.map(p => p.key)).size).toBe(1)
     const stored = JSON.parse(puts[0]!.value) as { row: { headwayS: number } }[]
     expect(stored[0]!.row.headwayS).toBe(STOP_HEADWAYS_S[modelled.lineStop])
+  })
+
+  it('scales an integration line that never routes, so it moves with the corridors beside it', async () => {
+    // In the schedule's per-line table only: the per-stop table is limited to the
+    // routed topology, so this row is the line-level one.
+    expect(LINE_TERMINI['6C']).toBeUndefined()
+    expect(STOP_HEADWAYS_S['6C@TJ-H00014P']).toBeUndefined()
+    const res = await request(
+      '/stations/TJ/H00014P/headway?day=WD&hour=12',
+      envObserved(station({ lines: '6C' }))
+    )
+    const [row] = (await res.json() as HeadwayBody).data
+    expect(row).toMatchObject({
+      line: 'TJ:6C',
+      source: 'LINE',
+      basis: 'SCALED',
+      scheduledS: HEADWAYS_S['6C'],
+      headwayS: scaledExpected(HEADWAYS_S['6C']!, 'WD:12')
+    })
   })
 
   it('leaves rail rows exactly as they were', async () => {
