@@ -65,19 +65,25 @@ fun TripState.progress(plan: TripPlan): TripProgress {
 }
 
 /**
+ * How late the ride runs, for the stops still ahead: never negative. A train running early is no
+ * reason to promise the next station sooner, as it may well wait out its time there.
+ */
+private val TripState.lateS: Long get() = maxOf(clockOffsetS, 0L)
+
+/**
  * When the current ride should reach its alighting stop, lateness included; `null` when it has no
  * timetable or the trip has arrived.
  */
 fun TripState.expectedAlightingAt(plan: TripPlan): java.time.Instant? {
     if (phase == TripPhase.ARRIVED) return null
     val ride = plan.ride(legIndex).takeIf { it.isTimed } ?: return null
-    return ride.arrivalAt?.plusSeconds(clockOffsetS)
+    return ride.arrivalAt?.plusSeconds(lateS)
 }
 
 /** When the current ride should leave its boarding stop, lateness included; `null` untimed. */
 fun TripState.expectedDepartureAt(plan: TripPlan): java.time.Instant? {
     val ride = plan.ride(legIndex).takeIf { it.isTimed } ?: return null
-    return ride.departureAt?.plusSeconds(clockOffsetS)
+    return ride.departureAt?.plusSeconds(lateS)
 }
 
 /**
@@ -98,5 +104,5 @@ fun TripPlan.scheduledAtStop(legIndex: Int, stopIndex: Int): java.time.Instant? 
 fun TripState.expectedAt(plan: TripPlan, position: Double): java.time.Instant? {
     if (phase == TripPhase.ARRIVED) return null
     val ride = plan.ride(legIndex).takeIf { it.isTimed } ?: return null
-    return RideClock(ride).scheduledAt(position)?.plusSeconds(clockOffsetS)
+    return RideClock(ride).scheduledAt(position)?.plusSeconds(lateS)
 }
