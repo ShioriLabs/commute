@@ -1,5 +1,8 @@
 package id.shiorilabs.commute.feature.station.presentation
 
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -8,9 +11,11 @@ import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.Placeholder
@@ -19,8 +24,14 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import id.shiorilabs.commute.core.ui.morph.LocalNavAnimatedVisibilityScope
+import id.shiorilabs.commute.core.ui.morph.LocalSharedTransitionScope
+import id.shiorilabs.commute.core.ui.motion.IosSpringEasing
 
 private const val TRAILING_ICON_ID = "trailing"
+
+/** How long the caret takes to fade in once the page has settled. */
+private const val CARET_FADE_MILLIS = 250
 
 /** Joins the icon to the last word, so it never wraps onto a line of its own. */
 private const val WORD_JOINER = "⁠"
@@ -50,6 +61,7 @@ fun StationTitleText(
     scaleWithFlight: Boolean = false,
     trailingIcon: ImageVector? = null,
 ) {
+    val caretAlpha = if (trailingIcon != null) settledAlpha() else null
     val text = remember(name, trailingIcon) {
         if (trailingIcon == null) {
             AnnotatedString(name)
@@ -73,7 +85,7 @@ fun StationTitleText(
                     Icon(
                         imageVector = trailingIcon,
                         contentDescription = null,
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(16.dp).graphicsLayer { alpha = caretAlpha?.value ?: 1f },
                         tint = style.color,
                     )
                 }
@@ -86,4 +98,26 @@ fun StationTitleText(
         style = style,
         inlineContent = inline,
     )
+}
+
+/**
+ * 0 while a page transition is running, then fading to 1 on the iOS curve once it has settled. The
+ * caret's room is always reserved, so the name never reflows; only the caret waits. Composed with no
+ * transition running (a cold start, a tab switch), it is simply there.
+ */
+@Composable
+private fun settledAlpha(): Animatable<Float, *> {
+    val sharedScope = LocalSharedTransitionScope.current
+    val transition = LocalNavAnimatedVisibilityScope.current?.transition
+    val settled = (sharedScope == null || !sharedScope.isTransitionActive) &&
+        (transition == null || (transition.currentState == EnterExitState.Visible && transition.targetState == EnterExitState.Visible))
+    val alpha = remember { Animatable(if (settled) 1f else 0f) }
+    LaunchedEffect(settled) {
+        if (settled) {
+            alpha.animateTo(1f, tween(CARET_FADE_MILLIS, easing = IosSpringEasing))
+        } else {
+            alpha.snapTo(0f)
+        }
+    }
+    return alpha
 }
