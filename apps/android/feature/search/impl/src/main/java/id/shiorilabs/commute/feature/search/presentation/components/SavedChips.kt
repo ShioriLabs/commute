@@ -64,7 +64,8 @@ fun SavedChips(
                     .clip(CircleShape)
                     .background(lineColor?.tint(0.2f) ?: MaterialTheme.colorScheme.primaryContainer)
                     .clickable { onClick(station) }
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                    // 16dp so the first pin lands on the 32dp line inside the header's gutter.
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

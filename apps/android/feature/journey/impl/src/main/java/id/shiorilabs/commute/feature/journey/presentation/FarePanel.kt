@@ -82,6 +82,8 @@ internal fun FarePanel(
     now: Instant,
     actions: FarePanelActions,
     modifier: Modifier = Modifier,
+    /** Whether an empty pair shows its "pick stations" hint; the host may fill the spot itself. */
+    showEmptyHint: Boolean = true,
     footer: @Composable () -> Unit = {},
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -96,7 +98,7 @@ internal fun FarePanel(
         CriteriaBar(criteria = state.criteria, now = now, onChange = actions.onCriteriaChange)
 
         when (val trip = state.trip) {
-            TripState.Idle -> if (state.origin == null || state.destination == null) {
+            TripState.Idle -> if (showEmptyHint && (state.origin == null || state.destination == null)) {
                 EmptyPair()
             }
 

@@ -237,7 +237,7 @@ private fun SearchContent(
         )
         if (mode == SearchMode.FARE) {
             val insets = WindowInsets.navigationBars.asPaddingValues()
-            otwContent(PaddingValues(start = 32.dp, end = 32.dp, bottom = insets.calculateBottomPadding() + 32.dp))
+            otwContent(PaddingValues(start = 16.dp, end = 16.dp, bottom = insets.calculateBottomPadding() + 32.dp))
             return@Column
         }
         // Each query's results start at the top. The list otherwise holds on to its first visible
