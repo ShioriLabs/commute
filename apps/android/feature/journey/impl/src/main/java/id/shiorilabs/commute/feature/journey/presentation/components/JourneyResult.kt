@@ -37,7 +37,8 @@ internal fun JourneyResult(
             Box(modifier = Modifier.height(32.dp), contentAlignment = Alignment.CenterStart) {
                 Text(
                     text = stringResource(R.string.journey_options, journeys.size),
-                    modifier = Modifier.semantics { heading() },
+                    // The cards sit on the 16dp gutter; their text, and so this, on the 32dp line.
+                    modifier = Modifier.padding(horizontal = 16.dp).semantics { heading() },
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                     color = Slate500,
