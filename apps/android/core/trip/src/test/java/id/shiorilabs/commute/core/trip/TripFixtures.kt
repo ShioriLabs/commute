@@ -124,6 +124,15 @@ internal val lrtThenKrl = TripPlan(
     ),
 )
 
+/** The Commuter Line from Manggarai to Sudirman, a walk to Dukuh Atas, then the LRT to Setiabudi. */
+internal val krlThenLrt = TripPlan(
+    listOf(
+        ride(Places.MANGGARAI, Places.SUDIRMAN, line = "KCI:C", departs = 0, arrives = 4),
+        TripLeg.Transfer(Places.SUDIRMAN, Places.LRT_DUKUH_ATAS, distanceM = 310),
+        ride(Places.LRT_DUKUH_ATAS, Places.LRT_SETIABUDI, line = "LRTJBDB:CB", departs = 12, arrives = 14),
+    ),
+)
+
 /** Runs [events] from a start at [startAt], collecting every effect. */
 internal class Run(val plan: TripPlan, startAt: Instant = at(-2), hasLocation: Boolean = true) {
 

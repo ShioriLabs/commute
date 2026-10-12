@@ -543,6 +543,23 @@ class TripEngineTest {
     }
 
     @Test
+    fun `halfway between two stations a change sits by, the rider is still walking`() {
+        // 2026-10-12: off the Commuter Line at Sudirman's east end, then 210 m from Sudirman and
+        // 209 m from LRT Dukuh Atas, still on the KRL side. The LRT platform came three minutes later.
+        val run = Run(krlThenLrt)
+        run.tick(0.0)
+        run.fix(GeoPoint(-6.202675, 106.824654), 4.0, accuracyM = 4f, speedMps = 0f)
+        assertEquals(at(4.0), run.state.walkingSince)
+
+        run.fix(GeoPoint(-6.202822, 106.825547), 6.0, accuracyM = 18f)
+        assertEquals(at(4.0), run.state.walkingSince)
+
+        run.fix(GeoPoint(-6.204336, 106.825100), 9.0, accuracyM = 11f, speedMps = 0.7f)
+        assertNull(run.state.walkingSince)
+        assertEquals(TripPhase.WAITING_TO_BOARD, run.state.phase)
+    }
+
+    @Test
     fun `seen moving along the next ride after the walk, the rider is on it`() {
         val run = Run(withChange)
         run.tick(0.0)
