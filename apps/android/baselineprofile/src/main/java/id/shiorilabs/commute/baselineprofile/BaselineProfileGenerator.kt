@@ -144,7 +144,7 @@ class BaselineProfileGenerator {
         /** The heading over the route options (journey_options): "3 pilihan rute". */
         const val OTW_OPTIONS_SUFFIX = "pilihan rute"
 
-        /** A saved station's title on the feed (station_title): "Stasiun Manggarai". */
-        const val SAVED_TITLE_PREFIX = "Stasiun"
+        /** A saved station's title on the feed: its name, the station the run pinned from search. */
+        const val SAVED_TITLE_PREFIX = SEARCH_RESULT
     }
 }
