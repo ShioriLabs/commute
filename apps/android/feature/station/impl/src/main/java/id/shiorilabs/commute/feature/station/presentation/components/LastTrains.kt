@@ -30,6 +30,7 @@ import id.shiorilabs.commute.core.ui.theme.Gray500
 import id.shiorilabs.commute.core.ui.theme.Slate600
 import id.shiorilabs.commute.core.ui.theme.Slate800
 import id.shiorilabs.commute.core.ui.theme.Slate900
+import id.shiorilabs.commute.core.ui.theme.TABULAR
 import id.shiorilabs.commute.feature.station.R
 import id.shiorilabs.commute.feature.station.domain.LastTrainDestination
 import id.shiorilabs.commute.feature.station.domain.LastTrainLine
@@ -116,7 +117,7 @@ fun LastTrainCard(
                         Text(
                             text = time,
                             modifier = if (last) Modifier.semantics { contentDescription = lastDescription } else Modifier,
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = MaterialTheme.typography.bodyLarge.copy(fontFeatureSettings = TABULAR),
                             fontWeight = if (last) FontWeight.Bold else FontWeight.Medium,
                             color = if (last) Slate900 else Slate600,
                         )
