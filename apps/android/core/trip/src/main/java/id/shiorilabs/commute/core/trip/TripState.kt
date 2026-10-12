@@ -82,6 +82,12 @@ data class TripState(
      */
     val sightedPosition: Double? = null,
     /**
+     * Fixes in a row, while waiting to board, that have put the rider past the platform faster than
+     * anyone walks: one could be the fix leaping, so they board on the second, which has to carry on
+     * from the first.
+     */
+    val boardingFixes: Int = 0,
+    /**
      * When the rider was seen at each stop, as epoch milliseconds keyed `leg:stop`: by a fix there
      * while riding (the last one while the train waits, so about when it left; the first at the
      * stop to get off at, when it got in), or by a tap of "Udah naik" or "Udah turun". A stop
