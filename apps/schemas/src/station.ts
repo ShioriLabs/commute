@@ -172,6 +172,60 @@ export const HeadwayRowSchema = v.pipe(
 export type HeadwayRow = v.InferOutput<typeof HeadwayRowSchema>
 
 /*
+ * Named with v.title + v.metadata({ ref }) like HeadwayRow, so the OpenAPI
+ * snapshot carries them as components and the Android app's fabrikt build
+ * generates `StationDensity` / `DensityHour` / `DensityRange` classes instead
+ * of anonymous inline ones. Levels are plain integers rather than an enum so
+ * they arrive in Kotlin as Int and compare with < and >.
+ */
+const densityLevel = (description: string) => v.pipe(
+  v.number(),
+  v.integer(),
+  v.minValue(0),
+  v.maxValue(3),
+  v.description(description)
+)
+
+export const DensityRangeSchema = v.pipe(
+  v.object({
+    min: densityLevel('Ujung bawah perkiraan: 0 lengang, 1 ramai, 2 padat, 3 sangat padat.'),
+    max: densityLevel('Ujung atas perkiraan, skala yang sama. Selalu `>= min`.')
+  }),
+  v.title('DensityRange'),
+  v.description('Rentang perkiraan kepadatan. Modelnya nggak yakin persis, jadi kasih rentang: `{ min: 2, max: 3 }` artinya biasanya padat sampai sangat padat. Kalau `min` sama dengan `max`, modelnya cukup yakin.'),
+  v.metadata({ ref: 'DensityRange' })
+)
+
+export const DensityHourSchema = v.pipe(
+  v.object({
+    hour: v.pipe(v.number(), v.description('Jam, 0-23 waktu Jakarta.')),
+    level: v.pipe(
+      v.nullable(DensityRangeSchema),
+      v.description('Perkiraan kepadatan biasanya di jam ini. `null` kalau lagi nggak ada layanan atau keretanya jarang banget, jadi nggak bisa diperkirakan. `null` BUKAN berarti lengang.')
+    )
+  }),
+  v.title('DensityHour'),
+  v.description('Perkiraan kepadatan satu jam.'),
+  v.metadata({ ref: 'DensityHour' })
+)
+
+export const StationDensitySchema = v.pipe(
+  v.object({
+    day: v.pipe(v.picklist(['WD', 'SAT', 'SUN']), v.description('Hari yang dipakai: `WD` (Senin-Jumat), `SAT`, atau `SUN`.')),
+    hours: v.pipe(
+      v.array(DensityHourSchema),
+      v.description('24 jam, urut dari 0. Ini perkiraan dari jadwal dan data penumpang, BUKAN kondisi live.')
+    )
+  }),
+  v.title('StationDensity'),
+  v.description('Perkiraan seberapa padat stasiun ini biasanya, per jam.'),
+  v.metadata({ ref: 'StationDensity' })
+)
+
+export type DensityRange = v.InferOutput<typeof DensityRangeSchema>
+export type StationDensity = v.InferOutput<typeof StationDensitySchema>
+
+/*
  * A single scheduled departure. The row's own id, its station id and the
  * timestamps are gone: a schedule is always read in the context of the station
  * and line that own it, so repeating them was noise.

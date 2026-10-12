@@ -34,6 +34,7 @@ const PUBLIC_ROUTES = [
   '/stations/{operator}',
   '/stations/{operator}/{stationCode}',
   '/stations/{operator}/{stationCode}/headway',
+  '/stations/{operator}/{stationCode}/density',
   '/stations/{operator}/{stationCode}/timetable',
   '/stations/{operator}/{stationCode}/timetable/grouped',
   '/stations/{operator}/{stationCode}/timetable/{line}',
