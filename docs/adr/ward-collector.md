@@ -54,9 +54,11 @@ Build `apps/ward`, a small Node service on a 1 vCPU / 1GB VPS:
 - R2 costs nothing for ~10 months (~1GB/month against the 10GB free tier), then
   ~$0.015/GB-month. Egress to the laptop is free.
 - Collection quality depends on the relay. Ward can't fix upstream staleness;
-  the analysis discards stale stretches (fewer than `HEALTHY_MIN` buses updating
-  per snapshot) and uses a rate estimator (arrivals ÷ healthy time) that isn't
-  biased by short healthy windows.
+  the analysis discards stale stretches (fewer than half of the in-scope buses
+  that are running updating per snapshot) and uses a rate estimator (arrivals ÷
+  healthy time) that isn't biased by short healthy windows. The first version
+  gated on a fixed count of fresh buses (400), which undercounted healthy time
+  2-4× at night and on weekends; the share gate replaced it on 2026-10-12.
 - Nothing is served to users from ward. What eventually ships is aggregates
   (headways baked into `headways.ts`), not live positions.
 - Feeding observed headways into `generateHeadways.ts`, including per-hour
@@ -77,3 +79,32 @@ Build `apps/ward`, a small Node service on a 1 vCPU / 1GB VPS:
 - **Read the operator's feed directly.** It's fresher and richer (it carries
   direction), but it means depending on TJ's private services from this
   project. Rejected in favour of staying one step removed.
+
+## Stage 1: per-hour observed headways (2026-10-12)
+
+`pnpm --filter api fit:headways --dir <archives>` aggregates each WIB day once
+(cached, n / Σh / Σh² per line-stop-direction-hour plus healthy seconds per
+hour), fits smoothed estimators, backtests them, and writes
+`apps/api/src/db/data/headways.observed.ts`. Nothing at runtime reads that file
+yet; wiring it into `fares.ts` (`headwaysFor(day, departureS)`) and the station
+headway endpoint is a separate, reviewed change.
+
+- **Quantity:** the rate headway (healthy time ÷ arrivals), what "every N
+  minutes" means. Bunching is kept as a pooled CV per line-direction-hour, not
+  folded in, so the wait-versus-headway decision can be made with data.
+- **Model:** profile(line-direction, day type, hour) × factor(stop), fitted by
+  iterative proportional fitting. Day types are weekday and weekend (Sat+Sun
+  pooled until there are enough weekends to split). Chosen over per-key-hour
+  shrinkage because it is ~14× smaller; per-key-hour pooling or shrinkage is
+  ~2 points more accurate (median |log error| 0.175 vs 0.191, leave-one-day-out)
+  and could be emitted instead at ~33k cells if that ever matters.
+- **Backtest gate:** a (day type, hour) column ships only if the held-out
+  backtest has at least 100 buckets for it and beats GTFS scaled by a per-hour
+  factor there. Weekday 07, 09, 11, 17 and 18 and the overnight hours therefore
+  fall back to GTFS.
+- **Dropped stops:** a stop seen under 0.3× as often as its line-direction's
+  average is treated as a detection artefact (an origin terminal, a halte the
+  sampling keeps skipping) and gets no factor.
+- **Not verified:** day-to-day consistency is measured; absolute level is not.
+  Arrivals the method misses would make every value read long. Public holidays
+  are not recognised.
