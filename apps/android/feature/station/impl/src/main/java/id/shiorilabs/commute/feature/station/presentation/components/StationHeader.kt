@@ -105,8 +105,6 @@ fun StationHeader(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onBackground,
                     ),
-                    showWords = false,
-                    animateWords = !openedFromSearch,
                     scaleWithFlight = openedFromSearch,
                     modifier = Modifier.semantics { heading() },
                 )
