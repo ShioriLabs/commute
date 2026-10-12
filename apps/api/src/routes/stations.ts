@@ -27,7 +27,7 @@ import { CompactGroupedTimetableSchema, GroupedTimetableSchema, HeadwayRowSchema
 import type { DensityRange, HeadwayRow, StationDensity } from '@commute/schemas'
 import { DAY_HEADWAYS_S, DIRECTIONAL_HEADWAYS_S, HEADWAYS_S, LINE_DAY_MASK, LINE_TERMINI, STOP_HEADWAYS_S } from 'db/data/headways'
 import { type Direction, resolveHeadway, type RowKind } from 'utils/observedHeadways'
-import { observedHeadwaysEnabled } from 'utils/observedFlag'
+import { observedHeadwaysEnabledFor } from 'utils/observedFlag'
 import { serviceDay } from 'utils/fare'
 import { SERVICE_HOURS } from 'db/data/service-hours'
 import { memoize } from 'utils/memo'
@@ -579,7 +579,7 @@ app.get(
      * below: the entry holds the schedule numbers, so one entry serves every
      * hour and the kill switch takes effect without a purge.
      */
-    const enabled = observedHeadwaysEnabled()
+    const enabled = observedHeadwaysEnabledFor(c.req.raw)
     const resolve = (entries: CachedHeadwayRow[]): HeadwayRow[] => entries.map(({ row, kind, lineCode, dir }) => {
       const { headwayS, basis } = resolveHeadway({
         nominalS: row.headwayS, kind, lineCode, stationId: stationID, dir, day, hour, enabled,

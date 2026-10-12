@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { column, type FactorisedModel } from './fit'
-import { CAP_QUANTILE, computeColumnScales, MIN_CAP_LINES, MIN_SCALE_RATIOS, plannerValue } from './scale'
+import { CAP_QUANTILE, columnsWithData, computeColumnScales, MIN_CAP_LINES, MIN_SCALE_RATIOS, plannerValue } from './scale'
 
 /*
  * A model with `lines` line-directions, each having `stops` stops with factor 1,
@@ -22,6 +22,8 @@ function modelOf(opts: { lines: number, stops: number, columns: number[], headwa
 const WD10 = column('WD', 10)
 const WD14 = column('WD', 14)
 const schedule = () => 100
+const noDirectional = () => undefined
+const BOTH = new Set([WD10, WD14])
 
 describe('plannerValue', () => {
   it('is the mean of the directions, clamped', () => {
@@ -37,48 +39,101 @@ describe('plannerValue', () => {
   })
 })
 
+describe('columnsWithData', () => {
+  it('lists the columns the model has any profile cell for, sorted', () => {
+    const model = modelOf({ lines: 2, stops: 1, columns: [WD14, WD10], headwayS: () => 300 })
+    expect(columnsWithData(model)).toEqual([WD10, WD14])
+  })
+})
+
 describe('computeColumnScales', () => {
   // 10 lines x 3 stops: 30 ratios, enough to measure.
   const model = modelOf({ lines: 10, stops: 3, columns: [WD10, WD14], headwayS: l => 200 + l * 50 })
 
-  it('measures the median observed / schedule ratio over stops', () => {
-    const scales = computeColumnScales(model, new Set([WD10]), schedule)
-    const wd10 = scales.find(s => s.id === 'WD:10')!
+  it('measures the median modelled / schedule ratio over stops', () => {
+    const wd10 = computeColumnScales(model, schedule, noDirectional, BOTH).find(s => s.id === 'WD:10')!
     expect(wd10.measured).toBe(true)
-    // Observed 200..650 against a schedule of 100: median of 2.0..6.5 (30 values, 3 per line).
+    // Modelled 200..650 against a schedule of 100: median of 2.0..6.5 (30 values, 3 per line).
     expect(wd10.scale).toBeCloseTo(4.5, 6)
+  })
+
+  it('measures EVERY column with data, not only the vouched ones', () => {
+    // Both columns are measured from the model; neither needed to be vouched.
+    const scales = computeColumnScales(model, schedule, noDirectional, BOTH)
+    expect(scales.find(s => s.id === 'WD:10')!.measured).toBe(true)
+    expect(scales.find(s => s.id === 'WD:14')!.measured).toBe(true)
   })
 
   it('does not measure a column with fewer than MIN_SCALE_RATIOS stops', () => {
     const few = modelOf({ lines: 1, stops: MIN_SCALE_RATIOS - 1, columns: [WD10], headwayS: () => 300 })
-    expect(computeColumnScales(few, new Set([WD10]), schedule)).toEqual([])
+    expect(computeColumnScales(few, schedule, noDirectional, new Set([WD10]))).toEqual([])
   })
 
-  it('interpolates unvouched hours between measured ones and holds the end value', () => {
-    const scales = computeColumnScales(model, new Set([WD10, WD14]), schedule)
+  it('interpolates only the hours with no data, between the nearest measured ones', () => {
+    const scales = computeColumnScales(model, schedule, noDirectional, BOTH)
     const at = (h: number) => scales.find(s => s.id === `WD:${h}`)!
-    expect(at(10).measured).toBe(true)
     expect(at(12).measured).toBe(false)
     expect(at(12).scale).toBeCloseTo((at(10).scale + at(14).scale) / 2, 6)
     expect(at(3).scale).toBe(at(10).scale)
     expect(at(20).scale).toBe(at(14).scale)
   })
 
+  it('measures a directional scale against the directional schedule values', () => {
+    // Directional schedule values 1.5x the pooled ones: the directional scale is correspondingly smaller.
+    const scales = computeColumnScales(model, schedule, () => 150, BOTH)
+    const wd10 = scales.find(s => s.id === 'WD:10')!
+    expect(wd10.scaleDir).toBeCloseTo(wd10.scale / 1.5, 6)
+  })
+
+  it('leaves the directional scale absent when the schedule has no directional values', () => {
+    expect(computeColumnScales(model, schedule, noDirectional, BOTH).find(s => s.id === 'WD:10')!.scaleDir).toBeUndefined()
+  })
+
   it('emits a cap at the 90th percentile of the line-level headways', () => {
-    const scales = computeColumnScales(model, new Set([WD10]), schedule)
+    const wd10 = computeColumnScales(model, schedule, noDirectional, BOTH).find(s => s.id === 'WD:10')!
     const levels = Array.from({ length: 10 }, (_, l) => 200 + l * 50)
-    expect(scales.find(s => s.id === 'WD:10')!.cap).toBeCloseTo(levels[Math.floor(CAP_QUANTILE * (levels.length - 1))]!, 6)
+    expect(wd10.cap).toBeCloseTo(levels[Math.floor(CAP_QUANTILE * (levels.length - 1))]!, 6)
+  })
+
+  it('clamps the cap into the shipped bounds', () => {
+    const slow = modelOf({ lines: 10, stops: 3, columns: [WD10], headwayS: () => 9000 })
+    expect(computeColumnScales(slow, schedule, noDirectional, new Set([WD10])).find(s => s.id === 'WD:10')!.cap).toBe(3600)
   })
 
   it('leaves the cap absent when too few lines were measured to trust a percentile', () => {
     const narrow = modelOf({ lines: MIN_CAP_LINES - 1, stops: 10, columns: [WD10], headwayS: l => 200 + l * 50 })
-    const wd10 = computeColumnScales(narrow, new Set([WD10]), schedule).find(s => s.id === 'WD:10')!
+    const wd10 = computeColumnScales(narrow, schedule, noDirectional, new Set([WD10])).find(s => s.id === 'WD:10')!
     expect(wd10.measured).toBe(true)
     expect(wd10.cap).toBeUndefined()
   })
 
+  it('takes caps only from the columns it is told ship a measured profile', () => {
+    // Both columns have data, so both SCALES are measured; only WD:10 may source a cap.
+    const scales = computeColumnScales(model, schedule, noDirectional, new Set([WD10]))
+    const wd10 = scales.find(s => s.id === 'WD:10')!
+    const wd14 = scales.find(s => s.id === 'WD:14')!
+    expect(wd14.measured).toBe(true)
+    expect(wd10.cap).toBeDefined()
+    // WD:14's own p90 would be the same here, so assert the SOURCE: it is held from WD:10.
+    expect(wd14.cap).toBe(wd10.cap)
+    expect(scales.find(s => s.id === 'WD:20')!.cap).toBe(wd10.cap)
+  })
+
+  it('measures a cap by interpolating between the capped columns, not the scaled ones', () => {
+    // WD:10 and WD:14 sourced caps; WD:12 sits between them and has no data.
+    const slowThenFast = modelOf({ lines: 10, stops: 3, columns: [WD10, WD14], headwayS: l => 200 + l * 50 })
+    // Make WD:14 slower so the two caps differ.
+    for (const [id, rate] of slowThenFast.profile) {
+      if (id.endsWith(`|${WD14}`)) slowThenFast.profile.set(id, rate / 2)
+    }
+    const scales = computeColumnScales(slowThenFast, schedule, noDirectional, BOTH)
+    const cap = (h: number) => scales.find(s => s.id === `WD:${h}`)!.cap!
+    expect(cap(14)).toBeGreaterThan(cap(10))
+    expect(cap(12)).toBeCloseTo((cap(10) + cap(14)) / 2, 6)
+  })
+
   it('interpolates the cap the same way as the scale', () => {
-    const scales = computeColumnScales(model, new Set([WD10, WD14]), schedule)
+    const scales = computeColumnScales(model, schedule, noDirectional, BOTH)
     const cap = (h: number) => scales.find(s => s.id === `WD:${h}`)!.cap!
     expect(cap(12)).toBeCloseTo((cap(10) + cap(14)) / 2, 6)
   })
@@ -87,10 +142,10 @@ describe('computeColumnScales', () => {
     const we = column('WE', 10)
     const weModel = modelOf({ lines: 10, stops: 3, columns: [we], headwayS: () => 400 })
     const seen: string[] = []
-    computeColumnScales(weModel, new Set([we]), (day) => {
+    computeColumnScales(weModel, (day) => {
       seen.push(day)
       return 100
-    })
+    }, noDirectional, new Set([we]))
     expect(new Set(seen)).toEqual(new Set(['SAT', 'SUN']))
   })
 })

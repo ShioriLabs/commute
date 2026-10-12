@@ -18,6 +18,12 @@ import { buildPool, column, fitPooled, MIN_DAY_HEALTHY_S, type ModelSpec, type P
  * model that abstains on hard cells doesn't look better for it; coverage is
  * reported separately.
  *
+ * What SHIPS is judged on a different intersection: the buckets the shipped
+ * model and its baseline both predicted (`pair`). Using the all-model
+ * intersection would score it only on stops the weakest predictor can also
+ * cover (those with >= 5 pooled arrivals) and then ship it to the thinly
+ * observed stops it was never scored on.
+ *
  * Caveat: the truth is itself estimated from one day, so errors include
  * sampling noise on the truth. And it measures consistency across days, not
  * bias: arrivals the method misses depress every day the same way.
@@ -79,6 +85,11 @@ export interface BacktestSummary {
   models: Record<string, ModelScore>
   /** Median error per column (see fit.column: day type x WIB hour) on the intersection, per model. */
   byColumn: Record<number, { n: number, median: Record<string, number> }>
+  /**
+   * Per column, the shipped model against its baseline over the buckets BOTH
+   * predicted. Present when a `focus` was given. This is what vouching reads.
+   */
+  pair?: Record<number, { n: number, model: number, baseline: number }>
 }
 
 const quantile = (xs: number[], q: number) => {
@@ -93,7 +104,9 @@ export function backtest(
   gtfs: GtfsLookup,
   mode: 'loo' | 'rolling',
   /** Only held-out days of this kind are scored; undefined scores all. */
-  dayType?: 'WD' | 'WE'
+  dayType?: 'WD' | 'WE',
+  /** The shipped model and its baseline, for the pairwise per-column stats. */
+  focus?: { model: string, baseline: string }
 ): BacktestSummary {
   const ordered = [...days].sort((a, b) => a.day.localeCompare(b.day))
   type Item = { column: number, errors: Map<string, number> }
@@ -150,7 +163,22 @@ export function backtest(
       byColumn[c]!.median[spec.name] = quantile(subset.map(item => item.errors.get(spec.name)!), 0.5)
     }
   }
-  return { mode, folds, truthBuckets, intersection: all.length, models, byColumn }
+
+  let pair: BacktestSummary['pair']
+  if (focus) {
+    pair = {}
+    const both = items.filter(item => item.errors.has(focus.model) && item.errors.has(focus.baseline))
+    const columns = new Set(both.map(item => item.column))
+    for (const c of columns) {
+      const subset = both.filter(item => item.column === c)
+      pair[c] = {
+        n: subset.length,
+        model: quantile(subset.map(item => item.errors.get(focus.model)!), 0.5),
+        baseline: quantile(subset.map(item => item.errors.get(focus.baseline)!), 0.5)
+      }
+    }
+  }
+  return { mode, folds, truthBuckets, intersection: all.length, models, byColumn, pair }
 }
 
 /** A column needs at least this many held-out buckets before the backtest can vouch for it. */
@@ -164,6 +192,14 @@ export const MIN_VALIDATION_BUCKETS = 100
  */
 export function vouchedColumns(summary: BacktestSummary, model: string, baseline: string): Set<number> {
   const out = new Set<number>()
+  // Prefer the pairwise stats: they score the model over every bucket it can
+  // predict, not only the ones every model in the comparison could.
+  if (summary.pair) {
+    for (const [c, row] of Object.entries(summary.pair)) {
+      if (row.n >= MIN_VALIDATION_BUCKETS && row.model < row.baseline) out.add(Number(c))
+    }
+    return out
+  }
   for (const [c, row] of Object.entries(summary.byColumn)) {
     if (row.n >= MIN_VALIDATION_BUCKETS && row.median[model]! < row.median[baseline]!) out.add(Number(c))
   }

@@ -21,18 +21,41 @@ export const OBSERVED_FLAG_CACHE_TTL = 60
 
 let enabled = true
 
+/*
+ * The value one request saw when it started.
+ *
+ * The module boolean above is shared by every request in the isolate, and a
+ * request reads it at several points separated by awaits: the journey cache key
+ * (scope), then the search (timeOptions), then the reopening probe. A concurrent
+ * request whose middleware flips the boolean in between would let one request
+ * key a body under one regime and compute it under the other, and the entry
+ * lives 20 hours. So the request's own value is captured once, keyed by the
+ * request object, and everything on that request reads the capture.
+ */
+const perRequest = new WeakMap<Request, boolean>()
+
+/** The module-wide last value. Use `observedHeadwaysEnabledFor` on a request path. */
 export function observedHeadwaysEnabled(): boolean {
   return enabled
 }
 
-export async function refreshObservedHeadwaysFlag(kv: KVNamespace | undefined): Promise<void> {
+/** The value this request started with, falling back to the module value (tests, scripts). */
+export function observedHeadwaysEnabledFor(request: Request): boolean {
+  return perRequest.get(request) ?? enabled
+}
+
+export async function refreshObservedHeadwaysFlag(kv: KVNamespace | undefined, request?: Request): Promise<void> {
   // No binding (local dev, tests): keep whatever was last set.
-  if (!kv) return
-  try {
-    enabled = (await kv.get(OBSERVED_HEADWAYS_FLAG_KEY, { cacheTtl: OBSERVED_FLAG_CACHE_TTL })) !== 'off'
-  } catch {
-    // A KV hiccup must not flip planner behaviour; keep the last value.
+  if (kv) {
+    try {
+      enabled = (await kv.get(OBSERVED_HEADWAYS_FLAG_KEY, { cacheTtl: OBSERVED_FLAG_CACHE_TTL })) !== 'off'
+    } catch {
+      // A KV hiccup must not flip planner behaviour; keep the last value.
+    }
   }
+  // Captured AFTER the read, from the value this request just obtained, so every
+  // later read on the request agrees with the one it keyed its cache entry on.
+  if (request) perRequest.set(request, enabled)
 }
 
 /** Test seam: set the held value directly. */

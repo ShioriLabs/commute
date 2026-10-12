@@ -111,8 +111,8 @@ function serviceHoursMap(day: ServiceDay = 'ALL'): Map<string, ServiceWindow> {
  * carries a 20-minute departure slot, so a cached answer can never straddle an
  * hour boundary.
  */
-function headwaysFor(day: ServiceDay, hour: number): Map<string, number> {
-  return plannerHeadways(day, hour, observedHeadwaysEnabled())
+function headwaysFor(day: ServiceDay, hour: number, enabled: boolean): Map<string, number> {
+  return plannerHeadways(day, hour, enabled)
 }
 
 const hourOf = (seconds: number) => Math.floor(seconds / 3600) % 24
@@ -169,7 +169,12 @@ export function nextServiceAt(
    * The same place-equivalent endpoints the search used (utils/places.ts), for
    * the same reason as `excludeLines`.
    */
-  endpoints?: { originIds: ReadonlySet<string>, targetIds: ReadonlySet<string> }
+  endpoints?: { originIds: ReadonlySet<string>, targetIds: ReadonlySet<string> },
+  /*
+   * The observed-headway switch the failed search ran under. A request passes
+   * its own captured value; the default is the isolate's last one.
+   */
+  observed: boolean = observedHeadwaysEnabled()
 ): { departureS: number, at: Date } | null {
   const day = serviceDay(context.departureAt)
   const from = secondsSinceLocalMidnight(context.departureAt)
@@ -179,7 +184,7 @@ export function nextServiceAt(
     const found = router.findRoutes(fromId, toId, {
       departureS,
       serviceHours: serviceHoursMap(day),
-      headwaysS: headwaysFor(day, hourOf(departureS)),
+      headwaysS: headwaysFor(day, hourOf(departureS), observed),
       excludeLines,
       ...endpoints
     })
@@ -210,7 +215,7 @@ export function linesOf(operator: Operator): ReadonlySet<string> {
 }
 
 /** Planner options that depend on when the rider is travelling. */
-export function timeOptions(context: FareContext): {
+export function timeOptions(context: FareContext, observed: boolean = observedHeadwaysEnabled()): {
   departureS: number
   serviceHours: Map<string, ServiceWindow>
   headwaysS: Map<string, number>
@@ -220,7 +225,7 @@ export function timeOptions(context: FareContext): {
   return {
     departureS,
     serviceHours: serviceHoursMap(day),
-    headwaysS: headwaysFor(day, hourOf(departureS))
+    headwaysS: headwaysFor(day, hourOf(departureS), observed)
   }
 }
 

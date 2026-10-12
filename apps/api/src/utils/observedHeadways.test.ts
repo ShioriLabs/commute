@@ -1,18 +1,32 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { HEADWAYS_S, LINE_TERMINI } from '../db/data/headways'
-import { OBSERVED_GTFS_CAP_S, OBSERVED_GTFS_SCALE, OBSERVED_PROFILE_INTERP_S, OBSERVED_PROFILE_S, OBSERVED_STOP_FACTOR } from '../db/data/headways.observed'
+import { HEADWAYS_S, LINE_TERMINI, STOP_HEADWAYS_S } from '../db/data/headways'
+import {
+  OBSERVED_GTFS_CAP_S,
+  OBSERVED_GTFS_SCALE,
+  OBSERVED_GTFS_SCALE_DIR,
+  OBSERVED_PROFILE_INTERP_S,
+  OBSERVED_PROFILE_S,
+  OBSERVED_STOP_FACTOR
+} from '../db/data/headways.observed'
 import { clampHeadway } from './headwayBounds'
 import { baseHeadways } from './headways'
 import {
   dayTypeOf,
   observedDirHeadway,
+  observedLineDirHeadway,
   observedLineHeadway,
   observedStopHeadway,
   plannerHeadways,
   resolveHeadway,
   scaledHeadway
 } from './observedHeadways'
-import { OBSERVED_HEADWAYS_FLAG_KEY, observedHeadwaysEnabled, refreshObservedHeadwaysFlag, setObservedHeadwaysEnabled } from './observedFlag'
+import {
+  OBSERVED_HEADWAYS_FLAG_KEY,
+  observedHeadwaysEnabled,
+  observedHeadwaysEnabledFor,
+  refreshObservedHeadwaysFlag,
+  setObservedHeadwaysEnabled
+} from './observedFlag'
 
 /*
  * Fixtures come from the generated overlay, so a refit does not break these:
@@ -49,6 +63,29 @@ const twoWayStop = (() => {
   throw new Error('no two-way stop')
 })()
 const stopId = twoWayStop.slice(twoWayStop.indexOf('@') + 1)
+
+/**
+ * Stops of a corridor the schedule knows (so the planner map has them) that the
+ * fit gave no factor in either direction: an origin terminal, or a halte it
+ * barely sees. Split by whether the SCHEDULE calls the stop as frequent as its
+ * line (an artefact: takes the line's level) or rarer (a branch halte: must not).
+ */
+const factorlessStops = (() => {
+  const common: { key: string, line: string, stationId: string, scheduleS: number }[] = []
+  const rare: typeof common = []
+  for (const [key, scheduleS] of Object.entries(STOP_HEADWAYS_S)) {
+    const line = key.slice(0, key.indexOf('@'))
+    if (!LINE_TERMINI[line]) continue
+    if (OBSERVED_STOP_FACTOR[`${key}@F`] !== undefined || OBSERVED_STOP_FACTOR[`${key}@R`] !== undefined) continue
+    if (OBSERVED_PROFILE_S[`${COLUMN}:${line}@F`] === undefined || OBSERVED_PROFILE_S[`${COLUMN}:${line}@R`] === undefined) continue
+    const level = observedLineHeadway(line, 'WD', 12)!.seconds
+    const entry = { key, line, stationId: key.slice(key.indexOf('@') + 1), scheduleS }
+    if (scheduleS <= level) common.push(entry)
+    else rare.push(entry)
+  }
+  return { common, rare }
+})()
+const factorless = factorlessStops.common[0]
 
 afterEach(() => setObservedHeadwaysEnabled(true))
 
@@ -130,6 +167,18 @@ describe('scaledHeadway', () => {
     const cap = OBSERVED_GTFS_CAP_S['WD:12']!
     const past = Math.min(3000, Math.ceil(cap) + 500)
     expect(scaledHeadway(past, line, 'WD', 12)).toBe(clampHeadway(past))
+  })
+
+  it('uses the directional scale for a directional schedule value, and the pooled one otherwise', () => {
+    const line = Object.keys(LINE_TERMINI)[0]!
+    const column = 'WD:12'
+    const cap = OBSERVED_GTFS_CAP_S[column]!
+    const x = 100
+    const dir = OBSERVED_GTFS_SCALE_DIR[column]!
+    const pooled = OBSERVED_GTFS_SCALE[column]!
+    expect(dir).toBeLessThan(pooled)
+    expect(scaledHeadway(x, line, 'WD', 12, true, true)).toBe(clampHeadway(Math.max(x, Math.min(x * dir, cap))))
+    expect(scaledHeadway(x, line, 'WD', 12, true, false)).toBe(clampHeadway(Math.max(x, Math.min(x * pooled, cap))))
   })
 
   it('applies to a line the caller says is TransJakarta even when it is not a routed corridor', () => {
@@ -238,6 +287,17 @@ describe('resolveHeadway', () => {
     expect(resolveHeadway({ ...common, lineCode: '6C', tj: false })).toEqual({ headwayS: 514, basis: 'SCHEDULE' })
   })
 
+  it('scales a SCALED directional row with the directional scale', () => {
+    const column = 'WD:12'
+    const x = 300
+    const row = resolveHeadway({ nominalS: x, kind: 'dir', dir: 'F', lineCode: '6C', stationId: 'TJ-X', day: 'WD', hour: 12, enabled: true, tj: true })
+    const cap = OBSERVED_GTFS_CAP_S[column]!
+    expect(row).toEqual({
+      headwayS: clampHeadway(Math.max(x, Math.min(x * OBSERVED_GTFS_SCALE_DIR[column]!, cap))),
+      basis: 'SCALED'
+    })
+  })
+
   it('reads a directional row from its own direction', () => {
     const row = resolveHeadway({ ...base, nominalS: 120, kind: 'dir', dir: 'R' })
     expect(row).toEqual({ headwayS: observedDirHeadway(profiledLine, stopId, 'R', 'WD', 12)!.seconds, basis: 'OBSERVED' })
@@ -274,7 +334,106 @@ describe('kill switch', () => {
     expect(observedHeadwaysEnabled()).toBe(false)
   })
 
+  it('pins the value a request started with, whatever later requests do to the module value', async () => {
+    const a = new Request('https://x.test/a')
+    const b = new Request('https://x.test/b')
+    await refreshObservedHeadwaysFlag(kv('off'), a)
+    expect(observedHeadwaysEnabledFor(a)).toBe(false)
+
+    // A concurrent request flips the shared value while `a` is still in flight.
+    await refreshObservedHeadwaysFlag(kv('on'), b)
+    expect(observedHeadwaysEnabled()).toBe(true)
+    expect(observedHeadwaysEnabledFor(b)).toBe(true)
+    // `a` keeps what it started with, so its cache key and its search agree.
+    expect(observedHeadwaysEnabledFor(a)).toBe(false)
+  })
+
+  it('falls back to the module value for a request that was never snapshotted', async () => {
+    await refreshObservedHeadwaysFlag(kv('off'))
+    expect(observedHeadwaysEnabledFor(new Request('https://x.test/never'))).toBe(false)
+  })
+
   it('uses the documented key', () => {
     expect(OBSERVED_HEADWAYS_FLAG_KEY).toBe('config:observed-headways')
+  })
+})
+
+describe('a stop the fit gave no factor', () => {
+  it('exists in the current fit, as both kinds (otherwise these tests prove nothing)', () => {
+    expect(factorlessStops.common.length).toBeGreaterThan(0)
+    expect(factorlessStops.rare.length).toBeGreaterThan(0)
+  })
+
+  it('takes its line\'s observed level in the planner map when the schedule agrees it is as frequent', () => {
+    const { key, line } = factorless!
+    const level = observedLineHeadway(line, 'WD', 12)!
+    expect(plannerHeadways('WD', 12, true).get(key)).toBe(level.seconds)
+  })
+
+  it('is NOT shortened to the line\'s level when the schedule says it is rarer', () => {
+    // 12@TJ-H00261S: 3600s in the schedule, ~980s at its line's level. The first
+    // version of the fallback priced the branch halte as the trunk.
+    const map = plannerHeadways('WD', 12, true)
+    for (const { key, line, scheduleS } of factorlessStops.rare) {
+      const level = observedLineHeadway(line, 'WD', 12)!.seconds
+      expect(scheduleS, key).toBeGreaterThan(level)
+      expect(map.get(key), key).toBeGreaterThanOrEqual(scheduleS)
+      expect(map.get(key), key).not.toBe(level)
+    }
+  })
+
+  it('takes the line-direction\'s own level on a directional row, when not rarer than the schedule', () => {
+    const { line, stationId, scheduleS } = factorless!
+    const row = resolveHeadway({ nominalS: scheduleS, kind: 'dir', dir: 'F', lineCode: line, stationId, day: 'WD', hour: 12, enabled: true, tj: true })
+    expect(row).toEqual({ headwayS: observedLineDirHeadway(line, 'F', 'WD', 12)!.seconds, basis: 'OBSERVED' })
+  })
+
+  it('takes the line\'s level on a per-stop row, when not rarer than the schedule', () => {
+    const { line, stationId, scheduleS } = factorless!
+    const row = resolveHeadway({ nominalS: scheduleS, kind: 'stop', lineCode: line, stationId, day: 'WD', hour: 12, enabled: true, tj: true })
+    expect(row).toEqual({ headwayS: observedLineHeadway(line, 'WD', 12)!.seconds, basis: 'OBSERVED' })
+  })
+
+  it('does not call a rarer stop OBSERVED, and never shortens it below its schedule value', () => {
+    for (const { line, stationId, scheduleS } of factorlessStops.rare) {
+      const row = resolveHeadway({ nominalS: scheduleS, kind: 'stop', lineCode: line, stationId, day: 'WD', hour: 12, enabled: true, tj: true })
+      expect(row.basis).toBe('SCALED')
+      expect(row.headwayS!).toBeGreaterThanOrEqual(scheduleS)
+    }
+  })
+
+  it('does not affect a stop that has a factor', () => {
+    expect(resolveHeadway({ nominalS: 120, kind: 'stop', lineCode: profiledLine, stationId: stopId, day: 'WD', hour: 12, enabled: true }).headwayS)
+      .toBe(observedStopHeadway(profiledLine, stopId, 'WD', 12)!.seconds)
+  })
+})
+
+describe('planner and endpoint agree', () => {
+  /*
+   * The planner map and the station endpoint are two implementations of one
+   * rule. They drifted once (a stop with a factor but no profile at an hour got
+   * the line level in the planner and the scaled schedule on the endpoint), so
+   * every corridor stop is compared at hours that exercise each branch.
+   */
+  it.each([0, 4, 12, 17, 22])('gives the same per-stop value at hour %i', (hour) => {
+    const map = plannerHeadways('WD', hour, true)
+    let compared = 0
+    for (const [key, scheduleS] of Object.entries(STOP_HEADWAYS_S)) {
+      const line = key.slice(0, key.indexOf('@'))
+      if (!LINE_TERMINI[line]) continue
+      const row = resolveHeadway({
+        nominalS: scheduleS,
+        kind: 'stop',
+        lineCode: line,
+        stationId: key.slice(key.indexOf('@') + 1),
+        day: 'WD',
+        hour,
+        enabled: true,
+        tj: true
+      })
+      expect(map.get(key), `${key} at ${hour}:00`).toBe(row.headwayS)
+      compared++
+    }
+    expect(compared).toBeGreaterThan(100)
   })
 })

@@ -18,6 +18,8 @@ export interface OverlayInput {
   dayCounts: { WD: number, WE: number }
   /** Profile cells filled by interpolation (see interpolate.ts): `${line}@${dir}|${column}` -> seconds. */
   interpolated: ReadonlyMap<string, number>
+  /** Columns whose interpolation was rejected because it contradicted the model's own values. */
+  rejectedColumns: readonly number[]
   /** Per-column GTFS scale (see scale.ts), the fallback where the profile is absent. */
   scales: readonly ColumnScale[]
   /** Columns (fit.column) the backtest vouches for; the profile is restricted to them. */
@@ -74,6 +76,11 @@ export function renderOverlay(input: OverlayInput): string {
   const scaleEntries = [...input.scales]
     .map(s => [s.id, Math.round(s.scale * 1000) / 1000] as const)
     .sort(([a], [b]) => naturalCompare(a, b))
+  const scaleDirEntries = input.scales
+    .filter((s): s is ColumnScale & { scaleDir: number } => s.scaleDir !== undefined)
+    .map(s => [s.id, Math.round(s.scaleDir * 1000) / 1000] as const)
+    .sort(([a], [b]) => naturalCompare(a, b))
+  const rejectedIds = input.rejectedColumns.map(c => `${columnDayType(c)}:${columnHour(c)}`)
   const capEntries = input.scales
     .filter((s): s is ColumnScale & { cap: number } => s.cap !== undefined)
     .map(s => [s.id, Math.round(s.cap)] as const)
@@ -115,11 +122,20 @@ export function renderOverlay(input: OverlayInput): string {
     ' *   1. OBSERVED_PROFILE_INTERP_S: the line-direction\'s own profile',
     ' *      interpolated between its nearest measured hours (at most 8h apart; held',
     ' *      for at most 2h past the first or last). Same key format as the profile.',
-    ' *   2. OBSERVED_GTFS_SCALE: the schedule value (headways.ts) times the',
-    ' *      column\'s scale, for what is left, never above OBSERVED_GTFS_CAP_S for',
-    ' *      that column (observed headways saturate; see scale.ts) and never below',
-    ' *      the schedule value itself. Columns the backtest vouched for carry a',
-    ' *      measured scale; the rest are interpolated (see scaleMeasured).',
+    ' *      A column is left out (see interpolationRejected) where the model\'s own',
+    ' *      unvouched values contradict the interpolation by more than 1.3x in the',
+    ' *      median: those are hours that WERE observed, across a service-regime',
+    ' *      change (overnight), so a line between the neighbours would be wrong.',
+    ' *      The hours between two measured hours are judged together, and a single',
+    ' *      cell more than 2x from the model\'s own value is dropped on its own.',
+    ' *   2. OBSERVED_GTFS_SCALE (pooled per-stop schedule values) and',
+    ' *      OBSERVED_GTFS_SCALE_DIR (directional ones): the schedule value',
+    ' *      (headways.ts) times the column\'s scale, for what is left, never above',
+    ' *      OBSERVED_GTFS_CAP_S for that column (observed headways saturate; see',
+    ' *      scale.ts) and never below the schedule value itself. Scales are measured',
+    ' *      for every column the model had data for, vouched or not, and only',
+    ' *      columns with no data (the weekday rush hours) are interpolated (see',
+    ' *      scaleMeasured). Caps are measured only on vouched columns.',
     ' *',
     ' * Profile values are clamped to the same [120, 3600] seconds as headways.ts.',
     ' * Read by utils/observedHeadways.ts (planner and station headway endpoint).',
@@ -144,6 +160,7 @@ export function renderOverlay(input: OverlayInput): string {
     `  to: '${input.range.to}',`,
     `  days: { WD: ${input.dayCounts.WD}, WE: ${input.dayCounts.WE} },`,
     `  scaleMeasured: [${scaleMeasured.map(id => `'${id}'`).join(', ')}],`,
+    `  interpolationRejected: [${rejectedIds.map(id => `'${id}'`).join(', ')}],`,
     '  /** Healthy hours behind each `${dayType}:${hour}`, summed over the fitted days. */',
     '  healthyHours: {',
     Object.entries(healthyHours).sort(([a], [b]) => naturalCompare(a, b)).map(([k, v]) => `    '${k}': ${v}`).join(',\n'),
@@ -170,6 +187,11 @@ ${entries(interpolated)}
 /** Schedule-to-observed multiplier per \`\${dayType}:\${hour}\`: the fallback where the profile is absent. */
 export const OBSERVED_GTFS_SCALE: Record<string, number> = {
 ${entries(scaleEntries)}
+}
+
+/** As OBSERVED_GTFS_SCALE, for the schedule's directional values (\`line@stop@dir\`), measured against those. */
+export const OBSERVED_GTFS_SCALE_DIR: Record<string, number> = {
+${entries(scaleDirEntries)}
 }
 
 /** Ceiling for the scaled schedule value per \`\${dayType}:\${hour}\`: the 90th percentile of the measured line-level headways. */

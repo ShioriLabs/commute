@@ -9,7 +9,7 @@ import { backtest, type BacktestSummary, type GtfsLookup, gtfsRawSpec, gtfsScale
 import { buildPool, columnDayType, columnHour, fitFactorised, fitPooled, fitShrunk, type ModelSpec, pooledCv, SHRINK_KAPPAS } from './observedHeadways/fit'
 import { DEFAULT_GATE } from './observedHeadways/health'
 import { renderOverlay } from './observedHeadways/render'
-import { interpolateProfiles } from './observedHeadways/interpolate'
+import { CELL_VETO, CONFLICT_TOLERANCE, interpolateProfiles, rejectConflicting } from './observedHeadways/interpolate'
 import { computeColumnScales } from './observedHeadways/scale'
 import { dayFiles } from './observedHeadways/snapshots'
 import { baseHeadways } from '../../utils/headways'
@@ -97,30 +97,38 @@ async function main() {
   ]
   const names = specs.map(s => s.name)
 
-  const loo = backtest(days, specs, gtfs, 'loo')
-  const looWd = backtest(days, specs, gtfs, 'loo', 'WD')
-  const looWe = backtest(days, specs, gtfs, 'loo', 'WE')
-  const rolling = backtest(days, specs, gtfs, 'rolling')
+  // What ships is M2, judged against the scaled schedule over every bucket BOTH
+  // predicted, so a column vouches on the stops it will actually be applied to.
+  const focus = { model: 'M2 factor', baseline: 'gtfsScaled' }
+  const loo = backtest(days, specs, gtfs, 'loo', undefined, focus)
+  const looWd = backtest(days, specs, gtfs, 'loo', 'WD', focus)
+  const looWe = backtest(days, specs, gtfs, 'loo', 'WE', focus)
+  const rolling = backtest(days, specs, gtfs, 'rolling', undefined, focus)
   printSummary('leave-one-day-out, all days', loo, names)
   printSummary('leave-one-day-out, weekday folds', looWd, names)
   printSummary(`leave-one-day-out, weekend folds (${count('WE')} days: low confidence)`, looWe, names)
   printSummary('rolling next-day', rolling, names)
 
-  const vouched = vouchedColumns(loo, 'M2 factor', 'gtfsScaled')
-  console.log('\nper-column median error, all-days LOO (M2 vs GTFS scaled); * = vouched, shipped:')
-  for (const c of Object.keys(loo.byColumn).map(Number).sort((a, b) => a - b)) {
-    const row = loo.byColumn[c]!
+  const vouched = vouchedColumns(loo, focus.model, focus.baseline)
+  console.log('\nper-column median error, all-days LOO (M2 vs GTFS scaled, buckets both predicted); * = vouched, shipped:')
+  for (const c of Object.keys(loo.pair ?? {}).map(Number).sort((a, b) => a - b)) {
+    const row = loo.pair![c]!
     const mark = vouched.has(c) ? '*' : ' '
-    console.log(`  ${mark} ${columnDayType(c)} ${String(columnHour(c)).padStart(2)}  n=${String(row.n).padStart(5)}  M2 ${fmt(row.median['M2 factor']!)}  gtfsScaled ${fmt(row.median.gtfsScaled!)}`)
+    console.log(`  ${mark} ${columnDayType(c)} ${String(columnHour(c)).padStart(2)}  n=${String(row.n).padStart(5)}  M2 ${fmt(row.model)}  gtfsScaled ${fmt(row.baseline)}`)
   }
 
   // ── choose and gate ────────────────────────────────────────────────────────
   const m2 = loo.models['M2 factor']!
-  const bestShrink = SHRINK_KAPPAS.map(k => ({ k, ...loo.models[`M1 k=${k}`]! })).sort((a, b) => a.median - b.median)[0]!
-  const shrinkWins = bestShrink.median < m2.median - M1_MARGIN
+  // The best key-hour model: pooled (M0) or any shrinkage (M1). The overlay
+  // format only carries M2, so a clear winner here means "revisit the format".
+  const keyHour = [
+    { name: 'M0 pooled', ...loo.models['M0 pooled']! },
+    ...SHRINK_KAPPAS.map(k => ({ name: `M1 k=${k}`, ...loo.models[`M1 k=${k}`]! }))
+  ].sort((a, b) => a.median - b.median)[0]!
+  const keyHourWins = keyHour.median < m2.median - M1_MARGIN
   const baseline = loo.models.gtfsScaled!
   const beatsGtfs = m2.median < baseline.median
-  console.log(`\nchosen: ${shrinkWins ? `M1 k=${bestShrink.k}` : 'M2 factor'}; M2 ${fmt(m2.median)} vs GTFS scaled ${fmt(baseline.median)} (beats: ${beatsGtfs})`)
+  console.log(`\nchosen: ${keyHourWins ? keyHour.name : 'M2 factor'}; M2 ${fmt(m2.median)} vs best key-hour ${keyHour.name} ${fmt(keyHour.median)} (margin ${M1_MARGIN}) vs GTFS scaled ${fmt(baseline.median)} (beats: ${beatsGtfs})`)
 
   const pool = buildPool(days)
   fs.writeFileSync(path.join(cacheDir, 'fit-report.json'), JSON.stringify({
@@ -129,8 +137,8 @@ async function main() {
     cv: Object.fromEntries(pooledCv(pool))
   }))
 
-  if (shrinkWins) {
-    console.error('M1 beats M2 by more than the margin, but the overlay format only carries M2. Not writing; revisit the format.')
+  if (keyHourWins) {
+    console.error(`${keyHour.name} beats M2 by more than the margin, but the overlay format only carries M2. Not writing; revisit the format.`)
     process.exitCode = 1
     return
   }
@@ -142,18 +150,35 @@ async function main() {
   if (args['no-write']) return
 
   const model = fitFactorised(pool)
-  // The base is exactly what the planner would use for the day, so the scale
-  // multiplies the same numbers it was measured against.
-  const scales = computeColumnScales(model, vouched, (day, key) => baseHeadways(day).get(key))
-  // Only the cells that ship are measured; interpolation fills between those.
-  // The model's profile is a rate (arrivals per second at an average stop);
-  // interpolation is done in headway seconds, which is what ships.
-  const measured = new Map(
-    [...model.profile]
-      .filter(([id]) => vouched.has(Number(id.split('|')[1])))
-      .map(([id, perSecond]) => [id, 1 / perSecond] as const)
+  // The base is exactly what the planner would use for the day, so each scale
+  // multiplies the same kind of number it was measured against.
+  const scales = computeColumnScales(
+    model,
+    (day, key) => baseHeadways(day).get(key),
+    key => DIRECTIONAL_HEADWAYS_S[key],
+    vouched
   )
-  const interpolated = interpolateProfiles(measured)
+  // The model's profile is a rate (arrivals per second at an average stop);
+  // everything below works in headway seconds, which is what ships.
+  const own = new Map([...model.profile].map(([id, perSecond]) => [id, 1 / perSecond] as const))
+  // Only the cells that ship are measured; interpolation fills between those,
+  // and is then checked against what the model itself saw in the hours it fills.
+  const measured = new Map([...own].filter(([id]) => vouched.has(Number(id.split('|')[1]))))
+  const { accepted: interpolated, rejectedColumns, deviations, vetoedCells } = rejectConflicting(
+    interpolateProfiles(measured),
+    own,
+    vouched
+  )
+  // Show every column's margin, so a borderline one is visible to whoever reviews
+  // the refit rather than discovered when it flips.
+  console.log(`\ninterpolation vs the model's own values (median |log|; tolerance ${CONFLICT_TOLERANCE.toFixed(2)}, cell veto ${CELL_VETO.toFixed(2)}):`)
+  for (const [c, deviation] of [...deviations].sort(([a], [b]) => a - b)) {
+    const margin = CONFLICT_TOLERANCE - deviation
+    const state = rejectedColumns.includes(c) ? 'rejected' : 'kept'
+    const flag = Math.abs(margin) < 0.05 ? '  <- borderline' : ''
+    console.log(`  ${columnDayType(c)} ${String(columnHour(c)).padStart(2)}  ${deviation.toFixed(2)}  ${state}${flag}`)
+  }
+  console.log(`rejected (own failure or sharing a span with one): ${rejectedColumns.map(c => `${columnDayType(c)}:${columnHour(c)}`).join(' ') || 'none'}; ${vetoedCells} cells vetoed`)
   const summary = (label: string, s: BacktestSummary) =>
     `${label}: M2 ${fmt(s.models['M2 factor']!.median)}, pooled ${fmt(s.models['M0 pooled']!.median)}, GTFS scaled ${fmt(s.models.gtfsScaled!.median)}, GTFS raw ${fmt(s.models.gtfsRaw!.median)} (median |log err|, ${s.intersection} buckets)`
   const text = renderOverlay({
@@ -165,6 +190,7 @@ async function main() {
     vouched,
     scales,
     interpolated,
+    rejectedColumns,
     backtestLines: [summary('Leave-one-day-out', loo), summary('Rolling next-day', rolling)]
   })
   fs.writeFileSync(args.out!, text)

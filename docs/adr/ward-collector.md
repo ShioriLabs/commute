@@ -174,3 +174,63 @@ holidays ride the weekend model (`serviceDay` already maps them to SUN). The
 Android client needs its generated API classes refreshed for `basis` and
 `scheduledS` (additive; old builds are unaffected), and the web card does not
 yet label the basis.
+
+### Review fixes (2026-10-12)
+
+An independent review of the wiring found problems in the fallback and selection
+paths. What changed, and why it is the way it is:
+
+- **Interpolation no longer overrides observed hours.** Hours 01-04 are not blind:
+  the relay was healthy on every day, they just have too few arrivals per stop to
+  validate. A straight line from the 00:00 to the 05:00 value ramped through
+  03:00 as if buses ran every 13 minutes where the data says ~30. Each
+  interpolated column is now compared with the model's own (unvouched) value for
+  the same cells; where the median disagreement exceeds 1.3x the column is left
+  to the scaled fallback (`OBSERVED_META.interpolationRejected`). Columns with no
+  model value at all (the weekday rush hours) have nothing to contradict them and
+  are kept. Measured gap: daytime agrees to <= 0.23 in log terms, night starts at
+  0.28. That gap is narrow, so the hours between two measured hours are judged
+  together (one conflicting hour rejects the whole span, so the weakest cannot
+  ship a ramp alone between a measured hour and a rejected one), a single cell
+  more than 2x from the model's own value is dropped on its own, and the fit
+  prints every column's margin with the borderline ones flagged.
+- **The scale is measured wherever the model has data**, vouched or not, not only
+  on vouched columns. A median over ~900 stops averages out the per-stop noise
+  that keeps thin hours from validating. It is the same quantity the backtest's
+  `gtfsScaled` baseline estimates (a per-column median ratio to the schedule),
+  computed here from the shipped model against the planner's base values. Only
+  columns with no data are interpolated. Caps are the exception: a p90 over
+  8-15 lines is noisy, so they are measured only on vouched columns and
+  interpolated across the rest (measured on unvouched ones they stepped by 2x
+  between neighbouring weekend hours).
+- **A directional scale** (`OBSERVED_GTFS_SCALE_DIR`) for directional schedule
+  values, measured against those: they run ~1.17x the pooled per-stop values the
+  pooled scale was measured on, and scaling them with it double-counted the gap.
+- **A stop with no factor takes its line's observed level** (factor 1) before the
+  scaled schedule, but only when the schedule does not call the stop rarer than
+  that. The fit drops origin terminals and barely-seen haltes as detection
+  artefacts; the scaled schedule had made them the most pessimistic rows on the
+  card (`1@TJ-H00170P`: 793 s against a line level of 253 s). It also drops
+  genuinely rare branch haltes, and the first version of this fallback priced
+  those as the trunk (`12@TJ-H00261S`: 3600 s in the schedule, 982 s). A stop
+  with a factor but no profile at an hour keeps its scaled value on both the
+  planner and the endpoint; a property test compares the two for every
+  corridor stop at five hours.
+- **Vouching scores what ships.** Per-column stats are computed over every bucket
+  the shipped model and its baseline both predicted, not the all-model
+  intersection (which scored it only on stops a pooled model could also cover).
+  The chooser now weighs M2 against the best of M0 and M1.
+- **One kill-switch value per request.** The journey cache scope and the search
+  used to read a shared per-isolate boolean at different points separated by
+  awaits, so a concurrent flip could key a body under one regime and compute it
+  under the other for 20 hours. The value is captured once per request
+  (`observedHeadwaysEnabledFor(request)`) and both read that.
+- **A stricter guard test** on the generated file: scales >= 1, caps in bounds,
+  stop factors averaging ~1 per line-direction (catches an inversion), no
+  interpolated cell in a rejected column, and none outside twice its measured
+  neighbours.
+
+Deliberately not changed: pricing a whole journey at the departure hour, `basis:
+SCALED` carrying an unchanged value when the schedule is already past the cap,
+hours outside a line's service window still returning a value on the card, and
+the manual `API_VERSION` bump on a refit.
