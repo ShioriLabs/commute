@@ -61,11 +61,15 @@ fun SearchHeader(
     aboveField: @Composable () -> Unit = {},
     belowField: @Composable () -> Unit = {},
 ) {
+    // The title and its text sit on the 32dp line; the toggle, field and chips are containers, so
+    // their edges take the 16dp gutter and their contents land back on that line.
     Column(
-        modifier = modifier.padding(start = 32.dp, top = 32.dp, end = 32.dp, bottom = 16.dp),
+        modifier = modifier.padding(top = 32.dp, bottom = 16.dp),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 32.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -87,15 +91,17 @@ fun SearchHeader(
                 )
             }
         }
-        aboveField()
-        if (showField) {
-            VerticalSpacer(16.dp)
-            SearchField(
-                query = query,
-                onQueryChange = onQueryChange,
-                focusRequester = focusRequester,
-            )
-            belowField()
+        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            aboveField()
+            if (showField) {
+                VerticalSpacer(16.dp)
+                SearchField(
+                    query = query,
+                    onQueryChange = onQueryChange,
+                    focusRequester = focusRequester,
+                )
+                belowField()
+            }
         }
     }
 }
@@ -125,7 +131,8 @@ private fun SearchField(
                 modifier = Modifier
                     .background(FieldFill, MaterialTheme.shapes.medium)
                     .border(2.dp, FieldOutline, MaterialTheme.shapes.medium)
-                    .padding(start = 16.dp, end = 4.dp),
+                    // 14dp + the 2dp border: the magnifier lands on the title's line.
+                    .padding(start = 14.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
