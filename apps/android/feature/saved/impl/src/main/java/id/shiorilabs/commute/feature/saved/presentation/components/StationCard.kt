@@ -24,6 +24,7 @@ import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.type.isOffline
 import id.shiorilabs.commute.core.ui.components.ProblemPanel
 import id.shiorilabs.commute.core.ui.components.SkeletonBlock
+import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.feature.saved.R
 import id.shiorilabs.commute.feature.station.domain.LineInfo
@@ -88,6 +89,8 @@ fun StationTitle(
                     color = MaterialTheme.colorScheme.onBackground,
                 ),
                 shared = shareName,
+                // The web's caret after the name: this opens the station's page.
+                trailingIcon = if (onClick != null) CommuteIcons.Chevron else null,
             )
         }
         if (note != null) {
