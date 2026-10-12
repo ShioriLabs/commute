@@ -33,7 +33,7 @@ import javax.inject.Singleton
 /**
  * A trip's reminder for getting off ("Tambah Pengingat"), on the watch when one's in reach, else
  * the phone:
- * - "Ingatkan Aku": one hard buzz.
+ * - "Ingatkan Aku": three knocks, Morse U.
  * - "Bangunkan Aku", for a rider asleep on the train: the watch rings as an alarm; if nobody answers
  *   it for [ESCALATE_AFTER] (off the wrist, flat, slept through), the phone rings too, or straight
  *   away with no watch. Either rings until "Udah bangun", getting off, or [RING_FOR] has passed.
@@ -68,7 +68,7 @@ class TripWaker @Inject constructor(
         remindedFor = key
         val stop = trip.plan.ride(legIndex).stops.last().name
         when (trip.reminder) {
-            TripReminder.PING -> scope.launch { if (!tellWatch(WearPaths.PING, stop)) vibrate() }
+            TripReminder.PING -> scope.launch { if (!tellWatch(WearPaths.PING, stop)) vibrate(WearPaths.PING_BUZZ) }
             TripReminder.WAKE -> {
                 ringing?.cancel()
                 ringing = scope.launch {
@@ -91,14 +91,14 @@ class TripWaker @Inject constructor(
         if (wasRinging && tellWatch) scope.launch { tellWatch(WearPaths.WAKE_STOP, "") }
     }
 
-    /** Rings until cancelled or [RING_FOR] is up, a burst at a time; the notification says why. */
+    /** Rings until cancelled or [RING_FOR] is up, T R N at a time; the notification says why. */
     private suspend fun ringPhone(stop: String) {
         showAlarm(stop)
         try {
             withTimeoutOrNull(RING_FOR.toMillis()) {
                 while (true) {
                     vibrate()
-                    delay(BURST.sumOf { it })
+                    delay(WearPaths.WAKE_BUZZ.sum())
                 }
             }
         } finally {
@@ -107,8 +107,8 @@ class TripWaker @Inject constructor(
         }
     }
 
-    private fun vibrate() {
-        val effect = VibrationEffect.createWaveform(BURST, -1)
+    private fun vibrate(pattern: LongArray = WearPaths.WAKE_BUZZ) {
+        val effect = VibrationEffect.createWaveform(pattern, -1)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             vibrator.vibrate(effect, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_ALARM))
         } else {
@@ -155,8 +155,5 @@ class TripWaker @Inject constructor(
 
         /** How long an unanswered alarm rings: past the stop by then, and only draining the battery. */
         val RING_FOR: Duration = Duration.ofMinutes(5)
-
-        /** Long and hard, then a breath: an alarm, not a message. */
-        val BURST = longArrayOf(0, 800, 300, 800, 300, 800, 700)
     }
 }

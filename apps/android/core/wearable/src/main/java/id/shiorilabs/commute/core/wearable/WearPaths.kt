@@ -11,8 +11,17 @@ object WearPaths {
     /** A tap on the watch, a message whose payload is a [RiderAction]'s name. */
     const val ACTION = "/trip/action"
 
-    /** Phone to watch: "Ingatkan Aku", one hard buzz. */
+    /** Phone to watch: "Ingatkan Aku", three knocks (Morse U). */
     const val PING = "/trip/ping"
+
+    /** Morse U, as a knock: dot, dot, dash, a dot's 100 ms. A waveform's timings, off first. */
+    val PING_BUZZ = longArrayOf(0, 100, 100, 100, 100, 300)
+
+    /**
+     * One round of the wake alarm: T R N, "turun" without its vowels, in Morse (- .-. -.) on a
+     * 150 ms dot, then a word's gap before it comes round again. A waveform's timings, off first.
+     */
+    val WAKE_BUZZ = longArrayOf(0, 450, 450, 150, 150, 450, 150, 150, 450, 450, 150, 150, 1050)
 
     /** Phone to watch: wake the rider, a message whose payload is the stop to get off at. */
     const val WAKE = "/trip/wake"
