@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.feature.journey.presentation.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -86,7 +88,11 @@ internal fun JourneyCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(plate, MaterialTheme.shapes.extraSmall)
+            // An option to choose is outlined as the Dari/Ke card is, and clipped so its ripple
+            // follows the corners.
+            .then(if (onClick != null) Modifier.border(2.dp, Stone200, MaterialTheme.shapes.medium) else Modifier)
+            .clip(MaterialTheme.shapes.medium)
+            .background(plate)
             .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
             .padding(16.dp),
     ) {
