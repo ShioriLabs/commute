@@ -18,6 +18,10 @@ describe('releaseBoardings', () => {
     expect(releaseBoardings(release('X', 17_000, 'alighting'))).toBeCloseTo(17_000 / DESTINATION_SHARE_BEFORE_CUTOFF)
   })
 
+  it('takes a whole-day count as published', () => {
+    expect(releaseBoardings({ ...release('X', 4_700, 'boarding'), cutoffHour: 24 })).toBe(4_700)
+  })
+
   it('uses the smaller mid-peak share for an 08:00 origin count', () => {
     expect(releaseBoardings({ ...release('X', 11_220, 'boarding'), cutoffHour: 8 })).toBeCloseTo(11_220 / ORIGIN_SHARE_BEFORE_08)
     expect(ORIGIN_SHARE_BEFORE_08).toBeLessThan(ORIGIN_SHARE_BEFORE_CUTOFF)

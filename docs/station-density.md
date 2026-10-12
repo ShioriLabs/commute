@@ -623,7 +623,10 @@ dated 24 Jun 2026). A KCI figure for "pengguna Commuter Line" at the station, sp
 - This is an all-days average (weekends and Lebaran 2026, around 21 Mar, included). March is the highest month even though
   Lebaran emptied the commuter network, which fits the intercity terminal pulling KRL riders in for mudik. A weekday is probably
   5–6k boardings.
-- **Not applied yet:** the figure is not in `db/data/release-counts.ts`, and the weekday range for Senen has not been regenerated.
+- **Applied 2026-10-12:** `KCI-PSE` is in `release-counts.ts` as a whole-day gate-in count of 4,700 (`cutoffHour: 24`, used as
+  published). Gate in, not half of in + out, because Senen's gate out is higher. Regenerating moved Senen's weekday range from
+  3~3 at every service hour to 1~2 at the peaks and 0~1 to 1~2 between. The ~24k of boardings it gave back were redistributed
+  across the unranked KCI stations by score (the network total is fixed), so ~45 others rose by one level in 1–4 weekday hours.
 
 **Holiday per-station counts found 2026-10-12 (ratios only, not anchors).** From the Lebaran 2026 release on
 Mon 23 Mar 2026 ([RRI](https://rri.co.id/arus-mudikbalik/2280807/transit-di-manggarai-tembus-201-ribu-orang-pada-masa-libur-lebaran),

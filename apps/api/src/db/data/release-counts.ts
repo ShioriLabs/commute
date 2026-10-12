@@ -18,7 +18,8 @@ export interface ReleaseCount {
   stationId: string
   /** Riders counted from the start of service up to this hour. */
   count: number
-  cutoffHour: 8 | 11 | 13
+  /** 24 is a whole day's count, used as published. */
+  cutoffHour: 8 | 11 | 13 | 24
   /** What the release counted: riders getting on (origin) or off (destination). */
   kind: 'boarding' | 'alighting'
   published: string
@@ -46,7 +47,20 @@ export const RELEASE_COUNTS: ReleaseCount[] = [
     source: 'https://www.kci.id/informasi-publik/berita/layanan-commuter-line-jabodetabek-kembali-normal-1-065-perjalanan-tambah-4-perjalanan-commuter-line-bogor-hari-ini'
   },
   // KCI lists Tebet among its office-district arrival stations.
-  { stationId: 'KCI-TEB', count: 19_400, cutoffHour: 13, kind: 'alighting', published: '~19,4 ribu hingga 13.00 (rekonstruksi)' }
+  { stationId: 'KCI-TEB', count: 19_400, cutoffHour: 13, kind: 'alighting', published: '~19,4 ribu hingga 13.00 (rekonstruksi)' },
+  {
+    // Gate-in only: 706,562 over the 151 days of Jan–May 2026 (706,562 / 151 =
+    // 4,679, rounded). Gate-out is higher (802,631), so half of in + out would
+    // overstate boardings here. It is an all-days average, weekends and Lebaran
+    // included, so a weekday is probably a little higher; left unscaled because
+    // nothing published says by how much.
+    stationId: 'KCI-PSE',
+    count: 4_700,
+    cutoffHour: 24,
+    kind: 'boarding',
+    published: 'Stasiun Pasar Senen 1.509.193 pelanggan Commuter Line Januari–Mei 2026 (gate in 706.562, gate out 802.631)',
+    source: 'https://rri.co.id/bisnis/2514896/stasiun-pasar-senen-layani-315-juta-pelanggan-ka-jarak-jauh'
+  }
 ]
 
 export const RELEASE_COUNTS_BY_STATION_ID: ReadonlyMap<string, ReleaseCount>
