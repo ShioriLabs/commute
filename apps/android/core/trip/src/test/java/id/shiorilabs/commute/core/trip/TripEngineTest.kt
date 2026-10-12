@@ -795,6 +795,18 @@ class TripEngineTest {
     }
 
     @Test
+    fun `an early train never pulls the stops ahead earlier than the timetable`() {
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        val early = run.state.copy(clockOffsetS = -180)
+        val ride = bogorLine.ride(0)
+
+        assertEquals(RideClock(ride).scheduledAt(3.0), early.expectedAtStop(bogorLine, 3))
+        assertEquals(ride.arrivalAt, early.expectedAlightingAt(bogorLine))
+        assertEquals(ride.departureAt, early.expectedDepartureAt(bogorLine))
+    }
+
+    @Test
     fun `a restart a moment after a fix keeps the rider where the fix put them`() {
         val run = Run(bogorLine)
         run.tick(0.0)
