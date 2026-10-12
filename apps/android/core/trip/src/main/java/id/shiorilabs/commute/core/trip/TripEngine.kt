@@ -177,10 +177,10 @@ object TripEngine {
         val candidate = pullOut.leftTo ?: located
         if (candidate != null && candidate >= state.confirmedPosition - JITTER) {
             // Seen near the line but not aboard: the fix says where they are, not how far they've
-            // come. A walk ends only nearer the station it goes to, as a change can run beside the
+            // come. A walk ends only at the station it goes to, as a change can run beside the
             // next line out of the station it left.
             if (state.phase == TripPhase.WAITING_TO_BOARD && !boards(ride, state, candidate, fix, tuning)) {
-                val walked = state.walkingSince != null && reachedAfterWalk(plan, state.legIndex, fix.point)
+                val walked = state.walkingSince != null && reachedAfterWalk(plan, state.legIndex, fix.point, tuning)
                 return tracked.copy(
                     sightedPosition = candidate,
                     confirmedAt = fix.at,
@@ -400,12 +400,18 @@ object TripEngine {
         return metres
     }
 
-    /** Whether [point] is nearer the station the walk before ride [legIndex] goes to than the one it left. */
-    private fun reachedAfterWalk(plan: TripPlan, legIndex: Int, point: GeoPoint): Boolean {
+    /**
+     * Whether [point] is at the station the walk before ride [legIndex] goes to: within a stopped
+     * train's reach of it, and nearer it than the one it left. Merely nearer isn't enough: off the
+     * Commuter Line at Sudirman's east end, a rider still on the KRL side was 210 m from Sudirman
+     * and 209 m from LRT Dukuh Atas, three minutes before reaching its platform.
+     */
+    private fun reachedAfterWalk(plan: TripPlan, legIndex: Int, point: GeoPoint, tuning: Tuning): Boolean {
         val walk = plan.transferBefore(legIndex) ?: return true
         val to = walk.to.point ?: return true
         val from = walk.from.point ?: return true
-        return distanceM(point, to) < distanceM(point, from)
+        val distance = distanceM(point, to)
+        return distance <= tuning.atStop && distance < distanceM(point, from)
     }
 
     /** Beyond the alighting stop, on the far side from the stop before it, and well clear of it. */
