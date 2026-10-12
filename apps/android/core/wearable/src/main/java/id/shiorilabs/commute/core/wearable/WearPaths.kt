@@ -23,6 +23,31 @@ object WearPaths {
      */
     val WAKE_BUZZ = longArrayOf(0, 450, 450, 150, 150, 450, 150, 150, 450, 450, 150, 150, 1050)
 
+    /** Easter egg: getting off at one of these three interchanges, both reminders buzz SOS instead. */
+    private val SOS_STOPS = setOf("manggarai", "tanah abang", "duri")
+
+    /** [PING_BUZZ], or SOS ( ... --- ... ) on the same dot, for a stop that earns it. */
+    fun pingBuzz(stop: String): LongArray = if (isSosStop(stop)) sos(dot = 100) else PING_BUZZ
+
+    /** [WAKE_BUZZ], or SOS on the same dot, a word's gap after each round, for a stop that earns it. */
+    fun wakeBuzz(stop: String): LongArray = if (isSosStop(stop)) sos(dot = 150) else WAKE_BUZZ
+
+    private fun isSosStop(stop: String): Boolean =
+        stop.trim().removePrefix("Stasiun ").lowercase() in SOS_STOPS
+
+    private fun sos(dot: Long): LongArray {
+        val timings = mutableListOf(0L)
+        "...|---|...".split('|').forEach { letter ->
+            letter.forEach { symbol ->
+                timings += if (symbol == '.') dot else dot * 3
+                timings += dot
+            }
+            timings[timings.lastIndex] = dot * 3
+        }
+        timings[timings.lastIndex] = dot * 7
+        return timings.toLongArray()
+    }
+
     /** Phone to watch: wake the rider, a message whose payload is the stop to get off at. */
     const val WAKE = "/trip/wake"
 

@@ -18,7 +18,7 @@ class TripListenerService : WearableListenerService() {
 
     override fun onMessageReceived(event: MessageEvent) {
         when (event.path) {
-            WearPaths.PING -> WatchAlarm.ping(this)
+            WearPaths.PING -> WatchAlarm.ping(this, event.data.decodeToString())
             WearPaths.WAKE -> WatchAlarm.ring(this, event.data.decodeToString())
             WearPaths.WAKE_STOP -> WatchAlarm.silence(this)
         }
