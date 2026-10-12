@@ -299,7 +299,7 @@ private fun changesBefore(weights: List<Float>, fraction: Float): Int {
     return weights.dropLast(1).count { run += it; fraction * total >= run }
 }
 
-/** Time on the way (not for a trip closed long after), stops passed, and changes, as three tiles. */
+/** Time on the way (not for a trip closed long after) and stops passed, as two tiles. */
 @Composable
 private fun Figures(finished: FinishedTrip, rides: List<TripLeg.Ride>, modifier: Modifier = Modifier) {
     val trip = finished.trip
@@ -311,7 +311,6 @@ private fun Figures(finished: FinishedTrip, rides: List<TripLeg.Ride>, modifier:
     } else {
         (trip.state.progress(trip.plan).fraction * rides.sumOf { it.lastIndex }).toInt()
     }
-    val changes = rides.size - 1
     Row(modifier = modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (finished.reason != FinishReason.TIMED_OUT) {
             Figure(
@@ -327,11 +326,6 @@ private fun Figures(finished: FinishedTrip, rides: List<TripLeg.Ride>, modifier:
         Figure(
             value = stops.toString(),
             label = stringResource(if (rides.all { it.isBus }) R.string.trip_done_haltes else R.string.trip_done_stations),
-            modifier = Modifier.weight(1f),
-        )
-        Figure(
-            value = if (changes == 0) stringResource(R.string.trip_done_direct) else stringResource(R.string.trip_done_changes, changes),
-            label = stringResource(if (changes == 0) R.string.trip_done_direct_label else R.string.trip_done_changes_label),
             modifier = Modifier.weight(1f),
         )
     }
