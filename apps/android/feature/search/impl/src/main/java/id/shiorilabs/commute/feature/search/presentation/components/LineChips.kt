@@ -28,7 +28,8 @@ fun LineChips(
         )
         VerticalSpacer(8.dp)
         FlowRow(
-            modifier = Modifier.padding(horizontal = 32.dp),
+            // Chips are containers: edge on the 16dp gutter, as the header's field and toggle.
+            modifier = Modifier.padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {

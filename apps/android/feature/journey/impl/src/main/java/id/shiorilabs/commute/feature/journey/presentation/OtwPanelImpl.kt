@@ -57,6 +57,8 @@ class OtwPanelImpl @Inject constructor() : OtwPanel {
                 state = state,
                 picker = picker,
                 pickerText = pickerText,
+                // Recents stand in for the hint when there are any.
+                showEmptyHint = recentRoutes.isEmpty(),
                 now = rememberJakartaNow().atZone(JAKARTA).toInstant(),
                 actions = viewModel.panelActions(
                     onSelectJourney = { journey ->
@@ -83,7 +85,7 @@ class OtwPanelImpl @Inject constructor() : OtwPanel {
                     onOpen = viewModel::onOpenRecent,
                     onTogglePin = viewModel::onToggleRecentRoute,
                     onClear = viewModel::onClearRecentRoutes,
-                    modifier = Modifier.padding(top = 24.dp),
+                    modifier = Modifier.padding(start = 16.dp, top = 24.dp, end = 16.dp),
                 )
             }
         }
