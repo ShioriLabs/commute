@@ -30,6 +30,7 @@
             <option value="$PROJECT_DIR$/core/common" />
             <option value="$PROJECT_DIR$/core/config" />
             <option value="$PROJECT_DIR$/core/datastore" />
+            <option value="$PROJECT_DIR$/core/font" />
             <option value="$PROJECT_DIR$/core/location" />
             <option value="$PROJECT_DIR$/core/model" />
             <option value="$PROJECT_DIR$/core/navigation" />
@@ -37,6 +38,7 @@
             <option value="$PROJECT_DIR$/core/notification" />
             <option value="$PROJECT_DIR$/core/query" />
             <option value="$PROJECT_DIR$/core/trip" />
+            <option value="$PROJECT_DIR$/core/tripcopy" />
             <option value="$PROJECT_DIR$/core/ui" />
             <option value="$PROJECT_DIR$/core/wearable" />
             <option value="$PROJECT_DIR$/feature" />
@@ -50,6 +52,8 @@
             <option value="$PROJECT_DIR$/feature/journey/impl" />
             <option value="$PROJECT_DIR$/feature/line" />
             <option value="$PROJECT_DIR$/feature/line/impl" />
+            <option value="$PROJECT_DIR$/feature/onboarding" />
+            <option value="$PROJECT_DIR$/feature/onboarding/impl" />
             <option value="$PROJECT_DIR$/feature/saved" />
             <option value="$PROJECT_DIR$/feature/saved/impl" />
             <option value="$PROJECT_DIR$/feature/search" />
