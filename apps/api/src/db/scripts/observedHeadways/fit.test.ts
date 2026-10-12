@@ -198,7 +198,7 @@ describe('vouchedColumns', () => {
 describe('renderOverlay', () => {
   const pool = buildPool(days)
   const model = fitFactorised(pool)
-  const base = { model, pool, modelName: 'M2 factorised', range: { from: '20261005', to: '20261009' }, dayCounts: { WD: 5, WE: 0 }, backtestLines: ['Leave-one-day-out: test'] }
+  const base = { model, pool, modelName: 'M2 factorised', range: { from: '20261005', to: '20261009' }, dayCounts: { WD: 5, WE: 0 }, backtestLines: ['Leave-one-day-out: test'], scales: [], interpolated: new Map() }
 
   it('writes sorted, clamped profile cells for vouched columns only', () => {
     const text = renderOverlay({ ...base, vouched: new Set([column('WD', 10)]) })

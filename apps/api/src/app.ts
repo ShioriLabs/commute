@@ -12,6 +12,7 @@ import uploads from './routes/uploads'
 import { cacheControl, MAX_AGE } from './middleware/cache-control'
 import { rateLimit } from './middleware/rate-limit'
 import { requestLog } from './middleware/request-log'
+import { observedFlag } from './middleware/observed-flag'
 
 /**
  * Cloudflare's rate limiting binding. Optional because local `wrangler dev` and
@@ -99,6 +100,17 @@ app.use('/fares/*', rateLimit('FARE'), cacheControl(MAX_AGE.FARE))
  * is strictly better than the nothing it carried before.
  */
 app.use('/_internal/*', rateLimit('FARE'), cacheControl(MAX_AGE.FARE))
+/*
+ * Headways depend on the hour of day, so the halte page's frequency answer can
+ * go stale on an hour boundary rather than on a data change: the FARE lifetime
+ * (10 min) instead of /stations' hour. Registered after the broad group so the
+ * more specific value wins, the same way timetables get theirs above.
+ *
+ * `observedFlag` refreshes the kill switch for the two surfaces that read
+ * headways (the planner behind /_internal/trips and this endpoint).
+ */
+app.use('/stations/:operator/:stationCode/headway', observedFlag(), cacheControl(MAX_AGE.FARE))
+app.use('/_internal/trips/*', observedFlag())
 /*
  * Compiled into the worker like lines.ts, so it changes only on a deploy: a
  * day at the edge, and the app revalidates with the ETag for a bodyless 304.
