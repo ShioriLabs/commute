@@ -447,7 +447,7 @@ object TripEngine {
             val ride = plan.ride(state.legIndex)
             val clock = RideClock(ride)
             val fresh = state.confirmedAt?.let { Duration.between(it, now) < STALE } == true
-            val offset = Duration.ofSeconds(state.clockOffsetS)
+            val offset = Duration.ofSeconds(state.lateS)
 
             if (state.phase == TripPhase.WAITING_TO_BOARD) {
                 val departs = ride.departureAt?.plus(offset)
@@ -465,10 +465,13 @@ object TripEngine {
             val estimate = clock.positionAt(now.minus(offset))
             val position = if (fresh || estimate == null) state.confirmedPosition else max(state.confirmedPosition, estimate)
             state = state.copy(position = position, source = sourceOf(ride, fresh))
+            // Where a train running early would be if it kept its lead: "siap-siap" goes by that,
+            // better a minute early than after the doors have shut.
+            val ahead = if (fresh) position else clock.positionAt(now.minusSeconds(state.clockOffsetS))?.let { max(position, it) } ?: position
 
             // Reached the alighting stop already (a long sleep, a sparse fix): too late for
             // "siap-siap", which is skipped below rather than sent after the fact.
-            if (position < ride.lastIndex) state = prepareIfDue(ride, clock, state, now, effects)
+            if (position < ride.lastIndex) state = prepareIfDue(ride, clock, state, ahead, now, effects)
 
             if (position >= ride.lastIndex) {
                 fire(state, AlertKind.PREPARE, estimated = state.source != PositionSource.CONFIRMED, mutableListOf())
@@ -511,26 +514,28 @@ object TripEngine {
     /**
      * "Siap-siap": as the train leaves the stop before the one to get off at, or, when that last hop
      * is long, about three minutes before reaching it. A train held at the stop before (seen there
-     * by a fix) hasn't left; by the clock alone, it leaves as it gets there.
+     * by a fix) hasn't left; by the clock alone, it leaves as it gets there. [position] is where the
+     * train is taken to be for it: a train running early, unseen, still on its lead.
      */
     private fun prepareIfDue(
         ride: TripLeg.Ride,
         clock: RideClock,
         state: TripState,
+        position: Double,
         now: Instant,
         effects: MutableList<TripEffect>,
     ): TripState {
         if (prepareKey(state.legIndex) in state.firedAlerts) return state
         val before = (ride.lastIndex - 1).toDouble()
         val hopStart = clock.scheduledAt(before)
-        val left = state.position > before || (
-            state.position == before && state.source != PositionSource.CONFIRMED &&
+        val left = position > before || (
+            position == before && state.source != PositionSource.CONFIRMED &&
                 hopStart != null && !now.isBefore(hopStart.plusSeconds(state.clockOffsetS))
             )
         if (!left) return state
         val hopEnd = clock.scheduledAt(ride.lastIndex.toDouble())
         if (hopStart != null && hopEnd != null && Duration.between(hopStart, hopEnd) > LONG_HOP) {
-            val atPosition = clock.scheduledAt(state.position)!!
+            val atPosition = clock.scheduledAt(position)!!
             if (Duration.between(atPosition, hopEnd) > PREPARE_LEAD) return state
         }
         return fire(state, AlertKind.PREPARE, estimated = state.source != PositionSource.CONFIRMED, effects) ?: state
@@ -570,7 +575,7 @@ object TripEngine {
             offRouteStrikes = 0,
             askedStillOnRoute = false,
             // Off when seen; by the clock, when the ride should have got in, not when that was noticed.
-            walkingSince = (if (estimated) ride.arrivalAt?.plusSeconds(state.clockOffsetS) ?: now else now)
+            walkingSince = (if (estimated) ride.arrivalAt?.plusSeconds(state.lateS) ?: now else now)
                 .takeIf { plan.transferBefore(following) != null },
             sightedPosition = null,
             passingFrom = null,
@@ -629,15 +634,18 @@ object TripEngine {
         if (state.phase != TripPhase.ARRIVED) {
             val ride = plan.ride(state.legIndex)
             val clock = RideClock(ride)
-            val offset = Duration.ofSeconds(state.clockOffsetS)
+            val offset = Duration.ofSeconds(state.lateS)
+            // "Siap-siap" keeps to an early train's lead ([prepareIfDue]).
+            val lead = Duration.ofSeconds(state.clockOffsetS)
             if (ride.isTimed) {
                 when (state.phase) {
                     TripPhase.WAITING_TO_BOARD -> candidates += ride.departureAt!!.plus(offset)
                     else -> {
                         val nextStop = floor(state.position).toInt() + 1
                         if (nextStop <= ride.lastIndex) clock.scheduledAt(nextStop.toDouble())?.let { candidates += it.plus(offset) }
+                        clock.scheduledAt((ride.lastIndex - 1).toDouble())?.let { candidates += it.plus(lead) }
                         val arrives = ride.arrivalAt!!.plus(offset)
-                        candidates += arrives.minus(PREPARE_LEAD)
+                        candidates += ride.arrivalAt.plus(lead).minus(PREPARE_LEAD)
                         candidates += arrives
                         candidates += arrives.plus(ALIGHT_GRACE)
                     }
