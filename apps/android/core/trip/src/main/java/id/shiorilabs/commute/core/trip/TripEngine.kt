@@ -64,6 +64,14 @@ object TripEngine {
     /** Past this along the first hop, and seen getting there at [RIDING_M_PER_S], a rider still walking from the last ride is on the vehicle. */
     private const val BOARDED_AT = 0.3
 
+    /**
+     * Fixes in a row that must have a waiting rider past the platform at a vehicle's pace before
+     * they're aboard. At Sudirman one fix leapt 200 m north and the next came back past the platform
+     * at 9.9 m/s: the board had a train 279 s early sitting there for six minutes before the real one
+     * left. One that has them at a stop further on will do: no fix wanders a whole hop from the platform.
+     */
+    private const val BOARDING_FIXES = 2
+
     /** Faster than anyone walks (about 7 km/h); slower than a train pulling out or a bus in traffic. */
     private const val RIDING_M_PER_S = 2.0
 
@@ -179,9 +187,13 @@ object TripEngine {
             // Seen near the line but not aboard: the fix says where they are, not how far they've
             // come. A walk ends only at the station it goes to, as a change can run beside the
             // next line out of the station it left.
-            if (state.phase == TripPhase.WAITING_TO_BOARD && !boards(ride, state, candidate, fix, tuning)) {
+            val boarding = state.phase == TripPhase.WAITING_TO_BOARD && boards(ride, state, candidate, fix, tuning)
+            val boardingFixes = if (boarding) state.boardingFixes + 1 else 0
+            val boarded = boarding && (boardingFixes >= BOARDING_FIXES || candidate >= 1.0)
+            if (state.phase == TripPhase.WAITING_TO_BOARD && !boarded) {
                 val walked = state.walkingSince != null && reachedAfterWalk(plan, state.legIndex, fix.point, tuning)
                 return tracked.copy(
+                    boardingFixes = boardingFixes,
                     sightedPosition = candidate,
                     confirmedAt = fix.at,
                     offRouteStrikes = 0,
@@ -225,6 +237,7 @@ object TripEngine {
                 resumed = false,
                 walkingSince = null,
                 sightedPosition = null,
+                boardingFixes = 0,
                 stopTimes = stopTimes,
                 passingFrom = null,
             )
@@ -356,12 +369,17 @@ object TripEngine {
      * Still walking from the last ride, only [BOARDED_AT] of the hop will do: the station walked
      * from can lie beside this line, past its platform (Dukuh Atas LRT is 270 m along the KRL out
      * of Sudirman), where one rough fix leaping on would otherwise board them.
+     *
+     * After one such fix (now the sighting), the next need only keep on at a vehicle's pace by the
+     * satellites, not behind it: a second a train out of Setiabudi covers less than the fixes' error.
+     * Without a speed, it still has to have come on from it.
      */
     private fun boards(ride: TripLeg.Ride, state: TripState, candidate: Double, fix: TripEvent.Fix, tuning: Tuning): Boolean {
         val pastPlatform = if (state.walkingSince != null) candidate >= BOARDED_AT else metresAlong(ride, 0.0, candidate) > tuning.atStop
         if (!pastPlatform) return false
         if (fix.speedMps != null && fix.speedMps < RIDING_M_PER_S) return false
         val from = state.sightedPosition ?: return false
+        if (state.boardingFixes > 0 && fix.speedMps != null) return candidate >= from
         val since = state.confirmedAt ?: return false
         val seconds = Duration.between(since, fix.at).toMillis() / 1000.0
         val moved = metresAlong(ride, from, candidate)
@@ -578,6 +596,7 @@ object TripEngine {
             walkingSince = (if (estimated) ride.arrivalAt?.plusSeconds(state.lateS) ?: now else now)
                 .takeIf { plan.transferBefore(following) != null },
             sightedPosition = null,
+            boardingFixes = 0,
             passingFrom = null,
         )
     }

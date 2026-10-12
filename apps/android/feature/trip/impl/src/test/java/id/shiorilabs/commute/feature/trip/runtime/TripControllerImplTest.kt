@@ -454,9 +454,9 @@ class TripControllerImplTest {
         origin,
     )
 
-    private val sudirmanToManggarai = GeoPoint(
-        SUDIRMAN.latitude!! + (MANGGARAI.latitude!! - SUDIRMAN.latitude!!) * 0.2,
-        SUDIRMAN.longitude!! + (MANGGARAI.longitude!! - SUDIRMAN.longitude!!) * 0.2,
+    private fun sudirmanToManggarai(fraction: Double) = GeoPoint(
+        SUDIRMAN.latitude!! + (MANGGARAI.latitude!! - SUDIRMAN.latitude!!) * fraction,
+        SUDIRMAN.longitude!! + (MANGGARAI.longitude!! - SUDIRMAN.longitude!!) * fraction,
     )
 
     @Test
@@ -478,7 +478,8 @@ class TripControllerImplTest {
         runCurrent()
 
         // The 08.10, three minutes late: 600 m out at 08.13.
-        controller.onFix(Fix(sudirmanToManggarai, 10f, minutes(13), speedMps = 12f))
+        controller.onFix(Fix(sudirmanToManggarai(0.2), 10f, minutes(13), speedMps = 12f))
+        controller.onFix(Fix(sudirmanToManggarai(0.22), 10f, minutes(13).plusSeconds(5), speedMps = 12f))
 
         val trip = controller.active.value!!
         assertEquals(plan, trip.plan)
@@ -505,7 +506,8 @@ class TripControllerImplTest {
         assertEquals(minutes(30), controller.active.value!!.plan.ride(2).departureAt)
 
         // The 08.20, three minutes late: 600 m out at 08.23.
-        controller.onFix(Fix(sudirmanToManggarai, 10f, minutes(23), speedMps = 12f))
+        controller.onFix(Fix(sudirmanToManggarai(0.2), 10f, minutes(23), speedMps = 12f))
+        controller.onFix(Fix(sudirmanToManggarai(0.22), 10f, minutes(23).plusSeconds(5), speedMps = 12f))
 
         val trip = controller.active.value!!
         assertEquals(afterOne, trip.plan)
@@ -535,7 +537,8 @@ class TripControllerImplTest {
         runCurrent()
 
         controller.onFix(Fix(GeoPoint(SUDIRMAN.latitude!!, SUDIRMAN.longitude!!), 10f, minutes(20), speedMps = 0f))
-        controller.onFix(Fix(sudirmanToManggarai, 10f, minutes(21), speedMps = 12f))
+        controller.onFix(Fix(sudirmanToManggarai(0.2), 10f, minutes(21), speedMps = 12f))
+        controller.onFix(Fix(sudirmanToManggarai(0.22), 10f, minutes(21).plusSeconds(5), speedMps = 12f))
 
         val trip = controller.active.value!!
         assertEquals(minutes(20), trip.plan.ride(2).departureAt)

@@ -386,6 +386,7 @@ class TripEngineTest {
         assertTrue(run.alerts().isEmpty())
 
         run.fix(Places.HALTE_1, 0.0)
+        run.fix(between(Places.HALTE_1, Places.HALTE_2, 0.4), 1.5)
         run.fix(between(Places.HALTE_1, Places.HALTE_2, 0.6), 2.0)
         assertEquals(TripPhase.RIDING, run.state.phase)
 
@@ -567,6 +568,7 @@ class TripEngineTest {
 
         run.fix(between(Places.SUDIRMAN, Places.MANGGARAI, 0.4), 11.0)
         run.fix(between(Places.SUDIRMAN, Places.MANGGARAI, 0.6), 11.5)
+        run.fix(between(Places.SUDIRMAN, Places.MANGGARAI, 0.8), 12.0)
         assertNull(run.state.walkingSince)
         assertEquals(TripPhase.RIDING, run.state.phase)
     }
@@ -594,16 +596,19 @@ class TripEngineTest {
         assertEquals(TripPhase.WAITING_TO_BOARD, run.state.phase)
 
         run.fix(between(Places.MANGGARAI, Places.TEBET, 0.6), -0.5)
+        run.fix(between(Places.MANGGARAI, Places.TEBET, 0.8), 0.0)
         assertEquals(TripPhase.RIDING, run.state.phase)
-        assertEquals(0.6, run.state.confirmedPosition, 0.01)
+        assertEquals(0.8, run.state.confirmedPosition, 0.01)
     }
 
     @Test
     fun `a rider pulling out of the station is aboard once past the platform, however long the hop`() {
         // Setiabudi on 2026-10-06: standing on the platform, then 140 m out at 5 m/s, a sixth of the hop.
+        // Again on 2026-10-12, and a second later 5 m on at 4.4 m/s, no further than the fix's error.
         val run = Run(lrtThenKrl)
-        run.fix(GeoPoint(-6.209087, 106.830283), 1.0, accuracyM = 4f, speedMps = 0f)
-        run.fix(GeoPoint(-6.207960, 106.829877), 1.02, accuracyM = 6f, speedMps = 5.08f)
+        run.fix(GeoPoint(-6.2092469, 106.8302789), 1.0, accuracyM = 8f)
+        run.fix(GeoPoint(-6.2081734, 106.8298661), 1.38, accuracyM = 7f, speedMps = 4.44f)
+        run.fix(GeoPoint(-6.2081295, 106.8298632), 1.4, accuracyM = 5f, speedMps = 4.36f)
 
         assertEquals(TripPhase.RIDING, run.state.phase)
     }
@@ -615,6 +620,28 @@ class TripEngineTest {
         run.fix(GeoPoint(-6.207960, 106.829877), -0.98, accuracyM = 6f, speedMps = 0.3f)
 
         assertEquals(TripPhase.WAITING_TO_BOARD, run.state.phase)
+    }
+
+    @Test
+    fun `one fix leaping past the platform at speed isn't boarding, the train leaving is`() {
+        // Sudirman on 2026-10-12: waiting at the platform's east end, a rough fix 200 m north, then
+        // one back past the platform the satellites put at 9.9 m/s. The train left six minutes later.
+        val run = Run(lrtThenKrl)
+        run.tick(0.0)
+        run.fix(Places.LRT_DUKUH_ATAS, 2.0, accuracyM = 7f, speedMps = 4.2f)
+        run.fix(GeoPoint(-6.2025725, 106.8248478), 10.0, accuracyM = 4f, speedMps = 0.38f)
+        assertNull(run.state.walkingSince)
+
+        run.fix(GeoPoint(-6.2018987, 106.8254485), 11.0, accuracyM = 47f, speedMps = 0.97f)
+        run.fix(GeoPoint(-6.2029836, 106.8255072), 11.03, accuracyM = 32f, speedMps = 9.93f)
+        run.fix(GeoPoint(-6.2036441, 106.8253222), 11.5, accuracyM = 17f)
+        run.fix(GeoPoint(-6.203466, 106.8252717), 11.53, accuracyM = 15f, speedMps = 0.87f)
+        assertEquals(TripPhase.WAITING_TO_BOARD, run.state.phase)
+
+        run.fix(GeoPoint(-6.2026464, 106.8244441), 12.0, accuracyM = 7f, speedMps = 0f)
+        run.fix(GeoPoint(-6.2028828, 106.8257336), 12.5, accuracyM = 93f)
+        run.fix(GeoPoint(-6.2031194, 106.8259567), 12.53, accuracyM = 15f, speedMps = 11.68f)
+        assertEquals(TripPhase.RIDING, run.state.phase)
     }
 
     @Test
