@@ -47,8 +47,8 @@ const OUT_PATH = `${__dirname}/../data/headways.ts`
  * dominance test. It binds on ~37% of TJ pairs once variants are combined, which
  * is why the UI renders the floor as "~2 menit" rather than a precise figure.
  */
-const HEADWAY_CAP_S = 3600
-const HEADWAY_FLOOR_S = 120
+export const HEADWAY_CAP_S = 3600
+export const HEADWAY_FLOOR_S = 120
 
 /*
  * TJ route scope, matching generateTJSQL.ts's SCOPE_DESC.
