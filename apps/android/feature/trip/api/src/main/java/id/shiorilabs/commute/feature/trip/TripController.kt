@@ -48,7 +48,7 @@ enum class TripReminder {
     NONE,
 
     /**
-     * "Ingatkan Aku": one hard buzz with "Siap-siap turun", on the watch if one's in reach, else the
+     * "Ingatkan Aku": three knocks (Morse U) with "Siap-siap turun", on the watch if one's in reach, else the
      * phone, as an alarm's buzz, so it comes through silent mode.
      */
     PING,
