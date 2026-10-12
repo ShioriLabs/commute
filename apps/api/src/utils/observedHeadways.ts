@@ -16,7 +16,7 @@ import { memoize } from './memo'
  * Observed TransJakarta headways, applied over the schedule-derived ones.
  *
  * The model is generated (db/scripts/fitObservedHeadways.ts, `pnpm --filter api
- * fit:headways`) and this module reads four exports of it and nothing else, so
+ * fit:headways`) and this module reads six exports of it and nothing else, so
  * refitting is "regenerate the file and deploy": no logic here knows how the
  * values were made, including how the gaps were filled.
  *

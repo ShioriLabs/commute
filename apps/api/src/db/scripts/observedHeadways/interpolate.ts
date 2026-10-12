@@ -110,6 +110,12 @@ export const CELL_VETO = Math.log(2)
 
 export interface ConflictResult {
   accepted: Map<string, number>
+  /**
+   * Cells dropped because the model saw the line-direction in a column that DID
+   * have data and found too few arrivals to fit a profile: evidence of little or
+   * no service, which interpolation from busier hours would paper over.
+   */
+  sparseVetoed: number
   /** Columns dropped, whether they failed the test themselves or shared a span with one that did. */
   rejectedColumns: number[]
   /** Median |log(interp/model)| per column that had model values, for reporting margins. */
@@ -130,12 +136,24 @@ export interface ConflictResult {
  * `measuredColumns` are the columns that ship a measured profile. They define
  * the spans; a leading or trailing run before the first or after the last
  * measured hour is a span of its own.
+ *
+ * A third check handles what the two above cannot see. The reference only has a
+ * cell where the model had enough arrivals to fit one, so a line-direction that
+ * was observed in a healthy column but barely ran (7F has no scheduled service
+ * 09:30-14:00) has NO reference there, which reads as "nothing to contradict
+ * it", and the hour was filled from its busier neighbours (~19 minutes, labelled
+ * INTERPOLATED). `dataColumns` are the columns with enough healthy days to fit
+ * anything; an interpolated cell in one of them with no model value of its own
+ * is that situation, and is dropped. In a column without data (the weekday rush
+ * hours) an absent cell really is a blind hour, and interpolation is the answer.
  */
 export function rejectConflicting(
   interpolated: ReadonlyMap<string, number>,
   /** `${line}@${dir}|${column}` -> the model's own headway seconds, vouched or not. */
   reference: ReadonlyMap<string, number>,
   measuredColumns: ReadonlySet<number>,
+  /** Columns with enough healthy days to fit a profile at all. */
+  dataColumns: ReadonlySet<number> = new Set(),
   tolerance: number = CONFLICT_TOLERANCE,
   cellVeto: number = CELL_VETO
 ): ConflictResult {
@@ -186,14 +204,20 @@ export function rejectConflicting(
 
   const accepted = new Map<string, number>()
   let vetoedCells = 0
+  let sparseVetoed = 0
   for (const [id, seconds] of interpolated) {
-    if (rejected.has(columnOf(id))) continue
+    const column = columnOf(id)
+    if (rejected.has(column)) continue
     const own = reference.get(id)
+    if (own === undefined && dataColumns.has(column)) {
+      sparseVetoed++
+      continue
+    }
     if (own !== undefined && own > 0 && Math.abs(Math.log(seconds / own)) > cellVeto) {
       vetoedCells++
       continue
     }
     accepted.set(id, seconds)
   }
-  return { accepted, rejectedColumns: [...rejected].sort((a, b) => a - b), deviations: median, vetoedCells }
+  return { accepted, rejectedColumns: [...rejected].sort((a, b) => a - b), deviations: median, vetoedCells, sparseVetoed }
 }

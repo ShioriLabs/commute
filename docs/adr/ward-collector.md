@@ -85,9 +85,9 @@ Build `apps/ward`, a small Node service on a 1 vCPU / 1GB VPS:
 `pnpm --filter api fit:headways --dir <archives>` aggregates each WIB day once
 (cached, n / Σh / Σh² per line-stop-direction-hour plus healthy seconds per
 hour), fits smoothed estimators, backtests them, and writes
-`apps/api/src/db/data/headways.observed.ts`. Nothing at runtime reads that file
-yet; wiring it into `fares.ts` (`headwaysFor(day, departureS)`) and the station
-headway endpoint is a separate, reviewed change.
+`apps/api/src/db/data/headways.observed.ts`. It is read at runtime by the planner
+and the station headway endpoint; see "Wiring observed headways into the API"
+below.
 
 - **Quantity:** the rate headway (healthy time ÷ arrivals), what "every N
   minutes" means. Bunching is kept as a pooled CV per line-direction-hour, not
@@ -112,7 +112,7 @@ headway endpoint is a separate, reviewed change.
 ## Wiring observed headways into the API (2026-10-12)
 
 The overlay from stage 1 is read by the planner and the station headway endpoint.
-The runtime (`apps/api/src/utils/observedHeadways.ts`) reads four generated
+The runtime (`apps/api/src/utils/observedHeadways.ts`) reads six generated
 exports and knows nothing about how they were made, so refitting is
 **regenerate and deploy**:
 
@@ -188,7 +188,8 @@ paths. What changed, and why it is the way it is:
   the same cells; where the median disagreement exceeds 1.3x the column is left
   to the scaled fallback (`OBSERVED_META.interpolationRejected`). Columns with no
   model value at all (the weekday rush hours) have nothing to contradict them and
-  are kept. Measured gap: daytime agrees to <= 0.23 in log terms, night starts at
+  are kept (see the sparse veto below for the per-cell version of "no model
+  value"). Measured gap: daytime agrees to <= 0.23 in log terms, night starts at
   0.28. That gap is narrow, so the hours between two measured hours are judged
   together (one conflicting hour rejects the whole span, so the weakest cannot
   ship a ramp alone between a measured hour and a rejected one), a single cell
@@ -234,3 +235,36 @@ Deliberately not changed: pricing a whole journey at the departure hour, `basis:
 SCALED` carrying an unchanged value when the schedule is already past the cap,
 hours outside a line's service window still returning a value on the card, and
 the manual `API_VERSION` bump on a refit.
+
+### Second review round (2026-10-12)
+
+A fresh review of the whole feature found no blocker. What it found, and what
+changed:
+
+- **Sparse hours are not blind hours.** The conflict check's reference is the
+  model's own value, which only exists for cells that passed the arrival floor.
+  A line-direction missing from a column that DID have data barely ran there
+  (7F has no scheduled service 09:30-14:00, and the model saw none), yet "no
+  reference" read as "nothing to contradict it" and the hour was filled from the
+  busier neighbours (~19 minutes, labelled INTERPOLATED). An interpolated cell in
+  a column with enough healthy days whose line-direction has no model value is
+  now dropped and takes the scaled fallback (47 cells). Columns with no data at
+  all (the weekday rush hours) are still interpolated.
+- **The fit's day cache is keyed on what shapes an aggregate**, not only the
+  archive files: a fingerprint of the stop order and direction assignment, the
+  health gate, the arrival options and the collector's gap constants. A TJ import
+  that changes a corridor, or a gate tweak, now re-aggregates instead of silently
+  reusing old days.
+- **Holidays train the weekend model.** `dayTypeOf` in the fit now uses
+  `HOLIDAYS`, as `serviceDay()` does at runtime; the day type is recomputed on
+  load, so a date added to the list moves an already-cached day.
+- **Generated keys are escaped**, so a line code or station id containing a quote
+  or backslash cannot break the file.
+- **Fixture-dependent tests skip visibly** (`it.skipIf`) instead of returning
+  without asserting when a refit leaves no suitable fixture.
+
+Known and not addressed: the backtest scores only cells with >= 4 arrivals in a
+held-out hour, so sparse (30-60 minute) cells are never scored and still ship
+when their column is vouched; and the vouching baseline uses weekday schedule
+values, one scale and no cap, which is weaker than the fallback that ships.
+Both change how columns are vouched and want their own before/after.

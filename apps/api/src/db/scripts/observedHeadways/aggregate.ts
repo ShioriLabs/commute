@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto'
+import { HOLIDAYS } from '@commute/constants'
 import { type ArrivalOptions, DEFAULT_ARRIVAL_OPTIONS, extractArrivals, type StopOrder } from './arrivals'
-import { SnapshotCollector } from './collector'
+import { REPLAY_WINDOW_MS, SILENCE_GAP_MS, SnapshotCollector } from './collector'
 import { type HealthGate, healthySecondsByHour, intervals, wibHour } from './health'
 import { lines, type SnapshotRecord } from './snapshots'
 
@@ -35,14 +37,42 @@ export interface DayAggregate {
 export const AGGREGATE_SCHEMA = 1
 
 /**
- * Weekend vs weekday. Public holidays are not recognised: a holiday weekday
- * lands in WD and reads as a quiet weekday. None fell inside the collection
- * window at the time of writing; revisit when one does.
+ * Weekend vs weekday, with public holidays on the weekend side.
+ *
+ * Mirrors the runtime: `serviceDay()` maps a holiday to SUN, which reads the
+ * pooled weekend model, so a holiday's snapshots must train that model rather
+ * than dilute the weekday one with a quiet "weekday".
  */
 export function dayTypeOf(day: string): DayType {
-  const weekday = new Date(`${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6, 8)}T00:00:00Z`).getUTCDay()
-  const weekend = weekday === 0 || weekday === 6
+  const iso = `${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6, 8)}`
+  const weekday = new Date(`${iso}T00:00:00Z`).getUTCDay()
+  const weekend = weekday === 0 || weekday === 6 || HOLIDAYS.has(iso)
   return weekend ? 'WE' : 'WD'
+}
+
+/**
+ * Everything, besides the snapshot files themselves, that decides what an
+ * aggregate contains: the stop order and direction assignment, the health gate,
+ * the arrival options and the collector's gap constants.
+ *
+ * A cached day is reusable only if this matches. Without it, a TJ import that
+ * changed a corridor's path, or a tweak to the gate, would silently keep feeding
+ * old aggregates into the factors and scales with nothing reporting it.
+ */
+export function aggregationFingerprint(
+  order: StopOrder,
+  gate: HealthGate,
+  options: ArrivalOptions = DEFAULT_ARRIVAL_OPTIONS
+): string {
+  const orderEntries = [...order].map(([line, dirs]) => [line, [...dirs.F], [...dirs.R]])
+  const material = JSON.stringify({
+    order: orderEntries,
+    gate,
+    options: { maxObsGapMs: options.maxObsGapMs, interpolate: options.interpolate },
+    silenceGapMs: SILENCE_GAP_MS,
+    replayWindowMs: REPLAY_WINDOW_MS
+  })
+  return createHash('sha256').update(material).digest('hex').slice(0, 16)
 }
 
 /** Reduce an already-folded day. Split from the file reading so it is testable on its own. */

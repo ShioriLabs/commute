@@ -3,10 +3,10 @@ import * as path from 'node:path'
 import { parseArgs } from 'node:util'
 import { DIRECTIONAL_HEADWAYS_S, STOP_HEADWAYS_S } from '../data/headways'
 import { TOPOLOGY } from '../data/topology'
-import { aggregateDay, AGGREGATE_SCHEMA, type DayAggregate } from './observedHeadways/aggregate'
+import { aggregateDay, AGGREGATE_SCHEMA, aggregationFingerprint, dayTypeOf, type DayAggregate } from './observedHeadways/aggregate'
 import { buildOrder } from './observedHeadways/arrivals'
 import { backtest, type BacktestSummary, type GtfsLookup, gtfsRawSpec, gtfsScaledSpec, vouchedColumns } from './observedHeadways/backtest'
-import { buildPool, columnDayType, columnHour, fitFactorised, fitPooled, fitShrunk, type ModelSpec, pooledCv, SHRINK_KAPPAS } from './observedHeadways/fit'
+import { buildPool, COLUMNS, columnDayType, columnHour, fitFactorised, MIN_COLUMN_DAYS, fitPooled, fitShrunk, type ModelSpec, pooledCv, SHRINK_KAPPAS } from './observedHeadways/fit'
 import { DEFAULT_GATE } from './observedHeadways/health'
 import { renderOverlay } from './observedHeadways/render'
 import { CELL_VETO, CONFLICT_TOLERANCE, interpolateProfiles, rejectConflicting } from './observedHeadways/interpolate'
@@ -24,7 +24,8 @@ import { baseHeadways } from '../../utils/headways'
  *
  * <dir> is ward's daily archives (see observedHeadways/snapshots.ts). The cache
  * holds one small JSON per day, so a nightly run only reads new archives.
- * Nothing at runtime reads the output yet.
+ * The runtime reads the output through utils/observedHeadways.ts (the planner
+ * and the station headway endpoint); see docs/adr/ward-collector.md.
  */
 
 const OUT_PATH = `${__dirname}/../data/headways.observed.ts`
@@ -47,6 +48,7 @@ const gtfs: GtfsLookup = key => DIRECTIONAL_HEADWAYS_S[key] ?? STOP_HEADWAYS_S[k
 async function loadDays(dir: string, cacheDir: string, limit?: number): Promise<DayAggregate[]> {
   fs.mkdirSync(cacheDir, { recursive: true })
   const order = buildOrder(TOPOLOGY)
+  const fingerprint = aggregationFingerprint(order, DEFAULT_GATE)
   const all = dayFiles(dir)
   const wanted = limit ? all.slice(-limit) : all
   const out: DayAggregate[] = []
@@ -54,15 +56,24 @@ async function loadDays(dir: string, cacheDir: string, limit?: number): Promise<
     const source = files.map(f => ({ file: path.basename(f), size: fs.statSync(f).size }))
     const cachePath = path.join(cacheDir, `day-${day}.json`)
     if (fs.existsSync(cachePath)) {
-      const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as { source: typeof source, aggregate: DayAggregate }
-      if (cached.aggregate.schema === AGGREGATE_SCHEMA && JSON.stringify(cached.source) === JSON.stringify(source)) {
-        out.push(cached.aggregate)
+      const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as {
+        source: typeof source
+        fingerprint?: string
+        aggregate: DayAggregate
+      }
+      const same = cached.aggregate.schema === AGGREGATE_SCHEMA
+        && cached.fingerprint === fingerprint
+        && JSON.stringify(cached.source) === JSON.stringify(source)
+      if (same) {
+        // The day type is recomputed, not trusted: a holiday list that gained a
+        // date since the aggregate was written must move that day to WE.
+        out.push({ ...cached.aggregate, dayType: dayTypeOf(day) })
         continue
       }
     }
     console.log(`aggregating ${day} (${files.length} file${files.length === 1 ? '' : 's'})`)
     const aggregate = await aggregateDay(day, files, order, DEFAULT_GATE)
-    fs.writeFileSync(cachePath, JSON.stringify({ source, aggregate }))
+    fs.writeFileSync(cachePath, JSON.stringify({ source, fingerprint, aggregate }))
     out.push(aggregate)
   }
   return out
@@ -164,10 +175,16 @@ async function main() {
   // Only the cells that ship are measured; interpolation fills between those,
   // and is then checked against what the model itself saw in the hours it fills.
   const measured = new Map([...own].filter(([id]) => vouched.has(Number(id.split('|')[1]))))
-  const { accepted: interpolated, rejectedColumns, deviations, vetoedCells } = rejectConflicting(
+  // Columns with enough healthy days to fit a profile: a line-direction missing
+  // from one of them barely ran, which is not the same as a blind hour.
+  const dataColumns = new Set(
+    Array.from({ length: COLUMNS }, (_, c) => c).filter(c => pool.daysOk[c]! >= MIN_COLUMN_DAYS)
+  )
+  const { accepted: interpolated, rejectedColumns, deviations, vetoedCells, sparseVetoed } = rejectConflicting(
     interpolateProfiles(measured),
     own,
-    vouched
+    vouched,
+    dataColumns
   )
   // Show every column's margin, so a borderline one is visible to whoever reviews
   // the refit rather than discovered when it flips.
@@ -178,7 +195,7 @@ async function main() {
     const flag = Math.abs(margin) < 0.05 ? '  <- borderline' : ''
     console.log(`  ${columnDayType(c)} ${String(columnHour(c)).padStart(2)}  ${deviation.toFixed(2)}  ${state}${flag}`)
   }
-  console.log(`rejected (own failure or sharing a span with one): ${rejectedColumns.map(c => `${columnDayType(c)}:${columnHour(c)}`).join(' ') || 'none'}; ${vetoedCells} cells vetoed`)
+  console.log(`rejected (own failure or sharing a span with one): ${rejectedColumns.map(c => `${columnDayType(c)}:${columnHour(c)}`).join(' ') || 'none'}; ${vetoedCells} cells vetoed, ${sparseVetoed} sparse (observed column, line-direction barely ran)`)
   const summary = (label: string, s: BacktestSummary) =>
     `${label}: M2 ${fmt(s.models['M2 factor']!.median)}, pooled ${fmt(s.models['M0 pooled']!.median)}, GTFS scaled ${fmt(s.models.gtfsScaled!.median)}, GTFS raw ${fmt(s.models.gtfsRaw!.median)} (median |log err|, ${s.intersection} buckets)`
   const text = renderOverlay({

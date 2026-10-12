@@ -209,11 +209,14 @@ describe('plannerHeadways', () => {
     for (const key of baseHeadways('WD').keys()) expect(map.has(key)).toBe(true)
   })
 
-  it('falls back to the scaled schedule where there is no profile at all, measured or interpolated', () => {
-    const line = Object.keys(LINE_TERMINI).find(l => HEADWAYS_S[l] !== undefined
-      && !Object.keys(OBSERVED_PROFILE_S).some(k => k.startsWith('WD:') && k.includes(`:${l}@`))
-      && !Object.keys(OBSERVED_PROFILE_INTERP_S).some(k => k.startsWith('WD:') && k.includes(`:${l}@`)))
-    if (line === undefined) return // every TJ line has a profile in this fit
+  // A TJ corridor with no profile of either kind on weekdays. If every line has
+  // one in the current fit, the test is reported SKIPPED, not silently passed.
+  const lineWithoutProfile = Object.keys(LINE_TERMINI).find(l => HEADWAYS_S[l] !== undefined
+    && !Object.keys(OBSERVED_PROFILE_S).some(k => k.startsWith('WD:') && k.includes(`:${l}@`))
+    && !Object.keys(OBSERVED_PROFILE_INTERP_S).some(k => k.startsWith('WD:') && k.includes(`:${l}@`)))
+
+  it.skipIf(lineWithoutProfile === undefined)('falls back to the scaled schedule where there is no profile at all, measured or interpolated', () => {
+    const line = lineWithoutProfile!
     expect(plannerHeadways('WD', 17, true).get(line)).toBe(scaledExpected(HEADWAYS_S[line]!, 'WD:17'))
   })
 

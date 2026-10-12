@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { aggregateCollected, dayTypeOf } from './aggregate'
+import { aggregateCollected, aggregationFingerprint, dayTypeOf } from './aggregate'
 import { buildOrder } from './arrivals'
 import { SnapshotCollector } from './collector'
 import type { Tuple } from './snapshots'
@@ -14,6 +14,36 @@ describe('dayTypeOf', () => {
     expect(dayTypeOf('20261010')).toBe('WE') // Saturday
     expect(dayTypeOf('20261011')).toBe('WE') // Sunday
     expect(dayTypeOf('20261012')).toBe('WD') // Monday
+  })
+
+  it('puts a public holiday on the weekend side, as the runtime does', () => {
+    // Friday 2026-12-25 (Natal): serviceDay() maps it to SUN, which reads the WE model.
+    expect(dayTypeOf('20261225')).toBe('WE')
+    // The day before is an ordinary Thursday.
+    expect(dayTypeOf('20261224')).toBe('WD')
+  })
+})
+
+describe('aggregationFingerprint', () => {
+  const gate = { kind: 'share' as const, minShare: 0.5, minScope: 20 }
+
+  it('is stable for the same inputs', () => {
+    expect(aggregationFingerprint(order, gate)).toBe(aggregationFingerprint(order, gate))
+  })
+
+  it('changes when the stop order or a direction assignment changes', () => {
+    const changed = buildOrder([
+      { operator: 'TJ', lineCode: 'T', path: [{ station: 'A' }, { station: 'C' }], pathReverse: [{ station: 'C' }, { station: 'A' }] }
+    ] as never)
+    expect(aggregationFingerprint(changed, gate)).not.toBe(aggregationFingerprint(order, gate))
+  })
+
+  it('changes when the health gate or the arrival options change', () => {
+    const base = aggregationFingerprint(order, gate)
+    expect(aggregationFingerprint(order, { ...gate, minShare: 0.4 })).not.toBe(base)
+    expect(aggregationFingerprint(order, { kind: 'count', min: 400 })).not.toBe(base)
+    expect(aggregationFingerprint(order, gate, { maxObsGapMs: 120_000, interpolate: true })).not.toBe(base)
+    expect(aggregationFingerprint(order, gate, { maxObsGapMs: 300_000, interpolate: false })).not.toBe(base)
   })
 })
 

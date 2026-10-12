@@ -30,6 +30,13 @@ export interface OverlayInput {
 
 const naturalCompare = (a: string, b: string) => a.localeCompare(b, 'en', { numeric: true })
 
+/**
+ * A string as a single-quoted TypeScript literal. Keys are line codes and
+ * station ids from the topology; one containing a quote or a backslash would
+ * otherwise write a file that does not compile.
+ */
+const quote = (value: string) => `'${value.replace(/\\/g, '\\\\').replace(/'/g, '\\\'')}'`
+
 export function profileKey(ld: string, column: number): string {
   return `${columnDayType(column)}:${columnHour(column)}:${ld}`
 }
@@ -100,20 +107,23 @@ export function renderOverlay(input: OverlayInput): string {
     ' *',
     ' * where the profile is the headway at an average stop of that line-direction',
     ' * and the factor (mean 1 per line-direction) says how much more or less often',
-    ' * than average this stop is served. A stop with no factor has no observed',
-    ' * value: use headways.ts for it. Hour is the WIB hour of day;',
+    ' * than average this stop is served. A stop with no factor takes its',
+    ' * line-direction\'s profile at factor 1 where the schedule does not call it',
+    ' * rarer, and the scaled schedule otherwise. Hour is the WIB hour of day;',
     ' * dayType is WD (Mon-Fri) or WE (Sat+Sun pooled — too few weekends yet to split).',
     ' *',
     ' * It is the RATE headway: healthy time divided by arrivals, what "every N',
     ' * minutes" means. Bunching makes the wait a rider experiences longer than half',
     ' * of it; the pooled CV is kept in OBSERVED_CV_PROFILE for that decision.',
     ' *',
-    ' * Cells are ABSENT, and a consumer must fall back to headways.ts, when they',
-    ' * fail the floors (fewer than 3 days with 15 healthy minutes, or under 30',
-    ' * pooled arrivals) or when the backtest does not vouch for their (dayType,',
-    ' * hour): at least 100 held-out buckets, and a lower median error than GTFS',
-    ' * scaled by a per-hour factor. The upstream relay is almost never healthy in',
-    ' * the weekday rush hours, so those hours have nothing to fit or to validate.',
+    ' * A profile cell is ABSENT when it fails the floors (fewer than 3 days with 15',
+    ' * healthy minutes, or under 30 pooled arrivals) or when the backtest does not',
+    ' * vouch for its (dayType, hour): at least 100 held-out buckets, and a lower',
+    ' * median error than GTFS scaled by a per-hour factor. A consumer then reads,',
+    ' * in order, OBSERVED_PROFILE_INTERP_S, the scaled schedule below, and',
+    ' * finally headways.ts as it was. The upstream relay is almost never healthy',
+    ' * in the weekday rush hours, so those hours have nothing to fit or to',
+    ' * validate.',
     ' *',
     ` * Hours present, WIB: weekday ${hoursPresent('WD')}; weekend ${hoursPresent('WE')}.`,
     ' *',
@@ -126,8 +136,11 @@ export function renderOverlay(input: OverlayInput): string {
     ' *      unvouched values contradict the interpolation by more than 1.3x in the',
     ' *      median: those are hours that WERE observed, across a service-regime',
     ' *      change (overnight), so a line between the neighbours would be wrong.',
-    ' *      The hours between two measured hours are judged together, and a single',
-    ' *      cell more than 2x from the model\'s own value is dropped on its own.',
+    ' *      The hours between two measured hours are judged together, a single',
+    ' *      cell more than 2x from the model\'s own value is dropped on its own,',
+    ' *      and a line-direction the model saw in a column that had data but found',
+    ' *      too few arrivals to fit (it barely ran there) is not filled from its',
+    ' *      busier neighbours.',
     ' *   2. OBSERVED_GTFS_SCALE (pooled per-stop schedule values) and',
     ' *      OBSERVED_GTFS_SCALE_DIR (directional ones): the schedule value',
     ' *      (headways.ts) times the column\'s scale, for what is left, never above',
@@ -151,19 +164,19 @@ export function renderOverlay(input: OverlayInput): string {
   ].join('\n')
 
   const entries = (rows: ReadonlyArray<readonly [string, number]>) =>
-    rows.map(([k, v]) => `  '${k}': ${v}`).join(',\n')
+    rows.map(([k, v]) => `  ${quote(k)}: ${v}`).join(',\n')
 
   const meta = [
     '{',
-    `  model: '${input.modelName}',`,
-    `  from: '${input.range.from}',`,
-    `  to: '${input.range.to}',`,
+    `  model: ${quote(input.modelName)},`,
+    `  from: ${quote(input.range.from)},`,
+    `  to: ${quote(input.range.to)},`,
     `  days: { WD: ${input.dayCounts.WD}, WE: ${input.dayCounts.WE} },`,
-    `  scaleMeasured: [${scaleMeasured.map(id => `'${id}'`).join(', ')}],`,
-    `  interpolationRejected: [${rejectedIds.map(id => `'${id}'`).join(', ')}],`,
+    `  scaleMeasured: [${scaleMeasured.map(quote).join(', ')}],`,
+    `  interpolationRejected: [${rejectedIds.map(quote).join(', ')}],`,
     '  /** Healthy hours behind each `${dayType}:${hour}`, summed over the fitted days. */',
     '  healthyHours: {',
-    Object.entries(healthyHours).sort(([a], [b]) => naturalCompare(a, b)).map(([k, v]) => `    '${k}': ${v}`).join(',\n'),
+    Object.entries(healthyHours).sort(([a], [b]) => naturalCompare(a, b)).map(([k, v]) => `    ${quote(k)}: ${v}`).join(',\n'),
     '  }',
     '}'
   ].join('\n')
