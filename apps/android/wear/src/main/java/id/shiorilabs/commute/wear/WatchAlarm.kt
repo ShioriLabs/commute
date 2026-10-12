@@ -39,8 +39,9 @@ object WatchAlarm {
     @SuppressLint("MissingPermission") // Checked just below; without it the buzz still comes.
     fun ring(context: Context, stop: String) {
         val vibrator = context.getSystemService(VibratorManager::class.java).defaultVibrator
-        val round = WearPaths.WAKE_BUZZ.drop(1)
-        val rounds = (RING_MS / WearPaths.WAKE_BUZZ.sum()).toInt()
+        val buzz = WearPaths.wakeBuzz(stop)
+        val round = buzz.drop(1)
+        val rounds = (RING_MS / buzz.sum()).toInt()
         val pattern = longArrayOf(0) + List(rounds) { round }.flatten().toLongArray()
         vibrator.vibrate(
             VibrationEffect.createWaveform(pattern, -1),
@@ -87,9 +88,9 @@ object WatchAlarm {
     }
 
     /** "Ingatkan Aku": three knocks, as an alarm's, so they come through silent mode. */
-    fun ping(context: Context) {
+    fun ping(context: Context, stop: String) {
         context.getSystemService(VibratorManager::class.java).defaultVibrator.vibrate(
-            VibrationEffect.createWaveform(WearPaths.PING_BUZZ, -1),
+            VibrationEffect.createWaveform(WearPaths.pingBuzz(stop), -1),
             VibrationAttributes.createForUsage(VibrationAttributes.USAGE_ALARM),
         )
     }
