@@ -74,6 +74,10 @@ export function renderOverlay(input: OverlayInput): string {
   const scaleEntries = [...input.scales]
     .map(s => [s.id, Math.round(s.scale * 1000) / 1000] as const)
     .sort(([a], [b]) => naturalCompare(a, b))
+  const capEntries = input.scales
+    .filter((s): s is ColumnScale & { cap: number } => s.cap !== undefined)
+    .map(s => [s.id, Math.round(s.cap)] as const)
+    .sort(([a], [b]) => naturalCompare(a, b))
   const scaleMeasured = input.scales.filter(s => s.measured).map(s => s.id).sort(naturalCompare)
 
   const header = [
@@ -112,8 +116,10 @@ export function renderOverlay(input: OverlayInput): string {
     ' *      interpolated between its nearest measured hours (at most 8h apart; held',
     ' *      for at most 2h past the first or last). Same key format as the profile.',
     ' *   2. OBSERVED_GTFS_SCALE: the schedule value (headways.ts) times the',
-    ' *      column\'s scale, for what is left. Columns the backtest vouched for',
-    ' *      carry a measured scale; the rest are interpolated (see scaleMeasured).',
+    ' *      column\'s scale, for what is left, never above OBSERVED_GTFS_CAP_S for',
+    ' *      that column (observed headways saturate; see scale.ts) and never below',
+    ' *      the schedule value itself. Columns the backtest vouched for carry a',
+    ' *      measured scale; the rest are interpolated (see scaleMeasured).',
     ' *',
     ' * Profile values are clamped to the same [120, 3600] seconds as headways.ts.',
     ' * Read by utils/observedHeadways.ts (planner and station headway endpoint).',
@@ -164,6 +170,11 @@ ${entries(interpolated)}
 /** Schedule-to-observed multiplier per \`\${dayType}:\${hour}\`: the fallback where the profile is absent. */
 export const OBSERVED_GTFS_SCALE: Record<string, number> = {
 ${entries(scaleEntries)}
+}
+
+/** Ceiling for the scaled schedule value per \`\${dayType}:\${hour}\`: the 90th percentile of the measured line-level headways. */
+export const OBSERVED_GTFS_CAP_S: Record<string, number> = {
+${entries(capEntries)}
 }
 
 /** Diagnostic: CV of consecutive headways, pooled over a line-direction's stops. Same keys as the profile (where a CV exists). */

@@ -1,5 +1,6 @@
 import { LINE_TERMINI } from '../db/data/headways'
 import {
+  OBSERVED_GTFS_CAP_S,
   OBSERVED_GTFS_SCALE,
   OBSERVED_PROFILE_INTERP_S,
   OBSERVED_PROFILE_S,
@@ -29,6 +30,9 @@ import { memoize } from './memo'
  *                              curve across a day stays continuous instead of
  *                              reverting to the schedule's most optimistic number
  *                              at the busiest hours.
+ *   OBSERVED_GTFS_CAP_S        ceiling for that scaled value per column: observed
+ *                              headways saturate, so a multiplier alone overshoots
+ *                              for lines whose schedule value is already long.
  *
  * Lookup order for a row: measured profile, interpolated profile, scaled
  * schedule, schedule. The basis reported for each is OBSERVED, INTERPOLATED,
@@ -153,11 +157,31 @@ export function observedLineHeadway(lineCode: string, day: ServiceDay, hour: num
   return { seconds: clampHeadway(mean(found.map(f => f.seconds))), interpolated: found.some(f => f.interpolated) }
 }
 
-/** The schedule value scaled to this hour, or undefined where there is no scale. */
-export function scaledHeadway(scheduleS: number, lineCode: string, day: ServiceDay, hour: number): number | undefined {
-  const scale = OBSERVED_GTFS_SCALE[columnId(day, hour)]
-  if (scale === undefined || !isTjLine(lineCode)) return undefined
-  return clampHeadway(scheduleS * scale)
+/**
+ * The schedule value scaled to this hour, or undefined where there is no scale.
+ *
+ * `tj` says the line is a TransJakarta one. It defaults to "is a corridor in
+ * the routing topology", which is what the planner map can know from a bare
+ * line code; the station endpoint knows the operator and passes it, so the
+ * integration and feeder lines that never route (and so were never observed)
+ * move with the corridors beside them on a halte card instead of staying at
+ * the schedule's optimistic number.
+ */
+export function scaledHeadway(
+  scheduleS: number,
+  lineCode: string,
+  day: ServiceDay,
+  hour: number,
+  tj: boolean = isTjLine(lineCode)
+): number | undefined {
+  const column = columnId(day, hour)
+  const scale = OBSERVED_GTFS_SCALE[column]
+  if (scale === undefined || !tj) return undefined
+  const cap = OBSERVED_GTFS_CAP_S[column]
+  const scaled = cap === undefined ? scheduleS * scale : Math.min(scheduleS * scale, cap)
+  // Scaling only ever lengthens a wait: a line the schedule already calls
+  // infrequent is not made to look better than its own schedule by the cap.
+  return clampHeadway(Math.max(scheduleS, scaled))
 }
 
 // ── the planner's map ─────────────────────────────────────────────────────────
@@ -210,6 +234,12 @@ export interface ResolveInput {
   day: ServiceDay
   hour: number
   enabled: boolean
+  /**
+   * Whether the row's operator is TransJakarta. Omitted: inferred from the line
+   * code being a routed corridor. A line that is TJ but not routed has no
+   * profile of its own, so it can only ever be SCALED.
+   */
+  tj?: boolean
 }
 
 /**
@@ -220,7 +250,8 @@ export interface ResolveInput {
  */
 export function resolveHeadway(input: ResolveInput): { headwayS: number | null, basis: ObservedBasis } {
   const { nominalS, kind, lineCode, stationId, dir, day, hour, enabled } = input
-  if (!enabled || nominalS === null || !isTjLine(lineCode)) return { headwayS: nominalS, basis: 'SCHEDULE' }
+  const tj = input.tj ?? isTjLine(lineCode)
+  if (!enabled || nominalS === null || !tj) return { headwayS: nominalS, basis: 'SCHEDULE' }
 
   let observed: Observed | undefined
   if (kind === 'dir' && dir) observed = observedDirHeadway(lineCode, stationId, dir, day, hour)
@@ -230,7 +261,7 @@ export function resolveHeadway(input: ResolveInput): { headwayS: number | null, 
     return { headwayS: observed.seconds, basis: observed.interpolated ? 'INTERPOLATED' : 'OBSERVED' }
   }
 
-  const scaled = scaledHeadway(nominalS, lineCode, day, hour)
+  const scaled = scaledHeadway(nominalS, lineCode, day, hour, tj)
   if (scaled !== undefined) return { headwayS: scaled, basis: 'SCALED' }
   return { headwayS: nominalS, basis: 'SCHEDULE' }
 }

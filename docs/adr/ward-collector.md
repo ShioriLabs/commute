@@ -130,7 +130,7 @@ pnpm --filter api test                                 # includes a guard on the
 |---|---|
 | `OBSERVED` | the line-direction's profile for that day type and hour, divided by the stop's factor |
 | `INTERPOLATED` | the same line-direction's profile interpolated between its nearest measured hours (≤ 8h apart; held ≤ 2h past the ends) |
-| `SCALED` | the schedule value times a per-column scale (the last resort: no profile of either kind) |
+| `SCALED` | the schedule value times a per-column scale, capped at that column's 90th-percentile measured line headway and never below the schedule value (the last resort: no profile of either kind; also what TJ lines that never route get, since they have no profile at all) |
 | absent | the schedule value as it was (rail, a line that does not run, the kill switch off) |
 
 Why interpolation sits above the scale: schedule headways are clamped at 120s, so
@@ -138,6 +138,14 @@ a global ratio varies by stop, and a stop with measured neighbours zig-zagged
 between measured and scaled values across the day. Held out against measured
 cells, interpolating a line-direction's own profile had median |log error| 0.12
 against 0.22 for schedule x scale at 2-6h gaps, and stayed ahead to 12h.
+
+**Why the scale is capped.** Observed line-level headways saturate: at midday a
+schedule value of 120s or less reads ~3.5x longer in the data, 450-900s reads
+~1.1x. A flat multiplier therefore overshoots for lines nobody observed (an
+integration line at a 514s schedule came out at 28 minutes where comparable lines
+ran ~16). Held out line by line, capping at the column's p90 beat the plain
+scalar on the tails (p90 |log error| 0.58 vs 0.71) and a fitted power law (0.64)
+with the median unchanged.
 
 **Planner.** `fares.ts headwaysFor(day, hour)` hands the unchanged planner a flat
 map. At a stop the observed value is the mean of the stop's directions: the

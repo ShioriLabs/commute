@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { HEADWAYS_S, LINE_TERMINI } from '../db/data/headways'
-import { OBSERVED_GTFS_SCALE, OBSERVED_PROFILE_INTERP_S, OBSERVED_PROFILE_S, OBSERVED_STOP_FACTOR } from '../db/data/headways.observed'
+import { OBSERVED_GTFS_CAP_S, OBSERVED_GTFS_SCALE, OBSERVED_PROFILE_INTERP_S, OBSERVED_PROFILE_S, OBSERVED_STOP_FACTOR } from '../db/data/headways.observed'
 import { clampHeadway } from './headwayBounds'
 import { baseHeadways } from './headways'
 import {
@@ -20,6 +20,13 @@ import { OBSERVED_HEADWAYS_FLAG_KEY, observedHeadwaysEnabled, refreshObservedHea
  */
 const COLUMN = 'WD:12'
 const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length
+
+/** What the scaled fallback should give: scale, capped, never below the schedule, clamped. */
+const scaledExpected = (scheduleS: number, column: string) => {
+  const scaled = scheduleS * OBSERVED_GTFS_SCALE[column]!
+  const cap = OBSERVED_GTFS_CAP_S[column]
+  return clampHeadway(Math.max(scheduleS, cap === undefined ? scaled : Math.min(scaled, cap)))
+}
 
 /** A line with a profile for both directions at the column. */
 const profiledLine = (() => {
@@ -105,8 +112,29 @@ describe('observed lookups', () => {
 describe('scaledHeadway', () => {
   it('multiplies a TJ schedule value by the column scale, clamped', () => {
     const line = Object.keys(LINE_TERMINI)[0]!
-    expect(scaledHeadway(200, line, 'WD', 17)).toBe(clampHeadway(200 * OBSERVED_GTFS_SCALE['WD:17']!))
+    expect(scaledHeadway(200, line, 'WD', 17)).toBe(scaledExpected(200, 'WD:17'))
     expect(scaledHeadway(100_000, line, 'WD', 12)).toBe(3600)
+  })
+
+  it('caps the scaled value at what comparable lines were observed to run', () => {
+    const line = Object.keys(LINE_TERMINI)[0]!
+    const cap = OBSERVED_GTFS_CAP_S['WD:12']!
+    // A schedule value whose scaled result would be far past the cap.
+    const long = Math.ceil(cap / OBSERVED_GTFS_SCALE['WD:12']!) + 50
+    expect(long * OBSERVED_GTFS_SCALE['WD:12']!).toBeGreaterThan(cap)
+    expect(scaledHeadway(long, line, 'WD', 12)).toBe(clampHeadway(Math.max(long, cap)))
+  })
+
+  it('never shortens a schedule value, even one already past the cap', () => {
+    const line = Object.keys(LINE_TERMINI)[0]!
+    const cap = OBSERVED_GTFS_CAP_S['WD:12']!
+    const past = Math.min(3000, Math.ceil(cap) + 500)
+    expect(scaledHeadway(past, line, 'WD', 12)).toBe(clampHeadway(past))
+  })
+
+  it('applies to a line the caller says is TransJakarta even when it is not a routed corridor', () => {
+    expect(scaledHeadway(300, '6C', 'WD', 12)).toBeUndefined()
+    expect(scaledHeadway(300, '6C', 'WD', 12, true)).toBe(scaledExpected(300, 'WD:12'))
   })
 
   it('never scales a line that is not a TransJakarta corridor', () => {
@@ -137,7 +165,7 @@ describe('plannerHeadways', () => {
       && !Object.keys(OBSERVED_PROFILE_S).some(k => k.startsWith('WD:') && k.includes(`:${l}@`))
       && !Object.keys(OBSERVED_PROFILE_INTERP_S).some(k => k.startsWith('WD:') && k.includes(`:${l}@`)))
     if (line === undefined) return // every TJ line has a profile in this fit
-    expect(plannerHeadways('WD', 17, true).get(line)).toBe(clampHeadway(HEADWAYS_S[line]! * OBSERVED_GTFS_SCALE['WD:17']!))
+    expect(plannerHeadways('WD', 17, true).get(line)).toBe(scaledExpected(HEADWAYS_S[line]!, 'WD:17'))
   })
 
   it('uses the interpolated profile in a blind hour rather than the scaled schedule', () => {
@@ -191,8 +219,23 @@ describe('resolveHeadway', () => {
       && OBSERVED_GTFS_SCALE[`WD:${h}`] !== undefined)
     if (bare !== undefined) {
       expect(resolveHeadway({ ...base, nominalS: 120, kind: 'stop', hour: bare }))
-        .toEqual({ headwayS: clampHeadway(120 * OBSERVED_GTFS_SCALE[`WD:${bare}`]!), basis: 'SCALED' })
+        .toEqual({ headwayS: scaledExpected(120, `WD:${bare}`), basis: 'SCALED' })
     }
+  })
+
+  it('scales a TransJakarta line that is not a routed corridor, and never a rail one', () => {
+    // 6C is an integration line: in the schedule table, not in the topology.
+    expect(LINE_TERMINI['6C']).toBeUndefined()
+    expect(HEADWAYS_S['6C']).toBeDefined()
+    const common = { nominalS: 514, kind: 'line' as const, stationId: 'TJ-X', day: 'WD' as const, hour: 12, enabled: true }
+
+    // Without the operator, a bare code cannot be told from rail: unchanged.
+    expect(resolveHeadway({ ...common, lineCode: '6C' })).toEqual({ headwayS: 514, basis: 'SCHEDULE' })
+    // With it, the scale applies and the basis says so.
+    expect(resolveHeadway({ ...common, lineCode: '6C', tj: true }))
+      .toEqual({ headwayS: scaledExpected(514, 'WD:12'), basis: 'SCALED' })
+    // A rail row says it is not TJ, whatever its code.
+    expect(resolveHeadway({ ...common, lineCode: '6C', tj: false })).toEqual({ headwayS: 514, basis: 'SCHEDULE' })
   })
 
   it('reads a directional row from its own direction', () => {
