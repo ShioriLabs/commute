@@ -807,6 +807,56 @@ class TripEngineTest {
     }
 
     @Test
+    fun `an early train lost from view is carried on by the timetable, not its lead`() {
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(Places.TEBET, 2.0)
+        assertTrue(run.state.clockOffsetS < -60)
+
+        // No more fixes: its lead may well go waiting somewhere for an express to pass.
+        run.tick(10.0)
+        assertEquals(RideClock(bogorLine.ride(0)).positionAt(at(10))!!, run.state.position, 0.01)
+
+        run.tick(15.0)
+        assertTrue(run.alerts().none { it.kind == AlertKind.ALIGHT })
+        run.tick(16.0)
+        assertEquals(alert(AlertKind.ALIGHT, estimated = true), run.alerts().last())
+    }
+
+    @Test
+    fun `siap-siap still comes on an early train's lead, the trip waking for it`() {
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(Places.TEBET, 2.0)
+        val early = run.state.clockOffsetS
+        val leaves = RideClock(bogorLine.ride(0)).scheduledAt(4.0)!!.plusSeconds(early)
+
+        // No more fixes: only the trip's own wakes move it on.
+        var now = at(2)
+        repeat(20) {
+            if (run.alerts().any { it.kind == AlertKind.PREPARE }) return@repeat
+            now = run.step.nextWakeAt!!
+            run.send(TripEvent.Tick(now))
+        }
+        assertEquals(alert(AlertKind.PREPARE, estimated = true), run.alerts().single())
+        assertEquals(leaves, now)
+    }
+
+    @Test
+    fun `off an early train by the clock, the walk starts when the timetable has it in`() {
+        val run = Run(krlThenLrt)
+        run.tick(0.0)
+        run.fix(between(Places.MANGGARAI, Places.SUDIRMAN, 0.5), 1.0)
+        assertTrue(run.state.clockOffsetS < -30)
+
+        run.tick(5.5)
+        assertEquals(TripPhase.RIDING, run.state.phase)
+        run.tick(6.0)
+        assertEquals(TripPhase.WAITING_TO_BOARD, run.state.phase)
+        assertEquals(at(4), run.state.walkingSince)
+    }
+
+    @Test
     fun `a restart a moment after a fix keeps the rider where the fix put them`() {
         val run = Run(bogorLine)
         run.tick(0.0)
