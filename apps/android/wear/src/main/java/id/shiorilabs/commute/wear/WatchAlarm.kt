@@ -15,12 +15,14 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import id.shiorilabs.commute.core.tripcopy.R as CopyR
+import id.shiorilabs.commute.core.wearable.WearPaths
 
 /**
  * "Bangunkan Aku" on the wrist: the phone says the rider's stop is near, and the watch rings as an
  * alarm does, through silent mode, with "Udah bangun" to stop it.
  *
- * The buzz is one long waveform rather than a repeating one, so it ends by itself after [RING_MS]
+ * The buzz is T R N in Morse ("turun" without vowels), as one long waveform rather than a repeating
+ * one, so it ends by itself after [RING_MS]
  * even if this process is gone before anything can cancel it; by then the phone has joined in.
  */
 object WatchAlarm {
@@ -31,17 +33,15 @@ object WatchAlarm {
     private const val CHANNEL = "trip_wake"
     private const val ID = 3
 
-    /** About a minute of [BURST]s: twice the phone's wait before it rings too. */
+    /** About a minute of T R N rounds: twice the phone's wait before it rings too. */
     private const val RING_MS = 60_000L
-
-    /** Long and hard, then a breath, as the phone's. */
-    private val BURST = longArrayOf(800, 300, 800, 300, 800, 700)
 
     @SuppressLint("MissingPermission") // Checked just below; without it the buzz still comes.
     fun ring(context: Context, stop: String) {
         val vibrator = context.getSystemService(VibratorManager::class.java).defaultVibrator
-        val bursts = (RING_MS / BURST.sum()).toInt()
-        val pattern = longArrayOf(0) + List(bursts) { BURST.toList() }.flatten().toLongArray()
+        val round = WearPaths.WAKE_BUZZ.drop(1)
+        val rounds = (RING_MS / WearPaths.WAKE_BUZZ.sum()).toInt()
+        val pattern = longArrayOf(0) + List(rounds) { round }.flatten().toLongArray()
         vibrator.vibrate(
             VibrationEffect.createWaveform(pattern, -1),
             VibrationAttributes.createForUsage(VibrationAttributes.USAGE_ALARM),
@@ -86,10 +86,10 @@ object WatchAlarm {
         NotificationManagerCompat.from(context).notify(ID, notification)
     }
 
-    /** "Ingatkan Aku": one burst, as an alarm's, so it comes through silent mode. */
+    /** "Ingatkan Aku": three knocks, as an alarm's, so they come through silent mode. */
     fun ping(context: Context) {
         context.getSystemService(VibratorManager::class.java).defaultVibrator.vibrate(
-            VibrationEffect.createWaveform(longArrayOf(0) + BURST, -1),
+            VibrationEffect.createWaveform(WearPaths.PING_BUZZ, -1),
             VibrationAttributes.createForUsage(VibrationAttributes.USAGE_ALARM),
         )
     }
