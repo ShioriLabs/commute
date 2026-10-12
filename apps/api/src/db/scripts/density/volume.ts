@@ -65,6 +65,7 @@ export interface VolumeStation {
 }
 
 export function releaseBoardings(r: ReleaseCount): number {
+  if (r.cutoffHour === 24) return r.count
   if (r.kind === 'alighting') return r.count / DESTINATION_SHARE_BEFORE_CUTOFF
   return r.count / (r.cutoffHour === 8 ? ORIGIN_SHARE_BEFORE_08 : ORIGIN_SHARE_BEFORE_CUTOFF)
 }
