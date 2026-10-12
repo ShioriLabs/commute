@@ -544,15 +544,15 @@ by gate. "Peak" is the generated weekday range at the station's busiest hour.
 |---|---|---|---|---|---|
 | 1 | **Depok Baru** (DPB) | 11.4k, score 47 | 0~1 | BPS *Kota Depok Dalam Angka 2019* reportedly lists 11,713,906 departing passengers for 2018 (~32k/day), unverified (BPS 403s for us). Maps shows it busy | The BPS table "Jumlah Penumpang Kereta Api Menurut Stasiun Keberangkatan" (2019 ed., p.205, and newer editions) |
 | 2 | **Depok** (DP) | 11.4k, score 47 | 0~1 | Same BPS table. Maps shows it busy | Same BPS table |
-| 3 | **Jakarta Kota** (JAKK) | 30.2k (at the ceiling) | 1~3 | The score inversion put it at ~119k before the ceiling. No figure at all, and the terminus + Kota Tua leisure mix makes the role a guess too | Any station count; holiday/Angleb releases (leisure destination), "stasiun tujuan" lists |
+| 3 | **Jakarta Kota** (JAKK) | 30.2k (at the ceiling) | 1~3 | The score inversion put it at ~119k before the ceiling. No figure at all, and the terminus + Kota Tua leisure mix makes the role a guess too | Any station count; holiday/Angleb releases (leisure destination), "stasiun tujuan" lists. **Partial, 2026-10-12:** 13,226 users on Mon 23 Mar 2026 (Lebaran), Bogor 32,080 the same day (ratio 0.41). Holiday, measure unstated, ratio only |
 | 4 | ~~**Duri** (DU)~~ | 30.2k (ceiling) + **70k transit** | 2~3 most of the day | **Transit settled 2026-10-09:** "rata-rata … 70 ribu orang per hari", KCI's H1 2025 average ([KCI](https://www.kci.id/informasi-publik/berita/meningkat-6-13-persen-kai-commuter-layani-166-4-juta-pengguna-commuter-line-jabodetabek-pada-semester-i-2025-jadi-dampak-positif-dari-1-063-perjalanan-commuter-line-jabodetabek-per-hari-di-gapeka-2025)). It brackets the same-day ratios to Manggarai (0.34, 0.42 → 0.43) and retires the 2026 escalator release's "13 ribu lebih" as a narrower count | A Duri *gate* count (the 30.2k is still the ceiling guess) |
-| 5 | **Pasar Senen** (PSE) | 28.9k, score 62 | 3~3 at 06h | Probably *over*stated: the score counts the intercity terminal. Sangat Padat at 06h is suspicious | KRL-only gate counts; Angleb releases separate KRL from long-distance |
-| 6 | **Jatinegara** (JNG) | 28.9k, score 62 | 1~3 | Same terminal effect as Senen, plus Cikarang-line transfers | KRL gate counts, transit volume |
-| 7 | **Cawang** (CW) | 27.2k, score 61 | 0~2 | Angleb 2026 release: 277,456 for the period, measure unstated (boarding or in+out) | The same release's wording, or another Cawang figure with a stated measure |
-| 8 | **Cikarang** (CKR) | 12.9k, score 49 | 2~3 | Angleb 2026: 337,049, more than Cawang, measure unstated. Probably *under*stated now | Same as Cawang |
-| 9 | **Rangkasbitung** (RK) | 7.4k, score 40 | 2~3 | Angleb 2026: 236,634, measure unstated. Thin service makes any volume error loud | Same; BPS *Lebak Dalam Angka* |
-| 10 | **Serpong, Rawa Buntu, Pondok Ranji, Parung Panjang** | 6.1k each, score 37 | 0~1/0~2 | Big BSD/Tangsel origins that all collapse to one score, so they read as small halts | BPS *Tangerang Selatan / Kab. Bogor Dalam Angka*; Rangkasbitung-line releases |
-| 11 | ~~Bojonggede~~, **Pasar Minggu, Kranji** | Bojonggede ~29.5k (release); others 10.7–11.4k | BJD 1~2 | **Bojonggede done 2026-10-09:** 11,220 boarding by 08:00, Mon 21 Sep 2026 ([KCI](https://www.kci.id/informasi-publik/berita/layanan-commuter-line-jabodetabek-kembali-normal-1-065-perjalanan-tambah-4-perjalanan-commuter-line-bogor-hari-ini)), scaled by the 0.38 that anchored Citayam/Bekasi show in the same release. Kranji is a big origin/junction; Pasar Minggu shares score 47 with half the Bogor line | BPS *Kota Bekasi Dalam Angka*; WFH-Friday "hingga 11.00" releases; more "hingga pukul 08.00" releases like this one |
+| 5 | ~~**Pasar Senen** (PSE)~~ | 28.9k, score 62 → **~5k** (release, not yet in `release-counts.ts`) | 3~3 at 06h | **Count found 2026-10-12:** KRL gate in 706,562 + gate out 802,631 = 1,509,193 for Jan–May 2026 (151 days), so ~4.7k in and ~5.3k out per day. The model was ~6x too high, as suspected: the score counts the intercity terminal. Details in "Pasar Senen, Jan–May 2026" below | A weekday-only figure; a Pasar Senen hourly or "hingga pukul" count |
+| 6 | **Jatinegara** (JNG) | 28.9k, score 62 | 1~3 | Same terminal effect as Senen, plus Cikarang-line transfers | KRL gate counts, transit volume. **Weak lead, 2026-10-12:** a search summary of a Bisnis piece gives an average of 8,566 *alighting* against 6,792 on holidays (Mar 2025), scope unclear (may include long-distance arrivals); not fetched, the page 403s. The Pasar Senen article family (Jan–May 2026 gate counts) may have a Jatinegara sibling |
+| 7 | **Cawang** (CW) | 27.2k, score 61 | 0~2 | Angleb 2026 release: 277,456 for the period, measure unstated (boarding or in+out) | The same release's wording, or another Cawang figure with a stated measure. **Not found 2026-10-12.** One search summary gives 4,957 *transfers* at Cawang on day 2 of Lebaran 2026 (unverified) |
+| 8 | **Cikarang** (CKR) | 12.9k, score 49 | 2~3 | Angleb 2026: 337,049, more than Cawang, measure unstated. Probably *under*stated now | Same as Cawang. **Partial, 2026-10-12:** 12,518 users on Mon 23 Mar 2026 (Lebaran, [RRI](https://rri.co.id/arus-mudikbalik/2280807/transit-di-manggarai-tembus-201-ribu-orang-pada-masa-libur-lebaran), fetched; measure unstated); 11,812 *boarding* on a 2024 Lebaran day (search summary of IDX Channel, unverified). Holiday days, not weekday anchors |
+| 9 | **Rangkasbitung** (RK) | 7.4k, score 40 | 2~3 | Angleb 2026: 236,634, measure unstated. Thin service makes any volume error loud | Same; BPS *Lebak Dalam Angka*. **Partial, 2026-10-12:** 11,383 *boarding* on a 2024 Lebaran day (search summary of IDX Channel, unverified); 10,681 on day 2 of Lebaran 2026 (search summary, unverified, measure unstated). Holiday days, so they only say Rangkasbitung (~11k) is of the same order as Cikarang (~12k), not a weekday volume |
+| 10 | **Serpong, Rawa Buntu, Pondok Ranji, Parung Panjang** | 6.1k each, score 37 | 0~1/0~2 | Big BSD/Tangsel origins that all collapse to one score, so they read as small halts | BPS *Tangerang Selatan / Kab. Bogor Dalam Angka*; Rangkasbitung-line releases. **Weak lead, 2026-10-12:** Pondok Ranji "10,892 per day in normal times" (3,546 in the PSBB transition), from a search summary of a Republika piece dated Aug 2020; measure unknown, pre-2021. If it holds, 6.1k is low for Pondok Ranji. Nothing for Serpong, Rawa Buntu or Parung Panjang |
+| 11 | ~~Bojonggede~~, **Pasar Minggu, Kranji** | Bojonggede ~29.5k (release); others 10.7–11.4k | BJD 1~2 | **Bojonggede done 2026-10-09:** 11,220 boarding by 08:00, Mon 21 Sep 2026 ([KCI](https://www.kci.id/informasi-publik/berita/layanan-commuter-line-jabodetabek-kembali-normal-1-065-perjalanan-tambah-4-perjalanan-commuter-line-bogor-hari-ini)), scaled by the 0.38 that anchored Citayam/Bekasi show in the same release. Kranji is a big origin/junction; Pasar Minggu shares score 47 with half the Bogor line | BPS *Kota Bekasi Dalam Angka*; WFH-Friday "hingga 11.00" releases; more "hingga pukul 08.00" releases like this one. **2026-10-12:** Pasar Minggu 21,785 *alighting* on the Imlek 2023 holiday (search summary of Bisnis, unverified), which is a holiday destination count and not a boarding anchor. Nothing for Kranji |
 | 12 | **Pondok Cina, UI** | 11.4k each | 0~1 | Campus stations; the Depok BPS table should cover them for free | Same BPS table as #1 |
 | 13 | **Tanjung Priok** (TPK) | 4.8k, score 33 | 1~3 at 06h | A thin-service artefact more than a volume one: few trains make a small volume look full. Check before trusting the 3 | Any count; otherwise widen MIN_DEPARTURES |
 
@@ -602,6 +602,41 @@ and Manggarai's transfers rise ~40%, which is a fair ceiling for an "event" day 
 same 0.38 gives ~15k a day, against ~22k from its 11:00 count (14,390 ÷ 0.65). The two releases are
 different days and Sudimara's Rangkasbitung-line morning may run later, so it's left on the 11:00
 figure. A second Sudimara count would settle which one is off.
+
+**Pasar Senen, Jan–May 2026** ([Kumparan](https://kumparan.com/kumparanbisnis/pasar-senen-jadi-stasiun-ka-tersibuk-januari-mei-2026-angkut-3-1-juta-penumpang-27ev2ZjlMLA),
+[RRI](https://rri.co.id/bisnis/2514896/stasiun-pasar-senen-layani-315-juta-pelanggan-ka-jarak-jauh), both fetched; the RRI page is
+dated 24 Jun 2026). A KCI figure for "pengguna Commuter Line" at the station, split into gate in and gate out:
+
+| Month | In + out | Per day |
+|---|---|---|
+| Jan | 311,994 | ~10.1k |
+| Feb | 262,895 | ~9.4k |
+| Mar | 382,015 | ~12.3k |
+| Apr | 272,160 | ~9.1k |
+| May | 280,129 | ~9.0k |
+| **Jan–May** | **1,509,193** (in 706,562, out 802,631) | **~10.0k** (in ~4.7k, out ~5.3k) |
+
+- **Boardings are ~5k/day** whichever convention is used (gate in alone is ~4.7k, half of in + out is ~5.0k). The model has 28.9k, so
+  it is ~6x too high and the 06h "Sangat Padat" is almost certainly wrong.
+- Gate out is 13% above gate in, so Senen leans towards a destination. That matches its role, with riders arriving by KRL to
+  catch a long-distance train as well as leaving it.
+- This is an all-days average (weekends and Lebaran 2026, around 21 Mar, included). March is the highest month even though
+  Lebaran emptied the commuter network, which fits the intercity terminal pulling KRL riders in for mudik. A weekday is probably
+  5–6k boardings.
+- **Not applied yet:** the figure is not in `db/data/release-counts.ts`, and the weekday range for Senen has not been regenerated.
+
+**Holiday per-station counts found 2026-10-12 (ratios only, not anchors).** From the Lebaran 2026 release on
+Mon 23 Mar 2026 ([RRI](https://rri.co.id/arus-mudikbalik/2280807/transit-di-manggarai-tembus-201-ribu-orang-pada-masa-libur-lebaran),
+fetched; measure unstated): Bogor 32,080, Jakarta Kota 13,226, Cikarang 12,518, Tanah Abang 8,129. On Sun 22 Mar, Manggarai transfers
+hit a record 201,617. That is a leisure holiday, so Tanah Abang sits low and Jakarta Kota high, which says nothing about weekdays.
+Other holiday numbers, all from search-result summaries of pages that 403 on fetch (**unverified**): Cikarang 9,175 and
+Rangkasbitung 10,681 on day 2 of Lebaran 2026; Rangkasbitung 11,383 and Cikarang 11,812 boarding on a 2024 Lebaran day; Pasar Minggu
+21,785 alighting on the Imlek 2023 holiday.
+
+**Still not found (2026-10-12):** the BPS *Kota Depok Dalam Angka* departing-passenger table (rows 1, 2, 12), the Angleb 2026
+release with Cawang 277,456 / Cikarang 337,049 / Rangkasbitung 236,634 and its measure wording (rows 7–9), and anything for Duri's
+gate count, Kranji, Serpong, Rawa Buntu, Parung Panjang or Tanjung Priok. BPS and kci.id return 403 to plain fetches, and the
+browser extension could not be connected on this machine (Edge), so these still need a manual browser session.
 
 **What to record for each figure:** station, exact number as printed, period or cut-off hour,
 measure (gate in+out, boarding/"naik", alighting/"turun", "pengguna"), the day's circumstances
