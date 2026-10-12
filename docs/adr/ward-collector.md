@@ -108,3 +108,61 @@ headway endpoint is a separate, reviewed change.
 - **Not verified:** day-to-day consistency is measured; absolute level is not.
   Arrivals the method misses would make every value read long. Public holidays
   are not recognised.
+
+## Wiring observed headways into the API (2026-10-12)
+
+The overlay from stage 1 is read by the planner and the station headway endpoint.
+The runtime (`apps/api/src/utils/observedHeadways.ts`) reads four generated
+exports and knows nothing about how they were made, so refitting is
+**regenerate and deploy**:
+
+```
+pnpm --filter @commute/ward pull --out <archives>      # new days
+pnpm --filter api fit:headways --dir <archives>        # ~15s with the cache; prints the backtest
+git diff apps/api/src/db/data/headways.observed.ts     # review: vouched cells, scale, range
+pnpm --filter api test                                 # includes a guard on the generated file
+# deploy (API_VERSION bump busts every cached body)
+```
+
+**Lookup order for a row**, and the `basis` the endpoint reports for it:
+
+| Basis | Source |
+|---|---|
+| `OBSERVED` | the line-direction's profile for that day type and hour, divided by the stop's factor |
+| `INTERPOLATED` | the same line-direction's profile interpolated between its nearest measured hours (≤ 8h apart; held ≤ 2h past the ends) |
+| `SCALED` | the schedule value times a per-column scale (the last resort: no profile of either kind) |
+| absent | the schedule value as it was (rail, a line that does not run, the kill switch off) |
+
+Why interpolation sits above the scale: schedule headways are clamped at 120s, so
+a global ratio varies by stop, and a stop with measured neighbours zig-zagged
+between measured and scaled values across the day. Held out against measured
+cells, interpolating a line-direction's own profile had median |log error| 0.12
+against 0.22 for schedule x scale at 2-6h gaps, and stayed ahead to 12h.
+
+**Planner.** `fares.ts headwaysFor(day, hour)` hands the unchanged planner a flat
+map. At a stop the observed value is the mean of the stop's directions: the
+planner cannot know the rider's direction, and the schedule's per-stop figure
+pools both directions, which reads optimistic. Rail keys are never touched.
+
+**Station endpoint.** `?hour=` (default: now, Jakarta). `headwayS` is that hour's
+value, `scheduledS` the schedule number, `basis` as above. The KV entry stays
+one per (station, day) and holds the schedule numbers; the hour is applied per
+request. Edge cache for the path is 10 minutes (it went stale on hour
+boundaries, not on data changes).
+
+**Kill switch.** `config:observed-headways` = `off` reverts both surfaces to the
+schedule within about a minute; any other value, or none, leaves them on. The
+journey cache scope gets an `obs-off` suffix so a flip never serves 20 hours of
+the other regime.
+
+**Measured effect (2026-10-12, 300 seeded ODs, `findRoutes`, local D1):** the
+primary route changed for 31-39% of ODs; median planned wait went from ~250s to
+420-560s (p90 570s to 780-980s); query time rose 5-18%. Worker bundle
+1,725 KiB to 1,809 KiB (368 to 387 KiB gzip).
+
+**Open:** the absolute level is verified only for day-to-day consistency, not
+against ground truth: spot-check a few stops before relying on it. Public
+holidays ride the weekend model (`serviceDay` already maps them to SUN). The
+Android client needs its generated API classes refreshed for `basis` and
+`scheduledS` (additive; old builds are unaffected), and the web card does not
+yet label the basis.

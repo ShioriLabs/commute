@@ -151,6 +151,14 @@ export const HeadwayRowSchema = v.pipe(
       v.optional(v.string()),
       v.description('Nama halte tujuan akhir buat arah ini, kayak yang ada di papan halte ("arah Galunggung"). Cuma ada kalau dua arahnya beda frekuensi — kalau nggak ada, angkanya berlaku buat dua-duanya.')
     ),
+    scheduledS: v.pipe(
+      v.optional(v.nullable(v.number())),
+      v.description('Angka jadwal (GTFS) buat hari ini, sebelum disesuaikan dengan jam. Cuma ada kalau `basis` ada. `null` kalau linnya nggak jalan di hari itu.')
+    ),
+    basis: v.pipe(
+      v.optional(v.picklist(['OBSERVED', 'INTERPOLATED', 'SCALED'])),
+      v.description('Dari mana `headwayS` berasal, cuma ada buat TransJakarta. `OBSERVED` = diukur dari posisi bus di jam itu. `INTERPOLATED` = diperkirakan dari jam-jam terdekat yang terukur, karena jam itu sendiri belum terukur. `SCALED` = angka jadwal yang disesuaikan dengan pola jam itu, kalau jam-jam di sekitarnya pun belum terukur. Kalau field-nya nggak ada, `headwayS` adalah angka jadwal apa adanya.')
+    ),
     serviceHours: v.pipe(
       v.optional(v.union([
         v.object({

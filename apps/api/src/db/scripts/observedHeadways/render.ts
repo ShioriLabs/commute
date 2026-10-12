@@ -1,4 +1,5 @@
 import { clampHeadway, columnDayType, columnHour, type FactorisedModel, type Pool, pooledCv } from './fit'
+import type { ColumnScale } from './scale'
 
 /*
  * The generated overlay, headways.observed.ts.
@@ -15,6 +16,10 @@ export interface OverlayInput {
   /** First and last WIB day fitted, YYYYMMDD. */
   range: { from: string, to: string }
   dayCounts: { WD: number, WE: number }
+  /** Profile cells filled by interpolation (see interpolate.ts): `${line}@${dir}|${column}` -> seconds. */
+  interpolated: ReadonlyMap<string, number>
+  /** Per-column GTFS scale (see scale.ts), the fallback where the profile is absent. */
+  scales: readonly ColumnScale[]
   /** Columns (fit.column) the backtest vouches for; the profile is restricted to them. */
   vouched: ReadonlySet<number>
   /** Pre-formatted one-line backtest results for the header. */
@@ -34,6 +39,12 @@ export function renderOverlay(input: OverlayInput): string {
     .map(([id, perSecond]) => {
       const [ld, column] = id.split('|')
       return [profileKey(ld!, Number(column)), clampHeadway(1 / perSecond)] as const
+    })
+    .sort(([a], [b]) => naturalCompare(a, b))
+  const interpolated = [...input.interpolated]
+    .map(([id, seconds]) => {
+      const [ld, column] = id.split('|')
+      return [profileKey(ld!, Number(column)), clampHeadway(seconds)] as const
     })
     .sort(([a], [b]) => naturalCompare(a, b))
   const factors = [...model.factor]
@@ -59,6 +70,11 @@ export function renderOverlay(input: OverlayInput): string {
     const hours = [...present].filter(k => k.startsWith(`${dayType}:`)).map(k => Number(k.split(':')[1])).sort((a, b) => a - b)
     return hours.length === 0 ? 'none' : hours.map(h => String(h).padStart(2, '0')).join(' ')
   }
+
+  const scaleEntries = [...input.scales]
+    .map(s => [s.id, Math.round(s.scale * 1000) / 1000] as const)
+    .sort(([a], [b]) => naturalCompare(a, b))
+  const scaleMeasured = input.scales.filter(s => s.measured).map(s => s.id).sort(naturalCompare)
 
   const header = [
     '/*',
@@ -90,8 +106,17 @@ export function renderOverlay(input: OverlayInput): string {
     ' *',
     ` * Hours present, WIB: weekday ${hoursPresent('WD')}; weekend ${hoursPresent('WE')}.`,
     ' *',
+    ' * The hours the backtest did not vouch for are filled in two steps, so the',
+    ' * curve across a day stays continuous:',
+    ' *   1. OBSERVED_PROFILE_INTERP_S: the line-direction\'s own profile',
+    ' *      interpolated between its nearest measured hours (at most 8h apart; held',
+    ' *      for at most 2h past the first or last). Same key format as the profile.',
+    ' *   2. OBSERVED_GTFS_SCALE: the schedule value (headways.ts) times the',
+    ' *      column\'s scale, for what is left. Columns the backtest vouched for',
+    ' *      carry a measured scale; the rest are interpolated (see scaleMeasured).',
+    ' *',
     ' * Profile values are clamped to the same [120, 3600] seconds as headways.ts.',
-    ' * Not yet read by the planner or the station headway endpoint.',
+    ' * Read by utils/observedHeadways.ts (planner and station headway endpoint).',
     ' *',
     ' * Unverified: this is consistent from day to day (see the backtest below) but',
     ' * its absolute level is not checked against ground truth. Arrivals the method',
@@ -112,6 +137,7 @@ export function renderOverlay(input: OverlayInput): string {
     `  from: '${input.range.from}',`,
     `  to: '${input.range.to}',`,
     `  days: { WD: ${input.dayCounts.WD}, WE: ${input.dayCounts.WE} },`,
+    `  scaleMeasured: [${scaleMeasured.map(id => `'${id}'`).join(', ')}],`,
     '  /** Healthy hours behind each `${dayType}:${hour}`, summed over the fitted days. */',
     '  healthyHours: {',
     Object.entries(healthyHours).sort(([a], [b]) => naturalCompare(a, b)).map(([k, v]) => `    '${k}': ${v}`).join(',\n'),
@@ -128,6 +154,16 @@ ${entries(profile)}
 /** Relative arrival rate of a stop within its line-direction (mean 1); absent means no observed value. Key: \`\${line}@\${stationId}@\${dir}\`. */
 export const OBSERVED_STOP_FACTOR: Record<string, number> = {
 ${entries(factors)}
+}
+
+/** Interpolated profile cells for hours with no measured one. Same keys as the profile; never overlaps it. */
+export const OBSERVED_PROFILE_INTERP_S: Record<string, number> = {
+${entries(interpolated)}
+}
+
+/** Schedule-to-observed multiplier per \`\${dayType}:\${hour}\`: the fallback where the profile is absent. */
+export const OBSERVED_GTFS_SCALE: Record<string, number> = {
+${entries(scaleEntries)}
 }
 
 /** Diagnostic: CV of consecutive headways, pooled over a line-direction's stops. Same keys as the profile (where a CV exists). */

@@ -9,7 +9,10 @@ import { backtest, type BacktestSummary, type GtfsLookup, gtfsRawSpec, gtfsScale
 import { buildPool, columnDayType, columnHour, fitFactorised, fitPooled, fitShrunk, type ModelSpec, pooledCv, SHRINK_KAPPAS } from './observedHeadways/fit'
 import { DEFAULT_GATE } from './observedHeadways/health'
 import { renderOverlay } from './observedHeadways/render'
+import { interpolateProfiles } from './observedHeadways/interpolate'
+import { computeColumnScales } from './observedHeadways/scale'
 import { dayFiles } from './observedHeadways/snapshots'
+import { baseHeadways } from '../../utils/headways'
 
 /*
  * Stage 1 of the observed-headway model: aggregate ward's archives per day
@@ -139,6 +142,18 @@ async function main() {
   if (args['no-write']) return
 
   const model = fitFactorised(pool)
+  // The base is exactly what the planner would use for the day, so the scale
+  // multiplies the same numbers it was measured against.
+  const scales = computeColumnScales(model, vouched, (day, key) => baseHeadways(day).get(key))
+  // Only the cells that ship are measured; interpolation fills between those.
+  // The model's profile is a rate (arrivals per second at an average stop);
+  // interpolation is done in headway seconds, which is what ships.
+  const measured = new Map(
+    [...model.profile]
+      .filter(([id]) => vouched.has(Number(id.split('|')[1])))
+      .map(([id, perSecond]) => [id, 1 / perSecond] as const)
+  )
+  const interpolated = interpolateProfiles(measured)
   const summary = (label: string, s: BacktestSummary) =>
     `${label}: M2 ${fmt(s.models['M2 factor']!.median)}, pooled ${fmt(s.models['M0 pooled']!.median)}, GTFS scaled ${fmt(s.models.gtfsScaled!.median)}, GTFS raw ${fmt(s.models.gtfsRaw!.median)} (median |log err|, ${s.intersection} buckets)`
   const text = renderOverlay({
@@ -148,11 +163,13 @@ async function main() {
     range: { from: days[0]!.day, to: days.at(-1)!.day },
     dayCounts: { WD: count('WD'), WE: count('WE') },
     vouched,
+    scales,
+    interpolated,
     backtestLines: [summary('Leave-one-day-out', loo), summary('Rolling next-day', rolling)]
   })
   fs.writeFileSync(args.out!, text)
   const shipped = [...model.profile.keys()].filter(id => vouched.has(Number(id.split('|')[1]))).length
-  console.log(`wrote ${args.out} (${shipped} of ${model.profile.size} profile cells vouched, ${model.factor.size} stop factors)`)
+  console.log(`wrote ${args.out} (${shipped} of ${model.profile.size} profile cells vouched, ${model.factor.size} stop factors, ${scales.filter(s => s.measured).length}/${scales.length} scale columns measured, ${interpolated.size} interpolated profile cells)`)
 }
 
 main().catch((err) => {

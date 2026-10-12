@@ -10,6 +10,7 @@ import { wibIsoString } from 'utils/fare'
 import { assembleJourney, planJourney } from 'utils/fare-journey'
 import { handleJourneyRequest, journeyCacheKey } from 'utils/journey-endpoint'
 import { retimeTrips } from 'utils/journey-times'
+import { observedHeadwaysEnabled } from 'utils/observedFlag'
 import { summarizeFares } from 'utils/fare-summary'
 import { ridesAirportPairsOnly, withAirportExclusion } from 'utils/airport'
 import { endpointsFor, getPlaceIndex } from 'utils/places'
@@ -172,7 +173,15 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
     const walking = walkingPreference(c.req.query('walking'))
     const parts = [
       c.req.query('modes') === 'rail' ? 'rail' : null,
-      walking === 'AVERAGE' ? null : walking
+      walking === 'AVERAGE' ? null : walking,
+      /*
+       * The observed-headway kill switch changes the ANSWER (waits, and with
+       * them which route wins), so it is part of the key. Absent while the
+       * values are on, which is the normal case, so flipping the switch off
+       * sends requests to a separate namespace and flipping it back finds the
+       * warm entries again instead of 20 hours of the wrong regime.
+       */
+      observedHeadwaysEnabled() ? null : 'obs-off'
     ].filter(Boolean)
     return parts.length > 0 ? parts.join('+') : undefined
   },

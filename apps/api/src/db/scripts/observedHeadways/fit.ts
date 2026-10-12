@@ -1,4 +1,4 @@
-import { HEADWAY_CAP_S, HEADWAY_FLOOR_S } from '../generateHeadways'
+import { clampHeadway } from '../../../utils/headwayBounds'
 import type { DayAggregate, DayType } from './aggregate'
 
 /*
@@ -49,8 +49,7 @@ export const MIN_STOP_FACTOR = 0.3
 export const STOP_SHRINK_KAPPA = 5
 export const SHRINK_KAPPAS = [2, 4, 6, 12]
 
-export const clampHeadway = (seconds: number) =>
-  Math.max(HEADWAY_FLOOR_S, Math.min(HEADWAY_CAP_S, Math.round(seconds)))
+export { clampHeadway }
 
 export const lineDirOf = (key: string) => {
   const [line, , dir] = key.split('@')
