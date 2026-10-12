@@ -73,6 +73,15 @@ fun RouteTitle(
             tint = MaterialTheme.colorScheme.onBackground,
         )
         Text(text = to, modifier = Modifier.weight(1f, fill = false), style = style, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // The web's caret after the title, as on a station's: this opens the pair.
+        if (onClick != null) {
+            Icon(
+                imageVector = CommuteIcons.Chevron,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onBackground,
+            )
+        }
     }
 }
 
