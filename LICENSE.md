@@ -1,3 +1,25 @@
+# License
+
+Copyright (c) 2025 Shiori Labs
+
+This repository contains material under several different licenses and
+ownership terms. Which one applies depends on the kind of material, as
+described below.
+
+| Material                                   | License                                  |
+| ------------------------------------------ | ---------------------------------------- |
+| Source code                                | [MIT](#1-source-code--mit)               |
+| Data (generated files, `.sql`, etc.)       | [ODbL 1.0](#2-data--odbl-10)             |
+| OpenStreetMap-derived geometry             | [© OpenStreetMap contributors, ODbL 1.0](#3-openstreetmap-derived-data--openstreetmap-contributors) |
+| Maps and map tiles                         | [Forum Diskusi Transportasi Jakarta](#4-maps-and-tiles--forum-diskusi-transportasi-jakarta) |
+| Art, media, fonts, icons and other assets  | [Atribusi Aset Kreatif](#5-art-media-and-other-assets--atribusi-aset-kreatif) |
+
+## 1. Source code — MIT
+
+Everything that is not covered by sections 2 to 5 is source code and is
+licensed under the MIT License.
+
+```
 MIT License
 
 Copyright (c) 2025 Shiori Labs
@@ -19,3 +41,65 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+```
+
+## 2. Data — ODbL 1.0
+
+Data files are licensed under the
+[Open Database License (ODbL) v1.0](https://opendatacommons.org/licenses/odbl/1-0/).
+You are free to share, create derivative databases from, and adapt the data,
+provided that you attribute it, share derivative databases under the same
+license, and keep them open.
+
+This covers, in particular:
+
+- generated files, such as `*.generated.ts` and precomputed datasets;
+- SQL files containing data, such as timetables, stations and edges (`*.sql`);
+- other data files such as `.csv` and data `.json`.
+
+The full license text is available at
+<https://opendatacommons.org/licenses/odbl/1-0/>. Individual contents of the
+database are not covered separately; the license applies to the database as a
+whole.
+
+The OpenStreetMap-derived files listed in section 3 are excluded from this
+section's copyright statement, although they are under the same license.
+
+## 3. OpenStreetMap-derived data — © OpenStreetMap contributors
+
+The following files are derived from [OpenStreetMap](https://www.openstreetmap.org/)
+data and are © OpenStreetMap contributors, available under the
+[Open Database License (ODbL) v1.0](https://opendatacommons.org/licenses/odbl/1-0/).
+See <https://www.openstreetmap.org/copyright> for details.
+
+- `apps/api/src/db/data/geometry/*.geojson`: traced rail geometry for KCI,
+  MRT Jakarta, LRT Jakarta, LRT Jabodebek and Kalayang Bandara;
+- `apps/api/src/db/data/trackShapes.generated.ts`: track shapes whose rail
+  portion is derived from the geometry above.
+
+Anything derived from these files must keep the attribution
+"© OpenStreetMap contributors" and remain under the ODbL. Their copyright
+belongs to the OpenStreetMap contributors, not to Shiori Labs.
+
+## 4. Maps and tiles — Forum Diskusi Transportasi Jakarta
+
+The maps and map tiles (including the schematic map tiles, previews and
+manifests under `apps/web/public/maps/`) are owned by **Forum Diskusi
+Transportasi Jakarta** and are used by Commute under permission.
+
+They are **not** covered by the MIT License or the ODbL. No license to these
+files is granted by this repository. To reuse, redistribute or modify them,
+obtain permission from Forum Diskusi Transportasi Jakarta.
+
+## 5. Art, media and other assets — Atribusi Aset Kreatif
+
+Illustrations, icons, fonts and other creative assets used in the project are
+the property of their respective creators and are used under their own
+licenses. They are **not** relicensed under the MIT License or the ODbL.
+
+The list of assets, their creators and their licenses is maintained on the
+**Atribusi Aset Kreatif** page of the app
+(`/settings/legal/creative-assets-attributions`, source in
+`apps/web/app/routes/settings/legal/creative-assets-attributions.tsx`).
+Attributions for data sources are on the sibling page
+(`/settings/legal/data-attributions`).
