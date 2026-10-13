@@ -98,10 +98,11 @@ below.
   shrinkage because it is ~14× smaller; per-key-hour pooling or shrinkage is
   ~2 points more accurate (median |log error| 0.175 vs 0.191, leave-one-day-out)
   and could be emitted instead at ~33k cells if that ever matters.
-- **Backtest gate:** a (day type, hour) column ships only if the held-out
-  backtest has at least 100 buckets for it and beats GTFS scaled by a per-hour
-  factor there. Weekday 07, 09, 11, 17 and 18 and the overnight hours therefore
-  fall back to GTFS.
+- **Backtest gate:** a profile cell ships only if its stratum of its (day type,
+  hour) column beat the fallback that would be shown instead on held-out data;
+  see "Vouching by stratum" below for the exact rule. The weekday rush hours
+  (07, 17, 18) have no data to validate and take the interpolated or scaled
+  fallback.
 - **Dropped stops:** a stop seen under 0.3× as often as its line-direction's
   average is treated as a detection artefact (an origin terminal, a halte the
   sampling keeps skipping) and gets no factor.
@@ -263,8 +264,71 @@ changed:
 - **Fixture-dependent tests skip visibly** (`it.skipIf`) instead of returning
   without asserting when a refit leaves no suitable fixture.
 
-Known and not addressed: the backtest scores only cells with >= 4 arrivals in a
-held-out hour, so sparse (30-60 minute) cells are never scored and still ship
-when their column is vouched; and the vouching baseline uses weekday schedule
-values, one scale and no cap, which is weaker than the fallback that ships.
-Both change how columns are vouched and want their own before/after.
+The two items that review left open are addressed in the next section.
+
+### Vouching by stratum (2026-10-13)
+
+The review's two open points were both about WHAT a column was vouched on, and
+both turned out to matter more than they looked.
+
+**What changed.**
+
+- **The baseline is the fallback that ships.** It was `gtfsScaled`: weekday
+  schedule values, one scale, no cap. It is now `shipped fallback`
+  (`observedHeadways/fallback.ts`): the day-aware schedule for the held-out day's
+  service day (a Saturday reads the Saturday table, a holiday SUN), a separate
+  scale for directional values, capped and never below the schedule, with scales
+  and caps fitted on that fold's TRAINING days only. A model that beat the weaker
+  baseline but not the real fallback would have been shipped over something
+  better.
+- **Sparse cells are scored.** The |log| score needs >= 4 arrivals in a held-out
+  hour, so a stop served every 30-60 minutes could never be scored, and the
+  conditioning biased the truth towards short headways. Vouching now uses the
+  Poisson deviance of the predicted count (healthy time / predicted headway)
+  against the observed one, counting zero, over every key that plausibly runs in
+  the column (seen that day, or with training arrivals there).
+- **Two strata per column,** split by the profile cell that ships: line-directions
+  whose profile puts buses under 900 s apart and those at or over. Each is vouched
+  on its own (>= 100 buckets and a lower deviance), and a cell ships only if its
+  stratum was. Pooled, a few thousand easy frequent buckets would carry a column
+  whose sparse cells lose. A stop is scored in its line-direction's stratum, not
+  by its own factor-adjusted value, so a verdict covers exactly the stops it is
+  applied to.
+- **A with-buses guard.** Counting empty buckets rewards a model for predicting
+  less service than the fallback. A stratum must also not be more than 5% worse
+  where buses actually ran (applied from 30 such buckets).
+- **A cell that loses stays lost.** A stratum that was scored and lost is not the
+  same as one too thin to score: there the fallback is the measured better
+  answer. Such cells are excluded from interpolation too (`heldBackCells`). Before
+  this, 17 of them at WD 12, WD 19 and WE 12 came back from their neighbours as
+  INTERPOLATED values that nothing had vouched for, in exactly the places the
+  backtest preferred the fallback. Cells in an unscored stratum (the blind rush
+  hours) still interpolate.
+- **Factors ship only with a profile.** A line-direction whose every cell was
+  held back (a weekend-only line) emits no stop factors, which nothing would read.
+
+**What it did to the shipped file on the 2026-10-12 data.**
+
+| | Before | After |
+|---|---|---|
+| Profile cells shipped | 1,447 | 1,578 |
+| Night hours (WD 00-04, WE 00-04) | not vouched; scaled or interpolated | vouched via the sparse stratum |
+| Sparse cells at WD 12, WD 19, WE 05-07, WE 12 | shipped, unscored | held back (lose to the fallback), and not interpolated back in |
+| Interpolated profile cells | 714 | 697 |
+
+Night columns validate on merit: M2's deviance is 0.40-0.61 against the
+fallback's 0.54-0.86 over thousands of buckets, and it wins both on empty buckets
+and on the ones where buses ran (WD 03: 0.26 vs 0.32 with buses). Weekend
+05:00-06:00 is the case the with-buses guard exists for: M2 wins pooled
+(2.36 vs 2.97) by predicting less service on empties, but is 8-65% worse where
+buses ran, so those cells are held out.
+
+The baseline still differs from what ships in two ways (`fallback.ts`). Its caps
+are measured on every column with data, where the shipped caps come only from
+vouched columns, which are not known until vouching has run. And it models only
+the scaled schedule, not the interpolated profile an entirely unvouched column
+may show instead.
+
+**Not addressed:** the held-out truth is still one day, deviance is only a
+ranking between two predictors (arrivals are more regular than Poisson), and the
+absolute level is still unverified against ground truth.

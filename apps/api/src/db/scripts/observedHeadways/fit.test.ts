@@ -228,6 +228,29 @@ describe('renderOverlay', () => {
     expect(read()['T@TJ-O\'Brien\\path@F']).toBe(1.1)
   })
 
+  it('ships only the cells it is given, even inside a vouched column', () => {
+    const wd10 = column('WD', 10)
+    const all = [...model.profile.keys()].filter(id => id.endsWith(`|${wd10}`))
+    expect(all.length).toBeGreaterThan(0)
+    // Ship none of them: the column is "vouched" but no cell is, as when a stratum lost.
+    const none = renderOverlay({ ...base, vouched: new Set([wd10]), shippedCells: new Set() })
+    expect(none).not.toContain(`'${profileKey('T@F', wd10)}'`)
+    const some = renderOverlay({ ...base, vouched: new Set([wd10]), shippedCells: new Set([`T@F|${wd10}`]) })
+    expect(some).toContain(`'${profileKey('T@F', wd10)}': 300`)
+  })
+
+  it('emits no stop factor for a line-direction that ships no profile cell', () => {
+    const wd10 = column('WD', 10)
+    // Ship nothing for T@F: its factors would be read by nothing.
+    const none = renderOverlay({ ...base, vouched: new Set([wd10]), shippedCells: new Set() })
+    const factorSection = none.slice(none.indexOf('export const OBSERVED_STOP_FACTOR'), none.indexOf('export const OBSERVED_PROFILE_INTERP_S'))
+    expect(factorSection).not.toContain('T@TJ-')
+    // Ship one cell: the line-direction's factors come with it.
+    const some = renderOverlay({ ...base, vouched: new Set([wd10]), shippedCells: new Set([`T@F|${wd10}`]) })
+    const withFactors = some.slice(some.indexOf('export const OBSERVED_STOP_FACTOR'), some.indexOf('export const OBSERVED_PROFILE_INTERP_S'))
+    expect(withFactors).toContain('\'T@TJ-S1@F\'')
+  })
+
   it('is deterministic', () => {
     const vouched = new Set([column('WD', 10), column('WD', 11)])
     expect(renderOverlay({ ...base, vouched })).toBe(renderOverlay({ ...base, vouched }))
