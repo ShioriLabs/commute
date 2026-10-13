@@ -24,7 +24,8 @@ import { parseCSV } from './gtfs'
  *   - TransJakarta: the GTFS shapes, cut at each halte by shape_dist_traveled.
  *     Directed, since a bus can take a different street each way.
  *
- * Re-run after generate:track-geometry, generate:edges or a TJ GTFS import:
+ * Re-run after generate:track-geometry or a TJ GTFS import, then re-run
+ * generate:edges, which prices the TJ poster-override corridors from these:
  *   pnpm --filter api generate:track-shapes
  * TJ needs the feed extracted under scripts/file_gtfs/, as generateTJSQL does.
  */
