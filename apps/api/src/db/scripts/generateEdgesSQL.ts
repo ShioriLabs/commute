@@ -1,6 +1,9 @@
 import * as fs from 'node:fs'
 import { TOPOLOGY, type LineTopology, type Stop } from '../data/topology'
+import { TJ_TOPOLOGY_OVERRIDES } from '../data/topology.tj.overrides'
+import { TRACK_SHAPES } from '../data/trackShapes.generated'
 import { haversineMeters } from '../../utils/geo'
+import { decodePolyline } from '../../utils/polyline'
 import { chainHops, stopLists, type Hop } from '../../utils/edgeChain'
 
 // Emits directed edge rows (both directions per adjacency) for the `edges` table.
@@ -12,6 +15,14 @@ import { chainHops, stopLists, type Hop } from '../../utils/edgeChain'
 // length: KCI prices on its own chainage, and the trace runs 2-3% long, which
 // is enough to tip a fare over a 10km step — Bogor -> Manggarai is 44.1km of
 // chainage (Rp 5,000, as published) but 45.4km of track (Rp 6,000).
+//
+// TransJakarta poster-override corridors (topology.tj.overrides.ts) are the
+// exception: their cumM is cumulative haversine, not chainage, and ranking it
+// first priced detours as straight lines (corridor 6 Flyover Kuningan ->
+// Galunggung: 512m straight, 2,750m along the road). Those lines skip cumM and
+// take the GTFS shape length from data/trackShapes.generated.ts, directed,
+// falling back to haversine where no shape covers the hop. So for TJ, run
+// `generate:track-shapes` before this.
 // Apply with:
 //   wrangler d1 execute commute --local --file=src/db/scripts/edges.sql
 const OUTPUT_SQL_PATH = `${__dirname}/edges.sql`
@@ -44,8 +55,27 @@ function loadTrackLengths(): Map<string, number> {
   return lengths
 }
 
+// Length along the road of every TransJakarta shape, by directed `from>to` key:
+// a bus can take a different street each way.
+function loadShapeLengths(): Map<string, number> {
+  const lengths = new Map<string, number>()
+  for (const [key, encoded] of Object.entries(TRACK_SHAPES.shapes)) {
+    if (!key.startsWith('TJ-')) continue
+    const coords = decodePolyline(encoded)
+    let m = 0
+    for (let i = 1; i < coords.length; i++) {
+      m += haversineMeters(coords[i - 1]![1], coords[i - 1]![0], coords[i]![1], coords[i]![0])
+    }
+    lengths.set(key, Math.round(m))
+  }
+  return lengths
+}
+
 const pairKey = (a: string, b: string): string => [a, b].sort().join('|')
 const trackLengths = loadTrackLengths()
+const shapeLengths = loadShapeLengths()
+// Lines whose cumM is haversine rather than chainage, so never ranked first.
+const haversineCumLines = new Set(TJ_TOPOLOGY_OVERRIDES.map(l => l.lineCode))
 
 const out: string[] = []
 const missingCoords = new Set<string>()
@@ -58,7 +88,10 @@ const srcCounts: Record<string, number> = {}
 const zeroLength = new Set<string>()
 
 function distance(line: LineTopology, a: Stop, b: Stop, coords: Map<string, Coord>): { m: number, src: string } {
-  if (a.cumM != null && b.cumM != null) {
+  if (haversineCumLines.has(line.lineCode)) {
+    const shaped = shapeLengths.get(`${line.operator}-${a.station}>${line.operator}-${b.station}`)
+    if (shaped != null) return { m: shaped, src: 'shape' }
+  } else if (a.cumM != null && b.cumM != null) {
     return { m: Math.abs(a.cumM - b.cumM), src: 'track' }
   }
   const traced = trackLengths.get(pairKey(`${line.operator}-${a.station}`, `${line.operator}-${b.station}`))
@@ -66,6 +99,9 @@ function distance(line: LineTopology, a: Stop, b: Stop, coords: Map<string, Coor
   const ca = coords.get(`${line.operator}-${a.station}`)
   const cb = coords.get(`${line.operator}-${b.station}`)
   if (ca && cb) return { m: Math.round(haversineMeters(ca.lat, ca.lng, cb.lat, cb.lng)), src: 'haversine' }
+  // An override's haversine cumM, from feed coords, for haltes the live
+  // stations list has no position for (Manggarai Temporer 1 and 2).
+  if (a.cumM != null && b.cumM != null) return { m: Math.abs(a.cumM - b.cumM), src: 'haversine-cum' }
   return { m: 0, src: 'unknown' }
 }
 
@@ -83,22 +119,28 @@ function emit(line: LineTopology, hop: Hop, coords: Map<string, Coord>): void {
   const bId = `${line.operator}-${b.station}`
   if (!coords.has(aId)) missingCoords.add(aId)
   if (!coords.has(bId)) missingCoords.add(bId)
-  let m = 0
-  for (let i = 1; i < covered.length; i++) {
-    const segment = distance(line, covered[i - 1]!, covered[i]!, coords)
-    srcCounts[segment.src] = (srcCounts[segment.src] ?? 0) + 1
-    if (segment.m === 0) {
-      zeroLength.add(`${line.lineCode}: ${line.operator}-${covered[i - 1]!.station} <-> ${line.operator}-${covered[i]!.station} (${segment.src})`)
-    }
-    m += segment.m
-  }
-  const pairs = hop.bothWays ? [[aId, bId], [bId, aId]] as const : [[aId, bId]] as const
-  for (const [from, to] of pairs) {
+  // Priced per direction: a TJ shape is directed, so the way back can differ.
+  const rows = hop.bothWays ? [[aId, bId, covered], [bId, aId, [...covered].reverse()]] as const : [[aId, bId, covered]] as const
+  for (const [from, to, stops] of rows) {
+    const m = coveredLength(line, stops, coords)
     out.push(
       `INSERT OR REPLACE INTO edges (id, lineCode, fromStationId, toStationId, distance, createdAt, updatedAt)`
       + ` VALUES ('${line.lineCode}:${from}->${to}', '${line.lineCode}', '${from}', '${to}', ${m}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`
     )
   }
+}
+
+function coveredLength(line: LineTopology, stops: readonly Stop[], coords: Map<string, Coord>): number {
+  let m = 0
+  for (let i = 1; i < stops.length; i++) {
+    const segment = distance(line, stops[i - 1]!, stops[i]!, coords)
+    srcCounts[segment.src] = (srcCounts[segment.src] ?? 0) + 1
+    if (segment.m === 0) {
+      zeroLength.add(`${line.lineCode}: ${line.operator}-${stops[i - 1]!.station} <-> ${line.operator}-${stops[i]!.station} (${segment.src})`)
+    }
+    m += segment.m
+  }
+  return m
 }
 
 function emitChain(line: LineTopology, stops: Stop[], coords: Map<string, Coord>, directed = false): void {
@@ -139,7 +181,7 @@ async function main(): Promise<void> {
 
   fs.writeFileSync(OUTPUT_SQL_PATH, out.join('\n') + '\n')
   const srcSummary = Object.entries(srcCounts).map(([k, v]) => `${v} ${k}`).join(', ')
-  console.log(`Wrote ${out.length} edge rows (${srcSummary} segments) to "${OUTPUT_SQL_PATH}".`)
+  console.log(`Wrote ${out.length} edge rows (${srcSummary} directed segments) to "${OUTPUT_SQL_PATH}".`)
   if (missingCoords.size > 0) {
     console.warn(`No coordinates for ${missingCoords.size} station(s): ${[...missingCoords].join(', ')}`)
   }

@@ -14,7 +14,9 @@ import type { LineTopology } from './topology'
  * path = toward-bottom run (both-ways + toward-bottom-only stops, top→bottom);
  * pathReverse = toward-top run (both-ways + toward-top-only, bottom→top). Symmetric
  * corridors carry path only. Directional-platform haltes keep one `…S` code per
- * direction. cumM is cumulative haversine metres (0-based per leg) from feed coords.
+ * direction. cumM is cumulative haversine metres (0-based per leg) from feed coords,
+ * so generateEdgesSQL prices these corridors from the GTFS shapes instead and uses
+ * cumM only for haltes with no live coordinates.
  *
  * This file is hand-maintained; the GTFS generator does NOT emit or read it.
  */
