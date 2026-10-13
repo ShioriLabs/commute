@@ -18,9 +18,13 @@ const swrConfig = {
   shouldRetryOnError: false
 }
 
-export function meta() {
+// A route-param title rather than a "loading" placeholder: the SPA shell's
+// crawler-rewritten title is replaced on hydration, and the real name only
+// arrives after an API fetch, so a placeholder here is what Google indexes
+// whenever its render snapshot wins that race.
+export function meta({ params }: Route.MetaArgs) {
   return [
-    { title: 'Memuat... - Commute' },
+    { title: `${params.lineCode.toUpperCase()} - Commute` },
     { name: 'theme-color', content: '#FFFFFF' }
   ]
 }

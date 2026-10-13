@@ -8,9 +8,13 @@ import { sortLineKeysForDisplay } from '~/utils/lines'
 import { useLines } from '~/hooks/use-lines'
 import { readSavedStations, toggleSavedStation } from 'utils/saved-stations'
 
-export function meta() {
+// A route-param title rather than a "loading" placeholder: the SPA shell's
+// crawler-rewritten title is replaced on hydration, and the real name only
+// arrives after an API fetch, so a placeholder here is what Google indexes
+// whenever its render snapshot wins that race.
+export function meta({ params }: Route.MetaArgs) {
   return [
-    { title: 'Memuat... - Commute' },
+    { title: `${params.code.toUpperCase()} - Commute` },
     { name: 'theme-color', content: '#FFFFFF' }
   ]
 }
