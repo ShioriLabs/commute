@@ -44,10 +44,21 @@ export const AGGREGATE_SCHEMA = 1
  * than dilute the weekday one with a quiet "weekday".
  */
 export function dayTypeOf(day: string): DayType {
+  return serviceDayOf(day) === 'WD' ? 'WD' : 'WE'
+}
+
+/**
+ * The service day the runtime would read for a WIB day: SUN for a Sunday or a
+ * public holiday, SAT for a Saturday, WD otherwise. The schedule tables are keyed
+ * this way, so the fallback baseline needs it, not just weekday/weekend.
+ */
+export function serviceDayOf(day: string): 'WD' | 'SAT' | 'SUN' {
   const iso = `${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6, 8)}`
+  if (HOLIDAYS.has(iso)) return 'SUN'
   const weekday = new Date(`${iso}T00:00:00Z`).getUTCDay()
-  const weekend = weekday === 0 || weekday === 6 || HOLIDAYS.has(iso)
-  return weekend ? 'WE' : 'WD'
+  if (weekday === 0) return 'SUN'
+  if (weekday === 6) return 'SAT'
+  return 'WD'
 }
 
 /**

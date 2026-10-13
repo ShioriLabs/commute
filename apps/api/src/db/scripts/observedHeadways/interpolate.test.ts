@@ -156,6 +156,14 @@ describe('rejectConflicting', () => {
       expect(result.accepted.size).toBe(1)
     })
 
+    it('drops a cell the backtest held back, even where the model agrees with the interpolation', () => {
+      const reference = hours('7F@F', { 12: 1100 })
+      const held = new Set([`7F@F|${column('WD', 12)}`])
+      const result = rejectConflicting(interpolated, reference, measuredAround(11, 14), new Set([column('WD', 12)]), held)
+      expect(result.heldBackDropped).toBe(1)
+      expect(result.accepted.size).toBe(0)
+    })
+
     it('does not count a cell that has a model value of its own as sparse', () => {
       const reference = hours('7F@F', { 12: 1000 })
       const result = rejectConflicting(interpolated, reference, measuredAround(11, 14), new Set([column('WD', 12)]))

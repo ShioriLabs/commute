@@ -3,9 +3,10 @@ import * as path from 'node:path'
 import { parseArgs } from 'node:util'
 import { DIRECTIONAL_HEADWAYS_S, STOP_HEADWAYS_S } from '../data/headways'
 import { TOPOLOGY } from '../data/topology'
-import { aggregateDay, AGGREGATE_SCHEMA, aggregationFingerprint, dayTypeOf, type DayAggregate } from './observedHeadways/aggregate'
+import { aggregateDay, AGGREGATE_SCHEMA, aggregationFingerprint, dayTypeOf, type DayAggregate, serviceDayOf } from './observedHeadways/aggregate'
 import { buildOrder } from './observedHeadways/arrivals'
-import { backtest, type BacktestSummary, type GtfsLookup, gtfsRawSpec, gtfsScaledSpec, vouchedColumns } from './observedHeadways/backtest'
+import { backtest, type BacktestSummary, type GtfsLookup, gtfsRawSpec, gtfsScaledSpec, heldBackCells, selectShippedCells, SPARSE_HEADWAY_S, vouchedColumns, vouchedStrata } from './observedHeadways/backtest'
+import { shippedFallbackSpec } from './observedHeadways/fallback'
 import { buildPool, COLUMNS, columnDayType, columnHour, fitFactorised, MIN_COLUMN_DAYS, fitPooled, fitShrunk, type ModelSpec, pooledCv, SHRINK_KAPPAS } from './observedHeadways/fit'
 import { DEFAULT_GATE } from './observedHeadways/health'
 import { renderOverlay } from './observedHeadways/render'
@@ -102,15 +103,22 @@ async function main() {
   const specs: ModelSpec[] = [
     gtfsRawSpec(gtfs),
     gtfsScaledSpec(gtfs),
+    // What a rider is shown instead of the model: the baseline vouching uses.
+    shippedFallbackSpec({
+      base: (day, key) => baseHeadways(day).get(key),
+      baseDir: key => DIRECTIONAL_HEADWAYS_S[key],
+      serviceDayOf
+    }),
     { name: 'M0 pooled', fit: fitPooled },
     ...SHRINK_KAPPAS.map(k => ({ name: `M1 k=${k}`, fit: (pool: Parameters<typeof fitPooled>[0]) => fitShrunk(pool, k) })),
     { name: 'M2 factor', fit: fitFactorised }
   ]
   const names = specs.map(s => s.name)
 
-  // What ships is M2, judged against the scaled schedule over every bucket BOTH
-  // predicted, so a column vouches on the stops it will actually be applied to.
-  const focus = { model: 'M2 factor', baseline: 'gtfsScaled' }
+  // What ships is M2, judged against the fallback that would be shown instead
+  // (day-aware, two scales, capped), over every bucket BOTH predicted, sparse
+  // ones included, so a cell is vouched on the stops it will be applied to.
+  const focus = { model: 'M2 factor', baseline: 'shipped fallback' }
   const loo = backtest(days, specs, gtfs, 'loo', undefined, focus)
   const looWd = backtest(days, specs, gtfs, 'loo', 'WD', focus)
   const looWe = backtest(days, specs, gtfs, 'loo', 'WE', focus)
@@ -121,11 +129,21 @@ async function main() {
   printSummary('rolling next-day', rolling, names)
 
   const vouched = vouchedColumns(loo, focus.model, focus.baseline)
-  console.log('\nper-column median error, all-days LOO (M2 vs GTFS scaled, buckets both predicted); * = vouched, shipped:')
-  for (const c of Object.keys(loo.pair ?? {}).map(Number).sort((a, b) => a - b)) {
-    const row = loo.pair![c]!
-    const mark = vouched.has(c) ? '*' : ' '
-    console.log(`  ${mark} ${columnDayType(c)} ${String(columnHour(c)).padStart(2)}  n=${String(row.n).padStart(5)}  M2 ${fmt(row.model)}  gtfsScaled ${fmt(row.baseline)}`)
+  const strata = vouchedStrata(loo)
+  const meanDev = (s: { n: number, devModel: number, devBaseline: number, nBuses: number, devModelBuses: number, devBaselineBuses: number }) => {
+    if (s.n === 0) return '    -           -     '
+    const pooled = `${(s.devModel / s.n).toFixed(2)}/${(s.devBaseline / s.n).toFixed(2)}`
+    const buses = s.nBuses === 0 ? '-' : `${(s.devModelBuses / s.nBuses).toFixed(2)}/${(s.devBaselineBuses / s.nBuses).toFixed(2)}`
+    return `${pooled} (buses ${buses})`.padEnd(30)
+  }
+  console.log(`\nper-column Poisson deviance, all-days LOO (M2 / shipped fallback, mean per bucket; sparse = the line-direction's profile is >= ${SPARSE_HEADWAY_S}s)`)
+  console.log('  each stratum needs n >= 100, a lower pooled deviance, and not >5% worse where buses ran. * = ships')
+  for (const c of Object.keys(loo.strata ?? {}).map(Number).sort((a, b) => a - b)) {
+    const row = loo.strata![c]!
+    const verdict = strata.get(c)
+    const f = verdict?.frequent ? '*' : ' '
+    const sp = verdict?.sparse ? '*' : ' '
+    console.log(`  ${columnDayType(c)} ${String(columnHour(c)).padStart(2)}  frequent ${f} n=${String(row.frequent.n).padStart(5)} ${meanDev(row.frequent)}  sparse ${sp} n=${String(row.sparse.n).padStart(5)} ${meanDev(row.sparse)}`)
   }
 
   // ── choose and gate ────────────────────────────────────────────────────────
@@ -137,9 +155,9 @@ async function main() {
     ...SHRINK_KAPPAS.map(k => ({ name: `M1 k=${k}`, ...loo.models[`M1 k=${k}`]! }))
   ].sort((a, b) => a.median - b.median)[0]!
   const keyHourWins = keyHour.median < m2.median - M1_MARGIN
-  const baseline = loo.models.gtfsScaled!
-  const beatsGtfs = m2.median < baseline.median
-  console.log(`\nchosen: ${keyHourWins ? keyHour.name : 'M2 factor'}; M2 ${fmt(m2.median)} vs best key-hour ${keyHour.name} ${fmt(keyHour.median)} (margin ${M1_MARGIN}) vs GTFS scaled ${fmt(baseline.median)} (beats: ${beatsGtfs})`)
+  const baseline = loo.models['shipped fallback']!
+  const beatsFallback = m2.median < baseline.median
+  console.log(`\nchosen: ${keyHourWins ? keyHour.name : 'M2 factor'}; M2 ${fmt(m2.median)} vs best key-hour ${keyHour.name} ${fmt(keyHour.median)} (margin ${M1_MARGIN}) vs shipped fallback ${fmt(baseline.median)} (beats: ${beatsFallback})`)
 
   const pool = buildPool(days)
   fs.writeFileSync(path.join(cacheDir, 'fit-report.json'), JSON.stringify({
@@ -153,8 +171,8 @@ async function main() {
     process.exitCode = 1
     return
   }
-  if (!beatsGtfs && !args.force) {
-    console.error('M2 does not beat GTFS scaled in the backtest. Not writing (use --force to override).')
+  if (!beatsFallback && !args.force) {
+    console.error('M2 does not beat the shipped fallback in the backtest. Not writing (use --force to override).')
     process.exitCode = 1
     return
   }
@@ -172,19 +190,29 @@ async function main() {
   // The model's profile is a rate (arrivals per second at an average stop);
   // everything below works in headway seconds, which is what ships.
   const own = new Map([...model.profile].map(([id, perSecond]) => [id, 1 / perSecond] as const))
+  // The cells that ship: each is judged by its own stratum, so a vouched column
+  // can ship only its frequent cells (or only its sparse ones).
+  const shipped = selectShippedCells(model.profile, strata)
+  const unshippedSparse = [...model.profile].filter(([id, perSecond]) => !shipped.has(id) && vouched.has(Number(id.split('|')[1])) && 1 / perSecond >= SPARSE_HEADWAY_S).length
+  const unshippedFrequent = [...model.profile].filter(([id, perSecond]) => !shipped.has(id) && vouched.has(Number(id.split('|')[1])) && 1 / perSecond < SPARSE_HEADWAY_S).length
+  console.log(`\nprofile cells: ${model.profile.size} fitted, ${shipped.size} ship; held back inside vouched columns: ${unshippedSparse} sparse, ${unshippedFrequent} frequent`)
   // Only the cells that ship are measured; interpolation fills between those,
   // and is then checked against what the model itself saw in the hours it fills.
-  const measured = new Map([...own].filter(([id]) => vouched.has(Number(id.split('|')[1]))))
+  const measured = new Map([...own].filter(([id]) => shipped.has(id)))
   // Columns with enough healthy days to fit a profile: a line-direction missing
   // from one of them barely ran, which is not the same as a blind hour.
   const dataColumns = new Set(
     Array.from({ length: COLUMNS }, (_, c) => c).filter(c => pool.daysOk[c]! >= MIN_COLUMN_DAYS)
   )
-  const { accepted: interpolated, rejectedColumns, deviations, vetoedCells, sparseVetoed } = rejectConflicting(
+  // Cells whose stratum was scored and lost: the fallback is the measured better
+  // answer there, so interpolation must not fill them back in.
+  const heldBack = heldBackCells(model.profile, loo)
+  const { accepted: interpolated, rejectedColumns, deviations, vetoedCells, sparseVetoed, heldBackDropped } = rejectConflicting(
     interpolateProfiles(measured),
     own,
     vouched,
-    dataColumns
+    dataColumns,
+    heldBack
   )
   // Show every column's margin, so a borderline one is visible to whoever reviews
   // the refit rather than discovered when it flips.
@@ -195,9 +223,9 @@ async function main() {
     const flag = Math.abs(margin) < 0.05 ? '  <- borderline' : ''
     console.log(`  ${columnDayType(c)} ${String(columnHour(c)).padStart(2)}  ${deviation.toFixed(2)}  ${state}${flag}`)
   }
-  console.log(`rejected (own failure or sharing a span with one): ${rejectedColumns.map(c => `${columnDayType(c)}:${columnHour(c)}`).join(' ') || 'none'}; ${vetoedCells} cells vetoed, ${sparseVetoed} sparse (observed column, line-direction barely ran)`)
+  console.log(`rejected (own failure or sharing a span with one): ${rejectedColumns.map(c => `${columnDayType(c)}:${columnHour(c)}`).join(' ') || 'none'}; ${vetoedCells} cells vetoed, ${sparseVetoed} sparse (observed column, line-direction barely ran), ${heldBackDropped} held back by the backtest`)
   const summary = (label: string, s: BacktestSummary) =>
-    `${label}: M2 ${fmt(s.models['M2 factor']!.median)}, pooled ${fmt(s.models['M0 pooled']!.median)}, GTFS scaled ${fmt(s.models.gtfsScaled!.median)}, GTFS raw ${fmt(s.models.gtfsRaw!.median)} (median |log err|, ${s.intersection} buckets)`
+    `${label}: M2 ${fmt(s.models['M2 factor']!.median)}, pooled ${fmt(s.models['M0 pooled']!.median)}, shipped fallback ${fmt(s.models['shipped fallback']!.median)}, GTFS raw ${fmt(s.models.gtfsRaw!.median)} (median |log err|, ${s.intersection} buckets)`
   const text = renderOverlay({
     model,
     pool,
@@ -205,14 +233,17 @@ async function main() {
     range: { from: days[0]!.day, to: days.at(-1)!.day },
     dayCounts: { WD: count('WD'), WE: count('WE') },
     vouched,
+    shippedCells: shipped,
     scales,
     interpolated,
     rejectedColumns,
     backtestLines: [summary('Leave-one-day-out', loo), summary('Rolling next-day', rolling)]
   })
   fs.writeFileSync(args.out!, text)
-  const shipped = [...model.profile.keys()].filter(id => vouched.has(Number(id.split('|')[1]))).length
-  console.log(`wrote ${args.out} (${shipped} of ${model.profile.size} profile cells vouched, ${model.factor.size} stop factors, ${scales.filter(s => s.measured).length}/${scales.length} scale columns measured, ${interpolated.size} interpolated profile cells)`)
+  // Factors ship only with a shipped profile cell of their line-direction (render.ts).
+  const shippedLineDirs = new Set([...shipped].map(id => id.slice(0, id.lastIndexOf('|'))))
+  const factorsShipped = [...model.factor.keys()].filter(k => shippedLineDirs.has(`${k.slice(0, k.indexOf('@'))}@${k.slice(-1)}`)).length
+  console.log(`wrote ${args.out} (${shipped.size} of ${model.profile.size} profile cells vouched, ${factorsShipped} of ${model.factor.size} stop factors, ${scales.filter(s => s.measured).length}/${scales.length} scale columns measured, ${interpolated.size} interpolated profile cells)`)
 }
 
 main().catch((err) => {

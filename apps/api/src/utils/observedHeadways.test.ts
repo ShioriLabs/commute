@@ -69,17 +69,24 @@ const stopId = twoWayStop.slice(twoWayStop.indexOf('@') + 1)
  * fit gave no factor in either direction: an origin terminal, or a halte it
  * barely sees. Split by whether the SCHEDULE calls the stop as frequent as its
  * line (an artefact: takes the line's level) or rarer (a branch halte: must not).
+ *
+ * Each entry carries the weekday hour it was chosen at, because which hours a
+ * line has a level for changes with the fit: the first hour from the list where
+ * the line has an observed (measured or interpolated) level is used.
  */
+const FIXTURE_HOURS = [12, 13, 14, 10, 15, 16, 8, 20, 21, 6]
 const factorlessStops = (() => {
-  const common: { key: string, line: string, stationId: string, scheduleS: number }[] = []
-  const rare: typeof common = []
+  type Entry = { key: string, line: string, stationId: string, scheduleS: number, hour: number }
+  const common: Entry[] = []
+  const rare: Entry[] = []
   for (const [key, scheduleS] of Object.entries(STOP_HEADWAYS_S)) {
     const line = key.slice(0, key.indexOf('@'))
     if (!LINE_TERMINI[line]) continue
     if (OBSERVED_STOP_FACTOR[`${key}@F`] !== undefined || OBSERVED_STOP_FACTOR[`${key}@R`] !== undefined) continue
-    if (OBSERVED_PROFILE_S[`${COLUMN}:${line}@F`] === undefined || OBSERVED_PROFILE_S[`${COLUMN}:${line}@R`] === undefined) continue
-    const level = observedLineHeadway(line, 'WD', 12)!.seconds
-    const entry = { key, line, stationId: key.slice(key.indexOf('@') + 1), scheduleS }
+    const hour = FIXTURE_HOURS.find(h => observedLineHeadway(line, 'WD', h) !== undefined && observedLineDirHeadway(line, 'F', 'WD', h) !== undefined)
+    if (hour === undefined) continue
+    const level = observedLineHeadway(line, 'WD', hour)!.seconds
+    const entry = { key, line, stationId: key.slice(key.indexOf('@') + 1), scheduleS, hour }
     if (scheduleS <= level) common.push(entry)
     else rare.push(entry)
   }
@@ -209,15 +216,23 @@ describe('plannerHeadways', () => {
     for (const key of baseHeadways('WD').keys()) expect(map.has(key)).toBe(true)
   })
 
-  // A TJ corridor with no profile of either kind on weekdays. If every line has
-  // one in the current fit, the test is reported SKIPPED, not silently passed.
-  const lineWithoutProfile = Object.keys(LINE_TERMINI).find(l => HEADWAYS_S[l] !== undefined
-    && !Object.keys(OBSERVED_PROFILE_S).some(k => k.startsWith('WD:') && k.includes(`:${l}@`))
-    && !Object.keys(OBSERVED_PROFILE_INTERP_S).some(k => k.startsWith('WD:') && k.includes(`:${l}@`)))
+  // A TJ corridor and a weekday hour where it has no profile of either kind. Any
+  // hour will do, so a fit that profiles every line somewhere still has one; if
+  // none exists at all, the test is reported SKIPPED, not silently passed.
+  const withoutProfile = (() => {
+    const has = (hour: number, line: string) => [OBSERVED_PROFILE_S, OBSERVED_PROFILE_INTERP_S]
+      .some(table => table[`WD:${hour}:${line}@F`] !== undefined || table[`WD:${hour}:${line}@R`] !== undefined)
+    for (const line of Object.keys(LINE_TERMINI)) {
+      if (HEADWAYS_S[line] === undefined) continue
+      const hour = [...Array(24).keys()].find(h => !has(h, line))
+      if (hour !== undefined) return { line, hour }
+    }
+    return undefined
+  })()
 
-  it.skipIf(lineWithoutProfile === undefined)('falls back to the scaled schedule where there is no profile at all, measured or interpolated', () => {
-    const line = lineWithoutProfile!
-    expect(plannerHeadways('WD', 17, true).get(line)).toBe(scaledExpected(HEADWAYS_S[line]!, 'WD:17'))
+  it.skipIf(withoutProfile === undefined)('falls back to the scaled schedule where there is no profile at all, measured or interpolated', () => {
+    const { line, hour } = withoutProfile!
+    expect(plannerHeadways('WD', hour, true).get(line)).toBe(scaledExpected(HEADWAYS_S[line]!, `WD:${hour}`))
   })
 
   it('uses the interpolated profile in a blind hour rather than the scaled schedule', () => {
@@ -368,38 +383,40 @@ describe('a stop the fit gave no factor', () => {
   })
 
   it('takes its line\'s observed level in the planner map when the schedule agrees it is as frequent', () => {
-    const { key, line } = factorless!
-    const level = observedLineHeadway(line, 'WD', 12)!
-    expect(plannerHeadways('WD', 12, true).get(key)).toBe(level.seconds)
+    const { key, line, hour } = factorless!
+    const level = observedLineHeadway(line, 'WD', hour)!
+    expect(plannerHeadways('WD', hour, true).get(key)).toBe(level.seconds)
   })
 
   it('is NOT shortened to the line\'s level when the schedule says it is rarer', () => {
-    // 12@TJ-H00261S: 3600s in the schedule, ~980s at its line's level. The first
+    // 12@TJ-H00261S: 3600s in the schedule, ~900-980s at its line's level. The first
     // version of the fallback priced the branch halte as the trunk.
-    const map = plannerHeadways('WD', 12, true)
-    for (const { key, line, scheduleS } of factorlessStops.rare) {
-      const level = observedLineHeadway(line, 'WD', 12)!.seconds
+    for (const { key, line, scheduleS, hour } of factorlessStops.rare) {
+      const level = observedLineHeadway(line, 'WD', hour)!.seconds
+      const mapped = plannerHeadways('WD', hour, true).get(key)!
       expect(scheduleS, key).toBeGreaterThan(level)
-      expect(map.get(key), key).toBeGreaterThanOrEqual(scheduleS)
-      expect(map.get(key), key).not.toBe(level)
+      expect(mapped, key).toBeGreaterThanOrEqual(scheduleS)
+      expect(mapped, key).not.toBe(level)
     }
   })
 
   it('takes the line-direction\'s own level on a directional row, when not rarer than the schedule', () => {
-    const { line, stationId, scheduleS } = factorless!
-    const row = resolveHeadway({ nominalS: scheduleS, kind: 'dir', dir: 'F', lineCode: line, stationId, day: 'WD', hour: 12, enabled: true, tj: true })
-    expect(row).toEqual({ headwayS: observedLineDirHeadway(line, 'F', 'WD', 12)!.seconds, basis: 'OBSERVED' })
+    const { line, stationId, scheduleS, hour } = factorless!
+    const row = resolveHeadway({ nominalS: scheduleS, kind: 'dir', dir: 'F', lineCode: line, stationId, day: 'WD', hour, enabled: true, tj: true })
+    const level = observedLineDirHeadway(line, 'F', 'WD', hour)!
+    expect(row).toEqual({ headwayS: level.seconds, basis: level.interpolated ? 'INTERPOLATED' : 'OBSERVED' })
   })
 
   it('takes the line\'s level on a per-stop row, when not rarer than the schedule', () => {
-    const { line, stationId, scheduleS } = factorless!
-    const row = resolveHeadway({ nominalS: scheduleS, kind: 'stop', lineCode: line, stationId, day: 'WD', hour: 12, enabled: true, tj: true })
-    expect(row).toEqual({ headwayS: observedLineHeadway(line, 'WD', 12)!.seconds, basis: 'OBSERVED' })
+    const { line, stationId, scheduleS, hour } = factorless!
+    const row = resolveHeadway({ nominalS: scheduleS, kind: 'stop', lineCode: line, stationId, day: 'WD', hour, enabled: true, tj: true })
+    const level = observedLineHeadway(line, 'WD', hour)!
+    expect(row).toEqual({ headwayS: level.seconds, basis: level.interpolated ? 'INTERPOLATED' : 'OBSERVED' })
   })
 
   it('does not call a rarer stop OBSERVED, and never shortens it below its schedule value', () => {
-    for (const { line, stationId, scheduleS } of factorlessStops.rare) {
-      const row = resolveHeadway({ nominalS: scheduleS, kind: 'stop', lineCode: line, stationId, day: 'WD', hour: 12, enabled: true, tj: true })
+    for (const { line, stationId, scheduleS, hour } of factorlessStops.rare) {
+      const row = resolveHeadway({ nominalS: scheduleS, kind: 'stop', lineCode: line, stationId, day: 'WD', hour, enabled: true, tj: true })
       expect(row.basis).toBe('SCALED')
       expect(row.headwayS!).toBeGreaterThanOrEqual(scheduleS)
     }

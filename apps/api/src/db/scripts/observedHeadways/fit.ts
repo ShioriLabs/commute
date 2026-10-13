@@ -109,11 +109,29 @@ export function buildPool(days: readonly DayAggregate[]): Pool {
 export interface RateModel {
   /** Expected seconds between vehicles, or undefined where the model has no basis. */
   headway: (key: string, dayType: DayType, hour: number) => number | undefined
+  /**
+   * The headway that decides a key's backtest stratum (frequent or sparse), when
+   * it is not `headway` itself. M2 ships and is vouched per line-direction cell,
+   * so its stops are scored in the stratum of their line-direction's profile,
+   * not of their own factor-adjusted value.
+   */
+  stratumHeadway?: (key: string, dayType: DayType, hour: number) => number | undefined
+}
+
+/**
+ * The held-out day a model is being fitted for, when it is fitted inside a
+ * backtest fold. Most models ignore it; the fallback baseline needs the
+ * service day (a Saturday's schedule differs from a Sunday's), which the pooled
+ * day type alone cannot tell it.
+ */
+export interface FoldInfo {
+  day: string
+  dayType: DayType
 }
 
 export interface ModelSpec {
   name: string
-  fit: (pool: Pool) => RateModel
+  fit: (pool: Pool, fold?: FoldInfo) => RateModel
 }
 
 const median = (xs: number[]) => {
@@ -242,6 +260,10 @@ export function fitFactorised(pool: Pool): FactorisedModel {
       const relative = factor.get(key)
       if (base === undefined || relative === undefined) return undefined
       return 1 / (base * relative)
+    },
+    stratumHeadway(key, dayType, hour) {
+      const base = profile.get(`${lineDirOf(key)}|${column(dayType, hour)}`)
+      return base === undefined ? undefined : 1 / base
     }
   }
 }

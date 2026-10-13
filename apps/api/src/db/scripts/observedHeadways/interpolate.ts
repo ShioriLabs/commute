@@ -122,6 +122,8 @@ export interface ConflictResult {
   deviations: Map<number, number>
   /** Cells dropped by the per-cell veto inside accepted columns. */
   vetoedCells: number
+  /** Cells dropped because the backtest held them back (scored, and lost to the fallback). */
+  heldBackDropped: number
 }
 
 /*
@@ -146,18 +148,27 @@ export interface ConflictResult {
  * anything; an interpolated cell in one of them with no model value of its own
  * is that situation, and is dropped. In a column without data (the weekday rush
  * hours) an absent cell really is a blind hour, and interpolation is the answer.
+ *
+ * `heldBack` are cells the backtest scored and found worse than the fallback
+ * (backtest.ts `heldBackCells`). They are absent from the measured profile for
+ * that reason, not for want of data, so they are dropped before anything else:
+ * filled from their neighbours they would ship, labelled INTERPOLATED, in the
+ * one place the backtest measured that the fallback does better.
  */
 export function rejectConflicting(
-  interpolated: ReadonlyMap<string, number>,
+  candidates: ReadonlyMap<string, number>,
   /** `${line}@${dir}|${column}` -> the model's own headway seconds, vouched or not. */
   reference: ReadonlyMap<string, number>,
   measuredColumns: ReadonlySet<number>,
   /** Columns with enough healthy days to fit a profile at all. */
   dataColumns: ReadonlySet<number> = new Set(),
+  heldBack: ReadonlySet<string> = new Set(),
   tolerance: number = CONFLICT_TOLERANCE,
   cellVeto: number = CELL_VETO
 ): ConflictResult {
   const columnOf = (id: string) => Number(id.slice(id.lastIndexOf('|') + 1))
+  const interpolated = new Map([...candidates].filter(([id]) => !heldBack.has(id)))
+  const heldBackDropped = candidates.size - interpolated.size
 
   const deviations = new Map<number, number[]>()
   for (const [id, seconds] of interpolated) {
@@ -219,5 +230,5 @@ export function rejectConflicting(
     }
     accepted.set(id, seconds)
   }
-  return { accepted, rejectedColumns: [...rejected].sort((a, b) => a - b), deviations: median, vetoedCells, sparseVetoed }
+  return { accepted, rejectedColumns: [...rejected].sort((a, b) => a - b), deviations: median, vetoedCells, sparseVetoed, heldBackDropped }
 }

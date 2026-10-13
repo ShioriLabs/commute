@@ -22,8 +22,14 @@ export interface OverlayInput {
   rejectedColumns: readonly number[]
   /** Per-column GTFS scale (see scale.ts), the fallback where the profile is absent. */
   scales: readonly ColumnScale[]
-  /** Columns (fit.column) the backtest vouches for; the profile is restricted to them. */
+  /** Columns (fit.column) with at least one vouched stratum. */
   vouched: ReadonlySet<number>
+  /**
+   * The profile cells that ship, as `${line}@${dir}|${column}`. A column is
+   * vouched per stratum (frequent / sparse), so a vouched column can ship only
+   * part of its cells. Omitted: every cell of a vouched column ships.
+   */
+  shippedCells?: ReadonlySet<string>
   /** Pre-formatted one-line backtest results for the header. */
   backtestLines: string[]
 }
@@ -44,7 +50,9 @@ export function profileKey(ld: string, column: number): string {
 export function renderOverlay(input: OverlayInput): string {
   const { model, pool } = input
   const profile = [...model.profile]
-    .filter(([id]) => input.vouched.has(Number(id.split('|')[1])))
+    .filter(([id]) => input.shippedCells
+      ? input.shippedCells.has(id)
+      : input.vouched.has(Number(id.split('|')[1])))
     .map(([id, perSecond]) => {
       const [ld, column] = id.split('|')
       return [profileKey(ld!, Number(column)), clampHeadway(1 / perSecond)] as const
@@ -56,7 +64,12 @@ export function renderOverlay(input: OverlayInput): string {
       return [profileKey(ld!, Number(column)), clampHeadway(seconds)] as const
     })
     .sort(([a], [b]) => naturalCompare(a, b))
+  // A stop factor only means something next to a profile of its line-direction.
+  // A line-direction whose every cell was held back (a weekend-only line whose
+  // sparse cells lost to the fallback) would otherwise ship factors nothing reads.
+  const shippedLineDirs = new Set(profile.map(([key]) => key.split(':').slice(2).join(':')))
   const factors = [...model.factor]
+    .filter(([key]) => shippedLineDirs.has(`${key.slice(0, key.indexOf('@'))}@${key.slice(-1)}`))
     .map(([key, f]) => [key, Math.round(f * 100) / 100] as const)
     .sort(([a], [b]) => naturalCompare(a, b))
 
@@ -118,8 +131,11 @@ export function renderOverlay(input: OverlayInput): string {
     ' *',
     ' * A profile cell is ABSENT when it fails the floors (fewer than 3 days with 15',
     ' * healthy minutes, or under 30 pooled arrivals) or when the backtest does not',
-    ' * vouch for its (dayType, hour): at least 100 held-out buckets, and a lower',
-    ' * median error than GTFS scaled by a per-hour factor. A consumer then reads,',
+    ' * vouch for its stratum of its (dayType, hour): cells the model puts under 15',
+    ' * minutes apart and cells it puts at or over are judged separately, each needing',
+    ' * at least 100 held-out buckets (counted with zeros, so a stop that barely ran is',
+    ' * scored on that) and a lower Poisson deviance than the fallback that would be',
+    ' * shown instead. A consumer then reads,',
     ' * in order, OBSERVED_PROFILE_INTERP_S, the scaled schedule below, and',
     ' * finally headways.ts as it was. The upstream relay is almost never healthy',
     ' * in the weekday rush hours, so those hours have nothing to fit or to',
