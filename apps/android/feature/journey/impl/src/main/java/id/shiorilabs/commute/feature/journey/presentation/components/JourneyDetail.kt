@@ -62,13 +62,18 @@ internal fun JourneyDetail(journey: Journey, lines: Map<String, LineInfo>) {
         verticalArrangement = Arrangement.spacedBy(4.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        if (departureAt != null && arrivalAt != null) {
+        if (journey.rides.isEmpty()) {
+            // Nothing to ride: the recap is just the walk.
+            RecapText(stringResource(R.string.journey_walk_only_summary, journey.walkDistanceM), strong = true)
+        } else if (departureAt != null && arrivalAt != null) {
             RecapText(formatDuration(departureAt, arrivalAt), strong = true)
         }
-        RecapText(stringResource(R.string.journey_transfer_count, journey.transferCount))
-        journey.totalFare?.let { RecapText(formatRupiah(it), strong = true) }
-        RecapText(formatKm(journey.totalDistanceM))
-        if (journey.walkDistanceM > 0) {
+        if (journey.rides.isNotEmpty()) {
+            RecapText(stringResource(R.string.journey_transfer_count, journey.transferCount))
+            journey.totalFare?.let { RecapText(formatRupiah(it), strong = true) }
+            RecapText(formatKm(journey.totalDistanceM))
+        }
+        if (journey.rides.isNotEmpty() && journey.walkDistanceM > 0) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(imageVector = CommuteIcons.Walk, contentDescription = null, modifier = Modifier.size(16.dp), tint = Slate500)
                 RecapText("${journey.walkDistanceM} m")
