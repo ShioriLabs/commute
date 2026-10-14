@@ -202,11 +202,13 @@ private fun TripContent(
                     TripPageState.Failed -> Problem(text = stringResource(R.string.journey_failed), onRetry = onRetry, top = BodyTop)
 
                     is TripPageState.Loaded -> Column(modifier = Modifier.padding(top = BodyTop)) {
+                        // No ride, no trip to start, pin or share: a walk alone has nothing to keep.
+                        val hasRide = trip.journey.legs.any { it is JourneyLeg.Ride }
                         TripActions(
                             tripStart = tripStart,
                             asksLocation = tripAsksLocation,
-                            routeSaved = routeSaved,
-                            shareUrl = state.shareUrl,
+                            routeSaved = routeSaved.takeIf { hasRide },
+                            shareUrl = state.shareUrl.takeIf { hasRide },
                             onStartTrip = onStartTrip,
                             onOpenTrip = onOpenTrip,
                             onToggleSaveRoute = onToggleSaveRoute,
@@ -251,9 +253,10 @@ private fun TripHeader(state: TripUiState, innerPadding: PaddingValues, onClose:
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (journey != null) {
+            val segments = journey?.let { routeBarSegments(it.legs) { ride -> legLines(ride, state.lines) } }
+            if (!segments.isNullOrEmpty()) {
                 RouteBar(
-                    segments = routeBarSegments(journey.legs) { legLines(it, state.lines) },
+                    segments = segments,
                     plateColor = TripBackground,
                     modifier = Modifier
                         .weight(1f)
@@ -261,7 +264,9 @@ private fun TripHeader(state: TripUiState, innerPadding: PaddingValues, onClose:
                 )
             } else {
                 Text(
-                    text = stringResource(R.string.journey_trip_title),
+                    text = stringResource(
+                        if (journey != null) R.string.journey_trip_detail_title else R.string.journey_trip_title,
+                    ),
                     modifier = Modifier
                         .weight(1f)
                         .semantics { heading() },

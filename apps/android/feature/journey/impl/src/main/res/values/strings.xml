@@ -4,6 +4,8 @@
 
     <!-- The trip page: one journey in full, opened from an OTW option or a saved pair's row -->
     <string name="journey_trip_title">Perjalanan</string>
+    <!-- Stands in for the route bar when the journey has no ride to draw (a walk only) -->
+    <string name="journey_trip_detail_title">Detail OTW</string>
     <string name="journey_close_description">Tutup perjalanan</string>
     <string name="journey_share_description">Bagikan rute ini</string>
     <!-- The trip page's buttons under its header; TalkBack reads the longer descriptions instead -->
@@ -66,6 +68,7 @@
     <string name="journey_last_service">Terakhir</string>
     <!-- %1$d is the number of transfers -->
     <string name="journey_transfer_count">transit %1$dx</string>
+    <string name="journey_walk_only_summary">Jalan aja udeh, cuma %1$dm</string>
     <!-- %1$s is the boarding time, %2$s the arrival, both like 07.14 -->
     <!-- %1$s is a platform code like 3·4 -->
     <string name="journey_platform">Peron %1$s</string>

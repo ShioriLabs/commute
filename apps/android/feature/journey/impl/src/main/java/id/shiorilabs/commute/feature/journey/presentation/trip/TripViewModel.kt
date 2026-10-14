@@ -18,6 +18,7 @@ import id.shiorilabs.commute.feature.journey.data.JourneyRepository
 import id.shiorilabs.commute.feature.journey.domain.JourneyCriteria
 import id.shiorilabs.commute.feature.journey.domain.TripStart
 import id.shiorilabs.commute.feature.journey.domain.toTripPlan
+import id.shiorilabs.commute.feature.journey.domain.JourneyLeg
 import id.shiorilabs.commute.feature.journey.domain.tripStartFor
 import id.shiorilabs.commute.feature.journey.domain.fareShareUrl
 import id.shiorilabs.commute.feature.journey.domain.findJourneyByKey
@@ -91,7 +92,9 @@ class TripViewModel @AssistedInject constructor(
         minuteTicks(),
         developerPreferences.forceTripStart,
     ) { trip, active, now, force ->
-        (trip as? TripPageState.Loaded)?.let { tripStartFor(it.journey, route, active?.origin, now, force) }
+        (trip as? TripPageState.Loaded)
+            ?.takeIf { loaded -> loaded.journey.legs.any { it is JourneyLeg.Ride } }
+            ?.let { tripStartFor(it.journey, route, active?.origin, now, force) }
     }.stateIn(viewModelScope, WhileUiSubscribed, null)
 
     /**
@@ -104,6 +107,8 @@ class TripViewModel @AssistedInject constructor(
     /** Follows the loaded journey from now, in place of any trip already running. */
     fun startTrip() {
         val journey = (trip.value as? TripPageState.Loaded)?.journey ?: return
+        // A journey with no ride (walk only) has no train to follow.
+        if (journey.legs.none { it is JourneyLeg.Ride }) return
         tripController.start(journey.toTripPlan(), route)
     }
 
