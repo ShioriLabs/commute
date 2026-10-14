@@ -2,6 +2,7 @@ package id.shiorilabs.commute.core.ui.morph
 
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.BoundsTransform
+import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -134,6 +135,8 @@ fun Modifier.navCardMorphSource(destination: Route): Modifier {
 /**
  * The destination end of a rail card's morph: the root of the screen [destination] opens.
  *
+ * @param enabled false for a screen that is only sometimes opened out of its source: it is then a
+ *   plain box, and its own page transition carries it.
  * @param cardTint the face colour of an accent card, which the screen gathers into on its way back
  *   and out of on its way open. Null for a white card: the white mask is all it needs.
  */
@@ -142,11 +145,12 @@ fun NavCardMorphTarget(
     destination: Route,
     cardTint: Color?,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val sharedScope = LocalSharedTransitionScope.current
     val visibilityScope = LocalNavAnimatedVisibilityScope.current
-    if (sharedScope == null || visibilityScope == null) {
+    if (!enabled || sharedScope == null || visibilityScope == null) {
         Box(modifier) {
             content()
         }
@@ -318,15 +322,18 @@ private const val BACKDROP_MILLIS = 200
  * fades most of the way out behind the morph, as behind the web's backdrop.
  */
 fun navCardMorphMetadata(): Map<String, Any> {
-    val open = {
-        EnterTransition.None togetherWith fadeOut(tween(BACKDROP_MILLIS), targetAlpha = BACKDROP_ALPHA)
-    }
-    val close = {
-        // No exit of its own: the destination stays composed for as long as its morph animations
-        // run, which is exactly as long as it is needed.
-        fadeIn(tween(BACKDROP_MILLIS), initialAlpha = BACKDROP_ALPHA) togetherWith ExitTransition.None
-    }
-    return NavDisplay.transitionSpec { open() } +
-        NavDisplay.popTransitionSpec { close() } +
-        NavDisplay.predictivePopTransitionSpec { close() }
+    return NavDisplay.transitionSpec { navCardMorphOpen() } +
+        NavDisplay.popTransitionSpec { navCardMorphClose() } +
+        NavDisplay.predictivePopTransitionSpec { navCardMorphClose() }
 }
+
+/** The morph's opening scene change: only the shared bounds move, the screen underneath fades. */
+internal fun navCardMorphOpen(): ContentTransform =
+    EnterTransition.None togetherWith fadeOut(tween(BACKDROP_MILLIS), targetAlpha = BACKDROP_ALPHA)
+
+/**
+ * The morph's closing scene change. No exit of its own: the destination stays composed for as long
+ * as its morph animations run, which is exactly as long as it is needed.
+ */
+internal fun navCardMorphClose(): ContentTransform =
+    fadeIn(tween(BACKDROP_MILLIS), initialAlpha = BACKDROP_ALPHA) togetherWith ExitTransition.None

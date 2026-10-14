@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.feature.saved.presentation.components
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,6 +13,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -37,6 +40,7 @@ private const val NAME_LOADING = "…"
  * slides the two alike. Each name gives way before the arrow does, so a long pair still reads both
  * ends.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun RouteTitle(
     fromName: String?,
@@ -44,7 +48,10 @@ fun RouteTitle(
     modifier: Modifier = Modifier,
     topInset: Dp = 0.dp,
     onClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
 ) {
+    val haptics = LocalHapticFeedback.current
+    val longClickLabel = stringResource(R.string.saved_title_edit_action)
     val from = fromName ?: NAME_LOADING
     val to = toName ?: NAME_LOADING
     val description = stringResource(R.string.saved_route_title_description, from, to)
@@ -56,7 +63,23 @@ fun RouteTitle(
         modifier = modifier
             .fillMaxWidth()
             .padding(top = topInset)
-            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
+            .then(
+                if (onClick != null) {
+                    Modifier.combinedClickable(
+                        role = Role.Button,
+                        onLongClickLabel = longClickLabel.takeIf { onLongClick != null },
+                        onLongClick = onLongClick?.let { hold ->
+                            {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                hold()
+                            }
+                        },
+                        onClick = onClick,
+                    )
+                } else {
+                    Modifier
+                },
+            )
             .padding(16.dp)
             .semantics(mergeDescendants = true) {
                 heading()
