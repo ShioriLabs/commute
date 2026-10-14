@@ -84,6 +84,7 @@ import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.components.StationNode
 import id.shiorilabs.commute.core.ui.components.StopNode
 import id.shiorilabs.commute.core.ui.components.TimelineGutter
+import id.shiorilabs.commute.core.ui.components.TimelineGutterSlack
 import id.shiorilabs.commute.core.ui.components.TimelineLineWidth
 import id.shiorilabs.commute.core.ui.components.TimelineNode
 import id.shiorilabs.commute.core.ui.components.TimelineRow
@@ -243,14 +244,14 @@ private fun ActiveTripContent(
                 )
             }
             item(key = "actions") {
-                Actions(trip, onStop, onSay, modifier = Modifier.padding(start = 32.dp, top = 24.dp, end = 32.dp, bottom = 16.dp))
+                Actions(trip, onStop, onSay, modifier = Modifier.padding(start = 16.dp, top = 24.dp, end = 16.dp, bottom = 16.dp))
             }
             if (trip.state.phase != TripPhase.ARRIVED) {
                 item(key = "reminder") {
                     ReminderButton(
                         reminder = trip.reminder,
                         onChange = onReminder,
-                        modifier = Modifier.padding(start = 32.dp, end = 32.dp, bottom = 24.dp),
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
                     )
                 }
             }
@@ -258,7 +259,7 @@ private fun ActiveTripContent(
                 item(key = "no-location") {
                     NoticeBanner(
                         message = stringResource(if (state.tripFixesOff) R.string.trip_live_location_off else R.string.trip_live_no_location),
-                        modifier = Modifier.padding(start = 32.dp, end = 32.dp, bottom = 24.dp),
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
                     )
                 }
             }
@@ -285,16 +286,16 @@ private fun ActiveTripContent(
                             sameStationChange = isSameStationChange(legs.getOrNull(index - 1), leg),
                             before = railBeside(legs.getOrNull(index - 1), leg, after = false),
                             after = railBeside(legs.getOrNull(index + 1), leg, after = true),
-                            modifier = Modifier.padding(horizontal = 32.dp),
+                            modifier = Modifier.padding(start = 32.dp - TimelineGutterSlack, end = 32.dp),
                         )
                     }
                     is TripLeg.Transfer -> item(key = "walk-$index") {
-                        WalkRow(leg, modifier = Modifier.padding(horizontal = 32.dp))
+                        WalkRow(leg, modifier = Modifier.padding(start = 32.dp - TimelineGutterSlack, end = 32.dp))
                     }
                 }
             }
             item(key = "details") {
-                DetailsRow(onClick = { onDetails(trip) }, modifier = Modifier.padding(start = 32.dp, top = 24.dp, end = 32.dp))
+                DetailsRow(onClick = { onDetails(trip) }, modifier = Modifier.padding(start = 16.dp, top = 24.dp, end = 16.dp))
             }
         }
         Column(
