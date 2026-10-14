@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.feature.saved.presentation.components
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -58,6 +61,7 @@ private const val MAX_SKELETON_LINES = 3
  *
  * [note] sits muted at the row's far end, on the title's baseline: how far a nearby station is.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun StationTitle(
     stationId: String,
@@ -68,13 +72,32 @@ fun StationTitle(
     opened: Boolean = false,
     note: String? = null,
     onClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
 ) {
+    val haptics = LocalHapticFeedback.current
+    val longClickLabel = stringResource(R.string.saved_title_edit_action)
     Row(
         modifier = modifier
             .fillMaxWidth()
             .padding(top = topInset)
             // Under the inset, so a tap behind the clock doesn't open anything.
-            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
+            .then(
+                if (onClick != null) {
+                    Modifier.combinedClickable(
+                        role = Role.Button,
+                        onLongClickLabel = longClickLabel.takeIf { onLongClick != null },
+                        onLongClick = onLongClick?.let { hold ->
+                            {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                hold()
+                            }
+                        },
+                        onClick = onClick,
+                    )
+                } else {
+                    Modifier
+                },
+            )
             .padding(16.dp)
             .semantics(mergeDescendants = true) { heading() },
         horizontalArrangement = Arrangement.spacedBy(12.dp),
