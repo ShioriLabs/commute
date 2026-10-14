@@ -130,6 +130,7 @@ fun SavedStationsScreen(
         onSettingsClick = { navigator.goTo(Route.Settings) },
         onStationClick = { navigator.goTo(Route.Station(it)) },
         onRouteClick = { fromId, toId -> navigator.goTo(Route.Otw(fromId = fromId, toId = toId)) },
+        onEditClick = { navigator.goTo(Route.SettingsSavedStations) },
         savedRouteCard = savedRouteCard,
         nearby = nearby,
         raised = raised,
@@ -151,6 +152,7 @@ private fun SavedStationsContent(
     onSettingsClick: () -> Unit = {},
     onStationClick: (stationId: String) -> Unit = {},
     onRouteClick: (fromId: String, toId: String) -> Unit = { _, _ -> },
+    onEditClick: () -> Unit = {},
     savedRouteCard: SavedRouteCard = NoSavedRouteCard,
     /** The running trip's card, `null` while there is none. */
     nearby: NearbyUiState = NearbyUiState.Hidden,
@@ -203,6 +205,7 @@ private fun SavedStationsContent(
                     onRefreshNoticeShown = onRefreshNoticeShown,
                     onStationClick = onStationClick,
                     onRouteClick = onRouteClick,
+                    onEditClick = onEditClick,
                     savedRouteCard = savedRouteCard,
                     nearby = nearby,
                     raised = raised,
@@ -250,6 +253,20 @@ private sealed interface BarTitle {
     data class Pair(val fromId: String, val toId: String, val fromName: String?, val toName: String?) : BarTitle
 }
 
+/** Which title the editor's morph opens out of, kept apart from the titles' own keys. */
+private fun BarTitle.editKey(): String = when (this) {
+    is BarTitle.Station -> "station:$stationId"
+    is BarTitle.Pair -> "pair:$fromId:$toId"
+}
+
+/**
+ * The start of the morph into the editor, on the title [active] holds. Switched off for now: the
+ * editor slides in like any page. Restore `navCardMorphSource(Route.SettingsSavedStations)` here, with
+ * the metadata and `NavCardMorphTarget` at the other end, to bring the morph back.
+ */
+@Suppress("UnusedParameter")
+private fun Modifier.editSource(active: Boolean): Modifier = this
+
 /** A station has a title once it has loaded; a pair always has one, its names filling in. */
 private fun HomeEntry.barTitle(): BarTitle? = when (this) {
     is HomeEntry.StationEntry -> (board.station as? UIState.Success)?.data?.let { BarTitle.Station(board.stationId, it.name) }
@@ -274,6 +291,7 @@ private fun StationFeed(
     onRefreshNoticeShown: () -> Unit,
     onStationClick: (stationId: String) -> Unit,
     onRouteClick: (fromId: String, toId: String) -> Unit,
+    onEditClick: () -> Unit,
     savedRouteCard: SavedRouteCard,
     nearby: NearbyUiState,
     raised: List<String>,
@@ -364,6 +382,14 @@ private fun StationFeed(
     val incoming = stuck?.takeIf { it.pushOffset < 0 }
         ?.let { current -> titleRows.firstOrNull { it.first > current.index } }
         ?.takeIf { it.second.barTitle() != null }
+    // The title held to open the editor: the one the page morphs out of, and back into on closing.
+    // Only the copy on screen carries it, as a morph key may be on one composable at a time.
+    var editingKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val edit = { key: String ->
+        editingKey = key
+        onEditClick()
+    }
+    val editTitle = { title: BarTitle -> edit(title.editKey()) }
     val openTitle = { title: BarTitle ->
         when (title) {
             is BarTitle.Station -> openStation(title.stationId)
@@ -461,7 +487,10 @@ private fun StationFeed(
                                     // A pinned station of the same name below owns the flight home.
                                     shareName = false,
                                     onClick = { openStation(station.id) },
-                                    modifier = Modifier.cardEntrance(index),
+                                    onLongClick = { edit("nearby:${station.id}") },
+                                    modifier = Modifier
+                                        .editSource(editingKey == "nearby:${station.id}")
+                                        .cardEntrance(index),
                                 )
                             }
                             item(key = "nearby:${station.id}") {
@@ -493,7 +522,9 @@ private fun StationFeed(
                             fromName = entry.fromName,
                             toName = entry.toName,
                             onClick = { onRouteClick(entry.fromId, entry.toId) },
+                            onLongClick = { editTitle(BarTitle.Pair(entry.fromId, entry.toId, entry.fromName, entry.toName)) },
                             modifier = Modifier
+                                .editSource(editingKey == "pair:${entry.fromId}:${entry.toId}" && !underBar())
                                 .cardEntrance(index)
                                 .graphicsLayer { alpha = if (underBar()) 0f else 1f },
                         )
@@ -520,7 +551,9 @@ private fun StationFeed(
                             shareName = !hidden,
                             opened = card.stationId == opened,
                             onClick = { openStation(card.stationId) },
+                            onLongClick = { edit("station:${card.stationId}") },
                             modifier = Modifier
+                                .editSource(editingKey == "station:${card.stationId}" && !hidden)
                                 .cardEntrance(index)
                                 .graphicsLayer { alpha = if (hidden) 0f else 1f },
                         )
@@ -573,6 +606,8 @@ private fun StationFeed(
             // The bar covers the list's own copy of the title, so it takes the tap for it.
             opened = (stuckTitle as? BarTitle.Station)?.stationId?.let { it == opened } == true,
             onClick = stuckTitle?.let { title -> { openTitle(title) } },
+            onLongClick = stuckTitle?.let { title -> { editTitle(title) } },
+            morphSource = stuckTitle != null && editingKey == stuckTitle.editKey(),
             drawn = { firstDraw[0] },
         )
 
@@ -612,6 +647,8 @@ private fun StuckTitleBar(
     onTitleHeight: (Int) -> Unit,
     opened: Boolean,
     onClick: (() -> Unit)?,
+    onLongClick: (() -> Unit)?,
+    morphSource: Boolean,
     drawn: () -> Boolean,
 ) {
     val density = LocalDensity.current
@@ -645,7 +682,9 @@ private fun StuckTitleBar(
             shareName = title is BarTitle.Station,
             opened = opened,
             onClick = onClick,
+            onLongClick = onLongClick,
             modifier = Modifier
+                .editSource(morphSource)
                 .onSizeChanged { onTitleHeight(it.height - statusBarPx) }
                 .graphicsLayer {
                     translationY = pushOffset().toFloat()
@@ -694,6 +733,7 @@ private fun BarTitleRow(
     modifier: Modifier = Modifier,
     opened: Boolean = false,
     onClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
 ) {
     when (title) {
         is BarTitle.Pair -> RouteTitle(
@@ -702,6 +742,7 @@ private fun BarTitleRow(
             modifier = modifier,
             topInset = topInset,
             onClick = onClick,
+            onLongClick = onLongClick,
         )
 
         is BarTitle.Station -> StationTitle(
@@ -712,6 +753,7 @@ private fun BarTitleRow(
             shareName = shareName,
             opened = opened,
             onClick = onClick,
+            onLongClick = onLongClick,
         )
 
         null -> StationTitle(stationId = "", name = "", modifier = modifier, topInset = topInset, shareName = false)

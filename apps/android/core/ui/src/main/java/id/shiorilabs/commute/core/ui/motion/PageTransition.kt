@@ -9,6 +9,8 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.navigation3.scene.Scene
+import id.shiorilabs.commute.core.ui.morph.navCardMorphClose
+import id.shiorilabs.commute.core.ui.morph.navCardMorphOpen
 import androidx.navigation3.ui.NavDisplay
 
 /**
@@ -61,7 +63,10 @@ private fun Scene<*>.isSharedElementSource(): Boolean = metadata[SHARED_ELEMENT_
  * Without it a page gets Navigation 3's default, a 700 ms crossfade with both screens see-through
  * at once.
  */
-fun pageTransitionMetadata(receivesSharedElements: Boolean = false): Map<String, Any> {
+fun pageTransitionMetadata(
+    receivesSharedElements: Boolean = false,
+    morphsFromMarkedSource: Boolean = false,
+): Map<String, Any> {
     val push = {
         slideInHorizontally(pageTween()) { width -> width } togetherWith
             (slideOutHorizontally(pageTween()) { width -> -width / UNDERNEATH_DRIFT } + fadeOut(pageTween(), UNDERNEATH_ALPHA))
@@ -74,7 +79,37 @@ fun pageTransitionMetadata(receivesSharedElements: Boolean = false): Map<String,
         fadeIn(tween(PAGE_MILLIS - FADE_OUT_MILLIS, delayMillis = FADE_OUT_MILLIS, easing = PageEasing)) togetherWith
             fadeOut(tween(FADE_OUT_MILLIS))
     }
-    return NavDisplay.transitionSpec { if (receivesSharedElements && initialState.isSharedElementSource()) crossfade() else push() } +
-        NavDisplay.popTransitionSpec { if (receivesSharedElements && targetState.isSharedElementSource()) crossfade() else pop() } +
-        NavDisplay.predictivePopTransitionSpec { if (receivesSharedElements && targetState.isSharedElementSource()) crossfade() else pop() }
+    return NavDisplay.transitionSpec {
+        when {
+            morphsFromMarkedSource && initialState.isMorphSource() -> navCardMorphOpen()
+            receivesSharedElements && initialState.isSharedElementSource() -> crossfade()
+            else -> push()
+        }
+    } +
+        NavDisplay.popTransitionSpec {
+            when {
+                morphsFromMarkedSource && targetState.isMorphSource() -> navCardMorphClose()
+                receivesSharedElements && targetState.isSharedElementSource() -> crossfade()
+                else -> pop()
+            }
+        } +
+        NavDisplay.predictivePopTransitionSpec {
+            when {
+                morphsFromMarkedSource && targetState.isMorphSource() -> navCardMorphClose()
+                receivesSharedElements && targetState.isSharedElementSource() -> crossfade()
+                else -> pop()
+            }
+        }
 }
+
+/** The metadata key [morphSourceMetadata] sets. */
+private const val MORPH_SOURCE = "commute.morphSource"
+
+/**
+ * Nav entry metadata for a screen that holds a card-morph source for a page which otherwise slides
+ * in: that page, built with `morphsFromMarkedSource`, morphs out of this screen and slides in from
+ * every other.
+ */
+fun morphSourceMetadata(): Map<String, Any> = mapOf(MORPH_SOURCE to true)
+
+private fun Scene<*>.isMorphSource(): Boolean = metadata[MORPH_SOURCE] == true
