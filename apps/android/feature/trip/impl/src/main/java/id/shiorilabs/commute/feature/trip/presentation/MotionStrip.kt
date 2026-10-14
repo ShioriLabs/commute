@@ -90,7 +90,7 @@ internal fun MotionStrip(state: MotionStripState, bottomInset: Dp, modifier: Mod
         FlowRow(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 11.dp),
+                .padding(horizontal = 32.dp, vertical = 11.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {

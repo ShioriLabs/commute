@@ -57,10 +57,10 @@ internal fun TripUploadPrompt(
     var consenting by rememberSaveable { mutableStateOf(false) }
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (uploaded) {
-            Text(text = stringResource(R.string.trip_done_upload_thanks), style = MaterialTheme.typography.bodyMedium, color = Slate500)
+            Text(text = stringResource(R.string.trip_done_upload_thanks), modifier = Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodyMedium, color = Slate500)
             return@Column
         }
-        Text(text = stringResource(R.string.trip_done_upload_ask), style = MaterialTheme.typography.bodyMedium, color = Slate500)
+        Text(text = stringResource(R.string.trip_done_upload_ask), modifier = Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodyMedium, color = Slate500)
         CommuteButton(
             text = stringResource(R.string.trip_done_upload),
             onClick = { consenting = true },

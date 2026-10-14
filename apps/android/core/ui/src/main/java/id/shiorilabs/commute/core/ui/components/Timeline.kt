@@ -55,6 +55,12 @@ import id.shiorilabs.commute.core.ui.theme.Slate900
 /** The gutter the rail runs down; the rail runs down its middle. */
 val TimelineGutter = 28.dp
 
+/**
+ * The gutter's slack beside the widest node (16 dp): pull the timeline left by this much and the
+ * nodes, and the rail through them, start flush with the text above rather than inset from it.
+ */
+val TimelineGutterSlack = 6.dp
+
 /** The rail's gauge: the route bar's, laid upright. */
 val TimelineLineWidth = 6.dp
 
