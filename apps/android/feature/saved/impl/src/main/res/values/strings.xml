@@ -17,6 +17,7 @@
 
     <!-- Station cards. -->
     <string name="saved_station_list_description">Daftar stasiun dan rute tersimpan</string>
+    <string name="saved_title_edit_action">Ubah stasiun dan rute</string>
     <string name="saved_route_title_description">Rute %1$s ke %2$s</string>
     <string name="saved_station_failed">Gagal memuat stasiun ini</string>
     <string name="saved_station_offline">Tidak dapat memuat stasiun ini saat offline</string>
