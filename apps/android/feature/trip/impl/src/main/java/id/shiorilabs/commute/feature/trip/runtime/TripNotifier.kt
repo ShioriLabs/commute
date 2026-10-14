@@ -72,7 +72,13 @@ class TripNotifier @Inject constructor(
             (headline is Headline.RideTo && headline.stopsLeft <= 1)
 
         val builder = NotificationCompat.Builder(context, NotificationChannels.TRIP_PROGRESS)
-            .setSmallIcon(if (alighting) R.drawable.ic_stat_alight else R.drawable.ic_stat_trip)
+            .setSmallIcon(
+                when {
+                    alighting -> R.drawable.ic_stat_alight
+                    trip.state.phase == TripPhase.WAITING_TO_BOARD -> R.drawable.ic_stat_boarding
+                    else -> R.drawable.ic_stat_trip
+                },
+            )
             .setContentTitle(copy.title(headline))
             .setContentText(copy.detail(trip, headline))
             .setSubText(copy.source(trip))
