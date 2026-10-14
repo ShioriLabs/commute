@@ -82,7 +82,7 @@ internal fun MarkBar(rows: List<List<MarkKind>>, bottomInset: Dp, onMark: (MarkK
         Text(
             text = last?.let { (kind, at) -> stringResource(R.string.trip_mark_last, stringResource(kind.label), formatClockSeconds(at)) }
                 ?: stringResource(if (rows.size > 1) R.string.trip_mark_hint_platform else R.string.trip_mark_hint),
-            modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp),
+            modifier = Modifier.padding(start = 32.dp, top = 8.dp, end = 32.dp),
             style = MaterialTheme.typography.labelMedium,
             color = Color(0xFF64748B),
         )

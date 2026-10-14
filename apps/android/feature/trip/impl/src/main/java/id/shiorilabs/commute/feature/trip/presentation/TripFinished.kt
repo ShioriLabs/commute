@@ -97,7 +97,7 @@ internal fun TripFinished(
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Plate(finished.reason, destination, rides, lines, fraction, plan.ride(plan.rideIndices.first()).stops.first(), topInset, onClose)
-        Figures(finished, rides, modifier = Modifier.padding(start = 20.dp, top = 24.dp, end = 20.dp))
+        Figures(finished, rides, modifier = Modifier.padding(start = 16.dp, top = 24.dp, end = 16.dp))
         SectionLabel(
             text = stringResource(R.string.trip_done_summary),
             modifier = Modifier.padding(start = 32.dp, top = 32.dp, end = 32.dp, bottom = 12.dp),
@@ -105,7 +105,7 @@ internal fun TripFinished(
         )
         Column(
             modifier = Modifier
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = 16.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .border(1.dp, DoneLine, RoundedCornerShape(16.dp)),
         ) {
@@ -115,7 +115,7 @@ internal fun TripFinished(
             }
         }
         Column(
-            modifier = Modifier.padding(start = 20.dp, top = 24.dp, end = 20.dp),
+            modifier = Modifier.padding(start = 16.dp, top = 24.dp, end = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             val lastRide = rides.last()
@@ -141,7 +141,7 @@ internal fun TripFinished(
                 state = upload,
                 onUpload = onUpload,
                 onPrivacyPolicy = onPrivacyPolicy,
-                modifier = Modifier.padding(start = 20.dp, top = 32.dp, end = 20.dp),
+                modifier = Modifier.padding(start = 16.dp, top = 32.dp, end = 16.dp),
             )
         }
     }
@@ -175,7 +175,7 @@ private fun Plate(
                 tint = Color.White,
             )
         }
-        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 32.dp)) {
             val eyebrow = stringResource(
                 when (reason) {
                     FinishReason.ARRIVED -> R.string.trip_done_arrived
