@@ -36,16 +36,19 @@ fun tripHero(headline: Headline, source: PositionSource, now: Instant): Hero {
  * waited for, getting off once aboard, so long as somewhere on the route is known. `null` when
  * there is no time to count to.
  */
-fun countdownMinutes(headline: Headline, source: PositionSource, now: Instant): Int? {
+fun countdownMinutes(headline: Headline, source: PositionSource, now: Instant): Int? =
+    countdownTo(headline, source, now)?.let { minutesUntil(now, it) }
+
+/** The moment [countdownMinutes] counts to, for a clock that counts down on its own. */
+fun countdownTo(headline: Headline, source: PositionSource, now: Instant): Instant? {
     val at = when (headline) {
         is Headline.Board -> headline.departsAt
         is Headline.Change -> headline.departsAt
         is Headline.RideTo -> headline.alightsAt?.takeIf { source != PositionSource.UNKNOWN }
         else -> null
     } ?: return null
-    val minutes = minutesUntil(now, at)
-    if (!at.isAfter(now) || minutes >= NEAR_MINUTES) return null
-    return minutes
+    if (!at.isAfter(now) || minutesUntil(now, at) >= NEAR_MINUTES) return null
+    return at
 }
 
 private const val NEAR_MINUTES = 60
