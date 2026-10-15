@@ -17,10 +17,34 @@ import { findTopology } from 'utils/topology'
  * `code` may be a directional-platform pair `A/B` (one halte, one code per Arah)
  * or a `B…` code (Manggarai Temporer, dropped by the current generator).
  *
- * Not covered (no poster image provided): corridor 1. L7 is absent from the
- * GTFS feed, and 10D was retired out of it.
+ * Not covered: L7 is absent from the GTFS feed, and 10D was retired out of it.
  */
 const CORRIDORS: Record<string, string> = {
+  '1': `
+Kali Besar,H00093P,·
+Museum Sejarah Jakarta,H00132P,↓
+Kota,H00275P,↓
+Glodok,H00068P,·
+Taman Sari,H00133P,·
+Mangga Besar,H00281P,·
+Sawah Besar,H00280P,·
+Harmoni,H00278P,·
+Monumen Nasional,H00131P,·
+Kebon Sirih,H00268S/H00267S,·
+MH Thamrin,H00207P,·
+Bundaran HI Astra,H00022P,·
+Tosari,H00251P,·
+Dukuh Atas,H00047P,·
+Karet,H00099P,·
+Bendungan Hilir,H00010P,·
+Polda Metro Jaya,H00176P,·
+Senayan Bank Jakarta,H00067P,·
+Bundaran Senayan,H00023P,·
+Masjid Agung,H00127P,·
+Kejaksaan Agung,H00266P,↓
+ASEAN,H00265P,↑
+Blok M,H00014P,·
+`,
   '2': `
 Monumen Nasional,H00131P,·
 Pecenongan,H00155P,↑
