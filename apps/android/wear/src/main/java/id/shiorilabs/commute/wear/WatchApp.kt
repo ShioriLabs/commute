@@ -6,6 +6,9 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.draw.alpha
+import id.shiorilabs.commute.core.time.formatClock
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
@@ -30,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
@@ -41,6 +45,7 @@ import androidx.compose.ui.unit.em
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
+import androidx.wear.compose.foundation.lazy.items
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
 import androidx.wear.compose.material3.AlertDialog
@@ -203,6 +208,7 @@ private fun TripScreen(trip: WearTrip, now: Instant, phone: PhoneLink) {
                         },
                         figure = copy.heroFigure(hero),
                         unit = copy.heroUnit(hero),
+                        raiseUnit = hero is Hero.Minutes,
                         lead = copy.lead(headline),
                         place = copy.place(headline),
                         detail = copy.heroDetail(headline, hero),
@@ -226,6 +232,19 @@ private fun TripScreen(trip: WearTrip, now: Instant, phone: PhoneLink) {
                             Text(stringResource(primary.label))
                         }
                     }
+                }
+                // The trip's key moments, as a weather app lists its hours: under the tap the moment
+                // calls for, so that stays in reach below the top.
+                val moments = tripMoments(trip.plan, trip.state)
+                val timed = moments.any { it.at != null }
+                items(moments) { moment ->
+                    MomentRow(
+                        moment = moment,
+                        timed = timed,
+                        note = copy.momentNote(moment),
+                        color = trip.lines[trip.plan.ride(moment.legIndex).line]?.color?.let(::Color)
+                            ?: MaterialTheme.colorScheme.primary,
+                    )
                 }
                 copy.source(trip.state)?.let { source ->
                     item {
@@ -291,12 +310,18 @@ private fun TripTop(
     @DrawableRes icon: Int,
     figure: String?,
     unit: String?,
+    raiseUnit: Boolean,
     lead: String,
     place: String,
     detail: String,
 ) {
     val colors = MaterialTheme.colorScheme
     val type = MaterialTheme.typography
+    // The big type as big as the screen allows: at full size on a large watch, the place ran off
+    // the narrow bottom of a 40 mm one's.
+    val scale = (LocalConfiguration.current.screenHeightDp / FULL_SIZE_SCREEN_DP).coerceAtMost(1f)
+    val figureSize = type.numeralExtraLarge.fontSize * scale
+    val placeSize = type.displayMedium.fontSize * scale
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth().padding(horizontal = TEXT_INSET),
@@ -313,28 +338,36 @@ private fun TripTop(
             modifier = Modifier.padding(top = 4.dp).size(ICON_SIZE),
         )
         if (figure != null) {
-            // The unit beside the figure, as Health's "109–120 bpm": under it, the top ran into
-            // the narrow bottom of the round screen and cut the place's name off at the sides.
-            Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(top = 2.dp)) {
+            // The unit beside the figure: under it, the top ran into the narrow bottom of the round
+            // screen and cut the place's name off. "mnt" is raised, as a weather app raises its
+            // "°"; "halte lagi" is too long to hang off the top, so it sits on the line.
+            Row(verticalAlignment = if (raiseUnit) Alignment.Top else Alignment.Bottom, modifier = Modifier.padding(top = 2.dp)) {
                 BasicText(
                     figure,
                     style = type.numeralExtraLarge.copy(
+                        fontSize = figureSize,
                         color = colors.onSurface,
                         fontWeight = FontWeight.SemiBold,
                         lineHeight = 1.em,
                         lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
                     ),
                     maxLines = 1,
-                    autoSize = TextAutoSize.StepBased(minFontSize = type.numeralSmall.fontSize, maxFontSize = type.numeralExtraLarge.fontSize),
-                    modifier = Modifier.alignByBaseline(),
+                    autoSize = TextAutoSize.StepBased(minFontSize = type.numeralSmall.fontSize, maxFontSize = figureSize),
+                    modifier = if (raiseUnit) Modifier else Modifier.alignByBaseline(),
                 )
-                if (unit != null) {
+                if (unit != null && raiseUnit) {
                     Text(
                         unit,
-                        style = type.titleMedium,
+                        style = type.titleMedium.copy(
+                            lineHeight = 1.em,
+                            lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
+                        ),
                         color = colors.onSurface,
-                        modifier = Modifier.alignByBaseline().padding(start = 6.dp),
+                        // Down to the digits' tops, which sit under the trimmed line's.
+                        modifier = Modifier.padding(start = 4.dp, top = UNIT_DROP),
                     )
+                } else if (unit != null) {
+                    Text(unit, style = type.titleMedium, color = colors.onSurface, modifier = Modifier.alignByBaseline().padding(start = 6.dp))
                 }
             }
             Text(
@@ -359,9 +392,19 @@ private fun TripTop(
             )
             BasicText(
                 place,
-                style = type.displayMedium.copy(color = colors.onSurface, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center),
+                // Line height in ems, so it follows the size autoSize settles on.
+                style = type.displayMedium.copy(
+                    fontSize = placeSize,
+                    lineHeight = PLACE_LINE_HEIGHT,
+                    color = colors.onSurface,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                ),
                 maxLines = 2,
-                autoSize = TextAutoSize.StepBased(minFontSize = type.titleLarge.fontSize, maxFontSize = type.displayMedium.fontSize),
+                autoSize = TextAutoSize.StepBased(minFontSize = type.titleLarge.fontSize, maxFontSize = placeSize),
+                // Its second line sits low, where the round screen narrows into the arc: inset
+                // further, so a long name shrinks before it runs into it.
+                modifier = Modifier.padding(horizontal = PLACE_INSET),
             )
         }
         if (detail.isNotEmpty()) {
@@ -372,6 +415,46 @@ private fun TripTop(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 2.dp),
             )
+        }
+    }
+}
+
+/**
+ * One of the trip's moments: the time, and under it how late; getting on or off, in the ride's
+ * colour; the place, and under it the walk there and the platform. Passed moments fade back.
+ */
+@Composable
+private fun MomentRow(moment: Moment, timed: Boolean, note: String, color: Color) {
+    val colors = MaterialTheme.colorScheme
+    val type = MaterialTheme.typography
+    Row(
+        verticalAlignment = Alignment.Top,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = MOMENT_INSET, vertical = 4.dp)
+            .alpha(if (moment.status == Moment.Status.PASSED) PASSED_ALPHA else 1f),
+    ) {
+        // As wide as a time, even with none, so an untimed ride's icons line up with a timed one's;
+        // and no column at all when nothing on the trip has a time, as on most TransJakarta.
+        if (timed) {
+            Column(Modifier.width(MOMENT_TIME_WIDTH)) {
+                moment.at?.let { Text(formatClock(it), style = type.titleSmall, fontWeight = FontWeight.Bold, color = colors.onSurface) }
+                if (moment.lateMinutes > 0) {
+                    Text("+${moment.lateMinutes}", style = type.labelSmall, color = colors.tertiary)
+                }
+            }
+        }
+        Icon(
+            painterResource(if (moment.kind == Moment.Kind.BOARD) CopyR.drawable.ic_stat_boarding else CopyR.drawable.ic_stat_alight),
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.padding(end = 8.dp).size(MOMENT_ICON_SIZE),
+        )
+        Column {
+            Text(moment.place, style = type.titleSmall, fontWeight = FontWeight.Bold, color = colors.onSurface, maxLines = 2)
+            if (note.isNotEmpty()) {
+                Text(note, style = type.labelSmall, color = colors.onSurfaceVariant)
+            }
         }
     }
 }
@@ -423,10 +506,28 @@ private val IDLE_INSET = 12.dp
 /** Keeps the trip's text clear of the arc round the edge. */
 private val TEXT_INSET = 16.dp
 
+/** The screen height the top's big type is at full size for: a large watch's; smaller ones scale it down. */
+private const val FULL_SIZE_SCREEN_DP = 240f
+
+/** The big place's extra inset, on top of [TEXT_INSET]. */
+private val PLACE_INSET = 12.dp
+private val PLACE_LINE_HEIGHT = 1.15.em
+
+/** How far the raised unit sits below the top of the figure's line. */
+private val UNIT_DROP = 6.dp
+
 /** The arc at rest, as thick as Health's. */
 private val ARC_THICKNESS = 14.dp
 
 private val ICON_SIZE = 22.dp
+
+/** Keeps the moments' rows, wider than the centred lines above, in from the round edge. */
+private val MOMENT_INSET = 16.dp
+private val MOMENT_TIME_WIDTH = 44.dp
+private val MOMENT_ICON_SIZE = 18.dp
+
+/** How far back a passed moment fades. */
+private const val PASSED_ALPHA = 0.45f
 
 /** How much of the top scrolls off before the arc and the tint are gone. */
 private const val SCROLLED_AWAY_SHARE = 0.5f
