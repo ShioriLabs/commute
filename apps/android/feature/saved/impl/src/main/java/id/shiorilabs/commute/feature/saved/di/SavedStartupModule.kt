@@ -8,6 +8,9 @@ import dagger.multibindings.IntoSet
 import id.shiorilabs.commute.core.startup.StartupWarmup
 import id.shiorilabs.commute.feature.saved.startup.HomeWarmup
 import id.shiorilabs.commute.feature.saved.startup.NearbyWarmup
+import id.shiorilabs.commute.feature.saved.startup.WearSyncWarmup
+import id.shiorilabs.commute.feature.saved.wear.DataLayerWearStationStore
+import id.shiorilabs.commute.feature.saved.wear.WearStationStore
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -20,4 +23,11 @@ abstract class SavedStartupModule {
     @Binds
     @IntoSet
     abstract fun bindNearbyWarmup(impl: NearbyWarmup): StartupWarmup
+
+    @Binds
+    @IntoSet
+    abstract fun bindWearSyncWarmup(impl: WearSyncWarmup): StartupWarmup
+
+    @Binds
+    abstract fun bindWearStationStore(impl: DataLayerWearStationStore): WearStationStore
 }
