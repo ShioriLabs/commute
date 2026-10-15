@@ -23,13 +23,16 @@ import {
 } from 'utils/directions'
 import * as v from 'valibot'
 import { doc, operatorParam, pathParam, queryParam, stationCodeParam, timeWindowParams } from 'schemas/describe'
-import { CompactGroupedTimetableSchema, GroupedTimetableSchema, HeadwayRowSchema, ScheduleSchema, StationSchema, TransferSchema } from '@commute/schemas'
-import type { HeadwayRow } from '@commute/schemas'
+import { CompactGroupedTimetableSchema, GroupedTimetableSchema, HeadwayRowSchema, ScheduleSchema, StationDensitySchema, StationSchema, TransferSchema } from '@commute/schemas'
+import type { DensityRange, HeadwayRow, StationDensity } from '@commute/schemas'
 import { DAY_HEADWAYS_S, DIRECTIONAL_HEADWAYS_S, HEADWAYS_S, LINE_DAY_MASK, LINE_TERMINI, STOP_HEADWAYS_S } from 'db/data/headways'
+import { type Direction, resolveHeadway, type RowKind } from 'utils/observedHeadways'
+import { observedHeadwaysEnabledFor } from 'utils/observedFlag'
 import { serviceDay } from 'utils/fare'
 import { SERVICE_HOURS } from 'db/data/service-hours'
 import { memoize } from 'utils/memo'
 import { lineCodeOf, lineKey } from 'utils/ids'
+import { DENSITY_LEVELS } from 'db/data/density'
 
 /*
  * The three day buckets, high bit first, matching how LINE_DAY_MASK is packed
@@ -47,6 +50,35 @@ type ServiceDayName = (typeof DAY_ORDER)[number]
 function requestedDay(raw: string | undefined): ServiceDayName {
   const upper = raw?.toUpperCase()
   return upper === 'WD' || upper === 'SAT' || upper === 'SUN' ? upper : serviceDay(new Date())
+}
+
+/*
+ * Whole hours of the Jakarta clock. `?hour=` for an explicit one, otherwise the
+ * hour it is now, the same default as `day`. Anything that is not an integer
+ * 0-23 falls back to now rather than erroring, like every other query param here.
+ */
+function requestedHour(raw: string | undefined): number {
+  const parsed = raw === undefined || raw === '' ? Number.NaN : Number(raw)
+  if (Number.isInteger(parsed) && parsed >= 0 && parsed <= 23) return parsed
+  return new Date(Date.now() + 7 * 3_600_000).getUTCHours()
+}
+
+const hourParam = queryParam(
+  'hour',
+  'Jam yang mau dilihat, 0-23 waktu Jakarta. Default-nya jam sekarang. Dipakai buat `headwayS`: frekuensi TransJakarta beda-beda tiap jam.',
+  '8'
+)
+
+/**
+ * A headway row as it sits in KV: the schedule number plus what is needed to
+ * resolve it for an hour at request time. Hour is deliberately NOT in the key,
+ * so this stays one entry per (station, day) however many hours are asked for.
+ */
+interface CachedHeadwayRow {
+  row: HeadwayRow
+  kind: RowKind
+  lineCode: string
+  dir?: Direction
 }
 
 const dayParam = queryParam(
@@ -512,7 +544,8 @@ app.get(
     parameters: [
       operatorParam,
       stationCodeParam,
-      dayParam
+      dayParam,
+      hourParam
     ],
     errors: { 404: 'Kode operator atau stasiun tidak ditemukan.' }
   }),
@@ -530,18 +563,46 @@ app.get(
      * without the caller having to say so.
      */
     const day = requestedDay(c.req.query('day'))
+    const hour = requestedHour(c.req.query('hour'))
+    const stationID = `${operator.code}-${stationCode}`
 
     const kvRepository = new KVRepository(c.env.KV)
     const stationRepository = new StationRepository(c.env.DB)
 
+    /*
+     * What a cached row becomes for the asked hour: the observed value where the
+     * model has one for exactly this row, else the schedule value scaled to the
+     * hour, else the schedule value as it was (utils/observedHeadways.ts). The
+     * schedule number stays alongside as `scheduledS` so a client can show both.
+     *
+     * Applied on a cache hit and on a miss alike, and never before the write
+     * below: the entry holds the schedule numbers, so one entry serves every
+     * hour and the kill switch takes effect without a purge.
+     */
+    const enabled = observedHeadwaysEnabledFor(c.req.raw)
+    const resolve = (entries: CachedHeadwayRow[]): HeadwayRow[] => entries.map(({ row, kind, lineCode, dir }) => {
+      const { headwayS, basis } = resolveHeadway({
+        nominalS: row.headwayS, kind, lineCode, stationId: stationID, dir, day, hour, enabled,
+        // `OPERATOR:CODE`. Lets integration and feeder lines that never route
+        // take the scale fallback, which the bare line code cannot tell apart
+        // from a rail line.
+        tj: row.line.startsWith('TJ:')
+      })
+      // Unchanged schedule number (rail, a line that does not run, the kill
+      // switch off): the row is exactly what it was before observed values
+      // existed, so `basis` absent always means "the schedule, as is".
+      if (basis === 'SCHEDULE') return row
+      return { ...row, headwayS, basis, scheduledS: row.headwayS }
+    })
+
     // The day is part of the key: frequencies differ by day, and some corridors
     // do not run at all, so a Saturday body served from a Tuesday key would show
-    // a weekday-only line as though it were running.
-    const kvKey = `headway:${operator.code}-${stationCode}:${day}:${c.env.API_VERSION}`
-    const cached = await kvRepository.get(kvKey)
-    if (cached) return c.json(Ok(cached), 200)
+    // a weekday-only line as though it were running. The hour is not: see above.
+    // `headway2` because the cached shape carries what resolve() needs.
+    const kvKey = `headway2:${operator.code}-${stationCode}:${day}:${c.env.API_VERSION}`
+    const cached = await kvRepository.get<CachedHeadwayRow[]>(kvKey)
+    if (cached) return c.json(Ok(resolve(cached)), 200)
 
-    const stationID = `${operator.code}-${stationCode}`
     const station = await stationRepository.getById(stationID)
     if (station === null) {
       return c.json(UnknownStation(stationCode, operator.code), 404)
@@ -630,7 +691,7 @@ app.get(
       return { serviceHours: { start: hhmm(startS), end: hhmm(endS) } }
     }
 
-    const rows: HeadwayRow[] = []
+    const entries: CachedHeadwayRow[] = []
     for (const key of station.lines) {
       const lineCode = lineCodeOf(key)
       const days = daysOf(lineCode)
@@ -665,14 +726,19 @@ app.get(
         const termini = LINE_TERMINI[lineCode]
         for (const { dir, headwayS } of directional) {
           const boundFor = termini ? terminusName.get(termini[dir]) : undefined
-          rows.push({ line: key, headwayS, source: 'STOP', ...dayFields, ...(boundFor ? { boundFor } : {}) })
+          entries.push({
+            kind: 'dir',
+            dir,
+            lineCode,
+            row: { line: key, headwayS, source: 'STOP', ...dayFields, ...(boundFor ? { boundFor } : {}) }
+          })
         }
         continue
       }
 
       const perStop = headwayOn(STOP_HEADWAYS_S, `${lineCode}@${station.id}`, days)
       if (perStop !== undefined) {
-        rows.push({ line: key, headwayS: perStop, source: 'STOP', ...dayFields })
+        entries.push({ kind: 'stop', lineCode, row: { line: key, headwayS: perStop, source: 'STOP', ...dayFields } })
         continue
       }
       const perLine = headwayOn(HEADWAYS_S, lineCode, days)
@@ -683,16 +749,69 @@ app.get(
        * rather than dropping the corridor off the halte silently. A line we
        * simply derive no headway for (a feeder with no topology) is omitted.
        */
-      if (perLine !== undefined) rows.push({ line: key, headwayS: perLine, source: 'LINE', ...dayFields })
-      else if (!days.includes(day)) rows.push({ line: key, headwayS: null, source: 'LINE', ...dayFields })
+      if (perLine !== undefined) entries.push({ kind: 'line', lineCode, row: { line: key, headwayS: perLine, source: 'LINE', ...dayFields } })
+      else if (!days.includes(day)) entries.push({ kind: 'line', lineCode, row: { line: key, headwayS: null, source: 'LINE', ...dayFields } })
     }
 
     // Cache an empty result too. A station with no headway data is a stable fact
     // about the operator, not a miss worth recomputing on every request — the
     // same reasoning the transfers handler above spells out.
-    c.executionCtx.waitUntil(kvRepository.set(kvKey, rows))
+    c.executionCtx.waitUntil(kvRepository.set(kvKey, entries))
 
-    return c.json(Ok(rows), 200)
+    return c.json(Ok(resolve(entries)), 200)
+  }
+)
+
+/*
+ * Forecast crowding for one station, hour by hour, for one day type.
+ *
+ * Pure lookup into the generated DENSITY_LEVELS, so there is no KV entry: the
+ * module is in memory and versioned with the deploy. The station lookup is only
+ * there to tell an unknown code (404) from a known station we have no estimate
+ * for (24 nulls). A TJ halte is the second case, not an error.
+ */
+app.get(
+  '/:operator/:stationCode/density',
+  doc({
+    summary: 'Perkiraan kepadatan stasiun per jam',
+    description: 'Seberapa padat stasiun ini BIASANYA di tiap jam, buat hari yang diminta. Ini perkiraan dari jadwal kereta, data penumpang yang dipublikasikan operator, dan pola jam sibuk. BUKAN pantauan live, jadi bisa meleset pas ada kejadian khusus.\n\nSkalanya 0 lengang, 1 ramai, 2 padat, 3 sangat padat. Tiap jam dikasih rentang `min` sampai `max` karena modelnya nggak bisa yakin persis: stasiun yang data penumpangnya dipublikasikan rentangnya lebih sempit daripada yang cuma diperkirakan.\n\nSementara cuma stasiun kereta (KCI, MRT, LRT Jakarta, LRT Jabodebek). Halte TransJakarta dapat `null` semua.',
+    tag: 'Stasiun',
+    data: StationDensitySchema,
+    parameters: [
+      operatorParam,
+      stationCodeParam,
+      dayParam
+    ],
+    errors: { 404: 'Kode operator atau stasiun tidak ditemukan.' }
+  }),
+  async (c) => {
+    const operatorCode = c.req.param('operator')
+    const stationCode = c.req.param('stationCode')
+    const operator = getOperatorByCode(operatorCode)
+    if (!operator) {
+      return c.json(NotFound('UNKNOWN_OPERATOR', `Unknown Operator Code: ${operatorCode}`), 404)
+    }
+
+    const day = requestedDay(c.req.query('day'))
+    const stationID = `${operator.code}-${stationCode}`
+    const station = await new StationRepository(c.env.DB).getById(stationID)
+    if (station === null) {
+      return c.json(NotFound('UNKNOWN_STATION', `Unknown Station Code ${stationCode} in Operator ${operator.code}`), 404)
+    }
+
+    // Two 24-character digit strings, '-' where there is no estimate.
+    const levels = DENSITY_LEVELS[stationID]?.[day]
+    const rangeAt = (hour: number): DensityRange | null => {
+      const min = levels?.min[hour]
+      const max = levels?.max[hour]
+      if (min === undefined || max === undefined || min === '-' || max === '-') return null
+      return { min: Number(min), max: Number(max) }
+    }
+    const body: StationDensity = {
+      day,
+      hours: Array.from({ length: 24 }, (_, hour) => ({ hour, level: rangeAt(hour) }))
+    }
+    return c.json(Ok(body), 200)
   }
 )
 

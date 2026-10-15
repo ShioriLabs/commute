@@ -5,9 +5,13 @@ import { XIcon } from '@phosphor-icons/react'
 import { useStationHeader } from '~/components/station-content'
 import TimetableContent from '~/components/timetable-content'
 
-export function meta() {
+// A route-param title rather than a "loading" placeholder: the SPA shell's
+// crawler-rewritten title is replaced on hydration, and the real name only
+// arrives after an API fetch, so a placeholder here is what Google indexes
+// whenever its render snapshot wins that race.
+export function meta({ params }: Route.MetaArgs) {
   return [
-    { title: 'Memuat... - Commute' },
+    { title: `${params.code.toUpperCase()} - Jadwal Lengkap - Commute` },
     { name: 'theme-color', content: '#FFFFFF' }
   ]
 }

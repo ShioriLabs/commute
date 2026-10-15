@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { DAY_HEADWAYS_S, DIRECTIONAL_HEADWAYS_S, HEADWAYS_S, LINE_TERMINI, STOP_HEADWAYS_S } from 'db/data/headways'
+import { OBSERVED_GTFS_CAP_S, OBSERVED_GTFS_SCALE, OBSERVED_PROFILE_INTERP_S, OBSERVED_PROFILE_S, OBSERVED_STOP_FACTOR } from 'db/data/headways.observed'
 import { SERVICE_HOURS } from 'db/data/service-hours'
+import { clampHeadway } from 'utils/headwayBounds'
 
 /*
  * The handler reaches D1 through the `db(d1)` Kysely factory, so the query
@@ -69,9 +71,21 @@ const envFor = (row: Record<string, unknown> | undefined, termini?: unknown[]) =
   if (termini) terminalResults.push(termini)
   return {
     API_VERSION: 'v1',
-    KV: { get: async () => null, put: async () => undefined },
+    KV: { get: async (key: string) => key === OBSERVED_FLAG ? 'off' : null, put: async () => undefined },
     DB: {}
   } as unknown as Partial<Bindings>
+}
+
+/*
+ * The handler tests below pin the SCHEDULE contract, so the kill switch is off
+ * for them: the response is then exactly what it was before observed values
+ * existed. The `observed values` block at the end turns it on.
+ */
+const OBSERVED_FLAG = 'config:observed-headways'
+const envObserved = (row: Record<string, unknown> | undefined, termini?: unknown[]) => {
+  const env = envFor(row, termini) as { KV: { get: (key: string) => Promise<unknown> } }
+  env.KV.get = async () => null
+  return env as unknown as Partial<Bindings>
 }
 
 const station = (overrides: Record<string, unknown>) => ({
@@ -98,6 +112,8 @@ interface HeadwayBody {
     days?: string[]
     boundFor?: string
     serviceHours?: { start: string, end: string } | { allDay: true }
+    basis?: 'OBSERVED' | 'INTERPOLATED' | 'SCALED'
+    scheduledS?: number | null
   }[]
 }
 
@@ -352,5 +368,152 @@ describe('/stations/:operator/:code/headway', () => {
       )
       expect((await res.json() as HeadwayBody).data[0]!.serviceHours).toBeUndefined()
     })
+  })
+})
+
+/*
+ * The observed values on top of the schedule ones (utils/observedHeadways.ts).
+ *
+ * Fixtures are picked from the generated overlay rather than hard-coded, so a
+ * refit does not break them: the point is the contract (observed where the model
+ * speaks, scaled schedule where it does not, schedule for rail), not a number.
+ */
+describe('/stations/:operator/:code/headway with observed values', () => {
+  const column = 'WD:12'
+
+  /** The scaled fallback: scale, capped, never below the schedule value, clamped. */
+  const scaledExpected = (scheduleS: number, col: string) => {
+    const scaled = scheduleS * OBSERVED_GTFS_SCALE[col]!
+    const cap = OBSERVED_GTFS_CAP_S[col]
+    return clampHeadway(Math.max(scheduleS, cap === undefined ? scaled : Math.min(scaled, cap)))
+  }
+
+  /** A line-stop that is not split by direction, has both directions modelled, and a profile at WD:12. */
+  const modelled = (() => {
+    const byStop = new Map<string, string[]>()
+    for (const key of Object.keys(OBSERVED_STOP_FACTOR)) {
+      const at = key.lastIndexOf('@')
+      byStop.set(key.slice(0, at), [...(byStop.get(key.slice(0, at)) ?? []), key.slice(at + 1)])
+    }
+    for (const [lineStop, dirs] of byStop) {
+      const line = lineStop.slice(0, lineStop.indexOf('@'))
+      const split = DIRECTIONAL_HEADWAYS_S[`${lineStop}@F`] !== undefined || DIRECTIONAL_HEADWAYS_S[`${lineStop}@R`] !== undefined
+      const profiled = dirs.every(d => OBSERVED_PROFILE_S[`${column}:${line}@${d}`] !== undefined)
+      if (!split && dirs.length === 2 && profiled && STOP_HEADWAYS_S[lineStop] !== undefined && LINE_TERMINI[line]) {
+        return { lineStop, line, stationId: lineStop.slice(lineStop.indexOf('@') + 1), dirs }
+      }
+    }
+    throw new Error('no suitable modelled stop in the overlay')
+  })()
+
+  const fetchRow = async (hour: number, env = envObserved) => {
+    const { line, stationId } = modelled
+    const res = await request(
+      `/stations/TJ/${stationId.slice(3)}/headway?day=WD&hour=${hour}`,
+      env(station({ id: stationId, code: stationId.slice(3), lines: line }))
+    )
+    expect(res.status).toBe(200)
+    return (await res.json() as HeadwayBody).data
+  }
+
+  it('reports the observed value, with the schedule number beside it', async () => {
+    const [row] = await fetchRow(12)
+    const expected = clampHeadway(
+      modelled.dirs
+        .map(d => OBSERVED_PROFILE_S[`${column}:${modelled.line}@${d}`]! / OBSERVED_STOP_FACTOR[`${modelled.lineStop}@${d}`]!)
+        .reduce((a, b) => a + b, 0) / modelled.dirs.length
+    )
+    expect(row).toMatchObject({ basis: 'OBSERVED', headwayS: expected, scheduledS: STOP_HEADWAYS_S[modelled.lineStop], source: 'STOP' })
+    // The whole reason for the feature: the observed wait is longer than the schedule's.
+    expect(row!.headwayS!).toBeGreaterThan(STOP_HEADWAYS_S[modelled.lineStop]!)
+  })
+
+  // Fixtures are chosen from the generated file. If a refit leaves no suitable
+  // hour, the test is reported as SKIPPED rather than passing without asserting.
+  const interpolatedHour = Array.from({ length: 24 }, (_, h) => h).find(h =>
+    OBSERVED_PROFILE_S[`WD:${h}:${modelled.line}@F`] === undefined
+    && modelled.dirs.every(d => OBSERVED_PROFILE_INTERP_S[`WD:${h}:${modelled.line}@${d}`] !== undefined))
+
+  it.skipIf(interpolatedHour === undefined)('interpolates an hour the model did not measure, from the same line-direction\'s neighbours', async () => {
+    const hour = interpolatedHour!
+    const [row] = await fetchRow(hour)
+    expect(row).toMatchObject({ basis: 'INTERPOLATED', scheduledS: STOP_HEADWAYS_S[modelled.lineStop] })
+  })
+
+  const scaledHour = Array.from({ length: 24 }, (_, h) => h).find(h =>
+    modelled.dirs.every(d => OBSERVED_PROFILE_S[`WD:${h}:${modelled.line}@${d}`] === undefined
+      && OBSERVED_PROFILE_INTERP_S[`WD:${h}:${modelled.line}@${d}`] === undefined)
+    && OBSERVED_GTFS_SCALE[`WD:${h}`] !== undefined)
+
+  it.skipIf(scaledHour === undefined)('scales the schedule value where there is no profile of any kind', async () => {
+    const hour = scaledHour!
+    const [row] = await fetchRow(hour)
+    expect(row).toMatchObject({
+      basis: 'SCALED',
+      scheduledS: STOP_HEADWAYS_S[modelled.lineStop],
+      headwayS: scaledExpected(STOP_HEADWAYS_S[modelled.lineStop]!, `WD:${hour}`)
+    })
+  })
+
+  it('keeps one KV entry per station and day, holding the schedule numbers', async () => {
+    const puts: { key: string, value: string }[] = []
+    const record = async (key: string, value: string) => {
+      puts.push({ key, value })
+    }
+    const env = (row: Record<string, unknown> | undefined) => {
+      const e = envFor(row) as { KV: Record<string, unknown> }
+      e.KV = { get: async () => null, put: record }
+      return e as unknown as Partial<Bindings>
+    }
+    await fetchRow(12, env)
+    await fetchRow(17, env)
+    expect(new Set(puts.map(p => p.key)).size).toBe(1)
+    const stored = JSON.parse(puts[0]!.value) as { row: { headwayS: number } }[]
+    expect(stored[0]!.row.headwayS).toBe(STOP_HEADWAYS_S[modelled.lineStop])
+  })
+
+  it('scales an integration line that never routes, so it moves with the corridors beside it', async () => {
+    // In the schedule's per-line table only: the per-stop table is limited to the
+    // routed topology, so this row is the line-level one.
+    expect(LINE_TERMINI['6C']).toBeUndefined()
+    expect(STOP_HEADWAYS_S['6C@TJ-H00014P']).toBeUndefined()
+    const res = await request(
+      '/stations/TJ/H00014P/headway?day=WD&hour=12',
+      envObserved(station({ lines: '6C' }))
+    )
+    const [row] = (await res.json() as HeadwayBody).data
+    expect(row).toMatchObject({
+      line: 'TJ:6C',
+      source: 'LINE',
+      basis: 'SCALED',
+      scheduledS: HEADWAYS_S['6C'],
+      headwayS: scaledExpected(HEADWAYS_S['6C']!, 'WD:12')
+    })
+  })
+
+  it('leaves rail rows exactly as they were', async () => {
+    const res = await request(
+      '/stations/MRTJ/SSM/headway?hour=12',
+      envObserved(station({ id: 'MRTJ-SSM', code: 'SSM', name: 'Stasiun ASEAN', operator: 'MRTJ', lines: 'M' }))
+    )
+    const [row] = (await res.json() as HeadwayBody).data
+    expect(row).not.toHaveProperty('basis')
+    expect(row).not.toHaveProperty('scheduledS')
+  })
+
+  it('returns the schedule number untouched when the kill switch is off', async () => {
+    const [row] = await fetchRow(12, envFor)
+    expect(row).toMatchObject({ headwayS: STOP_HEADWAYS_S[modelled.lineStop] })
+    expect(row).not.toHaveProperty('basis')
+  })
+
+  it('treats a malformed hour as "now" rather than an error', async () => {
+    for (const hour of ['99', '-1', 'abc', '']) {
+      const res = await request(
+        `/stations/TJ/${modelled.stationId.slice(3)}/headway?day=WD&hour=${hour}`,
+        envObserved(station({ id: modelled.stationId, code: modelled.stationId.slice(3), lines: modelled.line }))
+      )
+      expect(res.status).toBe(200)
+    }
   })
 })

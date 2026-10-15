@@ -6,7 +6,7 @@ import { assembleJourney, planJourney } from 'utils/fare-journey'
 import { handleJourneyRequest, journeyCacheKey } from 'utils/journey-endpoint'
 import { SERVICE_BREAKS, TOPOLOGY } from 'db/data/topology'
 import { loadGraph, type ServiceWindow, type Tsundere } from '@commute/tsundere'
-import { DAY_HEADWAYS_S, HEADWAYS_S, STOP_HEADWAYS_S } from 'db/data/headways'
+import { HEADWAYS_S, STOP_HEADWAYS_S } from 'db/data/headways'
 import { SERVICE_HOURS, type ServiceDay } from 'db/data/service-hours'
 import { TRIP_PATTERNS } from 'db/data/trips'
 import { airportExclusion } from 'utils/airport'
@@ -14,6 +14,8 @@ import { secondsSinceLocalMidnight, serviceDay } from 'utils/fare'
 import { doc, pathParam, queryParam } from 'schemas/describe'
 import { FareResultSchema, type FareResult } from '@commute/schemas'
 import { memoize } from 'utils/memo'
+import { plannerHeadways } from 'utils/observedHeadways'
+import { observedHeadwaysEnabled } from 'utils/observedFlag'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -98,25 +100,22 @@ function serviceHoursMap(day: ServiceDay = 'ALL'): Map<string, ServiceWindow> {
 }
 
 /*
- * Headways for a given day: the weekday table, overlaid with that day's deltas.
+ * Headways for a given day and hour of day.
  *
- * DAY_HEADWAYS_S is sparse — only the (day, line) and (day, line@stop) pairs
- * that actually differ — so a miss falls through to the weekday number, which
- * is what the planner used before days existed.
+ * The schedule table for the day, with TransJakarta's observed values laid over
+ * it for that hour (utils/observedHeadways.ts): where the model has a number it
+ * wins, elsewhere the schedule value is scaled to the hour, and rail is left
+ * alone. With the kill switch off this is exactly the schedule map.
+ *
+ * The hour is whole hours of the Jakarta clock. The journey cache key already
+ * carries a 20-minute departure slot, so a cached answer can never straddle an
+ * hour boundary.
  */
-const headwaysCache = new Map<ServiceDay, Map<string, number>>()
-function headwaysFor(day: ServiceDay): Map<string, number> {
-  return memoize(headwaysCache, day, () => {
-    const base = new Map([...Object.entries(HEADWAYS_S), ...Object.entries(STOP_HEADWAYS_S)])
-    if (day !== 'ALL') {
-      const prefix = `${day}:`
-      for (const [key, seconds] of Object.entries(DAY_HEADWAYS_S)) {
-        if (key.startsWith(prefix)) base.set(key.slice(prefix.length), seconds)
-      }
-    }
-    return base
-  })
+function headwaysFor(day: ServiceDay, hour: number, enabled: boolean): Map<string, number> {
+  return plannerHeadways(day, hour, enabled)
 }
+
+const hourOf = (seconds: number) => Math.floor(seconds / 3600) % 24
 
 /*
  * Every distinct moment a line opens, in seconds since local midnight, sorted.
@@ -170,7 +169,12 @@ export function nextServiceAt(
    * The same place-equivalent endpoints the search used (utils/places.ts), for
    * the same reason as `excludeLines`.
    */
-  endpoints?: { originIds: ReadonlySet<string>, targetIds: ReadonlySet<string> }
+  endpoints?: { originIds: ReadonlySet<string>, targetIds: ReadonlySet<string> },
+  /*
+   * The observed-headway switch the failed search ran under. A request passes
+   * its own captured value; the default is the isolate's last one.
+   */
+  observed: boolean = observedHeadwaysEnabled()
 ): { departureS: number, at: Date } | null {
   const day = serviceDay(context.departureAt)
   const from = secondsSinceLocalMidnight(context.departureAt)
@@ -180,7 +184,7 @@ export function nextServiceAt(
     const found = router.findRoutes(fromId, toId, {
       departureS,
       serviceHours: serviceHoursMap(day),
-      headwaysS: headwaysFor(day),
+      headwaysS: headwaysFor(day, hourOf(departureS), observed),
       excludeLines,
       ...endpoints
     })
@@ -211,16 +215,17 @@ export function linesOf(operator: Operator): ReadonlySet<string> {
 }
 
 /** Planner options that depend on when the rider is travelling. */
-export function timeOptions(context: FareContext): {
+export function timeOptions(context: FareContext, observed: boolean = observedHeadwaysEnabled()): {
   departureS: number
   serviceHours: Map<string, ServiceWindow>
   headwaysS: Map<string, number>
 } {
   const day = serviceDay(context.departureAt)
+  const departureS = secondsSinceLocalMidnight(context.departureAt)
   return {
-    departureS: secondsSinceLocalMidnight(context.departureAt),
+    departureS,
     serviceHours: serviceHoursMap(day),
-    headwaysS: headwaysFor(day)
+    headwaysS: headwaysFor(day, hourOf(departureS), observed)
   }
 }
 

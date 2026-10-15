@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import * as fs from 'node:fs'
 import { TOPOLOGY } from '../data/topology'
+import { clampHeadway, HEADWAY_CAP_S, HEADWAY_FLOOR_S } from '../../utils/headwayBounds'
 
 /*
  * Headway generator: how often a vehicle comes, per line AND per stop.
@@ -34,21 +35,10 @@ const FEED_DIR = `${__dirname}/file_gtfs`
 const OUT_PATH = `${__dirname}/../data/headways.ts`
 
 /*
- * Bounds applied to every derived value.
- *
- * The cap exists for rows like `BW*` (Wisata tourist buses, 52700s) and `ASG*`
- * (school shuttles, up to 86400s — a once-daily service). None are routable
- * today, so nothing is currently clamped; it is here so a future GTFS refresh
- * that pulls a school route into the topology fails safe instead of pricing a
- * boarding at twelve hours of waiting.
- *
- * The floor exists because a sub-two-minute nominal headway is not a difference
- * a rider can act on, and letting it approach zero just adds noise to the
- * dominance test. It binds on ~37% of TJ pairs once variants are combined, which
- * is why the UI renders the floor as "~2 menit" rather than a precise figure.
+ * Bounds applied to every derived value live in utils/headwayBounds.ts, shared
+ * with the observed-headway fit and the runtime lookup, so a value is clamped
+ * the same way wherever it is made. See there for why the cap and floor exist.
  */
-const HEADWAY_CAP_S = 3600
-const HEADWAY_FLOOR_S = 120
 
 /*
  * TJ route scope, matching generateTJSQL.ts's SCOPE_DESC.
@@ -138,7 +128,7 @@ const toSeconds = (hhmmss: string): number => {
   return (h ?? 0) * 3600 + (m ?? 0) * 60 + (s ?? 0)
 }
 
-const clamp = (seconds: number) => Math.max(HEADWAY_FLOOR_S, Math.min(HEADWAY_CAP_S, Math.round(seconds)))
+const clamp = clampHeadway
 
 /*
  * Combined frequency of several services sharing a stop.

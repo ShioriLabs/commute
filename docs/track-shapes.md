@@ -75,8 +75,10 @@ The rail shapes are derived from OpenStreetMap under ODbL.
 pnpm --filter api generate:track-shapes
 ```
 
-Re-run after `generate:track-geometry`, after `generate:edges`, or after a TJ
-GTFS import, and commit `apps/api/src/db/data/trackShapes.generated.ts`. TJ
+Re-run after `generate:track-geometry` or a TJ GTFS import, and commit
+`apps/api/src/db/data/trackShapes.generated.ts`. Then re-run
+`generate:edges`, which prices the poster-override corridors from these
+shapes (see below). TJ
 needs the feed extracted under `apps/api/src/db/scripts/file_gtfs/`, as
 `generateTJSQL` does. The run prints coverage against the topology's hops; rail
 below 100% means a hop's segment is missing from `data/geometry`.
@@ -97,7 +99,17 @@ below 100% means a hop's segment is missing from `data/geometry`.
     files, so every TJ shape today comes from that fallback. Ends land a median
     10 m (p95 31 m, max 100 m) from the haltes in the database.
 
-  The shapes are also a check on `edges`. Shape length matches the priced
-  distance on most edges (median ratio 0.999). The 55 edges where the shape is
-  more than 25% longer are all priced at exactly the straight line between the
-  haltes, i.e. haversine fallbacks (corridors 2/2A around Monas among them).
+  The shapes also price `edges` on the poster-override corridors
+  (`topology.tj.overrides.ts`). Their `cumM` is cumulative haversine, so
+  `generateEdgesSQL` skips it there and takes the directed shape length,
+  falling back to haversine for the hops no shape covers. Before this, 55
+  edges were priced at the straight line while the shape ran more than 25%
+  longer, the worst being corridor 6 Flyover Kuningan → Galunggung (512 m
+  straight, 2,750 m along the road). Now none are, and shape length matches
+  the priced distance at a median ratio of 1.000.
+
+  Caveat: the posters (17 Sep 2026) are newer than the GTFS export
+  (2026-07-24). If an override corridor has been rerouted since, its shape is
+  the old route and so is its price. The biggest detours worth checking
+  against the real route: 6 Flyover Kuningan → Galunggung (5.4× the straight
+  line), 14 `H00090P` → `H00108P` (3.6×), 4D `H00114P` → `H00073P` (2.6×).
