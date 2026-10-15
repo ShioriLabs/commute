@@ -13,7 +13,7 @@ import java.time.Instant
 /**
  * Keeps the trip's Ongoing Activity and "OTW" complication in step with the phone, whether or not
  * the app is open, buzzes once as a new trip comes in, and buzzes or rings the trip's reminder when
- * the phone says to.
+ * the phone says to. New saved-station boards from the phone ask the departures complications again.
  */
 class TripListenerService : WearableListenerService() {
 
@@ -26,6 +26,7 @@ class TripListenerService : WearableListenerService() {
     }
 
     override fun onDataChanged(events: DataEventBuffer) {
+        if (events.touchesSavedStations()) DeparturesComplicationService.updateAll(this)
         val change = events.latestTrip() ?: return
         TripComplicationService.update(this)
         val trip = change.trip

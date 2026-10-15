@@ -40,6 +40,23 @@
     <string name="complication_otw_preview_title">Turun di Manggarai</string>
     <string name="complication_otw_preview_text">12m · 3 stasiun lagi</string>
 
+    <!-- The "Keberangkatan" complication: a saved station's next trains in one direction. -->
+    <string name="complication_departures">Keberangkatan</string>
+    <!-- %1$s is the station, %2$s the last station its trains head for. -->
+    <string name="complication_toward">%1$s · arah %2$s</string>
+    <string name="complication_departures_unset">Pilih stasiun</string>
+    <string name="complication_no_trains">Gak ada kereta lagi</string>
+    <string name="complication_departures_preview_short">4m</string>
+    <string name="complication_departures_preview_label">Bogor</string>
+    <string name="complication_departures_preview_title">Tebet · arah Bogor</string>
+    <string name="complication_departures_preview_text">4m · 19.11 · 19.18</string>
+
+    <!-- Setting up a "Keberangkatan" slot. -->
+    <string name="config_stations">Stasiun tersimpan</string>
+    <string name="config_toward">arah %1$s</string>
+    <string name="config_empty_title">Belom ada stasiun tersimpan</string>
+    <string name="config_empty_detail">Simpan stasiun dulu di HP, baru nanti muncul di sini</string>
+
     <!-- "Bangunkan Aku": the alarm before getting off. -->
     <string name="trip_wake_channel">Bangunkan Aku</string>
 </resources>
