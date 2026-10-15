@@ -361,6 +361,16 @@ object TripEngine {
     }
 
     /**
+     * Whether the rider waiting for their ride was last seen at its platform: standing there, or on a
+     * train still pulling along it (only one at a train's pace is put along the hop that near).
+     */
+    fun seenAtPlatform(plan: TripPlan, state: TripState): Boolean {
+        val sighted = state.sightedPosition ?: return false
+        val ride = plan.ride(state.legIndex)
+        return metresAlong(ride, 0.0, sighted) <= Tuning.of(ride).atStop
+    }
+
+    /**
      * Whether a rider waiting for [ride], last seen at [TripState.sightedPosition], is aboard now
      * [candidate] puts them past the platform's end: they came further than the fix could wander,
      * faster than walking, and the satellites, when they say, have them moving too. Setiabudi's LRT
