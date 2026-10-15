@@ -45,6 +45,11 @@ object TripEngine {
     private const val BUS_OFF_ROUTE_M = 500.0
     private const val BUS_MISSED_M = 300.0
 
+    /** A bus's "siap-siap" comes within this much road of the halte: [busPrepareM]. */
+    private const val BUS_PREPARE_MIN_M = 250.0
+    private const val BUS_PREPARE_MAX_M = 400.0
+    private val BUS_PREPARE_LEAD: Duration = Duration.ofMinutes(1)
+
     /**
      * Slower than this by a station, by the satellites' own speed, the train is stopping there; faster,
      * it is still rolling in or already pulling out. About 20 km/h: braking at a KRL's 0.8–1 m/s², five
@@ -189,7 +194,12 @@ object TripEngine {
 
         val located = locate(ride, state.confirmedPosition, fix, tuning)
         val pullOut = pullOut(ride, state, fix, located, tuning)
-        val tracked = state.copy(stoodAt = pullOut.stoodAt, pullingOutFixes = pullOut.fixes, pullingOutSpeed = pullOut.speed)
+        val tracked = state.copy(
+            stoodAt = pullOut.stoodAt,
+            pullingOutFixes = pullOut.fixes,
+            pullingOutSpeed = pullOut.speed,
+            lastSpeedMps = fix.speedMps,
+        )
         val candidate = pullOut.leftTo ?: located
         if (candidate != null && candidate >= state.confirmedPosition - JITTER) {
             // Seen near the line but not aboard: the fix says where they are, not how far they've
@@ -552,6 +562,9 @@ object TripEngine {
      * is long, about three minutes before reaching it. A train held at the stop before (seen there
      * by a fix) hasn't left; by the clock alone, it leaves as it gets there. [position] is where the
      * train is taken to be for it: a train running early, unseen, still on its lead.
+     *
+     * A bus, once out of the halte before, waits for the halte to be near by road ([busPrepareM]):
+     * on 15 Oct a jammed 9C took 24 minutes over Ciliwung to Cawang's last 915 m.
      */
     private fun prepareIfDue(
         ride: TripLeg.Ride,
@@ -569,6 +582,11 @@ object TripEngine {
                 hopStart != null && !now.isBefore(hopStart.plusSeconds(state.clockOffsetS))
             )
         if (!left) return state
+        if (ride.isBus) {
+            val metresLeft = metresAlong(ride, position, ride.lastIndex.toDouble())
+            if (metresLeft > busPrepareM(state.lastSpeedMps)) return state
+            return fire(state, AlertKind.PREPARE, estimated = state.source != PositionSource.CONFIRMED, effects) ?: state
+        }
         val hopEnd = clock.scheduledAt(ride.lastIndex.toDouble())
         if (hopStart != null && hopEnd != null && Duration.between(hopStart, hopEnd) > LONG_HOP) {
             val atPosition = clock.scheduledAt(position)!!
@@ -576,6 +594,15 @@ object TripEngine {
         }
         return fire(state, AlertKind.PREPARE, estimated = state.source != PositionSource.CONFIRMED, effects) ?: state
     }
+
+    /**
+     * How near the halte a bus's "siap-siap" comes: about a minute out at the speed the satellites
+     * last read, but never nearer than [BUS_PREPARE_MIN_M] (under Cawang's flyovers no usable fix
+     * came within 180 m) nor further than [BUS_PREPARE_MAX_M] (leaving Ciliwung at 10 m/s, the 9C
+     * read a minute out 24 minutes before it got there). Without a speed, as near as it goes.
+     */
+    private fun busPrepareM(speedMps: Float?): Double =
+        ((speedMps ?: 0f).toDouble() * BUS_PREPARE_LEAD.seconds).coerceIn(BUS_PREPARE_MIN_M, BUS_PREPARE_MAX_M)
 
     /** Off the current ride: on to the next one, or arrived. */
     private fun completeRide(

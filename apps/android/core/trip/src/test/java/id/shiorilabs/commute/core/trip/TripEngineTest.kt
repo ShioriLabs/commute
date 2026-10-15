@@ -396,10 +396,88 @@ class TripEngineTest {
         assertEquals(0.6, run.state.position, 0.05)
 
         run.fix(Places.HALTE_3, 7.0)
-        run.fix(between(Places.HALTE_3, Places.HALTE_4, 0.3), 8.0)
+        // 200 m to go: near enough for "siap-siap" whatever the speed.
+        run.fix(between(Places.HALTE_3, Places.HALTE_4, 0.6), 8.0)
         assertEquals(listOf(alert(AlertKind.PREPARE, estimated = false)), run.alerts())
         run.fix(Places.HALTE_4, 9.0)
         assertEquals(TripPhase.ARRIVED, run.state.phase)
+    }
+
+    /** On [busway], seen standing at Halte Tiga at 08.07, the 500 m hop to Halte Empat to go. */
+    private fun atTheBuswaysLastHalteButOne(): Run {
+        val run = Run(busway, startAt = at(0))
+        run.fix(Places.HALTE_1, 0.0)
+        run.fix(between(Places.HALTE_1, Places.HALTE_2, 0.4), 1.5)
+        run.fix(between(Places.HALTE_1, Places.HALTE_2, 0.6), 2.0)
+        run.fix(Places.HALTE_3, 7.0, accuracyM = 5f, speedMps = 0f)
+        assertEquals(2.0, run.state.confirmedPosition, 0.0)
+        return run
+    }
+
+    @Test
+    fun `a bus crawling up to the halte gets its siap-siap 250 m out, not leaving the one before`() {
+        val run = atTheBuswaysLastHalteButOne()
+
+        // Out of Halte Tiga into a jam: 350 m to go at walking pace, then a fix without a speed.
+        run.fix(between(Places.HALTE_3, Places.HALTE_4, 0.3), 8.0, accuracyM = 5f, speedMps = 0.5f)
+        run.fix(between(Places.HALTE_3, Places.HALTE_4, 0.4), 14.0, accuracyM = 5f)
+        assertTrue(run.alerts().none { it.kind == AlertKind.PREPARE })
+
+        // 225 m to go.
+        run.fix(between(Places.HALTE_3, Places.HALTE_4, 0.55), 20.0, accuracyM = 5f, speedMps = 0.3f)
+        assertEquals(listOf(alert(AlertKind.PREPARE, estimated = false)), run.alerts())
+    }
+
+    @Test
+    fun `a bus moving freely gets its siap-siap a minute out, but never further than 400 m`() {
+        val run = atTheBuswaysLastHalteButOne()
+
+        // 425 m to go at 10 m/s: a minute out would be 600 m, past the 400 m cap.
+        run.fix(between(Places.HALTE_3, Places.HALTE_4, 0.15), 7.5, accuracyM = 5f, speedMps = 10f)
+        assertTrue(run.alerts().none { it.kind == AlertKind.PREPARE })
+
+        // 375 m to go at 8 m/s: under 400 m, and under the 480 m a minute covers.
+        run.fix(between(Places.HALTE_3, Places.HALTE_4, 0.25), 7.6, accuracyM = 5f, speedMps = 8f)
+        assertEquals(listOf(alert(AlertKind.PREPARE, estimated = false)), run.alerts())
+    }
+
+    @Test
+    fun `the 9C jammed into Cawang on 15 Oct rings siap-siap four minutes out, not twenty-four`() {
+        // A tester's ride from Ciliwung, its last 915 m along the TransJakarta shape taking 24 minutes.
+        val ciliwung = TripStop("TJ-H00061S", "Ciliwung Arah Timur", -6.243012, 106.86354)
+        val cawang = TripStop("TJ-H00276P", "Cawang", -6.245863, 106.871143)
+        val plan = TripPlan(
+            listOf(
+                TripLeg.Ride(
+                    line = "TJ:9C",
+                    operator = "TJ",
+                    stops = listOf(ciliwung, cawang),
+                    hopShapes = listOf("fibe@}wfkSH{Cp@{EtCcMnA{GtA{CvCyCh@aB"),
+                ),
+            ),
+        )
+        fun wib(time: String) = java.time.OffsetDateTime.parse("2026-10-15T$time+07:00").toInstant()
+        val run = Run(plan, startAt = wib("18:28:00"))
+        run.send(TripEvent.RiderSaid(RiderAction.BOARDED, wib("18:28:00")))
+        fun fix(time: String, lat: Double, lon: Double, accuracyM: Float, speedMps: Float) =
+            run.send(TripEvent.Fix(GeoPoint(lat, lon), accuracyM, wib(time), speedMps))
+
+        fix("18:28:07", -6.2429567, 106.8630333, 4.55f, 3.18f)
+        // Away from Ciliwung at up to 10.5 m/s for half a minute, then into the jam.
+        fix("18:29:23", -6.2428717, 106.8637367, 4.85f, 4.64f)
+        fix("18:29:28", -6.2430317, 106.8642267, 4.9f, 6.73f)
+        fix("18:29:32", -6.2431683, 106.8645767, 4.85f, 10.07f)
+        fix("18:29:37", -6.243265, 106.8653117, 4.05f, 10.52f)
+        fix("18:29:43", -6.243375, 106.8658, 3.0f, 10.4f)
+        fix("18:29:48", -6.2434633, 106.8662033, 2.85f, 8.71f)
+        fix("18:29:52", -6.2435433, 106.8664733, 2.6f, 4.96f)
+        fix("18:38:30", -6.2440217, 106.8680467, 3.0f, 1.49f)
+        fix("18:47:15", -6.2443367, 106.868875, 2.6f, 1.51f)
+        assertTrue(run.alerts().none { it.kind == AlertKind.PREPARE })
+
+        // 246 m out, standing in the queue; Turun came at 18:53:27.
+        fix("18:49:05", -6.2444867, 106.8693283, 3.0f, 0.0f)
+        assertEquals(listOf(alert(AlertKind.PREPARE, estimated = false)), run.alerts())
     }
 
     @Test
@@ -419,7 +497,9 @@ class TripEngineTest {
         assertEquals(1.0, run.state.confirmedPosition, 0.0)
         assertTrue(run.alerts().isEmpty())
         run.fix(GeoPoint(-6.240198, 106.828631), 25.4, accuracyM = 4f, speedMps = 9.4f)
-        assertEquals(listOf(alert(AlertKind.PREPARE, estimated = false)), run.alerts())
+        assertTrue(run.state.confirmedPosition > 1.0)
+        // Past Tegal Mampang, but CSW is still 3.3 km on: "siap-siap" waits for it to be near.
+        assertTrue(run.alerts().isEmpty())
         run.fix(GeoPoint(-6.239851, 106.799049), 30.8, accuracyM = 7f, speedMps = 5.3f)
         assertEquals(TripPhase.ARRIVED, run.state.phase)
     }
