@@ -53,6 +53,11 @@
                     android:host="*"
                     android:path="/trip/active"
                     android:scheme="wear" />
+                <!-- The saved stations' timetables, for the departures complication. -->
+                <data
+                    android:host="*"
+                    android:pathPrefix="/saved/station/"
+                    android:scheme="wear" />
             </intent-filter>
             <!-- The trip's reminder: "Ingatkan Aku"'s buzz, and "Bangunkan Aku" ringing and called off. -->
             <intent-filter>
@@ -82,6 +87,46 @@
                 android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS"
                 android:value="0" />
         </service>
+
+        <!-- "Keberangkatan" on the watch face: a saved station's next trains. The timeline it hands
+             over moves the slot on by itself; asked again hourly, and as the phone sends boards. -->
+        <service
+            android:name=".DeparturesComplicationService"
+            android:exported="true"
+            android:icon="@drawable/ic_launcher_monochrome"
+            android:label="@string/complication_departures"
+            android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter>
+                <action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST" />
+            </intent-filter>
+            <meta-data
+                android:name="android.support.wearable.complications.SUPPORTED_TYPES"
+                android:value="SHORT_TEXT,LONG_TEXT" />
+            <meta-data
+                android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS"
+                android:value="3600" />
+            <meta-data
+                android:name="android.support.wearable.complications.PROVIDER_CONFIG_ACTION"
+                android:value="id.shiorilabs.commute.wear.CONFIG_DEPARTURES" />
+        </service>
+
+        <!-- Picking the station and direction as a "Keberangkatan" slot is added. -->
+        <activity
+            android:name=".DeparturesConfigActivity"
+            android:exported="true"
+            android:label="@string/complication_departures"
+            android:taskAffinity="">
+            <intent-filter>
+                <action android:name="id.shiorilabs.commute.wear.CONFIG_DEPARTURES" />
+                <category android:name="android.support.wearable.complications.category.PROVIDER_CONFIG" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- A tap on a departures slot: the station's page on the phone. -->
+        <receiver
+            android:name=".OpenStationReceiver"
+            android:exported="false" />
 
         <!-- "Udah bangun" on the watch's alarm. Only the app's own pending intent reaches it. -->
         <receiver
