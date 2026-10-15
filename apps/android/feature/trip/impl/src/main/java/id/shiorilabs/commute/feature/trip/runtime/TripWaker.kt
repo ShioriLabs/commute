@@ -123,7 +123,7 @@ class TripWaker @Inject constructor(
         if (!NotificationChannels.allowed(context)) return
         NotificationChannels.ensure(context)
         val notification = NotificationCompat.Builder(context, NotificationChannels.TRIP_WAKE)
-            .setSmallIcon(R.drawable.ic_stat_alight)
+            .setSmallIcon(CopyR.drawable.ic_stat_alight)
             .setContentTitle(context.getString(CopyR.string.trip_wake_title))
             .setContentText(context.getString(CopyR.string.trip_wake_text, stop))
             .setPriority(NotificationCompat.PRIORITY_MAX)
