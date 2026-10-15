@@ -105,6 +105,14 @@ object TripEngine {
     val LONG_HOP: Duration = Duration.ofMinutes(5)
     val PREPARE_LEAD: Duration = Duration.ofMinutes(3)
 
+    /**
+     * How long before a ride is due, and after, fixes come every few seconds while waiting for it.
+     * After: KRL ran a minute and a half to three and a half behind on 13–15 Oct; a train later than
+     * that is usually swapped for the next by then, which brings its own window.
+     */
+    private val DEPARTING_LEAD: Duration = Duration.ofMinutes(2)
+    private val DEPARTING_TAIL: Duration = Duration.ofMinutes(5)
+
     /** The trip ends itself this long after arriving. */
     val ARRIVED_LINGER: Duration = Duration.ofMinutes(5)
 
@@ -531,7 +539,7 @@ object TripEngine {
             return TripStep(state.copy(locationMode = TripLocationMode.OFF), effects, null)
         }
 
-        val mode = locationModeFor(plan, state)
+        val mode = locationModeFor(plan, state, now)
         if (mode != state.locationMode) {
             effects += TripEffect.SetLocationMode(mode)
             state = state.copy(locationMode = mode)
@@ -637,10 +645,23 @@ object TripEngine {
 
     private fun prepareKey(legIndex: Int) = "${AlertKind.PREPARE.name}:$legIndex"
 
-    private fun locationModeFor(plan: TripPlan, state: TripState): TripLocationMode = when {
+    /**
+     * Fixes every few seconds where a half-minute gap costs most: getting on, and getting off. Getting
+     * on is from [DEPARTING_LEAD] before the ride is due until [DEPARTING_TAIL] after (a later train
+     * swapped in moves it on), and whenever a fix has seen it pulling out: on 15 Oct the fix that
+     * boarded came 30 s after the one that saw Setiabudi's late LRT leave.
+     */
+    private fun locationModeFor(plan: TripPlan, state: TripState, now: Instant): TripLocationMode = when {
         !state.hasLocation || state.phase == TripPhase.ARRIVED -> TripLocationMode.OFF
         state.phase == TripPhase.RIDING && state.position >= plan.ride(state.legIndex).lastIndex - 2 -> TripLocationMode.PRECISE
+        state.phase == TripPhase.WAITING_TO_BOARD && (state.boardingFixes > 0 || departing(plan, state, now)) -> TripLocationMode.PRECISE
         else -> TripLocationMode.BALANCED
+    }
+
+    /** Whether the ride being waited for is about due to leave, or left only just. */
+    private fun departing(plan: TripPlan, state: TripState, now: Instant): Boolean {
+        val departs = plan.ride(state.legIndex).departureAt?.plusSeconds(state.lateS) ?: return false
+        return !now.isBefore(departs.minus(DEPARTING_LEAD)) && now.isBefore(departs.plus(DEPARTING_TAIL))
     }
 
     /**
@@ -668,7 +689,10 @@ object TripEngine {
             val lead = Duration.ofSeconds(state.clockOffsetS)
             if (ride.isTimed) {
                 when (state.phase) {
-                    TripPhase.WAITING_TO_BOARD -> candidates += ride.departureAt!!.plus(offset)
+                    TripPhase.WAITING_TO_BOARD -> {
+                        candidates += ride.departureAt!!.plus(offset)
+                        candidates += ride.departureAt.plus(offset).minus(DEPARTING_LEAD)
+                    }
                     else -> {
                         val nextStop = floor(state.position).toInt() + 1
                         if (nextStop <= ride.lastIndex) clock.scheduledAt(nextStop.toDouble())?.let { candidates += it.plus(offset) }
