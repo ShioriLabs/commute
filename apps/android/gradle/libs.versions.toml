@@ -38,6 +38,7 @@ fabrikt = "26.0.1"
 wearCompose = "1.7.0"
 wearOngoing = "1.1.0"
 wearRemoteInteractions = "1.2.0"
+wearWatchface = "1.3.0"
 playServicesWearable = "20.0.1"
 # Play services' wearable pulls in Fragment 1.1, too old for the activity result API.
 fragment = "1.8.9"
@@ -106,6 +107,7 @@ androidx-wear-compose-foundation = { group = "androidx.wear.compose", name = "co
 androidx-wear-compose-ui-tooling = { group = "androidx.wear.compose", name = "compose-ui-tooling", version.ref = "wearCompose" }
 androidx-wear-ongoing = { group = "androidx.wear", name = "wear-ongoing", version.ref = "wearOngoing" }
 androidx-wear-remote-interactions = { group = "androidx.wear", name = "wear-remote-interactions", version.ref = "wearRemoteInteractions" }
+androidx-wear-watchface-complications-data-source-ktx = { group = "androidx.wear.watchface", name = "watchface-complications-data-source-ktx", version.ref = "wearWatchface" }
 play-services-wearable = { group = "com.google.android.gms", name = "play-services-wearable", version.ref = "playServicesWearable" }
 androidx-fragment = { group = "androidx.fragment", name = "fragment", version.ref = "fragment" }
 kotlinx-coroutines-play-services = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-play-services", version.ref = "coroutines" }

@@ -29,6 +29,17 @@
     <string name="trip_start_channel">Mulai OTW</string>
     <string name="trip_started">OTW dimulai</string>
 
+    <!-- The "OTW" complication: its name, and the few characters a slot has room for. -->
+    <string name="complication_otw">OTW</string>
+    <string name="complication_stations">%1$d st</string>
+    <string name="complication_haltes">%1$d hlt</string>
+    <string name="complication_board">Naik</string>
+    <string name="complication_alight">Turun</string>
+    <string name="complication_arrived">Sampai</string>
+    <string name="complication_otw_preview_short">12m</string>
+    <string name="complication_otw_preview_title">Turun di Manggarai</string>
+    <string name="complication_otw_preview_text">12m · 3 stasiun lagi</string>
+
     <!-- "Bangunkan Aku": the alarm before getting off. -->
     <string name="trip_wake_channel">Bangunkan Aku</string>
 </resources>

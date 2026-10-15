@@ -29,7 +29,7 @@ class WearTripRepository(context: Context) {
     }
 
     /** The trip as last synced, from the watch's own copy: there even with the phone out of reach. */
-    private suspend fun current(): WearTrip? = runCatching {
+    suspend fun current(): WearTrip? = runCatching {
         val items = client.getDataItems(TRIP_URI).await()
         try {
             items.firstOrNull()?.data?.let(WearTrip::decode)
