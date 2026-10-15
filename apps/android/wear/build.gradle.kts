@@ -48,4 +48,6 @@ dependencies {
     // :baselineprofile-wear generates it (see WearBaselineProfileGenerator).
     implementation(libs.androidx.profileinstaller)
     baselineProfile(project(":baselineprofile-wear"))
+
+    testImplementation(libs.junit)
 }

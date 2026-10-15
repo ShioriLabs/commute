@@ -7,7 +7,6 @@ import id.shiorilabs.commute.core.trip.PositionSource
 import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripPhase
 import id.shiorilabs.commute.core.trip.TripState
-import id.shiorilabs.commute.core.trip.minutesUntil
 import id.shiorilabs.commute.core.tripcopy.R as CopyR
 import id.shiorilabs.commute.core.tripcopy.TripWording
 import id.shiorilabs.commute.core.wearable.WearLine
@@ -47,63 +46,67 @@ class WatchCopy(private val resources: Resources, private val lines: Map<String,
         is Headline.Arrived -> headline.destination
     }
 
-    /**
-     * The ride's own line over the headline: its direction while it's still to be caught, so the
-     * line's name isn't said twice, and its name once aboard. One bus route is "Kor L13E" there
-     * throughout, beside its roundel.
-     */
-    fun rideLabel(headline: Headline, ride: TripLeg.Ride): String = when {
-        ride.isBus && ride.otherLines == 0 -> resources.getString(R.string.trip_corridor_short, ride.line.substringAfter(':'))
-        else -> rideLabelOf(headline, ride)
+    /** [countdownMinutes], in words: "4 mnt". */
+    fun minutes(state: TripState, headline: Headline, now: Instant): String? =
+        countdownMinutes(headline, state.source, now)?.let { resources.getString(R.string.trip_minutes, it) }
+
+    /** The [hero]'s figure, big: "12", "3", "18.50". `null` for [Hero.Place], which [place] says. */
+    fun heroFigure(hero: Hero): String? = when (hero) {
+        is Hero.Minutes -> hero.minutes.toString()
+        is Hero.StopsLeft -> hero.stops.toString()
+        is Hero.Clock -> formatClock(hero.at)
+        Hero.Place -> null
     }
 
-    private fun rideLabelOf(headline: Headline, ride: TripLeg.Ride): String = when (headline) {
-        is Headline.Board, is Headline.Change ->
-            direction(ride) ?: rideName(ride)
-        else -> rideName(ride)
-    }
-
-    /**
-     * Minutes to the moment that matters, when it's within the hour: the train leaving while it's
-     * waited for, getting off once aboard. `null` when there is no time to count to.
-     */
-    fun minutes(state: TripState, headline: Headline, now: Instant): String? {
-        val at = when (headline) {
-            is Headline.Board -> headline.departsAt
-            is Headline.Change -> headline.departsAt
-            is Headline.RideTo -> headline.alightsAt?.takeIf { state.source != PositionSource.UNKNOWN }
-            else -> null
-        } ?: return null
-        val minutes = minutesUntil(now, at)
-        if (!at.isAfter(now) || minutes >= NEAR_MINUTES) return null
-        return resources.getString(R.string.trip_minutes, minutes)
+    /** What the [hero]'s figure counts, under it; a clock needs nothing. */
+    fun heroUnit(hero: Hero): String? = when (hero) {
+        is Hero.Minutes -> resources.getString(R.string.trip_hero_minutes)
+        is Hero.StopsLeft -> resources.getString(if (hero.bus) R.string.trip_hero_haltes else R.string.trip_hero_stations)
+        is Hero.Clock, Hero.Place -> null
     }
 
     /** What else there is to know, after [minutes]. */
-    fun detail(state: TripState, headline: Headline, now: Instant): String = when (headline) {
+    fun detail(state: TripState, headline: Headline, now: Instant): String =
+        details(headline, showsDeparture = minutes(state, headline, now) != null, showsStops = false).joinToString(SEPARATOR)
+
+    /**
+     * What else there is to know under the [hero], which already says its own part: led, while a
+     * ride is still to be caught, by where it heads, which nothing else on the screen says.
+     */
+    fun heroDetail(headline: Headline, hero: Hero): String {
+        val heads = when (headline) {
+            is Headline.Board -> direction(headline.ride)
+            is Headline.Change -> direction(headline.ride)
+            else -> null
+        }
+        val rest = details(headline, showsDeparture = hero is Hero.Minutes || hero is Hero.Clock, showsStops = hero is Hero.StopsLeft)
+        return listOfNotNull(heads).plus(rest).joinToString(SEPARATOR)
+    }
+
+    private fun details(headline: Headline, showsDeparture: Boolean, showsStops: Boolean): List<String> = when (headline) {
         is Headline.Board -> listOfNotNull(
             platform(headline.ride),
-            headline.departsAt?.takeIf { minutes(state, headline, now) == null }
+            headline.departsAt?.takeUnless { showsDeparture }
                 ?.let { resources.getString(CopyR.string.trip_departs_at, formatClock(it)) },
         )
         is Headline.Change -> listOfNotNull(
             headline.walk?.let { resources.getString(CopyR.string.trip_walk_to, it.to.name, it.distanceM) },
             platform(headline.ride),
-            headline.departsAt?.takeIf { minutes(state, headline, now) == null }
+            headline.departsAt?.takeUnless { showsDeparture }
                 ?.let { resources.getString(CopyR.string.trip_departs_at, formatClock(it)) },
         )
-        is Headline.RideTo -> listOf(
+        is Headline.RideTo -> listOfNotNull(
             resources.getString(
                 if (headline.ride.isBus) CopyR.string.trip_haltes_left else CopyR.string.trip_stations_left,
                 headline.stopsLeft,
-            ),
+            ).takeUnless { showsStops },
         )
         is Headline.AlightNow -> listOf(
             headline.then?.let { resources.getString(CopyR.string.trip_then_change, rideName(it)) }
                 ?: resources.getString(CopyR.string.trip_then_done),
         )
         is Headline.Arrived -> emptyList()
-    }.joinToString(SEPARATOR)
+    }
 
     /** [minutes] and [detail] on one line, for the notification. */
     fun summary(state: TripState, headline: Headline, now: Instant): String =
@@ -124,7 +127,6 @@ class WatchCopy(private val resources: Resources, private val lines: Map<String,
     companion object {
 
         const val SEPARATOR = " · "
-        private const val NEAR_MINUTES = 60
         private val PLATFORM_SLASH = Regex("\\s*/\\s*")
     }
 }
