@@ -564,7 +564,8 @@ object TripEngine {
      * train is taken to be for it: a train running early, unseen, still on its lead.
      *
      * A bus, once out of the halte before, waits for the halte to be near by road ([busPrepareM]):
-     * on 15 Oct a jammed 9C took 24 minutes over Ciliwung to Cawang's last 915 m.
+     * on 15 Oct a jammed 9C took 24 minutes over Ciliwung to Cawang's last 915 m. A last hop under
+     * [BUS_PREPARE_MAX_M] is near as soon as the bus is out of the halte before.
      */
     private fun prepareIfDue(
         ride: TripLeg.Ride,
@@ -583,8 +584,9 @@ object TripEngine {
             )
         if (!left) return state
         if (ride.isBus) {
-            val metresLeft = metresAlong(ride, position, ride.lastIndex.toDouble())
-            if (metresLeft > busPrepareM(state.lastSpeedMps)) return state
+            val last = ride.lastIndex.toDouble()
+            val shortHop = metresAlong(ride, before, last) < BUS_PREPARE_MAX_M
+            if (!shortHop && metresAlong(ride, position, last) > busPrepareM(state.lastSpeedMps)) return state
             return fire(state, AlertKind.PREPARE, estimated = state.source != PositionSource.CONFIRMED, effects) ?: state
         }
         val hopEnd = clock.scheduledAt(ride.lastIndex.toDouble())

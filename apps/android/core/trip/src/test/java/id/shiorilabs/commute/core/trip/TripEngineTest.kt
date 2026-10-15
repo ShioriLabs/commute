@@ -442,6 +442,22 @@ class TripEngineTest {
     }
 
     @Test
+    fun `a last hop under 400 m gets its siap-siap on leaving the halte before, jam or not`() {
+        // Halte Dua to a halte 350 m on: out of Halte Dua is near enough already.
+        val near = TripStop("TJ-H2B", "Halte Dua B", between(Places.HALTE_2, Places.HALTE_3, 0.7).latitude, between(Places.HALTE_2, Places.HALTE_3, 0.7).longitude)
+        val run = Run(TripPlan(listOf(ride(Places.HALTE_1, Places.HALTE_2, near, line = "TJ:1"))), startAt = at(0))
+        run.fix(Places.HALTE_1, 0.0)
+        run.fix(between(Places.HALTE_1, Places.HALTE_2, 0.4), 1.5)
+        run.fix(between(Places.HALTE_1, Places.HALTE_2, 0.6), 2.0)
+        run.fix(Places.HALTE_2, 7.0, accuracyM = 5f, speedMps = 0f)
+        assertTrue(run.alerts().none { it.kind == AlertKind.PREPARE })
+
+        // 90 m out of Halte Dua at a crawl, 260 m still to go.
+        run.fix(between(Places.HALTE_2, Places.HALTE_3, 0.18), 9.0, accuracyM = 5f, speedMps = 0.5f)
+        assertEquals(listOf(alert(AlertKind.PREPARE, estimated = false)), run.alerts())
+    }
+
+    @Test
     fun `the 9C jammed into Cawang on 15 Oct rings siap-siap four minutes out, not twenty-four`() {
         // A tester's ride from Ciliwung, its last 915 m along the TransJakarta shape taking 24 minutes.
         val ciliwung = TripStop("TJ-H00061S", "Ciliwung Arah Timur", -6.243012, 106.86354)
