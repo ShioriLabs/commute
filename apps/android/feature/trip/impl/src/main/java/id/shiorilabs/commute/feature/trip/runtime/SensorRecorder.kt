@@ -142,6 +142,11 @@ class SensorRecorder @Inject constructor(
         Intent.createChooser(send, null)
     }
 
+    override suspend fun clear() = withContext(Dispatchers.IO) {
+        synchronized(lock) { runCatching { recording.clear() } }
+        Unit
+    }
+
     private companion object {
 
         /** Under filesDir; matches `trip_log_paths.xml` and the backup exclusions. */

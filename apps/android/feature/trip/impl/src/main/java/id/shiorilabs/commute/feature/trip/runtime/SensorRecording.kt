@@ -78,6 +78,11 @@ internal class SensorRecording(
         prune()
     }
 
+    /** Every kept recording deleted, but the one being written: the ride carries on in it. */
+    fun clear() {
+        kept().filter { it != current }.forEach { it.delete() }
+    }
+
     /**
      * Every kept recording, oldest first, each complete: one being written is closed, and the ride
      * carries on in a new file, the same name with the next part number and the same header, which

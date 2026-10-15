@@ -6,8 +6,11 @@ import android.content.Intent
  * The trip's own log, kept on disk across rides and process deaths, for a field test to send on:
  * what logcat would say, without a computer, and from before logcat rotated it away.
  */
-fun interface TripLogExport {
+interface TripLogExport {
 
     /** A share sheet with a copy of the log, or `null` when nothing has been logged yet. */
     suspend fun share(): Intent?
+
+    /** Everything logged so far deleted; what comes next is logged as before. */
+    suspend fun clear()
 }
