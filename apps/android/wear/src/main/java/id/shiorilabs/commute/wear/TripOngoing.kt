@@ -96,7 +96,8 @@ object TripOngoing {
         NotificationManagerCompat.from(context).notify(ID, builder.build())
     }
 
-    private fun openApp(context: Context): PendingIntent = PendingIntent.getActivity(
+    /** Opens the watch app, where it was left. */
+    fun openApp(context: Context): PendingIntent = PendingIntent.getActivity(
         context,
         0,
         Intent(context, MainActivity::class.java),
