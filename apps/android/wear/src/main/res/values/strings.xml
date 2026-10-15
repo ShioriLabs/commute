@@ -11,9 +11,10 @@
     <string name="trip_lead_alight">Turun di</string>
     <string name="trip_lead_arrived">Udah sampai di</string>
     <string name="trip_minutes">%1$d mnt</string>
-
-    <!-- A TransJakarta route by its code: the big name, and the line over it. -->
-    <string name="trip_corridor_short">Kor %1$s</string>
+    <!-- What the big figure counts, under it. -->
+    <string name="trip_hero_minutes">menit</string>
+    <string name="trip_hero_stations">stasiun lagi</string>
+    <string name="trip_hero_haltes">halte lagi</string>
 
     <!-- The Ongoing Activity's few characters. #t# is the countdown. -->
     <string name="trip_chip_board_timer">Naik #t#</string>

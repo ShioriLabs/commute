@@ -1,7 +1,18 @@
 package id.shiorilabs.commute.wear
 
 import android.widget.Toast
-import androidx.compose.foundation.layout.Arrangement
+import androidx.annotation.DrawableRes
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.res.painterResource
+import androidx.wear.compose.foundation.lazy.TransformingLazyColumnLayoutInfo
+import androidx.wear.compose.material3.Icon
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,13 +33,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
@@ -46,6 +55,7 @@ import androidx.wear.compose.material3.OpenOnPhoneDialog
 import androidx.wear.compose.material3.OpenOnPhoneDialogDefaults
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
+import androidx.wear.compose.material3.TimeTextDefaults
 import androidx.wear.compose.material3.openOnPhoneDialogCurvedText
 import id.shiorilabs.commute.core.trip.Headline
 import id.shiorilabs.commute.core.trip.RiderAction
@@ -161,63 +171,42 @@ private fun TripScreen(trip: WearTrip, now: Instant, phone: PhoneLink) {
     }
 
     val primary = primaryAction(trip, headline)
-    // The tap the moment calls for sits under the headline, not in an edge button: one of those
-    // only grows in at the end of the list, and this list runs past the screen.
-    ScreenScaffold(scrollState = listState) { padding ->
-        Box(Modifier.fillMaxSize()) {
-            TripRing(
+    val hero = tripHero(headline, trip.state.source, now)
+    val lineColor = trip.lines[ride.line]?.color?.let(::Color) ?: MaterialTheme.colorScheme.primary
+    // How far the top has scrolled off: the arc thins away and the tint fades to black with it.
+    val scrolledAway by remember(listState) { derivedStateOf { scrolledAway(listState.layoutInfo) } }
+    // The tap the moment calls for sits under the top, not in an edge button: one of those only
+    // grows in at the end of the list, and this list runs past the screen.
+    // No clock round the top: the top of the trip says the time itself, as Health's "Now".
+    ScreenScaffold(scrollState = listState, timeText = {}) { padding ->
+        Box(
+            Modifier
+                .fillMaxSize()
+                .drawBehind { drawRect(lineTint(lineColor), alpha = 1f - scrolledAway) },
+        ) {
+            TripArc(
                 rideFractions = progress.rideFractions,
                 fraction = progress.fraction,
                 colors = trip.plan.rideIndices.map { index ->
                     trip.lines[trip.plan.ride(index).line]?.color?.let(::Color) ?: MaterialTheme.colorScheme.primary
                 },
+                thickness = ARC_THICKNESS * (1f - scrolledAway),
                 modifier = Modifier.fillMaxSize(),
             )
             TransformingLazyColumn(state = listState, contentPadding = padding, modifier = Modifier.fillMaxSize()) {
                 item {
-                    LineRow(
-                        code = ride.line.substringAfter(':'),
-                        name = copy.rideLabel(headline, ride),
-                        color = trip.lines[ride.line]?.color?.let(::Color),
-                        operator = ride.operator,
+                    TripTop(
+                        icon = if (headline is Headline.Board || headline is Headline.Change) {
+                            CopyR.drawable.ic_stat_boarding
+                        } else {
+                            CopyR.drawable.ic_stat_alight
+                        },
+                        figure = copy.heroFigure(hero),
+                        unit = copy.heroUnit(hero),
+                        lead = copy.lead(headline),
+                        place = copy.place(headline),
+                        detail = copy.heroDetail(headline, hero),
                     )
-                }
-                item {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = TEXT_INSET)) {
-                        Text(
-                            copy.lead(headline),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            copy.place(headline),
-                            style = MaterialTheme.typography.titleLarge,
-                            textAlign = TextAlign.Center,
-                            // One line, cut short: a sponsor's name ("Dukuh Atas Bank Syariah
-                            // Indonesia") wrapped to two and pushed the button off the screen.
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-                val minutes = copy.minutes(trip.state, headline, now)
-                val detail = copy.detail(trip.state, headline, now)
-                if (minutes != null || detail.isNotEmpty()) {
-                    item {
-                        val accent = MaterialTheme.colorScheme.primary
-                        Text(
-                            buildAnnotatedString {
-                                if (minutes != null) {
-                                    withStyle(SpanStyle(color = accent, fontWeight = FontWeight.Bold)) { append(minutes) }
-                                    if (detail.isNotEmpty()) append(WatchCopy.SEPARATOR)
-                                }
-                                append(detail)
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = TEXT_INSET),
-                        )
-                    }
                 }
                 if (trip.state.askedStillOnRoute) {
                     item {
@@ -292,26 +281,116 @@ private fun ArrivedScreen(trip: WearTrip, onDismiss: () -> Unit) {
 }
 
 /**
- * The ride's line: its roundel, then its name, as the phone heads a ride. Inset, as it sits up where
- * the round screen is narrow: without it a long "arah …" ran off under the bezel, roundel and all.
+ * The top of the trip, led by one big figure as Health leads with the heart rate: the time, getting
+ * on or off, the figure and what it counts, then where. With no figure ([figure] `null`) the
+ * place is said big instead. Whole names wrap or shrink rather than cut: a sponsor's name is the
+ * station's name.
  */
 @Composable
-private fun LineRow(code: String, name: String, color: Color?, operator: String) {
-    Row(
-        modifier = Modifier.padding(horizontal = HEADER_INSET),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+private fun TripTop(
+    @DrawableRes icon: Int,
+    figure: String?,
+    unit: String?,
+    lead: String,
+    place: String,
+    detail: String,
+) {
+    val colors = MaterialTheme.colorScheme
+    val type = MaterialTheme.typography
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = TEXT_INSET),
     ) {
-        Roundel(code, color ?: MaterialTheme.colorScheme.outline, operator)
         Text(
-            name,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+            TimeTextDefaults.rememberTimeSource(TimeTextDefaults.timeFormat()).currentTime(),
+            style = type.titleMedium,
+            color = colors.onSurface,
         )
+        Icon(
+            painterResource(icon),
+            contentDescription = null,
+            tint = colors.onSurface,
+            modifier = Modifier.padding(top = 4.dp).size(ICON_SIZE),
+        )
+        if (figure != null) {
+            // The unit beside the figure, as Health's "109–120 bpm": under it, the top ran into
+            // the narrow bottom of the round screen and cut the place's name off at the sides.
+            Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(top = 2.dp)) {
+                BasicText(
+                    figure,
+                    style = type.numeralExtraLarge.copy(
+                        color = colors.onSurface,
+                        fontWeight = FontWeight.SemiBold,
+                        lineHeight = 1.em,
+                        lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
+                    ),
+                    maxLines = 1,
+                    autoSize = TextAutoSize.StepBased(minFontSize = type.numeralSmall.fontSize, maxFontSize = type.numeralExtraLarge.fontSize),
+                    modifier = Modifier.alignByBaseline(),
+                )
+                if (unit != null) {
+                    Text(
+                        unit,
+                        style = type.titleMedium,
+                        color = colors.onSurface,
+                        modifier = Modifier.alignByBaseline().padding(start = 6.dp),
+                    )
+                }
+            }
+            Text(
+                lead,
+                style = type.labelMedium,
+                color = colors.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            Text(
+                place,
+                style = type.titleMedium,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+            )
+        } else {
+            Text(
+                lead,
+                style = type.labelMedium,
+                color = colors.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            BasicText(
+                place,
+                style = type.displayMedium.copy(color = colors.onSurface, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center),
+                maxLines = 2,
+                autoSize = TextAutoSize.StepBased(minFontSize = type.titleLarge.fontSize, maxFontSize = type.displayMedium.fontSize),
+            )
+        }
+        if (detail.isNotEmpty()) {
+            Text(
+                detail,
+                style = type.bodySmall,
+                color = colors.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
     }
 }
+
+/**
+ * How far the top item has scrolled off, 0 at rest to 1 once half of it has gone; 1 too once it's
+ * out of sight altogether.
+ */
+private fun scrolledAway(info: TransformingLazyColumnLayoutInfo): Float {
+    val top = info.visibleItems.firstOrNull { it.index == 0 } ?: return 1f
+    if (top.measuredHeight == 0) return 0f
+    val scrolled = info.beforeContentPadding - top.offset
+    return (scrolled / (top.measuredHeight * SCROLLED_AWAY_SHARE)).coerceIn(0f, 1f)
+}
+
+/** The line's colour, deep, rising from the bottom of the black: Health's maroon, in the line's own. */
+private fun lineTint(line: Color): Brush = Brush.verticalGradient(
+    listOf(lerp(Color.Black, line, TINT_TOP), lerp(Color.Black, line, TINT_BOTTOM)),
+)
 
 private class PrimaryAction(val action: RiderAction, val label: Int)
 
@@ -341,8 +420,17 @@ private val ARRIVED_SHOWN: Duration = Duration.ofMinutes(5)
 /** Keeps the idle screen's lines clear of the round edge. */
 private val IDLE_INSET = 12.dp
 
-/** Keeps the trip's text clear of the ring round the edge. */
-private val TEXT_INSET = 8.dp
+/** Keeps the trip's text clear of the arc round the edge. */
+private val TEXT_INSET = 16.dp
 
-/** Keeps the line row, near the top where the circle narrows, inside it. */
-private val HEADER_INSET = 28.dp
+/** The arc at rest, as thick as Health's. */
+private val ARC_THICKNESS = 14.dp
+
+private val ICON_SIZE = 22.dp
+
+/** How much of the top scrolls off before the arc and the tint are gone. */
+private const val SCROLLED_AWAY_SHARE = 0.5f
+
+/** How much of the line's colour is in the black, at the top and the bottom of the screen. */
+private const val TINT_TOP = 0.06f
+private const val TINT_BOTTOM = 0.3f
