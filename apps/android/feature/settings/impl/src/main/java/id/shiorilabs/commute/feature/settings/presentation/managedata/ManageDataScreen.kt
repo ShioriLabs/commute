@@ -9,11 +9,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +34,7 @@ import id.shiorilabs.commute.core.ui.components.CommuteIconButton
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.feature.settings.R
+import id.shiorilabs.commute.feature.settings.presentation.components.ConfirmClearDialog
 import id.shiorilabs.commute.feature.settings.presentation.components.SettingsGutter
 import id.shiorilabs.commute.feature.settings.presentation.components.SettingsPage
 
@@ -133,30 +132,6 @@ private fun ManageDataContent(
             onDismiss = { confirmingOfflineData = false },
         )
     }
-}
-
-/** "Hapus" or "Batal" before clearing something that is slow or impossible to get back. */
-@Composable
-private fun ConfirmClearDialog(message: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        text = { Text(message) },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onDismiss()
-                    onConfirm()
-                },
-            ) {
-                Text(stringResource(R.string.settings_data_confirm))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.settings_data_cancel))
-            }
-        },
-    )
 }
 
 /** One kind of stored data: what it is, how much there is, and a button to clear it. */

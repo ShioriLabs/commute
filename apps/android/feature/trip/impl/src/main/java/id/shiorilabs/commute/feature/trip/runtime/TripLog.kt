@@ -85,6 +85,12 @@ class FileTripLog @Inject constructor(
         Intent.createChooser(send, null)
     }
 
+    override suspend fun clear() = withContext(Dispatchers.IO) {
+        synchronized(lock) { runCatching { file.delete() } }
+        File(context.cacheDir, SHARED_DIR).listFiles()?.forEach { it.delete() }
+        Unit
+    }
+
     companion object {
 
         /** `adb logcat -s CommuteTrip`: what a field test needs to tell why a trip did what it did. */
