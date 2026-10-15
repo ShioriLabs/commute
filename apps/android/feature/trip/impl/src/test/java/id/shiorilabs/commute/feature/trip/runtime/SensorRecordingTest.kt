@@ -53,6 +53,39 @@ class SensorRecordingTest {
     }
 
     @Test
+    fun `clearing deletes every recording kept`() {
+        val recording = recording()
+        recording.start("20261009-095512-KCI-C", header)
+        recording.imu(0L, accel, quat)
+        recording.stop()
+        recording.start("20261009-182040-KCI-B", header)
+        recording.imu(0L, accel, quat)
+        recording.stop()
+
+        recording.clear()
+
+        assertEquals(emptyList<File>(), recording.files())
+        assertEquals(0, folder.root.listFiles()!!.size)
+    }
+
+    @Test
+    fun `clearing mid-ride keeps the recording being written, which carries on`() {
+        val recording = recording()
+        recording.start("20261009-095512-KCI-C", header)
+        recording.stop()
+        recording.start("20261009-182040-KCI-B", header)
+        recording.imu(1L, accel, quat)
+
+        recording.clear()
+        recording.imu(2L, accel, quat)
+        recording.stop()
+
+        val kept = recording.files().single()
+        assertEquals("20261009-182040-KCI-B.ndjson.zst", kept.name)
+        assertEquals(listOf("header", "imu", "imu"), lines(kept).map { it["ev"]!!.jsonPrimitive.content })
+    }
+
+    @Test
     fun `a raw sensor's sample is a line of its own`() {
         val recording = recording()
         recording.start("20261009-095512-KCI-C", header)
