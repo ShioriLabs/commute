@@ -29,6 +29,10 @@ enum class PositionSource {
     UNKNOWN,
 }
 
+/** A fix's speed by the satellites, and when it was taken (epoch milliseconds). */
+@Serializable
+data class SpeedSample(val atMs: Long, val mps: Float)
+
 /** How hard the service should look for the rider, as the trip needs it. */
 @Serializable
 enum class TripLocationMode { PRECISE, BALANCED, OFF }
@@ -104,8 +108,11 @@ data class TripState(
     val pullingOutFixes: Int = 0,
     /** The speed of the last of those fixes: one slower than it is braking in, and starts the count again. */
     val pullingOutSpeed: Float? = null,
-    /** The satellites' speed in the last fix taken, `null` when it had none: how far ahead a bus's "siap-siap" looks. */
-    val lastSpeedMps: Float? = null,
+    /**
+     * The satellites' speed in each fix taken over the last half minute, `0` where one had none: the
+     * slowest is how far ahead a bus's "siap-siap" looks, so a burst between jams doesn't count.
+     */
+    val recentSpeeds: List<SpeedSample> = emptyList(),
     /**
      * On a bus, the furthest-back point fixes have put the rider since they first landed past a halte
      * it was never seen near, `null` otherwise. They count only once one comes far enough on from it:
