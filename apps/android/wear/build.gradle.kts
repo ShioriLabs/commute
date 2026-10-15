@@ -40,6 +40,8 @@ dependencies {
     implementation(libs.androidx.wear.ongoing)
     // "Buka di HP".
     implementation(libs.androidx.wear.remote.interactions)
+    // The "OTW" and "Keberangkatan" complications on the watch face.
+    implementation(libs.androidx.wear.watchface.complications.data.source.ktx)
     implementation(libs.play.services.wearable)
     // Asking for the notification permission: Play services brings a Fragment too old for it.
     implementation(libs.androidx.fragment)

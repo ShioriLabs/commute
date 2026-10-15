@@ -64,6 +64,25 @@
             </intent-filter>
         </service>
 
+        <!-- "OTW" on the watch face: the running trip, asked again as the phone's trip changes. -->
+        <service
+            android:name=".TripComplicationService"
+            android:exported="true"
+            android:icon="@drawable/ic_launcher_monochrome"
+            android:label="@string/complication_otw"
+            android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter>
+                <action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST" />
+            </intent-filter>
+            <meta-data
+                android:name="android.support.wearable.complications.SUPPORTED_TYPES"
+                android:value="RANGED_VALUE,SHORT_TEXT,LONG_TEXT" />
+            <!-- Pushed, never polled: the trip's changes ask for it. -->
+            <meta-data
+                android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS"
+                android:value="0" />
+        </service>
+
         <!-- "Udah bangun" on the watch's alarm. Only the app's own pending intent reaches it. -->
         <receiver
             android:name=".AwakeReceiver"
