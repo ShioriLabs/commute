@@ -773,13 +773,50 @@ class TripEngineTest {
 
     @Test
     fun `location is looked for harder on the approach`() {
-        val run = Run(bogorLine)
+        val run = Run(bogorLine, startAt = at(-10))
         assertEquals(TripLocationMode.BALANCED, run.state.locationMode)
 
         run.tick(0.0)
         run.fix(Places.DUREN_KALIBATA, 12.0)
         assertEquals(TripLocationMode.PRECISE, run.state.locationMode)
         assertTrue(TripEffect.SetLocationMode(TripLocationMode.PRECISE) in run.effects)
+    }
+
+    @Test
+    fun `location is looked for harder as the train is due to leave`() {
+        // On the platform early: half-minute fixes. Two minutes before the 08.00, the trip wakes
+        // and asks for them every few seconds, so a train pulling out is seen within a fix or two.
+        val run = Run(bogorLine, startAt = at(-10))
+        run.fix(Places.MANGGARAI, -3.0, speedMps = 0f)
+        assertEquals(TripLocationMode.BALANCED, run.state.locationMode)
+        assertEquals(at(-2), run.step.nextWakeAt)
+
+        run.tick(-2.0)
+        assertEquals(TripLocationMode.PRECISE, run.state.locationMode)
+        assertTrue(TripEffect.SetLocationMode(TripLocationMode.PRECISE) in run.effects)
+    }
+
+    @Test
+    fun `waiting on long past the train's time, location is looked for less often again`() {
+        val run = Run(bogorLine, startAt = at(-10))
+        run.fix(Places.MANGGARAI, 4.5, speedMps = 0f)
+        assertEquals(TripPhase.WAITING_TO_BOARD, run.state.phase)
+        assertEquals(TripLocationMode.PRECISE, run.state.locationMode)
+
+        run.fix(Places.MANGGARAI, 5.5, speedMps = 0f)
+        assertEquals(TripLocationMode.BALANCED, run.state.locationMode)
+    }
+
+    @Test
+    fun `a ride seen pulling out is followed closely until boarding is sure, timetable or not`() {
+        val run = Run(busway, startAt = at(0))
+        run.fix(Places.HALTE_1, 0.0, accuracyM = 10f, speedMps = 0f)
+        assertEquals(TripLocationMode.BALANCED, run.state.locationMode)
+
+        // 150 m on at 8 m/s: one of the two fixes boarding asks for.
+        run.fix(between(Places.HALTE_1, Places.HALTE_2, 0.3), 0.25, accuracyM = 10f, speedMps = 8f)
+        assertEquals(TripPhase.WAITING_TO_BOARD, run.state.phase)
+        assertEquals(TripLocationMode.PRECISE, run.state.locationMode)
     }
 
     @Test
