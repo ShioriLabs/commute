@@ -41,6 +41,24 @@ class PhoneLink(context: Context) {
         }
     }
 
+    /** Asks the phone to send [stationId]'s timetables again, or every saved station's when `null`. */
+    suspend fun requestSavedSync(stationId: String?) {
+        runCatching {
+            val phone = phone() ?: return
+            Wearable.getMessageClient(app).sendMessage(phone.id, WearPaths.SAVED_SYNC, stationId.orEmpty().encodeToByteArray()).await()
+        }
+    }
+
+    /** Opens [stationId]'s page on the phone, through the web link the app answers for. */
+    suspend fun openStation(stationId: String) {
+        runCatching {
+            val phone = phone() ?: return
+            val link = "$STATION_LINK${stationId.substringBefore('-')}/${stationId.substringAfter('-')}"
+            val intent = Intent(Intent.ACTION_VIEW, link.toUri()).addCategory(Intent.CATEGORY_BROWSABLE)
+            RemoteActivityHelper(app).startRemoteActivity(intent, phone.id)
+        }
+    }
+
     /** The phone running the app, the nearest if there are several. */
     private suspend fun phone(): Node? =
         Wearable.getCapabilityClient(app)
@@ -52,5 +70,8 @@ class PhoneLink(context: Context) {
     private companion object {
 
         const val PLAY_STORE = "market://details?id="
+
+        /** `KCI-TEB`'s page is `/stations/KCI/TEB`, as on the web. */
+        const val STATION_LINK = "https://commute.shiorilabs.id/stations/"
     }
 }
