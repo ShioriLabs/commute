@@ -181,6 +181,16 @@ class TripNotifier @Inject constructor(
     }
 
     /**
+     * Ride [legIndex] was made after all, late: "naik yang … aja" would only be wrong now, so it goes,
+     * and "Turun di sini" no longer names it as missed.
+     */
+    fun rerouteTakenBack(legIndex: Int) {
+        if (reroute?.legIndex != legIndex) return
+        reroute = null
+        manager.cancel(REROUTE_ID)
+    }
+
+    /**
      * "Turun di sini" for ride [legIndex]: where, and what then. A change names the ride and when it
      * leaves, and the one it stands in for when that was missed.
      */

@@ -41,6 +41,9 @@ interface TripRuntime {
      */
     fun rerouted(trip: ActiveTrip, legIndex: Int, missed: Instant)
 
+    /** The rider made ride [legIndex] after all: word of its swap, if any was sent, is taken back. */
+    fun rerouteTakenBack(legIndex: Int)
+
     /** The trip is over: its notification goes. */
     fun finish()
 
@@ -102,6 +105,8 @@ class AndroidTripRuntime @Inject constructor(
     override fun askStillOnRoute(trip: ActiveTrip) = notifier.askStillOnRoute(trip)
 
     override fun rerouted(trip: ActiveTrip, legIndex: Int, missed: Instant) = notifier.rerouted(trip, legIndex, missed)
+
+    override fun rerouteTakenBack(legIndex: Int) = notifier.rerouteTakenBack(legIndex)
 
     override fun finish() = notifier.finish()
 

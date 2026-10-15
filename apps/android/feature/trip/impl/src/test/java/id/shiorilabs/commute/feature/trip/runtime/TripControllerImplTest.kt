@@ -27,6 +27,7 @@ import id.shiorilabs.commute.feature.trip.DUKUH_ATAS
 import id.shiorilabs.commute.feature.trip.NOW
 import id.shiorilabs.commute.feature.trip.origin
 import id.shiorilabs.commute.feature.trip.plan
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.test.TestScope
@@ -71,6 +72,7 @@ class TripControllerImplTest {
         var asked = 0
         var wakeAt: Instant? = null
         val rerouted = mutableListOf<Pair<Int, Instant>>()
+        val takenBack = mutableListOf<Int>()
         val reminded = mutableListOf<Pair<Int, TripReminder>>()
         var wakingStopped = 0
 
@@ -85,6 +87,9 @@ class TripControllerImplTest {
         }
         override fun rerouted(trip: ActiveTrip, legIndex: Int, missed: Instant) {
             rerouted += legIndex to missed
+        }
+        override fun rerouteTakenBack(legIndex: Int) {
+            takenBack += legIndex
         }
         override fun finish() {
             finished++
@@ -118,8 +123,11 @@ class TripControllerImplTest {
     /** What the journey planner offers on, and what it was asked. */
     private var onward: TripPlan? = null
     private val asked = mutableListOf<String>()
+    /** Holds the planner's answer back until completed, for what comes in while it's asked. */
+    private var answerHeld: CompletableDeferred<Unit>? = null
     private val replanner = TripReplanner { fromId, toId, _, line ->
         asked += "$fromId>$toId on $line"
+        answerHeld?.await()
         onward
     }
 
@@ -544,6 +552,107 @@ class TripControllerImplTest {
         assertEquals(minutes(20), trip.plan.ride(2).departureAt)
         assertEquals(TripPhase.RIDING, trip.state.phase)
         assertNull(trip.replaced)
+    }
+
+    /** [onThePlatform], seen there at 08.10.50, before the 08.10 was a minute late. */
+    private fun onThePlatformInTime(): ActiveTrip = onThePlatform().let {
+        it.copy(state = it.state.copy(confirmedAt = minutes(10).plusSeconds(50)))
+    }
+
+    @Test
+    fun `a train seen pulling out isn't given up on before the next fix can say the rider is aboard`() = runTest {
+        // The 08.10 leaving late, as at Setiabudi on 15 Oct: 300 m out at 08.11.19, past the minute's
+        // grace, one fix of the two boarding asks for. The next is half a minute off.
+        store.trip = onThePlatformInTime()
+        onward = TripPlan(listOf(nextTrain))
+        val clock = MutableClock(minutes(10).plusSeconds(50))
+        val controller = controller(clock = clock)
+        runCurrent()
+
+        clock.now = minutes(11).plusSeconds(19)
+        controller.onFix(Fix(sudirmanToManggarai(0.1), 7f, clock.now, speedMps = 4.5f))
+        runCurrent()
+
+        assertEquals(emptyList<String>(), asked)
+        assertEquals(emptyList<Pair<Int, Instant>>(), runtime.rerouted)
+
+        clock.now = minutes(11).plusSeconds(49)
+        controller.onFix(Fix(sudirmanToManggarai(0.2), 6f, clock.now, speedMps = 7.5f))
+        runCurrent()
+
+        val trip = controller.active.value!!
+        assertEquals(plan, trip.plan)
+        assertEquals(TripPhase.RIDING, trip.state.phase)
+        assertEquals(emptyList<String>(), asked)
+    }
+
+    @Test
+    fun `a train seen leaving while its re-plan is asked keeps the rider, unless the next fix says not`() = runTest {
+        store.trip = onThePlatformInTime()
+        onward = TripPlan(listOf(nextTrain))
+        answerHeld = CompletableDeferred()
+        val clock = MutableClock(minutes(10).plusSeconds(50))
+        val controller = controller(clock = clock)
+        runCurrent()
+
+        // Still standing there at 08.11.05: the 08.10 is asked about.
+        clock.now = minutes(11).plusSeconds(5)
+        controller.onFix(Fix(GeoPoint(SUDIRMAN.latitude!!, SUDIRMAN.longitude!!), 7f, clock.now, speedMps = 0f))
+        runCurrent()
+        assertEquals(1, asked.size)
+
+        // Seen leaving before the answer: the swap waits on the next fix.
+        clock.now = minutes(11).plusSeconds(19)
+        controller.onFix(Fix(sudirmanToManggarai(0.1), 7f, clock.now, speedMps = 4.5f))
+        answerHeld!!.complete(Unit)
+        answerHeld = null
+        runCurrent()
+        assertEquals(plan, controller.active.value!!.plan)
+        assertEquals(emptyList<Pair<Int, Instant>>(), runtime.rerouted)
+
+        // Which has them back on the platform: a fix that leapt. Gone after all, so asked again.
+        clock.now = minutes(11).plusSeconds(49)
+        controller.onFix(Fix(GeoPoint(SUDIRMAN.latitude!!, SUDIRMAN.longitude!!), 6f, clock.now, speedMps = 0f))
+        runCurrent()
+        assertEquals(2, asked.size)
+        assertEquals(minutes(20), controller.active.value!!.plan.ride(2).departureAt)
+    }
+
+    @Test
+    fun `a train past its time rolling out along the platform is swapped for the next, quietly`() = runTest {
+        // At 08.11.05, 90 m along at 11 m/s, still within the platform: the rider is on it or still
+        // standing there, as at Sudirman on 15 Oct. Neither needs telling.
+        store.trip = onThePlatformInTime()
+        onward = TripPlan(listOf(nextTrain))
+        val clock = MutableClock(minutes(10).plusSeconds(50))
+        val controller = controller(clock = clock)
+        runCurrent()
+
+        clock.now = minutes(11).plusSeconds(5)
+        controller.onFix(Fix(sudirmanToManggarai(0.03), 8f, clock.now, speedMps = 11f))
+        runCurrent()
+
+        assertEquals(minutes(20), controller.active.value!!.plan.ride(2).departureAt)
+        assertEquals(emptyList<Pair<Int, Instant>>(), runtime.rerouted)
+    }
+
+    @Test
+    fun `a swap the rider was told of is taken back with the train, once seen aboard it after all`() = runTest {
+        store.trip = walkingToAMissedTrain()
+        onward = TripPlan(listOf(nextTrain))
+        val controller = controller(at = minutes(13))
+        runCurrent()
+        assertEquals(listOf(2 to minutes(10)), runtime.rerouted)
+
+        // Ran for it and made it: the 08.10, three minutes late, a kilometre out at 08.13.30.
+        controller.onFix(Fix(sudirmanToManggarai(0.33), 10f, minutes(13).plusSeconds(30), speedMps = 12f))
+        controller.onFix(Fix(sudirmanToManggarai(0.35), 10f, minutes(13).plusSeconds(35), speedMps = 12f))
+        controller.onFix(Fix(sudirmanToManggarai(0.37), 10f, minutes(13).plusSeconds(40), speedMps = 12f))
+
+        val trip = controller.active.value!!
+        assertEquals(plan, trip.plan)
+        assertEquals(TripPhase.RIDING, trip.state.phase)
+        assertEquals(listOf(2), runtime.takenBack)
     }
 
     @Test
