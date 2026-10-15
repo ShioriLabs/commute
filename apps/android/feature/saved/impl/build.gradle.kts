@@ -24,6 +24,11 @@ dependencies {
     implementation(project(":feature:journey:api"))
     // "Di dekat kamu": one fix while home is open, asked for only from its card.
     implementation(project(":core:location"))
+    // The saved stations' timetables, handed to the watch for its departures complication.
+    implementation(project(":core:wearable"))
+    implementation(project(":core:query"))
+    implementation(libs.play.services.wearable)
+    implementation(libs.kotlinx.coroutines.play.services)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.runtime)
