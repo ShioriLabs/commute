@@ -6,6 +6,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import android.content.Intent
 import android.widget.Toast
@@ -23,6 +26,7 @@ import id.shiorilabs.commute.core.ext.WhileUiSubscribed
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.feature.settings.R
+import id.shiorilabs.commute.feature.settings.presentation.components.ConfirmClearDialog
 import id.shiorilabs.commute.feature.settings.presentation.components.SettingsGutter
 import id.shiorilabs.commute.feature.settings.presentation.components.SettingsItem
 import id.shiorilabs.commute.feature.settings.presentation.components.SettingsPage
@@ -73,6 +77,13 @@ class ExperimentalViewModel @Inject constructor(
     /** The sensor recordings' share sheet, or `null` with none recorded yet. */
     fun shareSensorData(onReady: (Intent?) -> Unit) = viewModelScope.launch { onReady(sensorData.share()) }
 
+    /** The trip log and the sensor recordings deleted, but a recording a ride is still writing. */
+    fun clearLogs(onDone: () -> Unit) = viewModelScope.launch {
+        tripLog.clear()
+        sensorData.clear()
+        onDone()
+    }
+
     /** Takes the page back out of settings; the seven taps bring it back. */
     fun hide() = viewModelScope.launch { preferences.setExperimentalUnlocked(false) }
 }
@@ -99,6 +110,7 @@ fun ExperimentalScreen(
     val context = LocalContext.current
     val empty = stringResource(R.string.settings_experimental_trip_log_empty)
     val noSensorData = stringResource(R.string.settings_experimental_sensor_data_empty)
+    val cleared = stringResource(R.string.settings_experimental_clear_logs_done)
 
     ExperimentalContent(
         innerPadding = innerPadding,
@@ -131,6 +143,9 @@ fun ExperimentalScreen(
                 if (intent != null) context.startActivity(intent) else Toast.makeText(context, noSensorData, Toast.LENGTH_SHORT).show()
             }
         },
+        onClearLogs = {
+            viewModel.clearLogs { Toast.makeText(context, cleared, Toast.LENGTH_SHORT).show() }
+        },
         onHide = {
             viewModel.hide()
             navigator.pop()
@@ -162,8 +177,11 @@ private fun ExperimentalContent(
     onWatchAutoOpen: (Boolean) -> Unit = {},
     onShareTripLog: () -> Unit = {},
     onShareSensorData: () -> Unit = {},
+    onClearLogs: () -> Unit = {},
     onHide: () -> Unit = {},
 ) {
+    var confirmingClear by rememberSaveable { mutableStateOf(false) }
+
     SettingsPage(
         title = stringResource(R.string.settings_experimental_title),
         innerPadding = innerPadding,
@@ -236,6 +254,14 @@ private fun ExperimentalContent(
                 onClick = onShareSensorData,
             )
         }
+        SettingsItem(
+            label = stringResource(R.string.settings_experimental_clear_logs),
+            detail = stringResource(
+                if (sensorData) R.string.settings_experimental_clear_logs_detail_sensors else R.string.settings_experimental_clear_logs_detail,
+            ),
+            // Asked first: what's gone can't be sent or uploaded any more.
+            onClick = { confirmingClear = true },
+        )
         if (canHide) {
             SettingsItem(
                 label = stringResource(R.string.settings_experimental_hide),
@@ -243,6 +269,16 @@ private fun ExperimentalContent(
                 modifier = Modifier.padding(top = 24.dp),
             )
         }
+    }
+
+    if (confirmingClear) {
+        ConfirmClearDialog(
+            message = stringResource(
+                if (sensorData) R.string.settings_experimental_clear_logs_confirm_sensors else R.string.settings_experimental_clear_logs_confirm,
+            ),
+            onConfirm = onClearLogs,
+            onDismiss = { confirmingClear = false },
+        )
     }
 }
 

@@ -100,6 +100,12 @@
     <string name="settings_experimental_sensor_data">Kirim Data Sensor</string>
     <string name="settings_experimental_sensor_data_detail">Rekaman sensor gerak 50 Hz, GPS, sama perkiraan kecepatan tiap naik kereta pas Kecepatan IMU nyala. Temennya log perjalanan</string>
     <string name="settings_experimental_sensor_data_empty">Belum ada data sensor. Nyalain Kecepatan IMU terus naik kereta dulu</string>
+    <string name="settings_experimental_clear_logs">Hapus Log</string>
+    <string name="settings_experimental_clear_logs_detail">Hapus log perjalanan yang tersimpan di HP ini</string>
+    <string name="settings_experimental_clear_logs_detail_sensors">Hapus log perjalanan dan data sensor yang tersimpan di HP ini</string>
+    <string name="settings_experimental_clear_logs_confirm">Yakin mau hapus log perjalanan? Perjalanan yang udah selesai gak bisa di-Upload OTW Ini lagi</string>
+    <string name="settings_experimental_clear_logs_confirm_sensors">Yakin mau hapus log perjalanan dan data sensor? Perjalanan yang udah selesai gak bisa di-Upload OTW Ini lagi. Rekaman sensor perjalanan yang lagi jalan tetap disimpan</string>
+    <string name="settings_experimental_clear_logs_done">Log udah dihapus</string>
     <string name="settings_experimental_hide">Sembunyikan Menu Experimental</string>
     <string name="settings_experimental_taps_left">%1$d ketukan lagi buat buka menu Experimental</string>
     <string name="settings_experimental_opened">Menu Experimental udah kebuka</string>
