@@ -133,7 +133,6 @@ export const STOP_HEADWAYS_S: Record<string, number> = {
   '1@TJ-H00131P': 120,
   '1@TJ-H00132P': 130,
   '1@TJ-H00133P': 120,
-  '1@TJ-H00170P': 240,
   '1@TJ-H00176P': 120,
   '1@TJ-H00207P': 120,
   '1@TJ-H00251P': 120,
@@ -879,9 +878,7 @@ export const WEEKEND_ONLY_LINES: readonly string[] = ['13E', '7T', '8A', '9N']
  * in this feed (Koridor 5 labels both directions `0`).
  */
 export const DIRECTIONAL_HEADWAYS_S: Record<string, number> = {
-  '1@TJ-H00131P@R': 120,
   '1@TJ-H00132P@F': 130,
-  '1@TJ-H00170P@F': 400,
   '1@TJ-H00265P@R': 128,
   '1@TJ-H00266P@F': 128,
   '1@TJ-H00267S@R': 146,
