@@ -216,6 +216,7 @@ class TripControllerImpl @Inject constructor(
         val untilDue = trip.plan.ride(leg).departureAt?.let { Duration.between(event.at, it).seconds } ?: 0
         if (maxOf(-step.state.clockOffsetS, untilDue) < EARLIER_TRAIN.seconds) return trip.copy(replaced = null) to step
         log.event("earlier", mapOf("leg" to leg, "departs" to replaced.plan.ride(leg).departureAt))
+        runtime.rerouteTakenBack(leg)
         return trip.copy(plan = replaced.plan, replaced = null) to TripEngine.step(replaced.plan, trip.state, event)
     }
 
@@ -332,12 +333,19 @@ class TripControllerImpl @Inject constructor(
      * shows a change already lost. Told only within [EARLY_REPLAN] of getting in ([tellSwap]), and
      * taken back untold if the train makes up the time ([takeBack]). Only on lateness a fix saw on
      * the move; a late "Udah naik" tap would read as a late train.
+     *
+     * A rider seen once past the platform at a train's pace is likely on it, late: nothing is asked
+     * until the next fix says. Setiabudi's and Sudirman's on 15 Oct were each a minute and a half
+     * behind time, and called gone between the fix that saw them leave and the one that boarded.
      */
     private fun replanIfMissed(trip: ActiveTrip) {
         val state = trip.state
         val now = clock.instant()
         val (legIndex, readyAt) = when (state.phase) {
-            TripPhase.WAITING_TO_BOARD -> state.legIndex to maxOf(now, state.walkEndsAt(trip.plan) ?: now)
+            TripPhase.WAITING_TO_BOARD -> {
+                if (state.boardingFixes > 0) return
+                state.legIndex to maxOf(now, state.walkEndsAt(trip.plan) ?: now)
+            }
             TripPhase.RIDING -> {
                 if (state.source != PositionSource.CONFIRMED || state.confirmedPosition <= 0.0) return
                 state.nextRideReadyAt(trip.plan) ?: return
@@ -369,6 +377,11 @@ class TripControllerImpl @Inject constructor(
                 val boarded = current.state.legIndex > legIndex ||
                     (current.state.legIndex == legIndex && current.state.phase != TripPhase.WAITING_TO_BOARD)
                 if (current.plan != trip.plan || boarded) return@withLock
+                // Seen leaving meanwhile, likely aboard: asked again only if the next fix says not.
+                if (current.state.boardingFixes > 0) {
+                    replannedFor = null
+                    return@withLock
+                }
                 val plan = TripPlan(current.plan.legs.take(legIndex) + onward.legs)
                 val told = tells(current.plan, state, now)
                 val aboard = state.phase == TripPhase.RIDING
@@ -397,18 +410,19 @@ class TripControllerImpl @Inject constructor(
     /**
      * Seen at the station of the ride being waited for, and not walking to it: whatever comes next
      * is what they'll take, the train being late, gone, or let go full. A swap is no news to them;
-     * the board shows it, and [boardedEarlier] puts it back if the late one turns up.
+     * the board shows it, and [boardedEarlier] puts it back if the late one turns up. Seen pulling
+     * along the platform counts: that is the late one leaving, likely with them aboard.
      */
-    private fun onPlatform(state: TripState): Boolean =
+    private fun onPlatform(plan: TripPlan, state: TripState): Boolean =
         state.phase == TripPhase.WAITING_TO_BOARD && state.walkingSince == null &&
-            state.source == PositionSource.CONFIRMED && state.sightedPosition == 0.0
+            state.source == PositionSource.CONFIRMED && TripEngine.seenAtPlatform(plan, state)
 
     /**
      * Whether a swap is news to tell the rider now: waiting, unless [onPlatform]; aboard, within
      * [EARLY_REPLAN] of getting in, near enough that the lateness won't be made up.
      */
     private fun tells(plan: TripPlan, state: TripState, now: Instant): Boolean = when (state.phase) {
-        TripPhase.WAITING_TO_BOARD -> !onPlatform(state)
+        TripPhase.WAITING_TO_BOARD -> !onPlatform(plan, state)
         TripPhase.RIDING -> state.expectedAlightingAt(plan)?.isAfter(now.plus(EARLY_REPLAN)) != true
         else -> false
     }
