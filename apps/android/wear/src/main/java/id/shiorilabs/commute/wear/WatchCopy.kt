@@ -121,8 +121,15 @@ class WatchCopy(private val resources: Resources, private val lines: Map<String,
         else -> null
     }
 
-    private fun platform(ride: TripLeg.Ride): String? =
-        ride.platformCode?.let { resources.getString(CopyR.string.trip_platform, it.replace(PLATFORM_SLASH, "·")) }
+    /** The small line under a [Moment]'s place: the walk to a ride, then its platform. */
+    fun momentNote(moment: Moment): String = listOfNotNull(
+        moment.walkM?.let { resources.getString(R.string.trip_moment_walk, it) },
+        moment.platform?.let(::platform),
+    ).joinToString(SEPARATOR)
+
+    private fun platform(ride: TripLeg.Ride): String? = ride.platformCode?.let(::platform)
+
+    private fun platform(code: String): String = resources.getString(CopyR.string.trip_platform, code.replace(PLATFORM_SLASH, "·"))
 
     companion object {
 

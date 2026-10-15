@@ -12,9 +12,11 @@
     <string name="trip_lead_arrived">Udah sampai di</string>
     <string name="trip_minutes">%1$d mnt</string>
     <!-- What the big figure counts, under it. -->
-    <string name="trip_hero_minutes">menit</string>
+    <string name="trip_hero_minutes">mnt</string>
     <string name="trip_hero_stations">stasiun lagi</string>
     <string name="trip_hero_haltes">halte lagi</string>
+    <!-- The walk to a ride's boarding, in the list of the trip's moments. -->
+    <string name="trip_moment_walk">jalan %1$d m</string>
 
     <!-- The Ongoing Activity's few characters. #t# is the countdown. -->
     <string name="trip_chip_board_timer">Naik #t#</string>
