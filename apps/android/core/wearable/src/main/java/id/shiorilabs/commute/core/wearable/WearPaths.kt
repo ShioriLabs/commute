@@ -57,6 +57,16 @@ object WearPaths {
     /** Watch to phone: "Udah bangun" on the watch, so the phone needn't join in. */
     const val WAKE_ACK = "/trip/wake/ack"
 
+    /**
+     * A saved station's timetables, a data item of [WearStation]'s bytes under this prefix plus the
+     * station's id (`/saved/station/KCI-TEB`); gone once it is unsaved. TransJakarta haltes, with no
+     * timetable, have none.
+     */
+    const val SAVED_STATION = "/saved/station/"
+
+    /** Watch to phone: send the saved stations again; the payload is one station's id, or empty for all. */
+    const val SAVED_SYNC = "/saved/sync"
+
     /** Declared by the phone app, so the watch can tell it is installed and where to send taps. */
     const val PHONE_CAPABILITY = "commute_phone"
 
