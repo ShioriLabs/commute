@@ -47,8 +47,14 @@ object TripEngine {
 
     /** A bus's "siap-siap" comes within this much road of the halte: [busPrepareM]. */
     private const val BUS_PREPARE_MIN_M = 250.0
-    private const val BUS_PREPARE_MAX_M = 400.0
-    private val BUS_PREPARE_LEAD: Duration = Duration.ofMinutes(1)
+    private const val BUS_PREPARE_MAX_M = 900.0
+    private val BUS_PREPARE_LEAD: Duration = Duration.ofSeconds(90)
+
+    /** How long a bus must keep a speed for "siap-siap" to look ahead by it. */
+    private val BUS_SPEED_HELD: Duration = Duration.ofSeconds(30)
+
+    /** A last hop shorter than this is near as soon as the bus is out of the halte before. */
+    private const val BUS_SHORT_HOP_M = 400.0
 
     /**
      * Slower than this by a station, by the satellites' own speed, the train is stopping there; faster,
@@ -198,7 +204,8 @@ object TripEngine {
             stoodAt = pullOut.stoodAt,
             pullingOutFixes = pullOut.fixes,
             pullingOutSpeed = pullOut.speed,
-            lastSpeedMps = fix.speedMps,
+            recentSpeeds = (state.recentSpeeds + SpeedSample(fix.at.toEpochMilli(), fix.speedMps ?: 0f))
+                .filter { fix.at.toEpochMilli() - it.atMs <= BUS_SPEED_HELD.toMillis() },
         )
         val candidate = pullOut.leftTo ?: located
         if (candidate != null && candidate >= state.confirmedPosition - JITTER) {
@@ -565,7 +572,7 @@ object TripEngine {
      *
      * A bus, once out of the halte before, waits for the halte to be near by road ([busPrepareM]):
      * on 15 Oct a jammed 9C took 24 minutes over Ciliwung to Cawang's last 915 m. A last hop under
-     * [BUS_PREPARE_MAX_M] is near as soon as the bus is out of the halte before.
+     * [BUS_SHORT_HOP_M] is near as soon as the bus is out of the halte before.
      */
     private fun prepareIfDue(
         ride: TripLeg.Ride,
@@ -585,8 +592,8 @@ object TripEngine {
         if (!left) return state
         if (ride.isBus) {
             val last = ride.lastIndex.toDouble()
-            val shortHop = metresAlong(ride, before, last) < BUS_PREPARE_MAX_M
-            if (!shortHop && metresAlong(ride, position, last) > busPrepareM(state.lastSpeedMps)) return state
+            val shortHop = metresAlong(ride, before, last) < BUS_SHORT_HOP_M
+            if (!shortHop && metresAlong(ride, position, last) > busPrepareM(state.recentSpeeds)) return state
             return fire(state, AlertKind.PREPARE, estimated = state.source != PositionSource.CONFIRMED, effects) ?: state
         }
         val hopEnd = clock.scheduledAt(ride.lastIndex.toDouble())
@@ -598,13 +605,17 @@ object TripEngine {
     }
 
     /**
-     * How near the halte a bus's "siap-siap" comes: about a minute out at the speed the satellites
-     * last read, but never nearer than [BUS_PREPARE_MIN_M] (under Cawang's flyovers no usable fix
-     * came within 180 m) nor further than [BUS_PREPARE_MAX_M] (leaving Ciliwung at 10 m/s, the 9C
-     * read a minute out 24 minutes before it got there). Without a speed, as near as it goes.
+     * How near the halte a bus's "siap-siap" comes: [BUS_PREPARE_LEAD] out at the slowest speed the
+     * satellites read over the last [BUS_SPEED_HELD], enough for a rider dozing on the elevated
+     * busway, but never nearer than [BUS_PREPARE_MIN_M] (under Cawang's flyovers no usable fix came
+     * within 180 m) nor further than [BUS_PREPARE_MAX_M]. Held, not last: leaving Ciliwung at 10 m/s
+     * for 25 s, the 9C read 90 s out 24 minutes before it got there. A fix without a speed counts
+     * as standing.
      */
-    private fun busPrepareM(speedMps: Float?): Double =
-        ((speedMps ?: 0f).toDouble() * BUS_PREPARE_LEAD.seconds).coerceIn(BUS_PREPARE_MIN_M, BUS_PREPARE_MAX_M)
+    private fun busPrepareM(recentSpeeds: List<SpeedSample>): Double {
+        val held = recentSpeeds.minOfOrNull { it.mps } ?: 0f
+        return (held.toDouble() * BUS_PREPARE_LEAD.seconds).coerceIn(BUS_PREPARE_MIN_M, BUS_PREPARE_MAX_M)
+    }
 
     /** Off the current ride: on to the next one, or arrived. */
     private fun completeRide(

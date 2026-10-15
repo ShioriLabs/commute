@@ -428,17 +428,41 @@ class TripEngineTest {
         assertEquals(listOf(alert(AlertKind.PREPARE, estimated = false)), run.alerts())
     }
 
+    /**
+     * From Halte Dua, standing there at 08.02, out along a 1.5 km last hop at [speedMps] with a fix
+     * every [everyS] seconds: the metres left at the fix that brought "siap-siap", `null` if none did.
+     */
+    private fun leavingForALongLastHop(speedMps: Float, everyS: Double): Double? {
+        val far = between(Places.HALTE_2, Places.HALTE_3, 3.0)
+        val farStop = TripStop("TJ-HF", "Halte Jauh", far.latitude, far.longitude)
+        val plan = TripPlan(listOf(ride(Places.HALTE_1, Places.HALTE_2, farStop, line = "TJ:13")))
+        val run = Run(plan, startAt = at(0))
+        run.fix(Places.HALTE_1, 0.0)
+        run.fix(between(Places.HALTE_1, Places.HALTE_2, 0.4), 1.0)
+        run.fix(between(Places.HALTE_1, Places.HALTE_2, 0.6), 1.5)
+        run.fix(Places.HALTE_2, 2.0, accuracyM = 5f, speedMps = 0f)
+        val hopM = plan.ride(0).hopLengthM(1)!!
+        var i = 1
+        while (i * everyS * speedMps < hopM - 100) {
+            val travelled = i * everyS * speedMps
+            run.fix(between(Places.HALTE_2, farStop, travelled / hopM), 2.0 + i * everyS / 60, accuracyM = 5f, speedMps = speedMps)
+            if (run.alerts().any { it.kind == AlertKind.PREPARE }) return hopM - travelled
+            i++
+        }
+        return null
+    }
+
     @Test
-    fun `a bus moving freely gets its siap-siap a minute out, but never further than 400 m`() {
-        val run = atTheBuswaysLastHalteButOne()
+    fun `a bus moving steadily on a long last hop gets its siap-siap about 90 s out`() {
+        // 9.5 m/s, as on the elevated busway into CSW: 855 m is 90 s.
+        val left = leavingForALongLastHop(speedMps = 9.5f, everyS = 6.0)!!
+        assertTrue("rang $left m out", left in 800.0..855.0)
+    }
 
-        // 425 m to go at 10 m/s: a minute out would be 600 m, past the 400 m cap.
-        run.fix(between(Places.HALTE_3, Places.HALTE_4, 0.15), 7.5, accuracyM = 5f, speedMps = 10f)
-        assertTrue(run.alerts().none { it.kind == AlertKind.PREPARE })
-
-        // 375 m to go at 8 m/s: under 400 m, and under the 480 m a minute covers.
-        run.fix(between(Places.HALTE_3, Places.HALTE_4, 0.25), 7.6, accuracyM = 5f, speedMps = 8f)
-        assertEquals(listOf(alert(AlertKind.PREPARE, estimated = false)), run.alerts())
+    @Test
+    fun `however fast the bus, siap-siap comes no further out than 900 m`() {
+        val left = leavingForALongLastHop(speedMps = 20f, everyS = 3.0)!!
+        assertTrue("rang $left m out", left in 840.0..900.0)
     }
 
     @Test
