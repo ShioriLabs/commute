@@ -74,8 +74,8 @@ class TripNotifier @Inject constructor(
         val builder = NotificationCompat.Builder(context, NotificationChannels.TRIP_PROGRESS)
             .setSmallIcon(
                 when {
-                    alighting -> R.drawable.ic_stat_alight
-                    trip.state.phase == TripPhase.WAITING_TO_BOARD -> R.drawable.ic_stat_boarding
+                    alighting -> CopyR.drawable.ic_stat_alight
+                    trip.state.phase == TripPhase.WAITING_TO_BOARD -> CopyR.drawable.ic_stat_boarding
                     else -> R.drawable.ic_stat_trip
                 },
             )
@@ -133,7 +133,7 @@ class TripNotifier @Inject constructor(
                     context.getString(R.string.trip_alert_no_reminders, alighting, ride.lastIndex)
         }
         val icon = when (alert.kind) {
-            AlertKind.PREPARE, AlertKind.ALIGHT -> R.drawable.ic_stat_alight
+            AlertKind.PREPARE, AlertKind.ALIGHT -> CopyR.drawable.ic_stat_alight
             AlertKind.MISSED, AlertKind.NO_REMINDERS -> R.drawable.ic_stat_trip
         }
         notify(ALERT_ID, alertBuilder(title, text, icon).build())
@@ -167,7 +167,7 @@ class TripNotifier @Inject constructor(
         }
         if (justOff != null && previous != null) {
             val (title, text) = alight(trip, previous, justOff.estimated)
-            notify(ALERT_ID, alertBuilder(title, text, R.drawable.ic_stat_alight).setOnlyAlertOnce(true).build())
+            notify(ALERT_ID, alertBuilder(title, text, CopyR.drawable.ic_stat_alight).setOnlyAlertOnce(true).build())
             return
         }
         val text = if (trip.state.phase == TripPhase.RIDING) R.string.trip_alert_rerouted_ahead else R.string.trip_alert_rerouted
