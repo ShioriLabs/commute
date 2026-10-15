@@ -19,10 +19,13 @@
             android:name="com.google.android.wearable.standalone"
             android:value="false" />
 
+        <!-- Shown over the lock: the phone opens it as a trip starts, often on a locked watch in AOD,
+             where behind the lock it would draw nothing until unlocked. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
+            android:showWhenLocked="true"
             android:taskAffinity="">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
