@@ -19,6 +19,8 @@ import id.shiorilabs.commute.feature.journey.domain.JourneyCriteria
 import id.shiorilabs.commute.feature.journey.domain.TripStart
 import id.shiorilabs.commute.feature.journey.domain.toTripPlan
 import id.shiorilabs.commute.feature.journey.domain.JourneyLeg
+import id.shiorilabs.commute.feature.journey.domain.resolveTimedLegs
+import id.shiorilabs.commute.feature.journey.domain.retimeJourney
 import id.shiorilabs.commute.feature.journey.domain.tripStartFor
 import id.shiorilabs.commute.feature.journey.domain.fareShareUrl
 import id.shiorilabs.commute.feature.journey.domain.findJourneyByKey
@@ -74,7 +76,15 @@ class TripViewModel @AssistedInject constructor(
     private val trip = MutableStateFlow<TripPageState>(TripPageState.Loading)
     private val retries = MutableStateFlow(0)
 
-    val state: StateFlow<TripUiState> = combine(trip, lines, criteria) { trip, lines, criteria ->
+    /** Leg index to the `tripId` the rider chose there. One that cannot be made is ignored while it cannot, and applies again if it can. */
+    private val picks = MutableStateFlow<Map<Int, String>>(emptyMap())
+
+    /** [trip] as the rider's picks have retimed it; everything the page shows or starts reads this. */
+    private val shown: StateFlow<TripPageState> = combine(trip, picks) { trip, picks ->
+        if (trip is TripPageState.Loaded) trip.retimed(picks) else trip
+    }.stateIn(viewModelScope, WhileUiSubscribed, TripPageState.Loading)
+
+    val state: StateFlow<TripUiState> = combine(shown, lines, criteria) { trip, lines, criteria ->
         TripUiState(
             trip = trip,
             lines = lines,
@@ -87,7 +97,7 @@ class TripViewModel @AssistedInject constructor(
      * again every half minute, so a page left open becomes startable when its train gets close.
      */
     val tripStart: StateFlow<TripStart?> = combine(
-        trip,
+        shown,
         tripController.active,
         minuteTicks(),
         developerPreferences.forceTripStart,
@@ -106,7 +116,7 @@ class TripViewModel @AssistedInject constructor(
 
     /** Follows the loaded journey from now, in place of any trip already running. */
     fun startTrip() {
-        val journey = (trip.value as? TripPageState.Loaded)?.journey ?: return
+        val journey = (shown.value as? TripPageState.Loaded)?.journey ?: return
         // A journey with no ride (walk only) has no train to follow.
         if (journey.legs.none { it is JourneyLeg.Ride }) return
         tripController.start(journey.toTripPlan(), route)
@@ -141,6 +151,11 @@ class TripViewModel @AssistedInject constructor(
             return
         }
         viewModelScope.launch { savedRepository.toggleRoute(route.fromId, route.toId) }
+    }
+
+    /** Rides [tripId] on the leg at [legIndex]; the legs after it are retimed to connect. */
+    fun onPickDeparture(legIndex: Int, tripId: String) {
+        picks.update { it + (legIndex to tripId) }
     }
 
     fun retry() {
@@ -196,4 +211,9 @@ class TripViewModel @AssistedInject constructor(
 
         const val TICK_MILLIS = 30_000L
     }
+}
+
+private fun TripPageState.Loaded.retimed(picks: Map<Int, String>): TripPageState.Loaded {
+    val timed = resolveTimedLegs(journey.legs, picks)
+    return copy(journey = retimeJourney(journey, timed), timed = timed)
 }

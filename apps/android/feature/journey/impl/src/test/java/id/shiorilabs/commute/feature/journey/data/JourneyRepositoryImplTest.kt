@@ -50,15 +50,23 @@ class JourneyRepositoryImplTest {
 
     private fun service() = FakeCommuteService().apply { trips = { _, _, _ -> fixture } }
 
+    /** Captured before the API grew the trip-mode and journey-detail fields: an old cached body decodes without them. */
+    private val legacyFixture: TripResult by lazy {
+        val body = checkNotNull(javaClass.getResource("/trips_legacy.json")).readText()
+        json.decodeFromJsonElement(json.parseToJsonElement(body).jsonObject.getValue("data"))
+    }
+
+    private fun legacyService() = FakeCommuteService().apply { trips = { _, _, _ -> legacyFixture } }
+
     @Test
     fun `every journey maps, labels and all`() = runTest {
         val answer = JourneyRepositoryImpl(service(), testQueryClient(backgroundScope, clock)).trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).getOrNull()!!
 
         assertEquals("Bogor", answer.from.name)
-        assertEquals(9, answer.journeys.size)
+        assertEquals(4, answer.journeys.size)
         assertEquals(listOf(JourneyLabel.LEAST_WALKING), answer.journeys[0].labels)
-        assertEquals(listOf(JourneyLabel.CHEAPEST), answer.journeys[3].labels)
-        assertEquals(17500, answer.journeys[3].totalFare)
+        assertEquals(listOf(JourneyLabel.FEWEST_CHANGES, JourneyLabel.CHEAPEST), answer.journeys[2].labels)
+        assertEquals(9500, answer.journeys[2].totalFare)
     }
 
     @Test
@@ -68,12 +76,12 @@ class JourneyRepositoryImplTest {
         val timed = journeys[0]
         assertEquals(Instant.parse("2026-10-05T02:49:50Z"), timed.arrivalAt)
         val first = timed.legs.first() as JourneyLeg.Ride
-        assertEquals(Instant.parse("2026-10-05T01:03:00Z"), first.departureAt)
+        assertEquals(Instant.parse("2026-10-05T01:07:00Z"), first.departureAt)
         assertEquals("1/2", (timed.legs[1] as JourneyLeg.Ride).platformCode)
 
         // Through TransJakarta: no arrival, and the bus legs have no times.
-        assertNull(journeys[3].arrivalAt)
-        assertNull((journeys[3].legs[3] as JourneyLeg.Ride).departureAt)
+        assertNull(journeys[1].arrivalAt)
+        assertNull((journeys[1].legs[2] as JourneyLeg.Ride).departureAt)
     }
 
     @Test
@@ -99,19 +107,42 @@ class JourneyRepositoryImplTest {
     }
 
     @Test
+    fun `a route carries its other boardings and each leg its trains and change allowance`() = runTest {
+        val journey = JourneyRepositoryImpl(service(), testQueryClient(backgroundScope, clock))
+            .trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).getOrNull()!!
+            .journeys[0]
+        val first = journey.legs[0] as JourneyLeg.Ride
+        val second = journey.legs[1] as JourneyLeg.Ride
+
+        assertEquals(4, first.upcomingDepartures.size)
+        assertEquals(first.tripId, first.upcomingDepartures[0].tripId)
+        assertEquals(first.departureAt, first.upcomingDepartures[0].departureAt)
+        assertNull(first.minChangeS)
+        assertEquals(84, second.minChangeS)
+        assertEquals(5, journey.moreDepartures.size)
+        assertEquals(Instant.parse("2026-10-05T01:13:00Z"), journey.moreDepartures[0].departureAt)
+        assertEquals(Instant.parse("2026-10-05T02:55:20Z"), journey.moreDepartures[0].arrivalAt)
+        // The recap sums the walk legs the API rounded up, not the raw total it keeps for comparing routes.
+        assertEquals(journey.legs.filterIsInstance<JourneyLeg.Transfer>().sumOf { it.distanceM }, journey.walkDistanceM)
+        assertEquals(90, journey.walkDistanceM)
+    }
+
+    @Test
     fun `an answer from before the trip-mode fields maps without them`() = runTest {
-        val leg = JourneyRepositoryImpl(service(), testQueryClient(backgroundScope, clock))
+        val leg = JourneyRepositoryImpl(legacyService(), testQueryClient(backgroundScope, clock))
             .trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).getOrNull()!!
             .journeys[0].legs[0] as JourneyLeg.Ride
 
         assertTrue(leg.stopTimes.isEmpty())
         assertNull(leg.tripId)
         assertNull(leg.stops.first().latitude)
+        assertTrue(leg.upcomingDepartures.isEmpty())
+        assertNull(leg.minChangeS)
     }
 
     @Test
     fun `a leg on shared track keeps every line, and a plain one names its own`() = runTest {
-        val journeys = JourneyRepositoryImpl(service(), testQueryClient(backgroundScope, clock)).trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).getOrNull()!!.journeys
+        val journeys = JourneyRepositoryImpl(legacyService(), testQueryClient(backgroundScope, clock)).trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).getOrNull()!!.journeys
 
         assertEquals(3, (journeys[3].legs[3] as JourneyLeg.Ride).serviceLines.size)
         val plain = journeys[0].legs.first() as JourneyLeg.Ride
@@ -186,7 +217,7 @@ class JourneyRepositoryImplTest {
         val answer = repository.trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria())
 
         assertEquals(2, service.tripsCalls)
-        assertEquals(9, answer.getOrNull()?.journeys?.size)
+        assertEquals(4, answer.getOrNull()?.journeys?.size)
     }
 
     @Test

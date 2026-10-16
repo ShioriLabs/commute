@@ -17,6 +17,8 @@ import id.shiorilabs.commute.feature.journey.data.JourneyRepository
 import id.shiorilabs.commute.feature.journey.domain.Departure
 import id.shiorilabs.commute.feature.journey.domain.Journey
 import id.shiorilabs.commute.feature.journey.domain.JourneyCriteria
+import id.shiorilabs.commute.feature.journey.domain.JourneyLeg
+import id.shiorilabs.commute.feature.journey.domain.LegDeparture
 import id.shiorilabs.commute.feature.journey.domain.JourneyStop
 import id.shiorilabs.commute.feature.journey.domain.Modes
 import id.shiorilabs.commute.feature.journey.domain.PaymentMethod
@@ -134,6 +136,26 @@ class TripViewModelTest {
     @Test
     fun `the clock picks the boarding tapped among rows of one route`() = runTest {
         assertEquals(late, viewModel(trip.copy(boardingClock = "0915")).journey())
+    }
+
+    @Test
+    fun `picking a later train retimes the legs after it`() = runTest {
+        fun at(hhmm: String) = Instant.parse("2026-10-05T${hhmm}:00Z")
+        fun train(id: String, dep: String, arr: String) = LegDeparture(at(dep), at(arr), id, "KCI:C")
+        val first = listOf(train("a1", "02:00", "02:10"), train("a2", "02:08", "02:18"))
+        val second = listOf(train("b1", "02:16", "02:30"), train("b2", "02:24", "02:38"))
+        val connecting = journey(
+            ride("KCI:C", "KCI-SUD", "KCI-MRI").copy(departureAt = at("02:00"), arrivalAt = at("02:10"), tripId = "a1", upcomingDepartures = first),
+            ride("KCI:B", "KCI-MRI", "KCI-BKS").copy(departureAt = at("02:16"), arrivalAt = at("02:30"), tripId = "b1", upcomingDepartures = second),
+        )
+        journeys.answer = { answerOf(connecting).right() }
+        val viewModel = viewModel(trip.copy(journeyKey = "C.SUD-MRI~B.MRI-BKS"))
+
+        viewModel.onPickDeparture(0, "a2")
+
+        val rides = viewModel.journey().legs.filterIsInstance<JourneyLeg.Ride>()
+        assertEquals(listOf("a2", "b2"), rides.map { it.tripId })
+        assertEquals(listOf(at("02:08"), at("02:24")), rides.map { it.departureAt })
     }
 
     @Test
