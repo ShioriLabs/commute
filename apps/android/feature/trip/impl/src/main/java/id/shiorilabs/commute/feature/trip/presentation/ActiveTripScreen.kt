@@ -520,8 +520,8 @@ private fun StopRow(
         bottom = bottom?.let(::SolidColor),
         node = {
             when {
-                mark == StopMark.HERE -> TimelineNode(16.dp, fill = MaterialTheme.colorScheme.primary, ring = PageBackground)
-                next -> TimelineNode(16.dp, fill = NextStopYellow, ring = PageBackground)
+                mark == StopMark.HERE -> TimelineNode(16.dp, fill = MaterialTheme.colorScheme.primary, ring = color)
+                next -> TimelineNode(16.dp, fill = NextStopYellow, ring = color)
                 end -> StationNode(ring = ring, fill = PageBackground)
                 else -> StopNode(ring = ring, fill = PageBackground)
             }
