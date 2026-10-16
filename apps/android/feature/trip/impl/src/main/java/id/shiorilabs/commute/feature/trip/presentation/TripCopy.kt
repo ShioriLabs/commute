@@ -6,12 +6,14 @@ import id.shiorilabs.commute.core.trip.Headline
 import id.shiorilabs.commute.core.trip.PositionSource
 import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripPhase
+import id.shiorilabs.commute.core.trip.laterDepartures
 import id.shiorilabs.commute.core.tripcopy.R as CopyR
 import id.shiorilabs.commute.core.tripcopy.TripWording
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.trip.ActiveTrip
 import id.shiorilabs.commute.feature.station.domain.formatPlatformCode
 import id.shiorilabs.commute.feature.trip.R
+import java.time.Instant
 
 /**
  * The trip in words, one wording for every surface: the Live Update and the live screen say the
@@ -27,18 +29,20 @@ internal class TripCopy(private val resources: Resources, private val lines: Map
 
     fun title(headline: Headline): String = wording.title(headline)
 
-    fun detail(trip: ActiveTrip, headline: Headline): String = when (headline) {
+    fun detail(trip: ActiveTrip, headline: Headline, now: Instant): String = when (headline) {
         is Headline.Board -> listOfNotNull(
             direction(headline.ride),
             headline.ride.platformCode?.let { resources.getString(CopyR.string.trip_platform, formatPlatformCode(it)) },
             headline.departsAt?.let { resources.getString(CopyR.string.trip_departs_at, formatClock(it)) }
                 ?: resources.getString(R.string.trip_from_stop, headline.ride.stops.first().name),
+            nextDepartures(headline, now),
         ).joinToString(separator)
         is Headline.Change -> listOfNotNull(
             headline.walk?.let { resources.getString(CopyR.string.trip_walk_to, it.to.name, it.distanceM) },
             direction(headline.ride),
             headline.ride.platformCode?.let { resources.getString(CopyR.string.trip_platform, formatPlatformCode(it)) },
             headline.departsAt?.let { resources.getString(CopyR.string.trip_departs_at, formatClock(it)) },
+            nextDepartures(headline, now),
         ).joinToString(separator)
         // Aboard, the line and its direction are the rider's own train: only how far is left.
         is Headline.RideTo -> listOfNotNull(
@@ -54,6 +58,11 @@ internal class TripCopy(private val resources: Resources, private val lines: Map
         is Headline.Arrived -> ""
     }
 
+
+    /** "berikutnya 08.22, 08.33": what the rider would board if they missed this one, before they do. */
+    private fun nextDepartures(headline: Headline, now: Instant): String? =
+        headline.laterDepartures(now).take(NEXT_SHOWN).takeIf { it.isNotEmpty() }
+            ?.let { resources.getString(CopyR.string.trip_next_departures, it.joinToString(", ") { time -> formatClock(time) }) }
     /** How the position is known; `null` once arrived, when it no longer matters. */
     fun source(trip: ActiveTrip): String? = when {
         trip.state.phase == TripPhase.ARRIVED -> null
@@ -76,4 +85,10 @@ internal class TripCopy(private val resources: Resources, private val lines: Map
     }
 
     val separator: String get() = resources.getString(R.string.trip_separator)
+
+    private companion object {
+
+        /** Later trains named at the end of the detail line: enough to see whether a miss costs five minutes or twenty. */
+        const val NEXT_SHOWN = 2
+    }
 }

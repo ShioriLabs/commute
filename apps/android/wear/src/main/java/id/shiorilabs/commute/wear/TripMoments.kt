@@ -26,6 +26,8 @@ data class Moment(
     val platform: String? = null,
     /** Getting on only: the walk to it from the ride before, across to another station. */
     val walkM: Int? = null,
+    /** Getting on the next ride only: the trains after it, soonest first, as the plan knew them. */
+    val later: List<Instant> = emptyList(),
     val status: Status,
 ) {
 
@@ -52,6 +54,7 @@ fun tripMoments(plan: TripPlan, state: TripState): List<Moment> {
             moment(plan, state, leg, ride, 0, Moment.Kind.BOARD, board).copy(
                 platform = ride.platformCode,
                 walkM = plan.transferBefore(leg)?.distanceM,
+                later = ride.nextDepartures.takeIf { board == Moment.Status.NEXT }.orEmpty(),
             ),
             moment(plan, state, leg, ride, ride.lastIndex, Moment.Kind.ALIGHT, alight),
         )
