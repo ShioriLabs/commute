@@ -12,7 +12,7 @@
     <string name="trip_from_stop">dari %1$s</string>
     <string name="trip_alights_around">sampai sekitar %1$s</string>
     <string name="trip_then_change_at">Lalu transit ke %1$s, berangkat %2$s</string>
-    <string name="trip_then_missed">" (yang %1$s nggak kekejar)"</string>
+    <string name="trip_then_missed">" (yang %1$s gak keburu)"</string>
     <string name="trip_separator">" · "</string>
 
     <!-- How the position is known. -->
@@ -46,9 +46,9 @@
     <string name="trip_alert_alight_estimated_title">Harusnya udah sampai</string>
     <string name="trip_alert_alight_estimated">%1$s. Cek papan stasiun dulu ya</string>
     <string name="trip_alert_missed_title">Kamu kelewatan?</string>
-    <string name="trip_alert_missed">Kayaknya udah lewat %1$s. Turun di stasiun berikutnya terus balik arah ya</string>
+    <string name="trip_alert_missed">Kayaknya udah ngelewatin %1$s. Turun di stasiun berikutnya terus balik arah ya</string>
     <string name="trip_alert_no_reminders_title">Pantau sendiri dulu ya</string>
-    <string name="trip_alert_no_reminders">Buat rute ini belum bisa kasih pengingat otomatis, pantau halte ya. Turun di %1$s, %2$d halte lagi</string>
+    <string name="trip_alert_no_reminders">Buat rute ini belum bisa set pengingat otomatis, pantau halte dan announcement ya. Turun di %1$s, %2$d halte lagi</string>
     <string name="trip_ask_still_on_route_title">Masih di rute ini?</string>
     <string name="trip_ask_still_on_route">Posisi kamu jauh dari rute %1$s. Kalau udah ganti rute, berhentiin aja perjalanannya</string>
 
@@ -58,7 +58,7 @@
     <string name="trip_live_details">Lihat detail rute</string>
     <string name="trip_alert_rerouted_title">Naik yang %1$s aja</string>
     <string name="trip_alert_rerouted">Yang %1$s udah lewat. %2$s berikutnya berangkat %3$s dari %4$s.</string>
-    <string name="trip_alert_rerouted_ahead">Soalnya yang %1$s nggak kekejar. %2$s berikutnya berangkat %3$s dari %4$s.</string>
+    <string name="trip_alert_rerouted_ahead">Soalnya yang %1$s gak keburu. %2$s berikutnya berangkat %3$s dari %4$s.</string>
     <string name="trip_mark_moving">Jalan</string>
     <string name="trip_mark_stopped">Berhenti</string>
     <string name="trip_mark_odd">Aneh</string>

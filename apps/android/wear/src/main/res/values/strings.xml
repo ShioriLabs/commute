@@ -25,7 +25,7 @@
     <string name="trip_stop_confirm">Berhentiin perjalanan?</string>
     <string name="trip_send_failed">HP nggak terjangkau</string>
 
-    <string name="trip_channel">Perjalanan</string>
+    <string name="trip_channel">OTW</string>
     <string name="trip_start_channel">Mulai OTW</string>
     <string name="trip_started">OTW dimulai</string>
 
