@@ -250,13 +250,13 @@ private fun HelloPage(modifier: Modifier = Modifier) {
             text = "Halo, dunia!",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
-            color = PlainText,
+            color = MaterialTheme.colorScheme.onSurface,
         )
         Text(
             text = "Hello, world!",
             modifier = Modifier.padding(top = 4.dp),
             style = MaterialTheme.typography.titleMedium,
-            color = BoardDim,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -683,7 +683,7 @@ private fun Strip(
                         .align(Alignment.BottomEnd)
                         .padding(end = 24.dp, bottom = 12.dp),
                     style = MaterialTheme.typography.labelSmall,
-                    color = BoardDim,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -857,7 +857,7 @@ private fun StopLabel(stop: PidsStop, x: Float, centreY: Float, maxWidth: Int) {
             text = stop.name,
             // On the theme's type, as BasicText alone falls back to the platform's.
             style = MaterialTheme.typography.titleLarge.merge(
-                color = PlainText,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = if (stop.next || stop.alighting) FontWeight.Bold else FontWeight.SemiBold,
                 lineHeight = if (stop.next) 30.sp else 24.sp,
             ),
@@ -909,7 +909,7 @@ private fun ChangePanel(pids: Pids, lines: Map<String, LineInfo>, stationLines: 
             },
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
-            color = BoardDim,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (change != null) {
             Row(
@@ -925,7 +925,7 @@ private fun ChangePanel(pids: Pids, lines: Map<String, LineInfo>, stationLines: 
                     ).joinToString(copy.separator),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    color = PlainText,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
         } else {
