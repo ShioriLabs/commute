@@ -116,6 +116,33 @@ describe('assembleJourney', () => {
    * and Cibubur lines, so either train gets the rider there. Captured from
    * production's /fares/LRTJBDB-DKA/LRTJBDB-CWG.
    */
+  describe('back-to-back walks', () => {
+    const legs = () => [
+      walk('TJ-X', 'KCI-BOO', 560),
+      walk('KCI-BOO', 'KCI-MRI', 90),
+      ride('KCI', 'C', ['MRI', 'SUD'], 4000)
+    ]
+
+    it('reads as one walk ending at the last destination, rounded up', () => {
+      const { journey } = build(legs(), { walkDistanceM: 650 })
+      const walks = journey.legs.filter(l => l.type === 'TRANSFER')
+      expect(walks).toHaveLength(1)
+      expect(walks[0]).toMatchObject({ from: { id: 'TJ-X' }, to: { id: 'KCI-MRI' }, distanceM: 700 })
+    })
+
+    it('counts it as one transfer, and walking follows the rounded leg', () => {
+      const merged = build(legs(), { walkDistanceM: 650 }).journey
+      const separate = build([walk('TJ-X', 'KCI-BOO', 560), ride('KCI', 'C', ['BOO', 'MRI'], 1000)], { walkDistanceM: 560 }).journey
+      expect(merged.transferCount).toBe(separate.transferCount)
+      expect(merged.walkDistanceM).toBe(700)
+    })
+
+    it('leaves the exact walking total alone when nothing merged', () => {
+      const { journey } = build([walk('TJ-X', 'KCI-BOO', 90), ride('KCI', 'C', ['BOO', 'MRI'], 1000)], { walkDistanceM: 90 })
+      expect(journey.walkDistanceM).toBe(90)
+    })
+  })
+
   it('exposes both service lines on an interlined trunk leg, primary first', () => {
     const { journey } = build([
       ride('LRTJBDB', 'BK', ['DKA', 'SET', 'RAS', 'KUA', 'PAN', 'CKK', 'CIL', 'CWG'], 8164)
