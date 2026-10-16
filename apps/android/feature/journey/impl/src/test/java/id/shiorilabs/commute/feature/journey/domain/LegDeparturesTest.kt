@@ -33,6 +33,24 @@ class LegDeparturesTest {
     }
 
     @Test
+    fun `a first train the clock has passed is not the default, and is marked missed`() {
+        val timed = resolveTimedLegs(legs, emptyMap(), notBefore = at("07:25"))
+
+        assertEquals(listOf("a3", "b3"), timed.map { it.chosen.tripId })
+        assertEquals(listOf(Blocked.MISSED, Blocked.MISSED, null, Blocked.NO_ONWARD), timed[0].options.map { it.blocked })
+    }
+
+    @Test
+    fun `a train leaving this minute is still the one`() {
+        assertEquals("a2", resolveTimedLegs(legs, emptyMap(), notBefore = at("07:20")).first().chosen.tripId)
+    }
+
+    @Test
+    fun `when every first train has gone the answer stands as it is`() {
+        assertEquals(listOf("a1", "b1"), resolveTimedLegs(legs, emptyMap(), notBefore = at("09:00")).map { it.chosen.tripId })
+    }
+
+    @Test
     fun `the later leg moves when an earlier pick lands after its train`() {
         // a2 arrives 07.54, so b1 (07.52) is gone and b2 takes over.
         assertEquals(listOf("a2", "b2"), resolveTimedLegs(legs, mapOf(0 to "a2")).map { it.chosen.tripId })
