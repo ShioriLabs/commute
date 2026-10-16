@@ -91,8 +91,12 @@ class WatchCopy(private val resources: Resources, private val lines: Map<String,
                 ?.let { resources.getString(CopyR.string.trip_departs_at, formatClock(it)) },
         )
         is Headline.Change -> listOfNotNull(
-            headline.walk?.let { resources.getString(CopyR.string.trip_walk_to, it.to.name, it.distanceM) },
-            platform(headline.ride),
+            headline.walk?.let { walk ->
+                platform(headline.ride)
+                    ?.let { resources.getString(CopyR.string.trip_walk_to_platform, walk.to.name, it) }
+                    ?: resources.getString(CopyR.string.trip_walk_to, walk.to.name)
+            },
+            platform(headline.ride).takeIf { headline.walk == null },
             headline.departsAt?.takeUnless { showsDeparture }
                 ?.let { resources.getString(CopyR.string.trip_departs_at, formatClock(it)) },
         )
