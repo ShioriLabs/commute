@@ -4,12 +4,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -18,7 +21,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
@@ -26,6 +36,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import id.shiorilabs.commute.core.time.formatClock
@@ -90,6 +101,51 @@ private fun inkOf(option: LegOption, color: Color): Color = when {
     else -> Slate900
 }
 
+/** The trip page's side margin: the chip row runs out through it to the screen edge, so more chips are seen waiting. */
+private val PAGE_MARGIN = 32.dp
+
+/** How far in from the start the chips fade out once the row has been scrolled. */
+private val FADE_WIDTH = 28.dp
+
+/**
+ * Lets the row run [by] past its parent's end. It reports the parent's own width and only draws the
+ * extra, so nothing is coerced or re-centred; the part past the margin is for looking at, as touches
+ * out there stop at the parent.
+ */
+private fun Modifier.bleedEnd(by: Dp): Modifier = layout { measurable, constraints ->
+    if (!constraints.hasBoundedWidth) {
+        val placeable = measurable.measure(constraints)
+        return@layout layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+    }
+    val width = constraints.maxWidth + by.roundToPx()
+    val placeable = measurable.measure(constraints.copy(minWidth = width, maxWidth = width))
+    layout(constraints.maxWidth, placeable.height) { placeable.place(0, 0) }
+}
+
+/**
+ * Fades the start edge to nothing, by how far the row has scrolled: none at rest, where the first
+ * chip sits flush, the whole [FADE_WIDTH] once a chip has gone past it, so a cut chip melts away.
+ */
+private fun Modifier.fadeStart(state: LazyListState): Modifier = this
+    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+    .drawWithContent {
+        drawContent()
+        val fade = FADE_WIDTH.toPx()
+        val scrolled = if (state.firstVisibleItemIndex > 0) fade else state.firstVisibleItemScrollOffset.toFloat()
+        val strength = (scrolled / fade).coerceIn(0f, 1f)
+        if (strength > 0f) {
+            drawRect(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(Color.Black.copy(alpha = 1f - strength), Color.Black),
+                    startX = 0f,
+                    endX = fade,
+                ),
+                size = Size(fade, size.height),
+                blendMode = BlendMode.DstIn,
+            )
+        }
+    }
+
 @Composable
 internal fun DeparturePicker(
     options: List<LegOption>,
@@ -105,7 +161,13 @@ internal fun DeparturePicker(
             options.forEach { option -> LadderRung(option, color, onPick) }
         }
     } else {
-        LazyRow(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        val listState = rememberLazyListState()
+        LazyRow(
+            state = listState,
+            modifier = modifier.bleedEnd(PAGE_MARGIN).fadeStart(listState),
+            contentPadding = PaddingValues(end = PAGE_MARGIN),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
             items(options) { option -> Chip(option, color, onPick) }
         }
     }
