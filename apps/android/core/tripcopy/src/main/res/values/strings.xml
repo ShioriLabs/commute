@@ -15,6 +15,8 @@
     <string name="trip_chip_stops">%1$d lagi</string>
     <string name="trip_corridor">Koridor %1$s</string>
     <string name="trip_departs_at">berangkat %1$s</string>
+    <!-- %1$s is the clock times of the trains after the one being waited for, comma separated -->
+    <string name="trip_next_departures">berikutnya %1$s</string>
     <string name="trip_haltes_left">%1$d halte lagi</string>
     <string name="trip_headsign">arah %1$s</string>
     <string name="trip_platform">Peron %1$s</string>

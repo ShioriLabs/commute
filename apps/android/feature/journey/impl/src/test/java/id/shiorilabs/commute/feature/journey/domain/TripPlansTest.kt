@@ -75,6 +75,23 @@ class TripPlansTest {
         assertEquals("1466", ride.tripId)
     }
 
+
+    @Test
+    fun `the plan keeps the later trains of a ride, not the one followed`() {
+        fun train(id: String, minutes: Long) = LegDeparture(departs.plusSeconds(minutes * 60), departs.plusSeconds(minutes * 60 + 180), id, "KCI:B")
+        val leg = ride("KCI:B", "KCI-MRI", "KCI-TEB", departureAt = departs, arrivalAt = departs.plusSeconds(180)).copy(
+            tripId = "a1",
+            upcomingDepartures = listOf(train("a1", 0), train("a2", 8), train("a3", 16), train("a4", 24), train("a5", 32), train("a6", 40)),
+        )
+        val ride = journey(leg).toTripPlan().ride(0)
+
+        assertEquals(listOf(8L, 16L, 24L, 32L).map { departs.plusSeconds(it * 60) }, ride.nextDepartures)
+    }
+
+    @Test
+    fun `an untimed ride keeps no later trains`() {
+        assertEquals(emptyList<Instant>(), timed.toTripPlan().ride(2).nextDepartures)
+    }
     @Test
     fun `a leg without stop times leaves its stops untimed`() {
         val ride = timed.toTripPlan().ride(0)

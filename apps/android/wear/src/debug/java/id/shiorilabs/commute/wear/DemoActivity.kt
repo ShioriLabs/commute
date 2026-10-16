@@ -69,6 +69,7 @@ private fun demoTrip(scene: String, now: Instant): WearTrip {
         ),
         departureAt = at(4),
         arrivalAt = at(16),
+        nextDepartures = listOf(at(12), at(20), at(28)),
     )
     val mrt = TripLeg.Ride(
         line = "MRTJ:M",
@@ -81,6 +82,7 @@ private fun demoTrip(scene: String, now: Instant): WearTrip {
         ),
         departureAt = at(18),
         arrivalAt = at(23),
+        nextDepartures = listOf(at(26), at(34)),
     )
     // Untimed, as most TransJakarta rides are: no minutes to give, so stops and the place lead.
     val bus = TripLeg.Ride(

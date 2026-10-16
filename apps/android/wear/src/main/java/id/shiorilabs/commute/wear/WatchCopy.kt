@@ -7,6 +7,7 @@ import id.shiorilabs.commute.core.trip.PositionSource
 import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripPhase
 import id.shiorilabs.commute.core.trip.TripState
+import id.shiorilabs.commute.core.trip.laterThan
 import id.shiorilabs.commute.core.tripcopy.R as CopyR
 import id.shiorilabs.commute.core.tripcopy.TripWording
 import id.shiorilabs.commute.core.wearable.WearLine
@@ -121,11 +122,20 @@ class WatchCopy(private val resources: Resources, private val lines: Map<String,
         else -> null
     }
 
-    /** The small line under a [Moment]'s place: the walk to a ride, then its platform. */
-    fun momentNote(moment: Moment): String = listOfNotNull(
+    /** The small line under a [Moment]'s place: the walk to a ride, its platform, and the trains after it. */
+    fun momentNote(moment: Moment, now: Instant? = null): String = listOfNotNull(
         moment.walkM?.let { resources.getString(R.string.trip_moment_walk, it) },
         moment.platform?.let(::platform),
+        later(moment, now),
     ).joinToString(SEPARATOR)
+
+    /** "berikutnya 08.22, 08.33": what would be boarded if this were missed, once a clock says which are left. */
+    private fun later(moment: Moment, now: Instant?): String? {
+        now ?: return null
+        val times = moment.later.laterThan(moment.at, now).take(NEXT_SHOWN)
+        return times.takeIf { it.isNotEmpty() }
+            ?.let { resources.getString(CopyR.string.trip_next_departures, it.joinToString(", ") { time -> formatClock(time) }) }
+    }
 
     private fun platform(ride: TripLeg.Ride): String? = ride.platformCode?.let(::platform)
 
@@ -134,6 +144,9 @@ class WatchCopy(private val resources: Resources, private val lines: Map<String,
     companion object {
 
         const val SEPARATOR = " · "
+
+        /** Later trains a screen names after the one waited for; the notification and complication have no room for more. */
+        private const val NEXT_SHOWN = 2
         private val PLATFORM_SLASH = Regex("\\s*/\\s*")
     }
 }

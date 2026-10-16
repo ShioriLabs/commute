@@ -154,4 +154,6 @@
     <string name="trip_pids_change_walk">Lalu jalan %1$d m ke %2$s</string>
     <string name="trip_pids_description">Stasiun berikutnya, paling dekat dulu: %1$s</string>
     <string name="trip_live_all_stops">Perjalanan</string>
+    <!-- Under the board while waiting for a train: the trains after it, to board if it is missed -->
+    <string name="trip_live_next_departures">Kalau ketinggalan, berikutnya</string>
 </resources>

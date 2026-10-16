@@ -35,3 +35,24 @@ fun TripState.headline(plan: TripPlan): Headline = when (val next = progress(pla
 /** Whole minutes from [now] to [at], at least one: "sekitar 2 menit lagi". */
 fun minutesUntil(now: Instant, at: Instant): Int =
     ((at.toEpochMilli() - now.toEpochMilli() + 30_000) / 60_000).toInt().coerceAtLeast(1)
+
+/**
+ * The trains the rider would board if they missed the one being waited for, soonest first: those
+ * still to come after it (lateness included) and after [now]. Only while waiting for a ride or
+ * changing onto one; empty riding, for an untimed ride, or once the list has run out. The plan is a
+ * snapshot, so an old list shrinks rather than showing a time that has gone.
+ */
+fun Headline.laterDepartures(now: Instant): List<Instant> = when (this) {
+    is Headline.Board -> ride.nextDepartures.laterThan(departsAt, now)
+    is Headline.Change -> ride.nextDepartures.laterThan(departsAt, now)
+    else -> emptyList()
+}
+
+/**
+ * The times in this list after both the train waited for, at [departsAt], and [now]: what the
+ * phone's board and the watch's moments both name, so the two cannot drift apart.
+ */
+fun List<Instant>.laterThan(departsAt: Instant?, now: Instant): List<Instant> {
+    val after = maxOf(departsAt ?: now, now)
+    return filter { it.isAfter(after) }
+}

@@ -25,6 +25,11 @@ fun Journey.toTripPlan(): TripPlan = TripPlan(
                 departureAt = leg.departureAt,
                 arrivalAt = leg.arrivalAt,
                 tripId = leg.tripId,
+                // What the rider would board instead, to say so before a miss; the followed train is not in it.
+                nextDepartures = leg.upcomingDepartures
+                    .filter { it.tripId != leg.tripId && (leg.departureAt == null || it.departureAt.isAfter(leg.departureAt)) }
+                    .map { it.departureAt }
+                    .take(NEXT_DEPARTURES_KEPT),
                 serviceLines = leg.serviceLines
                     .takeIf { services -> services.any { it.line != leg.line } }
                     ?.map { TripServiceLine(it.line, it.headsign) }
@@ -73,3 +78,6 @@ fun tripStartFor(journey: Journey, route: Route.Trip, running: Route.Trip?, now:
     val boardsAt = boardsAtOf(journey) ?: return TripStart.Ready
     return if (Duration.between(now, boardsAt) > TRIP_START_LEAD) TripStart.TooEarly(boardsAt) else TripStart.Ready
 }
+
+/** How many later trains a trip keeps: the live screen lists four, the compact surfaces name two. */
+private const val NEXT_DEPARTURES_KEPT = 4

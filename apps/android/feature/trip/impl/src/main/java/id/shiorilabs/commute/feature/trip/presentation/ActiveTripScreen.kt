@@ -29,6 +29,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -74,7 +76,10 @@ import id.shiorilabs.commute.core.trip.scheduledAtStop
 import id.shiorilabs.commute.core.trip.seenAt
 import id.shiorilabs.commute.core.trip.PositionSource
 import id.shiorilabs.commute.core.trip.RiderAction
+import id.shiorilabs.commute.core.time.formatClock
 import id.shiorilabs.commute.core.trip.TripLeg
+import id.shiorilabs.commute.core.trip.headline
+import id.shiorilabs.commute.core.trip.laterDepartures
 import id.shiorilabs.commute.core.trip.TripPhase
 import id.shiorilabs.commute.core.trip.progress
 import id.shiorilabs.commute.core.ui.components.CommuteCloseButton
@@ -242,6 +247,14 @@ private fun ActiveTripContent(
                     strip = if (pidsStyle == PidsStyle.Yishun) trip.yishunStrip(pids, now) else null,
                     allStationLines = state.stationLines,
                 )
+            }
+            // What would be boarded if this one were missed: only while waiting for a train, and a
+            // snapshot of the plan, so it shrinks as the trains go rather than show one that has gone.
+            val later = trip.state.headline(trip.plan).laterDepartures(now).take(NEXT_LISTED)
+            if (later.isNotEmpty()) {
+                item(key = "next-departures") {
+                    NextDepartures(later, modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp))
+                }
             }
             item(key = "actions") {
                 Actions(trip, onStop, onSay, modifier = Modifier.padding(start = 16.dp, top = 24.dp, end = 16.dp, bottom = 16.dp))
@@ -733,5 +746,47 @@ private fun Finished(innerPadding: PaddingValues, onClose: () -> Unit) {
             style = MaterialTheme.typography.bodyMedium,
             color = Slate500,
         )
+    }
+}
+
+/** Later trains listed under the board: enough to see whether a miss costs five minutes or twenty. */
+private const val NEXT_LISTED = 4
+
+/** The trains after the one being waited for, so a rider knows what they would board before they miss it. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun NextDepartures(times: List<Instant>, modifier: Modifier = Modifier) {
+    val heading = stringResource(R.string.trip_live_next_departures)
+    // One sentence for a screen reader, not a heading and then each time on its own.
+    val description = heading + ": " + times.joinToString(", ") { formatClock(it) }
+    Column(
+        modifier = modifier.semantics(mergeDescendants = true) { contentDescription = description },
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = heading,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = Slate500,
+        )
+        // Wraps under a big font or on a narrow screen rather than squeezing the last time.
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            times.forEach { time ->
+                Text(
+                    text = formatClock(time),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Slate100)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.titleMedium.merge(fontFeatureSettings = TABULAR),
+                    fontWeight = FontWeight.Bold,
+                    color = Slate900,
+                    softWrap = false,
+                )
+            }
+        }
     }
 }
