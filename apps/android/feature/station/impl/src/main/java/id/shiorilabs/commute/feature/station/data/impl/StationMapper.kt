@@ -8,6 +8,9 @@ import id.shiorilabs.commute.core.model.models.InternalTransfer
 import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.feature.station.domain.Amenity
+import id.shiorilabs.commute.feature.station.domain.CrowdForecast
+import id.shiorilabs.commute.feature.station.domain.CrowdLevel
+import id.shiorilabs.commute.feature.station.domain.CrowdRange
 import id.shiorilabs.commute.feature.station.domain.Departure
 import id.shiorilabs.commute.feature.station.domain.DestinationTimetable
 import id.shiorilabs.commute.feature.station.domain.DirectionGroup
@@ -17,6 +20,7 @@ import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.ServiceHours
 import kotlin.math.roundToInt
 import id.shiorilabs.commute.core.model.models.Station as StationDto
+import id.shiorilabs.commute.core.model.models.StationDensity as StationDensityDto
 import id.shiorilabs.commute.core.model.models.Transfer as TransferDto
 import id.shiorilabs.commute.feature.station.domain.Station as Station
 import id.shiorilabs.commute.feature.station.domain.Transfer as Transfer
@@ -35,6 +39,22 @@ internal fun HeadwayRow.toFrequency() = Frequency(
         ?.takeIf { it.isNotEmpty() },
     serviceHours = serviceHours?.toServiceHours(),
 )
+
+/**
+ * A crowd forecast as the domain carries it: one slot per hour of the day, placed by each entry's own
+ * `hour` rather than its position. An hour missing from the answer, or out of range, has no estimate.
+ */
+internal fun StationDensityDto.toCrowdForecast(): CrowdForecast {
+    val hours = arrayOfNulls<CrowdRange>(24)
+    for (entry in this.hours) {
+        val hour = entry.hour.toInt()
+        val level = entry.level ?: continue
+        if (hour in hours.indices) {
+            hours[hour] = CrowdRange(CrowdLevel.of(level.min), CrowdLevel.of(level.max))
+        }
+    }
+    return CrowdForecast(hours.toList())
+}
 
 /** The two shapes the generator folds into one class: a window, or all day. Anything else is unknown. */
 private fun HeadwayRowServiceHours.toServiceHours(): ServiceHours? {

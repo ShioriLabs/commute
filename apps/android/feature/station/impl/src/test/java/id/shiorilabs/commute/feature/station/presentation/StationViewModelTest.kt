@@ -11,6 +11,9 @@ import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationRepository
+import id.shiorilabs.commute.feature.station.domain.CrowdForecast
+import id.shiorilabs.commute.feature.station.domain.CrowdLevel
+import id.shiorilabs.commute.feature.station.domain.CrowdRange
 import id.shiorilabs.commute.feature.station.domain.Frequency
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
@@ -58,10 +61,21 @@ class StationViewModelTest {
         override suspend fun transfers(stationId: String) = transfers
 
         val askedFrequencies = mutableListOf<Pair<String, ServiceDayName>>()
+        val askedHours = mutableListOf<Int>()
 
-        override suspend fun frequencies(stationId: String, day: ServiceDayName): Either<Failure, List<Frequency>> {
+        override suspend fun frequencies(stationId: String, day: ServiceDayName, hour: Int): Either<Failure, List<Frequency>> {
             askedFrequencies += stationId to day
+            askedHours += hour
             return listOf(Frequency("TJ:13", 186.0)).right()
+        }
+
+        val askedCrowding = mutableListOf<Pair<String, ServiceDayName>>()
+        var crowding: Either<Failure, CrowdForecast> =
+            CrowdForecast(List(24) { CrowdRange(CrowdLevel.PADAT, CrowdLevel.SANGAT_PADAT) }).right()
+
+        override suspend fun crowding(stationId: String, day: ServiceDayName): Either<Failure, CrowdForecast> {
+            askedCrowding += stationId to day
+            return crowding
         }
     }
 
@@ -197,6 +211,46 @@ class StationViewModelTest {
         // Saturday's service starts at 03:00.
         vm.onClockTick(LocalDateTime.parse("2026-10-03T03:00:00"))
         assertEquals(ServiceDayName.SAT, stations.asked.first().second)
+    }
+
+    @Test
+    fun `a halte's board refetches on the hour, for the new hour's frequencies`() = runTest {
+        stations.station = { id -> Station(id, "Petukangan D'MASIV", "TJ", "H00001P", listOf("TJ:13")).right() }
+        val vm = StationViewModel("TJ-H00001P", stations, lines, saved, clockAt("2026-10-03T08:00:00"))
+        vm.state.first { it.board.frequencies is UIState.Success }
+
+        vm.onClockTick(LocalDateTime.parse("2026-10-03T08:59:00"))
+        assertEquals(listOf(8), stations.askedHours)
+
+        vm.onClockTick(LocalDateTime.parse("2026-10-03T09:00:00"))
+        assertEquals(listOf(8, 9), stations.askedHours)
+    }
+
+    @Test
+    fun `a rail station's page carries its crowd forecast for the service day`() = runTest {
+        val page = viewModel().state.first { it.crowding != null }
+
+        assertEquals(CrowdRange(CrowdLevel.PADAT, CrowdLevel.SANGAT_PADAT), page.crowding!!.at(8))
+        assertEquals(listOf("KCI-MRI" to ServiceDayName.WD), stations.askedCrowding)
+    }
+
+    @Test
+    fun `a failed crowd forecast leaves the page without one`() = runTest {
+        stations.crowding = Failure.Unknown().left()
+
+        val page = viewModel().loaded()
+
+        assertEquals(null, page.crowding)
+    }
+
+    @Test
+    fun `a halte's page never asks for a crowd forecast`() = runTest {
+        stations.station = { id -> Station(id, "Petukangan D'MASIV", "TJ", "H00001P", listOf("TJ:13")).right() }
+
+        StationViewModel("TJ-H00001P", stations, lines, saved, clockAt("2026-10-03T08:00:00"))
+            .state.first { it.board.frequencies is UIState.Success }
+
+        assertTrue(stations.askedCrowding.isEmpty())
     }
 
     @Test
