@@ -82,9 +82,10 @@ export function boardsAtOf(journey: FareJourney): string | null {
  * A boarding as `HHMM` wall-clock WIB, for `?jt=`.
  *
  * The key above deliberately names no time, which is right for a shared link
- * but wrong for home's saved-route rows: three rows of one route share a key,
- * so every one of them opened on the earliest. `jt` is the extra fact those
- * links carry. Clock digits rather than an instant because it only has to tell
+ * but not for home's saved-route rows, which name the train a rider tapped.
+ * `jt` is the extra fact those links carry. Since /trips answers one card per
+ * route it often names a train riding along in `moreDepartures` rather than
+ * the card's own, and findJourneyByKey then lands on the route. Clock digits rather than an instant because it only has to tell
  * apart boardings of one route within one answer, and it stays legible in the
  * address bar like the key does. `?at=` can't do this job: it rounds down to a
  * 20-minute slot, which still lands on an earlier train.

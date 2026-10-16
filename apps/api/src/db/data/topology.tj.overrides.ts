@@ -23,6 +23,57 @@ import type { LineTopology } from './topology'
 export const TJ_TOPOLOGY_OVERRIDES: LineTopology[] = [
   {
     operator: 'TJ',
+    lineCode: '1',
+    // OVERRIDE: poster diagram (transjakarta.co.id)
+    path: [
+      { station: 'H00093P', pos: '', cumM: 0 },
+      { station: 'H00132P', pos: '', cumM: 174 },
+      { station: 'H00275P', pos: '', cumM: 619 },
+      { station: 'H00068P', pos: '', cumM: 1478 },
+      { station: 'H00133P', pos: '', cumM: 2030 },
+      { station: 'H00281P', pos: '', cumM: 2479 },
+      { station: 'H00280P', pos: '', cumM: 2953 },
+      { station: 'H00278P', pos: '', cumM: 3561 },
+      { station: 'H00131P', pos: '', cumM: 5103 },
+      { station: 'H00268S', pos: '', cumM: 5988 },
+      { station: 'H00207P', pos: '', cumM: 6428 },
+      { station: 'H00022P', pos: '', cumM: 6970 },
+      { station: 'H00251P', pos: '', cumM: 7401 },
+      { station: 'H00047P', pos: '', cumM: 8385 },
+      { station: 'H00099P', pos: '', cumM: 9174 },
+      { station: 'H00010P', pos: '', cumM: 9914 },
+      { station: 'H00176P', pos: '', cumM: 10620 },
+      { station: 'H00067P', pos: '', cumM: 11225 },
+      { station: 'H00023P', pos: '', cumM: 11898 },
+      { station: 'H00127P', pos: '', cumM: 12895 },
+      { station: 'H00266P', pos: '', cumM: 13342 },
+      { station: 'H00014P', pos: '', cumM: 13823 }
+    ],
+    pathReverse: [
+      { station: 'H00014P', pos: '', cumM: 0 },
+      { station: 'H00265P', pos: '', cumM: 489 },
+      { station: 'H00127P', pos: '', cumM: 872 },
+      { station: 'H00023P', pos: '', cumM: 1869 },
+      { station: 'H00067P', pos: '', cumM: 2542 },
+      { station: 'H00176P', pos: '', cumM: 3147 },
+      { station: 'H00010P', pos: '', cumM: 3854 },
+      { station: 'H00099P', pos: '', cumM: 4593 },
+      { station: 'H00047P', pos: '', cumM: 5382 },
+      { station: 'H00251P', pos: '', cumM: 6367 },
+      { station: 'H00022P', pos: '', cumM: 6797 },
+      { station: 'H00207P', pos: '', cumM: 7339 },
+      { station: 'H00267S', pos: '', cumM: 7937 },
+      { station: 'H00131P', pos: '', cumM: 8663 },
+      { station: 'H00278P', pos: '', cumM: 10205 },
+      { station: 'H00280P', pos: '', cumM: 10813 },
+      { station: 'H00281P', pos: '', cumM: 11287 },
+      { station: 'H00133P', pos: '', cumM: 11736 },
+      { station: 'H00068P', pos: '', cumM: 12287 },
+      { station: 'H00093P', pos: '', cumM: 13397 }
+    ]
+  },
+  {
+    operator: 'TJ',
     lineCode: '2',
     // OVERRIDE: poster diagram (transjakarta.co.id)
     path: [

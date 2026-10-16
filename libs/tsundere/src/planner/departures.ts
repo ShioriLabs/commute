@@ -28,7 +28,7 @@ import type { RouteLeg } from '../router'
 import type { WalkingPreference } from './criteria'
 import { GATED_TRANSFER_WALK_M, PAID_ZONE_TRANSFER_WALK_M } from './plan'
 import { DAY_S } from './service-hours'
-import { nextTrip, type IndexedPattern, type Trip, type TripIndex } from './trips'
+import { nextTrip, tripsFrom, type IndexedPattern, type Trip, type TripIndex } from './trips'
 
 /**
  * Walking pace for the gap between two legs, in metres per second.
@@ -120,6 +120,17 @@ export interface LegTiming {
   stopsS: number[]
   /** The trip boarded, for tracing back to the feed. Never parsed here. */
   tripId: string
+  /**
+   * The shortest change this rider can make into this leg: seconds from
+   * alighting the previous timed ride to the earliest moment they can board
+   * here, walks and in-station allowances included, at their own pace. Absent
+   * on the first ride, which has no change before it.
+   *
+   * Published so a client choosing a later train on an earlier leg can tell
+   * which of `upcoming` it still makes, by the engine's own rule rather than a
+   * copy of it.
+   */
+  changeBeforeS?: number
   /** Where that vehicle is signed for, when the feed says. See Trip.headsign. */
   headsign?: string
   /**
@@ -133,6 +144,26 @@ export interface LegTiming {
    * Present only when true.
    */
   lastOfDay?: true
+  /**
+   * The trains a rider standing on this leg's platform can take, soonest
+   * first: `[0]` is the one caught, the rest leave after it. Present only when
+   * `upcomingPerLeg` asks for it.
+   *
+   * Anchored on the same clock the leg boarded on — after the walk and the
+   * change from the leg before — so every entry is a train this rider can
+   * actually make, and none of them moves the legs that follow.
+   */
+  upcoming?: LegDeparture[]
+}
+
+/** One train that serves a leg's whole run, boarding to alighting. */
+export interface LegDeparture {
+  departureS: number
+  arrivalS: number
+  tripId: string
+  /** The line the trip runs on, which on a shared trunk may not be the leg's. */
+  lineCode: string
+  headsign?: string
 }
 
 export interface ResolveDeparturesOptions {
@@ -159,6 +190,12 @@ export interface ResolveDeparturesOptions {
    * Line codes only, like every other line set the engine takes.
    */
   gatedLines?: ReadonlySet<string>
+  /**
+   * How many trains to list per timed leg in `LegTiming.upcoming`, the caught
+   * one included. Absent or below two lists nothing, so the field only appears
+   * for a caller that asked.
+   */
+  upcomingPerLeg?: number
 }
 
 /*
@@ -221,6 +258,67 @@ function candidatePatterns(
 const alightTimeOf = (trip: Trip, index: number) =>
   trip.arrivalsS?.[index] ?? trip.departuresS[index]!
 
+/*
+ * Riding `trip` over a leg that boards at `boardIndex` on its pattern.
+ *
+ * The one place a trip becomes a departure, so the train caught and the list
+ * beside it can never disagree about when either leaves or arrives.
+ */
+const departureOn = (
+  trip: Trip,
+  lineCode: string,
+  boardIndex: number,
+  stopCount: number
+): LegDeparture => ({
+  departureS: trip.departuresS[boardIndex]!,
+  arrivalS: alightTimeOf(trip, boardIndex + stopCount - 1),
+  tripId: trip.id,
+  lineCode,
+  ...(trip.headsign === undefined ? {} : { headsign: trip.headsign })
+})
+
+/*
+ * The first `limit` trains that serve the whole leg from `afterS`, across every
+ * pattern a rider on it could board, soonest first.
+ *
+ * Up to `limit` from each pattern before merging, because the soonest overall
+ * can all come from one of them. Deduplicated by trip: a full run and a
+ * short-turn of one line can both resolve to the same vehicle, and that is one
+ * train on the platform, not two.
+ */
+function upcomingDepartures(
+  trips: TripIndex,
+  leg: Extract<RouteLeg, { type: 'RIDE' }>,
+  afterS: number,
+  dayMask: number,
+  gatedLines: ReadonlySet<string> | undefined,
+  limit: number
+): LegDeparture[] {
+  const found: LegDeparture[] = []
+  for (const pattern of candidatePatterns(trips, leg, gatedLines)) {
+    const board = boardingIndexFor(pattern, leg.stationIds)
+    if (board < 0) continue
+    let taken = 0
+    for (const trip of tripsFrom(pattern, board, afterS, dayMask)) {
+      found.push(departureOn(trip, pattern.lineCode, board, leg.stationIds.length))
+      if (++taken >= limit) break
+    }
+  }
+  /*
+   * Stable, so on a tie the earlier-listed pattern wins exactly as it does in
+   * the boarding scan, which keeps `[0]` the train resolveDepartures caught.
+   */
+  found.sort((a, b) => a.departureS - b.departureS)
+  const seen = new Set<string>()
+  return found
+    .filter((departure) => {
+      if (seen.has(departure.tripId)) return false
+      seen.add(departure.tripId)
+      return true
+    })
+    .slice(0, limit)
+}
+
 /**
  * Put clock times on a journey's legs, as far as the timetable honestly reaches.
  *
@@ -236,7 +334,7 @@ const alightTimeOf = (trip: Trip, index: number) =>
 export function resolveDepartures(
   legs: readonly RouteLeg[],
   trips: TripIndex,
-  { departureS, dayMask, walking = 'AVERAGE', gatedLines }: ResolveDeparturesOptions
+  { departureS, dayMask, walking = 'AVERAGE', gatedLines, upcomingPerLeg = 1 }: ResolveDeparturesOptions
 ): (LegTiming | null)[] {
   const timings: (LegTiming | null)[] = []
   let clockS: number | null = departureS
@@ -248,6 +346,8 @@ export function resolveDepartures(
    */
   let rodePrevious = false
   let previousLine: string | null = null
+  // When the last timed ride arrived, for publishing the change into the next.
+  let lastArrivalS: number | null = null
 
   for (const leg of legs) {
     if (leg.type === 'TRANSFER') {
@@ -286,21 +386,21 @@ export function resolveDepartures(
      */
     if (rodePrevious) clockS += changeSecondsAt(paceMs, crossesGate)
 
-    let best: { trip: Trip, lineCode: string, boardIndex: number, boardAt: number, alightAt: number } | null = null
+    let best: { trip: Trip, boardIndex: number, departure: LegDeparture } | null = null
     for (const pattern of candidatePatterns(trips, leg, gatedLines)) {
       const board = boardingIndexFor(pattern, leg.stationIds)
       if (board < 0) continue
       const trip = nextTrip(pattern, board, clockS, dayMask)
       if (!trip) continue
-      const boardAt = trip.departuresS[board]!
+      const departure = departureOn(trip, pattern.lineCode, board, leg.stationIds.length)
       /*
        * Earliest departure wins across patterns. A stop is often served by a
        * full run and a short-turn of the same line, and the rider takes
        * whichever comes first that goes far enough — `boardingIndexFor` has
        * already established both go far enough.
        */
-      if (best === null || boardAt < best.boardAt) {
-        best = { trip, lineCode: pattern.lineCode, boardIndex: board, boardAt, alightAt: alightTimeOf(trip, board + leg.stationIds.length - 1) }
+      if (best === null || departure.departureS < best.departure.departureS) {
+        best = { trip, boardIndex: board, departure }
       }
     }
 
@@ -311,18 +411,19 @@ export function resolveDepartures(
       continue
     }
 
-    const { trip, boardIndex, boardAt } = best
+    const { trip, boardIndex, departure } = best
     timings.push({
-      departureS: boardAt,
-      arrivalS: best.alightAt,
-      stopsS: leg.stationIds.map((_, i) => (i === 0 ? boardAt : alightTimeOf(trip, boardIndex + i))),
-      tripId: best.trip.id,
-      lineCode: best.lineCode,
-      ...(best.trip.headsign === undefined ? {} : { headsign: best.trip.headsign }),
-      ...(hasLaterTrip(trips, leg, best.boardAt, dayMask, gatedLines) ? {} : { lastOfDay: true as const })
+      ...departure,
+      ...(lastArrivalS === null ? {} : { changeBeforeS: clockS - lastArrivalS }),
+      stopsS: leg.stationIds.map((_, i) => (i === 0 ? departure.departureS : alightTimeOf(trip, boardIndex + i))),
+      ...(hasLaterTrip(trips, leg, departure.departureS, dayMask, gatedLines) ? {} : { lastOfDay: true as const }),
+      ...(upcomingPerLeg > 1
+        ? { upcoming: upcomingDepartures(trips, leg, clockS, dayMask, gatedLines, upcomingPerLeg) }
+        : {})
     })
-    previousLine = best.lineCode
-    clockS = best.alightAt
+    previousLine = departure.lineCode
+    clockS = departure.arrivalS
+    lastArrivalS = departure.arrivalS
     rodePrevious = true
   }
 

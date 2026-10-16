@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FareJourney, FareResult, FareResultRideLeg, FareResultTransferLeg, Line, TripResult } from '@commute/schemas'
 import { JOURNEY_LABELS, JOURNEY_LABEL_DESCRIPTIONS } from './journey-labels'
-import { boardingLineKeys, ENDPOINT_ROUNDEL_MAX, endpointRoundelLines, journeysOf, sortJourneyLabels, walkDistanceOf } from './journeys'
+import { boardingLineKeys, ENDPOINT_ROUNDEL_MAX, endpointRoundelLines, journeysOf, liveDeparturesOf, sortJourneyLabels, walkDistanceOf } from './journeys'
 
 const legacy: FareResult = {
   from: { id: 'KCI-SUD', name: 'Sudirman' },
@@ -114,6 +114,13 @@ describe('walkDistanceOf', () => {
     expect(walkDistanceOf(journey({ walkDistanceM: 460 }))).toBe(460)
     // A genuine zero is a claim the response actually made.
     expect(walkDistanceOf(journey({ walkDistanceM: 0 }))).toBe(0)
+  })
+
+  it('reads the walk legs, so the plate matches the rows under it', () => {
+    // The API sends one merged walk rounded up to 700 m, while walkDistanceM
+    // stays the raw 650 that routes are compared on.
+    const walk: FareResultTransferLeg = { type: 'TRANSFER', from: { id: 'A', name: 'A' }, to: { id: 'B', name: 'B' }, distanceM: 700 }
+    expect(walkDistanceOf(journey({ walkDistanceM: 650, legs: [walk] }))).toBe(700)
   })
 
   it('reports null for a promoted primary, which never knew', () => {
@@ -299,5 +306,58 @@ describe('endpointRoundelLines cap', () => {
   it('does not apply the cap to a ridden line', () => {
     const ridden = { line: line('C'), operator: 'KCI' }
     expect(endpointRoundelLines(station('A', 'B', 'C'), ridden, 2)).toEqual([ridden])
+  })
+})
+
+describe('liveDeparturesOf', () => {
+  const at = (hhmm: string) => `2026-10-05T${hhmm}:00+07:00`
+  const timed = (departureAt?: string, extra: Partial<FareJourney> = {}): FareJourney => ({
+    legs: [{
+      type: 'RIDE',
+      line: 'KCI:C',
+      operator: 'KCI',
+      from: { id: 'KCI-CUK', name: 'Cakung' },
+      to: { id: 'KCI-SUD', name: 'Sudirman' },
+      stationCount: 2,
+      stops: [],
+      headsign: null,
+      distanceM: 20000,
+      ...(departureAt ? { departureAt } : {})
+    }],
+    segments: [],
+    totalFare: 3000,
+    totalDistanceM: 20000,
+    transferCount: 0,
+    labels: [],
+    boardings: 1,
+    walkDistanceM: 0,
+    ...extra
+  })
+  const now = Date.parse(at('08:00'))
+
+  it('leads with the card\'s own train, then the ones riding along', () => {
+    const journey = timed(at('08:11'), {
+      arrivalAt: at('08:56'),
+      moreDepartures: [{ departureAt: at('08:22'), arrivalAt: at('09:07') }, { departureAt: at('08:33') }]
+    })
+    expect(liveDeparturesOf(journey, now)).toEqual([
+      { departureAt: at('08:11'), arrivalAt: at('08:56') },
+      { departureAt: at('08:22'), arrivalAt: at('09:07') },
+      { departureAt: at('08:33') }
+    ])
+  })
+
+  // A body held for a whole slot: the card's own train has gone, the next has not.
+  it('drops the trains that have already left', () => {
+    const journey = timed(at('07:55'), { moreDepartures: [{ departureAt: at('08:06') }] })
+    expect(liveDeparturesOf(journey, now).map(d => d.departureAt)).toEqual([at('08:06')])
+  })
+
+  it('is empty for an untimed route', () => {
+    expect(liveDeparturesOf(timed(), now)).toEqual([])
+  })
+
+  it('reads a body cached before more departures existed', () => {
+    expect(liveDeparturesOf(timed(at('08:11')), now)).toEqual([{ departureAt: at('08:11') }])
   })
 })

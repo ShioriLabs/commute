@@ -61,7 +61,7 @@ export type { Trip, TripPattern } from './planner/trips'
  * private — so callers reach it through `Tsundere.timeJourney`. Only the shapes
  * that cross the boundary are here.
  */
-export { clockOf, type LegTiming, type ResolveDeparturesOptions } from './planner/departures'
+export { clockOf, type LegDeparture, type LegTiming, type ResolveDeparturesOptions } from './planner/departures'
 
 /*
  * Graph inputs. Structural by design — apps/api passes Kysely rows straight in,

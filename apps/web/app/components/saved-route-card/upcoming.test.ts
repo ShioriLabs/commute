@@ -35,7 +35,7 @@ describe('upcomingJourneys', () => {
       journey('KCI:B', '2026-10-01T07:55:00+07:00'),
       journey('KCI:C', '2026-10-01T08:05:00+07:00')
     ], now, 3)
-    expect(rows.map(row => row.legs[0]!.type === 'RIDE' && row.legs[0]!.departureAt)).toEqual([
+    expect(rows.map(row => row.departures[0]!.departureAt)).toEqual([
       '2026-10-01T08:05:00+07:00',
       '2026-10-01T08:20:00+07:00'
     ])
@@ -47,7 +47,24 @@ describe('upcomingJourneys', () => {
       journey('KCI:B', '2026-10-01T08:20:00+07:00'),
       journey('TJ:9')
     ], now, 3)
-    expect(rows.map(row => row.legs[0]!.type === 'RIDE' && row.legs[0]!.line)).toEqual(['KCI:B', 'TJ:1', 'TJ:9'])
+    expect(rows.map(row => row.journey.legs[0]!.type === 'RIDE' && row.journey.legs[0]!.line)).toEqual(['KCI:B', 'TJ:1', 'TJ:9'])
+  })
+
+  /*
+   * A body held for a whole slot: the route's own train left at 07:55, but the
+   * 08:06 riding along with it is still to come, so the route stays and leads
+   * with that one.
+   */
+  it('keeps a route whose own train has left while a later one has not', () => {
+    const stale = { ...journey('KCI:B', '2026-10-01T07:55:00+07:00'), moreDepartures: [{ departureAt: '2026-10-01T08:06:00+07:00' }, { departureAt: '2026-10-01T08:17:00+07:00' }] }
+    const [row] = upcomingJourneys([stale, journey('KCI:C', '2026-10-01T08:10:00+07:00')], now, 3)
+    expect(row!.journey).toBe(stale)
+    expect(row!.departures.map(d => d.departureAt)).toEqual(['2026-10-01T08:06:00+07:00', '2026-10-01T08:17:00+07:00'])
+  })
+
+  it('gives an untimed row no departures', () => {
+    const [row] = upcomingJourneys([journey('TJ:1')], now, 3)
+    expect(row!.departures).toEqual([])
   })
 
   it('caps the list', () => {
@@ -69,7 +86,7 @@ describe('ended routes', () => {
 
   it('keeps live rows beside an ended route', () => {
     const live = journey('KCI:B', '2026-10-01T08:20:00+07:00')
-    expect(upcomingJourneys([ended('2026-10-02T04:28:00+07:00'), live], now, 3)).toEqual([live])
+    expect(upcomingJourneys([ended('2026-10-02T04:28:00+07:00'), live], now, 3).map(row => row.journey)).toEqual([live])
   })
 
   it('reports the earliest restart', () => {

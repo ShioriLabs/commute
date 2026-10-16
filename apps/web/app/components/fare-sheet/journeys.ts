@@ -1,4 +1,5 @@
-import type { FareJourney, FareJourneyLabel, FareResult, Line, TripResult } from '@commute/schemas'
+import type { FareJourney, FareJourneyDeparture, FareJourneyLabel, FareResult, Line, TripResult } from '@commute/schemas'
+import { boardsAtOf } from 'utils/journey-key'
 
 // Bridges a fare answer to the list of alternatives it may or may not carry.
 // Kept in a `.ts` so it is testable — vitest collects `.test.ts` only, so
@@ -38,13 +39,43 @@ export function journeysOf(result: FareResult | TripResult): FareJourney[] {
 }
 
 /**
- * A journey's walking distance, or null when the response could not say.
+ * A journey's walking distance as the rider reads it, or null when the response
+ * could not say.
+ *
+ * The sum of the walk legs rather than `walkDistanceM`: the API merges
+ * back-to-back walks into one rounded-up leg, while `walkDistanceM` stays raw
+ * because routes are compared on it. Summing the legs is what keeps the plate
+ * reading the same figure as the rows under it. A journey with no legs to sum
+ * (a test fixture, an old cached body) keeps the total it was sent.
  *
  * Only ever null for a promoted legacy primary. Callers must render nothing
  * rather than a zero, which would claim a walk-free journey.
  */
 export function walkDistanceOf(journey: FareJourney): number | null {
-  return journey.walkDistanceM < 0 ? null : journey.walkDistanceM
+  if (journey.walkDistanceM < 0) return null
+  if (journey.legs.length === 0) return journey.walkDistanceM
+  return journey.legs.reduce((sum, leg) => sum + (leg.type === 'TRANSFER' ? leg.distanceM : 0), 0)
+}
+
+/**
+ * A route's boardings that have not left yet, soonest first: the card's own
+ * train, then the later ones that ride along with it in `moreDepartures`.
+ *
+ * Filtered against the clock rather than trusted as sent: home holds a body
+ * for a whole departure slot, so the card's own train can be gone while the
+ * next ones on the same route are still catchable. Empty for an untimed route,
+ * which has no clock to show.
+ */
+export function liveDeparturesOf(journey: FareJourney, now: number): FareJourneyDeparture[] {
+  const boardsAt = boardsAtOf(journey)
+  if (boardsAt === null) return []
+  const own: FareJourneyDeparture = {
+    departureAt: boardsAt,
+    ...(journey.arrivalAt === undefined ? {} : { arrivalAt: journey.arrivalAt })
+  }
+  // Optional-chained against a body cached before the field existed.
+  return [own, ...(journey.moreDepartures ?? [])]
+    .filter(departure => Date.parse(departure.departureAt) >= now)
 }
 
 /*

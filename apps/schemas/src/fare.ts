@@ -40,6 +40,36 @@ export const LineRefSchema = v.pipe(
   v.metadata({ ref: 'FareLineRef' })
 )
 
+export const LegDepartureSchema = v.pipe(
+  v.object({
+    departureAt: v.pipe(v.string(), v.description('Jam berangkat dari stasiun naik.')),
+    arrivalAt: v.pipe(v.string(), v.description('Jam tiba di stasiun turun.')),
+    tripId: v.pipe(v.string(), v.description('Penanda perjalanan kendaraan ini. Jangan diurai, cuma buat membandingkan.')),
+    // May differ from the leg's own line on a trunk two lines share.
+    line: LineKeySchema,
+    headsign: v.pipe(
+      v.optional(v.string()),
+      v.description('Stasiun akhir yang dituju kendaraan ini, kalau jadwalnya mencantumkan.')
+    )
+  }),
+  v.title('FareLegDeparture'),
+  v.description('Satu kendaraan yang melayani seluruh tahap, dari stasiun naik sampai stasiun turun, sesuai jadwal resmi.'),
+  v.metadata({ ref: 'FareLegDeparture' })
+)
+
+export const JourneyDepartureSchema = v.pipe(
+  v.object({
+    departureAt: v.pipe(v.string(), v.description('Jam berangkat kendaraan pertama.')),
+    arrivalAt: v.pipe(
+      v.optional(v.string()),
+      v.description('Jam sampai tujuan. Cuma ada kalau semua tahap naik kendaraannya punya jadwal.')
+    )
+  }),
+  v.title('FareJourneyDeparture'),
+  v.description('Keberangkatan lain dari rute yang sama.'),
+  v.metadata({ ref: 'FareJourneyDeparture' })
+)
+
 export const RideLegSchema = v.pipe(
   v.object({
     type: v.literal('RIDE'),
@@ -102,6 +132,26 @@ export const RideLegSchema = v.pipe(
       v.description('Penanda perjalanan kendaraan yang dinaiki. Jangan diurai, cuma buat membandingkan. Cuma ada di tahap yang jadwalnya kami punya.')
     ),
     /*
+     * The engine's shortest change into this leg from the timed ride before it,
+     * walks and in-station allowances included, at the rider's walking pace.
+     * A client offering a later train on an earlier leg uses it to tell which
+     * of `upcomingDepartures` that train still makes, instead of guessing.
+     */
+    minChangeS: v.pipe(
+      v.optional(v.number()),
+      v.description('Waktu pindah paling singkat dalam detik, dari turun di tahap naik sebelumnya sampai bisa naik di tahap ini, termasuk jalan kaki, sesuai kecepatan jalan penumpang. Tidak ada di tahap naik pertama atau tahap yang tidak punya jadwal.')
+    ),
+    /*
+     * The trains a rider on this platform can take, the caught one first. Per-
+     * request like the stamps above, and anchored on the same clock: every
+     * entry is one this rider can make after the leg before, so picking a later
+     * one never makes an earlier leg wrong. Absent where the leg is untimed.
+     */
+    upcomingDepartures: v.pipe(
+      v.optional(v.array(LegDepartureSchema)),
+      v.description('Kendaraan yang bisa dinaiki di tahap ini, urut dari yang paling cepat. Yang pertama selalu kendaraan yang dipakai di `departureAt`. Cuma ada di tahap yang jadwalnya kami punya.')
+    ),
+    /*
      * Optional for the same reason as the two above, but with a sharper edge:
      * platform assignments are reassigned operationally and change with
      * engineering work, so PLATFORM_CODES carries only field-verified entries
@@ -127,7 +177,7 @@ export const TransferLegSchema = v.pipe(
     type: v.literal('TRANSFER'),
     from: FareStationSchema,
     to: FareStationSchema,
-    distanceM: v.pipe(v.number(), v.description('Jarak jalan kaki dalam meter.')),
+    distanceM: v.pipe(v.number(), v.description('Jarak jalan kaki dalam meter. Jalan kaki yang berurutan digabung jadi satu tahap, jaraknya dibulatkan ke atas: kelipatan 50 m kalau di bawah 500 m, selebihnya kelipatan 100 m.')),
     fare: v.pipe(
       v.optional(v.number()),
       v.description('Cuma ada di koridor berbayar. Transfer jalan kaki biasa gratis, jadi tidak punya ini.')
@@ -201,7 +251,7 @@ export const FareJourneySchema = v.pipe(
       v.description('Boleh kosong, dan itu wajar: rute yang tidak menang sendirian di kriteria mana pun memang tidak punya kelebihan khusus buat disebut.')
     ),
     boardings: v.pipe(v.number(), v.description('Berapa kali naik kendaraan. Beda tipis dari `transferCount`: ganti kereta di peron yang sama tetap dihitung naik, tapi tidak dihitung transit.')),
-    walkDistanceM: v.pipe(v.number(), v.description('Total jarak jalan kaki di pilihan rute ini dalam meter.')),
+    walkDistanceM: v.pipe(v.number(), v.description('Total jarak jalan kaki di pilihan rute ini dalam meter, apa adanya tanpa pembulatan, buat membandingkan rute. Buat ditampilkan, jumlahkan `distanceM` tahap jalan kakinya supaya sama dengan yang tertulis di tiap tahap.')),
     /*
      * All-or-nothing: present only when EVERY ride leg is timed. A total that
      * skipped an untimed leg would read as more certain than the legs it came
@@ -223,6 +273,15 @@ export const FareJourneySchema = v.pipe(
       v.optional(v.string()),
       v.description('Jam berangkat pertama rute ini di hari layanan berikutnya. Cuma ada kalau rutenya punya jadwal tapi layanan hari ini sudah selesai.'),
       v.metadata({ examples: ['2026-09-08T04:05:00+07:00'] })
+    ),
+    /*
+     * One card per route, so the route's later boardings ride along here
+     * instead of as cards of their own. Never one that leaves earlier and
+     * arrives no sooner than another: that train is only a longer wait.
+     */
+    moreDepartures: v.pipe(
+      v.optional(v.array(JourneyDepartureSchema)),
+      v.description('Keberangkatan lain rute ini dalam satu jam ke depan, urut dari yang paling cepat, tidak termasuk yang ditampilkan di tahap-tahapnya. Cuma ada di rute yang jadwalnya kami punya.')
     )
   }),
   v.title('FareJourney'),
@@ -274,6 +333,8 @@ export const TripResultSchema = v.pipe(
 export type FareStation = v.InferOutput<typeof FareStationSchema>
 export type FareLineRef = v.InferOutput<typeof LineRefSchema>
 export type FareRideLeg = v.InferOutput<typeof RideLegSchema>
+export type FareLegDeparture = v.InferOutput<typeof LegDepartureSchema>
+export type FareJourneyDeparture = v.InferOutput<typeof JourneyDepartureSchema>
 export type FareTransferLeg = v.InferOutput<typeof TransferLegSchema>
 export type FareLeg = v.InferOutput<typeof FareLegSchema>
 export type FareSegment = v.InferOutput<typeof FareSegmentSchema>

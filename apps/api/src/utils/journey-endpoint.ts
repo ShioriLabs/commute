@@ -8,6 +8,7 @@ import { departureSlot, serviceDay } from 'utils/fare'
 import { stationNamer, type StationNamer, type StationNamerOptions } from 'utils/fare-journey'
 import { Internal, NotFound, Ok } from 'utils/response'
 import { ServerTiming } from 'utils/server-timing'
+import { stripWalkHops } from 'utils/merge-walks'
 
 /*
  * The request pipeline both journey endpoints run.
@@ -196,7 +197,7 @@ export async function handleJourneyRequest<T>(
       )
     }
     // Timed on the way out, never on the way in — see `retime`.
-    return c.json(Ok(retime ? await retime(cached, c) : cached), 200)
+    return c.json(Ok(stripWalkHops(retime ? await retime(cached, c) : cached)), 200)
   }
 
   const stationRepository = new StationRepository(c.env.DB)
@@ -261,7 +262,7 @@ export async function handleJourneyRequest<T>(
     c.executionCtx.waitUntil(kvRepository.set(kvKey, result))
 
     c.header('Server-Timing', timing.header())
-    return c.json(Ok(retime ? await retime(result, c) : result), 200)
+    return c.json(Ok(stripWalkHops(retime ? await retime(result, c) : result)), 200)
   } catch (error) {
     console.error(error)
     return c.json(Internal('DATABASE_ERROR', 'Can\'t connect to database, please try again later.'), 500)

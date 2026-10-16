@@ -1,7 +1,35 @@
+import clsx from 'clsx'
 import { PersonSimpleWalkIcon } from '@phosphor-icons/react'
 import LineRoundel from '~/components/line-roundel'
 import { interlinedTrackFill, RAIL_WIDTH_PX, ROUTE_BAR_MIN_SEGMENT_PX } from '~/components/transit-geometry'
 import type { RouteBarSegment } from './route-bar-segments'
+
+/*
+ * A walk between two rides, as a pill with a disc inset the way a roundel sits
+ * on its track — so it reads as the same kind of object as the services either
+ * side of it. Exported so home's saved-route rows sign a walk exactly as this
+ * bar does.
+ *
+ * `distanceM` null means the walk is unmeasured; the pill then closes up around
+ * the disc rather than claiming "0 m".
+ */
+export function WalkChip({ distanceM }: { distanceM: number | null }) {
+  return (
+    <span className={clsx('shrink-0 h-6 rounded-full bg-slate-400 flex items-center gap-1 pl-0.5', distanceM !== null ? 'pr-2' : 'pr-0.5')}>
+      <span className="shrink-0 w-5 h-5 rounded-full bg-white flex items-center justify-center text-slate-500">
+        <PersonSimpleWalkIcon weight="bold" className="w-3 h-3" />
+      </span>
+      {distanceM !== null
+        ? (
+            <span className="figure text-[10px] font-bold leading-none text-white">
+              {distanceM}
+              {' m'}
+            </span>
+          )
+        : null}
+    </span>
+  )
+}
 
 /*
  * The journey at a glance, as a diagram rather than a bar.
@@ -35,31 +63,7 @@ export default function RouteBar({ segments }: { segments: RouteBarSegment[] }) 
          * is under 3% of the journey and would have no room to say so.
          */
         if (segment.kind === 'WALK') {
-          return (
-            <span
-              key={index}
-              className={`shrink-0 h-6 rounded-full bg-slate-400 flex items-center gap-1 pl-0.5 ${
-                // Unmeasured: the pill closes up around the disc rather than
-                // leaving a blank tail where a figure would have been.
-                segment.distanceM !== null ? 'pr-2' : 'pr-0.5'
-              }`}
-            >
-              {/* A white disc inset in the pill, the way a roundel sits on a
-                  track — so the walk reads as the same kind of object as the
-                  services either side of it, not as a caption between them. */}
-              <span className="shrink-0 w-5 h-5 rounded-full bg-white flex items-center justify-center text-slate-500">
-                <PersonSimpleWalkIcon weight="bold" className="w-3 h-3" />
-              </span>
-              {segment.distanceM !== null
-                ? (
-                    <span className="figure text-[10px] font-bold leading-none text-white">
-                      {segment.distanceM}
-                      {' m'}
-                    </span>
-                  )
-                : null}
-            </span>
-          )
+          return <WalkChip key={index} distanceM={segment.distanceM} />
         }
 
         const color = segment.colors[0]!

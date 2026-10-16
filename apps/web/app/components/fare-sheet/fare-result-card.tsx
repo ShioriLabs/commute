@@ -1,16 +1,18 @@
 import type { FareJourney, FareResult, FareResultLeg, FareResultRideLeg, FareResultTransferLeg, TripResult } from '@commute/schemas'
 import { OPERATORS, type Operator } from '@commute/constants'
-import { type CSSProperties, useEffect, useMemo, useState } from 'react'
+import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from 'react'
 import { CaretDownIcon, CaretLeftIcon, CaretRightIcon, PersonSimpleWalkIcon, TicketIcon } from '@phosphor-icons/react'
-import { getForegroundColor } from 'utils/colors'
 import { formatClock, formatDuration, formatKm, formatRupiah } from 'utils/format'
 import { formatPlatformCode, joinLabels } from 'utils/labels'
 import LineRoundel from '~/components/line-roundel'
 import TransferIcon from '~/components/transfer-icon'
 import { FARE_GUTTER_CLASS, FARE_RAIL_CENTER_PX, interlinedTrackFill, LINE_COLOR_FALLBACK, RAIL_WIDTH_PX } from '~/components/transit-geometry'
+import { useClock } from '~/hooks/clock'
 import { codeOfLineKey, useLines } from '~/hooks/use-lines'
+import DeparturePicker, { ConnectionNote } from './departure-picker'
 import { JOURNEY_LABELS } from './journey-labels'
 import { journeysOf, sortJourneyLabels, walkDistanceOf } from './journeys'
+import { changeAt, leaveInLabel, resolveTimedLegs, retimeJourney, type TimedLeg } from './leg-departures'
 import { useJourneyPager } from './journey-pager'
 import RouteBar from './route-bar'
 import { routeBarSegments } from './route-bar-segments'
@@ -53,7 +55,30 @@ function useLegLines() {
  * `cap` stops the bar half way, so the first and last rails of a run terminate
  * at their node instead of bleeding past it.
  */
-function Rail({ style, cap }: { style: CSSProperties, cap?: 'START' | 'END' }) {
+function Rail({ style, cap, dotted = false }: { style: CSSProperties, cap?: 'START' | 'END', dotted?: boolean }) {
+  /*
+   * A walk is drawn as dots in its own colour rather than a bar: a bar says
+   * "a line runs here", and none does. The dot colour is the bar's, so a caller
+   * only says which colour and whether it is a walk. Dots rather than a dashed
+   * border so the pitch is the same on every segment and the half-rails either
+   * side of a node line up with the walk's own.
+   */
+  const { backgroundColor, ...rest } = style
+  const fill = dotted
+    ? {
+        backgroundImage: `radial-gradient(circle at 50% 50%, ${backgroundColor} 2px, transparent 2.5px)`,
+        backgroundSize: `100% ${WALK_DOT_PITCH_PX}px`,
+        /*
+         * `space`, not `repeat`: only whole dots are placed, first and last
+         * flush with the segment's ends. A plain repeat cut the last dot in
+         * half wherever a segment's height was not a multiple of the pitch,
+         * and started each segment on its own phase, so two dots crowded
+         * together at every join between a walk and the half-rail by a node.
+         * Flush ends put a joined pair exactly one pitch apart.
+         */
+        backgroundRepeat: 'no-repeat space'
+      }
+    : { backgroundColor }
   return (
     <span
       className="absolute"
@@ -62,9 +87,30 @@ function Rail({ style, cap }: { style: CSSProperties, cap?: 'START' | 'END' }) {
         left: FARE_RAIL_CENTER_PX - RAIL_WIDTH_PX / 2,
         top: cap === 'START' ? '50%' : 0,
         bottom: cap === 'END' ? '50%' : 0,
-        ...style
+        ...fill,
+        ...rest
       }}
     />
+  )
+}
+
+const WALK_DOT_PITCH_PX = 9
+
+/*
+ * The walker, on its own walk's rail, over the dots.
+ *
+ * It sits on the line rather than beside the text because the line is what it
+ * describes: this stretch is on foot. A ground-coloured halo lets it interrupt
+ * the dots the way a node interrupts a rail.
+ */
+function WalkMark({ color }: { color: string }) {
+  return (
+    <span
+      className="absolute z-10 rounded-full bg-white p-0.5"
+      style={{ left: FARE_RAIL_CENTER_PX, top: '50%', transform: 'translate(-50%, -50%)', color }}
+    >
+      <PersonSimpleWalkIcon weight="bold" className="w-6 h-6" />
+    </span>
   )
 }
 
@@ -91,11 +137,26 @@ function EndpointStop({ name, cap }: { name: string, cap: 'START' | 'END' }) {
   return (
     <li className={`relative grid ${FARE_GUTTER_CLASS}`}>
       <div className="relative">
-        <Rail style={{ backgroundColor: 'var(--color-slate-300)' }} cap={cap} />
+        <Rail style={{ backgroundColor: 'var(--color-slate-400)' }} cap={cap} dotted />
         <Node color="var(--color-slate-400)" />
       </div>
       <b className="text-lg py-0.5">{name}</b>
     </li>
+  )
+}
+
+/*
+ * A stop's line beside the rail: its name (and whatever goes under it) on the
+ * left, its time down the right edge. Figures are tabular so the times line up
+ * down the ride, as the Android timeline sets them. No time renders nothing —
+ * see RideLeg for why absent is never a dash.
+ */
+function StopLine({ time, padding = 'py-0.5', children }: { time: string | null | undefined, padding?: string, children: ReactNode }) {
+  return (
+    <div className={`flex items-center justify-between gap-3 min-w-0 ${padding}`}>
+      <div className="flex flex-col min-w-0">{ children }</div>
+      {time ? <span className="figure shrink-0 text-sm font-medium text-slate-500 tabular-nums">{ formatClock(time) }</span> : null}
+    </div>
   )
 }
 
@@ -111,27 +172,23 @@ function EndpointStop({ name, cap }: { name: string, cap: 'START' | 'END' }) {
  */
 const walkRailColor = (leg: FareResultLeg | undefined): string | null => {
   if (leg?.type !== 'TRANSFER') return null
-  return leg.corridorLabel != null && leg.fare != null ? 'var(--color-rose-300)' : 'var(--color-slate-300)'
+  return leg.corridorLabel != null && leg.fare != null ? 'var(--color-rose-400)' : 'var(--color-slate-400)'
 }
 
-function RideLeg({ leg, isSameStationTransfer, walkBefore, walkAfter }: {
+function RideLeg({ leg, isSameStationTransfer, walkBefore, walkAfter, timed, changeGap, onPick }: {
   leg: FareResultRideLeg
   isSameStationTransfer: boolean
   walkBefore: string | null
   walkAfter: string | null
+  timed: TimedLeg | undefined
+  /** The change from the train before into this one, for an interchange with no walk leg. */
+  changeGap: { gapS: number, tight: boolean } | null
+  onPick: (tripId: string) => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const legLines = useLegLines()
   // Optional-chained against a stale API during deploy skew.
   const intermediate = leg.stops?.slice(1, -1) ?? []
-  /*
-   * Both ends or neither: the API sets them together, and half a range would
-   * read as a departure with an unknown arrival rather than as a leg we cannot
-   * time. `id-ID` renders 07.14, the dot form the departure board already uses.
-   */
-  const legTimes = leg.departureAt && leg.arrivalAt
-    ? `${formatClock(leg.departureAt)} - ${formatClock(leg.arrivalAt)}`
-    : null
   const summary = `${leg.stationCount - 1} stasiun • ${formatKm(leg.distanceM)}`
   const lines = legLines(leg)
   const isInterlined = lines.length > 1
@@ -156,47 +213,41 @@ function RideLeg({ leg, isSameStationTransfer, walkBefore, walkAfter }: {
               <div className="flex items-center gap-1.5 text-sm text-slate-500 py-1.5">
                 <TransferIcon mode={leg.operator === OPERATORS.TJ.code ? 'bus' : 'train'} className="w-3.5 h-3.5" />
                 <span>{leg.operator === OPERATORS.TJ.code ? 'Pindah bus' : 'Pindah kereta'}</span>
+                {changeGap ? <ConnectionNote gapS={changeGap.gapS} tight={changeGap.tight} /> : null}
               </div>
             </div>
           )
         : null}
       <div className={`relative grid ${FARE_GUTTER_CLASS}`}>
         <div className="relative">
-          {walkBefore ? <Rail style={{ backgroundColor: walkBefore }} cap="END" /> : null}
+          {walkBefore ? <Rail style={{ backgroundColor: walkBefore }} cap="END" dotted /> : null}
           <Rail style={railStyle} cap="START" />
           <Node color={legColor} />
         </div>
-        <div className="flex items-center gap-2 flex-wrap py-0.5">
+        <StopLine time={leg.departureAt}>
           <b className="text-lg">{leg.from.name}</b>
           {/*
             * Which peron to stand on, where it has been field-verified.
             *
-            * Beside the boarding station and nowhere else: a platform is where
+            * Under the boarding station and nowhere else: a platform is where
             * you get on, and the same figure against the alight node would be
             * read as where you get off. Absent for most legs by design — the
             * table is verified entries only, and a wrong peron sends a rider
             * to the wrong trackside — so there is no empty slot and no dash,
-            * the badge simply is not there. See PLATFORM_CODES.
+            * the label simply is not there. See PLATFORM_CODES.
             *
-            * Same pill as the timetable card's and the line card's, down to the
-            * line-tinted ground: a rider reads this figure off a platform sign
-            * either way, so it should not look like two different facts on two
-            * screens. formatPlatformCode is what tightens the stored "3/4" into
-            * the "3·4" those signs use.
+            * Plain text, as the Android timeline sets it. formatPlatformCode is
+            * what tightens the stored "3/4" into the "3·4" the signs use.
             */}
           {leg.platformCode
             ? (
-                <span
-                  className="shrink-0 text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap text-slate-900"
-                  style={{ backgroundColor: `${legColor}33` }}
-                  aria-label={`Berangkat dari peron ${leg.platformCode}`}
-                >
+                <span className="text-xs font-medium text-slate-500" aria-label={`Berangkat dari peron ${leg.platformCode}`}>
                   {'Peron '}
                   { formatPlatformCode(leg.platformCode) }
                 </span>
               )
             : null}
-        </div>
+        </StopLine>
       </div>
       <div className={`relative grid ${FARE_GUTTER_CLASS}`}>
         <div className="relative">
@@ -206,23 +257,21 @@ function RideLeg({ leg, isSameStationTransfer, walkBefore, walkAfter }: {
             runs, so a filled card around it drew a second box for the same
             fact — and set it competing with the journey plates above, which
             are the things actually being chosen between. */}
-        <div className="my-2 flex flex-col gap-1 items-start">
+        <div className="my-2 flex flex-col gap-1 items-start min-w-0 max-w-full">
           <div className="flex flex-wrap gap-1.5 items-center">
-            {lines.map(line => (leg.operator === OPERATORS.TJ.code
-              // TJ is spoken as "naik koridor 9", not by the line's full name —
-              // show the corridor roundel instead of a name pill.
-              ? (
-                  <LineRoundel key={line.code} size="SM" operator={leg.operator} code={line.code} color={line.color as `#${string}`} />
-                )
-              : (
-                  <span
-                    key={line.code}
-                    className={`text-sm font-semibold px-3 py-1 rounded-md w-fit ${getForegroundColor(line.color) === 'LIGHT' ? 'text-white' : 'text-slate-900'}`}
-                    style={{ backgroundColor: line.color }}
-                  >
-                    { line.name }
-                  </span>
-                )))}
+            {/* Each line as the Android timeline names it: its roundel, then its
+                name. The roundel carries the rail/corridor grammar (ringed or
+                filled) that a bare colour pill used to leave to the text. */}
+            {lines.map((line, lineIndex) => (
+              <span key={line.code} className="flex items-center gap-2">
+                <LineRoundel size="SM" operator={leg.operator} code={line.code} color={line.color as `#${string}`} />
+                <b className="text-base">{ line.name }</b>
+                {/* Missing this one means no leg tonight, not a later one. */}
+                {leg.lastService && lineIndex === 0
+                  ? <span className="text-xs font-bold text-amber-800 bg-amber-100 rounded-full px-2 py-0.5">Terakhir</span>
+                  : null}
+              </span>
+            ))}
           </div>
           {isInterlined
             ? <span className="text-sm font-medium text-slate-600">{leg.operator === OPERATORS.TJ.code ? 'Naik salah satu bus' : 'Naik salah satu kereta'}</span>
@@ -237,24 +286,14 @@ function RideLeg({ leg, isSameStationTransfer, walkBefore, walkAfter }: {
               )
             : null}
           {/*
-            * Only where the timetable actually covers this leg.
-            *
-            * Absent is the honest answer for TransJakarta, which has no
-            * timetable and never will, and for a rail leg whose trip reaches us
-            * without its intermediate stops. Rendering nothing is deliberate:
-            * a dash or a "—" would read as a missing value we could have
-            * fetched, where the truth is that no such time was ever published.
+            * The other trains this leg could be ridden on. Choosing one re-times
+            * the legs after it — see resolveTimedLegs. Present only where the
+            * timetable covers the leg: absent is the honest answer for
+            * TransJakarta, so nothing is drawn rather than a dash for a time
+            * no one ever published.
             */}
-          {legTimes
-            ? (
-                <span className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                  { legTimes }
-                  {/* Missing this one means no leg tonight, not a later one. */}
-                  {leg.lastService
-                    ? <span className="text-xs font-bold text-amber-800 bg-amber-100 rounded-full px-2 py-0.5">Terakhir</span>
-                    : null}
-                </span>
-              )
+          {timed
+            ? <DeparturePicker options={timed.options} color={legColor} onPick={onPick} />
             : null}
           {intermediate.length === 0
             ? <span className="text-sm text-slate-500">{ summary }</span>
@@ -263,7 +302,7 @@ function RideLeg({ leg, isSameStationTransfer, walkBefore, walkAfter }: {
                   type="button"
                   onClick={() => setExpanded(value => !value)}
                   aria-expanded={expanded}
-                  className="flex items-center gap-1 text-sm text-slate-500 cursor-pointer"
+                  className="flex items-center gap-1 text-sm font-bold text-slate-500 cursor-pointer"
                 >
                   { summary }
                   <CaretDownIcon weight="bold" className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
@@ -285,7 +324,7 @@ function RideLeg({ leg, isSameStationTransfer, walkBefore, walkAfter }: {
         ? (
             <div className={`grid transition-[grid-template-rows] duration-300 ${expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
               <ul className="overflow-hidden min-h-0">
-                {intermediate.map(stop => (
+                {intermediate.map((stop, stopIndex) => (
                   <li key={stop.id} className={`relative grid ${FARE_GUTTER_CLASS}`}>
                     <div className="relative">
                       <Rail style={railStyle} />
@@ -304,7 +343,11 @@ function RideLeg({ leg, isSameStationTransfer, walkBefore, walkAfter }: {
                         }}
                       />
                     </div>
-                    <span className="text-sm text-slate-600 py-1">{ stop.name }</span>
+                    {/* stopTimes is index-aligned with `stops`, and `intermediate`
+                        starts one in. Null is a stop with no recorded time. */}
+                    <StopLine time={leg.stopTimes?.[stopIndex + 1]} padding="py-1.5">
+                      <span className="text-sm font-semibold text-slate-900">{ stop.name }</span>
+                    </StopLine>
                   </li>
                 ))}
               </ul>
@@ -315,10 +358,14 @@ function RideLeg({ leg, isSameStationTransfer, walkBefore, walkAfter }: {
       <div className={`relative grid ${FARE_GUTTER_CLASS}`}>
         <div className="relative">
           <Rail style={railStyle} cap="END" />
-          {walkAfter ? <Rail style={{ backgroundColor: walkAfter }} cap="START" /> : null}
+          {walkAfter ? <Rail style={{ backgroundColor: walkAfter }} cap="START" dotted /> : null}
           <Node color={legColor} />
         </div>
-        <b className="text-lg py-0.5">{leg.to.name}</b>
+        {/* The step the rider watches the window for: named, with its time. */}
+        <StopLine time={leg.arrivalAt}>
+          <b className="text-lg">{leg.to.name}</b>
+          <span className="w-fit rounded bg-brand px-1.5 py-px text-[11px] font-bold text-white" aria-label="Turun di sini">TURUN</span>
+        </StopLine>
       </div>
     </li>
   )
@@ -327,9 +374,15 @@ function RideLeg({ leg, isSameStationTransfer, walkBefore, walkAfter }: {
 // Itinerary timeline: ringed nodes at board/alight stations, line-colored
 // connectors carrying the service card, walks as full-width cards that break
 // the rail (TfL Go-style).
-export function JourneyTimeline({ legs }: { legs: FareResultLeg[] }) {
+export function JourneyTimeline({ legs, timed = [], onPick = () => {} }: {
+  legs: FareResultLeg[]
+  /** Timed ride legs with their options. Omit for a journey with no picker. */
+  timed?: TimedLeg[]
+  onPick?: (legIndex: number, tripId: string) => void
+}) {
   const first = legs[0]
   const last = legs.at(-1)
+  const changeGapAt = (index: number) => changeAt(legs, timed, index)
   return (
     <ol className="mt-6 flex flex-col">
       {first?.type === 'TRANSFER' ? <EndpointStop name={first.from.name} cap="START" /> : null}
@@ -349,6 +402,9 @@ export function JourneyTimeline({ legs }: { legs: FareResultLeg[] }) {
               isSameStationTransfer={isSameStationTransfer}
               walkBefore={walkRailColor(previous ?? undefined)}
               walkAfter={walkRailColor(legs[index + 1])}
+              timed={timed.find(entry => entry.index === index)}
+              changeGap={isSameStationTransfer ? changeGapAt(index) : null}
+              onPick={tripId => onPick(index, tripId)}
             />
           )
         }
@@ -359,9 +415,10 @@ export function JourneyTimeline({ legs }: { legs: FareResultLeg[] }) {
           return (
             <li key={index} className={`relative grid ${FARE_GUTTER_CLASS}`}>
               <div className="relative">
-                <Rail style={{ backgroundColor: 'var(--color-rose-300)' }} />
+                <Rail style={{ backgroundColor: 'var(--color-rose-400)' }} dotted />
+                <WalkMark color="var(--color-rose-500)" />
               </div>
-              <div className="flex items-start gap-1.5 text-sm py-3.5">
+              <div className="flex items-start gap-1.5 text-sm py-5">
                 <TicketIcon weight="fill" className="w-3.5 h-3.5 shrink-0 mt-0.5 text-rose-500" />
                 <div className="flex flex-col">
                   <span className="text-rose-700">
@@ -387,19 +444,21 @@ export function JourneyTimeline({ legs }: { legs: FareResultLeg[] }) {
          * margin sits outside the row, where its rail cannot reach, and left a
          * gap at both ends of every walk.
          */
+        const walkGap = changeGapAt(index)
         return (
           <li key={index} className={`relative grid ${FARE_GUTTER_CLASS}`}>
             <div className="relative">
-              <Rail style={{ backgroundColor: 'var(--color-slate-300)' }} />
+              <Rail style={{ backgroundColor: 'var(--color-slate-400)' }} dotted />
+              <WalkMark color="var(--color-slate-500)" />
             </div>
-            <div className="flex items-center gap-1.5 text-sm text-slate-500 py-3.5">
-              <PersonSimpleWalkIcon weight="bold" className="w-3.5 h-3.5" />
+            <div className="flex items-center gap-1.5 text-sm text-slate-500 py-5">
               <span>
                 Transit ke
                 {' '}
                 {leg.to.name}
                 {leg.distanceM > 0 && ` (Jalan kaki ±${leg.distanceM}m)`}
               </span>
+              {walkGap ? <ConnectionNote gapS={walkGap.gapS} tight={walkGap.tight} /> : null}
             </div>
           </li>
         )
@@ -408,6 +467,12 @@ export function JourneyTimeline({ legs }: { legs: FareResultLeg[] }) {
     </ol>
   )
 }
+
+/*
+ * Later trains named under a card's own: two, like the reference apps, which is
+ * enough to see whether missing this one costs five minutes or twenty.
+ */
+const NEXT_DEPARTURES_SHOWN = 2
 
 /*
  * The face of one option: the shape of the trip, what it costs, what it wins.
@@ -462,6 +527,8 @@ export function JourneyCardFace({ journey, onSelect }: {
    * why this is not the "never a duration" rule being broken.
    */
   const duration = boardsAt && journey.arrivalAt ? formatDuration(boardsAt, journey.arrivalAt) : null
+  // Optional-chained against a body cached before the field existed.
+  const nextDepartures = journey.moreDepartures?.slice(0, NEXT_DEPARTURES_SHOWN) ?? []
   /*
    * Which service this is, not just which line.
    *
@@ -500,12 +567,11 @@ export function JourneyCardFace({ journey, onSelect }: {
       {/*
         * Time leads, and the fare steps back to the meta row.
         *
-        * The order is set by what actually varies. Where a list is one route at
-        * several departures — which is now the common answer, not an edge case
-        * — the fare is CONSTANT across those rows and the clock is the only
-        * thing that moves. Leading with Rp6.500 three times over prints the
-        * same figure as a headline on three cards a rider is trying to tell
-        * apart, and buries the one fact that separates them in 12px grey.
+        * The order is set by what actually varies. Routes between one pair
+        * often share a fare, and the clock is what tells them apart: leading
+        * with Rp6.500 on every card prints the same figure as a headline on
+        * cards a rider is trying to tell apart, and buries the one fact that
+        * separates them in 12px grey.
         *
         * Untimed journeys keep the fare as the headline below, because then it
         * genuinely is the most a row can say.
@@ -541,6 +607,20 @@ export function JourneyCardFace({ journey, onSelect }: {
             )
           : null}
       </div>
+      {/*
+        * The route's later trains, under the one this card is built on. They
+        * used to be cards of their own; as times here they stop pushing a
+        * genuinely different route off the first screen. As sent rather than
+        * filtered against the clock: the rider may be planning a departure
+        * that is not now.
+        */}
+      {nextDepartures.length > 0
+        ? (
+            <div className="figure mt-0.5 text-xs font-semibold text-slate-500 text-right tabular-nums truncate">
+              {`berikutnya ${nextDepartures.map(departure => formatClock(departure.departureAt)).join(', ')}`}
+            </div>
+          )
+        : null}
 
       {/*
         * The fare, and the reason this row is here.
@@ -663,7 +743,12 @@ export function JourneyCardFace({ journey, onSelect }: {
 }
 
 /** The chosen option in full: itinerary, fare breakdown, disclaimer. */
-function JourneyDetail({ journey }: { journey: FareJourney }) {
+function JourneyDetail({ journey, timed, onPick }: {
+  journey: FareJourney
+  timed: TimedLeg[]
+  onPick: (legIndex: number, tripId: string) => void
+}) {
+  const now = useClock()
   // Surcharged transfers (e.g. the Dukuh Atas corridor) aren't ride segments but
   // do contribute to totalFare, so they need their own breakdown rows for the
   // line items to reconcile with the total.
@@ -694,8 +779,24 @@ function JourneyDetail({ journey }: { journey: FareJourney }) {
     ? { departure: formatClock(start.departureAt), arrival: formatClock(journey.arrivalAt) }
     : null
 
+  // The countdown follows the journey as re-timed by the rider's picks.
+  const leaveIn = start?.type === 'RIDE' && start.departureAt ? leaveInLabel(start.departureAt, now) : null
+
   return (
     <>
+      {/*
+        * Tonight's service is over: say so, and when it starts again, rather
+        * than leave a timeline that looks like a journey someone can take.
+        */}
+      {journey.resumesAt
+        ? (
+            <p className="mt-4 rounded-sm bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
+              {'Layanan hari ini sudah selesai. Berangkat pertama '}
+              <span className="figure">{ formatClock(journey.resumesAt) }</span>
+            </p>
+          )
+        : null}
+      {leaveIn ? <b className="mt-4 block text-xl tracking-tight">{ leaveIn }</b> : null}
       {/*
         * Each time labelled by its own verb, rather than one phrase covering
         * both: "berangkat sampai tiba" is a gloss nobody says out loud, and the
@@ -705,17 +806,31 @@ function JourneyDetail({ journey }: { journey: FareJourney }) {
         */}
       {journeyClock
         ? (
-            <p className="mt-4 text-sm font-semibold text-slate-700">
-              Berangkat
-              {' '}
-              <span className="figure">{ journeyClock.departure }</span>
-              , tiba
-              {' '}
-              <span className="figure">{ journeyClock.arrival }</span>
+            <p className={`${leaveIn ? 'mt-1' : 'mt-4'} text-sm font-semibold text-slate-700`}>
+              {/* The countdown above already says "Berangkat", and the boarding
+                  row carries the departure time; repeating the verb read as
+                  the same fact twice. */}
+              {leaveIn
+                ? (
+                    <>
+                      {'Tiba '}
+                      <span className="figure">{ journeyClock.arrival }</span>
+                    </>
+                  )
+                : (
+                    <>
+                      Berangkat
+                      {' '}
+                      <span className="figure">{ journeyClock.departure }</span>
+                      , tiba
+                      {' '}
+                      <span className="figure">{ journeyClock.arrival }</span>
+                    </>
+                  )}
             </p>
           )
         : null}
-      <JourneyTimeline legs={journey.legs} />
+      <JourneyTimeline legs={journey.legs} timed={timed} onPick={onPick} />
 
       {/*
         * The journey in one line, after the itinerary that justifies it.
@@ -784,6 +899,34 @@ function JourneyDetail({ journey }: { journey: FareJourney }) {
       <p className="mt-6 text-xs text-slate-400">
         Estimasi berdasarkan tarif resmi per Oktober 2026. Tarif LRT Jabodebek mengikuti waktu berangkat: maksimal Rp20.000 pada jam sibuk (Senin–Jumat 06.00–08.59 dan 16.00–19.59), dan maksimal Rp10.000 di luar jam sibuk, akhir pekan, serta hari libur
       </p>
+    </>
+  )
+}
+
+/*
+ * One option, face and detail together, with the rider's train picks.
+ *
+ * The picks live here, above both, because the plate and the timeline must tell
+ * the same story: choosing a later train changes the plate's clock as well as
+ * the leg's. Keyed by the caller on the selected option, so a pick never
+ * carries over to a different route; and a pick that no longer matches any
+ * train (a fresh answer arrived) is ignored by resolveTimedLegs rather than
+ * applied.
+ */
+function JourneyPage({ journey }: { journey: FareJourney }) {
+  const [picks, setPicks] = useState<Record<number, string>>({})
+  const timed = useMemo(() => resolveTimedLegs(journey.legs, picks), [journey, picks])
+  const view = useMemo(() => retimeJourney(journey, timed), [journey, timed])
+  return (
+    <>
+      {/* Inert: on the detail page this is the journey being read,
+          not one of several being chosen between. */}
+      <JourneyCardFace journey={view} />
+      <JourneyDetail
+        journey={view}
+        timed={timed}
+        onPick={(legIndex, tripId) => setPicks(current => ({ ...current, [legIndex]: tripId }))}
+      />
     </>
   )
 }
@@ -908,12 +1051,7 @@ export default function FareResultCard({
               </ul>
             )
           : (
-              <>
-                {/* Inert: on the detail page this is the journey being read,
-                    not one of several being chosen between. */}
-                <JourneyCardFace journey={journey} />
-                <JourneyDetail journey={journey} />
-              </>
+              <JourneyPage key={selected} journey={journey} />
             )}
       </div>
     </article>

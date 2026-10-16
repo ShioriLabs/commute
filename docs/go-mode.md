@@ -159,19 +159,25 @@ them in a `retime` hook that runs on the cache-hit path as well as the miss. So 
 storing the untimed journey for its full 20 hours while every reader gets times against
 their own `at` — the route is the cacheable half, the vehicle is the per-request half.
 
-**Each route is offered at its next three boardings** (`journey-times.ts`), merged across
-routes and sorted by arrival. A route is a way of getting there; a boarding is a train,
-and they are different choices: from Cakung the 08.11 and the 08.22 both reach Rasuna
-Said at 08.56, so the later one is strictly better and the old one-card-per-route view
-could not say so. Untimed routes contribute exactly one row, because there are no
-departures to enumerate.
+**One card per route, its later trains riding along** (`journey-times.ts`, 2026-10-16).
+From 2026-09-07 each route was offered at its next three boardings as separate rows; that
+pushed genuinely different routes off the first screen, and the reference apps (Citymapper)
+show one card per route with "Next 4:15, 4:36". So each route now becomes one row: its
+best boarding, with the route's other boardings in the next hour (at most eight) as
+`moreDepartures`. A boarding that leaves earlier and arrives no sooner than a later one is
+dropped — from Cakung the 08.11 and the 08.22 both reach Rasuna Said at 08.56, so the
+08.22 is the card. Untimed routes are unchanged, since there are no departures to walk.
+Rows are sorted by arrival and **labels are still recomputed in apps/api**, compared per
+route, because two engine journeys can be one route to a rider (either line of a shared
+trunk). The card face shows the boarding even when the arrival is unknown: on a
+rail-into-TJ journey the departure is a fact and the arrival is not.
 
-Two consequences worth knowing. **Labels are recomputed in apps/api over the expanded
-set**, compared per ROUTE rather than per row — three boardings of one route share its
-fare, so comparing rows would tie every axis against itself and award nothing. And the
-card face shows the boarding even when the arrival is unknown: on a rail-into-TJ journey
-the departure is a fact and the arrival is not, and without it several rows of one route
-are indistinguishable plates.
+**Each timed leg also lists its next trains** (`upcomingDepartures`, four including the
+one caught), resolved by `resolveDepartures` with `upcomingPerLeg` over the same
+candidate patterns as the boarding scan and anchored on the same clock — so every entry
+is a train this rider can make after the leg before. Data only for now; nothing renders
+it yet. Home's saved-route rows and the fare card show `moreDepartures` as
+"berikutnya 08.22, 08.33".
 
 **Coverage is 51.5% of rail-only journeys fully timed**, and the shortfall is directional
 data rather than engine capability: not one KCI stop pattern is reversible (line C has 23
@@ -213,7 +219,8 @@ Still unanswerable, and each for its own reason:
 - "Leave now / depart at HH:MM / arrive by HH:MM." — needs the departures work above.
   Departure *time* is already a rider input (it drives the fare bucket and service hours);
   what is missing is arrive-by and next-departure.
-- Next departures inline on the itinerary legs — same blocker.
+- Next departures inline on the itinerary legs — data shipped (`upcomingDepartures` per
+  ride leg, 2026-10-16); the leg UI is not built.
 - Reframe the entry point: it is still "Cek Tarif" gated behind the fare button rather
   than a plan-a-journey surface. This is now the largest purely-presentational gap, and it
   no longer depends on any engine work.

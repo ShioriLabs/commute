@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { FareJourney } from '@commute/schemas'
 import type { FareContext } from '@commute/constants'
 import type { Tsundere } from '@commute/tsundere'
-import { byArrival, retimeTrips } from './journey-times'
+import { byArrival, retimeTrips, toRouteLegs } from './journey-times'
+import { mergeConsecutiveWalks } from './merge-walks'
 
 /*
  * Only the fields the ordering reads. A real FareJourney carries legs, fares
@@ -191,15 +192,179 @@ describe('retimeTrips on a shared trunk', () => {
     journeyArrival: (_legs: unknown, timings: { arrivalS: number }[]) => timings[0]?.arrivalS ?? null
   } as unknown as Tsundere
 
-  it('offers the other line\'s train under its own line', () => {
-    const lines = retimeTrips(result, router, context).journeys
-      .map(j => j.legs[0]!.type === 'RIDE' ? j.legs[0]!.line : null)
-    expect(lines).toEqual(['LRTJBDB:BK', 'LRTJBDB:CB', 'LRTJBDB:BK'])
+  it('offers the route once, with its later trains as more departures', () => {
+    const rows = retimeTrips(result, router, context).journeys
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.moreDepartures?.map(d => d.departureAt)).toEqual(['2026-10-05T18:45:00+07:00', '2026-10-05T18:49:00+07:00'])
+    expect(rows[0]!.moreDepartures?.map(d => d.arrivalAt)).toEqual(['2026-10-05T18:48:00+07:00', '2026-10-05T18:52:00+07:00'])
   })
 
-  it('still treats every boarding as one route for the badges', () => {
+  it('offers the other line\'s train under its own line', () => {
+    const late = { ...context, departureAt: new Date('2026-10-05T18:42:00+07:00') }
+    const [row] = retimeTrips(result, router, late).journeys
+    expect(row!.legs[0]!.type === 'RIDE' && row!.legs[0]!.line).toBe('LRTJBDB:CB')
+  })
+
+  it('still awards each badge once across two routes', () => {
     const rows = retimeTrips({ ...result, journeys: [lrt, other] }, router, context).journeys
-    // Two routes, so the cheaper one wins CHEAPEST on its first row only.
+    expect(rows).toHaveLength(2)
     expect(rows.filter(j => j.labels.includes('CHEAPEST'))).toHaveLength(1)
+  })
+})
+
+/*
+ * Which of a route's boardings become the card and which ride along. A stub
+ * router over a fixed list of trains, so each rule is asserted against times
+ * that make it visible.
+ */
+describe('retimeTrips grouping boardings', () => {
+  const station = (id: string) => ({ id, name: id })
+  const route: FareJourney = {
+    legs: [{
+      type: 'RIDE',
+      line: 'KCI:C',
+      operator: 'KCI',
+      from: station('KCI-CUK'),
+      to: station('KCI-SUD'),
+      stationCount: 2,
+      stops: [station('KCI-CUK'), station('KCI-SUD')],
+      headsign: null,
+      distanceM: 20000
+    }],
+    segments: [],
+    totalFare: 3000,
+    totalDistanceM: 20000,
+    transferCount: 0,
+    labels: [],
+    boardings: 1,
+    walkDistanceM: 0
+  }
+  const result = { from: station('KCI-CUK'), to: station('KCI-SUD'), journeys: [route] }
+  const context = { paymentMethod: 'KMT', departureAt: new Date('2026-10-05T08:00:00+07:00') } as unknown as FareContext
+  const hhmm = (h: number, m: number) => h * 3600 + m * 60
+  const stampAt = (h: number, m: number) => `2026-10-05T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00+07:00`
+
+  type Train = { departureS: number, arrivalS: number | null, tripId: string }
+  const routerOver = (trains: Train[]) => ({
+    timeJourney: (_legs: unknown, { departureS }: { departureS: number }) => {
+      const train = trains.find(t => t.departureS >= departureS)
+      if (!train) return [null]
+      const arrivalS = train.arrivalS ?? train.departureS + 600
+      return [{
+        ...train,
+        arrivalS,
+        lineCode: 'C',
+        stopsS: [train.departureS, arrivalS],
+        upcoming: trains.filter(t => t.departureS >= train.departureS).slice(0, 4)
+          .map(t => ({ departureS: t.departureS, arrivalS: t.arrivalS ?? t.departureS + 600, tripId: t.tripId, lineCode: 'C' }))
+      }]
+    },
+    journeyArrival: (_legs: unknown, timings: Train[]) => (trains.length && timings[0] ? (trains.find(t => t.tripId === timings[0]!.tripId)!.arrivalS) : null)
+  } as unknown as Tsundere)
+
+  const every10 = (count: number): Train[] => Array.from({ length: count }, (_, i) =>
+    ({ departureS: hhmm(8, 5 + i * 10), arrivalS: hhmm(8, 50 + i * 10), tripId: `t${i}` }))
+
+  it('keeps only the boardings inside the hour', () => {
+    // 08.05 … 09.05: the 09.05 is past the hour and stays off the card.
+    const [row] = retimeTrips(result, routerOver(every10(7)), context).journeys
+    expect(row!.legs[0]!.type === 'RIDE' && row!.legs[0]!.departureAt).toBe(stampAt(8, 5))
+    expect(row!.moreDepartures?.map(d => d.departureAt)).toEqual([stampAt(8, 15), stampAt(8, 25), stampAt(8, 35), stampAt(8, 45), stampAt(8, 55)])
+  })
+
+  it('caps how many ride along on a frequent line', () => {
+    const frequent = Array.from({ length: 30 }, (_, i) =>
+      ({ departureS: hhmm(8, 1 + i * 2), arrivalS: hhmm(8, 30 + i * 2), tripId: `f${i}` }))
+    const [row] = retimeTrips(result, routerOver(frequent), context).journeys
+    expect(row!.moreDepartures).toHaveLength(8)
+  })
+
+  it('offers the first boarding even when it is more than an hour off', () => {
+    const sparse = [{ departureS: hhmm(9, 30), arrivalS: hhmm(10, 15), tripId: 's1' }, { departureS: hhmm(9, 40), arrivalS: hhmm(10, 25), tripId: 's2' }]
+    const [row] = retimeTrips(result, routerOver(sparse), context).journeys
+    expect(row!.legs[0]!.type === 'RIDE' && row!.legs[0]!.departureAt).toBe(stampAt(9, 30))
+    expect(row!.moreDepartures).toBeUndefined()
+  })
+
+  /*
+   * The 08.11 and the 08.22 that both reach Rasuna Said at 08.56: the earlier
+   * one is only a longer wait, so the later one is the card.
+   */
+  it('drops a boarding that only means a longer wait', () => {
+    const trains = [
+      { departureS: hhmm(8, 11), arrivalS: hhmm(8, 56), tripId: 'slow' },
+      { departureS: hhmm(8, 22), arrivalS: hhmm(8, 56), tripId: 'fast' },
+      { departureS: hhmm(8, 33), arrivalS: hhmm(9, 10), tripId: 'next' }
+    ]
+    const [row] = retimeTrips(result, routerOver(trains), context).journeys
+    expect(row!.legs[0]!.type === 'RIDE' && row!.legs[0]!.tripId).toBe('fast')
+    expect(row!.moreDepartures?.map(d => d.departureAt)).toEqual([stampAt(8, 33)])
+  })
+
+  it('keeps every boarding when no arrival is known', () => {
+    const untimedArrivals = every10(3).map(t => ({ ...t, arrivalS: null }))
+    const router = { ...routerOver(untimedArrivals), journeyArrival: () => null } as unknown as Tsundere
+    const [row] = retimeTrips(result, router, context).journeys
+    expect(row!.arrivalAt).toBeUndefined()
+    expect(row!.moreDepartures).toEqual([{ departureAt: stampAt(8, 15) }, { departureAt: stampAt(8, 25) }])
+  })
+
+  it('lists the trains under the leg, the caught one first', () => {
+    const [row] = retimeTrips(result, routerOver(every10(5)), context).journeys
+    const leg = row!.legs[0]!
+    if (leg.type !== 'RIDE') throw new Error('expected a ride')
+    expect(leg.upcomingDepartures).toHaveLength(4)
+    expect(leg.upcomingDepartures![0]).toEqual({
+      departureAt: leg.departureAt,
+      arrivalAt: leg.arrivalAt,
+      tripId: leg.tripId,
+      line: 'KCI:C'
+    })
+  })
+
+  it('carries neither list on a route the timetable never covers', () => {
+    const untimetabled = { timeJourney: () => [null], journeyArrival: () => null } as unknown as Tsundere
+    const [row] = retimeTrips(result, untimetabled, context).journeys
+    const leg = row!.legs[0]!
+    expect(row!.moreDepartures).toBeUndefined()
+    expect(leg.type === 'RIDE' && leg.upcomingDepartures).toBeUndefined()
+  })
+})
+
+describe('toRouteLegs', () => {
+  const station = (id: string) => ({ id, name: id })
+  const walk = (from: string, to: string, distanceM: number) => ({ type: 'TRANSFER' as const, from: station(from), to: station(to), distanceM })
+  const ride = {
+    type: 'RIDE' as const,
+    line: 'KCI:C',
+    operator: 'KCI' as const,
+    from: station('KCI-MRI'),
+    to: station('KCI-SUD'),
+    stationCount: 2,
+    stops: [station('KCI-MRI'), station('KCI-SUD')],
+    headsign: null,
+    distanceM: 1000
+  }
+
+  /*
+   * A merged walk is shown as one row but timed as its hops, so each still
+   * pays the engine's change floor. Timed as one, an unmeasured hop plus a
+   * 300 m one cost 250 s where the two hops cost 459 s.
+   */
+  it('times a merged walk as the hops it was made of', () => {
+    const { legs } = mergeConsecutiveWalks([walk('A', 'B', 0), walk('B', 'KCI-MRI', 300), ride])
+    const route = toRouteLegs(legs)
+    expect(route.legs.map(leg => [leg.type, leg.distanceM])).toEqual([['TRANSFER', 0], ['TRANSFER', 300], ['RIDE', 1000]])
+  })
+
+  it('maps each wire leg to where it landed among the engine legs', () => {
+    const { legs } = mergeConsecutiveWalks([walk('A', 'B', 0), walk('B', 'KCI-MRI', 300), ride])
+    expect(toRouteLegs(legs).engineIndexOf).toEqual([0, 2])
+  })
+
+  it('maps one to one when nothing was merged', () => {
+    const route = toRouteLegs([walk('A', 'KCI-MRI', 90), ride])
+    expect(route.legs).toHaveLength(2)
+    expect(route.engineIndexOf).toEqual([0, 1])
   })
 })

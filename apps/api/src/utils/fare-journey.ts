@@ -6,6 +6,7 @@ import { summarizeFares, type FareSummary } from 'utils/fare-summary'
 import { computeHeadsignCode } from 'utils/headsign'
 import { findInterliningLineCodes, mergeInterlinedLegs } from 'utils/interlining'
 import { lineKey, stationCodeOf } from 'utils/ids'
+import { mergeConsecutiveWalks } from 'utils/merge-walks'
 
 /*
  * Turning one routed journey into the shape the API returns.
@@ -185,7 +186,7 @@ export function assembleJourney(plan: JourneyPlan, namer: StationNamer, context:
     return PLATFORM_CODES[`${leg.fromStationId}:${leg.lineCode}:${nextHopCode}`]
   }
 
-  const resultLegs: FareResultLeg[] = legs.flatMap((leg, index): FareResultLeg[] => {
+  const builtLegs: FareResultLeg[] = legs.flatMap((leg, index): FareResultLeg[] => {
     if (leg.type === 'TRANSFER') {
       const merge = corridorMerges.get(index)
       if (merge?.kind === 'ABSORBED') return [] // folded into the anchor leg
@@ -242,6 +243,10 @@ export function assembleJourney(plan: JourneyPlan, namer: StationNamer, context:
     }]
   })
 
+  // Consecutive plain walks read as one to the rider; see merge-walks.ts.
+  const walks = mergeConsecutiveWalks(builtLegs)
+  const resultLegs = walks.legs
+
   // summary.totalDistanceM already counts both raw legs of each merge; the only
   // uncounted distance is the internal-peron walk baked into each anchor.
   const internalWalkExtra = [...corridorMerges.values()].reduce(
@@ -267,7 +272,7 @@ export function assembleJourney(plan: JourneyPlan, namer: StationNamer, context:
     })),
     totalFare: summary.totalFare,
     totalDistanceM: summary.totalDistanceM + internalWalkExtra,
-    transferCount: summary.transferCount - absorbedCount,
+    transferCount: summary.transferCount - absorbedCount - walks.absorbed,
     labels: plan.labels.map(l => LABELS[l]),
     /*
      * From the engine when a planner produced this journey, otherwise counted
@@ -276,6 +281,10 @@ export function assembleJourney(plan: JourneyPlan, namer: StationNamer, context:
      * have been merged, and walking is the sum of the transfer distances.
      */
     boardings: plan.criteria?.boardings ?? legs.filter(l => l.type === 'RIDE').length,
+    // Raw, never the merged walks' rounded figure: this is what routes are
+    // compared on (LEAST_WALKING, here and again in journey-times relabel), and
+    // rounding only the merged ones could hand the badge to the route that
+    // walks further. Clients show the sum of the walk legs instead.
     walkDistanceM: plan.criteria?.walkDistanceM
       ?? legs.reduce((sum, l) => sum + (l.type === 'TRANSFER' ? l.distanceM : 0), 0)
   }
