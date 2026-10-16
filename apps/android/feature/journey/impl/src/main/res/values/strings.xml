@@ -70,7 +70,7 @@
     <string name="journey_change_gap">%1$d mnt</string>
     <string name="journey_change_gap_tight">%1$d mnt · mepet</string>
     <!-- A departure chip's caption: %1$d is minutes to the next train, %1$s a clock time -->
-    <string name="journey_pick_change">pindah %1$d mnt</string>
+    <string name="journey_pick_change">transit %1$d mnt</string>
     <string name="journey_pick_change_tight">mepet %1$d mnt</string>
     <string name="journey_pick_missed">tak terkejar</string>
     <string name="journey_pick_no_onward">tak tersambung</string>
