@@ -53,6 +53,45 @@ describe('resolveTimedLegs', () => {
     expect(second.options.map(option => [option.departure.tripId, option.blocked])).toEqual([['b1', 'MISSED'], ['b2', null], ['b3', null]])
   })
 
+  it('drops trains that have left, and boards the next one', () => {
+    // 07.22: a1 and a2 both left more than the minute's grace ago.
+    const timed = resolveTimedLegs(legs, {}, Date.parse(at('07:22')))
+    expect(timed[0]!.options.map(option => option.departure.tripId)).toEqual(['a3', 'a4'])
+    expect(timed.map(leg => leg.chosen.tripId)).toEqual(['a3', 'b3'])
+  })
+
+  it('still offers a train due within the last minute', () => {
+    const timed = resolveTimedLegs(legs, {}, Date.parse(at('07:12')) + 45_000)
+    expect(timed[0]!.chosen.tripId).toBe('a1')
+  })
+
+  it('resolves nothing once every listed train has left', () => {
+    expect(resolveTimedLegs(legs, {}, Date.parse(at('07:40')))).toEqual([])
+  })
+
+  /*
+   * The engine lists a later leg long enough to connect from the earlier leg's
+   * last train; the row shows the part around where the rider is.
+   */
+  it('shows a later leg from the train just missed, at most a chip row', () => {
+    const many = [
+      train('c1', '07:40', '08:00'), train('c2', '07:50', '08:10'), train('c3', '08:00', '08:20'),
+      train('c4', '08:05', '08:25'), train('c5', '08:10', '08:30'), train('c6', '08:15', '08:35')
+    ]
+    const second = resolveTimedLegs([ride(first), ride(many)], { 0: 'a2' })[1]!
+    // a2 lands 07.54: c1 and c2 are missed, c3 is the first it makes.
+    expect(second.options.map(option => option.departure.tripId)).toEqual(['c2', 'c3', 'c4', 'c5'])
+  })
+
+  it('slides the row so a later pick stays in view', () => {
+    const many = [
+      train('c1', '07:50', '08:00'), train('c2', '07:55', '08:05'), train('c3', '08:00', '08:10'),
+      train('c4', '08:05', '08:15'), train('c5', '08:10', '08:20'), train('c6', '08:15', '08:25')
+    ]
+    const second = resolveTimedLegs([ride(first), ride(many)], { 1: 'c6' })[1]!
+    expect(second.options.map(option => option.departure.tripId)).toEqual(['c3', 'c4', 'c5', 'c6'])
+  })
+
   it('keeps a pick on a later leg without touching the earlier one', () => {
     const timed = resolveTimedLegs(legs, { 1: 'b3' })
     expect(timed.map(leg => leg.chosen.tripId)).toEqual(['a1', 'b3'])

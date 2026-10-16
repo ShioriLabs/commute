@@ -911,11 +911,12 @@ function JourneyDetail({ journey, timed, onPick }: {
  * the leg's. Keyed by the caller on the selected option, so a pick never
  * carries over to a different route; and a pick that no longer matches any
  * train (a fresh answer arrived) is ignored by resolveTimedLegs rather than
- * applied.
+ * applied. The clock drops trains that have left while the page was open.
  */
 function JourneyPage({ journey }: { journey: FareJourney }) {
   const [picks, setPicks] = useState<Record<number, string>>({})
-  const timed = useMemo(() => resolveTimedLegs(journey.legs, picks), [journey, picks])
+  const now = useClock()
+  const timed = useMemo(() => resolveTimedLegs(journey.legs, picks, now), [journey, picks, now])
   const view = useMemo(() => retimeJourney(journey, timed), [journey, timed])
   return (
     <>
