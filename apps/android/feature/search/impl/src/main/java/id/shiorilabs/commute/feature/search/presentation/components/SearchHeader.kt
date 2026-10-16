@@ -1,5 +1,10 @@
 package id.shiorilabs.commute.feature.search.presentation.components
 
+import id.shiorilabs.commute.core.ui.theme.themed
+import id.shiorilabs.commute.core.ui.theme.StoneLineDark
+import id.shiorilabs.commute.core.ui.theme.StoneFillDark
+import id.shiorilabs.commute.core.ui.theme.Slate500
+import id.shiorilabs.commute.core.ui.theme.Slate400
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -37,12 +42,16 @@ import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.feature.search.R
 
 /** The field's fill and outline, the web's `bg-stone-100/80` and `border-stone-200/40`. */
-private val FieldFill = Color(0xCCF5F5F4)
-private val FieldOutline = Color(0x66E7E5E4)
+private val FieldFill: Color
+    @Composable get() = themed(Color(0xCCF5F5F4), StoneFillDark)
+private val FieldOutline: Color
+    @Composable get() = themed(Color(0x66E7E5E4), StoneLineDark)
 
 /** The magnifier in the field, `text-slate-400`, and the clear button, `text-slate-500`. */
-private val FieldIcon = Color(0xFF94A3B8)
-private val ClearIcon = Color(0xFF64748B)
+private val FieldIcon: Color
+    @Composable get() = Slate400
+private val ClearIcon: Color
+    @Composable get() = Slate500
 
 /**
  * Title, close button and the query field: the part of search that stays put while results scroll.

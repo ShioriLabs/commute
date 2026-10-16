@@ -48,6 +48,7 @@ import id.shiorilabs.commute.core.tripcopy.R as CopyR
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.ext.lineColorOf
+import id.shiorilabs.commute.core.ui.theme.Fixed
 import id.shiorilabs.commute.core.ui.theme.Slate900
 import id.shiorilabs.commute.core.ui.theme.TABULAR
 import id.shiorilabs.commute.feature.station.domain.LineInfo
@@ -56,7 +57,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /** The panel: the top bar's slate, so the two read as one. */
-private val YishunInk = Slate900
+private val YishunInk = Fixed.Slate900
 private val YishunMuted = Color(0xFF9FB0C8)
 
 /** The line behind the rider, and its stops: SMRT greys out what's been passed. */

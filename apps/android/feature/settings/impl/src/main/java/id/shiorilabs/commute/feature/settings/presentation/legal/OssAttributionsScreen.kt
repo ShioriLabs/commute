@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.settings.presentation.legal
 
+import id.shiorilabs.commute.core.ui.theme.themed
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -26,7 +27,8 @@ import id.shiorilabs.commute.feature.settings.presentation.components.HtmlText
 import id.shiorilabs.commute.feature.settings.presentation.components.SettingsPage
 
 /** The web's blue-600 on the library links. */
-private val LibraryLinkColor = Color(0xFF2563EB)
+private val LibraryLinkColor: Color
+    @Composable get() = themed(Color(0xFF2563EB), Color(0xFF60A5FA))
 
 @Composable
 fun OssAttributionsScreen(innerPadding: PaddingValues) {

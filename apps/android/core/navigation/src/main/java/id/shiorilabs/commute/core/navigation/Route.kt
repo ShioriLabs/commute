@@ -158,6 +158,10 @@ sealed interface Route : NavKey {
     @Serializable
     data object SettingsOtw : Route
 
+    /** The app's look: the phone's setting, light, dark or black. */
+    @Serializable
+    data object SettingsAppearance : Route
+
     /** Switches for trying the app out: debug builds, or after seven taps on the version. */
     @Serializable
     data object SettingsExperimental : Route

@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.settings.presentation.components
 
+import id.shiorilabs.commute.core.ui.theme.themed
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,7 +27,8 @@ import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.navigation.Route
 
 /** The legal pages' links, the web's blue-500. */
-internal val DocumentLinkColor = Color(0xFF3B82F6)
+internal val DocumentLinkColor: Color
+    @Composable get() = themed(Color(0xFF3B82F6), Color(0xFF60A5FA))
 
 /** The scheme of a link that opens another settings page rather than the browser. */
 private const val ROUTE_SCHEME = "route:"
@@ -46,6 +48,7 @@ private val LINKED_PAGES: Map<String, Route> = mapOf(
  * the app.
  *
  * @param linkColor the links' colour: the web's blue on the legal pages, the brand pink on About.
+ * @param color the text's colour.
  */
 @Composable
 internal fun HtmlText(
@@ -53,6 +56,7 @@ internal fun HtmlText(
     modifier: Modifier = Modifier,
     style: TextStyle = MaterialTheme.typography.bodyMedium,
     linkColor: Color = DocumentLinkColor,
+    color: Color = MaterialTheme.colorScheme.onBackground,
 ) {
     val navigator = LocalNavigator.current
     val uriHandler = LocalUriHandler.current
@@ -75,7 +79,7 @@ internal fun HtmlText(
         text = text,
         modifier = modifier,
         style = style,
-        color = MaterialTheme.colorScheme.onBackground,
+        color = color,
     )
 }
 

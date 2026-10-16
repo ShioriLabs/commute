@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.search.presentation.components
 
+import id.shiorilabs.commute.core.ui.theme.Slate500
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -8,7 +9,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 
 /** Section labels in the idle state, `text-slate-500`. */
-internal val SectionLabelColor = Color(0xFF64748B)
+internal val SectionLabelColor: Color
+    @Composable get() = Slate500
 
 /** A quiet label over an idle-state section: small, bold, grey. */
 @Composable

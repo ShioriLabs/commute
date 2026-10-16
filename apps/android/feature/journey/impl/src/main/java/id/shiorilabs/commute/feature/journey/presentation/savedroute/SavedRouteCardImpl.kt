@@ -48,7 +48,7 @@ import id.shiorilabs.commute.feature.journey.domain.routeBarSegments
 import id.shiorilabs.commute.feature.journey.presentation.components.WalkChip
 import id.shiorilabs.commute.feature.journey.presentation.components.legLines
 import id.shiorilabs.commute.core.ui.ext.lineColorOf
-import id.shiorilabs.commute.core.ui.ext.tint
+import id.shiorilabs.commute.core.ui.ext.themedTint
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.startup.HoldStartupWhile
 import id.shiorilabs.commute.core.ui.theme.Amber700
@@ -165,11 +165,11 @@ private fun RouteBoard(
     // ended card keeps its line's colour instead of greying.
     val lead = rows.firstOrNull()?.journey ?: answer.journeys.firstOrNull { it.resumesAt != null }
     val lineColor = lineColorOf(lead?.rides?.firstOrNull()?.let { lines[it.line] }?.colorCode)
-    val divider = lineColor.tint(0.3f)
+    val divider = lineColor.themedTint(0.3f)
     val description = stringResource(R.string.journey_saved_route_rows_description, answer.from.name, answer.to.name)
 
     CommuteCard(
-        color = lineColor.tint(0.065f),
+        color = lineColor.themedTint(0.065f),
         modifier = modifier.semantics { contentDescription = description },
     ) {
         Box(

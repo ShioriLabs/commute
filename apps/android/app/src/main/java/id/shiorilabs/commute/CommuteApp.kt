@@ -1,6 +1,7 @@
 package id.shiorilabs.commute
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -29,7 +30,9 @@ import id.shiorilabs.commute.core.ui.debug.FrostTunerOverlay
 import id.shiorilabs.commute.core.ui.frost.FrostTuning
 import id.shiorilabs.commute.core.ui.frost.LocalFrostTuning
 import id.shiorilabs.commute.core.ui.startup.HoldStartupWhile
+import id.shiorilabs.commute.core.datastore.ThemeMode
 import id.shiorilabs.commute.core.ui.theme.CommuteTheme
+import id.shiorilabs.commute.core.ui.theme.resolve
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -47,9 +50,14 @@ fun CommuteApp(
     pendingLink: MutableStateFlow<Route?> = MutableStateFlow(null),
     onboardingDone: Flow<Boolean> = flowOf(true),
     frostTuner: Flow<Boolean> = flowOf(false),
+    themeMode: Flow<ThemeMode> = flowOf(ThemeMode.Light),
     tripBar: ActiveTripBar? = null,
 ) {
-    CommuteTheme {
+    // Read off disk under the splash too, so a rider on the dark theme never sees a light frame.
+    val mode = themeMode.collectAsState(initial = null).value
+    HoldStartupWhile(mode == null)
+    val systemDark = isSystemInDarkTheme()
+    CommuteTheme(look = (mode ?: ThemeMode.System).resolve(systemDark)) {
         // Read off disk under the splash, so the first screen drawn is the right one: neither home
         // nor the welcome page flashes before the other.
         val onboarded = onboardingDone.collectAsState(initial = null).value

@@ -165,6 +165,7 @@ private fun EndpointStop(name: String, start: Boolean) {
  * was bare; the ride draws that half in the walk's colour, being the one that knows where its node
  * sits.
  */
+@Composable
 private fun walkRail(leg: JourneyLeg?): Brush? = when {
     leg !is JourneyLeg.Transfer -> null
     leg.corridorLabel != null && leg.fare != null -> SolidColor(Rose300)

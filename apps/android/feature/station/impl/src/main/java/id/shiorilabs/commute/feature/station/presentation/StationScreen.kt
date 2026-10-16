@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.station.presentation
 
+import androidx.compose.material3.MaterialTheme
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.PaddingValues
@@ -79,7 +80,8 @@ import java.time.LocalDateTime
 import id.shiorilabs.commute.core.ui.R as CoreUiR
 
 /** The page is white, not the app's tinted background, as on web. */
-private val StationBackground = Color.White
+private val StationBackground: Color
+    @Composable get() = MaterialTheme.colorScheme.surfaceContainerLowest
 
 
 /** Bekasi Timur, which carries the memorial. */

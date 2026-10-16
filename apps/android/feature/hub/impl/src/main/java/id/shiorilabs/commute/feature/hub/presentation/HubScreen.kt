@@ -43,7 +43,8 @@ import id.shiorilabs.commute.feature.hub.presentation.components.HubMemberRow
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 
 /** The page is white, as on the web, like the station page. */
-private val HubBackground = Color.White
+private val HubBackground: Color
+    @Composable get() = MaterialTheme.colorScheme.surfaceContainerLowest
 
 /**
  * A hub's page, the web's `/hubs/{slug}`: its name and kind, then its member stations, each opening
