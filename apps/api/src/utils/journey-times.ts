@@ -18,6 +18,7 @@ import { atSecondsOfDay, serviceDay, secondsSinceLocalMidnight, wibIsoString } f
 import { DAY_MASK } from 'db/schemas/schedules'
 import { SEPARATELY_GATED_LINES, type FareContext } from '@commute/constants'
 import { lineCodeOf } from 'utils/ids'
+import { hopsOf } from 'utils/merge-walks'
 
 /** The 3-bit mask the trips carry, for the day the rider is travelling. */
 const dayMaskFor = (at: Date): number => DAY_MASK[serviceDay(at)]
@@ -32,9 +33,19 @@ const GATED_LINE_CODES: ReadonlySet<string> = new Set([...SEPARATELY_GATED_LINES
  * this from the response rather than carrying engine legs through the cache is
  * what keeps the cached body free of anything request-specific.
  */
-function toRouteLegs(legs: readonly FareResultLeg[]): RouteLeg[] {
-  return legs.map((leg): RouteLeg => leg.type === 'RIDE'
-    ? {
+/** The engine's legs for a wire journey, and where each wire leg landed among them. */
+interface EngineRoute {
+  legs: RouteLeg[]
+  /** `engineIndexOf[i]` is the engine leg wire leg `i` became (its first hop, for a merged walk). */
+  engineIndexOf: number[]
+}
+
+export function toRouteLegs(legs: readonly FareResultLeg[]): EngineRoute {
+  const route: EngineRoute = { legs: [], engineIndexOf: [] }
+  for (const leg of legs) {
+    route.engineIndexOf.push(route.legs.length)
+    if (leg.type === 'RIDE') {
+      route.legs.push({
         type: 'RIDE',
         // The wire carries `operator:lineCode`; the engine wants the bare code.
         lineCode: lineCodeOf(leg.line),
@@ -43,14 +54,19 @@ function toRouteLegs(legs: readonly FareResultLeg[]): RouteLeg[] {
         toStationId: leg.to.id,
         stationIds: leg.stops.map(s => s.id),
         distanceM: leg.distanceM
-      }
-    : {
-        type: 'TRANSFER',
-        fromStationId: leg.from.id,
-        toStationId: leg.to.id,
-        distanceM: leg.distanceM,
-        noTap: false
       })
+      continue
+    }
+    /*
+     * A merged walk is timed as the hops it was made of, so each still pays
+     * the engine's change floor — see merge-walks.ts. The station ids in
+     * between are not kept; the timing never reads them, only distance.
+     */
+    for (const distanceM of hopsOf(leg) ?? [leg.distanceM]) {
+      route.legs.push({ type: 'TRANSFER', fromStationId: leg.from.id, toStationId: leg.to.id, distanceM, noTap: false })
+    }
+  }
+  return route
 }
 
 /*
@@ -76,13 +92,13 @@ const DEPARTURES_PER_LEG = 4
 /** One journey, timed for a specific boarding. Null when nothing runs. */
 function timeOnce(
   journey: FareJourney,
-  routeLegs: RouteLeg[],
+  route: EngineRoute,
   router: Tsundere,
   context: FareContext,
   afterS: number,
   walking?: WalkingPreference
 ): { journey: FareJourney, departureS: number, arrivalS: number | null, tripId: string } | null {
-  const timings = router.timeJourney(routeLegs, {
+  const timings = router.timeJourney(route.legs, {
     departureS: afterS,
     dayMask: dayMaskFor(context.departureAt),
     gatedLines: GATED_LINE_CODES,
@@ -92,7 +108,7 @@ function timeOnce(
   const stamp = (seconds: number) => wibIsoString(atSecondsOfDay(context.departureAt, seconds))
 
   const legs = journey.legs.map((leg, index): FareResultLeg => {
-    const timing: LegTiming | null = timings[index] ?? null
+    const timing: LegTiming | null = timings[route.engineIndexOf[index]!] ?? null
     if (leg.type !== 'RIDE' || !timing) return leg
     /*
      * The boarded train's own headsign wins over the one planJourney derived.
@@ -132,6 +148,10 @@ function timeOnce(
       // identity belong to the vehicle caught, not to the cached route.
       stopTimes: timing.stopsS.map(stamp),
       tripId: timing.tripId,
+      // The engine's own change allowance into this leg, so a client re-timing
+      // a later train applies the same rule it would. Per-request: it depends
+      // on the rider's walking pace.
+      ...(timing.changeBeforeS === undefined ? {} : { minChangeS: timing.changeBeforeS }),
       ...(timing.headsign === undefined ? {} : { headsign: timing.headsign }),
       // Per-request like the stamps: whether this is the last train depends on
       // which train was caught, never on the cached route.
@@ -140,7 +160,7 @@ function timeOnce(
     }
   })
 
-  const arrivalS = router.journeyArrival(routeLegs, timings)
+  const arrivalS = router.journeyArrival(route.legs, timings)
   const timed = { ...journey, legs, ...(arrivalS === null ? {} : { arrivalAt: stamp(arrivalS) }) }
 
   const first = timings.find(t => t)
@@ -160,14 +180,14 @@ function boardingsOf(
   context: FareContext,
   walking?: WalkingPreference
 ): FareJourney {
-  const routeLegs = toRouteLegs(journey.legs)
+  const route = toRouteLegs(journey.legs)
   const boardings: NonNullable<ReturnType<typeof timeOnce>>[] = []
   const seenTrips = new Set<string>()
   const atS = secondsSinceLocalMidnight(context.departureAt)
   let afterS = atS
 
   while (boardings.length <= MAX_MORE_DEPARTURES) {
-    const timed = timeOnce(journey, routeLegs, router, context, afterS, walking)
+    const timed = timeOnce(journey, route, router, context, afterS, walking)
     // No timetable at all, or the service is done for the day. Either way there
     // is nothing further to offer, so stop rather than pad the list.
     if (!timed) break
@@ -211,7 +231,7 @@ function boardingsOf(
    * back as the one untimed row, exactly as before this existed.
    */
   const tomorrow = nextServiceDay(context)
-  const resumes = timeOnce(journey, routeLegs, router, tomorrow, SERVICE_DAY_START_S, walking)
+  const resumes = timeOnce(journey, route, router, tomorrow, SERVICE_DAY_START_S, walking)
   return resumes
     ? { ...journey, resumesAt: wibIsoString(atSecondsOfDay(tomorrow.departureAt, resumes.departureS)) }
     : journey

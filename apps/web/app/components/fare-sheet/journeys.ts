@@ -39,13 +39,22 @@ export function journeysOf(result: FareResult | TripResult): FareJourney[] {
 }
 
 /**
- * A journey's walking distance, or null when the response could not say.
+ * A journey's walking distance as the rider reads it, or null when the response
+ * could not say.
+ *
+ * The sum of the walk legs rather than `walkDistanceM`: the API merges
+ * back-to-back walks into one rounded-up leg, while `walkDistanceM` stays raw
+ * because routes are compared on it. Summing the legs is what keeps the plate
+ * reading the same figure as the rows under it. A journey with no legs to sum
+ * (a test fixture, an old cached body) keeps the total it was sent.
  *
  * Only ever null for a promoted legacy primary. Callers must render nothing
  * rather than a zero, which would claim a walk-free journey.
  */
 export function walkDistanceOf(journey: FareJourney): number | null {
-  return journey.walkDistanceM < 0 ? null : journey.walkDistanceM
+  if (journey.walkDistanceM < 0) return null
+  if (journey.legs.length === 0) return journey.walkDistanceM
+  return journey.legs.reduce((sum, leg) => sum + (leg.type === 'TRANSFER' ? leg.distanceM : 0), 0)
 }
 
 /**

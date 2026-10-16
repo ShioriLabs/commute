@@ -193,6 +193,32 @@ describe('resolveDepartures', () => {
       expect(gatedTimings[1]?.tripId).toBe('g-later')
     })
 
+    /*
+     * The allowance it charged, published, so a client offering a later train
+     * on the first leg applies the engine's rule rather than its own guess.
+     */
+    it('publishes the change it charged into each later ride, and none into the first', () => {
+      const legs = [ride('M', ['MRTJ-LBB', 'MRTJ-FTM']), ride('C', ['MRTJ-FTM', 'KCI-Y'])]
+      const timings = resolveDepartures(legs, index(mrt, connecting), { departureS: at(5), dayMask: ALL_DAYS })
+      expect(timings[0]).not.toHaveProperty('changeBeforeS')
+      // 100m of paid-zone change at 1.2 m/s.
+      expect(timings[1]?.changeBeforeS).toBe(84)
+    })
+
+    it('publishes the walk at the rider\'s own pace', () => {
+      const legs = [
+        ride('M', ['MRTJ-LBB', 'MRTJ-FTM', 'MRTJ-BLA']),
+        walk('MRTJ-BLA', 'KCI-X'),
+        ride('C', ['KCI-X', 'KCI-Y'])
+      ]
+      const trains: TripPattern = { lineCode: 'C', stationIds: ['KCI-X', 'KCI-Y'], trips: [{ id: 'c', dayMask: ALL_DAYS, departuresS: [at(7), at(7, 10)] }] }
+      const brisk = resolveDepartures(legs, index(mrt, trains), { departureS: at(5), dayMask: ALL_DAYS, walking: 'BRISK' })
+      const slow = resolveDepartures(legs, index(mrt, trains), { departureS: at(5), dayMask: ALL_DAYS, walking: 'SLOW' })
+      expect(brisk[2]?.changeBeforeS).toBeLessThan(slow[2]!.changeBeforeS!)
+      // Measured from the alighting, not from when the next train happens to leave.
+      expect(brisk[2]!.departureS - brisk[0]!.arrivalS).toBeGreaterThan(brisk[2]!.changeBeforeS!)
+    })
+
     it('does not charge the first boarding', () => {
       const [timing] = resolveDepartures(
         [ride('M', ['MRTJ-LBB', 'MRTJ-FTM'])], index(mrt), { departureS: at(6), dayMask: ALL_DAYS }

@@ -116,6 +116,13 @@ describe('walkDistanceOf', () => {
     expect(walkDistanceOf(journey({ walkDistanceM: 0 }))).toBe(0)
   })
 
+  it('reads the walk legs, so the plate matches the rows under it', () => {
+    // The API sends one merged walk rounded up to 700 m, while walkDistanceM
+    // stays the raw 650 that routes are compared on.
+    const walk: FareResultTransferLeg = { type: 'TRANSFER', from: { id: 'A', name: 'A' }, to: { id: 'B', name: 'B' }, distanceM: 700 }
+    expect(walkDistanceOf(journey({ walkDistanceM: 650, legs: [walk] }))).toBe(700)
+  })
+
   it('reports null for a promoted primary, which never knew', () => {
     // Rendering 0 here would tell a rider a journey involves no walking when
     // the old response simply never said.

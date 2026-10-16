@@ -120,6 +120,17 @@ export interface LegTiming {
   stopsS: number[]
   /** The trip boarded, for tracing back to the feed. Never parsed here. */
   tripId: string
+  /**
+   * The shortest change this rider can make into this leg: seconds from
+   * alighting the previous timed ride to the earliest moment they can board
+   * here, walks and in-station allowances included, at their own pace. Absent
+   * on the first ride, which has no change before it.
+   *
+   * Published so a client choosing a later train on an earlier leg can tell
+   * which of `upcoming` it still makes, by the engine's own rule rather than a
+   * copy of it.
+   */
+  changeBeforeS?: number
   /** Where that vehicle is signed for, when the feed says. See Trip.headsign. */
   headsign?: string
   /**
@@ -335,6 +346,8 @@ export function resolveDepartures(
    */
   let rodePrevious = false
   let previousLine: string | null = null
+  // When the last timed ride arrived, for publishing the change into the next.
+  let lastArrivalS: number | null = null
 
   for (const leg of legs) {
     if (leg.type === 'TRANSFER') {
@@ -401,6 +414,7 @@ export function resolveDepartures(
     const { trip, boardIndex, departure } = best
     timings.push({
       ...departure,
+      ...(lastArrivalS === null ? {} : { changeBeforeS: clockS - lastArrivalS }),
       stopsS: leg.stationIds.map((_, i) => (i === 0 ? departure.departureS : alightTimeOf(trip, boardIndex + i))),
       ...(hasLaterTrip(trips, leg, departure.departureS, dayMask, gatedLines) ? {} : { lastOfDay: true as const }),
       ...(upcomingPerLeg > 1
@@ -409,6 +423,7 @@ export function resolveDepartures(
     })
     previousLine = departure.lineCode
     clockS = departure.arrivalS
+    lastArrivalS = departure.arrivalS
     rodePrevious = true
   }
 

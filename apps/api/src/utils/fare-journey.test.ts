@@ -130,16 +130,20 @@ describe('assembleJourney', () => {
       expect(walks[0]).toMatchObject({ from: { id: 'TJ-X' }, to: { id: 'KCI-MRI' }, distanceM: 700 })
     })
 
-    it('counts it as one transfer, and walking follows the rounded leg', () => {
+    it('counts it as one transfer', () => {
       const merged = build(legs(), { walkDistanceM: 650 }).journey
       const separate = build([walk('TJ-X', 'KCI-BOO', 560), ride('KCI', 'C', ['BOO', 'MRI'], 1000)], { walkDistanceM: 560 }).journey
       expect(merged.transferCount).toBe(separate.transferCount)
-      expect(merged.walkDistanceM).toBe(700)
     })
 
-    it('leaves the exact walking total alone when nothing merged', () => {
-      const { journey } = build([walk('TJ-X', 'KCI-BOO', 90), ride('KCI', 'C', ['BOO', 'MRI'], 1000)], { walkDistanceM: 90 })
-      expect(journey.walkDistanceM).toBe(90)
+    /*
+     * Routes are compared on walking, here and again after retiming, so the
+     * total stays raw: rounding only merged walks up could hand LEAST_WALKING
+     * to the route that walks further.
+     */
+    it('keeps the walking total raw for comparing routes', () => {
+      expect(build(legs(), { walkDistanceM: 650 }).journey.walkDistanceM).toBe(650)
+      expect(build(legs()).plan.criteria).toBeDefined()
     })
   })
 

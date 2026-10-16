@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FareLegDeparture, FareResultLeg } from '@commute/schemas'
 import type { FareJourney } from '@commute/schemas'
-import { connectionOf, journeyClockOf, leaveInLabel, resolveTimedLegs, retimeJourney } from './leg-departures'
+import { changeAt, journeyClockOf, leaveInLabel, resolveTimedLegs, retimeJourney } from './leg-departures'
 
 const at = (hhmm: string) => `2026-10-16T${hhmm}:00+07:00`
 const train = (tripId: string, dep: string, arr: string): FareLegDeparture => ({
@@ -50,7 +50,7 @@ describe('resolveTimedLegs', () => {
 
   it('marks trains that can no longer be reached, rather than hiding them', () => {
     const second = resolveTimedLegs(legs, { 0: 'a2' })[1]!
-    expect(second.options.map(option => [option.departure.tripId, option.reachable])).toEqual([['b1', false], ['b2', true], ['b3', true]])
+    expect(second.options.map(option => [option.departure.tripId, option.blocked])).toEqual([['b1', 'MISSED'], ['b2', null], ['b3', null]])
   })
 
   it('keeps a pick on a later leg without touching the earlier one', () => {
@@ -73,6 +73,7 @@ describe('resolveTimedLegs', () => {
     // a4 arrives 08.10, b3 leaves 08.10: a zero-second change is not a change.
     const [firstLeg] = resolveTimedLegs(legs, {})
     expect(firstLeg!.options[3]!.gapToNextS).toBeNull()
+    expect(firstLeg!.options[3]!.blocked).toBe('NO_ONWARD')
   })
 
   it('charges the transfer walk at average pace', () => {
@@ -86,17 +87,61 @@ describe('resolveTimedLegs', () => {
     expect(resolveTimedLegs([ride([])], {})).toEqual([])
   })
 
-  it('stops instead of running backwards when nothing connects', () => {
+  it('re-times nothing when no train can finish the journey', () => {
+    // Only reachable from a body whose lists disagree with themselves; the
+    // caller then keeps the journey exactly as the API sent it.
     const late = [ride([train('a1', '09:00', '09:30')]), ride([train('b1', '07:00', '07:20')])]
-    expect(resolveTimedLegs(late, {}).map(leg => leg.chosen.tripId)).toEqual(['a1'])
+    expect(resolveTimedLegs(late, {})).toEqual([])
   })
-})
 
-describe('connectionOf', () => {
-  it('names a thin change as thin', () => {
-    expect(connectionOf(3 * 60)).toBe('MEPET')
-    expect(connectionOf(6 * 60)).toBe('PAS')
-    expect(connectionOf(8 * 60)).toBe('LONGGAR')
+  describe('with the engine\'s change allowance', () => {
+    // 600 m between the rides: the fallback would demand 500 s at average pace.
+    const withAllowance = (minChangeS: number) => [
+      ride(first),
+      walk(600),
+      { ...(ride(second) as FareResultLeg & { type: 'RIDE' }), minChangeS }
+    ]
+
+    it('trusts the engine over its own fallback', () => {
+      // A brisk rider: the engine allows 300 s, so the 07.52 is made from a 07.46 arrival.
+      const timed = resolveTimedLegs(withAllowance(300), {})
+      expect(timed[1]!.chosen.tripId).toBe('b1')
+      expect(timed[1]!.options[0]!.blocked).toBeNull()
+    })
+
+    it('judges tight on the spare time beyond the allowance, not on the gap', () => {
+      const [firstLeg] = resolveTimedLegs(withAllowance(300), {})
+      // a1 → b1 is a 360 s gap: only 60 s to spare, so tight.
+      expect(firstLeg!.options[0]).toMatchObject({ gapToNextS: 360, tight: true })
+      // a3 → b3 is 480 s: 180 s to spare.
+      expect(firstLeg!.options[2]).toMatchObject({ gapToNextS: 480, tight: false })
+    })
+
+    it('reports the same verdict for the change row in the timeline', () => {
+      const allowed = withAllowance(300)
+      expect(changeAt(allowed, resolveTimedLegs(allowed, {}), 1)).toEqual({ gapS: 360, tight: true })
+    })
+  })
+
+  describe('a train nothing later connects from', () => {
+    // b's list ends at 08.10, so a4 (in 08.10) has no onward train.
+    it('is offered but cannot be picked, and says why', () => {
+      const [firstLeg] = resolveTimedLegs(legs, {})
+      expect(firstLeg!.options.map(option => option.blocked)).toEqual([null, null, null, 'NO_ONWARD'])
+    })
+
+    it('ignores a pick of it rather than splitting the journey in two', () => {
+      const timed = resolveTimedLegs(legs, { 0: 'a4' })
+      expect(timed.map(leg => leg.chosen.tripId)).toEqual(['a1', 'b1'])
+    })
+
+    it('looks past the next leg to the ones after it', () => {
+      // c only runs early: b3 cannot finish, so neither can a3, which only connects to b3.
+      const third = [train('c1', '08:20', '08:30'), train('c2', '08:30', '08:40')]
+      const timed = resolveTimedLegs([ride(first), ride(second), ride(third)], {})
+      expect(timed[1]!.options.map(option => option.blocked)).toEqual([null, null, 'NO_ONWARD'])
+      expect(timed[0]!.options.map(option => option.blocked)).toEqual([null, null, 'NO_ONWARD', 'NO_ONWARD'])
+    })
   })
 })
 

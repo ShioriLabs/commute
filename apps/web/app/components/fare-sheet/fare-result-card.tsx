@@ -12,7 +12,7 @@ import { codeOfLineKey, useLines } from '~/hooks/use-lines'
 import DeparturePicker, { ConnectionNote } from './departure-picker'
 import { JOURNEY_LABELS } from './journey-labels'
 import { journeysOf, sortJourneyLabels, walkDistanceOf } from './journeys'
-import { leaveInLabel, resolveTimedLegs, retimeJourney, type TimedLeg } from './leg-departures'
+import { changeAt, leaveInLabel, resolveTimedLegs, retimeJourney, type TimedLeg } from './leg-departures'
 import { useJourneyPager } from './journey-pager'
 import RouteBar from './route-bar'
 import { routeBarSegments } from './route-bar-segments'
@@ -175,14 +175,14 @@ const walkRailColor = (leg: FareResultLeg | undefined): string | null => {
   return leg.corridorLabel != null && leg.fare != null ? 'var(--color-rose-400)' : 'var(--color-slate-400)'
 }
 
-function RideLeg({ leg, isSameStationTransfer, walkBefore, walkAfter, timed, changeGapS, onPick }: {
+function RideLeg({ leg, isSameStationTransfer, walkBefore, walkAfter, timed, changeGap, onPick }: {
   leg: FareResultRideLeg
   isSameStationTransfer: boolean
   walkBefore: string | null
   walkAfter: string | null
   timed: TimedLeg | undefined
-  /** Seconds between the train before and this one, for an interchange with no walk leg. */
-  changeGapS: number | null
+  /** The change from the train before into this one, for an interchange with no walk leg. */
+  changeGap: { gapS: number, tight: boolean } | null
   onPick: (tripId: string) => void
 }) {
   const [expanded, setExpanded] = useState(false)
@@ -213,7 +213,7 @@ function RideLeg({ leg, isSameStationTransfer, walkBefore, walkAfter, timed, cha
               <div className="flex items-center gap-1.5 text-sm text-slate-500 py-1.5">
                 <TransferIcon mode={leg.operator === OPERATORS.TJ.code ? 'bus' : 'train'} className="w-3.5 h-3.5" />
                 <span>{leg.operator === OPERATORS.TJ.code ? 'Pindah bus' : 'Pindah kereta'}</span>
-                {changeGapS !== null ? <ConnectionNote gapS={changeGapS} /> : null}
+                {changeGap ? <ConnectionNote gapS={changeGap.gapS} tight={changeGap.tight} /> : null}
               </div>
             </div>
           )
@@ -382,17 +382,7 @@ export function JourneyTimeline({ legs, timed = [], onPick = () => {} }: {
 }) {
   const first = legs[0]
   const last = legs.at(-1)
-  /*
-   * The change at a point in the timeline: getting off the last timed train
-   * before it, to boarding the first one at or after it. Null when either side
-   * is untimed, because a gap with one end unknown is not a number to print.
-   */
-  const changeGapAt = (index: number): number | null => {
-    const before = timed.filter(leg => leg.index < index).at(-1)
-    const after = timed.find(leg => leg.index >= index)
-    if (!before || !after) return null
-    return (Date.parse(after.chosen.departureAt) - Date.parse(before.chosen.arrivalAt)) / 1000
-  }
+  const changeGapAt = (index: number) => changeAt(legs, timed, index)
   return (
     <ol className="mt-6 flex flex-col">
       {first?.type === 'TRANSFER' ? <EndpointStop name={first.from.name} cap="START" /> : null}
@@ -413,7 +403,7 @@ export function JourneyTimeline({ legs, timed = [], onPick = () => {} }: {
               walkBefore={walkRailColor(previous ?? undefined)}
               walkAfter={walkRailColor(legs[index + 1])}
               timed={timed.find(entry => entry.index === index)}
-              changeGapS={isSameStationTransfer ? changeGapAt(index) : null}
+              changeGap={isSameStationTransfer ? changeGapAt(index) : null}
               onPick={tripId => onPick(index, tripId)}
             />
           )
@@ -454,7 +444,7 @@ export function JourneyTimeline({ legs, timed = [], onPick = () => {} }: {
          * margin sits outside the row, where its rail cannot reach, and left a
          * gap at both ends of every walk.
          */
-        const walkGapS = changeGapAt(index)
+        const walkGap = changeGapAt(index)
         return (
           <li key={index} className={`relative grid ${FARE_GUTTER_CLASS}`}>
             <div className="relative">
@@ -468,7 +458,7 @@ export function JourneyTimeline({ legs, timed = [], onPick = () => {} }: {
                 {leg.to.name}
                 {leg.distanceM > 0 && ` (Jalan kaki ±${leg.distanceM}m)`}
               </span>
-              {walkGapS !== null ? <ConnectionNote gapS={walkGapS} /> : null}
+              {walkGap ? <ConnectionNote gapS={walkGap.gapS} tight={walkGap.tight} /> : null}
             </div>
           </li>
         )
