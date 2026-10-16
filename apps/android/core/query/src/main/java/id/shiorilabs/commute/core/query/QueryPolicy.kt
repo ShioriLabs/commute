@@ -26,8 +26,14 @@ class QueryPolicy(val staleAt: (fetchedAt: Instant) -> Instant) {
         /** Operators and lines: compiled into the API, changed only by a deploy. */
         val Static: QueryPolicy = freshFor(Duration.ofHours(24))
 
-        /** Stations, transfers, headways and the search index: changed when an importer runs. */
+        /** Stations, transfers, crowd forecasts and the search index: changed when an importer runs. */
         val Topology: QueryPolicy = freshFor(Duration.ofHours(1))
+
+        /**
+         * Headways: measured hour by hour, so an answer goes stale on the hour's turn rather than on a
+         * data change. The API holds them for the same ten minutes as a fare.
+         */
+        val Hourly: QueryPolicy = freshFor(Duration.ofMinutes(10))
 
         /** Timetables: changed with a schedule, and kept tighter than topology on purpose. */
         val Timetable: QueryPolicy = freshFor(Duration.ofMinutes(30))

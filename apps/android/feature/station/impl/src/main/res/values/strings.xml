@@ -58,4 +58,25 @@
     <string name="station_memorial_title">In Memoriam</string>
     <string name="station_memorial_body">27 April 2026. Enam belas perempuan yang sedang dalam perjalanan menuju suatu tempat kehilangan nyawanya di stasiun ini. Sekitar sembilan puluh orang lainnya terluka.</string>
     <string name="station_memorial_closing">Kami mengenang mereka.</string>
+
+    <!--
+        Forecast crowding, the web's density badge. A forecast, never a live reading, so the label
+        says "biasanya" every time. The level words fill the two "Biasanya" strings.
+    -->
+    <string name="crowd_title">Perkiraan Keramaian</string>
+    <string name="crowd_badge_description">Perkiraan Keramaian: %1$s</string>
+    <string name="crowd_usually">Biasanya %1$s jam segini</string>
+    <string name="crowd_usually_range">Biasanya %1$s sampai %2$s jam segini</string>
+    <string name="crowd_word_lengang">lengang</string>
+    <string name="crowd_word_ramai">ramai</string>
+    <string name="crowd_word_padat">padat</string>
+    <string name="crowd_word_sangat_padat">sangat padat</string>
+    <!-- The legend's rows. -->
+    <string name="crowd_name_lengang">Lengang</string>
+    <string name="crowd_name_ramai">Ramai</string>
+    <string name="crowd_name_padat">Padat</string>
+    <string name="crowd_name_sangat_padat">Sangat padat</string>
+    <string name="crowd_legend_close">Tutup arti ikon keramaian</string>
+    <!-- "historical" is set in italics, as on the web. -->
+    <string name="crowd_legend_note">Dua ikon dengan tanda ~ menandakan keramaiannya bisa di antara 2 ikon tersebut. Perkiraan keramaian berdasarkan data &lt;i&gt;historical&lt;/i&gt;</string>
 </resources>

@@ -13,6 +13,7 @@ import id.shiorilabs.commute.feature.journey.data.JourneyRepository
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationRepository
 import id.shiorilabs.commute.feature.station.data.board
+import id.shiorilabs.commute.feature.station.data.boardHour
 import id.shiorilabs.commute.feature.station.data.cachedBoard
 import id.shiorilabs.commute.feature.station.data.loadInto
 import id.shiorilabs.commute.feature.station.domain.LineInfo
@@ -54,6 +55,9 @@ class SavedStationsViewModel @Inject constructor(
 
     /** The service day the loaded boards belong to. */
     private var loadedDay: ServiceDayName? = null
+
+    /** The hour each loaded board belongs to, by station: a halte's, whose frequencies are the hour's. */
+    private val loadedHours = mutableMapOf<String, Int?>()
 
     private val saved = savedRepository.entries
 
@@ -139,13 +143,15 @@ class SavedStationsViewModel @Inject constructor(
      * Called as the screen's clock ticks. The boards are for one service day: when it turns over
      * (03:00, or midnight into a holiday), every card refetches, as the web does when its board URL
      * changes. Driven by the screen rather than a timer of its own, so nothing polls while the feed
-     * isn't on screen.
+     * isn't on screen. A halte's card also refetches on the hour, since its frequencies are the
+     * hour's.
      */
     fun onClockTick(now: LocalDateTime) {
         val day = serviceDayOf(now)
-        if (loadedDay != null && loadedDay != day) {
-            cards.value.keys.forEach { load(it, now) }
-        }
+        if (loadedDay == null) return
+        cards.value.keys
+            .filter { loadedDay != day || loadedHours[it] != boardHour(it, now) }
+            .forEach { load(it, now) }
     }
 
     /**
@@ -206,6 +212,7 @@ class SavedStationsViewModel @Inject constructor(
 
     private fun load(stationId: String, now: LocalDateTime = now()) {
         loadedDay = serviceDayOf(now)
+        loadedHours[stationId] = boardHour(stationId, now)
         // A retry or a day turnover replaces a load still in flight, which would otherwise land
         // after it and put the older board back.
         loads[stationId]?.cancel()
