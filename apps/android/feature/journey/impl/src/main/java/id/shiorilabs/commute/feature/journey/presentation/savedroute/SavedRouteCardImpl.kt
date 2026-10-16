@@ -17,6 +17,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -42,6 +43,10 @@ import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.ProblemPanel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.components.SkeletonBlock
+import id.shiorilabs.commute.feature.journey.domain.RouteBarSegment
+import id.shiorilabs.commute.feature.journey.domain.routeBarSegments
+import id.shiorilabs.commute.feature.journey.presentation.components.WalkChip
+import id.shiorilabs.commute.feature.journey.presentation.components.legLines
 import id.shiorilabs.commute.core.ui.ext.lineColorOf
 import id.shiorilabs.commute.core.ui.ext.tint
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
@@ -53,9 +58,11 @@ import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
 import id.shiorilabs.commute.feature.journey.R
 import id.shiorilabs.commute.core.time.JAKARTA
 import id.shiorilabs.commute.feature.journey.domain.Journey
+import id.shiorilabs.commute.feature.journey.domain.NEXT_DEPARTURES_SHOWN
 import id.shiorilabs.commute.feature.journey.domain.JourneyStop
 import id.shiorilabs.commute.feature.journey.domain.TripAnswer
-import id.shiorilabs.commute.feature.journey.domain.boardsAt
+import id.shiorilabs.commute.feature.journey.domain.UpcomingRow
+import id.shiorilabs.commute.feature.journey.domain.boardsAtOf
 import id.shiorilabs.commute.feature.journey.domain.formatDuration
 import id.shiorilabs.commute.feature.journey.domain.formatRupiah
 import id.shiorilabs.commute.feature.journey.domain.isLastTrain
@@ -65,7 +72,6 @@ import id.shiorilabs.commute.feature.journey.domain.upcomingJourneys
 import id.shiorilabs.commute.feature.journey.presentation.SavedRouteCard
 import id.shiorilabs.commute.feature.journey.presentation.trip.tripRoute
 import id.shiorilabs.commute.feature.station.domain.LineInfo
-import id.shiorilabs.commute.feature.station.domain.codeOfLineKey
 import java.time.Instant
 import javax.inject.Inject
 
@@ -100,12 +106,12 @@ class SavedRouteCardImpl @Inject constructor() : SavedRouteCard {
         SavedRouteCardContent(
             state = state,
             now = now,
-            onOpen = { journey ->
+            onOpen = { row ->
                 // The trip page asks with the card's own criteria, so lands on the card's answer.
                 val criteria = state.criteria
                 navigator.goTo(
-                    if (journey != null && criteria != null) {
-                        tripRoute(fromId, toId, journey, criteria)
+                    if (row != null && criteria != null) {
+                        tripRoute(fromId, toId, row.journey, criteria, row.departures.firstOrNull()?.departureAt ?: boardsAtOf(row.journey))
                     } else {
                         Route.Otw(fromId = fromId, toId = toId)
                     },
@@ -121,7 +127,7 @@ class SavedRouteCardImpl @Inject constructor() : SavedRouteCard {
 private fun SavedRouteCardContent(
     state: SavedRouteUiState,
     now: Instant,
-    onOpen: (Journey?) -> Unit,
+    onOpen: (UpcomingRow?) -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -151,13 +157,13 @@ private fun RouteBoard(
     answer: TripAnswer,
     lines: Map<String, LineInfo>,
     now: Instant,
-    onOpen: (Journey?) -> Unit,
+    onOpen: (UpcomingRow?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val rows = upcomingJourneys(answer.journeys, now)
     // Coloured by the soonest row, or once the night is over by the route that starts again, so an
     // ended card keeps its line's colour instead of greying.
-    val lead = rows.firstOrNull() ?: answer.journeys.firstOrNull { it.resumesAt != null }
+    val lead = rows.firstOrNull()?.journey ?: answer.journeys.firstOrNull { it.resumesAt != null }
     val lineColor = lineColorOf(lead?.rides?.firstOrNull()?.let { lines[it.line] }?.colorCode)
     val divider = lineColor.tint(0.3f)
     val description = stringResource(R.string.journey_saved_route_rows_description, answer.from.name, answer.to.name)
@@ -175,54 +181,71 @@ private fun RouteBoard(
         if (rows.isEmpty()) {
             Ended(resumesAt = resumeTimeOf(answer.journeys), onClick = { onOpen(null) })
         } else {
-            rows.forEachIndexed { index, journey ->
+            rows.forEachIndexed { index, row ->
                 if (index > 0) {
                     HorizontalDivider(color = divider)
                 }
-                JourneyRow(journey, lines, onClick = { onOpen(journey) })
+                JourneyRow(row, lines, onClick = { onOpen(row) })
             }
         }
     }
 }
 
-/** The web's "transit Nx" counts walk transfers only, so a same-platform change is no transit. */
+/**
+ * One boarding as the web's saved-route row draws it: the route as roundels and walk chips, then the
+ * clock beside its duration, then what comes next beside the fare. No change count or headsign: the
+ * roundels already say how many vehicles and which lines, and the row is about when.
+ */
 @Composable
-private fun changeLabel(journey: Journey): String = when {
-    journey.transferCount > 0 -> stringResource(R.string.journey_transfer_count, journey.transferCount)
-    journey.boardings > 1 -> stringResource(R.string.journey_saved_route_change_train)
-    else -> stringResource(R.string.journey_saved_route_direct)
-}
+private fun JourneyRow(row: UpcomingRow, lines: Map<String, LineInfo>, onClick: () -> Unit) {
+    val journey = row.journey
+    // The soonest train still to come: the route's own unless it left while the answer was held.
+    val lead = row.departures.firstOrNull()
+    val boardsAt = lead?.departureAt
+    val arrivesAt = lead?.arrivalAt
+    val next = row.departures.drop(1).take(NEXT_DEPARTURES_SHOWN)
+    val headsign = journey.rides.firstOrNull()?.headsign
+    val segments = routeBarSegments(journey.legs) { legLines(it, lines) }
+    val duration = if (boardsAt != null && arrivesAt != null) formatDuration(boardsAt, arrivesAt).ifEmpty { null } else null
+    val fare = journey.totalFare?.let(::formatRupiah)
+    // Untimed rows have no duration, so the fare moves up to the headline's line.
+    val headlineFigure = duration ?: fare
+    val secondFigure = if (duration != null) fare else null
+    // The last train has nothing after it, so it and later trains share one line, and it wins.
+    val secondLine = when {
+        journey.isLastTrain -> stringResource(R.string.journey_last_train) to true
+        next.isNotEmpty() -> stringResource(R.string.journey_next_departures, next.joinToString(", ") { formatClock(it.departureAt) }) to false
+        else -> null
+    }
 
-@Composable
-private fun JourneyRow(journey: Journey, lines: Map<String, LineInfo>, onClick: () -> Unit) {
-    val rides = journey.rides
-    val boardsAt = journey.boardsAt
-    val arrivesAt = journey.arrivalAt
-    val headsign = rides.firstOrNull()?.headsign
-    val lastTrain = stringResource(R.string.journey_last_train)
-    val change = changeLabel(journey)
-    val towards = headsign?.let { stringResource(R.string.journey_headsign, it) }
-
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            rides.forEach { ride ->
-                val info = lines[ride.line]
-                LineRoundel(
-                    code = info?.lineCode ?: codeOfLineKey(ride.line),
-                    color = info?.colorCode ?: "#94A3B8",
-                    operator = ride.operator,
-                    size = RoundelSize.SM,
-                )
+        Row(
+            modifier = Modifier.padding(bottom = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            segments.forEach { segment ->
+                when (segment) {
+                    is RouteBarSegment.Walk -> WalkChip(segment.distanceM)
+                    is RouteBarSegment.Ride -> LineRoundel(
+                        code = segment.code,
+                        color = segment.colors.first(),
+                        operator = segment.operator,
+                        size = RoundelSize.SM,
+                    )
+                }
             }
         }
-        Column(modifier = Modifier.weight(1f)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Bottom,
+        ) {
             if (boardsAt != null) {
                 Text(
                     text = buildAnnotatedString {
@@ -232,52 +255,49 @@ private fun JourneyRow(journey: Journey, lines: Map<String, LineInfo>, onClick: 
                             append(formatClock(arrivesAt))
                         }
                     },
+                    modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                 )
             } else {
                 Text(
-                    text = towards?.let { stringResource(R.string.journey_saved_route_towards, headsign) }
+                    text = headsign?.let { stringResource(R.string.journey_saved_route_towards, it) }
                         ?: stringResource(R.string.journey_saved_route_untimed),
+                    modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Text(
-                text = buildAnnotatedString {
-                    if (journey.isLastTrain) {
-                        withStyle(SpanStyle(color = Amber700)) { append("$lastTrain · ") }
-                    }
-                    append(change)
-                    if (boardsAt != null && towards != null) {
-                        append(" · $towards")
-                    }
-                },
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.SemiBold,
-                color = Slate500,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Column(horizontalAlignment = Alignment.End) {
-            if (boardsAt != null && arrivesAt != null) {
+            headlineFigure?.let {
                 Text(
-                    text = formatDuration(boardsAt, arrivesAt),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
+                    text = it,
+                    style = if (duration != null) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
+                    fontWeight = if (duration != null) FontWeight.Bold else FontWeight.SemiBold,
+                    color = if (duration != null) Color.Unspecified else Slate500,
                 )
             }
-            journey.totalFare?.let { fare ->
+        }
+        if (secondLine != null || secondFigure != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
                 Text(
-                    text = formatRupiah(fare),
+                    text = secondLine?.first.orEmpty(),
+                    modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.SemiBold,
-                    color = Slate500,
+                    color = if (secondLine?.second == true) Amber700 else Slate500,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
+                secondFigure?.let {
+                    Text(text = it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = Slate500)
+                }
             }
         }
     }

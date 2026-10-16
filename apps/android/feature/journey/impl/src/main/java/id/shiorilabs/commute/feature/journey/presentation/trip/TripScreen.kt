@@ -37,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -92,6 +93,7 @@ import id.shiorilabs.commute.feature.journey.presentation.components.JourneyDeta
 import id.shiorilabs.commute.feature.journey.presentation.components.RouteBar
 import id.shiorilabs.commute.feature.journey.presentation.components.legLines
 import id.shiorilabs.commute.feature.station.domain.LineInfo
+import kotlinx.coroutines.delay
 import java.time.Instant
 
 /**
@@ -126,6 +128,7 @@ fun TripScreen(
             navigator.goTo(Route.ActiveTrip)
         },
         onOpenTrip = { navigator.goTo(Route.ActiveTrip) },
+        onPickDeparture = viewModel::onPickDeparture,
         onRetry = viewModel::retry,
         onClose = navigator::pop,
         // Back to the options this was picked from when they sit right behind; otherwise (a saved
@@ -151,6 +154,9 @@ fun TripScreen(
 /** White like the OTW tab it opens from. */
 private val TripBackground = Color.White
 
+/** How often the countdown to departure is looked at again. */
+private const val CLOCK_TICK_MILLIS = 30_000L
+
 /** Between the header and the page, on top of the header's own 16 dp: the page's usual 24 in all. */
 private val BodyTop = 8.dp
 
@@ -168,6 +174,7 @@ private fun TripContent(
     tripAsksLocation: Boolean = true,
     onStartTrip: () -> Unit = {},
     onOpenTrip: () -> Unit = {},
+    onPickDeparture: (legIndex: Int, tripId: String) -> Unit = { _, _ -> },
 ) {
     FrostedHeaderPage(
         surfaceColor = TripBackground,
@@ -224,7 +231,20 @@ private fun TripContent(
                                 modifier = Modifier.padding(bottom = 24.dp),
                             )
                         }
-                        JourneyDetail(journey = trip.journey, lines = state.lines)
+                        // A minute-granular countdown, so a page left open keeps counting.
+                        val now by produceState(Instant.now()) {
+                            while (true) {
+                                delay(CLOCK_TICK_MILLIS)
+                                value = Instant.now()
+                            }
+                        }
+                        JourneyDetail(
+                            journey = trip.journey,
+                            lines = state.lines,
+                            now = now,
+                            timed = trip.timed,
+                            onPickDeparture = onPickDeparture,
+                        )
                         ReportIssueLink(page = state.shareUrl, modifier = Modifier.padding(top = 32.dp))
                     }
                 }

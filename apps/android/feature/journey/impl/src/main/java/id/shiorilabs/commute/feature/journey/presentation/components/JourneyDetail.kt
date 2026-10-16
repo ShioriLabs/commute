@@ -22,6 +22,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import id.shiorilabs.commute.core.constants.OPERATOR_NAMES
+import id.shiorilabs.commute.core.time.formatClock
+import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.components.VerticalSpacer
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.theme.Slate400
@@ -30,13 +32,17 @@ import id.shiorilabs.commute.core.ui.theme.Slate700
 import id.shiorilabs.commute.feature.journey.R
 import id.shiorilabs.commute.feature.journey.domain.Journey
 import id.shiorilabs.commute.feature.journey.domain.JourneyStop
+import id.shiorilabs.commute.feature.journey.domain.LeaveIn
+import id.shiorilabs.commute.feature.journey.domain.TimedLeg
 import id.shiorilabs.commute.feature.journey.domain.formatDuration
 import id.shiorilabs.commute.feature.journey.domain.formatKm
 import id.shiorilabs.commute.feature.journey.domain.formatRupiah
 import id.shiorilabs.commute.feature.journey.domain.isLastTrain
+import id.shiorilabs.commute.feature.journey.domain.leaveInOf
 import id.shiorilabs.commute.feature.journey.domain.rides
 import id.shiorilabs.commute.feature.journey.domain.surchargedTransfers
 import id.shiorilabs.commute.feature.station.domain.LineInfo
+import java.time.Instant
 
 /*
  * One journey in full, under the trip page's header (which carries its route bar, clock and fare):
@@ -46,7 +52,13 @@ import id.shiorilabs.commute.feature.station.domain.LineInfo
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun JourneyDetail(journey: Journey, lines: Map<String, LineInfo>) {
+internal fun JourneyDetail(
+    journey: Journey,
+    lines: Map<String, LineInfo>,
+    now: Instant,
+    timed: List<TimedLeg> = emptyList(),
+    onPickDeparture: (legIndex: Int, tripId: String) -> Unit = { _, _ -> },
+) {
     val departureAt = journey.rides.firstOrNull()?.departureAt
     val arrivalAt = journey.arrivalAt
     val surcharged = journey.surchargedTransfers
@@ -54,7 +66,54 @@ internal fun JourneyDetail(journey: Journey, lines: Map<String, LineInfo>) {
     JourneyTags(journey = journey)
 
     val tagged = journey.isLastTrain || journey.labels.isNotEmpty()
-    JourneyTimeline(legs = journey.legs, lines = lines, modifier = Modifier.padding(top = if (tagged) 16.dp else 0.dp))
+
+    // Tonight's service is over: say so, and when it starts again, rather than leave a timeline
+    // that looks like a journey someone can take.
+    journey.resumesAt?.let { resumesAt ->
+        NoticeBanner(
+            message = stringResource(R.string.journey_service_ended, formatClock(resumesAt)),
+            modifier = Modifier.padding(top = if (tagged) 16.dp else 0.dp),
+        )
+    }
+
+    // The countdown follows the journey as the rider's picks have retimed it.
+    val leaveIn = departureAt?.let { leaveInOf(it, now) }
+    if (leaveIn != null) {
+        Text(
+            text = when (leaveIn) {
+                LeaveIn.Gone -> stringResource(R.string.journey_left_already)
+                LeaveIn.Now -> stringResource(R.string.journey_leave_now)
+                is LeaveIn.InMinutes -> stringResource(R.string.journey_leave_in, leaveIn.minutes)
+            },
+            modifier = Modifier.padding(top = 16.dp).semantics { heading() },
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+    // A span only means something with two rides or more: the waiting and walking between them. With
+    // one, the boarding row and the header already say it.
+    if (departureAt != null && arrivalAt != null && journey.rides.size > 1) {
+        Text(
+            text = if (leaveIn != null) {
+                stringResource(R.string.journey_clock_arrives, formatClock(arrivalAt))
+            } else {
+                stringResource(R.string.journey_clock_departs_arrives, formatClock(departureAt), formatClock(arrivalAt))
+            },
+            modifier = Modifier.padding(top = if (leaveIn != null) 4.dp else 16.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = Slate700,
+        )
+    }
+
+    val timelineTop = if (tagged || journey.resumesAt != null || leaveIn != null || (arrivalAt != null && journey.rides.size > 1)) 16.dp else 0.dp
+    JourneyTimeline(
+        legs = journey.legs,
+        lines = lines,
+        modifier = Modifier.padding(top = timelineTop),
+        timed = timed,
+        onPickDeparture = onPickDeparture,
+    )
 
     FlowRow(
         modifier = Modifier.padding(top = 24.dp),

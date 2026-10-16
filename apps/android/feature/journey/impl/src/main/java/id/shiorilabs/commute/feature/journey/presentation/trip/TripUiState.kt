@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.feature.journey.presentation.trip
 
 import id.shiorilabs.commute.feature.journey.domain.Journey
+import id.shiorilabs.commute.feature.journey.domain.TimedLeg
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import java.time.Instant
 
@@ -18,6 +19,8 @@ sealed interface TripPageState {
         val journey: Journey,
         val updatedAt: Instant? = null,
         val isOutdated: Boolean = false,
+        /** The timed ride legs with their alternatives, resolved against the rider's picks; [journey] is already retimed to them. */
+        val timed: List<TimedLeg> = emptyList(),
     ) : TripPageState
 
     /** The pair still answers, but no longer with this journey's route: its options are offered. */

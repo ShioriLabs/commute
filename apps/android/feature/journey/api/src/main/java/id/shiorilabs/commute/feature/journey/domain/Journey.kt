@@ -34,6 +34,7 @@ data class Journey(
     val labels: List<JourneyLabel>,
     /** Times boarding; a same-platform change counts here but is not a transfer. */
     val boardings: Int,
+    /** The sum of the [JourneyLeg.Transfer] legs, which the API rounds up and merges, so it matches the rows. */
     val walkDistanceM: Int,
     /** Only when every ride leg is timetabled, so never for a journey with TransJakarta in it. */
     val arrivalAt: Instant?,
@@ -43,6 +44,28 @@ data class Journey(
      * saved pairs say "Udahan · mulai lagi" with it rather than offer a journey nobody can take.
      */
     val resumesAt: Instant? = null,
+    /**
+     * This route's other boardings in the next hour, soonest first, not counting the one the legs
+     * show. Empty when the route is untimed.
+     */
+    val moreDepartures: List<JourneyDeparture> = emptyList(),
+)
+
+/** Another boarding of the same route; [arrivalAt] only when every ride leg is timetabled. */
+data class JourneyDeparture(
+    val departureAt: Instant,
+    val arrivalAt: Instant? = null,
+)
+
+/** One vehicle that runs a whole ride leg, to choose between with its siblings. */
+data class LegDeparture(
+    val departureAt: Instant,
+    val arrivalAt: Instant,
+    /** Compare, never parse. */
+    val tripId: String,
+    /** `OPERATOR:CODE`; may differ from the leg's own line on a shared trunk. */
+    val line: String,
+    val headsign: String? = null,
 )
 
 sealed interface JourneyLeg {
@@ -81,6 +104,10 @@ sealed interface JourneyLeg {
         val stopTimes: List<Instant?> = emptyList(),
         /** Which vehicle run this is, to compare and never to parse; only on a timetabled leg. */
         val tripId: String? = null,
+        /** Trains that can be boarded for this leg, soonest first; the first is [tripId]'s. Empty when untimed. */
+        val upcomingDepartures: List<LegDeparture> = emptyList(),
+        /** The engine's shortest change into this leg in seconds, at the rider's pace; `null` on the first ride. */
+        val minChangeS: Int? = null,
     ) : JourneyLeg
 
     data class Transfer(
