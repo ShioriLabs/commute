@@ -13,7 +13,7 @@
  */
 
 import type { LegTiming, RouteLeg, Tsundere, WalkingPreference } from '@commute/tsundere'
-import type { FareJourney, FareResultLeg, TripResult } from '@commute/schemas'
+import type { FareJourney, FareJourneyDeparture, FareResultLeg, TripResult } from '@commute/schemas'
 import { atSecondsOfDay, serviceDay, secondsSinceLocalMidnight, wibIsoString } from 'utils/fare'
 import { DAY_MASK } from 'db/schemas/schedules'
 import { SEPARATELY_GATED_LINES, type FareContext } from '@commute/constants'
@@ -53,20 +53,25 @@ function toRouteLegs(legs: readonly FareResultLeg[]): RouteLeg[] {
       })
 }
 
-/** One journey, with times on every leg the timetable actually covers. */
 /*
- * How many boardings of one route to offer.
+ * How far ahead a route's other boardings are offered, and how many at most.
  *
  * A route is a way of getting there; a boarding is a train. From Cakung the
  * 08.11, the 08.22 and the 08.33 are all the same route and all real choices,
- * and showing only the first hides that the 08.22 arrives at the same 08.56 —
- * eleven fewer minutes on the platform for nothing.
- *
- * Three rather than more: a pair with two routes then lands six rows, which is
- * a list a rider can still read. Five would be closer to the reference apps and
- * would push genuinely different routes off the first screen.
+ * so the card names the next ones after its own — but as times on that card,
+ * not as cards of their own, which used to push genuinely different routes off
+ * the first screen. An hour is the horizon a rider plans a departure in; the
+ * cap only matters on a trunk running every few minutes.
  */
-const BOARDINGS_PER_ROUTE = 3
+const MORE_WINDOW_S = 3600
+const MAX_MORE_DEPARTURES = 8
+
+/*
+ * Trains listed under each timed leg, the caught one included: the train the
+ * card is built on and the three after it, which is what a rider glances at
+ * when they are about to miss one.
+ */
+const DEPARTURES_PER_LEG = 4
 
 /** One journey, timed for a specific boarding. Null when nothing runs. */
 function timeOnce(
@@ -76,11 +81,12 @@ function timeOnce(
   context: FareContext,
   afterS: number,
   walking?: WalkingPreference
-): { journey: FareJourney, departureS: number, tripId: string } | null {
+): { journey: FareJourney, departureS: number, arrivalS: number | null, tripId: string } | null {
   const timings = router.timeJourney(routeLegs, {
     departureS: afterS,
     dayMask: dayMaskFor(context.departureAt),
     gatedLines: GATED_LINE_CODES,
+    upcomingPerLeg: DEPARTURES_PER_LEG,
     ...(walking === undefined ? {} : { walking })
   })
   const stamp = (seconds: number) => wibIsoString(atSecondsOfDay(context.departureAt, seconds))
@@ -110,6 +116,13 @@ function timeOnce(
      */
     const prefix = leg.line.slice(0, leg.line.indexOf(':') + 1)
     const boardedLine = timing.lineCode === undefined ? leg.line : `${prefix}${timing.lineCode}`
+    const upcoming = timing.upcoming?.map(departure => ({
+      departureAt: stamp(departure.departureS),
+      arrivalAt: stamp(departure.arrivalS),
+      tripId: departure.tripId,
+      line: `${prefix}${departure.lineCode}`,
+      ...(departure.headsign === undefined ? {} : { headsign: departure.headsign })
+    }))
     return {
       ...leg,
       ...(boardedLine === leg.line ? {} : { line: boardedLine }),
@@ -122,7 +135,8 @@ function timeOnce(
       ...(timing.headsign === undefined ? {} : { headsign: timing.headsign }),
       // Per-request like the stamps: whether this is the last train depends on
       // which train was caught, never on the cached route.
-      ...(timing.lastOfDay ? { lastService: true as const } : {})
+      ...(timing.lastOfDay ? { lastService: true as const } : {}),
+      ...(upcoming === undefined ? {} : { upcomingDepartures: upcoming })
     }
   })
 
@@ -130,45 +144,64 @@ function timeOnce(
   const timed = { ...journey, legs, ...(arrivalS === null ? {} : { arrivalAt: stamp(arrivalS) }) }
 
   const first = timings.find(t => t)
-  return first ? { journey: timed, departureS: first.departureS, tripId: first.tripId } : null
+  return first ? { journey: timed, departureS: first.departureS, arrivalS, tripId: first.tripId } : null
 }
 
 /**
- * Every boarding of one route worth offering, earliest first.
+ * One route, as the card it is offered on: its best boarding, with the route's
+ * other boardings in the next hour carried along as `moreDepartures`.
  *
- * An untimed route yields exactly one row: there are no departures to walk, and
- * three identical cards with no clock on them would be noise rather than
- * choice. That is the TransJakarta case and the unchained-rail case both.
+ * An untimed route comes back unchanged: there are no departures to walk. That
+ * is the TransJakarta case and the unchained-rail case both.
  */
 function boardingsOf(
   journey: FareJourney,
   router: Tsundere,
   context: FareContext,
   walking?: WalkingPreference
-): FareJourney[] {
+): FareJourney {
   const routeLegs = toRouteLegs(journey.legs)
-  const rows: FareJourney[] = []
+  const boardings: NonNullable<ReturnType<typeof timeOnce>>[] = []
   const seenTrips = new Set<string>()
-  let afterS = secondsSinceLocalMidnight(context.departureAt)
+  const atS = secondsSinceLocalMidnight(context.departureAt)
+  let afterS = atS
 
-  for (let i = 0; i < BOARDINGS_PER_ROUTE; i++) {
+  while (boardings.length <= MAX_MORE_DEPARTURES) {
     const timed = timeOnce(journey, routeLegs, router, context, afterS, walking)
     // No timetable at all, or the service is done for the day. Either way there
     // is nothing further to offer, so stop rather than pad the list.
     if (!timed) break
+    // The first boarding is always offered, however far off; the rest only
+    // inside the window.
+    if (boardings.length > 0 && timed.departureS >= atS + MORE_WINDOW_S) break
     /*
      * Two patterns on one line can resolve to the same train — a full run and a
      * short-turn both serving the boarding stop. That is one vehicle and must
-     * be one row.
+     * be offered once.
      */
     if (!seenTrips.has(timed.tripId)) {
       seenTrips.add(timed.tripId)
-      rows.push(timed.journey)
+      boardings.push(timed)
     }
     afterS = timed.departureS + 60
   }
 
-  if (rows.length > 0) return rows
+  /*
+   * A boarding that leaves earlier and arrives no sooner than a later one is
+   * only a longer wait on the platform — the 08.11 and the 08.22 that both
+   * reach Rasuna Said at 08.56 — so it is never offered. Only judged where both
+   * arrivals are known; on a rail-into-TransJakarta route neither is, and every
+   * boarding stays a real choice.
+   */
+  const offered = boardings.filter((boarding, i) => boarding.arrivalS === null
+    || !boardings.slice(i + 1).some(later => later.arrivalS !== null && later.arrivalS <= boarding.arrivalS!))
+
+  const [row, ...more] = offered
+  if (row) {
+    return more.length === 0
+      ? row.journey
+      : { ...row.journey, moreDepartures: more.map(boarding => departureOf(boarding, context)) }
+  }
 
   /*
    * Nothing left tonight, or never timed at all? The first boarding of the
@@ -180,8 +213,22 @@ function boardingsOf(
   const tomorrow = nextServiceDay(context)
   const resumes = timeOnce(journey, routeLegs, router, tomorrow, SERVICE_DAY_START_S, walking)
   return resumes
-    ? [{ ...journey, resumesAt: wibIsoString(atSecondsOfDay(tomorrow.departureAt, resumes.departureS)) }]
-    : [journey]
+    ? { ...journey, resumesAt: wibIsoString(atSecondsOfDay(tomorrow.departureAt, resumes.departureS)) }
+    : journey
+}
+
+/*
+ * A boarding as one of `moreDepartures`: when its first vehicle leaves, and
+ * when the route lands if every leg is timed.
+ */
+function departureOf(
+  { journey, departureS }: NonNullable<ReturnType<typeof timeOnce>>,
+  context: FareContext
+): FareJourneyDeparture {
+  return {
+    departureAt: wibIsoString(atSecondsOfDay(context.departureAt, departureS)),
+    ...(journey.arrivalAt === undefined ? {} : { arrivalAt: journey.arrivalAt })
+  }
 }
 
 /*
@@ -210,18 +257,19 @@ export function retimeTrips(
   context: FareContext,
   walking?: WalkingPreference
 ): TripResult {
-  const rows = result.journeys.flatMap(j => boardingsOf(j, router, context, walking))
+  const rows = result.journeys.map(j => boardingsOf(j, router, context, walking))
   return { ...result, journeys: relabel(byArrival(rows)) }
 }
 
 /*
- * Reassign the badges across the expanded set.
+ * Reassign the badges across the timed set.
  *
  * The engine labels the journey that UNIQUELY wins an axis, and declines to
  * label a lone one — a badge is a comparison, so "Termurah" means nothing
- * without the option it beats. Expanding two journeys into six rows breaks that
- * outright: three rows of one route share a fare, so three cards would read
- * "Termurah" and tell a rider nothing.
+ * without the option it beats. Two of its journeys can still be one route to a
+ * rider — the same stations on either line of a shared trunk — and two cards of
+ * one route share a fare, so both would read "Termurah" and tell a rider
+ * nothing.
  *
  * So the engine's labels are dropped and recomputed here, keeping its rule
  * exactly — a tie means nobody wins.

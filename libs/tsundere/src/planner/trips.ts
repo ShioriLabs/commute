@@ -189,6 +189,23 @@ export function nextTrip(
   afterS: number,
   dayMask: number
 ): Trip | null {
+  for (const trip of tripsFrom(pattern, stopIndex, afterS, dayMask)) return trip
+  return null
+}
+
+/**
+ * Every trip on `pattern` a rider at `stopIndex` can board at or after
+ * `afterS`, soonest first. `nextTrip` is the first of these.
+ *
+ * Lazy, so a caller asking for the next few departures pays for those few and
+ * not for the rest of the day.
+ */
+export function * tripsFrom(
+  pattern: IndexedPattern,
+  stopIndex: number,
+  afterS: number,
+  dayMask: number
+): Generator<Trip> {
   const { trips } = pattern
 
   /*
@@ -210,7 +227,6 @@ export function nextTrip(
   for (let i = low; i < trips.length; i++) {
     const trip = trips[i]!
     if ((trip.dayMask & dayMask) === 0) continue
-    if (trip.departuresS[stopIndex]! >= afterS) return trip
+    if (trip.departuresS[stopIndex]! >= afterS) yield trip
   }
-  return null
 }

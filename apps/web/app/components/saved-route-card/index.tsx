@@ -1,6 +1,7 @@
 import type { FareJourney, FareResult, FareResultRideLeg, TripResult } from '@commute/schemas'
 import type { StandardResponse } from '@schema/response'
 import { ArrowRightIcon, CaretRightIcon } from '@phosphor-icons/react'
+import clsx from 'clsx'
 import { useMemo } from 'react'
 import { Link } from 'react-router'
 import useSWR from 'swr'
@@ -10,14 +11,16 @@ import { readFareCriteria } from 'utils/fare-criteria'
 import { DEPARTURE_SLOT_MINUTES } from 'utils/departure-time'
 import { getTintFromColor } from 'utils/colors'
 import { formatClock, formatDuration, formatRupiah } from 'utils/format'
-import { boardingClock, boardsAtOf, journeyKey } from 'utils/journey-key'
+import { boardingClock, journeyKey } from 'utils/journey-key'
 import LineRoundel from '~/components/line-roundel'
 import { LINE_COLOR_FALLBACK } from '~/components/transit-geometry'
 import { journeysOf } from '~/components/fare-sheet/journeys'
+import { WalkChip } from '~/components/fare-sheet/route-bar'
+import { routeBarSegments } from '~/components/fare-sheet/route-bar-segments'
 import { codeOfLineKey, useLines } from '~/hooks/use-lines'
 import { useClock } from '~/hooks/clock'
 import { useNetworkStatus } from '~/hooks/network'
-import { resumeTimeOf, upcomingJourneys } from './upcoming'
+import { resumeTimeOf, upcomingJourneys, type UpcomingRow } from './upcoming'
 
 const MAX_ROWS = 3
 
@@ -35,62 +38,111 @@ const swrConfig = {
   refreshInterval: DEPARTURE_SLOT_MINUTES * 60 * 1000
 }
 
-function fareUrl(from: string, to: string, journey?: FareJourney) {
+function fareUrl(from: string, to: string, journey?: FareJourney, boardsAt?: string) {
   const params = new URLSearchParams({ from, to })
   if (journey) {
     params.set('j', journeyKey(journey))
-    // Rows of one route share a key; the clock says which train was tapped.
-    const boardsAt = boardsAtOf(journey)
+    // The train the row leads with, which may be later than the route's own
+    // once that one has left. /fare falls back to the route when it differs.
     if (boardsAt) params.set('jt', boardingClock(boardsAt))
   }
   return `/fare?${params.toString()}`
 }
 
 /*
- * "transit Nx" counts walk transfers only, by decision, so a same-platform
- * change (Bogor line into Cikarang at Manggarai) is transit 0x. That still
- * isn't "langsung": two roundels beside that word would contradict it.
+ * How many of a route's later trains a row names after the one it leads with.
+ * Two, like the reference apps: enough to see whether missing this one costs
+ * five minutes or twenty, without the row turning into a timetable.
  */
-function changeLabel(journey: FareJourney): string {
-  if (journey.transferCount > 0) return `transit ${journey.transferCount}x`
-  return journey.boardings > 1 ? 'ganti kereta' : 'langsung'
-}
+const NEXT_SHOWN = 2
 
-function JourneyRow({ journey, from, to, tint }: { journey: FareJourney, from: string, to: string, tint: string }) {
+function JourneyRow({ row: { journey, departures }, from, to, tint }: { row: UpcomingRow, from: string, to: string, tint: string }) {
   const { line: lookupLine } = useLines()
   const rides = journey.legs.filter((leg): leg is FareResultRideLeg => leg.type === 'RIDE')
-  const boardsAt = boardsAtOf(journey)
-  const duration = boardsAt && journey.arrivalAt ? formatDuration(boardsAt, journey.arrivalAt) : null
+  const segments = routeBarSegments(journey.legs, (leg) => {
+    const code = codeOfLineKey(leg.line)
+    const line = lookupLine(leg.line)
+    return [{ code, name: line?.name ?? code, color: line?.colorCode ?? LINE_COLOR_FALLBACK }]
+  })
+  /*
+   * The soonest train still to come, which is the route's own unless that one
+   * has left while the body was held — then the next one riding along with it,
+   * with that train's own arrival.
+   */
+  const lead = departures[0]
+  const boardsAt = lead?.departureAt ?? null
+  const arrivalAt = lead?.arrivalAt
+  const duration = boardsAt && arrivalAt ? formatDuration(boardsAt, arrivalAt) : null
+  const next = departures.slice(1, 1 + NEXT_SHOWN)
   const headsign = rides[0]?.headsign ?? null
   const lastTrain = rides.some(leg => leg.lastService)
 
+  /*
+   * The figures on the right sit on the line they belong to rather than
+   * centred on the row: the duration beside the clock it is measured from, the
+   * fare beneath it. Untimed rows have no duration, so the fare moves up to
+   * the headline's line instead of floating beside an empty one.
+   */
+  const fare = journey.totalFare !== null ? formatRupiah(journey.totalFare) : null
+  const headlineFigure = duration ?? fare
+  const secondFigure = duration ? fare : null
+  /*
+   * Last train and later trains never meet — the last has nothing after it —
+   * so they share one line. The last train wins it, because it changes what a
+   * rider does. No change count or headsign: the roundels already say how many
+   * vehicles and which lines, and the row is about when.
+   */
+  const nextLine = next.length > 0
+    ? (
+        <span className="figure text-xs font-semibold text-slate-500 tabular-nums truncate">
+          {`berikutnya ${next.map(departure => formatClock(departure.departureAt)).join(', ')}`}
+        </span>
+      )
+    : null
+  const secondLine = lastTrain
+    ? <span className="text-xs font-semibold text-amber-700 truncate">Kereta terakhir</span>
+    : nextLine
+
   return (
     <li className="border-t first:border-t-0" style={{ borderTopColor: tint }}>
-      <Link to={fareUrl(from, to, journey)} className="px-4 py-3 flex items-center gap-3">
-        <span className="flex items-center gap-1 shrink-0">
-          {rides.map((leg, index) => {
-            const line = lookupLine(leg.line)
-            return (
-              <LineRoundel
-                key={`${leg.line}-${index}`}
-                size="SM"
-                operator={leg.operator}
-                code={codeOfLineKey(leg.line)}
-                color={(line?.colorCode ?? LINE_COLOR_FALLBACK) as `#${string}`}
-              />
-            )
-          })}
+      <Link to={fareUrl(from, to, journey, boardsAt ?? undefined)} className="px-4 py-3 flex flex-col">
+        {/*
+          * The lines ride above the clock rather than beside it: beside, a
+          * three-leg row pushed the times inward and every row started at a
+          * different x, so the clocks no longer lined up down the card.
+          */}
+        {/*
+          * Built by the route bar's own segmenter, so a walk between two rides
+          * gets the same chip there and here — two roundels side by side hid
+          * that the change is a 300 m walk. A change made on one platform has
+          * no transfer leg and so no chip, and a walk before the first ride or
+          * after the last is dropped, as the bar drops it.
+          */}
+        <span className="flex items-center gap-1 mb-1">
+          {segments.map((segment, index) => segment.kind === 'WALK'
+            ? <WalkChip key={index} distanceM={segment.distanceM} />
+            : (
+                <LineRoundel
+                  key={index}
+                  size="SM"
+                  operator={segment.operator}
+                  code={segment.code}
+                  color={segment.colors[0] as `#${string}`}
+                />
+              ))}
         </span>
-        <span className="flex-grow min-w-0 flex flex-col">
+        <span className="flex items-baseline justify-between gap-3">
           {boardsAt
             ? (
-                <span className="figure text-lg font-bold tabular-nums leading-tight">
+                <span className="figure text-lg font-bold tabular-nums leading-tight inline-flex items-center gap-1.5">
                   {formatClock(boardsAt)}
-                  {journey.arrivalAt
+                  {arrivalAt
                     ? (
                         <>
-                          <span className="text-slate-400 font-semibold">{' → '}</span>
-                          {formatClock(journey.arrivalAt)}
+                          {/* An icon rather than a "→" glyph, which sits on the
+                            * font's own baseline and read low beside the digits. */}
+                          <ArrowRightIcon weight="bold" className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-label="sampai" />
+                          {formatClock(arrivalAt)}
                         </>
                       )
                     : null}
@@ -101,18 +153,24 @@ function JourneyRow({ journey, from, to, tint }: { journey: FareJourney, from: s
                   {headsign ? `Arah ${headsign}` : 'Jadwal tidak tersedia'}
                 </span>
               )}
-          <span className="text-xs font-semibold text-slate-500 truncate">
-            {lastTrain ? <span className="text-amber-700">Kereta terakhir · </span> : null}
-            {changeLabel(journey)}
-            {boardsAt && headsign ? ` · arah ${headsign}` : null}
-          </span>
-        </span>
-        <span className="shrink-0 flex flex-col items-end">
-          {duration ? <span className="figure text-sm font-bold tabular-nums">{duration}</span> : null}
-          {journey.totalFare !== null
-            ? <span className="figure text-xs font-semibold text-slate-500 tabular-nums">{formatRupiah(journey.totalFare)}</span>
+          {headlineFigure
+            ? (
+                <span className={clsx('figure shrink-0 tabular-nums', duration ? 'text-sm font-bold' : 'text-xs font-semibold text-slate-500')}>
+                  {headlineFigure}
+                </span>
+              )
             : null}
         </span>
+        {secondLine || secondFigure
+          ? (
+              <span className="flex items-baseline justify-between gap-3">
+                {secondLine ?? <span />}
+                {secondFigure
+                  ? <span className="figure shrink-0 text-xs font-semibold text-slate-500 tabular-nums">{secondFigure}</span>
+                  : null}
+              </span>
+            )
+          : null}
       </Link>
     </li>
   )
@@ -140,7 +198,7 @@ export default function SavedRouteCard({ from, to }: { from: string, to: string 
   const resumesAt = useMemo(() => (result ? resumeTimeOf(journeysOf(result)) : null), [result])
   // Coloured by the soonest row, or once the night is over by the route that
   // starts again, so an ended card keeps its line's colour instead of greying.
-  const lead = rows[0] ?? (result ? journeysOf(result).find(journey => journey.resumesAt) : undefined)
+  const lead = rows[0]?.journey ?? (result ? journeysOf(result).find(journey => journey.resumesAt) : undefined)
   const firstRide = lead?.legs.find((leg): leg is FareResultRideLeg => leg.type === 'RIDE')
   const lineColor = (firstRide && lookupLine(firstRide.line)?.colorCode) ?? LINE_COLOR_FALLBACK
   const tint = getTintFromColor(lineColor, 0.3)
@@ -198,8 +256,8 @@ export default function SavedRouteCard({ from, to }: { from: string, to: string 
           {rows.length > 0
             ? (
                 <ul aria-label={`Keberangkatan berikutnya dari ${result.from.name} ke ${result.to.name}`}>
-                  {rows.map(journey => (
-                    <JourneyRow key={`${journeyKey(journey)}@${boardsAtOf(journey) ?? ''}`} journey={journey} from={from} to={to} tint={tint} />
+                  {rows.map(row => (
+                    <JourneyRow key={`${journeyKey(row.journey)}@${row.departures[0]?.departureAt ?? ''}`} row={row} from={from} to={to} tint={tint} />
                   ))}
                 </ul>
               )

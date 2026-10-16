@@ -381,6 +381,121 @@ describe('resolveDepartures', () => {
     })
   })
 
+  /*
+   * The "all departures" list a rider sees under a leg: the train they catch
+   * and the ones after it, from the same platform and under the same rules.
+   */
+  describe('listing the trains after the caught one', () => {
+    const every = (lineCode: string, stationIds: string[], times: number[], extra: Partial<TripPattern['trips'][number]> = {}): TripPattern => ({
+      lineCode,
+      stationIds,
+      trips: times.map((t, i) => ({
+        id: `${lineCode}${i}`,
+        dayMask: ALL_DAYS,
+        departuresS: stationIds.map((_, s) => t + s * 600),
+        ...extra
+      }))
+    })
+    const line = every('C', ['KCI-A', 'KCI-B'], [at(7), at(7, 10), at(7, 20), at(7, 30), at(7, 40)])
+    const leg = [ride('C', ['KCI-A', 'KCI-B'])]
+
+    it('lists nothing unless asked', () => {
+      const [timing] = resolveDepartures(leg, index(line), { departureS: at(6), dayMask: ALL_DAYS })
+      expect(timing?.upcoming).toBeUndefined()
+    })
+
+    it('starts with the train caught and lists the next ones in order', () => {
+      const [timing] = resolveDepartures(leg, index(line), { departureS: at(7, 5), dayMask: ALL_DAYS, upcomingPerLeg: 3 })
+      expect(timing?.upcoming?.map(d => d.tripId)).toEqual(['C1', 'C2', 'C3'])
+      expect(timing?.upcoming?.[0]).toMatchObject({
+        departureS: timing?.departureS,
+        arrivalS: timing?.arrivalS,
+        tripId: timing?.tripId,
+        lineCode: 'C'
+      })
+      expect(timing?.upcoming?.[1]).toMatchObject({ departureS: at(7, 20), arrivalS: at(7, 30) })
+    })
+
+    it('stops at the end of the day rather than padding', () => {
+      const [timing] = resolveDepartures(leg, index(line), { departureS: at(7, 35), dayMask: ALL_DAYS, upcomingPerLeg: 4 })
+      expect(timing?.upcoming?.map(d => d.tripId)).toEqual(['C4'])
+    })
+
+    /*
+     * A full run and a short-turn interleave at the boarding stop, and the
+     * soonest few can all come from one of them — so each is read past the
+     * first and the two are merged, not concatenated.
+     */
+    it('merges the patterns that serve the leg, soonest first', () => {
+      const full = every('C', ['KCI-A', 'KCI-B', 'KCI-Z'], [at(7), at(7, 30)])
+      const shortRun = every('C', ['KCI-A', 'KCI-B'], [at(7, 10), at(7, 20)])
+      const short = { ...shortRun, trips: shortRun.trips.map(trip => ({ ...trip, id: `short-${trip.id}` })) }
+      const [timing] = resolveDepartures(leg, index(full, short), { departureS: at(6), dayMask: ALL_DAYS, upcomingPerLeg: 4 })
+      expect(timing?.upcoming?.map(d => d.departureS)).toEqual([at(7), at(7, 10), at(7, 20), at(7, 30)])
+    })
+
+    // One vehicle reached through two patterns is one train on the platform.
+    it('lists a train once when two patterns resolve to it', () => {
+      const a = every('C', ['KCI-A', 'KCI-B'], [at(7), at(7, 10)])
+      const b: TripPattern = { ...a, stationIds: ['KCI-A', 'KCI-B', 'KCI-Z'], trips: a.trips.map(trip => ({ ...trip, departuresS: [...trip.departuresS, trip.departuresS[1]! + 600] })) }
+      const [timing] = resolveDepartures(leg, index(a, b), { departureS: at(6), dayMask: ALL_DAYS, upcomingPerLeg: 4 })
+      expect(timing?.upcoming?.map(d => d.tripId)).toEqual(['C0', 'C1'])
+    })
+
+    it('includes the other line on a shared trunk, under its own line', () => {
+      const trunk = ['LRTJBDB-SET', 'LRTJBDB-DKA']
+      const bk = every('BK', trunk, [at(18, 49), at(18, 59)])
+      const cb = every('CB', trunk, [at(18, 45), at(18, 55)])
+      const [timing] = resolveDepartures([ride('BK', trunk)], index(bk, cb), { departureS: at(18, 40), dayMask: ALL_DAYS, upcomingPerLeg: 4 })
+      expect(timing?.upcoming?.map(d => d.lineCode)).toEqual(['CB', 'BK', 'CB', 'BK'])
+    })
+
+    it('refuses a train that branches off before the alighting stop', () => {
+      const branch = every('D', ['KCI-A', 'KCI-Q'], [at(7, 1)])
+      const [timing] = resolveDepartures(leg, index(line, branch), { departureS: at(6), dayMask: ALL_DAYS, upcomingPerLeg: 3 })
+      expect(timing?.upcoming?.map(d => d.tripId)).toEqual(['C0', 'C1', 'C2'])
+    })
+
+    it('respects the day mask', () => {
+      const weekday = every('C', ['KCI-A', 'KCI-B'], [at(7, 5)], { dayMask: WD })
+      const [timing] = resolveDepartures(leg, index(line, weekday), { departureS: at(7), dayMask: 0b010, upcomingPerLeg: 3 })
+      expect(timing?.upcoming?.map(d => d.tripId)).toEqual(['C0', 'C1', 'C2'])
+    })
+
+    it('carries the headsign of each train', () => {
+      const signed = every('C', ['KCI-A', 'KCI-B'], [at(7)], { headsign: 'Angke' })
+      const [timing] = resolveDepartures(leg, index(signed), { departureS: at(6), dayMask: ALL_DAYS, upcomingPerLeg: 2 })
+      expect(timing?.upcoming?.[0]?.headsign).toBe('Angke')
+    })
+
+    /*
+     * A later leg's list starts where the rider actually is: after the ride
+     * before it and the change between, so a train they cannot reach is never
+     * offered as one they could take.
+     */
+    it('anchors a later leg on the clock the rider reaches its platform', () => {
+      const feeder = every('M', ['MRTJ-X', 'KCI-A'], [at(6, 50)])
+      const timings = resolveDepartures(
+        [ride('M', ['MRTJ-X', 'KCI-A']), ride('C', ['KCI-A', 'KCI-B'])],
+        index(feeder, line),
+        // Alights 07:00; the change rules out the 07:00 train.
+        { departureS: at(6), dayMask: ALL_DAYS, upcomingPerLeg: 2 }
+      )
+      expect(timings[1]?.upcoming?.map(d => d.tripId)).toEqual(['C1', 'C2'])
+    })
+
+    it('lists nothing on an untimed leg', () => {
+      const [timing] = resolveDepartures([ride('9C', ['TJ-A', 'TJ-B'])], index(line), { departureS: at(6), dayMask: ALL_DAYS, upcomingPerLeg: 3 })
+      expect(timing).toBeNull()
+    })
+
+    it('keeps times past midnight above DAY_S', () => {
+      const late = every('B', ['KCI-JAKK', 'KCI-CLT'], [at(23, 40), at(23, 55)])
+      const [timing] = resolveDepartures([ride('B', ['KCI-JAKK', 'KCI-CLT'])], index(late), { departureS: at(23, 30), dayMask: ALL_DAYS, upcomingPerLeg: 3 })
+      expect(timing?.upcoming?.at(-1)?.arrivalS).toBe(at(24, 5))
+    })
+  })
+
   it('respects the day mask', () => {
     const weekdayOnly: TripPattern = {
       ...mrt,
