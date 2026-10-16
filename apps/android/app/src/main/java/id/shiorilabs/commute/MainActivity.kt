@@ -12,6 +12,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
 import dagger.hilt.android.AndroidEntryPoint
+import id.shiorilabs.commute.core.datastore.AppearancePreferencesRepository
 import id.shiorilabs.commute.core.datastore.DeveloperPreferencesRepository
 import id.shiorilabs.commute.core.datastore.OnboardingPreferencesRepository
 import id.shiorilabs.commute.core.navigation.Route
@@ -29,6 +30,9 @@ class MainActivity : ComponentActivity() {
     lateinit var developerPreferences: DeveloperPreferencesRepository
 
     @Inject
+    lateinit var appearancePreferences: AppearancePreferencesRepository
+
+    @Inject
     lateinit var onboardingPreferences: OnboardingPreferencesRepository
 
     @Inject
@@ -40,8 +44,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Both bars are fully transparent and the theme is light only, so the bars always take dark
-        // icons. Insets themselves are handled in Compose: `CommuteApp` hands each screen the
+        // Both bars are fully transparent; the theme sets their icons' shade for its look. Insets
+        // themselves are handled in Compose: `CommuteApp` hands each screen the
         // system-bar padding.
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
@@ -62,6 +66,7 @@ class MainActivity : ComponentActivity() {
                     pendingLink = pendingLink,
                     onboardingDone = onboardingPreferences.completed,
                     frostTuner = developerPreferences.frostTuner,
+                    themeMode = appearancePreferences.themeMode,
                     tripBar = tripBar,
                 )
             }

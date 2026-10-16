@@ -1,5 +1,7 @@
 package id.shiorilabs.commute.feature.journey.presentation.components
 
+import id.shiorilabs.commute.core.ui.theme.themed
+import id.shiorilabs.commute.core.ui.theme.StoneFillDark
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
@@ -69,7 +71,8 @@ private val RowHeight = 44.dp
 private const val PADDING_ROWS = 2
 
 /** `bg-stone-100/80`, the band behind the selected row. */
-private val SelectionBand = Color(0xCCF5F5F4)
+private val SelectionBand: Color
+    @Composable get() = themed(Color(0xCCF5F5F4), StoneFillDark)
 
 /**
  * When the rider is leaving: a day, an hour and a minute on wheels, the minutes on the 20-minute grid

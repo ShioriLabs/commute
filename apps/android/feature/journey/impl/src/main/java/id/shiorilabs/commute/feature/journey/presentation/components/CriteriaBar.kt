@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.journey.presentation.components
 
+import id.shiorilabs.commute.core.ui.theme.PageGround
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -159,7 +160,7 @@ internal fun CriteriaBar(
             modifier = Modifier
                 .height(IntrinsicSize.Min)
                 .clip(CircleShape)
-                .background(Color.White)
+                .background(PageGround)
                 .border(2.dp, Stone200, CircleShape),
         ) {
             ChipSegment(
@@ -203,7 +204,7 @@ internal fun CriteriaBar(
         Row(
             modifier = Modifier
                 .clip(CircleShape)
-                .background(if (picked) Rose100 else Color.White)
+                .background(if (picked) Rose100 else PageGround)
                 .border(2.dp, if (picked) Rose200 else Stone200, CircleShape)
                 .clickable { openSheet(OpenCriterion.DEPARTURE) }
                 .clearAndSetSemantics {

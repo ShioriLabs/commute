@@ -1,7 +1,10 @@
 package id.shiorilabs.commute.core.ui.ext
 
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import id.shiorilabs.commute.core.ui.theme.Slate400
+import id.shiorilabs.commute.core.ui.theme.LocalDarkTheme
+import id.shiorilabs.commute.core.ui.theme.Fixed
 import kotlin.math.roundToInt
 
 /**
@@ -24,7 +27,7 @@ fun parseHexColor(hex: String, fallback: Color = Color.Gray): Color {
  * loading) or it doesn't parse: the web's `LINE_COLOR_FALLBACK`, so a card renders grey rather than
  * blanking.
  */
-fun lineColorOf(colorCode: String?): Color = colorCode?.let { parseHexColor(it, Slate400) } ?: Slate400
+fun lineColorOf(colorCode: String?): Color = colorCode?.let { parseHexColor(it, Fixed.Slate400) } ?: Fixed.Slate400
 
 /** Which text colour reads on a background. */
 enum class Foreground {
@@ -48,10 +51,20 @@ fun Color.foreground(): Foreground {
 }
 
 /**
- * This colour washed towards white: [factor] of the colour, the rest white. `0.2f` is the pale
+ * This colour washed towards [base] (white): [factor] of the colour, the rest [base]. `0.2f` is the pale
  * card background the web derives from a line colour.
  */
-fun Color.tint(factor: Float = 0.2f): Color {
-    fun channel(value: Float) = ((value * 255 * factor + 255 * (1 - factor)).roundToInt()) / 255f
-    return Color(red = channel(red), green = channel(green), blue = channel(blue))
+fun Color.tint(factor: Float = 0.2f, base: Color = Color.White): Color {
+    fun channel(value: Float, ground: Float) = ((value * 255 * factor + ground * 255 * (1 - factor)).roundToInt()) / 255f
+    return Color(red = channel(red, base.red), green = channel(green, base.green), blue = channel(blue, base.blue))
+}
+
+/**
+ * [tint] on the theme's own ground: white on the light theme, as the web, and the dark themes'
+ * card surface otherwise, so a line's card is that line's hue on the dark rather than a pale slab.
+ */
+@Composable
+fun Color.themedTint(factor: Float = 0.2f): Color {
+    val base = if (LocalDarkTheme.current) MaterialTheme.colorScheme.surfaceContainer else Color.White
+    return tint(factor, base)
 }

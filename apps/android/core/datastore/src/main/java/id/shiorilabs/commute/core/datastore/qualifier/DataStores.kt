@@ -75,3 +75,11 @@ annotation class OtwDataStore
 @Qualifier
 @Retention(AnnotationRetention.RUNTIME)
 annotation class OnboardingDataStore
+
+/**
+ * Hilt [Qualifier] for the preferences [DataStore]<[Preferences]> backing the app's look
+ * (Pengaturan → Tema).
+ */
+@Qualifier
+@Retention(AnnotationRetention.RUNTIME)
+annotation class AppearanceDataStore

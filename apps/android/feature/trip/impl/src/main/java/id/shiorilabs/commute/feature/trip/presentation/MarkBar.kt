@@ -1,5 +1,8 @@
 package id.shiorilabs.commute.feature.trip.presentation
 
+import id.shiorilabs.commute.core.ui.theme.PageGround
+import id.shiorilabs.commute.core.ui.theme.Slate200
+import id.shiorilabs.commute.core.ui.theme.Slate500
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -40,7 +43,7 @@ enum class MarkKind(val key: String, val label: Int, val fill: Color, val ink: C
     MOVING("moving", R.string.trip_mark_moving, Color(0xFF059669), Color.White),
 
     /** The train stopped at a station. */
-    STOPPED("stopped", R.string.trip_mark_stopped, Color(0xFF0F172A), Color.White),
+    STOPPED("stopped", R.string.trip_mark_stopped, Color(0xFF334155), Color.White),
 
     /** What the page says is wrong right now. */
     ODD("odd", R.string.trip_mark_odd, Color(0xFFF59E0B), Color(0xFF0F172A)),
@@ -75,16 +78,16 @@ internal fun MarkBar(rows: List<List<MarkKind>>, bottomInset: Dp, onMark: (MarkK
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color.White)
+            .background(PageGround)
             .padding(bottom = bottomInset),
     ) {
-        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFFE2E8F0)))
+        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Slate200))
         Text(
             text = last?.let { (kind, at) -> stringResource(R.string.trip_mark_last, stringResource(kind.label), formatClockSeconds(at)) }
                 ?: stringResource(if (rows.size > 1) R.string.trip_mark_hint_platform else R.string.trip_mark_hint),
             modifier = Modifier.padding(start = 32.dp, top = 8.dp, end = 32.dp),
             style = MaterialTheme.typography.labelMedium,
-            color = Color(0xFF64748B),
+            color = Slate500,
         )
         rows.forEach { row ->
             Row(

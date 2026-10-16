@@ -1,5 +1,9 @@
 package id.shiorilabs.commute.feature.search.presentation.components
 
+import id.shiorilabs.commute.core.ui.theme.themed
+import id.shiorilabs.commute.core.ui.theme.StoneLineDark
+import id.shiorilabs.commute.core.ui.theme.Slate500
+import id.shiorilabs.commute.core.ui.theme.Slate300
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -42,13 +46,16 @@ import id.shiorilabs.commute.feature.station.presentation.sharedLineRoundel
 import id.shiorilabs.commute.feature.station.presentation.sharedStationName
 
 /** The subtitle beside a result's title, `text-slate-500`. */
-private val SubtitleColor = Color(0xFF64748B)
+private val SubtitleColor: Color
+    @Composable get() = Slate500
 
 /** An unpinned pin, `text-slate-300`. */
-private val PinIdle = Color(0xFFCBD5E1)
+private val PinIdle: Color
+    @Composable get() = Slate300
 
 /** The hairline between rows, `bg-stone-200/70`. */
-private val Hairline = Color(0xB3E7E5E4)
+private val Hairline: Color
+    @Composable get() = themed(Color(0xB3E7E5E4), StoneLineDark)
 
 /** Where the text starts. */
 private val RowInset = 32.dp
@@ -83,13 +90,14 @@ fun SearchResultItem(
     val stationId = (searchable as? Searchable.Station)?.stationId
     val sharedStationId = stationId?.takeIf { shared }
 
+    val hairline = Hairline
     Row(
         modifier = modifier
             .fillMaxWidth()
             .drawBehind {
                 if (showDivider) {
                     val y = size.height - 0.5.dp.toPx()
-                    drawLine(Hairline, Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
+                    drawLine(hairline, Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
                 }
             }
             .padding(start = RowInset, end = 16.dp),

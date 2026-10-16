@@ -24,7 +24,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.ui.components.CommuteCard
 import id.shiorilabs.commute.core.ui.ext.lineColorOf
-import id.shiorilabs.commute.core.ui.ext.tint
+import id.shiorilabs.commute.core.ui.ext.themedTint
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.Gray500
 import id.shiorilabs.commute.core.ui.theme.Slate600
@@ -56,12 +56,12 @@ fun LastTrainCard(
     modifier: Modifier = Modifier,
 ) {
     val lineColor = lineColorOf(lineInfo?.colorCode)
-    val divider = lineColor.tint(0.3f)
+    val divider = lineColor.themedTint(0.3f)
     val name = lineInfo?.name ?: line.lineKey
     val description = stringResource(R.string.station_last_trains_description, name)
 
     CommuteCard(
-        color = lineColor.tint(0.065f),
+        color = lineColor.themedTint(0.065f),
         modifier = modifier.semantics { contentDescription = description },
     ) {
         Row(

@@ -39,7 +39,7 @@ import id.shiorilabs.commute.core.ui.components.CommuteCard
 import id.shiorilabs.commute.core.ui.ext.Foreground
 import id.shiorilabs.commute.core.ui.ext.foreground
 import id.shiorilabs.commute.core.ui.ext.lineColorOf
-import id.shiorilabs.commute.core.ui.ext.tint
+import id.shiorilabs.commute.core.ui.ext.themedTint
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.Gray500
@@ -99,12 +99,12 @@ fun LineCard(
     val lineName = lineInfo?.name
         ?: codeOfLineKey(line.lineKey).ifEmpty { stringResource(R.string.line_card_fallback_name) }
     val lineColor = lineColorOf(lineInfo?.colorCode)
-    val divider = lineColor.tint(0.3f)
+    val divider = lineColor.themedTint(0.3f)
     val shape = MaterialTheme.shapes.medium
     val cardDescription = stringResource(R.string.line_card_description, lineName)
 
     CommuteCard(
-        color = lineColor.tint(0.065f),
+        color = lineColor.themedTint(0.065f),
         modifier = modifier.semantics { contentDescription = cardDescription },
     ) {
         Box(
@@ -172,7 +172,7 @@ private fun GroupHeader(group: UpcomingGroup, lineColor: Color) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(lineColor.tint(0.16f))
+            .background(lineColor.themedTint(0.16f))
             .padding(horizontal = 16.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
