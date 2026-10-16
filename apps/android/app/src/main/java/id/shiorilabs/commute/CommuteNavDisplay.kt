@@ -20,7 +20,9 @@ import dagger.hilt.android.EntryPointAccessors
 import id.shiorilabs.commute.core.navigation.CommuteNavigator
 import id.shiorilabs.commute.core.navigation.NavGraphScope
 import id.shiorilabs.commute.core.ui.morph.LocalNavAnimatedVisibilityScope
+import id.shiorilabs.commute.core.ui.morph.LocalNavCardWidths
 import id.shiorilabs.commute.core.ui.morph.LocalSharedTransitionScope
+import id.shiorilabs.commute.core.ui.morph.NavCardWidths
 import id.shiorilabs.commute.di.NavGraphEntryPoint
 
 /** The Navigation 3 display: renders [navigator]'s back stack from the entries features contribute. */
@@ -79,7 +81,10 @@ fun CommuteNavDisplay(
     }
 
     SharedTransitionLayout(modifier = modifier) {
-        CompositionLocalProvider(LocalSharedTransitionScope provides this) {
+        CompositionLocalProvider(
+            LocalSharedTransitionScope provides this,
+            LocalNavCardWidths provides remember { NavCardWidths() },
+        ) {
             NavDisplay(
                 backStack = navigator.backStack,
                 onBack = { navigator.pop() },

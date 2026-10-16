@@ -6,25 +6,37 @@ import org.junit.Test
 
 class NavCardTintTest {
 
-    @Test
-    fun `opening starts as the card's colour and ends clear`() {
-        assertEquals(1f, navCardTintAlpha(clock = 0f, closing = false), 0.001f)
-        assertEquals(0f, navCardTintAlpha(clock = 1f, closing = false), 0.001f)
-    }
+    private val screen = 1080f
+    private val card = 462f
 
     @Test
-    fun `closing starts clear and ends as the card's colour`() {
-        // Closing runs the clock from 1 (full screen) back to 0 (card).
-        assertEquals(0f, navCardTintAlpha(clock = 1f, closing = true), 0.001f)
-        assertEquals(1f, navCardTintAlpha(clock = 0f, closing = true), 0.001f)
+    fun `the card is its colour`() {
+        assertEquals(1f, navCardTintAlpha(panelWidth = card, screenWidth = screen, cardWidth = card), 0.001f)
     }
 
-    // The point of the 4th power: while the panel is still large, it is still white. The curve is
-    // front-loaded, so "large" is the first moments of a close and everything past the first
-    // moments of an open.
+    // The point of the 4th power: while the panel is still large, it is still white.
     @Test
     fun `the tint stays off the large panel`() {
-        assertTrue(navCardTintAlpha(clock = 0.5f, closing = false) < 0.05f)
-        assertTrue(navCardTintAlpha(clock = 0.9f, closing = true) < 0.1f)
+        val halfway = (screen + card) / 2
+        assertTrue(navCardTintAlpha(panelWidth = halfway, screenWidth = screen, cardWidth = card) < 0.1f)
+    }
+
+    // The tester's flash: on a slow phone the shrink starts frames after the transition does, so
+    // the screen still fills the display while the morph's clock is well on. The tint goes by the
+    // panel, not the clock, so it stays clear.
+    @Test
+    fun `a panel that hasn't started shrinking stays clear`() {
+        assertEquals(0f, navCardTintAlpha(panelWidth = screen, screenWidth = screen, cardWidth = card), 0f)
+    }
+
+    @Test
+    fun `an overshoot past the card stays the card's colour`() {
+        assertEquals(1f, navCardTintAlpha(panelWidth = card - 10f, screenWidth = screen, cardWidth = card), 0f)
+    }
+
+    @Test
+    fun `a card it can't measure against isn't tinted`() {
+        assertEquals(0f, navCardTintAlpha(panelWidth = card, screenWidth = screen, cardWidth = null), 0f)
+        assertEquals(0f, navCardTintAlpha(panelWidth = card, screenWidth = card, cardWidth = card), 0f)
     }
 }
