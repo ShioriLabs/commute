@@ -66,7 +66,8 @@ private const val SOURCE_RECENT = "recent"
 private const val SOURCE_RESULT = "result"
 
 /** The sheet the morph opens onto is white, not the app's tinted background, as on web. */
-private val SearchBackground = Color.White
+private val SearchBackground: Color
+    @Composable get() = MaterialTheme.colorScheme.surfaceContainerLowest
 
 @Composable
 fun SearchScreen(

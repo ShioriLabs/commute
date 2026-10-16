@@ -206,18 +206,7 @@ fun TimelineStopLine(
 /** The pink "TURUN" under the stop to get off at, read out as [description]. */
 @Composable
 fun GetOffBadge(text: String, description: String, modifier: Modifier = Modifier) {
-    Text(
-        text = text,
-        modifier = modifier
-            .padding(top = 2.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(MaterialTheme.colorScheme.primary)
-            .padding(horizontal = 6.dp, vertical = 1.dp)
-            .clearAndSetSemantics { contentDescription = description },
-        style = MaterialTheme.typography.labelSmall,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onPrimary,
-    )
+    Badge(text = text, modifier = modifier.padding(top = 2.dp), contentDescription = description)
 }
 
 /** A vehicle with the swap arrows on it: a change, by train or by bus. The web's `TransferIcon`. */

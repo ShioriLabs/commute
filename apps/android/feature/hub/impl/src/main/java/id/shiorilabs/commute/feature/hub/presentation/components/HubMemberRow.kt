@@ -1,5 +1,9 @@
 package id.shiorilabs.commute.feature.hub.presentation.components
 
+import id.shiorilabs.commute.core.ui.theme.themed
+import id.shiorilabs.commute.core.ui.theme.StoneFillDark
+import id.shiorilabs.commute.core.ui.theme.Slate500
+import id.shiorilabs.commute.core.ui.theme.Slate400
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -37,13 +41,16 @@ import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.sortLineKeysForDisplay
 
 /** The operator beside the name, the web's `text-slate-500`. */
-private val OperatorColor = Color(0xFF64748B)
+private val OperatorColor: Color
+    @Composable get() = Slate500
 
 /** The rule between rows, the web's `border-stone-100`. */
-private val RowDivider = Color(0xFFF5F5F4)
+private val RowDivider: Color
+    @Composable get() = themed(Color(0xFFF5F5F4), StoneFillDark)
 
 /** The chevron, the web's `text-slate-400`. */
-private val ChevronColor = Color(0xFF94A3B8)
+private val ChevronColor: Color
+    @Composable get() = Slate400
 
 /**
  * One station in a hub, as the web's hub page lists it: its name with its operator beside it, the

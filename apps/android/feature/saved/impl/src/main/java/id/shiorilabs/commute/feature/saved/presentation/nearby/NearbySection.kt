@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.saved.presentation.nearby
 
+import id.shiorilabs.commute.core.ui.theme.Slate100
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -29,7 +30,8 @@ import id.shiorilabs.commute.core.ui.theme.Slate400
 import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.feature.saved.R
 
-private val PromptFill = Color(0xFFF1F5F9)
+private val PromptFill: Color
+    @Composable get() = Slate100
 
 /**
  * The offer to show stations near the rider, in place of the section while location isn't granted.

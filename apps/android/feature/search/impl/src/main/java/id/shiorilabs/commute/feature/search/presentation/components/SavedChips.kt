@@ -1,5 +1,9 @@
 package id.shiorilabs.commute.feature.search.presentation.components
 
+import id.shiorilabs.commute.core.ui.theme.themed
+import id.shiorilabs.commute.core.ui.theme.StoneFillDark
+import id.shiorilabs.commute.core.ui.theme.Slate900
+import id.shiorilabs.commute.core.ui.theme.Slate700
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,18 +25,21 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.ui.ext.parseHexColor
-import id.shiorilabs.commute.core.ui.ext.tint
+import id.shiorilabs.commute.core.ui.ext.themedTint
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.feature.search.R
 import id.shiorilabs.commute.feature.search.domain.Searchable
 import id.shiorilabs.commute.feature.station.presentation.sharedStationName
 
 /** The chip's name, `text-slate-900`. */
-private val ChipInk = Color(0xFF0F172A)
+private val ChipInk: Color
+    @Composable get() = Slate900
 
 /** The pencil chip, the web's `bg-stone-100/80` and `text-slate-700`. */
-private val EditChipFill = Color(0xCCF5F5F4)
-private val EditChipInk = Color(0xFF334155)
+private val EditChipFill: Color
+    @Composable get() = themed(Color(0xCCF5F5F4), StoneFillDark)
+private val EditChipInk: Color
+    @Composable get() = Slate700
 
 /**
  * The pinned stations as shortcut pills under the field, each tinted from its first line with the
@@ -62,7 +69,7 @@ fun SavedChips(
             Row(
                 modifier = Modifier
                     .clip(CircleShape)
-                    .background(lineColor?.tint(0.2f) ?: MaterialTheme.colorScheme.primaryContainer)
+                    .background(lineColor?.themedTint(0.2f) ?: MaterialTheme.colorScheme.primaryContainer)
                     .clickable { onClick(station) }
                     // 16dp so the first pin lands on the 32dp line inside the header's gutter.
                     .padding(horizontal = 16.dp, vertical = 6.dp),

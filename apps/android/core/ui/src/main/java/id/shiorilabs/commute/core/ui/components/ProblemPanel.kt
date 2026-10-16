@@ -1,5 +1,7 @@
 package id.shiorilabs.commute.core.ui.components
 
+import id.shiorilabs.commute.core.ui.theme.Slate700
+import id.shiorilabs.commute.core.ui.theme.Rose50
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,8 +16,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 /** The failure panel, the web's `bg-rose-50` with `text-slate-700`. */
-private val ProblemFill = Color(0xFFFFF1F2)
-private val ProblemInk = Color(0xFF334155)
+private val ProblemFill: Color
+    @Composable get() = Rose50
+private val ProblemInk: Color
+    @Composable get() = Slate700
 
 /**
  * Something on the page that didn't load: a short [message] and a retry button. Inline, in place of

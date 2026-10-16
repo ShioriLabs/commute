@@ -34,8 +34,9 @@ import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.feature.settings.R
 
-/** The settings pages are white, not the app's tinted background, as on web. */
-internal val SettingsBackground = Color.White
+/** The settings pages are white on the light theme, not the app's tinted background, as on web. */
+internal val SettingsBackground: Color
+    @Composable get() = MaterialTheme.colorScheme.surfaceContainerLowest
 
 /** The web's p-8: the side margin every settings page lines its content up on. */
 internal val SettingsGutter = 32.dp

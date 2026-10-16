@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.core.ui.morph
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.BoundsTransform
 import androidx.compose.animation.ContentTransform
@@ -212,6 +213,8 @@ fun NavCardMorphTarget(
         }
     }
     val morphing = if (closing) !covered else !opened
+    // The page it grows into, so the mask meets it rather than flashing white on the dark themes.
+    val maskColor = MaterialTheme.colorScheme.surfaceContainerLowest
 
     // The layers read the panel's width as they draw. The shrink is only a layer scale, which
     // doesn't redraw the content, so this ticks a redraw on every frame the shared transition runs.
@@ -249,7 +252,7 @@ fun NavCardMorphTarget(
                     drawContent()
                     val progress = if (morphing && frame >= 0L) panel.progress() else null
                     if (progress != null) {
-                        drawRect(Color.White, alpha = navCardMaskAlpha(progress, closing))
+                        drawRect(maskColor, alpha = navCardMaskAlpha(progress, closing))
                         if (cardTint != null) {
                             drawRect(cardTint, alpha = navCardTintAlpha(progress))
                         }

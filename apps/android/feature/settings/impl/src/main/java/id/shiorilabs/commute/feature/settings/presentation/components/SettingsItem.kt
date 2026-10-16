@@ -21,12 +21,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import id.shiorilabs.commute.core.ui.components.Badge
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 
 /**
  * A row of the settings list, the web's `SettingsItem`: an optional [icon], the [label] (with a line
- * of [detail] under it), and a chevron, or with [external] the external-link mark for a row that
+ * of [detail] under it, and a [badge] such as "BETA" beside it), and a chevron, or with [external] the external-link mark for a row that
  * leaves the app.
  */
 @Composable
@@ -37,6 +38,7 @@ internal fun SettingsItem(
     icon: ImageVector? = null,
     detail: String? = null,
     external: Boolean = false,
+    badge: String? = null,
 ) {
     Row(
         modifier = modifier
@@ -56,14 +58,20 @@ internal fun SettingsItem(
             )
         }
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.titleMedium,
-                // The web's text-lg.
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.titleMedium,
+                    // The web's text-lg.
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                badge?.let { Badge(text = it) }
+            }
             detail?.let {
                 Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

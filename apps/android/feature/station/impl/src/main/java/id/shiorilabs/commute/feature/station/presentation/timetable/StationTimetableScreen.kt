@@ -95,7 +95,8 @@ import id.shiorilabs.commute.feature.station.presentation.components.rememberPul
 // Tailwind's colours, as the web's timetable page uses them.
 
 /** The page is white, as the station page it opens from. */
-private val TimetableBackground = Color.White
+private val TimetableBackground: Color
+    @Composable get() = MaterialTheme.colorScheme.surfaceContainerLowest
 
 /**
  * A station's whole timetable for the day, the web's "Jadwal Lengkap": every departure, a section

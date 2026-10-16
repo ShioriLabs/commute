@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.search.presentation.components
 
+import id.shiorilabs.commute.core.ui.theme.Slate200
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,7 +28,8 @@ import id.shiorilabs.commute.feature.search.R
 import id.shiorilabs.commute.core.ui.R as CoreUiR
 
 /** Placeholder blocks, the web's `bg-slate-200`. */
-private val SkeletonColor = Color(0xFFE2E8F0)
+private val SkeletonColor: Color
+    @Composable get() = Slate200
 
 /** Three placeholder rows while the index loads under a query. */
 @Composable
