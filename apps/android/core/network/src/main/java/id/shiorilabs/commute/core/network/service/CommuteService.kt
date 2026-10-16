@@ -7,6 +7,7 @@ import id.shiorilabs.commute.core.model.models.LineDetail
 import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.model.models.Station
+import id.shiorilabs.commute.core.model.models.StationDensity
 import id.shiorilabs.commute.core.model.models.TrackShapes
 import id.shiorilabs.commute.core.model.models.Transfer
 import id.shiorilabs.commute.core.model.models.TripResult
@@ -63,15 +64,29 @@ interface CommuteService {
     ): Fetched<List<Transfer>>
 
     /**
-     * How often each line passes the station on [day] (`WD`, `SAT` or `SUN`): an average gap, not a
-     * schedule, so it can't say when the next one comes. TransJakarta's stand-in for a timetable.
+     * How often each line passes the station on [day] (`WD`, `SAT` or `SUN`) at [hour] (0-23,
+     * Jakarta): an average gap, not a schedule, so it can't say when the next one comes.
+     * TransJakarta's stand-in for a timetable. A corridor's figure changes through the day, measured
+     * from where its buses were seen where the API has that.
      */
     suspend fun getHeadway(
         operator: String,
         stationCode: String,
         day: String,
+        hour: Int,
         ifNoneMatch: String? = null,
     ): Fetched<List<HeadwayRow>>
+
+    /**
+     * How crowded the station usually is on [day] (`WD`, `SAT` or `SUN`), hour by hour: a forecast,
+     * not a live reading. Rail only; a TransJakarta halte answers 24 nulls.
+     */
+    suspend fun getDensity(
+        operator: String,
+        stationCode: String,
+        day: String,
+        ifNoneMatch: String? = null,
+    ): Fetched<StationDensity>
 
     /** One hub, by its URL [slug] (`dukuh-atas`): its kind and its member stations, in display order. */
     suspend fun getHub(slug: String, ifNoneMatch: String? = null): Fetched<Hub>

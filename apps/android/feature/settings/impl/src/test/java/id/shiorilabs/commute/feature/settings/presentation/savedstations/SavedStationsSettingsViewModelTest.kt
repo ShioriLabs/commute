@@ -40,7 +40,7 @@ class SavedStationsSettingsViewModelTest {
 
         override suspend fun transfers(stationId: String): Either<Failure, List<Transfer>> = emptyList<Transfer>().right()
 
-        override suspend fun frequencies(stationId: String, day: ServiceDayName): Either<Failure, List<Frequency>> =
+        override suspend fun frequencies(stationId: String, day: ServiceDayName, hour: Int): Either<Failure, List<Frequency>> =
             emptyList<Frequency>().right()
     }
 

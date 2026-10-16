@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.feature.station.presentation
 
 import id.shiorilabs.commute.core.type.UIState
+import id.shiorilabs.commute.feature.station.domain.CrowdForecast
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.StationBoard
 import id.shiorilabs.commute.feature.station.domain.Transfer
@@ -21,4 +22,6 @@ data class StationUiState(
     val unserved: UnservedStation? = null,
     /** Set for a station trains no longer call at: a notice over its page. */
     val retired: RetiredStation? = null,
+    /** How crowded the station usually is, hour by hour. Null while loading, at a halte, or on failure. */
+    val crowding: CrowdForecast? = null,
 )

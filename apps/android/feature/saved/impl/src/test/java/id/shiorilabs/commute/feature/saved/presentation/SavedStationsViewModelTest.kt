@@ -58,8 +58,12 @@ class SavedStationsViewModelTest {
 
         override suspend fun transfers(stationId: String): Either<Failure, List<Transfer>> = emptyList<Transfer>().right()
 
-        override suspend fun frequencies(stationId: String, day: ServiceDayName): Either<Failure, List<Frequency>> =
-            emptyList<Frequency>().right()
+        val askedHours = mutableListOf<Pair<String, Int>>()
+
+        override suspend fun frequencies(stationId: String, day: ServiceDayName, hour: Int): Either<Failure, List<Frequency>> {
+            askedHours += stationId to hour
+            return emptyList<Frequency>().right()
+        }
 
         /** What this session already holds, offered without asking. */
         var held: Pair<Station, List<LineTimetable>>? = null
@@ -300,5 +304,21 @@ class SavedStationsViewModelTest {
         // Saturday's service starts at 03:00.
         vm.onClockTick(LocalDateTime.parse("2026-10-03T03:00:00"))
         assertEquals(ServiceDayName.SAT, stations.asked.first().second)
+    }
+
+    @Test
+    fun `a halte's card refetches on the hour, a rail station's doesn't`() = runTest {
+        saved.toggleStation("KCI-MRI")
+        saved.toggleStation("TJ-H00001P")
+        val vm = viewModel(clockAt("2026-09-30T08:00:00"))
+        vm.loaded()
+        stations.asked.clear()
+
+        vm.onClockTick(LocalDateTime.parse("2026-09-30T08:30:00"))
+        assertEquals(listOf("TJ-H00001P" to 8), stations.askedHours)
+
+        vm.onClockTick(LocalDateTime.parse("2026-09-30T09:00:00"))
+        assertEquals(listOf("TJ-H00001P" to 8, "TJ-H00001P" to 9), stations.askedHours)
+        assertEquals(listOf("TJ-H00001P"), stations.asked.map { it.first })
     }
 }

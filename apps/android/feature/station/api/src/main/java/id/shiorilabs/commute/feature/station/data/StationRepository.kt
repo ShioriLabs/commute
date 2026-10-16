@@ -6,6 +6,7 @@ import id.shiorilabs.commute.core.query.Refetched
 import id.shiorilabs.commute.core.query.queryOnce
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.type.Failure
+import id.shiorilabs.commute.feature.station.domain.CrowdForecast
 import id.shiorilabs.commute.feature.station.domain.Frequency
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
@@ -30,8 +31,15 @@ interface StationRepository {
     /** The stations a rider can walk to from this one, nearest first as the API orders them. */
     suspend fun transfers(stationId: String): Either<Failure, List<Transfer>>
 
-    /** How often each line passes the station on [day], in the API's order. Not a schedule. */
-    suspend fun frequencies(stationId: String, day: ServiceDayName): Either<Failure, List<Frequency>>
+    /**
+     * How often each line passes the station on [day] at [hour] (0-23, Jakarta), in the API's order.
+     * Not a schedule. A corridor's figure changes through the day, so each hour is its own answer.
+     */
+    suspend fun frequencies(stationId: String, day: ServiceDayName, hour: Int): Either<Failure, List<Frequency>>
+
+    /** How crowded the station usually is on [day], hour by hour. A forecast, and rail only. */
+    suspend fun crowding(stationId: String, day: ServiceDayName): Either<Failure, CrowdForecast> =
+        Either.Right(CrowdForecast.NONE)
 
     // The observe calls are stale-while-revalidate: what is held first, however old, then a fresh
     // answer if it was due one. They don't complete. The defaults serve an implementation with no
@@ -46,8 +54,12 @@ interface StationRepository {
         queryOnce(cachedTimetable(stationId, day)) { timetable(stationId, day) }
 
     /** [frequencies], as they change. */
-    fun observeFrequencies(stationId: String, day: ServiceDayName): Flow<Query<List<Frequency>>> =
-        queryOnce(cachedFrequencies(stationId, day)) { frequencies(stationId, day) }
+    fun observeFrequencies(stationId: String, day: ServiceDayName, hour: Int): Flow<Query<List<Frequency>>> =
+        queryOnce(cachedFrequencies(stationId, day, hour)) { frequencies(stationId, day, hour) }
+
+    /** [crowding], as it changes. */
+    fun observeCrowding(stationId: String, day: ServiceDayName): Flow<Query<CrowdForecast>> =
+        queryOnce(null) { crowding(stationId, day) }
 
     /**
      * Asks again for every part of [stationId] being observed (the station, its boards, a halte's
@@ -69,7 +81,7 @@ interface StationRepository {
     fun cachedTransfers(stationId: String): List<Transfer>? = null
 
     /** [frequencies] as already loaded this session, without asking. */
-    fun cachedFrequencies(stationId: String, day: ServiceDayName): List<Frequency>? = null
+    fun cachedFrequencies(stationId: String, day: ServiceDayName, hour: Int): List<Frequency>? = null
 }
 
 interface LineRepository {
