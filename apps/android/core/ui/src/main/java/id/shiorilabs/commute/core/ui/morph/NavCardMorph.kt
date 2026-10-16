@@ -28,13 +28,21 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.ui.NavDisplay
@@ -60,6 +68,9 @@ import kotlin.math.pow
  *            panel's SIZE rather than the clock: how close it is to card size, to the 4th power. So
  *            the large moving surface stays white and the colour gathers only as the panel nears
  *            the card. Tied to the clock it lagged the shape, and closing shrank as a white ghost.
+ *            The size is measured, not derived from the clock either: the bounds animation starts
+ *            only once the card has been laid out again, frames late on a slow phone, and a clock
+ *            that ran on without it washed the full-size screen pink.
  *   landing  closing only: the landed panel crossfades into the card over the last 100 ms, while
  *            the card's own text and icon slide back in ([navCardFace]).
  */
@@ -102,6 +113,22 @@ val LocalSharedTransitionScope = compositionLocalOf<SharedTransitionScope?> { nu
 /** The enter/exit scope of the nav entry this composable is in. Null outside a nav host. */
 val LocalNavAnimatedVisibilityScope = compositionLocalOf<AnimatedVisibilityScope?> { null }
 
+/**
+ * The rail cards' widths, by the destination each opens: what a screen's tint measures its panel
+ * against. Provided by the nav host alongside [LocalSharedTransitionScope]; null outside one.
+ */
+class NavCardWidths {
+    private val widths = mutableMapOf<Route, Int>()
+
+    internal operator fun get(destination: Route): Int? = widths[destination]
+
+    internal operator fun set(destination: Route, width: Int) {
+        widths[destination] = width
+    }
+}
+
+val LocalNavCardWidths = compositionLocalOf<NavCardWidths?> { null }
+
 private data class NavCardMorphKey(val destination: Route)
 
 /**
@@ -115,6 +142,7 @@ private data class NavCardMorphKey(val destination: Route)
 fun Modifier.navCardMorphSource(destination: Route): Modifier {
     val sharedScope = LocalSharedTransitionScope.current ?: return this
     val visibilityScope = LocalNavAnimatedVisibilityScope.current ?: return this
+    val cardWidths = LocalNavCardWidths.current
 
     return with(sharedScope) {
         this@navCardMorphSource.sharedBounds(
@@ -128,7 +156,7 @@ fun Modifier.navCardMorphSource(destination: Route): Modifier {
             // follows in both directions.
             zIndexInOverlay = 0f,
             clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(CardCorner)),
-        )
+        ).onSizeChanged { cardWidths?.set(destination, it.width) }
     }
 }
 
@@ -196,13 +224,16 @@ fun NavCardMorphTarget(
         label = "navCardMorphMask",
     ) { state -> if (state == EnterExitState.Visible) 0f else 1f }
 
-    // The morph's clock, 0 → 1 over the bounds animation in either direction. The tint is derived
-    // from where the panel's size is at that moment, so it runs on the same duration and curve.
-    val clock by transition.animateFloat(
-        transitionSpec = { tween(NAV_CARD_MORPH_MILLIS, easing = LinearEasing) },
-        label = "navCardMorphClock",
-    ) { state -> if (state == EnterExitState.Visible) 1f else 0f }
-    val tintAlpha = if (cardTint == null) 0f else navCardTintAlpha(clock, closing)
+    // The tint reads the panel's width as it draws. The shrink is only a layer scale, which doesn't
+    // redraw the content, so this ticks a redraw on every frame the shared transition runs.
+    val cardWidth = LocalNavCardWidths.current?.get(destination)
+    val panel = remember { PanelCoordinates() }
+    val tinting = morphing && cardTint != null && sharedScope.isTransitionActive
+    val frame by produceState(0L, tinting) {
+        while (tinting) {
+            withFrameNanos { value = it }
+        }
+    }
 
     val landingAlpha by transition.animateFloat(
         transitionSpec = {
@@ -228,7 +259,20 @@ fun NavCardMorphTarget(
                     zIndexInOverlay = 1f,
                     clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(if (morphing) corner else 0.dp)),
                 )
-                .graphicsLayer { alpha = if (morphing) landingAlpha else 1f },
+                .graphicsLayer { alpha = if (morphing) landingAlpha else 1f }
+                .onGloballyPositioned { panel.coordinates = it }
+                // Over the content and the mask.
+                .drawWithContent {
+                    drawContent()
+                    // Reading the frame is what redraws this as the panel shrinks.
+                    val panelWidth = panel.width()
+                    if (tinting && cardTint != null && frame >= 0L && panelWidth != null) {
+                        val tintAlpha = navCardTintAlpha(panelWidth, size.width, cardWidth?.toFloat())
+                        if (tintAlpha > 0f) {
+                            drawRect(cardTint, alpha = tintAlpha)
+                        }
+                    }
+                },
         ) {
             content()
             if (morphing && maskAlpha > 0f) {
@@ -239,26 +283,32 @@ fun NavCardMorphTarget(
                         .background(Color.White),
                 )
             }
-            if (morphing && cardTint != null && tintAlpha > 0f) {
-                Box(
-                    Modifier
-                        .matchParentSize()
-                        .graphicsLayer { alpha = tintAlpha }
-                        .background(cardTint),
-                )
-            }
         }
     }
 }
 
 /**
- * The accent tint's opacity [clock] of the way through the morph: how close the panel is to card
- * size, to the [TINT_POWER]. Opening, the panel leaves the card along the morph curve; closing, it
- * approaches it along the same curve run from the other end.
+ * The accent tint's opacity for a panel [panelWidth] wide on screen, morphing between the full
+ * [screenWidth] and the card's [cardWidth]: how close it is to card size, to the [TINT_POWER].
+ * Clear when there's no card to measure against.
  */
-internal fun navCardTintAlpha(clock: Float, closing: Boolean): Float {
-    val towardsCard = if (closing) MorphEasing.transform(1f - clock) else 1f - MorphEasing.transform(clock)
+internal fun navCardTintAlpha(panelWidth: Float, screenWidth: Float, cardWidth: Float?): Float {
+    if (cardWidth == null || screenWidth <= cardWidth) {
+        return 0f
+    }
+    val towardsCard = (screenWidth - panelWidth) / (screenWidth - cardWidth)
     return towardsCard.coerceIn(0f, 1f).pow(TINT_POWER)
+}
+
+/** Where the morphing screen is laid out, for reading its on-screen width as it draws. */
+private class PanelCoordinates {
+    var coordinates: LayoutCoordinates? = null
+
+    /** The width it's drawn at, the shrink's scale included; null before it's been placed. */
+    fun width(): Float? {
+        val coordinates = coordinates?.takeIf { it.isAttached } ?: return null
+        return coordinates.findRootCoordinates().localBoundingBoxOf(coordinates, clipBounds = false).width
+    }
 }
 
 /** Which part of a rail card's face, for [navCardFace]. */
