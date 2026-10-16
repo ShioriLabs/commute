@@ -54,10 +54,11 @@ private val PeopleX = listOf(1f, 7f, 13f, 19f)
 @Composable
 fun CrowdIcon(level: CrowdLevel, modifier: Modifier = Modifier, size: Dp = 20.dp) {
     val fill = LevelFills[level.ordinal]
+    val empty = Slate300
     Canvas(modifier = modifier.size(size)) {
         val unit = this.size.width / 24f
         PeopleX.forEachIndexed { person, x ->
-            val color = if (person <= level.ordinal) fill else Slate300
+            val color = if (person <= level.ordinal) fill else empty
             drawCircle(color, radius = 2f * unit, center = Offset((x + 2f) * unit, 4f * unit))
             drawRoundRect(
                 color = color,

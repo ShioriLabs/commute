@@ -1,7 +1,7 @@
 package id.shiorilabs.commute.core.ui.ext
 
 import androidx.compose.ui.graphics.Color
-import id.shiorilabs.commute.core.ui.theme.Slate400
+import id.shiorilabs.commute.core.ui.theme.Fixed
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -27,8 +27,8 @@ class ColorExtTest {
     @Test
     fun `a line without a usable colour is slate`() {
         assertEquals(Color(0xFF25B8EB), lineColorOf("#25B8EB"))
-        assertEquals(Slate400, lineColorOf(null))
-        assertEquals(Slate400, lineColorOf("#GGGGGG"))
+        assertEquals(Fixed.Slate400, lineColorOf(null))
+        assertEquals(Fixed.Slate400, lineColorOf("#GGGGGG"))
     }
 
     // Same answers as utils/colors.ts getForegroundColor on the web.

@@ -62,6 +62,7 @@ import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.motion.IosSpringEasing
 import id.shiorilabs.commute.core.ui.motion.rememberReducedMotion
+import id.shiorilabs.commute.core.ui.theme.LocalDarkTheme
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.trip.R
 import kotlinx.coroutines.delay
@@ -69,7 +70,7 @@ import kotlinx.coroutines.delay
 // The pieces any PIDS style, and the finished trip's plate, draw with: see [PidsStyle].
 
 /**
- * Light icons over a dark surface while it's up; the app's dark ones again once the last such
+ * Light icons over a dark surface while it's up; the app's own again once the last such
  * surface has gone, so the trip bar leaving as the finished page's plate arrives can't darken
  * them under the plate. Set on every pass too, as the theme sets its own whenever it recomposes.
  */
@@ -79,13 +80,15 @@ internal fun DarkStatusBarIcons() {
     val controller = remember(view) {
         view.context.findActivity()?.window?.let { WindowCompat.getInsetsController(it, view) }
     }
+    // What the app's own icons are once the last dark surface goes: dark ones on the light theme.
+    val appIconsDark = !LocalDarkTheme.current
     SideEffect { controller?.isAppearanceLightStatusBars = false }
-    DisposableEffect(controller) {
+    DisposableEffect(controller, appIconsDark) {
         darkSurfaces++
         controller?.isAppearanceLightStatusBars = false
         onDispose {
             darkSurfaces--
-            if (darkSurfaces == 0) controller?.isAppearanceLightStatusBars = true
+            if (darkSurfaces == 0) controller?.isAppearanceLightStatusBars = appIconsDark
         }
     }
 }

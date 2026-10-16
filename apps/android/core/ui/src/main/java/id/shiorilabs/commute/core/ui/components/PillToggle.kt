@@ -1,5 +1,9 @@
 package id.shiorilabs.commute.core.ui.components
 
+import id.shiorilabs.commute.core.ui.theme.themed
+import id.shiorilabs.commute.core.ui.theme.StoneLineDark
+import id.shiorilabs.commute.core.ui.theme.StoneFillDark
+import id.shiorilabs.commute.core.ui.theme.Slate500
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -25,9 +29,12 @@ import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 
 /** The track's `bg-stone-100/80` and `border-stone-200/40`, and an unselected option's `text-slate-500`. */
-private val TrackFill = Color(0xCCF5F5F4)
-private val TrackOutline = Color(0x66E7E5E4)
-private val IdleText = Color(0xFF64748B)
+private val TrackFill: Color
+    @Composable get() = themed(Color(0xCCF5F5F4), StoneFillDark)
+private val TrackOutline: Color
+    @Composable get() = themed(Color(0x66E7E5E4), StoneLineDark)
+private val IdleText: Color
+    @Composable get() = Slate500
 
 /**
  * A few options in a pill, the chosen one filled in the brand colour: the web's search mode toggle,

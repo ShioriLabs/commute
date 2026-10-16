@@ -9,6 +9,7 @@ import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.ui.morph.navCardMorphMetadata
 import id.shiorilabs.commute.core.ui.motion.pageTransitionMetadata
 import id.shiorilabs.commute.feature.settings.presentation.about.AboutScreen
+import id.shiorilabs.commute.feature.settings.presentation.appearance.AppearanceScreen
 import id.shiorilabs.commute.feature.settings.presentation.experimental.ExperimentalScreen
 import id.shiorilabs.commute.feature.settings.presentation.home.SettingsScreen
 import id.shiorilabs.commute.feature.settings.presentation.legal.CreativeAssetsScreen
@@ -48,6 +49,9 @@ class SettingsNavContribution @Inject constructor(
         }
         entry<Route.SettingsOtw>(metadata = pageTransitionMetadata()) {
             OtwSettingsScreen(innerPadding = scope.screenPadding)
+        }
+        entry<Route.SettingsAppearance>(metadata = pageTransitionMetadata()) {
+            AppearanceScreen(innerPadding = scope.screenPadding)
         }
         entry<Route.SettingsExperimental>(metadata = pageTransitionMetadata()) {
             ExperimentalScreen(innerPadding = scope.screenPadding, debug = environment.debug)

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The window behind MainActivity on a phone in night mode: the dark theme's navy
+         (NavyColors.background), so launch doesn't flash light. -->
+    <color name="window_background">#FF0C1B2A</color>
+</resources>

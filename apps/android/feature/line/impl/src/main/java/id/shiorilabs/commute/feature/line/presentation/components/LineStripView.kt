@@ -45,7 +45,7 @@ import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.ext.Foreground
 import id.shiorilabs.commute.core.ui.ext.foreground
 import id.shiorilabs.commute.core.ui.ext.parseHexColor
-import id.shiorilabs.commute.core.ui.ext.tint
+import id.shiorilabs.commute.core.ui.ext.themedTint
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.feature.line.R
@@ -323,7 +323,7 @@ private fun BranchRamp(
         Row(
             modifier = Modifier
                 .padding(start = 12.dp, top = 4.dp, bottom = 4.dp)
-                .background(color.tint(0.15f), CircleShape)
+                .background(color.themedTint(0.15f), CircleShape)
                 .clickable(role = Role.Button, onClick = onClick)
                 .semantics(mergeDescendants = true) { contentDescription = description }
                 .padding(horizontal = 12.dp, vertical = 4.dp),

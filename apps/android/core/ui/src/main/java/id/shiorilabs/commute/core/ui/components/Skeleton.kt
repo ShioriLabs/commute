@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.core.ui.components
 
+import id.shiorilabs.commute.core.ui.theme.Slate200
 import androidx.compose.animation.core.InfiniteRepeatableSpec
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -18,7 +19,8 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 
 /** Placeholder blocks, the web's `bg-slate-200`. */
-private val SkeletonColor = Color(0xFFE2E8F0)
+private val SkeletonColor: Color
+    @Composable get() = Slate200
 
 /** A placeholder block pulsing like the web's `animate-pulse`. [modifier] gives it its size. */
 @Composable

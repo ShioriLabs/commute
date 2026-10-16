@@ -1,5 +1,7 @@
 package id.shiorilabs.commute.core.ui.components
 
+import id.shiorilabs.commute.core.ui.theme.Amber950
+import id.shiorilabs.commute.core.ui.theme.Amber100
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -23,8 +25,10 @@ import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 
 /** The web's `bg-amber-100` with `text-amber-950`. */
-private val NoticeFill = Color(0xFFFEF3C7)
-private val NoticeInk = Color(0xFF451A03)
+private val NoticeFill: Color
+    @Composable get() = Amber100
+private val NoticeInk: Color
+    @Composable get() = Amber950
 
 private val IconSize = 24.dp
 private val IconGap = 8.dp

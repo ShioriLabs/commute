@@ -1,5 +1,9 @@
 package id.shiorilabs.commute.feature.trip.presentation
 
+import id.shiorilabs.commute.core.ui.theme.Slate200
+import id.shiorilabs.commute.core.ui.theme.PageGround
+import id.shiorilabs.commute.core.ui.theme.Slate900
+import id.shiorilabs.commute.core.ui.theme.Slate500
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -69,8 +73,10 @@ internal fun motionStrip(enabled: Boolean, live: MotionLive?): MotionStripState?
 
 private const val KMH_PER_MPS = 3.6
 
-private val Label = Color(0xFF64748B)
-private val Value = Color(0xFF0F172A)
+private val Label: Color
+    @Composable get() = Slate500
+private val Value: Color
+    @Composable get() = Slate900
 
 /**
  * "Kecepatan IMU" (Experimental): the satellites' speed beside the motion sensors', with the fixes
@@ -83,10 +89,10 @@ internal fun MotionStrip(state: MotionStripState, bottomInset: Dp, modifier: Mod
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color.White)
+            .background(PageGround)
             .padding(bottom = bottomInset),
     ) {
-        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFFE2E8F0)))
+        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Slate200))
         FlowRow(
             modifier = Modifier
                 .fillMaxWidth()

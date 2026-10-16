@@ -9,6 +9,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import id.shiorilabs.commute.core.datastore.qualifier.AppearanceDataStore
 import id.shiorilabs.commute.core.datastore.qualifier.DeveloperDataStore
 import id.shiorilabs.commute.core.datastore.qualifier.FarePreferencesDataStore
 import id.shiorilabs.commute.core.datastore.qualifier.HomeDataStore
@@ -21,6 +22,7 @@ import id.shiorilabs.commute.core.datastore.qualifier.SearchModeDataStore
 import javax.inject.Singleton
 
 // One file per store on disk, each under its own name.
+private val Context.appearanceDataStore: DataStore<Preferences> by preferencesDataStore(name = "commute_appearance")
 private val Context.developerDataStore: DataStore<Preferences> by preferencesDataStore(name = "commute_developer")
 private val Context.farePreferencesDataStore: DataStore<Preferences> by preferencesDataStore(name = "commute_fare_preferences")
 private val Context.homeDataStore: DataStore<Preferences> by preferencesDataStore(name = "commute_home")
@@ -34,6 +36,11 @@ private val Context.searchModeDataStore: DataStore<Preferences> by preferencesDa
 @Module
 @InstallIn(SingletonComponent::class)
 object DatastoreModule {
+
+    @Provides
+    @Singleton
+    @AppearanceDataStore
+    fun provideAppearanceDataStore(@ApplicationContext context: Context): DataStore<Preferences> = context.appearanceDataStore
 
     @Provides
     @Singleton

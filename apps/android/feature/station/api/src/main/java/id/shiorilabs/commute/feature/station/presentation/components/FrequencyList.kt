@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.station.presentation.components
 
+import id.shiorilabs.commute.core.ui.theme.Paper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -29,7 +30,7 @@ import id.shiorilabs.commute.core.ui.components.CommuteEmptyState
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.ext.lineColorOf
-import id.shiorilabs.commute.core.ui.ext.tint
+import id.shiorilabs.commute.core.ui.ext.themedTint
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.Gray600
 import id.shiorilabs.commute.core.ui.theme.Slate500
@@ -87,10 +88,10 @@ fun FrequencyList(
     val description = stringResource(R.string.frequency_description)
 
     Column(modifier = modifier.semantics { contentDescription = description }) {
-        CommuteCard(color = Color.White) {
+        CommuteCard(color = Paper) {
             corridors.forEachIndexed { index, rows ->
                 if (index > 0) {
-                    HorizontalDivider(thickness = 2.dp, color = Color.White)
+                    HorizontalDivider(thickness = 2.dp, color = Paper)
                 }
                 CorridorRows(rows, lines[rows.first().lineKey])
             }
@@ -121,7 +122,7 @@ private fun CorridorRows(rows: List<Frequency>, lineInfo: LineInfo?) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(lineColor.tint(0.1f))
+            .background(lineColor.themedTint(0.1f))
             .padding(bottom = if (inline) 0.dp else 8.dp),
     ) {
         // Top-aligned: the roundel and the frequency belong to the name's first line, wherever a

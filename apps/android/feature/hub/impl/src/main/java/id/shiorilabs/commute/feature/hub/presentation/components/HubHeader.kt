@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.hub.presentation.components
 
+import id.shiorilabs.commute.core.ui.theme.Slate500
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,7 +29,8 @@ import id.shiorilabs.commute.feature.hub.domain.Hub
 import id.shiorilabs.commute.feature.hub.domain.HubKind
 
 /** The kind under the name, the web's `text-slate-500`. */
-private val KindColor = Color(0xFF64748B)
+private val KindColor: Color
+    @Composable get() = Slate500
 
 /**
  * The page's header, as the web's hub page draws it: the hub's name over its kind, with the close

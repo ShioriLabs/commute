@@ -60,7 +60,7 @@ fun CommuteBottomSheet(
         modifier = modifier,
         sheetState = state,
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-        containerColor = Color.White,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
         contentColor = MaterialTheme.colorScheme.onBackground,
         scrimColor = SheetScrim,
         dragHandle = null,

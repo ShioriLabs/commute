@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.journey.presentation.components
 
+import id.shiorilabs.commute.core.ui.theme.Paper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -76,7 +77,7 @@ internal fun JourneyCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
 ) {
-    val plate = if (onClick != null) OptionPlate else Color.White
+    val plate = if (onClick != null) OptionPlate else Paper
     val labels = sortJourneyLabels(journey.labels).take(JOURNEY_LABELS_SHOWN)
     val lastTrain = journey.isLastTrain
     val boardsAt = journey.boardsAt

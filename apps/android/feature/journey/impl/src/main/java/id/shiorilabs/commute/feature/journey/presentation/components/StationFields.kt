@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.journey.presentation.components
 
+import id.shiorilabs.commute.core.ui.theme.PageGround
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -80,7 +81,7 @@ internal fun StationFields(
                 .zIndex(1f)
                 .shadow(2.dp, CircleShape)
                 .clip(CircleShape)
-                .background(Color.White)
+                .background(PageGround)
                 .border(2.dp, Stone200, CircleShape)
                 .clickable(role = Role.Button, onClick = onSwap)
                 .padding(12.dp),

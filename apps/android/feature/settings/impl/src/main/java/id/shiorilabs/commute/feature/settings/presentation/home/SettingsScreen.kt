@@ -120,6 +120,12 @@ private fun SettingsContent(
             onClick = { onOpen(Route.SettingsManageData) },
         )
         SettingsItem(
+            label = stringResource(R.string.settings_item_appearance),
+            icon = CommuteIcons.Appearance,
+            badge = stringResource(R.string.settings_beta),
+            onClick = { onOpen(Route.SettingsAppearance) },
+        )
+        SettingsItem(
             label = stringResource(R.string.settings_item_location),
             icon = CommuteIcons.Location,
             onClick = { onOpen(Route.SettingsLocation) },

@@ -152,7 +152,8 @@ fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel
     )
 }
 
-private val PageBackground = Color.White
+private val PageBackground: Color
+    @Composable get() = MaterialTheme.colorScheme.surfaceContainerLowest
 
 /** Ahead of the timetable: the rare train that's early. */
 private val OnTimeGreen = Color(0xFF059669)
@@ -409,7 +410,7 @@ private fun RideBlock(
     var expanded by rememberSaveable { mutableStateOf(false) }
     val rows = timelineRows(ride.stops.size, focus = if (current) here ?: marks.betweenAfter ?: next else null, expanded = expanded)
     // The line below stop i: grey once the rider is past it.
-    fun railAfter(i: Int) = if (marks.marks[i + 1].reached || marks.betweenAfter == i) Slate300 else color
+    @Composable fun railAfter(i: Int) = if (marks.marks[i + 1].reached || marks.betweenAfter == i) Slate300 else color
 
     Column(modifier = modifier.fillMaxWidth()) {
         if (sameStationChange) ChangeRow(bus = ride.isBus)
@@ -638,6 +639,7 @@ private fun isSameStationChange(previous: TripLeg?, ride: TripLeg.Ride): Boolean
  * The rail of what comes beside a ride, [after] it or before, so the two meet at the ride's end: a
  * walk's, or a same-station change's. With nothing beside it, the ride's line just ends.
  */
+@Composable
 private fun railBeside(neighbour: TripLeg?, ride: TripLeg.Ride, after: Boolean): Color? = when (neighbour) {
     is TripLeg.Transfer -> Slate300
     is TripLeg.Ride -> Slate300.takeIf {
@@ -650,6 +652,7 @@ private fun railBeside(neighbour: TripLeg?, ride: TripLeg.Ride, after: Boolean):
 @Composable
 private fun RiderChevron() {
     val pink = MaterialTheme.colorScheme.primary
+    val outline = PageBackground
     Canvas(modifier = Modifier.size(22.dp)) {
         val s = size.minDimension * 0.3f
         val c = center
@@ -658,7 +661,7 @@ private fun RiderChevron() {
             lineTo(c.x, c.y + s * 0.6f)
             lineTo(c.x + s, c.y - s * 0.6f)
         }
-        drawPath(chevron, PageBackground, style = Stroke(width = s * 1.1f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        drawPath(chevron, outline, style = Stroke(width = s * 1.1f, cap = StrokeCap.Round, join = StrokeJoin.Round))
         drawPath(chevron, pink, style = Stroke(width = s * 0.6f, cap = StrokeCap.Round, join = StrokeJoin.Round))
     }
 }
