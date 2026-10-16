@@ -37,7 +37,7 @@ function optionNote(option: LegOption): { text: string, tight: boolean } {
   if (option.blocked === 'NO_ONWARD') return { text: 'tak tersambung', tight: false }
   if (option.gapToNextS === null) return { text: `tiba ${formatClock(option.departure.arrivalAt)}`, tight: false }
   const minutes = minutesOf(option.gapToNextS)
-  return { text: option.tight ? `mepet ${minutes} mnt` : `pindah ${minutes} mnt`, tight: option.tight }
+  return { text: option.tight ? `mepet ${minutes} mnt` : `transit ${minutes} mnt`, tight: option.tight }
 }
 
 /*
