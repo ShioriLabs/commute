@@ -30,5 +30,7 @@
     <string name="trip_via">via %1$s</string>
     <string name="trip_wake_text">Turun di %1$s</string>
     <string name="trip_wake_title">Bangun! Bentar lagi turun</string>
-    <string name="trip_walk_to">Jalan ke %1$s, %2$d m</string>
+    <string name="trip_walk_to">Jalan ke %1$s</string>
+    <!-- %2$s is the platform, already as "Peron 2" -->
+    <string name="trip_walk_to_platform">Jalan ke %1$s %2$s</string>
 </resources>
