@@ -9,18 +9,15 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.SharedTransitionScope.ResizeMode.Companion.scaleToBounds
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Easing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import id.shiorilabs.commute.core.ui.motion.IosSpringEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateDp
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -36,7 +33,11 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -44,6 +45,8 @@ import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.ui.NavDisplay
 import id.shiorilabs.commute.core.navigation.LocalNavigator
@@ -65,14 +68,17 @@ import kotlin.math.pow
  *            over 100 ms; closing it is front-loaded, opaque within ~60 ms, so the text never shows
  *            distorting.
  *   tint     the card's colour, for an accent card only, above the mask. Its opacity follows the
- *            panel's SIZE rather than the clock: how close it is to card size, to the 4th power. So
- *            the large moving surface stays white and the colour gathers only as the panel nears
- *            the card. Tied to the clock it lagged the shape, and closing shrank as a white ghost.
- *            The size is measured, not derived from the clock either: the bounds animation starts
- *            only once the card has been laid out again, frames late on a slow phone, and a clock
- *            that ran on without it washed the full-size screen pink.
+ *            panel's size: how close it is to card size, to the 4th power. So the large moving
+ *            surface stays white and the colour gathers only as the panel nears the card.
  *   landing  closing only: the landed panel crossfades into the card over the last 100 ms, while
  *            the card's own text and icon slide back in ([navCardFace]).
+ *
+ * None of them runs on the transition's clock, though, and nor do the corners: each is read off the
+ * panel's measured width as it draws, the timings above mapped through the bounds curve onto how
+ * far the panel has got. The bounds animation starts only once the card has been laid out, which
+ * on the way back is frames into the transition on a slow phone; layers on the clock ran on
+ * without it, and the full-size screen washed white and pink before it had begun to shrink. On a
+ * phone that keeps up, the two readings are the same.
  */
 
 /** Length of the bounds animation, matching the web's `PANEL_MS`. */
@@ -207,44 +213,18 @@ fun NavCardMorphTarget(
     }
     val morphing = if (closing) !covered else !opened
 
-    // Corners: the card's on the way in and out, square once the screen fills the display.
-    val corner by transition.animateDp(
-        transitionSpec = { tween(NAV_CARD_MORPH_MILLIS, easing = MorphEasing) },
-        label = "navCardMorphCorner",
-    ) { state -> if (state == EnterExitState.Visible) 0.dp else CardCorner }
-
-    val maskAlpha by transition.animateFloat(
-        transitionSpec = {
-            if (targetState == EnterExitState.Visible) {
-                tween(MASK_OPEN_MILLIS, delayMillis = MASK_OPEN_DELAY_MILLIS)
-            } else {
-                tween(MASK_CLOSE_MILLIS, easing = MaskCloseEasing)
-            }
-        },
-        label = "navCardMorphMask",
-    ) { state -> if (state == EnterExitState.Visible) 0f else 1f }
-
-    // The tint reads the panel's width as it draws. The shrink is only a layer scale, which doesn't
-    // redraw the content, so this ticks a redraw on every frame the shared transition runs.
-    val cardWidth = LocalNavCardWidths.current?.get(destination)
-    val panel = remember { PanelCoordinates() }
-    val tinting = morphing && cardTint != null && sharedScope.isTransitionActive
-    val frame by produceState(0L, tinting) {
-        while (tinting) {
+    // The layers read the panel's width as they draw. The shrink is only a layer scale, which
+    // doesn't redraw the content, so this ticks a redraw on every frame the shared transition runs.
+    val cardWidths = LocalNavCardWidths.current
+    val panel = remember(cardWidths, destination) { MorphPanel { cardWidths?.get(destination) } }
+    val animating = morphing && sharedScope.isTransitionActive
+    val frame by produceState(0L, animating) {
+        while (animating) {
             withFrameNanos { value = it }
         }
     }
-
-    val landingAlpha by transition.animateFloat(
-        transitionSpec = {
-            if (targetState == EnterExitState.PostExit) {
-                tween(LAND_FADE_MILLIS, delayMillis = NAV_CARD_MORPH_MILLIS - LAND_FADE_MILLIS, easing = LinearEasing)
-            } else {
-                snap()
-            }
-        },
-        label = "navCardMorphLanding",
-    ) { state -> if (state == EnterExitState.PostExit) 0f else 1f }
+    // Corners: the card's on the way in and out, square once the screen fills the display.
+    val cornerClip = remember(panel) { MorphCornerClip(panel) }
 
     with(sharedScope) {
         Box(
@@ -257,57 +237,142 @@ fun NavCardMorphTarget(
                     boundsTransform = MorphBounds,
                     resizeMode = scaleToBounds(ContentScale.FillWidth, Alignment.TopCenter),
                     zIndexInOverlay = 1f,
-                    clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(if (morphing) corner else 0.dp)),
+                    clipInOverlayDuringTransition = if (morphing) cornerClip else SquareClip,
                 )
-                .graphicsLayer { alpha = if (morphing) landingAlpha else 1f }
+                // Reading the frame is what redraws these as the panel shrinks.
+                .graphicsLayer {
+                    val progress = if (morphing && frame >= 0L) panel.progress() else null
+                    alpha = progress?.let { navCardLandingAlpha(it, closing) } ?: 1f
+                }
                 .onGloballyPositioned { panel.coordinates = it }
-                // Over the content and the mask.
                 .drawWithContent {
                     drawContent()
-                    // Reading the frame is what redraws this as the panel shrinks.
-                    val panelWidth = panel.width()
-                    if (tinting && cardTint != null && frame >= 0L && panelWidth != null) {
-                        val tintAlpha = navCardTintAlpha(panelWidth, size.width, cardWidth?.toFloat())
-                        if (tintAlpha > 0f) {
-                            drawRect(cardTint, alpha = tintAlpha)
+                    val progress = if (morphing && frame >= 0L) panel.progress() else null
+                    if (progress != null) {
+                        drawRect(Color.White, alpha = navCardMaskAlpha(progress, closing))
+                        if (cardTint != null) {
+                            drawRect(cardTint, alpha = navCardTintAlpha(progress))
                         }
                     }
                 },
         ) {
             content()
-            if (morphing && maskAlpha > 0f) {
-                Box(
-                    Modifier
-                        .matchParentSize()
-                        .graphicsLayer { alpha = maskAlpha }
-                        .background(Color.White),
-                )
-            }
         }
     }
 }
 
 /**
- * The accent tint's opacity for a panel [panelWidth] wide on screen, morphing between the full
- * [screenWidth] and the card's [cardWidth]: how close it is to card size, to the [TINT_POWER].
- * Clear when there's no card to measure against.
+ * How far a panel [panelWidth] wide on screen has got between the full [screenWidth], 0, and the
+ * card's [cardWidth], 1. Null when there's no card to measure against.
  */
-internal fun navCardTintAlpha(panelWidth: Float, screenWidth: Float, cardWidth: Float?): Float {
+internal fun navCardMorphProgress(panelWidth: Float, screenWidth: Float, cardWidth: Float?): Float? {
     if (cardWidth == null || screenWidth <= cardWidth) {
-        return 0f
+        return null
     }
-    val towardsCard = (screenWidth - panelWidth) / (screenWidth - cardWidth)
-    return towardsCard.coerceIn(0f, 1f).pow(TINT_POWER)
+    return ((screenWidth - panelWidth) / (screenWidth - cardWidth)).coerceIn(0f, 1f)
 }
 
-/** Where the morphing screen is laid out, for reading its on-screen width as it draws. */
-private class PanelCoordinates {
+/**
+ * Where the web's clock stands, in ms since the morph began, once the panel is at [progress]: the
+ * bounds curve run backwards.
+ */
+internal fun navCardMorphMillis(progress: Float, closing: Boolean): Float {
+    val travelled = if (closing) progress else 1f - progress
+    return NAV_CARD_MORPH_MILLIS * MorphEasing.inverse(travelled.coerceIn(0f, 1f))
+}
+
+/** The white mask's opacity with the panel at [progress]. */
+internal fun navCardMaskAlpha(progress: Float, closing: Boolean): Float {
+    val millis = navCardMorphMillis(progress, closing)
+    return if (closing) {
+        MaskCloseEasing.transform((millis / MASK_CLOSE_MILLIS).coerceIn(0f, 1f))
+    } else {
+        1f - FastOutSlowInEasing.transform(((millis - MASK_OPEN_DELAY_MILLIS) / MASK_OPEN_MILLIS).coerceIn(0f, 1f))
+    }
+}
+
+/** The accent tint's opacity with the panel at [progress]: its nearness to the card, to the [TINT_POWER]. */
+internal fun navCardTintAlpha(progress: Float): Float = progress.pow(TINT_POWER)
+
+/** The panel's own opacity at [progress]: whole, until it crossfades into the card as it lands. */
+internal fun navCardLandingAlpha(progress: Float, closing: Boolean): Float {
+    if (!closing) {
+        return 1f
+    }
+    val fadingFor = navCardMorphMillis(progress, closing = true) - (NAV_CARD_MORPH_MILLIS - LAND_FADE_MILLIS)
+    return 1f - (fadingFor / LAND_FADE_MILLIS).coerceIn(0f, 1f)
+}
+
+/**
+ * The x at which this easing reaches [value], for a curve that only rises. Its ends are exact: a
+ * search can't find them where the curve is flat or steep.
+ */
+private fun Easing.inverse(value: Float): Float {
+    if (value <= 0f) return 0f
+    if (value >= 1f) return 1f
+    var low = 0f
+    var high = 1f
+    repeat(24) {
+        val mid = (low + high) / 2
+        if (transform(mid) < value) low = mid else high = mid
+    }
+    return (low + high) / 2
+}
+
+/**
+ * The morphing screen, read off its on-screen width: [progress] from 0 filling the display to 1 at
+ * the card. Null until the screen has been placed and the card measured.
+ */
+private class MorphPanel(private val cardWidth: () -> Int?) {
     var coordinates: LayoutCoordinates? = null
 
-    /** The width it's drawn at, the shrink's scale included; null before it's been placed. */
-    fun width(): Float? {
+    /** As it's drawn now, the shrink's scale included. */
+    fun progress(): Float? {
         val coordinates = coordinates?.takeIf { it.isAttached } ?: return null
-        return coordinates.findRootCoordinates().localBoundingBoxOf(coordinates, clipBounds = false).width
+        val drawnWidth = coordinates.findRootCoordinates().localBoundingBoxOf(coordinates, clipBounds = false).width
+        return progress(drawnWidth)
+    }
+
+    /** At [drawnWidth] on screen. */
+    fun progress(drawnWidth: Float): Float? {
+        val screenWidth = coordinates?.size?.width ?: return null
+        return navCardMorphProgress(drawnWidth, screenWidth.toFloat(), cardWidth()?.toFloat())
+    }
+}
+
+/**
+ * Rounds the morphing screen's corners by how near it is to the card, from the bounds the overlay
+ * is about to draw it at.
+ */
+private class MorphCornerClip(private val panel: MorphPanel) : SharedTransitionScope.OverlayClip {
+    private val path = Path()
+
+    override fun getClipPath(
+        sharedContentState: SharedTransitionScope.SharedContentState,
+        bounds: Rect,
+        layoutDirection: LayoutDirection,
+        density: Density,
+    ): Path {
+        val radius = with(density) { CardCorner.toPx() } * (panel.progress(bounds.width) ?: 0f)
+        path.reset()
+        path.addRoundRect(RoundRect(bounds, CornerRadius(radius)))
+        return path
+    }
+}
+
+/** The screen's clip when it isn't morphing: square, as it fills the display. */
+private object SquareClip : SharedTransitionScope.OverlayClip {
+    private val path = Path()
+
+    override fun getClipPath(
+        sharedContentState: SharedTransitionScope.SharedContentState,
+        bounds: Rect,
+        layoutDirection: LayoutDirection,
+        density: Density,
+    ): Path {
+        path.reset()
+        path.addRect(bounds)
+        return path
     }
 }
 
