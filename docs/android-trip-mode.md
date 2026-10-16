@@ -32,7 +32,7 @@ needs is already in that shape:
 | `RIDE.stops[]` | the ordered stations of the leg: progress and "N stasiun lagi" |
 | `RIDE.departureAt` / `arrivalAt` | the clock, where a real trip covers the leg |
 | `RIDE.platformCode`, `headsign` | what to board |
-| `TRANSFER.distanceM`, `corridorLabel` | the walk between legs |
+| `TRANSFER.distanceM`, `corridorLabel` | the walk between legs (back-to-back walks arrive as one, rounded up) |
 | `carPosition`, exits (once they exist) | boarding and alighting hints |
 
 Station coordinates come from the station data the app already caches. The trip

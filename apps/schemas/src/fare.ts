@@ -167,7 +167,7 @@ export const TransferLegSchema = v.pipe(
     type: v.literal('TRANSFER'),
     from: FareStationSchema,
     to: FareStationSchema,
-    distanceM: v.pipe(v.number(), v.description('Jarak jalan kaki dalam meter.')),
+    distanceM: v.pipe(v.number(), v.description('Jarak jalan kaki dalam meter. Jalan kaki yang berurutan digabung jadi satu tahap, jaraknya dibulatkan ke atas: kelipatan 50 m kalau di bawah 500 m, selebihnya kelipatan 100 m.')),
     fare: v.pipe(
       v.optional(v.number()),
       v.description('Cuma ada di koridor berbayar. Transfer jalan kaki biasa gratis, jadi tidak punya ini.')
