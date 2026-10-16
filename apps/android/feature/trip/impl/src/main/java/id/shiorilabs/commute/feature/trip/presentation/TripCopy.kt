@@ -38,9 +38,9 @@ internal class TripCopy(private val resources: Resources, private val lines: Map
             nextDepartures(headline, now),
         ).joinToString(separator)
         is Headline.Change -> listOfNotNull(
-            headline.walk?.let { resources.getString(CopyR.string.trip_walk_to, it.to.name, it.distanceM) },
-            direction(headline.ride),
-            headline.ride.platformCode?.let { resources.getString(CopyR.string.trip_platform, formatPlatformCode(it)) },
+            walkAndPlatform(headline),
+            headline.ride.platformCode?.takeIf { headline.walk == null }
+                ?.let { resources.getString(CopyR.string.trip_platform, formatPlatformCode(it)) },
             headline.departsAt?.let { resources.getString(CopyR.string.trip_departs_at, formatClock(it)) },
             nextDepartures(headline, now),
         ).joinToString(separator)
@@ -58,6 +58,13 @@ internal class TripCopy(private val resources: Resources, private val lines: Map
         is Headline.Arrived -> ""
     }
 
+
+    /** "Jalan ke Sudirman Peron 2": the walk, which ends at the platform the ride leaves from. */
+    private fun walkAndPlatform(headline: Headline.Change): String? = headline.walk?.let { walk ->
+        headline.ride.platformCode
+            ?.let { resources.getString(CopyR.string.trip_walk_to_platform, walk.to.name, resources.getString(CopyR.string.trip_platform, formatPlatformCode(it))) }
+            ?: resources.getString(CopyR.string.trip_walk_to, walk.to.name)
+    }
 
     /** "berikutnya 08.22, 08.33": what the rider would board if they missed this one, before they do. */
     private fun nextDepartures(headline: Headline, now: Instant): String? =
