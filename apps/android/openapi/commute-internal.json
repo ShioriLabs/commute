@@ -1042,6 +1042,44 @@
         "title": "FareLineRef",
         "description": "Lin yang dipakai di satu tahap perjalanan."
       },
+      "FareLegDeparture": {
+        "type": "object",
+        "properties": {
+          "departureAt": {
+            "type": "string",
+            "description": "Jam berangkat dari stasiun naik."
+          },
+          "arrivalAt": {
+            "type": "string",
+            "description": "Jam tiba di stasiun turun."
+          },
+          "tripId": {
+            "type": "string",
+            "description": "Penanda perjalanan kendaraan ini. Jangan diurai, cuma buat membandingkan."
+          },
+          "line": {
+            "type": "string",
+            "title": "Line key",
+            "description": "`OPERATOR:CODE`, dicocokkan ke kamus lin dari `/operators`.",
+            "examples": [
+              "KCI:C",
+              "MRTJ:M"
+            ]
+          },
+          "headsign": {
+            "type": "string",
+            "description": "Stasiun akhir yang dituju kendaraan ini, kalau jadwalnya mencantumkan."
+          }
+        },
+        "required": [
+          "departureAt",
+          "arrivalAt",
+          "tripId",
+          "line"
+        ],
+        "title": "FareLegDeparture",
+        "description": "Satu kendaraan yang melayani seluruh tahap, dari stasiun naik sampai stasiun turun, sesuai jadwal resmi."
+      },
       "FareRideLeg": {
         "type": "object",
         "properties": {
@@ -1153,6 +1191,18 @@
             "type": "string",
             "description": "Penanda perjalanan kendaraan yang dinaiki. Jangan diurai, cuma buat membandingkan. Cuma ada di tahap yang jadwalnya kami punya."
           },
+          "minChangeS": {
+            "type": "number",
+            "description": "Waktu pindah paling singkat dalam detik, dari turun di tahap naik sebelumnya sampai bisa naik di tahap ini, termasuk jalan kaki, sesuai kecepatan jalan penumpang. Tidak ada di tahap naik pertama atau tahap yang tidak punya jadwal.",
+            "format": "double"
+          },
+          "upcomingDepartures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FareLegDeparture"
+            },
+            "description": "Kendaraan yang bisa dinaiki di tahap ini, urut dari yang paling cepat. Yang pertama selalu kendaraan yang dipakai di `departureAt`. Cuma ada di tahap yang jadwalnya kami punya."
+          },
           "platformCode": {
             "type": "string",
             "description": "Peron tempat naik, kalau datanya sudah diverifikasi. Bisa berupa rentang kalau peronnya pulau.",
@@ -1192,7 +1242,7 @@
           },
           "distanceM": {
             "type": "number",
-            "description": "Jarak jalan kaki dalam meter.",
+            "description": "Jarak jalan kaki dalam meter. Jalan kaki yang berurutan digabung jadi satu tahap, jaraknya dibulatkan ke atas: kelipatan 50 m kalau di bawah 500 m, selebihnya kelipatan 100 m.",
             "format": "double"
           },
           "fare": {
@@ -1665,6 +1715,24 @@
         "title": "FareJourneyLabel",
         "description": "Kelebihan yang cuma dipunya satu pilihan rute: `FEWEST_CHANGES` paling jarang ganti kendaraan, `LEAST_WALKING` paling sedikit jalan kaki, `CHEAPEST` paling murah, `SHORTEST_WAIT` kendaraannya paling sering lewat. Kalau ada dua rute yang sama-sama unggul, dua-duanya tidak dapat label, biar labelnya benar-benar membedakan. Nilai yang dikenal saat ini: `FEWEST_CHANGES`, `LEAST_WALKING`, `CHEAPEST`, `SHORTEST_WAIT`. Bisa bertambah."
       },
+      "FareJourneyDeparture": {
+        "type": "object",
+        "properties": {
+          "departureAt": {
+            "type": "string",
+            "description": "Jam berangkat kendaraan pertama."
+          },
+          "arrivalAt": {
+            "type": "string",
+            "description": "Jam sampai tujuan. Cuma ada kalau semua tahap naik kendaraannya punya jadwal."
+          }
+        },
+        "required": [
+          "departureAt"
+        ],
+        "title": "FareJourneyDeparture",
+        "description": "Keberangkatan lain dari rute yang sama."
+      },
       "FareJourney": {
         "type": "object",
         "properties": {
@@ -1721,7 +1789,7 @@
           },
           "walkDistanceM": {
             "type": "number",
-            "description": "Total jarak jalan kaki di pilihan rute ini dalam meter.",
+            "description": "Total jarak jalan kaki di pilihan rute ini dalam meter, apa adanya tanpa pembulatan, buat membandingkan rute. Buat ditampilkan, jumlahkan `distanceM` tahap jalan kakinya supaya sama dengan yang tertulis di tiap tahap.",
             "format": "double"
           },
           "arrivalAt": {
@@ -1737,6 +1805,13 @@
             "examples": [
               "2026-09-08T04:05:00+07:00"
             ]
+          },
+          "moreDepartures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FareJourneyDeparture"
+            },
+            "description": "Keberangkatan lain rute ini dalam satu jam ke depan, urut dari yang paling cepat, tidak termasuk yang ditampilkan di tahap-tahapnya. Cuma ada di rute yang jadwalnya kami punya."
           }
         },
         "required": [

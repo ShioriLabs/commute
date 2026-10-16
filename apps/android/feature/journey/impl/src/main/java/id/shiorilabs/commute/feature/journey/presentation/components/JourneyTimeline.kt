@@ -68,9 +68,12 @@ import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.ext.parseHexColor
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.feature.journey.R
+import id.shiorilabs.commute.feature.journey.domain.Change
 import id.shiorilabs.commute.feature.journey.domain.JourneyLeg
 import id.shiorilabs.commute.feature.journey.domain.LINE_COLOR_FALLBACK
 import id.shiorilabs.commute.feature.journey.domain.LegLine
+import id.shiorilabs.commute.feature.journey.domain.TimedLeg
+import id.shiorilabs.commute.feature.journey.domain.changeAt
 import id.shiorilabs.commute.feature.journey.domain.formatKm
 import id.shiorilabs.commute.feature.journey.domain.formatRupiah
 import id.shiorilabs.commute.feature.station.domain.LineInfo
@@ -103,7 +106,13 @@ internal fun legLines(ride: JourneyLeg.Ride, lines: Map<String, LineInfo>): List
  * `JourneyTimeline` in its order, on the timeline parts the live trip screen draws its rides with.
  */
 @Composable
-internal fun JourneyTimeline(legs: List<JourneyLeg>, lines: Map<String, LineInfo>, modifier: Modifier = Modifier) {
+internal fun JourneyTimeline(
+    legs: List<JourneyLeg>,
+    lines: Map<String, LineInfo>,
+    modifier: Modifier = Modifier,
+    timed: List<TimedLeg> = emptyList(),
+    onPickDeparture: (legIndex: Int, tripId: String) -> Unit = { _, _ -> },
+) {
     Column(modifier = modifier.fillMaxWidth()) {
         (legs.firstOrNull() as? JourneyLeg.Transfer)?.let { EndpointStop(it.from.name, start = true) }
         legs.forEachIndexed { index, leg ->
@@ -117,6 +126,9 @@ internal fun JourneyTimeline(legs: List<JourneyLeg>, lines: Map<String, LineInfo
                     RideLeg(
                         leg = leg,
                         lines = legLines(leg, lines),
+                        timed = timed.firstOrNull { it.index == index },
+                        changeGap = if (sameStationChange) changeAt(legs, timed, index) else null,
+                        onPick = { tripId -> onPickDeparture(index, tripId) },
                         sameStationChange = sameStationChange,
                         // The change's slate rail runs on to the nodes either side, as a walk's does.
                         walkBefore = walkRail(previous) ?: SolidColor(Slate300).takeIf { sameStationChange },
@@ -124,7 +136,7 @@ internal fun JourneyTimeline(legs: List<JourneyLeg>, lines: Map<String, LineInfo
                     )
                 }
 
-                is JourneyLeg.Transfer -> TransferLeg(leg)
+                is JourneyLeg.Transfer -> TransferLeg(leg, gap = changeAt(legs, timed, index))
             }
         }
         (legs.lastOrNull() as? JourneyLeg.Transfer)?.let { EndpointStop(it.to.name, start = false) }
@@ -164,6 +176,9 @@ private fun RideLeg(
     leg: JourneyLeg.Ride,
     lines: List<LegLine>,
     sameStationChange: Boolean,
+    timed: TimedLeg?,
+    changeGap: Change?,
+    onPick: (tripId: String) -> Unit,
     walkBefore: Brush?,
     walkAfter: Brush?,
 ) {
@@ -187,6 +202,7 @@ private fun RideLeg(
                     style = MaterialTheme.typography.bodyMedium,
                     color = Slate500,
                 )
+                changeGap?.let { ConnectionNote(it) }
             }
         }
     }
@@ -237,6 +253,9 @@ private fun RideLeg(
             if (directions.isNotEmpty()) {
                 RideNote(stringResource(R.string.journey_headsign, joinLabels(directions)))
             }
+            // The other trains this leg could be ridden on; choosing one retimes the legs after it.
+            // Only where the timetable covers the leg: TransJakarta has none, so nothing is drawn.
+            timed?.let { DeparturePicker(options = it.options, color = legColor, onPick = onPick) }
             val summary = stringResource(R.string.journey_ride_summary, leg.stationCount - 1, formatKm(leg.distanceM))
             if (intermediate.isEmpty()) {
                 Text(text = summary, style = MaterialTheme.typography.bodyMedium, color = Slate500)
@@ -323,7 +342,7 @@ private fun RideNote(text: String) {
 }
 
 @Composable
-private fun TransferLeg(leg: JourneyLeg.Transfer) {
+private fun TransferLeg(leg: JourneyLeg.Transfer, gap: Change? = null) {
     val fare = leg.fare
     val corridor = leg.corridorLabel
     // The breathing room is padding on the content, not on the row: outside the row, its rail can't
@@ -374,9 +393,11 @@ private fun TransferLeg(leg: JourneyLeg.Transfer) {
             val walk = if (leg.distanceM > 0) " " + stringResource(R.string.journey_transfer_walk, leg.distanceM) else ""
             Text(
                 text = stringResource(R.string.journey_transfer_to, leg.to.name) + walk,
+                modifier = Modifier.weight(1f, fill = false),
                 style = MaterialTheme.typography.bodyMedium,
                 color = Slate500,
             )
+            gap?.let { ConnectionNote(it) }
         }
     }
 }

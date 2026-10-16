@@ -23,6 +23,9 @@ fun sortJourneyLabels(labels: Collection<JourneyLabel>): List<JourneyLabel> = LA
 /** How many labels a card wears: a row with four reasons is making none of them. */
 const val JOURNEY_LABELS_SHOWN = 2
 
+/** Later trains named under a route's own: enough to see whether missing it costs five minutes or twenty. */
+const val NEXT_DEPARTURES_SHOWN = 2
+
 val Journey.rides: List<JourneyLeg.Ride> get() = legs.filterIsInstance<JourneyLeg.Ride>()
 
 /** The first timed ride's departure: when the rider actually boards. */

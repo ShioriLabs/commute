@@ -22,20 +22,41 @@ const val SAVED_ROUTE_ROWS = 3
  * is not a row at all: the API marks it with [Journey.resumesAt], and offered untimed it would read
  * as rideable.
  */
-fun upcomingJourneys(journeys: List<Journey>, now: Instant, limit: Int = SAVED_ROUTE_ROWS): List<Journey> {
-    val timed = mutableListOf<Pair<Journey, Instant>>()
-    val untimed = mutableListOf<Journey>()
+fun upcomingJourneys(journeys: List<Journey>, now: Instant, limit: Int = SAVED_ROUTE_ROWS): List<UpcomingRow> {
+    val timed = mutableListOf<UpcomingRow>()
+    val untimed = mutableListOf<UpcomingRow>()
     for (journey in journeys) {
         if (journey.resumesAt != null) {
             continue
         }
-        val boardsAt = boardsAtOf(journey)
-        when {
-            boardsAt == null -> untimed += journey
-            !boardsAt.isBefore(now) -> timed += journey to boardsAt
+        if (boardsAtOf(journey) == null) {
+            untimed += UpcomingRow(journey, emptyList())
+            continue
+        }
+        val departures = liveDeparturesOf(journey, now)
+        if (departures.isNotEmpty()) {
+            timed += UpcomingRow(journey, departures)
         }
     }
-    return (timed.sortedBy { it.second }.map { it.first } + untimed).take(limit)
+    return (timed.sortedBy { it.departures.first().departureAt } + untimed).take(limit)
+}
+
+/** One route on a saved pair's card, with the trains on it that have not left yet. */
+data class UpcomingRow(
+    val journey: Journey,
+    /** Soonest first; the first leads the row. Empty when the route is untimed. */
+    val departures: List<JourneyDeparture>,
+)
+
+/**
+ * A route's boardings that have not left yet: the journey's own train, then the later ones riding
+ * along in [Journey.moreDepartures]. Filtered against the clock because home holds an answer for a
+ * whole departure slot, so the own train can be gone while the next ones are still catchable.
+ */
+fun liveDeparturesOf(journey: Journey, now: Instant): List<JourneyDeparture> {
+    val boardsAt = boardsAtOf(journey) ?: return emptyList()
+    return (listOf(JourneyDeparture(boardsAt, journey.arrivalAt)) + journey.moreDepartures)
+        .filter { !it.departureAt.isBefore(now) }
 }
 
 /**

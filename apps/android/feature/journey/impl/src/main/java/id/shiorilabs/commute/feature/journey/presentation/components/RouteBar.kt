@@ -104,7 +104,7 @@ private fun RouteBarRow(segments: List<RouteBarSegment>, plateColor: Color, minS
     ) {
         segments.forEach { segment ->
             when (segment) {
-                is RouteBarSegment.Walk -> WalkSegment(segment.distanceM)
+                is RouteBarSegment.Walk -> WalkChip(segment.distanceM)
                 is RouteBarSegment.Ride -> Box(
                     modifier = Modifier
                         // Weight by share of ground covered, floored at the roundel it carries.
@@ -135,7 +135,7 @@ private fun RouteBarRow(segments: List<RouteBarSegment>, plateColor: Color, minS
 }
 
 @Composable
-private fun WalkSegment(distanceM: Int?) {
+internal fun WalkChip(distanceM: Int?) {
     Row(
         modifier = Modifier
             .height(24.dp)

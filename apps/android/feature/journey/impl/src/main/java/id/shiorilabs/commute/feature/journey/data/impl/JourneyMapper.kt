@@ -7,7 +7,9 @@ import id.shiorilabs.commute.core.model.models.TripResult
 import id.shiorilabs.commute.feature.journey.domain.FareSegment
 import id.shiorilabs.commute.feature.journey.domain.Journey
 import id.shiorilabs.commute.feature.journey.domain.JourneyLabel
+import id.shiorilabs.commute.feature.journey.domain.JourneyDeparture
 import id.shiorilabs.commute.feature.journey.domain.JourneyLeg
+import id.shiorilabs.commute.feature.journey.domain.LegDeparture
 import id.shiorilabs.commute.feature.journey.domain.JourneyStop
 import id.shiorilabs.commute.feature.journey.domain.ServiceLine
 import id.shiorilabs.commute.feature.journey.domain.TripAnswer
@@ -23,13 +25,18 @@ internal fun TripResult.toTripAnswer(): TripAnswer = TripAnswer(
     journeys = journeys.map { it.toJourney() },
 )
 
-private fun FareJourney.toJourney(): Journey = Journey(
-    legs = legs.map { leg ->
+private fun FareJourney.toJourney(): Journey {
+    val mapped = legs.map { leg ->
         when (leg) {
             is FareRideLeg -> leg.toRide()
             is FareTransferLeg -> leg.toTransfer()
         }
-    },
+    }
+    return toJourney(mapped, transferMeters = mapped.filterIsInstance<JourneyLeg.Transfer>().sumOf { it.distanceM })
+}
+
+private fun FareJourney.toJourney(mapped: List<JourneyLeg>, transferMeters: Int): Journey = Journey(
+    legs = mapped,
     segments = segments.map { it.toSegment() },
     totalFare = totalFare?.roundToInt(),
     totalDistanceM = totalDistanceM.roundToInt(),
@@ -37,9 +44,14 @@ private fun FareJourney.toJourney(): Journey = Journey(
     // The API only ever adds labels; one this version does not know is dropped, not shown raw.
     labels = labels.mapNotNull { label -> JourneyLabel.entries.firstOrNull { it.name == label } },
     boardings = boardings.roundToInt(),
-    walkDistanceM = walkDistanceM.roundToInt(),
+    // The API merges back-to-back walks into one rounded-up leg but keeps `walkDistanceM` raw for
+    // comparing routes; summing the legs is what makes the recap read like the rows under it.
+    walkDistanceM = if (legs.isEmpty()) walkDistanceM.roundToInt() else transferMeters,
     arrivalAt = arrivalAt?.toInstantOrNull(),
     resumesAt = resumesAt?.toInstantOrNull(),
+    moreDepartures = moreDepartures.orEmpty().mapNotNull { d ->
+        d.departureAt.toInstantOrNull()?.let { JourneyDeparture(it, d.arrivalAt?.toInstantOrNull()) }
+    },
 )
 
 private fun FareRideLeg.toRide(): JourneyLeg.Ride = JourneyLeg.Ride(
@@ -59,6 +71,12 @@ private fun FareRideLeg.toRide(): JourneyLeg.Ride = JourneyLeg.Ride(
     // Index-aligned with the stops or no use at all: a list that doesn't line up is dropped.
     stopTimes = stopTimes?.takeIf { it.size == stops.size }?.map { it?.toInstantOrNull() }.orEmpty(),
     tripId = tripId,
+    upcomingDepartures = upcomingDepartures.orEmpty().mapNotNull { d ->
+        val departure = d.departureAt.toInstantOrNull() ?: return@mapNotNull null
+        val arrival = d.arrivalAt.toInstantOrNull() ?: return@mapNotNull null
+        LegDeparture(departure, arrival, d.tripId, d.line, d.headsign)
+    },
+    minChangeS = minChangeS?.roundToInt(),
 )
 
 private fun FareTransferLeg.toTransfer(): JourneyLeg.Transfer = JourneyLeg.Transfer(
