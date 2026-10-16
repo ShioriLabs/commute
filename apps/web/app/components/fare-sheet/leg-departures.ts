@@ -31,6 +31,12 @@ const TIGHT_SLACK_S = 2 * 60
 /** Past this many options a row of chips stops being scannable; use a ladder. */
 export const CHIP_ROW_MAX = 4
 
+/*
+ * A train is gone a minute after it was due, the same grace leaveInLabel gives
+ * "Berangkat sekarang", so the one at the platform now is still offered.
+ */
+const DEPARTED_GRACE_S = 60
+
 /**
  * Why an option cannot be picked: the rider cannot reach it after the train
  * chosen before it, or nothing on a later leg connects from it.
@@ -56,6 +62,12 @@ export interface TimedLeg {
   /** Index into the journey's `legs`. */
   index: number
   chosen: FareLegDeparture
+  /**
+   * The trains to show, at most CHIP_ROW_MAX: the one just missed, if any, then
+   * the ones the rider can make, always including `chosen`. The engine lists a
+   * later leg long enough to connect from every train on the leg before it, so
+   * showing all of it would turn every row into a ladder.
+   */
   options: LegOption[]
 }
 
@@ -63,6 +75,17 @@ const seconds = (iso: string) => Date.parse(iso) / 1000
 
 const upcomingOf = (leg: FareResultLeg | undefined): readonly FareLegDeparture[] =>
   leg?.type === 'RIDE' ? (leg.upcomingDepartures ?? []) : []
+
+/*
+ * The part of options worth showing: from the train just before the first one
+ * the rider can make, slid on where needed so the chosen one stays in view.
+ */
+function windowOf(options: readonly LegOption[]): LegOption[] {
+  const reachable = options.findIndex(option => option.blocked !== 'MISSED')
+  const selected = options.findIndex(option => option.selected)
+  const start = Math.max(0, reachable - 1, selected - CHIP_ROW_MAX + 1)
+  return options.slice(start, start + CHIP_ROW_MAX)
+}
 
 /** The shortest change into leg `to` from the ride at `from`, by the engine's rule. */
 function minChangeS(legs: readonly FareResultLeg[], from: number, to: number): number {
@@ -85,8 +108,20 @@ const isTight = (gapS: number, minS: number) => gapS - minS < TIGHT_SLACK_S
  * that no later train connects from, is ignored and the leg falls back to the
  * earliest train that works, so a stale pick never produces a connection that
  * runs backwards in time or a journey that stops halfway.
+ *
+ * Trains that left before `nowMs` are dropped first. A "now" answer is timed
+ * from the start of its slot and can be held for the whole of it, so at 18.33
+ * it still listed the 18.24 and 18.29 as trains to catch. A leg with nothing
+ * left ends the resolution there, and retimeJourney then keeps the journey as
+ * it came until the next answer arrives.
  */
-export function resolveTimedLegs(legs: readonly FareResultLeg[], picks: Readonly<Record<number, string>>): TimedLeg[] {
+export function resolveTimedLegs(
+  legs: readonly FareResultLeg[],
+  picks: Readonly<Record<number, string>>,
+  nowMs = Number.NEGATIVE_INFINITY
+): TimedLeg[] {
+  const goneBeforeS = nowMs / 1000 - DEPARTED_GRACE_S
+  const upcomingAt = (index: number) => upcomingOf(legs[index]).filter(departure => seconds(departure.departureAt) >= goneBeforeS)
   const timedIndexes = legs.flatMap((leg, index) => (upcomingOf(leg).length > 0 ? [index] : []))
 
   /*
@@ -100,13 +135,13 @@ export function resolveTimedLegs(legs: readonly FareResultLeg[], picks: Readonly
   for (let position = timedIndexes.length - 1; position >= 0; position--) {
     const index = timedIndexes[position]!
     const nextIndex = timedIndexes[position + 1]
-    const upcoming = upcomingOf(legs[index])
+    const upcoming = upcomingAt(index)
     if (nextIndex === undefined) {
       finishing.set(index, new Set(upcoming.map(departure => departure.tripId)))
       continue
     }
     const change = minChangeS(legs, index, nextIndex)
-    const nextFinishing = upcomingOf(legs[nextIndex]).filter(next => finishing.get(nextIndex)!.has(next.tripId))
+    const nextFinishing = upcomingAt(nextIndex).filter(next => finishing.get(nextIndex)!.has(next.tripId))
     finishing.set(index, new Set(upcoming
       .filter(departure => nextFinishing.some(next => seconds(next.departureAt) >= seconds(departure.arrivalAt) + change))
       .map(departure => departure.tripId)))
@@ -116,7 +151,7 @@ export function resolveTimedLegs(legs: readonly FareResultLeg[], picks: Readonly
   let previous: { index: number, arrivalS: number } | null = null
 
   for (const [position, index] of timedIndexes.entries()) {
-    const upcoming = upcomingOf(legs[index])
+    const upcoming = upcomingAt(index)
     const earliest: number = previous
       ? previous.arrivalS + minChangeS(legs, previous.index, index)
       : Number.NEGATIVE_INFINITY
@@ -127,16 +162,16 @@ export function resolveTimedLegs(legs: readonly FareResultLeg[], picks: Readonly
 
     const picked = upcoming.find(departure => departure.tripId === picks[index] && blockedOf(departure) === null)
     const chosen = picked ?? upcoming.find(departure => blockedOf(departure) === null)
-    // Nothing usable: only possible on a body without `minChangeS` whose
-    // fallback disagrees with the engine. Stop rather than emit a connection
-    // that runs backwards; the caller keeps the legs it already had.
+    // Nothing usable: every train listed has left, or a body without
+    // `minChangeS` whose fallback disagrees with the engine. Stop rather than
+    // emit a connection that runs backwards; the caller keeps the legs it had.
     if (!chosen) break
 
     const nextIndex = timedIndexes[position + 1]
     const change = nextIndex === undefined ? 0 : minChangeS(legs, index, nextIndex)
     const nextUpcoming = nextIndex === undefined
       ? []
-      : upcomingOf(legs[nextIndex]).filter(next => finishing.get(nextIndex)!.has(next.tripId))
+      : upcomingAt(nextIndex).filter(next => finishing.get(nextIndex)!.has(next.tripId))
     const options = upcoming.map((departure): LegOption => {
       const nextTrain = nextUpcoming.find(next => seconds(next.departureAt) >= seconds(departure.arrivalAt) + change)
       const gapToNextS = nextTrain ? seconds(nextTrain.departureAt) - seconds(departure.arrivalAt) : null
@@ -149,7 +184,7 @@ export function resolveTimedLegs(legs: readonly FareResultLeg[], picks: Readonly
       }
     })
 
-    resolved.push({ index, chosen, options })
+    resolved.push({ index, chosen, options: windowOf(options) })
     previous = { index, arrivalS: seconds(chosen.arrivalAt) }
   }
   return resolved
