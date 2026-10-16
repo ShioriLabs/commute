@@ -2,16 +2,14 @@ package id.shiorilabs.commute.feature.journey.presentation.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -21,7 +19,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
@@ -29,8 +26,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import id.shiorilabs.commute.core.time.formatClock
@@ -95,25 +90,6 @@ private fun inkOf(option: LegOption, color: Color): Color = when {
     else -> Slate900
 }
 
-/** The trip page's side margin: the chips run out through it, so a row that overflows is seen to. */
-private val PAGE_MARGIN = 32.dp
-
-/** Widens the row by [by] on the right, past its parent's edge. */
-private fun Modifier.bleedEnd(by: Dp): Modifier = offset {
-    // A size past its constraints is centred on them, which would pull the row left by half of this.
-    IntOffset(by.roundToPx() / 2, 0)
-}.layout { measurable, constraints ->
-    val extra = by.roundToPx()
-    val placeable = measurable.measure(
-        if (constraints.hasBoundedWidth) {
-            constraints.copy(minWidth = constraints.maxWidth + extra, maxWidth = constraints.maxWidth + extra)
-        } else {
-            constraints
-        },
-    )
-    layout(placeable.width, placeable.height) { placeable.place(0, 0) }
-}
-
 @Composable
 internal fun DeparturePicker(
     options: List<LegOption>,
@@ -129,12 +105,8 @@ internal fun DeparturePicker(
             options.forEach { option -> LadderRung(option, color, onPick) }
         }
     } else {
-        Row(
-            modifier = modifier.bleedEnd(PAGE_MARGIN).horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            options.forEach { option -> Chip(option, color, onPick) }
-            Spacer(Modifier.width(PAGE_MARGIN - 6.dp))
+        LazyRow(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(options) { option -> Chip(option, color, onPick) }
         }
     }
 }
