@@ -2,17 +2,17 @@ import clsx from 'clsx'
 import { type CSSProperties } from 'react'
 import { getForegroundColor } from 'utils/colors'
 import { formatClock } from 'utils/format'
-import { CHIP_ROW_MAX, connectionOf, type LegOption } from './leg-departures'
+import { CHIP_ROW_MAX, type LegOption } from './leg-departures'
 
 const minutesOf = (gapS: number) => Math.round(gapS / 60)
 
 /*
  * The change between two trains, as the timeline rows between rides print it.
- * Only a tight one is named: a comfortable change and an adequate one are both
- * simply "N mnt", since neither asks anything of the rider.
+ * Only a tight one is named: "tight" is judged on the spare time beyond the
+ * engine's own change allowance, so a long walk with a minute to spare is
+ * flagged even though the gap itself looks generous.
  */
-export function ConnectionNote({ gapS }: { gapS: number }) {
-  const tight = connectionOf(gapS) === 'MEPET'
+export function ConnectionNote({ gapS, tight }: { gapS: number, tight: boolean }) {
   return (
     <span className={clsx('figure text-xs', tight ? 'text-amber-700 font-bold' : 'text-slate-500')}>
       {tight ? `${minutesOf(gapS)} mnt · mepet` : `${minutesOf(gapS)} mnt`}
@@ -33,11 +33,11 @@ export function ConnectionNote({ gapS }: { gapS: number }) {
  * The last leg has no change to make, so it says when it arrives instead.
  */
 function optionNote(option: LegOption): { text: string, tight: boolean } {
-  if (!option.reachable) return { text: 'tak terkejar', tight: false }
+  if (option.blocked === 'MISSED') return { text: 'tak terkejar', tight: false }
+  if (option.blocked === 'NO_ONWARD') return { text: 'tak tersambung', tight: false }
   if (option.gapToNextS === null) return { text: `tiba ${formatClock(option.departure.arrivalAt)}`, tight: false }
-  const tight = connectionOf(option.gapToNextS) === 'MEPET'
   const minutes = minutesOf(option.gapToNextS)
-  return { text: tight ? `mepet ${minutes} mnt` : `pindah ${minutes} mnt`, tight }
+  return { text: option.tight ? `mepet ${minutes} mnt` : `pindah ${minutes} mnt`, tight: option.tight }
 }
 
 /*
@@ -62,9 +62,9 @@ function toneOf(selected: boolean, color: string): { className: string, style?: 
  * along when about to miss one. Past that a row scrolls off screen and hides
  * the options, so it becomes a ladder: one line per train, arrival beside it.
  *
- * A train that can no longer be reached after an earlier pick stays in the list
- * but disabled, so the rider sees why the choice narrowed instead of finding
- * options gone.
+ * A train that can no longer be reached after an earlier pick, or that no later
+ * train connects from, stays in the list but disabled, with which of the two it
+ * is, so the rider sees why the choice narrowed instead of finding options gone.
  */
 export default function DeparturePicker({ options, color, onPick }: {
   options: LegOption[]
@@ -83,17 +83,17 @@ export default function DeparturePicker({ options, color, onPick }: {
             <li key={option.departure.tripId}>
               <button
                 type="button"
-                disabled={!option.reachable}
+                disabled={option.blocked !== null}
                 aria-pressed={option.selected}
                 onClick={() => onPick(option.departure.tripId)}
                 className={clsx(
                   'w-full grid grid-cols-[3.25rem_1fr] items-baseline gap-2 px-3 py-2 text-left',
                   tone.className,
-                  option.reachable ? 'cursor-pointer' : 'cursor-default opacity-50'
+                  option.blocked === null ? 'cursor-pointer' : 'cursor-default opacity-50'
                 )}
                 style={tone.style}
               >
-                <b className={clsx('figure text-base tabular-nums', !option.reachable && 'line-through')}>{ formatClock(option.departure.departureAt) }</b>
+                <b className={clsx('figure text-base tabular-nums', option.blocked !== null && 'line-through')}>{ formatClock(option.departure.departureAt) }</b>
                 <span className={clsx('figure text-xs truncate', option.selected ? 'opacity-80' : 'text-slate-500', note.tight && !option.selected && 'text-amber-700 font-bold')}>{ note.text }</span>
               </button>
             </li>
@@ -112,17 +112,17 @@ export default function DeparturePicker({ options, color, onPick }: {
           <li key={option.departure.tripId} className="shrink-0">
             <button
               type="button"
-              disabled={!option.reachable}
+              disabled={option.blocked !== null}
               aria-pressed={option.selected}
               onClick={() => onPick(option.departure.tripId)}
               className={clsx(
                 'flex flex-col items-start gap-0.5 rounded-xl px-3 py-2 text-left',
                 tone.className,
-                option.reachable ? 'cursor-pointer' : 'cursor-default opacity-50'
+                option.blocked === null ? 'cursor-pointer' : 'cursor-default opacity-50'
               )}
               style={tone.style}
             >
-              <b className={clsx('figure text-base leading-none tabular-nums', !option.reachable && 'line-through')}>{ formatClock(option.departure.departureAt) }</b>
+              <b className={clsx('figure text-base leading-none tabular-nums', option.blocked !== null && 'line-through')}>{ formatClock(option.departure.departureAt) }</b>
               <span className={clsx('figure text-[11px] leading-none whitespace-nowrap', option.selected ? 'opacity-80' : 'text-slate-500', note.tight && !option.selected && 'text-amber-700 font-bold')}>
                 { note.text }
               </span>

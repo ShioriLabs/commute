@@ -132,6 +132,16 @@ export const RideLegSchema = v.pipe(
       v.description('Penanda perjalanan kendaraan yang dinaiki. Jangan diurai, cuma buat membandingkan. Cuma ada di tahap yang jadwalnya kami punya.')
     ),
     /*
+     * The engine's shortest change into this leg from the timed ride before it,
+     * walks and in-station allowances included, at the rider's walking pace.
+     * A client offering a later train on an earlier leg uses it to tell which
+     * of `upcomingDepartures` that train still makes, instead of guessing.
+     */
+    minChangeS: v.pipe(
+      v.optional(v.number()),
+      v.description('Waktu pindah paling singkat dalam detik, dari turun di tahap naik sebelumnya sampai bisa naik di tahap ini, termasuk jalan kaki, sesuai kecepatan jalan penumpang. Tidak ada di tahap naik pertama atau tahap yang tidak punya jadwal.')
+    ),
+    /*
      * The trains a rider on this platform can take, the caught one first. Per-
      * request like the stamps above, and anchored on the same clock: every
      * entry is one this rider can make after the leg before, so picking a later
@@ -241,7 +251,7 @@ export const FareJourneySchema = v.pipe(
       v.description('Boleh kosong, dan itu wajar: rute yang tidak menang sendirian di kriteria mana pun memang tidak punya kelebihan khusus buat disebut.')
     ),
     boardings: v.pipe(v.number(), v.description('Berapa kali naik kendaraan. Beda tipis dari `transferCount`: ganti kereta di peron yang sama tetap dihitung naik, tapi tidak dihitung transit.')),
-    walkDistanceM: v.pipe(v.number(), v.description('Total jarak jalan kaki di pilihan rute ini dalam meter.')),
+    walkDistanceM: v.pipe(v.number(), v.description('Total jarak jalan kaki di pilihan rute ini dalam meter, apa adanya tanpa pembulatan, buat membandingkan rute. Buat ditampilkan, jumlahkan `distanceM` tahap jalan kakinya supaya sama dengan yang tertulis di tiap tahap.')),
     /*
      * All-or-nothing: present only when EVERY ride leg is timed. A total that
      * skipped an untimed leg would read as more certain than the legs it came

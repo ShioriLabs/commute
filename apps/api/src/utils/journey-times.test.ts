@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { FareJourney } from '@commute/schemas'
 import type { FareContext } from '@commute/constants'
 import type { Tsundere } from '@commute/tsundere'
-import { byArrival, retimeTrips } from './journey-times'
+import { byArrival, retimeTrips, toRouteLegs } from './journey-times'
+import { mergeConsecutiveWalks } from './merge-walks'
 
 /*
  * Only the fields the ordering reads. A real FareJourney carries legs, fares
@@ -327,5 +328,43 @@ describe('retimeTrips grouping boardings', () => {
     const leg = row!.legs[0]!
     expect(row!.moreDepartures).toBeUndefined()
     expect(leg.type === 'RIDE' && leg.upcomingDepartures).toBeUndefined()
+  })
+})
+
+describe('toRouteLegs', () => {
+  const station = (id: string) => ({ id, name: id })
+  const walk = (from: string, to: string, distanceM: number) => ({ type: 'TRANSFER' as const, from: station(from), to: station(to), distanceM })
+  const ride = {
+    type: 'RIDE' as const,
+    line: 'KCI:C',
+    operator: 'KCI' as const,
+    from: station('KCI-MRI'),
+    to: station('KCI-SUD'),
+    stationCount: 2,
+    stops: [station('KCI-MRI'), station('KCI-SUD')],
+    headsign: null,
+    distanceM: 1000
+  }
+
+  /*
+   * A merged walk is shown as one row but timed as its hops, so each still
+   * pays the engine's change floor. Timed as one, an unmeasured hop plus a
+   * 300 m one cost 250 s where the two hops cost 459 s.
+   */
+  it('times a merged walk as the hops it was made of', () => {
+    const { legs } = mergeConsecutiveWalks([walk('A', 'B', 0), walk('B', 'KCI-MRI', 300), ride])
+    const route = toRouteLegs(legs)
+    expect(route.legs.map(leg => [leg.type, leg.distanceM])).toEqual([['TRANSFER', 0], ['TRANSFER', 300], ['RIDE', 1000]])
+  })
+
+  it('maps each wire leg to where it landed among the engine legs', () => {
+    const { legs } = mergeConsecutiveWalks([walk('A', 'B', 0), walk('B', 'KCI-MRI', 300), ride])
+    expect(toRouteLegs(legs).engineIndexOf).toEqual([0, 2])
+  })
+
+  it('maps one to one when nothing was merged', () => {
+    const route = toRouteLegs([walk('A', 'KCI-MRI', 90), ride])
+    expect(route.legs).toHaveLength(2)
+    expect(route.engineIndexOf).toEqual([0, 1])
   })
 })

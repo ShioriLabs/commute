@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FareResultLeg } from '@commute/schemas'
-import { mergeConsecutiveWalks, roundWalkM } from 'utils/merge-walks'
+import { hopsOf, mergeConsecutiveWalks, roundWalkM, stripWalkHops } from 'utils/merge-walks'
 
 const station = (id: string) => ({ id, name: `Name:${id}` })
 const walk = (from: string, to: string, distanceM: number, extra: { fare?: number, corridorLabel?: string } = {}): FareResultLeg => ({
@@ -47,25 +47,24 @@ describe('roundWalkM', () => {
 
 describe('mergeConsecutiveWalks', () => {
   it('folds two walks into one that ends at the last destination', () => {
-    const { legs, absorbed, roundingExtraM } = mergeConsecutiveWalks([walk('A', 'B', 560), walk('B', 'C', 90), ride('C', 'D')])
+    const { legs, absorbed } = mergeConsecutiveWalks([walk('A', 'B', 560), walk('B', 'C', 90), ride('C', 'D')])
     expect(legs).toHaveLength(2)
     expect(legs[0]).toMatchObject({ type: 'TRANSFER', from: { id: 'A' }, to: { id: 'C' }, distanceM: 700 })
     expect(absorbed).toBe(1)
-    expect(roundingExtraM).toBe(50)
   })
 
   it('folds a run of three', () => {
     const { legs, absorbed } = mergeConsecutiveWalks([walk('A', 'B', 100), walk('B', 'C', 100), walk('C', 'D', 100)])
-    expect(legs).toEqual([{ type: 'TRANSFER', from: station('A'), to: station('D'), distanceM: 300 }])
+    expect(legs).toEqual([{ type: 'TRANSFER', from: station('A'), to: station('D'), distanceM: 300, hopsM: [100, 100, 100] }])
     expect(absorbed).toBe(2)
   })
 
   it('leaves a lone walk at its exact distance', () => {
     const input = [ride('A', 'B'), walk('B', 'C', 90), ride('C', 'D')]
-    const { legs, absorbed, roundingExtraM } = mergeConsecutiveWalks(input)
+    const { legs, absorbed } = mergeConsecutiveWalks(input)
     expect(legs).toEqual(input)
     expect(absorbed).toBe(0)
-    expect(roundingExtraM).toBe(0)
+    expect(hopsOf(legs[1]!)).toBeUndefined()
   })
 
   it('does not merge walks that a ride separates', () => {
@@ -88,6 +87,30 @@ describe('mergeConsecutiveWalks', () => {
   })
 
   it('returns nothing to merge for an empty journey', () => {
-    expect(mergeConsecutiveWalks([])).toEqual({ legs: [], absorbed: 0, roundingExtraM: 0 })
+    expect(mergeConsecutiveWalks([])).toEqual({ legs: [], absorbed: 0 })
+  })
+})
+
+describe('the hops behind a merged walk', () => {
+  it('keeps each hop\'s raw distance, unmeasured ones included', () => {
+    // 0 means UNMEASURED: it is exactly the hop the timing must still floor.
+    const { legs } = mergeConsecutiveWalks([walk('A', 'B', 0), walk('B', 'C', 300)])
+    expect(hopsOf(legs[0]!)).toEqual([0, 300])
+  })
+
+  it('stays flat when an already merged walk is merged again', () => {
+    const [once] = mergeConsecutiveWalks([walk('A', 'B', 100), walk('B', 'C', 100)]).legs
+    const { legs } = mergeConsecutiveWalks([once!, walk('C', 'D', 100)])
+    expect(hopsOf(legs[0]!)).toEqual([100, 100, 100])
+  })
+
+  it('is stripped from a response, top-level legs and every journey\'s', () => {
+    const merged = mergeConsecutiveWalks([walk('A', 'B', 100), walk('B', 'C', 100)]).legs
+    const body = stripWalkHops({ legs: merged, journeys: [{ legs: merged, totalFare: 0 }] })
+    expect(body.legs[0]).not.toHaveProperty('hopsM')
+    expect(body.journeys[0]!.legs[0]).not.toHaveProperty('hopsM')
+    expect(body.journeys[0]!.totalFare).toBe(0)
+    // The cached original is untouched; the timing still needs it.
+    expect(hopsOf(merged[0]!)).toEqual([100, 100])
   })
 })

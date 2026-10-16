@@ -281,9 +281,11 @@ export function assembleJourney(plan: JourneyPlan, namer: StationNamer, context:
      * have been merged, and walking is the sum of the transfer distances.
      */
     boardings: plan.criteria?.boardings ?? legs.filter(l => l.type === 'RIDE').length,
-    // Plus what rounding the merged walks up added, so the total names the
-    // same distance as the rows it sums.
-    walkDistanceM: (plan.criteria?.walkDistanceM
-      ?? legs.reduce((sum, l) => sum + (l.type === 'TRANSFER' ? l.distanceM : 0), 0)) + walks.roundingExtraM
+    // Raw, never the merged walks' rounded figure: this is what routes are
+    // compared on (LEAST_WALKING, here and again in journey-times relabel), and
+    // rounding only the merged ones could hand the badge to the route that
+    // walks further. Clients show the sum of the walk legs instead.
+    walkDistanceM: plan.criteria?.walkDistanceM
+      ?? legs.reduce((sum, l) => sum + (l.type === 'TRANSFER' ? l.distanceM : 0), 0)
   }
 }
