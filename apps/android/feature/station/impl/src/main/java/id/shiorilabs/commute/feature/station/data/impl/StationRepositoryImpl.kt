@@ -17,6 +17,7 @@ import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationDirectory
 import id.shiorilabs.commute.feature.station.data.StationRepository
+import id.shiorilabs.commute.feature.station.domain.CrowdForecast
 import id.shiorilabs.commute.feature.station.domain.Frequency
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
@@ -31,6 +32,7 @@ import kotlinx.serialization.builtins.ListSerializer
 import javax.inject.Inject
 import javax.inject.Singleton
 import id.shiorilabs.commute.core.model.models.Station as StationDto
+import id.shiorilabs.commute.core.model.models.StationDensity as StationDensityDto
 import id.shiorilabs.commute.core.model.models.Transfer as TransferDto
 
 /**
@@ -76,14 +78,25 @@ class StationRepositoryImpl @Inject constructor(
             service.getTransfers(operator, code, etag)
         }
 
-    private fun frequenciesQuery(stationId: String, day: ServiceDayName): QuerySpec<List<HeadwayRow>> =
+    /** One per hour as well as per day: the API measures a corridor's frequency hour by hour. */
+    private fun frequenciesQuery(stationId: String, day: ServiceDayName, hour: Int): QuerySpec<List<HeadwayRow>> =
         QuerySpec(
-            key = queryKey(STATION, stationId, "headway", day.name),
+            key = queryKey(STATION, stationId, "headway", day.name, hour.toString()),
             serializer = ListSerializer(HeadwayRow.serializer()),
+            policy = QueryPolicy.Hourly,
+        ) { etag ->
+            val (operator, code) = stationId.splitId()
+            service.getHeadway(operator, code, day.name, hour, etag)
+        }
+
+    private fun crowdingQuery(stationId: String, day: ServiceDayName): QuerySpec<StationDensityDto> =
+        QuerySpec(
+            key = queryKey(STATION, stationId, "density", day.name),
+            serializer = StationDensityDto.serializer(),
             policy = QueryPolicy.Topology,
         ) { etag ->
             val (operator, code) = stationId.splitId()
-            service.getHeadway(operator, code, day.name, etag)
+            service.getDensity(operator, code, day.name, etag)
         }
 
     override suspend fun station(stationId: String): Either<Failure, Station> =
@@ -95,8 +108,11 @@ class StationRepositoryImpl @Inject constructor(
     override suspend fun transfers(stationId: String): Either<Failure, List<Transfer>> =
         queries.fetch(transfersQuery(stationId)).mapOnDataThread { rows -> rows.map { it.toTransfer() } }
 
-    override suspend fun frequencies(stationId: String, day: ServiceDayName): Either<Failure, List<Frequency>> =
-        queries.fetch(frequenciesQuery(stationId, day)).mapOnDataThread { it.toFrequencies() }
+    override suspend fun frequencies(stationId: String, day: ServiceDayName, hour: Int): Either<Failure, List<Frequency>> =
+        queries.fetch(frequenciesQuery(stationId, day, hour)).mapOnDataThread { it.toFrequencies() }
+
+    override suspend fun crowding(stationId: String, day: ServiceDayName): Either<Failure, CrowdForecast> =
+        queries.fetch(crowdingQuery(stationId, day)).mapOnDataThread { it.toCrowdForecast() }
 
     override fun observeStation(stationId: String): Flow<Query<Station>> =
         queries.observe(stationQuery(stationId)).mapData { it.toStation() }
@@ -104,8 +120,11 @@ class StationRepositoryImpl @Inject constructor(
     override fun observeTimetable(stationId: String, day: ServiceDayName): Flow<Query<List<LineTimetable>>> =
         queries.observe(timetableQuery(stationId, day)).mapData { it.toLineTimetables() }
 
-    override fun observeFrequencies(stationId: String, day: ServiceDayName): Flow<Query<List<Frequency>>> =
-        queries.observe(frequenciesQuery(stationId, day)).mapData { it.toFrequencies() }
+    override fun observeFrequencies(stationId: String, day: ServiceDayName, hour: Int): Flow<Query<List<Frequency>>> =
+        queries.observe(frequenciesQuery(stationId, day, hour)).mapData { it.toFrequencies() }
+
+    override fun observeCrowding(stationId: String, day: ServiceDayName): Flow<Query<CrowdForecast>> =
+        queries.observe(crowdingQuery(stationId, day)).mapData { it.toCrowdForecast() }
 
     override suspend fun refresh(stationId: String): Refetched =
         queries.refetch(queryKey(STATION, stationId))
@@ -119,8 +138,8 @@ class StationRepositoryImpl @Inject constructor(
     override fun cachedTransfers(stationId: String): List<Transfer>? =
         queries.peek(transfersQuery(stationId))?.data?.map { it.toTransfer() }
 
-    override fun cachedFrequencies(stationId: String, day: ServiceDayName): List<Frequency>? =
-        queries.peek(frequenciesQuery(stationId, day))?.data?.toFrequencies()
+    override fun cachedFrequencies(stationId: String, day: ServiceDayName, hour: Int): List<Frequency>? =
+        queries.peek(frequenciesQuery(stationId, day, hour))?.data?.toFrequencies()
 
     private fun List<GroupedTimetable>.toLineTimetables(): List<LineTimetable> = map { it.toLineTimetable() }
 

@@ -23,7 +23,8 @@ import java.time.LocalDateTime
  * so today's board shows as loading until the station has settled. The next day's board is only
  * asked for when tomorrow runs a different one; the rest of the week today's already holds
  * tomorrow's first trains. Frequencies are only asked for at a TransJakarta halte, as on the web: a
- * rail station has a real board and never pays for the request.
+ * rail station has a real board and never pays for the request. They are [now]'s hour's, so a
+ * halte's board is collected afresh when the hour turns (see [boardHour]).
  *
  * Doesn't complete while its parts are cached ones; a collector cancels it.
  */
@@ -32,7 +33,7 @@ fun StationRepository.board(stationId: String, now: LocalDateTime): Flow<Station
     val nextDay = nextServiceDayOf(now)
     val halte = isTransJakarta(stationId)
     val nextBoard = if (nextDay != day) observeTimetable(stationId, nextDay) else flowOf(null)
-    val frequencies = if (halte) observeFrequencies(stationId, day) else flowOf(null)
+    val frequencies = if (halte) observeFrequencies(stationId, day, now.hour) else flowOf(null)
 
     return combine(
         observeStation(stationId),
@@ -82,9 +83,16 @@ fun StationRepository.cachedBoard(stationId: String, now: LocalDateTime): Statio
         nextDayBoard = if (nextDay != day) cachedTimetable(stationId, nextDay)?.associateBy { it.lineKey } else null,
         nextDayDiffers = nextDay != day,
         frequencies = if (isTransJakarta(stationId)) {
-            cachedFrequencies(stationId, day)?.let { UIState.Success(it) } ?: UIState.Loading
+            cachedFrequencies(stationId, day, now.hour)?.let { UIState.Success(it) } ?: UIState.Loading
         } else {
             UIState.Idle
         },
     )
 }
+
+/**
+ * The hour [board] was asked for, as far as it matters: [now]'s hour at a TransJakarta halte, whose
+ * frequencies change with it, and null at a rail station, whose board holds all day. A screen
+ * collects the board afresh when this changes, as it does when the service day turns.
+ */
+fun boardHour(stationId: String, now: LocalDateTime): Int? = if (isTransJakarta(stationId)) now.hour else null
