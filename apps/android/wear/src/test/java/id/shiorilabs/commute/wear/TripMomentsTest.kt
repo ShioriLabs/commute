@@ -60,6 +60,16 @@ class TripMomentsTest {
         assertEquals(listOf(NEXT, AHEAD, AHEAD, AHEAD), moments.map { it.status })
     }
 
+
+    @Test
+    fun `only the boarding waited for names the trains after it`() {
+        val withLater = krl.copy(nextDepartures = listOf(at(8), at(16)))
+        val laterPlan = TripPlan(listOf(withLater, walk, mrt))
+
+        assertEquals(listOf(listOf(at(8), at(16)), emptyList(), emptyList(), emptyList()), tripMoments(laterPlan, state(0, TripPhase.WAITING_TO_BOARD)).map { it.later })
+        // Aboard, they are no one's fallback any more.
+        assertEquals(emptyList<Instant>(), tripMoments(laterPlan, state(0, TripPhase.RIDING)).first().later)
+    }
     @Test
     fun `aboard, getting on has passed and getting off is next`() {
         assertEquals(listOf(PASSED, NEXT, AHEAD, AHEAD), tripMoments(plan, state(0, TripPhase.RIDING)).map { it.status })

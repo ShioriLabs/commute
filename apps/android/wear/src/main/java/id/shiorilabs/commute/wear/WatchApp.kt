@@ -241,7 +241,7 @@ private fun TripScreen(trip: WearTrip, now: Instant, phone: PhoneLink) {
                     MomentRow(
                         moment = moment,
                         timed = timed,
-                        note = copy.momentNote(moment),
+                        note = copy.momentNote(moment, now),
                         color = trip.lines[trip.plan.ride(moment.legIndex).line]?.color?.let(::Color)
                             ?: MaterialTheme.colorScheme.primary,
                     )
