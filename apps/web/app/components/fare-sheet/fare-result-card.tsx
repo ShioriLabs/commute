@@ -410,6 +410,12 @@ export function JourneyTimeline({ legs }: { legs: FareResultLeg[] }) {
 }
 
 /*
+ * Later trains named under a card's own: two, like the reference apps, which is
+ * enough to see whether missing this one costs five minutes or twenty.
+ */
+const NEXT_DEPARTURES_SHOWN = 2
+
+/*
  * The face of one option: the shape of the trip, what it costs, what it wins.
  *
  * The route leads. A rider scanning two options is choosing between journeys,
@@ -462,6 +468,8 @@ export function JourneyCardFace({ journey, onSelect }: {
    * why this is not the "never a duration" rule being broken.
    */
   const duration = boardsAt && journey.arrivalAt ? formatDuration(boardsAt, journey.arrivalAt) : null
+  // Optional-chained against a body cached before the field existed.
+  const nextDepartures = journey.moreDepartures?.slice(0, NEXT_DEPARTURES_SHOWN) ?? []
   /*
    * Which service this is, not just which line.
    *
@@ -500,12 +508,11 @@ export function JourneyCardFace({ journey, onSelect }: {
       {/*
         * Time leads, and the fare steps back to the meta row.
         *
-        * The order is set by what actually varies. Where a list is one route at
-        * several departures — which is now the common answer, not an edge case
-        * — the fare is CONSTANT across those rows and the clock is the only
-        * thing that moves. Leading with Rp6.500 three times over prints the
-        * same figure as a headline on three cards a rider is trying to tell
-        * apart, and buries the one fact that separates them in 12px grey.
+        * The order is set by what actually varies. Routes between one pair
+        * often share a fare, and the clock is what tells them apart: leading
+        * with Rp6.500 on every card prints the same figure as a headline on
+        * cards a rider is trying to tell apart, and buries the one fact that
+        * separates them in 12px grey.
         *
         * Untimed journeys keep the fare as the headline below, because then it
         * genuinely is the most a row can say.
@@ -541,6 +548,20 @@ export function JourneyCardFace({ journey, onSelect }: {
             )
           : null}
       </div>
+      {/*
+        * The route's later trains, under the one this card is built on. They
+        * used to be cards of their own; as times here they stop pushing a
+        * genuinely different route off the first screen. As sent rather than
+        * filtered against the clock: the rider may be planning a departure
+        * that is not now.
+        */}
+      {nextDepartures.length > 0
+        ? (
+            <div className="figure mt-0.5 text-xs font-semibold text-slate-500 text-right tabular-nums truncate">
+              {`berikutnya ${nextDepartures.map(departure => formatClock(departure.departureAt)).join(', ')}`}
+            </div>
+          )
+        : null}
 
       {/*
         * The fare, and the reason this row is here.

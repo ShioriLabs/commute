@@ -1,35 +1,44 @@
-import type { FareJourney } from '@commute/schemas'
+import type { FareJourney, FareJourneyDeparture } from '@commute/schemas'
 import { boardsAtOf } from 'utils/journey-key'
+import { liveDeparturesOf } from '~/components/fare-sheet/journeys'
 
 /*
- * The rows a saved pair shows on home: what leaves next, soonest first.
+ * The rows a saved pair shows on home: one per route, soonest first, each with
+ * the trains on it that have not left yet.
  *
  * The planner orders journeys by how sensible the ROUTE is, and its answer is
  * cached per 20-minute slot, so the body can still hold boardings that left a
  * few minutes ago. Home is a "when is my train" surface rather than a "which
- * way" one, so it re-sorts by boarding time and drops anything already gone.
+ * way" one, so it re-sorts by the next live boarding and drops a route only
+ * once every train it carries has gone.
  *
  * Untimed journeys (any TransJakarta first leg) have no clock to sort on and
- * cannot go stale, so they follow the timed rows in the planner's own order.
- * A route whose service has ended for the night is not a row at all: the API
- * marks it with `resumesAt`, and offering it untimed would read as rideable.
+ * cannot go stale, so they follow the timed rows in the planner's own order,
+ * with no departures. A route whose service has ended for the night is not a
+ * row at all: the API marks it with `resumesAt`, and offering it untimed would
+ * read as rideable.
  */
-export function upcomingJourneys(journeys: readonly FareJourney[], now: number, limit: number): FareJourney[] {
-  const timed: Array<{ journey: FareJourney, at: number }> = []
-  const untimed: FareJourney[] = []
+export interface UpcomingRow {
+  journey: FareJourney
+  /** Live boardings, soonest first; `[0]` is the one the row leads with. Empty when untimed. */
+  departures: FareJourneyDeparture[]
+}
+
+export function upcomingJourneys(journeys: readonly FareJourney[], now: number, limit: number): UpcomingRow[] {
+  const timed: UpcomingRow[] = []
+  const untimed: UpcomingRow[] = []
   for (const journey of journeys) {
     // Done for the night: not a row, see resumeTimeOf.
     if (journey.resumesAt) continue
-    const boardsAt = boardsAtOf(journey)
-    if (boardsAt === null) {
-      untimed.push(journey)
+    if (boardsAtOf(journey) === null) {
+      untimed.push({ journey, departures: [] })
       continue
     }
-    const at = Date.parse(boardsAt)
-    if (at >= now) timed.push({ journey, at })
+    const departures = liveDeparturesOf(journey, now)
+    if (departures.length > 0) timed.push({ journey, departures })
   }
-  timed.sort((a, b) => a.at - b.at)
-  return [...timed.map(entry => entry.journey), ...untimed].slice(0, limit)
+  timed.sort((a, b) => Date.parse(a.departures[0]!.departureAt) - Date.parse(b.departures[0]!.departureAt))
+  return [...timed, ...untimed].slice(0, limit)
 }
 
 /*

@@ -40,6 +40,36 @@ export const LineRefSchema = v.pipe(
   v.metadata({ ref: 'FareLineRef' })
 )
 
+export const LegDepartureSchema = v.pipe(
+  v.object({
+    departureAt: v.pipe(v.string(), v.description('Jam berangkat dari stasiun naik.')),
+    arrivalAt: v.pipe(v.string(), v.description('Jam tiba di stasiun turun.')),
+    tripId: v.pipe(v.string(), v.description('Penanda perjalanan kendaraan ini. Jangan diurai, cuma buat membandingkan.')),
+    // May differ from the leg's own line on a trunk two lines share.
+    line: LineKeySchema,
+    headsign: v.pipe(
+      v.optional(v.string()),
+      v.description('Stasiun akhir yang dituju kendaraan ini, kalau jadwalnya mencantumkan.')
+    )
+  }),
+  v.title('FareLegDeparture'),
+  v.description('Satu kendaraan yang melayani seluruh tahap, dari stasiun naik sampai stasiun turun, sesuai jadwal resmi.'),
+  v.metadata({ ref: 'FareLegDeparture' })
+)
+
+export const JourneyDepartureSchema = v.pipe(
+  v.object({
+    departureAt: v.pipe(v.string(), v.description('Jam berangkat kendaraan pertama.')),
+    arrivalAt: v.pipe(
+      v.optional(v.string()),
+      v.description('Jam sampai tujuan. Cuma ada kalau semua tahap naik kendaraannya punya jadwal.')
+    )
+  }),
+  v.title('FareJourneyDeparture'),
+  v.description('Keberangkatan lain dari rute yang sama.'),
+  v.metadata({ ref: 'FareJourneyDeparture' })
+)
+
 export const RideLegSchema = v.pipe(
   v.object({
     type: v.literal('RIDE'),
@@ -100,6 +130,16 @@ export const RideLegSchema = v.pipe(
     tripId: v.pipe(
       v.optional(v.string()),
       v.description('Penanda perjalanan kendaraan yang dinaiki. Jangan diurai, cuma buat membandingkan. Cuma ada di tahap yang jadwalnya kami punya.')
+    ),
+    /*
+     * The trains a rider on this platform can take, the caught one first. Per-
+     * request like the stamps above, and anchored on the same clock: every
+     * entry is one this rider can make after the leg before, so picking a later
+     * one never makes an earlier leg wrong. Absent where the leg is untimed.
+     */
+    upcomingDepartures: v.pipe(
+      v.optional(v.array(LegDepartureSchema)),
+      v.description('Kendaraan yang bisa dinaiki di tahap ini, urut dari yang paling cepat. Yang pertama selalu kendaraan yang dipakai di `departureAt`. Cuma ada di tahap yang jadwalnya kami punya.')
     ),
     /*
      * Optional for the same reason as the two above, but with a sharper edge:
@@ -223,6 +263,15 @@ export const FareJourneySchema = v.pipe(
       v.optional(v.string()),
       v.description('Jam berangkat pertama rute ini di hari layanan berikutnya. Cuma ada kalau rutenya punya jadwal tapi layanan hari ini sudah selesai.'),
       v.metadata({ examples: ['2026-09-08T04:05:00+07:00'] })
+    ),
+    /*
+     * One card per route, so the route's later boardings ride along here
+     * instead of as cards of their own. Never one that leaves earlier and
+     * arrives no sooner than another: that train is only a longer wait.
+     */
+    moreDepartures: v.pipe(
+      v.optional(v.array(JourneyDepartureSchema)),
+      v.description('Keberangkatan lain rute ini dalam satu jam ke depan, urut dari yang paling cepat, tidak termasuk yang ditampilkan di tahap-tahapnya. Cuma ada di rute yang jadwalnya kami punya.')
     )
   }),
   v.title('FareJourney'),
@@ -274,6 +323,8 @@ export const TripResultSchema = v.pipe(
 export type FareStation = v.InferOutput<typeof FareStationSchema>
 export type FareLineRef = v.InferOutput<typeof LineRefSchema>
 export type FareRideLeg = v.InferOutput<typeof RideLegSchema>
+export type FareLegDeparture = v.InferOutput<typeof LegDepartureSchema>
+export type FareJourneyDeparture = v.InferOutput<typeof JourneyDepartureSchema>
 export type FareTransferLeg = v.InferOutput<typeof TransferLegSchema>
 export type FareLeg = v.InferOutput<typeof FareLegSchema>
 export type FareSegment = v.InferOutput<typeof FareSegmentSchema>

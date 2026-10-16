@@ -1,4 +1,5 @@
-import type { FareJourney, FareJourneyLabel, FareResult, Line, TripResult } from '@commute/schemas'
+import type { FareJourney, FareJourneyDeparture, FareJourneyLabel, FareResult, Line, TripResult } from '@commute/schemas'
+import { boardsAtOf } from 'utils/journey-key'
 
 // Bridges a fare answer to the list of alternatives it may or may not carry.
 // Kept in a `.ts` so it is testable — vitest collects `.test.ts` only, so
@@ -45,6 +46,27 @@ export function journeysOf(result: FareResult | TripResult): FareJourney[] {
  */
 export function walkDistanceOf(journey: FareJourney): number | null {
   return journey.walkDistanceM < 0 ? null : journey.walkDistanceM
+}
+
+/**
+ * A route's boardings that have not left yet, soonest first: the card's own
+ * train, then the later ones that ride along with it in `moreDepartures`.
+ *
+ * Filtered against the clock rather than trusted as sent: home holds a body
+ * for a whole departure slot, so the card's own train can be gone while the
+ * next ones on the same route are still catchable. Empty for an untimed route,
+ * which has no clock to show.
+ */
+export function liveDeparturesOf(journey: FareJourney, now: number): FareJourneyDeparture[] {
+  const boardsAt = boardsAtOf(journey)
+  if (boardsAt === null) return []
+  const own: FareJourneyDeparture = {
+    departureAt: boardsAt,
+    ...(journey.arrivalAt === undefined ? {} : { arrivalAt: journey.arrivalAt })
+  }
+  // Optional-chained against a body cached before the field existed.
+  return [own, ...(journey.moreDepartures ?? [])]
+    .filter(departure => Date.parse(departure.departureAt) >= now)
 }
 
 /*
