@@ -7,6 +7,7 @@ import id.shiorilabs.commute.core.model.models.LineDetail
 import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.model.models.Station
+import id.shiorilabs.commute.core.model.models.StationDensity
 import id.shiorilabs.commute.core.model.models.TrackShapes
 import id.shiorilabs.commute.core.model.models.Transfer
 import id.shiorilabs.commute.core.model.models.TripResult
@@ -74,6 +75,17 @@ class FakeCommuteService : CommuteService {
     var headwayCalls: Int = 0
         private set
 
+    /** The `hour` the most recent [getHeadway] asked about. */
+    var lastHeadwayHour: Int? = null
+        private set
+
+    var density: suspend (operator: String, stationCode: String, day: String) -> StationDensity =
+        { _, _, _ -> error("getDensity was not stubbed") }
+
+    /** How many times [getDensity] was called — for asserting that a repository caches, or skips it. */
+    var densityCalls: Int = 0
+        private set
+
     var operators: suspend () -> List<OperatorWithLines> = { error("getOperators was not stubbed") }
 
     /** How many times [getOperators] was called — for asserting that the dictionary is cached. */
@@ -119,10 +131,22 @@ class FakeCommuteService : CommuteService {
         operator: String,
         stationCode: String,
         day: String,
+        hour: Int,
         ifNoneMatch: String?,
     ): Fetched<List<HeadwayRow>> {
         headwayCalls++
+        lastHeadwayHour = hour
         return answer(ifNoneMatch) { headway(operator, stationCode, day) }
+    }
+
+    override suspend fun getDensity(
+        operator: String,
+        stationCode: String,
+        day: String,
+        ifNoneMatch: String?,
+    ): Fetched<StationDensity> {
+        densityCalls++
+        return answer(ifNoneMatch) { density(operator, stationCode, day) }
     }
 
     override suspend fun getOperators(ifNoneMatch: String?): Fetched<List<OperatorWithLines>> {

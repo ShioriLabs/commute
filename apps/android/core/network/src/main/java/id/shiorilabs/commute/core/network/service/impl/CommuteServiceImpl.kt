@@ -7,6 +7,7 @@ import id.shiorilabs.commute.core.model.models.LineDetail
 import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.model.models.Station
+import id.shiorilabs.commute.core.model.models.StationDensity
 import id.shiorilabs.commute.core.model.models.TrackShapes
 import id.shiorilabs.commute.core.model.models.Transfer
 import id.shiorilabs.commute.core.model.models.TripResult
@@ -66,9 +67,22 @@ class CommuteServiceImpl @Inject constructor(
         operator: String,
         stationCode: String,
         day: String,
+        hour: Int,
         ifNoneMatch: String?,
     ): Fetched<List<HeadwayRow>> =
         client.get("${stationPath(operator, stationCode)}/headway") {
+            parameter("day", day)
+            parameter("hour", hour)
+            validator(ifNoneMatch)
+        }.decodeFetched()
+
+    override suspend fun getDensity(
+        operator: String,
+        stationCode: String,
+        day: String,
+        ifNoneMatch: String?,
+    ): Fetched<StationDensity> =
+        client.get("${stationPath(operator, stationCode)}/density") {
             parameter("day", day)
             validator(ifNoneMatch)
         }.decodeFetched()

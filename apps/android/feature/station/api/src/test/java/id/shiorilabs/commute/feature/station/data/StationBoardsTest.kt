@@ -46,14 +46,16 @@ class StationBoardsTest {
 
         var frequencies: Either<Failure, List<Frequency>> = listOf(Frequency("TJ:13", 186.0)).right()
         val askedFrequencies = mutableListOf<Pair<String, ServiceDayName>>()
+        val askedHours = mutableListOf<Int>()
         var cachedFrequencies: List<Frequency>? = null
 
-        override suspend fun frequencies(stationId: String, day: ServiceDayName): Either<Failure, List<Frequency>> {
+        override suspend fun frequencies(stationId: String, day: ServiceDayName, hour: Int): Either<Failure, List<Frequency>> {
             askedFrequencies += stationId to day
+            askedHours += hour
             return frequencies
         }
 
-        override fun cachedFrequencies(stationId: String, day: ServiceDayName) = cachedFrequencies
+        override fun cachedFrequencies(stationId: String, day: ServiceDayName, hour: Int) = cachedFrequencies
     }
 
     private val halte = Station("TJ-H00001P", "Petukangan D'MASIV", "TJ", "H00001P", listOf("TJ:13"))
@@ -180,6 +182,28 @@ class StationBoardsTest {
         assertTrue(boards.first().frequencies is UIState.Loading)
         assertEquals(listOf(Frequency("TJ:13", 186.0)), (boards.last().frequencies as UIState.Success).data)
         assertEquals(listOf("TJ-H00001P" to ServiceDayName.WD), repository.askedFrequencies)
+    }
+
+    @Test
+    fun `a halte asks for the hour's frequencies, the service day's after midnight`() = runTest {
+        val repository = FakeStationRepository().apply {
+            station = halte.right()
+            timetable = { emptyList<LineTimetable>().right() }
+        }
+
+        // Half past midnight into a Thursday: still Wednesday's service day, at hour 0.
+        repository.board("TJ-H00001P", LocalDateTime.parse("2026-10-01T00:30:00")).toList()
+
+        assertEquals(listOf("TJ-H00001P" to ServiceDayName.WD), repository.askedFrequencies)
+        assertEquals(listOf(0), repository.askedHours)
+    }
+
+    @Test
+    fun `only a halte's board belongs to an hour`() {
+        val now = LocalDateTime.parse("2026-09-30T08:59:00")
+
+        assertEquals(8, boardHour("TJ-H00001P", now))
+        assertEquals(null, boardHour("KCI-MRI", now))
     }
 
     @Test

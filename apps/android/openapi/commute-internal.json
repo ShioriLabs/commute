@@ -42,970 +42,6 @@
       "description": "Dibentuk khusus buat klien Commute sendiri. Bisa berubah tanpa pemberitahuan."
     }
   ],
-  "paths": {
-    "/_internal/searchables": {
-      "get": {
-        "operationId": "getInternalSearchables",
-        "summary": "Indeks pencarian",
-        "description": "Semua yang bisa dicari dalam satu response: stasiun, pumpunan moda, dan lin, plus kamus lin yang dirujuk tiap entri.",
-        "tags": [
-          "Internal"
-        ],
-        "responses": {
-          "200": {
-            "description": "Berhasil.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "number",
-                      "description": "Sama dengan HTTP status code-nya.",
-                      "examples": [
-                        200
-                      ],
-                      "format": "double"
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/SearchableIndex"
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "data"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/_internal/track-shapes": {
-      "get": {
-        "operationId": "getInternalTrackShapes",
-        "summary": "Bentuk jalur antarstasiun",
-        "description": "Bentuk jalur fisik tiap pasangan stasiun berurutan, buat mode perjalanan di aplikasi Android. Satu file untuk seluruh jaringan; jarang berubah, jadi simpan dan validasi ulang dengan ETag.",
-        "tags": [
-          "Internal"
-        ],
-        "responses": {
-          "200": {
-            "description": "Berhasil.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "number",
-                      "description": "Sama dengan HTTP status code-nya.",
-                      "examples": [
-                        200
-                      ],
-                      "format": "double"
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/TrackShapes"
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "data"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/_internal/trips/{from}/{to}": {
-      "get": {
-        "operationId": "getInternalTripsByFromByTo",
-        "summary": "Beberapa pilihan rute antara dua stasiun",
-        "description": "Sama seperti `/fares/{from}/{to}`, tapi menjawab dengan beberapa `journeys`, masing-masing dengan tarif, label, dan jam berangkat/tiba tiap kaki perjalanan kalau jadwalnya ada.",
-        "tags": [
-          "Internal"
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "from",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "examples": [
-                "KCI-SUD"
-              ]
-            },
-            "description": "Station id asal, `{operator}-{code}`."
-          },
-          {
-            "in": "path",
-            "name": "to",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "examples": [
-                "MRTJ-LBB"
-              ]
-            },
-            "description": "Station id tujuan."
-          },
-          {
-            "in": "query",
-            "name": "paymentMethod",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Menentukan tarif mana yang dipakai. Default-nya tarif kartu uang elektronik biasa."
-          },
-          {
-            "in": "query",
-            "name": "at",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "examples": [
-                "2026-07-28T08:00:00Z"
-              ]
-            },
-            "description": "Timestamp ISO 8601 buat perjalanannya. Default-nya waktu sekarang."
-          },
-          {
-            "in": "query",
-            "name": "modes",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "examples": [
-                "rail"
-              ]
-            },
-            "description": "`rail` buat rute tanpa TransJakarta. Default-nya semua moda."
-          },
-          {
-            "in": "query",
-            "name": "walking",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "examples": [
-                "SLOW"
-              ]
-            },
-            "description": "Kecepatan jalan kaki: `BRISK`, `AVERAGE`, `SLOW`, atau `SLOWEST`. Default-nya `AVERAGE`."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Berhasil.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "number",
-                      "description": "Sama dengan HTTP status code-nya.",
-                      "examples": [
-                        200
-                      ],
-                      "format": "double"
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/TripResult"
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "data"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Salah satu stasiunnya tidak ditemukan, tidak ada rute di antara keduanya (`NO_ROUTE`), layanannya sudah tutup (`CLOSED`), atau asal dan tujuannya sama (`SAME_STATION`).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "number",
-                      "examples": [
-                        404
-                      ],
-                      "format": "double"
-                    },
-                    "error": {
-                      "$ref": "#/components/schemas/Error"
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "error"
-                  ],
-                  "title": "ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Perhitungan tarif gagal (`DATABASE_ERROR`).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "number",
-                      "examples": [
-                        404
-                      ],
-                      "format": "double"
-                    },
-                    "error": {
-                      "$ref": "#/components/schemas/Error"
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "error"
-                  ],
-                  "title": "ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/hubs/{slug}": {
-      "get": {
-        "operationId": "getHubsBySlug",
-        "summary": "Detail pumpunan moda",
-        "description": "Satu pumpunan moda lengkap dengan stasiun-stasiun di dalamnya.",
-        "tags": [
-          "Pumpunan Moda"
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "slug",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "examples": [
-                "dukuh-atas"
-              ]
-            },
-            "description": "Kunci URL pumpunan moda, bisa diambil dari `/hubs`."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Berhasil.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "number",
-                      "description": "Sama dengan HTTP status code-nya.",
-                      "examples": [
-                        200
-                      ],
-                      "format": "double"
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/Hub"
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "data"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Tidak ada pumpunan moda dengan slug tersebut.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "number",
-                      "examples": [
-                        404
-                      ],
-                      "format": "double"
-                    },
-                    "error": {
-                      "$ref": "#/components/schemas/Error"
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "error"
-                  ],
-                  "title": "ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/lines/{operator}/{lineCode}": {
-      "get": {
-        "operationId": "getLinesByOperatorByLineCode",
-        "summary": "Detail lin",
-        "description": "Struktur lengkap satu lin, urut dari stasiun awal. Lin yang lurus cuma punya satu segmen `TRUNK`. Lin yang bercabang seperti loop Cikarang atau ramp Nambo punya segmen tambahan yang menunjukkan di mana cabangnya berpisah dan menyatu lagi.",
-        "tags": [
-          "Lin"
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "operator",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "examples": [
-                "KCI"
-              ]
-            },
-            "description": "Kode operator, misalnya `KCI`, `MRTJ`, `TJ`."
-          },
-          {
-            "in": "path",
-            "name": "lineCode",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "examples": [
-                "C"
-              ]
-            },
-            "description": "Kode lin, bisa diambil dari `/operators`."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Berhasil.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "number",
-                      "description": "Sama dengan HTTP status code-nya.",
-                      "examples": [
-                        200
-                      ],
-                      "format": "double"
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/LineDetail"
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "data"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Operator atau lin-nya tidak ditemukan, atau lin-nya belum punya data topologi (`NO_TOPOLOGY`).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "number",
-                      "examples": [
-                        404
-                      ],
-                      "format": "double"
-                    },
-                    "error": {
-                      "$ref": "#/components/schemas/Error"
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "error"
-                  ],
-                  "title": "ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/operators": {
-      "get": {
-        "operationId": "getOperators",
-        "summary": "Daftar operator",
-        "description": "Semua operator transit beserta lin yang mereka jalankan. Bagus dipanggil duluan, karena kode dari sini dipakai di seluruh API.",
-        "tags": [
-          "Operator"
-        ],
-        "responses": {
-          "200": {
-            "description": "Berhasil.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "number",
-                      "description": "Sama dengan HTTP status code-nya.",
-                      "examples": [
-                        200
-                      ],
-                      "format": "double"
-                    },
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/OperatorWithLines"
-                      }
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "data"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/stations": {
-      "get": {
-        "operationId": "getStations",
-        "summary": "Daftar semua stasiun",
-        "description": "Semua stasiun dari seluruh operator yang bisa dicari. Stasiun yang cuma dipakai buat routing tidak termasuk di sini. Isinya jarang berubah, jadi bisa di-cache di sisi kamu.",
-        "tags": [
-          "Stasiun"
-        ],
-        "responses": {
-          "200": {
-            "description": "Berhasil.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "number",
-                      "description": "Sama dengan HTTP status code-nya.",
-                      "examples": [
-                        200
-                      ],
-                      "format": "double"
-                    },
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Station"
-                      }
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "data"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/stations/{operator}/{stationCode}": {
-      "get": {
-        "operationId": "getStationsByOperatorByStationCode",
-        "summary": "Detail stasiun",
-        "description": "Detail lengkap satu stasiun, termasuk fasilitas dan koordinatnya. Beda dengan endpoint daftar, di sini stasiun yang cuma dipakai buat routing juga ikut dikembalikan.",
-        "tags": [
-          "Stasiun"
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "operator",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "examples": [
-                "KCI"
-              ]
-            },
-            "description": "Kode operator, misalnya `KCI`, `MRTJ`, `TJ`."
-          },
-          {
-            "in": "path",
-            "name": "stationCode",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "examples": [
-                "SUD"
-              ]
-            },
-            "description": "Kode stasiun versi operatornya, bukan station id yang lengkap."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Berhasil.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "number",
-                      "description": "Sama dengan HTTP status code-nya.",
-                      "examples": [
-                        200
-                      ],
-                      "format": "double"
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/Station"
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "data"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Kode operator atau stasiun tidak ditemukan.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "number",
-                      "examples": [
-                        404
-                      ],
-                      "format": "double"
-                    },
-                    "error": {
-                      "$ref": "#/components/schemas/Error"
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "error"
-                  ],
-                  "title": "ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/stations/{operator}/{stationCode}/headway": {
-      "get": {
-        "operationId": "getStationsByOperatorByStationCodeHeadway",
-        "summary": "Frekuensi kendaraan di satu stasiun",
-        "description": "Rata-rata berapa lama sekali kendaraan tiap lin lewat stasiun ini. Ini BUKAN jadwal: nggak bisa dipakai buat tahu keberangkatan berikutnya jam berapa, cuma buat tahu kira-kira nunggunya berapa lama.\n\nAngkanya ikut hari: sebagian koridor lebih jarang atau malah nggak jalan pas akhir pekan. Defaultnya hari ini di Jakarta, atau tentukan sendiri lewat `day`. Lin yang nggak jalan di hari yang diminta `headwayS`-nya `null` dan `days`-nya berisi hari-hari lin itu jalan.",
-        "tags": [
-          "Stasiun"
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "operator",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "examples": [
-                "KCI"
-              ]
-            },
-            "description": "Kode operator, misalnya `KCI`, `MRTJ`, `TJ`."
-          },
-          {
-            "in": "path",
-            "name": "stationCode",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "examples": [
-                "SUD"
-              ]
-            },
-            "description": "Kode stasiun versi operatornya, bukan station id yang lengkap."
-          },
-          {
-            "in": "query",
-            "name": "day",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "examples": [
-                "SAT"
-              ]
-            },
-            "description": "Hari yang mau dilihat: `WD` (Senin-Jumat), `SAT`, atau `SUN`. Hari libur nasional ikut jadwal `SUN`. Default-nya hari ini waktu Jakarta."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Berhasil.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "number",
-                      "description": "Sama dengan HTTP status code-nya.",
-                      "examples": [
-                        200
-                      ],
-                      "format": "double"
-                    },
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/HeadwayRow"
-                      }
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "data"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Kode operator atau stasiun tidak ditemukan.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "number",
-                      "examples": [
-                        404
-                      ],
-                      "format": "double"
-                    },
-                    "error": {
-                      "$ref": "#/components/schemas/Error"
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "error"
-                  ],
-                  "title": "ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/stations/{operator}/{stationCode}/timetable/grouped": {
-      "get": {
-        "operationId": "getStationsByOperatorByStationCodeTimetableGrouped",
-        "summary": "Jadwal stasiun, dikelompokkan",
-        "description": "Jadwal keberangkatan yang sudah dikelompokkan per lin, arah, dan tujuan, sesuai bentuk yang ditampilkan papan keberangkatan. Arahnya ditentukan dari stasiun terakhir tiap perjalanan.\n\nKalau butuh response yang lebih ringan, pakai `compact=1`. Tiap keberangkatan jadi tuple `[tripNumber, minutesSinceMidnight]`, bukan object penuh. Menitnya pakai waktu lokal Asia/Jakarta, dari 0 sampai 1439.\n\nBisa dipersempit ke rentang jam pakai `from` dan `to` (format `HH:MM`, dibulatkan ke jam bulat). Pengelompokannya tetap dihitung dari jadwal sehari penuh, jadi arah dan tujuan yang muncul tidak berubah cuma karena rentangnya dipersempit; yang tersaring keberangkatannya.",
-        "tags": [
-          "Stasiun"
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "operator",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "examples": [
-                "KCI"
-              ]
-            },
-            "description": "Kode operator, misalnya `KCI`, `MRTJ`, `TJ`."
-          },
-          {
-            "in": "path",
-            "name": "stationCode",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "examples": [
-                "SUD"
-              ]
-            },
-            "description": "Kode stasiun versi operatornya, bukan station id yang lengkap."
-          },
-          {
-            "in": "query",
-            "name": "compact",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "examples": [
-                "1"
-              ]
-            },
-            "description": "Isi `1` kalau mau keberangkatannya dalam bentuk tuple. Nilai lain akan mengembalikan bentuk penuh."
-          },
-          {
-            "in": "query",
-            "name": "day",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "examples": [
-                "SAT"
-              ]
-            },
-            "description": "Hari yang mau dilihat: `WD` (Senin-Jumat), `SAT`, atau `SUN`. Hari libur nasional ikut jadwal `SUN`. Default-nya hari ini waktu Jakarta."
-          },
-          {
-            "in": "query",
-            "name": "from",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "examples": [
-                "12:00"
-              ]
-            },
-            "description": "Awal rentang jam keberangkatan, format `HH:MM` 24 jam, waktu lokal Asia/Jakarta. Dibulatkan ke bawah ke jam bulat, jadi `12:13` sama saja dengan `12:00`. Kalau cuma `to` yang diisi, rentangnya mulai dari `00:00`."
-          },
-          {
-            "in": "query",
-            "name": "to",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "examples": [
-                "15:00"
-              ]
-            },
-            "description": "Akhir rentang jam keberangkatan. Dibulatkan ke atas sampai akhir jamnya, jadi `15:18` mencakup semua keberangkatan sampai `15:59` dan yang diminta tidak ada yang hilang. Boleh lebih kecil dari `from` buat rentang yang melewati tengah malam, misalnya `22:00` sampai `02:00`. Kalau persis sama dengan `from`, yang keluar sehari penuh."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Berhasil.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "number",
-                      "description": "Sama dengan HTTP status code-nya.",
-                      "examples": [
-                        200
-                      ],
-                      "format": "double"
-                    },
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/GroupedTimetable"
-                      }
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "data"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Format `from` atau `to` salah (`INVALID_TIME_RANGE`). Pakai `HH:MM` 24 jam.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "number",
-                      "examples": [
-                        404
-                      ],
-                      "format": "double"
-                    },
-                    "error": {
-                      "$ref": "#/components/schemas/Error"
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "error"
-                  ],
-                  "title": "ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Kode operator atau stasiun tidak ditemukan.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "number",
-                      "examples": [
-                        404
-                      ],
-                      "format": "double"
-                    },
-                    "error": {
-                      "$ref": "#/components/schemas/Error"
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "error"
-                  ],
-                  "title": "ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/stations/{operator}/{stationCode}/transfers": {
-      "get": {
-        "operationId": "getStationsByOperatorByStationCodeTransfers",
-        "summary": "Transfer dari satu stasiun",
-        "description": "Sambungan ke stasiun terdekat, termasuk yang beda operator, lengkap dengan jarak jalan kakinya. Transfer `INTERNAL` masih di dalam area berbayar, sedangkan `EXTERNAL` berarti kamu harus tap keluar dulu lalu tap masuk lagi.",
-        "tags": [
-          "Stasiun"
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "operator",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "examples": [
-                "KCI"
-              ]
-            },
-            "description": "Kode operator, misalnya `KCI`, `MRTJ`, `TJ`."
-          },
-          {
-            "in": "path",
-            "name": "stationCode",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "examples": [
-                "SUD"
-              ]
-            },
-            "description": "Kode stasiun versi operatornya, bukan station id yang lengkap."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Berhasil.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "number",
-                      "description": "Sama dengan HTTP status code-nya.",
-                      "examples": [
-                        200
-                      ],
-                      "format": "double"
-                    },
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Transfer"
-                      }
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "data"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Kode operator atau stasiun tidak ditemukan.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "number",
-                      "examples": [
-                        404
-                      ],
-                      "format": "double"
-                    },
-                    "error": {
-                      "$ref": "#/components/schemas/Error"
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "error"
-                  ],
-                  "title": "ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  },
   "components": {
     "schemas": {
       "Amenity": {
@@ -1541,6 +577,22 @@
             "type": "string",
             "description": "Nama halte tujuan akhir buat arah ini, kayak yang ada di papan halte (\"arah Galunggung\"). Cuma ada kalau dua arahnya beda frekuensi — kalau nggak ada, angkanya berlaku buat dua-duanya."
           },
+          "scheduledS": {
+            "anyOf": [
+              {
+                "type": "number",
+                "format": "double"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Angka jadwal (GTFS) buat hari ini, sebelum disesuaikan dengan jam. Cuma ada kalau `basis` ada. `null` kalau linnya nggak jalan di hari itu."
+          },
+          "basis": {
+            "type": "string",
+            "description": "Dari mana `headwayS` berasal, cuma ada buat TransJakarta. `OBSERVED` = diukur dari posisi bus di jam itu. `INTERPOLATED` = diperkirakan dari jam-jam terdekat yang terukur, karena jam itu sendiri belum terukur. `SCALED` = angka jadwal yang disesuaikan dengan pola jam itu, kalau jam-jam di sekitarnya pun belum terukur. Kalau field-nya nggak ada, `headwayS` adalah angka jadwal apa adanya. Nilai yang dikenal saat ini: `OBSERVED`, `INTERPOLATED`, `SCALED`. Bisa bertambah."
+          },
           "serviceHours": {
             "anyOf": [
               {
@@ -1589,6 +641,78 @@
         ],
         "title": "HeadwayRow",
         "description": "Seberapa sering kendaraan lewat, bukan jadwal. Nggak bisa dipakai buat tahu kapan yang berikutnya datang."
+      },
+      "DensityRange": {
+        "type": "object",
+        "properties": {
+          "min": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3,
+            "description": "Ujung bawah perkiraan: 0 lengang, 1 ramai, 2 padat, 3 sangat padat."
+          },
+          "max": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3,
+            "description": "Ujung atas perkiraan, skala yang sama. Selalu `>= min`."
+          }
+        },
+        "required": [
+          "min",
+          "max"
+        ],
+        "title": "DensityRange",
+        "description": "Rentang perkiraan kepadatan. Modelnya nggak yakin persis, jadi kasih rentang: `{ min: 2, max: 3 }` artinya biasanya padat sampai sangat padat. Kalau `min` sama dengan `max`, modelnya cukup yakin."
+      },
+      "DensityHour": {
+        "type": "object",
+        "properties": {
+          "hour": {
+            "type": "number",
+            "description": "Jam, 0-23 waktu Jakarta.",
+            "format": "double"
+          },
+          "level": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DensityRange"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Perkiraan kepadatan biasanya di jam ini. `null` kalau lagi nggak ada layanan atau keretanya jarang banget, jadi nggak bisa diperkirakan. `null` BUKAN berarti lengang."
+          }
+        },
+        "required": [
+          "hour",
+          "level"
+        ],
+        "title": "DensityHour",
+        "description": "Perkiraan kepadatan satu jam."
+      },
+      "StationDensity": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "description": "Hari yang dipakai: `WD` (Senin-Jumat), `SAT`, atau `SUN`. Nilai yang dikenal saat ini: `WD`, `SAT`, `SUN`. Bisa bertambah."
+          },
+          "hours": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DensityHour"
+            },
+            "description": "24 jam, urut dari 0. Ini perkiraan dari jadwal dan data penumpang, BUKAN kondisi live."
+          }
+        },
+        "required": [
+          "day",
+          "hours"
+        ],
+        "title": "StationDensity",
+        "description": "Perkiraan seberapa padat stasiun ini biasanya, per jam."
       },
       "Hub": {
         "type": "object",
@@ -2652,6 +1776,1086 @@
         ],
         "title": "TripResult",
         "description": "Beberapa pilihan rute sekaligus buat satu pasangan stasiun, masing-masing lengkap dengan tarifnya."
+      }
+    }
+  },
+  "paths": {
+    "/_internal/searchables": {
+      "get": {
+        "operationId": "getInternalSearchables",
+        "summary": "Indeks pencarian",
+        "description": "Semua yang bisa dicari dalam satu response: stasiun, pumpunan moda, dan lin, plus kamus lin yang dirujuk tiap entri.",
+        "tags": [
+          "Internal"
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "description": "Sama dengan HTTP status code-nya.",
+                      "examples": [
+                        200
+                      ],
+                      "format": "double"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/SearchableIndex"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/_internal/track-shapes": {
+      "get": {
+        "operationId": "getInternalTrackShapes",
+        "summary": "Bentuk jalur antarstasiun",
+        "description": "Bentuk jalur fisik tiap pasangan stasiun berurutan, buat mode perjalanan di aplikasi Android. Satu file untuk seluruh jaringan; jarang berubah, jadi simpan dan validasi ulang dengan ETag.",
+        "tags": [
+          "Internal"
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "description": "Sama dengan HTTP status code-nya.",
+                      "examples": [
+                        200
+                      ],
+                      "format": "double"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TrackShapes"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/_internal/trips/{from}/{to}": {
+      "get": {
+        "operationId": "getInternalTripsByFromByTo",
+        "summary": "Beberapa pilihan rute antara dua stasiun",
+        "description": "Sama seperti `/fares/{from}/{to}`, tapi menjawab dengan beberapa `journeys`, masing-masing dengan tarif, label, dan jam berangkat/tiba tiap kaki perjalanan kalau jadwalnya ada.",
+        "tags": [
+          "Internal"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "KCI-SUD"
+              ]
+            },
+            "description": "Station id asal, `{operator}-{code}`."
+          },
+          {
+            "in": "path",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "MRTJ-LBB"
+              ]
+            },
+            "description": "Station id tujuan."
+          },
+          {
+            "in": "query",
+            "name": "paymentMethod",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Menentukan tarif mana yang dipakai. Default-nya tarif kartu uang elektronik biasa."
+          },
+          {
+            "in": "query",
+            "name": "at",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "2026-07-28T08:00:00Z"
+              ]
+            },
+            "description": "Timestamp ISO 8601 buat perjalanannya. Default-nya waktu sekarang."
+          },
+          {
+            "in": "query",
+            "name": "modes",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "rail"
+              ]
+            },
+            "description": "`rail` buat rute tanpa TransJakarta. Default-nya semua moda."
+          },
+          {
+            "in": "query",
+            "name": "walking",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "SLOW"
+              ]
+            },
+            "description": "Kecepatan jalan kaki: `BRISK`, `AVERAGE`, `SLOW`, atau `SLOWEST`. Default-nya `AVERAGE`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "description": "Sama dengan HTTP status code-nya.",
+                      "examples": [
+                        200
+                      ],
+                      "format": "double"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TripResult"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Salah satu stasiunnya tidak ditemukan, tidak ada rute di antara keduanya (`NO_ROUTE`), layanannya sudah tutup (`CLOSED`), atau asal dan tujuannya sama (`SAME_STATION`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "examples": [
+                        404
+                      ],
+                      "format": "double"
+                    },
+                    "error": {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "error"
+                  ],
+                  "title": "ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Perhitungan tarif gagal (`DATABASE_ERROR`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "examples": [
+                        404
+                      ],
+                      "format": "double"
+                    },
+                    "error": {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "error"
+                  ],
+                  "title": "ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/hubs/{slug}": {
+      "get": {
+        "operationId": "getHubsBySlug",
+        "summary": "Detail pumpunan moda",
+        "description": "Satu pumpunan moda lengkap dengan stasiun-stasiun di dalamnya.",
+        "tags": [
+          "Pumpunan Moda"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "dukuh-atas"
+              ]
+            },
+            "description": "Kunci URL pumpunan moda, bisa diambil dari `/hubs`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "description": "Sama dengan HTTP status code-nya.",
+                      "examples": [
+                        200
+                      ],
+                      "format": "double"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Hub"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tidak ada pumpunan moda dengan slug tersebut.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "examples": [
+                        404
+                      ],
+                      "format": "double"
+                    },
+                    "error": {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "error"
+                  ],
+                  "title": "ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/lines/{operator}/{lineCode}": {
+      "get": {
+        "operationId": "getLinesByOperatorByLineCode",
+        "summary": "Detail lin",
+        "description": "Struktur lengkap satu lin, urut dari stasiun awal. Lin yang lurus cuma punya satu segmen `TRUNK`. Lin yang bercabang seperti loop Cikarang atau ramp Nambo punya segmen tambahan yang menunjukkan di mana cabangnya berpisah dan menyatu lagi.",
+        "tags": [
+          "Lin"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operator",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "KCI"
+              ]
+            },
+            "description": "Kode operator, misalnya `KCI`, `MRTJ`, `TJ`."
+          },
+          {
+            "in": "path",
+            "name": "lineCode",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "C"
+              ]
+            },
+            "description": "Kode lin, bisa diambil dari `/operators`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "description": "Sama dengan HTTP status code-nya.",
+                      "examples": [
+                        200
+                      ],
+                      "format": "double"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/LineDetail"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Operator atau lin-nya tidak ditemukan, atau lin-nya belum punya data topologi (`NO_TOPOLOGY`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "examples": [
+                        404
+                      ],
+                      "format": "double"
+                    },
+                    "error": {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "error"
+                  ],
+                  "title": "ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/operators": {
+      "get": {
+        "operationId": "getOperators",
+        "summary": "Daftar operator",
+        "description": "Semua operator transit beserta lin yang mereka jalankan. Bagus dipanggil duluan, karena kode dari sini dipakai di seluruh API.",
+        "tags": [
+          "Operator"
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "description": "Sama dengan HTTP status code-nya.",
+                      "examples": [
+                        200
+                      ],
+                      "format": "double"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/OperatorWithLines"
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stations": {
+      "get": {
+        "operationId": "getStations",
+        "summary": "Daftar semua stasiun",
+        "description": "Semua stasiun dari seluruh operator yang bisa dicari. Stasiun yang cuma dipakai buat routing tidak termasuk di sini. Isinya jarang berubah, jadi bisa di-cache di sisi kamu.",
+        "tags": [
+          "Stasiun"
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "description": "Sama dengan HTTP status code-nya.",
+                      "examples": [
+                        200
+                      ],
+                      "format": "double"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Station"
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stations/{operator}/{stationCode}": {
+      "get": {
+        "operationId": "getStationsByOperatorByStationCode",
+        "summary": "Detail stasiun",
+        "description": "Detail lengkap satu stasiun, termasuk fasilitas dan koordinatnya. Beda dengan endpoint daftar, di sini stasiun yang cuma dipakai buat routing juga ikut dikembalikan.",
+        "tags": [
+          "Stasiun"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operator",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "KCI"
+              ]
+            },
+            "description": "Kode operator, misalnya `KCI`, `MRTJ`, `TJ`."
+          },
+          {
+            "in": "path",
+            "name": "stationCode",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "SUD"
+              ]
+            },
+            "description": "Kode stasiun versi operatornya, bukan station id yang lengkap."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "description": "Sama dengan HTTP status code-nya.",
+                      "examples": [
+                        200
+                      ],
+                      "format": "double"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Station"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Kode operator atau stasiun tidak ditemukan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "examples": [
+                        404
+                      ],
+                      "format": "double"
+                    },
+                    "error": {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "error"
+                  ],
+                  "title": "ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stations/{operator}/{stationCode}/density": {
+      "get": {
+        "operationId": "getStationsByOperatorByStationCodeDensity",
+        "summary": "Perkiraan kepadatan stasiun per jam",
+        "description": "Seberapa padat stasiun ini BIASANYA di tiap jam, buat hari yang diminta. Ini perkiraan dari jadwal kereta, data penumpang yang dipublikasikan operator, dan pola jam sibuk. BUKAN pantauan live, jadi bisa meleset pas ada kejadian khusus.\n\nSkalanya 0 lengang, 1 ramai, 2 padat, 3 sangat padat. Tiap jam dikasih rentang `min` sampai `max` karena modelnya nggak bisa yakin persis: stasiun yang data penumpangnya dipublikasikan rentangnya lebih sempit daripada yang cuma diperkirakan.\n\nSementara cuma stasiun kereta (KCI, MRT, LRT Jakarta, LRT Jabodebek). Halte TransJakarta dapat `null` semua.",
+        "tags": [
+          "Stasiun"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operator",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "KCI"
+              ]
+            },
+            "description": "Kode operator, misalnya `KCI`, `MRTJ`, `TJ`."
+          },
+          {
+            "in": "path",
+            "name": "stationCode",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "SUD"
+              ]
+            },
+            "description": "Kode stasiun versi operatornya, bukan station id yang lengkap."
+          },
+          {
+            "in": "query",
+            "name": "day",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "SAT"
+              ]
+            },
+            "description": "Hari yang mau dilihat: `WD` (Senin-Jumat), `SAT`, atau `SUN`. Hari libur nasional ikut jadwal `SUN`. Default-nya hari ini waktu Jakarta."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "description": "Sama dengan HTTP status code-nya.",
+                      "examples": [
+                        200
+                      ],
+                      "format": "double"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/StationDensity"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Kode operator atau stasiun tidak ditemukan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "examples": [
+                        404
+                      ],
+                      "format": "double"
+                    },
+                    "error": {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "error"
+                  ],
+                  "title": "ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stations/{operator}/{stationCode}/headway": {
+      "get": {
+        "operationId": "getStationsByOperatorByStationCodeHeadway",
+        "summary": "Frekuensi kendaraan di satu stasiun",
+        "description": "Rata-rata berapa lama sekali kendaraan tiap lin lewat stasiun ini. Ini BUKAN jadwal: nggak bisa dipakai buat tahu keberangkatan berikutnya jam berapa, cuma buat tahu kira-kira nunggunya berapa lama.\n\nAngkanya ikut hari: sebagian koridor lebih jarang atau malah nggak jalan pas akhir pekan. Defaultnya hari ini di Jakarta, atau tentukan sendiri lewat `day`. Lin yang nggak jalan di hari yang diminta `headwayS`-nya `null` dan `days`-nya berisi hari-hari lin itu jalan.",
+        "tags": [
+          "Stasiun"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operator",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "KCI"
+              ]
+            },
+            "description": "Kode operator, misalnya `KCI`, `MRTJ`, `TJ`."
+          },
+          {
+            "in": "path",
+            "name": "stationCode",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "SUD"
+              ]
+            },
+            "description": "Kode stasiun versi operatornya, bukan station id yang lengkap."
+          },
+          {
+            "in": "query",
+            "name": "day",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "SAT"
+              ]
+            },
+            "description": "Hari yang mau dilihat: `WD` (Senin-Jumat), `SAT`, atau `SUN`. Hari libur nasional ikut jadwal `SUN`. Default-nya hari ini waktu Jakarta."
+          },
+          {
+            "in": "query",
+            "name": "hour",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "8"
+              ]
+            },
+            "description": "Jam yang mau dilihat, 0-23 waktu Jakarta. Default-nya jam sekarang. Dipakai buat `headwayS`: frekuensi TransJakarta beda-beda tiap jam."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "description": "Sama dengan HTTP status code-nya.",
+                      "examples": [
+                        200
+                      ],
+                      "format": "double"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/HeadwayRow"
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Kode operator atau stasiun tidak ditemukan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "examples": [
+                        404
+                      ],
+                      "format": "double"
+                    },
+                    "error": {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "error"
+                  ],
+                  "title": "ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stations/{operator}/{stationCode}/timetable/grouped": {
+      "get": {
+        "operationId": "getStationsByOperatorByStationCodeTimetableGrouped",
+        "summary": "Jadwal stasiun, dikelompokkan",
+        "description": "Jadwal keberangkatan yang sudah dikelompokkan per lin, arah, dan tujuan, sesuai bentuk yang ditampilkan papan keberangkatan. Arahnya ditentukan dari stasiun terakhir tiap perjalanan.\n\nKalau butuh response yang lebih ringan, pakai `compact=1`. Tiap keberangkatan jadi tuple `[tripNumber, minutesSinceMidnight]`, bukan object penuh. Menitnya pakai waktu lokal Asia/Jakarta, dari 0 sampai 1439.\n\nBisa dipersempit ke rentang jam pakai `from` dan `to` (format `HH:MM`, dibulatkan ke jam bulat). Pengelompokannya tetap dihitung dari jadwal sehari penuh, jadi arah dan tujuan yang muncul tidak berubah cuma karena rentangnya dipersempit; yang tersaring keberangkatannya.",
+        "tags": [
+          "Stasiun"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operator",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "KCI"
+              ]
+            },
+            "description": "Kode operator, misalnya `KCI`, `MRTJ`, `TJ`."
+          },
+          {
+            "in": "path",
+            "name": "stationCode",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "SUD"
+              ]
+            },
+            "description": "Kode stasiun versi operatornya, bukan station id yang lengkap."
+          },
+          {
+            "in": "query",
+            "name": "compact",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "1"
+              ]
+            },
+            "description": "Isi `1` kalau mau keberangkatannya dalam bentuk tuple. Nilai lain akan mengembalikan bentuk penuh."
+          },
+          {
+            "in": "query",
+            "name": "day",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "SAT"
+              ]
+            },
+            "description": "Hari yang mau dilihat: `WD` (Senin-Jumat), `SAT`, atau `SUN`. Hari libur nasional ikut jadwal `SUN`. Default-nya hari ini waktu Jakarta."
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "12:00"
+              ]
+            },
+            "description": "Awal rentang jam keberangkatan, format `HH:MM` 24 jam, waktu lokal Asia/Jakarta. Dibulatkan ke bawah ke jam bulat, jadi `12:13` sama saja dengan `12:00`. Kalau cuma `to` yang diisi, rentangnya mulai dari `00:00`."
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "15:00"
+              ]
+            },
+            "description": "Akhir rentang jam keberangkatan. Dibulatkan ke atas sampai akhir jamnya, jadi `15:18` mencakup semua keberangkatan sampai `15:59` dan yang diminta tidak ada yang hilang. Boleh lebih kecil dari `from` buat rentang yang melewati tengah malam, misalnya `22:00` sampai `02:00`. Kalau persis sama dengan `from`, yang keluar sehari penuh."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "description": "Sama dengan HTTP status code-nya.",
+                      "examples": [
+                        200
+                      ],
+                      "format": "double"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/GroupedTimetable"
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Format `from` atau `to` salah (`INVALID_TIME_RANGE`). Pakai `HH:MM` 24 jam.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "examples": [
+                        404
+                      ],
+                      "format": "double"
+                    },
+                    "error": {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "error"
+                  ],
+                  "title": "ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Kode operator atau stasiun tidak ditemukan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "examples": [
+                        404
+                      ],
+                      "format": "double"
+                    },
+                    "error": {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "error"
+                  ],
+                  "title": "ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stations/{operator}/{stationCode}/transfers": {
+      "get": {
+        "operationId": "getStationsByOperatorByStationCodeTransfers",
+        "summary": "Transfer dari satu stasiun",
+        "description": "Sambungan ke stasiun terdekat, termasuk yang beda operator, lengkap dengan jarak jalan kakinya. Transfer `INTERNAL` masih di dalam area berbayar, sedangkan `EXTERNAL` berarti kamu harus tap keluar dulu lalu tap masuk lagi.",
+        "tags": [
+          "Stasiun"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operator",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "KCI"
+              ]
+            },
+            "description": "Kode operator, misalnya `KCI`, `MRTJ`, `TJ`."
+          },
+          {
+            "in": "path",
+            "name": "stationCode",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "SUD"
+              ]
+            },
+            "description": "Kode stasiun versi operatornya, bukan station id yang lengkap."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "description": "Sama dengan HTTP status code-nya.",
+                      "examples": [
+                        200
+                      ],
+                      "format": "double"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Transfer"
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Kode operator atau stasiun tidak ditemukan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "examples": [
+                        404
+                      ],
+                      "format": "double"
+                    },
+                    "error": {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "error"
+                  ],
+                  "title": "ErrorResponse"
+                }
+              }
+            }
+          }
+        }
       }
     }
   }

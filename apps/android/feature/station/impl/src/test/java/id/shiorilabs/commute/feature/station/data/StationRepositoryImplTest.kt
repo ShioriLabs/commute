@@ -4,6 +4,7 @@ import id.shiorilabs.commute.core.model.models.GroupedTimetable
 import id.shiorilabs.commute.core.model.models.HeadwayRow
 import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.Station
+import id.shiorilabs.commute.core.model.models.StationDensity
 import id.shiorilabs.commute.core.model.models.Transfer as TransferDto
 import id.shiorilabs.commute.core.network.testing.FakeCommuteService
 import id.shiorilabs.commute.core.time.ServiceDayName
@@ -12,6 +13,8 @@ import id.shiorilabs.commute.feature.station.data.impl.LineRepositoryImpl
 import id.shiorilabs.commute.feature.station.data.impl.StationDirectoryImpl
 import id.shiorilabs.commute.feature.station.data.impl.StationRepositoryImpl
 import id.shiorilabs.commute.feature.station.domain.Amenity
+import id.shiorilabs.commute.feature.station.domain.CrowdLevel
+import id.shiorilabs.commute.feature.station.domain.CrowdRange
 import id.shiorilabs.commute.feature.station.domain.Departure
 import id.shiorilabs.commute.feature.station.domain.Frequency
 import id.shiorilabs.commute.feature.station.domain.LineInfo
@@ -74,7 +77,7 @@ class StationRepositoryImplTest {
             online.station("KCI-MRI"),
             online.timetable("KCI-MRI", ServiceDayName.WD),
             online.transfers("KCI-MRI"),
-            online.frequencies("KCI-MRI", ServiceDayName.WD),
+            online.frequencies("KCI-MRI", ServiceDayName.WD, 8),
             onlineLines.lines(),
         ).map { it.getOrNull() }
 
@@ -86,7 +89,7 @@ class StationRepositoryImplTest {
             later.station("KCI-MRI"),
             later.timetable("KCI-MRI", ServiceDayName.WD),
             later.transfers("KCI-MRI"),
-            later.frequencies("KCI-MRI", ServiceDayName.WD),
+            later.frequencies("KCI-MRI", ServiceDayName.WD, 8),
             laterLines.lines(),
         ).map { it.getOrNull() }
 
@@ -312,7 +315,7 @@ class StationRepositoryImplTest {
             }
         }
 
-        val rows = StationRepositoryImpl(service, queries()).frequencies("TJ-H00001P", ServiceDayName.WD).getOrNull()!!
+        val rows = StationRepositoryImpl(service, queries()).frequencies("TJ-H00001P", ServiceDayName.WD, 8).getOrNull()!!
 
         assertEquals(Triple("TJ", "H00001P", "WD"), asked)
         assertEquals(
@@ -341,7 +344,7 @@ class StationRepositoryImplTest {
             }
         }
 
-        val rows = StationRepositoryImpl(service, queries()).frequencies("TJ-H00001P", ServiceDayName.SAT).getOrNull()!!
+        val rows = StationRepositoryImpl(service, queries()).frequencies("TJ-H00001P", ServiceDayName.SAT, 8).getOrNull()!!
 
         assertEquals(setOf(ServiceDayName.SAT), rows[0].days)
         assertEquals(null, rows[0].serviceHours)
@@ -353,12 +356,60 @@ class StationRepositoryImplTest {
         val service = FakeCommuteService().apply { headway = { _, _, _ -> emptyList() } }
         val repository = StationRepositoryImpl(service, queries())
 
-        repository.frequencies("TJ-H00001P", ServiceDayName.WD)
-        repository.frequencies("TJ-H00001P", ServiceDayName.WD)
-        repository.frequencies("TJ-H00001P", ServiceDayName.SAT)
+        repository.frequencies("TJ-H00001P", ServiceDayName.WD, 8)
+        repository.frequencies("TJ-H00001P", ServiceDayName.WD, 8)
+        repository.frequencies("TJ-H00001P", ServiceDayName.SAT, 8)
 
         assertEquals(2, service.headwayCalls)
-        assertEquals(emptyList<Frequency>(), repository.cachedFrequencies("TJ-H00001P", ServiceDayName.WD))
-        assertEquals(null, repository.cachedFrequencies("TJ-H00001P", ServiceDayName.SUN))
+        assertEquals(emptyList<Frequency>(), repository.cachedFrequencies("TJ-H00001P", ServiceDayName.WD, 8))
+        assertEquals(null, repository.cachedFrequencies("TJ-H00001P", ServiceDayName.SUN, 8))
+    }
+
+    @Test
+    fun `frequencies are asked for, and kept, hour by hour`() = runTest {
+        val service = FakeCommuteService().apply { headway = { _, _, _ -> fixture<List<HeadwayRow>>("headway-hourly.json") } }
+        val repository = StationRepositoryImpl(service, queries())
+
+        val rows = repository.frequencies("TJ-H00001P", ServiceDayName.WD, 8).getOrNull()!!
+        assertEquals(8, service.lastHeadwayHour)
+        repository.frequencies("TJ-H00001P", ServiceDayName.WD, 8)
+        repository.frequencies("TJ-H00001P", ServiceDayName.WD, 9)
+
+        // The hour's measured figure, not the schedule's (186 s).
+        assertEquals(332.0, rows[0].headwaySeconds)
+        assertEquals(9, service.lastHeadwayHour)
+        assertEquals(2, service.headwayCalls)
+        assertEquals(null, repository.cachedFrequencies("TJ-H00001P", ServiceDayName.WD, 10))
+    }
+
+    @Test
+    fun `a crowd forecast decodes by hour, an hour without an estimate left empty`() = runTest {
+        var asked: Triple<String, String, String>? = null
+        val service = FakeCommuteService().apply {
+            density = { operator, code, day ->
+                asked = Triple(operator, code, day)
+                fixture<StationDensity>("density.json")
+            }
+        }
+
+        val forecast = StationRepositoryImpl(service, queries()).crowding("KCI-MRI", ServiceDayName.WD).getOrNull()!!
+
+        assertEquals(Triple("KCI", "MRI", "WD"), asked)
+        assertEquals(24, forecast.hours.size)
+        assertEquals(null, forecast.at(0))
+        assertEquals(CrowdRange(CrowdLevel.RAMAI, CrowdLevel.RAMAI), forecast.at(4))
+        assertEquals(CrowdRange(CrowdLevel.PADAT, CrowdLevel.SANGAT_PADAT), forecast.at(8))
+    }
+
+    @Test
+    fun `a crowd forecast is kept per day`() = runTest {
+        val service = FakeCommuteService().apply { density = { _, _, _ -> fixture<StationDensity>("density.json") } }
+        val repository = StationRepositoryImpl(service, queries())
+
+        repository.crowding("KCI-MRI", ServiceDayName.WD)
+        repository.crowding("KCI-MRI", ServiceDayName.WD)
+        repository.crowding("KCI-MRI", ServiceDayName.SAT)
+
+        assertEquals(2, service.densityCalls)
     }
 }

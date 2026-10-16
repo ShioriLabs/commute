@@ -16,8 +16,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.SubcomposeLayout
@@ -51,6 +53,7 @@ import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
 import id.shiorilabs.commute.core.ui.time.updatedAgoText
 import id.shiorilabs.commute.feature.station.R
 import id.shiorilabs.commute.feature.station.domain.Amenity
+import id.shiorilabs.commute.feature.station.domain.CrowdRange
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.core.constants.OPERATOR_TJ
@@ -61,6 +64,8 @@ import id.shiorilabs.commute.feature.station.domain.isTransJakarta
 import id.shiorilabs.commute.feature.station.domain.lastTrains
 import id.shiorilabs.commute.feature.station.presentation.components.AmenityList
 import id.shiorilabs.commute.feature.station.presentation.components.BekasiTimurMemorial
+import id.shiorilabs.commute.feature.station.presentation.components.CrowdBadge
+import id.shiorilabs.commute.feature.station.presentation.components.CrowdLegendSheet
 import id.shiorilabs.commute.feature.station.presentation.components.HalteFrequencies
 import id.shiorilabs.commute.feature.station.presentation.components.LastTrainCard
 import id.shiorilabs.commute.feature.station.presentation.components.LastTrainsHeading
@@ -245,6 +250,10 @@ private fun StationList(
     val station = (board.station as? UIState.Success)?.data
     val timetableShown = (board.timetable as? UIState.Success)?.data?.isNotEmpty() == true
     listState.RevealInsertedTop(offline && timetableShown)
+    var crowdLegendOpen by rememberSaveable { mutableStateOf(false) }
+    if (crowdLegendOpen) {
+        CrowdLegendSheet(onDismiss = { crowdLegendOpen = false })
+    }
 
     LazyColumn(
         state = listState,
@@ -296,6 +305,9 @@ private fun StationList(
             now = now,
             offline = offline,
             retired = state.retired != null,
+            // The clock's hour, so the badge moves on with the page rather than with a refetch.
+            crowd = state.crowding?.at(now.hour),
+            onOpenCrowdLegend = { crowdLegendOpen = true },
             onRetry = onRetry,
             onOtw = onOtw,
             onOpenTimetable = onOpenTimetable,
@@ -376,6 +388,8 @@ private fun LazyListScope.departures(
     now: LocalDateTime,
     offline: Boolean,
     retired: Boolean,
+    crowd: CrowdRange?,
+    onOpenCrowdLegend: () -> Unit,
     onRetry: () -> Unit,
     onOtw: () -> Unit,
     onOpenTimetable: () -> Unit,
@@ -417,6 +431,12 @@ private fun LazyListScope.departures(
                             detail = board.updatedAt?.let { updatedAgoText(it) },
                             modifier = inset.padding(bottom = 16.dp),
                         )
+                    }
+                }
+                // Over a real board only, as on the web: a halte's frequencies get none.
+                if (crowd != null) {
+                    item(key = "crowd") {
+                        CrowdBadge(range = crowd, onClick = onOpenCrowdLegend, modifier = inset.padding(bottom = 16.dp))
                     }
                 }
                 item(key = "actions") {
