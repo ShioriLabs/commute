@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.line.presentation
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -45,7 +46,8 @@ import id.shiorilabs.commute.feature.line.presentation.components.LineStripView
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 
 /** The page is white, as on the web, like the station page. */
-private val LineBackground = Color.White
+private val LineBackground: Color
+    @Composable get() = MaterialTheme.colorScheme.surfaceContainerLowest
 
 /** The web's `max-w-md`, which the strip and its skeleton are centred in. */
 private val ContentMaxWidth = 448.dp

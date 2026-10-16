@@ -152,7 +152,8 @@ fun TripScreen(
 }
 
 /** White like the OTW tab it opens from. */
-private val TripBackground = Color.White
+private val TripBackground: Color
+    @Composable get() = MaterialTheme.colorScheme.surfaceContainerLowest
 
 /** How often the countdown to departure is looked at again. */
 private const val CLOCK_TICK_MILLIS = 30_000L

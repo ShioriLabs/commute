@@ -93,8 +93,10 @@ private fun captionOf(option: LegOption): Caption {
 }
 
 /** The line's own colour, filled, for the chosen train; the unchosen are quiet stone plates. */
+@Composable
 private fun fillOf(option: LegOption, color: Color): Color = if (option.selected) color else Stone100
 
+@Composable
 private fun inkOf(option: LegOption, color: Color): Color = when {
     !option.selected -> Slate900
     color.foreground() == Foreground.LIGHT -> Color.White
@@ -231,6 +233,7 @@ private fun LadderRung(option: LegOption, color: Color, onPick: (String) -> Unit
     }
 }
 
+@Composable
 private fun captionInk(option: LegOption, caption: Caption, ink: Color): Color = when {
     option.selected -> ink.copy(alpha = 0.8f)
     caption.tight -> Amber700

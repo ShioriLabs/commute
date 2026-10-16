@@ -18,6 +18,8 @@
     <string name="settings_item_manage_data">Atur Data</string>
     <string name="settings_item_location">Lokasi</string>
     <string name="settings_item_otw">OTW</string>
+    <string name="settings_item_appearance">Tema</string>
+    <string name="settings_beta">BETA</string>
     <string name="settings_item_legal">Legal &amp; Atribusi</string>
     <string name="settings_item_data_platform">Commute Data Platform</string>
     <string name="settings_item_report_issue">Laporkan Masalah</string>
@@ -69,6 +71,14 @@
     <string name="settings_location_permission_granted">Diizinkan</string>
     <string name="settings_location_permission_denied">Belum diizinkan</string>
 
+    <string name="settings_appearance_title">Tema</string>
+    <string name="settings_appearance_beta_detail"><![CDATA[Beberapa tampilan di mode gelap/hitam masih belum oke banget. <a href=\"%1$s\">Berikan Masukan</a>]]></string>
+    <string name="settings_appearance_system">Ngikutin Hape</string>
+    <string name="settings_appearance_system_detail">Ngikutin apa kata hape kamu aja temanya</string>
+    <string name="settings_appearance_light">Terang</string>
+    <string name="settings_appearance_dark">Gelap</string>
+    <string name="settings_appearance_black">Hitam</string>
+    <string name="settings_appearance_black_detail">Biar hemat baterai buat hape OLED</string>
     <string name="settings_otw_title">OTW</string>
     <string name="settings_otw_pids_diagram">Diagram ala Layar Kereta Jepang</string>
     <string name="settings_otw_pids_diagram_detail">Tampilkan diagram perjalanan ala Jepang di atas linimasa perjalanan</string>

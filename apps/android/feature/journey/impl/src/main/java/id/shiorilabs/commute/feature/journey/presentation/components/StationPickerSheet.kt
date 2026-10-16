@@ -1,5 +1,8 @@
 package id.shiorilabs.commute.feature.journey.presentation.components
 
+import id.shiorilabs.commute.core.ui.theme.themed
+import id.shiorilabs.commute.core.ui.theme.StoneLineDark
+import id.shiorilabs.commute.core.ui.theme.StoneFillDark
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -84,8 +87,10 @@ private const val MIN_QUERY_LENGTH = 2
 private const val FOCUS_DELAY_MILLIS = 350L
 
 /** `bg-stone-100/80` and `border-stone-200/40`, the search field's fill and outline. */
-private val FieldFill = Color(0xCCF5F5F4)
-private val FieldOutline = Color(0x66E7E5E4)
+private val FieldFill: Color
+    @Composable get() = themed(Color(0xCCF5F5F4), StoneFillDark)
+private val FieldOutline: Color
+    @Composable get() = themed(Color(0x66E7E5E4), StoneLineDark)
 
 /**
  * Choosing one end of the trip: a full-height sheet with a search field, the rider's recent and the

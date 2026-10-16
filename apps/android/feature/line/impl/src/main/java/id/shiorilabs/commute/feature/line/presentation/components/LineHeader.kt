@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.line.presentation.components
 
+import id.shiorilabs.commute.core.ui.theme.Slate500
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -34,7 +35,8 @@ import id.shiorilabs.commute.feature.line.R
 import id.shiorilabs.commute.feature.line.domain.LineDetail
 
 /** The operator under the name, the web's `text-slate-500`. */
-private val OperatorColor = Color(0xFF64748B)
+private val OperatorColor: Color
+    @Composable get() = Slate500
 
 /**
  * The page's header, as the web's line page draws it: the line's roundel, its name over its
