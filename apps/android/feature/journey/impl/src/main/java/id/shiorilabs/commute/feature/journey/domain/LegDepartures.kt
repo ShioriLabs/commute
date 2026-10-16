@@ -70,8 +70,16 @@ private fun isTight(gapS: Long, minS: Int) = gapS - minS < TIGHT_SLACK_S
  * `tripId`). A pick that can no longer be made, or that no later train connects from, is ignored and
  * the leg falls back to the earliest train that works, so a stale pick never produces a connection
  * that runs backwards in time or a journey that stops halfway.
+ *
+ * With [notBefore] (the clock), first-leg trains that have already left cannot be chosen: the API
+ * answers a "now" ask from the start of its 20-minute slot, so its own train can be minutes gone.
  */
-fun resolveTimedLegs(legs: List<JourneyLeg>, picks: Map<Int, String>): List<TimedLeg> {
+fun resolveTimedLegs(legs: List<JourneyLeg>, picks: Map<Int, String>, notBefore: Instant? = null): List<TimedLeg> =
+    resolve(legs, picks, notBefore)
+        // Every train of the first leg has left (an answer held past its hour): show the answer as it stands.
+        .ifEmpty { if (notBefore != null) resolve(legs, picks, null) else emptyList() }
+
+private fun resolve(legs: List<JourneyLeg>, picks: Map<Int, String>, notBefore: Instant?): List<TimedLeg> {
     val timedIndexes = legs.indices.filter { upcomingOf(legs[it]).isNotEmpty() }
 
     // Which trains on each leg can still finish the journey, worked back from the last leg.
@@ -101,6 +109,8 @@ fun resolveTimedLegs(legs: List<JourneyLeg>, picks: Map<Int, String>): List<Time
         val earliest = previousArrival?.plusSeconds(minChangeS(legs, previousIndex, index).toLong())
         fun blockedOf(d: LegDeparture): Blocked? = when {
             earliest != null && d.departureAt.isBefore(earliest) -> Blocked.MISSED
+            // The first train has no earlier ride to follow, but the clock still says it has gone.
+            earliest == null && notBefore != null && d.departureAt.isBefore(notBefore) -> Blocked.MISSED
             d.tripId in finishing.getValue(index) -> null
             else -> Blocked.NO_ONWARD
         }

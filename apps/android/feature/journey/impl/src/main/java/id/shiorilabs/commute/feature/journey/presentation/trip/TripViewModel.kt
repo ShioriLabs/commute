@@ -31,6 +31,7 @@ import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.loadInto
 import id.shiorilabs.commute.feature.trip.TripController
 import kotlinx.coroutines.delay
+import java.time.Instant
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -80,8 +81,8 @@ class TripViewModel @AssistedInject constructor(
     private val picks = MutableStateFlow<Map<Int, String>>(emptyMap())
 
     /** [trip] as the rider's picks have retimed it; everything the page shows or starts reads this. */
-    private val shown: StateFlow<TripPageState> = combine(trip, picks) { trip, picks ->
-        if (trip is TripPageState.Loaded) trip.retimed(picks) else trip
+    private val shown: StateFlow<TripPageState> = combine(trip, picks, minuteTicks()) { trip, picks, now ->
+        if (trip is TripPageState.Loaded) trip.retimed(picks, now) else trip
     }.stateIn(viewModelScope, WhileUiSubscribed, TripPageState.Loading)
 
     val state: StateFlow<TripUiState> = combine(shown, lines, criteria) { trip, lines, criteria ->
@@ -213,7 +214,7 @@ class TripViewModel @AssistedInject constructor(
     }
 }
 
-private fun TripPageState.Loaded.retimed(picks: Map<Int, String>): TripPageState.Loaded {
-    val timed = resolveTimedLegs(journey.legs, picks)
+private fun TripPageState.Loaded.retimed(picks: Map<Int, String>, now: Instant): TripPageState.Loaded {
+    val timed = resolveTimedLegs(journey.legs, picks, notBefore = now)
     return copy(journey = retimeJourney(journey, timed), timed = timed)
 }
