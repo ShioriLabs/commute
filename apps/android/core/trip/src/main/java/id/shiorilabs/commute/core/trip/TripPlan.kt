@@ -66,6 +66,12 @@ sealed interface TripLeg {
         /** The vehicle run boarded, as the API names it: only ever compared, for "still on my train?". */
         val tripId: String? = null,
         /**
+         * The later trains of this ride, soonest first, as the API named them when the trip started:
+         * only what the rider would board instead, to say so before a miss. Never followed; empty
+         * for an untimed ride or a trip stored before this was kept.
+         */
+        val nextDepartures: List<@Serializable(with = InstantSerializer::class) Instant> = emptyList(),
+        /**
          * Every line the rider can take for this ride, [line] first: haltes several TransJakarta
          * routes serve in turn, or an interlined stretch of track. Empty when it's [line] alone, as
          * for a trip stored before this was kept.
