@@ -38,6 +38,7 @@ import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.core.ui.theme.Slate700
 import id.shiorilabs.commute.feature.journey.R
 import id.shiorilabs.commute.feature.journey.domain.JOURNEY_LABELS_SHOWN
+import id.shiorilabs.commute.feature.journey.domain.NEXT_DEPARTURES_SHOWN
 import id.shiorilabs.commute.feature.journey.domain.Journey
 import id.shiorilabs.commute.feature.journey.domain.JourneyLabel
 import id.shiorilabs.commute.feature.journey.domain.boardsAt
@@ -84,6 +85,7 @@ internal fun JourneyCard(
     val fareText = journey.totalFare?.let(::formatRupiah)
     val fareLeads = duration == null && fareText != null
     val headsign = journey.rides.firstOrNull()?.headsign
+    val nextDepartures = journey.moreDepartures.take(NEXT_DEPARTURES_SHOWN)
 
     Column(
         modifier = modifier
@@ -124,6 +126,18 @@ internal fun JourneyCard(
                     color = Slate500,
                 )
             }
+        }
+        // Later trains on this route, on a line of their own under the clock: enough to see whether
+        // missing this one costs five minutes or twenty.
+        if (boardsAt != null && nextDepartures.isNotEmpty()) {
+            Text(
+                text = stringResource(R.string.journey_next_departures, nextDepartures.joinToString(", ") { formatClock(it.departureAt) }),
+                modifier = Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = Slate500,
+                textAlign = TextAlign.End,
+            )
         }
 
         if (!(fareLeads && labels.isEmpty() && !lastTrain)) {

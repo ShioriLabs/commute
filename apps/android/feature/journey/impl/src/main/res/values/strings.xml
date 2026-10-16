@@ -31,8 +31,6 @@
     <string name="journey_saved_route_none_left">Udah gak ada keberangkatan lagi</string>
     <string name="journey_saved_route_untimed">Jadwal tidak tersedia</string>
     <string name="journey_saved_route_towards">Arah %1$s</string>
-    <string name="journey_saved_route_direct">langsung</string>
-    <string name="journey_saved_route_change_train">ganti kereta</string>
     <string name="journey_saved_route_rows_description">Keberangkatan berikutnya dari %1$s ke %2$s</string>
 
     <!-- Dari/Ke -->
@@ -66,6 +64,25 @@
     <string name="journey_fare_unknown">Tarif tidak tersedia</string>
     <string name="journey_last_train">Kereta terakhir</string>
     <string name="journey_last_service">Terakhir</string>
+    <!-- %1$s is the clock times of the next departures, comma separated -->
+    <string name="journey_next_departures">berikutnya %1$s</string>
+    <!-- A change between two trains in the timeline; %1$d is minutes -->
+    <string name="journey_change_gap">%1$d mnt</string>
+    <string name="journey_change_gap_tight">%1$d mnt · mepet</string>
+    <!-- A departure chip's caption: %1$d is minutes to the next train, %1$s a clock time -->
+    <string name="journey_pick_change">pindah %1$d mnt</string>
+    <string name="journey_pick_change_tight">mepet %1$d mnt</string>
+    <string name="journey_pick_missed">tak terkejar</string>
+    <string name="journey_pick_no_onward">tak tersambung</string>
+    <string name="journey_pick_arrives">tiba %1$s</string>
+    <string name="journey_pick_description">Pilih kereta berangkat %1$s</string>
+    <!-- Countdown above the timeline; %1$d is minutes -->
+    <string name="journey_leave_in">Berangkat %1$d mnt lagi</string>
+    <string name="journey_leave_now">Berangkat sekarang</string>
+    <string name="journey_left_already">Sudah berangkat</string>
+    <string name="journey_service_ended">Layanan hari ini sudah selesai. Berangkat pertama %1$s</string>
+    <string name="journey_clock_arrives">Tiba %1$s</string>
+    <string name="journey_clock_departs_arrives">Berangkat %1$s, tiba %2$s</string>
     <!-- %1$d is the number of transfers -->
     <string name="journey_transfer_count">transit %1$dx</string>
     <string name="journey_walk_only_summary">Jalan aja udeh, cuma %1$dm</string>

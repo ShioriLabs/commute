@@ -29,14 +29,14 @@ class UpcomingJourneysTest {
             now,
         )
 
-        assertEquals(listOf(wib("2026-10-01T08:05:00"), wib("2026-10-01T08:20:00")), rows.map(::boardsAtOf))
+        assertEquals(listOf(wib("2026-10-01T08:05:00"), wib("2026-10-01T08:20:00")), rows.map { it.departures.first().departureAt })
     }
 
     @Test
     fun `untimed journeys follow the timed ones, in the planner's order`() {
         val rows = upcomingJourneys(listOf(untimed("TJ:1"), timed("KCI:B", "2026-10-01T08:20:00"), untimed("TJ:9")), now)
 
-        assertEquals(listOf("KCI:B", "TJ:1", "TJ:9"), rows.map { (it.legs.first() as JourneyLeg.Ride).line })
+        assertEquals(listOf("KCI:B", "TJ:1", "TJ:9"), rows.map { (it.journey.legs.first() as JourneyLeg.Ride).line })
     }
 
     @Test
@@ -56,14 +56,14 @@ class UpcomingJourneysTest {
 
     @Test
     fun `a route whose service has ended is not a row, untimed or otherwise`() {
-        assertEquals(emptyList<Journey>(), upcomingJourneys(listOf(ended("2026-10-02T04:28:00")), now))
+        assertEquals(emptyList<UpcomingRow>(), upcomingJourneys(listOf(ended("2026-10-02T04:28:00")), now))
     }
 
     @Test
     fun `live rows stay beside an ended route`() {
         val live = timed("KCI:B", "2026-10-01T08:20:00")
 
-        assertEquals(listOf(live), upcomingJourneys(listOf(ended("2026-10-02T04:28:00"), live), now))
+        assertEquals(listOf(live), upcomingJourneys(listOf(ended("2026-10-02T04:28:00"), live), now).map { it.journey })
     }
 
     @Test
@@ -73,5 +73,22 @@ class UpcomingJourneysTest {
             resumeTimeOf(listOf(ended("2026-10-02T05:10:00"), untimed("TJ:1"), ended("2026-10-02T04:28:00"))),
         )
         assertNull(resumeTimeOf(listOf(untimed("TJ:1"))))
+    }
+
+    @Test
+    fun `a route whose own train has left stays while a later one has not`() {
+        // A held answer: the route's own train left at 07.55, but the 08.06 riding along is still to come.
+        val stale = timed("KCI:B", "2026-10-01T07:55:00").copy(
+            moreDepartures = listOf(JourneyDeparture(wib("2026-10-01T08:06:00")), JourneyDeparture(wib("2026-10-01T08:17:00"))),
+        )
+        val row = upcomingJourneys(listOf(stale, timed("KCI:C", "2026-10-01T08:10:00")), now).first()
+
+        assertEquals(stale, row.journey)
+        assertEquals(listOf(wib("2026-10-01T08:06:00"), wib("2026-10-01T08:17:00")), row.departures.map { it.departureAt })
+    }
+
+    @Test
+    fun `an untimed row has no departures`() {
+        assertEquals(emptyList<JourneyDeparture>(), upcomingJourneys(listOf(untimed("TJ:1")), now).single().departures)
     }
 }
