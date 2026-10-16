@@ -3,6 +3,7 @@ package id.shiorilabs.commute.wear
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.lifecycle.lifecycleScope
 import id.shiorilabs.commute.core.trip.PositionSource
 import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripLocationMode
@@ -13,18 +14,39 @@ import id.shiorilabs.commute.core.trip.TripStop
 import id.shiorilabs.commute.core.wearable.WearLine
 import id.shiorilabs.commute.core.wearable.WearTrip
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import java.time.Instant
 
 /**
  * The trip screen on a made-up trip, picked by the `scene` extra: `board`, `ride`, `alight`,
- * `change`, `late`, `busboard`, `bus` or `busalight`. Debug builds only, for looking at the
- * screen on an emulator with no phone paired.
+ * `change`, `late`, `busboard`, `bus` or `busalight`; `seed` and `unseed` for the complications.
+ * Debug builds only, for looking at the screen on an emulator with no phone paired.
  */
 class DemoActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val trip = demoTrip(intent.getStringExtra("scene") ?: "ride", Instant.now())
+        val scene = intent.getStringExtra("scene") ?: "ride"
+        // `seed` (with `trip` naming the scene to run) and `unseed` fill and empty the watch's own
+        // Data Layer instead, for the complications.
+        when (scene) {
+            "seed" -> {
+                val now = Instant.now()
+                lifecycleScope.launch {
+                    seedDemo(this@DemoActivity, demoTrip(intent.getStringExtra("trip") ?: "ride", now), now)
+                    finish()
+                }
+                return
+            }
+            "unseed" -> {
+                lifecycleScope.launch {
+                    unseedDemo(this@DemoActivity)
+                    finish()
+                }
+                return
+            }
+        }
+        val trip = demoTrip(scene, Instant.now())
         setContent { WatchApp(flowOf(trip), PhoneLink(this)) }
     }
 }
