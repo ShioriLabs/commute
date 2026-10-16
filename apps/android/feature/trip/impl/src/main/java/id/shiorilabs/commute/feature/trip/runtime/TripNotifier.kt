@@ -80,7 +80,7 @@ class TripNotifier @Inject constructor(
                 },
             )
             .setContentTitle(copy.title(headline))
-            .setContentText(copy.detail(trip, headline))
+            .setContentText(copy.detail(trip, headline, clock.instant()))
             .setSubText(copy.source(trip))
             .setContentIntent(openTrip())
             .setOngoing(true)
