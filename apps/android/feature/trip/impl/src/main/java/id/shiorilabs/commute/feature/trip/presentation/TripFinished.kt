@@ -58,6 +58,10 @@ import id.shiorilabs.commute.core.ui.components.SectionLabel
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.motion.IosSpringEasing
 import id.shiorilabs.commute.core.ui.motion.rememberReducedMotion
+import id.shiorilabs.commute.core.ui.theme.Slate100
+import id.shiorilabs.commute.core.ui.theme.Slate200
+import id.shiorilabs.commute.core.ui.theme.Slate500
+import id.shiorilabs.commute.core.ui.theme.Slate900
 import id.shiorilabs.commute.core.ui.theme.TABULAR
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.trip.R
@@ -68,9 +72,6 @@ import java.time.Duration
 private val DoneInk = Color(0xFF0F172A)
 private val DoneMuted = Color(0xFF94A3B8)
 private val DoneTrack = Color(0xFF334155)
-private val DoneTile = Color(0xFFF1F5F9)
-private val DoneLine = Color(0xFFE2E8F0)
-private val DoneLabel = Color(0xFF64748B)
 
 /**
  * The trip page's last word on a trip that has ended: the board's plate saying where the rider got
@@ -107,10 +108,10 @@ internal fun TripFinished(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
                 .clip(RoundedCornerShape(16.dp))
-                .border(1.dp, DoneLine, RoundedCornerShape(16.dp)),
+                .border(1.dp, Slate200, RoundedCornerShape(16.dp)),
         ) {
             rides.forEachIndexed { index, ride ->
-                if (index > 0) Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(DoneLine))
+                if (index > 0) Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Slate200))
                 RideRow(ride, lines, copy)
             }
         }
@@ -336,19 +337,19 @@ private fun Figure(value: String, label: String, modifier: Modifier = Modifier) 
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(DoneTile)
+            .background(Slate100)
             .padding(horizontal = 14.dp, vertical = 12.dp)
             .semantics(mergeDescendants = true) {},
     ) {
         // Shrinks to fit a narrow tile ("Langsung") rather than cut it off.
-        val style = MaterialTheme.typography.titleLarge.merge(color = DoneInk, fontWeight = FontWeight.Bold, fontFeatureSettings = TABULAR)
+        val style = MaterialTheme.typography.titleLarge.merge(color = Slate900, fontWeight = FontWeight.Bold, fontFeatureSettings = TABULAR)
         BasicText(
             text = value,
             style = style,
             maxLines = 1,
             autoSize = TextAutoSize.StepBased(minFontSize = 14.sp, maxFontSize = style.fontSize, stepSize = 1.sp),
         )
-        Text(text = label, style = MaterialTheme.typography.bodySmall, color = DoneLabel)
+        Text(text = label, style = MaterialTheme.typography.bodySmall, color = Slate500)
     }
 }
 
@@ -374,10 +375,10 @@ private fun RideRow(ride: TripLeg.Ride, lines: Map<String, LineInfo>, copy: Trip
                 text = stringResource(R.string.trip_done_ride, ride.stops.first().name, ride.stops.last().name),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
-                color = DoneInk,
+                color = Slate900,
             )
             val way = listOfNotNull(copy.rideName(ride), rideDirection(ride))
-            Text(text = way.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = DoneLabel)
+            Text(text = way.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = Slate500)
         }
         val departs = ride.departureAt
         val arrives = ride.arrivalAt
@@ -385,7 +386,7 @@ private fun RideRow(ride: TripLeg.Ride, lines: Map<String, LineInfo>, copy: Trip
             Text(
                 text = "${formatClock(departs)}–${formatClock(arrives)}",
                 style = MaterialTheme.typography.bodySmall.merge(fontFeatureSettings = TABULAR),
-                color = DoneLabel,
+                color = Slate500,
             )
         }
     }
