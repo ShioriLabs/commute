@@ -15,8 +15,8 @@ android {
 
     defaultConfig {
         applicationId = "id.shiorilabs.commute"
-        versionCode = 4
-        versionName = "1.0.0 (Closed Test)"
+        versionCode = 5
+        versionName = "1.0.0 (Closed Test 2)"
 
         // Where crash reports go. A DSN only lets an app send events, so it is no secret.
         buildConfigField(
