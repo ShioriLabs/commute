@@ -46,6 +46,16 @@ class LegDeparturesTest {
     }
 
     @Test
+    fun `a train that left within the last minute is still the one`() {
+        assertEquals("a2", resolveTimedLegs(legs, emptyMap(), notBefore = at("07:20").plusSeconds(59)).first().chosen.tripId)
+    }
+
+    @Test
+    fun `a train gone for more than a minute is passed over`() {
+        assertEquals("a3", resolveTimedLegs(legs, emptyMap(), notBefore = at("07:20").plusSeconds(61)).first().chosen.tripId)
+    }
+
+    @Test
     fun `when every first train has gone the answer stands as it is`() {
         assertEquals(listOf("a1", "b1"), resolveTimedLegs(legs, emptyMap(), notBefore = at("09:00")).map { it.chosen.tripId })
     }
