@@ -65,15 +65,13 @@ class BaselineProfileGenerator {
                 device.findObject(By.clazz(EDIT_TEXT_CLASS))?.text = SEARCH_QUERY
                 device.wait(Until.hasObject(By.text(SEARCH_RESULT)), CONTENT_TIMEOUT_MS)
                 device.findObject(By.text(SEARCH_RESULT))?.click() ?: return@runCatching
-                scrollStationPage()
+                // The badge, buttons and line badges sit at the top, so scroll the page last.
                 openCrowdLegend()
                 openTimetable()
                 openLine()
                 planTripHere()
-                device.pressBack()
-                device.waitForIdle()
-                device.pressBack()
-                device.waitForIdle()
+                scrollStationPage()
+                backToHome()
             }
 
             // A saved station and a saved route from the feed: their pages flying in.
@@ -95,17 +93,28 @@ class BaselineProfileGenerator {
                 device.wait(Until.hasObject(By.desc(SEARCH_CARD_DESCRIPTION)), CONTENT_TIMEOUT_MS)
                 device.findObject(By.desc(SEARCH_CARD_DESCRIPTION))?.click() ?: return@runCatching
                 device.wait(Until.hasObject(By.clazz(EDIT_TEXT_CLASS)), CONTENT_TIMEOUT_MS)
-                device.findObject(By.clazz(EDIT_TEXT_CLASS))?.text = station
-                device.wait(Until.hasObject(By.text(station)), CONTENT_TIMEOUT_MS)
-                device.findObject(By.text(station))?.click() ?: return@runCatching
+                // Typed in lower case, so the field never matches the result it is looking for.
+                device.findObject(By.clazz(EDIT_TEXT_CLASS))?.text = station.lowercase()
+                device.wait(Until.hasObject(By.textStartsWith(station)), CONTENT_TIMEOUT_MS)
+                device.findObject(By.textStartsWith(station))?.click() ?: return@runCatching
                 device.wait(Until.hasObject(By.desc(SAVE_STATION_DESCRIPTION)), CONTENT_TIMEOUT_MS)
                 device.findObject(By.desc(SAVE_STATION_DESCRIPTION))?.click()
                 device.waitForIdle()
-                device.pressBack()
-                device.waitForIdle()
-                device.pressBack()
-                device.waitForIdle()
+                backToHome()
             }
+        }
+    }
+
+    /**
+     * Backs out of whatever is open until the rail's search card shows. A station opened from search
+     * takes one back to return to the search page, and another only to drop its keyboard, so the
+     * count differs by screen; looking for the card is what tells home has been reached.
+     */
+    private fun MacrobenchmarkScope.backToHome() {
+        repeat(BACK_TO_HOME_LIMIT) {
+            if (device.hasObject(By.desc(SEARCH_CARD_DESCRIPTION))) return
+            device.pressBack()
+            device.waitForIdle()
         }
     }
 
@@ -233,9 +242,23 @@ class BaselineProfileGenerator {
             device.findObject(By.clazz(EDIT_TEXT_CLASS))?.text = OTW_ORIGIN_QUERY
             device.wait(Until.hasObject(By.textStartsWith(OTW_ORIGIN)), CONTENT_TIMEOUT_MS)
             device.findObject(By.textStartsWith(OTW_ORIGIN))?.click() ?: return@runCatching
-            device.wait(Until.hasObject(By.textEndsWith(OTW_OPTIONS_SUFFIX)), CONTENT_TIMEOUT_MS)
-            swipeDepartureChips()
+            device.wait(Until.hasObject(By.textContains(ROUTE_OPTION_TIMES)), CONTENT_TIMEOUT_MS)
             openRouteDetail()
+            device.pressBack()
+            device.waitForIdle()
+        }
+    }
+
+    /** The first route option opened into its detail: chips swiped, scrolled, saved to the feed. */
+    private fun MacrobenchmarkScope.openRouteDetail() {
+        runCatching {
+            device.findObject(By.textContains(ROUTE_OPTION_TIMES))?.click() ?: return@runCatching
+            device.wait(Until.hasObject(By.textStartsWith(DEPARTURE_CHIP_ARRIVES)), CONTENT_TIMEOUT_MS)
+            swipeDepartureChips()
+            scrollStationPage()
+            // Saved here so the feed has a route to open from.
+            device.findObject(By.desc(SAVE_ROUTE_DESCRIPTION))?.click()
+            device.waitForIdle()
             device.pressBack()
             device.waitForIdle()
         }
@@ -244,28 +267,14 @@ class BaselineProfileGenerator {
     /** The departure chips run off the screen: swipe them both ways and pick another train. */
     private fun MacrobenchmarkScope.swipeDepartureChips() {
         runCatching {
-            val row = device.findObject(By.descStartsWith(DEPARTURE_CHIP_DESCRIPTION))?.parent
+            val y = device.findObject(By.textStartsWith(DEPARTURE_CHIP_ARRIVES))?.visibleCenter?.y
                 ?: return@runCatching
-            row.setGestureMargin(device.displayWidth / 10)
-            row.fling(Direction.RIGHT)
+            val width = device.displayWidth
+            device.swipe(width * 9 / 10, y, width / 10, y, CHIP_SWIPE_STEPS)
             device.waitForIdle()
-            row.fling(Direction.LEFT)
+            device.swipe(width / 10, y, width * 9 / 10, y, CHIP_SWIPE_STEPS)
             device.waitForIdle()
-            device.findObject(By.descStartsWith(DEPARTURE_CHIP_DESCRIPTION))?.click()
-            device.waitForIdle()
-        }
-    }
-
-    /** The first route option opened into its detail, scrolled, saved to the feed, and closed. */
-    private fun MacrobenchmarkScope.openRouteDetail() {
-        runCatching {
-            device.findObject(By.textStartsWith(ROUTE_OPTION_ARRIVES))?.click() ?: return@runCatching
-            device.wait(Until.hasObject(By.scrollable(true)), CONTENT_TIMEOUT_MS)
-            scrollStationPage()
-            // Saved here so the feed has a route to open from.
-            device.findObject(By.desc(SAVE_ROUTE_DESCRIPTION))?.click()
-            device.waitForIdle()
-            device.pressBack()
+            device.findObject(By.textStartsWith(DEPARTURE_CHIP_ARRIVES))?.click()
             device.waitForIdle()
         }
     }
@@ -296,6 +305,9 @@ class BaselineProfileGenerator {
         const val FAST_FLING_FACTOR = 4
         const val REFRESH_SWIPE_STEPS = 20
 
+        /** The most backs from a station opened through search to the feed: station, keyboard, search. */
+        const val BACK_TO_HOME_LIMIT = 4
+
         /** The home rail's search card, as it is read out (saved_nav_search_description). */
         const val SEARCH_CARD_DESCRIPTION = "Cari stasiun, rute, dan tarif"
 
@@ -310,12 +322,12 @@ class BaselineProfileGenerator {
         const val OTW_ORIGIN_QUERY = "sudirman"
         const val OTW_ORIGIN = "Sudirman"
 
-        /** The heading over the route options (journey_options): "3 pilihan rute". */
-        const val OTW_OPTIONS_SUFFIX = "pilihan rute"
+        /** A route option's departure and arrival times, "15.27 → 15.37", on the card for the one route. */
+        const val ROUTE_OPTION_TIMES = "→"
 
-        /** A departure chip (journey_pick_description) and a route option's arrival (journey_clock_arrives). */
-        const val DEPARTURE_CHIP_DESCRIPTION = "Pilih kereta berangkat"
-        const val ROUTE_OPTION_ARRIVES = "Tiba "
+        /** A departure chip on the route's detail, under its time: "tiba 15.45" (journey_pick_arrives). */
+        const val DEPARTURE_CHIP_ARRIVES = "tiba "
+        const val CHIP_SWIPE_STEPS = 15
 
         /** The route detail's save button (journey_save_route). */
         const val SAVE_ROUTE_DESCRIPTION = "Simpan rute ini ke beranda"
