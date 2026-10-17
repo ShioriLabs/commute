@@ -10,6 +10,9 @@ import java.time.Instant
 /** How many boardings a saved pair's card shows. */
 const val SAVED_ROUTE_ROWS = 3
 
+/** A train that left this long ago still counts as boardable, matching the web's "Berangkat sekarang" minute. */
+const val DEPARTED_GRACE_S = 60L
+
 /**
  * The next boardings of [journeys] at [now], at most [limit].
  *
@@ -56,7 +59,7 @@ data class UpcomingRow(
 fun liveDeparturesOf(journey: Journey, now: Instant): List<JourneyDeparture> {
     val boardsAt = boardsAtOf(journey) ?: return emptyList()
     return (listOf(JourneyDeparture(boardsAt, journey.arrivalAt)) + journey.moreDepartures)
-        .filter { !it.departureAt.isBefore(now) }
+        .filter { !it.departureAt.isBefore(now.minusSeconds(DEPARTED_GRACE_S)) }
 }
 
 /**

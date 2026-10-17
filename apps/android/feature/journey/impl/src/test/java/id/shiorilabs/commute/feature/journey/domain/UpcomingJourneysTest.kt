@@ -33,6 +33,16 @@ class UpcomingJourneysTest {
     }
 
     @Test
+    fun `a train that left within the last minute is kept, an older one dropped`() {
+        val rows = upcomingJourneys(
+            listOf(timed("KCI:B", "2026-10-01T07:59:30"), timed("KCI:C", "2026-10-01T07:58:30")),
+            now,
+        )
+
+        assertEquals(listOf(wib("2026-10-01T07:59:30")), rows.map { it.departures.first().departureAt })
+    }
+
+    @Test
     fun `untimed journeys follow the timed ones, in the planner's order`() {
         val rows = upcomingJourneys(listOf(untimed("TJ:1"), timed("KCI:B", "2026-10-01T08:20:00"), untimed("TJ:9")), now)
 

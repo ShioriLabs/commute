@@ -18,6 +18,9 @@ import kotlin.math.roundToInt
 /** How many departures a destination row shows: the lead one and two after it. */
 private const val UPCOMING_LIMIT = 3
 
+/** Seconds a just-departed train stays listed, matching the web LineCard's 60 s. */
+private const val DEPARTED_GRACE_S = 60
+
 /**
  * The lead departure stays relative ("12 mnt") up to this many minutes out, so it reads in the same
  * units across a typical headway rather than flipping to a clock time halfway through.
@@ -126,7 +129,7 @@ private fun DestinationTimetable.sameRunAs(other: DestinationTimetable) = boundF
  */
 internal fun nextDepartures(departures: List<Departure>, now: LocalDateTime, limit: Int = UPCOMING_LIMIT): List<Departure> {
     val nowSecond = now.toLocalTime().toSecondOfDay()
-    val cutoff = nowSecond - 60
+    val cutoff = nowSecond - DEPARTED_GRACE_S
     val rollsOver = now.hour >= 21
 
     fun sortKey(minute: Int) = minute * 60 + if (rollsOver && minute < 4 * 60) 24 * 3600 else 0
