@@ -110,7 +110,7 @@ private fun resolve(legs: List<JourneyLeg>, picks: Map<Int, String>, notBefore: 
         fun blockedOf(d: LegDeparture): Blocked? = when {
             earliest != null && d.departureAt.isBefore(earliest) -> Blocked.MISSED
             // The first train has no earlier ride to follow, but the clock still says it has gone.
-            earliest == null && notBefore != null && d.departureAt.isBefore(notBefore) -> Blocked.MISSED
+            earliest == null && notBefore != null && d.departureAt.isBefore(notBefore.minusSeconds(DEPARTED_GRACE_S)) -> Blocked.MISSED
             d.tripId in finishing.getValue(index) -> null
             else -> Blocked.NO_ONWARD
         }
