@@ -554,6 +554,69 @@ class TripControllerImplTest {
         assertNull(trip.replaced)
     }
 
+    /**
+     * The 08.20 with a timetable padded like 5152C's on 16 Oct: ten minutes' run to Manggarai, due
+     * there at 08.28, where the 08.10 is due about 08.14.
+     */
+    private val paddedNextTrain = nextTrain.copy(
+        stops = listOf(SUDIRMAN, MANGGARAI.copy(scheduledAt = minutes(28)), TEBET.copy(scheduledAt = minutes(30)), CAWANG),
+        arrivalAt = minutes(33),
+    )
+
+    private fun manggaraiToTebet(fraction: Double) = GeoPoint(
+        MANGGARAI.latitude!! + (TEBET.latitude!! - MANGGARAI.latitude!!) * fraction,
+        MANGGARAI.longitude!! + (TEBET.longitude!! - MANGGARAI.longitude!!) * fraction,
+    )
+
+    @Test
+    fun `a train that leaves a station well before the one swapped in could is the late one it replaced`() = runTest {
+        // As at Sudirman on 16 Oct: the 08.10 swapped for the 08.20 on the platform, then pulling
+        // out at 08.19.45, ten minutes late, when the 08.20 was due. Nothing yet tells them apart.
+        store.trip = onThePlatform()
+        onward = TripPlan(listOf(paddedNextTrain))
+        val controller = controller(at = minutes(11).plusSeconds(30))
+        runCurrent()
+        controller.onFix(Fix(GeoPoint(SUDIRMAN.latitude!!, SUDIRMAN.longitude!!), 10f, minutes(19).plusSeconds(30), speedMps = 0f))
+        controller.onFix(Fix(sudirmanToManggarai(0.05), 10f, minutes(19).plusSeconds(50), speedMps = 6f))
+        controller.onFix(Fix(sudirmanToManggarai(0.07), 10f, minutes(19).plusSeconds(55), speedMps = 8f))
+        controller.active.value!!.let {
+            assertEquals(minutes(20), it.plan.ride(2).departureAt)
+            assertEquals(TripPhase.RIDING, it.state.phase)
+        }
+
+        // Out of Manggarai at 08.24, four minutes before the 08.20 is due there: not the 08.20.
+        controller.onFix(Fix(GeoPoint(MANGGARAI.latitude!!, MANGGARAI.longitude!!), 10f, minutes(23), speedMps = 0f))
+        controller.onFix(Fix(GeoPoint(MANGGARAI.latitude!!, MANGGARAI.longitude!!), 10f, minutes(24), speedMps = 0f))
+        controller.onFix(Fix(manggaraiToTebet(0.2), 10f, minutes(24).plusSeconds(30), speedMps = 12f))
+
+        val trip = controller.active.value!!
+        assertEquals(plan, trip.plan)
+        assertEquals(TripPhase.RIDING, trip.state.phase)
+        // Late against the 08.10, not pinned early against the 08.20.
+        assertTrue(trip.state.clockOffsetS in 400L..800L)
+    }
+
+    @Test
+    fun `a swapped-in train that waits out its time at a station is the one ridden`() = runTest {
+        // The 08.20 itself, on time: in at Manggarai early, held there until it's due at 08.28.
+        store.trip = onThePlatform()
+        onward = TripPlan(listOf(paddedNextTrain))
+        val controller = controller(at = minutes(11).plusSeconds(30))
+        runCurrent()
+        controller.onFix(Fix(GeoPoint(SUDIRMAN.latitude!!, SUDIRMAN.longitude!!), 10f, minutes(19).plusSeconds(50), speedMps = 0f))
+        controller.onFix(Fix(sudirmanToManggarai(0.05), 10f, minutes(20).plusSeconds(10), speedMps = 6f))
+        controller.onFix(Fix(sudirmanToManggarai(0.07), 10f, minutes(20).plusSeconds(15), speedMps = 8f))
+        assertEquals(TripPhase.RIDING, controller.active.value!!.state.phase)
+        controller.onFix(Fix(GeoPoint(MANGGARAI.latitude!!, MANGGARAI.longitude!!), 10f, minutes(23), speedMps = 0f))
+        controller.onFix(Fix(GeoPoint(MANGGARAI.latitude!!, MANGGARAI.longitude!!), 10f, minutes(28), speedMps = 0f))
+        controller.onFix(Fix(manggaraiToTebet(0.2), 10f, minutes(28).plusSeconds(30), speedMps = 12f))
+
+        val trip = controller.active.value!!
+        assertEquals(minutes(20), trip.plan.ride(2).departureAt)
+        assertEquals(TripPhase.RIDING, trip.state.phase)
+    }
+
+
     /** [onThePlatform], seen there at 08.10.50, before the 08.10 was a minute late. */
     private fun onThePlatformInTime(): ActiveTrip = onThePlatform().let {
         it.copy(state = it.state.copy(confirmedAt = minutes(10).plusSeconds(50)))
