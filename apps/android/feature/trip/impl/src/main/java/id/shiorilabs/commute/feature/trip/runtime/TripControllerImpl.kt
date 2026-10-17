@@ -17,6 +17,8 @@ import id.shiorilabs.commute.core.trip.TripPhase
 import id.shiorilabs.commute.core.trip.TripState
 import id.shiorilabs.commute.core.trip.expectedAlightingAt
 import id.shiorilabs.commute.core.trip.nextRideReadyAt
+import id.shiorilabs.commute.core.trip.scheduledAtStop
+import id.shiorilabs.commute.core.trip.seenAt
 import id.shiorilabs.commute.core.trip.walkEndsAt
 import id.shiorilabs.commute.core.trip.TripEvent
 import id.shiorilabs.commute.core.trip.TripPlan
@@ -195,7 +197,8 @@ class TripControllerImpl @Inject constructor(
         restored.join()
         mutex.withLock {
             val before = _active.value ?: return
-            val (trip, step) = boardedEarlier(before, event, TripEngine.step(before.plan, before.state, event))
+            val (boarded, stepped) = boardedEarlier(before, event, TripEngine.step(before.plan, before.state, event))
+            val (trip, step) = leftTooEarly(boarded, event, stepped)
             logStep(event, before.state, step.state)
             apply(trip, step)
         }
@@ -204,8 +207,9 @@ class TripControllerImpl @Inject constructor(
     /**
      * Boarded a ride that was swapped for a later one: well before the later one could have left
      * (seen that far ahead of it, or "Udah naik" before it was due), the rider is on the one it
-     * replaced, which ran late. Back to that plan then, the lateness measured against it. Either way
-     * the swap is settled.
+     * replaced, which ran late. Back to that plan then, the lateness measured against it. Boarded
+     * about when the later one was due, it could be either, the earlier one late enough to leave
+     * with the later one's time: that's left to [leftTooEarly].
      */
     private fun boardedEarlier(trip: ActiveTrip, event: TripEvent, step: TripStep): Pair<ActiveTrip, TripStep> {
         val replaced = trip.replaced ?: return trip to step
@@ -214,10 +218,46 @@ class TripControllerImpl @Inject constructor(
         if (trip.state.legIndex > leg) return trip.copy(replaced = null) to step
         if (!waiting || (step.state.legIndex == leg && step.state.phase == TripPhase.WAITING_TO_BOARD)) return trip to step
         val untilDue = trip.plan.ride(leg).departureAt?.let { Duration.between(event.at, it).seconds } ?: 0
-        if (maxOf(-step.state.clockOffsetS, untilDue) < EARLIER_TRAIN.seconds) return trip.copy(replaced = null) to step
+        if (maxOf(-step.state.clockOffsetS, untilDue) < EARLIER_TRAIN.seconds) {
+            val aboard = step.state.legIndex == leg && step.state.phase == TripPhase.RIDING
+            val either = replaced.takeIf { aboard && sameRide(it.plan, trip.plan, leg) }
+            return trip.copy(replaced = null, mightBeOn = either) to step
+        }
         log.event("earlier", mapOf("leg" to leg, "departs" to replaced.plan.ride(leg).departureAt))
         runtime.rerouteTakenBack(leg)
         return trip.copy(plan = replaced.plan, replaced = null) to TripEngine.step(replaced.plan, trip.state, event)
+    }
+
+    /**
+     * Aboard a train that could be either of two ([ActiveTrip.mightBeOn]): one leaving a station on
+     * the way [LEFT_EARLY] or more before the plan's train is due to is not that train, when the
+     * earlier one it was swapped from could have. A train doesn't leave early; it waits out a padded
+     * timetable. Sudirman's on 16 Oct was the 18.57 five and a half minutes late, taken for the 19.02,
+     * whose run is padded ten minutes to Manggarai: it left there 19.08.52, four minutes before the
+     * 19.02 was due to, the board pinned early for the whole ride.
+     */
+    private fun leftTooEarly(trip: ActiveTrip, event: TripEvent, step: TripStep): Pair<ActiveTrip, TripStep> {
+        val earlier = trip.mightBeOn ?: return trip to step
+        val leg = earlier.legIndex
+        val state = step.state
+        if (state.legIndex != leg || state.phase != TripPhase.RIDING) return trip.copy(mightBeOn = null) to step
+        val ride = trip.plan.ride(leg)
+        val left = (1 until ride.lastIndex).lastOrNull { it < state.confirmedPosition && state.seenAt(leg, it) != null }
+            ?: return trip to step
+        val leftAt = state.seenAt(leg, left)!!
+        val ahead = trip.plan.scheduledAtStop(leg, left)?.let { Duration.between(leftAt, it) } ?: return trip to step
+        val earlierAhead = earlier.plan.scheduledAtStop(leg, left)?.let { Duration.between(leftAt, it) } ?: return trip to step
+        if (ahead < LEFT_EARLY || earlierAhead >= LEFT_EARLY) return trip to step
+        log.event("earlier", mapOf("leg" to leg, "departs" to earlier.plan.ride(leg).departureAt, "left" to left, "aheadS" to ahead.seconds))
+        runtime.rerouteTakenBack(leg)
+        return trip.copy(plan = earlier.plan, mightBeOn = null) to TripEngine.step(earlier.plan, trip.state, event)
+    }
+
+    /** Whether ride [legIndex] of [a] and [b] runs the same line between the same stops: one train or the other. */
+    private fun sameRide(a: TripPlan, b: TripPlan, legIndex: Int): Boolean {
+        val one = a.legs.getOrNull(legIndex) as? TripLeg.Ride ?: return false
+        val other = b.legs.getOrNull(legIndex) as? TripLeg.Ride ?: return false
+        return one.line == other.line && one.stops.map { it.id } == other.stops.map { it.id }
     }
 
     /**
@@ -494,6 +534,12 @@ class TripControllerImpl @Inject constructor(
          * don't leave two minutes early; tonight's were five and six ahead.
          */
         val EARLIER_TRAIN: Duration = Duration.ofMinutes(2)
+
+        /**
+         * Out of a station this far ahead of a train's time there, it's not that train: 16 Oct's left
+         * Manggarai four minutes before the 19.02 was due, and five and a half after the 18.57.
+         */
+        val LEFT_EARLY: Duration = Duration.ofMinutes(2)
     }
 }
 

@@ -17,6 +17,9 @@ import java.time.Instant
  * @property reminder How getting off is told, past the notification: this trip only.
  * @property replaced The plan as it was before a ride was last swapped for a later one, until the
  *   rider boards: the train it was swapped from may only have run late, and the rider be on it.
+ * @property mightBeOn [replaced] once the rider has boarded about when the later train was due, so
+ *   either could be the one they're on: kept for the rest of that ride, until a station the train
+ *   leaves says which.
  */
 @Serializable
 data class ActiveTrip(
@@ -25,6 +28,7 @@ data class ActiveTrip(
     val origin: Route.Trip,
     val reminder: TripReminder = TripReminder.NONE,
     val replaced: ReplacedPlan? = null,
+    val mightBeOn: ReplacedPlan? = null,
 )
 
 /**
