@@ -9,8 +9,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.ui.components.VerticalSpacer
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
+import id.shiorilabs.commute.feature.search.domain.SearchLine
 import id.shiorilabs.commute.feature.search.domain.Searchable
 
 /** Every rail line as a coloured chip, in one wrapping group. */
@@ -42,5 +45,30 @@ fun LineChips(
                 )
             }
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun LineChipsPreview() {
+    val lines = listOf(
+        "Lin Bogor" to "#EE3D43",
+        "Lin Cikarang" to "#25B8EB",
+        "Lin Rangkasbitung" to "#7BC043",
+        "Lin Tanjung Priok" to "#E5A5C8",
+        "Lin Lingkar Cikarang" to "#F7941D",
+    ).map { (name, color) ->
+        Searchable.Line(
+            title = name,
+            to = "/lines/KCI/$name",
+            keywords = emptyList(),
+            subtitle = null,
+            score = null,
+            operator = "KCI",
+            line = SearchLine(name, name.takeLast(1), color, "KCI"),
+        )
+    }
+    CommutePreviewScaffold {
+        LineChips(title = "Semua lin", lines = lines, onClick = {}, modifier = Modifier.padding(vertical = 16.dp))
     }
 }

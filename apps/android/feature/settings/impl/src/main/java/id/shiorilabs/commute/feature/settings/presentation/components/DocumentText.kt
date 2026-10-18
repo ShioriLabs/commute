@@ -1,5 +1,7 @@
 package id.shiorilabs.commute.feature.settings.presentation.components
 
+import androidx.compose.ui.tooling.preview.Preview
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.themed
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -152,5 +154,18 @@ internal fun DocumentSection(
     ) {
         DocumentHeading(title)
         content()
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun DocumentSectionPreview() {
+    CommutePreviewScaffold {
+        DocumentBody {
+            DocumentSection(title = "1. Data yang kami kumpulkan") {
+                HtmlText("Kami hanya menyimpan <b>stasiun favorit</b> di perangkatmu. <a href=\"route:privacy-policy\">Kebijakan privasi</a>")
+                DocumentBullets(items = listOf("<b>Lokasi:</b> hanya saat kamu mengizinkan", "Log kerusakan tanpa identitas"))
+            }
+        }
     }
 }

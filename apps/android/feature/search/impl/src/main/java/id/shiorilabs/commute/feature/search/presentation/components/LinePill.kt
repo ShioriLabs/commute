@@ -1,6 +1,8 @@
 package id.shiorilabs.commute.feature.search.presentation.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
@@ -9,10 +11,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.ui.ext.Foreground
 import id.shiorilabs.commute.core.ui.ext.foreground
 import id.shiorilabs.commute.core.ui.ext.parseHexColor
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.feature.search.domain.SearchLine
 
 /** Near-black text on a pale line colour, the web's `text-slate-900`. */
@@ -38,4 +42,15 @@ fun LinePill(
         fontWeight = FontWeight.SemiBold,
         color = if (color.foreground() == Foreground.LIGHT) Color.White else DarkInk,
     )
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun LinePillPreview() {
+    CommutePreviewScaffold {
+        Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            LinePill(SearchLine("Lin Bogor", "B", "#EE3D43", "KCI"))
+            LinePill(SearchLine("Lin Lingkar Cikarang", "C", "#F7D117", "KCI"))
+        }
+    }
 }

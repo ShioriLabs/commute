@@ -6,6 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -22,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
@@ -39,7 +41,9 @@ import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
 import androidx.wear.watchface.complications.datasource.ComplicationDataSourceService
+import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.tripcopy.R as CopyR
+import id.shiorilabs.commute.core.wearable.WearDay
 import id.shiorilabs.commute.core.wearable.WearDirection
 import id.shiorilabs.commute.core.wearable.WearStation
 import kotlinx.coroutines.launch
@@ -178,3 +182,23 @@ private fun NoStations(phone: PhoneLink) {
 private val DOT = 12.dp
 private val INSET = 12.dp
 private val PLATFORM_SLASH = Regex("\\s*/\\s*")
+
+@Preview(widthDp = 192, heightDp = 192, showBackground = true, backgroundColor = 0xFF000000)
+@Composable
+private fun DeparturesChoicesPreview() {
+    val direction = WearDirection(
+        key = "KCI:B|G1",
+        lineKey = "KCI:B",
+        lineName = "Lin Bogor",
+        color = 0xFFEE3D43.toInt(),
+        label = "Bogor",
+        platform = "1/2",
+        days = mapOf(ServiceDayName.WD to WearDay(start = 264, minutes = listOf(264, 600, 610))),
+    )
+    CommuteWatchTheme {
+        Column {
+            StationButton(WearStation("KCI-MRI", "Manggarai", builtAt = 0, directions = listOf(direction)), onClick = {})
+            DirectionButton(direction, onClick = {})
+        }
+    }
+}

@@ -24,16 +24,19 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.ext.parseHexColor
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.Slate400
 import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.feature.journey.R
 import id.shiorilabs.commute.feature.journey.domain.RouteBarSegment
+import id.shiorilabs.commute.feature.journey.presentation.JourneyPreviewData
 
 /** The rail's gauge: the track is drawn at it rather than filled to the row, which reads as a button. */
 internal val RailWidth = 6.dp
@@ -157,5 +160,13 @@ internal fun WalkChip(distanceM: Int?) {
         if (distanceM != null) {
             Text(text = "$distanceM m", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun RouteBarPreview() {
+    CommutePreviewScaffold {
+        RouteBar(segments = JourneyPreviewData.routeBar, plateColor = Color.White, modifier = Modifier.padding(16.dp))
     }
 }

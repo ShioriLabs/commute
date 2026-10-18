@@ -1,5 +1,7 @@
 package id.shiorilabs.commute.feature.search.presentation.components
 
+import androidx.compose.ui.tooling.preview.Preview
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.themed
 import id.shiorilabs.commute.core.ui.theme.StoneFillDark
 import id.shiorilabs.commute.core.ui.theme.Slate900
@@ -28,6 +30,7 @@ import id.shiorilabs.commute.core.ui.ext.parseHexColor
 import id.shiorilabs.commute.core.ui.ext.themedTint
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.feature.search.R
+import id.shiorilabs.commute.feature.search.domain.SearchLine
 import id.shiorilabs.commute.feature.search.domain.Searchable
 import id.shiorilabs.commute.feature.station.presentation.sharedStationName
 
@@ -104,6 +107,32 @@ fun SavedChips(
                 .padding(horizontal = 14.dp, vertical = 6.dp)
                 .size(16.dp),
             tint = EditChipInk,
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun SavedChipsPreview() {
+    fun station(name: String, id: String, line: SearchLine) = Searchable.Station(
+        title = name,
+        to = "/stations/${id.replace('-', '/')}",
+        keywords = emptyList(),
+        subtitle = null,
+        score = null,
+        stationId = id,
+        operator = "KCI",
+        lines = listOf(line),
+    )
+    CommutePreviewScaffold {
+        SavedChips(
+            stations = listOf(
+                station("Manggarai", "KCI-MRI", SearchLine("Lin Bogor", "B", "#EE3D43", "KCI")),
+                station("Sudirman", "KCI-SUD", SearchLine("Lin Cikarang", "C", "#25B8EB", "KCI")),
+            ),
+            onClick = {},
+            onEdit = {},
+            modifier = Modifier.padding(horizontal = 16.dp),
         )
     }
 }

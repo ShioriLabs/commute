@@ -19,6 +19,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import id.shiorilabs.commute.core.constants.OPERATOR_NAMES
@@ -26,6 +27,7 @@ import id.shiorilabs.commute.core.time.formatClock
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.components.VerticalSpacer
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.Slate400
 import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.core.ui.theme.Slate700
@@ -39,8 +41,10 @@ import id.shiorilabs.commute.feature.journey.domain.formatKm
 import id.shiorilabs.commute.feature.journey.domain.formatRupiah
 import id.shiorilabs.commute.feature.journey.domain.isLastTrain
 import id.shiorilabs.commute.feature.journey.domain.leaveInOf
+import id.shiorilabs.commute.feature.journey.domain.resolveTimedLegs
 import id.shiorilabs.commute.feature.journey.domain.rides
 import id.shiorilabs.commute.feature.journey.domain.surchargedTransfers
+import id.shiorilabs.commute.feature.journey.presentation.JourneyPreviewData
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import java.time.Instant
 
@@ -208,5 +212,21 @@ private fun BreakdownRow(title: String, from: JourneyStop, to: JourneyStop, fare
             }
         }
         Text(text = fare, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Preview(showBackground = true, heightDp = 900)
+@Composable
+private fun JourneyDetailPreview() {
+    val journey = JourneyPreviewData.journey
+    CommutePreviewScaffold {
+        Column(modifier = Modifier.padding(horizontal = 32.dp, vertical = 16.dp)) {
+            JourneyDetail(
+                journey = journey,
+                lines = JourneyPreviewData.lines,
+                now = JourneyPreviewData.now,
+                timed = resolveTimedLegs(journey.legs, picks = emptyMap()),
+            )
+        }
     }
 }

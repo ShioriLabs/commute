@@ -1,11 +1,14 @@
 package id.shiorilabs.commute.feature.journey.presentation.components
 
+import androidx.compose.ui.tooling.preview.Preview
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.PageGround
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -55,6 +58,7 @@ import id.shiorilabs.commute.feature.journey.domain.Modes
 import id.shiorilabs.commute.feature.journey.domain.PaymentMethod
 import id.shiorilabs.commute.feature.journey.domain.WalkingSpeed
 import id.shiorilabs.commute.feature.journey.domain.formatDepartureLabel
+import id.shiorilabs.commute.feature.journey.presentation.JourneyPreviewData
 import java.time.Instant
 
 /** Which criteria sheet is up; one at a time. */
@@ -331,5 +335,35 @@ private fun CriteriaSheets(
             onSelect = { onChange(criteria.copy(departure = it)) },
             onDismiss = onClose,
         )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun CriteriaBarPreview() {
+    CommutePreviewScaffold {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            CriteriaBar(criteria = JourneyCriteria(), now = JourneyPreviewData.now, onChange = {})
+            CriteriaBar(
+                criteria = JourneyCriteria(
+                    paymentMethod = PaymentMethod.QRIS_TAP,
+                    departure = Departure.At(JourneyPreviewData.now.plusSeconds(40 * 60)),
+                    modes = Modes.RAIL,
+                    walking = WalkingSpeed.SLOW,
+                ),
+                now = JourneyPreviewData.now,
+                onChange = {},
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun WalkingIconPreview() {
+    CommutePreviewScaffold {
+        Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            WalkingSpeed.entries.forEach { WalkingIcon(speed = it, height = 28.dp, tint = Slate600) }
+        }
     }
 }

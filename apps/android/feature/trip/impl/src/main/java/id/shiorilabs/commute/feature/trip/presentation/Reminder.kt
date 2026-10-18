@@ -26,11 +26,13 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.ui.components.CommuteBottomSheet
 import id.shiorilabs.commute.core.ui.components.CommuteButton
 import id.shiorilabs.commute.core.ui.components.CommuteButtonVariant
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.Rose50
 import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.core.ui.theme.Slate900
@@ -129,4 +131,15 @@ private val TripReminder.icon: ImageVector get() = when (this) {
     TripReminder.PING -> CommuteIcons.ReminderPing
     TripReminder.WAKE -> CommuteIcons.ReminderWake
     TripReminder.NONE -> CommuteIcons.ReminderNone
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ReminderButtonPreview() {
+    CommutePreviewScaffold {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ReminderButton(reminder = TripReminder.NONE, onChange = {})
+            ReminderButton(reminder = TripReminder.PING, onChange = {})
+        }
+    }
 }

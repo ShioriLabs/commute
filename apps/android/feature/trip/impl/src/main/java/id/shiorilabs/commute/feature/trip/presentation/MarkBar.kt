@@ -1,5 +1,7 @@
 package id.shiorilabs.commute.feature.trip.presentation
 
+import androidx.compose.ui.tooling.preview.Preview
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.PageGround
 import id.shiorilabs.commute.core.ui.theme.Slate200
 import id.shiorilabs.commute.core.ui.theme.Slate500
@@ -122,5 +124,16 @@ private fun RowScope.MarkButton(kind: MarkKind, onClick: () -> Unit) {
             fontWeight = FontWeight.Bold,
             color = kind.ink,
         )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun MarkBarPreview() {
+    CommutePreviewScaffold {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            MarkBar(rows = markRows(manual = true, platform = false), bottomInset = 0.dp, onMark = {})
+            MarkBar(rows = markRows(manual = true, platform = true), bottomInset = 0.dp, onMark = {})
+        }
     }
 }
