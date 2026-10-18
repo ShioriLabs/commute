@@ -47,11 +47,18 @@ function corpus(): Criteria[] {
   const rnd = lcg(20260807)
   const out: Criteria[] = []
   for (let i = 0; i < 240; i++) {
+    const boardings = Math.floor(rnd() * 5)
+    const rideDistanceM = Math.floor(rnd() * 60000)
+    const walkDistanceM = Math.floor(rnd() * 1500)
+    const transfers = Math.floor(rnd() * 3)
     out.push({
-      boardings: Math.floor(rnd() * 5),
-      rideDistanceM: Math.floor(rnd() * 60000),
-      walkDistanceM: Math.floor(rnd() * 1500),
-      concourseWalkM: Math.floor(rnd() * 3) * 250,
+      boardings,
+      rideDistanceM,
+      walkDistanceM,
+      concourseWalkM: transfers * 250,
+      // One walk per transfer's worth of concourse. Derived rather than drawn,
+      // so adding the axis did not reshuffle every value after it.
+      walks: transfers,
       waitS: Math.floor(rnd() * 1800),
       fare: rnd() < 0.15 ? null : Math.floor(rnd() * 20000)
     })
@@ -83,8 +90,14 @@ describe('dominance, over the whole corpus', () => {
      * tolerance. Verdicts rose 2995 -> 3277, +9.4%, which is the change working:
      * pairs that used to escape domination by straddling a bucket boundary no
      * longer do. See the note in criteria.test.ts.
+     *
+     * Re-recorded 2026-10-18 for WALK_LEG_COST_M, a fixed cost per walk hop.
+     * The corpus gained a `walks` axis derived from its concourse draw, so the
+     * values themselves did not move. Verdicts rose 3277 -> 3279: a walk now
+     * costs something on the travel axis, so two more walk-heavy vectors fall to
+     * one that walks less.
      */
-    expect({ trueCount, checksum }).toEqual({ trueCount: 3277, checksum: 4023133581 })
+    expect({ trueCount, checksum }).toEqual({ trueCount: 3279, checksum: 827965652 })
   })
 
   /*
@@ -106,7 +119,8 @@ describe('dominance, over the whole corpus', () => {
 
   it('scores the corpus identically', () => {
     const total = SAMPLES.reduce((sum, c) => sum + rankScore(c), 0)
-    expect(Math.round(total)).toBe(10080311)
+    // Re-recorded 2026-10-18: +400 per walk hop (WALK_LEG_COST_M).
+    expect(Math.round(total)).toBe(10169111)
   })
 })
 
@@ -146,17 +160,22 @@ describe('bag, fed the whole corpus', () => {
    * and the floor has no protected-free victim to choose — it falls back to the
    * global worst, which is the old behaviour exactly. At maxSize 8 the cap
    * rarely binds on three lines, so there is little eviction to change.
+   *
+   * Re-recorded 2026-10-18 for WALK_LEG_COST_M. Eviction ranks by rankScore,
+   * which now charges each walk hop, so a walk-heavy label is the one that pays
+   * for the cap: maxSize 1 keeps one label fewer on the way in, and maxSize 8
+   * holds 40 in place of 107. maxSize 4 did not move.
    */
   it('keeps the same labels at maxSize 4', () => {
     expect(fingerprint(4)).toEqual({ kept: 24, size: 4, traces: '137,198,202,214' })
   })
 
   it('keeps the same labels at maxSize 1', () => {
-    expect(fingerprint(1)).toEqual({ kept: 11, size: 1, traces: '202' })
+    expect(fingerprint(1)).toEqual({ kept: 10, size: 1, traces: '202' })
   })
 
   it('keeps the same labels at maxSize 8', () => {
-    expect(fingerprint(8)).toEqual({ kept: 42, size: 8, traces: '29,107,137,152,174,198,202,214' })
+    expect(fingerprint(8)).toEqual({ kept: 42, size: 8, traces: '29,40,137,152,174,198,202,214' })
   })
 })
 
@@ -222,9 +241,14 @@ describe('planner output on a branching network', () => {
 
   it('returns the same journeys for A -> G', () => {
     expect(describeJourneys('KCI-A', 'MRTJ-G')).toEqual([
-      'R:X:KCI-A>KCI-B>KCI-C>KCI-D|W:KCI-D>LRTJ-H|W:LRTJ-H>MRTJ-G b1 r3200 w600 c350 t300 f4538 SHORTEST_WAIT+CHEAPEST',
+      /*
+       * Re-recorded 2026-10-18 for WALK_LEG_COST_M. The one-seat ride on Y now
+       * ranks above riding X short and walking twice, and the two-boarding
+       * ride-then-walk falls off the front entirely: it was only ever
+       * competitive while a walk cost nothing beyond its metres.
+       */
       'R:Y:KCI-A>MRTJ-F>MRTJ-G b1 r3900 w0 c0 t450 f4539 LEAST_WALKING',
-      'R:X:KCI-A>KCI-B>KCI-C|R:Z:KCI-C>LRTJ-H|W:LRTJ-H>MRTJ-G b2 r2900 w180 c100 t1050 f6031 -'
+      'R:X:KCI-A>KCI-B>KCI-C>KCI-D|W:KCI-D>LRTJ-H|W:LRTJ-H>MRTJ-G b1 r3200 w600 c350 t300 f4538 SHORTEST_WAIT+CHEAPEST'
     ])
   })
 
@@ -279,7 +303,10 @@ describe('planner output on a branching network', () => {
      * that survived on a rounding artefact, and on this fixture it also frees
      * bag space for genuinely different journeys to reach the front — which is
      * why a count can move either way and only reading the journeys settles it.
+     *
+     * Re-recorded 2026-10-18 for WALK_LEG_COST_M: 128 -> 124. A -> G above is
+     * one of the pairs that lost a journey, a ride-then-walk shortcut.
      */
-    expect({ journeys, checksum }).toEqual({ journeys: 128, checksum: 839605904 })
+    expect({ journeys, checksum }).toEqual({ journeys: 124, checksum: 997181446 })
   })
 })

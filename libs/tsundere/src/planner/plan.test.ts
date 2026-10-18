@@ -330,6 +330,37 @@ describe('plan', () => {
   })
 })
 
+/*
+ * Line X: A-B-C-D. Line Y: F-E-D. B -> F is a 300m walk.
+ *
+ * Riding X on to D and changing to Y there is 4000m aboard with no walk.
+ * Alighting at B and walking to F is 2700m aboard plus the walk, which by the
+ * metre alone (300 + the 250 concourse allowance, at twice riding) undercuts it
+ * — the shape newly measured transfers produced on 2026-10-18. WALK_LEG_COST_M
+ * is what puts riding on first.
+ */
+describe('walking to a line the vehicle reaches anyway', () => {
+  const shortcutGraph = buildGraph(
+    [
+      ...edge('X', 'KCI-A', 'KCI-B'),
+      ...edge('X', 'KCI-B', 'KCI-C'),
+      ...edge('X', 'KCI-C', 'KCI-D'),
+      ...edge('Y', 'KCI-F', 'KCI-E', 1700),
+      ...edge('Y', 'KCI-E', 'KCI-D')
+    ],
+    [
+      { fromStationId: 'KCI-B', toStationId: 'KCI-F', distance: 300 },
+      { fromStationId: 'KCI-F', toStationId: 'KCI-B', distance: 300 }
+    ]
+  )
+
+  it('rides on rather than getting off early to walk', () => {
+    const [best] = plan(shortcutGraph, 'KCI-A', 'KCI-E')
+    expect(best!.legs.map(l => l.type)).toEqual(['RIDE', 'RIDE'])
+    expect(best!.criteria.walks).toBe(0)
+  })
+})
+
 describe('defaults', () => {
   /*
    * The default bag size is a latency budget, not an algorithmic choice. It was

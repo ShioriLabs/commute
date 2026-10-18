@@ -30,6 +30,11 @@ export interface Criteria {
    */
   concourseWalkM: number
   /**
+   * Walk hops taken. Not compared on its own — the walk axis already answers
+   * "which walks less" — but every one of them is charged `WALK_LEG_COST_M`.
+   */
+  walks: number
+  /**
    * Expected wait, summed over boardings. Derived from headways, not from a
    * timetable — this engine does not know when the next bus is, only how often
    * one tends to come.
@@ -87,6 +92,25 @@ export const bucket = (value: number, size: number) => Math.round(value / size)
  */
 const WALK_DISTANCE_COST = 2
 
+/*
+ * What getting off to walk costs over and above the metres walked.
+ *
+ * Charging walking by the metre alone made a walk that cuts a corner nearly
+ * free: alight two stops early, walk 400m to a parallel line, and the ride
+ * metres saved outweigh the walk at twice its length. A rider does not see it
+ * that way. Leaving the vehicle means finding the exit, crossing the road,
+ * tapping out and in again — a fixed price for the walk existing at all, paid
+ * however short it is. Riding on to the proper interchange skips it.
+ *
+ * Per hop, so a chain of two walks through a halte costs more than the
+ * measured direct walk it imitates (see the Bali Mester -> Jatinegara case).
+ *
+ * Not `concourseWalkM`. That is distance the transfer survey left out, and it
+ * reaches the clock in departures.ts; this is a cost with no distance behind
+ * it, so it stays out of everything the rider is told.
+ */
+export const WALK_LEG_COST_M = 400
+
 /**
  * Every metre this journey asks a rider to walk: surveyed footpath plus the
  * in-station allowance.
@@ -109,7 +133,9 @@ export function effectiveWalkM(criteria: Criteria): number {
  * shortest journey does can still be offered that.
  */
 const travelCostM = (criteria: Criteria) =>
-  criteria.rideDistanceM + effectiveWalkM(criteria) * WALK_DISTANCE_COST
+  criteria.rideDistanceM
+  + effectiveWalkM(criteria) * WALK_DISTANCE_COST
+  + criteria.walks * WALK_LEG_COST_M
 
 /**
  * Does `a` dominate `b`?
@@ -174,13 +200,16 @@ export function dominates(a: Criteria, b: Criteria): boolean {
  *
  * Metres are the base unit. Waiting is charged at roughly ten times riding per
  * second, since a bus covers ~10m in the second you spend waiting for it.
- * Walking is twice riding per metre. A boarding costs 600m.
+ * Walking is twice riding per metre. A boarding costs 600m, and so does
+ * WALK_LEG_COST_M for each walk.
  */
 export interface RankWeights {
   rideDistanceM: number
   walkDistanceM: number
   waitS: number
   boardings: number
+  /** Per walk hop. Not scaled by walking speed — see weightsForWalking. */
+  walks: number
   fare: number
 }
 
@@ -189,6 +218,7 @@ export const DEFAULT_RANK_WEIGHTS: RankWeights = {
   walkDistanceM: 2,
   waitS: 10,
   boardings: 600,
+  walks: WALK_LEG_COST_M,
   fare: 0
 }
 
@@ -198,6 +228,7 @@ export function rankScore(criteria: Criteria, weights: RankWeights = DEFAULT_RAN
     + effectiveWalkM(criteria) * weights.walkDistanceM
     + criteria.waitS * weights.waitS
     + criteria.boardings * weights.boardings
+    + criteria.walks * weights.walks
     + (criteria.fare ?? 0) * weights.fare
 }
 
