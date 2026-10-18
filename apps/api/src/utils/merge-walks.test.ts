@@ -114,3 +114,37 @@ describe('the hops behind a merged walk', () => {
     expect(hopsOf(merged[0]!)).toEqual([100, 100])
   })
 })
+
+describe('mergeConsecutiveWalks exits', () => {
+  const exit = (id: string) => ({ id, ref: id.split(':')[1]!, name: null })
+  const pinned = (from: string, to: string, extra: { fromExit?: ReturnType<typeof exit>, toExit?: ReturnType<typeof exit> }): FareResultLeg =>
+    ({ ...walk(from, to, 200), ...extra })
+
+  it('keeps the first hop\'s fromExit and the last hop\'s toExit on a merged walk', () => {
+    const { legs } = mergeConsecutiveWalks([
+      pinned('A', 'B', { fromExit: exit('A:1'), toExit: exit('B:2') }),
+      pinned('B', 'C', { fromExit: exit('B:3'), toExit: exit('C:4') })
+    ])
+    expect(legs).toHaveLength(1)
+    expect(legs[0]).toMatchObject({ fromExit: { id: 'A:1' }, toExit: { id: 'C:4' } })
+  })
+
+  it('leaves a lone walk and an unpinned run without exit keys', () => {
+    expect(mergeConsecutiveWalks([walk('A', 'B', 200), walk('B', 'C', 200)]).legs[0]).not.toHaveProperty('fromExit')
+    const lone = pinned('A', 'B', { toExit: exit('B:2') })
+    expect(mergeConsecutiveWalks([lone]).legs[0]).toBe(lone)
+  })
+
+  it('does not merge a run across a priced corridor walk, so each side keeps its own doors', () => {
+    const { legs } = mergeConsecutiveWalks([
+      pinned('A', 'B', { fromExit: exit('A:1'), toExit: exit('B:2') }),
+      pinned('B', 'C', { fromExit: exit('B:3'), toExit: exit('C:4') }),
+      walk('C', 'D', 300, { fare: 3000, corridorLabel: 'Transit berbayar' }),
+      pinned('D', 'E', { fromExit: exit('D:5'), toExit: exit('E:6') })
+    ])
+    expect(legs).toHaveLength(3)
+    expect(legs[0]).toMatchObject({ fromExit: { id: 'A:1' }, toExit: { id: 'C:4' } })
+    expect(legs[1]).not.toHaveProperty('fromExit')
+    expect(legs[2]).toMatchObject({ fromExit: { id: 'D:5' }, toExit: { id: 'E:6' } })
+  })
+})

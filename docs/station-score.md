@@ -224,10 +224,11 @@ wrangler d1 execute commute --remote --file=src/db/scripts/station_scores.sql
 # 4. bump API_VERSION in apps/api/wrangler.toml, then deploy
 ```
 
-**Ordering constraint.** `db/scripts/tj_stations_insert.sql` is an `INSERT OR REPLACE INTO stations`
-with no `score` column, so re-running `generate:tj` and applying it resets every TJ score to 0.
-Rail is safe — `StationRepository.insertMany` upserts an explicit column list that excludes
-`score`. Apply the score seed *after* any TJ reseed.
+**Ordering.** `db/scripts/tj_stations_insert.sql` is an upsert (`ON CONFLICT(id) DO UPDATE`) that
+refreshes only the feed's own columns and never touches `score`, so a TJ reseed no longer resets
+TJ scores. (It used to be an `INSERT OR REPLACE`, which did.) Rail is safe too —
+`StationRepository.insertMany` upserts an explicit column list that excludes `score`. Applying
+the score seed after a reseed is still harmless, just no longer required.
 
 **Cache.** Score flows into five KV families: `searchables:{V}`, `stations:{V}`,
 `stations:{OP}:{V}`, `hubs:{V}`, `hubs:{slug}:{V}`. There are no bust routes: the old

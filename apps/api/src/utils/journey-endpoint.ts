@@ -8,6 +8,7 @@ import { departureSlot, serviceDay } from 'utils/fare'
 import { stationNamer, type StationNamer, type StationNamerOptions } from 'utils/fare-journey'
 import { Internal, NotFound, Ok } from 'utils/response'
 import { ServerTiming } from 'utils/server-timing'
+import { getTransferExitResolver, NO_EXITS, type TransferExitResolver } from 'utils/transfer-exits'
 import { stripWalkHops } from 'utils/merge-walks'
 
 /*
@@ -80,6 +81,14 @@ export function journeyCacheKey(
  */
 const CLOSED_CACHE_TTL_S = 5 * 60
 
+/*
+ * How long a body stays cached when something decorative failed to load while
+ * it was built. The answer is still right, just missing a field, so it is worth
+ * serving, but not worth freezing for 20 hours: the same TTL as CLOSED, long
+ * enough to absorb a burst and short enough to heal on its own.
+ */
+const DEGRADED_CACHE_TTL_S = 5 * 60
+
 /** What the endpoint-specific half is handed once the shared work is done. */
 export interface JourneyBuildTools {
   router: Tsundere
@@ -89,6 +98,14 @@ export interface JourneyBuildTools {
   toId: string
   /** Batched name lookup. Call with every station id the answer references. */
   hydrate: (stationIds: string[], options?: StationNamerOptions) => Promise<StationNamer>
+  /**
+   * The doors pinned on transfer walks. Opt-in and lazy: /fares never calls it,
+   * so its contract and its cost stay as they were.
+   *
+   * Never rejects. Doors are decoration, so a failed load yields a resolver that
+   * names none, and the body is cached briefly instead of for the usual 20 hours.
+   */
+  transferExits: () => Promise<TransferExitResolver>
 }
 
 /*
@@ -201,6 +218,7 @@ export async function handleJourneyRequest<T>(
   }
 
   const stationRepository = new StationRepository(c.env.DB)
+  let degraded = false
 
   try {
     const endpoints = await timing.measure('endpoints', () => stationRepository.getByIds([fromId, toId]))
@@ -220,7 +238,12 @@ export async function handleJourneyRequest<T>(
       hydrate: async (stationIds, options) => {
         const stations = await timing.measure('hydrate', () => stationRepository.getByIds(stationIds))
         return stationNamer(stations, options)
-      }
+      },
+      transferExits: () => timing.measure('exits', () => getTransferExitResolver(c.env.DB)).catch((error: unknown) => {
+        console.error(error)
+        degraded = true
+        return NO_EXITS
+      })
     })
 
     if (result === null) {
@@ -259,7 +282,7 @@ export async function handleJourneyRequest<T>(
      * back, so the entry stays true for its whole 20 hours while every rider
      * reading it gets times resolved against their own request.
      */
-    c.executionCtx.waitUntil(kvRepository.set(kvKey, result))
+    c.executionCtx.waitUntil(degraded ? kvRepository.set(kvKey, result, DEGRADED_CACHE_TTL_S) : kvRepository.set(kvKey, result))
 
     c.header('Server-Timing', timing.header())
     return c.json(Ok(stripWalkHops(retime ? await retime(result, c) : result)), 200)

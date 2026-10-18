@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { LineKeySchema, OperatorCodeSchema } from './common'
+import { ExitRefSchema } from './station'
 
 export const FareStationSchema = v.pipe(
   v.object({
@@ -185,6 +186,20 @@ export const TransferLegSchema = v.pipe(
     corridorLabel: v.pipe(
       v.optional(v.string()),
       v.description('Nama koridor yang dilewati waktu pindah, kalau ada.')
+    ),
+    /*
+     * Only /_internal/trips fills these, like the coordinates on FareStation:
+     * /fares is the shared URL the OG card and the embed read, so its body does
+     * not move. The description sits on the field, but the OpenAPI generator
+     * emits a bare $ref for a described object, so it never reaches the spec.
+     */
+    fromExit: v.pipe(
+      v.optional(ExitRefSchema),
+      v.description('Pintu di stasiun asal tempat jalan kakinya mulai. Cuma diisi di /_internal/trips, dan cuma kalau sudah dicatat.')
+    ),
+    toExit: v.pipe(
+      v.optional(ExitRefSchema),
+      v.description('Pintu di stasiun tujuan tempat jalan kakinya masuk. Cuma diisi di /_internal/trips, dan cuma kalau sudah dicatat.')
     )
   }),
   v.title('FareTransferLeg'),

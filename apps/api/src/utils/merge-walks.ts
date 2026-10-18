@@ -86,6 +86,11 @@ export function mergeConsecutiveWalks(legs: readonly FareResultLeg[]): MergedWal
       from: run[0]!.from,
       to: run.at(-1)!.to,
       distanceM: roundWalkM(hopsM.reduce((sum, hop) => sum + hop, 0)),
+      // The doors the rider actually uses: out of the first station, into the last.
+      // A known loss: the doors at the stations in between are dropped, as there is
+      // no field on a merged walk to carry them.
+      ...(run[0]!.fromExit && { fromExit: run[0]!.fromExit }),
+      ...(run.at(-1)!.toExit && { toExit: run.at(-1)!.toExit }),
       hopsM
     }
     merged.push(walk)
