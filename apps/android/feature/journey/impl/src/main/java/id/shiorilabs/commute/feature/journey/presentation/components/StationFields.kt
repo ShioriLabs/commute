@@ -1,5 +1,7 @@
 package id.shiorilabs.commute.feature.journey.presentation.components
 
+import androidx.compose.ui.tooling.preview.Preview
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.PageGround
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -39,6 +41,7 @@ import id.shiorilabs.commute.core.ui.theme.Slate300
 import id.shiorilabs.commute.core.ui.theme.Slate400
 import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.feature.journey.R
+import id.shiorilabs.commute.feature.journey.presentation.JourneyPreviewData
 import id.shiorilabs.commute.feature.journey.presentation.PairEndpoint
 import id.shiorilabs.commute.feature.search.domain.SearchLine
 import kotlin.math.pow
@@ -167,6 +170,31 @@ private fun EndpointMark(lines: List<SearchLine>, operator: String?) {
                         },
                 )
             }
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun StationFieldsPreview() {
+    val bogor = JourneyPreviewData.stations[0]
+    val sudirman = JourneyPreviewData.stations[2]
+    CommutePreviewScaffold {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            StationFields(
+                origin = PairEndpoint(bogor.id, bogor, bogor.name),
+                destination = PairEndpoint(sudirman.id, sudirman, sudirman.name),
+                onPickOrigin = {},
+                onPickDestination = {},
+                onSwap = {},
+            )
+            StationFields(
+                origin = null,
+                destination = null,
+                onPickOrigin = {},
+                onPickDestination = {},
+                onSwap = {},
+            )
         }
     }
 }

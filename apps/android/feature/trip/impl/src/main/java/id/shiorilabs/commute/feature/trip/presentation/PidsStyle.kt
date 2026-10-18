@@ -1,9 +1,16 @@
 package id.shiorilabs.commute.feature.trip.presentation
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.feature.station.domain.LineInfo
+import java.time.Instant
 
 /**
  * Which look the trip's live display takes: the board on the trip page and the bar over every
@@ -64,5 +71,53 @@ internal fun PidsBar(
     when (style) {
         // Yishun keeps the same bar: it's already the dark band SMRT's panel sits under.
         is PidsStyle.BekasiRailway, PidsStyle.Yishun -> BekasiRailwayBar(pids, lines, copy, topInset, collapsed, onTripPage, onClose, onOpen, modifier)
+    }
+}
+
+@Preview(showBackground = true, heightDp = 900)
+@Composable
+private fun PidsBoardPreview() {
+    val context = LocalContext.current
+    val now = Instant.now()
+    val trip = TripPreviewData.riding(now)
+    val pids = trip.pids(now)
+    val copy = TripCopy(context.resources, TripPreviewData.lines)
+    CommutePreviewScaffold {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            listOf(PidsStyle.BekasiRailway(), PidsStyle.BekasiRailway(diagram = false), PidsStyle.Yishun).forEach { style ->
+                PidsBoard(
+                    style = style,
+                    pids = pids,
+                    lines = TripPreviewData.lines,
+                    stationLines = TripPreviewData.stationLines[pids.stationId].orEmpty(),
+                    copy = copy,
+                    source = null,
+                    onNameMoved = {},
+                    strip = trip.yishunStrip(pids, now),
+                    allStationLines = TripPreviewData.stationLines,
+                )
+            }
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PidsBarPreview() {
+    val context = LocalContext.current
+    val now = Instant.now()
+    val pids = TripPreviewData.riding(now).pids(now)
+    CommutePreviewScaffold {
+        PidsBar(
+            style = PidsStyle.BekasiRailway(),
+            pids = pids,
+            lines = TripPreviewData.lines,
+            copy = TripCopy(context.resources, TripPreviewData.lines),
+            topInset = 0.dp,
+            collapsed = false,
+            onTripPage = false,
+            onClose = {},
+            onOpen = {},
+        )
     }
 }

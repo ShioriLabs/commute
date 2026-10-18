@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -39,6 +40,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -58,6 +60,7 @@ import id.shiorilabs.commute.core.ui.components.SectionLabel
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.motion.IosSpringEasing
 import id.shiorilabs.commute.core.ui.motion.rememberReducedMotion
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.Slate100
 import id.shiorilabs.commute.core.ui.theme.Slate200
 import id.shiorilabs.commute.core.ui.theme.Slate500
@@ -393,3 +396,37 @@ private fun RideRow(ride: TripLeg.Ride, lines: Map<String, LineInfo>, copy: Trip
 }
 
 private const val DRAW_IN_MILLIS = 1100
+
+@Preview(showBackground = true, heightDp = 1100)
+@Composable
+private fun TripFinishedPreview() {
+    val context = LocalContext.current
+    CommutePreviewScaffold {
+        TripFinished(
+            finished = TripPreviewData.finished(),
+            lines = TripPreviewData.lines,
+            copy = TripCopy(context.resources, TripPreviewData.lines),
+            topInset = 0.dp,
+            onClose = {},
+            onOpenStation = {},
+            onRouteBack = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, heightDp = 1100)
+@Composable
+private fun TripFinishedStoppedPreview() {
+    val context = LocalContext.current
+    CommutePreviewScaffold {
+        TripFinished(
+            finished = TripPreviewData.finished(reason = FinishReason.STOPPED),
+            lines = TripPreviewData.lines,
+            copy = TripCopy(context.resources, TripPreviewData.lines),
+            topInset = 0.dp,
+            onClose = {},
+            onOpenStation = {},
+            onRouteBack = {},
+        )
+    }
+}

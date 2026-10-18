@@ -5,10 +5,12 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -22,11 +24,14 @@ import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.morph.LocalNavAnimatedVisibilityScope
 import id.shiorilabs.commute.core.ui.morph.LocalSharedTransitionScope
 import id.shiorilabs.commute.core.ui.motion.IosSpringEasing
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 
 private const val TRAILING_ICON_ID = "trailing"
 
@@ -120,4 +125,18 @@ private fun settledAlpha(): Animatable<Float, *> {
         }
     }
     return alpha
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun StationTitleTextPreview() {
+    CommutePreviewScaffold {
+        StationTitleText(
+            stationId = "KCI-MRI",
+            name = "Manggarai",
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.padding(16.dp),
+            trailingIcon = CommuteIcons.Chevron,
+        )
+    }
 }

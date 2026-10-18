@@ -1,9 +1,16 @@
 package id.shiorilabs.commute.core.ui.frost
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -11,9 +18,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 
 /**
  * A page whose [header] floats over its scrolling [content], with the frost behind the header, laid
@@ -71,3 +82,22 @@ fun FrostedHeaderPage(
 }
 
 private enum class FrostedPageSlot { HEADER, BACKDROP, CONTENT }
+
+@Preview(showBackground = true)
+@Composable
+private fun FrostedHeaderPagePreview() {
+    CommutePreviewScaffold {
+        FrostedHeaderPage(
+            surfaceColor = MaterialTheme.colorScheme.background,
+            header = { Text("Judul halaman", modifier = Modifier.padding(16.dp)) },
+        ) { headerHeight, listState, hazeState ->
+            LazyColumn(
+                modifier = Modifier.hazeSource(hazeState),
+                state = listState,
+                contentPadding = PaddingValues(top = headerHeight),
+            ) {
+                items((1..20).toList()) { Text("Baris $it", modifier = Modifier.fillMaxWidth().padding(16.dp)) }
+            }
+        }
+    }
+}

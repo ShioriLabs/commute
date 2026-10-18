@@ -3,6 +3,8 @@ package id.shiorilabs.commute.core.ui.components
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -11,10 +13,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import id.shiorilabs.commute.core.ui.R
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 
 /** Side of the square the illustration is fitted into, matching the web's empty states. */
 private val IllustrationSize = 192.dp
@@ -62,6 +68,20 @@ fun CommuteEmptyState(
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onBackground,
             textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun CommuteEmptyStatePreview() {
+    CommutePreviewScaffold {
+        CommuteEmptyState(
+            illustration = painterResource(R.drawable.img_no_schedule),
+            illustrationDescription = "",
+            title = "Belum ada jadwal",
+            body = AnnotatedString("Tidak ada kereta yang berangkat dalam waktu dekat."),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
         )
     }
 }

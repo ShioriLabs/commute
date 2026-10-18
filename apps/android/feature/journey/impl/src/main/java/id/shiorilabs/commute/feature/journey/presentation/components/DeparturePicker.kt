@@ -36,12 +36,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import id.shiorilabs.commute.core.time.formatClock
 import id.shiorilabs.commute.core.ui.ext.Foreground
 import id.shiorilabs.commute.core.ui.ext.foreground
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.Amber700
 import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.core.ui.theme.Slate900
@@ -51,6 +53,8 @@ import id.shiorilabs.commute.feature.journey.domain.Blocked
 import id.shiorilabs.commute.feature.journey.domain.CHIP_ROW_MAX
 import id.shiorilabs.commute.feature.journey.domain.Change
 import id.shiorilabs.commute.feature.journey.domain.LegOption
+import id.shiorilabs.commute.feature.journey.domain.resolveTimedLegs
+import id.shiorilabs.commute.feature.journey.presentation.JourneyPreviewData
 import kotlin.math.roundToInt
 
 /*
@@ -255,4 +259,18 @@ private fun optionModifier(
         .background(fillOf(option, color))
         .semantics(mergeDescendants = true) { selected = option.selected }
         .clickable(enabled = enabled, role = Role.Button, onClickLabel = description) { onPick(option.departure.tripId) }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun DeparturePickerPreview() {
+    val options = resolveTimedLegs(JourneyPreviewData.journey.legs, picks = emptyMap()).first().options
+    CommutePreviewScaffold {
+        Column(modifier = Modifier.padding(horizontal = 32.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            DeparturePicker(options = options, color = Color(0xFFE4002B), onPick = {})
+            DeparturePicker(options = List(6) { options[it % options.size] }, color = Color(0xFFE4002B), onPick = {})
+            ConnectionNote(change = Change(gapS = 240, tight = false))
+            ConnectionNote(change = Change(gapS = 150, tight = true))
+        }
+    }
 }

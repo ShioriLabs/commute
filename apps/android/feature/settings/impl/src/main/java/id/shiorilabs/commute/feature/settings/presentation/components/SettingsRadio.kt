@@ -15,8 +15,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 
 /** One choice of several: what it is, optionally what it does, and the radio. The whole row selects it. */
 @Composable
@@ -52,5 +54,16 @@ internal fun SettingsRadio(
             onClick = null,
             colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary),
         )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun SettingsRadioPreview() {
+    CommutePreviewScaffold {
+        Column {
+            SettingsRadio(title = "Terang", selected = false, onSelect = {})
+            SettingsRadio(title = "Gelap", selected = true, onSelect = {}, detail = "Mengikuti malam hari")
+        }
     }
 }

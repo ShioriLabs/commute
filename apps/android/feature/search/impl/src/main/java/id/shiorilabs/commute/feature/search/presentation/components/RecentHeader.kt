@@ -12,7 +12,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.feature.search.R
 
 /** "Terakhir dicari", with the action that clears the list beside it. */
@@ -38,5 +40,13 @@ fun RecentHeader(
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,
         )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun RecentHeaderPreview() {
+    CommutePreviewScaffold {
+        RecentHeader(onClear = {}, modifier = Modifier.padding(vertical = 16.dp))
     }
 }

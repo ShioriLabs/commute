@@ -27,6 +27,7 @@ import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.ui.components.CommuteBottomSheet
 import id.shiorilabs.commute.core.ui.components.CommuteButton
@@ -35,6 +36,7 @@ import id.shiorilabs.commute.core.ui.components.CommuteButtonText
 import id.shiorilabs.commute.core.ui.components.CommuteButtonVariant
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.core.ui.theme.Slate900
 import id.shiorilabs.commute.feature.trip.R
@@ -139,6 +141,17 @@ private fun Point(icon: ImageVector, title: Int, detail: Int) {
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(text = stringResource(title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Slate900)
             Text(text = stringResource(detail), style = MaterialTheme.typography.bodyMedium, color = Slate500)
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun TripUploadPromptPreview() {
+    CommutePreviewScaffold {
+        Column(verticalArrangement = Arrangement.spacedBy(24.dp), modifier = Modifier.padding(16.dp)) {
+            TripUploadPrompt(uploaded = false, state = TripUploadState.IDLE, onUpload = {}, onPrivacyPolicy = {})
+            TripUploadPrompt(uploaded = true, state = TripUploadState.SENT, onUpload = {}, onPrivacyPolicy = {})
         }
     }
 }
