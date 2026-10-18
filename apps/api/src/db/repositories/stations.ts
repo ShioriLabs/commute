@@ -9,7 +9,7 @@ import { getLineByOperator } from 'utils/line'
 import { mapify } from 'utils/mapify'
 import { getOperatorByCode } from 'utils/operator'
 import { lineKey } from 'utils/ids'
-import { StationExitRepository } from './station-exits'
+import { ownedExit, StationExitRepository } from './station-exits'
 
 /*
  * The public Station shape.
@@ -370,12 +370,6 @@ export class StationRepository extends Repository {
     const exitRefs = await new StationExitRepository(this.d1).getRefsByIds(
       transfers.flatMap(transfer => [transfer.fromExitId, transfer.toExitId]).filter((exitId): exitId is string => !!exitId)
     )
-
-    // A pin is only trusted when the exit belongs to the station it is pinned on
-    // (ids are `${stationId}:${ref}`); the FK alone would let a seed typo show
-    // another station's door.
-    const ownedExit = (exitId: string | null | undefined, stationId: string | null) =>
-      !!exitId && !!stationId && exitId.startsWith(`${stationId}:`)
 
     const returningTransfers = []
     for (const transfer of transfers) {

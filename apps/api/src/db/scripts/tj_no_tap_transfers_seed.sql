@@ -8,5 +8,5 @@ UPDATE transfers SET noTap = 1, updatedAt = CURRENT_TIMESTAMP WHERE id IN ('TJ-H
 
 -- Dukuh Atas <-> Galunggung: TJ-TJ skybridge, not previously modeled at all
 -- (each halte only connected separately to KCI-SUD, 310m each). Measured 140m.
-INSERT OR REPLACE INTO transfers (id, dataType, fromStationId, toStationId, toStationData, distance, notes, noTap, createdAt, updatedAt) VALUES ('TJ-H00047P->TJ-H00283P', 'INTERNAL', 'TJ-H00047P', 'TJ-H00283P', NULL, 140, NULL, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT OR REPLACE INTO transfers (id, dataType, fromStationId, toStationId, toStationData, distance, notes, noTap, createdAt, updatedAt) VALUES ('TJ-H00283P->TJ-H00047P', 'INTERNAL', 'TJ-H00283P', 'TJ-H00047P', NULL, 140, NULL, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT INTO transfers (id, dataType, fromStationId, toStationId, toStationData, distance, notes, noTap, createdAt, updatedAt) VALUES ('TJ-H00047P->TJ-H00283P', 'INTERNAL', 'TJ-H00047P', 'TJ-H00283P', NULL, 140, NULL, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET distance = excluded.distance, notes = excluded.notes, noTap = excluded.noTap, updatedAt = CURRENT_TIMESTAMP;
+INSERT INTO transfers (id, dataType, fromStationId, toStationId, toStationData, distance, notes, noTap, createdAt, updatedAt) VALUES ('TJ-H00283P->TJ-H00047P', 'INTERNAL', 'TJ-H00283P', 'TJ-H00047P', NULL, 140, NULL, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET distance = excluded.distance, notes = excluded.notes, noTap = excluded.noTap, updatedAt = CURRENT_TIMESTAMP;

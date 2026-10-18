@@ -190,7 +190,7 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
    * is the multi-criteria search, roughly ten times the work of findRoute. If
    * routing is ever going to dominate a request, it is here rather than there.
    */
-  build: async ({ router, timing, context, fromId, toId, hydrate }) => {
+  build: async ({ router, timing, context, fromId, toId, hydrate, transferExits }) => {
     // The same captured value the cache scope above keyed this body on.
     const observed = observedHeadwaysEnabledFor(c.req.raw)
     /*
@@ -262,12 +262,15 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
      * rider's stop from a fix near it, and routing-only haltes are absent from
      * `/stations`, so this answer is the only place their coordinates reach it.
      */
-    const namer = await hydrate([...new Set(plans.flatMap(p => p.stationIds))], { coordinates: true })
+    const [namer, exitsOf] = await Promise.all([
+      hydrate([...new Set(plans.flatMap(p => p.stationIds))], { coordinates: true }),
+      transferExits()
+    ])
 
     return timing.measureSync('assemble', () => ({
       from: namer.ref(fromId),
       to: namer.ref(toId),
-      journeys: plans.map(plan => assembleJourney(plan, namer, context))
+      journeys: plans.map(plan => assembleJourney(plan, namer, context, exitsOf))
     }))
   }
 }))

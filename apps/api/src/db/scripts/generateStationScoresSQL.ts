@@ -30,9 +30,8 @@ import { TOPOLOGY } from '../data/topology'
  *
  * Rail only. TransJakarta has no timetables (headway-based GTFS) and no
  * published per-halte ridership, so TJ stays at the DEFAULT 0 and is not
- * emitted here. When TJ is scored, note that db/scripts/tj_stations_insert.sql
- * is an INSERT OR REPLACE with no `score` column: a TJ reseed wipes TJ scores,
- * so the score seed must be applied after it.
+ * emitted here. db/scripts/tj_stations_insert.sql is an upsert that does not
+ * touch `score`, so a TJ reseed no longer wipes scores applied by this seed.
  *
  * Reads the DB via `wrangler d1 execute --json`; emits an UPDATE seed. Apply:
  *   pnpm --filter api generate:station-scores -- --remote

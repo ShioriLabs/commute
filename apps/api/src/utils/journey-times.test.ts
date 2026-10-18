@@ -3,7 +3,7 @@ import type { FareJourney } from '@commute/schemas'
 import type { FareContext } from '@commute/constants'
 import type { Tsundere } from '@commute/tsundere'
 import { byArrival, retimeTrips, toRouteLegs } from './journey-times'
-import { mergeConsecutiveWalks } from './merge-walks'
+import { mergeConsecutiveWalks, stripWalkHops } from './merge-walks'
 
 /*
  * Only the fields the ordering reads. A real FareJourney carries legs, fares
@@ -139,6 +139,63 @@ describe('retimeTrips after the last train', () => {
     if (leg.type !== 'RIDE') throw new Error('expected a ride')
     expect(leg.stopTimes).toBeUndefined()
     expect(leg.tripId).toBeUndefined()
+  })
+})
+
+describe('retimeTrips keeps the doors on a walk', () => {
+  const station = (id: string) => ({ id, name: id })
+  const exit = (id: string) => ({ id, ref: id.split(':')[1]!, name: null })
+  const ride = (from: string, to: string): FareJourney['legs'][number] => ({
+    type: 'RIDE',
+    line: 'KCI:C',
+    operator: 'KCI',
+    from: station(from),
+    to: station(to),
+    stationCount: 2,
+    stops: [station(from), station(to)],
+    headsign: null,
+    distanceM: 5000
+  })
+  const route: FareJourney = {
+    legs: [
+      ride('KCI-BKS', 'KCI-SUD'),
+      { type: 'TRANSFER', from: station('KCI-SUD'), to: station('MRTJ-DKA'), distanceM: 300, fromExit: exit('KCI-SUD:Utara'), toExit: exit('MRTJ-DKA:A') },
+      ride('MRTJ-DKA', 'MRTJ-LBB')
+    ],
+    segments: [],
+    totalFare: 3000,
+    totalDistanceM: 10300,
+    transferCount: 1,
+    labels: [],
+    boardings: 2,
+    walkDistanceM: 300
+  }
+  const result = { from: station('KCI-BKS'), to: station('MRTJ-LBB'), journeys: [route] }
+  const context = { paymentMethod: 'KMT', departureAt: new Date('2026-10-02T07:00:00+07:00') } as unknown as FareContext
+  const timeLeg = (departureS: number, tripId: string) => ({ departureS, arrivalS: departureS + 600, stopsS: [departureS, departureS + 600], tripId })
+  const timetabled = {
+    // One service only: a search for anything after 07:10 finds nothing, so the
+    // loop that gathers later boardings stops.
+    timeJourney: (_legs: unknown, { departureS }: { departureS: number }) =>
+      departureS <= 7 * 3600 + 600 ? [timeLeg(7 * 3600 + 600, 'T1'), null, timeLeg(7 * 3600 + 1800, 'T2')] : [null, null, null],
+    journeyArrival: () => null
+  } as unknown as Tsundere
+
+  it('passes a timed journey\'s walk through with both exits', () => {
+    const [row] = retimeTrips(result, timetabled, context).journeys
+    expect(row!.legs[0]!.type === 'RIDE' && row!.legs[0]!.tripId).toBe('T1')
+    expect(row!.legs[1]).toMatchObject({ type: 'TRANSFER', fromExit: { ref: 'Utara' }, toExit: { ref: 'A' } })
+  })
+
+  it('and so does a route the timetable never covers', () => {
+    const untimed = { timeJourney: () => [null, null, null], journeyArrival: () => null } as unknown as Tsundere
+    const [row] = retimeTrips(result, untimed, context).journeys
+    expect(row!.legs[1]).toMatchObject({ fromExit: { ref: 'Utara' }, toExit: { ref: 'A' } })
+  })
+
+  it('survives stripWalkHops on the way out', () => {
+    const [row] = stripWalkHops(retimeTrips(result, timetabled, context)).journeys
+    expect(row!.legs[1]).toMatchObject({ fromExit: { ref: 'Utara' }, toExit: { ref: 'A' } })
   })
 })
 

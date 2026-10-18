@@ -43,11 +43,12 @@ VALUES
 -- (migration 0013), and this crossing is gated on both — BST sells Rp35k-85k
 -- tickets, the Kalayang is free. Two paid zones, so it stays a tap-out boundary
 -- and the rides either side must not merge into one priced segment.
-INSERT OR REPLACE INTO transfers
+INSERT INTO transfers
   (id, dataType, fromStationId, toStationId, toStationData, distance, notes, noTap, createdAt, updatedAt)
 VALUES
   ('T-APCGK-SHIA-KCI-BST', 'INTERNAL', 'APCGK-SHIA', 'KCI-BST', NULL, 500, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-  ('T-KCI-BST-APCGK-SHIA', 'INTERNAL', 'KCI-BST', 'APCGK-SHIA', NULL, 500, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+  ('T-KCI-BST-APCGK-SHIA', 'INTERNAL', 'KCI-BST', 'APCGK-SHIA', NULL, 500, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT(id) DO UPDATE SET distance = excluded.distance, notes = excluded.notes, noTap = excluded.noTap, updatedAt = CURRENT_TIMESTAMP;
 
 -- ── Hub ─────────────────────────────────────────────────────────────────────
 --
