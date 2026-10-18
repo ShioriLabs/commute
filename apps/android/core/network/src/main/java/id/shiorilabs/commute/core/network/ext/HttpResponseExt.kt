@@ -21,7 +21,7 @@ import kotlinx.serialization.json.jsonPrimitive
  */
 internal suspend inline fun <reified T> HttpResponse.decodeOrThrow(): T {
     if (!status.isSuccess()) {
-        throw ApiException(status = status.value, message = errorMessage())
+        throw apiException()
     }
     return try {
         body()
@@ -33,7 +33,7 @@ internal suspend inline fun <reified T> HttpResponse.decodeOrThrow(): T {
 /** Throws [ApiException] on a non-2xx status, for a request whose answer has nothing to read. */
 internal suspend fun HttpResponse.throwUnlessSuccess() {
     if (!status.isSuccess()) {
-        throw ApiException(status = status.value, message = errorMessage())
+        throw apiException()
     }
 }
 
@@ -50,13 +50,18 @@ internal suspend inline fun <reified T> HttpResponse.decodeFetched(): Fetched<T>
 }
 
 /**
- * Reads `error.message` out of the API's error envelope
- * (`{ "status": 404, "error": { "code": "NOT_FOUND", "message": "Not found" } }`), or `null` when
- * the body isn't one — a proxy's HTML error page, say.
+ * The [ApiException] for a non-2xx response, carrying what the API's error envelope
+ * (`{ "status": 404, "error": { "code": "NOT_FOUND", "message": "Not found" } }`) says: its
+ * message, code and, on `CLOSED`, `nextServiceAt`. Each is `null` when the body isn't an envelope
+ * — a proxy's HTML error page, say.
  */
-private suspend fun HttpResponse.errorMessage(): String? = runCatching {
-    Json.parseToJsonElement(bodyAsText())
-        .jsonObject.getValue("error")
-        .jsonObject.getValue("message")
-        .jsonPrimitive.content
-}.getOrNull()
+internal suspend fun HttpResponse.apiException(): ApiException {
+    val error = runCatching { Json.parseToJsonElement(bodyAsText()).jsonObject.getValue("error").jsonObject }.getOrNull()
+    fun field(name: String) = runCatching { error?.get(name)?.jsonPrimitive?.content }.getOrNull()
+    return ApiException(
+        status = status.value,
+        message = field("message"),
+        code = field("code"),
+        nextServiceAt = field("nextServiceAt"),
+    )
+}

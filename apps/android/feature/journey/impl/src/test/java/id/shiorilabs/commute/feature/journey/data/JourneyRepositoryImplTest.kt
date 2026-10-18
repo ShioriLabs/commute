@@ -3,6 +3,7 @@ package id.shiorilabs.commute.feature.journey.data
 import id.shiorilabs.commute.core.model.models.TripResult
 import id.shiorilabs.commute.core.network.testing.FakeCommuteService
 import id.shiorilabs.commute.core.query.testing.testQueryClient
+import id.shiorilabs.commute.core.type.ApiException
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.feature.journey.data.impl.JourneyRepositoryImpl
 import id.shiorilabs.commute.feature.journey.domain.Departure
@@ -13,6 +14,9 @@ import id.shiorilabs.commute.feature.journey.domain.Modes
 import id.shiorilabs.commute.feature.journey.domain.PaymentMethod
 import id.shiorilabs.commute.feature.journey.domain.ServiceLine
 import id.shiorilabs.commute.feature.journey.domain.WalkingSpeed
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromJsonElement
@@ -218,6 +222,75 @@ class JourneyRepositoryImplTest {
 
         assertEquals(2, service.tripsCalls)
         assertEquals(4, answer.getOrNull()?.journeys?.size)
+    }
+
+    private fun closedUntil(at: String?, code: String = "CLOSED") = ApiException(
+        status = 404,
+        message = "No service on this route at that time.",
+        code = code,
+        nextServiceAt = at,
+    )
+
+    @Test
+    fun `a closed route is asked again at its opening and answers with the journeys there`() = runTest {
+        val asked = mutableListOf<String?>()
+        val service = FakeCommuteService().apply {
+            trips = { _, _, criteria ->
+                asked += criteria.at
+                if (criteria.at == null) throw closedUntil("2026-10-18T04:12:00+07:00") else fixture
+            }
+        }
+        val repository = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
+
+        val answer = repository.trips("KCI-CUK", "LRTJBDB-SET", JourneyCriteria()).getOrNull()!!
+
+        assertEquals(listOf(null, "2026-10-18T04:12:00+07:00"), asked)
+        assertEquals(4, answer.journeys.size)
+    }
+
+    @Test
+    fun `a 404 that is not a closure stays not found, without a second ask`() = runTest {
+        val service = FakeCommuteService().apply { trips = { _, _, _ -> throw closedUntil(null, code = "NO_ROUTE") } }
+        val repository = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
+
+        val failure = repository.trips("KCI-CUK", "LRTJBDB-SET", JourneyCriteria()).leftOrNull()
+
+        assertEquals(404, (failure as Failure.Remote).code)
+        assertEquals(1, service.tripsCalls)
+    }
+
+    @Test
+    fun `a closure with no opening time stays not found`() = runTest {
+        val service = FakeCommuteService().apply { trips = { _, _, _ -> throw closedUntil(null) } }
+        val repository = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
+
+        assertTrue(repository.trips("KCI-CUK", "LRTJBDB-SET", JourneyCriteria()).leftOrNull() is Failure.Remote)
+        assertEquals(1, service.tripsCalls)
+    }
+
+    @Test
+    fun `a closed route that is still closed at its opening fails rather than asking again`() = runTest {
+        val service = FakeCommuteService().apply { trips = { _, _, _ -> throw closedUntil("2026-10-18T04:12:00+07:00") } }
+        val repository = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
+
+        assertTrue(repository.trips("KCI-CUK", "LRTJBDB-SET", JourneyCriteria()).isLeft())
+        assertEquals(2, service.tripsCalls)
+    }
+
+    @Test
+    fun `refreshing a closed route is not a failed refresh`() = runTest {
+        val service = FakeCommuteService().apply {
+            trips = { _, _, criteria ->
+                if (criteria.at == null) throw closedUntil("2026-10-18T04:12:00+07:00") else fixture
+            }
+        }
+        val repository = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
+        backgroundScope.launch { repository.observeTrips("KCI-CUK", "LRTJBDB-SET", JourneyCriteria()).collect() }
+        runCurrent()
+
+        val refetched = repository.refresh("KCI-CUK", "LRTJBDB-SET")
+
+        assertEquals(0, refetched.failed)
     }
 
     @Test
