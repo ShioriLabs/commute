@@ -1,5 +1,7 @@
 package id.shiorilabs.commute.feature.saved.presentation.nearby
 
+import androidx.compose.ui.tooling.preview.Preview
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.Slate100
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -103,4 +105,15 @@ internal fun nearbyDistance(metres: Int): String =
 internal fun formatDistance(metres: Int): String {
     val rounded = (metres + 5) / 10 * 10
     return if (rounded < 1000) "$rounded m" else "%.1f km".format(java.util.Locale.forLanguageTag("id"), rounded / 1000.0)
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun NearbyPromptCardPreview() {
+    CommutePreviewScaffold {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            NearbyPromptCard(onResult = {}, onDismiss = {})
+            NearbyHeading()
+        }
+    }
 }

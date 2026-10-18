@@ -16,8 +16,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 
 /**
  * A setting that is on or off: what it is and what it does, and the switch. The whole row toggles
@@ -63,5 +65,17 @@ internal fun SettingsSwitch(
             enabled = enabled,
             colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary),
         )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun SettingsSwitchPreview() {
+    CommutePreviewScaffold {
+        Column {
+            SettingsSwitch(title = "Getar", subtitle = "Bergetar saat sudah dekat", checked = true, onCheckedChange = {})
+            SettingsSwitch(title = "Bunyi", subtitle = "Putar bunyi saat tiba", checked = false, onCheckedChange = {})
+            SettingsSwitch(title = "Nonaktif", subtitle = "Menunggu pengaturan lain", checked = true, onCheckedChange = {}, enabled = false)
+        }
     }
 }

@@ -39,9 +39,11 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.constants.OPERATOR_TJ
 import id.shiorilabs.commute.core.time.formatClock
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.Amber100
 import id.shiorilabs.commute.core.ui.theme.Amber800
 import id.shiorilabs.commute.core.ui.theme.Rose300
@@ -53,6 +55,8 @@ import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.core.ui.theme.Slate600
 import id.shiorilabs.commute.core.ui.theme.Slate900
 import id.shiorilabs.commute.core.ui.theme.TABULAR
+import id.shiorilabs.commute.feature.journey.domain.resolveTimedLegs
+import id.shiorilabs.commute.feature.journey.presentation.JourneyPreviewData
 import java.time.Instant
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
@@ -400,5 +404,19 @@ private fun TransferLeg(leg: JourneyLeg.Transfer, gap: Change? = null) {
             )
             gap?.let { ConnectionNote(it) }
         }
+    }
+}
+
+@Preview(showBackground = true, heightDp = 700)
+@Composable
+private fun JourneyTimelinePreview() {
+    val journey = JourneyPreviewData.journey
+    CommutePreviewScaffold {
+        JourneyTimeline(
+            legs = journey.legs,
+            lines = JourneyPreviewData.lines,
+            modifier = Modifier.padding(horizontal = 32.dp, vertical = 16.dp),
+            timed = resolveTimedLegs(journey.legs, picks = emptyMap()),
+        )
     }
 }

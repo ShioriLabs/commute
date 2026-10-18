@@ -1,5 +1,7 @@
 package id.shiorilabs.commute.core.ui.components
 
+import androidx.compose.ui.tooling.preview.Preview
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.Slate700
 import id.shiorilabs.commute.core.ui.theme.Rose50
 import androidx.compose.foundation.background
@@ -48,6 +50,19 @@ fun ProblemPanel(
         CommuteButton(
             text = retryLabel,
             onClick = onRetry,
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ProblemPanelPreview() {
+    CommutePreviewScaffold {
+        ProblemPanel(
+            message = "Jadwal belum bisa dimuat.",
+            retryLabel = "Coba lagi",
+            onRetry = {},
+            modifier = Modifier.padding(16.dp),
         )
     }
 }

@@ -5,6 +5,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.feature.settings.R
 
 /** "Hapus" or "Batal" before clearing something that is slow or impossible to get back. */
@@ -29,4 +31,12 @@ internal fun ConfirmClearDialog(message: String, onConfirm: () -> Unit, onDismis
             }
         },
     )
+}
+
+@Preview
+@Composable
+private fun ConfirmClearDialogPreview() {
+    CommutePreviewScaffold {
+        ConfirmClearDialog(message = "Hapus semua jadwal yang tersimpan?", onConfirm = {}, onDismiss = {})
+    }
 }

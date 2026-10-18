@@ -1,5 +1,7 @@
 package id.shiorilabs.commute.feature.trip.presentation
 
+import androidx.compose.ui.tooling.preview.Preview
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.Slate200
 import id.shiorilabs.commute.core.ui.theme.PageGround
 import id.shiorilabs.commute.core.ui.theme.Slate900
@@ -148,4 +150,31 @@ private fun Cell(text: String, label: String? = null) {
         color = Value,
         maxLines = 1,
     )
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun MotionStripPreview() {
+    CommutePreviewScaffold {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            MotionStrip(state = MotionStripState.Waiting, bottomInset = 0.dp)
+            MotionStrip(state = MotionStripState.Unavailable, bottomInset = 0.dp)
+            MotionStrip(
+                state = MotionStripState.Reading(
+                    gpsKmh = 62,
+                    gpsAgeS = 2,
+                    imuKmh = 60,
+                    rawKmh = 58,
+                    accelMps2 = 0.82,
+                    aligned = true,
+                    still = false,
+                ),
+                bottomInset = 0.dp,
+            )
+            MotionStrip(
+                state = MotionStripState.Reading(null, null, null, null, null, aligned = false, still = false),
+                bottomInset = 0.dp,
+            )
+        }
+    }
 }

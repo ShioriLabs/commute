@@ -1,5 +1,7 @@
 package id.shiorilabs.commute.feature.search.presentation.components
 
+import androidx.compose.ui.tooling.preview.Preview
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.Slate200
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -96,4 +98,22 @@ fun SearchError(
             onClick = onRetry,
         )
     }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun SearchResultsSkeletonPreview() {
+    CommutePreviewScaffold { SearchResultsSkeleton() }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun SearchNotFoundPreview() {
+    CommutePreviewScaffold { SearchNotFound() }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun SearchErrorPreview() {
+    CommutePreviewScaffold { SearchError(message = "Daftar stasiun belum bisa dimuat.", onRetry = {}) }
 }
