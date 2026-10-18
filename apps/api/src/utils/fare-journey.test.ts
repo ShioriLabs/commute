@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { FareContext } from '@commute/constants'
 import type { Criteria, RideLeg, RouteLeg, TransferLeg } from '@commute/tsundere'
 import { assembleJourney, planJourney, stationNamer } from 'utils/fare-journey'
@@ -22,6 +22,8 @@ const criteria = (over: Partial<Criteria> = {}): Criteria => ({
   boardings: 1,
   rideDistanceM: 0,
   walkDistanceM: 0,
+  concourseWalkM: 0,
+  walks: 0,
   waitS: 0,
   fare: null,
   ...over
@@ -346,5 +348,53 @@ describe('stationNamer', () => {
     )
     expect(ref('TJ-X')).toEqual({ id: 'TJ-X', name: 'Halte X' })
     expect(ref('TJ-NOPE')).toEqual({ id: 'TJ-NOPE', name: 'TJ-NOPE' })
+  })
+})
+
+describe('assembleJourney exits', () => {
+  const exitsOf = (from: string, to: string) =>
+    from === 'MRTJ-DKA' && to === 'KCI-SUD' ? { fromExit: { id: 'MRTJ-DKA:A', ref: 'A', name: null } } : {}
+  const legs = () => [ride('MRTJ', 'NS', ['LBB', 'DKA'], 3000), walk('MRTJ-DKA', 'KCI-SUD', 300), ride('KCI', 'C', ['SUD', 'BOO'], 5000)]
+
+  it('puts a pinned door on the walk when a resolver is given', () => {
+    const plan = planJourney(legs(), criteria(), [], CONTEXT)
+    const journey = assembleJourney(plan, namerFor(plan.legs, plan.stationIds), CONTEXT, exitsOf)
+    expect(journey.legs.find(l => l.type === 'TRANSFER')).toMatchObject({ fromExit: { ref: 'A' } })
+  })
+
+  it('leaves the body untouched without a resolver, as /fares does', () => {
+    const plan = planJourney(legs(), criteria(), [], CONTEXT)
+    const journey = assembleJourney(plan, namerFor(plan.legs, plan.stationIds), CONTEXT)
+    expect(JSON.stringify(journey)).not.toContain('Exit')
+  })
+
+  it('gives a merged corridor anchor no doors, even when the resolver has some', () => {
+    const qris: FareContext = { ...CONTEXT, paymentMethod: 'QRIS_TAP' }
+    const everywhere = () => ({ fromExit: { id: 'X:a', ref: 'a', name: null }, toExit: { id: 'Y:b', ref: 'b', name: null } })
+    const plan = planJourney([
+      ride('MRTJ', 'M', ['BNH', 'DKA'], 2000),
+      walk('MRTJ-DKA', 'KCI-SUD', 90),
+      walk('KCI-SUD', 'LRTJBDB-DKA', 310),
+      ride('LRTJBDB', 'BK', ['DKA', 'SET', 'RAS'], 3000)
+    ], criteria({ boardings: 2, walkDistanceM: 400 }), [], qris)
+    const transfer = assembleJourney(plan, namerFor(plan.legs, plan.stationIds), qris, everywhere).legs.find(l => l.type === 'TRANSFER')
+    expect(transfer).toMatchObject({ corridorLabel: 'Transit berbayar via Peron Sudirman' })
+    expect(transfer).not.toHaveProperty('fromExit')
+    expect(transfer).not.toHaveProperty('toExit')
+  })
+
+  it('gives a plain surcharged walk no doors, even when the resolver has some', () => {
+    // Ends on the walk, so it is priced on its own rather than folded into an anchor.
+    const qris: FareContext = { ...CONTEXT, paymentMethod: 'QRIS_TAP' }
+    const resolver = vi.fn(() => ({ fromExit: { id: 'X:a', ref: 'a', name: null }, toExit: { id: 'Y:b', ref: 'b', name: null } }))
+    const plan = planJourney([
+      ride('LRTJBDB', 'BK', ['RAS', 'SET', 'DKA'], 3000),
+      walk('LRTJBDB-DKA', 'KCI-SUD', 310)
+    ], criteria({ boardings: 1, walkDistanceM: 310 }), [], qris)
+    const transfer = assembleJourney(plan, namerFor(plan.legs, plan.stationIds), qris, resolver).legs.find(l => l.type === 'TRANSFER')
+    expect(transfer).toMatchObject({ fare: expect.any(Number) as number })
+    expect(transfer).not.toHaveProperty('fromExit')
+    expect(transfer).not.toHaveProperty('toExit')
+    expect(resolver).not.toHaveBeenCalled()
   })
 })

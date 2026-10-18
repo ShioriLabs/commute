@@ -7,6 +7,7 @@ import { computeHeadsignCode } from 'utils/headsign'
 import { findInterliningLineCodes, mergeInterlinedLegs } from 'utils/interlining'
 import { lineKey, stationCodeOf } from 'utils/ids'
 import { mergeConsecutiveWalks } from 'utils/merge-walks'
+import type { TransferExitResolver } from 'utils/transfer-exits'
 
 /*
  * Turning one routed journey into the shape the API returns.
@@ -152,7 +153,16 @@ const LABELS: Record<JourneyLabel, FareJourneyLabel> = {
 }
 
 /** A plan plus resolved names becomes the wire shape. No I/O. */
-export function assembleJourney(plan: JourneyPlan, namer: StationNamer, context: FareContext): FareJourney {
+export function assembleJourney(
+  plan: JourneyPlan,
+  namer: StationNamer,
+  context: FareContext,
+  /*
+   * The doors pinned on walks, for /_internal/trips only. Absent for /fares, the
+   * public contract the OG card and the embed read, which keeps its shape.
+   */
+  exitsOf?: TransferExitResolver
+): FareJourney {
   const { legs, summary, corridorMerges, legLines } = plan
   const { ref: stationRef, known } = namer
 
@@ -209,7 +219,9 @@ export function assembleJourney(plan: JourneyPlan, namer: StationNamer, context:
         from: stationRef(leg.fromStationId),
         to: stationRef(leg.toStationId),
         distanceM: leg.distanceM,
-        ...(surcharge ? { fare: surcharge.fare, corridorLabel: surcharge.corridor.label } : {})
+        ...(surcharge ? { fare: surcharge.fare, corridorLabel: surcharge.corridor.label } : {}),
+        // Only a plain walk names its doors: a surcharged corridor row is not one.
+        ...(surcharge ? {} : exitsOf?.(leg.fromStationId, leg.toStationId))
       }]
     }
     const meta = legLines[index]!
