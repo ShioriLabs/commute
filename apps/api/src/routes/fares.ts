@@ -5,7 +5,7 @@ import { EdgeRepository } from 'db/repositories/edges'
 import { assembleJourney, planJourney } from 'utils/fare-journey'
 import { handleJourneyRequest, journeyCacheKey } from 'utils/journey-endpoint'
 import { SERVICE_BREAKS, TOPOLOGY } from 'db/data/topology'
-import { loadGraph, type ServiceWindow, type Tsundere } from '@commute/tsundere'
+import { loadGraph, type LoadGraphInput, type ServiceWindow, type Tsundere } from '@commute/tsundere'
 import { HEADWAYS_S, STOP_HEADWAYS_S } from 'db/data/headways'
 import { SERVICE_HOURS, type ServiceDay } from 'db/data/service-hours'
 import { TRIP_PATTERNS } from 'db/data/trips'
@@ -26,7 +26,17 @@ const app = new Hono<{ Bindings: Bindings }>()
 let cachedRouter: Tsundere | null = null
 export async function getRouter(d1: D1Database): Promise<Tsundere> {
   if (cachedRouter) return cachedRouter
-  const { edges, transfers } = await new EdgeRepository(d1).getGraphInputs()
+  cachedRouter = routerFromInputs(await new EdgeRepository(d1).getGraphInputs())
+  return cachedRouter
+}
+
+/*
+ * The engine for a given set of graph rows, with everything else it is loaded
+ * with taken from repo data. Split out of getRouter so the route regression
+ * suite (routes/trips.regression.test.ts) builds its router from a snapshot the
+ * same way production builds it from D1, rather than from a copy that can drift.
+ */
+export function routerFromInputs({ edges, transfers }: Pick<LoadGraphInput, 'edges' | 'transfers'>): Tsundere {
   // Service breaks are authored in (operator, station) codes; the graph works
   // in `${operator}-${station}` DB ids. tsundere treats node ids as opaque, so
   // this mapping stays here rather than in the engine.
@@ -36,7 +46,7 @@ export async function getRouter(d1: D1Database): Promise<Tsundere> {
     fromStationId: `${b.operator}-${b.from}`,
     toStationId: `${b.operator}-${b.to}`
   }))
-  cachedRouter = loadGraph({
+  return loadGraph({
     edges,
     transfers,
     // Read by findRoutes only; /fares keeps the answer it has always given.
@@ -74,7 +84,6 @@ export async function getRouter(d1: D1Database): Promise<Tsundere> {
       }))
     }))
   })
-  return cachedRouter
 }
 
 /*
