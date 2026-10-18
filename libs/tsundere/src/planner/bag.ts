@@ -61,6 +61,7 @@ function sameCriteria(a: Criteria, b: Criteria): boolean {
     && a.rideDistanceM === b.rideDistanceM
     && a.walkDistanceM === b.walkDistanceM
     && a.concourseWalkM === b.concourseWalkM
+    && a.walks === b.walks
     && a.waitS === b.waitS
     && a.fare === b.fare
 }

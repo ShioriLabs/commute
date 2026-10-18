@@ -315,7 +315,7 @@ export function plan(
   }
 
   const origin: Label<Trace | null> = {
-    criteria: { boardings: 0, rideDistanceM: 0, walkDistanceM: 0, concourseWalkM: 0, waitS: 0, fare: null },
+    criteria: { boardings: 0, rideDistanceM: 0, walkDistanceM: 0, concourseWalkM: 0, walks: 0, waitS: 0, fare: null },
     incomingLine: null,
     trace: null
   }
@@ -415,6 +415,7 @@ export function plan(
             rideDistanceM: label.criteria.rideDistanceM + (isWalk ? 0 : edge.distanceM),
             walkDistanceM: label.criteria.walkDistanceM + (isWalk ? edge.distanceM : 0),
             concourseWalkM: label.criteria.concourseWalkM + (isWalk ? concourseWalkFor(edge) : 0),
+            walks: label.criteria.walks + (isWalk ? 1 : 0),
             waitS: label.criteria.waitS + (boarding ? expectedWaitS(edge.lineCode!, stop, headwaysS, defaultHeadwayS) : 0),
             fare: null
           }

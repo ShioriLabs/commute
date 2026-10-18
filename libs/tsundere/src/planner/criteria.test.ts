@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_RANK_WEIGHTS, dominates, rankScore, weightsForWalking, type Criteria } from './criteria'
+import { DEFAULT_RANK_WEIGHTS, WALK_LEG_COST_M, dominates, rankScore, weightsForWalking, type Criteria } from './criteria'
 
 const criteria = (over: Partial<Criteria> = {}): Criteria => ({
   boardings: 1,
   rideDistanceM: 5000,
   walkDistanceM: 200,
   concourseWalkM: 0,
+  walks: 0,
   waitS: 300,
   fare: 3500,
   ...over
@@ -113,7 +114,7 @@ describe('dominates', () => {
    */
   it('leaves a walk that saves far more riding than it costs non-dominated', () => {
     const longWayRound = criteria({ boardings: 1, rideDistanceM: 9000, walkDistanceM: 0 })
-    const shortcut = criteria({ boardings: 1, rideDistanceM: 3000, walkDistanceM: 600 })
+    const shortcut = criteria({ boardings: 1, rideDistanceM: 3000, walkDistanceM: 600, walks: 1 })
     expect(dominates(longWayRound, shortcut)).toBe(false)
     expect(dominates(shortcut, longWayRound)).toBe(false)
   })
@@ -130,6 +131,20 @@ describe('dominates', () => {
     const withConcourse = criteria({ walkDistanceM: 400, concourseWalkM: 250 })
     expect(dominates(measuredOnly, withConcourse)).toBe(true)
     expect(dominates(withConcourse, measuredOnly)).toBe(false)
+  })
+
+  /*
+   * Alighting early to walk to the next line, against riding on to where it can
+   * be boarded without a walk. By the metre alone the shortcut costs 5800 to
+   * the ride's 6000 and survives; the walk's own cost is what makes it a loss.
+   * The shape behind 2026-10-18's change, when newly measured transfers started
+   * winning over riding one or two more stops.
+   */
+  it('dominates alighting early to walk when riding on costs no more', () => {
+    const rideOn = criteria({ boardings: 2, rideDistanceM: 6000, walkDistanceM: 0, walks: 0 })
+    const walkAcross = criteria({ boardings: 2, rideDistanceM: 4700, walkDistanceM: 300, concourseWalkM: 250, walks: 1 })
+    expect(dominates(rideOn, walkAcross)).toBe(true)
+    expect(dominates(walkAcross, rideOn)).toBe(false)
   })
 
   describe('unknown fares', () => {
@@ -167,6 +182,12 @@ describe('rankScore', () => {
     const walked = criteria({ rideDistanceM: 0, walkDistanceM: 1000 })
     const ridden = criteria({ rideDistanceM: 1000, walkDistanceM: 0 })
     expect(rankScore(walked)).toBeGreaterThan(rankScore(ridden))
+  })
+
+  it('charges each walk a fixed cost on top of its metres', () => {
+    const once = criteria({ walks: 1 })
+    const twice = criteria({ walks: 2 })
+    expect(rankScore(twice) - rankScore(once)).toBe(WALK_LEG_COST_M)
   })
 
   it('treats an unknown fare as zero rather than throwing', () => {
@@ -214,6 +235,13 @@ describe('walking preference', () => {
   // or the rider gets nothing instead of an option they merely dislike.
   it('leaves SLOWEST finite so a walk-only route is still rankable', () => {
     expect(Number.isFinite(rankScore(longWalk, weightsForWalking('SLOWEST')))).toBe(true)
+  })
+
+  // A cost per walk, not per metre, so how fast the rider walks does not move it.
+  it('charges every walk the same fixed cost at every speed', () => {
+    for (const level of ['BRISK', 'AVERAGE', 'SLOW', 'SLOWEST'] as const) {
+      expect(weightsForWalking(level).walks).toBe(WALK_LEG_COST_M)
+    }
   })
 
   it('leaves the other axes alone', () => {
