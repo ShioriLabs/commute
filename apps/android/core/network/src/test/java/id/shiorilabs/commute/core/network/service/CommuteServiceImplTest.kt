@@ -105,6 +105,28 @@ class CommuteServiceImplTest {
     }
 
     @Test
+    fun `a closed route's error carries its code and when service opens`() = runTest {
+        val body = """{"status":404,"error":{"code":"CLOSED","message":"No service on this route at that time.","nextServiceAt":"2026-10-18T04:12:00+07:00"}}"""
+        val service = service { respond(content = body, status = HttpStatusCode.NotFound, headers = headersOf(HttpHeaders.ContentType, "application/json")) }
+
+        val thrown = runCatching { service.getTrips("KCI-CUK", "LRTJBDB-SET", null, null, null, null, null) }.exceptionOrNull() as ApiException
+
+        assertEquals(404, thrown.status)
+        assertEquals("CLOSED", thrown.code)
+        assertEquals("2026-10-18T04:12:00+07:00", thrown.nextServiceAt)
+    }
+
+    @Test
+    fun `an error body that isn't the envelope has no code`() = runTest {
+        val service = service { respond(content = "<html>bad gateway</html>", status = HttpStatusCode.BadGateway) }
+
+        val thrown = runCatching { service.getTrips("KCI-CUK", "LRTJBDB-SET", null, null, null, null, null) }.exceptionOrNull() as ApiException
+
+        assertNull(thrown.code)
+        assertNull(thrown.nextServiceAt)
+    }
+
+    @Test
     fun `a trip log goes up once, as zstd, with the app's version`() = runTest {
         val service = service { respond(content = "", status = HttpStatusCode.ServiceUnavailable) }
         val body = byteArrayOf(0x28, 0xb5.toByte(), 0x2f, 0xfd.toByte(), 1, 2, 3)

@@ -10,6 +10,7 @@ import id.shiorilabs.commute.core.query.QueryPolicy
 import id.shiorilabs.commute.core.query.QuerySpec
 import id.shiorilabs.commute.core.query.Refetched
 import id.shiorilabs.commute.core.query.queryKey
+import id.shiorilabs.commute.core.type.ApiException
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.feature.journey.data.JourneyRepository
 import id.shiorilabs.commute.feature.journey.domain.DEPARTURE_SLOT_MINUTES
@@ -34,6 +35,10 @@ import javax.inject.Singleton
  * the ones the API would give, asked again in the next slot, and the last one for a pair is still
  * there to show (with its age) when the next can't be had. A picked departure is its own key, kept
  * as briefly as a fare.
+ *
+ * A pair that is closed when asked (`404 CLOSED`, which says when service opens) is asked again at
+ * the opening, and answers with those journeys: the first service, as other transit apps give, and
+ * not an error. Partial service needs none of this: the API routes over whatever runs.
  */
 @Singleton
 class JourneyRepositoryImpl @Inject constructor(
@@ -57,15 +62,22 @@ class JourneyRepositoryImpl @Inject constructor(
                 is Departure.At -> QueryPolicy.Fare
             },
         ) { etag ->
-            service.getTrips(
+            suspend fun ask(at: String?) = service.getTrips(
                 fromId = fromId,
                 toId = toId,
                 paymentMethod = params.paymentMethod,
-                at = params.at,
+                at = at,
                 modes = params.modes,
                 walking = params.walking,
                 ifNoneMatch = etag,
             )
+            try {
+                ask(params.at)
+            } catch (closed: ApiException) {
+                val opening = closed.nextServiceAt
+                if (closed.status != 404 || closed.code != CLOSED || opening == null) throw closed
+                ask(opening)
+            }
         }
     }
 
@@ -86,6 +98,8 @@ class JourneyRepositoryImpl @Inject constructor(
     private companion object {
 
         const val TRIPS = "trips"
+
+        const val CLOSED = "CLOSED"
 
         /** Fresh until the end of the departure slot it was fetched in. */
         val UntilSlotEnds = QueryPolicy { fetchedAt ->
