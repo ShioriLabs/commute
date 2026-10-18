@@ -4,7 +4,7 @@ import { Bindings } from 'app'
 import { HubRepository } from 'db/repositories/hubs'
 import { StationRepository } from 'db/repositories/stations'
 import type { TripResult } from '@commute/schemas'
-import { weightsForWalking, type RankWeights, type WalkingPreference } from '@commute/tsundere'
+import { weightsForWalking, type RankWeights, type Tsundere, type WalkingPreference } from '@commute/tsundere'
 import { getRouter, linesOf, nextServiceAt, parseFareContext, timeOptions } from 'routes/fares'
 import { wibIsoString } from 'utils/fare'
 import { assembleJourney, planJourney } from 'utils/fare-journey'
@@ -13,7 +13,7 @@ import { retimeTrips } from 'utils/journey-times'
 import { observedHeadwaysEnabledFor } from 'utils/observedFlag'
 import { summarizeFares } from 'utils/fare-summary'
 import { ridesAirportPairsOnly, withAirportExclusion } from 'utils/airport'
-import { endpointsFor, getPlaceIndex } from 'utils/places'
+import { endpointsFor, getPlaceIndex, type PlaceIndex } from 'utils/places'
 import { mergeInterlinedLegs } from 'utils/interlining'
 import { Ok } from 'utils/response'
 import { readThrough } from 'utils/read-through'
@@ -144,6 +144,65 @@ function walkingWeights(walking?: WalkingPreference): RankWeights | undefined {
   return walking === undefined || walking === 'AVERAGE' ? undefined : weightsForWalking(walking)
 }
 
+/*
+ * The trips search itself: endpoints, exclusions, time, walking and fares
+ * resolved exactly as /_internal/trips resolves them, then the engine.
+ *
+ * Exported for the route regression suite (routes/trips.regression.test.ts),
+ * which has to ask the question the app asks. A copy of these options in the
+ * test would drift the first time one of them changed here.
+ */
+export function searchTrips(
+  router: Tsundere,
+  fromId: string,
+  toId: string,
+  { places, context, modes, walking, observed }: {
+    places: PlaceIndex
+    context: FareContext
+    modes?: string
+    walking?: WalkingPreference
+    observed: boolean
+  }
+) {
+  /*
+   * Each endpoint as the whole place it belongs to (utils/places.ts): a rider
+   * asking for LRT Rasuna Said has arrived at the TJ halte stacked on it, and
+   * either side of an "Arah" halte is the same stop.
+   */
+  const endpoints = endpointsFor(places, fromId, toId)
+  const excluded = excludedLines(modes, endpoints)
+  const journeys = router.findRoutes(fromId, toId, {
+    ...endpoints,
+    /*
+     * When the rider is travelling, which decides both which lines are
+     * running at all and how often they come. Omitting these is what the
+     * search did before service hours existed.
+     */
+    ...timeOptions(context, observed),
+    /*
+     * Lines the rider will not board. Boarding-only, so a walk between two
+     * haltes is still offered and a ride already under way is never cut.
+     */
+    excludeLines: excluded,
+    /*
+     * Reorders the front; never prunes it. A rider who walks slowly still
+     * gets the footbridge route offered, just ranked below the alternatives.
+     */
+    weights: walkingWeights(walking),
+    /*
+     * Pricing the journeys is what makes the CHEAPEST label reachable at all —
+     * without a scorer every journey's `fare` criterion is null and the axis
+     * is skipped as incomparable.
+     *
+     * The legs are merged first, exactly as planJourney merges them, so the
+     * fare a label was decided on and the fare the rider sees are computed
+     * over the same decomposition. Scoring raw legs would let them disagree.
+     */
+    scoreFare: legs => summarizeFares(mergeInterlinedLegs([...legs]), context).totalFare
+  }).filter(journey => ridesAirportPairsOnly(journey.legs))
+  return { endpoints, excluded, journeys }
+}
+
 app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRouter, parseFareContext, {
   keyPrefix: 'trips',
   /*
@@ -193,42 +252,14 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
   build: async ({ router, timing, context, fromId, toId, hydrate, transferExits }) => {
     // The same captured value the cache scope above keyed this body on.
     const observed = observedHeadwaysEnabledFor(c.req.raw)
-    /*
-     * Each endpoint as the whole place it belongs to (utils/places.ts): a rider
-     * asking for LRT Rasuna Said has arrived at the TJ halte stacked on it, and
-     * either side of an "Arah" halte is the same stop.
-     */
-    const endpoints = endpointsFor(await getPlaceIndex(c.env.DB), fromId, toId)
-    const excluded = excludedLines(c.req.query('modes'), endpoints)
-    const routed = timing.measureSync('route', () => router.findRoutes(fromId, toId, {
-      ...endpoints,
-      /*
-       * When the rider is travelling, which decides both which lines are
-       * running at all and how often they come. Omitting these is what the
-       * search did before service hours existed.
-       */
-      ...timeOptions(context, observed),
-      /*
-       * Lines the rider will not board. Boarding-only, so a walk between two
-       * haltes is still offered and a ride already under way is never cut.
-       */
-      excludeLines: excluded,
-      /*
-       * Reorders the front; never prunes it. A rider who walks slowly still
-       * gets the footbridge route offered, just ranked below the alternatives.
-       */
-      weights: walkingWeights(walkingPreference(c.req.query('walking'))),
-      /*
-       * Pricing the journeys is what makes the CHEAPEST label reachable at all —
-       * without a scorer every journey's `fare` criterion is null and the axis
-       * is skipped as incomparable.
-       *
-       * The legs are merged first, exactly as planJourney merges them, so the
-       * fare a label was decided on and the fare the rider sees are computed
-       * over the same decomposition. Scoring raw legs would let them disagree.
-       */
-      scoreFare: legs => summarizeFares(mergeInterlinedLegs([...legs]), context).totalFare
-    }).filter(journey => ridesAirportPairsOnly(journey.legs)))
+    const placeIndex = await getPlaceIndex(c.env.DB)
+    const { endpoints, excluded, journeys: routed } = timing.measureSync('route', () => searchTrips(router, fromId, toId, {
+      places: placeIndex,
+      context,
+      modes: c.req.query('modes'),
+      walking: walkingPreference(c.req.query('walking')),
+      observed
+    }))
     /*
      * findRoutes reports "no route" as an empty front, where findRoute returns
      * null. An empty front has two very different causes, and the rider needs
