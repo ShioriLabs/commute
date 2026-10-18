@@ -13,6 +13,11 @@ export interface TransferSchema {
   // side, e.g. a busway underpass between two halte). D1 stores 0/1; consumers
   // coerce to a boolean on read.
   noTap: ColumnType<number, number | undefined, number | undefined>
+  // Optional pins to `stationExits.id`: the exit this walk leaves fromStationId by
+  // and the one it enters toStationId by. Null for most rows; external transfers
+  // have no toStationId, so only fromExitId applies to them.
+  fromExitId: ColumnType<string | null, string | null | undefined, string | null | undefined>
+  toExitId: ColumnType<string | null, string | null | undefined, string | null | undefined>
   createdAt: ColumnType<Date, string | undefined, never>
   updatedAt: ColumnType<Date, string | undefined, string | undefined>
 }

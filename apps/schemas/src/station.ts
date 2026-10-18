@@ -69,6 +69,40 @@ export const StationRefSchema = v.pipe(
   v.metadata({ ref: 'StationRef' })
 )
 
+/* A station's exits, referenced from transfers and listed by the exits endpoint. */
+export const ExitRefSchema = v.pipe(
+  v.object({
+    id: v.pipe(v.string(), v.metadata({ examples: ['MRTJ-IST:B'] })),
+    ref: v.pipe(
+      v.string(),
+      v.description('Nama pintu persis seperti tulisan di papan petunjuk, misalnya `B` atau `Utara`.'),
+      v.metadata({ examples: ['B'] })
+    ),
+    name: v.pipe(
+      v.nullable(v.string()),
+      v.description('Jalan atau penanda tempat pintu ini membuka. Null kalau belum dicatat.')
+    )
+  }),
+  v.title('ExitRef'),
+  v.description('Rujukan singkat ke satu pintu keluar stasiun.'),
+  v.metadata({ ref: 'ExitRef' })
+)
+
+export const StationExitSchema = v.pipe(
+  v.object({
+    ...ExitRefSchema.entries,
+    latitude: v.pipe(v.nullable(v.number()), v.description('Koordinat pintu itu sendiri, bukan koordinat stasiun. Null kalau belum diukur.')),
+    longitude: v.nullable(v.number()),
+    source: v.pipe(
+      v.picklist(['FIELD', 'OPERATOR', 'OSM']),
+      v.description('Asal datanya. `FIELD` = dicek langsung di lokasi, `OPERATOR` = dari peta resmi operator, `OSM` = dari OpenStreetMap (ODbL, wajib atribusi).')
+    )
+  }),
+  v.title('StationExit'),
+  v.description('Satu pintu keluar atau gerbang stasiun.'),
+  v.metadata({ ref: 'StationExit' })
+)
+
 /*
  * Transfers are a discriminated union on `dataType`: an INTERNAL transfer points
  * at a station this API knows, so it carries the full reference; an EXTERNAL one
@@ -87,6 +121,10 @@ const TransferBaseEntries = {
   notes: v.pipe(
     v.nullable(v.string()),
     v.description('Petunjuk tambahan buat jalan kakinya. Null kalau tidak ada yang perlu dijelaskan.')
+  ),
+  fromExit: v.pipe(
+    v.optional(ExitRefSchema),
+    v.description('Pintu di stasiun asal yang dipakai buat mulai jalan. Cuma ada kalau sudah dicatat.')
   )
 }
 
@@ -94,7 +132,11 @@ export const InternalTransferSchema = v.pipe(
   v.object({
     ...TransferBaseEntries,
     dataType: v.literal('INTERNAL'),
-    toStation: StationRefSchema
+    toStation: StationRefSchema,
+    toExit: v.pipe(
+      v.optional(ExitRefSchema),
+      v.description('Pintu di stasiun tujuan tempat jalan kakinya masuk. Cuma ada kalau sudah dicatat.')
+    )
   }),
   v.title('InternalTransfer'),
   v.description('Sambungan ke stasiun lain yang ada di API ini. `toStation` berisi referensi stasiun lengkap.'),

@@ -9,6 +9,7 @@ import { getLineByOperator } from 'utils/line'
 import { mapify } from 'utils/mapify'
 import { getOperatorByCode } from 'utils/operator'
 import { lineKey } from 'utils/ids'
+import { StationExitRepository } from './station-exits'
 
 /*
  * The public Station shape.
@@ -366,6 +367,16 @@ export class StationRepository extends Repository {
     const internalToStationIDs = transfers.filter(transfer => transfer.dataType === 'INTERNAL').map(transfer => transfer.toStationId!)
     const internalToStations = mapify((await this.getByIds(internalToStationIDs)), item => item.id)
 
+    const exitRefs = await new StationExitRepository(this.d1).getRefsByIds(
+      transfers.flatMap(transfer => [transfer.fromExitId, transfer.toExitId]).filter((exitId): exitId is string => !!exitId)
+    )
+
+    // A pin is only trusted when the exit belongs to the station it is pinned on
+    // (ids are `${stationId}:${ref}`); the FK alone would let a seed typo show
+    // another station's door.
+    const ownedExit = (exitId: string | null | undefined, stationId: string | null) =>
+      !!exitId && !!stationId && exitId.startsWith(`${stationId}:`)
+
     const returningTransfers = []
     for (const transfer of transfers) {
       let toStation
@@ -390,7 +401,10 @@ export class StationRepository extends Repository {
         toStation,
         // `distanceM`, matching FareLeg.distanceM and FareResult.totalDistanceM.
         distanceM: transfer.distance,
-        notes: transfer.notes
+        notes: transfer.notes,
+        // Absent rather than null: most transfers have no exit pinned yet.
+        ...(ownedExit(transfer.fromExitId, transfer.fromStationId) && exitRefs.has(transfer.fromExitId!) && { fromExit: exitRefs.get(transfer.fromExitId!) }),
+        ...(transfer.dataType === 'INTERNAL' && ownedExit(transfer.toExitId, transfer.toStationId) && exitRefs.has(transfer.toExitId!) && { toExit: exitRefs.get(transfer.toExitId!) })
       })
     }
 
