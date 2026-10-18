@@ -21,6 +21,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.type.UIState
@@ -28,10 +29,15 @@ import id.shiorilabs.commute.core.type.isOffline
 import id.shiorilabs.commute.core.ui.components.ProblemPanel
 import id.shiorilabs.commute.core.ui.components.SkeletonBlock
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.feature.saved.R
+import id.shiorilabs.commute.feature.station.domain.Departure
+import id.shiorilabs.commute.feature.station.domain.DestinationTimetable
+import id.shiorilabs.commute.feature.station.domain.DirectionGroup
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
+import id.shiorilabs.commute.feature.station.domain.Station
 import id.shiorilabs.commute.feature.station.domain.StationBoard
 import id.shiorilabs.commute.feature.station.domain.isTransJakarta
 import id.shiorilabs.commute.feature.station.presentation.components.HalteFrequencies
@@ -236,6 +242,66 @@ private fun StationSkeleton(modifier: Modifier = Modifier) {
                 .padding(top = 16.dp)
                 .fillMaxWidth()
                 .height(320.dp),
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun StationTitlePreview() {
+    CommutePreviewScaffold {
+        Column {
+            StationTitle(stationId = "KCI-MRI", name = "Manggarai", onClick = {})
+            StationTitle(stationId = "KCI-SUD", name = "Sudirman", note = "350 m", onClick = {})
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun StationPlaceholderPreview() {
+    CommutePreviewScaffold {
+        Column {
+            StationPlaceholder(station = UIState.Loading, onRetry = {})
+            StationPlaceholder(station = UIState.Error("gagal"), onRetry = {})
+        }
+    }
+}
+
+@Preview(showBackground = true, heightDp = 600)
+@Composable
+private fun StationTimetablePreview() {
+    val lineKey = "KCI:B"
+    val board = StationBoard(
+        stationId = "KCI-MRI",
+        station = UIState.Success(Station("KCI-MRI", "Manggarai", "KCI", "MRI", listOf(lineKey))),
+        timetable = UIState.Success(
+            listOf(
+                LineTimetable(
+                    lineKey = lineKey,
+                    groups = listOf(
+                        DirectionGroup(
+                            key = "south",
+                            label = listOf("Bogor"),
+                            platformCode = "3/4",
+                            destinations = listOf(
+                                DestinationTimetable("Bogor", null, List(10) { Departure(null, 8 * 60 + 2 + it * 12) }),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+        nextDayBoard = null,
+        nextDayDiffers = false,
+    )
+    CommutePreviewScaffold {
+        StationTimetable(
+            card = board,
+            lineCount = 1,
+            lines = mapOf(lineKey to LineInfo("Lin Bogor", "B", "#EE3D43", "KCI")),
+            now = LocalDateTime.of(2026, 10, 1, 8, 0),
+            onRetry = {},
         )
     }
 }

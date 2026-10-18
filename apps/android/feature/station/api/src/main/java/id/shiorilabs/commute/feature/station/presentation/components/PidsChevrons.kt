@@ -9,9 +9,12 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
@@ -24,9 +27,11 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 
 /** One pulse, Tailwind's `animate-pulse` at 1.2 s: down to half opacity and back. */
 private const val PULSE_MILLIS = 1200
@@ -171,3 +176,15 @@ private fun pulse(index: Int): InfiniteRepeatableSpec<Float> = infiniteRepeatabl
     repeatMode = RepeatMode.Restart,
     initialStartOffset = StartOffset(index * PULSE_STAGGER_MILLIS),
 )
+
+@Preview(showBackground = true)
+@Composable
+private fun PidsChevronsPreview() {
+    CommutePreviewScaffold {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            PidsChevrons(color = MaterialTheme.colorScheme.primary)
+            PidsChevronsProgress(progress = { 0.5f }, pulsing = false, color = MaterialTheme.colorScheme.primary, height = 12.dp)
+            PidsChevronsProgress(progress = { 1f }, pulsing = false, color = MaterialTheme.colorScheme.primary, height = 12.dp)
+        }
+    }
+}

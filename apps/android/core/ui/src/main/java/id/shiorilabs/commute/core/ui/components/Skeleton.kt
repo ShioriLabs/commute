@@ -1,5 +1,13 @@
 package id.shiorilabs.commute.core.ui.components
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.Slate200
 import androidx.compose.animation.core.InfiniteRepeatableSpec
 import androidx.compose.animation.core.LinearEasing
@@ -52,3 +60,14 @@ private val PulseSpec: InfiniteRepeatableSpec<Float> = infiniteRepeatable(
     },
     repeatMode = RepeatMode.Restart,
 )
+
+@Preview(showBackground = true)
+@Composable
+private fun SkeletonBlockPreview() {
+    CommutePreviewScaffold {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SkeletonBlock(Modifier.fillMaxWidth().height(24.dp))
+            SkeletonBlock(Modifier.fillMaxWidth(0.6f).height(16.dp))
+        }
+    }
+}

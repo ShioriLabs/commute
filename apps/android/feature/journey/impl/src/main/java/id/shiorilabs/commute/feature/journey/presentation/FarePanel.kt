@@ -22,11 +22,13 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.components.SkeletonBlock
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.Amber100
 import id.shiorilabs.commute.core.ui.theme.Amber950
 import id.shiorilabs.commute.core.ui.theme.Slate400
@@ -34,8 +36,10 @@ import id.shiorilabs.commute.core.ui.time.updatedAgoText
 import id.shiorilabs.commute.feature.journey.R
 import id.shiorilabs.commute.feature.journey.domain.Journey
 import id.shiorilabs.commute.feature.journey.domain.JourneyCriteria
+import id.shiorilabs.commute.feature.journey.domain.JourneyStop
 import id.shiorilabs.commute.feature.journey.domain.PairEnd
 import id.shiorilabs.commute.feature.journey.domain.PickableStation
+import id.shiorilabs.commute.feature.journey.domain.TripAnswer
 import id.shiorilabs.commute.feature.journey.presentation.components.CriteriaBar
 import id.shiorilabs.commute.feature.journey.presentation.components.JourneyResult
 import id.shiorilabs.commute.feature.journey.presentation.components.OptionPlate
@@ -215,3 +219,75 @@ internal fun Problem(text: String, onRetry: (() -> Unit)? = null, actionLabel: S
         }
     }
 }
+
+@Preview(showBackground = true, heightDp = 1000)
+@Composable
+private fun FarePanelLoadedPreview() {
+    val bogor = JourneyPreviewData.stations[0]
+    val sudirman = JourneyPreviewData.stations[2]
+    CommutePreviewScaffold {
+        FarePanel(
+            state = JourneyUiState(
+                origin = PairEndpoint(bogor.id, bogor, bogor.name),
+                destination = PairEndpoint(sudirman.id, sudirman, sudirman.name),
+                trip = TripState.Loaded(
+                    answer = TripAnswer(
+                        from = JourneyStop(bogor.id, bogor.name),
+                        to = JourneyStop(sudirman.id, sudirman.name),
+                        journeys = listOf(JourneyPreviewData.journey, JourneyPreviewData.directJourney),
+                    ),
+                ),
+                lines = JourneyPreviewData.lines,
+            ),
+            picker = PickerUiState(),
+            pickerText = "",
+            now = JourneyPreviewData.now,
+            actions = previewActions,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun FarePanelEmptyPreview() {
+    CommutePreviewScaffold {
+        FarePanel(
+            state = JourneyUiState(),
+            picker = PickerUiState(),
+            pickerText = "",
+            now = JourneyPreviewData.now,
+            actions = previewActions,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ResultSkeletonPreview() {
+    CommutePreviewScaffold {
+        Column(modifier = Modifier.padding(horizontal = 16.dp)) { ResultSkeleton() }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ProblemPreview() {
+    CommutePreviewScaffold {
+        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            Problem(text = "Rute belum bisa dimuat.", onRetry = {})
+        }
+    }
+}
+
+private val previewActions = FarePanelActions(
+    onPick = {},
+    onSwap = {},
+    onCriteriaChange = {},
+    onSelectJourney = {},
+    onRetry = {},
+    onPickerQueryChange = {},
+    onPickStation = {},
+    onClosePicker = {},
+)

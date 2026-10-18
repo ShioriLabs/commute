@@ -1,7 +1,9 @@
 package id.shiorilabs.commute.feature.trip.presentation
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.tooling.preview.Preview
 import id.shiorilabs.commute.core.tripcopy.R as CopyR
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.TABULAR
 import id.shiorilabs.commute.feature.station.domain.formatPlatformCode
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -791,5 +793,80 @@ private fun NextDepartures(times: List<Instant>, modifier: Modifier = Modifier) 
                 )
             }
         }
+    }
+}
+
+@Preview(showBackground = true, heightDp = 1400)
+@Composable
+private fun ActiveTripRidingPreview() {
+    CommutePreviewScaffold {
+        ActiveTripContent(
+            state = ActiveTripUiState(
+                trip = TripPreviewData.riding(),
+                lines = TripPreviewData.lines,
+                stationLines = TripPreviewData.stationLines,
+            ),
+            innerPadding = PaddingValues(),
+            onClose = {},
+            onStop = {},
+            onSay = {},
+            onReminder = {},
+            onDetails = {},
+            onNameHidden = {},
+            onOpenStation = {},
+            onRouteBack = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, heightDp = 1400)
+@Composable
+private fun ActiveTripWaitingPreview() {
+    CommutePreviewScaffold {
+        ActiveTripContent(
+            state = ActiveTripUiState(
+                trip = TripPreviewData.waiting(),
+                lines = TripPreviewData.lines,
+                stationLines = TripPreviewData.stationLines,
+            ),
+            innerPadding = PaddingValues(),
+            onClose = {},
+            onStop = {},
+            onSay = {},
+            onReminder = {},
+            onDetails = {},
+            onNameHidden = {},
+            onOpenStation = {},
+            onRouteBack = {},
+            pidsStyle = PidsStyle.Yishun,
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ActiveTripGonePreview() {
+    CommutePreviewScaffold {
+        ActiveTripContent(
+            state = ActiveTripUiState(trip = null),
+            innerPadding = PaddingValues(),
+            onClose = {},
+            onStop = {},
+            onSay = {},
+            onReminder = {},
+            onDetails = {},
+            onNameHidden = {},
+            onOpenStation = {},
+            onRouteBack = {},
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun NextDeparturesPreview() {
+    val now = Instant.now()
+    CommutePreviewScaffold {
+        NextDepartures(times = List(4) { now.plusSeconds((it + 1) * 12 * 60L) }, modifier = Modifier.padding(16.dp))
     }
 }

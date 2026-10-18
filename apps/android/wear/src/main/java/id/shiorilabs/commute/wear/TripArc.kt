@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.wear
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -10,7 +11,9 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -77,3 +80,17 @@ private const val DOT_SHADOW_ALPHA = 0.35f
 
 /** Thinner than this, the arc is gone: nothing is drawn. */
 private const val MIN_STROKE_PX = 0.5f
+
+@Preview(widthDp = 192, heightDp = 192, showBackground = true, backgroundColor = 0xFF000000)
+@Composable
+private fun TripArcPreview() {
+    CommuteWatchTheme {
+        TripArc(
+            rideFractions = listOf(0.7, 0.3),
+            fraction = 0.45,
+            colors = listOf(Color(0xFFE4002B), Color(0xFF00A9E0)),
+            thickness = 8.dp,
+            modifier = Modifier.size(192.dp),
+        )
+    }
+}

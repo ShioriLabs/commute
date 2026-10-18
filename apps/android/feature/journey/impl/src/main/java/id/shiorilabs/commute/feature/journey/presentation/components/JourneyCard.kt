@@ -1,5 +1,7 @@
 package id.shiorilabs.commute.feature.journey.presentation.components
 
+import androidx.compose.ui.tooling.preview.Preview
+import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.Paper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -50,6 +52,7 @@ import id.shiorilabs.commute.feature.journey.domain.isLastTrain
 import id.shiorilabs.commute.feature.journey.domain.rides
 import id.shiorilabs.commute.feature.journey.domain.routeBarSegments
 import id.shiorilabs.commute.feature.journey.domain.sortJourneyLabels
+import id.shiorilabs.commute.feature.journey.presentation.JourneyPreviewData
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 
 @Composable
@@ -223,4 +226,15 @@ private fun MetaText(text: String, modifier: Modifier = Modifier) {
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun JourneyCardPreview() {
+    CommutePreviewScaffold {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            JourneyCard(journey = JourneyPreviewData.journey, lines = JourneyPreviewData.lines, onClick = {})
+            JourneyCard(journey = JourneyPreviewData.directJourney, lines = JourneyPreviewData.lines)
+        }
+    }
 }
