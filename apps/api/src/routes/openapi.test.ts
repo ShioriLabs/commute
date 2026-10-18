@@ -39,6 +39,7 @@ const PUBLIC_ROUTES = [
   '/stations/{operator}/{stationCode}/timetable/grouped',
   '/stations/{operator}/{stationCode}/timetable/{line}',
   '/stations/{operator}/{stationCode}/transfers',
+  '/stations/{operator}/{stationCode}/exits',
   '/hubs',
   '/hubs/{slug}',
   '/lines/{operator}/{lineCode}',

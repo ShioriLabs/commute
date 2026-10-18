@@ -288,6 +288,33 @@ describe('StationRepository.getTransfersFromStationId', () => {
   })
 })
 
+describe('StationRepository.getTransfersFromStationId exits', () => {
+  it('attaches pinned exits, drops dangling and foreign-station ones, and never pins an EXTERNAL toExit', async () => {
+    terminalResults.push([
+      { id: 1, fromStationId: 'KCI-DP', dataType: 'INTERNAL', toStationId: 'KCI-BOO', distance: 100, notes: null, fromExitId: 'KCI-DP:A', toExitId: 'KCI-BOO:Utara' },
+      { id: 2, fromStationId: 'KCI-DP', dataType: 'INTERNAL', toStationId: 'KCI-BOO', distance: 100, notes: null, fromExitId: 'KCI-DP:GONE', toExitId: 'KCI-ELSEWHERE:X' },
+      { id: 3, fromStationId: 'KCI-DP', dataType: 'EXTERNAL', toStationData: JSON.stringify({ name: 'Ext' }), distance: 200, notes: null, fromExitId: 'KCI-DP:A', toExitId: 'KCI-BOO:Utara' }
+    ])
+    terminalResults.push([
+      { id: 'KCI-BOO', code: 'BOO', operator: 'KCI', lines: 'C', amenities: null, searchable: 1, name: 'Bogor', formattedName: null }
+    ])
+    terminalResults.push([
+      { id: 'KCI-DP:A', ref: 'A', name: 'Jl. Margonda' },
+      { id: 'KCI-BOO:Utara', ref: 'Utara', name: null }
+    ])
+
+    const [pinned, dangling, external] = await repo().getTransfersFromStationId('KCI-DP')
+    expect(pinned).toMatchObject({
+      fromExit: { id: 'KCI-DP:A', ref: 'A', name: 'Jl. Margonda' },
+      toExit: { id: 'KCI-BOO:Utara', ref: 'Utara', name: null }
+    })
+    expect(dangling).not.toHaveProperty('fromExit')
+    expect(dangling).not.toHaveProperty('toExit')
+    expect(external).toHaveProperty('fromExit')
+    expect(external).not.toHaveProperty('toExit')
+  })
+})
+
 describe('StationRepository.insertTimetable', () => {
   it('returns undefined when the station does not exist', async () => {
     terminalResults.push(undefined) // getById -> executeTakeFirst -> nothing

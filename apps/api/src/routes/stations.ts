@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { StationRepository } from 'db/repositories/stations'
+import { StationExitRepository } from 'db/repositories/station-exits'
 import { InvalidTimeRange, Internal, NotFound, Ok, TimetableNotAvailable, UnknownOperator, UnknownStation } from 'utils/response'
 import { Bindings } from 'app'
 import { KVRepository } from 'db/repositories/kv'
@@ -23,7 +24,7 @@ import {
 } from 'utils/directions'
 import * as v from 'valibot'
 import { doc, operatorParam, pathParam, queryParam, stationCodeParam, timeWindowParams } from 'schemas/describe'
-import { CompactGroupedTimetableSchema, GroupedTimetableSchema, HeadwayRowSchema, ScheduleSchema, StationDensitySchema, StationSchema, TransferSchema } from '@commute/schemas'
+import { CompactGroupedTimetableSchema, GroupedTimetableSchema, HeadwayRowSchema, ScheduleSchema, StationDensitySchema, StationExitSchema, StationSchema, TransferSchema } from '@commute/schemas'
 import type { DensityRange, HeadwayRow, StationDensity } from '@commute/schemas'
 import { DAY_HEADWAYS_S, DIRECTIONAL_HEADWAYS_S, HEADWAYS_S, LINE_DAY_MASK, LINE_TERMINI, STOP_HEADWAYS_S } from 'db/data/headways'
 import { type Direction, resolveHeadway, type RowKind } from 'utils/observedHeadways'
@@ -516,6 +517,47 @@ app.get(
       if (!checkStationResult.value.exists || checkStationResult.value.station === null) return c.json(UnknownStation(stationCode, operator.code), 404)
 
       return transfers.value
+    })
+  }
+)
+
+app.get(
+  '/:operator/:stationCode/exits',
+  doc({
+    summary: 'Pintu keluar satu stasiun',
+    description: 'Daftar pintu keluar atau gerbang stasiun, urut berdasarkan nama pintu. Datanya diisi bertahap per stasiun, jadi array kosong artinya belum dicatat, bukan berarti stasiunnya nggak punya pintu.',
+    tag: 'Stasiun',
+    data: v.array(StationExitSchema),
+    parameters: [operatorParam, stationCodeParam],
+    errors: { 404: 'Kode operator atau stasiun tidak ditemukan.' }
+  }),
+  async (c) => {
+    const operatorCode = c.req.param('operator')
+    const stationCode = c.req.param('stationCode')
+    const operator = getOperatorByCode(operatorCode)
+    if (!operator) {
+      return c.json(UnknownOperator(operatorCode), 404)
+    }
+
+    const stationRepository = new StationRepository(c.env.DB)
+    const exitRepository = new StationExitRepository(c.env.DB)
+
+    const kvKey = `exits:${operator.code}-${stationCode}:${c.env.API_VERSION}`
+
+    // Cached even when empty: most stations have no exits recorded yet, and the
+    // set only changes with a seed, which ships alongside an API_VERSION bump.
+    return readThrough(c, kvKey, async () => {
+      const stationID = `${operator.code}-${stationCode}`
+      const [checkStationResult, exits] = await Promise.allSettled([
+        stationRepository.checkIfExists(stationID),
+        exitRepository.getByStationId(stationID)
+      ])
+
+      if (checkStationResult.status === 'rejected' || exits.status === 'rejected') return c.json(Internal('DATABASE_ERROR', 'Can\'t connect to database, please try again later.'), 500)
+
+      if (!checkStationResult.value.exists || checkStationResult.value.station === null) return c.json(UnknownStation(stationCode, operator.code), 404)
+
+      return exits.value
     })
   }
 )

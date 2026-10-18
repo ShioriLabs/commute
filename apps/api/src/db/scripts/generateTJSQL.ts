@@ -142,6 +142,14 @@ stationStops.sort()
 // One INSERT statement per row — D1's `wrangler d1 execute` rejects a single
 // multi-thousand-row VALUES list (SQLITE_TOOBIG). Matches generateEdgesSQL.ts.
 const STATIONS_COLS = 'id, name, code, formattedName, region, regionCode, operator, timetableSynced, searchable, latitude, longitude, createdAt, updatedAt'
+/*
+ * An upsert, not INSERT OR REPLACE: REPLACE deletes the old row first, and with
+ * foreign keys on that cascades into everything hanging off a station
+ * (stationExits, hubStations, transfers pinned to an exit) and resets columns the
+ * feed doesn't own (score, amenities, timetableSynced). Only the feed's own
+ * columns are refreshed.
+ */
+const STATIONS_FEED_OWNED = ['name', 'code', 'formattedName', 'region', 'regionCode', 'operator', 'searchable', 'latitude', 'longitude']
 const stationRows: string[] = []
 let searchableCount = 0
 let hiddenCount = 0
@@ -159,8 +167,9 @@ for (const collapsedId of stationStops) {
   }
   const name = esc(s.stop_name)
   stationRows.push(
-    `INSERT OR REPLACE INTO stations (${STATIONS_COLS}) VALUES `
-    + `('${stationId(collapsedId)}', '${name}', '${esc(collapsedId)}', '${name}', '${REGION}', '${REGION_CODE}', '${OPERATOR}', FALSE, ${searchable}, ${s.stop_lat}, ${s.stop_lon}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`
+    `INSERT INTO stations (${STATIONS_COLS}) VALUES `
+    + `('${stationId(collapsedId)}', '${name}', '${esc(collapsedId)}', '${name}', '${REGION}', '${REGION_CODE}', '${OPERATOR}', FALSE, ${searchable}, ${s.stop_lat}, ${s.stop_lon}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+    + ` ON CONFLICT(id) DO UPDATE SET ${STATIONS_FEED_OWNED.map(col => `${col} = excluded.${col}`).join(', ')}, updatedAt = CURRENT_TIMESTAMP;`
   )
 }
 fs.writeFileSync(`${SCRIPTS_DIR}/tj_stations_insert.sql`, stationRows.join('\n') + '\n')
@@ -251,6 +260,9 @@ for (const [key, e] of edgeDist) {
 fs.writeFileSync(`${SCRIPTS_DIR}/tj_edges_insert.sql`, edgeRows.join('\n') + '\n')
 
 // ── transfers (feed-provided H<->H pairs, INTERNAL) ──────────────────────────
+// INSERT OR IGNORE: an existing row is left exactly as it is. The distance here
+// is a haversine placeholder, and a row may since have been measured, pinned to
+// exits (fromExitId/toExitId) or marked noTap, all of which a REPLACE would reset.
 const transferRows: string[] = []
 const seenTransfer = new Set<string>()
 for (const t of transfers) {
@@ -266,7 +278,7 @@ for (const t of transfers) {
   const cb = coord(toCollapsed)
   const m = ca && cb ? Math.round(haversineMeters(ca.lat, ca.lng, cb.lat, cb.lng)) : 0
   transferRows.push(
-    `INSERT OR REPLACE INTO transfers (id, dataType, fromStationId, toStationId, toStationData, distance, notes, createdAt, updatedAt)`
+    `INSERT OR IGNORE INTO transfers (id, dataType, fromStationId, toStationId, toStationData, distance, notes, createdAt, updatedAt)`
     + ` VALUES ('${id}', 'INTERNAL', '${from}', '${to}', NULL, ${m}, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`
   )
 }
