@@ -21,6 +21,21 @@ class WalkingTest {
     }
 
     @Test
+    fun `a short change gets a share of the overhead, not all of it`() {
+        val platformChange = TripPlan(
+            listOf(
+                krlThenLrt.legs[0],
+                TripLeg.Transfer(Places.SUDIRMAN, Places.LRT_DUKUH_ATAS, distanceM = 50),
+                krlThenLrt.legs[2],
+            ),
+        )
+        val ends = walking.walkEndsAt(platformChange)!!
+
+        // 45 s at an easy pace, and 60 s of stairs: 50 m is not 310.
+        assertEquals(45L + 60, ends.epochSecond - at(4).epochSecond)
+    }
+
+    @Test
     fun `riding on, the next ride's ready time counts the same walk`() {
         val aboard = walking.copy(legIndex = 0, phase = TripPhase.RIDING, walkingSince = null, confirmedAt = at(2))
 
