@@ -949,6 +949,23 @@ class TripEngineTest {
     }
 
     @Test
+    fun `walking to a train that has left, the trip wakes once it's past the grace for a late rider`() {
+        // Seen off the Commuter Line at 08.08 with 310 m to the 08.12 LRT: no fix since, the walk won't
+        // be done by then. Nothing else is due, so without this wake the missed train is never noticed.
+        val walking = TripEngine.start(krlThenLrt, at(0), hasLocation = true).state.copy(
+            legIndex = 2,
+            phase = TripPhase.WAITING_TO_BOARD,
+            confirmedAt = at(8),
+            walkingSince = at(8),
+        )
+
+        val step = TripEngine.step(krlThenLrt, walking, TripEvent.Tick(at(12.5)))
+
+        assertEquals(TripPhase.WAITING_TO_BOARD, step.state.phase)
+        assertEquals(at(12).plus(CATCH_GRACE).plusSeconds(1), step.nextWakeAt)
+    }
+
+    @Test
     fun `a fix too rough to trust is ignored`() {
         val run = Run(bogorLine)
         run.tick(0.0)
