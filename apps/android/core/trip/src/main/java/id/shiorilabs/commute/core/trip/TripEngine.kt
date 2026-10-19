@@ -568,7 +568,7 @@ object TripEngine {
             if (state.phase == TripPhase.WAITING_TO_BOARD) {
                 val departs = ride.departureAt?.plus(offset)
                 // Seen off the ride before, and still walking to this one when it left: the rider
-                // can't be aboard, whatever the clock says.
+                // can't be aboard, whatever the clock says. Whether it's lost is the controller's call.
                 val walkedPast = departs != null && state.confirmedAt != null && state.walkEndsAt(plan)?.isAfter(departs) == true
                 if (ride.isTimed && !fresh && departs != null && !now.isBefore(departs) && !walkedPast) {
                     state = state.copy(phase = TripPhase.RIDING)
@@ -806,10 +806,6 @@ object TripEngine {
                     TripPhase.WAITING_TO_BOARD -> {
                         candidates += ride.departureAt!!.plus(offset)
                         candidates += ride.departureAt.plus(offset).minus(DEPARTING_LEAD)
-                        // Just past the grace a late rider has: if the walk isn't done by then the train is
-                        // lost, and with no fix to step on nothing else would say so ([walkEndsAt]).
-                        candidates += maxOf(ride.departureAt, plan.plannedReadyAt(state.legIndex) ?: ride.departureAt)
-                            .plus(CATCH_GRACE).plusSeconds(1)
                     }
                     else -> {
                         val nextStop = floor(state.position).toInt() + 1
