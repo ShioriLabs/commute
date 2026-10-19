@@ -867,6 +867,64 @@ class TripControllerImplTest {
         assertTrue("tracking" in logged)
     }
 
+    /**
+     * Still walking to the 08.10 (the walk is not done by it, so the clock leaves the rider waiting),
+     * with the 08.14 and 08.18 behind it, as the API named them.
+     */
+    private fun waitingForTheEightTen(): ActiveTrip {
+        val ride = (plan.legs[2] as TripLeg.Ride).copy(nextDepartures = listOf(minutes(14), minutes(18)))
+        return walkingToAMissedTrain().let { it.copy(plan = TripPlan(plan.legs.take(2) + ride)) }
+    }
+
+    @Test
+    fun `boarding when a later train was due is that train, however late the planned one would be`() = runTest {
+        // 19 Oct: the 10.17 LRT planned, "Udah naik" at 10.21.42 with the 10.21 listed behind it.
+        store.trip = waitingForTheEightTen()
+        val clock = MutableClock(minutes(14).plusSeconds(42))
+        val controller = controller(clock = clock)
+        runCurrent()
+
+        controller.say(RiderAction.BOARDED)
+
+        val trip = controller.active.value!!
+        val ride = trip.plan.ride(2)
+        assertEquals(TripPhase.RIDING, trip.state.phase)
+        assertEquals(minutes(14), ride.departureAt)
+        assertEquals(minutes(24), ride.arrivalAt)
+        assertEquals(listOf(minutes(18)), ride.nextDepartures)
+        assertEquals(42L, trip.state.clockOffsetS)
+        assertTrue("later" in logged)
+    }
+
+    @Test
+    fun `boarding a little after the planned train is that train, running late`() = runTest {
+        store.trip = waitingForTheEightTen()
+        val clock = MutableClock(minutes(11).plusSeconds(30))
+        val controller = controller(clock = clock)
+        runCurrent()
+
+        controller.say(RiderAction.BOARDED)
+
+        val trip = controller.active.value!!
+        assertEquals(minutes(10), trip.plan.ride(2).departureAt)
+        assertEquals(90L, trip.state.clockOffsetS)
+        assertFalse("later" in logged)
+    }
+
+    @Test
+    fun `boarding just ahead of a later train's time is that train, boarded early`() = runTest {
+        store.trip = waitingForTheEightTen()
+        val clock = MutableClock(minutes(13))
+        val controller = controller(clock = clock)
+        runCurrent()
+
+        controller.say(RiderAction.BOARDED)
+
+        val trip = controller.active.value!!
+        assertEquals(minutes(14), trip.plan.ride(2).departureAt)
+        assertEquals(-60L, trip.state.clockOffsetS)
+    }
+
     @Test
     fun `a train still to be caught isn't re-planned`() = runTest {
         // Off at 08.02 instead: there in good time for the 08.10, which is just leaving.
