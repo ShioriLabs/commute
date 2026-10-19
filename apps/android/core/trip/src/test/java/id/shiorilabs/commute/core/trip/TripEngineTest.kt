@@ -1017,6 +1017,29 @@ class TripEngineTest {
     }
 
     @Test
+    fun `waiting for a train a long change from the last, the trip wakes past the grace for the change`() {
+        // In at 08.08, 310 m (281 s and 180 s of stairs) to the 08.12 LRT: on time, the walk ends at 08.15.41,
+        // after the train's 08.12. The wake is for the lateness past that, not past 08.12.
+        val tight = TripPlan(
+            listOf(
+                ride(Places.MANGGARAI, Places.SUDIRMAN, line = "KCI:C", departs = 0, arrives = 8),
+                TripLeg.Transfer(Places.SUDIRMAN, Places.LRT_DUKUH_ATAS, distanceM = 310),
+                ride(Places.LRT_DUKUH_ATAS, Places.LRT_SETIABUDI, line = "LRTJBDB:CB", departs = 12, arrives = 14),
+            ),
+        )
+        val walking = TripEngine.start(tight, at(0), hasLocation = true).state.copy(
+            legIndex = 2,
+            phase = TripPhase.WAITING_TO_BOARD,
+            confirmedAt = at(8),
+            walkingSince = at(8),
+        )
+
+        val step = TripEngine.step(tight, walking, TripEvent.Tick(at(12.5)))
+
+        assertEquals(at(8).plusSeconds(281 + 180 + 61), step.nextWakeAt)
+    }
+
+    @Test
     fun `a fix too rough to trust is ignored`() {
         val run = Run(bogorLine)
         run.tick(0.0)
