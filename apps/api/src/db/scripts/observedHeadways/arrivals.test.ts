@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildOrder, DEFAULT_ARRIVAL_OPTIONS, extractArrivals } from './arrivals'
+import { buildOrder, DEFAULT_ARRIVAL_OPTIONS, extractArrivals, extractPassings } from './arrivals'
 import type { Obs } from './snapshots'
 
 const order = buildOrder([
@@ -60,6 +60,15 @@ describe('extractArrivals', () => {
     const { arrivals, stats } = extractArrivals([[obs(0, 'A'), obs(30_000, 'A'), obs(60_000, '')]], order, DEFAULT_ARRIVAL_OPTIONS)
     expect(arrivals.size).toBe(0)
     expect(stats.transitions).toBe(0)
+  })
+
+  it('reports each passing with its index and how many stops its interval spanned', () => {
+    const passings = extractPassings([obs(0, 'A'), obs(30_000, 'B'), obs(70_000, 'D')], order, DEFAULT_ARRIVAL_OPTIONS)
+    expect(passings.map(x => [x.stop, x.index, x.t, x.span])).toEqual([
+      ['A', 0, 15_000, 1],
+      ['B', 1, 40_000, 2],
+      ['C', 2, 60_000, 2]
+    ])
   })
 
   it('filters arrivals by time with `keep`', () => {
