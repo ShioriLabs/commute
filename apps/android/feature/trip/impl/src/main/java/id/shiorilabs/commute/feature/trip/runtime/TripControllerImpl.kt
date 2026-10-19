@@ -88,6 +88,12 @@ class TripControllerImpl @Inject constructor(
     /** The ride, by leg and departure, last re-planned for, so a missed train is asked about once. */
     private var replannedFor: String? = null
 
+    /** When a re-plan that found nothing is asked again, kept with the engine's own wake so an alarm covers it. */
+    private var retryAt: Instant? = null
+
+    /** The engine's next wake as last given to [schedule]. */
+    private var engineWake: Instant? = null
+
     /** The re-plan being asked, for an alarm that woke the process to wait on ([awaitReplan]). */
     private var replanJob: Job? = null
 
@@ -286,8 +292,9 @@ class TripControllerImpl @Inject constructor(
      * times shifted, offline: the stops and the line are the same) and the lateness is measured
      * against it. Later rides are left to [replanIfMissed] to find missed or not.
      *
-     * The nearer train in time wins, the planned one on a tie; a later train counts only when due no
-     * more than [EARLIER_TRAIN] after boarding, and the planned one only when over [CATCH_GRACE] gone.
+     * The nearer train in time wins, the planned one on a tie; a later train counts only when it has
+     * left by the time of a fix, or by [TAP_SLACK] after a tap, and the planned one only when over
+     * [CATCH_GRACE] gone. Only a fix or a tap counts: the clock boarding a rider says nothing.
      * A swap already made ([ActiveTrip.replaced]) is the plan's train, and [boardedEarlier] its business.
      */
     private fun boardedLater(before: ActiveTrip, trip: ActiveTrip, event: TripEvent, step: TripStep): Pair<ActiveTrip, TripStep> {
@@ -295,12 +302,18 @@ class TripControllerImpl @Inject constructor(
         val state = step.state
         if (before.state.phase != TripPhase.WAITING_TO_BOARD || state.phase != TripPhase.RIDING || state.legIndex != leg) return trip to step
         if (trip.plan != before.plan) return trip to step
+        // Only a boarding something saw. The clock boards a rider whenever its tick runs after the
+        // departure (a late alarm, a restore, a stale fix), which says nothing of the train taken.
+        val sawBoarding = event is TripEvent.Fix || (event is TripEvent.RiderSaid && event.action == RiderAction.BOARDED)
+        if (!sawBoarding) return trip to step
         val ride = trip.plan.ride(leg)
         val planned = ride.departureAt ?: return trip to step
         val boardedAt = event.at
         if (!boardedAt.isAfter(planned.plus(CATCH_GRACE))) return trip to step
+        // A train doesn't leave early: seen moving, it has left; a tap may come a few seconds before it does.
+        val tapSlack = if (event is TripEvent.Fix) Duration.ZERO else TAP_SLACK
         val took = ride.nextDepartures
-            .filter { !it.isAfter(boardedAt.plus(EARLIER_TRAIN)) }
+            .filter { !it.isAfter(boardedAt.plus(tapSlack)) }
             .minByOrNull { Math.abs(Duration.between(it, boardedAt).seconds) }
             ?: return trip to step
         if (Math.abs(Duration.between(took, boardedAt).seconds) >= Math.abs(Duration.between(planned, boardedAt).seconds)) return trip to step
@@ -466,8 +479,10 @@ class TripControllerImpl @Inject constructor(
         val departs = ride.departureAt ?: return
         if (!readyAt.isAfter(departs.plus(CATCH_GRACE))) return
         val key = "$legIndex@$departs"
-        if (key == replannedFor) return
+        // Asked about already, until a retry that found nothing is due.
+        if (key == replannedFor && retryAt?.let { now.isBefore(it) } != false) return
         replannedFor = key
+        retryAt = null
         log.event("replan", mapOf("leg" to legIndex, "departs" to departs, "ready" to readyAt))
         replanJob = scope.launch {
             val onward = replanner.replan(ride.stops.first().id, trip.plan.destination.id, readyAt, ride.line)
@@ -475,13 +490,12 @@ class TripControllerImpl @Inject constructor(
                 ?.takeIf { it.legs.firstOrNull() is TripLeg.Ride }
             if (onward == null) {
                 log.event("missed", mapOf("leg" to legIndex, "departs" to departs, "ready" to readyAt, "onward" to null))
-                // Offline, say: ask again once it's had a while. A rider walking gives no fix to step
-                // on, so the step is made here, apart from this job, which a waiting alarm joins.
-                scope.launch {
-                    delay(REPLAN_RETRY.toMillis())
-                    if (replannedFor != key) return@launch
-                    replannedFor = null
-                    tick()
+                // Offline, say: ask again once it's had a while, on a wake of its own: a rider walking
+                // gives no fix to step on, and a frozen process needs an alarm.
+                mutex.withLock {
+                    if (replannedFor != key) return@withLock
+                    retryAt = clock.instant().plus(REPLAN_RETRY)
+                    schedule(engineWake)
                 }
                 return@launch
             }
@@ -575,7 +589,10 @@ class TripControllerImpl @Inject constructor(
      * Ticks at [at] twice over: a timer for while the process is awake, and an alarm for when it
      * dozes or dies. Whichever is second finds nothing new; a tick is idempotent.
      */
-    private fun schedule(at: Instant?) {
+    private fun schedule(next: Instant?) {
+        engineWake = next
+        val now = clock.instant()
+        val at = listOfNotNull(next, retryAt?.takeIf { it.isAfter(now) }).minOrNull()
         timer?.cancel()
         if (at == null) {
             runtime.cancelWake()
@@ -602,6 +619,9 @@ class TripControllerImpl @Inject constructor(
          * that its lateness won't be made up, early enough to sit with the news.
          */
         val EARLY_REPLAN: Duration = Duration.ofMinutes(10)
+
+        /** A "Udah naik" tap can come this long before the train is off. */
+        val TAP_SLACK: Duration = Duration.ofSeconds(30)
 
         /** The most a train is taken to run ahead of its time, as the engine's own bound is. */
         const val MAX_EARLY_S = -5 * 60L
