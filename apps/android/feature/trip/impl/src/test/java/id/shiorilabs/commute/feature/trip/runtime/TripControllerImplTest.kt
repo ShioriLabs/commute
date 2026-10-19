@@ -932,7 +932,8 @@ class TripControllerImplTest {
 
         val trip = controller.active.value!!
         assertEquals(minutes(14), trip.plan.ride(2).departureAt)
-        assertEquals(-15L, trip.state.clockOffsetS)
+        // Before its time, the engine reads a tap as on time.
+        assertEquals(0L, trip.state.clockOffsetS)
     }
 
     @Test
@@ -949,6 +950,24 @@ class TripControllerImplTest {
         val trip = controller.active.value!!
         assertEquals(minutes(10), trip.plan.ride(2).departureAt)
         assertEquals(180L, trip.state.clockOffsetS)
+    }
+
+    @Test
+    fun `a swap already made is not moved again by a late boarding`() = runTest {
+        // Swapped for the 08.10 and boarding at 08.14.42: boardedEarlier keeps the swapped plan and
+        // leaves it "either train" for leftTooEarly to settle; moving the leg here would drop that.
+        val waiting = waitingForTheEightTen()
+        store.trip = waiting.copy(replaced = ReplacedPlan(waiting.plan, 2, null))
+        val clock = MutableClock(minutes(14).plusSeconds(42))
+        val controller = controller(clock = clock)
+        runCurrent()
+
+        controller.say(RiderAction.BOARDED)
+
+        val trip = controller.active.value!!
+        assertEquals(minutes(10), trip.plan.ride(2).departureAt)
+        assertNotNull(trip.mightBeOn)
+        assertFalse("later" in logged)
     }
 
     @Test
