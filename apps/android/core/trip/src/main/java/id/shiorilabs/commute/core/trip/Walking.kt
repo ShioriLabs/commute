@@ -40,5 +40,8 @@ fun TripState.nextRideReadyAt(plan: TripPlan): Pair<Int, Instant>? {
  */
 private const val TRANSFER_OVERHEAD_S = 180L
 
+/** Short changes (a platform to the next) have fewer stairs: the overhead grows with the walk up to its full size. */
+private const val OVERHEAD_S_PER_M = 1.2
+
 private fun walkSeconds(walk: TripLeg.Transfer): Long =
-    if (walk.distanceM <= 0) 0 else (walk.distanceM / WALK_M_PER_S).toLong() + TRANSFER_OVERHEAD_S
+    if (walk.distanceM <= 0) 0 else (walk.distanceM / WALK_M_PER_S).toLong() + minOf(TRANSFER_OVERHEAD_S, (walk.distanceM * OVERHEAD_S_PER_M).toLong())
