@@ -29,6 +29,7 @@ import id.shiorilabs.commute.feature.trip.origin
 import id.shiorilabs.commute.feature.trip.plan
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -41,6 +42,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
@@ -123,6 +125,8 @@ class TripControllerImplTest {
     /** What the journey planner offers on, and what it was asked. */
     private var onward: TripPlan? = null
     private val asked = mutableListOf<String>()
+    /** What the trip logged, by name. */
+    private val logged = mutableListOf<String>()
     /** Holds the planner's answer back until completed, for what comes in while it's asked. */
     private var answerHeld: CompletableDeferred<Unit>? = null
     private val replanner = TripReplanner { fromId, toId, _, line ->
@@ -148,7 +152,7 @@ class TripControllerImplTest {
         location = location,
         locationPreferences = locationPreferences,
         replanner = replanner,
-        log = { _, _ -> },
+        log = { name, _ -> logged += name },
         clock = clock,
         scope = scope,
     )
@@ -425,12 +429,32 @@ class TripControllerImplTest {
     }
 
     @Test
-    fun `a late train still in time for the change isn't re-planned`() = runTest {
-        // Two minutes late: at Sudirman about 08.08.30, in good time for the 08.10.
-        store.trip = aboardTheMrt(lateS = 120)
-        val controller = controller(at = minutes(3))
+    fun `a change made with seconds to spare stays swapped`() = runTest {
+        store.trip = aboardTheLongRide()
+        onward = TripPlan(listOf(nextTrain.copy(departureAt = minutes(60), arrivalAt = minutes(70))))
+        val clock = MutableClock(minutes(27))
+        val controller = controller(clock = clock)
         runCurrent()
-        controller.onFix(Fix(halfwayToDukuhAtas, 15f, minutes(3), speedMps = 15f))
+        controller.onFix(Fix(alongTheMrt(0.5), 15f, minutes(27), speedMps = 15f))
+        runCurrent()
+
+        // Seven tenths along at 08.30, two minutes late: at Sudirman 08.42, the walk done about
+        // 08.49.30, half a minute before the 08.50. A walk estimate is not good to half a minute.
+        clock.now = minutes(30)
+        controller.onFix(Fix(alongTheMrt(0.7), 15f, minutes(30), speedMps = 15f))
+
+        val trip = controller.active.value!!
+        assertEquals(minutes(60), trip.plan.ride(2).departureAt)
+        assertEquals(minutes(50), trip.replaced!!.untold)
+    }
+
+    @Test
+    fun `a late train still in time for the change isn't re-planned`() = runTest {
+        // A minute late: in at 08.03, the walk done by about 08.10.30, inside the minute's grace for the 08.10.
+        store.trip = aboardTheMrt(lateS = 60)
+        val controller = controller(at = minutes(2))
+        runCurrent()
+        controller.onFix(Fix(halfwayToDukuhAtas, 15f, minutes(2), speedMps = 15f))
         runCurrent()
 
         assertEquals(0, controller.active.value!!.state.legIndex)
@@ -727,6 +751,120 @@ class TripControllerImplTest {
         assertEquals(1, asked.size)
         assertEquals(plan, controller.active.value!!.plan)
         assertEquals(emptyList<Instant>(), runtime.rerouted)
+    }
+
+    @Test
+    fun `nothing on offer is asked again after a while, with no fix to step on`() = runTest {
+        store.trip = walkingToAMissedTrain()
+        val clock = MutableClock(minutes(13))
+        val controller = controller(clock = clock)
+        runCurrent()
+        assertEquals(1, asked.size)
+
+        // Back online, the rider still on their way: nothing else steps the trip.
+        onward = TripPlan(listOf(nextTrain))
+        clock.now = minutes(16)
+        testScheduler.advanceTimeBy(Duration.ofMinutes(2).toMillis() + 1)
+        runCurrent()
+
+        assertEquals(2, asked.size)
+        assertEquals(minutes(20), controller.active.value!!.plan.ride(2).departureAt)
+    }
+
+    @Test
+    fun `a rider still walking once the grace for the train is out is re-planned, with no fix to say so`() = runTest {
+        // Off at 08.02.58 for the 08.10 with 300 m to walk: done about 08.10.30, inside the minute's
+        // grace, so not missed yet. This is the 19 Oct stretch with no fixes and no events.
+        val early = walkingToAMissedTrain()
+        val offAt = minutes(2).plusSeconds(58)
+        store.trip = early.copy(state = early.state.copy(confirmedAt = offAt, walkingSince = offAt))
+        onward = TripPlan(listOf(nextTrain))
+        val clock = MutableClock(minutes(5))
+        val controller = controller(clock = clock)
+        runCurrent()
+        assertEquals(emptyList<String>(), asked)
+
+        clock.now = minutes(10).plusSeconds(1)
+        controller.tick()
+        runCurrent()
+        assertEquals(emptyList<String>(), asked)
+        assertEquals(minutes(11).plusSeconds(1), runtime.wakeAt)
+
+        // The wake is all that comes: the walk is past its time, and the train has gone.
+        clock.now = minutes(11).plusSeconds(1)
+        testScheduler.advanceTimeBy(Duration.ofSeconds(60).toMillis())
+        runCurrent()
+
+        assertEquals(listOf("KCI-SUD>KCI-CW on KCI:B"), asked)
+        assertEquals(minutes(20), controller.active.value!!.plan.ride(2).departureAt)
+    }
+
+    @Test
+    fun `the alarm's tick can wait for the re-plan it started`() = runTest {
+        store.trip = walkingToAMissedTrain()
+        onward = TripPlan(listOf(nextTrain))
+        answerHeld = CompletableDeferred()
+        val controller = controller(at = minutes(13))
+        runCurrent()
+        assertEquals(1, asked.size)
+
+        var waited = false
+        backgroundScope.launch {
+            controller.awaitReplan(Duration.ofSeconds(30))
+            waited = true
+        }
+        runCurrent()
+        assertFalse(waited)
+        assertEquals(plan, controller.active.value!!.plan)
+
+        answerHeld!!.complete(Unit)
+        answerHeld = null
+        runCurrent()
+        assertTrue(waited)
+        assertEquals(minutes(20), controller.active.value!!.plan.ride(2).departureAt)
+    }
+
+    @Test
+    fun `waiting for a re-plan that never answers gives up, with the trip as it was`() = runTest {
+        store.trip = walkingToAMissedTrain()
+        answerHeld = CompletableDeferred()
+        val controller = controller(at = minutes(13))
+        runCurrent()
+
+        var waited = false
+        backgroundScope.launch {
+            controller.awaitReplan(Duration.ofSeconds(30))
+            waited = true
+        }
+        testScheduler.advanceTimeBy(29_000)
+        runCurrent()
+        assertFalse(waited)
+
+        testScheduler.advanceTimeBy(2_000)
+        runCurrent()
+        assertTrue(waited)
+        assertEquals(plan, controller.active.value!!.plan)
+    }
+
+    @Test
+    fun `a re-plan being asked, and a trip picked up again, are logged`() = runTest {
+        store.trip = walkingToAMissedTrain()
+        controller(at = minutes(13))
+        runCurrent()
+
+        assertTrue("restored" in logged)
+        assertTrue("resumed" in logged)
+        assertTrue("replan" in logged)
+    }
+
+    @Test
+    fun `tracking that can't be started again is logged`() = runTest {
+        store.trip = walkingToAMissedTrain()
+        runtime.trackingAllowed = false
+        controller(at = minutes(13))
+        runCurrent()
+
+        assertTrue("tracking" in logged)
     }
 
     @Test

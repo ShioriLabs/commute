@@ -100,8 +100,8 @@ class PidsTest {
         assertEquals(PidsLabel.WALK, pids.label)
         assertEquals("Sudirman", pids.station)
         assertEquals(300, pids.walkM)
-        // 300 m at an easy pace, from 08.02: about four minutes of it left at 08.03.
-        assertEquals(4, pids.walkMinutes)
+        // 300 m at an easy pace and the stairs on top, from 08.02: about seven minutes of it left at 08.03.
+        assertEquals(7, pids.walkMinutes)
         assertNull(pids.changeTo)
     }
 
@@ -109,7 +109,7 @@ class PidsTest {
     fun `there, or once the walk should be done, the board says where to board`() {
         val there = ActiveTrip(walking.plan, walking.state.copy(walkingSince = null), origin)
         assertEquals(PidsLabel.BOARD, there.pids(minutes(3)).label)
-        assertEquals(PidsLabel.BOARD, walking.pids(minutes(8)).label)
+        assertEquals(PidsLabel.BOARD, walking.pids(minutes(10)).label)
     }
 
     @Test
