@@ -473,10 +473,20 @@ describe('TransJakarta estimates', () => {
   it('puts an estimate on the journey and never a time on its legs', () => {
     const [row] = retimeTrips(result(tjJourney('tj')), engine, context, undefined, { mode: 'fields', ...inputs }).journeys
     const expected = estimateTjLeg(toRouteLegs(row!.legs).legs[0] as never, 12 * 3600, inputs)!
-    expect(row!.estimate).toEqual({ durationS: expected.waitS + expected.rideS, rideS: [expected.rideS] })
+    expect(row!.estimate).toEqual({ durationS: expected.waitS + expected.rideS, fromS: 0, rideS: [expected.rideS] })
     expect(row!.arrivalAt).toBeUndefined()
     const leg = row!.legs[0]!
     expect(leg.type === 'RIDE' && (leg.departureAt ?? leg.arrivalAt ?? leg.stopTimes)).toBeUndefined()
+  })
+
+  it('counts from the first boarding when a timed ride opens the journey', () => {
+    const train = { type: 'RIDE', line: 'KCI:B', operator: 'KCI', from: { id: 'KCI-A' }, to: { id: 'KCI-B' }, stops: [{ id: 'KCI-A' }, { id: 'KCI-B' }], distanceM: 5000, departureAt: at('12:08') }
+    const tj = tjJourney('mixed')
+    const mixed = { ...tj, legs: [train, ...tj.legs] } as unknown as FareJourney
+    // The train boards at 12:08 and the journey is estimated to land at 12:50.
+    const fixed = { ...engine, estimateJourney: () => ({ arrivalS: 12 * 3600 + 50 * 60, rideS: [null, 900] }) } as unknown as Tsundere
+    const [row] = retimeTrips(result(mixed), fixed, context, undefined, { mode: 'fields', ...inputs }).journeys
+    expect(row!.estimate).toEqual({ durationS: 50 * 60, fromS: 8 * 60, rideS: [null, 900] })
   })
 
   it('adds nothing with the switch off, or without estimate options at all', () => {

@@ -343,7 +343,17 @@ function withEstimate(
     ? estimatedArrivalS(route, router, context, walking, { ...options, statistic: 'p75' })?.arrivalS ?? null
     : median.arrivalS
   const sortArrivalS = sortS === null ? null : Math.round(sortS / ESTIMATE_SORT_BAND_S) * ESTIMATE_SORT_BAND_S
-  return { journey: { ...journey, estimate: { durationS: median.arrivalS - atS, rideS } }, sortArrivalS }
+  /*
+   * Where a timed ride opens the journey, the card counts from that boarding,
+   * as it does on a fully timed one; the client cannot recover `at` itself
+   * through the edge cache. A journey opening on a bus counts from `at`, so
+   * the expected wait at the first halte stays in the figure.
+   */
+  const firstRide = journey.legs.find(leg => leg.type === 'RIDE')
+  const fromS = firstRide?.type === 'RIDE' && firstRide.departureAt
+    ? Math.max(0, Math.round((Date.parse(firstRide.departureAt) - context.departureAt.getTime()) / 1000))
+    : 0
+  return { journey: { ...journey, estimate: { durationS: median.arrivalS - atS, fromS, rideS } }, sortArrivalS }
 }
 
 /** Every journey in a trips answer, timed against the request's own clock. */

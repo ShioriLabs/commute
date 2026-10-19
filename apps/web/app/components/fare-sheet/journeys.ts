@@ -1,4 +1,5 @@
 import type { FareJourney, FareJourneyDeparture, FareJourneyLabel, FareResult, Line, TripResult } from '@commute/schemas'
+import { formatEstimate } from 'utils/format'
 import { boardsAtOf } from 'utils/journey-key'
 
 // Bridges a fare answer to the list of alternatives it may or may not carry.
@@ -76,6 +77,21 @@ export function liveDeparturesOf(journey: FareJourney, now: number): FareJourney
   // Optional-chained against a body cached before the field existed.
   return [own, ...(journey.moreDepartures ?? [])]
     .filter(departure => Date.parse(departure.departureAt) >= now)
+}
+
+/**
+ * A TransJakarta journey's estimated duration as the card prints it, or null
+ * when the API could not estimate one.
+ *
+ * Counted from the first boarding where a timed ride opens the journey
+ * (`fromS`), so a train-then-bus card measures the same span as a fully timed
+ * one beside it.
+ */
+export function estimatedDurationOf(journey: FareJourney): string | null {
+  const estimate = journey.estimate
+  if (!estimate) return null
+  const seconds = estimate.durationS - estimate.fromS
+  return seconds > 0 ? formatEstimate(seconds) : null
 }
 
 /*
