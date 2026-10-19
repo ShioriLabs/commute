@@ -1,6 +1,10 @@
 package id.shiorilabs.commute.core.trip
 
+import java.time.Duration
 import java.time.Instant
+
+/** A train a minute late is still worth running for; past that, look for the next. */
+val CATCH_GRACE: Duration = Duration.ofMinutes(1)
 
 /** An easy pace through a station's corridors and stairs, crowds and all. */
 private const val WALK_M_PER_S = 1.1
@@ -29,4 +33,12 @@ fun TripState.nextRideReadyAt(plan: TripPlan): Pair<Int, Instant>? {
     return next to alighting.plusSeconds(plan.transferBefore(next)?.let(::walkSeconds) ?: 0)
 }
 
-private fun walkSeconds(walk: TripLeg.Transfer): Long = (walk.distanceM / WALK_M_PER_S).toLong()
+/**
+ * Added to any walk between stations for the stairs, gates and corridors the distance doesn't show:
+ * 310 m from Sudirman to Dukuh Atas BSI took about nine minutes on 19 Oct, against four and a half
+ * by distance alone.
+ */
+private const val TRANSFER_OVERHEAD_S = 180L
+
+private fun walkSeconds(walk: TripLeg.Transfer): Long =
+    if (walk.distanceM <= 0) 0 else (walk.distanceM / WALK_M_PER_S).toLong() + TRANSFER_OVERHEAD_S
