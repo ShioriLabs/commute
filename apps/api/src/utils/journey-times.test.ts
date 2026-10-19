@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { FareJourney } from '@commute/schemas'
+import type { FareJourney, TripResult } from '@commute/schemas'
 import type { FareContext } from '@commute/constants'
-import type { Tsundere } from '@commute/tsundere'
+import type { ResolveDeparturesOptions, RouteLeg, Tsundere } from '@commute/tsundere'
+import { TJ_RUNTIMES } from 'db/data/runtimes.planner'
 import { byArrival, retimeTrips, toRouteLegs } from './journey-times'
+import { estimateTjLeg } from './observedRuntimes'
 import { mergeConsecutiveWalks, stripWalkHops } from './merge-walks'
 
 /*
@@ -423,5 +425,97 @@ describe('toRouteLegs', () => {
     const route = toRouteLegs([walk('A', 'KCI-MRI', 90), ride])
     expect(route.legs).toHaveLength(2)
     expect(route.engineIndexOf).toEqual([0, 1])
+  })
+})
+
+describe('TransJakarta estimates', () => {
+  // A real line-direction from the generated table, so estimateTjLeg runs on real data.
+  const [lineDir, tjLine] = Object.entries(TJ_RUNTIMES).find(([, l]) => l.WD[3] && l.WD[3].s.slice(1, 4).every(s => s > 0))!
+  const code = lineDir.slice(0, lineDir.lastIndexOf('@'))
+  const stops = tjLine.stops.slice(1, 4)
+  const tjJourney = (id: string): FareJourney => ({
+    id,
+    legs: [{
+      type: 'RIDE',
+      line: `TJ:${code}`,
+      operator: 'TJ',
+      from: { id: stops[0]! },
+      to: { id: stops.at(-1)! },
+      stops: stops.map(s => ({ id: s })),
+      distanceM: 2000
+    }],
+    labels: [],
+    boardings: 1,
+    walkDistanceM: 0,
+    totalFare: 3500
+  } as unknown as FareJourney)
+  const railJourney = (id: string, arrivalAt: string) => ({ ...journey(id, arrivalAt), legs: [], labels: [] } as unknown as FareJourney)
+
+  /*
+   * A stand-in engine that times nothing (TransJakarta has no timetable) and
+   * estimates through the real hook, so the estimate is estimateTjLeg's.
+   */
+  const engine = {
+    timeJourney: (legs: unknown[]) => legs.map(() => null),
+    journeyArrival: () => null,
+    estimateJourney: (legs: RouteLeg[], options: ResolveDeparturesOptions) => {
+      const leg = legs[0]!
+      if (leg.type !== 'RIDE') return null
+      const e = options.estimateUntimed!(leg, options.departureS)
+      return e ? { arrivalS: options.departureS + e.waitS + e.rideS, rideS: [e.rideS] } : null
+    }
+  } as unknown as Tsundere
+  const context = { paymentMethod: 'KMT', departureAt: new Date(at('12:00')) } as unknown as FareContext
+  const inputs = { day: 'WD' as const, headways: new Map([[code, 600]]), serviceHours: new Map() }
+  const station = (id: string) => ({ id, name: id })
+  const result = (...journeys: FareJourney[]) => ({ from: station('A'), to: station('B'), journeys }) as unknown as TripResult
+
+  it('puts an estimate on the journey and never a time on its legs', () => {
+    const [row] = retimeTrips(result(tjJourney('tj')), engine, context, undefined, { mode: 'fields', ...inputs }).journeys
+    const expected = estimateTjLeg(toRouteLegs(row!.legs).legs[0] as never, 12 * 3600, inputs)!
+    expect(row!.estimate).toEqual({ durationS: expected.waitS + expected.rideS, rideS: [expected.rideS] })
+    expect(row!.arrivalAt).toBeUndefined()
+    const leg = row!.legs[0]!
+    expect(leg.type === 'RIDE' && (leg.departureAt ?? leg.arrivalAt ?? leg.stopTimes)).toBeUndefined()
+  })
+
+  it('adds nothing with the switch off, or without estimate options at all', () => {
+    expect(retimeTrips(result(tjJourney('tj')), engine, context, undefined, { mode: 'off', ...inputs }).journeys[0]!.estimate).toBeUndefined()
+    expect(retimeTrips(result(tjJourney('tj')), engine, context).journeys[0]!.estimate).toBeUndefined()
+  })
+
+  it('keeps the old order in fields mode, and sorts by estimated arrival in sort mode', () => {
+    // A train arriving at 14:00 against a bus journey estimated well before it.
+    const rows = [railJourney('rail', at('14:00')), railJourney('rail2', at('15:00')), tjJourney('tj')]
+    const fields = retimeTrips(result(...rows), engine, context, undefined, { mode: 'fields', ...inputs }).journeys
+    expect(idsOf(fields)).toEqual(['rail', 'rail2', 'tj'])
+    const sorted = retimeTrips(result(...rows), engine, context, undefined, { mode: 'sort', ...inputs }).journeys
+    expect(idsOf(sorted)).toEqual(['tj', 'rail', 'rail2'])
+  })
+
+  it('keeps the engine order between estimates in the same five-minute band', () => {
+    // Two bus routes estimated alike, behind them a train: the buses keep their engine order.
+    const rows = [tjJourney('tj-a'), tjJourney('tj-b'), railJourney('rail', at('18:00'))]
+    const sorted = retimeTrips(result(...rows), engine, context, undefined, { mode: 'sort', ...inputs }).journeys
+    expect(idsOf(sorted)).toEqual(['tj-a', 'tj-b', 'rail'])
+  })
+
+  it('leaves a journey it cannot estimate in the untimed tail even in sort mode', () => {
+    const closed = { ...inputs, serviceHours: new Map([[code, [0, 3600] as [number, number]]]) }
+    const rows = [tjJourney('tj'), railJourney('rail', at('14:00')), railJourney('rail2', at('15:00'))]
+    const sorted = retimeTrips(result(...rows), engine, context, undefined, { mode: 'sort', ...closed }).journeys
+    expect(idsOf(sorted)).toEqual(['rail', 'rail2', 'tj'])
+    expect(sorted[2]!.estimate).toBeUndefined()
+  })
+})
+
+describe('byArrival with estimated arrivals', () => {
+  it('sorts estimated rows among the timed ones on one rule', () => {
+    const estimated = journey('est')
+    const sorted = byArrival(
+      [journey('late', at('09:10')), estimated, journey('u'), journey('early', at('09:00'))],
+      j => (j === estimated ? Date.parse(at('09:05')) : undefined)
+    )
+    expect(idsOf(sorted)).toEqual(['early', 'est', 'late', 'u'])
   })
 })

@@ -345,6 +345,11 @@ pnpm --filter api fit:tj-runtimes --dir <archives>   # ~8s with the cache; print
 pnpm --filter api test -- runtimes.observed           # guard test on the generated file
 ```
 
-Nothing at runtime reads `runtimes.observed.ts` yet, so a refit needs no
-API_VERSION bump. Refit after a TJ topology change: hop keys are station pairs,
-and the guard test fails on a pair that is no longer adjacent.
+The fit writes two files. `runtimes.observed.ts` is the full table for analysis
+and nothing at runtime imports it. `runtimes.planner.ts` is the compact slice
+the worker reads (`utils/observedRuntimes.ts`) for the journey `estimate` and
+the `sort` mode of `config:observed-runtimes` (2026-10-19). Estimates are
+applied after the journey cache, so a refit needs a deploy but no API_VERSION
+bump and no KV purge. Refit after a TJ topology change: hop keys are station
+pairs, and both guard tests (`runtimes.observed`, `runtimes.planner`) fail on a
+pair that is no longer adjacent.

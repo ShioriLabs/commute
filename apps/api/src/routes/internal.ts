@@ -5,12 +5,12 @@ import { HubRepository } from 'db/repositories/hubs'
 import { StationRepository } from 'db/repositories/stations'
 import type { TripResult } from '@commute/schemas'
 import { weightsForWalking, type RankWeights, type Tsundere, type WalkingPreference } from '@commute/tsundere'
-import { getRouter, linesOf, nextServiceAt, parseFareContext, timeOptions } from 'routes/fares'
+import { estimateInputs, getRouter, linesOf, nextServiceAt, parseFareContext, timeOptions } from 'routes/fares'
 import { wibIsoString } from 'utils/fare'
 import { assembleJourney, planJourney } from 'utils/fare-journey'
 import { handleJourneyRequest, journeyCacheKey } from 'utils/journey-endpoint'
 import { retimeTrips } from 'utils/journey-times'
-import { observedHeadwaysEnabledFor } from 'utils/observedFlag'
+import { observedHeadwaysEnabledFor, observedRuntimesModeFor } from 'utils/observedFlag'
 import { summarizeFares } from 'utils/fare-summary'
 import { ridesAirportPairsOnly, withAirportExclusion } from 'utils/airport'
 import { endpointsFor, getPlaceIndex, type PlaceIndex } from 'utils/places'
@@ -216,18 +216,30 @@ app.get('/trips/:from/:to', async c => handleJourneyRequest<TripResult>(c, getRo
    * body as well as a fresh one, and never written into KV. The route is the
    * cacheable half; the vehicle you catch is the per-request half.
    */
-  retime: async (result, c) => retimeTrips(
-    result,
-    await getRouter(c.env.DB),
-    parseFareContext(c.req.query('paymentMethod'), c.req.query('at')),
-    /*
-     * The same preference the search ranks by, used here as a SPEED: how fast
-     * this rider crosses a station decides which connections they make, and so
-     * how long the journey takes. Already part of the cache scope below, so a
-     * slow rider's timings can never be served to a brisk one.
-     */
-    walkingPreference(c.req.query('walking'))
-  ),
+  retime: async (result, c) => {
+    const context = parseFareContext(c.req.query('paymentMethod'), c.req.query('at'))
+    return retimeTrips(
+      result,
+      await getRouter(c.env.DB),
+      context,
+      /*
+       * The same preference the search ranks by, used here as a SPEED: how fast
+       * this rider crosses a station decides which connections they make, and so
+       * how long the journey takes. Already part of the cache scope below, so a
+       * slow rider's timings can never be served to a brisk one.
+       */
+      walkingPreference(c.req.query('walking')),
+      /*
+       * TransJakarta estimates, per request like the times: the mode this
+       * request started with (utils/observedFlag.ts), and the waits the search
+       * itself charged, under the same observed-headway regime.
+       */
+      {
+        mode: observedRuntimesModeFor(c.req.raw),
+        ...estimateInputs(context, observedHeadwaysEnabledFor(c.req.raw))
+      }
+    )
+  },
   scope: (c) => {
     const walking = walkingPreference(c.req.query('walking'))
     const parts = [

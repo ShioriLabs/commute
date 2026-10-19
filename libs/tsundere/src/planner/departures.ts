@@ -154,6 +154,13 @@ export interface LegTiming {
    * actually make, and none of them moves the legs that follow.
    */
   upcoming?: LegDeparture[]
+  /**
+   * Not from a timetable: an estimate `estimateUntimed` supplied for a leg no
+   * trip covers (see estimateJourney). Only `departureS` and `arrivalS` mean
+   * anything then; `stopsS` is empty and `tripId` is ''. `timeJourney` never
+   * produces one, so a caller that only times never sees it.
+   */
+  estimated?: true
 }
 
 /** One train that serves a leg's whole run, boarding to alighting. */
@@ -196,6 +203,13 @@ export interface ResolveDeparturesOptions {
    * for a caller that asked.
    */
   upcomingPerLeg?: number
+  /**
+   * For a ride leg no trip covers, an estimate of the wait at its boarding stop
+   * and the ride, given the moment the rider is standing there. Absent, or
+   * returning null, keeps the honest default: the leg and every leg after it
+   * are untimed. Only estimateJourney passes it.
+   */
+  estimateUntimed?: (leg: Extract<RouteLeg, { type: 'RIDE' }>, atS: number) => { waitS: number, rideS: number } | null
 }
 
 /*
@@ -350,7 +364,7 @@ const UPCOMING_CAP_FACTOR = 3
 export function resolveDepartures(
   legs: readonly RouteLeg[],
   trips: TripIndex,
-  { departureS, dayMask, walking = 'AVERAGE', gatedLines, upcomingPerLeg = 1 }: ResolveDeparturesOptions
+  { departureS, dayMask, walking = 'AVERAGE', gatedLines, upcomingPerLeg = 1, estimateUntimed }: ResolveDeparturesOptions
 ): (LegTiming | null)[] {
   const timings: (LegTiming | null)[] = []
   let clockS: number | null = departureS
@@ -423,9 +437,28 @@ export function resolveDepartures(
     }
 
     if (best === null) {
-      timings.push(null)
-      clockS = null
-      rodePrevious = false
+      const estimate = estimateUntimed?.(leg, clockS) ?? null
+      if (estimate === null) {
+        timings.push(null)
+        clockS = null
+        rodePrevious = false
+        continue
+      }
+      const boardS: number = clockS + estimate.waitS
+      const alightS: number = boardS + estimate.rideS
+      timings.push({
+        departureS: boardS,
+        arrivalS: alightS,
+        stopsS: [],
+        tripId: '',
+        lineCode: leg.lineCode,
+        estimated: true,
+        ...(lastArrivalS === null ? {} : { changeBeforeS: clockS - lastArrivalS })
+      })
+      clockS = alightS
+      lastArrivalS = alightS
+      lastListedArrivalS = alightS
+      rodePrevious = true
       continue
     }
 
@@ -518,6 +551,34 @@ export function journeyArrivalS(
     last = timing.arrivalS
   }
   return last
+}
+
+/** A journey's estimated arrival, and how long each estimated leg rides. */
+export interface JourneyEstimate {
+  arrivalS: number
+  /** Index-aligned with the legs: seconds boarding to alighting on estimated legs, null elsewhere. */
+  rideS: (number | null)[]
+}
+
+/**
+ * When a journey probably arrives, timing what the timetable covers and asking
+ * `estimateUntimed` for the rest (in practice TransJakarta, which has none).
+ *
+ * Kept apart from resolveDepartures' callers on purpose: these numbers are
+ * estimates and must never be stamped onto legs as times. Null when any ride
+ * leg stays untimed (no trip and no estimate, or a later train the estimated
+ * clock misses), and when nothing was estimated at all — then the timetable
+ * alone already answers and journeyArrivalS is the fact to use.
+ */
+export function estimateJourney(
+  legs: readonly RouteLeg[],
+  trips: TripIndex,
+  options: ResolveDeparturesOptions & Required<Pick<ResolveDeparturesOptions, 'estimateUntimed'>>
+): JourneyEstimate | null {
+  const timings = resolveDepartures(legs, trips, { ...options, upcomingPerLeg: 1 })
+  const arrivalS = journeyArrivalS(legs, timings)
+  if (arrivalS === null || !timings.some(t => t?.estimated)) return null
+  return { arrivalS, rideS: timings.map(t => (t?.estimated ? t.arrivalS - t.departureS : null)) }
 }
 
 /** Seconds since local midnight as a same-day offset, for display. */

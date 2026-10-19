@@ -6,9 +6,14 @@ import {
   lineGeometry,
   MIN_HOP_N,
   MIN_TRIPS,
+  MAX_TRIP_BIAS,
   poolTrips,
+  renderPlannerRuntimes,
   renderRuntimes,
   type StratumScore,
+  tripBias,
+  type TripScore,
+  vouchedBias,
   vouchedStrata
 } from './runtimes'
 
@@ -168,5 +173,54 @@ describe('renderRuntimes', () => {
     expect(mod.OBSERVED_HOP_S['WD:10-16:T@F:TJ-B>TJ-C']).toEqual([100, 100, 'OBSERVED'])
     expect(mod.OBSERVED_HOP_S['WD:10-16:T@F:TJ-A>TJ-B']).toEqual([120, 120, 'DISTANCE'])
     expect(mod.OBSERVED_SERVICE_WINDOWS['T@F']).toEqual({ SUN: { first: 36000, days: 2 } })
+  })
+})
+
+describe('tripBias', () => {
+  const pool = (tripS: number) => poolTrips([day({
+    hops: { 'T@F|1|3': times(MIN_HOP_N, 100), 'T@F|2|3': times(MIN_HOP_N, 100), 'T@F|3|3': times(MIN_HOP_N, 100) },
+    trips: { 'T@F|3': times(MIN_TRIPS, tripS) }
+  })])
+
+  it('is the trip median over the summed interior hop medians', () => {
+    expect(tripBias(fitRuntimes(pool(315), geometry), geometry).get('WD|T@F|3')).toBeCloseTo(1.05)
+  })
+
+  it('is clamped to [1, MAX_TRIP_BIAS]', () => {
+    expect(tripBias(fitRuntimes(pool(250), geometry), geometry).get('WD|T@F|3')).toBe(1)
+    expect(tripBias(fitRuntimes(pool(900), geometry), geometry).get('WD|T@F|3')).toBe(MAX_TRIP_BIAS)
+  })
+
+  it('skips strata the backtest does not vouch for', () => {
+    const allow = vouchedBias([
+      { dt: 'WD', block: 3, buckets: 50, model: 0.05, biased: 0.03, baseline: 0.2 },
+      { dt: 'WE', block: 3, buckets: 50, model: 0.05, biased: 0.08, baseline: 0.2 }
+    ] satisfies TripScore[])
+    expect(allow('WD', 3)).toBe(true)
+    expect(allow('WE', 3)).toBe(false)
+    expect(tripBias(fitRuntimes(pool(315), geometry), geometry, () => false).size).toBe(0)
+  })
+})
+
+describe('renderPlannerRuntimes', () => {
+  it('lays cells out by hop position, with 0 for a missing cell and null for an empty block', () => {
+    // Hop 2 seen, but too thinly for a cell (with no sightings at all it would be a mismatch, DISTANCE-priced).
+    const pool = poolTrips([day({ hops: { 'T@F|1|3': times(MIN_HOP_N, 100), 'T@F|2|3': times(3, 500), 'T@F|3|3': times(MIN_HOP_N, 140) } })])
+    const fit = fitRuntimes(pool, geometry)
+    const text = renderPlannerRuntimes({ fit, bias: new Map([['WD|T@F|3', 1.04]]), geometry, range: { from: '20261006', to: '20261008' } })
+    const js = text
+      .replace(/^\/\*[\s\S]*?\*\/\n/, '')
+      .replace(/export interface \w+ \{[\s\S]*?\n\}\n/g, '')
+      .replace(/export const (\w+)(: [^=]+)? = /g, 'var $1 = ')
+      .replace(/ as const/g, '')
+    const { TJ_RUNTIMES } = new Function(`${js}\nreturn { TJ_RUNTIMES }`)() as {
+      TJ_RUNTIMES: Record<string, { stops: string[], metres: number[], WD: ({ s: number[], bias: number } | null)[] }>
+    }
+    const line = TJ_RUNTIMES['T@F']!
+    expect(line.stops).toEqual(['TJ-A', 'TJ-B', 'TJ-C', 'TJ-D', 'TJ-E', 'TJ-F'])
+    expect(line.metres).toEqual([1000, 1000, 1000, 1000, 1000])
+    // Hop 2 has no cell; the terminus hops are DISTANCE-priced at (100 + 140) / 2 km.
+    expect(line.WD[3]).toEqual({ s: [120, 100, 0, 140, 120], p75: [120, 100, 0, 140, 120], bias: 1.04 })
+    expect(line.WD[2]).toBeNull()
   })
 })

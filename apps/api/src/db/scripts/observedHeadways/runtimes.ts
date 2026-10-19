@@ -32,6 +32,13 @@ export const MIN_HELD_OUT_HOPS = 5
 export const MIN_HELD_OUT_TRIPS = 3
 /** Truth buckets a stratum needs before the backtest can vouch for it. */
 export const MIN_STRATUM_BUCKETS = 50
+/**
+ * The largest correction a line-direction's summed hop medians may take. Hop
+ * times skew right, so the sum of their medians undershoots the median of the
+ * sum (3-5% on full trips); a much larger gap means the hops and the trips
+ * disagree for another reason, and is not one to paper over.
+ */
+export const MAX_TRIP_BIAS = 1.15
 /** First and last buses must agree this closely across days. */
 export const WINDOW_AGREE_S = 1800
 /** Stop-1 passings a day needs to count as the line running that day, not a stray bus. */
@@ -243,7 +250,42 @@ export interface TripScore {
   block: number
   buckets: number
   model: number
+  /** The same sum corrected by `tripBias` from the training days. */
+  biased: number
   baseline: number
+}
+
+/**
+ * Full-trip median ÷ the sum of its interior hop medians, per
+ * `${dt}|${line}@${dir}|${block}`, clamped to [1, MAX_TRIP_BIAS]. Only where
+ * the bucket has a trip cell and every interior hop priced; elsewhere absent
+ * (a consumer takes 1).
+ */
+export function tripBias(
+  fit: RuntimeFit,
+  geometry: ReadonlyMap<string, LineGeometry>,
+  allow: (dt: DayType, block: number) => boolean = () => true
+): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const [key, trip] of fit.trips) {
+    const [dt, ld, block] = key.split('|') as [DayType, string, string]
+    if (!allow(dt, Number(block))) continue
+    const geo = geometry.get(ld)
+    if (!geo) continue
+    let sum = 0
+    let complete = true
+    for (let i = 1; i <= geo.stops.length - 3; i++) {
+      const cell = fit.hops.get(hopKey(dt, ld, i, Number(block)))
+      if (!cell) {
+        complete = false
+        break
+      }
+      sum += cell.s
+    }
+    if (!complete || sum <= 0) continue
+    out.set(key, Math.min(MAX_TRIP_BIAS, Math.max(1, trip.s / sum)))
+  }
+  return out
 }
 
 /**
@@ -269,7 +311,7 @@ export function backtest(days: readonly DayTrips[], geometry: ReadonlyMap<string
   trips: TripScore[]
 } {
   const hopErr = new Map<string, { model: number[], baseline: number[] }>()
-  const tripErr = new Map<string, { model: number[], baseline: number[] }>()
+  const tripErr = new Map<string, { model: number[], biased: number[], baseline: number[] }>()
   const push = (map: typeof hopErr, key: string, model: number, baseline: number) => {
     let e = map.get(key)
     if (!e) map.set(key, e = { model: [], baseline: [] })
@@ -280,6 +322,7 @@ export function backtest(days: readonly DayTrips[], geometry: ReadonlyMap<string
   for (const held of days) {
     const train = poolTrips(days.filter(d => d !== held))
     const fit = fitRuntimes(train, geometry)
+    const bias = tripBias(fit, geometry)
     const paces = linePaces(train, geometry)
     const dt = held.dayType
 
@@ -315,7 +358,12 @@ export function backtest(days: readonly DayTrips[], geometry: ReadonlyMap<string
       }
       if (!complete) continue
       const truth = median(xs)
-      push(tripErr, `${dt}|${block}`, Math.abs(Math.log(predicted / truth)), Math.abs(Math.log(base / truth)))
+      const corrected = predicted * (bias.get(`${dt}|${ld}|${block}`) ?? 1)
+      let e = tripErr.get(`${dt}|${block}`)
+      if (!e) tripErr.set(`${dt}|${block}`, e = { model: [], biased: [], baseline: [] })
+      e.model.push(Math.abs(Math.log(predicted / truth)))
+      e.biased.push(Math.abs(Math.log(corrected / truth)))
+      e.baseline.push(Math.abs(Math.log(base / truth)))
     }
   }
 
@@ -325,7 +373,7 @@ export function backtest(days: readonly DayTrips[], geometry: ReadonlyMap<string
   })
   const trips = [...tripErr].map(([key, e]) => {
     const [dt, block] = key.split('|') as [DayType, string]
-    return { dt, block: Number(block), buckets: e.model.length, model: median(e.model), baseline: median(e.baseline) }
+    return { dt, block: Number(block), buckets: e.model.length, model: median(e.model), biased: median(e.biased), baseline: median(e.baseline) }
   })
   const byStratum = (a: { dt: string, block: number }, b: { dt: string, block: number }) =>
     a.dt.localeCompare(b.dt) || a.block - b.block
@@ -343,6 +391,16 @@ export function vouchedStrata(strata: readonly StratumScore[]): StratumFilter {
     .filter(s => s.buckets >= MIN_STRATUM_BUCKETS && s.model < s.baseline)
     .map(s => `${s.dt}|${s.block}|${s.basis}`))
   return (dt, block, basis) => basis === 'DISTANCE' || ok.has(`${dt}|${block}|${basis}`)
+}
+
+/**
+ * The (day type, block) strata where the backtest shows the trip-sum bias
+ * helping. On four weekend days it can overfit and make sums worse; there the
+ * plain sum ships.
+ */
+export function vouchedBias(trips: readonly TripScore[]): (dt: DayType, block: number) => boolean {
+  const ok = new Set(trips.filter(t => t.biased < t.model).map(t => `${t.dt}|${t.block}`))
+  return (dt, block) => ok.has(`${dt}|${block}`)
 }
 
 // ── service windows ──
@@ -529,6 +587,98 @@ export function renderRuntimes(input: RuntimesInput): string {
     '',
     'export const OBSERVED_SERVICE_WINDOWS: Record<string, Partial<Record<\'WD\' | \'SAT\' | \'SUN\', ObservedWindow>>> = {',
     table(windowRows),
+    '}',
+    ''
+  ].join('\n')
+}
+
+// ── compact planner table ──
+
+export interface PlannerRuntimesInput {
+  fit: RuntimeFit
+  bias: ReadonlyMap<string, number>
+  geometry: ReadonlyMap<string, LineGeometry>
+  range: { from: string, to: string }
+}
+
+/**
+ * The slice of the fit the worker reads (utils/observedRuntimes.ts), laid out
+ * by position so it costs a fraction of OBSERVED_HOP_S: per line-direction its
+ * stops and hop metres, and per day type a bucket per block holding every hop's
+ * median and p75 (0 where there is no cell) and the trip-sum bias.
+ */
+export function renderPlannerRuntimes(input: PlannerRuntimesInput): string {
+  const rows: [string, string][] = []
+  for (const [ld, geo] of input.geometry) {
+    const hopCount = geo.stops.length - 1
+    let any = false
+    const buckets = (dt: DayType) => RUNTIME_BLOCKS.map((_, b) => {
+      const s: number[] = [], p75: number[] = []
+      let cells = 0
+      for (let i = 0; i < hopCount; i++) {
+        const cell = input.fit.hops.get(hopKey(dt, ld, i, b))
+        s.push(cell?.s ?? 0)
+        p75.push(cell?.p75 ?? 0)
+        if (cell) cells++
+      }
+      if (cells === 0) return 'null'
+      any = true
+      const bias = input.bias.get(`${dt}|${ld}|${b}`) ?? 1
+      return `{ s: [${s.join(', ')}], p75: [${p75.join(', ')}], bias: ${Number(bias.toFixed(3))} }`
+    })
+    const wd = buckets('WD'), we = buckets('WE')
+    if (!any) continue
+    rows.push([ld, [
+      '{',
+      `    stops: [${geo.stops.map(stop => quote(stationId(stop))).join(', ')}],`,
+      `    metres: [${geo.hopMetres.map(m => m ?? 0).join(', ')}],`,
+      `    WD: [\n      ${wd.join(',\n      ')}\n    ],`,
+      `    WE: [\n      ${we.join(',\n      ')}\n    ]`,
+      '  }'
+    ].join('\n')])
+  }
+  rows.sort((a, b) => naturalCompare(a[0], b[0]))
+
+  return [
+    '/*',
+    ' * Observed TransJakarta run times, compact, for the trip planner\'s estimates.',
+    ' *',
+    ' * GENERATED — do not edit by hand; re-run `pnpm --filter api fit:tj-runtimes`.',
+    ' * The same vouched cells as runtimes.observed.ts (see there and',
+    ' * docs/tj-observed-timings.md), laid out by position: read through',
+    ' * utils/observedRuntimes.ts, never directly.',
+    ' *',
+    ' * TJ_RUNTIMES[`${line}@${dir}`]: `stops` in travel order, `metres[i]` for hop',
+    ' * i (stops[i] -> stops[i + 1], 0 = unknown), and per day type (WD; WE = Sat,',
+    ' * Sun, holidays) one bucket per TJ_RUNTIME_BLOCKS entry, null when the block',
+    ' * has no cell at all. In a bucket `s[i]` / `p75[i]` are hop i\'s median and',
+    ' * p75 seconds, passing to passing (ride plus dwell), 0 where there is no cell;',
+    ' * `bias` is the full-trip median over the sum of the interior hop medians',
+    ` * (1 to ${MAX_TRIP_BIAS}), the correction for summing right-skewed medians.`,
+    ' */',
+    '',
+    `export const TJ_RUNTIME_BLOCKS = [${RUNTIME_BLOCKS.map((_, b) => quote(blockLabel(b))).join(', ')}] as const`,
+    '',
+    'export const TJ_RUNTIMES_META = {',
+    `  from: ${quote(input.range.from)},`,
+    `  to: ${quote(input.range.to)}`,
+    '} as const',
+    '',
+    'export interface TjRuntimeBucket {',
+    '  s: readonly number[]',
+    '  p75: readonly number[]',
+    '  bias: number',
+    '}',
+    '',
+    'export interface TjRuntimeLine {',
+    '  stops: readonly string[]',
+    '  metres: readonly number[]',
+    '  WD: readonly (TjRuntimeBucket | null)[]',
+    '  WE: readonly (TjRuntimeBucket | null)[]',
+    '}',
+    '',
+    'export const TJ_RUNTIMES: Record<string, TjRuntimeLine> = {',
+    rows.map(([k, v]) => `  ${quote(k)}: ${v}`).join(',\n'),
     '}',
     ''
   ].join('\n')
