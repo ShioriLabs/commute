@@ -620,6 +620,68 @@ class TripControllerImplTest {
         assertNull(trip.replaced)
     }
 
+    @Test
+    fun `a train first seen aboard two stops on is the planned one, the lateness picked up on the way`() = runTest {
+        // The 08.10 leaves a minute late and loses four more by Tebet, where the first fix aboard
+        // comes at 08.21: against the plan, five minutes late, which would date the boarding 08.15,
+        // the 08.14's time. Nothing says it left Sudirman then.
+        val waiting = waitingForTheEightTen()
+        store.trip = waiting.copy(
+            state = waiting.state.copy(confirmedAt = minutes(10).plusSeconds(50), walkingSince = null, sightedPosition = 0.0),
+        )
+        val clock = MutableClock(minutes(10).plusSeconds(50))
+        val controller = controller(clock = clock)
+        runCurrent()
+
+        clock.now = minutes(21)
+        controller.onFix(Fix(manggaraiToTebet(1.0), 10f, clock.now, speedMps = 12f))
+        clock.now = minutes(21).plusSeconds(10)
+        controller.onFix(Fix(manggaraiToTebet(1.05), 10f, clock.now, speedMps = 12f))
+        runCurrent()
+
+        val trip = controller.active.value!!
+        assertEquals(TripPhase.RIDING, trip.state.phase)
+        assertEquals(minutes(10), trip.plan.ride(2).departureAt)
+        assertFalse("later" in logged)
+    }
+
+    @Test
+    fun `a late tap with fixes to come waits for the first one out to say which train`() = runTest {
+        // Aboard the 08.10, "Udah naik" once seated at 08.14.42, when the 08.14 was due: no move.
+        val waiting = waitingForTheEightTen()
+        store.trip = waiting.copy(
+            state = waiting.state.copy(confirmedAt = minutes(10).plusSeconds(50), walkingSince = null, sightedPosition = 0.0),
+        )
+        val clock = MutableClock(minutes(14).plusSeconds(42))
+        val controller = controller(clock = clock)
+        runCurrent()
+
+        controller.say(RiderAction.BOARDED)
+        assertEquals(minutes(10), controller.active.value!!.plan.ride(2).departureAt)
+
+        // The first fix, a fifth of the way to Manggarai at 08.15.40: on the 08.14's time, not the 08.10's.
+        clock.now = minutes(15).plusSeconds(40)
+        controller.onFix(Fix(sudirmanToManggarai(0.2), 10f, clock.now, speedMps = 12f))
+        runCurrent()
+
+        assertEquals(minutes(14), controller.active.value!!.plan.ride(2).departureAt)
+        assertTrue("later" in logged)
+    }
+
+    @Test
+    fun `on the platform once the walk is done, a train gone past the grace is lost whatever the walk was reckoned`() = runTest {
+        // In at 08.08 for the 08.10, 300 m away: an on-time walk is reckoned done 08.15.32, but the
+        // rider is seen on the platform at 08.11.30, and the train has gone.
+        val lateIn = TripPlan(listOf((plan.legs[0] as TripLeg.Ride).copy(arrivalAt = minutes(8)), plan.legs[1], plan.legs[2]))
+        val platform = onThePlatform()
+        store.trip = platform.copy(plan = lateIn, state = platform.state.copy(confirmedAt = minutes(11).plusSeconds(30)))
+        onward = TripPlan(listOf(nextTrain))
+        controller(at = minutes(11).plusSeconds(30))
+        runCurrent()
+
+        assertEquals(listOf("KCI-SUD>KCI-CW on KCI:B"), asked)
+    }
+
     /**
      * The 08.20 with a timetable padded like 5152C's on 16 Oct: ten minutes' run to Manggarai, due
      * there at 08.28, where the 08.10 is due about 08.14.
@@ -923,15 +985,19 @@ class TripControllerImplTest {
      * Still walking to the 08.10 (the walk is not done by it, so the clock leaves the rider waiting),
      * with the 08.14 and 08.18 behind it, as the API named them.
      */
-    private fun waitingForTheEightTen(): ActiveTrip {
+    private fun waitingForTheEightTen(hasLocation: Boolean = true): ActiveTrip {
         val ride = (plan.legs[2] as TripLeg.Ride).copy(nextDepartures = listOf(minutes(14), minutes(18)))
-        return walkingToAMissedTrain().let { it.copy(plan = TripPlan(plan.legs.take(2) + ride)) }
+        return walkingToAMissedTrain().let {
+            it.copy(plan = TripPlan(plan.legs.take(2) + ride), state = it.state.copy(hasLocation = hasLocation))
+        }
     }
 
     @Test
     fun `boarding when a later train was due is that train, however late the planned one would be`() = runTest {
+        // With no fixes to be had, a tap alone says which train.
+        location.granted = false
         // 19 Oct: the 10.17 LRT planned, "Udah naik" at 10.21.42 with the 10.21 listed behind it.
-        store.trip = waitingForTheEightTen()
+        store.trip = waitingForTheEightTen(hasLocation = false)
         val clock = MutableClock(minutes(14).plusSeconds(42))
         val controller = controller(clock = clock)
         runCurrent()
@@ -965,7 +1031,9 @@ class TripControllerImplTest {
 
     @Test
     fun `boarding a few seconds ahead of a later train's time is that train, boarded early`() = runTest {
-        store.trip = waitingForTheEightTen()
+        // With no fixes to be had, a tap alone says which train.
+        location.granted = false
+        store.trip = waitingForTheEightTen(hasLocation = false)
         val clock = MutableClock(minutes(13).plusSeconds(45))
         val controller = controller(clock = clock)
         runCurrent()
@@ -1136,12 +1204,14 @@ class TripControllerImplTest {
 
     @Test
     fun `boarding a later train doesn't move the allowance for the change after it`() = runTest {
+        // With no fixes to be had, a tap alone says which train.
+        location.granted = false
         // The 08.00 MRT with the 08.04 behind it, in at 08.05 and 08.09 on that: the 08.10 was allowed 300 s
         // from 08.05. On the 08.04, on time, the rider is at it at 08.16.32: lost, though 08.09 + 452 s is
         // later than 08.10.
         val ride = (tightChange.legs[0] as TripLeg.Ride).copy(nextDepartures = listOf(minutes(4)))
         val plan = TripPlan(listOf(ride, tightChange.legs[1], tightChange.legs[2]))
-        store.trip = ActiveTrip(plan, TripEngine.start(plan, NOW.minusSeconds(120), hasLocation = true).state, origin)
+        store.trip = ActiveTrip(plan, TripEngine.start(plan, NOW.minusSeconds(120), hasLocation = false).state, origin)
         val clock = MutableClock(minutes(-1))
         val controller = controller(clock = clock)
         runCurrent()

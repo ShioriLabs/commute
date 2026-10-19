@@ -45,14 +45,25 @@ private const val OVERHEAD_S_PER_M = 1.2
 
 /**
  * When a rider who got off the ride before this one on time could be at ride [rideIndex]'s first
- * stop: that ride's planned arrival, and the walk between at the same pace as [walkEndsAt]. What the
- * planner allowed for the change: lateness past it is what loses a train, not a walk reckoned longer.
- * `null` with no timed ride before.
+ * stop: that ride's planned arrival, and the walk between at the same pace as [walkEndsAt]. A ready
+ * time that counts that walk is late against this, like with like: lateness is what loses a train,
+ * not a walk reckoned longer than the timetable's change. `null` with no timed ride before.
  */
 fun TripPlan.plannedReadyAt(rideIndex: Int): Instant? {
     val before = legs.take(rideIndex).lastOrNull { it is TripLeg.Ride } as? TripLeg.Ride ?: return null
     val arrives = before.plannedArrivalAt ?: before.arrivalAt ?: return null
     return arrives.plusSeconds(transferBefore(rideIndex)?.let(::walkSeconds) ?: 0)
+}
+
+/**
+ * From when ride [rideIndex] is lost to a rider ready for it then: gone over [CATCH_GRACE]. A ready
+ * time that counts a [walk] still to make ([walkEndsAt], [nextRideReadyAt]) is late only past an
+ * on-time rider's ([plannedReadyAt]). `null` for an untimed ride.
+ */
+fun TripPlan.missedFrom(rideIndex: Int, walk: Boolean): Instant? {
+    val departs = ride(rideIndex).departureAt ?: return null
+    val gone = if (walk) maxOf(departs, plannedReadyAt(rideIndex) ?: departs) else departs
+    return gone.plus(CATCH_GRACE)
 }
 
 private fun walkSeconds(walk: TripLeg.Transfer): Long =

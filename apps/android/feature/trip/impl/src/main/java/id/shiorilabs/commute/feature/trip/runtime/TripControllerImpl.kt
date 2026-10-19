@@ -17,6 +17,7 @@ import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripPhase
 import id.shiorilabs.commute.core.trip.TripState
 import id.shiorilabs.commute.core.trip.expectedAlightingAt
+import id.shiorilabs.commute.core.trip.missedFrom
 import id.shiorilabs.commute.core.trip.nextRideReadyAt
 import id.shiorilabs.commute.core.trip.plannedReadyAt
 import id.shiorilabs.commute.core.trip.scheduledAtStop
@@ -307,24 +308,32 @@ class TripControllerImpl @Inject constructor(
      *
      * The nearer train in time wins, the planned one on a tie; a later train counts only when it has
      * left by the time of a fix, or by [TAP_SLACK] after a tap, and the planned one only when over
-     * [CATCH_GRACE] gone. Only a fix or a tap counts: the clock boarding a rider says nothing.
-     * A swap already made ([ActiveTrip.replaced]) is the plan's train, and [boardedEarlier] its business.
+     * [CATCH_GRACE] gone. A swap already made ([ActiveTrip.replaced]) is the plan's train, and
+     * [boardedEarlier] its business.
+     *
+     * Only the first fix along the ride counts, and only by the first stop out: the lateness it
+     * measures there is near enough all from leaving late. Further on it may have been picked up on
+     * the way, the 10.17 leaving 50 s late and losing three minutes more by two stops on, which is no
+     * 10.21. That fix may come after boarding by a tap or the clock; neither says which train it
+     * was by itself (a tap comes whenever the rider has a hand free), so a tap counts alone only
+     * with no fixes to wait for.
      */
     private fun boardedLater(before: ActiveTrip, trip: ActiveTrip, event: TripEvent, step: TripStep): Pair<ActiveTrip, TripStep> {
         val leg = before.state.legIndex
         val state = step.state
-        if (before.state.phase != TripPhase.WAITING_TO_BOARD || state.phase != TripPhase.RIDING || state.legIndex != leg) return trip to step
+        if (before.state.phase == TripPhase.ARRIVED || state.phase != TripPhase.RIDING || state.legIndex != leg) return trip to step
         if (trip.plan != before.plan) return trip to step
         // A swap already made is [boardedEarlier]'s, and an "either train" is [leftTooEarly]'s to settle.
         if (before.replaced != null || trip.mightBeOn != null) return trip to step
-        // Only a boarding something saw. The clock boards a rider whenever its tick runs after the
-        // departure (a late alarm, a restore, a stale fix), which says nothing of the train taken.
-        val sawBoarding = event is TripEvent.Fix || (event is TripEvent.RiderSaid && event.action == RiderAction.BOARDED)
-        if (!sawBoarding) return trip to step
+        val firstFix = event is TripEvent.Fix && before.state.confirmedPosition == 0.0 &&
+            state.confirmedPosition > 0.0 && state.confirmedPosition <= 1.0
+        val tapAlone = event is TripEvent.RiderSaid && event.action == RiderAction.BOARDED &&
+            before.state.phase == TripPhase.WAITING_TO_BOARD && !before.state.hasLocation
+        if (!firstFix && !tapAlone) return trip to step
         val ride = trip.plan.ride(leg)
         val planned = ride.departureAt ?: return trip to step
         // A tap is the boarding. A fix can come long after it (two are asked for, or a gap in them): the
-        // train left when the lateness the fix measured against the plan says, not when it was seen.
+        // train left when the lateness the fix measured by the first stop out says, not when it was seen.
         val boardedAt = if (event is TripEvent.Fix) planned.plusSeconds(maxOf(state.clockOffsetS, 0)) else event.at
         if (!boardedAt.isAfter(planned.plus(CATCH_GRACE))) return trip to step
         // A train doesn't leave early: seen moving, it has left; a tap may come a few seconds before it does.
@@ -507,10 +516,10 @@ class TripControllerImpl @Inject constructor(
         tellSwap(trip, legIndex, now)
         val ride = trip.plan.ride(legIndex)
         val departs = ride.departureAt ?: return
-        // The plan's own change was the planner's to allow: what is a miss is the lateness past it, not
-        // the walk being reckoned longer than the planner's allowance, aboard or walking.
-        val baseline = maxOf(departs, trip.plan.plannedReadyAt(legIndex) ?: departs)
-        if (!readyAt.isAfter(baseline.plus(CATCH_GRACE))) return
+        // Walking or aboard, [readyAt] counts a walk at an easy pace, and is late only against an
+        // on-time rider's at the same pace. On the platform the walk is done: late against the train.
+        val walk = state.phase == TripPhase.RIDING || state.walkEndsAt(trip.plan) != null
+        if (!readyAt.isAfter(trip.plan.missedFrom(legIndex, walk) ?: return)) return
         val key = "$legIndex@$departs"
         // One out at a time; for a different ride than the one asked about, the old answer is no use.
         replanJob?.takeIf { it.isActive }?.let { out ->
@@ -642,13 +651,25 @@ class TripControllerImpl @Inject constructor(
     }
 
     /**
+     * Just past the grace a walker has for the ride they're walking to: if the walk isn't done by
+     * then the train is lost ([replanIfMissed]), and with no fix to step on nothing else would say
+     * so. The 19 Oct stretch from Sudirman had none for nine minutes.
+     */
+    private fun missAt(trip: ActiveTrip): Instant? {
+        val state = trip.state
+        if (state.phase != TripPhase.WAITING_TO_BOARD || state.walkingSince == null) return null
+        return trip.plan.missedFrom(state.legIndex, walk = true)?.plusSeconds(1)
+    }
+
+    /**
      * Ticks at [at] twice over: a timer for while the process is awake, and an alarm for when it
      * dozes or dies. Whichever is second finds nothing new; a tick is idempotent.
      */
     private fun schedule(next: Instant?) {
         engineWake = next
         val now = clock.instant()
-        val at = listOfNotNull(next, retryAt?.takeIf { it.isAfter(now) }).minOrNull()
+        val missAt = _active.value?.let(::missAt)
+        val at = listOfNotNull(next, retryAt, missAt).filter { it.isAfter(now) }.minOrNull()
         timer?.cancel()
         if (at == null) {
             runtime.cancelWake()
