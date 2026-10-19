@@ -152,6 +152,9 @@ class TripControllerImpl @Inject constructor(
                 if (_active.value != null) runtime.finish()
                 _finished.value = null
                 store.clearFinished()
+                replannedFor = null
+                retryAt = null
+                engineWake = null
                 val step = TripEngine.start(placed, clock.instant(), hasLocation)
                 log.event("started", mapOf("journey" to origin.journeyKey, "location" to hasLocation))
                 apply(ActiveTrip(placed, step.state, origin), step)
@@ -311,7 +314,9 @@ class TripControllerImpl @Inject constructor(
         if (!sawBoarding) return trip to step
         val ride = trip.plan.ride(leg)
         val planned = ride.departureAt ?: return trip to step
-        val boardedAt = event.at
+        // A tap is the boarding. A fix can come long after it (two are asked for, or a gap in them): the
+        // train left when the lateness the fix measured against the plan says, not when it was seen.
+        val boardedAt = if (event is TripEvent.Fix) planned.plusSeconds(maxOf(state.clockOffsetS, 0)) else event.at
         if (!boardedAt.isAfter(planned.plus(CATCH_GRACE))) return trip to step
         // A train doesn't leave early: seen moving, it has left; a tap may come a few seconds before it does.
         val tapSlack = if (event is TripEvent.Fix) Duration.ZERO else TAP_SLACK
@@ -415,6 +420,9 @@ class TripControllerImpl @Inject constructor(
             // At the destination an alarm already ringing rings on until the rider says they're up.
             if (finished.reason != FinishReason.ARRIVED) runtime.stopWakingRider()
             timer?.cancel()
+            replannedFor = null
+            retryAt = null
+            engineWake = null
             runtime.cancelWake()
             runtime.stopTracking()
             runtime.finish()
@@ -479,8 +487,16 @@ class TripControllerImpl @Inject constructor(
         tellSwap(trip, legIndex, now)
         val ride = trip.plan.ride(legIndex)
         val departs = ride.departureAt ?: return
-        if (!readyAt.isAfter(departs.plus(CATCH_GRACE))) return
+        // Aboard, the plan's own change was the planner's to allow: what is a miss is the lateness past it,
+        // not the walk being reckoned longer than the planner's allowance.
+        val allowed = if (state.phase == TripPhase.RIDING) {
+            state.copy(clockOffsetS = 0).nextRideReadyAt(trip.plan)?.second
+        } else {
+            null
+        }
+        if (!readyAt.isAfter(maxOf(departs, allowed ?: departs).plus(CATCH_GRACE))) return
         val key = "$legIndex@$departs"
+        if (replanJob?.isActive == true) return
         // Asked about already, until a retry that found nothing is due.
         if (key == replannedFor && retryAt?.let { now.isBefore(it) } != false) return
         replannedFor = key
@@ -495,7 +511,8 @@ class TripControllerImpl @Inject constructor(
                 // Offline, say: ask again once it's had a while, on a wake of its own: a rider walking
                 // gives no fix to step on, and a frozen process needs an alarm.
                 mutex.withLock {
-                    if (replannedFor != key) return@withLock
+                    // Not for a trip that ended, or a plan that has moved on, meanwhile.
+                    if (replannedFor != key || _active.value?.plan != trip.plan) return@withLock
                     retryAt = clock.instant().plus(REPLAN_RETRY)
                     schedule(engineWake)
                 }
