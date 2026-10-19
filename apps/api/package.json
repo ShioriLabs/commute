@@ -37,6 +37,7 @@
     "generate:route-snapshot": "tsx ./src/db/scripts/generateRouteSnapshot.ts",
     "generate:dataplatform-network": "tsx ./src/db/scripts/generateDataPlatformNetwork.ts",
     "analyze:headways": "tsx ./src/db/scripts/analyzeObservedHeadways.ts",
+    "analyze:tj-trips": "tsx ./src/db/scripts/analyzeTjTrips.ts",
     "fit:headways": "tsx ./src/db/scripts/fitObservedHeadways.ts"
   },
   "keywords": [],
