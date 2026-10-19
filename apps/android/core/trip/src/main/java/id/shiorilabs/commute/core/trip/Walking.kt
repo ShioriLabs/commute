@@ -51,7 +51,7 @@ private const val OVERHEAD_S_PER_M = 1.2
  */
 fun TripPlan.plannedReadyAt(rideIndex: Int): Instant? {
     val before = legs.take(rideIndex).lastOrNull { it is TripLeg.Ride } as? TripLeg.Ride ?: return null
-    val arrives = before.arrivalAt ?: return null
+    val arrives = before.plannedArrivalAt ?: before.arrivalAt ?: return null
     return arrives.plusSeconds(transferBefore(rideIndex)?.let(::walkSeconds) ?: 0)
 }
 
