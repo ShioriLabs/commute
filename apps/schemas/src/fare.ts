@@ -331,7 +331,7 @@ export const FareJourneySchema = v.pipe(
     )
   }),
   v.title('FareJourney'),
-  v.description('Satu pilihan rute lengkap dengan tarifnya. Yang dibandingkan cuma jumlah naik kendaraan, jarak jalan kaki, rata-rata lama nunggu, dan tarif, bukan waktu tempuh. Jam berangkat dan tiba ikut ditampilkan di tahap yang jadwalnya kami punya.'),
+  v.description('Satu pilihan rute lengkap dengan tarifnya. Yang dibandingkan cuma jumlah naik kendaraan, jarak jalan kaki, rata-rata lama nunggu, dan tarif, bukan waktu tempuh. Lama nunggu TransJakarta ikut menghitung bus yang datang bergerombol, dan di ruas yang dilewati beberapa rute dihitung dari bus rute mana pun yang datang duluan. Jam berangkat dan tiba ikut ditampilkan di tahap yang jadwalnya kami punya.'),
   v.metadata({ ref: 'FareJourney' })
 )
 

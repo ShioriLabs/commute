@@ -42,6 +42,25 @@ const concourseWalkFor = (edge: GraphEdge) =>
  */
 export type FareScorer = (legs: readonly RouteLeg[]) => number | null
 
+/** See PlanOptions.waitS. `lines[0]` is the line boarded. */
+export type WaitModel = (lines: readonly string[], stop: string, next: string) => number
+
+/*
+ * A ride on a stretch several lines share, carried on its label while two or
+ * more of them still run it. Where it was boarded and the stop after are the
+ * set's key for the wait model; `waitS` is what the label has been charged for
+ * it so far, so narrowing charges only the difference.
+ */
+interface SharedRide {
+  board: string
+  first: string
+  lines: readonly string[]
+  waitS: number
+}
+
+/** The search's back-pointer, plus the shared ride it is on, if any. */
+type PlanTrace = Trace & { ride?: SharedRide }
+
 export interface PlanOptions {
   /** Vehicle boardings allowed. Beyond four is not a journey anyone takes. */
   maxRounds?: number
@@ -57,6 +76,21 @@ export interface PlanOptions {
   headwaysS?: Map<string, number>
   /** Used when a line has no headway data at all. */
   defaultHeadwayS?: number
+  /**
+   * The caller's wait model, replacing half the boarded line's headway.
+   *
+   * Called with every boardable line that runs the stretch ridden so far,
+   * boarded line first, the stop boarded at and the stop after it (which says
+   * which way). On a stretch several lines share, a rider takes whichever bus
+   * comes first, so the wait belongs to the set, and the set narrows as the
+   * ride passes the points where lines leave. The engine finds the sets from
+   * its own edges; what a set's wait is — how often its buses come, how
+   * unevenly, how often they arrive together — is the caller's data.
+   *
+   * Must not decrease when a set narrows. Absent, every boarding waits half its
+   * own line's headway, exactly as before this existed.
+   */
+  waitS?: WaitModel
   /**
    * When the rider sets off, in seconds since local midnight.
    *
@@ -199,7 +233,8 @@ const DEFAULTS = {
 } as const
 
 /*
- * Expected wait for a rider arriving at a random time is half the headway.
+ * Expected wait for a rider arriving at a random time is half the headway, when
+ * no wait model is passed (PlanOptions.waitS replaces this whole function).
  *
  * That uniform-arrival assumption is the whole time model. It is not a
  * timetable: this engine cannot say when the next vehicle comes, only how long
@@ -258,6 +293,7 @@ export function plan(
     weights = DEFAULT_RANK_WEIGHTS,
     headwaysS,
     defaultHeadwayS = DEFAULTS.defaultHeadwayS,
+    waitS: waitModel,
     departureS,
     serviceHours,
     excludeLines,
@@ -302,19 +338,77 @@ export function plan(
     ? inService
     : (lineCode: string): boolean => !excludeLines.has(lineCode) && inService(lineCode)
 
-  const bagFor = new Map<string, Bag<Trace | null>>()
+  /*
+   * The boardable lines running a hop, boarded line first: what a rider at
+   * `from` heading for `to` could take instead. Per query, because `canBoard`
+   * is.
+   *
+   * Everything here is keyed by object identity rather than by strings: it
+   * runs on every boarding edge, and building a key string there cost more
+   * than the search itself (measured: +70% time for +4% labels). The arrays
+   * are interned, one per boarding edge and one per narrowing, so an array
+   * identifies its stop, its direction and its lines, and is a valid key for
+   * the wait it was charged.
+   */
+  const hopLines = new Map<GraphEdge, readonly string[]>()
+  const linesOnHop = (from: string, edge: GraphEdge): readonly string[] => {
+    // A graph edge is one object per (from, to, line), so it is the key.
+    let lines = hopLines.get(edge)
+    if (!lines) {
+      const boarded = edge.lineCode!
+      const others: string[] = []
+      for (const e of adjacency.get(from) ?? []) {
+        if (e.to === edge.to && e.lineCode !== null && e.lineCode !== boarded && canBoard(e.lineCode) && !others.includes(e.lineCode)) others.push(e.lineCode)
+      }
+      lines = others.length === 0 ? [boarded] : [boarded, ...others.sort()]
+      hopLines.set(edge, lines)
+    }
+    return lines
+  }
+
+  /*
+   * A shared set narrowed to the lines that also run `from -> to`. Returns the
+   * same array when nothing leaves, which is how the caller tells.
+   */
+  const narrowed = new Map<readonly string[], Map<string, Map<string, readonly string[]>>>()
+  const narrow = (lines: readonly string[], from: string, to: string): readonly string[] => {
+    let byFrom = narrowed.get(lines)
+    if (!byFrom) narrowed.set(lines, byFrom = new Map())
+    let byTo = byFrom.get(from)
+    if (!byTo) byFrom.set(from, byTo = new Map())
+    let kept = byTo.get(to)
+    if (!kept) {
+      const running = (line: string) => (adjacency.get(from) ?? []).some(e => e.to === to && e.lineCode === line)
+      const filtered = lines.filter(running)
+      kept = filtered.length === lines.length ? lines : filtered
+      byTo.set(to, kept)
+    }
+    return kept
+  }
+
+  const waits = new Map<readonly string[], number>()
+  const sharedWait = (lines: readonly string[], board: string, first: string): number => {
+    let w = waits.get(lines)
+    if (w === undefined) {
+      w = waitModel!(lines, board, first)
+      waits.set(lines, w)
+    }
+    return w
+  }
+
+  const bagFor = new Map<string, Bag<PlanTrace | null>>()
   const bagKey = (stop: string, round: number) => `${round}:${stop}`
-  const getBag = (stop: string, round: number): Bag<Trace | null> => {
+  const getBag = (stop: string, round: number): Bag<PlanTrace | null> => {
     const key = bagKey(stop, round)
     let bag = bagFor.get(key)
     if (!bag) {
-      bag = new Bag<Trace | null>({ maxSize: maxBagSize, weights, instrument })
+      bag = new Bag<PlanTrace | null>({ maxSize: maxBagSize, weights, instrument })
       bagFor.set(key, bag)
     }
     return bag
   }
 
-  const origin: Label<Trace | null> = {
+  const origin: Label<PlanTrace | null> = {
     criteria: { boardings: 0, rideDistanceM: 0, walkDistanceM: 0, concourseWalkM: 0, walks: 0, waitS: 0, fare: null },
     incomingLine: null,
     trace: null
@@ -324,7 +418,7 @@ export function plan(
   // The one bag that is a result set rather than a state: the journey is over,
   // so the line the rider arrived on decides nothing further and two labels here
   // are two finished journeys, comparable outright.
-  const destinationBag = new Bag<Trace | null>({ maxSize: maxBagSize, weights, comparesAcrossLines: true, instrument })
+  const destinationBag = new Bag<PlanTrace | null>({ maxSize: maxBagSize, weights, comparesAcrossLines: true, instrument })
   // Fewest boardings of any completed journey, for the bound above.
   let bestCompletedBoardings = Infinity
 
@@ -410,13 +504,51 @@ export function plan(
            * needed — the boardings check above already rejects the cheapest
            * case before this allocates, which is why it is hoisted.
            */
+          /*
+           * The wait this edge adds, and the shared ride it leaves the label on.
+           *
+           * Without a wait model: half the boarded line's headway, at boarding.
+           * With one, a boarding is charged for every line that could be taken
+           * here instead, and riding on charges the difference each time a line
+           * leaves the stretch, until one is left. Charging up front and topping
+           * up keeps waitS non-decreasing along a journey, which the target
+           * pruning below relies on.
+           *
+           * Approximate in one place, knowingly: two labels on the same line at
+           * a stop compare on the wait charged so far, while the one on a wider
+           * set may still be topped up. The most it can be topped up to is the
+           * boarded line's own wait.
+           */
+          let addedWaitS = 0
+          let ride: SharedRide | undefined
+          if (boarding) {
+            if (waitModel) {
+              const lines = linesOnHop(stop, edge)
+              const waitS = sharedWait(lines, stop, edge.to)
+              addedWaitS = waitS
+              if (lines.length > 1) ride = { board: stop, first: edge.to, lines, waitS }
+            } else {
+              addedWaitS = expectedWaitS(edge.lineCode!, stop, headwaysS, defaultHeadwayS)
+            }
+          } else if (sameLine && label.trace?.ride) {
+            const was = label.trace.ride
+            const lines = narrow(was.lines, stop, edge.to)
+            if (lines === was.lines) {
+              ride = was
+            } else {
+              const waitS = sharedWait(lines, was.board, was.first)
+              addedWaitS = Math.max(0, waitS - was.waitS)
+              if (lines.length > 1) ride = { board: was.board, first: was.first, lines, waitS: Math.max(waitS, was.waitS) }
+            }
+          }
+
           const criteria: Criteria = {
             boardings: label.criteria.boardings + (boarding ? 1 : 0),
             rideDistanceM: label.criteria.rideDistanceM + (isWalk ? 0 : edge.distanceM),
             walkDistanceM: label.criteria.walkDistanceM + (isWalk ? edge.distanceM : 0),
             concourseWalkM: label.criteria.concourseWalkM + (isWalk ? concourseWalkFor(edge) : 0),
             walks: label.criteria.walks + (isWalk ? 1 : 0),
-            waitS: label.criteria.waitS + (boarding ? expectedWaitS(edge.lineCode!, stop, headwaysS, defaultHeadwayS) : 0),
+            waitS: label.criteria.waitS + addedWaitS,
             fare: null
           }
 
@@ -451,12 +583,16 @@ export function plan(
             continue
           }
 
-          const next: Label<Trace | null> = {
+          const next: Label<PlanTrace | null> = {
             criteria,
             // A walk resets the boarded line, which is what makes boarding
             // after a transfer free — matching findRoute.
             incomingLine: isWalk ? null : edge.lineCode,
-            trace: { hop: { from: stop, to: edge.to, edge, breaksService: brokenTurn }, previous: label.trace }
+            // Two literal shapes rather than a spread: this runs once per edge
+            // examined, and a spread allocates a throwaway object every time.
+            trace: ride
+              ? { hop: { from: stop, to: edge.to, edge, breaksService: brokenTurn }, previous: label.trace, ride }
+              : { hop: { from: stop, to: edge.to, edge, breaksService: brokenTurn }, previous: label.trace }
           }
 
           if (targetIds.has(edge.to)) {
