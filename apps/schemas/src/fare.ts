@@ -314,8 +314,13 @@ export const FareJourneySchema = v.pipe(
       v.optional(v.object({
         durationS: v.pipe(
           v.number(),
-          v.description('Perkiraan lama perjalanan dalam detik, dihitung dari jam yang diminta (`at`) sampai tiba, termasuk jalan kaki dan rata-rata waktu tunggu. Perkiraan dari pengamatan bus, bukan jadwal.'),
+          v.description('Perkiraan lama perjalanan dalam detik, dihitung dari jam yang diminta (`at`) sampai tiba, termasuk jalan kaki dan rata-rata waktu tunggu. Perkiraan dari pengamatan bus, bukan jadwal. Lama dari naik kendaraan pertama: `durationS - fromS`.'),
           v.metadata({ examples: [3420] })
+        ),
+        fromS: v.pipe(
+          v.number(),
+          v.description('Detik dari `at` sampai naik kendaraan pertama kalau tahap itu terjadwal (`departureAt` ada), selain itu 0. Biar lama perjalanannya bisa dihitung dari naik, sama seperti rute yang jadwalnya lengkap.'),
+          v.metadata({ examples: [480] })
         ),
         rideS: v.pipe(
           v.array(v.nullable(v.number())),

@@ -302,7 +302,7 @@ export default function MapTripCard({
                   className="px-4 pb-4 border-t border-slate-100 overflow-y-auto overscroll-contain [&>ol]:mt-4"
                   style={{ maxHeight: bodyMaxH ?? undefined }}
                 >
-                  <JourneyTimeline legs={journey.legs} />
+                  <JourneyTimeline legs={journey.legs} rideS={journey.estimate?.rideS} />
                 </div>
               )}
         </div>

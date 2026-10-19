@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatClock, formatDuration, formatKm, formatRupiah } from './format'
+import { formatClock, formatDuration, formatEstimate, formatKm, formatRupiah } from './format'
 
 describe('formatRupiah', () => {
   it('renders whole rupiah with no fractional part', () => {
@@ -76,14 +76,16 @@ describe('formatDuration', () => {
     expect(formatDuration('2026-09-07T22:54:00+07:00', '2026-09-07T23:08:00+07:00')).toBe('14 mnt')
   })
 
-  it('splits hours out once there are any', () => {
-    expect(formatDuration('2026-09-07T08:00:00+07:00', '2026-09-07T09:05:00+07:00')).toBe('1 j 5 mnt')
+  it('stays in minutes up to two hours, and splits hours out past that', () => {
+    expect(formatDuration('2026-09-07T08:00:00+07:00', '2026-09-07T09:05:00+07:00')).toBe('65 mnt')
+    expect(formatDuration('2026-09-07T08:00:00+07:00', '2026-09-07T10:00:00+07:00')).toBe('120 mnt')
+    expect(formatDuration('2026-09-07T08:00:00+07:00', '2026-09-07T10:01:00+07:00')).toBe('2 j 1 mnt')
   })
 
   // The API stamps a real +07:00 instant on both, so a journey over midnight is
   // an ordinary subtraction rather than a wrap to be undone.
   it('crosses midnight without wrapping', () => {
-    expect(formatDuration('2026-09-07T23:10:00+07:00', '2026-09-08T00:15:00+07:00')).toBe('1 j 5 mnt')
+    expect(formatDuration('2026-09-07T23:10:00+07:00', '2026-09-08T00:15:00+07:00')).toBe('65 mnt')
   })
 
   // Defensive: the caller only reaches here with a fully timed journey, so a
@@ -91,5 +93,19 @@ describe('formatDuration', () => {
   // would be worse than saying nothing.
   it('says nothing when the span is impossible', () => {
     expect(formatDuration('2026-09-07T09:00:00+07:00', '2026-09-07T08:00:00+07:00')).toBe('')
+  })
+})
+
+describe('formatEstimate', () => {
+  // The ± is what keeps an observed bus estimate from reading as a timetable figure.
+  it('marks the figure as approximate, in the same shape as a duration', () => {
+    expect(formatEstimate(45 * 60)).toBe('±45 mnt')
+    expect(formatEstimate(65 * 60)).toBe('±65 mnt')
+    expect(formatEstimate(128 * 60)).toBe('±2 j 8 mnt')
+  })
+
+  it('rounds to the minute and never claims zero', () => {
+    expect(formatEstimate(44 * 60 + 31)).toBe('±45 mnt')
+    expect(formatEstimate(20)).toBe('±1 mnt')
   })
 })
