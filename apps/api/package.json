@@ -38,7 +38,8 @@
     "generate:dataplatform-network": "tsx ./src/db/scripts/generateDataPlatformNetwork.ts",
     "analyze:headways": "tsx ./src/db/scripts/analyzeObservedHeadways.ts",
     "analyze:tj-trips": "tsx ./src/db/scripts/analyzeTjTrips.ts",
-    "fit:headways": "tsx ./src/db/scripts/fitObservedHeadways.ts"
+    "fit:headways": "tsx ./src/db/scripts/fitObservedHeadways.ts",
+    "fit:tj-runtimes": "tsx ./src/db/scripts/fitTjRuntimes.ts"
   },
   "keywords": [],
   "author": "",
