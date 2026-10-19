@@ -231,17 +231,37 @@ stability (`mcraptor.md`) are untouched; seconds inside the search stay
 ride and no `arrivalAt` carry `estimate: { durationS, rideS }`:
 - `durationS` runs from the request's `at` to the estimated arrival, including
   walks and expected waits;
+- `fromS` is the seconds from `at` to the first boarding when a timed ride
+  opens the journey, and 0 otherwise. Clients show `durationS - fromS`, so a
+  train-then-bus card measures boarding to arrival like a fully timed one. The
+  client cannot recover `at` itself through the edge cache;
 - `rideS` is aligned with `legs` and is set on TJ legs only.
 
 Legs still carry no TJ `departureAt`/`arrivalAt`/`stopTimes`, because every
-client reads those as timetable facts. The public `/fares` is unchanged. No UI
-reads `estimate` yet.
+client reads those as timetable facts. The public `/fares` is unchanged.
+
+**Web UI.** Estimates print as `±45 mnt` (`formatEstimate`) and are never shown
+as a clock:
+- the journey card's headline slot (fare list and map rail), where the fare
+  drops back to the meta row as it does on timed cards;
+- the detail's closing recap;
+- each TJ leg's summary (`18 stasiun • 14,3 km • ±42 mnt`, from `rideS`);
+- home's saved-route rows.
+
+`estimatedDurationOf` in `fare-sheet/journeys.ts` is the single reader.
 
 **How a journey is estimated:**
 - `Tsundere.estimateJourney` reuses `resolveDepartures` with an `estimateUntimed`
   hook. `timeJourney` ignores the hook, so the timed fields cannot change.
 - The hook is `utils/observedRuntimes.ts` `estimateTjLeg`:
-  - the wait is half the same headway the search charged;
+  - the wait is half the same headway the search charged, times the
+    line-direction's bunching `1 + CV²` (`bunchingFactor`, from
+    `OBSERVED_CV_PROFILE`, using the neighbouring hour where the cell is
+    missing). CV is capped at 1, so a wait averages at most one headway: the
+    profile's p90 is 0.99, and the tail past it (max 4.78) is the
+    topology-mismatch lines and the 05:00 ramp-ups. Ranking still charges h/2.
+    For 6 to Ragunan at Galunggung this is 8.1 min at WD 12:00 (h 9.7 min,
+    CV 0.82), against 4.8 min before;
   - the ride is a sum of hop medians in the block the running clock is in;
   - a hop with no cell is priced at the leg's own pace if at least 50% of the
     leg's metres are measured;
@@ -296,10 +316,16 @@ estimate. The gain is the median estimated gain of the changed pairs.
 **Open before switching to `sort`:**
 - **Coverage bias.** At peak, a journey on a well-measured line can move up while
   an unmeasured one stays in the untimed tail, whatever the real speeds.
-- **No visible reason.** With no UI reading `estimate`, a rider sees a new order
-  with nothing explaining it.
+- **Partly visible reason.** Cards now print each estimate, so a reordered list
+  shows the figures it was sorted on. Nothing says the order itself changed, and
+  an unestimated journey still shows no duration at all.
 - **Descriptions.** The `FareJourneySchema` description still says ranking ignores
   travel time. It changes when sort ships.
-- **Waits are h/2.** Bunching (h(1+CV²)/2) still isn't modelled, so waits are on
-  the short side.
+- **Ranking waits are h/2.** The estimate charges bunching and the search
+  doesn't, so sort mode orders by bunched waits while the routes themselves were
+  found with even-service ones.
+- **WD 17-18 headways are interpolated.** The evening peak starts in the
+  observed 16:00 cell (network median 0.9× the mean of 15:00 and 17:00; 6@R 263 s
+  against 514 s at 15:00, as buses are added toward the suburbs). 17:00 and 18:00
+  are guessed between 16:00 and 19:00, and their CV is borrowed from 16:00.
 - **`moreDepartures` rows get no estimates.**
