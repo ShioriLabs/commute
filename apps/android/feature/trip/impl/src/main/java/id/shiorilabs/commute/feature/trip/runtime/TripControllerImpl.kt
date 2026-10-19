@@ -223,7 +223,8 @@ class TripControllerImpl @Inject constructor(
         mutex.withLock {
             val before = _active.value ?: return
             val (boarded, stepped) = boardedEarlier(before, event, TripEngine.step(before.plan, before.state, event))
-            val (trip, step) = leftTooEarly(boarded, event, stepped)
+            val (left, leftStep) = leftTooEarly(boarded, event, stepped)
+            val (trip, step) = boardedLater(before, left, event, leftStep)
             logStep(event, before.state, step.state)
             apply(trip, step)
         }
@@ -276,6 +277,48 @@ class TripControllerImpl @Inject constructor(
         log.event("earlier", mapOf("leg" to leg, "departs" to earlier.plan.ride(leg).departureAt, "left" to left, "aheadS" to ahead.seconds))
         runtime.rerouteTakenBack(leg)
         return trip.copy(plan = earlier.plan, mightBeOn = null) to TripEngine.step(earlier.plan, trip.state, event)
+    }
+
+    /**
+     * Boarded well after the planned train, with a later one due about then: the later one is the
+     * train they're on, not the planned one running that late. Boarding at 10.21.42 for the 10.17 with
+     * the 10.21 behind it, the board showed the 10.17 282 s late. The leg moves onto that train (its
+     * times shifted, offline: the stops and the line are the same) and the lateness is measured
+     * against it. Later rides are left to [replanIfMissed] to find missed or not.
+     *
+     * The nearer train in time wins, the planned one on a tie; a later train counts only when due no
+     * more than [EARLIER_TRAIN] after boarding, and the planned one only when over [CATCH_GRACE] gone.
+     * A swap already made ([ActiveTrip.replaced]) is the plan's train, and [boardedEarlier] its business.
+     */
+    private fun boardedLater(before: ActiveTrip, trip: ActiveTrip, event: TripEvent, step: TripStep): Pair<ActiveTrip, TripStep> {
+        val leg = before.state.legIndex
+        val state = step.state
+        if (before.state.phase != TripPhase.WAITING_TO_BOARD || state.phase != TripPhase.RIDING || state.legIndex != leg) return trip to step
+        if (trip.plan != before.plan) return trip to step
+        val ride = trip.plan.ride(leg)
+        val planned = ride.departureAt ?: return trip to step
+        val boardedAt = event.at
+        if (!boardedAt.isAfter(planned.plus(CATCH_GRACE))) return trip to step
+        val took = ride.nextDepartures
+            .filter { !it.isAfter(boardedAt.plus(EARLIER_TRAIN)) }
+            .minByOrNull { Math.abs(Duration.between(it, boardedAt).seconds) }
+            ?: return trip to step
+        if (Math.abs(Duration.between(took, boardedAt).seconds) >= Math.abs(Duration.between(planned, boardedAt).seconds)) return trip to step
+
+        val delta = Duration.between(planned, took)
+        val shifted = ride.copy(
+            departureAt = took,
+            arrivalAt = ride.arrivalAt?.plus(delta),
+            stops = ride.stops.map { it.copy(scheduledAt = it.scheduledAt?.plus(delta)) },
+            // Which run it is isn't known from here, only when it left.
+            tripId = null,
+            nextDepartures = ride.nextDepartures.filter { it.isAfter(took) },
+        )
+        val plan = TripPlan(trip.plan.legs.toMutableList().also { it[leg] = shifted })
+        log.event("later", mapOf("leg" to leg, "planned" to planned, "took" to took, "boarded" to boardedAt))
+        val offset = (state.clockOffsetS - delta.seconds).coerceAtLeast(MAX_EARLY_S)
+        val moved = trip.copy(plan = plan, replaced = null, mightBeOn = null)
+        return moved to TripEngine.step(plan, state.copy(clockOffsetS = offset), TripEvent.Tick(clock.instant()))
     }
 
     /** Whether ride [legIndex] of [a] and [b] runs the same line between the same stops: one train or the other. */
@@ -559,6 +602,9 @@ class TripControllerImpl @Inject constructor(
          * that its lateness won't be made up, early enough to sit with the news.
          */
         val EARLY_REPLAN: Duration = Duration.ofMinutes(10)
+
+        /** The most a train is taken to run ahead of its time, as the engine's own bound is. */
+        const val MAX_EARLY_S = -5 * 60L
 
         /** How long before asking again when a re-plan found nothing. */
         val REPLAN_RETRY: Duration = Duration.ofMinutes(2)
