@@ -6,6 +6,8 @@ import id.shiorilabs.commute.feature.journey.data.JourneyRepository
 import id.shiorilabs.commute.feature.journey.domain.Departure
 import id.shiorilabs.commute.feature.journey.domain.Journey
 import id.shiorilabs.commute.feature.journey.domain.JourneyLeg
+import id.shiorilabs.commute.feature.journey.domain.resolveTimedLegs
+import id.shiorilabs.commute.feature.journey.domain.retimeJourney
 import id.shiorilabs.commute.feature.journey.domain.toTripPlan
 import id.shiorilabs.commute.feature.journey.presentation.savedroute.homeRouteCriteria
 import id.shiorilabs.commute.feature.trip.TripReplanner
@@ -46,15 +48,29 @@ internal fun replanDeparture(readyAt: Instant, now: Instant): Departure =
 /**
  * Of [journeys], the one a rider at [fromId] from [readyAt] can still take that arrives first: its
  * first leg a ride from there, leaving no earlier. On [line] when that arrives as soon.
+ *
+ * The API times each journey on one train of its first leg, which can have left a few seconds
+ * before the rider is ready while the trains after it, in `upcomingDepartures`, are still to come:
+ * the journey is then re-timed onto the first of those the rider can make.
  */
 internal fun onwardJourney(journeys: List<Journey>, fromId: String, readyAt: Instant, line: String): Journey? =
     journeys
-        .filter { journey ->
-            val first = journey.legs.firstOrNull() as? JourneyLeg.Ride ?: return@filter false
-            val departs = first.departureAt ?: return@filter false
-            first.stops.firstOrNull()?.id == fromId && !departs.isBefore(readyAt)
-        }
+        .mapNotNull { journey -> catchableFrom(journey, fromId, readyAt) }
         .minWithOrNull(
             compareBy<Journey> { it.arrivalAt ?: Instant.MAX }
                 .thenBy { (it.legs.first() as JourneyLeg.Ride).line != line },
         )
+
+/** [journey] as the rider at [fromId] can take it from [readyAt]: as timed, or on the next train that works; `null` if none. */
+private fun catchableFrom(journey: Journey, fromId: String, readyAt: Instant): Journey? {
+    val first = journey.legs.firstOrNull() as? JourneyLeg.Ride ?: return null
+    if (first.stops.firstOrNull()?.id != fromId) return null
+    val departs = first.departureAt ?: return null
+    if (!departs.isBefore(readyAt)) return journey
+
+    val next = first.upcomingDepartures.firstOrNull { !it.departureAt.isBefore(readyAt) } ?: return null
+    val timed = resolveTimedLegs(journey.legs, picks = mapOf(0 to next.tripId), notBefore = readyAt)
+    val retimed = retimeJourney(journey, timed)
+    val boards = (retimed.legs.first() as JourneyLeg.Ride).departureAt
+    return retimed.takeIf { boards != null && !boards.isBefore(readyAt) }
+}
