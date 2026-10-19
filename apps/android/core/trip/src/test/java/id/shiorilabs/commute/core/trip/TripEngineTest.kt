@@ -966,6 +966,41 @@ class TripEngineTest {
     }
 
     @Test
+    fun `a train still rolling into a change's stop is told to get off, but the walk starts once it has stopped`() {
+        // Sudirman on 19 Oct: the fix that put the train there read 5.35 m/s, and the walk was timed
+        // from it, seconds before the doors opened.
+        val aboard = TripEngine.start(krlThenLrt, at(-1), hasLocation = true).state.copy(
+            phase = TripPhase.RIDING,
+            confirmedPosition = 0.5,
+            position = 0.5,
+            source = PositionSource.CONFIRMED,
+            confirmedAt = at(3),
+        )
+
+        val step = TripEngine.step(krlThenLrt, aboard, TripEvent.Fix(Places.SUDIRMAN.here, 10f, at(3.9), 5.35f))
+
+        assertEquals(alert(AlertKind.ALIGHT, estimated = false), step.effects.filterIsInstance<TripEffect.Alert>().last())
+        assertEquals(TripPhase.WAITING_TO_BOARD, step.state.phase)
+        // Six seconds to brake from 5.35 m/s at 1 m/s², and ten for the doors.
+        assertEquals(at(3.9).plusSeconds(16), step.state.walkingSince)
+    }
+
+    @Test
+    fun `a train standing at the stop starts the walk at once`() {
+        val aboard = TripEngine.start(krlThenLrt, at(-1), hasLocation = true).state.copy(
+            phase = TripPhase.RIDING,
+            confirmedPosition = 0.5,
+            position = 0.5,
+            source = PositionSource.CONFIRMED,
+            confirmedAt = at(3),
+        )
+
+        val step = TripEngine.step(krlThenLrt, aboard, TripEvent.Fix(Places.SUDIRMAN.here, 10f, at(3.9), 0.2f))
+
+        assertEquals(at(3.9), step.state.walkingSince)
+    }
+
+    @Test
     fun `a fix too rough to trust is ignored`() {
         val run = Run(bogorLine)
         run.tick(0.0)

@@ -7,6 +7,7 @@ import id.shiorilabs.commute.core.geo.project
 import id.shiorilabs.commute.core.geo.projectOnPath
 import java.time.Duration
 import java.time.Instant
+import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
@@ -88,6 +89,13 @@ object TripEngine {
 
     /** Slower than this, by the satellites, the train is standing still. */
     private const val STANDING_M_PER_S = 1.0
+
+    /** A train brakes into a stop at about this rate; and the doors take [DOORS_OPEN] after it halts. */
+    private const val BRAKING_M_PER_S2 = 1.0
+    private val DOORS_OPEN: Duration = Duration.ofSeconds(10)
+
+    /** A fix this recent says how fast the train is going as it's left. */
+    private val ROLLING_FIX_FRESH: Duration = Duration.ofSeconds(10)
 
     /**
      * Fixes in a row at [RIDING_M_PER_S] or more, after standing at a stop, that take a train out of
@@ -651,12 +659,23 @@ object TripEngine {
             offRouteStrikes = 0,
             askedStillOnRoute = false,
             // Off when seen; by the clock, when the ride should have got in, not when that was noticed.
-            walkingSince = (if (estimated) ride.arrivalAt?.plusSeconds(state.lateS) ?: now else now)
+            walkingSince = (if (estimated) ride.arrivalAt?.plusSeconds(state.lateS) ?: now else now.plus(stillRolling(state, now)))
                 .takeIf { plan.transferBefore(following) != null },
             sightedPosition = null,
             boardingFixes = 0,
             passingFrom = null,
         )
+    }
+
+    /**
+     * How long until the train that a fix has just put at the stop is stopped and its doors are open:
+     * the walk can't start before. Sudirman's fix on 19 Oct read 5.35 m/s. Nothing when the last fix is
+     * old (a tap, a long gap) or the train was standing.
+     */
+    private fun stillRolling(state: TripState, now: Instant): Duration {
+        val last = state.recentSpeeds.lastOrNull() ?: return Duration.ZERO
+        if (last.mps < STANDING_M_PER_S || now.toEpochMilli() - last.atMs > ROLLING_FIX_FRESH.toMillis()) return Duration.ZERO
+        return Duration.ofSeconds(ceil(last.mps / BRAKING_M_PER_S2).toLong()).plus(DOORS_OPEN)
     }
 
     /** The one honest notice for a ride nothing can place: untimed, and no fixes to be had. */
