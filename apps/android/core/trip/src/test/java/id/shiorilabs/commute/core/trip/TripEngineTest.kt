@@ -4,6 +4,7 @@ import id.shiorilabs.commute.core.geo.GeoPoint
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -1049,20 +1050,21 @@ class TripEngineTest {
     }
 
     @Test
-    fun `walking to a train that has left, the trip wakes once it's past the grace for a late rider`() {
-        // Seen off the Commuter Line at 08.08 with 310 m to the 08.12 LRT: no fix since, the walk won't
-        // be done by then. Nothing else is due, so without this wake the missed train is never noticed.
+    fun `off too late for the change the planner allowed, the clock doesn't board the rider`() {
+        // Seen off the Commuter Line at 08.10 with 310 m to the 08.12 LRT: the walk ends 08.17.41.
+        // Lost, for the controller to replan at this tick.
         val walking = TripEngine.start(krlThenLrt, at(0), hasLocation = true).state.copy(
             legIndex = 2,
             phase = TripPhase.WAITING_TO_BOARD,
             confirmedAt = at(8),
-            walkingSince = at(8),
+            walkingSince = at(10),
         )
 
-        val step = TripEngine.step(krlThenLrt, walking, TripEvent.Tick(at(12.5)))
+        val step = TripEngine.step(krlThenLrt, walking, TripEvent.Tick(at(12)))
 
         assertEquals(TripPhase.WAITING_TO_BOARD, step.state.phase)
-        assertEquals(at(12).plus(CATCH_GRACE).plusSeconds(1), step.nextWakeAt)
+        // Nothing waits out the grace: the miss is the controller's, at this very tick.
+        assertNotEquals(at(13).plusSeconds(1), step.nextWakeAt)
     }
 
     @Test
@@ -1117,9 +1119,10 @@ class TripEngineTest {
     }
 
     @Test
-    fun `waiting for a train a long change from the last, the trip wakes past the grace for the change`() {
-        // In at 08.08, 310 m (281 s and 180 s of stairs) to the 08.12 LRT: on time, the walk ends at 08.15.41,
-        // after the train's 08.12. The wake is for the lateness past that, not past 08.12.
+    fun `in on time to a long change, a walk not done when the train leaves isn't boarded by the clock`() {
+        // In at 08.08, 310 m (281 s and 180 s of stairs) to the 08.12 LRT: the walk ends at 08.15.41,
+        // after the train's 08.12. No fix since: still walking, and the engine doesn't wait out the
+        // grace for the controller.
         val tight = TripPlan(
             listOf(
                 ride(Places.MANGGARAI, Places.SUDIRMAN, line = "KCI:C", departs = 0, arrives = 8),
@@ -1136,7 +1139,8 @@ class TripEngineTest {
 
         val step = TripEngine.step(tight, walking, TripEvent.Tick(at(12.5)))
 
-        assertEquals(at(8).plusSeconds(281 + 180 + 61), step.nextWakeAt)
+        assertEquals(TripPhase.WAITING_TO_BOARD, step.state.phase)
+        assertNotEquals(at(13).plusSeconds(1), step.nextWakeAt)
     }
 
     @Test
