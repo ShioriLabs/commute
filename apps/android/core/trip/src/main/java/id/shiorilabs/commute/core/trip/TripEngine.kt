@@ -94,6 +94,9 @@ object TripEngine {
     private const val BRAKING_M_PER_S2 = 1.0
     private val DOORS_OPEN: Duration = Duration.ofSeconds(10)
 
+    /** Faster than a rider walks (1.2 to 1.5 m/s): a fix at this speed is a train still rolling. */
+    private const val ROLLING_M_PER_S = 3.0
+
     /** A fix this recent says how fast the train is going as it's left. */
     private val ROLLING_FIX_FRESH: Duration = Duration.ofSeconds(10)
 
@@ -674,7 +677,7 @@ object TripEngine {
      */
     private fun stillRolling(state: TripState, now: Instant): Duration {
         val last = state.recentSpeeds.lastOrNull() ?: return Duration.ZERO
-        if (last.mps < STANDING_M_PER_S || now.toEpochMilli() - last.atMs > ROLLING_FIX_FRESH.toMillis()) return Duration.ZERO
+        if (last.mps < ROLLING_M_PER_S || now.toEpochMilli() - last.atMs > ROLLING_FIX_FRESH.toMillis()) return Duration.ZERO
         return Duration.ofSeconds(ceil(last.mps / BRAKING_M_PER_S2).toLong()).plus(DOORS_OPEN)
     }
 

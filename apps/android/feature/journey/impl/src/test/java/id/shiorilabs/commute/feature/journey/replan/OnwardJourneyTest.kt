@@ -104,6 +104,24 @@ class OnwardJourneyTest {
     }
 
     @Test
+    fun `a train that nothing connects from is passed over for the next that does`() {
+        // The 10.25 is a slow one, in at 10.35, and the connection leaves at 10.34; the 10.29 is in at 10.33.
+        fun train(dep: String, arr: String) = LegDeparture(
+            Instant.parse("2026-10-19T${dep}:00Z"), Instant.parse("2026-10-19T${arr}:00Z"), "T-$dep", "LRTJ:CB",
+        )
+        val trains = listOf(train("03:21", "03:25"), train("03:25", "03:35"), train("03:29", "03:33"))
+        val onward = ride("MRTJ:M", "LRTJ-STB", "MRTJ-X", departureAt = at("03:34"), arrivalAt = at("03:40"))
+            .copy(tripId = "M-1", upcomingDepartures = listOf(train("03:34", "03:40")), minChangeS = 60)
+        val first = ride("LRTJ:CB", "LRTJ-DKA", "LRTJ-STB", departureAt = trains[0].departureAt, arrivalAt = trains[0].arrivalAt)
+            .copy(tripId = "T-03:21", upcomingDepartures = trains)
+        val journey = journey(first, onward).copy(arrivalAt = at("03:40"))
+
+        val taken = onwardJourney(listOf(journey), "LRTJ-DKA", Instant.parse("2026-10-19T03:21:26Z"), "LRTJ:CB")
+
+        assertEquals("T-03:29", (taken?.legs?.first() as JourneyLeg.Ride).tripId)
+    }
+
+    @Test
     fun `every train on the list gone, there is nothing to take`() {
         val readyAt = Instant.parse("2026-10-19T03:30:00Z")
 
