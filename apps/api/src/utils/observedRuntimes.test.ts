@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { RouteLeg } from '@commute/tsundere'
-import { OBSERVED_CV_PROFILE } from '../db/data/headways.observed'
 import { TJ_RUNTIMES } from '../db/data/runtimes.planner'
-import { blockAt, bunchingFactor, estimateTjLeg, MAX_WAIT_CV, MIN_PRICED_SHARE } from './observedRuntimes'
+import { blockAt, estimateTjLeg, MIN_PRICED_SHARE } from './observedRuntimes'
+import { tjDirOf } from './tjHops'
+import { bunchingFactor } from './tjWaits'
 
 /*
  * Fixtures come from the generated table itself, so a refit changes the numbers
@@ -43,28 +44,8 @@ describe('blockAt', () => {
   })
 })
 
-describe('bunchingFactor', () => {
-  // Synthetic keys can't collide with real ones, so these read the real table.
-  const cell = Object.entries(OBSERVED_CV_PROFILE).find(([, cv]) => cv > 0.5 && cv < MAX_WAIT_CV)!
-  const [dayType, hour, dir] = cell[0].split(':') as ['WD' | 'WE', string, string]
-
-  it('lengthens the wait by 1 + CV² for the hour the rider arrives in', () => {
-    expect(bunchingFactor(dayType, at(Number(hour), 30), dir)).toBeCloseTo(1 + cell[1] ** 2)
-  })
-
-  it('caps the spread at one full headway of wait', () => {
-    const wild = Object.entries(OBSERVED_CV_PROFILE).find(([, cv]) => cv > MAX_WAIT_CV)!
-    const [d, h, ld] = wild[0].split(':') as ['WD' | 'WE', string, string]
-    expect(bunchingFactor(d, at(Number(h)), ld)).toBe(1 + MAX_WAIT_CV ** 2)
-  })
-
-  it('leaves the wait at half a headway where nothing was observed', () => {
-    expect(bunchingFactor('WD', at(12), 'NO-SUCH-LINE@F')).toBe(1)
-  })
-})
-
 describe('estimateTjLeg', () => {
-  const bunching = bunchingFactor('WD', at(12), lineDir)
+  const bunching = bunchingFactor('WD', at(12), `${code}@${tjDirOf(code, stops[0]!, stops[1]!)}`)
 
   it('waits half the headway scaled by bunching, then rides the hops\' medians with the line\'s bias', () => {
     const estimate = estimateTjLeg(leg(code, stops), at(12), inputs)!
@@ -83,6 +64,20 @@ describe('estimateTjLeg', () => {
   it('prefers the stop\'s own headway over the line\'s', () => {
     const headways = new Map([[code, 600], [`${code}@${stops[0]}`, 240]])
     expect(estimateTjLeg(leg(code, stops), at(12), { ...inputs, headways })!.waitS).toBe(Math.round(120 * bunching))
+  })
+
+  /*
+   * 13E is never reported on Karet Kuningan -> Kuningan Madya -> Setiabudi
+   * Integritas, but 6 runs the same road there: the leg is priced on 6 rather
+   * than dropped.
+   */
+  it('prices the ride on another line of a shared stretch the boarded one cannot', () => {
+    const shared = ['TJ-H00098P', 'TJ-H00114P', 'TJ-H00215P']
+    const headways = new Map([['13E', 600], ['6', 600]])
+    const on13E = estimateTjLeg(leg('13E', shared), at(12), { ...inputs, headways })
+    const on6 = estimateTjLeg(leg('6', shared), at(12), { ...inputs, headways })
+    expect(on13E).not.toBeNull()
+    expect(on13E!.rideS).toBe(on6!.rideS)
   })
 
   it('gives up when the line has closed by the time a bus would come', () => {

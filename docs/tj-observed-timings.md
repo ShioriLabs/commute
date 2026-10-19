@@ -321,9 +321,16 @@ estimate. The gain is the median estimated gain of the changed pairs.
   an unestimated journey still shows no duration at all.
 - **Descriptions.** The `FareJourneySchema` description still says ranking ignores
   travel time. It changes when sort ships.
-- **Ranking waits are h/2.** The estimate charges bunching and the search
-  doesn't, so sort mode orders by bunched waits while the routes themselves were
-  found with even-service ones.
+- **Waits are bunched and shared in the search too** (2026-10-19,
+  docs/adr/tj-shared-waits.md). A/B on 2,000 pairs × 5 moments: the top route
+  (ignoring which line of a shared stretch is named) changes on 10-15% of
+  pairs, about 1% rail over TJ. Search cost is about +5-14% p50. The
+  merged-stream CV is p50 1.37: lines on one road arrive together.
+- **Ranking now trades walking for wait without counting either as time.**
+  Sudirman → Karet Kuningan at WD 12:00 ranks walk 560 m + 13E/L13E (±22)
+  over walk 310 m + 6 from Galunggung (±18), because the pooled 13E/L13E wait
+  edges out 6's bunched one. The estimate disagrees. Sort mode or
+  router-time-objective would fix it.
 - **WD 17-18 headways are interpolated.** The evening peak starts in the
   observed 16:00 cell (network median 0.9× the mean of 15:00 and 17:00; 6@R 263 s
   against 514 s at 15:00, as buses are added toward the suburbs). 17:00 and 18:00

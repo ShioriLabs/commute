@@ -5,7 +5,7 @@ import { EdgeRepository } from 'db/repositories/edges'
 import { assembleJourney, planJourney } from 'utils/fare-journey'
 import { handleJourneyRequest, journeyCacheKey } from 'utils/journey-endpoint'
 import { SERVICE_BREAKS, TOPOLOGY } from 'db/data/topology'
-import { loadGraph, type LoadGraphInput, type ServiceWindow, type Tsundere } from '@commute/tsundere'
+import { loadGraph, type LoadGraphInput, type ServiceWindow, type Tsundere, type WaitModel } from '@commute/tsundere'
 import { HEADWAYS_S, STOP_HEADWAYS_S } from 'db/data/headways'
 import { SERVICE_HOURS, type ServiceDay } from 'db/data/service-hours'
 import { TRIP_PATTERNS } from 'db/data/trips'
@@ -16,6 +16,7 @@ import { FareResultSchema, type FareResult } from '@commute/schemas'
 import { memoize } from 'utils/memo'
 import { plannerHeadways } from 'utils/observedHeadways'
 import { observedHeadwaysEnabled } from 'utils/observedFlag'
+import { DEFAULT_HEADWAY_S, expectedWaitS } from 'utils/tjWaits'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -223,36 +224,63 @@ export function linesOf(operator: Operator): ReadonlySet<string> {
   return lines
 }
 
+/*
+ * The search's wait model for one service day and hour (utils/tjWaits.ts):
+ * bunched TransJakarta waits, pooled across lines on a shared stretch, and h/2
+ * for everything else or with observed headways off. Memoised per isolate like
+ * the headway maps it reads, and so are the waits inside it: the same few
+ * thousand (set, stop) pairs come up on every search in that hour.
+ */
+const waitModels = new Map<string, WaitModel>()
+function waitModelFor(day: ServiceDay, hour: number, observed: boolean): WaitModel {
+  return memoize(waitModels, `${day}:${hour}:${observed}`, () => {
+    const ctx = { day, clockS: hour * 3600, headways: headwaysFor(day, hour, observed), observed }
+    const memo = new Map<string, number>()
+    return (lines, stop, next) => {
+      const key = `${stop}>${next}|${lines.join(',')}`
+      let waitS = memo.get(key)
+      if (waitS === undefined) {
+        waitS = expectedWaitS(lines, stop, next, ctx, DEFAULT_HEADWAY_S)!
+        memo.set(key, waitS)
+      }
+      return waitS
+    }
+  })
+}
+
 /** Planner options that depend on when the rider is travelling. */
 export function timeOptions(context: FareContext, observed: boolean = observedHeadwaysEnabled()): {
   departureS: number
   serviceHours: Map<string, ServiceWindow>
   headwaysS: Map<string, number>
+  waitS: WaitModel
 } {
   const day = serviceDay(context.departureAt)
   const departureS = secondsSinceLocalMidnight(context.departureAt)
   return {
     departureS,
     serviceHours: serviceHoursMap(day),
-    headwaysS: headwaysFor(day, hourOf(departureS), observed)
+    headwaysS: headwaysFor(day, hourOf(departureS), observed),
+    waitS: waitModelFor(day, hourOf(departureS), observed)
   }
 }
 
 /**
  * What the TransJakarta estimates need for this request (utils/observedRuntimes.ts):
  * the service day, the same headways the search charged, and the day's service
- * windows. Built from the same memoised maps as timeOptions, so the estimate and
- * the ranking start from the same headway; the estimate then adds bunching on
- * top (observedRuntimes.ts bunchingFactor).
+ * windows. Built from the same memoised maps as timeOptions, and waited on
+ * through the same model (utils/tjWaits.ts), so the estimate and the ranking
+ * agree on a wait.
  */
 export function estimateInputs(context: FareContext, observed: boolean = observedHeadwaysEnabled()): {
   day: ServiceDay
   headways: Map<string, number>
   serviceHours: Map<string, ServiceWindow>
+  observed: boolean
 } {
   const day = serviceDay(context.departureAt)
   const { serviceHours, headwaysS } = timeOptions(context, observed)
-  return { day, headways: headwaysS, serviceHours }
+  return { day, headways: headwaysS, serviceHours, observed }
 }
 
 // Resolve the fare context from optional query params, defaulting to today's

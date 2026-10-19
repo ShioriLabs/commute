@@ -40,7 +40,9 @@
     "analyze:tj-trips": "tsx ./src/db/scripts/analyzeTjTrips.ts",
     "fit:headways": "tsx ./src/db/scripts/fitObservedHeadways.ts",
     "fit:tj-runtimes": "tsx ./src/db/scripts/fitTjRuntimes.ts",
-    "ab:estimated-order": "tsx ./src/db/scripts/abEstimatedOrder.ts"
+    "fit:tj-shared-waits": "tsx ./src/db/scripts/fitTjSharedWaits.ts",
+    "ab:estimated-order": "tsx ./src/db/scripts/abEstimatedOrder.ts",
+    "ab:search-order": "tsx ./src/db/scripts/abSearchOrder.ts"
   },
   "keywords": [],
   "author": "",

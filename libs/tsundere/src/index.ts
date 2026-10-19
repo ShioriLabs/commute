@@ -13,7 +13,7 @@ export { loadGraph, Tsundere, type LoadGraphInput } from './tsundere'
  * walking, waiting, fare. Not the web app's FareCriteria, which is what the
  * rider chooses.
  */
-export type { FareScorer, Journey, JourneyLabel, PlanOptions } from './planner/plan'
+export type { FareScorer, Journey, JourneyLabel, PlanOptions, WaitModel } from './planner/plan'
 
 /*
  * Search counters. Not part of routing — a measurement hook the bench/audit
