@@ -990,6 +990,97 @@ class TripControllerImplTest {
         assertEquals(minutes(10), trip.plan.ride(2).departureAt)
     }
 
+    /** The MRT in at 08.05 for the 08.10 from Sudirman across 300 m: five minutes to change, planned. */
+    private val tightChange = TripPlan(
+        listOf((plan.legs[0] as TripLeg.Ride).copy(arrivalAt = minutes(5)), plan.legs[1], plan.legs[2]),
+    )
+
+    private fun aboardTheTightMrt() = ActiveTrip(
+        tightChange,
+        TripEngine.start(tightChange, NOW, hasLocation = true).state.copy(
+            phase = TripPhase.RIDING,
+            source = PositionSource.CONFIRMED,
+            confirmedAt = minutes(2),
+        ),
+        origin,
+    )
+
+    @Test
+    fun `an on-time train into a change the planner allows isn't re-planned for the walk's stairs`() = runTest {
+        // 300 m is 272 s at an easy pace and 180 s of stairs more; the plan gave 300 s. On time, the
+        // change was the planner's to approve, not a miss.
+        store.trip = aboardTheTightMrt()
+        val controller = controller(at = minutes(3))
+        runCurrent()
+        controller.onFix(Fix(halfwayToDukuhAtas, 15f, minutes(3), speedMps = 15f))
+        runCurrent()
+
+        assertEquals(emptyList<String>(), asked)
+        assertEquals(tightChange, controller.active.value!!.plan)
+    }
+
+    @Test
+    fun `a train more than a minute late into that change is re-planned`() = runTest {
+        // Halfway at 08.04.30 for 08.02.30: two minutes late.
+        store.trip = aboardTheTightMrt()
+        val controller = controller(at = minutes(4).plusSeconds(30))
+        runCurrent()
+        controller.onFix(Fix(halfwayToDukuhAtas, 15f, minutes(4).plusSeconds(30), speedMps = 15f))
+        runCurrent()
+
+        assertEquals(1, asked.size)
+    }
+
+    @Test
+    fun `a re-plan that finds nothing after the trip has ended arms no wake`() = runTest {
+        store.trip = walkingToAMissedTrain()
+        answerHeld = CompletableDeferred()
+        val controller = controller(at = minutes(13))
+        runCurrent()
+        assertEquals(1, asked.size)
+
+        controller.stop()
+        runCurrent()
+        assertNull(controller.active.value)
+        assertNull(runtime.wakeAt)
+
+        answerHeld!!.complete(Unit)
+        answerHeld = null
+        runCurrent()
+
+        assertNull(runtime.wakeAt)
+    }
+
+    @Test
+    fun `a train that left late, seen only near the next stop, is the planned train and not a later one`() = runTest {
+        // The 08.10 leaves a minute late; the first fixes that see the rider aboard are at Manggarai at
+        // 08.14.10, after the 08.14 has left Sudirman. The fix's time is not the boarding's.
+        val waiting = waitingForTheEightTen()
+        // Seen on the platform at 08.10.50, then no fix until Manggarai.
+        store.trip = waiting.copy(
+            state = waiting.state.copy(confirmedAt = minutes(10).plusSeconds(50), walkingSince = null, sightedPosition = 0.0),
+        )
+        val clock = MutableClock(minutes(10).plusSeconds(50))
+        val controller = controller(clock = clock)
+        runCurrent()
+        assertEquals(TripPhase.WAITING_TO_BOARD, controller.active.value!!.state.phase)
+
+        clock.now = minutes(14).plusSeconds(10)
+        controller.onFix(Fix(GeoPoint(MANGGARAI.latitude!!, MANGGARAI.longitude!!), 10f, clock.now, speedMps = 12f))
+        clock.now = minutes(14).plusSeconds(20)
+        val past = GeoPoint(
+            MANGGARAI.latitude!! + (TEBET.latitude!! - MANGGARAI.latitude!!) * 0.05,
+            MANGGARAI.longitude!! + (TEBET.longitude!! - MANGGARAI.longitude!!) * 0.05,
+        )
+        controller.onFix(Fix(past, 10f, clock.now, speedMps = 12f))
+        runCurrent()
+
+        val trip = controller.active.value!!
+        assertEquals(trip.state.toString(), TripPhase.RIDING, trip.state.phase)
+        assertEquals(minutes(10), trip.plan.ride(2).departureAt)
+        assertFalse("later" in logged)
+    }
+
     @Test
     fun `a train still to be caught isn't re-planned`() = runTest {
         // Off at 08.02 instead: there in good time for the 08.10, which is just leaving.
