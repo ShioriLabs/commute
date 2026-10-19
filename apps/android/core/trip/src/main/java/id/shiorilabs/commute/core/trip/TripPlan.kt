@@ -63,6 +63,13 @@ sealed interface TripLeg {
         val departureAt: Instant? = null,
         @Serializable(with = InstantSerializer::class)
         val arrivalAt: Instant? = null,
+        /**
+         * When the ride was planned to arrive, kept when the rider is found aboard a later train and
+         * [arrivalAt] moves with it: the change after it was allowed for from here, not from the new
+         * arrival. `null` while the ride is as planned.
+         */
+        @Serializable(with = InstantSerializer::class)
+        val plannedArrivalAt: Instant? = null,
         /** The vehicle run boarded, as the API names it: only ever compared, for "still on my train?". */
         val tripId: String? = null,
         /**

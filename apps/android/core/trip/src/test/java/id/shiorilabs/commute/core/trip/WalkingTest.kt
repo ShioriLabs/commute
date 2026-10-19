@@ -46,6 +46,21 @@ class WalkingTest {
     }
 
     @Test
+    fun `a ride moved onto a later train keeps the arrival the change was planned for`() {
+        // The 08.00 to 08.04, moved to the 08.04 to 08.08: the change at 310 m was allowed for from 08.04.
+        val ride = krlThenLrt.legs[0] as TripLeg.Ride
+        val moved = TripPlan(
+            listOf(
+                ride.copy(departureAt = at(4), arrivalAt = at(8), plannedArrivalAt = ride.arrivalAt),
+                krlThenLrt.legs[1],
+                krlThenLrt.legs[2],
+            ),
+        )
+
+        assertEquals(at(4).plusSeconds(281 + 180), moved.plannedReadyAt(2))
+    }
+
+    @Test
     fun `no walk before the ride, none to end`() {
         val noWalk = TripEngine.start(bogorLine, at(0), hasLocation = true).state.copy(walkingSince = at(1))
 
