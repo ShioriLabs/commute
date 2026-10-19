@@ -214,7 +214,14 @@ class TripControllerImpl @Inject constructor(
      */
     suspend fun awaitReplan(timeout: Duration) {
         restored.join()
-        withTimeoutOrNull(timeout.toMillis()) { replanJob?.join() }
+        // A replan can start another as it ends (a swap whose ride is missed too): wait for the last.
+        withTimeoutOrNull(timeout.toMillis()) {
+            while (true) {
+                val job = replanJob ?: break
+                job.join()
+                if (replanJob === job) break
+            }
+        }
     }
 
     suspend fun say(action: RiderAction) {
@@ -332,6 +339,8 @@ class TripControllerImpl @Inject constructor(
         val shifted = ride.copy(
             departureAt = took,
             arrivalAt = ride.arrivalAt?.plus(delta),
+            // The change after it was allowed for from the planned arrival, not this one.
+            plannedArrivalAt = ride.plannedArrivalAt ?: ride.arrivalAt,
             stops = ride.stops.map { it.copy(scheduledAt = it.scheduledAt?.plus(delta)) },
             // Which run it is isn't known from here, only when it left.
             tripId = null,
@@ -514,8 +523,15 @@ class TripControllerImpl @Inject constructor(
                 // Offline, say: ask again once it's had a while, on a wake of its own: a rider walking
                 // gives no fix to step on, and a frozen process needs an alarm.
                 mutex.withLock {
-                    // Not for a trip that ended, or a plan that has moved on, meanwhile.
-                    if (replannedFor != key || _active.value?.plan != trip.plan) return@withLock
+                    if (replannedFor != key) return@withLock
+                    val current = _active.value ?: return@withLock
+                    // A plan that has moved on meanwhile: this answer is no use to it, ask for its own.
+                    if (current.plan != trip.plan) {
+                        replannedFor = null
+                        replanJob = null
+                        replanIfMissed(current)
+                        return@withLock
+                    }
                     retryAt = clock.instant().plus(REPLAN_RETRY)
                     schedule(engineWake)
                 }
@@ -596,7 +612,7 @@ class TripControllerImpl @Inject constructor(
         // A change the planner allowed more for than the train's time is back when the train is on its
         // time again; otherwise only with a margin to spare.
         val allowed = replaced.plan.plannedReadyAt(legIndex)
-        val back = if (allowed != null && allowed.isAfter(departs)) allowed else departs.minus(TAKE_BACK_MARGIN)
+        val back = maxOf(departs.minus(TAKE_BACK_MARGIN), allowed ?: Instant.MIN)
         if (readyAt.isAfter(back)) return false
         log.event("caught", mapOf("leg" to legIndex, "departs" to departs, "ready" to readyAt))
         // Missed again later, it's asked about again.

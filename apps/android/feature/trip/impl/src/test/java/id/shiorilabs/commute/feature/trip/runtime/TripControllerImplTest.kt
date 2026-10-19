@@ -1093,6 +1093,29 @@ class TripControllerImplTest {
     }
 
     @Test
+    fun `boarding a later train doesn't move the allowance for the change after it`() = runTest {
+        // The 08.00 MRT with the 08.04 behind it, in at 08.05 and 08.09 on that: the 08.10 was allowed 300 s
+        // from 08.05. On the 08.04, on time, the rider is at it at 08.16.32: lost, though 08.09 + 452 s is
+        // later than 08.10.
+        val ride = (tightChange.legs[0] as TripLeg.Ride).copy(nextDepartures = listOf(minutes(4)))
+        val plan = TripPlan(listOf(ride, tightChange.legs[1], tightChange.legs[2]))
+        store.trip = ActiveTrip(plan, TripEngine.start(plan, NOW.minusSeconds(120), hasLocation = true).state, origin)
+        val clock = MutableClock(minutes(-1))
+        val controller = controller(clock = clock)
+        runCurrent()
+
+        clock.now = minutes(4).plusSeconds(42)
+        controller.say(RiderAction.BOARDED)
+        assertEquals(minutes(4), controller.active.value!!.plan.ride(0).departureAt)
+
+        clock.now = minutes(6).plusSeconds(30)
+        controller.onFix(Fix(halfwayToDukuhAtas, 15f, clock.now, speedMps = 15f))
+        runCurrent()
+
+        assertEquals(1, asked.size)
+    }
+
+    @Test
     fun `a train more than a minute late into that change is re-planned`() = runTest {
         // Halfway at 08.04.30 for 08.02.30: two minutes late.
         store.trip = aboardTheTightMrt()
