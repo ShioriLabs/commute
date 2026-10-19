@@ -22,27 +22,28 @@ function containsContiguous(haystack: string[], needle: string[]): boolean {
 }
 
 /*
- * Every lineCode of `operator` whose topology path contains `stationCodes` as a
- * contiguous run (either travel direction). When it returns ≥ 2 codes the leg
- * runs on shared/interlined track and can be served by any of them. Returns []
- * for operators that don't interline, keeping the behaviour scoped.
+ * Every lineCode of `operator` that calls at `stationCodes` as a contiguous run,
+ * in that travel order. When it returns ≥ 2 codes the leg runs on
+ * shared/interlined track and can be served by any of them. Returns [] for
+ * operators that don't interline, keeping the behaviour scoped.
  */
 export function findInterliningLineCodes(operator: Operator, stationCodes: string[]): string[] {
   if (!INTERLINING_OPERATORS.has(operator)) return []
   const reversed = [...stationCodes].reverse()
-  // A run matches a line if it's a contiguous run of that line's stops in either
-  // travel direction. For asymmetric corridors the two directions differ, so a
-  // reverse-only run (e.g. K1 via Kejagung) lives in `pathReverse`, not `path`;
-  // check both sequences.
-  const matches = (seq: { station: string }[]): boolean => {
-    const codes = seq.map(stop => stop.station)
-    return containsContiguous(codes, stationCodes) || containsContiguous(codes, reversed)
-  }
+  const codesOf = (seq: { station: string }[]) => seq.map(stop => stop.station)
+  /*
+   * Direction matters on an asymmetric corridor, as generateEdgesSQL reads it:
+   * `path` runs one way and `pathReverse` the other, each in travel order. So
+   * the run must appear forwards in one of them. Reading `path` backwards
+   * would claim 4D for Karet Kuningan → Kuningan Madya → Setiabudi Integritas,
+   * which its outbound path passes the other way while its return skips
+   * Integritas for Halimun. A symmetric line's `path` serves both ways.
+   */
+  const serves = (topology: (typeof TOPOLOGY)[number]): boolean => topology.pathReverse
+    ? containsContiguous(codesOf(topology.path), stationCodes) || containsContiguous(codesOf(topology.pathReverse), stationCodes)
+    : containsContiguous(codesOf(topology.path), stationCodes) || containsContiguous(codesOf(topology.path), reversed)
   return TOPOLOGY
-    .filter((topology) => {
-      if (topology.operator !== operator) return false
-      return matches(topology.path) || matches(topology.pathReverse ?? [])
-    })
+    .filter(topology => topology.operator === operator && serves(topology))
     .map(topology => topology.lineCode)
 }
 
