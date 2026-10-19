@@ -1,5 +1,6 @@
 import { inWindow, type RouteLeg, type ServiceWindow } from '@commute/tsundere'
 import { TJ_RUNTIME_BLOCKS, TJ_RUNTIMES, type TjRuntimeLine } from '../db/data/runtimes.planner'
+import { OBSERVED_CV_PROFILE } from '../db/data/headways.observed'
 import type { ServiceDay } from '../db/data/service-hours'
 import { dayTypeOf } from './observedHeadways'
 
@@ -43,8 +44,42 @@ export function blockAt(clockS: number): number {
   return block
 }
 
+/*
+ * Ceiling on the CV the wait is scaled by, so a wait averages at most one full
+ * headway. The profile's p90 sits right at it (median 0.63, p90 0.99); the tail
+ * past it runs to 4.78 and is led by the topology-mismatch lines (4@F 3.07,
+ * 3F@F 1.66) and the 05:00 ramp-ups, where the spread is the timetable changing
+ * gear within the hour rather than buses bunching.
+ */
+export const MAX_WAIT_CV = 1
+
+/**
+ * How much longer than half a headway a rider waits on this line-direction,
+ * (1 + CV²), from the observed spread of consecutive headways (`fit:headways`).
+ *
+ * Half a headway is only the wait when buses come evenly. They do not: traffic
+ * holds a bus up, the one behind catches it, and a pair arrives with a long gap
+ * behind them. A rider turning up at random is more likely to land in the long
+ * gap, so the expected wait is h(1 + CV²)/2. On 6 to Ragunan, which meets the
+ * traffic south of Underpass Kuningan, a CV around 0.8 makes it 1.6 times the
+ * even-service wait.
+ *
+ * The hour's own cell, else a neighbouring hour's: the CV is missing exactly
+ * where the headway profile was interpolated. 1 (no adjustment) with neither.
+ */
+export function bunchingFactor(dayType: 'WD' | 'WE', clockS: number, lineDir: string): number {
+  const hour = Math.floor((((clockS % DAY_S) + DAY_S) % DAY_S) / 3600)
+  for (const h of [hour, (hour + 23) % 24, (hour + 1) % 24]) {
+    const cv = OBSERVED_CV_PROFILE[`${dayType}:${h}:${lineDir}`]
+    if (cv !== undefined) return 1 + Math.min(cv, MAX_WAIT_CV) ** 2
+  }
+  return 1
+}
+
 interface HopRef {
   line: TjRuntimeLine
+  /** The table's key, `${line}@${dir}`, which is also the headway profile's. */
+  lineDir: string
   hop: number
 }
 
@@ -57,7 +92,7 @@ function getIndex(): Map<string, HopRef> {
   for (const [lineDir, line] of Object.entries(TJ_RUNTIMES)) {
     const code = lineDir.slice(0, lineDir.lastIndexOf('@'))
     for (let hop = 0; hop < line.stops.length - 1; hop++) {
-      index.set(`${code}|${line.stops[hop]}>${line.stops[hop + 1]}`, { line, hop })
+      index.set(`${code}|${line.stops[hop]}>${line.stops[hop + 1]}`, { line, lineDir, hop })
     }
   }
   return index
@@ -78,9 +113,10 @@ export interface TjEstimateInputs {
  * not a TJ leg, no headway, the line closed by the time a bus would come, a hop
  * the table does not know, or too little of the leg measured.
  *
- * - Wait: half the headway at the boarding stop, the same expected wait the
- *   search charged (plan.ts expectedWaitS), so the estimate and the ranking
- *   agree on it. Bunching makes real waits longer; that is not modelled.
+ * - Wait: half the headway the search charged at the boarding stop, scaled by
+ *   the line-direction's bunching (bunchingFactor). Longer than the search's own
+ *   expectedWaitS (plan.ts), which stays at h/2: ranking compares routes, and
+ *   this is what a rider will actually stand through.
  * - Ride: each hop's median (or p75) in the block the running clock is in, so a
  *   leg crossing 10:00 changes block halfway. Hops without a cell are priced at
  *   the leg's own pace if MIN_PRICED_SHARE of its metres are measured.
@@ -92,14 +128,16 @@ export function estimateTjLeg(leg: RideLeg, atS: number, inputs: TjEstimateInput
   if (leg.operator !== 'TJ' || leg.stationIds.length < 2) return null
   const headwayS = inputs.headways.get(`${leg.lineCode}@${leg.fromStationId}`) ?? inputs.headways.get(leg.lineCode)
   if (headwayS === undefined) return null
-  const waitS = Math.round(headwayS / 2)
+  const idx = getIndex()
+  const first = idx.get(`${leg.lineCode}|${leg.stationIds[0]}>${leg.stationIds[1]}`)
+  if (!first) return null
+  const dayType = dayTypeOf(inputs.day)
+  const waitS = Math.round(headwayS / 2 * bunchingFactor(dayType, atS, first.lineDir))
   const boardS = atS + waitS
   const window = inputs.serviceHours.get(leg.lineCode)
   if (window && !inWindow(((boardS % DAY_S) + DAY_S) % DAY_S, window)) return null
 
-  const dayType = dayTypeOf(inputs.day)
   const statistic = inputs.statistic ?? 'median'
-  const idx = getIndex()
   let clockS = boardS
   let measuredS = 0
   let measuredM = 0

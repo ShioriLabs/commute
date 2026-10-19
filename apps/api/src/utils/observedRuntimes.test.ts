@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { RouteLeg } from '@commute/tsundere'
+import { OBSERVED_CV_PROFILE } from '../db/data/headways.observed'
 import { TJ_RUNTIMES } from '../db/data/runtimes.planner'
-import { blockAt, estimateTjLeg, MIN_PRICED_SHARE } from './observedRuntimes'
+import { blockAt, bunchingFactor, estimateTjLeg, MAX_WAIT_CV, MIN_PRICED_SHARE } from './observedRuntimes'
 
 /*
  * Fixtures come from the generated table itself, so a refit changes the numbers
@@ -42,13 +43,35 @@ describe('blockAt', () => {
   })
 })
 
+describe('bunchingFactor', () => {
+  // Synthetic keys can't collide with real ones, so these read the real table.
+  const cell = Object.entries(OBSERVED_CV_PROFILE).find(([, cv]) => cv > 0.5 && cv < MAX_WAIT_CV)!
+  const [dayType, hour, dir] = cell[0].split(':') as ['WD' | 'WE', string, string]
+
+  it('lengthens the wait by 1 + CV² for the hour the rider arrives in', () => {
+    expect(bunchingFactor(dayType, at(Number(hour), 30), dir)).toBeCloseTo(1 + cell[1] ** 2)
+  })
+
+  it('caps the spread at one full headway of wait', () => {
+    const wild = Object.entries(OBSERVED_CV_PROFILE).find(([, cv]) => cv > MAX_WAIT_CV)!
+    const [d, h, ld] = wild[0].split(':') as ['WD' | 'WE', string, string]
+    expect(bunchingFactor(d, at(Number(h)), ld)).toBe(1 + MAX_WAIT_CV ** 2)
+  })
+
+  it('leaves the wait at half a headway where nothing was observed', () => {
+    expect(bunchingFactor('WD', at(12), 'NO-SUCH-LINE@F')).toBe(1)
+  })
+})
+
 describe('estimateTjLeg', () => {
-  it('waits half the headway, then rides the hops\' medians with the line\'s bias', () => {
+  const bunching = bunchingFactor('WD', at(12), lineDir)
+
+  it('waits half the headway scaled by bunching, then rides the hops\' medians with the line\'s bias', () => {
     const estimate = estimateTjLeg(leg(code, stops), at(12), inputs)!
     const sum = bucket.s.slice(1, 5).reduce((a, b) => a + b, 0)
     const interior = Math.max(1, line.stops.length - 3)
     const factor = 1 + (bucket.bias - 1) * Math.min(1, 4 / interior)
-    expect(estimate.waitS).toBe(300)
+    expect(estimate.waitS).toBe(Math.round(300 * bunching))
     expect(estimate.rideS).toBe(Math.round(sum * factor))
   })
 
@@ -59,7 +82,7 @@ describe('estimateTjLeg', () => {
 
   it('prefers the stop\'s own headway over the line\'s', () => {
     const headways = new Map([[code, 600], [`${code}@${stops[0]}`, 240]])
-    expect(estimateTjLeg(leg(code, stops), at(12), { ...inputs, headways })!.waitS).toBe(120)
+    expect(estimateTjLeg(leg(code, stops), at(12), { ...inputs, headways })!.waitS).toBe(Math.round(120 * bunching))
   })
 
   it('gives up when the line has closed by the time a bus would come', () => {
@@ -87,7 +110,7 @@ describe('estimateTjLeg', () => {
 
   it.skipIf(!hole)('prices an unmeasured hop at the leg\'s own pace only while most of it is measured', () => {
     const { lineCode, line: l, block, i } = hole!
-    // Mid-block clocks, minus the 5-minute wait, so the whole leg stays in `block`.
+    // Mid-block clocks, so the leg stays in `block` after a wait of up to one headway.
     const clock = [at(1), at(5, 30), at(8), at(12), at(17), at(21)][block]!
     const around = leg(lineCode, l.stops.slice(i - 1, i + 3))
     const measuredM = l.metres[i - 1]! + l.metres[i + 1]!
