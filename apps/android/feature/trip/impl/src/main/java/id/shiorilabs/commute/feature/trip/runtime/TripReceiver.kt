@@ -9,6 +9,7 @@ import id.shiorilabs.commute.core.query.di.ApplicationScope
 import id.shiorilabs.commute.core.trip.RiderAction
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import java.time.Duration
 import javax.inject.Inject
 
 /**
@@ -33,7 +34,10 @@ class TripReceiver : BroadcastReceiver() {
         scope.launch {
             try {
                 when (intent.action) {
-                    ACTION_TICK -> controller.tick()
+                    ACTION_TICK -> {
+                        controller.tick()
+                        controller.awaitReplan(REPLAN_WAIT)
+                    }
                     ACTION_STOP -> controller.say(RiderAction.STOP)
                     ACTION_ALIGHTED -> controller.say(RiderAction.ALIGHTED)
                     ACTION_BOARDED -> controller.say(RiderAction.BOARDED)
@@ -47,6 +51,9 @@ class TripReceiver : BroadcastReceiver() {
     }
 
     companion object {
+
+        /** Under a broadcast's allowance, which an unanswered request must not use up. */
+        private val REPLAN_WAIT: Duration = Duration.ofSeconds(20)
 
         const val ACTION_TICK = "id.shiorilabs.commute.trip.TICK"
         const val ACTION_STOP = "id.shiorilabs.commute.trip.STOP"
