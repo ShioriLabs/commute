@@ -18,6 +18,7 @@ import id.shiorilabs.commute.core.trip.TripPhase
 import id.shiorilabs.commute.core.trip.TripState
 import id.shiorilabs.commute.core.trip.expectedAlightingAt
 import id.shiorilabs.commute.core.trip.nextRideReadyAt
+import id.shiorilabs.commute.core.trip.plannedReadyAt
 import id.shiorilabs.commute.core.trip.scheduledAtStop
 import id.shiorilabs.commute.core.trip.seenAt
 import id.shiorilabs.commute.core.trip.walkEndsAt
@@ -152,6 +153,7 @@ class TripControllerImpl @Inject constructor(
                 if (_active.value != null) runtime.finish()
                 _finished.value = null
                 store.clearFinished()
+                replanJob?.cancel()
                 replannedFor = null
                 retryAt = null
                 engineWake = null
@@ -321,7 +323,7 @@ class TripControllerImpl @Inject constructor(
         // A train doesn't leave early: seen moving, it has left; a tap may come a few seconds before it does.
         val tapSlack = if (event is TripEvent.Fix) Duration.ZERO else TAP_SLACK
         val took = ride.nextDepartures
-            .filter { !it.isAfter(boardedAt.plus(tapSlack)) }
+            .filter { !it.isAfter(event.at.plus(tapSlack)) }
             .minByOrNull { Math.abs(Duration.between(it, boardedAt).seconds) }
             ?: return trip to step
         if (Math.abs(Duration.between(took, boardedAt).seconds) >= Math.abs(Duration.between(planned, boardedAt).seconds)) return trip to step
@@ -420,6 +422,7 @@ class TripControllerImpl @Inject constructor(
             // At the destination an alarm already ringing rings on until the rider says they're up.
             if (finished.reason != FinishReason.ARRIVED) runtime.stopWakingRider()
             timer?.cancel()
+            replanJob?.cancel()
             replannedFor = null
             retryAt = null
             engineWake = null
@@ -487,16 +490,16 @@ class TripControllerImpl @Inject constructor(
         tellSwap(trip, legIndex, now)
         val ride = trip.plan.ride(legIndex)
         val departs = ride.departureAt ?: return
-        // Aboard, the plan's own change was the planner's to allow: what is a miss is the lateness past it,
-        // not the walk being reckoned longer than the planner's allowance.
-        val allowed = if (state.phase == TripPhase.RIDING) {
-            state.copy(clockOffsetS = 0).nextRideReadyAt(trip.plan)?.second
-        } else {
-            null
-        }
-        if (!readyAt.isAfter(maxOf(departs, allowed ?: departs).plus(CATCH_GRACE))) return
+        // The plan's own change was the planner's to allow: what is a miss is the lateness past it, not
+        // the walk being reckoned longer than the planner's allowance, aboard or walking.
+        val baseline = maxOf(departs, trip.plan.plannedReadyAt(legIndex) ?: departs)
+        if (!readyAt.isAfter(baseline.plus(CATCH_GRACE))) return
         val key = "$legIndex@$departs"
-        if (replanJob?.isActive == true) return
+        // One out at a time; for a different ride than the one asked about, the old answer is no use.
+        replanJob?.takeIf { it.isActive }?.let { out ->
+            if (key == replannedFor) return
+            out.cancel()
+        }
         // Asked about already, until a retry that found nothing is due.
         if (key == replannedFor && retryAt?.let { now.isBefore(it) } != false) return
         replannedFor = key
@@ -523,7 +526,13 @@ class TripControllerImpl @Inject constructor(
                 // Moved on meanwhile (boarded it after all, or already re-planned): leave it be.
                 val boarded = current.state.legIndex > legIndex ||
                     (current.state.legIndex == legIndex && current.state.phase != TripPhase.WAITING_TO_BOARD)
-                if (current.plan != trip.plan || boarded) return@withLock
+                if (current.plan != trip.plan || boarded) {
+                    // Nothing calls this again for a ride still missed: ask once more now, as itself done.
+                    if (replannedFor == key) replannedFor = null
+                    replanJob = null
+                    replanIfMissed(current)
+                    return@withLock
+                }
                 // Seen leaving meanwhile, likely aboard: asked again only if the next fix says not.
                 if (current.state.boardingFixes > 0) {
                     replannedFor = null
@@ -584,7 +593,11 @@ class TripControllerImpl @Inject constructor(
         val replaced = trip.replaced ?: return false
         if (trip.state.phase != TripPhase.RIDING || replaced.legIndex != legIndex || replaced.untold == null) return false
         val departs = replaced.plan.ride(legIndex).departureAt ?: return false
-        if (readyAt.isAfter(departs.minus(TAKE_BACK_MARGIN))) return false
+        // A change the planner allowed more for than the train's time is back when the train is on its
+        // time again; otherwise only with a margin to spare.
+        val allowed = replaced.plan.plannedReadyAt(legIndex)
+        val back = if (allowed != null && allowed.isAfter(departs)) allowed else departs.minus(TAKE_BACK_MARGIN)
+        if (readyAt.isAfter(back)) return false
         log.event("caught", mapOf("leg" to legIndex, "departs" to departs, "ready" to readyAt))
         // Missed again later, it's asked about again.
         replannedFor = null

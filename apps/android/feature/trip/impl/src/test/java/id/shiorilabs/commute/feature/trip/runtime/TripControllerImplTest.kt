@@ -1020,6 +1020,79 @@ class TripControllerImplTest {
     }
 
     @Test
+    fun `off an on-time train into that change, walking, the rider isn't told it's missed`() = runTest {
+        // Off at 08.05 with 300 m to the 08.10: the walk is reckoned to end at 08.12.32, past the 08.11
+        // the plain departure allows. The planner gave 300 s; on time, the change is its to approve.
+        val tight = aboardTheTightMrt()
+        store.trip = tight.copy(
+            state = tight.state.copy(legIndex = 2, phase = TripPhase.WAITING_TO_BOARD, confirmedAt = minutes(5), walkingSince = minutes(5)),
+        )
+        controller(at = minutes(6))
+        runCurrent()
+
+        assertEquals(emptyList<String>(), asked)
+        assertEquals(emptyList<Pair<Int, Instant>>(), runtime.rerouted)
+    }
+
+    @Test
+    fun `a swap made for lateness is undone once the train is back to its time`() = runTest {
+        // The MRT 08.00 to 08.40, 300 m to change and five minutes given for it: the 08.45.
+        val ride = (plan.legs[0] as TripLeg.Ride).copy(arrivalAt = minutes(40))
+        val longTight = TripPlan(listOf(ride, plan.legs[1], (plan.legs[2] as TripLeg.Ride).copy(departureAt = minutes(45), arrivalAt = minutes(55))))
+        store.trip = ActiveTrip(
+            longTight,
+            TripEngine.start(longTight, NOW, hasLocation = true).state.copy(
+                phase = TripPhase.RIDING,
+                source = PositionSource.CONFIRMED,
+                confirmedAt = minutes(2),
+            ),
+            origin,
+        )
+        onward = TripPlan(listOf(nextTrain.copy(departureAt = minutes(60), arrivalAt = minutes(70))))
+        val clock = MutableClock(minutes(22))
+        val controller = controller(clock = clock)
+        runCurrent()
+        // Halfway at 08.22 for 08.20: two minutes late, in at 08.42 and 08.49.32 at the 08.45: lost, swapped quietly.
+        controller.onFix(Fix(alongTheMrt(0.5), 15f, minutes(22), speedMps = 15f))
+        runCurrent()
+        assertEquals(minutes(60), controller.active.value!!.plan.ride(2).departureAt)
+        assertEquals(minutes(45), controller.active.value!!.replaced!!.untold)
+
+        // Three quarters along at 08.30 by the 08.30: back on time, and the change the planner allowed is there again.
+        clock.now = minutes(31)
+        controller.onFix(Fix(alongTheMrt(0.75), 15f, minutes(30), speedMps = 15f))
+        runCurrent()
+
+        assertEquals(longTight, controller.active.value!!.plan)
+        assertNull(controller.active.value!!.replaced)
+    }
+
+    @Test
+    fun `a re-plan from a trip that was stopped doesn't swap the next one`() = runTest {
+        store.trip = walkingToAMissedTrain()
+        onward = TripPlan(listOf(nextTrain))
+        answerHeld = CompletableDeferred()
+        val clock = MutableClock(minutes(13))
+        val controller = controller(clock = clock)
+        runCurrent()
+        assertEquals(1, asked.size)
+
+        // Stopped, and the same journey started again an hour before its trains: waiting for the first.
+        controller.stop()
+        runCurrent()
+        clock.now = NOW.minusSeconds(120)
+        controller.start(plan, origin)
+        runCurrent()
+        assertEquals(0, controller.active.value!!.state.legIndex)
+
+        answerHeld!!.complete(Unit)
+        answerHeld = null
+        runCurrent()
+
+        assertEquals(plan, controller.active.value!!.plan)
+    }
+
+    @Test
     fun `a train more than a minute late into that change is re-planned`() = runTest {
         // Halfway at 08.04.30 for 08.02.30: two minutes late.
         store.trip = aboardTheTightMrt()
@@ -1049,6 +1122,34 @@ class TripControllerImplTest {
         runCurrent()
 
         assertNull(runtime.wakeAt)
+    }
+
+    @Test
+    fun `seen aboard the later train running a little early, the later train is the one taken`() = runTest {
+        // The 08.14 is aboard, 20 s ahead of its time at Manggarai: the fixes put the lateness against the
+        // 08.10 at 3 min 40, a hair short of the 08.14's four. It has left; that is what counts.
+        val waiting = waitingForTheEightTen()
+        store.trip = waiting.copy(
+            state = waiting.state.copy(confirmedAt = minutes(10).plusSeconds(50), walkingSince = null, sightedPosition = 0.0),
+        )
+        val clock = MutableClock(minutes(10).plusSeconds(50))
+        val controller = controller(clock = clock)
+        runCurrent()
+
+        clock.now = minutes(17)
+        controller.onFix(Fix(GeoPoint(MANGGARAI.latitude!!, MANGGARAI.longitude!!), 10f, clock.now, speedMps = 12f))
+        clock.now = minutes(17).plusSeconds(10)
+        val past = GeoPoint(
+            MANGGARAI.latitude!! + (TEBET.latitude!! - MANGGARAI.latitude!!) * 0.05,
+            MANGGARAI.longitude!! + (TEBET.longitude!! - MANGGARAI.longitude!!) * 0.05,
+        )
+        controller.onFix(Fix(past, 10f, clock.now, speedMps = 12f))
+        runCurrent()
+
+        val trip = controller.active.value!!
+        assertEquals(TripPhase.RIDING, trip.state.phase)
+        assertEquals(minutes(14), trip.plan.ride(2).departureAt)
+        assertTrue("later" in logged)
     }
 
     @Test
