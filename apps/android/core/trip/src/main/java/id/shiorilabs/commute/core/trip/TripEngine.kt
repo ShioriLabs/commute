@@ -756,7 +756,8 @@ object TripEngine {
                         candidates += ride.departureAt.plus(offset).minus(DEPARTING_LEAD)
                         // Just past the grace a late rider has: if the walk isn't done by then the train is
                         // lost, and with no fix to step on nothing else would say so ([walkEndsAt]).
-                        candidates += ride.departureAt.plus(CATCH_GRACE).plusSeconds(1)
+                        candidates += maxOf(ride.departureAt, plan.plannedReadyAt(state.legIndex) ?: ride.departureAt)
+                            .plus(CATCH_GRACE).plusSeconds(1)
                     }
                     else -> {
                         val nextStop = floor(state.position).toInt() + 1

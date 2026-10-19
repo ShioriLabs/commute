@@ -43,5 +43,17 @@ private const val TRANSFER_OVERHEAD_S = 180L
 /** Short changes (a platform to the next) have fewer stairs: the overhead grows with the walk up to its full size. */
 private const val OVERHEAD_S_PER_M = 1.2
 
+/**
+ * When a rider who got off the ride before this one on time could be at ride [rideIndex]'s first
+ * stop: that ride's planned arrival, and the walk between at the same pace as [walkEndsAt]. What the
+ * planner allowed for the change: lateness past it is what loses a train, not a walk reckoned longer.
+ * `null` with no timed ride before.
+ */
+fun TripPlan.plannedReadyAt(rideIndex: Int): Instant? {
+    val before = legs.take(rideIndex).lastOrNull { it is TripLeg.Ride } as? TripLeg.Ride ?: return null
+    val arrives = before.arrivalAt ?: return null
+    return arrives.plusSeconds(transferBefore(rideIndex)?.let(::walkSeconds) ?: 0)
+}
+
 private fun walkSeconds(walk: TripLeg.Transfer): Long =
     if (walk.distanceM <= 0) 0 else (walk.distanceM / WALK_M_PER_S).toLong() + minOf(TRANSFER_OVERHEAD_S, (walk.distanceM * OVERHEAD_S_PER_M).toLong())
