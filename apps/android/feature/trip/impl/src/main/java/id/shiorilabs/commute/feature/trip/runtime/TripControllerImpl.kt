@@ -95,6 +95,7 @@ class TripControllerImpl @Inject constructor(
     private var engineWake: Instant? = null
 
     /** The re-plan being asked, for an alarm that woke the process to wait on ([awaitReplan]). */
+    @Volatile
     private var replanJob: Job? = null
 
     /**
@@ -302,6 +303,8 @@ class TripControllerImpl @Inject constructor(
         val state = step.state
         if (before.state.phase != TripPhase.WAITING_TO_BOARD || state.phase != TripPhase.RIDING || state.legIndex != leg) return trip to step
         if (trip.plan != before.plan) return trip to step
+        // A swap already made is [boardedEarlier]'s, and an "either train" is [leftTooEarly]'s to settle.
+        if (before.replaced != null || trip.mightBeOn != null) return trip to step
         // Only a boarding something saw. The clock boards a rider whenever its tick runs after the
         // departure (a late alarm, a restore, a stale fix), which says nothing of the train taken.
         val sawBoarding = event is TripEvent.Fix || (event is TripEvent.RiderSaid && event.action == RiderAction.BOARDED)
@@ -329,9 +332,8 @@ class TripControllerImpl @Inject constructor(
         )
         val plan = TripPlan(trip.plan.legs.toMutableList().also { it[leg] = shifted })
         log.event("later", mapOf("leg" to leg, "planned" to planned, "took" to took, "boarded" to boardedAt))
-        val offset = (state.clockOffsetS - delta.seconds).coerceAtLeast(MAX_EARLY_S)
-        val moved = trip.copy(plan = plan, replaced = null, mightBeOn = null)
-        return moved to TripEngine.step(plan, state.copy(clockOffsetS = offset), TripEvent.Tick(clock.instant()))
+        // The boarding again, from before it, on the new plan: lateness, alerts and wake all read against it.
+        return trip.copy(plan = plan) to TripEngine.step(plan, before.state, event)
     }
 
     /** Whether ride [legIndex] of [a] and [b] runs the same line between the same stops: one train or the other. */
@@ -622,9 +624,6 @@ class TripControllerImpl @Inject constructor(
 
         /** A "Udah naik" tap can come this long before the train is off. */
         val TAP_SLACK: Duration = Duration.ofSeconds(30)
-
-        /** The most a train is taken to run ahead of its time, as the engine's own bound is. */
-        const val MAX_EARLY_S = -5 * 60L
 
         /** How long before asking again when a re-plan found nothing. */
         val REPLAN_RETRY: Duration = Duration.ofMinutes(2)

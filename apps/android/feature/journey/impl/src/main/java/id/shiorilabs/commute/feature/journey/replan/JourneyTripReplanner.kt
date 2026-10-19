@@ -68,9 +68,14 @@ private fun catchableFrom(journey: Journey, fromId: String, readyAt: Instant): J
     val departs = first.departureAt ?: return null
     if (!departs.isBefore(readyAt)) return journey
 
-    val next = first.upcomingDepartures.firstOrNull { !it.departureAt.isBefore(readyAt) } ?: return null
-    val timed = resolveTimedLegs(journey.legs, picks = mapOf(0 to next.tripId), notBefore = readyAt)
-    val retimed = retimeJourney(journey, timed)
-    val boards = (retimed.legs.first() as JourneyLeg.Ride).departureAt
-    return retimed.takeIf { boards != null && !boards.isBefore(readyAt) }
+    // The first of the trains the rider can make that the rest of the journey still connects from: a
+    // slow one can miss the change a faster one after it makes.
+    return first.upcomingDepartures
+        .filter { !it.departureAt.isBefore(readyAt) }
+        .firstNotNullOfOrNull { next ->
+            val timed = resolveTimedLegs(journey.legs, picks = mapOf(0 to next.tripId), notBefore = readyAt)
+            val retimed = retimeJourney(journey, timed)
+            val ride = retimed.legs.first() as JourneyLeg.Ride
+            retimed.takeIf { ride.tripId == next.tripId }
+        }
 }

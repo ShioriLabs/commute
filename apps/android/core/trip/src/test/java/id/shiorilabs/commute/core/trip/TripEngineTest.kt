@@ -986,6 +986,22 @@ class TripEngineTest {
     }
 
     @Test
+    fun `a rider already walking when they tap off starts the walk at once`() {
+        val aboard = TripEngine.start(krlThenLrt, at(-1), hasLocation = true).state.copy(
+            phase = TripPhase.RIDING,
+            confirmedPosition = 0.5,
+            position = 0.5,
+            source = PositionSource.CONFIRMED,
+            confirmedAt = at(3),
+            recentSpeeds = listOf(SpeedSample(at(3.9).toEpochMilli(), 1.4f)),
+        )
+
+        val step = TripEngine.step(krlThenLrt, aboard, TripEvent.RiderSaid(RiderAction.ALIGHTED, at(3.95)))
+
+        assertEquals(at(3.95), step.state.walkingSince)
+    }
+
+    @Test
     fun `a train standing at the stop starts the walk at once`() {
         val aboard = TripEngine.start(krlThenLrt, at(-1), hasLocation = true).state.copy(
             phase = TripPhase.RIDING,
