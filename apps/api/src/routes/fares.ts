@@ -238,6 +238,22 @@ export function timeOptions(context: FareContext, observed: boolean = observedHe
   }
 }
 
+/**
+ * What the TransJakarta estimates need for this request (utils/observedRuntimes.ts):
+ * the service day, the same headways the search charged, and the day's service
+ * windows. Built from the same memoised maps as timeOptions, so the estimate and
+ * the ranking can never disagree on a wait.
+ */
+export function estimateInputs(context: FareContext, observed: boolean = observedHeadwaysEnabled()): {
+  day: ServiceDay
+  headways: Map<string, number>
+  serviceHours: Map<string, ServiceWindow>
+} {
+  const day = serviceDay(context.departureAt)
+  const { serviceHours, headwaysS } = timeOptions(context, observed)
+  return { day, headways: headwaysS, serviceHours }
+}
+
 // Resolve the fare context from optional query params, defaulting to today's
 // behaviour: single-tap stored value, departing now. Unknown/malformed values
 // fall back to the defaults rather than erroring.

@@ -1,7 +1,9 @@
 # TransJakarta timings from ward + GTFS fusion
 
-Status: **built as data, not read by anything yet** (noted 2026-10-19; measured
-and fitted the same day, see "Measurement pass" and "Fitted estimates" below). Feeds `router-time-objective.md`
+Status: **wired into the planner after the search, as an API-only estimate**
+(noted, measured, fitted and wired 2026-10-19; see "Measurement pass", "Fitted
+estimates" and "Planner estimates" below). The arrival sort that uses them is
+built but switched off (`config:observed-runtimes` = `fields`). Feeds `router-time-objective.md`
 and the TJ side of `schedules-as-stop-times` (zero TJ rows today).
 
 ## Why
@@ -218,3 +220,86 @@ the feed.
 - The weekend has only 2 Saturdays and 2 Sundays, so weekend windows rest on 2
   days each.
 - The sample is closed (2026-09-29 to 10-13).
+
+## Planner estimates (2026-10-19)
+
+Wired after the search only. The search, its criteria, its cache keys and route
+stability (`mcraptor.md`) are untouched; seconds inside the search stay
+`router-time-objective.md`'s step.
+
+**What a rider's client gets.** `/_internal/trips` journeys with a TransJakarta
+ride and no `arrivalAt` carry `estimate: { durationS, rideS }`:
+- `durationS` runs from the request's `at` to the estimated arrival, including
+  walks and expected waits;
+- `rideS` is aligned with `legs` and is set on TJ legs only.
+
+Legs still carry no TJ `departureAt`/`arrivalAt`/`stopTimes`, because every
+client reads those as timetable facts. The public `/fares` is unchanged. No UI
+reads `estimate` yet.
+
+**How a journey is estimated:**
+- `Tsundere.estimateJourney` reuses `resolveDepartures` with an `estimateUntimed`
+  hook. `timeJourney` ignores the hook, so the timed fields cannot change.
+- The hook is `utils/observedRuntimes.ts` `estimateTjLeg`:
+  - the wait is half the same headway the search charged;
+  - the ride is a sum of hop medians in the block the running clock is in;
+  - a hop with no cell is priced at the leg's own pace if at least 50% of the
+    leg's metres are measured;
+  - the trip-sum bias is applied where the backtest vouched for it (not WE 10-24).
+- Rail after a bus catches the next real train from the estimated clock.
+- There is no estimate when the line is closed at boarding, when the estimated
+  clock misses the last train, or when the hook can't price a leg.
+- Data comes from the compact `db/data/runtimes.planner.ts`, which adds 143 KB
+  raw / 39 KB gzip to the worker (1,872 KB / 403 KB → 2,016 KB / 442 KB).
+- The estimate pass costs 0.1 ms p50 and 0.3 ms p95 per OD.
+
+**Switch** `config:observed-runtimes` (see `utils/observedFlag.ts`):
+- `off`: no estimates;
+- `fields`: estimates, unchanged order. This is the default and what an absent
+  or unknown value means.
+- `sort`: estimated arrivals also join `byArrival`, rounded to 5-minute bands so
+  that close estimates keep the engine's order.
+
+Estimates are applied after the journey cache, so a flip needs no purge or
+API_VERSION bump. It takes effect within ~11 min (60 s KV cache plus the
+10-minute edge cache).
+
+**A/B** (`pnpm --filter api ab:estimated-order`; 2,000 seeded pairs on the network
+snapshot; share of multi-journey pairs whose top journey changes against today's
+order):
+
+| Moment | Estimated | sort / median | sort / p75 | sort / 5-min band |
+|---|---|---|---|---|
+| WD 07:30 | 62% | 18.6% (gain 5.8 min) | 20.1% | 16.8% (7.1 min) |
+| WD 12:00 | 90% | 24.1% (4.6) | 26.1% | 18.7% (6.1) |
+| WD 17:30 | 76% | 26.9% (5.4) | 29.6% | 23.1% (7.4) |
+| WD 21:00 | 84% | 21.4% (2.9) | 22.2% | 15.5% (5.0) |
+| WE 12:00 | 79% | 25.7% (3.6) | 29.0% | 21.3% (5.5) |
+
+"Estimated" is the share of TJ rows without a timetable arrival that got an
+estimate. The gain is the median estimated gain of the changed pairs.
+
+- **Most changes are one estimated journey overtaking another.** Today every TJ
+  journey sits in the untimed tail in the engine's order. Only about 1-2% of
+  pairs swap a timetabled top journey for an estimated one, or the other way
+  round.
+- **Without a band, most swaps were on 1-3 minutes,** inside the estimate's own
+  error. That is why the band ships as the sort behaviour.
+- **p75 churns more and helps nothing,** so it is not used.
+- **No leg ever failed because a station pair was missing from the table**
+  (diagnostic at WD 07:30 and 12:00), so the join between the graph and the table
+  is complete.
+- **All misses are "too little measured".** At WD 07:30, mostly 12, 9, 6A, 6B and
+  7F, which have no observed or scaled cell at the morning peak; at midday, the
+  topology-mismatch lines 4 and 3F.
+
+**Open before switching to `sort`:**
+- **Coverage bias.** At peak, a journey on a well-measured line can move up while
+  an unmeasured one stays in the untimed tail, whatever the real speeds.
+- **No visible reason.** With no UI reading `estimate`, a rider sees a new order
+  with nothing explaining it.
+- **Descriptions.** The `FareJourneySchema` description still says ranking ignores
+  travel time. It changes when sort ships.
+- **Waits are h/2.** Bunching (h(1+CV²)/2) still isn't modelled, so waits are on
+  the short side.
+- **`moreDepartures` rows get no estimates.**

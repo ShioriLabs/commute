@@ -10,6 +10,12 @@
  *
  * So this runs on the way OUT, on the cache-hit path as well as the miss path,
  * and it must never run before the KV write. See `retime` in journey-endpoint.
+ *
+ * The same pass adds `estimate` to journeys with a TransJakarta ride: observed
+ * run times and expected waits (utils/observedRuntimes.ts) give a probable
+ * duration where the timetable gives none. Estimates never become leg times,
+ * which every client reads as timetable facts; and like the times they depend
+ * on the request's clock, so they too stay out of the cached body.
  */
 
 import type { LegTiming, RouteLeg, Tsundere, WalkingPreference } from '@commute/tsundere'
@@ -19,6 +25,8 @@ import { DAY_MASK } from 'db/schemas/schedules'
 import { SEPARATELY_GATED_LINES, type FareContext } from '@commute/constants'
 import { lineCodeOf } from 'utils/ids'
 import { hopsOf } from 'utils/merge-walks'
+import type { RuntimesMode } from 'utils/observedFlag'
+import { estimateTjLeg, type RuntimeStatistic, type TjEstimateInputs } from 'utils/observedRuntimes'
 
 /** The 3-bit mask the trips carry, for the day the rider is travelling. */
 const dayMaskFor = (at: Date): number => DAY_MASK[serviceDay(at)]
@@ -270,15 +278,95 @@ function nextServiceDay(context: FareContext): FareContext {
   return { ...context, departureAt: atSecondsOfDay(context.departureAt, startS) }
 }
 
+/*
+ * Estimated arrivals closer than this sort as a tie, so the engine's order
+ * (fewer boardings, less walking) decides between them. The estimate's own error
+ * is minutes, and without the band most of what sort mode changed was one bus
+ * route overtaking another on a minute or two: measured on 2,000 seeded pairs
+ * (`ab:estimated-order`, 2026-10-19), the band cut top-journey changes by about a
+ * quarter and raised the median estimated gain of those that remain from 3-6 to
+ * 5-7 minutes. Rounding rather than a pairwise tolerance, because a sort needs a
+ * consistent order.
+ */
+export const ESTIMATE_SORT_BAND_S = 300
+
+/** What retimeTrips needs to estimate TransJakarta legs, per request. */
+export interface EstimateOptions extends Omit<TjEstimateInputs, 'statistic'> {
+  mode: RuntimesMode
+  /** The statistic the sort mode orders by; `estimate` itself is always the median. */
+  sortStatistic?: RuntimeStatistic
+}
+
+/**
+ * When a journey with a TransJakarta ride probably arrives, in seconds since
+ * local midnight, or null. Only for a journey the timetable cannot finish
+ * (`arrivalAt` absent); see Tsundere.estimateJourney for why a leg can still
+ * defeat it (a closed line, a last train the estimated clock misses).
+ */
+function estimatedArrivalS(
+  route: EngineRoute,
+  router: Tsundere,
+  context: FareContext,
+  walking: WalkingPreference | undefined,
+  inputs: TjEstimateInputs
+): { arrivalS: number, rideS: (number | null)[] } | null {
+  return router.estimateJourney(route.legs, {
+    departureS: secondsSinceLocalMidnight(context.departureAt),
+    dayMask: dayMaskFor(context.departureAt),
+    gatedLines: GATED_LINE_CODES,
+    ...(walking === undefined ? {} : { walking }),
+    estimateUntimed: (leg, atS) => estimateTjLeg(leg, atS, inputs)
+  })
+}
+
+const hasTjRide = (journey: FareJourney) => journey.legs.some(l => l.type === 'RIDE' && l.operator === 'TJ')
+
+/**
+ * The journey with `estimate` attached where one can be made, plus the arrival
+ * the sort mode should order it by. Untouched (and no sort key) otherwise.
+ */
+function withEstimate(
+  journey: FareJourney,
+  router: Tsundere,
+  context: FareContext,
+  walking: WalkingPreference | undefined,
+  options: EstimateOptions
+): { journey: FareJourney, sortArrivalS: number | null } {
+  if (journey.arrivalAt !== undefined || !hasTjRide(journey)) return { journey, sortArrivalS: null }
+  const route = toRouteLegs(journey.legs)
+  const median = estimatedArrivalS(route, router, context, walking, { ...options, statistic: 'median' })
+  if (!median) return { journey, sortArrivalS: null }
+  const atS = secondsSinceLocalMidnight(context.departureAt)
+  // Back onto the wire legs: a merged walk spans several engine legs, never a ride.
+  const rideS = journey.legs.map((leg, i) => (leg.type === 'RIDE' ? median.rideS[route.engineIndexOf[i]!] ?? null : null))
+  const sortS = options.sortStatistic === 'p75'
+    ? estimatedArrivalS(route, router, context, walking, { ...options, statistic: 'p75' })?.arrivalS ?? null
+    : median.arrivalS
+  const sortArrivalS = sortS === null ? null : Math.round(sortS / ESTIMATE_SORT_BAND_S) * ESTIMATE_SORT_BAND_S
+  return { journey: { ...journey, estimate: { durationS: median.arrivalS - atS, rideS } }, sortArrivalS }
+}
+
 /** Every journey in a trips answer, timed against the request's own clock. */
 export function retimeTrips(
   result: TripResult,
   router: Tsundere,
   context: FareContext,
-  walking?: WalkingPreference
+  walking?: WalkingPreference,
+  estimates?: EstimateOptions
 ): TripResult {
   const rows = result.journeys.map(j => boardingsOf(j, router, context, walking))
-  return { ...result, journeys: relabel(byArrival(rows)) }
+  if (!estimates || estimates.mode === 'off') return { ...result, journeys: relabel(byArrival(rows)) }
+
+  const estimated = rows.map(row => withEstimate(row, router, context, walking, estimates))
+  const journeys = estimated.map(e => e.journey)
+  if (estimates.mode !== 'sort') return { ...result, journeys: relabel(byArrival(journeys)) }
+
+  const sortArrival = new Map<FareJourney, number>()
+  const base = context.departureAt.getTime() - secondsSinceLocalMidnight(context.departureAt) * 1000
+  estimated.forEach((e) => {
+    if (e.sortArrivalS !== null) sortArrival.set(e.journey, base + e.sortArrivalS * 1000)
+  })
+  return { ...result, journeys: relabel(byArrival(journeys, j => sortArrival.get(j))) }
 }
 
 /*
@@ -390,17 +478,26 @@ function relabel(journeys: FareJourney[]): FareJourney[] {
  * Labels are untouched: the engine assigns them by comparison, not by position,
  * so `Termurah` stays on the cheapest card wherever it lands.
  *
+ * With `estimatedArrivalMs` (the observed-runtimes sort mode), a journey with
+ * no timetable arrival but an estimated one joins the timed set on that
+ * estimate. That is still one rule, arrival, applied to every row that has one;
+ * rows with neither stay in the untimed tail. Without it, exactly as before.
+ *
  * Exported for its own tests: the all-or-nothing rule and the stable tie-break
  * are the parts worth pinning, and reaching them through retimeTrips would mean
  * standing up a whole graph to assert an ordering.
  */
-export function byArrival(journeys: FareJourney[]): FareJourney[] {
+export function byArrival(
+  journeys: FareJourney[],
+  estimatedArrivalMs?: (journey: FareJourney) => number | undefined
+): FareJourney[] {
   if (journeys.length < 2) return journeys
-  const timed = journeys.filter(j => j.arrivalAt !== undefined)
-  const untimed = journeys.filter(j => j.arrivalAt === undefined)
+  const arrivalOf = (j: FareJourney) => (j.arrivalAt !== undefined ? Date.parse(j.arrivalAt) : estimatedArrivalMs?.(j))
+  const timed = journeys.filter(j => arrivalOf(j) !== undefined)
+  const untimed = journeys.filter(j => arrivalOf(j) === undefined)
   if (timed.length < 2) return journeys
   return [
-    ...[...timed].sort((a, b) => Date.parse(a.arrivalAt!) - Date.parse(b.arrivalAt!)),
+    ...[...timed].sort((a, b) => arrivalOf(a)! - arrivalOf(b)!),
     ...untimed
   ]
 }

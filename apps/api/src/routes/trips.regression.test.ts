@@ -1,8 +1,10 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import type { EdgeInput, RouteLeg, TransferInput } from '@commute/tsundere'
-import { routerFromInputs } from 'routes/fares'
+import { estimateInputs, routerFromInputs } from 'routes/fares'
 import { searchTrips } from 'routes/internal'
+import { TJ_RUNTIMES } from 'db/data/runtimes.planner'
+import { estimateTjLeg } from 'utils/observedRuntimes'
 import type { PlaceIndex } from 'utils/places'
 import { DEFAULT_AT, ROUTE_CASES, type RouteShape } from './trips.regression.cases'
 
@@ -129,4 +131,45 @@ describe('route regression', () => {
       }
     })
   }
+})
+
+/*
+ * The TransJakarta estimates on real graph legs (utils/observedRuntimes.ts).
+ * The point is the join: the graph's station ids and leg splits must land on
+ * the runtime table's keys, or every estimate silently comes back null.
+ */
+describe('TransJakarta estimates on real journeys', () => {
+  const at = new Date('2026-10-14T12:00:00+07:00')
+  const context = { paymentMethod: 'STORED_VALUE' as const, departureAt: at }
+  const inputs = estimateInputs(context, true)
+  const departureS = 12 * 3600
+  const corridor = TJ_RUNTIMES['1@F']!.stops
+
+  it('estimates a corridor 1 run and leaves its legs untimed', () => {
+    const { journeys } = searchTrips(router, corridor[1]!, corridor.at(-2)!, { places, context, observed: true })
+    const tj = journeys.find(j => j.legs.every(l => l.type !== 'RIDE' || l.operator === 'TJ'))
+    expect(tj, 'a TransJakarta-only journey').toBeDefined()
+    expect(router.timeJourney(tj!.legs, { departureS, dayMask: 0b100 }).every(t => t === null)).toBe(true)
+
+    const estimate = router.estimateJourney(tj!.legs, {
+      departureS,
+      dayMask: 0b100,
+      estimateUntimed: (leg, s) => estimateTjLeg(leg, s, inputs)
+    })
+    expect(estimate, 'an estimate').not.toBeNull()
+    // Corridor 1 stop 1 to second-to-last runs ~64 min at weekday midday (docs/tj-observed-timings.md).
+    const minutes = (estimate!.arrivalS - departureS) / 60
+    expect(minutes).toBeGreaterThan(50)
+    expect(minutes).toBeLessThan(100)
+  })
+
+  it('estimates the Kuningan Madya to Tanjung Duren change', () => {
+    const { journeys } = searchTrips(router, 'TJ-H00114P', 'TJ-H00210S', { places, context, observed: true })
+    const estimated = journeys.filter(j => router.estimateJourney(j.legs, {
+      departureS,
+      dayMask: 0b100,
+      estimateUntimed: (leg, s) => estimateTjLeg(leg, s, inputs)
+    }) !== null)
+    expect(estimated.length, 'journeys with an estimate').toBeGreaterThan(0)
+  })
 })

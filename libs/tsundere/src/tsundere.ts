@@ -2,8 +2,10 @@ import { plan, type Journey, type PlanOptions } from './planner/plan'
 import type { ServiceWindow } from './planner/service-hours'
 import { buildTripIndex, type TripIndex, type TripPattern } from './planner/trips'
 import {
+  estimateJourney,
   journeyArrivalS,
   resolveDepartures,
+  type JourneyEstimate,
   type LegTiming,
   type ResolveDeparturesOptions
 } from './planner/departures'
@@ -151,7 +153,21 @@ export class Tsundere {
    */
   timeJourney(legs: readonly RouteLeg[], options: ResolveDeparturesOptions): (LegTiming | null)[] {
     if (!this.#trips) return legs.map(() => null)
-    return resolveDepartures(legs, this.#trips, options)
+    // Times are facts only: an estimate hook passed here is ignored, never stamped.
+    return resolveDepartures(legs, this.#trips, { ...options, estimateUntimed: undefined })
+  }
+
+  /**
+   * When a journey probably arrives, with estimates (from `estimateUntimed`) for
+   * the ride legs no timetable covers. Null unless at least one leg was
+   * estimated and every ride leg got a time. See planner/departures.ts
+   * `estimateJourney`; never a substitute for timeJourney's facts.
+   */
+  estimateJourney(
+    legs: readonly RouteLeg[],
+    options: ResolveDeparturesOptions & Required<Pick<ResolveDeparturesOptions, 'estimateUntimed'>>
+  ): JourneyEstimate | null {
+    return estimateJourney(legs, this.#trips ?? buildTripIndex([]), options)
   }
 
   /** When a journey ends, or null unless every ride leg was timed. */

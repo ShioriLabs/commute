@@ -13,7 +13,10 @@ import {
   lineGeometry,
   MIN_STRATUM_BUCKETS,
   poolTrips,
+  renderPlannerRuntimes,
   renderRuntimes,
+  tripBias,
+  vouchedBias,
   vouchedStrata,
   type WindowDay
 } from './observedHeadways/runtimes'
@@ -23,7 +26,7 @@ import {
  * (docs/tj-observed-timings.md) and write db/data/runtimes.observed.ts.
  *
  *   pnpm --filter api fit:tj-runtimes --dir <archive dir> [--cache <dir>] [--days N]
- *     [--out <file>] [--no-write]
+ *     [--out <file>] [--planner-out <file>] [--no-write]
  *
  * Days are reduced once and cached (observedHeadways/dayTrips.ts, shared with
  * analyze:tj-trips). The backtest holds out each day in turn and scores every
@@ -32,10 +35,13 @@ import {
  * next to service-hours.ts but never written into it: merging them is a
  * reviewed, separate step.
  *
- * Nothing at runtime reads the output yet (docs/router-time-objective.md).
+ * It writes two files from the same fit: runtimes.observed.ts (everything, for
+ * analysis; nothing at runtime imports it) and runtimes.planner.ts (the compact
+ * slice the planner's estimates read through utils/observedRuntimes.ts).
  */
 
 const OUT_PATH = `${__dirname}/../data/runtimes.observed.ts`
+const PLANNER_OUT_PATH = `${__dirname}/../data/runtimes.planner.ts`
 
 const { values: args } = parseArgs({
   options: {
@@ -43,6 +49,7 @@ const { values: args } = parseArgs({
     'cache': { type: 'string' },
     'days': { type: 'string' },
     'out': { type: 'string', default: OUT_PATH },
+    'planner-out': { type: 'string', default: PLANNER_OUT_PATH },
     'no-write': { type: 'boolean', default: false }
   }
 })
@@ -71,13 +78,16 @@ async function main() {
     console.log(`  ${s.dt}  ${blockLabel(s.block)}  ${s.basis.padEnd(9)} ${String(s.buckets).padStart(8)}   ${fmt(s.model)}  ${fmt(s.baseline)}  ${ships}`)
   }
   console.log('\nTrip backtest (stop 1 to second-to-last = sum of predicted hops, lines with every interior hop priced)')
-  console.log('  dt  block  buckets   model  baseline')
+  console.log('  dt  block  buckets   model  biased  baseline')
   for (const t of trips) {
-    console.log(`  ${t.dt}  ${blockLabel(t.block)} ${String(t.buckets).padStart(8)}   ${fmt(t.model)}  ${fmt(t.baseline)}`)
+    const verdict = t.biased < t.model ? 'bias ships' : 'bias dropped'
+    console.log(`  ${t.dt}  ${blockLabel(t.block)} ${String(t.buckets).padStart(8)}   ${fmt(t.model)}  ${fmt(t.biased)}  ${fmt(t.baseline)}  ${verdict}`)
   }
 
   // ── final fit ──
   const fit = fitRuntimes(poolTrips(days), geometry, allow)
+  const biasAllowed = vouchedBias(trips)
+  const bias = tripBias(fit, geometry, biasAllowed)
   const windows = fitWindows(days)
 
   console.log('\nCells by basis, per day type and block:')
@@ -145,6 +155,9 @@ async function main() {
   }
   fs.writeFileSync(args.out!, text)
   console.log(`\nwrote ${args.out} (${fit.hops.size} hop cells, ${fit.trips.size} trip cells, ${windows.size} line-direction windows)`)
+  const planner = renderPlannerRuntimes({ fit, bias, geometry, range: { from: days[0]!.day, to: days.at(-1)!.day } })
+  fs.writeFileSync(args['planner-out']!, planner)
+  console.log(`wrote ${args['planner-out']} (${(planner.length / 1024).toFixed(0)} KiB, ${bias.size} trip-bias buckets)`)
 }
 
 void main()

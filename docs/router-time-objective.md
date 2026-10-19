@@ -40,10 +40,14 @@ can be measured, so the only preferences left are a couple of standard ones.
   - Rail: median stop-to-stop times from the trip patterns already loaded
     (`db/data/trips.ts`; KCI, MRTJ, LRTJ and LRTJBDB chain). The same
     median-hop approach is already used by `db/scripts/density/ride-time.ts`.
-  - TJ: no timetable (`schedules-as-stop-times`, zero TJ rows), so use speed
-    classes on distance: busway BRT, mixed traffic, and so on. These are
-    physical speeds you can measure, for example from trip logs. You don't tune
-    them against each other.
+  - TJ: no timetable (`schedules-as-stop-times`, zero TJ rows), but measured
+    run times now exist: per hop (station pair), per weekday/weekend and hour
+    block, from ward's archives (`db/data/runtimes.planner.ts`, read through
+    `utils/observedRuntimes.ts`; `docs/tj-observed-timings.md`). Since
+    2026-10-19 they price TJ legs AFTER the search, as `estimate` on a journey
+    and optionally in the arrival sort. Feeding the same per-hop seconds into
+    the search is the step this doc proposes; the lookup is ready for it.
+    Speed classes on distance stay the fallback for hops the table lacks.
   - Where neither exists, fall back to distance at a conservative speed.
 - **Walking:** distance at the rider's pace (`WALK_PACE_MS` in
   `planner/departures.ts`, 1.2 m/s average), plus the existing concourse
