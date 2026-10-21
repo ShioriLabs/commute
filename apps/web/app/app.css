@@ -63,6 +63,11 @@
      sweep rather than something to half-migrate here. Point new work at this. */
   --color-brand: #F55875;
 
+  /* Jak Lingko colour roles (docs/jaklingko-wayfinding.md, p17): yellow means
+     "way out" and nothing else, on the near-black every MRT/BRT/LRT sign uses. */
+  --color-exit: #F9D437;
+  --color-signage: #0C1B2A;
+
   /* The map page's layer scale, bottom to top. Every full-viewport surface on
      /map competes on the root stacking context, so the order between them is a
      single global fact — but it used to live only as bare `z-30`/`z-40` numbers
