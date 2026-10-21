@@ -2,6 +2,8 @@ import { BusIcon, TrainSimpleIcon } from '@phosphor-icons/react'
 import type { ExitSign, StationExit } from '@commute/schemas'
 import ExitBadge from '~/components/exit-badge'
 import PaneLink from '~/components/pane-stack/pane-link'
+import { useMemo } from 'react'
+import { Link } from 'react-router'
 
 /*
  * A station id is `${operator}-${code}` and the code may itself contain dashes
@@ -44,6 +46,14 @@ function SignLine({ sign }: { sign: ExitSign }) {
 export default function StationExits({ exits }: { exits: StationExit[] | undefined }) {
   if (!exits?.length) return null
 
+  const HAS_OSM_DATA = useMemo(() => {
+    for (const exit of exits) {
+      if (exit.source === 'OSM') return true
+    }
+
+    return false
+  }, [exits])
+
   return (
     <section className="mt-8">
       <h2 className="font-semibold text-lg px-4">Pintu Keluar</h2>
@@ -66,6 +76,17 @@ export default function StationExits({ exits }: { exits: StationExit[] | undefin
           </li>
         ))}
       </ul>
+      {HAS_OSM_DATA
+        ? (
+            <p className="px-4 font-semibold text-gray-600 text-sm mt-4">
+              Sebagian atau semua data pintu keluar di atas bersumber dari OpenStreetMap
+              <br />
+              © OpenStreetMap contributors
+              &nbsp;
+              <Link to="/settings/legal/data-attributions" className="text-brand">Lihat Atribusi Data</Link>
+            </p>
+          )
+        : null}
     </section>
   )
 }

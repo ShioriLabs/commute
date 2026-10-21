@@ -75,6 +75,18 @@ export default function DataAttributionsSettingsPage() {
             </li>
             <li>
               <article>
+                <h1 className="font-semibold">TransJakarta</h1>
+                <a href="https://ppid.transjakarta.co.id/informasi/berkala" target="_blank" className="text-blue-500">https://ppid.transjakarta.co.id/informasi/berkala</a>
+                <p>
+                  Kami mengumpulkan data TransJakarta melalui rilis publik GTFS yang disediakan oleh PPID TransJakarta dan melalui penyempurnaan tambahan yang dibantu oleh teknologi kecerdasan buatan seperti Anthropic Claude.
+                </p>
+                <p>
+                  © Transportasi Jakarta
+                </p>
+              </article>
+            </li>
+            <li>
+              <article>
                 <h1 className="font-semibold">Peta Integrasi Transportasi Jakarta</h1>
                 <a href="https://transportforjakarta.or.id" target="_blank" className="text-blue-500">https://transportforjakarta.or.id</a>
                 <p>
@@ -90,7 +102,7 @@ export default function DataAttributionsSettingsPage() {
                 <h1 className="font-semibold">OpenStreetMap</h1>
                 <a href="https://www.openstreetmap.org/copyright" target="_blank" className="text-blue-500">https://www.openstreetmap.org/copyright</a>
                 <p>
-                  Jalur fisik rel KRL Commuter Line, MRT Jakarta, LRT Jakarta, LRT Jabodebek, dan Kalayang Bandara kami telusuri dari data OpenStreetMap untuk menghitung jarak antarstasiun. Data turunan ini tersedia di bawah Open Database License (ODbL).
+                  Jalur fisik rel KRL Commuter Line, MRT Jakarta, LRT Jakarta, LRT Jabodebek, dan Kalayang Bandara, serta data pintu keluar dari beberapa stasiun kami telusuri dari data OpenStreetMap untuk menghitung jarak antarstasiun. Data turunan ini tersedia di bawah Open Database License (ODbL).
                 </p>
                 <p>
                   © OpenStreetMap contributors
