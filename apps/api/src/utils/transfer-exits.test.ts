@@ -9,7 +9,7 @@ vi.mock('db/repositories/station-exits', async (importOriginal) => {
 
 const { transferExitResolver, NO_EXITS } = await import('utils/transfer-exits')
 
-const ref = (id: string, name: string | null = null): ExitRef => ({ id, ref: id.split(':')[1]!, name })
+const ref = (id: string, name: string | null = null): ExitRef => ({ id, ref: id.split(':')[1]!, name, signs: null })
 
 const row = (over: Partial<PinnedTransfer> = {}): PinnedTransfer => ({
   fromStationId: 'MRTJ-DKA',
