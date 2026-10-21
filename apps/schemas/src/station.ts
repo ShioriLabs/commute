@@ -415,6 +415,8 @@ export const LegacyTimetableEntrySchema = v.pipe(
 
 export type Station = v.InferOutput<typeof StationSchema>
 export type StationRef = v.InferOutput<typeof StationRefSchema>
+export type ExitSign = v.InferOutput<typeof ExitSignSchema>
+export type StationExit = v.InferOutput<typeof StationExitSchema>
 export type Transfer = v.InferOutput<typeof TransferSchema>
 export type InternalTransfer = v.InferOutput<typeof InternalTransferSchema>
 export type ExternalTransfer = v.InferOutput<typeof ExternalTransferSchema>
