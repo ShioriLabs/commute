@@ -52,7 +52,7 @@ export default function StationExits({ exits }: { exits: StationExit[] | undefin
           <li key={exit.id} className="flex flex-row gap-3 px-4">
             <ExitBadge code={exit.ref} className="mt-0.5" />
             <div className="flex flex-col gap-1 min-w-0">
-              {exit.name ? <span className="font-semibold">{exit.name}</span> : null}
+              <span className="font-semibold mt-0.5">{exit.name ?? `Pintu ${exit.ref}`}</span>
               {exit.signs?.length
                 ? (
                     <ul className="flex flex-col gap-1">
