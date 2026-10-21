@@ -2,7 +2,7 @@ import { db } from 'db'
 import type { StationExit } from 'db/schemas/station-exits'
 import { Repository } from 'models/repository'
 
-export type ExitSign = { text: string, kind?: 'RAIL' | 'BUS' }
+export type ExitSign = { text: string, kind?: 'RAIL' | 'BUS', stationId?: string }
 export type ExitRef = { id: string, ref: string, name: string | null, signs: ExitSign[] | null }
 
 export interface PinnedTransfer {

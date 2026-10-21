@@ -75,6 +75,11 @@ export const ExitSignSchema = v.pipe(
     kind: v.pipe(
       v.optional(v.picklist(['RAIL', 'BUS'])),
       v.description('Hanya kalau papan memberi ikon: `RAIL` = stasiun kereta, `BUS` = halte bus.')
+    ),
+    stationId: v.pipe(
+      v.optional(v.string()),
+      v.description('ID internal stasiun atau halte yang dimaksud tulisan ini, kalau ada, misalnya `MRTJ-DKA`. Tidak diisi buat jalan atau gedung.'),
+      v.metadata({ examples: ['MRTJ-DKA'] })
     )
   }),
   v.title('ExitSign'),
