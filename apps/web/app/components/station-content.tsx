@@ -22,7 +22,7 @@ import { AMENITY_TYPES, OPERATORS, type AmenityType } from '@commute/constants'
 import type { StandardResponse } from '@schema/response'
 import type { Station } from '@commute/schemas'
 import type { CompactLineGroupedTimetable } from '@commute/schemas'
-import type { Transfer } from '@commute/schemas'
+import type { Transfer, StationExit } from '@commute/schemas'
 import type { HeadwayRow } from '@commute/schemas'
 import type { StationDensity } from '@commute/schemas'
 import { directionalBaseName } from 'utils/directional-stations'
@@ -35,6 +35,7 @@ import DensityBadge from '~/components/density-badge'
 import { currentHourRange } from '~/components/density-badge/format'
 import ExitLink from '~/components/exit-link'
 import ExitBadge from '~/components/exit-badge'
+import StationExits from '~/components/station-exits'
 import { fetcher } from 'utils/fetcher'
 import { normalizeGroupedTimetable } from 'utils/timetable-shim'
 import { serviceDayOf } from 'utils/service-day'
@@ -214,6 +215,10 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
     new URL(`/stations/${operator}/${code}/transfers`, import.meta.env.VITE_API_BASE_URL).href,
   [operator, code]
   )
+  const exitsUrl = useMemo(() =>
+    new URL(`/stations/${operator}/${code}/exits`, import.meta.env.VITE_API_BASE_URL).href,
+  [operator, code]
+  )
   /*
    * TJ only. Rail stations show a real departure board, so they never pay for
    * this request — a null SWR key skips the fetch entirely. The endpoint itself
@@ -242,6 +247,7 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
   const timetableData = useMemo(() => normalizeGroupedTimetable(timetable.data?.data), [timetable.data])
   const nextDayLine = useNextDayTimetable(operator, code)
   const transfers = useSWR<StandardResponse<Transfer[]>>(unserved ? null : transfersUrl, fetcher, swrConfig)
+  const exits = useSWR<StandardResponse<StationExit[]>>(unserved ? null : exitsUrl, fetcher, swrConfig)
   const headway = useSWR<StandardResponse<HeadwayRow[]>>(unserved ? null : headwayUrl, fetcher, swrConfig)
   const density = useSWR<StandardResponse<StationDensity>>(unserved ? null : densityUrl, fetcher, swrConfig)
   // Line keys on stations and transfers resolve through the dictionary.
@@ -336,7 +342,7 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
                 {otwButton}
                 <PaneLink
                   pane={{ kind: 'timetable', operator, code }}
-                  className="flex flex-row gap-2 justify-center bg-slate-200 text-[#F55875] font-bold p-4 rounded-xl text-center w-full text-sm"
+                  className="flex flex-row gap-2 justify-center bg-slate-200 text-brand font-bold p-4 rounded-xl text-center w-full text-sm"
                 >
                   Jadwal Lengkap
                 </PaneLink>
@@ -407,6 +413,7 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
               <p className="mt-4 px-4 text-gray-600">Tidak ada data fasilitas untuk stasiun ini</p>
             )}
       </section>
+      <StationExits exits={exits.data?.data} />
       {/* Outside the timetable branch on purpose: TJ stops have no timetable
           but still deserve a way to the physical halte. */}
       {station.data?.data?.latitude && station.data.data.longitude
@@ -416,7 +423,7 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
                 href={`https://maps.google.com/maps?q=${station.data.data.latitude},${station.data.data.longitude}(${encodeURIComponent(station.data.data.name)})`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex flex-row gap-2 justify-center bg-slate-200 text-[#F55875] font-bold p-4 rounded-xl text-center w-full text-sm"
+                className="flex flex-row gap-2 justify-center bg-slate-200 text-brand font-bold p-4 rounded-xl text-center w-full text-sm"
               >
                 Buka di Google Maps
                 <ArrowSquareOutIcon className="w-5 h-5" weight="bold" aria-label="Link eksternal, akan membuka Google Maps" />
