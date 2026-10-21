@@ -16,6 +16,7 @@ export interface StationExitSchema {
   name: ColumnType<string | null, string | null | undefined, string | null | undefined>
   latitude: ColumnType<number | null, number | null | undefined, number | null | undefined>
   longitude: ColumnType<number | null, number | null | undefined, number | null | undefined>
+  signs: ColumnType<string | null, string | null | undefined, string | null | undefined> // JSON array of ExitSign
   source: StationExitSource
   createdAt: ColumnType<Date, string | undefined, never>
   updatedAt: ColumnType<Date, string | undefined, string | undefined>

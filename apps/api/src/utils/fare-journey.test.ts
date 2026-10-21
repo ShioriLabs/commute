@@ -353,7 +353,7 @@ describe('stationNamer', () => {
 
 describe('assembleJourney exits', () => {
   const exitsOf = (from: string, to: string) =>
-    from === 'MRTJ-DKA' && to === 'KCI-SUD' ? { fromExit: { id: 'MRTJ-DKA:A', ref: 'A', name: null } } : {}
+    from === 'MRTJ-DKA' && to === 'KCI-SUD' ? { fromExit: { id: 'MRTJ-DKA:A', ref: 'A', name: null, signs: null } } : {}
   const legs = () => [ride('MRTJ', 'NS', ['LBB', 'DKA'], 3000), walk('MRTJ-DKA', 'KCI-SUD', 300), ride('KCI', 'C', ['SUD', 'BOO'], 5000)]
 
   it('puts a pinned door on the walk when a resolver is given', () => {
@@ -370,7 +370,7 @@ describe('assembleJourney exits', () => {
 
   it('gives a merged corridor anchor no doors, even when the resolver has some', () => {
     const qris: FareContext = { ...CONTEXT, paymentMethod: 'QRIS_TAP' }
-    const everywhere = () => ({ fromExit: { id: 'X:a', ref: 'a', name: null }, toExit: { id: 'Y:b', ref: 'b', name: null } })
+    const everywhere = () => ({ fromExit: { id: 'X:a', ref: 'a', name: null, signs: null }, toExit: { id: 'Y:b', ref: 'b', name: null, signs: null } })
     const plan = planJourney([
       ride('MRTJ', 'M', ['BNH', 'DKA'], 2000),
       walk('MRTJ-DKA', 'KCI-SUD', 90),
@@ -386,7 +386,7 @@ describe('assembleJourney exits', () => {
   it('gives a plain surcharged walk no doors, even when the resolver has some', () => {
     // Ends on the walk, so it is priced on its own rather than folded into an anchor.
     const qris: FareContext = { ...CONTEXT, paymentMethod: 'QRIS_TAP' }
-    const resolver = vi.fn(() => ({ fromExit: { id: 'X:a', ref: 'a', name: null }, toExit: { id: 'Y:b', ref: 'b', name: null } }))
+    const resolver = vi.fn(() => ({ fromExit: { id: 'X:a', ref: 'a', name: null, signs: null }, toExit: { id: 'Y:b', ref: 'b', name: null, signs: null } }))
     const plan = planJourney([
       ride('LRTJBDB', 'BK', ['RAS', 'SET', 'DKA'], 3000),
       walk('LRTJBDB-DKA', 'KCI-SUD', 310)

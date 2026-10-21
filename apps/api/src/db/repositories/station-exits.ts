@@ -2,7 +2,8 @@ import { db } from 'db'
 import type { StationExit } from 'db/schemas/station-exits'
 import { Repository } from 'models/repository'
 
-export type ExitRef = { id: string, ref: string, name: string | null }
+export type ExitSign = { text: string, kind?: 'RAIL' | 'BUS' }
+export type ExitRef = { id: string, ref: string, name: string | null, signs: ExitSign[] | null }
 
 export interface PinnedTransfer {
   fromStationId: string
@@ -11,8 +12,19 @@ export interface PinnedTransfer {
   toExit: ExitRef | null
 }
 
-export function toExitRef(exit: Pick<StationExit, 'id' | 'ref' | 'name'>): ExitRef {
-  return { id: exit.id, ref: exit.ref, name: exit.name }
+// A malformed column reads as unrecorded rather than failing the request.
+export function parseSigns(raw: string | null): ExitSign[] | null {
+  if (!raw) return null
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed as ExitSign[] : null
+  } catch {
+    return null
+  }
+}
+
+export function toExitRef(exit: Pick<StationExit, 'id' | 'ref' | 'name' | 'signs'>): ExitRef {
+  return { id: exit.id, ref: exit.ref, name: exit.name, signs: parseSigns(exit.signs) }
 }
 
 /*
@@ -33,12 +45,13 @@ export class StationExitRepository extends Repository {
   }
 
   async getByStationId(stationId: string) {
-    return await db(this.d1)
+    const rows = await db(this.d1)
       .selectFrom('stationExits')
-      .select(['id', 'ref', 'name', 'latitude', 'longitude', 'source'])
+      .select(['id', 'ref', 'name', 'signs', 'latitude', 'longitude', 'source'])
       .where('stationId', '=', stationId)
       .orderBy('ref asc')
       .execute()
+    return rows.map(({ signs, ...row }) => ({ ...row, signs: parseSigns(signs) }))
   }
 
   // Resolves exit ids to refs in one query. Unknown ids are simply absent, so a
@@ -48,7 +61,7 @@ export class StationExitRepository extends Repository {
     if (unique.length === 0) return new Map<string, ExitRef>()
     const rows = await db(this.d1)
       .selectFrom('stationExits')
-      .select(['id', 'ref', 'name'])
+      .select(['id', 'ref', 'name', 'signs'])
       .where('id', 'in', unique)
       .execute()
     return new Map(rows.map(row => [row.id, toExitRef(row)]))
@@ -67,8 +80,8 @@ export class StationExitRepository extends Repository {
       .select([
         'transfers.fromStationId',
         'transfers.toStationId',
-        'fe.id as feId', 'fe.ref as feRef', 'fe.name as feName',
-        'te.id as teId', 'te.ref as teRef', 'te.name as teName'
+        'fe.id as feId', 'fe.ref as feRef', 'fe.name as feName', 'fe.signs as feSigns',
+        'te.id as teId', 'te.ref as teRef', 'te.name as teName', 'te.signs as teSigns'
       ])
       .where('transfers.dataType', '=', 'INTERNAL')
       .where(eb => eb.or([eb('transfers.fromExitId', 'is not', null), eb('transfers.toExitId', 'is not', null)]))
@@ -76,8 +89,8 @@ export class StationExitRepository extends Repository {
     return rows.map(row => ({
       fromStationId: row.fromStationId,
       toStationId: row.toStationId,
-      fromExit: row.feId === null ? null : { id: row.feId, ref: row.feRef!, name: row.feName },
-      toExit: row.teId === null ? null : { id: row.teId, ref: row.teRef!, name: row.teName }
+      fromExit: row.feId === null ? null : { id: row.feId, ref: row.feRef!, name: row.feName, signs: parseSigns(row.feSigns) },
+      toExit: row.teId === null ? null : { id: row.teId, ref: row.teRef!, name: row.teName, signs: parseSigns(row.teSigns) }
     }))
   }
 }
