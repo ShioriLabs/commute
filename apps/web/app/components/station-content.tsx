@@ -34,6 +34,7 @@ import FrequencyList from '~/components/frequency-card'
 import DensityBadge from '~/components/density-badge'
 import { currentHourRange } from '~/components/density-badge/format'
 import ExitLink from '~/components/exit-link'
+import ExitBadge from '~/components/exit-badge'
 import { fetcher } from 'utils/fetcher'
 import { normalizeGroupedTimetable } from 'utils/timetable-shim'
 import { serviceDayOf } from 'utils/service-day'
@@ -478,6 +479,28 @@ const StationContent = memo(function StationContent({ operator, code, onSelectDe
                         )
                       })()}
                     </div>
+                    {transfer.fromExit || (transfer.dataType === 'INTERNAL' && transfer.toExit)
+                      ? (
+                          <p className="flex flex-row items-center gap-1.5 text-gray-600 mt-1">
+                            {transfer.fromExit
+                              ? (
+                                  <>
+                                    <span>Keluar lewat pintu</span>
+                                    <ExitBadge code={transfer.fromExit.ref} />
+                                  </>
+                                )
+                              : null}
+                            {transfer.dataType === 'INTERNAL' && transfer.toExit
+                              ? (
+                                  <>
+                                    <span>{transfer.fromExit ? '· masuk lewat pintu' : 'Masuk lewat pintu'}</span>
+                                    <ExitBadge code={transfer.toExit.ref} />
+                                  </>
+                                )
+                              : null}
+                          </p>
+                        )
+                      : null}
                     {transfer.notes
                       ? (
                           <p className="text-gray-600 mt-1">{transfer.notes}</p>
