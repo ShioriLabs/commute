@@ -133,6 +133,7 @@ const APP_PATHS = [
   '/stations',
   '/stations/{operator}/{stationCode}',
   '/stations/{operator}/{stationCode}/density',
+  '/stations/{operator}/{stationCode}/exits',
   '/stations/{operator}/{stationCode}/headway',
   '/stations/{operator}/{stationCode}/timetable/grouped',
   '/stations/{operator}/{stationCode}/transfers'
