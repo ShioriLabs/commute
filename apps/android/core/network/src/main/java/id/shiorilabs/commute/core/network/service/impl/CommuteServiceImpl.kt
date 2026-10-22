@@ -8,6 +8,7 @@ import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.model.models.Station
 import id.shiorilabs.commute.core.model.models.StationDensity
+import id.shiorilabs.commute.core.model.models.StationExit
 import id.shiorilabs.commute.core.model.models.TrackShapes
 import id.shiorilabs.commute.core.model.models.Transfer
 import id.shiorilabs.commute.core.model.models.TripResult
@@ -62,6 +63,13 @@ class CommuteServiceImpl @Inject constructor(
         ifNoneMatch: String?,
     ): Fetched<List<Transfer>> =
         client.get("${stationPath(operator, stationCode)}/transfers") { validator(ifNoneMatch) }.decodeFetched()
+
+    override suspend fun getExits(
+        operator: String,
+        stationCode: String,
+        ifNoneMatch: String?,
+    ): Fetched<List<StationExit>> =
+        client.get("${stationPath(operator, stationCode)}/exits") { validator(ifNoneMatch) }.decodeFetched()
 
     override suspend fun getHeadway(
         operator: String,

@@ -5,6 +5,7 @@ import id.shiorilabs.commute.core.model.models.HeadwayRow
 import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.Station
 import id.shiorilabs.commute.core.model.models.StationDensity
+import id.shiorilabs.commute.core.model.models.StationExit as StationExitDto
 import id.shiorilabs.commute.core.model.models.Transfer as TransferDto
 import id.shiorilabs.commute.core.network.testing.FakeCommuteService
 import id.shiorilabs.commute.core.time.ServiceDayName
@@ -16,9 +17,12 @@ import id.shiorilabs.commute.feature.station.domain.Amenity
 import id.shiorilabs.commute.feature.station.domain.CrowdLevel
 import id.shiorilabs.commute.feature.station.domain.CrowdRange
 import id.shiorilabs.commute.feature.station.domain.Departure
+import id.shiorilabs.commute.feature.station.domain.ExitSign
 import id.shiorilabs.commute.feature.station.domain.Frequency
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.ServiceHours
+import id.shiorilabs.commute.feature.station.domain.SignKind
+import id.shiorilabs.commute.feature.station.domain.StationExit
 import id.shiorilabs.commute.feature.station.domain.Transfer
 import id.shiorilabs.commute.core.query.QueryClient
 import id.shiorilabs.commute.core.query.testing.FakeNetworkMonitor
@@ -291,6 +295,59 @@ class StationRepositoryImplTest {
             ),
             transfers[2],
         )
+    }
+
+    @Test
+    fun `a transfer carries the exits it leaves by and enters through`() = runTest {
+        val service = FakeCommuteService().apply { transfers = { _, _ -> fixture<List<TransferDto>>("transfers-exits.json") } }
+
+        val transfers = StationRepositoryImpl(service, queries()).transfers("KCI-SUD").getOrNull()!!
+
+        assertEquals("B", transfers[0].fromExit)
+        assertEquals("D", (transfers[0] as Transfer.Internal).toExit)
+        assertEquals("A", transfers[1].fromExit)
+    }
+
+    @Test
+    fun `exits decode with their signs, the board's entries left as printed`() = runTest {
+        var asked: Pair<String, String>? = null
+        val service = FakeCommuteService().apply {
+            exits = { operator, code ->
+                asked = operator to code
+                fixture<List<StationExitDto>>("exits.json")
+            }
+        }
+
+        val exits = StationRepositoryImpl(service, queries()).exits("MRTJ-IST").getOrNull()!!
+
+        assertEquals("MRTJ" to "IST", asked)
+        assertEquals(
+            StationExit(
+                id = "MRTJ-IST:B",
+                ref = "B",
+                name = "Jl. Pintu Satu Senayan",
+                signs = listOf(
+                    ExitSign("Jl. Pintu Satu Senayan", kind = null, stationId = null),
+                    ExitSign("Stasiun Palmerah", kind = SignKind.RAIL, stationId = "KCI-PLM"),
+                    ExitSign("Halte Gelora Bung Karno", kind = SignKind.BUS, stationId = "TJ-H00201P"),
+                ),
+                fromOsm = false,
+            ),
+            exits[0],
+        )
+        // An exit not yet transcribed: no name, no signs, and OSM's, which has to be credited.
+        assertEquals(StationExit("MRTJ-IST:Utara", "Utara", name = null, signs = emptyList(), fromOsm = true), exits[1])
+    }
+
+    @Test
+    fun `a station's exits are asked once`() = runTest {
+        val service = FakeCommuteService().apply { exits = { _, _ -> fixture<List<StationExitDto>>("exits.json") } }
+        val repository = StationRepositoryImpl(service, queries())
+
+        repository.exits("MRTJ-IST")
+        repository.exits("MRTJ-IST")
+
+        assertEquals(1, service.exitsCalls)
     }
 
     @Test

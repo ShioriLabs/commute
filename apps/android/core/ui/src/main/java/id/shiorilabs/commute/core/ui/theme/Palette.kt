@@ -103,6 +103,13 @@ object Fixed {
 @Composable
 fun themed(light: Color, dark: Color): Color = pick(light, dark)
 
+/**
+ * The Jak Lingko colour roles for a way out: yellow means "exit" and nothing else, on the near-black
+ * every MRT, BRT and LRT sign uses. The same on every theme, as a sign is.
+ */
+val ExitYellow = Color(0xFFF9D437)
+val SignageNavy = Color(0xFF0C1B2A)
+
 /** The translucent stone the web fills fields and plates with, as white on dark; a hairline is a touch stronger. */
 val StoneFillDark = Color(0x1AFFFFFF)
 val StoneLineDark = Color(0x33FFFFFF)

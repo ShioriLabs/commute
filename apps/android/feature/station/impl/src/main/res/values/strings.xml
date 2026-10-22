@@ -25,6 +25,16 @@
     <string name="station_transfers_title">Integrasi</string>
     <string name="station_transfer_distance">%1$dm</string>
     <string name="station_transfer_distance_description">Jarak transit %1$d meter</string>
+    <string name="station_transfer_exit_from">Keluar lewat pintu</string>
+    <string name="station_transfer_exit_to">Masuk lewat pintu</string>
+    <string name="station_transfer_exit_to_after">· masuk lewat pintu</string>
+
+    <!-- Exits. %1$s is the signed name of the exit (B, Utara). -->
+    <string name="station_exits_title">Pintu Keluar</string>
+    <string name="station_exit_default_name">Pintu %1$s</string>
+    <string name="station_exits_osm_note">Sebagian atau semua data pintu keluar di atas bersumber dari OpenStreetMap</string>
+    <string name="station_exits_osm_copyright">© OpenStreetMap contributors</string>
+    <string name="station_exits_osm_link">Lihat Atribusi Data</string>
 
     <!-- Full timetable. %1$s is the joined direction labels; %1$s a platform; %1$d/%2$d lines shown of all. -->
     <string name="station_timetable_subtitle">Jadwal Lengkap</string>

@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.constants.OPERATOR_NAMES
+import id.shiorilabs.commute.core.ui.components.ExitBadge
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
@@ -121,6 +122,25 @@ fun TransferRow(
                 }
             }
         }
+        // The exit the walk leaves by here and, within this network, comes in through there.
+        val toExit = (transfer as? Transfer.Internal)?.toExit
+        if (transfer.fromExit != null || toExit != null) {
+            FlowRow(
+                modifier = Modifier.padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
+                transfer.fromExit?.let { ref ->
+                    ExitCaption(stringResource(R.string.station_transfer_exit_from))
+                    ExitBadge(code = ref)
+                }
+                toExit?.let { ref ->
+                    ExitCaption(stringResource(if (transfer.fromExit != null) R.string.station_transfer_exit_to_after else R.string.station_transfer_exit_to))
+                    ExitBadge(code = ref)
+                }
+            }
+        }
         transfer.notes?.let { notes ->
             Text(
                 text = notes,
@@ -130,6 +150,11 @@ fun TransferRow(
             )
         }
     }
+}
+
+@Composable
+private fun ExitCaption(text: String) {
+    Text(text = text, style = MaterialTheme.typography.bodyLarge, color = Gray600)
 }
 
 @Preview(showBackground = true)
@@ -147,6 +172,8 @@ private fun TransferRowPreview() {
                     name = "BNI City",
                     operator = "KCI",
                     lineKeys = listOf("KCI:A", "KCI:C"),
+                    fromExit = "B",
+                    toExit = "D",
                 ),
                 lines = mapOf("KCI:C" to LineInfo("Lin Cikarang", "C", "#25B8EB", "KCI")),
             )

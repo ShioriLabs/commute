@@ -14,13 +14,17 @@ import id.shiorilabs.commute.feature.station.domain.CrowdRange
 import id.shiorilabs.commute.feature.station.domain.Departure
 import id.shiorilabs.commute.feature.station.domain.DestinationTimetable
 import id.shiorilabs.commute.feature.station.domain.DirectionGroup
+import id.shiorilabs.commute.feature.station.domain.ExitSign
 import id.shiorilabs.commute.feature.station.domain.Frequency
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.ServiceHours
+import id.shiorilabs.commute.feature.station.domain.SignKind
+import id.shiorilabs.commute.feature.station.domain.StationExit
 import kotlin.math.roundToInt
 import id.shiorilabs.commute.core.model.models.Station as StationDto
 import id.shiorilabs.commute.core.model.models.StationDensity as StationDensityDto
+import id.shiorilabs.commute.core.model.models.StationExit as StationExitDto
 import id.shiorilabs.commute.core.model.models.Transfer as TransferDto
 import id.shiorilabs.commute.feature.station.domain.Station as Station
 import id.shiorilabs.commute.feature.station.domain.Transfer as Transfer
@@ -111,6 +115,8 @@ internal fun TransferDto.toTransfer(): Transfer = when (this) {
         name = toStation.name,
         operator = toStation.`operator`,
         lineKeys = toStation.lines,
+        fromExit = fromExit?.ref,
+        toExit = toExit?.ref,
     )
 
     is ExternalTransfer -> Transfer.External(
@@ -119,8 +125,20 @@ internal fun TransferDto.toTransfer(): Transfer = when (this) {
         notes = notes,
         name = toStation.name,
         operatorName = toStation.operatorName,
+        fromExit = fromExit?.ref,
     )
 }
+
+/** An exit as the domain carries it; a sign kind this version doesn't know loses its icon, not its text. */
+internal fun StationExitDto.toStationExit(): StationExit = StationExit(
+    id = id,
+    ref = ref,
+    name = name,
+    signs = signs.orEmpty().map { sign ->
+        ExitSign(sign.text, SignKind.entries.firstOrNull { it.name == sign.kind }, sign.stationId)
+    },
+    fromOsm = source == "OSM",
+)
 
 /** `HH:MM:SS` (or `HH:MM`) to minutes since midnight; seconds are dropped, as the boards do. */
 internal fun parseMinute(time: String): Int? {
