@@ -78,6 +78,7 @@ import id.shiorilabs.commute.feature.journey.domain.LINE_COLOR_FALLBACK
 import id.shiorilabs.commute.feature.journey.domain.LegLine
 import id.shiorilabs.commute.feature.journey.domain.TimedLeg
 import id.shiorilabs.commute.feature.journey.domain.changeAt
+import id.shiorilabs.commute.feature.journey.domain.formatEstimate
 import id.shiorilabs.commute.feature.journey.domain.formatKm
 import id.shiorilabs.commute.feature.journey.domain.formatRupiah
 import id.shiorilabs.commute.feature.station.domain.LineInfo
@@ -115,6 +116,8 @@ internal fun JourneyTimeline(
     lines: Map<String, LineInfo>,
     modifier: Modifier = Modifier,
     timed: List<TimedLeg> = emptyList(),
+    /** The journey's `estimate.rideS`, index-aligned with [legs]. */
+    rideS: List<Int?> = emptyList(),
     onPickDeparture: (legIndex: Int, tripId: String) -> Unit = { _, _ -> },
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -131,6 +134,7 @@ internal fun JourneyTimeline(
                         leg = leg,
                         lines = legLines(leg, lines),
                         timed = timed.firstOrNull { it.index == index },
+                        rideS = rideS.getOrNull(index),
                         changeGap = if (sameStationChange) changeAt(legs, timed, index) else null,
                         onPick = { tripId -> onPickDeparture(index, tripId) },
                         sameStationChange = sameStationChange,
@@ -182,6 +186,7 @@ private fun RideLeg(
     lines: List<LegLine>,
     sameStationChange: Boolean,
     timed: TimedLeg?,
+    rideS: Int?,
     changeGap: Change?,
     onPick: (tripId: String) -> Unit,
     walkBefore: Brush?,
@@ -261,7 +266,13 @@ private fun RideLeg(
             // The other trains this leg could be ridden on; choosing one retimes the legs after it.
             // Only where the timetable covers the leg: TransJakarta has none, so nothing is drawn.
             timed?.let { DeparturePicker(options = it.options, color = legColor, onPick = onPick) }
-            val summary = stringResource(R.string.journey_ride_summary, leg.stationCount - 1, formatKm(leg.distanceM))
+            // A bus leg has no times at its ends to read a ride off, so its estimate joins the counts:
+            // a span on board, never a clock.
+            val summary = if (rideS != null) {
+                stringResource(R.string.journey_ride_summary_estimate, leg.stationCount - 1, formatKm(leg.distanceM), formatEstimate(rideS))
+            } else {
+                stringResource(R.string.journey_ride_summary, leg.stationCount - 1, formatKm(leg.distanceM))
+            }
             if (intermediate.isEmpty()) {
                 Text(text = summary, style = MaterialTheme.typography.bodyMedium, color = Slate500)
             } else {

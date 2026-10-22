@@ -6,6 +6,7 @@ import id.shiorilabs.commute.core.model.models.FareTransferLeg
 import id.shiorilabs.commute.core.model.models.TripResult
 import id.shiorilabs.commute.feature.journey.domain.FareSegment
 import id.shiorilabs.commute.feature.journey.domain.Journey
+import id.shiorilabs.commute.feature.journey.domain.JourneyEstimate
 import id.shiorilabs.commute.feature.journey.domain.JourneyLabel
 import id.shiorilabs.commute.feature.journey.domain.JourneyDeparture
 import id.shiorilabs.commute.feature.journey.domain.JourneyLeg
@@ -52,6 +53,7 @@ private fun FareJourney.toJourney(mapped: List<JourneyLeg>, transferMeters: Int)
     moreDepartures = moreDepartures.orEmpty().mapNotNull { d ->
         d.departureAt.toInstantOrNull()?.let { JourneyDeparture(it, d.arrivalAt?.toInstantOrNull()) }
     },
+    estimate = estimate?.let { JourneyEstimate(it.durationS.roundToInt(), it.fromS.roundToInt(), it.rideS.map { s -> s?.roundToInt() }) },
 )
 
 private fun FareRideLeg.toRide(): JourneyLeg.Ride = JourneyLeg.Ride(
