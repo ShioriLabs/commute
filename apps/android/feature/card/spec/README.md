@@ -18,4 +18,4 @@ here locally and are gitignored. Download your own copies from Sony.
 it came from. A fact that isn't in these documents doesn't go in the code.
 
 Card-specific facts (which services a KMT card holds, what its blocks mean) never come from
-here. They come from dumps of our own cards.
+these documents. They come from dumps of our own cards and are written up in `KMT.md`.
