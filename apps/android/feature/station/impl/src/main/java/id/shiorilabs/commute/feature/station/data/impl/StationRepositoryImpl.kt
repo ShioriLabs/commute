@@ -22,6 +22,7 @@ import id.shiorilabs.commute.feature.station.domain.Frequency
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.Station
+import id.shiorilabs.commute.feature.station.domain.StationExit
 import id.shiorilabs.commute.feature.station.domain.Transfer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -33,6 +34,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import id.shiorilabs.commute.core.model.models.Station as StationDto
 import id.shiorilabs.commute.core.model.models.StationDensity as StationDensityDto
+import id.shiorilabs.commute.core.model.models.StationExit as StationExitDto
 import id.shiorilabs.commute.core.model.models.Transfer as TransferDto
 
 /**
@@ -78,6 +80,16 @@ class StationRepositoryImpl @Inject constructor(
             service.getTransfers(operator, code, etag)
         }
 
+    private fun exitsQuery(stationId: String): QuerySpec<List<StationExitDto>> =
+        QuerySpec(
+            key = queryKey(STATION, stationId, "exits"),
+            serializer = ListSerializer(StationExitDto.serializer()),
+            policy = QueryPolicy.Topology,
+        ) { etag ->
+            val (operator, code) = stationId.splitId()
+            service.getExits(operator, code, etag)
+        }
+
     /** One per hour as well as per day: the API measures a corridor's frequency hour by hour. */
     private fun frequenciesQuery(stationId: String, day: ServiceDayName, hour: Int): QuerySpec<List<HeadwayRow>> =
         QuerySpec(
@@ -107,6 +119,9 @@ class StationRepositoryImpl @Inject constructor(
 
     override suspend fun transfers(stationId: String): Either<Failure, List<Transfer>> =
         queries.fetch(transfersQuery(stationId)).mapOnDataThread { rows -> rows.map { it.toTransfer() } }
+
+    override suspend fun exits(stationId: String): Either<Failure, List<StationExit>> =
+        queries.fetch(exitsQuery(stationId)).mapOnDataThread { rows -> rows.map { it.toStationExit() } }
 
     override suspend fun frequencies(stationId: String, day: ServiceDayName, hour: Int): Either<Failure, List<Frequency>> =
         queries.fetch(frequenciesQuery(stationId, day, hour)).mapOnDataThread { it.toFrequencies() }

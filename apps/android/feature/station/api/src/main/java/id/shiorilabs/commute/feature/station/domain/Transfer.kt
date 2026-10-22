@@ -14,6 +14,9 @@ sealed interface Transfer {
     /** Directions for the walk, when there is something to say. */
     val notes: String?
 
+    /** The signed name of the exit here that the walk starts from, once recorded (`B`). */
+    val fromExit: String?
+
     /** A station on this API's network, with its lines. */
     data class Internal(
         override val id: String,
@@ -25,6 +28,9 @@ sealed interface Transfer {
         val operator: String,
         /** `OPERATOR:CODE`, resolved through [LineInfo] by whoever renders them. */
         val lineKeys: List<String>,
+        override val fromExit: String? = null,
+        /** The signed name of the exit at the other station the walk comes in through, once recorded. */
+        val toExit: String? = null,
     ) : Transfer
 
     /** A service this API doesn't cover: only a name and its operator's, as plain text. */
@@ -34,5 +40,6 @@ sealed interface Transfer {
         override val notes: String?,
         override val name: String,
         val operatorName: String,
+        override val fromExit: String? = null,
     ) : Transfer
 }

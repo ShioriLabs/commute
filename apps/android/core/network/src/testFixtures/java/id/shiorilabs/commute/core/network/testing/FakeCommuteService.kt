@@ -8,6 +8,7 @@ import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.model.models.Station
 import id.shiorilabs.commute.core.model.models.StationDensity
+import id.shiorilabs.commute.core.model.models.StationExit
 import id.shiorilabs.commute.core.model.models.TrackShapes
 import id.shiorilabs.commute.core.model.models.Transfer
 import id.shiorilabs.commute.core.model.models.TripResult
@@ -68,6 +69,13 @@ class FakeCommuteService : CommuteService {
     var transfersCalls: Int = 0
         private set
 
+    var exits: suspend (operator: String, stationCode: String) -> List<StationExit> =
+        { _, _ -> error("getExits was not stubbed") }
+
+    /** How many times [getExits] was called — for asserting that a repository caches. */
+    var exitsCalls: Int = 0
+        private set
+
     var headway: suspend (operator: String, stationCode: String, day: String) -> List<HeadwayRow> =
         { _, _, _ -> error("getHeadway was not stubbed") }
 
@@ -125,6 +133,15 @@ class FakeCommuteService : CommuteService {
     ): Fetched<List<Transfer>> {
         transfersCalls++
         return answer(ifNoneMatch) { transfers(operator, stationCode) }
+    }
+
+    override suspend fun getExits(
+        operator: String,
+        stationCode: String,
+        ifNoneMatch: String?,
+    ): Fetched<List<StationExit>> {
+        exitsCalls++
+        return answer(ifNoneMatch) { exits(operator, stationCode) }
     }
 
     override suspend fun getHeadway(

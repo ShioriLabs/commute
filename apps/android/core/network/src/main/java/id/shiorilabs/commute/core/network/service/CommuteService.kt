@@ -8,6 +8,7 @@ import id.shiorilabs.commute.core.model.models.OperatorWithLines
 import id.shiorilabs.commute.core.model.models.SearchableIndex
 import id.shiorilabs.commute.core.model.models.Station
 import id.shiorilabs.commute.core.model.models.StationDensity
+import id.shiorilabs.commute.core.model.models.StationExit
 import id.shiorilabs.commute.core.model.models.TrackShapes
 import id.shiorilabs.commute.core.model.models.Transfer
 import id.shiorilabs.commute.core.model.models.TripResult
@@ -62,6 +63,16 @@ interface CommuteService {
         stationCode: String,
         ifNoneMatch: String? = null,
     ): Fetched<List<Transfer>>
+
+    /**
+     * The station's exits, each with the signs the board there prints. Backfilled station by
+     * station, so most answer an empty list.
+     */
+    suspend fun getExits(
+        operator: String,
+        stationCode: String,
+        ifNoneMatch: String? = null,
+    ): Fetched<List<StationExit>>
 
     /**
      * How often each line passes the station on [day] (`WD`, `SAT` or `SUN`) at [hour] (0-23,

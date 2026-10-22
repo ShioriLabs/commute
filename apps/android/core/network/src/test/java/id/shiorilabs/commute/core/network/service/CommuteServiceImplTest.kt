@@ -58,6 +58,15 @@ class CommuteServiceImplTest {
     }
 
     @Test
+    fun `a station's exits are read from its exits path`() = runTest {
+        val service = service { respond(content = """{"status":200,"data":[]}""", headers = headersOf(HttpHeaders.ContentType, "application/json")) }
+
+        service.getExits("MRTJ", "IST")
+
+        assertEquals("/stations/MRTJ/IST/exits", requests.single().url.encodedPath)
+    }
+
+    @Test
     fun `a validator goes out as If-None-Match, and a 304 is NotModified`() = runTest {
         val service = service {
             respond(content = "", status = HttpStatusCode.NotModified, headers = headersOf(HttpHeaders.ETag, "W/\"abc\""))
