@@ -351,6 +351,85 @@
         "title": "GroupedTimetable",
         "description": "Jadwal satu lin, dikelompokkan tiga tingkat: per arah, lalu per stasiun tujuan, lalu daftar keberangkatannya. Ini bentuk yang dipakai papan keberangkatan."
       },
+      "ExitSign": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Tulisan di papan, persis seperti yang tercetak.",
+            "examples": [
+              "Jl. Kendal"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "description": "Hanya kalau papan memberi ikon: `RAIL` = stasiun kereta, `BUS` = halte bus. Nilai yang dikenal saat ini: `RAIL`, `BUS`. Bisa bertambah."
+          },
+          "stationId": {
+            "type": "string",
+            "description": "ID internal stasiun atau halte yang dimaksud tulisan ini, kalau ada, misalnya `MRTJ-DKA`. Tidak diisi buat jalan atau gedung.",
+            "examples": [
+              "MRTJ-DKA"
+            ]
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "ExitSign",
+        "description": "Satu baris di papan petunjuk pintu keluar."
+      },
+      "ExitRef": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "examples": [
+              "MRTJ-IST:B"
+            ]
+          },
+          "ref": {
+            "type": "string",
+            "description": "Nama pintu persis seperti tulisan di papan petunjuk, misalnya `B` atau `Utara`.",
+            "examples": [
+              "B"
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Jalan atau penanda tempat pintu ini membuka. Null kalau belum dicatat."
+          },
+          "signs": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ExitSign"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Isi papan petunjuk pintu ini, urut seperti yang tercetak. Null kalau papannya belum disalin."
+          }
+        },
+        "required": [
+          "id",
+          "ref",
+          "name",
+          "signs"
+        ],
+        "title": "ExitRef",
+        "description": "Rujukan singkat ke satu pintu keluar stasiun."
+      },
       "StationRef": {
         "type": "object",
         "properties": {
@@ -441,6 +520,9 @@
             ],
             "description": "Petunjuk tambahan buat jalan kakinya. Null kalau tidak ada yang perlu dijelaskan."
           },
+          "fromExit": {
+            "$ref": "#/components/schemas/ExitRef"
+          },
           "dataType": {
             "type": "string",
             "enum": [
@@ -449,6 +531,9 @@
           },
           "toStation": {
             "$ref": "#/components/schemas/StationRef"
+          },
+          "toExit": {
+            "$ref": "#/components/schemas/ExitRef"
           }
         },
         "required": [
@@ -485,6 +570,9 @@
               }
             ],
             "description": "Petunjuk tambahan buat jalan kakinya. Null kalau tidak ada yang perlu dijelaskan."
+          },
+          "fromExit": {
+            "$ref": "#/components/schemas/ExitRef"
           },
           "dataType": {
             "type": "string",
@@ -537,6 +625,87 @@
             "EXTERNAL": "#/components/schemas/ExternalTransfer"
           }
         }
+      },
+      "StationExit": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "examples": [
+              "MRTJ-IST:B"
+            ]
+          },
+          "ref": {
+            "type": "string",
+            "description": "Nama pintu persis seperti tulisan di papan petunjuk, misalnya `B` atau `Utara`.",
+            "examples": [
+              "B"
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Jalan atau penanda tempat pintu ini membuka. Null kalau belum dicatat."
+          },
+          "signs": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ExitSign"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Isi papan petunjuk pintu ini, urut seperti yang tercetak. Null kalau papannya belum disalin."
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number",
+                "format": "double"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Koordinat pintu itu sendiri, bukan koordinat stasiun. Null kalau belum diukur."
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number",
+                "format": "double"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "type": "string",
+            "description": "Asal datanya. `FIELD` = dicek langsung di lokasi, `OPERATOR` = dari peta resmi operator, `OSM` = dari OpenStreetMap (ODbL, wajib atribusi). Nilai yang dikenal saat ini: `FIELD`, `OPERATOR`, `OSM`. Bisa bertambah."
+          }
+        },
+        "required": [
+          "id",
+          "ref",
+          "name",
+          "signs",
+          "latitude",
+          "longitude",
+          "source"
+        ],
+        "title": "StationExit",
+        "description": "Satu pintu keluar atau gerbang stasiun."
       },
       "HeadwayRow": {
         "type": "object",
@@ -1253,6 +1422,12 @@
           "corridorLabel": {
             "type": "string",
             "description": "Nama koridor yang dilewati waktu pindah, kalau ada."
+          },
+          "fromExit": {
+            "$ref": "#/components/schemas/ExitRef"
+          },
+          "toExit": {
+            "$ref": "#/components/schemas/ExitRef"
           }
         },
         "required": [
@@ -1812,6 +1987,48 @@
               "$ref": "#/components/schemas/FareJourneyDeparture"
             },
             "description": "Keberangkatan lain rute ini dalam satu jam ke depan, urut dari yang paling cepat, tidak termasuk yang ditampilkan di tahap-tahapnya. Cuma ada di rute yang jadwalnya kami punya."
+          },
+          "estimate": {
+            "type": "object",
+            "properties": {
+              "durationS": {
+                "type": "number",
+                "description": "Perkiraan lama perjalanan dalam detik, dihitung dari jam yang diminta (`at`) sampai tiba, termasuk jalan kaki dan rata-rata waktu tunggu. Perkiraan dari pengamatan bus, bukan jadwal. Lama dari naik kendaraan pertama: `durationS - fromS`.",
+                "examples": [
+                  3420
+                ],
+                "format": "double"
+              },
+              "fromS": {
+                "type": "number",
+                "description": "Detik dari `at` sampai naik kendaraan pertama kalau tahap itu terjadwal (`departureAt` ada), selain itu 0. Biar lama perjalanannya bisa dihitung dari naik, sama seperti rute yang jadwalnya lengkap.",
+                "examples": [
+                  480
+                ],
+                "format": "double"
+              },
+              "rideS": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "description": "Sejajar dengan `legs`: perkiraan lama naik bus (detik) di tahap TransJakarta, null di tahap lain."
+              }
+            },
+            "required": [
+              "durationS",
+              "fromS",
+              "rideS"
+            ],
+            "description": "Perkiraan waktu tempuh buat rute yang ada TransJakarta-nya, dari waktu tempuh bus yang teramati. Bukan jadwal: jangan ditampilkan sebagai jam berangkat atau jam tiba. Tidak ada kalau tidak bisa diperkirakan dengan jujur."
           }
         },
         "required": [
@@ -1825,7 +2042,7 @@
           "walkDistanceM"
         ],
         "title": "FareJourney",
-        "description": "Satu pilihan rute lengkap dengan tarifnya. Yang dibandingkan cuma jumlah naik kendaraan, jarak jalan kaki, rata-rata lama nunggu, dan tarif, bukan waktu tempuh. Jam berangkat dan tiba ikut ditampilkan di tahap yang jadwalnya kami punya."
+        "description": "Satu pilihan rute lengkap dengan tarifnya. Yang dibandingkan cuma jumlah naik kendaraan, jarak jalan kaki, rata-rata lama nunggu, dan tarif, bukan waktu tempuh. Lama nunggu TransJakarta ikut menghitung bus yang datang bergerombol, dan di ruas yang dilewati beberapa rute dihitung dari bus rute mana pun yang datang duluan. Jam berangkat dan tiba ikut ditampilkan di tahap yang jadwalnya kami punya."
       },
       "TripResult": {
         "type": "object",
@@ -2509,6 +2726,101 @@
                     },
                     "data": {
                       "$ref": "#/components/schemas/StationDensity"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Kode operator atau stasiun tidak ditemukan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "examples": [
+                        404
+                      ],
+                      "format": "double"
+                    },
+                    "error": {
+                      "$ref": "#/components/schemas/Error"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "error"
+                  ],
+                  "title": "ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stations/{operator}/{stationCode}/exits": {
+      "get": {
+        "operationId": "getStationsByOperatorByStationCodeExits",
+        "summary": "Pintu keluar satu stasiun",
+        "description": "Daftar pintu keluar atau gerbang stasiun, urut berdasarkan nama pintu. Datanya diisi bertahap per stasiun, jadi array kosong artinya belum dicatat, bukan berarti stasiunnya nggak punya pintu.",
+        "tags": [
+          "Stasiun"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operator",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "KCI"
+              ]
+            },
+            "description": "Kode operator, misalnya `KCI`, `MRTJ`, `TJ`."
+          },
+          {
+            "in": "path",
+            "name": "stationCode",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "examples": [
+                "SUD"
+              ]
+            },
+            "description": "Kode stasiun versi operatornya, bukan station id yang lengkap."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "description": "Sama dengan HTTP status code-nya.",
+                      "examples": [
+                        200
+                      ],
+                      "format": "double"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/StationExit"
+                      }
                     }
                   },
                   "required": [
