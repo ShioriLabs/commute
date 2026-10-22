@@ -110,6 +110,8 @@
     <string name="settings_experimental_sensor_data">Kirim Data Sensor</string>
     <string name="settings_experimental_sensor_data_detail">Rekaman sensor gerak 50 Hz, GPS, sama perkiraan kecepatan tiap naik kereta pas Kecepatan IMU nyala. Temennya log perjalanan</string>
     <string name="settings_experimental_sensor_data_empty">Belum ada data sensor. Nyalain Kecepatan IMU terus naik kereta dulu</string>
+    <string name="settings_experimental_card_dumper">Dump Kartu FeliCa</string>
+    <string name="settings_experimental_card_dumper_detail">Baca isi KMT (atau kartu FeliCa lain) lewat NFC terus simpan jadi JSON, buat dibandingin sebelum dan sesudah tap</string>
     <string name="settings_experimental_clear_logs">Hapus Log</string>
     <string name="settings_experimental_clear_logs_detail">Hapus log perjalanan yang tersimpan di HP ini</string>
     <string name="settings_experimental_clear_logs_detail_sensors">Hapus log perjalanan dan data sensor yang tersimpan di HP ini</string>
