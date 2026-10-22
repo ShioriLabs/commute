@@ -63,6 +63,7 @@ import id.shiorilabs.commute.feature.journey.domain.JourneyStop
 import id.shiorilabs.commute.feature.journey.domain.TripAnswer
 import id.shiorilabs.commute.feature.journey.domain.UpcomingRow
 import id.shiorilabs.commute.feature.journey.domain.boardsAtOf
+import id.shiorilabs.commute.feature.journey.domain.estimatedDurationOf
 import id.shiorilabs.commute.feature.journey.domain.formatDuration
 import id.shiorilabs.commute.feature.journey.domain.formatRupiah
 import id.shiorilabs.commute.feature.journey.domain.isLastTrain
@@ -206,9 +207,11 @@ private fun JourneyRow(row: UpcomingRow, lines: Map<String, LineInfo>, onClick: 
     val next = row.departures.drop(1).take(NEXT_DEPARTURES_SHOWN)
     val headsign = journey.rides.firstOrNull()?.headsign
     val segments = routeBarSegments(journey.legs) { legLines(it, lines) }
-    val duration = if (boardsAt != null && arrivesAt != null) formatDuration(boardsAt, arrivesAt).ifEmpty { null } else null
+    // Published, or else the ±-marked TransJakarta estimate counted the same way.
+    val duration = if (boardsAt != null && arrivesAt != null) formatDuration(boardsAt, arrivesAt).ifEmpty { null } else estimatedDurationOf(journey)
     val fare = journey.totalFare?.let(::formatRupiah)
-    // Untimed rows have no duration, so the fare moves up to the headline's line.
+    // A row with neither a published nor an estimated duration has nothing for that slot, so the
+    // fare moves up to the headline's line.
     val headlineFigure = duration ?: fare
     val secondFigure = if (duration != null) fare else null
     // The last train has nothing after it, so it and later trains share one line, and it wins.

@@ -45,6 +45,7 @@ import id.shiorilabs.commute.feature.journey.domain.NEXT_DEPARTURES_SHOWN
 import id.shiorilabs.commute.feature.journey.domain.Journey
 import id.shiorilabs.commute.feature.journey.domain.JourneyLabel
 import id.shiorilabs.commute.feature.journey.domain.boardsAt
+import id.shiorilabs.commute.feature.journey.domain.estimatedDurationOf
 import id.shiorilabs.commute.feature.journey.domain.formatDuration
 import id.shiorilabs.commute.feature.journey.domain.formatKm
 import id.shiorilabs.commute.feature.journey.domain.formatRupiah
@@ -85,7 +86,9 @@ internal fun JourneyCard(
     val lastTrain = journey.isLastTrain
     val boardsAt = journey.boardsAt
     val arrivalAt = journey.arrivalAt
-    val duration = if (boardsAt != null && arrivalAt != null) formatDuration(boardsAt, arrivalAt).ifEmpty { null } else null
+    // Published where every leg is timed, otherwise the ±-marked TransJakarta estimate, which only
+    // exists on exactly the journeys that have no published one.
+    val duration = if (boardsAt != null && arrivalAt != null) formatDuration(boardsAt, arrivalAt).ifEmpty { null } else estimatedDurationOf(journey)
     val fareText = journey.totalFare?.let(::formatRupiah)
     val fareLeads = duration == null && fareText != null
     val headsign = journey.rides.firstOrNull()?.headsign
