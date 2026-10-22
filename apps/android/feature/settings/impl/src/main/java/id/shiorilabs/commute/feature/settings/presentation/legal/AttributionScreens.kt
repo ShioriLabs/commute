@@ -68,6 +68,12 @@ private fun DataAttributionsContent(
                     owner = "© Kereta Api Indonesia",
                 )
                 AttributionEntry(
+                    name = "TransJakarta",
+                    url = "https://ppid.transjakarta.co.id/informasi/berkala",
+                    body = stringResource(R.string.settings_data_attr_tj_body),
+                    owner = "© Transportasi Jakarta",
+                )
+                AttributionEntry(
                     name = stringResource(R.string.settings_data_attr_fdtj_name),
                     url = "https://transportforjakarta.or.id",
                     body = stringResource(R.string.settings_data_attr_fdtj_body),
