@@ -36,6 +36,7 @@ import id.shiorilabs.commute.feature.journey.domain.Journey
 import id.shiorilabs.commute.feature.journey.domain.JourneyStop
 import id.shiorilabs.commute.feature.journey.domain.LeaveIn
 import id.shiorilabs.commute.feature.journey.domain.TimedLeg
+import id.shiorilabs.commute.feature.journey.domain.estimatedDurationOf
 import id.shiorilabs.commute.feature.journey.domain.formatDuration
 import id.shiorilabs.commute.feature.journey.domain.formatKm
 import id.shiorilabs.commute.feature.journey.domain.formatRupiah
@@ -116,6 +117,7 @@ internal fun JourneyDetail(
         lines = lines,
         modifier = Modifier.padding(top = timelineTop),
         timed = timed,
+        rideS = journey.estimate?.rideS.orEmpty(),
         onPickDeparture = onPickDeparture,
     )
 
@@ -130,6 +132,8 @@ internal fun JourneyDetail(
             RecapText(stringResource(R.string.journey_walk_only_summary, journey.walkDistanceM), strong = true)
         } else if (departureAt != null && arrivalAt != null) {
             RecapText(formatDuration(departureAt, arrivalAt), strong = true)
+        } else {
+            estimatedDurationOf(journey)?.let { RecapText(it, strong = true) }
         }
         if (journey.rides.isNotEmpty()) {
             RecapText(stringResource(R.string.journey_transfer_count, journey.transferCount))
