@@ -24,6 +24,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import id.shiorilabs.commute.core.datastore.DeveloperPreferencesRepository
 import id.shiorilabs.commute.core.ext.WhileUiSubscribed
 import id.shiorilabs.commute.core.navigation.LocalNavigator
+import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.feature.settings.R
 import id.shiorilabs.commute.feature.settings.presentation.components.ConfirmClearDialog
@@ -143,6 +144,7 @@ fun ExperimentalScreen(
                 if (intent != null) context.startActivity(intent) else Toast.makeText(context, noSensorData, Toast.LENGTH_SHORT).show()
             }
         },
+        onCardDumper = { navigator.goTo(Route.CardDumper) },
         onClearLogs = {
             viewModel.clearLogs { Toast.makeText(context, cleared, Toast.LENGTH_SHORT).show() }
         },
@@ -177,6 +179,7 @@ private fun ExperimentalContent(
     onWatchAutoOpen: (Boolean) -> Unit = {},
     onShareTripLog: () -> Unit = {},
     onShareSensorData: () -> Unit = {},
+    onCardDumper: () -> Unit = {},
     onClearLogs: () -> Unit = {},
     onHide: () -> Unit = {},
 ) {
@@ -252,6 +255,12 @@ private fun ExperimentalContent(
                 label = stringResource(R.string.settings_experimental_sensor_data),
                 detail = stringResource(R.string.settings_experimental_sensor_data_detail),
                 onClick = onShareSensorData,
+            )
+            // Same gate: only a debug build asks for NFC (its manifest is the debug source set's).
+            SettingsItem(
+                label = stringResource(R.string.settings_experimental_card_dumper),
+                detail = stringResource(R.string.settings_experimental_card_dumper_detail),
+                onClick = onCardDumper,
             )
         }
         SettingsItem(
