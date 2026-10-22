@@ -33,11 +33,46 @@ class LegDeparturesTest {
     }
 
     @Test
-    fun `a first train the clock has passed is not the default, and is marked missed`() {
-        val timed = resolveTimedLegs(legs, emptyMap(), notBefore = at("07:25"))
+    fun `trains that have left are dropped, and the next one is boarded`() {
+        // 07.22: a1 and a2 both left more than the minute's grace ago.
+        val timed = resolveTimedLegs(legs, emptyMap(), notBefore = at("07:22"))
 
+        assertEquals(listOf("a3", "a4"), timed[0].options.map { it.departure.tripId })
         assertEquals(listOf("a3", "b3"), timed.map { it.chosen.tripId })
-        assertEquals(listOf(Blocked.MISSED, Blocked.MISSED, null, Blocked.NO_ONWARD), timed[0].options.map { it.blocked })
+    }
+
+    @Test
+    fun `a later leg drops its departed trains too`() {
+        // 07.45: y1 left at 07.30, long before the train the rider boards first.
+        val ahead = listOf(train("x1", "07:50", "08:00"))
+        val onward = listOf(train("y1", "07:30", "07:40"), train("y2", "08:05", "08:25"))
+
+        val timed = resolveTimedLegs(listOf(timedRide(ahead), timedRide(onward)), emptyMap(), notBefore = at("07:45"))
+
+        assertEquals(listOf("y2"), timed[1].options.map { it.departure.tripId })
+    }
+
+    @Test
+    fun `a row shows a later leg from the train just missed, at most a chip row`() {
+        val many = listOf(
+            train("c1", "07:40", "08:00"), train("c2", "07:50", "08:10"), train("c3", "08:00", "08:20"),
+            train("c4", "08:05", "08:25"), train("c5", "08:10", "08:30"), train("c6", "08:15", "08:35"),
+        )
+        // a2 lands 07.54: c1 and c2 are missed, c3 is the first it makes.
+        val second = resolveTimedLegs(listOf(timedRide(first), timedRide(many)), mapOf(0 to "a2"))[1]
+
+        assertEquals(listOf("c2", "c3", "c4", "c5"), second.options.map { it.departure.tripId })
+    }
+
+    @Test
+    fun `the row slides so a later pick stays in view`() {
+        val many = listOf(
+            train("c1", "07:50", "08:00"), train("c2", "07:55", "08:05"), train("c3", "08:00", "08:10"),
+            train("c4", "08:05", "08:15"), train("c5", "08:10", "08:20"), train("c6", "08:15", "08:25"),
+        )
+        val second = resolveTimedLegs(listOf(timedRide(first), timedRide(many)), mapOf(1 to "c6"))[1]
+
+        assertEquals(listOf("c3", "c4", "c5", "c6"), second.options.map { it.departure.tripId })
     }
 
     @Test

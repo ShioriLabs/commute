@@ -51,6 +51,18 @@ data class TimedLeg(
 
 private fun upcomingOf(leg: JourneyLeg?): List<LegDeparture> = (leg as? JourneyLeg.Ride)?.upcomingDepartures.orEmpty()
 
+/*
+ * The part of the options worth showing: from the train just before the first one the rider can
+ * make, slid on where needed so the chosen one stays in view. The engine lists a later leg long
+ * enough to connect from every train before it, so showing all of it would make every row a ladder.
+ */
+private fun windowOf(options: List<LegOption>): List<LegOption> {
+    val reachable = options.indexOfFirst { it.blocked != Blocked.MISSED }
+    val selected = options.indexOfFirst { it.selected }
+    val start = maxOf(0, reachable - 1, selected - CHIP_ROW_MAX + 1)
+    return options.drop(start).take(CHIP_ROW_MAX)
+}
+
 private fun secondsBetween(from: Instant, to: Instant): Long = Duration.between(from, to).seconds
 
 /** The shortest change into leg [to] from the ride at [from], by the engine's rule. */
@@ -71,8 +83,9 @@ private fun isTight(gapS: Long, minS: Int) = gapS - minS < TIGHT_SLACK_S
  * the leg falls back to the earliest train that works, so a stale pick never produces a connection
  * that runs backwards in time or a journey that stops halfway.
  *
- * With [notBefore] (the clock), first-leg trains that have already left cannot be chosen: the API
- * answers a "now" ask from the start of its 20-minute slot, so its own train can be minutes gone.
+ * With [notBefore] (the clock), trains that left more than the grace ago are dropped from every leg:
+ * the API answers a "now" ask from the start of its 20-minute slot, so its own train can be minutes
+ * gone. Each leg's options are windowed to a chip row ([windowOf]).
  */
 fun resolveTimedLegs(legs: List<JourneyLeg>, picks: Map<Int, String>, notBefore: Instant? = null): List<TimedLeg> =
     resolve(legs, picks, notBefore)
@@ -80,6 +93,8 @@ fun resolveTimedLegs(legs: List<JourneyLeg>, picks: Map<Int, String>, notBefore:
         .ifEmpty { if (notBefore != null) resolve(legs, picks, null) else emptyList() }
 
 private fun resolve(legs: List<JourneyLeg>, picks: Map<Int, String>, notBefore: Instant?): List<TimedLeg> {
+    val goneBefore = notBefore?.minusSeconds(DEPARTED_GRACE_S)
+    fun upcomingAt(index: Int) = upcomingOf(legs[index]).filter { goneBefore == null || !it.departureAt.isBefore(goneBefore) }
     val timedIndexes = legs.indices.filter { upcomingOf(legs[it]).isNotEmpty() }
 
     // Which trains on each leg can still finish the journey, worked back from the last leg.
@@ -87,13 +102,13 @@ private fun resolve(legs: List<JourneyLeg>, picks: Map<Int, String>, notBefore: 
     for (position in timedIndexes.indices.reversed()) {
         val index = timedIndexes[position]
         val nextIndex = timedIndexes.getOrNull(position + 1)
-        val upcoming = upcomingOf(legs[index])
+        val upcoming = upcomingAt(index)
         if (nextIndex == null) {
             finishing[index] = upcoming.map { it.tripId }.toSet()
             continue
         }
         val change = minChangeS(legs, index, nextIndex)
-        val nextFinishing = upcomingOf(legs[nextIndex]).filter { it.tripId in finishing.getValue(nextIndex) }
+        val nextFinishing = upcomingAt(nextIndex).filter { it.tripId in finishing.getValue(nextIndex) }
         finishing[index] = upcoming
             .filter { d -> nextFinishing.any { secondsBetween(d.arrivalAt, it.departureAt) >= change } }
             .map { it.tripId }
@@ -105,12 +120,10 @@ private fun resolve(legs: List<JourneyLeg>, picks: Map<Int, String>, notBefore: 
     var previousArrival: Instant? = null
 
     for ((position, index) in timedIndexes.withIndex()) {
-        val upcoming = upcomingOf(legs[index])
+        val upcoming = upcomingAt(index)
         val earliest = previousArrival?.plusSeconds(minChangeS(legs, previousIndex, index).toLong())
         fun blockedOf(d: LegDeparture): Blocked? = when {
             earliest != null && d.departureAt.isBefore(earliest) -> Blocked.MISSED
-            // The first train has no earlier ride to follow, but the clock still says it has gone.
-            earliest == null && notBefore != null && d.departureAt.isBefore(notBefore.minusSeconds(DEPARTED_GRACE_S)) -> Blocked.MISSED
             d.tripId in finishing.getValue(index) -> null
             else -> Blocked.NO_ONWARD
         }
@@ -126,7 +139,7 @@ private fun resolve(legs: List<JourneyLeg>, picks: Map<Int, String>, notBefore: 
         val nextUpcoming = if (nextIndex == null) {
             emptyList()
         } else {
-            upcomingOf(legs[nextIndex]).filter { it.tripId in finishing.getValue(nextIndex) }
+            upcomingAt(nextIndex).filter { it.tripId in finishing.getValue(nextIndex) }
         }
         val options = upcoming.map { d ->
             val nextTrain = nextUpcoming.firstOrNull { secondsBetween(d.arrivalAt, it.departureAt) >= change }
@@ -140,7 +153,7 @@ private fun resolve(legs: List<JourneyLeg>, picks: Map<Int, String>, notBefore: 
             )
         }
 
-        resolved += TimedLeg(index, chosen, options)
+        resolved += TimedLeg(index, chosen, windowOf(options))
         previousIndex = index
         previousArrival = chosen.arrivalAt
     }
