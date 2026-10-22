@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The card dumper: debug builds only, so these never reach a rider. -->
+    <string name="card_dumper_title">Dump Kartu FeliCa</string>
+    <string name="card_dumper_back">Kembali</string>
+    <string name="card_dumper_no_nfc">HP ini gak punya NFC</string>
+    <string name="card_dumper_nfc_off">NFC lagi mati. Nyalain dulu di pengaturan HP</string>
+    <string name="card_dumper_nfc_settings">Buka Pengaturan NFC</string>
+    <string name="card_dumper_waiting">Tempelin kartu di belakang HP, terus tahan sampai selesai</string>
+    <string name="card_dumper_reading">Lagi baca, jangan dilepas dulu…</string>
+    <string name="card_dumper_step_systems">Cari sistem</string>
+    <string name="card_dumper_step_searching">Cari layanan tanpa kunci</string>
+    <string name="card_dumper_step_reading">Baca blok</string>
+    <string name="card_dumper_step_mapping">Petain layanan berkunci</string>
+    <string name="card_dumper_found">%1$d layanan, %2$d blok</string>
+    <string name="card_dumper_complete">Selesai</string>
+    <string name="card_dumper_partial">Kepotong: %1$s</string>
+    <string name="card_dumper_summary_system">Sistem %1$s · IDm %2$s</string>
+    <string name="card_dumper_summary_service">%1$s · %2$d blok</string>
+    <string name="card_dumper_summary_keyed">%1$s · pakai kunci</string>
+    <string name="card_dumper_note">Catatan (mis. sebelum tap-in Cakung, saldo 23.500)</string>
+    <string name="card_dumper_save">Simpan</string>
+    <string name="card_dumper_saved">Tersimpan: %1$s</string>
+    <string name="card_dumper_again">Baca Lagi</string>
+    <string name="card_dumper_saved_count">%1$d dump tersimpan</string>
+    <string name="card_dumper_share">Kirim Semua</string>
+    <string name="card_dumper_share_empty">Belum ada dump yang disimpan</string>
+    <string name="card_dumper_clear">Hapus Semua</string>
+    <string name="card_dumper_clear_confirm">Yakin mau hapus semua dump? Yang belum dikirim bakal ilang</string>
+    <string name="card_dumper_clear_yes">Hapus</string>
+    <string name="card_dumper_clear_no">Batal</string>
+    <string name="card_dumper_privacy">Dump berisi IDm kartu sama riwayat perjalanan. Kirim ke orang yang kamu percaya aja</string>
+</resources>
