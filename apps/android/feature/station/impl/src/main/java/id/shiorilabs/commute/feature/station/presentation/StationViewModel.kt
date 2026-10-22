@@ -18,6 +18,7 @@ import id.shiorilabs.commute.feature.station.data.boardHour
 import id.shiorilabs.commute.feature.station.data.cachedBoard
 import id.shiorilabs.commute.feature.station.data.loadInto
 import id.shiorilabs.commute.feature.station.domain.CrowdForecast
+import id.shiorilabs.commute.feature.station.domain.StationExit
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.StationBoard
 import id.shiorilabs.commute.feature.station.domain.Transfer
@@ -54,6 +55,8 @@ class StationViewModel @AssistedInject constructor(
     )
     /** Null until it loads, and left so when it fails: the badge just isn't shown, as on the web. */
     private val crowding = MutableStateFlow<CrowdForecast?>(null)
+    /** Empty until it loads, and left so when it fails or the station has none: the section just isn't shown. */
+    private val exits = MutableStateFlow<List<StationExit>>(emptyList())
     private var load: Job? = null
 
     /** A station no train serves has nothing to load: its notice is the page. */
@@ -82,6 +85,8 @@ class StationViewModel @AssistedInject constructor(
             retired = retired,
             crowding = crowding,
         )
+    }.combine(exits) { state, exits ->
+        state.copy(exits = exits)
     }.stateIn(
         scope = viewModelScope,
         started = WhileUiSubscribed,
@@ -126,7 +131,7 @@ class StationViewModel @AssistedInject constructor(
 
     private fun now(): LocalDateTime = LocalDateTime.now(clock)
 
-    /** (Re)loads the board, and the lines and transfers unless they are already in. */
+    /** (Re)loads the board, and the lines, transfers and exits unless they are already in. */
     private fun loadAll() {
         load(now())
         if (lines.value.isEmpty()) {
@@ -134,6 +139,15 @@ class StationViewModel @AssistedInject constructor(
         }
         if (transfers.value !is UIState.Success) {
             loadTransfers()
+        }
+        if (exits.value.isEmpty()) {
+            loadExits()
+        }
+    }
+
+    private fun loadExits() {
+        viewModelScope.launch {
+            stationRepository.exits(stationId).onRight { exits.value = it }
         }
     }
 

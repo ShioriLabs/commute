@@ -67,6 +67,7 @@ import id.shiorilabs.commute.feature.station.presentation.components.AmenityList
 import id.shiorilabs.commute.feature.station.presentation.components.BekasiTimurMemorial
 import id.shiorilabs.commute.feature.station.presentation.components.CrowdBadge
 import id.shiorilabs.commute.feature.station.presentation.components.CrowdLegendSheet
+import id.shiorilabs.commute.feature.station.presentation.components.StationExits
 import id.shiorilabs.commute.feature.station.presentation.components.HalteFrequencies
 import id.shiorilabs.commute.feature.station.presentation.components.LastTrainCard
 import id.shiorilabs.commute.feature.station.presentation.components.LastTrainsHeading
@@ -129,6 +130,7 @@ fun StationScreen(
         onOtw = { navigator.goTo(Route.Otw(toId = stationId)) },
         onOpenTimetable = { title -> navigator.goTo(Route.StationTimetable(stationId, title)) },
         onOpenStation = { id -> navigator.goTo(Route.Station(id)) },
+        onOpenAttributions = { navigator.goTo(Route.SettingsDataAttributions) },
         onOpenLine = { key -> lineRoute(key, state.lines)?.let(navigator::goTo) },
     )
 }
@@ -149,6 +151,7 @@ private fun StationContent(
     onOtw: () -> Unit = {},
     onOpenTimetable: (title: String?) -> Unit = {},
     onOpenStation: (stationId: String) -> Unit = {},
+    onOpenAttributions: () -> Unit = {},
     onOpenLine: (lineKey: String) -> Unit = {},
 ) {
     val hazeState = rememberHazeState()
@@ -215,6 +218,7 @@ private fun StationContent(
                 onOtw = onOtw,
                 onOpenTimetable = { onOpenTimetable(station?.name ?: placeholderTitle) },
                 onOpenStation = onOpenStation,
+                onOpenAttributions = onOpenAttributions,
                 onOpenLine = onOpenLine,
             )
         }.map { it.measure(constraints) }
@@ -246,6 +250,7 @@ private fun StationList(
     onOtw: () -> Unit,
     onOpenTimetable: () -> Unit,
     onOpenStation: (stationId: String) -> Unit,
+    onOpenAttributions: () -> Unit,
     onOpenLine: (lineKey: String) -> Unit,
 ) {
     val board = state.board
@@ -331,6 +336,17 @@ private fun StationList(
                 amenities = station.amenities,
                 modifier = Modifier.padding(start = 16.dp, top = 32.dp, end = 16.dp),
             )
+        }
+
+        if (state.exits.isNotEmpty()) {
+            item(key = "exits") {
+                StationExits(
+                    exits = state.exits,
+                    modifier = Modifier.padding(top = 32.dp),
+                    onOpenStation = onOpenStation,
+                    onOpenAttributions = onOpenAttributions,
+                )
+            }
         }
 
         if (station.latitude != null && station.longitude != null) {
