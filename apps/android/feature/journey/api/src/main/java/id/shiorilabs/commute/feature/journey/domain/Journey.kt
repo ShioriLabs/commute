@@ -49,6 +49,18 @@ data class Journey(
      * show. Empty when the route is untimed.
      */
     val moreDepartures: List<JourneyDeparture> = emptyList(),
+    /** Only on a journey with TransJakarta in it, which has no published times to read a duration off. */
+    val estimate: JourneyEstimate? = null,
+)
+
+/** How long a TransJakarta journey probably takes, from observed bus run times, not from a timetable. */
+data class JourneyEstimate(
+    /** Seconds from the asked-for time to arriving, walking and the average wait included. */
+    val durationS: Int,
+    /** Seconds from the asked-for time to the first boarding when a timed ride opens the journey, else 0. */
+    val fromS: Int,
+    /** Index-aligned with the legs: seconds on board a TransJakarta leg, `null` on any other. */
+    val rideS: List<Int?>,
 )
 
 /** Another boarding of the same route; [arrivalAt] only when every ride leg is timetabled. */

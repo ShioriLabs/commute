@@ -101,6 +101,7 @@
     <string name="journey_change_bus">Pindah bus</string>
     <!-- %1$d is the stations ridden through, %2$s the distance like 4,2 km -->
     <string name="journey_ride_summary">%1$d stasiun • %2$s</string>
+    <string name="journey_ride_summary_estimate">%1$d stasiun • %2$s • %3$s</string>
     <!-- %1$s is the station walked to -->
     <string name="journey_transfer_to">Transit ke %1$s</string>
     <!-- %1$d is metres walked -->
