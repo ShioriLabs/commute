@@ -11,6 +11,7 @@ import id.shiorilabs.commute.feature.station.domain.Frequency
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.Station
+import id.shiorilabs.commute.feature.station.domain.StationExit
 import id.shiorilabs.commute.feature.station.domain.Transfer
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +31,9 @@ interface StationRepository {
 
     /** The stations a rider can walk to from this one, nearest first as the API orders them. */
     suspend fun transfers(stationId: String): Either<Failure, List<Transfer>>
+
+    /** The station's exits and the signs at them. Most stations have none recorded yet. */
+    suspend fun exits(stationId: String): Either<Failure, List<StationExit>> = Either.Right(emptyList())
 
     /**
      * How often each line passes the station on [day] at [hour] (0-23, Jakarta), in the API's order.

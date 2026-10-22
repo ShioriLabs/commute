@@ -4,6 +4,7 @@ import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.feature.station.domain.CrowdForecast
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.StationBoard
+import id.shiorilabs.commute.feature.station.domain.StationExit
 import id.shiorilabs.commute.feature.station.domain.Transfer
 
 /**
@@ -24,4 +25,6 @@ data class StationUiState(
     val retired: RetiredStation? = null,
     /** How crowded the station usually is, hour by hour. Null while loading, at a halte, or on failure. */
     val crowding: CrowdForecast? = null,
+    /** The exits and their signs. Empty while loading, on failure, and for most stations, which is "not yet": the page leaves the section out. */
+    val exits: List<StationExit> = emptyList(),
 )

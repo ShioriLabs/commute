@@ -18,6 +18,7 @@ import id.shiorilabs.commute.feature.station.domain.Frequency
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.domain.LineTimetable
 import id.shiorilabs.commute.feature.station.domain.Station
+import id.shiorilabs.commute.feature.station.domain.StationExit
 import id.shiorilabs.commute.feature.station.domain.Transfer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -59,6 +60,14 @@ class StationViewModelTest {
         var transfers: Either<Failure, List<Transfer>> = emptyList<Transfer>().right()
 
         override suspend fun transfers(stationId: String) = transfers
+
+        val askedExits = mutableListOf<String>()
+        var exits: Either<Failure, List<StationExit>> = listOf(StationExit("KCI-MRI:A", "A", "Jl. Sultan Agung", emptyList(), fromOsm = false)).right()
+
+        override suspend fun exits(stationId: String): Either<Failure, List<StationExit>> {
+            askedExits += stationId
+            return exits
+        }
 
         val askedFrequencies = mutableListOf<Pair<String, ServiceDayName>>()
         val askedHours = mutableListOf<Int>()
@@ -251,6 +260,38 @@ class StationViewModelTest {
             .state.first { it.board.frequencies is UIState.Success }
 
         assertTrue(stations.askedCrowding.isEmpty())
+    }
+
+    @Test
+    fun `a page carries the station's exits, a halte's included`() = runTest {
+        val rail = viewModel().state.first { it.exits.isNotEmpty() }
+        assertEquals("Jl. Sultan Agung", rail.exits.single().name)
+
+        stations.station = { id -> Station(id, "Petukangan D'MASIV", "TJ", "H00001P", listOf("TJ:13")).right() }
+        StationViewModel("TJ-H00001P", stations, lines, saved, clockAt("2026-10-03T08:00:00"))
+            .state.first { it.exits.isNotEmpty() }
+
+        assertEquals(listOf("KCI-MRI", "TJ-H00001P"), stations.askedExits)
+    }
+
+    @Test
+    fun `failed exits leave the page without a section, and a retry asks again`() = runTest {
+        stations.exits = Failure.Unknown().left()
+        val vm = viewModel()
+
+        assertTrue(vm.loaded().exits.isEmpty())
+
+        stations.exits = listOf(StationExit("KCI-MRI:A", "A", null, emptyList(), fromOsm = false)).right()
+        vm.retry()
+
+        assertEquals(1, vm.state.first { it.exits.isNotEmpty() }.exits.size)
+    }
+
+    @Test
+    fun `an unserved station asks for no exits`() = runTest {
+        StationViewModel("KCI-GMR", stations, lines, saved, clockAt("2026-09-30T08:00:00"))
+
+        assertTrue(stations.askedExits.isEmpty())
     }
 
     @Test
