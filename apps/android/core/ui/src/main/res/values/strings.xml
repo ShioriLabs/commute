@@ -20,7 +20,6 @@
     <string name="core_ui_report_issue">Laporkan masalah</string>
     <string name="core_ui_report_issue_description">Laporkan masalah, membuka formulir di browser</string>
 
-    <!-- WalkDetail: under a transfer, the exit it leaves by (when known) and how far it is. -->
-    <string name="core_ui_walk_via_exit">via Pintu</string>
-    <string name="core_ui_walk_distance">Jalan kaki ±%1$dm</string>
+    <!-- WalkExit: under a transfer, the exit it leaves by, when it is known. -->
+    <string name="core_ui_walk_exit">Keluar lewat pintu</string>
 </resources>
