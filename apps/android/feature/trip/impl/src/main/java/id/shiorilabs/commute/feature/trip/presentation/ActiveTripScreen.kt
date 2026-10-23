@@ -97,7 +97,8 @@ import id.shiorilabs.commute.core.ui.components.TimelineNode
 import id.shiorilabs.commute.core.ui.components.TimelineRow
 import id.shiorilabs.commute.core.ui.components.TimelineStopLine
 import id.shiorilabs.commute.core.ui.components.TimelineStopName
-import id.shiorilabs.commute.core.ui.components.WalkExit
+import id.shiorilabs.commute.core.ui.components.WalkDetail
+import id.shiorilabs.commute.core.ui.components.WalkTimelineRow
 import id.shiorilabs.commute.core.ui.components.TransferIcon
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.components.CommuteButton
@@ -701,29 +702,16 @@ private val NextStopYellow = Color(0xFFFBBF24)
  */
 @Composable
 private fun WalkRow(walk: TripLeg.Transfer, modifier: Modifier = Modifier) {
-    TimelineRow(rail = SolidColor(Slate300), modifier = modifier) {
-        Row(
-            modifier = Modifier.padding(vertical = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            Icon(
-                imageVector = CommuteIcons.Walk,
-                contentDescription = null,
-                modifier = Modifier.padding(top = 3.dp).size(14.dp),
-                tint = Slate500,
+    WalkTimelineRow(dots = Slate400, mark = Slate500, modifier = modifier) {
+        Column(modifier = Modifier.padding(vertical = 14.dp)) {
+            Text(
+                text = stringResource(R.string.trip_live_transfer_to, walk.to.name),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Slate500,
             )
-            Column {
-                val distance = if (walk.distanceM > 0) " " + stringResource(R.string.trip_live_transfer_walk, walk.distanceM) else ""
-                Text(
-                    text = stringResource(R.string.trip_live_transfer_to, walk.to.name) + distance,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Slate500,
-                )
-                WalkExit(exit = walk.fromExit, color = Slate500, modifier = Modifier.padding(top = 4.dp))
-                walk.corridorLabel?.let {
-                    Text(text = stringResource(R.string.trip_live_walk_corridor, it), style = MaterialTheme.typography.bodySmall, color = Slate500)
-                }
+            WalkDetail(exit = walk.fromExit, distanceM = walk.distanceM, color = Slate500)
+            walk.corridorLabel?.let {
+                Text(text = stringResource(R.string.trip_live_walk_corridor, it), style = MaterialTheme.typography.bodySmall, color = Slate500)
             }
         }
     }
