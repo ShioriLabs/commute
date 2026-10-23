@@ -25,10 +25,11 @@ import { serviceDay } from '../../utils/fare'
  * The wire pass also merges walks and interlined legs first; neither changes
  * which journey arrives first, so the engine level answers the question.
  *
- * Arms: `fields` (today's order), `sort` on the median estimate, `sort` on the
- * p75 estimate, and `sort` on the median rounded to --band seconds (estimates
- * that close count as a tie and keep the engine's order, since the estimate's
- * own error is minutes). Nothing here changes behaviour; it only measures.
+ * Arms: `fields` (the engine's order behind timetabled arrivals), `sort` on the
+ * median estimate, `sort` on the p75 estimate, and `sort` on the median where a
+ * journey only overtakes the engine's order by --margin seconds or more (what
+ * ships; journey-times.ts byArrival, ESTIMATE_OVERTAKE_S). Nothing here changes
+ * behaviour; it only measures.
  */
 
 const { values: args } = parseArgs({
@@ -36,7 +37,7 @@ const { values: args } = parseArgs({
     pairs: { type: 'string', default: '2000' },
     seed: { type: 'string', default: '42' },
     examples: { type: 'string', default: '20' },
-    band: { type: 'string', default: '300' }
+    margin: { type: 'string', default: '180' }
   }
 })
 
@@ -62,9 +63,9 @@ const MOMENTS = [
 ]
 
 type Legs = readonly RouteLeg[]
-type Arm = 'median' | 'p75' | 'band'
-const ARMS: readonly Arm[] = ['median', 'p75', 'band']
-const BAND_S = Number(args.band)
+type Arm = 'median' | 'p75' | 'margin'
+const ARMS: readonly Arm[] = ['median', 'p75', 'margin']
+const MARGIN_S = Number(args.margin)
 const hasTj = (legs: Legs) => legs.some(l => l.type === 'RIDE' && l.operator === 'TJ')
 const describe = (legs: Legs) => legs
   .map(l => (l.type === 'RIDE' ? `${l.operator}:${l.lineCode} ${l.fromStationId}>${l.toStationId}` : `walk ${Math.round(l.distanceM)}m`))
@@ -81,19 +82,31 @@ interface Row {
 
 /** An arm's sort key for a row with no timetable arrival. */
 function estimateFor(r: Row, arm: Arm): number | null {
-  if (arm === 'p75') return r.p75
-  if (arm === 'band') return r.median === null ? null : Math.round(r.median / BAND_S) * BAND_S
-  return r.median
+  return arm === 'p75' ? r.p75 : r.median
 }
 
-/** Today's byArrival, or the sort mode's with the given arm. Returns row indexes in order. */
+/** byArrival as it runs for `fields`, or for the sort mode with the given arm. Returns row indexes in order. */
 function order(rows: Row[], key: 'none' | Arm): number[] {
   const arrival = (r: Row) => r.exact ?? (key === 'none' ? null : estimateFor(r, key))
   const idx = rows.map((_, i) => i)
   const timed = idx.filter(i => arrival(rows[i]!) !== null)
   const untimed = idx.filter(i => arrival(rows[i]!) === null)
   if (rows.length < 2 || timed.length < 2) return idx
-  return [...[...timed].sort((a, b) => arrival(rows[a]!)! - arrival(rows[b]!)!), ...untimed]
+  if (key !== 'margin') return [...[...timed].sort((a, b) => arrival(rows[a]!)! - arrival(rows[b]!)!), ...untimed]
+  // The overtake rule, as in byArrival: zero margin between two timetabled rows.
+  const margin = (a: Row, b: Row) => (a.exact === null || b.exact === null ? MARGIN_S : 0)
+  const remaining = [...timed]
+  const ordered: number[] = []
+  while (remaining.length > 0) {
+    let lead = remaining[0]!
+    for (const i of remaining) if (arrival(rows[i]!)! < arrival(rows[lead]!)!) lead = i
+    const next = remaining.findIndex((i) => {
+      const behind = arrival(rows[i]!)! - arrival(rows[lead]!)!
+      return behind <= 0 || behind < margin(rows[i]!, rows[lead]!)
+    })
+    ordered.push(...remaining.splice(next, 1))
+  }
+  return [...ordered, ...untimed]
 }
 
 function main() {
@@ -110,9 +123,9 @@ function main() {
 
     const stats = {
       routed: 0, multi: 0, tjRows: 0, tjEstimated: 0,
-      changed: { median: 0, p75: 0, band: 0 } as Record<Arm, number>,
-      kinds: { median: new Map(), p75: new Map(), band: new Map() } as Record<Arm, Map<string, number>>,
-      gains: { median: [], p75: [], band: [] } as Record<Arm, number[]>,
+      changed: { median: 0, p75: 0, margin: 0 } as Record<Arm, number>,
+      kinds: { median: new Map(), p75: new Map(), margin: new Map() } as Record<Arm, Map<string, number>>,
+      gains: { median: [], p75: [], margin: [] } as Record<Arm, number[]>,
       estimateMs: [] as number[]
     }
     const shown: string[] = []
@@ -158,7 +171,7 @@ function main() {
           ? arrival(rows[before]!)! - arrival(rows[after]!)!
           : null
         if (gain !== null) stats.gains[key].push(gain / 60)
-        if (key === 'band' && shown.length < examples) {
+        if (key === 'margin' && shown.length < examples) {
           const b = rows[before]!, a = rows[after]!
           shown.push([
             `  ${from} -> ${to}`,
@@ -182,7 +195,7 @@ function main() {
     }
     const ms = sorted(stats.estimateMs)
     console.log(`  timing + estimate per pair: p50 ${percentile(ms, 0.5).toFixed(2)} ms, p95 ${percentile(ms, 0.95).toFixed(2)} ms`)
-    if (shown.length > 0) console.log(`  examples (sort/band):\n${shown.join('\n')}`)
+    if (shown.length > 0) console.log(`  examples (sort/margin):\n${shown.join('\n')}`)
     console.log()
   }
 }

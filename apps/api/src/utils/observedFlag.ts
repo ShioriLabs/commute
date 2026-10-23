@@ -66,14 +66,19 @@ export function setObservedHeadwaysEnabled(value: boolean): void {
 /*
  * Mode switch for the observed TransJakarta run times (utils/observedRuntimes.ts).
  *
- *   wrangler kv key put --binding KV config:observed-runtimes sort --remote
+ *   wrangler kv key put --binding KV config:observed-runtimes fields --remote
  *   wrangler kv key put --binding KV config:observed-runtimes off --remote
- *   wrangler kv key delete --binding KV config:observed-runtimes --remote   # back to fields
+ *   wrangler kv key delete --binding KV config:observed-runtimes --remote   # back to sort
  *
  *   off     no estimates at all
- *   fields  `estimate` on journeys, order exactly as before (the default, and
- *           what any unknown value or a missing key means)
- *   sort    estimates also take part in the arrival order (journey-times.ts byArrival)
+ *   fields  `estimate` on journeys, in the engine's order with timetabled
+ *           arrivals first, as before sort shipped
+ *   sort    estimates also take part in the arrival order (journey-times.ts
+ *           byArrival). The default since 2026-10-23, and what any unknown
+ *           value or a missing key means: the search ranks without counting
+ *           walk or ride time, so its own order put a 560 m walk to a 13E
+ *           (±22) over Galunggung + 6 (±18) from Sudirman, and the arrival
+ *           order is the one a rider can check.
  *
  * The estimates are applied after the journey cache (journey-endpoint `retime`),
  * so a flip needs no cache scope and no purge: it reaches riders as fast as the
@@ -84,9 +89,9 @@ export const OBSERVED_RUNTIMES_FLAG_KEY = 'config:observed-runtimes'
 
 export type RuntimesMode = 'off' | 'fields' | 'sort'
 
-const parseRuntimesMode = (value: string | null): RuntimesMode => (value === 'off' || value === 'sort' ? value : 'fields')
+const parseRuntimesMode = (value: string | null): RuntimesMode => (value === 'off' || value === 'fields' ? value : 'sort')
 
-let runtimesMode: RuntimesMode = 'fields'
+let runtimesMode: RuntimesMode = 'sort'
 const runtimesPerRequest = new WeakMap<Request, RuntimesMode>()
 
 /** The mode this request started with, falling back to the module value (tests, scripts). */

@@ -331,7 +331,7 @@ export const FareJourneySchema = v.pipe(
     )
   }),
   v.title('FareJourney'),
-  v.description('Satu pilihan rute lengkap dengan tarifnya. Yang dibandingkan cuma jumlah naik kendaraan, jarak jalan kaki, rata-rata lama nunggu, dan tarif, bukan waktu tempuh. Lama nunggu TransJakarta ikut menghitung bus yang datang bergerombol, dan di ruas yang dilewati beberapa rute dihitung dari bus rute mana pun yang datang duluan. Jam berangkat dan tiba ikut ditampilkan di tahap yang jadwalnya kami punya.'),
+  v.description('Satu pilihan rute lengkap dengan tarifnya. Rutenya dicari dengan membandingkan jumlah naik kendaraan, jarak jalan kaki, rata-rata lama nunggu, dan tarif. Lama nunggu TransJakarta ikut menghitung bus yang datang bergerombol, dan di ruas yang dilewati beberapa rute dihitung dari bus rute mana pun yang datang duluan. Jam berangkat dan tiba ikut ditampilkan di tahap yang jadwalnya kami punya.'),
   v.metadata({ ref: 'FareJourney' })
 )
 
@@ -368,7 +368,7 @@ export const TripResultSchema = v.pipe(
     to: FareStationSchema,
     journeys: v.pipe(
       v.array(FareJourneySchema),
-      v.description('Pilihan rute buat pasangan stasiun ini, diurutkan dari yang paling masuk akal. Selalu ada isinya kalau rutenya ketemu.')
+      v.description('Pilihan rute buat pasangan stasiun ini, diurutkan dari yang paling cepat sampai: jam tiba dari jadwal kalau ada, kalau tidak dari perkiraan TransJakarta (`estimate`). Kalau ada perkiraan yang ikut dibandingkan, rute baru dipindah ke depan kalau sampainya paling tidak 3 menit lebih cepat; selisih yang lebih kecil ikut urutan yang paling masuk akal. Rute yang tidak punya keduanya ada di belakang. Selalu ada isinya kalau rutenya ketemu.')
     )
   }),
   v.title('TripResult'),
