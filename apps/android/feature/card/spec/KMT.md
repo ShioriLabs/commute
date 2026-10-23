@@ -20,7 +20,7 @@ Generic FeliCa terms (service attributes, purse blocks, cyclic services) are as 
 | 1 daily card | 16 history entries over three weekdays, every tap labelled by the owner | 2026-10-23 |
 | 2 souvenir KMTs | 2–3 history entries each, mostly from 2024 | 2026-10-23 |
 | 6 daily-card dumps, one after each step of a morning commute | KRL tap-in (Cakung), KRL tap-out (Sudirman), LRT tap-in (Dukuh Atas), LRT tap-out (Rasuna Said), a TransJakarta tap-in with a GoPay top-up, then the TransJakarta tap-out | 2026-10-23 |
-| 3 daily-card dumps on the evening commute | TransJakarta tap-in, TransJakarta tap-out, LRT tap-in (Setiabudi) | 2026-10-23 |
+| 7 daily-card dumps on the evening commute | TransJakarta tap-in and tap-out; LRT Setiabudi to Dukuh Atas; KRL tap-in and tap-out at Sudirman without riding; MRT tap-in (Dukuh Atas) and tap-out (Bundaran HI) | 2026-10-23 |
 
 The dumps themselves aren't kept in the repo: they hold card numbers and travel history.
 
@@ -79,37 +79,41 @@ all-zero block is an empty slot.
 
 | Mode | D8–D13 | Seen |
 | --- | --- | --- |
-| KRL | `01 ss 01 01 01 00` | Fares of 3,000 |
+| KRL | `01 ss 01 01 01 00` | Fares of 3,000; 1 for leaving at the station tapped in at |
 | LRT Jabodebek | `00 05 00 ss 01 01` | Fares of 5,000 and 5,700 |
 | TransJakarta (JakLingko gates) | `01 16 00 1C 01 01` | 3,500, flat |
+| MRT Jakarta (JakLingko gates) | `01 16 00 10 01 01` | 0, once: Dukuh Atas to Bundaran HI |
 | Top-up through GoPay | `00 55 00 01 00 01` | 50,000 |
 | First entry on a new card | `01 ss 02 01 00 00` | Starting balance of 10,000 |
 
-**D12** is `01` on every ride and `00` on the top-up and the starting balance, so it is probably
-the direction: `01` money out, `00` money in (**likely**). The history holds no balance, so this
-flag is the only way to tell a top-up from a fare.
+**D12** is `01` on every ride, free ones included, and `00` on the top-up and the starting
+balance. So it is probably the direction: `01` money out, `00` money in (**likely**). The history
+holds no balance, so this flag is the only way to tell a top-up from a fare.
 
-**A guess at the rest (open).** On every entry that isn't KAI's own, D13 is `01`, and D8–D11
+**A guess at the rest (likely).** On every entry that isn't KAI's own, D13 is `01`, and D8–D11
 read naturally as two big-endian numbers:
-- an operator or terminal group: `0005` LRT, `0116` TransJakarta, `0055` GoPay
-- a place: the LRT station, TransJakarta's `001C`, GoPay's `0001`
+- an operator or fare system: `0005` LRT Jabodebek, `0116` JakLingko (both TransJakarta and MRT),
+  `0055` GoPay
+- a place or operator within it: the LRT station, `001C` TransJakarta, `0010` MRT, `0001` GoPay
 
-KAI's own entries (KRL rides and the sale) have D13 = `00`, a station in D9, and D10 = `01` on a
-ride, `02` on a sale. Two operators and one top-up isn't enough to rely on this layout.
+TransJakarta and MRT sharing `0116` but differing in D10–D11 is what moved this from a guess to
+likely. KAI's own entries (KRL rides and the sale) have D13 = `00`, a station in D9, and D10 =
+`01` on a ride, `02` on a sale.
 
-**KRL.** `ss` is a station code (**likely**). It's still **open** whether it's the station tapped
-in at or the one tapped out at. The 2026-10-23 ride was Cakung to Sudirman again, so it didn't
-settle this:
+**KRL.** `ss` is the tap-out station (**confirmed**). Tapping in and out at Sudirman, without
+riding, gave `48`, so `48` is Sudirman. Rides from Cakung to Sudirman also give `48`, so the code
+is the station tapped out at. `26` then comes from the rides from Sudirman to Kranji.
 
-| Code | If it's the tap-out station | If it's the tap-in station |
-| --- | --- | --- |
-| `48` | Sudirman | Cakung |
-| `26` | Kranji | Sudirman |
+| Code | Station |
+| --- | --- |
+| `26` | Kranji |
+| `48` | Sudirman |
 
-Two things lean towards the tap-out reading, but neither confirms it:
-- The owner believes both souvenir cards were bought at Sudirman, and both cards' first entries
-  carry `48`.
-- On LRT, the code is the tap-out station (see below).
+The souvenir cards' first entries, both bought at Sudirman, carry `48` too: on a sale, `ss` is
+where the card was sold.
+
+**Leaving at the station tapped in at** cost 1 rupiah. It's an ordinary KRL entry, with
+D12 = `01`.
 
 **LRT Jabodebek.** `ss` is the tap-out station (**confirmed**). The same pair of stations was
 ridden in both directions: Rasuna Said to Dukuh Atas gave `01`, and Dukuh Atas to Rasuna Said
@@ -124,11 +128,18 @@ gave `03`.
 These are neighbouring stations, numbered in line order from the Dukuh Atas end.
 
 **TransJakarta.** The bytes are identical at different tap-in and tap-out haltes, so these
-entries carry no halte (**confirmed**). All seven rides seen were on Koridor 6, and KAI's own
-app sometimes labels these entries "TRANSJAKARTA KORIDOR 6". So the bytes could still encode the
-corridor (**open**). A ride on another corridor would tell. Label them "JakLingko": TransJakarta doesn't take KMT
-itself, but its gates run JakLingko's software, accept KMT as an integrated transport card, and
-show "JAKLINGKO Rp3500" on a tap.
+entries carry no halte (**confirmed**). All eight rides seen were on Koridor 6, and KAI's own app
+sometimes labels these entries "TRANSJAKARTA KORIDOR 6". So `001C` could still be the corridor
+rather than TransJakarta as a whole (**open**). A ride on another corridor would tell.
+
+TransJakarta doesn't take KMT itself. Its gates run JakLingko's software, accept KMT as an
+integrated transport card, and show "JAKLINGKO Rp3500" on a tap. Label these entries
+"TransJakarta" when D10–D11 = `001C`, and "JakLingko" for an unknown `0116` entry.
+
+**MRT Jakarta.** One ride, Dukuh Atas to Bundaran HI, gave `0010` in D10–D11 and an amount of 0.
+It isn't known yet whether `0010` means MRT as a whole or Bundaran HI (**open**). Why it was free
+is also **open**: the ride began 21 minutes after a TransJakarta fare, so JakLingko's integrated
+fare is one possibility.
 
 Other readers show these entries as Tebet. We don't, because:
 - It doesn't fit what the gate shows.
@@ -153,7 +164,7 @@ same while its neighbour changes. Call that recurring value **G**.
 | 1 | Every tap-in, KRL and LRT: probably the tap-in record |
 | 2 | Every tap: G after a KRL or LRT tap-in, something different after each tap-out |
 | 3 | Nothing seen on the daily card. G on a souvenir card whose last ride was TransJakarta |
-| 4 | Every TransJakarta tap, in and out, to a new value each time: JakLingko's own trip record (**likely**). The top-up seems to write nothing here |
+| 4 | Every TransJakarta and MRT tap, in and out, to a new value each time: JakLingko's own trip record (**likely**). The top-up seems to write nothing here |
 
 Blocks 3–4 are all zero on the one card that has never been to TransJakarta or topped up.
 
@@ -168,8 +179,9 @@ LRT ride it still holds the values from the KRL ride before. KAI seems to keep i
 
 ## Open questions and the dumps that would answer them
 
-- **KRL: tap-in or tap-out station?** Dump after any KRL ride that doesn't start or end where
-  the usual ones do.
 - **The amount field:** a top-up over 65,535 shows whether D4–D5 are part of it.
-- **Rides by MRT Jakarta**, if KMT works there: what its entries look like.
-- **More KRL stations:** each new tap-out or tap-in station gives one more code.
+- **MRT: is `0010` the line or the station?** Dump after an MRT ride that ends somewhere other
+  than Bundaran HI. A paid MRT ride, not long after any JakLingko fare, would also show whether
+  integration is why the first one was free.
+- **TransJakarta: is `001C` Koridor 6?** Dump after a ride on another corridor.
+- **More stations:** each new KRL or LRT tap-out station gives one more code.
