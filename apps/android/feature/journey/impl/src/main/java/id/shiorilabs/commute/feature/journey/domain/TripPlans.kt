@@ -40,6 +40,7 @@ fun Journey.toTripPlan(): TripPlan = TripPlan(
                 to = leg.to.toTripStop(),
                 distanceM = leg.distanceM,
                 corridorLabel = leg.corridorLabel,
+                fromExit = leg.fromExit,
             )
         }
     },

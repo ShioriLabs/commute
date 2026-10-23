@@ -111,6 +111,20 @@ class JourneyRepositoryImplTest {
     }
 
     @Test
+    fun `a walk carries the exit it leaves by, and one with no exit data carries none`() = runTest {
+        // Dukuh Atas to Sudirman as production sent it: the exit has no sign text, `signs` is null.
+        val body = checkNotNull(javaClass.getResource("/trips_exit_walk.json")).readText()
+        val result: TripResult = json.decodeFromJsonElement(json.parseToJsonElement(body).jsonObject.getValue("data"))
+        val service = FakeCommuteService().apply { trips = { _, _, _ -> result } }
+
+        val journeys = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
+            .trips("MRTJ-DKA", "KCI-SUD", JourneyCriteria()).getOrNull()!!.journeys
+
+        assertEquals("D", (journeys[0].legs[0] as JourneyLeg.Transfer).fromExit)
+        assertNull((journeys[1].legs[0] as JourneyLeg.Transfer).fromExit)
+    }
+
+    @Test
     fun `a route carries its other boardings and each leg its trains and change allowance`() = runTest {
         val journey = JourneyRepositoryImpl(service(), testQueryClient(backgroundScope, clock))
             .trips("KCI-BOO", "MRTJ-LBB", JourneyCriteria()).getOrNull()!!

@@ -68,6 +68,7 @@ import id.shiorilabs.commute.core.ui.components.TimelineRow
 import id.shiorilabs.commute.core.ui.components.TimelineStopLine
 import id.shiorilabs.commute.core.ui.components.TimelineStopName
 import id.shiorilabs.commute.core.ui.components.TransferIcon
+import id.shiorilabs.commute.core.ui.components.WalkDetail
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.ext.parseHexColor
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
@@ -406,13 +407,14 @@ private fun TransferLeg(leg: JourneyLeg.Transfer, gap: Change? = null) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(imageVector = CommuteIcons.Walk, contentDescription = null, modifier = Modifier.size(14.dp), tint = Slate500)
-            val walk = if (leg.distanceM > 0) " " + stringResource(R.string.journey_transfer_walk, leg.distanceM) else ""
-            Text(
-                text = stringResource(R.string.journey_transfer_to, leg.to.name) + walk,
-                modifier = Modifier.weight(1f, fill = false),
-                style = MaterialTheme.typography.bodyMedium,
-                color = Slate500,
-            )
+            Column(modifier = Modifier.weight(1f, fill = false)) {
+                Text(
+                    text = stringResource(R.string.journey_transfer_to, leg.to.name),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Slate500,
+                )
+                WalkDetail(exit = leg.fromExit, distanceM = leg.distanceM, color = Slate500)
+            }
             gap?.let { ConnectionNote(it) }
         }
     }
