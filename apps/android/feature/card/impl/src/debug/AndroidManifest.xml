@@ -1,14 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- The card dumper, a debug build's alone: a release asks for no NFC at all. -->
-    <uses-permission android:name="android.permission.NFC" />
-    <uses-feature
-        android:name="android.hardware.nfc"
-        android:required="false" />
-
     <application>
-        <!-- The card dumps, shared from the dumper. -->
+        <!-- The card dumps, shared from the dumper, a debug build's alone. -->
         <provider
             android:name=".dump.CardDumpProvider"
             android:authorities="${applicationId}.carddump"

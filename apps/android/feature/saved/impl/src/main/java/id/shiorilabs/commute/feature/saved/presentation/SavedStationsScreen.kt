@@ -70,6 +70,7 @@ import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.startup.HoldStartupWhile
 import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
 import id.shiorilabs.commute.core.ui.time.updatedAgoText
+import id.shiorilabs.commute.feature.card.api.CardTap
 import id.shiorilabs.commute.feature.journey.presentation.SavedRouteCard
 import id.shiorilabs.commute.feature.saved.R
 import id.shiorilabs.commute.feature.saved.presentation.components.ChevronPullIndicator
@@ -95,6 +96,7 @@ import java.time.LocalDateTime
 fun SavedStationsScreen(
     innerPadding: PaddingValues,
     savedRouteCard: SavedRouteCard,
+    cardTap: CardTap,
     viewModel: SavedStationsViewModel = hiltViewModel(),
     nearbyViewModel: NearbyViewModel = hiltViewModel(),
 ) {
@@ -132,6 +134,7 @@ fun SavedStationsScreen(
         onRouteClick = { fromId, toId -> navigator.goTo(Route.Otw(fromId = fromId, toId = toId)) },
         onEditClick = { navigator.goTo(Route.SettingsSavedStations) },
         savedRouteCard = savedRouteCard,
+        cardTap = cardTap,
         nearby = nearby,
         raised = raised,
         onNearbyPermission = nearbyViewModel::onPermissionResult,
@@ -154,6 +157,7 @@ private fun SavedStationsContent(
     onRouteClick: (fromId: String, toId: String) -> Unit = { _, _ -> },
     onEditClick: () -> Unit = {},
     savedRouteCard: SavedRouteCard = NoSavedRouteCard,
+    cardTap: CardTap = NoCardTap,
     /** The running trip's card, `null` while there is none. */
     nearby: NearbyUiState = NearbyUiState.Hidden,
     raised: List<String> = emptyList(),
@@ -236,6 +240,10 @@ private fun SavedStationsContent(
             slidesWithPage = coveredByPage,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
+        cardTap.Content(
+            railHeight = innerPadding.calculateBottomPadding() + NavRailHeight,
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 
@@ -278,6 +286,13 @@ private object NoSavedRouteCard : SavedRouteCard {
 
     @Composable
     override fun Content(fromId: String, toId: String, modifier: Modifier) = Unit
+}
+
+/** Previews have no card feature to read a card. */
+private object NoCardTap : CardTap {
+
+    @Composable
+    override fun Content(railHeight: Dp, modifier: Modifier) = Unit
 }
 
 @Composable
@@ -794,6 +809,9 @@ private fun railSlidesWithPage(): Boolean {
 
 /** The rail's cards plus their padding: what the feed's last card has to scroll clear of. */
 private val NavRailClearance = 168.dp
+
+/** The rail itself, above the bottom inset: its cards (128dp) and the 16dp above and below them. */
+private val NavRailHeight = 160.dp
 
 /** Between one station's last card and the next station's name, the web's `gap-5`. */
 private val StationGap = 20.dp

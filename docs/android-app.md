@@ -207,10 +207,14 @@ The app lives in this public repo, like everything else in Commute. The
 exception is any module whose *implementation* someone could plausibly object
 to. Those live in a **separate private repo** and are pulled in at build time.
 
-- **First case: the card readers.** `:feature:card:api` here holds the
-  `CardReader` interface, and `:feature:card:impl` the screens and the fare
-  comparison. The reader implementations (the command sequences for each card)
-  are a module in the private repo that implements `:feature:card:api`.
+- **First case: the card readers.** `:feature:card:api` here holds the card
+  model (`CardSnapshot`) and the `CardTap` seam home renders; `:feature:card:impl`
+  holds the `CardReader` interface, the screens and the fare comparison.
+  - **Decided 2026-10-24: the KMT reader is public**, in `:feature:card:impl`.
+    It is written only from our own card dumps (`feature/card/spec/KMT.md`),
+    so there is no third-party reader code to object to. A reader that can't be
+    written that way still belongs in the private repo, as a module that
+    provides a `CardReader`.
 - **Why:** an objection to one reader would otherwise be an objection to the
   whole repo: the web app, the API and these docs would all sit behind the
   same takedown notice. Kept apart, a contested module can be pulled without

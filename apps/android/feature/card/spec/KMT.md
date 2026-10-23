@@ -177,6 +177,19 @@ tell whether a TransJakarta trip is in progress.
 `30CB` holds the same two blocks as `3089` blocks 1–2, but changes only on KRL taps. After an
 LRT ride it still holds the values from the KRL ride before. KAI seems to keep its own copy.
 
+## What the app reads (`reader/KmtReader.kt`)
+
+On a tap on home the app polls system `90B7`, then reads `1013` block 0, `200D` blocks 0-15 and
+`3009` block 0, and nothing else. Each field it shows rests on a section above:
+
+- Balance: D0-D3 of the purse, little-endian (confirmed).
+- Time, amount and entry kind: D0-D3, D6-D7 and D8-D13 of each non-empty history block (confirmed).
+- Money in or out: D12 (likely). If a top-up or a refund turns out to read the wrong way, the sign
+  in `KmtReader.entry` is the one line to change.
+- Station names: only the tap-out codes listed under the history table. Any other code leaves the
+  place blank, and the app then shows the operator's name instead.
+- Only the last four digits of the card number reach the screen.
+
 ## Open questions and the dumps that would answer them
 
 - **The amount field:** a top-up over 65,535 shows whether D4–D5 are part of it.
