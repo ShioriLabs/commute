@@ -12,8 +12,12 @@ import java.io.IOException
  * [onCard] runs on the reader's thread with the card connected, and may block there; the
  * connection closes when it returns.
  */
-internal fun NfcAdapter.readFelica(activity: Activity, onCard: (TappedCard) -> Unit) {
-    val extras = Bundle().apply { putInt(NfcAdapter.EXTRA_READER_PRESENCE_CHECK_DELAY, PRESENCE_CHECK_MS) }
+internal fun NfcAdapter.readFelica(
+    activity: Activity,
+    presenceCheckMs: Int = PRESENCE_CHECK_MS,
+    onCard: (TappedCard) -> Unit,
+) {
+    val extras = Bundle().apply { putInt(NfcAdapter.EXTRA_READER_PRESENCE_CHECK_DELAY, presenceCheckMs) }
     val callback = NfcAdapter.ReaderCallback { tag ->
         val nfcF = NfcF.get(tag) ?: return@ReaderCallback
         try {

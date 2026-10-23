@@ -1,5 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Reading a card from home. -->
+    <string name="card_pill_description">Saldo %1$s. Buka detail kartu</string>
+    <string name="card_pill_label_kmt">KMT</string>
+    <string name="card_tap_miss">Kartunya gak kebaca. Coba tempel lagi</string>
+    <string name="card_sheet_title">Kartu KMT</string>
+    <string name="card_sheet_close">Tutup</string>
+    <string name="card_digits">•••• %1$s</string>
+    <string name="card_last_ride">Perjalanan terakhir</string>
+    <string name="card_history">Riwayat</string>
+    <string name="card_history_empty">Belum ada riwayat di kartu ini</string>
+    <string name="card_entry_ride">Perjalanan</string>
+    <string name="card_entry_topup">Isi saldo</string>
     <!-- The card dumper: debug builds only, so these never reach a rider. -->
     <string name="card_dumper_title">Dump Kartu FeliCa</string>
     <string name="card_dumper_back">Kembali</string>
