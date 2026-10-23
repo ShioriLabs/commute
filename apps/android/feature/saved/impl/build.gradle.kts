@@ -22,6 +22,8 @@ dependencies {
     implementation(project(":feature:station:api"))
     // SavedRouteCard: a pinned pair's card, the journey feature's seam.
     implementation(project(":feature:journey:api"))
+    // CardTap: a card touched to the phone, read on home. The card feature's seam.
+    implementation(project(":feature:card:api"))
     // "Di dekat kamu": one fix while home is open, asked for only from its card.
     implementation(project(":core:location"))
     // The saved stations' timetables, handed to the watch for its departures complication.

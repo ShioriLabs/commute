@@ -1,8 +1,6 @@
 package id.shiorilabs.commute.feature.card.presentation
 
-import android.app.Activity
 import android.content.Context
-import android.content.ContextWrapper
 import android.content.Intent
 import android.nfc.NfcAdapter
 import android.provider.Settings
@@ -55,6 +53,7 @@ import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.feature.card.R
 import id.shiorilabs.commute.feature.card.dump.CardDump
 import id.shiorilabs.commute.feature.card.felica.DumpProgress
+import id.shiorilabs.commute.feature.card.felica.findActivity
 import id.shiorilabs.commute.feature.card.felica.readFelica
 
 /** The settings pages' p-8, so the dumper lines up with Experimental, where it's opened from. */
@@ -270,12 +269,6 @@ private fun Done(dump: CardDump, savedAs: String?, onSave: (String) -> Unit, onA
 @Composable
 private fun Hint(text: String) {
     Text(text = text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-}
-
-private tailrec fun Context.findActivity(): Activity? = when (this) {
-    is Activity -> this
-    is ContextWrapper -> baseContext.findActivity()
-    else -> null
 }
 
 @Preview

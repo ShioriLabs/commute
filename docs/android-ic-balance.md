@@ -87,7 +87,10 @@ responses without a device.
 ### Where the readers live
 
 The interface above, the screens and the fare comparison are in this public
-repo. **Reader implementations are not**: each one lives in a separate private
+repo. **Decided 2026-10-24: the KMT reader is public too**, in
+`feature/card/impl` (`reader/KmtReader.kt`). It is written only from our own
+card dumps, and `feature/card/spec/KMT.md` records where each constant came
+from. A reader that can't be written that way still lives in a separate private
 repo and is included only in release builds (`android-app.md`, "Where the code
 lives").
 
