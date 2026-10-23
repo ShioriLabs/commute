@@ -97,7 +97,7 @@ import id.shiorilabs.commute.core.ui.components.TimelineNode
 import id.shiorilabs.commute.core.ui.components.TimelineRow
 import id.shiorilabs.commute.core.ui.components.TimelineStopLine
 import id.shiorilabs.commute.core.ui.components.TimelineStopName
-import id.shiorilabs.commute.core.ui.components.WalkDetail
+import id.shiorilabs.commute.core.ui.components.WalkExit
 import id.shiorilabs.commute.core.ui.components.TransferIcon
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.components.CommuteButton
@@ -714,12 +714,13 @@ private fun WalkRow(walk: TripLeg.Transfer, modifier: Modifier = Modifier) {
                 tint = Slate500,
             )
             Column {
+                val distance = if (walk.distanceM > 0) " " + stringResource(R.string.trip_live_transfer_walk, walk.distanceM) else ""
                 Text(
-                    text = stringResource(R.string.trip_live_transfer_to, walk.to.name),
+                    text = stringResource(R.string.trip_live_transfer_to, walk.to.name) + distance,
                     style = MaterialTheme.typography.bodyMedium,
                     color = Slate500,
                 )
-                WalkDetail(exit = walk.fromExit, distanceM = walk.distanceM, color = Slate500)
+                WalkExit(exit = walk.fromExit, color = Slate500, modifier = Modifier.padding(top = 4.dp))
                 walk.corridorLabel?.let {
                     Text(text = stringResource(R.string.trip_live_walk_corridor, it), style = MaterialTheme.typography.bodySmall, color = Slate500)
                 }
