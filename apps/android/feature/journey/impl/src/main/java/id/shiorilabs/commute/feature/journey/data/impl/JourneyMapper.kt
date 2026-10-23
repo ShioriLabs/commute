@@ -87,6 +87,7 @@ private fun FareTransferLeg.toTransfer(): JourneyLeg.Transfer = JourneyLeg.Trans
     distanceM = distanceM.roundToInt(),
     fare = fare?.roundToInt(),
     corridorLabel = corridorLabel,
+    fromExit = fromExit?.ref,
 )
 
 private fun FareSegmentDto.toSegment(): FareSegment = FareSegment(

@@ -35,6 +35,14 @@ class TripPlansTest {
     }
 
     @Test
+    fun `a walk's exit goes into the plan with it`() {
+        fun planWith(walk: JourneyLeg) = journey(ride("MRTJ:M", "MRTJ-BHI", "MRTJ-DKA"), walk, ride("KCI:B", "KCI-SUD", "KCI-MRI")).toTripPlan()
+
+        assertEquals("D", (planWith(walk("MRTJ-DKA", "KCI-SUD").copy(fromExit = "D")).legs[1] as TripLeg.Transfer).fromExit)
+        assertNull((planWith(walk("MRTJ-DKA", "KCI-SUD")).legs[1] as TripLeg.Transfer).fromExit)
+    }
+
+    @Test
     fun `haltes several routes serve keep every route, and say which way only when they agree`() {
         // Setiabudi Integritas to Karet Kuningan on 2026-10-06: planned on 4D, ridden on an L13E.
         val leg = ride("TJ:4D", "TJ-H00215P", "TJ-H00098P").copy(
