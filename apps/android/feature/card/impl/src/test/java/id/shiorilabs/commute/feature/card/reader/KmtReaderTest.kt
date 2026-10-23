@@ -30,6 +30,17 @@ class KmtReaderTest {
     }
 
     @Test
+    fun `a card that exposes only the read-only service codes reads the same`() {
+        val snapshot = reader.read(
+            tag(balance = 96_030, number = "6032984400004821", history = listOf(krl("2026-10-23T11:42:00Z", 3_000, "48")), readOnlyCodes = true),
+        )!!
+
+        assertEquals(96_030L, snapshot.balanceRupiah)
+        assertEquals("4821", snapshot.lastDigits)
+        assertEquals(1, snapshot.entries.size)
+    }
+
+    @Test
     fun `a card without the KMT system isn't ours`() {
         val other = FakeCard(listOf(FakeCard.System(code = 0x0003, idm = IDM)))
 
@@ -114,6 +125,7 @@ class KmtReaderTest {
         number: String = "6032984400004821",
         history: List<ByteArray> = emptyList(),
         loseAfter: Int = Int.MAX_VALUE,
+        readOnlyCodes: Boolean = false,
     ): CardTag {
         val purse = int32le(balance) + ByteArray(12)
         val blocks = (history + List(16 - history.size) { EMPTY })
@@ -122,11 +134,19 @@ class KmtReaderTest {
                 FakeCard.System(
                     code = 0x90B7,
                     idm = IDM,
-                    services = mapOf(
-                        0x1013 to FakeCard.Service(blocks = listOf(purse)),
-                        0x200D to FakeCard.Service(blocks = blocks),
-                        0x3009 to FakeCard.Service(blocks = listOf(number.encodeToByteArray())),
-                    ),
+                    services = if (readOnlyCodes) {
+                        mapOf(
+                            0x1017 to FakeCard.Service(blocks = listOf(purse)),
+                            0x200F to FakeCard.Service(blocks = blocks),
+                            0x300B to FakeCard.Service(blocks = listOf(number.encodeToByteArray())),
+                        )
+                    } else {
+                        mapOf(
+                            0x1013 to FakeCard.Service(blocks = listOf(purse)),
+                            0x200D to FakeCard.Service(blocks = blocks),
+                            0x3009 to FakeCard.Service(blocks = listOf(number.encodeToByteArray())),
+                        )
+                    },
                 ),
             ),
             loseAfter = loseAfter,
