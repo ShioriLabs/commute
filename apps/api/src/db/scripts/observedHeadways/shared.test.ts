@@ -74,13 +74,25 @@ describe('mergedCells', () => {
 })
 
 describe('pooledSharedCv', () => {
-  it('pools days per block and over the whole day type, above the floor only', () => {
-    const cell = (g: number) => [g + 1, g, g * 300, g * 300 * 300] as [number, number, number, number]
+  const cell = (g: number, h: number) => [g + 1, g, g * h, g * h * h] as [number, number, number, number]
+
+  it('pools days per block, above the floor only', () => {
     const cv = pooledSharedCv([
-      { dayType: 'WD', cells: { k: { 3: cell(MIN_SHARED_GAPS), 4: cell(5) } } }
+      { dayType: 'WD', cells: { k: { 3: cell(MIN_SHARED_GAPS, 300), 4: cell(5, 300) } } }
     ])
     expect(cv.get('WD:3:k')).toBeCloseTo(0, 5)
     expect(cv.has('WD:4:k')).toBe(false)
-    expect(cv.has('WD:*:k')).toBe(true)
+  })
+
+  /*
+   * Perfectly even service in each block, at different headways: pooled across
+   * blocks it would read as uneven (CV 0.6 here), so it never is.
+   */
+  it('never pools across blocks, which would turn two even headways into false unevenness', () => {
+    const cv = pooledSharedCv([
+      { dayType: 'WD', cells: { k: { 2: cell(MIN_SHARED_GAPS, 300), 3: cell(MIN_SHARED_GAPS, 1200) } } }
+    ])
+    expect([...cv.keys()].sort()).toEqual(['WD:2:k', 'WD:3:k'])
+    expect([...cv.values()].every(v => v < 1e-6)).toBe(true)
   })
 })

@@ -85,9 +85,9 @@ function render(cv: Map<string, number>, days: readonly SharedDay[], setCount: n
  * See db/scripts/observedHeadways/shared.ts and docs/adr/tj-shared-waits.md.
  *
  * SHARED_CV[\`\${dayType}:\${block}:\${stop}>\${next}|\${lines}\`], where block
- * indexes SHARED_CV_BLOCKS (or is \`*\` for the day type pooled over every block),
- * stop and next are full station ids (next says which way) and lines are the
- * set's codes, sorted, comma-joined. A cell needs ${MIN_SHARED_GAPS} pooled gaps.
+ * indexes SHARED_CV_BLOCKS, stop and next are full station ids (next says which
+ * way) and lines are the set's codes, sorted, comma-joined. Never pooled across
+ * blocks, which would mix headway regimes into false unevenness. A cell needs ${MIN_SHARED_GAPS} pooled gaps.
  * Read through utils/tjWaits.ts.
  */
 
@@ -113,15 +113,14 @@ async function main() {
   const sets = enumerateSharedSets()
   const cv = pooledSharedCv(days)
 
-  const pooled = [...cv].filter(([k]) => k.split(':')[1] === '*')
-  const values = pooled.map(([, v]) => v).sort((a, b) => a - b)
-  const q = (p: number) => values[Math.min(values.length - 1, Math.floor(p * values.length))]?.toFixed(2) ?? '-'
-  console.log(`${days.length} days ${days[0]!.day}..${days.at(-1)!.day}; ${sets.length} shared sets`)
+  console.log(`${days.length} days ${days[0]!.day}..${days.at(-1)!.day}; ${sets.length} shared sets; ${cv.size} cells`)
   for (const type of ['WD', 'WE'] as const) {
-    const covered = new Set(pooled.filter(([k]) => k.startsWith(`${type}:`)).map(([k]) => k.slice(k.indexOf(':', 3) + 1)))
-    console.log(`  ${type}: ${covered.size} of ${sets.length} sets have a pooled CV`)
+    for (let block = 0; block < RUNTIME_BLOCKS.length; block++) {
+      const values = [...cv].filter(([k]) => k.startsWith(`${type}:${block}:`)).map(([, v]) => v).sort((a, b) => a - b)
+      const q = (p: number) => values[Math.min(values.length - 1, Math.floor(p * values.length))]?.toFixed(2) ?? '-'
+      console.log(`  ${type} ${blockLabel(block)}: ${values.length} of ${sets.length} sets; CV p10 ${q(0.1)}, p50 ${q(0.5)}, p90 ${q(0.9)}`)
+    }
   }
-  console.log(`  pooled CV p10 ${q(0.1)}, p50 ${q(0.5)}, p90 ${q(0.9)}, max ${q(1)}; ${cv.size} cells in all`)
 
   if (!args['no-write']) {
     fs.writeFileSync(args.out, render(cv, days, sets.length))

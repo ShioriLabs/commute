@@ -51,6 +51,32 @@ describe('plan with a wait model', () => {
     expect(best!.criteria.waitS).toBe(300)
   })
 
+  /*
+   * Three lines leave A together; Z turns off after B, Y after C. Riding X to D
+   * is charged the three-line wait at A, topped up twice: to the two-line wait
+   * past B and to X's own past C.
+   */
+  const threeWay = buildGraph([
+    ...edge('X', 'TJ-A', 'TJ-B'), ...edge('X', 'TJ-B', 'TJ-C'), ...edge('X', 'TJ-C', 'TJ-D'),
+    ...edge('Y', 'TJ-A', 'TJ-B'), ...edge('Y', 'TJ-B', 'TJ-C'),
+    ...edge('Z', 'TJ-A', 'TJ-B')
+  ], [])
+  const bySize: Record<number, number> = { 3: 60, 2: 90, 1: 300 }
+
+  it('tops the wait up at each line that leaves, not only at the last', () => {
+    const model: WaitModel = lines => bySize[lines.length]!
+    expect(plan(threeWay, 'TJ-A', 'TJ-B', { waitS: model })[0]!.criteria.waitS).toBe(60)
+    expect(plan(threeWay, 'TJ-A', 'TJ-C', { waitS: model })[0]!.criteria.waitS).toBe(90)
+    expect(plan(threeWay, 'TJ-A', 'TJ-D', { waitS: model })[0]!.criteria.waitS).toBe(300)
+  })
+
+  // A model that breaks its contract and shrinks as the set narrows must not
+  // hand back wait already charged: criteria only ever grow.
+  it('never refunds wait when a narrower set is quoted lower', () => {
+    const shrinking: WaitModel = lines => ({ 3: 200, 2: 100, 1: 50 } as Record<number, number>)[lines.length]!
+    expect(plan(threeWay, 'TJ-A', 'TJ-D', { waitS: shrinking })[0]!.criteria.waitS).toBe(200)
+  })
+
   it('charges half the headway, as before, without one', () => {
     const [best] = plan(graph, 'TJ-A', 'TJ-C', { headwaysS: new Map([['X', 600], ['Y', 600]]) })
     expect(best!.criteria.waitS).toBe(300)

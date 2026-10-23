@@ -10,7 +10,7 @@ import { wibHour } from './health'
  * The lines' bus counts add up exactly when their streams are merged, so the
  * shared headway needs no fit: it is 1 / Σ(1 / h_i) from the per-line model.
  * What does need measuring is how unevenly the merged buses come. Lines on one
- * road are held up by the same traffic and arrive together, which leaves the
+ * road are held up by the same traffic and can arrive together, which leaves the
  * long gaps a rider is most likely to land in; that shows up as the merged
  * stream's CV, and only there.
  *
@@ -115,8 +115,13 @@ export function mergedCells(
 export const MIN_SHARED_GAPS = 30
 
 /**
- * CV of the merged gaps, pooled over days: per day type and block, and per day
- * type over all blocks (`*`), each only where it has MIN_SHARED_GAPS gaps.
+ * CV of the merged gaps, pooled over days per day type and block, only where a
+ * cell has MIN_SHARED_GAPS gaps.
+ *
+ * Never pooled across blocks. A day's blocks run different headways, and gaps
+ * from 10-minute and 25-minute hours pooled together read as uneven service
+ * that no single hour has: all-day cells put the median CV at 1.3-1.5 where
+ * the daytime blocks sit at 0.84-0.95.
  */
 export function pooledSharedCv(days: readonly { dayType: DayType, cells: Record<string, Record<number, Cell>> }[]): Map<string, number> {
   const sums = new Map<string, [g: number, sumH: number, sumH2: number]>()
@@ -131,7 +136,6 @@ export function pooledSharedCv(days: readonly { dayType: DayType, cells: Record<
     for (const [key, blocks] of Object.entries(day.cells)) {
       for (const [block, c] of Object.entries(blocks)) {
         add(`${day.dayType}:${block}:${key}`, c)
-        add(`${day.dayType}:*:${key}`, c)
       }
     }
   }

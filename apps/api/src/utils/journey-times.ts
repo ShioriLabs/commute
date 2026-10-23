@@ -345,7 +345,6 @@ function withEstimate(
   const sortS = options.sortStatistic === 'p75'
     ? estimatedArrivalS(route, router, context, walking, { ...options, statistic: 'p75' })?.arrivalS ?? null
     : median.arrivalS
-  const sortArrivalS = sortS
   /*
    * Where a timed ride opens the journey, the card counts from that boarding,
    * as it does on a fully timed one; the client cannot recover `at` itself
@@ -356,7 +355,7 @@ function withEstimate(
   const fromS = firstRide?.type === 'RIDE' && firstRide.departureAt
     ? Math.max(0, Math.round((Date.parse(firstRide.departureAt) - context.departureAt.getTime()) / 1000))
     : 0
-  return { journey: { ...journey, estimate: { durationS: median.arrivalS - atS, fromS, rideS } }, sortArrivalS }
+  return { journey: { ...journey, estimate: { durationS: median.arrivalS - atS, fromS, rideS } }, sortArrivalS: sortS }
 }
 
 /** Every journey in a trips answer, timed against the request's own clock. */
@@ -496,13 +495,23 @@ function relabel(journeys: FareJourney[]): FareJourney[] {
  * estimate. That is still one rule, arrival, applied to every row that has one;
  * rows with neither stay in the untimed tail. Without it, exactly as before.
  *
- * Where an estimate is involved, arriving earlier is not enough on its own: a
- * journey moves ahead of one the engine ranked higher only when it arrives
- * ESTIMATE_OVERTAKE_S earlier. Between two timetabled journeys the margin is
- * zero, so an all-rail answer sorts exactly as it always has. The order is
- * built by repeatedly taking the earliest remaining arrival and, in its place,
- * the first journey in engine order that it does not beat by the margin. That
- * is deterministic, which a pairwise "close enough" comparator in a sort is not.
+ * Where an estimate is involved, arriving earlier is not enough on its own. The
+ * order is built by repeatedly finding the earliest remaining arrival and, in
+ * its place, taking the first journey in engine order that arrives within
+ * ESTIMATE_OVERTAKE_S of it, so a journey only displaces the engine's choice
+ * by beating it by the margin. Two rules on top:
+ *
+ * - Between timetabled journeys the margin is zero, and no train is ever taken
+ *   while an earlier train remains: timetabled arrivals keep their exact
+ *   order however the estimates fall between them, and an all-rail answer
+ *   sorts exactly as it always has.
+ * - The margin is measured against the earliest remaining journey, not between
+ *   every pair, because a pairwise rule can contradict itself: with estimates
+ *   A 12:20, B 12:18, C 12:16 in engine order, C beats A by the margin but
+ *   neither B nor C beats the one ahead of it, and no order satisfies all three.
+ *   This one gives B, C, A.
+ *
+ * Deterministic, which a "close enough" comparator handed to a sort is not.
  *
  * Exported for its own tests: the all-or-nothing rule and the stable tie-break
  * are the parts worth pinning, and reaching them through retimeTrips would mean
@@ -531,10 +540,12 @@ export function byArrival(
   while (remaining.length > 0) {
     let lead = remaining[0]!
     for (const j of remaining) if (arrivalOf(j)! < arrivalOf(lead)!) lead = j
+    const trainAhead = (j: FareJourney) => j.arrivalAt !== undefined
+      && remaining.some(k => k.arrivalAt !== undefined && arrivalOf(k)! < arrivalOf(j)!)
     // The earliest arrival qualifies for its own place, so this always finds one.
     const next = remaining.findIndex((j) => {
       const behind = arrivalOf(j)! - arrivalOf(lead)!
-      return behind <= 0 || behind < marginMs(j, lead)
+      return (behind <= 0 || behind < marginMs(j, lead)) && !trainAhead(j)
     })
     ordered.push(...remaining.splice(next, 1))
   }

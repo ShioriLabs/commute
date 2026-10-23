@@ -26,7 +26,7 @@ describe('headways.shared', () => {
     for (const key of Object.keys(SHARED_CV)) {
       const { dayType, block, set } = parse(key)
       expect(['WD', 'WE']).toContain(dayType)
-      expect(block === '*' || (Number(block) >= 0 && Number(block) < SHARED_CV_BLOCKS.length)).toBe(true)
+      expect(Number.isInteger(Number(block)) && Number(block) >= 0 && Number(block) < SHARED_CV_BLOCKS.length).toBe(true)
       if (!known.has(set)) stale.push(set)
     }
     // A topology edit that drops a set should be refitted; say which, not just how many.
