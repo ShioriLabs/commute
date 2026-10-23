@@ -21,6 +21,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -83,13 +85,15 @@ fun TimelineRow(
     bottom: Brush?,
     modifier: Modifier = Modifier,
     node: (@Composable () -> Unit)? = null,
+    topDotted: Boolean = false,
+    bottomDotted: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     Layout(
         contents = listOf(
             content,
-            { Box(if (top != null) Modifier.background(top) else Modifier) },
-            { Box(if (bottom != null) Modifier.background(bottom) else Modifier) },
+            { Box(if (top != null) (if (topDotted) Modifier.walkDots(top) else Modifier.background(top)) else Modifier) },
+            { Box(if (bottom != null) (if (bottomDotted) Modifier.walkDots(bottom) else Modifier.background(bottom)) else Modifier) },
             { if (node != null) node() },
         ),
         modifier = modifier.fillMaxWidth(),
@@ -152,6 +156,57 @@ fun TimelineStopName(
 @Composable
 fun TimelineRow(rail: Brush?, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     TimelineRow(top = rail, bottom = rail, modifier = modifier, content = content)
+}
+
+/** How far apart a walk's dots sit; the web's `WALK_DOT_PITCH_PX`. */
+private val WalkDotPitch = 9.dp
+private val WalkDotRadius = 2.25.dp
+
+/**
+ * A walk's rail: dots in [brush] rather than a bar, because a bar says a line runs here and none
+ * does. Only whole dots, the first and last flush with the ends and the gaps between them even, as
+ * the web lays them with `background-repeat: space`, so the two halves either side of a node still
+ * line up with a walk's own.
+ */
+private fun Modifier.walkDots(brush: Brush): Modifier = drawBehind {
+    val pitch = WalkDotPitch.toPx()
+    val count = maxOf(1, (size.height / pitch).toInt())
+    val gap = if (count > 1) (size.height - count * pitch) / (count - 1) else 0f
+    val x = size.width / 2
+    repeat(count) { i ->
+        val y = if (count > 1) pitch / 2 + i * (pitch + gap) else size.height / 2
+        drawCircle(brush = brush, radius = WalkDotRadius.toPx(), center = Offset(x, y))
+    }
+}
+
+/**
+ * A walk between two stops: the rail as dots in [dots], and a person in [mark] on a white disc
+ * where the rail's middle is, as the web's walking leg draws it.
+ */
+@Composable
+fun WalkTimelineRow(dots: Color, mark: Color, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    TimelineRow(
+        top = SolidColor(dots),
+        bottom = SolidColor(dots),
+        modifier = modifier,
+        node = { WalkMark(mark) },
+        topDotted = true,
+        bottomDotted = true,
+        content = content,
+    )
+}
+
+/** The walker on a walk's rail; the disc is as wide as the gutter, so the dots end at its edge. */
+@Composable
+private fun WalkMark(color: Color) {
+    Box(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(Color.White)
+            .padding(2.dp),
+    ) {
+        Icon(imageVector = CommuteIcons.Walk, contentDescription = null, modifier = Modifier.size(24.dp), tint = color)
+    }
 }
 
 /** A stop on the rail: a disc of [fill] ringed in [ring]. */
