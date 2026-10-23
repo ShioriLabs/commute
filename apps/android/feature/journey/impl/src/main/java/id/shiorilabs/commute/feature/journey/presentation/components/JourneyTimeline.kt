@@ -68,7 +68,8 @@ import id.shiorilabs.commute.core.ui.components.TimelineRow
 import id.shiorilabs.commute.core.ui.components.TimelineStopLine
 import id.shiorilabs.commute.core.ui.components.TimelineStopName
 import id.shiorilabs.commute.core.ui.components.TransferIcon
-import id.shiorilabs.commute.core.ui.components.WalkExit
+import id.shiorilabs.commute.core.ui.components.WalkDetail
+import id.shiorilabs.commute.core.ui.components.WalkTimelineRow
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.ext.parseHexColor
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
@@ -141,7 +142,9 @@ internal fun JourneyTimeline(
                         sameStationChange = sameStationChange,
                         // The change's slate rail runs on to the nodes either side, as a walk's does.
                         walkBefore = walkRail(previous) ?: SolidColor(Slate300).takeIf { sameStationChange },
+                        walkBeforeDotted = previous is JourneyLeg.Transfer,
                         walkAfter = walkRail(following) ?: SolidColor(Slate300).takeIf { changeAfter },
+                        walkAfterDotted = following is JourneyLeg.Transfer,
                     )
                 }
 
@@ -160,8 +163,14 @@ internal fun JourneyTimeline(
  */
 @Composable
 private fun EndpointStop(name: String, start: Boolean) {
-    val walk = SolidColor(Slate300)
-    TimelineRow(top = walk.takeUnless { start }, bottom = walk.takeIf { start }, node = { StationNode(Slate400) }) {
+    val walk = SolidColor(Slate400)
+    TimelineRow(
+        top = walk.takeUnless { start },
+        bottom = walk.takeIf { start },
+        node = { StationNode(Slate400) },
+        topDotted = true,
+        bottomDotted = true,
+    ) {
         TimelineStopLine {
             TimelineStopName(text = name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
@@ -178,7 +187,7 @@ private fun EndpointStop(name: String, start: Boolean) {
 private fun walkRail(leg: JourneyLeg?): Brush? = when {
     leg !is JourneyLeg.Transfer -> null
     leg.corridorLabel != null && leg.fare != null -> SolidColor(Rose300)
-    else -> SolidColor(Slate300)
+    else -> SolidColor(Slate400)
 }
 
 @Composable
@@ -191,7 +200,9 @@ private fun RideLeg(
     changeGap: Change?,
     onPick: (tripId: String) -> Unit,
     walkBefore: Brush?,
+    walkBeforeDotted: Boolean,
     walkAfter: Brush?,
+    walkAfterDotted: Boolean,
 ) {
     var expanded by rememberSaveable(leg.from.id, leg.to.id, leg.line) { mutableStateOf(false) }
     val isBus = leg.operator == OPERATOR_TJ
@@ -218,7 +229,7 @@ private fun RideLeg(
         }
     }
 
-    TimelineRow(top = walkBefore, bottom = rail, node = { StationNode(legColor) }) {
+    TimelineRow(top = walkBefore, bottom = rail, node = { StationNode(legColor) }, topDotted = walkBeforeDotted) {
         StopLine(time = leg.departureAt) {
             TimelineStopName(text = leg.from.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             leg.platformCode?.let { platform ->
@@ -324,7 +335,7 @@ private fun RideLeg(
         }
     }
 
-    TimelineRow(top = rail, bottom = walkAfter, node = { StationNode(legColor) }) {
+    TimelineRow(top = rail, bottom = walkAfter, node = { StationNode(legColor) }, bottomDotted = walkAfterDotted) {
         StopLine(time = leg.arrivalAt) {
             TimelineStopName(text = leg.to.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             GetOffBadge(
@@ -365,7 +376,7 @@ private fun TransferLeg(leg: JourneyLeg.Transfer, gap: Change? = null) {
     // The breathing room is padding on the content, not on the row: outside the row, its rail can't
     // reach, which left a gap at both ends of every walk.
     if (fare != null && corridor != null) {
-        TimelineRow(rail = SolidColor(Rose300)) {
+        WalkTimelineRow(dots = Rose300, mark = Rose500) {
             Row(
                 modifier = Modifier.padding(vertical = 14.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -400,21 +411,19 @@ private fun TransferLeg(leg: JourneyLeg.Transfer, gap: Change? = null) {
         return
     }
 
-    TimelineRow(rail = SolidColor(Slate300)) {
+    WalkTimelineRow(dots = Slate400, mark = Slate500) {
         Row(
             modifier = Modifier.padding(vertical = 14.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(imageVector = CommuteIcons.Walk, contentDescription = null, modifier = Modifier.size(14.dp), tint = Slate500)
-            val walk = if (leg.distanceM > 0) " " + stringResource(R.string.journey_transfer_walk, leg.distanceM) else ""
-            Column(modifier = Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(modifier = Modifier.weight(1f, fill = false)) {
                 Text(
-                    text = stringResource(R.string.journey_transfer_to, leg.to.name) + walk,
+                    text = stringResource(R.string.journey_transfer_to, leg.to.name),
                     style = MaterialTheme.typography.bodyMedium,
                     color = Slate500,
                 )
-                WalkExit(exit = leg.fromExit, color = Slate500)
+                WalkDetail(exit = leg.fromExit, distanceM = leg.distanceM, color = Slate500)
             }
             gap?.let { ConnectionNote(it) }
         }
