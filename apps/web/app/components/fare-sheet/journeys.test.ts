@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FareJourney, FareResult, FareResultRideLeg, FareResultTransferLeg, Line, TripResult } from '@commute/schemas'
 import { JOURNEY_LABELS, JOURNEY_LABEL_DESCRIPTIONS } from './journey-labels'
-import { boardingLineKeys, ENDPOINT_ROUNDEL_MAX, endpointRoundelLines, journeysOf, liveDeparturesOf, sortJourneyLabels, walkDistanceOf } from './journeys'
+import { boardingLineKeys, ENDPOINT_ROUNDEL_MAX, endpointRoundelLines, estimatedDurationOf, journeysOf, liveDeparturesOf, sortJourneyLabels, walkDistanceOf } from './journeys'
 
 const legacy: FareResult = {
   from: { id: 'KCI-SUD', name: 'Sudirman' },
@@ -359,5 +359,21 @@ describe('liveDeparturesOf', () => {
 
   it('reads a body cached before more departures existed', () => {
     expect(liveDeparturesOf(timed(at('08:11')), now)).toEqual([{ departureAt: at('08:11') }])
+  })
+})
+
+describe('estimatedDurationOf', () => {
+  it('prints an estimated bus journey with its ± mark', () => {
+    expect(estimatedDurationOf(journey({ estimate: { durationS: 2700, fromS: 0, rideS: [1800] } }))).toBe('±45 mnt')
+  })
+
+  // A train-then-bus card counts from boarding the train, like a timed card.
+  it('counts from the first boarding when a timed ride opens the journey', () => {
+    expect(estimatedDurationOf(journey({ estimate: { durationS: 3000, fromS: 480, rideS: [null, 1200] } }))).toBe('±42 mnt')
+  })
+
+  it('says nothing without an estimate, or with an impossible one', () => {
+    expect(estimatedDurationOf(journey())).toBeNull()
+    expect(estimatedDurationOf(journey({ estimate: { durationS: 300, fromS: 300, rideS: [] } }))).toBeNull()
   })
 })

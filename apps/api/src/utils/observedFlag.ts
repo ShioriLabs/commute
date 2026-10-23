@@ -62,3 +62,55 @@ export async function refreshObservedHeadwaysFlag(kv: KVNamespace | undefined, r
 export function setObservedHeadwaysEnabled(value: boolean): void {
   enabled = value
 }
+
+/*
+ * Mode switch for the observed TransJakarta run times (utils/observedRuntimes.ts).
+ *
+ *   wrangler kv key put --binding KV config:observed-runtimes fields --remote
+ *   wrangler kv key put --binding KV config:observed-runtimes off --remote
+ *   wrangler kv key delete --binding KV config:observed-runtimes --remote   # back to sort
+ *
+ *   off     no estimates at all
+ *   fields  `estimate` on journeys, in the engine's order with timetabled
+ *           arrivals first, as before sort shipped
+ *   sort    estimates also take part in the arrival order (journey-times.ts
+ *           byArrival). The default since 2026-10-23, and what any unknown
+ *           value or a missing key means: the search ranks without counting
+ *           walk or ride time, so its own order put a 560 m walk to a 13E
+ *           (±22) over Galunggung + 6 (±18) from Sudirman, and the arrival
+ *           order is the one a rider can check.
+ *
+ * The estimates are applied after the journey cache (journey-endpoint `retime`),
+ * so a flip needs no cache scope and no purge: it reaches riders as fast as the
+ * 60 s KV edge cache and the /_internal edge cache (max-age 600) allow.
+ * Pinned per request like the headway switch, so one request never mixes modes.
+ */
+export const OBSERVED_RUNTIMES_FLAG_KEY = 'config:observed-runtimes'
+
+export type RuntimesMode = 'off' | 'fields' | 'sort'
+
+const parseRuntimesMode = (value: string | null): RuntimesMode => (value === 'off' || value === 'fields' ? value : 'sort')
+
+let runtimesMode: RuntimesMode = 'sort'
+const runtimesPerRequest = new WeakMap<Request, RuntimesMode>()
+
+/** The mode this request started with, falling back to the module value (tests, scripts). */
+export function observedRuntimesModeFor(request: Request): RuntimesMode {
+  return runtimesPerRequest.get(request) ?? runtimesMode
+}
+
+export async function refreshObservedRuntimesFlag(kv: KVNamespace | undefined, request?: Request): Promise<void> {
+  if (kv) {
+    try {
+      runtimesMode = parseRuntimesMode(await kv.get(OBSERVED_RUNTIMES_FLAG_KEY, { cacheTtl: OBSERVED_FLAG_CACHE_TTL }))
+    } catch {
+      // A KV hiccup must not flip the order riders see; keep the last value.
+    }
+  }
+  if (request) runtimesPerRequest.set(request, runtimesMode)
+}
+
+/** Test seam: set the held mode directly. */
+export function setObservedRuntimesMode(mode: RuntimesMode): void {
+  runtimesMode = mode
+}

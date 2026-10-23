@@ -5,7 +5,7 @@ import { EdgeRepository } from 'db/repositories/edges'
 import { assembleJourney, planJourney } from 'utils/fare-journey'
 import { handleJourneyRequest, journeyCacheKey } from 'utils/journey-endpoint'
 import { SERVICE_BREAKS, TOPOLOGY } from 'db/data/topology'
-import { loadGraph, type ServiceWindow, type Tsundere } from '@commute/tsundere'
+import { loadGraph, type LoadGraphInput, type ServiceWindow, type Tsundere, type WaitModel } from '@commute/tsundere'
 import { HEADWAYS_S, STOP_HEADWAYS_S } from 'db/data/headways'
 import { SERVICE_HOURS, type ServiceDay } from 'db/data/service-hours'
 import { TRIP_PATTERNS } from 'db/data/trips'
@@ -16,6 +16,7 @@ import { FareResultSchema, type FareResult } from '@commute/schemas'
 import { memoize } from 'utils/memo'
 import { plannerHeadways } from 'utils/observedHeadways'
 import { observedHeadwaysEnabled } from 'utils/observedFlag'
+import { DEFAULT_HEADWAY_S, expectedWaitS } from 'utils/tjWaits'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -26,7 +27,17 @@ const app = new Hono<{ Bindings: Bindings }>()
 let cachedRouter: Tsundere | null = null
 export async function getRouter(d1: D1Database): Promise<Tsundere> {
   if (cachedRouter) return cachedRouter
-  const { edges, transfers } = await new EdgeRepository(d1).getGraphInputs()
+  cachedRouter = routerFromInputs(await new EdgeRepository(d1).getGraphInputs())
+  return cachedRouter
+}
+
+/*
+ * The engine for a given set of graph rows, with everything else it is loaded
+ * with taken from repo data. Split out of getRouter so the route regression
+ * suite (routes/trips.regression.test.ts) builds its router from a snapshot the
+ * same way production builds it from D1, rather than from a copy that can drift.
+ */
+export function routerFromInputs({ edges, transfers }: Pick<LoadGraphInput, 'edges' | 'transfers'>): Tsundere {
   // Service breaks are authored in (operator, station) codes; the graph works
   // in `${operator}-${station}` DB ids. tsundere treats node ids as opaque, so
   // this mapping stays here rather than in the engine.
@@ -36,7 +47,7 @@ export async function getRouter(d1: D1Database): Promise<Tsundere> {
     fromStationId: `${b.operator}-${b.from}`,
     toStationId: `${b.operator}-${b.to}`
   }))
-  cachedRouter = loadGraph({
+  return loadGraph({
     edges,
     transfers,
     // Read by findRoutes only; /fares keeps the answer it has always given.
@@ -74,7 +85,6 @@ export async function getRouter(d1: D1Database): Promise<Tsundere> {
       }))
     }))
   })
-  return cachedRouter
 }
 
 /*
@@ -214,19 +224,68 @@ export function linesOf(operator: Operator): ReadonlySet<string> {
   return lines
 }
 
+/*
+ * The search's wait model for one service day and hour (utils/tjWaits.ts):
+ * bunched TransJakarta waits, pooled across lines on a shared stretch, and h/2
+ * for everything else or with observed headways off. Memoised per isolate like
+ * the headway maps it reads, and so are the waits inside it: the same few
+ * thousand (set, stop) pairs come up on every search in that hour.
+ */
+const waitModels = new Map<string, WaitModel>()
+function waitModelFor(day: ServiceDay, hour: number, observed: boolean): WaitModel {
+  return memoize(waitModels, `${day}:${hour}:${observed}`, () => {
+    const ctx = { day, clockS: hour * 3600, headways: headwaysFor(day, hour, observed), observed }
+    const memo = new Map<string, number>()
+    return (lines, stop, next) => {
+      const key = `${stop}>${next}|${lines.join(',')}`
+      let waitS = memo.get(key)
+      if (waitS === undefined) {
+        // With a fallback headway this only comes back empty for a headway of
+        // zero, which no map holds; half the fallback then, never NaN.
+        waitS = expectedWaitS(lines, stop, next, ctx, DEFAULT_HEADWAY_S) ?? DEFAULT_HEADWAY_S / 2
+        memo.set(key, waitS)
+      }
+      return waitS
+    }
+  })
+}
+
 /** Planner options that depend on when the rider is travelling. */
 export function timeOptions(context: FareContext, observed: boolean = observedHeadwaysEnabled()): {
   departureS: number
   serviceHours: Map<string, ServiceWindow>
   headwaysS: Map<string, number>
+  waitS: WaitModel
 } {
   const day = serviceDay(context.departureAt)
   const departureS = secondsSinceLocalMidnight(context.departureAt)
   return {
     departureS,
     serviceHours: serviceHoursMap(day),
-    headwaysS: headwaysFor(day, hourOf(departureS), observed)
+    headwaysS: headwaysFor(day, hourOf(departureS), observed),
+    waitS: waitModelFor(day, hourOf(departureS), observed)
   }
+}
+
+/**
+ * What the TransJakarta estimates need for this request (utils/observedRuntimes.ts):
+ * the service day, the same headways the search charged, and the day's service
+ * windows. Built from the same memoised maps as timeOptions, and waited on
+ * through the same model (utils/tjWaits.ts). Not the identical figure: the
+ * estimate reads the bunching at the clock it reaches each stop rather than the
+ * request's hour, takes the set of lines open then (excluded modes are not
+ * applied, as the journey already chose its legs), and skips a line with no
+ * headway where the search assumes the default.
+ */
+export function estimateInputs(context: FareContext, observed: boolean = observedHeadwaysEnabled()): {
+  day: ServiceDay
+  headways: Map<string, number>
+  serviceHours: Map<string, ServiceWindow>
+  observed: boolean
+} {
+  const day = serviceDay(context.departureAt)
+  const { serviceHours, headwaysS } = timeOptions(context, observed)
+  return { day, headways: headwaysS, serviceHours, observed }
 }
 
 // Resolve the fare context from optional query params, defaulting to today's

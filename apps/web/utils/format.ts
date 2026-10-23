@@ -59,15 +59,36 @@ export function formatClock(isoInstant: string): string {
  * So the caller must only reach here with a FULLY timed journey. A journey
  * missing one leg's times has no honest total, and the API already withholds
  * `arrivalAt` in that case — which is the check, rather than anything here.
+ * The other figure worded as a duration is formatEstimate's, and it is marked.
  *
- * Hours appear only once there are any: "1 j 5 mnt" beside "45 mnt" in the same
- * list would be two shapes for one fact, and most journeys are under an hour.
- * Abbreviated because this sits in a meta row beside three other figures.
+ * Plain minutes up to two hours, "120 mnt" included, and hours only past that:
+ * rows are compared by eye, and "75 mnt" against "1 j 15 mnt" in the same
+ * list would be two shapes for one fact. Abbreviated because this sits in a
+ * meta row beside three other figures.
  */
 export function formatDuration(fromIso: string, toIso: string): string {
   const minutes = Math.round((Date.parse(toIso) - Date.parse(fromIso)) / 60000)
   if (!Number.isFinite(minutes) || minutes < 0) return ''
-  const hours = Math.floor(minutes / 60)
-  const rest = minutes % 60
-  return hours > 0 ? `${hours} j ${rest} mnt` : `${minutes} mnt`
+  return minutesLabel(minutes)
+}
+
+/*
+ * How long a TransJakarta ride or journey probably takes, from the API's
+ * `estimate`: observed bus run times plus the expected wait, not a timetable.
+ *
+ * The ± is the whole point. It sits in the same slots formatDuration fills,
+ * and without it a rider would read an estimate as the same kind of fact as a
+ * train's published duration beside it. Never a clock: an arrival time is
+ * exactly what nobody published for a bus.
+ */
+export function formatEstimate(seconds: number): string {
+  return `±${minutesLabel(Math.max(1, Math.round(seconds / 60)))}`
+}
+
+// Past this, hours are split out; see formatDuration.
+const MINUTES_ONLY_MAX = 120
+
+function minutesLabel(minutes: number): string {
+  if (minutes <= MINUTES_ONLY_MAX) return `${minutes} mnt`
+  return `${Math.floor(minutes / 60)} j ${minutes % 60} mnt`
 }

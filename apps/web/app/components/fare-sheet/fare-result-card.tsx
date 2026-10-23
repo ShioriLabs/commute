@@ -2,7 +2,7 @@ import type { FareJourney, FareResult, FareResultLeg, FareResultRideLeg, FareRes
 import { OPERATORS, type Operator } from '@commute/constants'
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from 'react'
 import { CaretDownIcon, CaretLeftIcon, CaretRightIcon, PersonSimpleWalkIcon, TicketIcon } from '@phosphor-icons/react'
-import { formatClock, formatDuration, formatKm, formatRupiah } from 'utils/format'
+import { formatClock, formatDuration, formatEstimate, formatKm, formatRupiah } from 'utils/format'
 import { formatPlatformCode, joinLabels } from 'utils/labels'
 import LineRoundel from '~/components/line-roundel'
 import TransferIcon from '~/components/transfer-icon'
@@ -11,7 +11,7 @@ import { useClock } from '~/hooks/clock'
 import { codeOfLineKey, useLines } from '~/hooks/use-lines'
 import DeparturePicker, { ConnectionNote } from './departure-picker'
 import { JOURNEY_LABELS } from './journey-labels'
-import { journeysOf, sortJourneyLabels, walkDistanceOf } from './journeys'
+import { estimatedDurationOf, journeysOf, sortJourneyLabels, walkDistanceOf } from './journeys'
 import { changeAt, leaveInLabel, resolveTimedLegs, retimeJourney, type TimedLeg } from './leg-departures'
 import { useJourneyPager } from './journey-pager'
 import RouteBar from './route-bar'
@@ -175,12 +175,14 @@ const walkRailColor = (leg: FareResultLeg | undefined): string | null => {
   return leg.corridorLabel != null && leg.fare != null ? 'var(--color-rose-400)' : 'var(--color-slate-400)'
 }
 
-function RideLeg({ leg, isSameStationTransfer, walkBefore, walkAfter, timed, changeGap, onPick }: {
+function RideLeg({ leg, isSameStationTransfer, walkBefore, walkAfter, timed, rideS, changeGap, onPick }: {
   leg: FareResultRideLeg
   isSameStationTransfer: boolean
   walkBefore: string | null
   walkAfter: string | null
   timed: TimedLeg | undefined
+  /** Estimated time on board for a TransJakarta leg, from observed run times. */
+  rideS: number | null
   /** The change from the train before into this one, for an interchange with no walk leg. */
   changeGap: { gapS: number, tight: boolean } | null
   onPick: (tripId: string) => void
@@ -189,7 +191,15 @@ function RideLeg({ leg, isSameStationTransfer, walkBefore, walkAfter, timed, cha
   const legLines = useLegLines()
   // Optional-chained against a stale API during deploy skew.
   const intermediate = leg.stops?.slice(1, -1) ?? []
-  const summary = `${leg.stationCount - 1} stasiun • ${formatKm(leg.distanceM)}`
+  /*
+   * A bus leg has no times at its ends to read a ride off, so the estimate
+   * joins the counts here instead — as a span on board, never a clock.
+   */
+  const summary = [
+    `${leg.stationCount - 1} stasiun`,
+    formatKm(leg.distanceM),
+    ...(rideS !== null ? [formatEstimate(rideS)] : [])
+  ].join(' • ')
   const lines = legLines(leg)
   const isInterlined = lines.length > 1
   const legColor = lines[0]?.color ?? LINE_COLOR_FALLBACK
@@ -374,10 +384,12 @@ function RideLeg({ leg, isSameStationTransfer, walkBefore, walkAfter, timed, cha
 // Itinerary timeline: ringed nodes at board/alight stations, line-colored
 // connectors carrying the service card, walks as full-width cards that break
 // the rail (TfL Go-style).
-export function JourneyTimeline({ legs, timed = [], onPick = () => {} }: {
+export function JourneyTimeline({ legs, timed = [], rideS, onPick = () => {} }: {
   legs: FareResultLeg[]
   /** Timed ride legs with their options. Omit for a journey with no picker. */
   timed?: TimedLeg[]
+  /** The journey's `estimate.rideS`, aligned with `legs`. */
+  rideS?: (number | null)[]
   onPick?: (legIndex: number, tripId: string) => void
 }) {
   const first = legs[0]
@@ -403,6 +415,7 @@ export function JourneyTimeline({ legs, timed = [], onPick = () => {} }: {
               walkBefore={walkRailColor(previous ?? undefined)}
               walkAfter={walkRailColor(legs[index + 1])}
               timed={timed.find(entry => entry.index === index)}
+              rideS={rideS?.[index] ?? null}
               changeGap={isSameStationTransfer ? changeGapAt(index) : null}
               onPick={tripId => onPick(index, tripId)}
             />
@@ -522,11 +535,16 @@ export function JourneyCardFace({ journey, onSelect }: {
   const boarding = journey.legs.find(leg => leg.type === 'RIDE' && leg.departureAt)
   const boardsAt = boarding?.type === 'RIDE' ? boarding.departureAt : undefined
   /*
-   * Only on a fully timed journey, which `arrivalAt` already guarantees — the
-   * API withholds it the moment one leg cannot be timed. See formatDuration for
-   * why this is not the "never a duration" rule being broken.
+   * Published where every leg is timed, which `arrivalAt` already guarantees —
+   * the API withholds it the moment one leg cannot be timed. See formatDuration
+   * for why this is not the "never a duration" rule being broken.
+   *
+   * Otherwise the TransJakarta estimate, ±-marked by formatEstimate, which only
+   * exists on exactly the journeys that have no published one.
    */
-  const duration = boardsAt && journey.arrivalAt ? formatDuration(boardsAt, journey.arrivalAt) : null
+  const duration = boardsAt && journey.arrivalAt
+    ? formatDuration(boardsAt, journey.arrivalAt)
+    : estimatedDurationOf(journey)
   // Optional-chained against a body cached before the field existed.
   const nextDepartures = journey.moreDepartures?.slice(0, NEXT_DEPARTURES_SHOWN) ?? []
   /*
@@ -580,12 +598,14 @@ export function JourneyCardFace({ journey, onSelect }: {
         * The lead slot, after JR East: how long it takes, then when it leaves.
         *
         * Duration leads because it is the figure a rider compares rows on, and
-        * it is the one JR East sets largest. It exists only on a fully timed
-        * journey though — formatDuration is arithmetic on two PUBLISHED times,
-        * and no TransJakarta journey has them — so the untimed variant is a
-        * defined layout rather than a blank first line: the fare moves up into
-        * the slot. The transfer count only takes it when the fare is unknown
-        * too, since the meta row below already carries that figure.
+        * it is the one JR East sets largest. A fully timed journey fills it
+        * from two PUBLISHED times; a TransJakarta journey from the observed
+        * estimate, ±-marked, beside its boarding clock where it has one (a
+        * journey that opens on a bus has none) and never an arrival.
+        * One the API could not estimate is a defined layout rather than a
+        * blank first line: the fare moves up into the slot. The transfer
+        * count only takes it when the fare is unknown too, since the meta row
+        * below already carries that figure.
         */}
       <div className="mt-3 flex items-baseline justify-between gap-2">
         <span className="figure text-xl font-bold tracking-tight shrink-0 tabular-nums">
@@ -779,6 +799,10 @@ function JourneyDetail({ journey, timed, onPick }: {
     ? { departure: formatClock(start.departureAt), arrival: formatClock(journey.arrivalAt) }
     : null
 
+  const recapDuration = start?.type === 'RIDE' && start.departureAt && journey.arrivalAt
+    ? formatDuration(start.departureAt, journey.arrivalAt)
+    : estimatedDurationOf(journey)
+
   // The countdown follows the journey as re-timed by the rider's picks.
   const leaveIn = start?.type === 'RIDE' && start.departureAt ? leaveInLabel(start.departureAt, now) : null
 
@@ -830,7 +854,7 @@ function JourneyDetail({ journey, timed, onPick }: {
             </p>
           )
         : null}
-      <JourneyTimeline legs={journey.legs} timed={timed} onPick={onPick} />
+      <JourneyTimeline legs={journey.legs} timed={timed} rideS={journey.estimate?.rideS} onPick={onPick} />
 
       {/*
         * The journey in one line, after the itinerary that justifies it.
@@ -838,17 +862,16 @@ function JourneyDetail({ journey, timed, onPick }: {
         * JR East closes its detail the same way, and the reason it works is
         * that every figure here was already drawn above in context — this is a
         * recap for someone who has finished reading, not the first statement of
-        * any of them. Duration only on a fully timed journey, for the reason
-        * formatDuration documents; the rest are always knowable.
+        * any of them. Duration on a fully timed journey, for the reason
+        * formatDuration documents, or the ±-marked TransJakarta estimate; the
+        * rest are always knowable.
         */}
       <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-1 figure text-sm text-slate-500">
         {/* Not gated on journeyClock: that one is deliberately null on a
             single-ride journey (it would repeat the leg's own times), but a
             one-seat ride still has a duration worth stating here. The real
             precondition is the pair of published times formatDuration needs. */}
-        {start?.type === 'RIDE' && start.departureAt && journey.arrivalAt
-          ? <b className="text-slate-700">{ formatDuration(start.departureAt, journey.arrivalAt) }</b>
-          : null}
+        {recapDuration ? <b className="text-slate-700">{ recapDuration }</b> : null}
         <span>
           {'transit '}
           { journey.transferCount }

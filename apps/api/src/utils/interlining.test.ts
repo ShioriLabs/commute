@@ -54,13 +54,23 @@ describe('findInterliningLineCodes', () => {
     expect(findInterliningLineCodes('TJ', run)).toContain('13E')
   })
 
-  // Koridor 1 is asymmetric: Kejagung (H00266P) is served in the Kota→Blok M
-  // direction only, so it appears in K1's `pathReverse`, never in `path`. A run
-  // through it must still resolve to line '1' — the match has to consult
-  // pathReverse, not just path.
-  it('matches a reverse-only run (K1 via Kejagung) against pathReverse', () => {
+  // Koridor 1 is asymmetric: Kejagung (H00266P) is served toward Blok M only,
+  // so it is on K1's `path` and not its `pathReverse`. The run resolves to
+  // line '1' in its own travel direction and not the other way.
+  it('matches a one-direction run (K1 via Kejagung) only in that direction', () => {
     const run = ['H00127P', 'H00266P', 'H00014P'] // Masjid Agung → Kejagung → Blok M
     expect(findInterliningLineCodes('TJ', run)).toContain('1')
+    expect(findInterliningLineCodes('TJ', [...run].reverse())).not.toContain('1')
+  })
+
+  // 4D calls at Setiabudi Integritas (H00215P) outbound only; back toward Pulo
+  // Gadung it runs Kuningan Madya → Halimun. Reading its outbound path
+  // backwards used to put 4D on this leg, first, over a stop it skips.
+  it('does not claim an asymmetric line for its path read backwards', () => {
+    const toIntegritas = ['H00098P', 'H00114P', 'H00215P'] // Karet Kuningan → Kuningan Madya → Setiabudi Integritas
+    expect(findInterliningLineCodes('TJ', toIntegritas)).not.toContain('4D')
+    expect(findInterliningLineCodes('TJ', toIntegritas)).toContain('6')
+    expect(findInterliningLineCodes('TJ', [...toIntegritas].reverse())).toContain('4D')
   })
 })
 

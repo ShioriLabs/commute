@@ -69,6 +69,24 @@ export const StationRefSchema = v.pipe(
   v.metadata({ ref: 'StationRef' })
 )
 
+export const ExitSignSchema = v.pipe(
+  v.object({
+    text: v.pipe(v.string(), v.description('Tulisan di papan, persis seperti yang tercetak.'), v.metadata({ examples: ['Jl. Kendal'] })),
+    kind: v.pipe(
+      v.optional(v.picklist(['RAIL', 'BUS'])),
+      v.description('Hanya kalau papan memberi ikon: `RAIL` = stasiun kereta, `BUS` = halte bus.')
+    ),
+    stationId: v.pipe(
+      v.optional(v.string()),
+      v.description('ID internal stasiun atau halte yang dimaksud tulisan ini, kalau ada, misalnya `MRTJ-DKA`. Tidak diisi buat jalan atau gedung.'),
+      v.metadata({ examples: ['MRTJ-DKA'] })
+    )
+  }),
+  v.title('ExitSign'),
+  v.description('Satu baris di papan petunjuk pintu keluar.'),
+  v.metadata({ ref: 'ExitSign' })
+)
+
 /* A station's exits, referenced from transfers and listed by the exits endpoint. */
 export const ExitRefSchema = v.pipe(
   v.object({
@@ -81,6 +99,10 @@ export const ExitRefSchema = v.pipe(
     name: v.pipe(
       v.nullable(v.string()),
       v.description('Jalan atau penanda tempat pintu ini membuka. Null kalau belum dicatat.')
+    ),
+    signs: v.pipe(
+      v.nullable(v.array(ExitSignSchema)),
+      v.description('Isi papan petunjuk pintu ini, urut seperti yang tercetak. Null kalau papannya belum disalin.')
     )
   }),
   v.title('ExitRef'),
@@ -393,6 +415,8 @@ export const LegacyTimetableEntrySchema = v.pipe(
 
 export type Station = v.InferOutput<typeof StationSchema>
 export type StationRef = v.InferOutput<typeof StationRefSchema>
+export type ExitSign = v.InferOutput<typeof ExitSignSchema>
+export type StationExit = v.InferOutput<typeof StationExitSchema>
 export type Transfer = v.InferOutput<typeof TransferSchema>
 export type InternalTransfer = v.InferOutput<typeof InternalTransferSchema>
 export type ExternalTransfer = v.InferOutput<typeof ExternalTransferSchema>

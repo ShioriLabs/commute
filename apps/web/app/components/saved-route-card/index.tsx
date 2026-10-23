@@ -14,7 +14,7 @@ import { formatClock, formatDuration, formatRupiah } from 'utils/format'
 import { boardingClock, journeyKey } from 'utils/journey-key'
 import LineRoundel from '~/components/line-roundel'
 import { LINE_COLOR_FALLBACK } from '~/components/transit-geometry'
-import { journeysOf } from '~/components/fare-sheet/journeys'
+import { estimatedDurationOf, journeysOf } from '~/components/fare-sheet/journeys'
 import { WalkChip } from '~/components/fare-sheet/route-bar'
 import { routeBarSegments } from '~/components/fare-sheet/route-bar-segments'
 import { codeOfLineKey, useLines } from '~/hooks/use-lines'
@@ -72,7 +72,8 @@ function JourneyRow({ row: { journey, departures }, from, to, tint }: { row: Upc
   const lead = departures[0]
   const boardsAt = lead?.departureAt ?? null
   const arrivalAt = lead?.arrivalAt
-  const duration = boardsAt && arrivalAt ? formatDuration(boardsAt, arrivalAt) : null
+  // Published, or else the ±-marked TransJakarta estimate counted the same way.
+  const duration = boardsAt && arrivalAt ? formatDuration(boardsAt, arrivalAt) : estimatedDurationOf(journey)
   const next = departures.slice(1, 1 + NEXT_SHOWN)
   const headsign = rides[0]?.headsign ?? null
   const lastTrain = rides.some(leg => leg.lastService)
@@ -80,7 +81,8 @@ function JourneyRow({ row: { journey, departures }, from, to, tint }: { row: Upc
   /*
    * The figures on the right sit on the line they belong to rather than
    * centred on the row: the duration beside the clock it is measured from, the
-   * fare beneath it. Untimed rows have no duration, so the fare moves up to
+   * fare beneath it. A row with neither a published nor an estimated duration
+   * has nothing for that slot, so the fare moves up to
    * the headline's line instead of floating beside an empty one.
    */
   const fare = journey.totalFare !== null ? formatRupiah(journey.totalFare) : null

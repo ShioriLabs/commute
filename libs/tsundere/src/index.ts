@@ -13,7 +13,7 @@ export { loadGraph, Tsundere, type LoadGraphInput } from './tsundere'
  * walking, waiting, fare. Not the web app's FareCriteria, which is what the
  * rider chooses.
  */
-export type { FareScorer, Journey, JourneyLabel, PlanOptions } from './planner/plan'
+export type { FareScorer, Journey, JourneyLabel, PlanOptions, WaitModel } from './planner/plan'
 
 /*
  * Search counters. Not part of routing — a measurement hook the bench/audit
@@ -61,7 +61,7 @@ export type { Trip, TripPattern } from './planner/trips'
  * private — so callers reach it through `Tsundere.timeJourney`. Only the shapes
  * that cross the boundary are here.
  */
-export { clockOf, type LegDeparture, type LegTiming, type ResolveDeparturesOptions } from './planner/departures'
+export { clockOf, type JourneyEstimate, type LegDeparture, type LegTiming, type ResolveDeparturesOptions } from './planner/departures'
 
 /*
  * Graph inputs. Structural by design — apps/api passes Kysely rows straight in,

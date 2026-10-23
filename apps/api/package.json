@@ -34,9 +34,15 @@
     "generate:density": "tsx ./src/db/scripts/generateDensity.ts",
     "generate:prune-feeder-edges": "tsx ./src/db/scripts/generatePruneFeederEdgesSQL.ts",
     "generate:prune-stationlines": "tsx ./src/db/scripts/generatePruneStationLinesSQL.ts",
+    "generate:route-snapshot": "tsx ./src/db/scripts/generateRouteSnapshot.ts",
     "generate:dataplatform-network": "tsx ./src/db/scripts/generateDataPlatformNetwork.ts",
     "analyze:headways": "tsx ./src/db/scripts/analyzeObservedHeadways.ts",
-    "fit:headways": "tsx ./src/db/scripts/fitObservedHeadways.ts"
+    "analyze:tj-trips": "tsx ./src/db/scripts/analyzeTjTrips.ts",
+    "fit:headways": "tsx ./src/db/scripts/fitObservedHeadways.ts",
+    "fit:tj-runtimes": "tsx ./src/db/scripts/fitTjRuntimes.ts",
+    "fit:tj-shared-waits": "tsx ./src/db/scripts/fitTjSharedWaits.ts",
+    "ab:estimated-order": "tsx ./src/db/scripts/abEstimatedOrder.ts",
+    "ab:search-order": "tsx ./src/db/scripts/abSearchOrder.ts"
   },
   "keywords": [],
   "author": "",

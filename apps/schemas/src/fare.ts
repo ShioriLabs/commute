@@ -100,6 +100,11 @@ export const RideLegSchema = v.pipe(
      * timetable at all and never will, and some rail trips reach us without
      * their intermediate stops, so those legs carry nothing rather than a
      * guess. Absent means "we do not know", and the UI must render nothing.
+     *
+     * That still holds with observed run times: a TransJakarta leg never gets a
+     * departure or arrival here. What the observations support is an estimate,
+     * and it lives on the journey (`estimate` on FareJourneySchema), where no
+     * client can mistake it for a timetable time.
      */
     departureAt: v.pipe(
       v.optional(v.string()),
@@ -297,10 +302,36 @@ export const FareJourneySchema = v.pipe(
     moreDepartures: v.pipe(
       v.optional(v.array(JourneyDepartureSchema)),
       v.description('Keberangkatan lain rute ini dalam satu jam ke depan, urut dari yang paling cepat, tidak termasuk yang ditampilkan di tahap-tahapnya. Cuma ada di rute yang jadwalnya kami punya.')
+    ),
+    /*
+     * Estimated, from observed TransJakarta run times and the expected wait
+     * (utils/observedRuntimes.ts). Only on a journey with a TransJakarta ride
+     * and no `arrivalAt`, and only where every ride leg could be timed or
+     * estimated. Kept off the legs on purpose: there, a time is a timetable
+     * fact. Never to be shown as a clock time.
+     */
+    estimate: v.pipe(
+      v.optional(v.object({
+        durationS: v.pipe(
+          v.number(),
+          v.description('Perkiraan lama perjalanan dalam detik, dihitung dari jam yang diminta (`at`) sampai tiba, termasuk jalan kaki dan rata-rata waktu tunggu. Perkiraan dari pengamatan bus, bukan jadwal. Lama dari naik kendaraan pertama: `durationS - fromS`.'),
+          v.metadata({ examples: [3420] })
+        ),
+        fromS: v.pipe(
+          v.number(),
+          v.description('Detik dari `at` sampai naik kendaraan pertama kalau tahap itu terjadwal (`departureAt` ada), selain itu 0. Biar lama perjalanannya bisa dihitung dari naik, sama seperti rute yang jadwalnya lengkap.'),
+          v.metadata({ examples: [480] })
+        ),
+        rideS: v.pipe(
+          v.array(v.nullable(v.number())),
+          v.description('Sejajar dengan `legs`: perkiraan lama naik bus (detik) di tahap TransJakarta, null di tahap lain.')
+        )
+      })),
+      v.description('Perkiraan waktu tempuh buat rute yang ada TransJakarta-nya, dari waktu tempuh bus yang teramati. Bukan jadwal: jangan ditampilkan sebagai jam berangkat atau jam tiba. Tidak ada kalau tidak bisa diperkirakan dengan jujur.')
     )
   }),
   v.title('FareJourney'),
-  v.description('Satu pilihan rute lengkap dengan tarifnya. Yang dibandingkan cuma jumlah naik kendaraan, jarak jalan kaki, rata-rata lama nunggu, dan tarif, bukan waktu tempuh. Jam berangkat dan tiba ikut ditampilkan di tahap yang jadwalnya kami punya.'),
+  v.description('Satu pilihan rute lengkap dengan tarifnya. Rutenya dicari dengan membandingkan jumlah naik kendaraan, jarak jalan kaki, rata-rata lama nunggu, dan tarif. Lama nunggu TransJakarta ikut menghitung bus yang datang bergerombol, dan di ruas yang dilewati beberapa rute dihitung dari bus rute mana pun yang datang duluan. Jam berangkat dan tiba ikut ditampilkan di tahap yang jadwalnya kami punya.'),
   v.metadata({ ref: 'FareJourney' })
 )
 
@@ -337,7 +368,7 @@ export const TripResultSchema = v.pipe(
     to: FareStationSchema,
     journeys: v.pipe(
       v.array(FareJourneySchema),
-      v.description('Pilihan rute buat pasangan stasiun ini, diurutkan dari yang paling masuk akal. Selalu ada isinya kalau rutenya ketemu.')
+      v.description('Pilihan rute buat pasangan stasiun ini, diurutkan dari yang paling cepat sampai: jam tiba dari jadwal kalau ada, kalau tidak dari perkiraan TransJakarta (`estimate`). Kalau ada perkiraan yang ikut dibandingkan, rute baru dipindah ke depan kalau sampainya paling tidak 3 menit lebih cepat; selisih yang lebih kecil ikut urutan yang paling masuk akal. Rute yang tidak punya keduanya ada di belakang. Selalu ada isinya kalau rutenya ketemu.')
     )
   }),
   v.title('TripResult'),

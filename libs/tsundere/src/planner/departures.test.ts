@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RouteLeg } from '../router'
-import { journeyArrivalS, resolveDepartures, clockOf } from './departures'
+import { journeyArrivalS, resolveDepartures, clockOf, estimateJourney } from './departures'
 import { buildTripIndex, type TripPattern } from './trips'
 
 const at = (h: number, m = 0) => h * 3600 + m * 60
@@ -711,5 +711,53 @@ describe('last train of the day', () => {
     }
     const [timing] = resolveDepartures(leg, index(mrt, weekdayLate), { departureS: at(6, 30), dayMask: 0b001 })
     expect(timing?.lastOfDay).toBe(true)
+  })
+})
+
+describe('estimateJourney', () => {
+  const bus = (stationIds: string[]) => ride('1', stationIds)
+  const tj = ['TJ-A', 'TJ-B', 'TJ-C']
+  // A wait of 5 min and a 20 min ride for any TJ leg; null for anything else.
+  const estimateUntimed = (leg: Extract<RouteLeg, { type: 'RIDE' }>) =>
+    (leg.operator === 'TJ' ? { waitS: 300, rideS: 1200 } : null)
+
+  it('estimates a leg no trip covers: the wait, then the ride', () => {
+    const estimate = estimateJourney([bus(tj)], index(mrt), { departureS: at(8), dayMask: ALL_DAYS, estimateUntimed })
+    expect(estimate).toEqual({ arrivalS: at(8, 25), rideS: [1200] })
+  })
+
+  it('keeps the clock going into the train after the bus', () => {
+    // Off the bus at 05:45, walk to LBB, catch the 06:00 rather than nothing.
+    const legs = [bus(tj), walk('TJ-C', 'MRTJ-LBB'), ride('M', ['MRTJ-LBB', 'MRTJ-FTM'])]
+    const estimate = estimateJourney(legs, index(mrt), { departureS: at(5, 20), dayMask: ALL_DAYS, estimateUntimed })
+    expect(estimate?.arrivalS).toBe(at(6, 9))
+    expect(estimate?.rideS).toEqual([1200, null, null])
+  })
+
+  it('gives up when the estimated clock misses the last train', () => {
+    const legs = [bus(tj), walk('TJ-C', 'MRTJ-LBB'), ride('M', ['MRTJ-LBB', 'MRTJ-FTM'])]
+    expect(estimateJourney(legs, index(mrt), { departureS: at(6, 50), dayMask: ALL_DAYS, estimateUntimed })).toBeNull()
+  })
+
+  it('gives up when the hook cannot estimate a leg', () => {
+    const legs = [bus(tj)]
+    expect(estimateJourney(legs, index(mrt), { departureS: at(8), dayMask: ALL_DAYS, estimateUntimed: () => null })).toBeNull()
+  })
+
+  it('returns nothing for a journey the timetable already times', () => {
+    const legs = [ride('M', ['MRTJ-LBB', 'MRTJ-FTM'])]
+    expect(estimateJourney(legs, index(mrt), { departureS: at(5), dayMask: ALL_DAYS, estimateUntimed })).toBeNull()
+  })
+
+  it('never estimates through resolveDepartures without the hook', () => {
+    const timings = resolveDepartures([bus(tj), ride('M', ['MRTJ-LBB', 'MRTJ-FTM'])], index(mrt), { departureS: at(5), dayMask: ALL_DAYS })
+    expect(timings).toEqual([null, null])
+  })
+
+  it('charges the change between two estimated rides', () => {
+    const legs = [bus(tj), ride('2', ['TJ-C', 'TJ-D'])]
+    const estimate = estimateJourney(legs, index(), { departureS: at(8), dayMask: ALL_DAYS, estimateUntimed })
+    // 25 min, then a change at the same halte, then 25 min more.
+    expect(estimate!.arrivalS).toBeGreaterThan(at(8, 50))
   })
 })

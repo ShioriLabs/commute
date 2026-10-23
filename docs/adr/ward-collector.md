@@ -332,3 +332,24 @@ may show instead.
 **Not addressed:** the held-out truth is still one day, deviance is only a
 ranking between two predictors (arrivals are more regular than Poisson), and the
 absolute level is still unverified against ground truth.
+
+## Run times and service windows (2026-10-19)
+
+The same archives also give TJ run times per hop and first/last buses
+(`docs/tj-observed-timings.md`). The per-day aggregate is cached next to the
+headway one (`day-trips-<day>.json`, with the same fingerprint rule plus
+`TRIPS_SCHEMA`). Refit:
+
+```
+pnpm --filter api fit:tj-runtimes --dir <archives>   # ~8s with the cache; prints the backtest and the window diff
+pnpm --filter api test -- runtimes.observed           # guard test on the generated file
+```
+
+The fit writes two files. `runtimes.observed.ts` is the full table for analysis
+and nothing at runtime imports it. `runtimes.planner.ts` is the compact slice
+the worker reads (`utils/observedRuntimes.ts`) for the journey `estimate` and
+the `sort` mode of `config:observed-runtimes` (2026-10-19). Estimates are
+applied after the journey cache, so a refit needs a deploy but no API_VERSION
+bump and no KV purge. Refit after a TJ topology change: hop keys are station
+pairs, and both guard tests (`runtimes.observed`, `runtimes.planner`) fail on a
+pair that is no longer adjacent.

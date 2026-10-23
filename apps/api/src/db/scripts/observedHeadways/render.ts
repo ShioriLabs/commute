@@ -41,7 +41,7 @@ const naturalCompare = (a: string, b: string) => a.localeCompare(b, 'en', { nume
  * station ids from the topology; one containing a quote or a backslash would
  * otherwise write a file that does not compile.
  */
-const quote = (value: string) => `'${value.replace(/\\/g, '\\\\').replace(/'/g, '\\\'')}'`
+export const quote = (value: string) => `'${value.replace(/\\/g, '\\\\').replace(/'/g, '\\\'')}'`
 
 export function profileKey(ld: string, column: number): string {
   return `${columnDayType(column)}:${columnHour(column)}:${ld}`

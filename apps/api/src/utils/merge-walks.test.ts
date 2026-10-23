@@ -116,7 +116,7 @@ describe('the hops behind a merged walk', () => {
 })
 
 describe('mergeConsecutiveWalks exits', () => {
-  const exit = (id: string) => ({ id, ref: id.split(':')[1]!, name: null })
+  const exit = (id: string) => ({ id, ref: id.split(':')[1]!, name: null, signs: null })
   const pinned = (from: string, to: string, extra: { fromExit?: ReturnType<typeof exit>, toExit?: ReturnType<typeof exit> }): FareResultLeg =>
     ({ ...walk(from, to, 200), ...extra })
 
