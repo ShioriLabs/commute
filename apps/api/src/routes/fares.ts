@@ -240,7 +240,9 @@ function waitModelFor(day: ServiceDay, hour: number, observed: boolean): WaitMod
       const key = `${stop}>${next}|${lines.join(',')}`
       let waitS = memo.get(key)
       if (waitS === undefined) {
-        waitS = expectedWaitS(lines, stop, next, ctx, DEFAULT_HEADWAY_S)!
+        // With a fallback headway this only comes back empty for a headway of
+        // zero, which no map holds; half the fallback then, never NaN.
+        waitS = expectedWaitS(lines, stop, next, ctx, DEFAULT_HEADWAY_S) ?? DEFAULT_HEADWAY_S / 2
         memo.set(key, waitS)
       }
       return waitS
@@ -269,8 +271,11 @@ export function timeOptions(context: FareContext, observed: boolean = observedHe
  * What the TransJakarta estimates need for this request (utils/observedRuntimes.ts):
  * the service day, the same headways the search charged, and the day's service
  * windows. Built from the same memoised maps as timeOptions, and waited on
- * through the same model (utils/tjWaits.ts), so the estimate and the ranking
- * agree on a wait.
+ * through the same model (utils/tjWaits.ts). Not the identical figure: the
+ * estimate reads the bunching at the clock it reaches each stop rather than the
+ * request's hour, takes the set of lines open then (excluded modes are not
+ * applied, as the journey already chose its legs), and skips a line with no
+ * headway where the search assumes the default.
  */
 export function estimateInputs(context: FareContext, observed: boolean = observedHeadwaysEnabled()): {
   day: ServiceDay

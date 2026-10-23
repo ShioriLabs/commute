@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { OBSERVED_CV_PROFILE } from '../db/data/headways.observed'
-import { SHARED_CV, SHARED_CV_BLOCKS } from '../db/data/headways.shared'
+import { SHARED_CV } from '../db/data/headways.shared'
 import { tjDirOf } from './tjHops'
 import { bunchingFactor, expectedWaitS, MAX_WAIT_CV, UNFITTED_SHARED_CV } from './tjWaits'
 
@@ -43,15 +43,27 @@ describe('expectedWaitS', () => {
     expect(expectedWaitS(['6'], KARET_KUNINGAN, KUNINGAN_MADYA, ctx)).toBeCloseTo(own('6', 600))
   })
 
-  it('pools a shared stretch, never past the best single line', () => {
+  /*
+   * Karet Kuningan toward Kuningan Madya at weekday midday: 6, 6A, 13E and L13E,
+   * whose merged stream the fit puts at CV 0.80. Equal 20-minute headways keep
+   * the arithmetic legible and the best single line's cap out of the way.
+   */
+  it('pools a shared stretch at its fitted CV', () => {
     const lines = ['6', '6A', '13E', 'L13E']
-    const shared = expectedWaitS(lines, KARET_KUNINGAN, KUNINGAN_MADYA, ctx)!
-    const rate = 1 / 600 + 1 / 900 + 1 / 1200 + 1 / 1800
-    expect(shared).toBeLessThanOrEqual(own('6', 600) + 1e-9)
-    expect(shared).toBeGreaterThan(0)
-    // Below the best line, the shared wait is the merged headway bunched by some CV.
-    const cv = Math.sqrt(Math.max(0, shared / (1 / rate / 2) - 1))
-    expect(Number.isFinite(cv)).toBe(true)
+    const key = `WD:3:${KARET_KUNINGAN}>${KUNINGAN_MADYA}|13E,6,6A,L13E`
+    expect(SHARED_CV[key]).toBe(0.8)
+    const headwaysEach = new Map(lines.map(line => [line, 1200]))
+    const wait = expectedWaitS(lines, KARET_KUNINGAN, KUNINGAN_MADYA, { ...ctx, headways: headwaysEach })!
+    // Four lines every 20 minutes: a bus every 5 on average, (300 / 2)(1 + 0.8²).
+    expect(wait).toBeCloseTo(150 * 1.64)
+  })
+
+  it('never waits longer on a shared stretch than for the best line alone', () => {
+    // 6 every 2 minutes and three rare lines: the merged figure would exceed 6's own.
+    const lines = ['6', '6A', '13E', 'L13E']
+    const skewed = new Map([['6', 120], ['6A', 3600], ['13E', 3600], ['L13E', 3600]])
+    const wait = expectedWaitS(lines, KARET_KUNINGAN, KUNINGAN_MADYA, { ...ctx, headways: skewed })!
+    expect(wait).toBeLessThanOrEqual(own('6', 120) + 1e-9)
   })
 
   it('takes the merged stream as Poisson where the fit has no cell', () => {
@@ -59,24 +71,6 @@ describe('expectedWaitS', () => {
     const wait = expectedWaitS(['6', 'C'], KARET_KUNINGAN, KUNINGAN_MADYA, { ...ctx, headways: new Map([['6', 6000], ['C', 6000]]) })!
     const merged = 3000
     expect(wait).toBeCloseTo(Math.min(own('6', 6000), (merged / 2) * (1 + UNFITTED_SHARED_CV ** 2)))
-  })
-
-  it('uses the fitted CV of the merged stream where there is one', () => {
-    const fitted = Object.entries(SHARED_CV).find(([key]) => key.split(':')[1] !== '*')
-    if (!fitted) return
-    const [dayType, block, rest] = [fitted[0].slice(0, 2), fitted[0].split(':')[1]!, fitted[0].slice(fitted[0].indexOf(':', 3) + 1)]
-    const [stops, codes] = rest.split('|') as [string, string]
-    const [stop, next] = stops.split('>') as [string, string]
-    const lines = codes.split(',')
-    const hour = Number(SHARED_CV_BLOCKS[Number(block)]!.slice(0, 2))
-    const headwaysEach = new Map(lines.map(line => [line, 3600]))
-    const wait = expectedWaitS(lines, stop, next, { day: dayType === 'WD' ? 'WD' : 'SUN', clockS: at(hour), headways: headwaysEach, observed: true })!
-    const best = Math.min(...lines.map((l) => {
-      const dir = tjDirOf(l, stop, next)
-      return 1800 * (dir ? bunchingFactor(dayType as 'WD' | 'WE', at(hour), `${l}@${dir}`) : 1)
-    }))
-    const merged = 3600 / lines.length
-    expect(wait).toBeCloseTo(Math.min(best, (merged / 2) * (1 + fitted[1] ** 2)))
   })
 
   it('has no wait without any headway, unless given a fallback', () => {

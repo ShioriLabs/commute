@@ -23,7 +23,8 @@ export interface TjChain {
 
 const id = (code: string) => `TJ-${code}`
 
-function chainsOf(line: LineTopology): TjChain[] {
+/** One TJ line's chains, F then R per stop list. Exported for its tests. */
+export function chainsOf(line: LineTopology): TjChain[] {
   if (line.pathReverse) {
     return [
       { lineCode: line.lineCode, dir: 'F', hops: chainHops(line.path).map(h => [id(h.from.station), id(h.to.station)]) },
@@ -39,12 +40,20 @@ function chainsOf(line: LineTopology): TjChain[] {
       {
         lineCode: line.lineCode,
         dir: 'R' as const,
-        // A both-ways hop is listed once, forwards; reversed here, and the
-        // walk order reversed with it. A one-way reverse hop already runs R.
-        hops: reverse.map((h): [string, string] => (h.bothWays ? [id(h.to.station), id(h.from.station)] : [id(h.from.station), id(h.to.station)])).reverse()
+        hops: reverseChain(reverse)
       }
     ]
   })
+}
+
+/*
+ * A list's R hops in R travel order. chainHops gives either both-ways hops,
+ * listed once forwards, which are flipped and taken in reverse order; or, on a
+ * list with a one-way stop, a walk already made in R order, kept as it is.
+ */
+function reverseChain(hops: ReturnType<typeof chainHops>): [string, string][] {
+  if (!hops.some(h => h.bothWays)) return hops.map(h => [id(h.from.station), id(h.to.station)])
+  return hops.map((h): [string, string] => [id(h.to.station), id(h.from.station)]).reverse()
 }
 
 let chains: TjChain[] | undefined

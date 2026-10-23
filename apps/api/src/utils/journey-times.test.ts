@@ -554,6 +554,22 @@ describe('byArrival with estimated arrivals', () => {
     expect(idsOf(byArrival([journey('bus'), train], estimates({ bus: '12:22' })))).toEqual(['bus', 'train'])
   })
 
+  // An estimate between two trains must not let the later train past the earlier.
+  it('never puts a train above an earlier train, whatever the estimates between them', () => {
+    const sorted = byArrival(
+      [journey('t2', at('12:21')), journey('est'), journey('t1', at('12:20'))],
+      estimates({ est: '12:19' })
+    )
+    expect(idsOf(sorted)).toEqual(['est', 't1', 't2'])
+  })
+
+  // The documented consequence of measuring the margin against the earliest
+  // remaining journey: the pairwise preferences here form a cycle.
+  it('measures the margin against the earliest remaining journey', () => {
+    const sorted = byArrival([journey('A'), journey('B'), journey('C')], estimates({ A: '12:20', B: '12:18', C: '12:16' }))
+    expect(idsOf(sorted)).toEqual(['B', 'C', 'A'])
+  })
+
   it('still sorts timetabled arrivals exactly, minute for minute', () => {
     const sorted = byArrival(
       [journey('b', at('12:21')), journey('a', at('12:20')), journey('est')],

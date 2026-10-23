@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs'
 import { performance } from 'node:perf_hooks'
 import { parseArgs } from 'node:util'
+import type { FareJourney } from '@commute/schemas'
 import type { EdgeInput, RouteLeg, TransferInput, Tsundere } from '@commute/tsundere'
 import { estimateInputs, routerFromInputs } from '../../routes/fares'
 import { searchTrips } from '../../routes/internal'
+import { byArrival } from '../../utils/journey-times'
 import { estimateTjLeg, type RuntimeStatistic } from '../../utils/observedRuntimes'
 import type { PlaceIndex } from '../../utils/places'
 import { DAY_MASK } from '../schemas/schedules'
@@ -26,18 +28,16 @@ import { serviceDay } from '../../utils/fare'
  * which journey arrives first, so the engine level answers the question.
  *
  * Arms: `fields` (the engine's order behind timetabled arrivals), `sort` on the
- * median estimate, `sort` on the p75 estimate, and `sort` on the median where a
- * journey only overtakes the engine's order by --margin seconds or more (what
- * ships; journey-times.ts byArrival, ESTIMATE_OVERTAKE_S). Nothing here changes
- * behaviour; it only measures.
+ * median estimate, `sort` on the p75 estimate, and `sort` as it ships: the median
+ * through journey-times.ts byArrival itself, with its ESTIMATE_OVERTAKE_S
+ * margin. Nothing here changes behaviour; it only measures.
  */
 
 const { values: args } = parseArgs({
   options: {
     pairs: { type: 'string', default: '2000' },
     seed: { type: 'string', default: '42' },
-    examples: { type: 'string', default: '20' },
-    margin: { type: 'string', default: '180' }
+    examples: { type: 'string', default: '20' }
   }
 })
 
@@ -65,7 +65,6 @@ const MOMENTS = [
 type Legs = readonly RouteLeg[]
 type Arm = 'median' | 'p75' | 'margin'
 const ARMS: readonly Arm[] = ['median', 'p75', 'margin']
-const MARGIN_S = Number(args.margin)
 const hasTj = (legs: Legs) => legs.some(l => l.type === 'RIDE' && l.operator === 'TJ')
 const describe = (legs: Legs) => legs
   .map(l => (l.type === 'RIDE' ? `${l.operator}:${l.lineCode} ${l.fromStationId}>${l.toStationId}` : `walk ${Math.round(l.distanceM)}m`))
@@ -93,20 +92,14 @@ function order(rows: Row[], key: 'none' | Arm): number[] {
   const untimed = idx.filter(i => arrival(rows[i]!) === null)
   if (rows.length < 2 || timed.length < 2) return idx
   if (key !== 'margin') return [...[...timed].sort((a, b) => arrival(rows[a]!)! - arrival(rows[b]!)!), ...untimed]
-  // The overtake rule, as in byArrival: zero margin between two timetabled rows.
-  const margin = (a: Row, b: Row) => (a.exact === null || b.exact === null ? MARGIN_S : 0)
-  const remaining = [...timed]
-  const ordered: number[] = []
-  while (remaining.length > 0) {
-    let lead = remaining[0]!
-    for (const i of remaining) if (arrival(rows[i]!)! < arrival(rows[lead]!)!) lead = i
-    const next = remaining.findIndex((i) => {
-      const behind = arrival(rows[i]!)! - arrival(rows[lead]!)!
-      return behind <= 0 || behind < margin(rows[i]!, rows[lead]!)
-    })
-    ordered.push(...remaining.splice(next, 1))
-  }
-  return [...ordered, ...untimed]
+  // The shipped rule itself, on stand-in journeys that carry only what byArrival reads.
+  const day = Date.parse('2026-10-14T00:00:00+07:00')
+  const stand = rows.map(r => (r.exact === null ? {} : { arrivalAt: new Date(day + r.exact * 1000).toISOString() }) as FareJourney)
+  const index = new Map(stand.map((j, i) => [j, i]))
+  return byArrival(stand, (j) => {
+    const r = rows[index.get(j)!]!
+    return r.median === null ? undefined : day + r.median * 1000
+  }).map(j => index.get(j)!)
 }
 
 function main() {

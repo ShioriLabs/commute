@@ -329,7 +329,7 @@ the changes are one estimated journey over another.
 estimate. The gain is the median estimated gain of the changed pairs.
 
 - **Most changes are one estimated journey overtaking another.** Today every TJ
-  journey sits in the untimed tail in the engine's order. Only about 1-2% of
+  journey sits in the untimed tail in the engine's order. Only about 1-3% of
   pairs swap a timetabled top journey for an estimated one, or the other way
   round.
 - **Without a margin, most swaps were on 1-3 minutes,** inside the estimate's
@@ -353,7 +353,9 @@ estimate. The gain is the median estimated gain of the changed pairs.
   docs/adr/tj-shared-waits.md). A/B on 2,000 pairs × 5 moments: the top route
   (ignoring which line of a shared stretch is named) changes on 10-15% of
   pairs, about 1% rail over TJ. Search cost is about +5-14% p50. The
-  merged-stream CV is p50 1.37: lines on one road arrive together.
+  merged-stream CV is p50 0.87-0.95 in the weekday daytime blocks, a little
+  more regular than independent streams. (The 1.37 first quoted here came from
+  cells pooled across blocks, since removed; see the ADR.)
 - **Ranking now trades walking for wait without counting either as time.**
   Sudirman → Karet Kuningan at WD 12:00 ranks walk 560 m + 13E/L13E (±22)
   over walk 310 m + 6 from Galunggung (±18), because the pooled 13E/L13E wait

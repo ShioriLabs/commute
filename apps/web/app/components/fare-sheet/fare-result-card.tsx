@@ -600,7 +600,8 @@ export function JourneyCardFace({ journey, onSelect }: {
         * Duration leads because it is the figure a rider compares rows on, and
         * it is the one JR East sets largest. A fully timed journey fills it
         * from two PUBLISHED times; a TransJakarta journey from the observed
-        * estimate, ±-marked, beside its boarding clock and never an arrival.
+        * estimate, ±-marked, beside its boarding clock where it has one (a
+        * journey that opens on a bus has none) and never an arrival.
         * One the API could not estimate is a defined layout rather than a
         * blank first line: the fare moves up into the slot. The transfer
         * count only takes it when the fare is unknown too, since the meta row
