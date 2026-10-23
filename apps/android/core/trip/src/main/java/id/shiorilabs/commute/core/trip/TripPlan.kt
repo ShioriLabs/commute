@@ -137,6 +137,8 @@ sealed interface TripLeg {
         val to: TripStop,
         val distanceM: Int,
         val corridorLabel: String? = null,
+        /** The signed name of the exit the walk leaves [from] by (`D`), only where it is on record. */
+        val fromExit: String? = null,
     ) : TripLeg
 }
 

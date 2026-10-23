@@ -105,7 +105,6 @@
     <!-- %1$s is the station walked to -->
     <string name="journey_transfer_to">Transit ke %1$s</string>
     <!-- %1$d is metres walked -->
-    <string name="journey_transfer_walk">(Jalan kaki ±%1$dm)</string>
     <string name="journey_walk">Jalan kaki ±%1$dm</string>
     <!-- %1$s is a paid corridor's name, %2$s its fare -->
     <string name="journey_corridor">%1$s • %2$s</string>
