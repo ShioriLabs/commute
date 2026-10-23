@@ -342,7 +342,7 @@ private fun StationList(
             item(key = "exits") {
                 StationExits(
                     exits = state.exits,
-                    modifier = Modifier.padding(top = 32.dp),
+                    modifier = Modifier.padding(start = 16.dp, top = 32.dp, end = 16.dp),
                     onOpenStation = onOpenStation,
                     onOpenAttributions = onOpenAttributions,
                 )
