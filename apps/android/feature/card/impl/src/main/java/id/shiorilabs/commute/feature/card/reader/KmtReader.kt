@@ -19,6 +19,10 @@ private const val KMT_SYSTEM = 0x90B7
 private const val PURSE = 0x1013
 private const val HISTORY = 0x200D
 private const val CARD_NUMBER = 0x3009
+// Each has a read-only twin with the same data; some cards list only the twin (KMT.md).
+private const val PURSE_READ_ONLY = 0x1017
+private const val HISTORY_READ_ONLY = 0x200F
+private const val CARD_NUMBER_READ_ONLY = 0x300B
 private const val HISTORY_BLOCKS = 16
 private const val LAST_DIGITS = 4
 private val EPOCH_2000: Instant = Instant.parse("2000-01-01T00:00:00Z")
@@ -36,9 +40,9 @@ internal class KmtReader(private val now: () -> Instant = Instant::now) : CardRe
         val card = (tag as? CardTag.Felica)?.card ?: return null
         return try {
             val idm = FelicaResponse.polling(card.transport.transceive(FelicaCommand.polling(KMT_SYSTEM)))?.idm ?: return null
-            val purse = card.readBlocks(idm, PURSE, listOf(0))?.single() ?: return null
-            val history = card.readBlocks(idm, HISTORY, (0 until HISTORY_BLOCKS).toList()) ?: return null
-            val number = card.readBlocks(idm, CARD_NUMBER, listOf(0))?.single()
+            val purse = card.readBlocks(idm, PURSE, PURSE_READ_ONLY, listOf(0))?.single() ?: return null
+            val history = card.readBlocks(idm, HISTORY, HISTORY_READ_ONLY, (0 until HISTORY_BLOCKS).toList()) ?: return null
+            val number = card.readBlocks(idm, CARD_NUMBER, CARD_NUMBER_READ_ONLY, listOf(0))?.single()
             CardSnapshot(
                 kind = kind,
                 lastDigits = number?.decodeToString()?.takeIf { d -> d.all(Char::isDigit) }?.takeLast(LAST_DIGITS),
@@ -50,6 +54,10 @@ internal class KmtReader(private val now: () -> Instant = Instant::now) : CardRe
             null
         }
     }
+
+    /** Reads from [service], or from its read-only twin when the card doesn't list [service]. */
+    private fun TappedCard.readBlocks(idm: ByteArray, service: Int, readOnly: Int, blocks: List<Int>): List<ByteArray>? =
+        readBlocks(idm, service, blocks) ?: readBlocks(idm, readOnly, blocks)
 
     private fun TappedCard.readBlocks(idm: ByteArray, service: Int, blocks: List<Int>): List<ByteArray>? =
         blocks.chunked(READ_BATCH).flatMap { batch ->

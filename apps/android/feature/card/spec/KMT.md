@@ -30,7 +30,9 @@ The dumps themselves aren't kept in the repo: they hold card numbers and travel 
 FeliCa Lite-S (`88B4`) or Secure ID (`957A`).
 
 **Readable services:** every service listed here can be read without a key. Where two codes
-are given, both show the same data, and both codes were present on all three cards.
+are given, both show the same data. Both codes were present on three of the four cards; the
+fourth (2026-10-24, a card that gave a read error on `1013`) lists only the second code of each
+pair: `1017`, `200F` and `300B`. So a reader has to be able to use either.
 
 | Codes | Kind | Blocks | Contents |
 | --- | --- | --- | --- |
@@ -180,7 +182,8 @@ LRT ride it still holds the values from the KRL ride before. KAI seems to keep i
 ## What the app reads (`reader/KmtReader.kt`)
 
 On a tap on home the app polls system `90B7`, then reads `1013` block 0, `200D` blocks 0-15 and
-`3009` block 0, and nothing else. Each field it shows rests on a section above:
+`3009` block 0, and nothing else. A service the card doesn't list is read through its read-only
+twin instead (`1017`, `200F`, `300B`). Each field it shows rests on a section above:
 
 - Balance: D0-D3 of the purse, little-endian (confirmed).
 - Time, amount and entry kind: D0-D3, D6-D7 and D8-D13 of each non-empty history block (confirmed).
