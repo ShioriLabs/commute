@@ -279,16 +279,19 @@ function nextServiceDay(context: FareContext): FareContext {
 }
 
 /*
- * Estimated arrivals closer than this sort as a tie, so the engine's order
- * (fewer boardings, less walking) decides between them. The estimate's own error
- * is minutes, and without the band most of what sort mode changed was one bus
- * route overtaking another on a minute or two: measured on 2,000 seeded pairs
- * (`ab:estimated-order`, 2026-10-19), the band cut top-journey changes by about a
- * quarter and raised the median estimated gain of those that remain from 3-6 to
- * 5-7 minutes. Rounding rather than a pairwise tolerance, because a sort needs a
- * consistent order.
+ * How much earlier an estimated arrival must be to put a journey ahead of one
+ * the engine ranked higher (byArrival). Closer than this, the engine's order
+ * (fewer boardings, less walking) decides. The estimate's own error is minutes,
+ * and with no margin most of what sort mode changed was one bus route
+ * overtaking another on a minute or two (`ab:estimated-order`, 2026-10-19).
+ *
+ * A margin rather than the 5-minute rounding it replaced: rounding tied any two
+ * arrivals that happened to fall in one band, up to five minutes apart, and
+ * split ones a minute apart across a band edge. From Sudirman at 12:00 it tied
+ * walk 560 m + 13E (~12:22) with Galunggung + 6 (~12:17) and kept the engine's
+ * pick of the slower one on top.
  */
-export const ESTIMATE_SORT_BAND_S = 300
+export const ESTIMATE_OVERTAKE_S = 180
 
 /** What retimeTrips needs to estimate TransJakarta legs, per request. */
 export interface EstimateOptions extends Omit<TjEstimateInputs, 'statistic'> {
@@ -342,7 +345,7 @@ function withEstimate(
   const sortS = options.sortStatistic === 'p75'
     ? estimatedArrivalS(route, router, context, walking, { ...options, statistic: 'p75' })?.arrivalS ?? null
     : median.arrivalS
-  const sortArrivalS = sortS === null ? null : Math.round(sortS / ESTIMATE_SORT_BAND_S) * ESTIMATE_SORT_BAND_S
+  const sortArrivalS = sortS
   /*
    * Where a timed ride opens the journey, the card counts from that boarding,
    * as it does on a fully timed one; the client cannot recover `at` itself
@@ -493,6 +496,14 @@ function relabel(journeys: FareJourney[]): FareJourney[] {
  * estimate. That is still one rule, arrival, applied to every row that has one;
  * rows with neither stay in the untimed tail. Without it, exactly as before.
  *
+ * Where an estimate is involved, arriving earlier is not enough on its own: a
+ * journey moves ahead of one the engine ranked higher only when it arrives
+ * ESTIMATE_OVERTAKE_S earlier. Between two timetabled journeys the margin is
+ * zero, so an all-rail answer sorts exactly as it always has. The order is
+ * built by repeatedly taking the earliest remaining arrival and, in its place,
+ * the first journey in engine order that it does not beat by the margin. That
+ * is deterministic, which a pairwise "close enough" comparator in a sort is not.
+ *
  * Exported for its own tests: the all-or-nothing rule and the stable tie-break
  * are the parts worth pinning, and reaching them through retimeTrips would mean
  * standing up a whole graph to assert an ordering.
@@ -506,8 +517,26 @@ export function byArrival(
   const timed = journeys.filter(j => arrivalOf(j) !== undefined)
   const untimed = journeys.filter(j => arrivalOf(j) === undefined)
   if (timed.length < 2) return journeys
-  return [
-    ...[...timed].sort((a, b) => arrivalOf(a)! - arrivalOf(b)!),
-    ...untimed
-  ]
+  if (!estimatedArrivalMs) {
+    return [
+      ...[...timed].sort((a, b) => arrivalOf(a)! - arrivalOf(b)!),
+      ...untimed
+    ]
+  }
+
+  const marginMs = (a: FareJourney, b: FareJourney) =>
+    (a.arrivalAt === undefined || b.arrivalAt === undefined ? ESTIMATE_OVERTAKE_S * 1000 : 0)
+  const remaining = [...timed]
+  const ordered: FareJourney[] = []
+  while (remaining.length > 0) {
+    let lead = remaining[0]!
+    for (const j of remaining) if (arrivalOf(j)! < arrivalOf(lead)!) lead = j
+    // The earliest arrival qualifies for its own place, so this always finds one.
+    const next = remaining.findIndex((j) => {
+      const behind = arrivalOf(j)! - arrivalOf(lead)!
+      return behind <= 0 || behind < marginMs(j, lead)
+    })
+    ordered.push(...remaining.splice(next, 1))
+  }
+  return [...ordered, ...untimed]
 }

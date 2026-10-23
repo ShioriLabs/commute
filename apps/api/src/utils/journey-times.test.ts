@@ -503,7 +503,7 @@ describe('TransJakarta estimates', () => {
     expect(idsOf(sorted)).toEqual(['tj', 'rail', 'rail2'])
   })
 
-  it('keeps the engine order between estimates in the same five-minute band', () => {
+  it('keeps the engine order between estimates closer than the margin', () => {
     // Two bus routes estimated alike, behind them a train: the buses keep their engine order.
     const rows = [tjJourney('tj-a'), tjJourney('tj-b'), railJourney('rail', at('18:00'))]
     const sorted = retimeTrips(result(...rows), engine, context, undefined, { mode: 'sort', ...inputs }).journeys
@@ -520,12 +520,45 @@ describe('TransJakarta estimates', () => {
 })
 
 describe('byArrival with estimated arrivals', () => {
+  const estimates = (byId: Record<string, string>) => (j: FareJourney) => {
+    const hhmm = byId[(j as unknown as { id: string }).id]
+    return hhmm ? Date.parse(at(hhmm)) : undefined
+  }
+
   it('sorts estimated rows among the timed ones on one rule', () => {
-    const estimated = journey('est')
     const sorted = byArrival(
-      [journey('late', at('09:10')), estimated, journey('u'), journey('early', at('09:00'))],
-      j => (j === estimated ? Date.parse(at('09:05')) : undefined)
+      [journey('late', at('09:10')), journey('est'), journey('u'), journey('early', at('09:00'))],
+      estimates({ est: '09:05' })
     )
     expect(idsOf(sorted)).toEqual(['early', 'est', 'late', 'u'])
+  })
+
+  /*
+   * Sudirman -> Karet Kuningan at 12:00: the engine ranked walk 560 m + 13E
+   * first (~12:22), then LRT + 4D (~12:18), then Galunggung + 6 (~12:17).
+   * Both of the others beat 13E by the margin; a minute between them is not
+   * enough to overrule the engine.
+   */
+  it('lets an estimate overtake the engine\'s order only by the margin', () => {
+    const sorted = byArrival(
+      [journey('13E'), journey('lrt'), journey('6')],
+      estimates({ '13E': '12:22', 'lrt': '12:18', '6': '12:17' })
+    )
+    expect(idsOf(sorted)).toEqual(['lrt', '6', '13E'])
+  })
+
+  it('needs the margin against a timetabled arrival too, either way round', () => {
+    const train = journey('train', at('12:20'))
+    expect(idsOf(byArrival([train, journey('bus')], estimates({ bus: '12:18' })))).toEqual(['train', 'bus'])
+    expect(idsOf(byArrival([train, journey('bus')], estimates({ bus: '12:16' })))).toEqual(['bus', 'train'])
+    expect(idsOf(byArrival([journey('bus'), train], estimates({ bus: '12:22' })))).toEqual(['bus', 'train'])
+  })
+
+  it('still sorts timetabled arrivals exactly, minute for minute', () => {
+    const sorted = byArrival(
+      [journey('b', at('12:21')), journey('a', at('12:20')), journey('est')],
+      estimates({ est: '13:00' })
+    )
+    expect(idsOf(sorted)).toEqual(['a', 'b', 'est'])
   })
 })

@@ -275,18 +275,20 @@ as a clock:
 
 **Switch** `config:observed-runtimes` (see `utils/observedFlag.ts`):
 - `off`: no estimates;
-- `fields`: estimates, unchanged order. This is the default and what an absent
-  or unknown value means.
-- `sort`: estimated arrivals also join `byArrival`, rounded to 5-minute bands so
-  that close estimates keep the engine's order.
+- `fields`: estimates, in the engine's order behind the timetabled arrivals.
+- `sort`: estimated arrivals also join `byArrival`. A journey moves ahead of one
+  the engine ranked higher only when it arrives at least 3 minutes earlier
+  (`ESTIMATE_OVERTAKE_S`); between two timetabled journeys the margin is zero.
+  **The default since 2026-10-23**, and what an absent or unknown value means.
+  `fields` is the kill switch.
 
 Estimates are applied after the journey cache, so a flip needs no purge or
 API_VERSION bump. It takes effect within ~11 min (60 s KV cache plus the
 10-minute edge cache).
 
 **A/B** (`pnpm --filter api ab:estimated-order`; 2,000 seeded pairs on the network
-snapshot; share of multi-journey pairs whose top journey changes against today's
-order):
+snapshot; share of multi-journey pairs whose top journey changes against the
+`fields` order). The first run was 2026-10-19, before the bunched waits:
 
 | Moment | Estimated | sort / median | sort / p75 | sort / 5-min band |
 |---|---|---|---|---|
@@ -296,6 +298,33 @@ order):
 | WD 21:00 | 84% | 21.4% (2.9) | 22.2% | 15.5% (5.0) |
 | WE 12:00 | 79% | 25.7% (3.6) | 29.0% | 21.3% (5.5) |
 
+Re-run 2026-10-23 on bunched, shared waits (461dad9d), before shipping sort:
+
+| Moment | Estimated | sort / median | sort / p75 | sort / 5-min band |
+|---|---|---|---|---|
+| WD 07:30 | 68% | 19.1% (gain 5.0 min) | 21.2% | 15.4% (9.0 min) |
+| WD 12:00 | 90% | 23.5% (4.3) | 26.4% | 18.0% (6.6) |
+| WD 17:30 | 75% | 25.0% (5.5) | 26.7% | 21.8% (6.4) |
+| WD 21:00 | 82% | 20.8% (4.2) | 23.1% | 16.2% (6.0) |
+| WE 12:00 | 82% | 25.1% (2.9) | 27.7% | 19.4% (6.3) |
+
+The 5-minute band, as first shipped in code, tied arrivals that rounded into
+one band. From Sudirman to Karet Kuningan at WD 12:00 it tied walk 560 m + 13E
+(~12:22) with Galunggung + 6 (~12:17), so the engine's pick of the slower one
+stayed on top. It was replaced before release by the 3-minute overtake margin
+(same run, same pairs):
+
+| Moment | sort / 3-min margin | timetabled over estimated | estimated over timetabled |
+|---|---|---|---|
+| WD 07:30 | 13.6% (gain 10.0 min) | 28 | 10 |
+| WD 12:00 | 15.2% (8.0) | 14 | 14 |
+| WD 17:30 | 20.4% (7.8) | 24 | 9 |
+| WD 21:00 | 14.7% (7.1) | 3 | 16 |
+| WE 12:00 | 17.2% (8.0) | 17 | 11 |
+
+The swap counts are out of ~1,450 multi-journey pairs per moment; the rest of
+the changes are one estimated journey over another.
+
 "Estimated" is the share of TJ rows without a timetable arrival that got an
 estimate. The gain is the median estimated gain of the changed pairs.
 
@@ -303,8 +332,9 @@ estimate. The gain is the median estimated gain of the changed pairs.
   journey sits in the untimed tail in the engine's order. Only about 1-2% of
   pairs swap a timetabled top journey for an estimated one, or the other way
   round.
-- **Without a band, most swaps were on 1-3 minutes,** inside the estimate's own
-  error. That is why the band ships as the sort behaviour.
+- **Without a margin, most swaps were on 1-3 minutes,** inside the estimate's
+  own error. That is why sort needs one; the margin changes fewer pairs than the
+  band did, by more.
 - **p75 churns more and helps nothing,** so it is not used.
 - **No leg ever failed because a station pair was missing from the table**
   (diagnostic at WD 07:30 and 12:00), so the join between the graph and the table
@@ -313,14 +343,12 @@ estimate. The gain is the median estimated gain of the changed pairs.
   7F, which have no observed or scaled cell at the morning peak; at midday, the
   topology-mismatch lines 4 and 3F.
 
-**Open before switching to `sort`:**
+**Open:**
 - **Coverage bias.** At peak, a journey on a well-measured line can move up while
   an unmeasured one stays in the untimed tail, whatever the real speeds.
 - **Partly visible reason.** Cards now print each estimate, so a reordered list
   shows the figures it was sorted on. Nothing says the order itself changed, and
   an unestimated journey still shows no duration at all.
-- **Descriptions.** The `FareJourneySchema` description still says ranking ignores
-  travel time. It changes when sort ships.
 - **Waits are bunched and shared in the search too** (2026-10-19,
   docs/adr/tj-shared-waits.md). A/B on 2,000 pairs × 5 moments: the top route
   (ignoring which line of a shared stretch is named) changes on 10-15% of
