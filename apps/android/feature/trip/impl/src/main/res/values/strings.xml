@@ -130,7 +130,6 @@
     <!-- A walk between rides, as the trip details word it. %1$s is the station walked to. -->
     <string name="trip_live_transfer_to">Transit ke %1$s</string>
     <!-- %1$d is metres walked -->
-    <string name="trip_live_transfer_walk">(Jalan kaki ±%1$dm)</string>
     <!-- Two rides through one station: a change on the spot, not a walk. -->
     <string name="trip_live_change_train">Pindah kereta</string>
     <string name="trip_live_change_bus">Pindah bus</string>

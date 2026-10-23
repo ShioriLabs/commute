@@ -129,6 +129,8 @@ sealed interface JourneyLeg {
         /** Only on a paid corridor. */
         val fare: Int?,
         val corridorLabel: String?,
+        /** The signed name of the exit the walk leaves [from] by (`D`), only where it is on record. */
+        val fromExit: String? = null,
     ) : JourneyLeg
 }
 
