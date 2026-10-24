@@ -81,11 +81,12 @@ class KmtReaderTest {
 
     @Test
     fun `a KRL entry names its tap-out station`() {
-        val entries = reader.read(tag(history = listOf(krl("2026-10-23T11:42:00Z", 3_000, "48"), krl("2026-10-23T00:31:00Z", 4_000, "26"))))!!.entries
+        val entries = reader.read(
+            tag(history = listOf(krl("2026-10-23T11:42:00Z", 3_000, "48"), krl("2026-10-23T00:31:00Z", 4_000, "26"), krl("2024-12-07T07:27:13Z", 3_000, "24"))),
+        )!!.entries
 
         assertEquals("KCI", entries[0].operator)
-        assertEquals("Sudirman", entries[0].place)
-        assertEquals("Kranji", entries[1].place)
+        assertEquals(listOf("Sudirman", "Kranji", "Jakarta Kota"), entries.map { it.place })
     }
 
     @Test
@@ -105,13 +106,29 @@ class KmtReaderTest {
     }
 
     @Test
-    fun `TransJakarta and MRT entries are told apart and name no place`() {
+    fun `a TransJakarta entry names no place`() {
+        val entry = reader.read(tag(history = listOf(entry("2026-10-23T01:05:00Z", 3_500, "01 16 00 1C 01 01"))))!!.entries.single()
+
+        assertEquals("TJ", entry.operator)
+        assertNull(entry.place)
+    }
+
+    @Test
+    fun `an MRT entry names its tap-out station`() {
         val entries = reader.read(
-            tag(history = listOf(entry("2026-10-23T01:05:00Z", 3_500, "01 16 00 1C 01 01"), entry("2026-10-22T11:10:00Z", 0, "01 16 00 10 01 01"))),
+            tag(history = listOf(entry("2026-10-22T11:10:00Z", 0, "01 16 00 10 01 01"), entry("2024-12-07T10:17:58Z", 3_000, "01 16 00 0F 01 01"))),
         )!!.entries
 
-        assertEquals(listOf("TJ", "MRTJ"), entries.map { it.operator })
-        assertEquals(listOf(null, null), entries.map { it.place })
+        assertEquals(listOf("MRTJ", "MRTJ"), entries.map { it.operator })
+        assertEquals(listOf("Bundaran HI Bank DKI", "Dukuh Atas BNI"), entries.map { it.place })
+    }
+
+    @Test
+    fun `a JakLingko entry we can't place is left unread`() {
+        val entry = reader.read(tag(history = listOf(entry("2026-10-23T01:05:00Z", 3_000, "01 16 00 0E 01 01"))))!!.entries.single()
+
+        assertNull(entry.operator)
+        assertNull(entry.place)
     }
 
     @Test
