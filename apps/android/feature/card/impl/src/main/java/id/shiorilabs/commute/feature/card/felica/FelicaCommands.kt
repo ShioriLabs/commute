@@ -23,6 +23,12 @@ internal const val MAX_NODES = 32
 /** Blocks per Read Without Encryption that every FeliCa Standard product takes (TN §2.1 item 4). */
 internal const val READ_BATCH = 12
 
+/** Services per Read Without Encryption (UM §4.4.5). */
+internal const val MAX_READ_SERVICES = 16
+
+/** One block of one service, for a read across services. */
+internal data class ServiceBlock(val serviceCode: Int, val block: Int)
+
 /** Service attributes, by kind and access: an odd one needs no key (UM §3.4.1, Table 3-2). */
 internal val NO_KEY_SERVICE_ATTRIBUTES = listOf(0x09, 0x0B, 0x0D, 0x0F, 0x11, 0x13, 0x15, 0x17)
 internal val KEYED_SERVICE_ATTRIBUTES = NO_KEY_SERVICE_ATTRIBUTES.map { it - 1 }
@@ -64,15 +70,21 @@ internal object FelicaCommand {
     }
 
     /** UM §4.4.5, one service at a time: the service, then each of its [blocks] to read. */
-    fun readWithoutEncryption(idm: ByteArray, serviceCode: Int, blocks: List<Int>): ByteArray {
+    fun readWithoutEncryption(idm: ByteArray, serviceCode: Int, blocks: List<Int>): ByteArray =
+        readWithoutEncryption(idm, blocks.map { ServiceBlock(serviceCode, it) })
+
+    /** UM §4.4.5 across services: each service listed once, in the order [blocks] first names it. */
+    fun readWithoutEncryption(idm: ByteArray, blocks: List<ServiceBlock>): ByteArray {
         require(blocks.isNotEmpty()) { "no blocks" }
+        val services = blocks.map { it.serviceCode }.distinct()
+        require(services.size <= MAX_READ_SERVICES) { "${services.size} services" }
         return frame(
             READ_WITHOUT_ENCRYPTION,
             idm,
-            byteArrayOf(1),
-            littleEndian(serviceCode),
+            byteArrayOf(services.size.toByte()),
+            *services.map(::littleEndian).toTypedArray(),
             byteArrayOf(blocks.size.toByte()),
-            *blocks.map { blockListElement(serviceIndex = 0, block = it) }.toTypedArray(),
+            *blocks.map { blockListElement(serviceIndex = services.indexOf(it.serviceCode), block = it.block) }.toTypedArray(),
         )
     }
 

@@ -40,6 +40,20 @@ class FelicaCommandsTest {
     }
 
     @Test
+    fun `a read across services lists each service once and points every block at its place in that list`() {
+        val frame = FelicaCommand.readWithoutEncryption(
+            IDM,
+            listOf(ServiceBlock(0x1017, 0), ServiceBlock(0x300B, 0), ServiceBlock(0x200F, 0), ServiceBlock(0x200F, 1)),
+        )
+        assertArrayEquals(hex("1A 06 01 2E 34 56 78 9A BC DE 03 17 10 0B 30 0F 20 04 80 00 81 00 82 00 82 01"), frame)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `a read refuses more than 16 services`() {
+        FelicaCommand.readWithoutEncryption(IDM, List(17) { ServiceBlock(serviceCode(it, 0x0B), 0) })
+    }
+
+    @Test
     fun `the manual's own example element - block 3 of the first service - is 80 03`() {
         assertArrayEquals(hex("80 03"), FelicaCommand.blockListElement(serviceIndex = 0, block = 3))
     }

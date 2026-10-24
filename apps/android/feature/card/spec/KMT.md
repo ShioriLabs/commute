@@ -181,9 +181,11 @@ LRT ride it still holds the values from the KRL ride before. KAI seems to keep i
 
 ## What the app reads (`reader/KmtReader.kt`)
 
-On a tap on home the app polls system `90B7`, then reads `1013` block 0, `200D` blocks 0-15 and
-`3009` block 0, and nothing else. A service the card doesn't list is read through its read-only
-twin instead (`1017`, `200F`, `300B`). Each field it shows rests on a section above:
+On a tap on home or the card page the app reads `1017` block 0, `300B` block 0 and `200F` blocks
+0-15, and nothing else: two Read Without Encryption commands of up to 12 blocks, each across all three
+services. It sends no poll first, since Android has already found the card by system `90B7`. Every
+card seen lists those read-only codes; a card that refuses them is read the same way through
+`1013`, `3009` and `200D` instead. Each field it shows rests on a section above:
 
 - Balance: D0-D3 of the purse, little-endian (confirmed).
 - Time, amount and entry kind: D0-D3, D6-D7 and D8-D13 of each non-empty history block (confirmed).
