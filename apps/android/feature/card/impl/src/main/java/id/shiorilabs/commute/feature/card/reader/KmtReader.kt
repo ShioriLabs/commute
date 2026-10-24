@@ -90,7 +90,7 @@ internal class KmtReader(private val now: () -> Instant = Instant::now) : CardRe
         return when {
             b[0] == 0x00 && b[1] == 0x05 && b[2] == 0x00 && b[4] == 0x01 && b[5] == 0x01 -> LRTJBDB to LRT_STATIONS[b[3]]
             b[0] == 0x01 && b[1] == 0x16 && b[2] == 0x00 && b[3] == 0x1C -> TJ to null
-            b[0] == 0x01 && b[1] == 0x16 && b[2] == 0x00 && b[3] == 0x10 -> MRTJ to null
+            b[0] == 0x01 && b[1] == 0x16 && b[2] == 0x00 && b[3] in MRT_STATIONS -> MRTJ to MRT_STATIONS[b[3]]
             b[0] == 0x01 && b[2] == 0x01 && b[3] == 0x01 && b[4] == 0x01 && b[5] == 0x00 -> KCI to KRL_STATIONS[b[1]]
             else -> null to null
         }
@@ -104,7 +104,10 @@ internal class KmtReader(private val now: () -> Instant = Instant::now) : CardRe
 
     private companion object {
         // Tap-out stations seen so far (KMT.md); any other code leaves the place unnamed.
-        val KRL_STATIONS = mapOf(0x26 to "Kranji", 0x48 to "Sudirman")
+        val KRL_STATIONS = mapOf(0x24 to "Jakarta Kota", 0x26 to "Kranji", 0x48 to "Sudirman")
         val LRT_STATIONS = mapOf(0x01 to "Dukuh Atas", 0x02 to "Setiabudi", 0x03 to "Rasuna Said")
+
+        // An MRT entry is told from TransJakarta's only by its station, so an unknown one stays unread.
+        val MRT_STATIONS = mapOf(0x0F to "Dukuh Atas BNI", 0x10 to "Bundaran HI Bank DKI")
     }
 }
