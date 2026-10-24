@@ -62,16 +62,19 @@ internal class FakeCard(
 
     private fun read(system: System, frame: ByteArray): ByteArray {
         val idm = system.idm
-        val service = system.services[frame.u16le(11)]
-        val count = frame.u8(13)
-        var at = 14
+        val codes = List(frame.u8(10)) { frame.u16le(11 + 2 * it) }
+        var at = 11 + 2 * codes.size
+        val count = frame.u8(at++)
+        // Each element: the service's place in the list, and the block.
         val wanted = List(count) {
-            if (frame.u8(at) and 0x80 != 0) frame.u8(at + 1).also { at += 2 } else frame.u16le(at + 1).also { at += 3 }
+            val index = frame.u8(at) and 0x0F
+            val block = if (frame.u8(at) and 0x80 != 0) frame.u8(at + 1).also { at += 2 } else frame.u16le(at + 1).also { at += 3 }
+            codes[index] to block
         }
         val fail = when {
-            service == null -> 0xA6
-            serviceAttribute(frame.u16le(11)) % 2 == 0 -> 0xA5
-            wanted.any { it >= service.blocks.size } -> 0xA8
+            codes.any { it !in system.services } -> 0xA6
+            codes.any { serviceAttribute(it) % 2 == 0 } -> 0xA5
+            wanted.any { (code, block) -> block >= system.services.getValue(code).blocks.size } -> 0xA8
             else -> 0
         }
         if (fail != 0) return response(READ_WITHOUT_ENCRYPTION + 1, idm, byteArrayOf(0x01, fail.toByte()))
@@ -79,7 +82,7 @@ internal class FakeCard(
             READ_WITHOUT_ENCRYPTION + 1,
             idm,
             byteArrayOf(0, 0, count.toByte()),
-            *wanted.map { service!!.blocks[it] }.toTypedArray(),
+            *wanted.map { (code, block) -> system.services.getValue(code).blocks[block] }.toTypedArray(),
         )
     }
 
