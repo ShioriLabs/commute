@@ -1,6 +1,9 @@
 package id.shiorilabs.commute.feature.card.presentation
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
@@ -28,6 +31,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,6 +59,7 @@ import id.shiorilabs.commute.feature.card.api.CardEntry
 import id.shiorilabs.commute.feature.card.api.CardKind
 import id.shiorilabs.commute.feature.card.api.CardSnapshot
 import java.time.Instant
+import kotlin.math.roundToLong
 
 /** The art's shape, 375 x 244 px. */
 private const val CARD_ASPECT = 375f / 244f
@@ -76,6 +82,9 @@ private const val BALANCE_SCALE = 0.75f
 private const val BALANCE_MAX_WIDTH = 0.62f
 
 private val Gutter = 32.dp
+
+/** Short enough to finish with the buzz that says the card was read. */
+private const val COUNT_UP_MS = 300
 
 /** The card itself sits closer to the edges than the text, as the app's cards do. */
 private val CardMargin = 16.dp
@@ -156,8 +165,7 @@ internal fun CardPage(
 }
 
 private fun LazyListScope.historyItems(snapshot: CardSnapshot) {
-    val last = snapshot.entries.firstOrNull()
-    if (last == null) {
+    if (snapshot.entries.isEmpty()) {
         item {
             Text(
                 text = stringResource(R.string.card_history_empty),
@@ -168,11 +176,9 @@ private fun LazyListScope.historyItems(snapshot: CardSnapshot) {
         }
         return
     }
-    item { SectionHeader(stringResource(R.string.card_last_ride)) }
-    item { EntryRow(last, snapshot.readAt) }
-    if (snapshot.entries.size > 1) {
-        item { SectionHeader(stringResource(R.string.card_history)) }
-        items(snapshot.entries.drop(1)) { EntryRow(it, snapshot.readAt) }
+    for (day in historyDays(snapshot)) {
+        item { DayHeader(formatDay(day.date, snapshot.readAt), day.total) }
+        items(day.entries) { EntryRow(it) }
     }
 }
 
@@ -194,6 +200,12 @@ private fun CardTile(snapshot: CardSnapshot?, modifier: Modifier = Modifier) {
         val cardWidth = maxWidth
         val cardHeight = maxHeight
         val labelFontSize = with(LocalDensity.current) { (cardHeight * LABEL_CAP_HEIGHT * BALANCE_SCALE / CAP_HEIGHT_PER_EM).toSp() }
+        // A read counts the balance up to what it found; a page opened on an earlier read just shows it.
+        val balance = remember { Animatable(snapshot?.balanceRupiah?.toFloat() ?: 0f) }
+        LaunchedEffect(snapshot?.readAt) {
+            val target = snapshot?.balanceRupiah ?: return@LaunchedEffect
+            balance.animateTo(target.toFloat(), tween(COUNT_UP_MS, easing = FastOutSlowInEasing))
+        }
         val balanceStyle = MaterialTheme.typography.headlineMedium.copy(
             color = Color.White,
             fontSize = labelFontSize,
@@ -219,7 +231,7 @@ private fun CardTile(snapshot: CardSnapshot?, modifier: Modifier = Modifier) {
                     )
                 }
                 BasicText(
-                    text = formatBalance(shown.balanceRupiah),
+                    text = formatBalance(balance.value.roundToLong()),
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(end = cardWidth * LABEL_END)
@@ -235,18 +247,34 @@ private fun CardTile(snapshot: CardSnapshot?, modifier: Modifier = Modifier) {
     }
 }
 
+/** A day's heading, with what the day came to on the right. */
 @Composable
-private fun SectionHeader(text: String) {
-    Text(
-        text = text,
-        modifier = Modifier.padding(start = Gutter, top = 24.dp, end = Gutter, bottom = 8.dp),
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+private fun DayHeader(day: String, total: Long) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = Gutter, top = 24.dp, end = Gutter, bottom = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = day,
+            modifier = Modifier
+                .weight(1f)
+                .semantics { heading() },
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = formatAmount(total),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }
 
 @Composable
-private fun EntryRow(entry: CardEntry, now: Instant) {
+private fun EntryRow(row: HistoryEntry) {
+    val entry = row.entry
     val topUp = entry.operator == null && entry.amountRupiah > 0
     val title = when {
         topUp -> stringResource(R.string.card_entry_topup)
@@ -277,7 +305,7 @@ private fun EntryRow(entry: CardEntry, now: Instant) {
         Column(Modifier.weight(1f)) {
             Text(text = title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
             Text(
-                text = formatEntryTime(entry.at, now),
+                text = stringResource(R.string.card_entry_detail, formatTime(entry.at), formatBalance(row.balanceAfter)),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -13,8 +13,7 @@
     <string name="card_page_title">Cek Saldo</string>
     <string name="card_page_close">Tutup</string>
     <string name="card_digits">•••• %1$s</string>
-    <string name="card_last_ride">Perjalanan terakhir</string>
-    <string name="card_history">Riwayat</string>
+    <string name="card_entry_detail">%1$s · saldo %2$s</string>
     <string name="card_history_empty">Belum ada riwayat di kartu ini</string>
     <string name="card_entry_ride">Perjalanan</string>
     <string name="card_entry_topup">Isi saldo</string>
