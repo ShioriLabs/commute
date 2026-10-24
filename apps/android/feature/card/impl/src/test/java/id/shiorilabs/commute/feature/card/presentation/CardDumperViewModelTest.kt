@@ -8,6 +8,8 @@ import id.shiorilabs.commute.feature.card.felica.IDM
 import id.shiorilabs.commute.feature.card.felica.PMM
 import id.shiorilabs.commute.feature.card.felica.TappedCard
 import id.shiorilabs.commute.feature.card.felica.blocks
+import id.shiorilabs.commute.feature.card.felica.hex
+import id.shiorilabs.commute.feature.card.iso.IsoTag
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -67,6 +69,30 @@ class CardDumperViewModelTest {
         assertEquals(CardDumperUiState.Phase.Done, state.phase)
         assertEquals(2, state.dump!!.systems.single().services.single().blocks.size)
         assertNull(state.progress)
+    }
+
+    @Test
+    fun `a card that isn't FeliCa is kept as Android found it`() {
+        val viewModel = CardDumperViewModel(dumps)
+
+        viewModel.identify(
+            IsoTag(
+                techs = listOf("android.nfc.tech.IsoDep", "android.nfc.tech.NfcA"),
+                id = hex("04 A1 B2 C3"),
+                atqa = hex("04 00"),
+                sak = 0x20,
+                historicalBytes = hex("80 31"),
+            ),
+            transport = null,
+        )
+
+        val state = viewModel.state.value
+        assertEquals(CardDumperUiState.Phase.Done, state.phase)
+        assertNull(state.dump!!.tag)
+        assertEquals(
+            CardDump.IsoDump(techs = listOf("IsoDep", "NfcA"), id = "04A1B2C3", atqa = "0400", sak = "20", historicalBytes = "8031"),
+            state.dump!!.iso,
+        )
     }
 
     @Test
