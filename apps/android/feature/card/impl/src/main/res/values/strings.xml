@@ -10,7 +10,7 @@
     <string name="card_hold_message">Tempel kartunya di belakang HP, terus tahan sebentar</string>
     <string name="card_hold_nfc_off">NFC lagi mati. Nyalain dulu di pengaturan HP</string>
     <string name="card_tap_miss">Kartunya gak kebaca. Coba tempel lagi</string>
-    <string name="card_page_title">Saldo kartu</string>
+    <string name="card_page_title">Cek Saldo</string>
     <string name="card_page_close">Tutup</string>
     <string name="card_digits">•••• %1$s</string>
     <string name="card_last_ride">Perjalanan terakhir</string>
