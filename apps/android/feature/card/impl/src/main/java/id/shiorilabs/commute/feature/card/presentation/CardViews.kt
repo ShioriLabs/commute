@@ -1,42 +1,44 @@
 package id.shiorilabs.commute.feature.card.presentation
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.constants.OPERATOR_NAMES
-import id.shiorilabs.commute.core.ui.components.CommuteBottomSheet
+import id.shiorilabs.commute.core.ui.components.CommuteCloseButton
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.feature.card.R
@@ -45,158 +47,143 @@ import id.shiorilabs.commute.feature.card.api.CardKind
 import id.shiorilabs.commute.feature.card.api.CardSnapshot
 import java.time.Instant
 
-private val CardLight = Color(0xFFECECEE)
-private val CardAccent = Color(0xFF3FAE6D)
+/** The art's shape, 373 x 240 px. */
+private const val CARD_ASPECT = 373f / 240f
 
-/** The card's face, drawn small: grey with a green corner. Generic on purpose, not any issuer's art. */
-private fun cardFace(): Brush = Brush.linearGradient(
-    0f to CardLight,
-    0.55f to CardLight,
-    0.55f to CardAccent,
-    1f to CardAccent,
-)
+private val Gutter = 32.dp
 
-/** What a read left on home: the card and its balance, swiped away when it's done with. */
+/** The card's face: our own generic art, not any issuer's. The art carries its own rounded corners. */
 @Composable
-internal fun CardPill(
-    snapshot: CardSnapshot,
-    onClick: () -> Unit,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val balance = formatBalance(snapshot.balanceRupiah)
-    val description = stringResource(R.string.card_pill_description, balance)
-    val state = rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            if (value != SwipeToDismissBoxValue.Settled) onDismiss()
-            true
-        },
-    )
-    SwipeToDismissBox(
-        state = state,
-        backgroundContent = {},
+private fun CardArt(modifier: Modifier = Modifier) {
+    Image(
+        painter = painterResource(R.drawable.card_generic),
+        contentDescription = null,
         modifier = modifier,
+        contentScale = ContentScale.FillBounds,
+    )
+}
+
+/**
+ * The card page: the card's face, then the last ride and history once one is read. Before that it
+ * says [message] under the same face, so a card read while the page is open fills it in place and
+ * nothing moves.
+ */
+@Composable
+internal fun CardPage(
+    innerPadding: PaddingValues,
+    snapshot: CardSnapshot?,
+    message: String,
+    onBack: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+            .padding(top = innerPadding.calculateTopPadding()),
     ) {
         Row(
             modifier = Modifier
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-                .clickable(onClick = onClick)
-                .semantics { contentDescription = description }
-                .padding(start = 8.dp, top = 8.dp, end = 18.dp, bottom = 8.dp),
+                .fillMaxWidth()
+                .padding(start = Gutter, top = Gutter, end = Gutter, bottom = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Box(
-                Modifier
-                    .size(width = 36.dp, height = 24.dp)
-                    .clip(RoundedCornerShape(5.dp))
-                    .background(cardFace()),
+            Text(
+                text = stringResource(R.string.card_page_title),
+                modifier = Modifier
+                    .weight(1f)
+                    .semantics { heading() },
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
             )
-            Column {
-                Text(
-                    text = stringResource(R.string.card_pill_label_kmt),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = balance,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
+            CommuteCloseButton(
+                onClick = onBack,
+                contentDescription = stringResource(R.string.card_page_close),
+                tint = MaterialTheme.colorScheme.onBackground,
+            )
+        }
+        LazyColumn(contentPadding = PaddingValues(bottom = innerPadding.calculateBottomPadding() + 32.dp)) {
+            item { CardTile(snapshot, Modifier.padding(horizontal = Gutter)) }
+            if (snapshot == null) {
+                item {
+                    Text(
+                        text = message,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Gutter, vertical = 24.dp),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            } else {
+                historyItems(snapshot)
             }
         }
     }
 }
 
-/** Said when a card was touched but not read, so the rider knows to try again rather than wonder. */
-@Composable
-internal fun CardMissNotice(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text = text,
-        modifier = modifier
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-            .padding(horizontal = 18.dp, vertical = 12.dp),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onBackground,
-    )
-}
-
-/** The card's detail: its face with the balance, the last ride, then the rest of its history. */
-@Composable
-internal fun CardSheet(snapshot: CardSnapshot, onDismiss: () -> Unit) {
-    CommuteBottomSheet(
-        title = stringResource(R.string.card_sheet_title),
-        closeDescription = stringResource(R.string.card_sheet_close),
-        onDismiss = onDismiss,
-    ) {
-        CardSheetContent(snapshot)
-    }
-}
-
-@Composable
-private fun CardSheetContent(snapshot: CardSnapshot) {
-    LazyColumn(contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 32.dp)) {
-        item { CardTile(snapshot, Modifier.padding(horizontal = 32.dp)) }
-        val last = snapshot.entries.firstOrNull()
-        if (last == null) {
-            item {
-                Text(
-                    text = stringResource(R.string.card_history_empty),
-                    modifier = Modifier.padding(horizontal = 32.dp, vertical = 24.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        } else {
-            item { SectionHeader(stringResource(R.string.card_last_ride)) }
-            item { EntryRow(last, snapshot.readAt) }
-            if (snapshot.entries.size > 1) {
-                item { SectionHeader(stringResource(R.string.card_history)) }
-                items(snapshot.entries.drop(1)) { EntryRow(it, snapshot.readAt) }
-            }
+private fun LazyListScope.historyItems(snapshot: CardSnapshot) {
+    val last = snapshot.entries.firstOrNull()
+    if (last == null) {
+        item {
+            Text(
+                text = stringResource(R.string.card_history_empty),
+                modifier = Modifier.padding(horizontal = Gutter, vertical = 24.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
+        return
+    }
+    item { SectionHeader(stringResource(R.string.card_last_ride)) }
+    item { EntryRow(last, snapshot.readAt) }
+    if (snapshot.entries.size > 1) {
+        item { SectionHeader(stringResource(R.string.card_history)) }
+        items(snapshot.entries.drop(1)) { EntryRow(it, snapshot.readAt) }
     }
 }
 
+/** The card's face, with what was read written on it once there is something to write. */
 @Composable
-private fun CardTile(snapshot: CardSnapshot, modifier: Modifier = Modifier) {
+private fun CardTile(snapshot: CardSnapshot?, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(120.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(cardFace()),
+            .aspectRatio(CARD_ASPECT),
     ) {
-        Text(
-            text = stringResource(R.string.card_pill_label_kmt),
-            modifier = Modifier.padding(start = 16.dp, top = 12.dp),
-            style = MaterialTheme.typography.labelMedium,
-            color = Color(0xFF555555),
-        )
-        snapshot.lastDigits?.let {
-            Text(
-                text = stringResource(R.string.card_digits, it),
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(end = 16.dp, top = 12.dp),
-                style = MaterialTheme.typography.labelMedium,
-                color = Color.White,
-            )
+        CardArt(Modifier.fillMaxSize())
+        AnimatedVisibility(visible = snapshot != null, enter = fadeIn(), exit = fadeOut()) {
+            val shown = snapshot ?: return@AnimatedVisibility
+            Box(Modifier.fillMaxSize()) {
+                Text(
+                    text = stringResource(R.string.card_pill_label_kmt),
+                    modifier = Modifier.padding(start = 16.dp, top = 12.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color(0xFF555555),
+                )
+                shown.lastDigits?.let {
+                    Text(
+                        text = stringResource(R.string.card_digits, it),
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(end = 16.dp, top = 12.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White,
+                    )
+                }
+                Text(
+                    text = formatBalance(shown.balanceRupiah),
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = 16.dp, bottom = 12.dp),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFF111111),
+                )
+            }
         }
-        Text(
-            text = formatBalance(snapshot.balanceRupiah),
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(start = 16.dp, bottom = 12.dp),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.ExtraBold,
-            color = Color(0xFF111111),
-        )
     }
 }
 
@@ -204,7 +191,7 @@ private fun CardTile(snapshot: CardSnapshot, modifier: Modifier = Modifier) {
 private fun SectionHeader(text: String) {
     Text(
         text = text,
-        modifier = Modifier.padding(start = 32.dp, top = 24.dp, end = 32.dp, bottom = 8.dp),
+        modifier = Modifier.padding(start = Gutter, top = 24.dp, end = Gutter, bottom = 8.dp),
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -221,7 +208,7 @@ private fun EntryRow(entry: CardEntry, now: Instant) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 32.dp, vertical = 10.dp),
+            .padding(horizontal = Gutter, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -278,18 +265,18 @@ private val PreviewCard = CardSnapshot(
     readAt = PreviewNow,
 )
 
-@Preview
+@Preview(heightDp = 760)
 @Composable
-private fun CardPillPreview() {
+private fun CardPageHoldPreview() {
     CommutePreviewScaffold {
-        CardPill(PreviewCard, onClick = {}, onDismiss = {}, modifier = Modifier.padding(16.dp))
+        CardPage(PaddingValues(), snapshot = null, message = stringResource(R.string.card_hold_message), onBack = {})
     }
 }
 
 @Preview(heightDp = 760)
 @Composable
-private fun CardSheetPreview() {
+private fun CardPageReadPreview() {
     CommutePreviewScaffold {
-        Column(Modifier.width(360.dp)) { CardSheetContent(PreviewCard) }
+        CardPage(PaddingValues(), snapshot = PreviewCard, message = "", onBack = {})
     }
 }

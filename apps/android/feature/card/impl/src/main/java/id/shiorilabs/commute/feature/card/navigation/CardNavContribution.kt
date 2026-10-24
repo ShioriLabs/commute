@@ -5,14 +5,20 @@ import androidx.navigation3.runtime.NavKey
 import id.shiorilabs.commute.core.navigation.NavGraphContribution
 import id.shiorilabs.commute.core.navigation.NavGraphScope
 import id.shiorilabs.commute.core.navigation.Route
+import id.shiorilabs.commute.core.ui.morph.navCardMorphMetadata
 import id.shiorilabs.commute.core.ui.motion.pageTransitionMetadata
 import id.shiorilabs.commute.feature.card.presentation.CardDumperScreen
+import id.shiorilabs.commute.feature.card.presentation.CardScreen
 import javax.inject.Inject
 
-/** The card dumper, opened from Pengaturan → Experimental in a debug build. */
+/** The card page, opened from home's card button; and the card dumper, from Pengaturan → Experimental in a debug build. */
 class CardNavContribution @Inject constructor() : NavGraphContribution {
 
     override fun EntryProviderScope<NavKey>.addEntries(scope: NavGraphScope) {
+        // Opens out of home's card button, as Settings does out of its own.
+        entry<Route.Card>(metadata = navCardMorphMetadata()) {
+            CardScreen(innerPadding = scope.screenPadding)
+        }
         entry<Route.CardDumper>(metadata = pageTransitionMetadata()) {
             CardDumperScreen(innerPadding = scope.screenPadding)
         }

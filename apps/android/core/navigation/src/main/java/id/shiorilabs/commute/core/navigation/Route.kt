@@ -166,6 +166,10 @@ sealed interface Route : NavKey {
     @Serializable
     data object SettingsExperimental : Route
 
+    /** A card touched to the phone: its balance and history, or a prompt to touch one. */
+    @Serializable
+    data object Card : Route
+
     /** Debug builds: reads a FeliCa card over NFC and keeps what it shows as JSON. */
     @Serializable
     data object CardDumper : Route
