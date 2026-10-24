@@ -41,5 +41,8 @@ reader for it, and none is planned.
   recording the card with Mandiri's app or at a gate. That would be our own observation, as the
   KMT dumps are.
 - **A spec published by Mandiri or JakLingko.** None is known.
+- **A bank's partner SDK**, used under its own agreement. That is probably how the other apps that
+  read these cards do it, unless they reverse-engineered a bank's app.
 
-Neither the commands other apps use for these cards nor their keys may be used: see `README.md`.
+Neither the commands other apps use for these cards nor their keys may be used, and nothing may be
+reverse-engineered from a bank's app (Livin', BNI Mobile, BCA mobile and the like): see `README.md`.
