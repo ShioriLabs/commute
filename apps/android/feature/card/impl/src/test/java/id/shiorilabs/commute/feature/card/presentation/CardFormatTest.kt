@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.feature.card.presentation
 
 import java.time.Instant
+import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -29,23 +30,19 @@ class CardFormatTest {
     }
 
     @Test
-    fun `an entry from today says hari ini`() {
-        assertEquals("Hari ini 06:30", formatEntryTime(Instant.parse("2026-10-23T23:30:00Z"), now))
+    fun `a day heading says hari ini, kemarin, else the weekday and date`() {
+        assertEquals("Hari ini", formatDay(LocalDate.parse("2026-10-24"), now))
+        assertEquals("Kemarin", formatDay(LocalDate.parse("2026-10-23"), now))
+        assertEquals("Kamis, 22 Okt", formatDay(LocalDate.parse("2026-10-22"), now))
     }
 
     @Test
-    fun `an entry from yesterday says kemarin`() {
-        assertEquals("Kemarin 18:42", formatEntryTime(Instant.parse("2026-10-23T11:42:00Z"), now))
+    fun `a day from another year gives the year too`() {
+        assertEquals("Sabtu, 7 Des 2024", formatDay(LocalDate.parse("2024-12-07"), now))
     }
 
     @Test
-    fun `an older entry gives its date`() {
-        assertEquals("22 Okt 07:31", formatEntryTime(Instant.parse("2026-10-22T00:31:00Z"), now))
-    }
-
-    @Test
-    fun `midnight in Jakarta is the new day, not UTC's`() {
-        // 17:30Z on the 23rd is 00:30 on the 24th in Jakarta.
-        assertEquals("Hari ini 00:30", formatEntryTime(Instant.parse("2026-10-23T17:30:00Z"), now))
+    fun `an entry under its day gives only the time, in Jakarta`() {
+        assertEquals("00:30", formatTime(Instant.parse("2026-10-23T17:30:00Z")))
     }
 }
