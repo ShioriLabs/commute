@@ -6,6 +6,7 @@ import id.shiorilabs.commute.feature.card.api.CardSnapshot
 import id.shiorilabs.commute.feature.card.felica.FelicaCommand
 import id.shiorilabs.commute.feature.card.felica.FelicaResponse
 import id.shiorilabs.commute.feature.card.felica.READ_BATCH
+import id.shiorilabs.commute.feature.card.felica.ServiceBlock
 import id.shiorilabs.commute.feature.card.felica.TappedCard
 import java.io.IOException
 import java.time.Instant
@@ -16,13 +17,14 @@ import java.time.Instant
  */
 
 private const val KMT_SYSTEM = 0x90B7
-private const val PURSE = 0x1013
-private const val HISTORY = 0x200D
-private const val CARD_NUMBER = 0x3009
-// Each has a read-only twin with the same data; some cards list only the twin (KMT.md).
-private const val PURSE_READ_ONLY = 0x1017
-private const val HISTORY_READ_ONLY = 0x200F
-private const val CARD_NUMBER_READ_ONLY = 0x300B
+
+/** The three services a read needs, by one of their two codes. */
+private class KmtServices(val purse: Int, val history: Int, val cardNumber: Int)
+
+// Every card seen lists the read-only codes, and one lists nothing else; the read-write codes
+// are there for a card that turns out not to (KMT.md).
+private val READ_ONLY = KmtServices(purse = 0x1017, history = 0x200F, cardNumber = 0x300B)
+private val READ_WRITE = KmtServices(purse = 0x1013, history = 0x200D, cardNumber = 0x3009)
 private const val HISTORY_BLOCKS = 16
 private const val LAST_DIGITS = 4
 private val EPOCH_2000: Instant = Instant.parse("2000-01-01T00:00:00Z")
@@ -38,15 +40,14 @@ internal class KmtReader(private val now: () -> Instant = Instant::now) : CardRe
 
     override fun read(tag: CardTag): CardSnapshot? {
         val card = (tag as? CardTag.Felica)?.card ?: return null
+        // A KMT has the one system (KMT.md), so the IDm Android found it by is the one to read with.
+        if (card.systemCode != KMT_SYSTEM) return null
         return try {
-            val idm = FelicaResponse.polling(card.transport.transceive(FelicaCommand.polling(KMT_SYSTEM)))?.idm ?: return null
-            val purse = card.readBlocks(idm, PURSE, PURSE_READ_ONLY, listOf(0))?.single() ?: return null
-            val history = card.readBlocks(idm, HISTORY, HISTORY_READ_ONLY, (0 until HISTORY_BLOCKS).toList()) ?: return null
-            val number = card.readBlocks(idm, CARD_NUMBER, CARD_NUMBER_READ_ONLY, listOf(0))?.single()
+            val (purse, number, history) = card.readAll(READ_ONLY) ?: card.readAll(READ_WRITE) ?: return null
             CardSnapshot(
                 kind = kind,
-                lastDigits = number?.decodeToString()?.takeIf { d -> d.all(Char::isDigit) }?.takeLast(LAST_DIGITS),
-                balanceRupiah = purse.u32le(0),
+                lastDigits = number.single().decodeToString().takeIf { d -> d.all(Char::isDigit) }?.takeLast(LAST_DIGITS),
+                balanceRupiah = purse.single().u32le(0),
                 entries = history.filter { block -> block.any { it != 0.toByte() } }.map(::entry).sortedByDescending { it.at },
                 readAt = now(),
             )
@@ -55,19 +56,20 @@ internal class KmtReader(private val now: () -> Instant = Instant::now) : CardRe
         }
     }
 
-    /** Reads from [service], or from its read-only twin when the card doesn't list [service]. */
-    private fun TappedCard.readBlocks(idm: ByteArray, service: Int, readOnly: Int, blocks: List<Int>): List<ByteArray>? =
-        readBlocks(idm, service, blocks) ?: readBlocks(idm, readOnly, blocks)
-
-    private fun TappedCard.readBlocks(idm: ByteArray, service: Int, blocks: List<Int>): List<ByteArray>? =
-        blocks.chunked(READ_BATCH).flatMap { batch ->
-            val response = FelicaResponse.readWithoutEncryption(
-                transport.transceive(FelicaCommand.readWithoutEncryption(idm, service, batch)),
-                idm,
-            )
-            if (response == null || !response.ok) return null
+    /**
+     * The purse, the card number and the history, in as few commands as a batch allows: each takes
+     * blocks from all three services at once. Null when the card refuses any of them.
+     */
+    private fun TappedCard.readAll(services: KmtServices): Triple<List<ByteArray>, List<ByteArray>, List<ByteArray>>? {
+        val wanted = listOf(ServiceBlock(services.purse, 0), ServiceBlock(services.cardNumber, 0)) +
+            (0 until HISTORY_BLOCKS).map { ServiceBlock(services.history, it) }
+        val blocks = wanted.chunked(READ_BATCH).flatMap { batch ->
+            val response = FelicaResponse.readWithoutEncryption(transport.transceive(FelicaCommand.readWithoutEncryption(idm, batch)), idm)
+            if (response == null || !response.ok || response.blocks.size != batch.size) return null
             response.blocks
         }
+        return Triple(blocks.subList(0, 1), blocks.subList(1, 2), blocks.subList(2, blocks.size))
+    }
 
     private fun entry(block: ByteArray): CardEntry {
         val amount = block.u16be(6).toLong()

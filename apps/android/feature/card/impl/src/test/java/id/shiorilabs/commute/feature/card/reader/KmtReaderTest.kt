@@ -30,10 +30,27 @@ class KmtReaderTest {
     }
 
     @Test
-    fun `a card that exposes only the read-only service codes reads the same`() {
-        val snapshot = reader.read(
-            tag(balance = 96_030, number = "6032984400004821", history = listOf(krl("2026-10-23T11:42:00Z", 3_000, "48")), readOnlyCodes = true),
-        )!!
+    fun `reads the whole card in two exchanges`() {
+        val card = card(history = listOf(krl("2026-10-23T11:42:00Z", 3_000, "48")))
+
+        assertEquals(10_000L, reader.read(tag(card))!!.balanceRupiah)
+        assertEquals(2, card.exchanges)
+    }
+
+    @Test
+    fun `a card that exposes only the read-only service codes reads the same, in as many exchanges`() {
+        val card = card(balance = 96_030, number = "6032984400004821", history = listOf(krl("2026-10-23T11:42:00Z", 3_000, "48")), codes = Codes.READ_ONLY)
+        val snapshot = reader.read(tag(card))!!
+
+        assertEquals(96_030L, snapshot.balanceRupiah)
+        assertEquals("4821", snapshot.lastDigits)
+        assertEquals(1, snapshot.entries.size)
+        assertEquals(2, card.exchanges)
+    }
+
+    @Test
+    fun `a card that exposes only the read-write service codes still reads`() {
+        val snapshot = reader.read(tag(card(balance = 96_030, history = listOf(krl("2026-10-23T11:42:00Z", 3_000, "48")), codes = Codes.READ_WRITE)))!!
 
         assertEquals(96_030L, snapshot.balanceRupiah)
         assertEquals("4821", snapshot.lastDigits)
@@ -49,7 +66,7 @@ class KmtReaderTest {
 
     @Test
     fun `a card that leaves mid-read gives nothing`() {
-        assertNull(reader.read(tag(loseAfter = 2)))
+        assertNull(reader.read(tag(card(loseAfter = 1))))
     }
 
     @Test
@@ -124,34 +141,31 @@ class KmtReaderTest {
         balance: Int = 10_000,
         number: String = "6032984400004821",
         history: List<ByteArray> = emptyList(),
+    ): CardTag = tag(card(balance, number, history))
+
+    private fun tag(card: FakeCard): CardTag = CardTag.Felica(TappedCard(IDM, PMM, 0x90B7, card))
+
+    /** Which of each service's two codes the card lists (KMT.md): both on most cards. */
+    private enum class Codes { BOTH, READ_ONLY, READ_WRITE }
+
+    private fun card(
+        balance: Int = 10_000,
+        number: String = "6032984400004821",
+        history: List<ByteArray> = emptyList(),
+        codes: Codes = Codes.BOTH,
         loseAfter: Int = Int.MAX_VALUE,
-        readOnlyCodes: Boolean = false,
-    ): CardTag {
-        val purse = int32le(balance) + ByteArray(12)
-        val blocks = (history + List(16 - history.size) { EMPTY })
-        val card = FakeCard(
-            listOf(
-                FakeCard.System(
-                    code = 0x90B7,
-                    idm = IDM,
-                    services = if (readOnlyCodes) {
-                        mapOf(
-                            0x1017 to FakeCard.Service(blocks = listOf(purse)),
-                            0x200F to FakeCard.Service(blocks = blocks),
-                            0x300B to FakeCard.Service(blocks = listOf(number.encodeToByteArray())),
-                        )
-                    } else {
-                        mapOf(
-                            0x1013 to FakeCard.Service(blocks = listOf(purse)),
-                            0x200D to FakeCard.Service(blocks = blocks),
-                            0x3009 to FakeCard.Service(blocks = listOf(number.encodeToByteArray())),
-                        )
-                    },
-                ),
-            ),
-            loseAfter = loseAfter,
-        )
-        return CardTag.Felica(TappedCard(IDM, PMM, 0x90B7, card))
+    ): FakeCard {
+        val purse = FakeCard.Service(blocks = listOf(int32le(balance) + ByteArray(12)))
+        val log = FakeCard.Service(blocks = history + List(16 - history.size) { EMPTY })
+        val digits = FakeCard.Service(blocks = listOf(number.encodeToByteArray()))
+        val readWrite = mapOf(0x1013 to purse, 0x200D to log, 0x3009 to digits)
+        val readOnly = mapOf(0x1017 to purse, 0x200F to log, 0x300B to digits)
+        val services = when (codes) {
+            Codes.BOTH -> readWrite + readOnly
+            Codes.READ_ONLY -> readOnly
+            Codes.READ_WRITE -> readWrite
+        }
+        return FakeCard(listOf(FakeCard.System(code = 0x90B7, idm = IDM, services = services)), loseAfter = loseAfter)
     }
 
     private fun int32be(v: Long) = byteArrayOf((v ushr 24).toByte(), (v ushr 16).toByte(), (v ushr 8).toByte(), v.toByte())
