@@ -70,6 +70,7 @@ import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.startup.HoldStartupWhile
 import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
 import id.shiorilabs.commute.core.ui.time.updatedAgoText
+import id.shiorilabs.commute.feature.card.api.CardRail
 import id.shiorilabs.commute.feature.card.api.CardTap
 import id.shiorilabs.commute.feature.journey.presentation.SavedRouteCard
 import id.shiorilabs.commute.feature.saved.R
@@ -239,10 +240,7 @@ private fun SavedStationsContent(
             bottomInset = innerPadding.calculateBottomPadding(),
             slidesWithPage = coveredByPage,
             modifier = Modifier.align(Alignment.BottomCenter),
-        )
-        cardTap.Content(
-            railHeight = innerPadding.calculateBottomPadding() + NavRailHeight,
-            modifier = Modifier.fillMaxSize(),
+            cardTap = cardTap,
         )
     }
 }
@@ -292,7 +290,7 @@ private object NoSavedRouteCard : SavedRouteCard {
 private object NoCardTap : CardTap {
 
     @Composable
-    override fun Content(railHeight: Dp, modifier: Modifier) = Unit
+    override fun Content(rail: @Composable (CardRail) -> Unit) = Unit
 }
 
 @Composable
@@ -800,7 +798,7 @@ private fun railSlidesWithPage(): Boolean {
     var coveredBy by rememberSaveable { mutableStateOf(CoveredBy.PAGE) }
     val current = when (top) {
         null, Route.Home -> coveredBy
-        Route.Search, Route.Settings -> CoveredBy.MORPH
+        Route.Search, Route.Card, Route.Settings -> CoveredBy.MORPH
         else -> CoveredBy.PAGE
     }
     SideEffect { coveredBy = current }
@@ -809,9 +807,6 @@ private fun railSlidesWithPage(): Boolean {
 
 /** The rail's cards plus their padding: what the feed's last card has to scroll clear of. */
 private val NavRailClearance = 168.dp
-
-/** The rail itself, above the bottom inset: its cards (128dp) and the 16dp above and below them. */
-private val NavRailHeight = 160.dp
 
 /** Between one station's last card and the next station's name, the web's `gap-5`. */
 private val StationGap = 20.dp
