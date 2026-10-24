@@ -1,11 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Reading a card from home. -->
-    <string name="card_pill_description">Saldo %1$s. Buka detail kartu</string>
+    <string name="card_rail_title_idle">Cek</string>
+    <string name="card_rail_subtitle_idle">Saldo Kartu</string>
+    <string name="card_rail_subtitle_missed">Gak kebaca</string>
+    <string name="card_rail_description_idle">Cek saldo kartu</string>
+    <string name="card_rail_description_read">Saldo %1$s. Buka detail kartu</string>
     <string name="card_pill_label_kmt">KMT</string>
+    <string name="card_hold_message">Tempel kartunya di belakang HP, terus tahan sebentar</string>
+    <string name="card_hold_nfc_off">NFC lagi mati. Nyalain dulu di pengaturan HP</string>
     <string name="card_tap_miss">Kartunya gak kebaca. Coba tempel lagi</string>
-    <string name="card_sheet_title">Kartu KMT</string>
-    <string name="card_sheet_close">Tutup</string>
+    <string name="card_page_title">Saldo kartu</string>
+    <string name="card_page_close">Tutup</string>
     <string name="card_digits">•••• %1$s</string>
     <string name="card_last_ride">Perjalanan terakhir</string>
     <string name="card_history">Riwayat</string>

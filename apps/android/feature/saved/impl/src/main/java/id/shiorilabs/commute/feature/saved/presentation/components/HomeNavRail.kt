@@ -38,6 +38,7 @@ import id.shiorilabs.commute.core.ui.morph.LocalSharedTransitionScope
 import id.shiorilabs.commute.core.ui.morph.navCardMorphSource
 import id.shiorilabs.commute.core.ui.motion.PageEasing
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
+import id.shiorilabs.commute.feature.card.api.CardTap
 import id.shiorilabs.commute.feature.saved.R
 
 /** Where the rail's backdrop turns from transparent to the solid page background. */
@@ -64,6 +65,8 @@ fun HomeNavRail(
     modifier: Modifier = Modifier,
     bottomInset: Dp = 0.dp,
     slidesWithPage: Boolean = true,
+    /** Where the card button between search and settings comes from; none without it. */
+    cardTap: CardTap? = null,
 ) {
 
     val background = MaterialTheme.colorScheme.background
@@ -104,7 +107,23 @@ fun HomeNavRail(
                 animateFace = !slidesWithPage && opened == RailCard.SEARCH,
             )
         }
-        Box(Modifier.navEntrance(1).navRailCardTransition(1, enabled = slidesWithPage)) {
+        cardTap?.Content { card ->
+            Box(Modifier.navEntrance(1).navRailCardTransition(1, enabled = slidesWithPage)) {
+                NavRailCard(
+                    title = card.title,
+                    subtitle = card.subtitle,
+                    description = card.description,
+                    icon = CommuteIcons.Payment,
+                    onClick = {
+                        opened = RailCard.CARD
+                        card.onClick()
+                    },
+                    modifier = Modifier.navCardMorphSource(Route.Card),
+                    animateFace = !slidesWithPage && opened == RailCard.CARD,
+                )
+            }
+        }
+        Box(Modifier.navEntrance(2).navRailCardTransition(2, enabled = slidesWithPage)) {
             NavRailCard(
                 title = stringResource(R.string.saved_nav_settings_title),
                 subtitle = stringResource(R.string.saved_nav_settings_subtitle),
@@ -181,7 +200,7 @@ private fun Modifier.navRailCardTransition(index: Int, enabled: Boolean): Modifi
 }
 
 /** The rail's cards that open a screen out of themselves. */
-private enum class RailCard { SEARCH, SETTINGS }
+private enum class RailCard { SEARCH, CARD, SETTINGS }
 
 /** Past this many cards they share a delay, as the web caps NAV_STAGGER. */
 private const val NAV_MAX_STAGGER = 4
