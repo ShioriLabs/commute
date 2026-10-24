@@ -7,6 +7,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,11 +15,15 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.paddingFrom
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -29,6 +34,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.LastBaseline
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
@@ -37,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import id.shiorilabs.commute.core.constants.OPERATOR_NAMES
 import id.shiorilabs.commute.core.ui.components.CommuteCloseButton
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
@@ -47,16 +55,39 @@ import id.shiorilabs.commute.feature.card.api.CardKind
 import id.shiorilabs.commute.feature.card.api.CardSnapshot
 import java.time.Instant
 
-/** The art's shape, 373 x 240 px. */
-private const val CARD_ASPECT = 373f / 240f
+/** The art's shape, 375 x 244 px. */
+private const val CARD_ASPECT = 375f / 244f
+
+/*
+ * Where the art's "KUE" sits, which the balance takes over once a card is read: its right edge
+ * 34 px in from the art's, its foot 30 px up from the bottom, its letters 37 px tall.
+ */
+private const val LABEL_END = 34f / 375f
+private const val LABEL_BOTTOM = 30f / 244f
+private const val LABEL_CAP_HEIGHT = 37f / 244f
+
+/** A digit's height as a share of its font size, for sizing the balance by the label. */
+private const val CAP_HEIGHT_PER_EM = 0.72f
+
+/** The balance is shorter than the label: "Rp7.000" at its full height reads too loud. */
+private const val BALANCE_SCALE = 0.75f
+
+/** How much of the card's width the balance may take before it shrinks, clear of the grey. */
+private const val BALANCE_MAX_WIDTH = 0.62f
 
 private val Gutter = 32.dp
 
-/** The card's face: our own generic art, not any issuer's. The art carries its own rounded corners. */
+/** The card itself sits closer to the edges than the text, as the app's cards do. */
+private val CardMargin = 16.dp
+
+/**
+ * The card's face: our own art, not any issuer's, with its own rounded corners. [labelled] shows
+ * the "KUE" that stands where the balance goes.
+ */
 @Composable
-private fun CardArt(modifier: Modifier = Modifier) {
+private fun CardArt(labelled: Boolean, modifier: Modifier = Modifier) {
     Image(
-        painter = painterResource(R.drawable.card_generic),
+        painter = painterResource(if (labelled) R.drawable.card_face else R.drawable.card_face_blank),
         contentDescription = null,
         modifier = modifier,
         contentScale = ContentScale.FillBounds,
@@ -104,7 +135,7 @@ internal fun CardPage(
             )
         }
         LazyColumn(contentPadding = PaddingValues(bottom = innerPadding.calculateBottomPadding() + 32.dp)) {
-            item { CardTile(snapshot, Modifier.padding(horizontal = Gutter)) }
+            item { CardTile(snapshot, Modifier.padding(horizontal = CardMargin)) }
             if (snapshot == null) {
                 item {
                     Text(
@@ -145,15 +176,29 @@ private fun LazyListScope.historyItems(snapshot: CardSnapshot) {
     }
 }
 
-/** The card's face, with what was read written on it once there is something to write. */
+/**
+ * The card's face, with what was read written on it once there is something to write. The balance
+ * fades in where the art's "KUE" fades out, as tall as it unless that would run it into the grey.
+ */
 @Composable
 private fun CardTile(snapshot: CardSnapshot?, modifier: Modifier = Modifier) {
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(CARD_ASPECT),
     ) {
-        CardArt(Modifier.fillMaxSize())
+        CardArt(labelled = false, modifier = Modifier.fillMaxSize())
+        AnimatedVisibility(visible = snapshot == null, enter = fadeIn(), exit = fadeOut()) {
+            CardArt(labelled = true, modifier = Modifier.fillMaxSize())
+        }
+        val cardWidth = maxWidth
+        val cardHeight = maxHeight
+        val labelFontSize = with(LocalDensity.current) { (cardHeight * LABEL_CAP_HEIGHT * BALANCE_SCALE / CAP_HEIGHT_PER_EM).toSp() }
+        val balanceStyle = MaterialTheme.typography.headlineMedium.copy(
+            color = Color.White,
+            fontSize = labelFontSize,
+            fontWeight = FontWeight.ExtraBold,
+        )
         AnimatedVisibility(visible = snapshot != null, enter = fadeIn(), exit = fadeOut()) {
             val shown = snapshot ?: return@AnimatedVisibility
             Box(Modifier.fillMaxSize()) {
@@ -173,14 +218,17 @@ private fun CardTile(snapshot: CardSnapshot?, modifier: Modifier = Modifier) {
                         color = Color.White,
                     )
                 }
-                Text(
+                BasicText(
                     text = formatBalance(shown.balanceRupiah),
                     modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(start = 16.dp, bottom = 12.dp),
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Color(0xFF111111),
+                        .align(Alignment.BottomEnd)
+                        .padding(end = cardWidth * LABEL_END)
+                        .widthIn(max = cardWidth * BALANCE_MAX_WIDTH)
+                        // Stood on the label's foot, wherever the font puts its baseline.
+                        .paddingFrom(LastBaseline, after = cardHeight * LABEL_BOTTOM),
+                    style = balanceStyle,
+                    maxLines = 1,
+                    autoSize = TextAutoSize.StepBased(minFontSize = 14.sp, maxFontSize = labelFontSize, stepSize = 1.sp),
                 )
             }
         }
