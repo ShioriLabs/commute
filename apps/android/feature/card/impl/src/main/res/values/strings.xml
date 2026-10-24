@@ -19,7 +19,8 @@
     <string name="card_entry_ride">Perjalanan</string>
     <string name="card_entry_topup">Isi saldo</string>
     <!-- The card dumper: debug builds only, so these never reach a rider. -->
-    <string name="card_dumper_title">Dump Kartu FeliCa</string>
+    <string name="card_dumper_title">Dump Kartu</string>
+    <string name="card_dumper_iso_hint">Bukan FeliCa: dicatat jenisnya, terus dicek ada daftar aplikasi (PSE) atau gak. Isi aplikasinya belum dibaca</string>
     <string name="card_dumper_back">Kembali</string>
     <string name="card_dumper_no_nfc">HP ini gak punya NFC</string>
     <string name="card_dumper_nfc_off">NFC lagi mati. Nyalain dulu di pengaturan HP</string>

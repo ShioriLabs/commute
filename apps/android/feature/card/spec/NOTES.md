@@ -176,3 +176,45 @@ The dumper treats any non-zero status as "stop reading this service" and records
 **Formula:** maximum time = T × ((B + 1) × n + (A + 1)) × 4^E, where T = 256 × 16 / fc ≈ 0.3020 ms.
 
 **Polling's time is different** (§2.3.5): the response comes in time slot k at 2.417 ms + k × 1.208 ms.
+
+# Smart-card facts (NFC-A and NFC-B)
+
+Source: **B1**, EMV 4.4 Book 1, Application Independent ICC to Terminal Interface Requirements
+(October 2022), plus the Android `IsoDep`, `NfcA` and `NfcB` references for what a tag shows
+before any command. Book 1 covers only application selection; anything past it (BER-TLV coding,
+other commands) is in Book 3, which the dumper doesn't use yet.
+
+## What Android shows without a command
+- `Tag.getTechList`, `Tag.getId`; `NfcA.getAtqa`, `getSak`; `NfcB.getApplicationData`,
+  `getProtocolInfo`; `IsoDep.getHistoricalBytes` (NFC-A) or `getHiLayerResponse` (NFC-B). None
+  needs a connection. The dumper records them as they come.
+
+## APDUs (B1 §11.1)
+- A command is `CLA INS P1 P2`, then optionally `Lc`, data, `Le`. SELECT and READ RECORD during
+  application selection send `Le` = `00`: as much as the card has, up to 256 bytes.
+- A response is its data followed by two status bytes, SW1 SW2.
+
+## SELECT (B1 §11.3, Tables 5–7)
+- `00 A4 04 P2 Lc name 00`. P1 `04` selects by name. P2 `00` is the first or only occurrence,
+  `02` the next one.
+- The name is 5 to 16 bytes (`Lc` `05`–`10`), and its first 5 are the provider's RID (§12.2.1).
+  **So a card can't be asked to list applications whose RID isn't known.**
+- Partial-name selection is optional for a card. Where supported, repeating "next occurrence" with
+  the same partial name walks every matching DF once, then answers `6A82` (§11.3.5).
+- The response is the FCI, template `6F` (Tables 8–10).
+
+## READ RECORD (B1 §11.2, Tables 3–4)
+- `00 B2 record P2 00`, P2 = SFI in bits 8–4 and `100` in bits 3–1 (P1 is a record number).
+- SFIs run from 1 to 30 within an application (§10.2.2).
+
+## The PSE (B1 §12.2.2–12.3.2)
+- The Payment System Environment is a DDF named `1PAY.SYS.DDF01`. It's optional.
+- Its FCI names the SFI of the directory, which is a linear file with an SFI of 1 to 10 (§12.2.3).
+  Each record is a `70` holding one or more `61` entries, each with the application's name in
+  `4F` and a label in `50` (Table 12).
+- SELECT of the PSE answers `9000` when it's there, `6A82` when it isn't, `6283` when it's
+  blocked, and `6A81` when the card is blocked or doesn't support SELECT. Records are read from 1
+  until `6A83`, "no such record".
+
+The dumper reads SFIs 1 to 10 in full instead of parsing the FCI for the right one, since parsing
+needs Book 3. It sends nothing but SELECT and READ RECORD.

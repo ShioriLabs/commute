@@ -10,6 +10,9 @@ import id.shiorilabs.commute.feature.card.dump.CardDumps
 import id.shiorilabs.commute.feature.card.felica.DumpProgress
 import id.shiorilabs.commute.feature.card.felica.FelicaDumper
 import id.shiorilabs.commute.feature.card.felica.TappedCard
+import id.shiorilabs.commute.feature.card.iso.IsoDumper
+import id.shiorilabs.commute.feature.card.iso.IsoTag
+import id.shiorilabs.commute.feature.card.iso.IsoTransport
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -52,6 +55,17 @@ class CardDumperViewModel @Inject constructor(
         if (before.phase == CardDumperUiState.Phase.Reading) return
         val dumper = FelicaDumper(card.transport, onProgress = { progress -> _state.update { it.copy(progress = progress) } })
         val dump = dumper.dump(card.idm, card.pmm, card.systemCode)
+        _state.update { it.copy(phase = CardDumperUiState.Phase.Done, progress = null, dump = dump) }
+    }
+
+    /** An NFC-A or NFC-B card, on the reader's thread like [read]; [transport] is null without ISO-DEP. */
+    @WorkerThread
+    internal fun identify(tag: IsoTag, transport: IsoTransport?) {
+        val before = _state.getAndUpdate {
+            if (it.phase == CardDumperUiState.Phase.Reading) it else it.copy(phase = CardDumperUiState.Phase.Reading, progress = null, dump = null, savedAs = null)
+        }
+        if (before.phase == CardDumperUiState.Phase.Reading) return
+        val dump = IsoDumper(transport).dump(tag)
         _state.update { it.copy(phase = CardDumperUiState.Phase.Done, progress = null, dump = dump) }
     }
 

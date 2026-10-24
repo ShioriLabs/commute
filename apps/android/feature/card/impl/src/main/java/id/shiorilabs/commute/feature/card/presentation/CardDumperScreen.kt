@@ -54,14 +54,16 @@ import id.shiorilabs.commute.feature.card.R
 import id.shiorilabs.commute.feature.card.dump.CardDump
 import id.shiorilabs.commute.feature.card.felica.DumpProgress
 import id.shiorilabs.commute.feature.card.felica.findActivity
-import id.shiorilabs.commute.feature.card.felica.readFelica
+import id.shiorilabs.commute.feature.card.felica.readAnyCard
+import id.shiorilabs.commute.feature.card.iso.IsoDumper
 
 /** The settings pages' p-8, so the dumper lines up with Experimental, where it's opened from. */
 private val Gutter = 32.dp
 
 /**
- * Reads a FeliCa card held to the phone and keeps what it shows. Reader mode is on only while
- * this screen is resumed, so a card tapped anywhere else in the app is left alone.
+ * Reads a card held to the phone and keeps what it shows: a FeliCa card in full, an NFC-A or NFC-B
+ * one as far as [IsoDumper] goes. Reader mode is on only while this screen is resumed, so a card
+ * tapped anywhere else in the app is left alone.
  */
 @Composable
 fun CardDumperScreen(
@@ -78,7 +80,7 @@ fun CardDumperScreen(
     LifecycleResumeEffect(adapter) {
         nfcOn = adapter?.isEnabled == true
         val activity = context.findActivity()
-        if (adapter != null && activity != null && nfcOn) adapter.readFelica(activity) { viewModel.read(it) }
+        if (adapter != null && activity != null && nfcOn) adapter.readAnyCard(activity, viewModel::read, viewModel::identify)
         onPauseOrDispose {
             if (adapter != null && activity != null) runCatching { adapter.disableReaderMode(activity) }
         }
@@ -224,7 +226,7 @@ private fun Reading(progress: DumpProgress?) {
 
 @Composable
 private fun Done(dump: CardDump, savedAs: String?, onSave: (String) -> Unit, onAgain: () -> Unit) {
-    var note by rememberSaveable(dump.transcript.size, dump.tag.idm) { mutableStateOf("") }
+    var note by rememberSaveable(dump.transcript.size, dump.tag?.idm ?: dump.iso?.id) { mutableStateOf("") }
     Text(
         text = if (dump.complete) stringResource(R.string.card_dumper_complete) else stringResource(R.string.card_dumper_partial, dump.failure.orEmpty()),
         style = MaterialTheme.typography.titleMedium,
@@ -249,6 +251,23 @@ private fun Done(dump: CardDump, savedAs: String?, onSave: (String) -> Unit, onA
                     fontFamily = FontFamily.Monospace,
                     color = if (service.readable) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+    }
+    dump.iso?.let { iso ->
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Hint(stringResource(R.string.card_dumper_iso_hint))
+            val lines = listOfNotNull(
+                iso.techs.joinToString(" · "),
+                "ID ${iso.id}",
+                iso.atqa?.let { "ATQA $it · SAK ${iso.sak}" },
+                iso.historicalBytes?.let { "Historical $it" },
+                iso.applicationData?.let { "App data $it · protocol ${iso.protocolInfo}" },
+                iso.hiLayerResponse?.let { "Hi-layer $it" },
+                iso.pse?.let { "PSE ${it.status} · ${it.records.size} record" },
+            )
+            for (line in lines) {
+                Text(line, style = MaterialTheme.typography.bodyMedium, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onBackground)
             }
         }
     }

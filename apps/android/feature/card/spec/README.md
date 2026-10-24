@@ -1,7 +1,7 @@
-# FeliCa sources
+# Card sources
 
-Everything the card dumper knows about FeliCa comes from the documents below and from the
-Android `NfcF` reference. Nothing comes from other readers' source code. The PDFs are kept
+Everything the card dumper knows about FeliCa and smart cards comes from the documents below
+and from the Android references. Nothing comes from other readers' source code. The PDFs are kept
 here locally and are gitignored. Download your own copies from Sony.
 
 | Document | Version | Date | Where |
@@ -13,9 +13,13 @@ here locally and are gitignored. Download your own copies from Sony.
 | Format Distinction Sequence Design Guidelines (M621) | 1.3 | — | same page |
 | FeliCa Card Command Sequence Design Guidelines | 1.2 | 2025-01-28 | same page |
 | Android `NfcF` reference | — | — | https://developer.android.com/reference/android/nfc/tech/NfcF |
+| EMV Book 1: Application Independent ICC to Terminal Interface Requirements | 4.4 | 2022-10 | https://www.emvco.com/specifications/ (free, after accepting EMVCo's terms) |
+| Android `IsoDep`, `NfcA`, `NfcB` references | — | — | https://developer.android.com/reference/android/nfc/tech/IsoDep |
 
 `NOTES.md` lists every constant the code uses, written in our own words, each with the section
 it came from. A fact that isn't in these documents doesn't go in the code.
 
 Card-specific facts (which services a KMT card holds, what its blocks mean) never come from
-these documents. They come from dumps of our own cards and are written up in `KMT.md`.
+these documents. They come from dumps of our own cards and are written up in `KMT.md` and
+`EMONEY.md`. The app's readers are for FeliCa cards; the dumper's NFC-A and NFC-B support is for
+looking at other cards, not for reading them.
