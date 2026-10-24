@@ -6,8 +6,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -24,6 +27,7 @@ import id.shiorilabs.commute.feature.card.reader.CardSession
 import id.shiorilabs.commute.feature.card.reader.CardTag
 import javax.inject.Inject
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /** Long enough to cover one read, short enough that a card pulled away is noticed (the dumper waits 10 s). */
 private const val PRESENCE_CHECK_MS = 250
@@ -82,12 +86,21 @@ internal class CardTapImpl @Inject constructor(
 
 /**
  * Listens for a card while the host is resumed, handing each to [read], which says whether it was
- * read. Returns whether the last one wasn't, for a few seconds: said once, then forgotten.
+ * read. Each tap buzzes as soon as it's settled, one way for a read and another for a miss, so the
+ * rider can take the card away without looking. Returns whether the last one wasn't read, for a few
+ * seconds: said once, then forgotten.
  */
 @Composable
 internal fun rememberMissedCard(adapter: NfcAdapter, read: (TappedCard) -> Boolean): Boolean {
     var missed by remember { mutableStateOf(false) }
-    CardTapListener(adapter) { missed = !read(it) }
+    val haptics = LocalHapticFeedback.current
+    // The reader calls back on its own thread; the buzz goes out on the main one.
+    val scope = rememberCoroutineScope()
+    CardTapListener(adapter) { card ->
+        val wasRead = read(card)
+        missed = !wasRead
+        scope.launch { haptics.performHapticFeedback(if (wasRead) HapticFeedbackType.Confirm else HapticFeedbackType.Reject) }
+    }
     LaunchedEffect(missed) {
         if (missed) {
             delay(MISS_NOTICE_MS)
