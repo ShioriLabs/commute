@@ -16,7 +16,7 @@ import java.time.ZoneId
 /*
  * A Japanese transit IC card, read just far enough to joke about. Every code and offset below is
  * from spec/JAPAN_IC.md, which cites the PASMO dump it was read from; a fact that isn't there
- * doesn't go in this file.
+ * doesn't go in this file. Who ran a ride comes from [JapanIcLines].
  */
 
 private const val JAPAN_IC_SYSTEM = 0x0003
@@ -27,10 +27,17 @@ private const val HISTORY_BLOCKS = 20
 /** A history slot's D0 when it's the card being issued. */
 private const val ISSUE = 0x08
 
+/** A history slot's D0 on the rail rides we've seen, the only slots whose D6–9 we know are stations. */
+private val RIDES = setOf(0x16, 0x17)
+
 /** The days are grouped in Jakarta, so a day starts there. */
 private val JAKARTA: ZoneId = ZoneId.of("Asia/Jakarta")
 
-internal class JapanIcReader(private val now: () -> Instant = Instant::now) : CardReader {
+internal class JapanIcReader(
+    private val now: () -> Instant = Instant::now,
+    /** A line by a station's line byte, or null when we can't name it. */
+    private val lines: (Int) -> JapanLine? = { null },
+) : CardReader {
     override val kind = CardKind.JAPAN_IC
 
     override fun read(tag: CardTag): CardSnapshot? {
@@ -71,15 +78,37 @@ internal class JapanIcReader(private val now: () -> Instant = Instant::now) : Ca
         val used = slots.filter { it.u16be(4) != 0 }
         val before = used.drop(1).map { it.u16le(10) } + if (used.size < HISTORY_BLOCKS) listOf(0L) else emptyList()
         return used.zip(before) { slot, previous ->
+            val ride = ride(slot)
             CardEntry(
                 at = day(slot.u16be(4)).atStartOfDay(JAKARTA).toInstant(),
-                operator = null,
-                place = null,
+                operator = ride?.let(::operator),
+                place = ride?.let(::line),
                 amount = slot.u16le(10) - previous,
                 timeKnown = false,
                 issue = slot[0].toInt() and 0xFF == ISSUE,
             )
         }
+    }
+
+    /** The lines a ride went in (D6) and out (D8) on, when it's a ride and both lines are known. */
+    private fun ride(slot: ByteArray): Pair<JapanLine, JapanLine>? {
+        if (slot[0].toInt() and 0xFF !in RIDES) return null
+        val from = lines(slot[6].toInt() and 0xFF) ?: return null
+        val to = lines(slot[8].toInt() and 0xFF) ?: return null
+        return from to to
+    }
+
+    /** Who ran the ride: one company, or where it went from and to between two. */
+    private fun operator(ride: Pair<JapanLine, JapanLine>): String {
+        val (from, to) = ride
+        return if (from.company == to.company) from.company else "${from.company} → ${to.company}"
+    }
+
+    /** The line the ride was on, or from and to when it changed; null when either has no name. */
+    private fun line(ride: Pair<JapanLine, JapanLine>): String? {
+        val from = ride.first.name ?: return null
+        val to = ride.second.name ?: return null
+        return if (from == to) from else "$from → $to"
     }
 
     /** D4–5: seven bits of year since 2000, four of month, five of day. */
