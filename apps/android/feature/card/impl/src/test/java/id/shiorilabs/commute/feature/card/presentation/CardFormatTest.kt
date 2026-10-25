@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.card.presentation
 
+import id.shiorilabs.commute.feature.card.api.CardKind
 import java.time.Instant
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
@@ -12,6 +13,13 @@ class CardFormatTest {
     fun `a balance groups with dots and has no space after Rp`() {
         assertEquals("Rp47.500", formatBalance(47_500))
         assertEquals("Rp0", formatBalance(0))
+    }
+
+    @Test
+    fun `yen groups with commas, as Japan writes it`() {
+        assertEquals("¥59", formatBalance(59, CardKind.JAPAN_IC))
+        assertEquals("¥12,345", formatBalance(12_345, CardKind.JAPAN_IC))
+        assertEquals("−¥199", formatAmount(-199, CardKind.JAPAN_IC))
     }
 
     @Test

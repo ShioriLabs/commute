@@ -13,6 +13,7 @@ import id.shiorilabs.commute.feature.card.dump.CardDumps
 import id.shiorilabs.commute.feature.card.navigation.CardNavContribution
 import id.shiorilabs.commute.feature.card.presentation.CardTapImpl
 import id.shiorilabs.commute.feature.card.reader.CardReader
+import id.shiorilabs.commute.feature.card.reader.JapanIcReader
 import id.shiorilabs.commute.feature.card.reader.KmtReader
 
 @Module
@@ -35,5 +36,9 @@ abstract class CardModule {
         @Provides
         @IntoSet
         internal fun provideKmtReader(): CardReader = KmtReader()
+
+        @Provides
+        @IntoSet
+        internal fun provideJapanIcReader(): CardReader = JapanIcReader()
     }
 }

@@ -20,6 +20,6 @@ here locally and are gitignored. Download your own copies from Sony.
 it came from. A fact that isn't in these documents doesn't go in the code.
 
 Card-specific facts (which services a KMT card holds, what its blocks mean) never come from
-these documents. They come from dumps of our own cards and are written up in `KMT.md` and
-`EMONEY.md`. The app's readers are for FeliCa cards; the dumper's NFC-A and NFC-B support is for
+these documents. They come from dumps of our own cards and are written up in `KMT.md`,
+`EMONEY.md` and `JAPAN_IC.md` (a PASMO's balance and history, for the easter egg). The app's readers are for FeliCa cards; the dumper's NFC-A and NFC-B support is for
 looking at other cards, not for reading them.
