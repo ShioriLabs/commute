@@ -25,7 +25,7 @@ class CardSessionTest {
     fun `a read shows up`() {
         session.show(snapshot(1_000))
 
-        assertEquals(1_000L, session.snapshot.value?.balanceRupiah)
+        assertEquals(1_000L, session.snapshot.value?.balance)
     }
 
     @Test
@@ -33,7 +33,7 @@ class CardSessionTest {
         session.show(snapshot(1_000))
         session.show(snapshot(2_000))
 
-        assertEquals(2_000L, session.snapshot.value?.balanceRupiah)
+        assertEquals(2_000L, session.snapshot.value?.balance)
     }
 
     @Test
@@ -53,7 +53,7 @@ class CardSessionTest {
         clock += Duration.ofMinutes(4) + Duration.ofSeconds(59)
         session.expireIfIdle()
 
-        assertEquals(1_000L, session.snapshot.value?.balanceRupiah)
+        assertEquals(1_000L, session.snapshot.value?.balance)
     }
 
     @Test
@@ -65,7 +65,7 @@ class CardSessionTest {
         clock += Duration.ofMinutes(4)
         session.expireIfIdle()
 
-        assertEquals(1_000L, session.snapshot.value?.balanceRupiah)
+        assertEquals(1_000L, session.snapshot.value?.balance)
     }
 
     @Test
@@ -81,7 +81,7 @@ class CardSessionTest {
     fun `the first reader to know the card wins`() {
         val readers = CardReaders(setOf(Fixed(null), Fixed(snapshot(7)), Fixed(snapshot(8))))
 
-        assertEquals(7L, readers.read(anyTag())?.balanceRupiah)
+        assertEquals(7L, readers.read(anyTag())?.balance)
     }
 
     @Test

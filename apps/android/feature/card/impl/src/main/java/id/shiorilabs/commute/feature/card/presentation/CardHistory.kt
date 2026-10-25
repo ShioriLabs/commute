@@ -11,16 +11,16 @@ internal data class HistoryDay(val date: LocalDate, val total: Long, val entries
 internal data class HistoryEntry(val entry: CardEntry, val balanceAfter: Long)
 
 /**
- * The history by day in Jakarta, newest first. The card holds no balance per entry, so each is
- * counted back from the one it holds now: the newest entry left the card's balance, and every
- * older one left that, less what came after it.
+ * The history by day in Jakarta, newest first. Each entry's balance is counted back from the one
+ * the card holds now: the newest entry left the card's balance, and every older one left that, less
+ * what came after it.
  */
 internal fun historyDays(snapshot: CardSnapshot): List<HistoryDay> {
-    var balance = snapshot.balanceRupiah
+    var balance = snapshot.balance
     val withBalances = snapshot.entries.map { entry ->
-        HistoryEntry(entry, balance).also { balance -= entry.amountRupiah }
+        HistoryEntry(entry, balance).also { balance -= entry.amount }
     }
     return withBalances
         .groupBy { jakartaDate(it.entry.at) }
-        .map { (date, entries) -> HistoryDay(date, entries.sumOf { it.entry.amountRupiah }, entries) }
+        .map { (date, entries) -> HistoryDay(date, entries.sumOf { it.entry.amount }, entries) }
 }

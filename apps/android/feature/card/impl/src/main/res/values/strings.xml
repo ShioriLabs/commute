@@ -10,6 +10,14 @@
     <string name="card_hold_message">Tempel kartunya di belakang HP, terus tahan sebentar</string>
     <string name="card_hold_nfc_off">NFC lagi mati. Nyalain dulu di pengaturan HP</string>
     <string name="card_tap_miss">Kartunya gak kebaca. Coba tempel lagi</string>
+    <string name="card_kmt_only">Untuk sekarang baru bisa baca KMT. Kartu bank kayak e-money, Flazz, Brizzi, atau TapCash belum bisa</string>
+    <!-- A Japanese IC card (PASMO, Suica…): read like a KMT, with a joke over its history. -->
+    <string name="card_pill_label_japan_ic">IC Card</string>
+    <string name="card_japan_ic">Di sini gak terima yen ges, simpen aja %1$s-nya buat ke Jepang nanti</string>
+    <string name="card_entry_topup_generic">Top Up</string>
+    <string name="card_entry_payment">Pembayaran</string>
+    <string name="card_entry_issue">Pembelian Kartu</string>
+    <string name="card_entry_detail_no_time">Saldo %1$s</string>
     <string name="card_page_title">Cek Saldo</string>
     <string name="card_page_close">Tutup</string>
     <string name="card_digits">•••• %1$s</string>
