@@ -45,13 +45,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import id.shiorilabs.commute.core.tripcopy.R as CopyR
-import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.ext.lineColorOf
 import id.shiorilabs.commute.core.ui.theme.Fixed
 import id.shiorilabs.commute.core.ui.theme.Slate900
 import id.shiorilabs.commute.core.ui.theme.TABULAR
 import id.shiorilabs.commute.feature.station.domain.LineInfo
+import id.shiorilabs.commute.feature.station.presentation.components.LineRoundel
 import id.shiorilabs.commute.feature.trip.R
 import kotlin.math.cos
 import kotlin.math.sin
@@ -396,15 +396,7 @@ private fun StopMarks(
                 modifier = Modifier.alpha(if (stop.passed) 0.45f else 1f),
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                transfers.forEach { key ->
-                    val info = lines[key]
-                    LineRoundel(
-                        code = info?.lineCode ?: key.substringAfter(':'),
-                        color = info?.colorCode ?: "#94A3B8",
-                        operator = key.substringBefore(':'),
-                        size = RoundelSize.SM,
-                    )
-                }
+                transfers.forEach { key -> LineRoundel(key, lines[key], size = RoundelSize.SM) }
             }
         }
     }
