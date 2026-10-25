@@ -61,10 +61,10 @@ internal class CardTapImpl @Inject constructor(
         }
 
         val current = snapshot
-        val balance = current?.let { formatBalance(it.balanceRupiah) }
+        val balance = current?.let { formatBalance(it.balance, it.kind) }
         rail(
             CardRail(
-                title = stringResource(if (current == null) R.string.card_rail_title_idle else R.string.card_pill_label_kmt),
+                title = stringResource(current?.kind?.label ?: R.string.card_rail_title_idle),
                 subtitle = when {
                     missed -> stringResource(R.string.card_rail_subtitle_missed)
                     balance != null -> balance
