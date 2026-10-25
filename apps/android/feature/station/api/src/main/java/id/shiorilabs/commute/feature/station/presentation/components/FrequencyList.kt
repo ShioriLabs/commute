@@ -27,7 +27,6 @@ import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.time.ServiceDayName
 import id.shiorilabs.commute.core.ui.components.CommuteCard
 import id.shiorilabs.commute.core.ui.components.CommuteEmptyState
-import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.ext.lineColorOf
 import id.shiorilabs.commute.core.ui.ext.themedTint
@@ -133,8 +132,8 @@ private fun CorridorRows(rows: List<Frequency>, lineInfo: LineInfo?) {
             verticalAlignment = Alignment.Top,
         ) {
             LineRoundel(
-                code = lineCode,
-                color = lineInfo?.colorCode ?: "#94A3B8",
+                lineKey = first.lineKey,
+                info = lineInfo,
                 operator = lineInfo?.operator ?: OPERATOR_TJ,
                 size = RoundelSize.SM,
             )

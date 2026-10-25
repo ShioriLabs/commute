@@ -63,7 +63,6 @@ import id.shiorilabs.commute.core.time.minuteOfDay
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.type.isOffline
 import id.shiorilabs.commute.core.ui.components.CommuteCloseButton
-import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.LoadProblem
 import id.shiorilabs.commute.core.ui.components.LoadProblemState
 import id.shiorilabs.commute.core.ui.components.NoticeBanner
@@ -90,6 +89,7 @@ import id.shiorilabs.commute.feature.station.domain.directionalBaseName
 import id.shiorilabs.commute.feature.station.domain.formatClock
 import id.shiorilabs.commute.feature.station.domain.formatPlatformCode
 import id.shiorilabs.commute.feature.station.domain.joinLabels
+import id.shiorilabs.commute.feature.station.presentation.components.LineRoundel
 import id.shiorilabs.commute.feature.station.presentation.components.rememberPulseAlpha
 
 // Tailwind's colours, as the web's timetable page uses them.
@@ -317,12 +317,7 @@ private fun LineFilter(
                         )
                     },
                     leadingIcon = {
-                        LineRoundel(
-                            code = info?.lineCode ?: codeOfLineKey(key),
-                            color = info?.colorCode ?: "#94A3B8",
-                            operator = info?.operator,
-                            modifier = Modifier.alpha(if (active) 1f else 0.4f),
-                        )
+                        LineRoundel(key, info, modifier = Modifier.alpha(if (active) 1f else 0.4f))
                     },
                     onClick = { onToggle(key) },
                 )
@@ -519,11 +514,7 @@ private fun SectionHeader(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            LineRoundel(
-                code = info?.lineCode ?: codeOfLineKey(section.lineKey),
-                color = info?.colorCode ?: "#94A3B8",
-                operator = info?.operator,
-            )
+            LineRoundel(section.lineKey, info)
             Text(
                 text = stringResource(R.string.station_timetable_towards, joinLabels(section.label)),
                 modifier = Modifier

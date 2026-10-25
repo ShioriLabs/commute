@@ -86,7 +86,6 @@ import id.shiorilabs.commute.core.trip.TripPhase
 import id.shiorilabs.commute.core.trip.progress
 import id.shiorilabs.commute.core.ui.components.CommuteCloseButton
 import id.shiorilabs.commute.core.ui.components.GetOffBadge
-import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.components.StationNode
 import id.shiorilabs.commute.core.ui.components.StopNode
@@ -113,6 +112,7 @@ import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.core.ui.theme.Slate600
 import id.shiorilabs.commute.core.ui.theme.Slate900
 import id.shiorilabs.commute.feature.station.domain.LineInfo
+import id.shiorilabs.commute.feature.station.presentation.components.LineRoundel
 import id.shiorilabs.commute.feature.trip.ActiveTrip
 import id.shiorilabs.commute.feature.trip.TripReminder
 import id.shiorilabs.commute.feature.trip.R
@@ -443,9 +443,8 @@ private fun RideBlock(
                     )
                     if (i == 0) {
                         RideHeader(
-                            code = line?.lineCode ?: ride.line.substringAfter(':'),
-                            colorCode = line?.colorCode ?: "#94A3B8",
-                            operator = ride.operator,
+                            ride = ride,
+                            line = line,
                             name = name,
                             direction = rideDirection(ride),
                             rail = railAfter(0),
@@ -484,14 +483,14 @@ private fun ChangeRow(bus: Boolean) {
 
 /** The ride's line on the rail under where to board, as the trip details name it, and which way. */
 @Composable
-private fun RideHeader(code: String, colorCode: String, operator: String, name: String, direction: String?, rail: Color) {
+private fun RideHeader(ride: TripLeg.Ride, line: LineInfo?, name: String, direction: String?, rail: Color) {
     TimelineRow(rail = SolidColor(rail)) {
         Column(
             modifier = Modifier.padding(vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                LineRoundel(code = code, color = colorCode, operator = operator, size = RoundelSize.SM)
+                LineRoundel(ride.line, line, operator = ride.operator, size = RoundelSize.SM)
                 Text(text = name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Slate900)
             }
             direction?.let {

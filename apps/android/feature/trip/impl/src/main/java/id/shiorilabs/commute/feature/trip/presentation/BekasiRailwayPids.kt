@@ -87,12 +87,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.ui.components.CommuteCloseButton
-import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.motion.IosSpringEasing
 import id.shiorilabs.commute.core.ui.motion.rememberReducedMotion
 import id.shiorilabs.commute.feature.station.domain.LineInfo
+import id.shiorilabs.commute.feature.station.presentation.components.LineRoundel
 import id.shiorilabs.commute.feature.station.presentation.components.PidsChevrons
 import id.shiorilabs.commute.feature.station.domain.formatPlatformCode
 import id.shiorilabs.commute.feature.trip.R
@@ -463,15 +463,7 @@ private fun AnyLine(ride: TripLeg.Ride, lines: Map<String, LineInfo>) {
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            ride.lineKeys.forEach { key ->
-                val info = lines[key]
-                LineRoundel(
-                    code = info?.lineCode ?: key.substringAfter(':'),
-                    color = info?.colorCode ?: "#94A3B8",
-                    operator = key.substringBefore(':'),
-                    size = RoundelSize.SM,
-                )
-            }
+            ride.lineKeys.forEach { key -> LineRoundel(key, lines[key], size = RoundelSize.SM) }
         }
     }
 }
@@ -934,15 +926,7 @@ private fun ChangePanel(pids: Pids, lines: Map<String, LineInfo>, stationLines: 
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                others.forEach { key ->
-                    val info = lines[key]
-                    LineRoundel(
-                        code = info?.lineCode ?: key.substringAfter(':'),
-                        color = info?.colorCode ?: "#94A3B8",
-                        operator = key.substringBefore(':'),
-                        size = RoundelSize.SM,
-                    )
-                }
+                others.forEach { key -> LineRoundel(key, lines[key], size = RoundelSize.SM) }
             }
         }
     }
@@ -950,12 +934,5 @@ private fun ChangePanel(pids: Pids, lines: Map<String, LineInfo>, stationLines: 
 
 @Composable
 private fun Roundel(ride: TripLeg.Ride, lines: Map<String, LineInfo>, modifier: Modifier = Modifier) {
-    val info = lines[ride.line]
-    LineRoundel(
-        code = info?.lineCode ?: ride.line.substringAfter(':'),
-        color = info?.colorCode ?: "#94A3B8",
-        modifier = modifier,
-        operator = ride.operator,
-        size = RoundelSize.SM,
-    )
+    LineRoundel(ride.line, lines[ride.line], modifier, operator = ride.operator, size = RoundelSize.SM)
 }

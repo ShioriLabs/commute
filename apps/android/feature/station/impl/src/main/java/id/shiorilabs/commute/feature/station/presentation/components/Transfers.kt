@@ -23,7 +23,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.constants.OPERATOR_NAMES
 import id.shiorilabs.commute.core.ui.components.ExitBadge
-import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
@@ -32,7 +31,6 @@ import id.shiorilabs.commute.feature.station.R
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.core.constants.OPERATOR_TJ
 import id.shiorilabs.commute.feature.station.domain.Transfer
-import id.shiorilabs.commute.feature.station.domain.codeOfLineKey
 import id.shiorilabs.commute.feature.station.domain.sortLineKeysForDisplay
 
 /** The "Integrasi" heading, over the rows [TransferRow] draws one per transfer. */
@@ -105,8 +103,8 @@ fun TransferRow(
                 sortLineKeysForDisplay(transfer.lineKeys, transfer.operator).forEach { key ->
                     val info = lines[key]
                     LineRoundel(
-                        code = info?.lineCode ?: codeOfLineKey(key),
-                        color = info?.colorCode ?: "#94A3B8",
+                        lineKey = key,
+                        info = info,
                         operator = transfer.operator,
                         size = RoundelSize.SM,
                         modifier = Modifier
