@@ -86,6 +86,13 @@ private fun DataAttributionsContent(
                     owner = "© OpenStreetMap contributors",
                     licenseUrl = "https://opendatacommons.org/licenses/odbl/1-0/",
                 )
+                AttributionEntry(
+                    name = "Suica Viewer",
+                    url = "https://github.com/soltia48/suica-viewer",
+                    body = stringResource(R.string.settings_data_attr_suica_viewer_body),
+                    owner = "© 2025 KIRISHIKI Yudai",
+                    licenseUrl = "https://github.com/soltia48/suica-viewer/blob/main/LICENSE",
+                )
             }
             HtmlText(stringResource(R.string.settings_data_attr_outro))
         }

@@ -1,9 +1,11 @@
 package id.shiorilabs.commute.feature.card.di
 
+import android.content.Context
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
 import id.shiorilabs.commute.core.navigation.NavGraphContribution
@@ -13,6 +15,8 @@ import id.shiorilabs.commute.feature.card.dump.CardDumps
 import id.shiorilabs.commute.feature.card.navigation.CardNavContribution
 import id.shiorilabs.commute.feature.card.presentation.CardTapImpl
 import id.shiorilabs.commute.feature.card.reader.CardReader
+import id.shiorilabs.commute.feature.card.reader.JAPAN_IC_LINES_ASSET
+import id.shiorilabs.commute.feature.card.reader.JapanIcLines
 import id.shiorilabs.commute.feature.card.reader.JapanIcReader
 import id.shiorilabs.commute.feature.card.reader.KmtReader
 
@@ -39,6 +43,9 @@ abstract class CardModule {
 
         @Provides
         @IntoSet
-        internal fun provideJapanIcReader(): CardReader = JapanIcReader()
+        internal fun provideJapanIcReader(@ApplicationContext context: Context): CardReader {
+            val lines = JapanIcLines { context.assets.open(JAPAN_IC_LINES_ASSET) }
+            return JapanIcReader(lines = lines::get)
+        }
     }
 }
