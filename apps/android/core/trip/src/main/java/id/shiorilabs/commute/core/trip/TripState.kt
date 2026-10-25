@@ -144,7 +144,16 @@ sealed interface TripEvent {
 
     /** The service came back after being killed, with the stored state. */
     data class Resumed(override val at: Instant) : TripEvent
+
+    /**
+     * The motion sensors felt the train pull out of stop [stopIndex] of leg [legIndex], the one
+     * [TripEngine.awaitingDeparture] had it standing at; [at] is when the pull began.
+     */
+    data class Departed(val legIndex: Int, val stopIndex: Int, override val at: Instant) : TripEvent
 }
+
+/** Stop [stopIndex] of the ride at leg [legIndex]. */
+data class StopAt(val legIndex: Int, val stopIndex: Int)
 
 enum class RiderAction { BOARDED, ALIGHTED, STILL_ON_ROUTE, STOP }
 

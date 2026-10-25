@@ -12,17 +12,24 @@ import android.os.SystemClock
 import dagger.hilt.android.qualifiers.ApplicationContext
 import id.shiorilabs.commute.core.location.Fix
 import id.shiorilabs.commute.core.query.di.ApplicationScope
+import id.shiorilabs.commute.core.trip.StopAt
+import id.shiorilabs.commute.core.trip.TripEvent
 import id.shiorilabs.commute.core.trip.TripLeg
+import id.shiorilabs.commute.core.trip.research.DepartureDetector
 import id.shiorilabs.commute.core.trip.research.MotionEstimator
 import id.shiorilabs.commute.core.trip.research.MotionReadout
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.time.Clock
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.roundToInt
@@ -33,9 +40,12 @@ data class MotionLive(val readout: MotionReadout?, val unavailable: Boolean, val
 /**
  * "Kecepatan IMU" (Experimental): the motion sensors read at 50 Hz while a train is ridden, through
  * a [MotionEstimator] the trip's fixes keep honest, so the trip page can set its speed beside the
- * satellites'. Nothing the trip decides reads it. Each fix, and every few seconds without one (a
- * tunnel), it writes an `imu` line to the trip log, to set against the rider's marks afterwards;
- * every sample, fix and estimate also goes to the leg's [SensorRecorder] file.
+ * satellites'. Nothing the trip decides reads that speed. Each fix, and every few seconds without
+ * one (a tunnel), it writes an `imu` line to the trip log, to set against the rider's marks
+ * afterwards; every sample, fix and estimate also goes to the leg's [SensorRecorder] file.
+ *
+ * What the trip does read is its [DepartureDetector]: [arm]ed at the stop the train stands at, it
+ * says on [departures] when the train pulls out, seconds before the satellites can.
  *
  * The sensors aren't wake-up sensors: with the CPU asleep their samples are lost, so a partial wake
  * lock is held while it runs. That's the battery the switch warns of.
@@ -46,6 +56,7 @@ class MotionTracker @Inject constructor(
     private val log: TripLog,
     private val recorder: SensorRecorder,
     @ApplicationScope private val scope: CoroutineScope,
+    private val clock: Clock,
 ) {
 
     private val _live = MutableStateFlow<MotionLive?>(null)
@@ -53,8 +64,15 @@ class MotionTracker @Inject constructor(
     /** `null` while it isn't running. */
     val live: StateFlow<MotionLive?> = _live.asStateFlow()
 
+    private val _departures = MutableSharedFlow<TripEvent.Departed>(extraBufferCapacity = 1)
+
+    /** The train felt pulling out of the stop [arm]ed for: once each arming. */
+    val departures: SharedFlow<TripEvent.Departed> = _departures.asSharedFlow()
+
     private val lock = Any()
     private var estimator: MotionEstimator? = null
+    private val detector = DepartureDetector()
+    private var armedFor: StopAt? = null
     private var thread: HandlerThread? = null
     private var listener: SensorEventListener? = null
     private var ticker: Job? = null
@@ -104,10 +122,12 @@ class MotionTracker @Inject constructor(
                         Sensor.TYPE_ACCELEROMETER -> {
                             estimator?.onAccelerometer(event.timestamp, event.values)
                             recorder.accelerometer(event.timestamp, event.values)
+                            detector.onAccelerometer(event.timestamp, event.values)?.let(::departed)
                         }
                         Sensor.TYPE_GYROSCOPE -> {
                             estimator?.onGyroscope(event.timestamp, event.values)
                             recorder.gyroscope(event.timestamp, event.values)
+                            detector.onGyroscope(event.timestamp, event.values)
                         }
                     }
                 }
@@ -143,9 +163,39 @@ class MotionTracker @Inject constructor(
         thread = null
         wakeLock?.takeIf { it.isHeld }?.release()
         wakeLock = null
-        synchronized(lock) { estimator = null }
+        synchronized(lock) {
+            estimator = null
+            armedFor = null
+            detector.disarm()
+        }
         recorder.stop()
         _live.value = null
+    }
+
+    /**
+     * Feels for the train leaving [stop] from now, the one the trip has it standing at; `null`, for
+     * none. The same stop again keeps the seconds already read. Only while it runs.
+     */
+    fun arm(stop: StopAt?) {
+        val now = SystemClock.elapsedRealtimeNanos()
+        val armed = synchronized(lock) {
+            if (stop == armedFor || (stop != null && estimator == null)) return
+            armedFor = stop
+            if (stop == null) detector.disarm() else detector.arm(now)
+            stop
+        } ?: return
+        recorder.departure(now, onsetNanos = null)
+        log.event("armed", mapOf("leg" to armed.legIndex, "stop" to armed.stopIndex))
+    }
+
+    /** Called under [lock] from the sensor thread, with the pull's onset on the sensors' clock. */
+    private fun departed(onsetNanos: Long) {
+        val stop = armedFor ?: return
+        armedFor = null
+        val now = SystemClock.elapsedRealtimeNanos()
+        val at = clock.instant().minusNanos(now - onsetNanos)
+        recorder.departure(now, onsetNanos)
+        _departures.tryEmit(TripEvent.Departed(stop.legIndex, stop.stopIndex, at))
     }
 
     /** A fix, as the trip got it: the estimator lines up and corrects on it, and the log notes both speeds. */

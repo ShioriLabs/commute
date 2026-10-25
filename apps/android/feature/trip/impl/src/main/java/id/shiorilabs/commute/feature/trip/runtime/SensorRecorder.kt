@@ -117,6 +117,11 @@ class SensorRecorder @Inject constructor(
         recording.event("mark", SystemClock.elapsedRealtimeNanos(), mapOf("t" to STAMP.format(clock.instant()), "kind" to kind))
     }
 
+    /** The departure detector armed at a stop ([onsetNanos] `null`), or felt the pull out of it, begun at [onsetNanos]. */
+    fun departure(nanos: Long, onsetNanos: Long?) = write {
+        recording.event(if (onsetNanos == null) "armed" else "departed", nanos, mapOf("onset" to onsetNanos))
+    }
+
     fun stop() = write { recording.stop() }
 
     /** A disk that's full or gone loses the recording, never the ride. */

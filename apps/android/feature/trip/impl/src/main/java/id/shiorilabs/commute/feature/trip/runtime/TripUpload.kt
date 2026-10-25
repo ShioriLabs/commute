@@ -119,7 +119,7 @@ internal object TripUploadRedactor {
     const val OFF_TRACK_M = 300.0
 
     /** What's ridden and sent: only lines that say where the trip stood, and the motion beside them. */
-    private val KEPT_EVENTS = setOf("fix", "tick", "rider", "location", "resumed", "imu", "mark")
+    private val KEPT_EVENTS = setOf("fix", "tick", "rider", "location", "resumed", "imu", "mark", "departed")
 
     /** A mark's board facts that would count down to the alighting stop. */
     private val DROPPED_MARK_FIELDS = setOf("boardStopsLeft", "boardMinutesLeft")

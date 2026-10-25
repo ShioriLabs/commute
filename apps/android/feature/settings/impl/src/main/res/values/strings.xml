@@ -101,7 +101,7 @@
     <string name="settings_experimental_yishun_pids">PIDS Yishun</string>
     <string name="settings_experimental_yishun_pids_detail">Papan perjalanan gaya layar kereta Singapura: garis lurus, nama stasiun miring, stasiun yang udah lewat jadi abu-abu</string>
     <string name="settings_experimental_imu_speed">Kecepatan IMU</string>
-    <string name="settings_experimental_imu_speed_detail">Bandingin kecepatan GPS sama perkiraan sensor gerak di halaman perjalanan, pas naik kereta. Lumayan makan baterai</string>
+    <string name="settings_experimental_imu_speed_detail">Bandingin kecepatan GPS sama perkiraan sensor gerak di halaman perjalanan, pas naik kereta, dan ngerasain kereta berangkat dari stasiun lebih cepet dari GPS. Lumayan makan baterai</string>
     <string name="settings_experimental_watch_auto_open">Buka Otomatis di Jam</string>
     <string name="settings_experimental_watch_auto_open_detail">Pas mulai OTW, aplikasi Commute di jam langsung kebuka</string>
     <string name="settings_experimental_trip_log">Kirim Log Perjalanan</string>

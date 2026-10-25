@@ -11,6 +11,7 @@ import id.shiorilabs.commute.core.datastore.DeveloperPreferencesRepository
 import id.shiorilabs.commute.core.location.LocationClient
 import id.shiorilabs.commute.core.location.LocationMode
 import id.shiorilabs.commute.core.trip.AlertKind
+import id.shiorilabs.commute.core.trip.TripEngine
 import id.shiorilabs.commute.core.trip.TripLocationMode
 import id.shiorilabs.commute.core.trip.TripPhase
 import id.shiorilabs.commute.feature.trip.ActiveTrip
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import java.time.Clock
 import javax.inject.Inject
 
 /**
@@ -48,6 +50,9 @@ class TripService : Service() {
 
     @Inject
     lateinit var developerPreferences: DeveloperPreferencesRepository
+
+    @Inject
+    lateinit var clock: Clock
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var wakeLock: PowerManager.WakeLock? = null
@@ -112,6 +117,18 @@ class TripService : Service() {
                     motion.stop()
                     riding?.let { (_, ride) -> motion.start(ride) }
                 }
+        }
+        scope.launch {
+            // The stop the train stands at, for the motion sensors to feel it leave: only while they run.
+            val running = motion.live.map { it != null && !it.unavailable }.distinctUntilChanged()
+            combine(controller.active, running) { trip, on ->
+                trip?.takeIf { on }?.let { TripEngine.awaitingDeparture(it.plan, it.state, clock.instant()) }
+            }
+                .distinctUntilChanged()
+                .collect { motion.arm(it) }
+        }
+        scope.launch {
+            motion.departures.collect { controller.onDeparted(it.legIndex, it.stopIndex, it.at) }
         }
     }
 
