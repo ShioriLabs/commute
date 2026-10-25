@@ -12,10 +12,10 @@ import android.os.SystemClock
 import dagger.hilt.android.qualifiers.ApplicationContext
 import id.shiorilabs.commute.core.location.Fix
 import id.shiorilabs.commute.core.query.di.ApplicationScope
+import id.shiorilabs.commute.core.trip.DepartureDetector
 import id.shiorilabs.commute.core.trip.StopAt
 import id.shiorilabs.commute.core.trip.TripEvent
 import id.shiorilabs.commute.core.trip.TripLeg
-import id.shiorilabs.commute.core.trip.research.DepartureDetector
 import id.shiorilabs.commute.core.trip.research.MotionEstimator
 import id.shiorilabs.commute.core.trip.research.MotionReadout
 import kotlinx.coroutines.CoroutineScope
