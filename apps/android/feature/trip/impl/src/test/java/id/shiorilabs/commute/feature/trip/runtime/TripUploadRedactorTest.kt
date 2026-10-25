@@ -107,6 +107,20 @@ class TripUploadRedactorTest {
     )
 
     @Test
+    fun `a departure the motion sensors felt goes too, where it was`() {
+        val felt = event(
+            "departed",
+            mapOf("by" to "imu", "used" to true, "leg" to 0, "phase" to TripPhase.RIDING, "pos" to 2.004, "confirmed" to 2.004, "src" to "CONFIRMED"),
+        )
+        val lines = tripLines.toMutableList().apply { add(indexOfFirst { it.contains("\"alert\"") }, felt) }
+
+        val sent = parsed(TripUploadRedactor.redact(lines, finished(), oneEach))
+
+        val departed = sent.single { it.ev() == "departed" }
+        assertEquals(1.004, departed.pos(), 1e-9)
+    }
+
+    @Test
     fun `only this trip's lines go, between a stop in from each end`() {
         val before = listOf(
             event("started", mapOf("journey" to "earlier", "location" to true)),
