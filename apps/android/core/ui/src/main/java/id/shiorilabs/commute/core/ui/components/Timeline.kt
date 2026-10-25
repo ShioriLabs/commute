@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
+import id.shiorilabs.commute.core.ui.theme.PageGround
 import id.shiorilabs.commute.core.ui.theme.Slate300
 import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.core.ui.theme.Slate900
@@ -180,8 +181,8 @@ private fun Modifier.walkDots(brush: Brush): Modifier = drawBehind {
 }
 
 /**
- * A walk between two stops: the rail as dots in [dots], and a person in [mark] on a white disc
- * where the rail's middle is, as the web's walking leg draws it.
+ * A walk between two stops: the rail as dots in [dots], and a person in [mark] on a disc of the
+ * page's ground where the rail's middle is, as the web's walking leg draws it.
  */
 @Composable
 fun WalkTimelineRow(dots: Color, mark: Color, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
@@ -196,13 +197,17 @@ fun WalkTimelineRow(dots: Color, mark: Color, modifier: Modifier = Modifier, con
     )
 }
 
-/** The walker on a walk's rail; the disc is as wide as the gutter, so the dots end at its edge. */
+/**
+ * The walker on a walk's rail; the disc is as wide as the gutter, so the dots end at its edge. It's
+ * the page's ground, a halo that breaks the dots as a node breaks a rail, not white: on the dark
+ * theme a white one stands out as a blob.
+ */
 @Composable
 private fun WalkMark(color: Color) {
     Box(
         modifier = Modifier
             .clip(CircleShape)
-            .background(Color.White)
+            .background(PageGround)
             .padding(2.dp),
     ) {
         Icon(imageVector = CommuteIcons.Walk, contentDescription = null, modifier = Modifier.size(24.dp), tint = color)
