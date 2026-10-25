@@ -50,7 +50,6 @@ import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripStop
 import id.shiorilabs.commute.core.trip.progress
 import id.shiorilabs.commute.core.ui.components.CommuteCloseButton
-import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.ext.lineColorOf
 import id.shiorilabs.commute.core.ui.components.CommuteButton
 import id.shiorilabs.commute.core.ui.components.CommuteButtonIcon
@@ -67,6 +66,7 @@ import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.core.ui.theme.Slate900
 import id.shiorilabs.commute.core.ui.theme.TABULAR
 import id.shiorilabs.commute.feature.station.domain.LineInfo
+import id.shiorilabs.commute.feature.station.presentation.components.LineRoundel
 import id.shiorilabs.commute.feature.trip.R
 import id.shiorilabs.commute.feature.trip.runtime.FinishedTrip
 import id.shiorilabs.commute.feature.trip.runtime.TripUploadRedactor
@@ -368,11 +368,7 @@ private fun RideRow(ride: TripLeg.Ride, lines: Map<String, LineInfo>, copy: Trip
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        LineRoundel(
-            code = line?.lineCode ?: ride.line.substringAfter(':'),
-            color = line?.colorCode ?: "#94A3B8",
-            operator = ride.operator,
-        )
+        LineRoundel(ride.line, line, operator = ride.operator)
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = stringResource(R.string.trip_done_ride, ride.stops.first().name, ride.stops.last().name),

@@ -58,12 +58,11 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.tripcopy.tripDirection
-import id.shiorilabs.commute.core.ui.components.LineRoundel
-import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.motion.IosSpringEasing
 import id.shiorilabs.commute.core.ui.motion.rememberReducedMotion
 import id.shiorilabs.commute.core.ui.theme.LocalDarkTheme
 import id.shiorilabs.commute.feature.station.domain.LineInfo
+import id.shiorilabs.commute.feature.station.presentation.components.LineRoundel
 import id.shiorilabs.commute.feature.trip.R
 import kotlinx.coroutines.delay
 
@@ -254,15 +253,7 @@ private const val PAGE_SLIDE_MILLIS = 450
 @Composable
 internal fun StationLines(keys: List<String>, lines: Map<String, LineInfo>) {
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        keys.forEach { key ->
-            val info = lines[key]
-            LineRoundel(
-                code = info?.lineCode ?: key.substringAfter(':'),
-                color = info?.colorCode ?: "#94A3B8",
-                operator = key.substringBefore(':'),
-                size = RoundelSize.MD,
-            )
-        }
+        keys.forEach { key -> LineRoundel(key, lines[key]) }
     }
 }
 
