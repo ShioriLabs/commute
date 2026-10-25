@@ -261,6 +261,106 @@ class TripEngineTest {
     }
 
     @Test
+    fun `a train seen standing at a station on the way waits there to be felt leaving`() {
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(Places.TEBET, 4.0, speedMps = 0.2f)
+
+        assertEquals(StopAt(0, 1), TripEngine.awaitingDeparture(bogorLine, run.state, at(4.5)))
+    }
+
+    @Test
+    fun `only a train seen standing, at a stop on the way, by a fresh fix, on rails, waits to be felt leaving`() {
+        // At Tebet without a speed: it may still be braking in.
+        val speedless = Run(bogorLine).apply { tick(0.0); fix(Places.TEBET, 4.0) }
+        assertNull(TripEngine.awaitingDeparture(bogorLine, speedless.state, at(4.5)))
+
+        // Standing there, but the fix is old.
+        val stale = Run(bogorLine).apply { tick(0.0); fix(Places.TEBET, 4.0, speedMps = 0.2f) }
+        assertNull(TripEngine.awaitingDeparture(bogorLine, stale.state, at(4.0).plus(TripEngine.STALE)))
+
+        // The station the ride starts from: boarding is its own business.
+        val boarding = Run(bogorLine).apply { send(TripEvent.RiderSaid(RiderAction.BOARDED, at(0))); fix(Places.MANGGARAI, 0.2, speedMps = 0.2f) }
+        assertNull(TripEngine.awaitingDeparture(bogorLine, boarding.state, at(0.3)))
+
+        // A halte: a bus stops and starts at every light.
+        val bus = Run(busway).apply {
+            send(TripEvent.RiderSaid(RiderAction.BOARDED, at(0)))
+            fix(Places.HALTE_2, 3.0, speedMps = 0.2f)
+        }
+        assertNull(TripEngine.awaitingDeparture(busway, bus.state, at(3.2)))
+    }
+
+    @Test
+    fun `a train felt leaving a station on the way has left it, as late as it was then`() {
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(Places.TEBET, 4.0, speedMps = 0.2f)
+        val due = RideClock(bogorLine.ride(0)).scheduledAt(1.0)!!
+
+        run.send(TripEvent.Departed(0, 1, at(4.5)))
+
+        assertTrue(run.state.position > 1.0)
+        assertTrue(run.state.position < 1.05)
+        assertEquals(at(4.5), run.state.confirmedAt)
+        assertEquals(at(4.5), run.state.seenAt(0, 1))
+        assertEquals(java.time.Duration.between(due, at(4.5)).seconds, run.state.clockOffsetS)
+        assertNull(TripEngine.awaitingDeparture(bogorLine, run.state, at(4.6)))
+    }
+
+    @Test
+    fun `felt leaving the stop before the one to get off at, it's time to get ready`() {
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(Places.PASAR_MINGGU_BARU, 12.0, speedMps = 0.2f)
+        assertTrue(run.alerts().none { it.kind == AlertKind.PREPARE })
+
+        run.send(TripEvent.Departed(0, 4, at(12.4)))
+
+        assertEquals(listOf(alert(AlertKind.PREPARE, estimated = false)), run.alerts().filter { it.kind == AlertKind.PREPARE })
+    }
+
+    @Test
+    fun `a train felt leaving a station it is no longer at changes nothing`() {
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(Places.TEBET, 4.0, speedMps = 0.2f)
+        run.fix(Places.CAWANG, 7.0, speedMps = 0.2f)
+        val before = run.state
+
+        run.send(TripEvent.Departed(0, 1, at(7.1)))
+
+        assertEquals(before, run.state)
+    }
+
+    @Test
+    fun `a train felt leaving a station it wasn't seen standing at changes nothing`() {
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(Places.TEBET, 4.0)
+        val before = run.state
+
+        run.send(TripEvent.Departed(0, 1, at(4.5)))
+
+        assertEquals(before, run.state)
+    }
+
+    @Test
+    fun `a fix still at the station after the train was felt leaving it doesn't take it back`() {
+        // Under Manggarai's roof on 16 Oct the satellites read standing 12 s into the pull.
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(Places.TEBET, 4.0, speedMps = 0.2f)
+        run.send(TripEvent.Departed(0, 1, at(4.5)))
+        val left = run.state.position
+
+        run.fix(Places.TEBET, 4.6, speedMps = 0.3f)
+
+        assertEquals(left, run.state.position, 0.0)
+        assertEquals(at(4.5), run.state.seenAt(0, 1))
+    }
+
+    @Test
     fun `the stop to get off at is reached on the way in, however fast`() {
         val run = Run(bogorLine)
         run.tick(0.0)

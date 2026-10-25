@@ -234,6 +234,9 @@ class TripControllerImpl @Inject constructor(
 
     suspend fun onFix(fix: Fix) = send(TripEvent.Fix(fix.point, fix.accuracyM, fix.at, fix.speedMps))
 
+    /** The motion sensors felt the train leave the stop it stood at ([TripEngine.awaitingDeparture]), the pull begun [at]. */
+    suspend fun onDeparted(legIndex: Int, stopIndex: Int, at: Instant) = send(TripEvent.Departed(legIndex, stopIndex, at))
+
     /** The service couldn't run (refused, or location went away): carry on by the clock. */
     suspend fun trackingLost() = send(TripEvent.LocationAvailability(false, clock.instant()))
 
@@ -369,6 +372,9 @@ class TripControllerImpl @Inject constructor(
             is TripEvent.RiderSaid -> "rider" to mapOf("action" to event.action)
             is TripEvent.LocationAvailability -> "location" to mapOf("available" to event.available)
             is TripEvent.Resumed -> "resumed" to emptyMap()
+            // Taken or not: one that comes when the train isn't waiting any more is a late or a false one.
+            // No stop index: the upload shifts `pos`, and a raw index would say how much was cut.
+            is TripEvent.Departed -> "departed" to mapOf("by" to "imu", "used" to (after.confirmedPosition != before.confirmedPosition))
             is TripEvent.Tick -> {
                 val moved = before.legIndex != after.legIndex || before.phase != after.phase ||
                     before.source != after.source || floor(before.position) != floor(after.position)

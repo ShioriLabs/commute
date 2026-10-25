@@ -294,6 +294,48 @@ class TripControllerImplTest {
         assertEquals(2, runtime.wakingStopped)
     }
 
+    /** On the 08.20 from Sudirman, seen standing at Manggarai at 08.23. */
+    private fun standingAtManggarai(): ActiveTrip {
+        val alone = TripPlan(listOf(nextTrain))
+        return ActiveTrip(
+            alone,
+            TripEngine.start(alone, minutes(19), hasLocation = true).state.copy(
+                phase = TripPhase.RIDING,
+                source = PositionSource.CONFIRMED,
+                confirmedPosition = 1.0,
+                position = 1.0,
+                confirmedAt = minutes(23),
+                stoodAt = "0:1",
+            ),
+            origin,
+        )
+    }
+
+    @Test
+    fun `a train the motion sensors feel leaving moves the trip on, and the log says so`() = runTest {
+        store.trip = standingAtManggarai()
+        val controller = controller(at = minutes(23).plusSeconds(40))
+        runCurrent()
+
+        controller.onDeparted(0, 1, minutes(23).plusSeconds(30))
+
+        assertTrue(controller.active.value!!.state.confirmedPosition > 1.0)
+        assertTrue("departed" in logged)
+    }
+
+    @Test
+    fun `one felt at a stop the train has left already is logged and changes nothing`() = runTest {
+        store.trip = standingAtManggarai()
+        val controller = controller(at = minutes(23).plusSeconds(40))
+        runCurrent()
+        val before = controller.active.value!!.state
+
+        controller.onDeparted(0, 2, minutes(23).plusSeconds(30))
+
+        assertEquals(before.confirmedPosition, controller.active.value!!.state.confirmedPosition, 0.0)
+        assertTrue("departed" in logged)
+    }
+
     /** Aboard the 08.00 MRT from Bundaran HI, said to be [lateS] late, but not yet seen on the move. */
     private fun aboardTheMrt(lateS: Long) = ActiveTrip(
         plan,
