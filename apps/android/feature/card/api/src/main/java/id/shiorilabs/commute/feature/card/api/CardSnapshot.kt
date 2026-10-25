@@ -14,9 +14,12 @@ enum class CardKind { KMT, JAPAN_IC }
  */
 data class CardEntry(
     val at: Instant,
-    /** The API's operator code (`KCI`, `LRTJBDB`, `MRTJ`, `TJ`), or null when the entry names none. */
+    /**
+     * The API's operator code (`KCI`, `LRTJBDB`, `MRTJ`, `TJ`), or on a Japanese card who ran the
+     * ride, in Japanese; null when the entry names none.
+     */
     val operator: String?,
-    /** The station the card names, or null when we can't say which. */
+    /** The station the card names (on a Japanese card, the line it rode), or null when we can't say which. */
     val place: String?,
     val amount: Long,
     /** False when the card keeps only the day: [at] is then that day's start in Jakarta. */
