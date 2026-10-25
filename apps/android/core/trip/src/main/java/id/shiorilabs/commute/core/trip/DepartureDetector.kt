@@ -1,4 +1,4 @@
-package id.shiorilabs.commute.core.trip.research
+package id.shiorilabs.commute.core.trip
 
 import kotlin.math.cos
 import kotlin.math.sin
