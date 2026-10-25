@@ -306,19 +306,25 @@ private fun DayHeader(day: String, total: String) {
     }
 }
 
-/** An entry. A Japanese card's names nothing we know, so it's only money in or money out. */
+/**
+ * An entry. A Japanese card's ride is named by its line, or else who ran it, in Japanese as the
+ * table has them; anything else on it is only money in or money out.
+ */
 @Composable
 private fun EntryRow(row: HistoryEntry, kind: CardKind) {
     val entry = row.entry
     val topUp = entry.operator == null && entry.amount > 0
+    val unnamed = kind == CardKind.JAPAN_IC && entry.place == null && entry.operator == null
     val title = when {
         entry.issue -> stringResource(R.string.card_entry_issue)
-        kind == CardKind.JAPAN_IC -> stringResource(if (topUp) R.string.card_entry_topup_generic else R.string.card_entry_payment)
+        unnamed -> stringResource(if (topUp) R.string.card_entry_topup_generic else R.string.card_entry_payment)
         topUp -> stringResource(R.string.card_entry_topup)
         entry.place != null -> entry.place!!
         else -> entry.operator?.let { OPERATOR_NAMES[it] ?: it } ?: stringResource(R.string.card_entry_ride)
     }
     val balanceAfter = formatBalance(row.balanceAfter, kind)
+    // A card that keeps no time says who ran the ride there instead, when the line took the title.
+    val lead = if (entry.timeKnown) formatTime(entry.at) else entry.operator.takeIf { kind == CardKind.JAPAN_IC && entry.place != null }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -334,7 +340,7 @@ private fun EntryRow(row: HistoryEntry, kind: CardKind) {
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = entry.icon(topUp || kind == CardKind.JAPAN_IC),
+                imageVector = entry.icon(topUp || unnamed),
                 contentDescription = null,
                 modifier = Modifier.size(18.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -343,8 +349,8 @@ private fun EntryRow(row: HistoryEntry, kind: CardKind) {
         Column(Modifier.weight(1f)) {
             Text(text = title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
             Text(
-                text = if (entry.timeKnown) {
-                    stringResource(R.string.card_entry_detail, formatTime(entry.at), balanceAfter)
+                text = if (lead != null) {
+                    stringResource(R.string.card_entry_detail, lead, balanceAfter)
                 } else {
                     stringResource(R.string.card_entry_detail_no_time, balanceAfter)
                 },
@@ -405,8 +411,8 @@ private val PreviewJapanIc = CardSnapshot(
     lastDigits = null,
     balance = 59,
     entries = listOf(
-        CardEntry(Instant.parse("2025-05-09T17:00:00Z"), null, null, -199, timeKnown = false),
-        CardEntry(Instant.parse("2025-05-09T17:00:00Z"), null, null, -242, timeKnown = false),
+        CardEntry(Instant.parse("2025-05-09T17:00:00Z"), "東日本旅客鉄道", null, -199, timeKnown = false),
+        CardEntry(Instant.parse("2025-05-09T17:00:00Z"), "東日本旅客鉄道", "両毛線", -242, timeKnown = false),
         CardEntry(Instant.parse("2025-05-07T17:00:00Z"), null, null, 500, timeKnown = false, issue = true),
     ),
     readAt = PreviewNow,

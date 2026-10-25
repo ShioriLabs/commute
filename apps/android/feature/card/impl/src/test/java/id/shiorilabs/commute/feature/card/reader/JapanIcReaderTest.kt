@@ -13,7 +13,7 @@ import org.junit.Test
 
 class JapanIcReaderTest {
     private val now = Instant.parse("2026-10-25T12:00:00Z")
-    private val reader = JapanIcReader { now }
+    private val reader = JapanIcReader(now = { now })
 
     @Test
     fun `reads the yen little-endian from the purse`() {
@@ -36,6 +36,41 @@ class JapanIcReaderTest {
 
         assertEquals(listOf(-199L, -242L, 500L), entries.map { it.amount })
         assertEquals(listOf(null, null, null), entries.map { it.operator })
+    }
+
+    @Test
+    fun `a ride says who ran it, and nothing about a line that has no one name`() {
+        val entries = read(mapOf(0x2D to JapanLine("東日本旅客鉄道", null))).entries
+
+        assertEquals(listOf("東日本旅客鉄道", "東日本旅客鉄道", null), entries.map { it.operator })
+        assertEquals(listOf(null, null, null), entries.map { it.place })
+    }
+
+    @Test
+    fun `a ride on a named line names it`() {
+        val entry = read(mapOf(0x2D to JapanLine("東日本旅客鉄道", "両毛線"))).entries.first()
+
+        assertEquals("両毛線", entry.place)
+        assertEquals("東日本旅客鉄道", entry.operator)
+    }
+
+    @Test
+    fun `a ride between two companies goes from one to the other`() {
+        val lines = mapOf(0x2D to JapanLine("東日本旅客鉄道", "両毛線"), 0x2E to JapanLine("わたらせ渓谷鐵道", "わたらせ渓谷線"))
+        val ride = hex("16 01 00 02 32 AA 2D 20 2E 05 3B 00 00 00 05 00")
+
+        val entry = read(lines, card(history = listOf(ride))).entries.first()
+
+        assertEquals("東日本旅客鉄道 → わたらせ渓谷鐵道", entry.operator)
+        assertEquals("両毛線 → わたらせ渓谷線", entry.place)
+    }
+
+    @Test
+    fun `a ride on a line the table lacks stays unnamed`() {
+        val entry = read(emptyMap()).entries.first()
+
+        assertNull(entry.place)
+        assertNull(entry.operator)
     }
 
     @Test
@@ -114,4 +149,7 @@ class JapanIcReaderTest {
     }
 
     private fun tag(card: FakeCard) = CardTag.Felica(TappedCard(IDM, PMM, 0x0003, card))
+
+    private fun read(lines: Map<Int, JapanLine>, card: FakeCard = card()) =
+        JapanIcReader(now = { now }, lines = lines::get).read(tag(card))!!
 }
