@@ -153,10 +153,7 @@ class TripControllerImpl @Inject constructor(
                 if (_active.value != null) runtime.finish()
                 _finished.value = null
                 store.clearFinished()
-                replanJob?.cancel()
-                replannedFor = null
-                retryAt = null
-                engineWake = null
+                forgetReplans()
                 val step = TripEngine.start(placed, clock.instant(), hasLocation)
                 log.event("started", mapOf("journey" to origin.journeyKey, "location" to hasLocation))
                 apply(ActiveTrip(placed, step.state, origin), step)
@@ -437,10 +434,7 @@ class TripControllerImpl @Inject constructor(
             // At the destination an alarm already ringing rings on until the rider says they're up.
             if (finished.reason != FinishReason.ARRIVED) runtime.stopWakingRider()
             timer?.cancel()
-            replanJob?.cancel()
-            replannedFor = null
-            retryAt = null
-            engineWake = null
+            forgetReplans()
             runtime.cancelWake()
             runtime.stopTracking()
             runtime.finish()
@@ -469,6 +463,14 @@ class TripControllerImpl @Inject constructor(
         runtime.showProgress(next)
         schedule(step.nextWakeAt)
         replanIfMissed(next)
+    }
+
+    /** What the last trip's re-plans and wakes had going, gone: a trip starting, or one ended, starts clean. */
+    private fun forgetReplans() {
+        replanJob?.cancel()
+        replannedFor = null
+        retryAt = null
+        engineWake = null
     }
 
     /**
