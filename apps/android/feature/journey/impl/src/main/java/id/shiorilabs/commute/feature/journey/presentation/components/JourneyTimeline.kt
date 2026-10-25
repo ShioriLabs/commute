@@ -213,18 +213,15 @@ private fun RideLeg(
 
     if (sameStationChange) {
         TimelineRow(rail = SolidColor(Slate300)) {
-            Row(
-                modifier = Modifier.padding(vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TransferIcon(bus = isBus, modifier = Modifier.size(14.dp))
-                Text(
-                    text = stringResource(if (isBus) R.string.journey_change_bus else R.string.journey_change_train),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Slate500,
-                )
-                changeGap?.let { ConnectionNote(it) }
+            TimelineStopLine(trailing = changeGap?.let { { ConnectionNote(it) } }, padding = 6.dp) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    TransferIcon(bus = isBus, modifier = Modifier.size(14.dp))
+                    Text(
+                        text = stringResource(if (isBus) R.string.journey_change_bus else R.string.journey_change_train),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Slate500,
+                    )
+                }
             }
         }
     }
@@ -412,20 +409,14 @@ private fun TransferLeg(leg: JourneyLeg.Transfer, gap: Change? = null) {
     }
 
     WalkTimelineRow(dots = Slate400, mark = Slate500) {
-        Row(
-            modifier = Modifier.padding(vertical = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f, fill = false)) {
-                Text(
-                    text = stringResource(R.string.journey_transfer_to, leg.to.name),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Slate500,
-                )
-                WalkDetail(exit = leg.fromExit, distanceM = leg.distanceM, color = Slate500)
-            }
-            gap?.let { ConnectionNote(it) }
+        // The change's minutes stand in the times' column, so they read down the page with them.
+        TimelineStopLine(trailing = gap?.let { { ConnectionNote(it) } }, padding = 14.dp) {
+            Text(
+                text = stringResource(R.string.journey_transfer_to, leg.to.name),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Slate500,
+            )
+            WalkDetail(exit = leg.fromExit, distanceM = leg.distanceM, color = Slate500)
         }
     }
 }

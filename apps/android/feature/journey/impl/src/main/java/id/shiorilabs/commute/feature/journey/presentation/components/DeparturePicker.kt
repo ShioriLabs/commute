@@ -68,14 +68,17 @@ import kotlin.math.roundToInt
 
 private fun minutesOf(gapS: Long) = (gapS / 60f).roundToInt()
 
-/** The change between two trains as the rows between rides print it; only a tight one is named. */
+/**
+ * The change between two trains as the rows between rides print it, in the times' column and
+ * their type; only a tight one is named.
+ */
 @Composable
 internal fun ConnectionNote(change: Change, modifier: Modifier = Modifier) {
     val minutes = minutesOf(change.gapS)
     Text(
         text = stringResource(if (change.tight) R.string.journey_change_gap_tight else R.string.journey_change_gap, minutes),
         modifier = modifier,
-        style = MaterialTheme.typography.bodySmall.merge(fontFeatureSettings = TABULAR),
+        style = MaterialTheme.typography.labelLarge.merge(fontFeatureSettings = TABULAR),
         fontWeight = if (change.tight) FontWeight.Bold else FontWeight.Normal,
         color = if (change.tight) Amber700 else Slate500,
     )
