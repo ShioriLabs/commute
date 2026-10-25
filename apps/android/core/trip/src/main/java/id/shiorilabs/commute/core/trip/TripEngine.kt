@@ -67,6 +67,12 @@ object TripEngine {
     /** How far short of a station a train still rolling in through its radius is put. */
     private const val ROLLING_IN = 0.01
 
+    /** How far out of a stop a train felt leaving it is put: about as far as it's gone by the time that's sure. */
+    private const val DEPARTED_M = 10.0
+
+    /** ...or this much of the hop, when how long it is isn't known. */
+    private const val DEPARTED_STEP = 0.001
+
     /** How many stops ahead a fix may place the rider: far enough for a long gap, not a loop's far side. */
     private const val LOOKAHEAD_STOPS = 6
 
@@ -170,6 +176,7 @@ object TripEngine {
             // its own. Dropping it would let the clock run them ahead, and alert, the moment the
             // process came back.
             is TripEvent.Resumed -> state.copy(resumed = true)
+            is TripEvent.Departed -> departed(plan, state, event)
             is TripEvent.RiderSaid -> when (event.action) {
                 // Done with a trip that already got there is arriving, not giving up on it.
                 RiderAction.STOP -> {
@@ -254,8 +261,9 @@ object TripEngine {
                 state.clockOffsetS
             }
             // At a stop, riding: when the train was there. The last fix while it waits, so about
-            // when it left; at the stop to get off at, the first, when it got in.
-            val stop = candidate.toInt().takeIf { candidate == floor(candidate) }
+            // when it left; at the stop to get off at, the first, when it got in. Not one still
+            // reading it there once it's been felt leaving: that's when it left.
+            val stop = candidate.toInt().takeIf { candidate == floor(candidate) && candidate >= state.confirmedPosition }
             val key = stop?.let { stopKey(state.legIndex, it) }
             val stopTimes = if (key == null || (stop == ride.lastIndex && key in state.stopTimes)) {
                 state.stopTimes
@@ -299,6 +307,50 @@ object TripEngine {
         // train's would hand over to the timetable, which knows more than a held position.
         if (ride.isBus) return tracked.copy(confirmedAt = fix.at, hasLocation = true)
         return tracked.copy(hasLocation = true)
+    }
+
+    /**
+     * The stop the train stands at, on the way, for the motion sensors to feel it leave
+     * ([TripEvent.Departed]): a fresh fix there read it standing, on rails. Not while it may still be
+     * braking in, whose braking read against the standing after it is a pull; not a bus, which stops
+     * and starts at every light; not the stop the ride starts from, which is boarding's.
+     */
+    fun awaitingDeparture(plan: TripPlan, state: TripState, now: Instant): StopAt? {
+        if (state.phase != TripPhase.RIDING) return null
+        val ride = plan.ride(state.legIndex)
+        if (ride.isBus) return null
+        val at = state.confirmedPosition
+        if (at != floor(at)) return null
+        val stop = at.toInt()
+        if (stop <= 0 || stop >= ride.lastIndex) return null
+        if (state.confirmedAt?.let { Duration.between(it, now) < STALE } != true) return null
+        if (state.stoodAt != stopKey(state.legIndex, stop)) return null
+        return StopAt(state.legIndex, stop)
+    }
+
+    /**
+     * Felt leaving the stop it stood at: just out of it, as late as it was setting off. Seconds before
+     * a fix could say so: every half minute, and frozen at standing under a roof. One that comes when
+     * the train isn't waiting there any more changes nothing.
+     */
+    private fun departed(plan: TripPlan, state: TripState, event: TripEvent.Departed): TripState {
+        if (awaitingDeparture(plan, state, event.at) != StopAt(event.legIndex, event.stopIndex)) return state
+        val ride = plan.ride(state.legIndex)
+        val stop = event.stopIndex
+        val out = ride.hopLengthM(stop)?.takeIf { it > 0 }?.let { min(DEPARTED_M / it, ROLLING_IN) } ?: DEPARTED_STEP
+        val offset = RideClock(ride).scheduledAt(stop.toDouble())
+            ?.let { Duration.between(it, event.at).seconds.coerceIn(MAX_EARLY_S, MAX_LATE_S) }
+            ?: state.clockOffsetS
+        return state.copy(
+            confirmedPosition = stop + out,
+            // A fix reading it standing can land a moment after the pull began.
+            confirmedAt = state.confirmedAt?.let { maxOf(it, event.at) } ?: event.at,
+            clockOffsetS = offset,
+            stopTimes = state.stopTimes + (stopKey(state.legIndex, stop) to event.at.toEpochMilli()),
+            stoodAt = null,
+            pullingOutFixes = 0,
+            pullingOutSpeed = null,
+        )
     }
 
     /** What [pullOut] makes of a fix: the stop being watched, the fixes counted, where it left to. */
