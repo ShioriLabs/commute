@@ -20,7 +20,7 @@ class KmtReaderTest {
         val snapshot = reader.read(tag(balance = 47_500))!!
 
         assertEquals(CardKind.KMT, snapshot.kind)
-        assertEquals(47_500L, snapshot.balanceRupiah)
+        assertEquals(47_500L, snapshot.balance)
         assertEquals(now, snapshot.readAt)
     }
 
@@ -33,7 +33,7 @@ class KmtReaderTest {
     fun `reads the whole card in two exchanges`() {
         val card = card(history = listOf(krl("2026-10-23T11:42:00Z", 3_000, "48")))
 
-        assertEquals(10_000L, reader.read(tag(card))!!.balanceRupiah)
+        assertEquals(10_000L, reader.read(tag(card))!!.balance)
         assertEquals(2, card.exchanges)
     }
 
@@ -42,7 +42,7 @@ class KmtReaderTest {
         val card = card(balance = 96_030, number = "6032984400004821", history = listOf(krl("2026-10-23T11:42:00Z", 3_000, "48")), codes = Codes.READ_ONLY)
         val snapshot = reader.read(tag(card))!!
 
-        assertEquals(96_030L, snapshot.balanceRupiah)
+        assertEquals(96_030L, snapshot.balance)
         assertEquals("4821", snapshot.lastDigits)
         assertEquals(1, snapshot.entries.size)
         assertEquals(2, card.exchanges)
@@ -52,7 +52,7 @@ class KmtReaderTest {
     fun `a card that exposes only the read-write service codes still reads`() {
         val snapshot = reader.read(tag(card(balance = 96_030, history = listOf(krl("2026-10-23T11:42:00Z", 3_000, "48")), codes = Codes.READ_WRITE)))!!
 
-        assertEquals(96_030L, snapshot.balanceRupiah)
+        assertEquals(96_030L, snapshot.balance)
         assertEquals("4821", snapshot.lastDigits)
         assertEquals(1, snapshot.entries.size)
     }
@@ -75,7 +75,7 @@ class KmtReaderTest {
             tag(history = listOf(krl("2026-10-23T11:42:00Z", 3_000, "48"), EMPTY, krl("2026-10-22T00:31:00Z", 4_000, "26"))),
         )!!
 
-        assertEquals(listOf(3_000L, 4_000L), snapshot.entries.map { -it.amountRupiah })
+        assertEquals(listOf(3_000L, 4_000L), snapshot.entries.map { -it.amount })
         assertEquals(Instant.parse("2026-10-23T11:42:00Z"), snapshot.entries.first().at)
     }
 
@@ -136,7 +136,7 @@ class KmtReaderTest {
         val entry = reader.read(tag(history = listOf(entry("2026-10-23T00:50:00Z", 50_000, "00 55 00 01 00 01"))))!!.entries.single()
 
         assertNull(entry.operator)
-        assertEquals(50_000L, entry.amountRupiah)
+        assertEquals(50_000L, entry.amount)
     }
 
     @Test
@@ -144,7 +144,7 @@ class KmtReaderTest {
         val entry = reader.read(tag(history = listOf(entry("2026-10-23T00:50:00Z", 1_000, "09 09 09 09 01 09"))))!!.entries.single()
 
         assertNull(entry.operator)
-        assertEquals(-1_000L, entry.amountRupiah)
+        assertEquals(-1_000L, entry.amount)
     }
 
     private fun krl(at: String, amount: Int, station: String) = entry(at, amount, "01 $station 01 01 01 00")

@@ -19,7 +19,7 @@ class CardHistoryTest {
     private val snapshot = CardSnapshot(
         kind = CardKind.KMT,
         lastDigits = "9122",
-        balanceRupiah = 16_000,
+        balance = 16_000,
         entries = listOf(kranji, dukuhAtas, topUp, kota, sale),
         readAt = Instant.parse("2026-10-24T00:12:00Z"),
     )

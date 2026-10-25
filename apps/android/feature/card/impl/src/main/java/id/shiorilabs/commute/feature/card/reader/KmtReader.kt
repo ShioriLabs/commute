@@ -47,7 +47,7 @@ internal class KmtReader(private val now: () -> Instant = Instant::now) : CardRe
             CardSnapshot(
                 kind = kind,
                 lastDigits = number.single().decodeToString().takeIf { d -> d.all(Char::isDigit) }?.takeLast(LAST_DIGITS),
-                balanceRupiah = purse.single().u32le(0),
+                balance = purse.single().u32le(0),
                 entries = history.filter { block -> block.any { it != 0.toByte() } }.map(::entry).sortedByDescending { it.at },
                 readAt = now(),
             )
@@ -80,7 +80,7 @@ internal class KmtReader(private val now: () -> Instant = Instant::now) : CardRe
             operator = operator,
             place = place,
             // D12 is 1 for money out, 0 for money in (KMT.md, "likely").
-            amountRupiah = if (modeAndPlace[4].toInt() == 1) -amount else amount,
+            amount = if (modeAndPlace[4].toInt() == 1) -amount else amount,
         )
     }
 

@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.card.presentation
 
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -105,8 +106,8 @@ private fun CardArt(labelled: Boolean, modifier: Modifier = Modifier) {
 
 /**
  * The card page: the card's face, then the last ride and history once one is read. Before that it
- * says [message] under the same face, so a card read while the page is open fills it in place and
- * nothing moves.
+ * says [message] under the same face, with a word on which cards it reads, so a card read while
+ * the page is open fills it in place and nothing moves. A Japanese card gets a joke over its history.
  */
 @Composable
 internal fun CardPage(
@@ -147,17 +148,42 @@ internal fun CardPage(
             item { CardTile(snapshot, Modifier.padding(horizontal = CardMargin)) }
             if (snapshot == null) {
                 item {
-                    Text(
-                        text = message,
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = Gutter, vertical = 24.dp),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        textAlign = TextAlign.Center,
-                    )
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = message,
+                            modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            textAlign = TextAlign.Center,
+                        )
+                        Text(
+                            text = stringResource(R.string.card_kmt_only),
+                            modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                 }
             } else {
+                if (snapshot.kind == CardKind.JAPAN_IC) {
+                    item {
+                        Text(
+                            text = stringResource(R.string.card_japan_ic, formatBalance(snapshot.balance, snapshot.kind)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = Gutter, top = 24.dp, end = Gutter),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
                 historyItems(snapshot)
             }
         }
@@ -177,10 +203,18 @@ private fun LazyListScope.historyItems(snapshot: CardSnapshot) {
         return
     }
     for (day in historyDays(snapshot)) {
-        item { DayHeader(formatDay(day.date, snapshot.readAt), day.total) }
-        items(day.entries) { EntryRow(it) }
+        item { DayHeader(formatDay(day.date, snapshot.readAt), formatAmount(day.total, snapshot.kind)) }
+        items(day.entries) { EntryRow(it, snapshot.kind) }
     }
 }
+
+/** The name the card goes by, on its face and on home's button. */
+@get:StringRes
+internal val CardKind.label: Int
+    get() = when (this) {
+        CardKind.KMT -> R.string.card_pill_label_kmt
+        CardKind.JAPAN_IC -> R.string.card_pill_label_japan_ic
+    }
 
 /**
  * The card's face, with what was read written on it once there is something to write. The balance
@@ -201,9 +235,9 @@ private fun CardTile(snapshot: CardSnapshot?, modifier: Modifier = Modifier) {
         val cardHeight = maxHeight
         val labelFontSize = with(LocalDensity.current) { (cardHeight * LABEL_CAP_HEIGHT * BALANCE_SCALE / CAP_HEIGHT_PER_EM).toSp() }
         // A read counts the balance up to what it found; a page opened on an earlier read just shows it.
-        val balance = remember { Animatable(snapshot?.balanceRupiah?.toFloat() ?: 0f) }
+        val balance = remember { Animatable(snapshot?.balance?.toFloat() ?: 0f) }
         LaunchedEffect(snapshot?.readAt) {
-            val target = snapshot?.balanceRupiah ?: return@LaunchedEffect
+            val target = snapshot?.balance ?: return@LaunchedEffect
             balance.animateTo(target.toFloat(), tween(COUNT_UP_MS, easing = FastOutSlowInEasing))
         }
         val balanceStyle = MaterialTheme.typography.headlineMedium.copy(
@@ -215,7 +249,7 @@ private fun CardTile(snapshot: CardSnapshot?, modifier: Modifier = Modifier) {
             val shown = snapshot ?: return@AnimatedVisibility
             Box(Modifier.fillMaxSize()) {
                 Text(
-                    text = stringResource(R.string.card_pill_label_kmt),
+                    text = stringResource(shown.kind.label),
                     modifier = Modifier.padding(start = 16.dp, top = 12.dp),
                     style = MaterialTheme.typography.labelMedium,
                     color = Color(0xFF555555),
@@ -231,7 +265,7 @@ private fun CardTile(snapshot: CardSnapshot?, modifier: Modifier = Modifier) {
                     )
                 }
                 BasicText(
-                    text = formatBalance(balance.value.roundToLong()),
+                    text = formatBalance(balance.value.roundToLong(), shown.kind),
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(end = cardWidth * LABEL_END)
@@ -249,7 +283,7 @@ private fun CardTile(snapshot: CardSnapshot?, modifier: Modifier = Modifier) {
 
 /** A day's heading, with what the day came to on the right. */
 @Composable
-private fun DayHeader(day: String, total: Long) {
+private fun DayHeader(day: String, total: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -265,22 +299,26 @@ private fun DayHeader(day: String, total: Long) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-            text = formatAmount(total),
+            text = total,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
 
+/** An entry. A Japanese card's names nothing we know, so it's only money in or money out. */
 @Composable
-private fun EntryRow(row: HistoryEntry) {
+private fun EntryRow(row: HistoryEntry, kind: CardKind) {
     val entry = row.entry
-    val topUp = entry.operator == null && entry.amountRupiah > 0
+    val topUp = entry.operator == null && entry.amount > 0
     val title = when {
+        entry.issue -> stringResource(R.string.card_entry_issue)
+        kind == CardKind.JAPAN_IC -> stringResource(if (topUp) R.string.card_entry_topup_generic else R.string.card_entry_payment)
         topUp -> stringResource(R.string.card_entry_topup)
         entry.place != null -> entry.place!!
         else -> entry.operator?.let { OPERATOR_NAMES[it] ?: it } ?: stringResource(R.string.card_entry_ride)
     }
+    val balanceAfter = formatBalance(row.balanceAfter, kind)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -296,7 +334,7 @@ private fun EntryRow(row: HistoryEntry) {
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = entry.icon(topUp),
+                imageVector = entry.icon(topUp || kind == CardKind.JAPAN_IC),
                 contentDescription = null,
                 modifier = Modifier.size(18.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -305,13 +343,17 @@ private fun EntryRow(row: HistoryEntry) {
         Column(Modifier.weight(1f)) {
             Text(text = title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
             Text(
-                text = stringResource(R.string.card_entry_detail, formatTime(entry.at), formatBalance(row.balanceAfter)),
+                text = if (entry.timeKnown) {
+                    stringResource(R.string.card_entry_detail, formatTime(entry.at), balanceAfter)
+                } else {
+                    stringResource(R.string.card_entry_detail_no_time, balanceAfter)
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Text(
-            text = formatAmount(entry.amountRupiah),
+            text = formatAmount(entry.amount, kind),
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onBackground,
@@ -319,8 +361,8 @@ private fun EntryRow(row: HistoryEntry) {
     }
 }
 
-private fun CardEntry.icon(topUp: Boolean): ImageVector = when {
-    topUp -> CommuteIcons.Payment
+private fun CardEntry.icon(money: Boolean): ImageVector = when {
+    money -> CommuteIcons.Payment
     operator == "TJ" -> CommuteIcons.Bus
     else -> CommuteIcons.Train
 }
@@ -330,7 +372,7 @@ private val PreviewNow: Instant = Instant.parse("2026-10-24T00:12:00Z")
 private val PreviewCard = CardSnapshot(
     kind = CardKind.KMT,
     lastDigits = "4821",
-    balanceRupiah = 47_500,
+    balance = 47_500,
     entries = listOf(
         CardEntry(Instant.parse("2026-10-23T11:42:00Z"), "KCI", "Sudirman", -3_000),
         CardEntry(Instant.parse("2026-10-23T01:05:00Z"), "TJ", null, -3_500),
@@ -354,5 +396,26 @@ private fun CardPageHoldPreview() {
 private fun CardPageReadPreview() {
     CommutePreviewScaffold {
         CardPage(PaddingValues(), snapshot = PreviewCard, message = "", onBack = {})
+    }
+}
+
+// The PASMO dump's history (JAPAN_IC.md), as the reader makes it.
+private val PreviewJapanIc = CardSnapshot(
+    kind = CardKind.JAPAN_IC,
+    lastDigits = null,
+    balance = 59,
+    entries = listOf(
+        CardEntry(Instant.parse("2025-05-09T17:00:00Z"), null, null, -199, timeKnown = false),
+        CardEntry(Instant.parse("2025-05-09T17:00:00Z"), null, null, -242, timeKnown = false),
+        CardEntry(Instant.parse("2025-05-07T17:00:00Z"), null, null, 500, timeKnown = false, issue = true),
+    ),
+    readAt = PreviewNow,
+)
+
+@Preview(heightDp = 760)
+@Composable
+private fun CardPageJapanIcPreview() {
+    CommutePreviewScaffold {
+        CardPage(PaddingValues(), snapshot = PreviewJapanIc, message = "", onBack = {})
     }
 }
