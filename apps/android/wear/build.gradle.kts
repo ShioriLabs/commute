@@ -53,3 +53,10 @@ dependencies {
 
     testImplementation(libs.junit)
 }
+
+// Debug-only NFC card-log tooling from the private submodule; linked only when it's checked out.
+if (rootProject.file("private/cardlog-wear/build.gradle.kts").exists()) {
+    dependencies {
+        debugImplementation(project(":private:cardlog-wear"))
+    }
+}
