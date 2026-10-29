@@ -10,6 +10,16 @@ android {
     namespace = "id.shiorilabs.commute.feature.card"
 }
 
+// Future in-app e-money reader sources from the private submodule; compiled into this module only
+// when it's checked out. A @Provides @IntoSet CardReader there joins CardModule's reader set;
+// absent → only the FeliCa readers (KMT + Japan IC). See private/card-impl/README.md. Configured
+// via the current AGP DSL type to avoid the legacy sourceSets accessor's classloader cast.
+rootProject.file("private/card-impl/src/main/java").takeIf { it.exists() }?.let { dir ->
+    extensions.configure(com.android.build.api.dsl.LibraryExtension::class.java) {
+        sourceSets.getByName("main").java.srcDir(dir)
+    }
+}
+
 dependencies {
     implementation(project(":feature:card:api"))
     implementation(project(":core:common"))
