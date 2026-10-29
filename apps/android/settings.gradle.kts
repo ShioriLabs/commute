@@ -68,3 +68,9 @@ include(":feature:card:api")
 include(":feature:card:impl")
 include(":feature:settings:impl")
 include(":feature:onboarding:impl")
+
+// Private bank-card NFC tooling (git submodule at apps/android/private). Absent → status quo:
+// the public app builds with only the FeliCa readers (KMT + Japan IC). See private/README.md.
+if (file("private/cardlog-wear/build.gradle.kts").exists()) {
+    include(":private:cardlog-wear")
+}
