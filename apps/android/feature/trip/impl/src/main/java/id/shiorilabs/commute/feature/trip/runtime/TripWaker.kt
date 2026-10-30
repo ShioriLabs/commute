@@ -13,6 +13,7 @@ import androidx.core.app.NotificationManagerCompat
 import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.Wearable
 import dagger.hilt.android.qualifiers.ApplicationContext
+import id.shiorilabs.commute.core.datastore.OtwPreferencesRepository
 import id.shiorilabs.commute.core.notification.NotificationChannels
 import id.shiorilabs.commute.core.query.di.ApplicationScope
 import id.shiorilabs.commute.core.tripcopy.R as CopyR
@@ -23,6 +24,7 @@ import id.shiorilabs.commute.feature.trip.TripReminder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeoutOrNull
@@ -38,6 +40,8 @@ import javax.inject.Singleton
  *   it for [ESCALATE_AFTER] (off the wrist, flat, slept through), the phone rings too, or straight
  *   away with no watch. Either rings until "Udah bangun", getting off, or [RING_FOR] has passed.
  *
+ * Either way the phone plays [ReminderTune] too, unless "Mainkan nada pengingat" is off.
+ *
  * The phone's buzz is an alarm's, so it goes through silent mode and Do Not Disturb, which a
  * notification's vibration doesn't; the alarm's notification is only there to show why, and to
  * stop it.
@@ -46,6 +50,8 @@ import javax.inject.Singleton
 class TripWaker @Inject constructor(
     @param:ApplicationContext private val context: Context,
     @param:ApplicationScope private val scope: CoroutineScope,
+    private val preferences: OtwPreferencesRepository,
+    private val tune: ReminderTune,
 ) {
 
     private val vibrator: Vibrator by lazy {
@@ -66,6 +72,7 @@ class TripWaker @Inject constructor(
         val key = "${trip.state.startedAt.toEpochMilli()}:$legIndex"
         if (key == remindedFor) return
         remindedFor = key
+        scope.launch { if (preferences.reminderTune.first()) tune.play() }
         val stop = trip.plan.ride(legIndex).stops.last().name
         when (trip.reminder) {
             TripReminder.PING -> scope.launch { if (!tellWatch(WearPaths.PING, stop)) vibrate(WearPaths.pingBuzz(stop)) }
@@ -85,6 +92,7 @@ class TripWaker @Inject constructor(
      * itself already.
      */
     fun stop(tellWatch: Boolean = true) {
+        tune.stop()
         val wasRinging = ringing?.isActive == true
         ringing?.cancel()
         ringing = null
