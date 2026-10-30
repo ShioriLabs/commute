@@ -23,6 +23,18 @@ class OtwPreferencesRepositoryTest {
     }
 
     @Test
+    fun `the reminder tune is on until turned off`() = runTest {
+        val repository = OtwPreferencesRepository(FakePreferencesDataStore())
+        assertTrue(repository.reminderTune.first())
+
+        repository.setReminderTune(false)
+        assertFalse(repository.reminderTune.first())
+
+        repository.setReminderTune(true)
+        assertTrue(repository.reminderTune.first())
+    }
+
+    @Test
     fun `the last read is kept for a screen's first frame`() = runTest {
         val repository = OtwPreferencesRepository(FakePreferencesDataStore())
         assertNull(repository.cachedPidsDiagram)

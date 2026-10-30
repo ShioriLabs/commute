@@ -31,8 +31,19 @@ class OtwPreferencesRepository @Inject constructor(
         dataStore.edit { it[PIDS_DIAGRAM] = enabled }
     }
 
+    /**
+     * "Mainkan nada pengingat": a trip with a reminder plays A Maiden's Prayer, as Taiwan's garbage
+     * trucks do, when it reminds the rider to get off. On until switched off.
+     */
+    val reminderTune: Flow<Boolean> = dataStore.data.map { prefs -> prefs[REMINDER_TUNE] != false }
+
+    suspend fun setReminderTune(enabled: Boolean) {
+        dataStore.edit { it[REMINDER_TUNE] = enabled }
+    }
+
     private companion object {
 
         val PIDS_DIAGRAM = booleanPreferencesKey("pids_diagram")
+        val REMINDER_TUNE = booleanPreferencesKey("reminder_tune")
     }
 }
