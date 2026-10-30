@@ -5,6 +5,7 @@ import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.time.Instant
 import java.time.LocalDate
+import java.time.MonthDay
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -29,6 +30,28 @@ internal fun formatAmount(amount: Long, kind: CardKind = CardKind.KMT): String =
     amount < 0 -> "−" + formatBalance(-amount, kind)
     amount > 0 -> "+" + formatBalance(amount, kind)
     else -> formatBalance(0, kind)
+}
+
+/** Founding of the ROC, Double Ten, and the birthdays of Chiang Kai-shek and Sun Yat-sen. */
+private val EGG_DAYS = setOf(
+    MonthDay.of(1, 1),
+    MonthDay.of(10, 10),
+    MonthDay.of(10, 31),
+    MonthDay.of(11, 12),
+)
+
+/** The Minguo calendar counts from 1912, the ROC's first year. */
+private const val MINGUO_EPOCH = 1911
+
+/**
+ * Whether a KMT card's rail button should go Taiwan: on a ROC holiday, or when the raw balance (no
+ * dots) holds this year's Minguo number or 886, Taiwan's calling code.
+ */
+internal fun isKmtEasterEgg(today: LocalDate, balance: Long): Boolean {
+    val digits = balance.toString()
+    return MonthDay.from(today) in EGG_DAYS ||
+        digits.contains((today.year - MINGUO_EPOCH).toString()) ||
+        digits.contains("886")
 }
 
 /** The day [at] falls on in Jakarta, which is what the history groups by. */
