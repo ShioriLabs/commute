@@ -82,6 +82,8 @@
     <string name="settings_otw_title">OTW</string>
     <string name="settings_otw_pids_diagram">Diagram ala Layar Kereta Jepang</string>
     <string name="settings_otw_pids_diagram_detail">Tampilkan diagram perjalanan ala Jepang di atas linimasa perjalanan</string>
+    <string name="settings_otw_reminder_tune">Mainkan nada pengingat</string>
+    <string name="settings_otw_reminder_tune_detail">A Maiden\'s Prayer oleh Tekla Bądarzewska</string>
 
     <!-- Experimental: switches for trying the app out. Listed in debug builds, or after tapping the
          version seven times. %1$d is how many taps are left. -->

@@ -13,29 +13,34 @@ import id.shiorilabs.commute.feature.settings.R
 import id.shiorilabs.commute.feature.settings.presentation.components.SettingsPage
 import id.shiorilabs.commute.feature.settings.presentation.components.SettingsSwitch
 
-/** How the trip page shows a trip under way: for now, whether its board draws the stops ahead. */
+/** How the trip page shows a trip under way: whether its board draws the stops ahead, and whether a reminder plays a tune. */
 @Composable
 fun OtwSettingsScreen(
     innerPadding: PaddingValues,
     viewModel: OtwSettingsViewModel = hiltViewModel(),
 ) {
     val pidsDiagram by viewModel.pidsDiagram.collectAsStateWithLifecycle()
+    val reminderTune by viewModel.reminderTune.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
 
     OtwSettingsContent(
         pidsDiagram = pidsDiagram,
+        reminderTune = reminderTune,
         innerPadding = innerPadding,
         onBack = { navigator.pop() },
         onPidsDiagram = { viewModel.setPidsDiagram(it) },
+        onReminderTune = { viewModel.setReminderTune(it) },
     )
 }
 
 @Composable
 private fun OtwSettingsContent(
     pidsDiagram: Boolean?,
+    reminderTune: Boolean?,
     innerPadding: PaddingValues,
     onBack: () -> Unit = {},
     onPidsDiagram: (Boolean) -> Unit = {},
+    onReminderTune: (Boolean) -> Unit = {},
 ) {
     SettingsPage(
         title = stringResource(R.string.settings_otw_title),
@@ -43,12 +48,18 @@ private fun OtwSettingsContent(
         onBack = onBack,
     ) {
         // Read off disk within a frame or two; nothing is drawn meanwhile, as on Lokasi.
-        if (pidsDiagram == null) return@SettingsPage
+        if (pidsDiagram == null || reminderTune == null) return@SettingsPage
         SettingsSwitch(
             title = stringResource(R.string.settings_otw_pids_diagram),
             subtitle = stringResource(R.string.settings_otw_pids_diagram_detail),
             checked = pidsDiagram,
             onCheckedChange = onPidsDiagram,
+        )
+        SettingsSwitch(
+            title = stringResource(R.string.settings_otw_reminder_tune),
+            subtitle = stringResource(R.string.settings_otw_reminder_tune_detail),
+            checked = reminderTune,
+            onCheckedChange = onReminderTune,
         )
     }
 }
@@ -57,6 +68,6 @@ private fun OtwSettingsContent(
 @Composable
 private fun OtwSettingsContentPreview() {
     CommutePreviewScaffold {
-        OtwSettingsContent(pidsDiagram = true, innerPadding = PaddingValues())
+        OtwSettingsContent(pidsDiagram = true, reminderTune = true, innerPadding = PaddingValues())
     }
 }

@@ -19,5 +19,9 @@ class OtwSettingsViewModel @Inject constructor(
     /** `null` until read off disk, so no switch shows the wrong way round for a frame. */
     val pidsDiagram: StateFlow<Boolean?> = preferences.pidsDiagram.stateIn(viewModelScope, WhileUiSubscribed, null)
 
+    val reminderTune: StateFlow<Boolean?> = preferences.reminderTune.stateIn(viewModelScope, WhileUiSubscribed, null)
+
     fun setPidsDiagram(enabled: Boolean) = viewModelScope.launch { preferences.setPidsDiagram(enabled) }
+
+    fun setReminderTune(enabled: Boolean) = viewModelScope.launch { preferences.setReminderTune(enabled) }
 }
