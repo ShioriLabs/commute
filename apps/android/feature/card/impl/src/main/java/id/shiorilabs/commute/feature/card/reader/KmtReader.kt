@@ -72,7 +72,7 @@ internal class KmtReader(private val now: () -> Instant = Instant::now) : CardRe
     }
 
     private fun entry(block: ByteArray): CardEntry {
-        val amount = block.u16be(6).toLong()
+        val amount = block.u32be(4)
         val modeAndPlace = block.copyOfRange(8, 14)
         val (operator, place) = classify(modeAndPlace)
         return CardEntry(
@@ -91,12 +91,11 @@ internal class KmtReader(private val now: () -> Instant = Instant::now) : CardRe
             b[0] == 0x00 && b[1] == 0x05 && b[2] == 0x00 && b[4] == 0x01 && b[5] == 0x01 -> LRTJBDB to LRT_STATIONS[b[3]]
             b[0] == 0x01 && b[1] == 0x16 && b[2] == 0x00 && b[3] == 0x1C -> TJ to null
             b[0] == 0x01 && b[1] == 0x16 && b[2] == 0x00 && b[3] in MRT_STATIONS -> MRTJ to MRT_STATIONS[b[3]]
-            b[0] == 0x01 && b[2] == 0x01 && b[3] == 0x01 && b[4] == 0x01 && b[5] == 0x00 -> KCI to KRL_STATIONS[b[1]]
+            // D11 is usually 1 on KRL, but not always, for a reason not yet known (KMT.md).
+            b[0] == 0x01 && b[2] == 0x01 && b[4] == 0x01 && b[5] == 0x00 -> KCI to KRL_STATIONS[b[1]]
             else -> null to null
         }
     }
-
-    private fun ByteArray.u16be(at: Int) = ((this[at].toInt() and 0xFF) shl 8) or (this[at + 1].toInt() and 0xFF)
 
     private fun ByteArray.u32be(at: Int) = (0 until 4).fold(0L) { acc, i -> (acc shl 8) or (this[at + i].toLong() and 0xFF) }
 
