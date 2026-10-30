@@ -17,6 +17,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.feature.card.R
+import id.shiorilabs.commute.feature.card.api.CardKind
 import id.shiorilabs.commute.feature.card.api.CardRail
 import id.shiorilabs.commute.feature.card.api.CardTap
 import id.shiorilabs.commute.feature.card.felica.TappedCard
@@ -79,6 +80,8 @@ internal class CardTapImpl @Inject constructor(
                     session.touch()
                     navigator.goTo(Route.Card)
                 },
+                taiwan = current != null && current.kind == CardKind.KMT &&
+                    isKmtEasterEgg(jakartaDate(current.readAt), current.balance),
             ),
         )
     }
