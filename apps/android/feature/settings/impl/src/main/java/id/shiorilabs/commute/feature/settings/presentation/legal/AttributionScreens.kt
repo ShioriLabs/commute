@@ -146,6 +146,12 @@ private fun CreativeAssetsContent(
                     owner = "Tekla Bądarzewska-Baranowska (komposisi), Michael Bednarek (MIDI, Domain Publik)",
                     licenseUrl = "https://commons.wikimedia.org/wiki/File:A_Maiden%27s_Prayer.mid",
                 )
+                AttributionEntry(
+                    name = "Clair de Lune",
+                    url = "https://en.wikipedia.org/wiki/Clair_de_lune_(Debussy)",
+                    body = stringResource(R.string.settings_creative_clair_de_lune_body),
+                    owner = "Claude Debussy (komposisi, Domain Publik)",
+                )
             }
         }
     }

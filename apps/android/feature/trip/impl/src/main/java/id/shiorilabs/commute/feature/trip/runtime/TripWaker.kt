@@ -78,7 +78,8 @@ class TripWaker @Inject constructor(
         if (key != tunedFor) {
             tunedFor = key
             val alarm = trip.reminder == TripReminder.WAKE
-            scope.launch { if (preferences.reminderTune.first()) tune.play(alarm) }
+            val bus = trip.plan.ride(legIndex).isBus
+            scope.launch { if (preferences.reminderTune.first()) tune.play(alarm, bus) }
         }
         if (trip.reminder == TripReminder.NONE || key == remindedFor) return
         remindedFor = key
