@@ -32,8 +32,8 @@ class OtwPreferencesRepository @Inject constructor(
     }
 
     /**
-     * "Mainkan nada pengingat": a trip with a reminder plays A Maiden's Prayer, as Taiwan's garbage
-     * trucks do, when it reminds the rider to get off. On until switched off.
+     * "Mainkan nada pengingat": a trip plays A Maiden's Prayer, as Taiwan's garbage trucks do, when
+     * it tells the rider to get ready to get off. On until switched off.
      */
     val reminderTune: Flow<Boolean> = dataStore.data.map { prefs -> prefs[REMINDER_TUNE] != false }
 

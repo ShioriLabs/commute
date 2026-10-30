@@ -40,7 +40,9 @@ import javax.inject.Singleton
  *   it for [ESCALATE_AFTER] (off the wrist, flat, slept through), the phone rings too, or straight
  *   away with no watch. Either rings until "Udah bangun", getting off, or [RING_FOR] has passed.
  *
- * Either way the phone plays [ReminderTune] too, unless "Mainkan nada pengingat" is off.
+ * With or without one the phone plays [ReminderTune] too, unless "Mainkan nada pengingat" is off:
+ * as an alarm with "Bangunkan Aku", as media otherwise, where a muted phone or earbuds keep it to
+ * the rider.
  *
  * The phone's buzz is an alarm's, so it goes through silent mode and Do Not Disturb, which a
  * notification's vibration doesn't; the alarm's notification is only there to show why, and to
@@ -63,16 +65,23 @@ class TripWaker @Inject constructor(
         }
     }
 
-    /** The ride last reminded about, as `startedAt:leg`, so each ride is reminded about once. */
+    /**
+     * The ride last played the tune for, and last reminded about, as `startedAt:leg`, so each ride
+     * gets each once. Apart: a reminder set after the tune played still comes, with "turun".
+     */
+    private var tunedFor: String? = null
     private var remindedFor: String? = null
     private var ringing: Job? = null
 
     fun remind(trip: ActiveTrip, legIndex: Int) {
-        if (trip.reminder == TripReminder.NONE) return
         val key = "${trip.state.startedAt.toEpochMilli()}:$legIndex"
-        if (key == remindedFor) return
+        if (key != tunedFor) {
+            tunedFor = key
+            val alarm = trip.reminder == TripReminder.WAKE
+            scope.launch { if (preferences.reminderTune.first()) tune.play(alarm) }
+        }
+        if (trip.reminder == TripReminder.NONE || key == remindedFor) return
         remindedFor = key
-        scope.launch { if (preferences.reminderTune.first()) tune.play() }
         val stop = trip.plan.ride(legIndex).stops.last().name
         when (trip.reminder) {
             TripReminder.PING -> scope.launch { if (!tellWatch(WearPaths.PING, stop)) vibrate(WearPaths.pingBuzz(stop)) }

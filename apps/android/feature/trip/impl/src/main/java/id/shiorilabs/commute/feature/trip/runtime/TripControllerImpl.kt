@@ -462,12 +462,10 @@ class TripControllerImpl @Inject constructor(
             log.event("alert", mapOf("kind" to it.kind, "leg" to it.legIndex, "estimated" to it.estimated))
             runtime.alert(next, it)
         }
-        // "Tambah Pengingat": the first word of getting off (a stop out, or at it if that came
-        // first) brings the reminder too.
-        if (next.reminder != TripReminder.NONE) {
-            alerts.firstOrNull { it.kind == AlertKind.PREPARE || it.kind == AlertKind.ALIGHT }
-                ?.let { runtime.remindRider(next, it.legIndex) }
-        }
+        // The first word of getting off (a stop out, or at it if that came first) brings the
+        // reminder too: the tune, and "Tambah Pengingat" if one is set.
+        alerts.firstOrNull { it.kind == AlertKind.PREPARE || it.kind == AlertKind.ALIGHT }
+            ?.let { runtime.remindRider(next, it.legIndex) }
         if (TripEffect.AskStillOnRoute in step.effects) runtime.askStillOnRoute(next)
         runtime.showProgress(next)
         schedule(step.nextWakeAt)
