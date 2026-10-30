@@ -139,6 +139,13 @@ private fun CreativeAssetsContent(
                     owner = "© Gumpita Rahayu dari Tokotype",
                     licenseUrl = "https://github.com/tokotype/PlusJakartaSans/blob/master/OFL.txt",
                 )
+                AttributionEntry(
+                    name = "A Maiden's Prayer",
+                    url = "https://en.wikipedia.org/wiki/File:A_Maiden's_Prayer.mid",
+                    body = stringResource(R.string.settings_creative_maiden_body),
+                    owner = "Tekla Bądarzewska-Baranowska (komposisi), Michael Bednarek (MIDI, Domain Publik)",
+                    licenseUrl = "https://commons.wikimedia.org/wiki/File:A_Maiden%27s_Prayer.mid",
+                )
             }
         }
     }
