@@ -22,6 +22,8 @@ Generic FeliCa terms (service attributes, purse blocks, cyclic services) are as 
 | 6 daily-card dumps, one after each step of a morning commute | KRL tap-in (Cakung), KRL tap-out (Sudirman), LRT tap-in (Dukuh Atas), LRT tap-out (Rasuna Said), a TransJakarta tap-in with a GoPay top-up, then the TransJakarta tap-out | 2026-10-23 |
 | 7 daily-card dumps on the evening commute | TransJakarta tap-in and tap-out; LRT Setiabudi to Dukuh Atas; KRL tap-in and tap-out at Sudirman without riding; MRT tap-in (Dukuh Atas) and tap-out (Bundaran HI) | 2026-10-23 |
 | 1 more souvenir KMT, the one with only read-only codes | 5 history entries, one day of them pieced together by the owner: KRL Kranji to Jakarta Kota, a KCI top-up, MRT Bundaran HI to Dukuh Atas, KRL Sudirman to Kranji | 2026-10-24 |
+| 1 daily-card dump after a KRL tap-in at Cakung | Purse unchanged by the tap-in | 2026-10-26 |
+| 1 daily-card dump after two GoPay top-ups, 200,000 and 100,000 | The purse rose by exactly 300,000 | 2026-10-30 |
 
 The dumps themselves aren't kept in the repo: they hold card numbers and travel history.
 
@@ -74,8 +76,7 @@ all-zero block is an empty slot.
 | Bytes | Field | Status |
 | --- | --- | --- |
 | D0–D3 | Time, in seconds since 2000-01-01 00:00 UTC, big-endian | **Confirmed**: matches the owner's tap-out times to the minute, in WIB |
-| D4–D5 | Always zero | **Open**: may be the high half of a 4-byte amount. A top-up of 50,000 still fits in D6–D7, so it takes one over 65,535 to tell |
-| D6–D7 | Amount, rupiah, big-endian | **Confirmed** |
+| D4–D7 | Amount, rupiah, big-endian | **Confirmed**: a 200,000 top-up reads `00 03 0D 40`, so D4–D5 are the high half |
 | D8–D13 | What the ride was: see below | Varies |
 | D14–D15 | The purse's execution ID after this entry | **Confirmed**: runs in step with the purse's |
 
@@ -83,7 +84,7 @@ all-zero block is an empty slot.
 
 | Mode | D8–D13 | Seen |
 | --- | --- | --- |
-| KRL | `01 ss 01 01 01 00` | Fares of 3,000; 1 for leaving at the station tapped in at |
+| KRL | `01 ss 01 xx 01 00` | Fares of 3,000; 1 for leaving at the station tapped in at. `xx` is `01` on all but one ride |
 | LRT Jabodebek | `00 05 00 ss 01 01` | Fares of 5,000 and 5,700 |
 | TransJakarta (JakLingko gates) | `01 16 00 1C 01 01` | 3,500, flat |
 | MRT Jakarta (JakLingko gates) | `01 16 00 ss 01 01` | 0 (Dukuh Atas to Bundaran HI) and 3,000 (Bundaran HI to Dukuh Atas) |
@@ -96,7 +97,11 @@ balance. So it is probably the direction: `01` money out, `00` money in (**likel
 holds no balance, so this flag is the only way to tell a top-up from a fare. On the read-only
 souvenir the whole history, top-up included, sums to the purse's balance with this sign.
 
-**Top-ups.** D8–D9 says where the money came from. `0055` is a top-up in GoPay. `0037` came at
+**Top-ups.** Each top-up writes one entry. The owner added 300,000 through GoPay as two top-ups,
+200,000 then 100,000, because GoPay allows at most 200,000 at a time. They are two entries, 36
+seconds apart, each with its own execution ID, and the purse rose by their sum.
+
+D8–D9 says where the money came from. `0055` is a top-up in GoPay. `0037` came at
 the minute the owner's GoPay history shows a payment to "KCI", so it is a top-up bought in KCI's
 own app and paid with GoPay (**likely**: one entry).
 
@@ -125,6 +130,14 @@ Sejarah Jakarta beside Jakarta Kota.
 
 Two souvenir cards bought at Sudirman have `48` in their first entry, and one bought at Kranji
 has `26`: on a sale, `ss` is where the card was sold.
+
+**D11 on KRL** is `01` on every ride but one: a Sudirman to Kranji ride on 2026-10-23, out at
+21:33, has `64`. The owner's location history confirms the route, and the fare (3,000) and every
+other byte match the usual Sudirman to Kranji ride. What `64` means is **open**. That evening the
+card had earlier been tapped in and out at Sudirman without riding (1 rupiah, 20:22) and had paid
+for TransJakarta, LRT and MRT. But on 2026-10-28 the same 1-rupiah exit at Sudirman came before a
+Kranji ride with `01`, so that alone doesn't explain it. A reader should accept any D11 on a KRL
+entry.
 
 **Leaving at the station tapped in at** cost 1 rupiah. It's an ordinary KRL entry, with
 D12 = `01`.
@@ -216,7 +229,7 @@ card seen lists those read-only codes; a card that refuses them is read the same
 `1013`, `3009` and `200D` instead. Each field it shows rests on a section above:
 
 - Balance: D0-D3 of the purse, little-endian (confirmed).
-- Time, amount and entry kind: D0-D3, D6-D7 and D8-D13 of each non-empty history block (confirmed).
+- Time, amount and entry kind: D0-D3, D4-D7 and D8-D13 of each non-empty history block (confirmed).
 - Money in or out: D12 (likely). If a top-up or a refund turns out to read the wrong way, the sign
   in `KmtReader.entry` is the one line to change.
 - Station names: only the KRL, LRT and MRT tap-out codes listed above, MRT under the names the
@@ -226,9 +239,10 @@ card seen lists those read-only codes; a card that refuses them is read the same
 
 ## Open questions and the dumps that would answer them
 
-- **The amount field:** a top-up over 65,535 shows whether D4–D5 are part of it.
 - **MRT: why was the first ride free?** A ride not long after a JakLingko fare on the same card,
   and another well after one, would show whether integration is the reason.
 - **More MRT stations:** each new tap-out station gives one more code.
 - **TransJakarta: is `001C` Koridor 6?** Dump after a ride on another corridor.
 - **More stations:** each new KRL or LRT tap-out station gives one more code.
+- **KRL D11 = `64`:** another KRL entry that isn't `01`, with the owner's notes on that day, may
+  show what sets it.
