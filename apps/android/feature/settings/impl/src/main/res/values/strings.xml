@@ -221,6 +221,7 @@
     <string name="settings_creative_irasutoya_body"><![CDATA[Kami menggunakan beberapa gambar <i>clipart</i> dari Irasutoya sesuai dengan ketentuan penggunaan yang berlaku]]></string>
     <string name="settings_creative_phosphor_body">Ikon pada Aplikasi Kami menggunakan ikon dari koleksi Phosphor Icons</string>
     <string name="settings_creative_jakarta_sans_body">Font pada Aplikasi Kami menggunakan Plus Jakarta Sans yang terlihat modern dan menunjukkan semangat \"Kota Kolaborasi\"-nya Pemerintah DKI Jakarta</string>
+    <string name="settings_creative_maiden_body"><![CDATA[Nada pengingat saat harus turun diadaptasi dari <i>A Maiden\'s Prayer</i> (<i>Modlitwa dziewicy</i>) gubahan Tekla Bądarzewska-Baranowska, dengan melodi yang kami ubah dari berkas MIDI karya Michael Bednarek. Keduanya berstatus domain publik]]></string>
     <!-- %1$s is the licence's URL. -->
     <string name="settings_creative_license"><![CDATA[Lisensi lengkap bisa dilihat di <a href=\"%1$s\">%1$s</a>]]></string>
 
