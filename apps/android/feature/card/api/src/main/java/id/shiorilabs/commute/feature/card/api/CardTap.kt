@@ -8,6 +8,8 @@ class CardRail(
     val subtitle: String,
     val description: String,
     val onClick: () -> Unit,
+    /** A KMT easter egg is in play: the button wears the Taiwan flag's blue and sun. */
+    val taiwan: Boolean = false,
 )
 
 /**

@@ -33,6 +33,7 @@ import id.shiorilabs.commute.core.ui.ext.NAV_STAGGER_OFFSET_MILLIS
 import id.shiorilabs.commute.core.ui.ext.NAV_STAGGER_STEP_MILLIS
 import id.shiorilabs.commute.core.ui.ext.navEntrance
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
+import id.shiorilabs.commute.core.ui.icons.KmtSun
 import id.shiorilabs.commute.core.ui.morph.LocalNavAnimatedVisibilityScope
 import id.shiorilabs.commute.core.ui.morph.LocalSharedTransitionScope
 import id.shiorilabs.commute.core.ui.morph.navCardMorphSource
@@ -113,7 +114,8 @@ fun HomeNavRail(
                     title = card.title,
                     subtitle = card.subtitle,
                     description = card.description,
-                    icon = CommuteIcons.Payment,
+                    icon = if (card.taiwan) CommuteIcons.KmtSun else CommuteIcons.Payment,
+                    taiwan = card.taiwan,
                     onClick = {
                         opened = RailCard.CARD
                         card.onClick()

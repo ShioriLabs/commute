@@ -4,6 +4,8 @@ import id.shiorilabs.commute.feature.card.api.CardKind
 import java.time.Instant
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CardFormatTest {
@@ -52,5 +54,21 @@ class CardFormatTest {
     @Test
     fun `an entry under its day gives only the time, in Jakarta`() {
         assertEquals("00:30", formatTime(Instant.parse("2026-10-23T17:30:00Z")))
+    }
+
+    @Test
+    fun `a ROC holiday is a KMT easter egg whatever the balance`() {
+        listOf("2026-01-01", "2026-10-10", "2026-10-31", "2026-11-12").forEach {
+            assertTrue(it, isKmtEasterEgg(LocalDate.parse(it), 47_500))
+        }
+    }
+
+    @Test
+    fun `a balance holding the Minguo year or 886 is an easter egg`() {
+        val day = LocalDate.parse("2026-10-24") // Minguo 115
+        assertTrue(isKmtEasterEgg(day, 11_500))
+        assertTrue(isKmtEasterEgg(day, 1_886))
+        assertFalse(isKmtEasterEgg(day, 30_029))
+        assertFalse(isKmtEasterEgg(LocalDate.parse("2026-10-11"), 47_500))
     }
 }

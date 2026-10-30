@@ -28,6 +28,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
+import id.shiorilabs.commute.core.ui.icons.KmtSun
 import id.shiorilabs.commute.core.ui.morph.NavCardFacePart
 import id.shiorilabs.commute.core.ui.morph.navCardFace
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
@@ -37,6 +38,9 @@ private val CardHeight = 128.dp
 
 /** How far the icon's circle hangs past the card's bottom-end corner before being clipped. */
 private val IconOverhang = 20.dp
+
+/** The ROC flag's blue: commonly cited, not checked against a spec. */
+private val TaiwanBlue = Color(0xFF000095)
 
 /** The white wash behind the icon on an accent card. */
 private const val ACCENT_ICON_WASH_ALPHA = 0.2f
@@ -48,6 +52,7 @@ private const val ACCENT_ICON_WASH_ALPHA = 0.2f
  * [accent] fills the face with the brand colour instead of white. The rail holds several cards, so
  * the one action most people came for has to be visibly the primary one.
  *
+ * @param taiwan the KMT easter egg: the face goes flag blue, as an accent card's does.
  * @param description what the card does, read out in place of its visible text.
  * @param animateFace whether the face slides out and back as the card morphs: only while the card
  *   is what the screen opens out of, not while the rail just drops away under another page.
@@ -62,17 +67,28 @@ fun NavRailCard(
     modifier: Modifier = Modifier,
     accent: Boolean = false,
     animateFace: Boolean = true,
+    taiwan: Boolean = false,
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    val containerColor = if (accent) colorScheme.primary else colorScheme.surfaceContainerLowest
-    val contentColor = if (accent) colorScheme.onPrimary else colorScheme.onSurface
-    val borderColor = if (accent) colorScheme.primary else colorScheme.outlineVariant
-    val iconWashColor = if (accent) {
+    // Dressed as an accent card, in the ROC flag's blue instead of the brand's.
+    val filled = accent || taiwan
+    val containerColor = when {
+        taiwan -> TaiwanBlue
+        accent -> colorScheme.primary
+        else -> colorScheme.surfaceContainerLowest
+    }
+    val contentColor = if (filled) Color.White else colorScheme.onSurface
+    val borderColor = when {
+        taiwan -> TaiwanBlue
+        accent -> colorScheme.primary
+        else -> colorScheme.outlineVariant
+    }
+    val iconWashColor = if (filled) {
         Color.White.copy(alpha = ACCENT_ICON_WASH_ALPHA)
     } else {
         colorScheme.secondaryContainer
     }
-    val iconColor = if (accent) colorScheme.onPrimary else colorScheme.onSecondaryContainer
+    val iconColor = if (filled) Color.White else colorScheme.onSecondaryContainer
 
     Box(
         modifier = modifier
@@ -137,6 +153,21 @@ private fun NavRailCardAccentPreview() {
             icon = CommuteIcons.Search,
             onClick = {},
             accent = true,
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun NavRailCardTaiwanPreview() {
+    CommutePreviewScaffold {
+        NavRailCard(
+            title = "KMT",
+            subtitle = "Rp88.600",
+            description = "Saldo KMT",
+            icon = CommuteIcons.KmtSun,
+            onClick = {},
+            taiwan = true,
         )
     }
 }
