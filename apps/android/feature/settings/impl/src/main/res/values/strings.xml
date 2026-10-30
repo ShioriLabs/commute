@@ -83,7 +83,7 @@
     <string name="settings_otw_pids_diagram">Diagram ala Layar Kereta Jepang</string>
     <string name="settings_otw_pids_diagram_detail">Tampilkan diagram perjalanan ala Jepang di atas linimasa perjalanan</string>
     <string name="settings_otw_reminder_tune">Mainkan nada pengingat</string>
-    <string name="settings_otw_reminder_tune_detail">A Maiden\'s Prayer oleh Tekla Bądarzewska</string>
+    <string name="settings_otw_reminder_tune_detail">A Maiden\'s Prayer di kereta (Tekla Bądarzewska), Clair de Lune di bus (Claude Debussy)</string>
 
     <!-- Experimental: switches for trying the app out. Listed in debug builds, or after tapping the
          version seven times. %1$d is how many taps are left. -->
@@ -221,6 +221,7 @@
     <string name="settings_creative_irasutoya_body"><![CDATA[Kami menggunakan beberapa gambar <i>clipart</i> dari Irasutoya sesuai dengan ketentuan penggunaan yang berlaku]]></string>
     <string name="settings_creative_phosphor_body">Ikon pada Aplikasi Kami menggunakan ikon dari koleksi Phosphor Icons</string>
     <string name="settings_creative_jakarta_sans_body">Font pada Aplikasi Kami menggunakan Plus Jakarta Sans yang terlihat modern dan menunjukkan semangat \"Kota Kolaborasi\"-nya Pemerintah DKI Jakarta</string>
+    <string name="settings_creative_clair_de_lune_body"><![CDATA[Nada pengingat saat harus turun dari bus adalah <i>Clair de Lune</i> gubahan Claude Debussy, dari suite <i>Suite bergamasque</i>, dengan rekaman buatan kami sendiri. Gubahannya berstatus domain publik]]></string>
     <string name="settings_creative_maiden_body"><![CDATA[Nada pengingat saat harus turun diadaptasi dari <i>A Maiden\'s Prayer</i> (<i>Modlitwa dziewicy</i>) gubahan Tekla Bądarzewska-Baranowska, dengan melodi yang kami ubah dari berkas MIDI karya Michael Bednarek. Keduanya berstatus domain publik]]></string>
     <!-- %1$s is the licence's URL. -->
     <string name="settings_creative_license"><![CDATA[Lisensi lengkap bisa dilihat di <a href=\"%1$s\">%1$s</a>]]></string>
