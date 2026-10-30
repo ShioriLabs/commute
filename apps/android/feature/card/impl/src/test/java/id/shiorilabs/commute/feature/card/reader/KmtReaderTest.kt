@@ -90,6 +90,14 @@ class KmtReaderTest {
     }
 
     @Test
+    fun `a KRL entry is read whatever its D11`() {
+        val entry = reader.read(tag(history = listOf(entry("2026-10-23T14:33:43Z", 3_000, "01 26 01 64 01 00"))))!!.entries.single()
+
+        assertEquals("KCI", entry.operator)
+        assertEquals("Kranji", entry.place)
+    }
+
+    @Test
     fun `a KRL station we haven't seen has no name`() {
         val entry = reader.read(tag(history = listOf(krl("2026-10-23T11:42:00Z", 3_000, "7F"))))!!.entries.single()
 
@@ -140,6 +148,13 @@ class KmtReaderTest {
     }
 
     @Test
+    fun `a top-up over 65,535 reads its whole amount`() {
+        val entry = reader.read(tag(history = listOf(entry("2026-10-30T04:52:28Z", 200_000, "00 55 00 01 00 01"))))!!.entries.single()
+
+        assertEquals(200_000L, entry.amount)
+    }
+
+    @Test
     fun `an entry we don't know how to read still shows its amount`() {
         val entry = reader.read(tag(history = listOf(entry("2026-10-23T00:50:00Z", 1_000, "09 09 09 09 01 09"))))!!.entries.single()
 
@@ -151,7 +166,7 @@ class KmtReaderTest {
 
     private fun entry(at: String, amount: Int, modeAndPlace: String): ByteArray {
         val seconds = Instant.parse(at).epochSecond - Instant.parse("2000-01-01T00:00:00Z").epochSecond
-        return int32be(seconds) + hex("00 00") + int16be(amount) + hex(modeAndPlace) + hex("00 07")
+        return int32be(seconds) + int32be(amount.toLong()) + hex(modeAndPlace) + hex("00 07")
     }
 
     private fun tag(
@@ -186,8 +201,6 @@ class KmtReaderTest {
     }
 
     private fun int32be(v: Long) = byteArrayOf((v ushr 24).toByte(), (v ushr 16).toByte(), (v ushr 8).toByte(), v.toByte())
-
-    private fun int16be(v: Int) = byteArrayOf((v ushr 8).toByte(), v.toByte())
 
     private fun int32le(v: Int) = byteArrayOf(v.toByte(), (v ushr 8).toByte(), (v ushr 16).toByte(), (v ushr 24).toByte())
 
