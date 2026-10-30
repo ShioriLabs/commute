@@ -48,8 +48,9 @@ interface TripRuntime {
     fun finish()
 
     /**
-     * The trip's reminder for getting off ride [legIndex]: a buzz, or an alarm on the watch and then
-     * the phone. Once per ride; a second call for the same one does nothing.
+     * The trip's reminder for getting off ride [legIndex]: the tune, and with "Tambah Pengingat" set
+     * a buzz, or an alarm on the watch and then the phone. Once per ride; a second call for the same
+     * one does nothing.
      */
     fun remindRider(trip: ActiveTrip, legIndex: Int)
 
