@@ -11,9 +11,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * A Maiden's Prayer, as Taiwan's garbage trucks play it, when a trip with a reminder tells the
- * rider to get ready to get off. It plays as an alarm, so silent mode and Do Not Disturb don't
- * hush it, and ducks whatever the rider is listening to while it does.
+ * A Maiden's Prayer, as Taiwan's garbage trucks play it, when the trip tells the rider to get ready
+ * to get off. As media, which silent mode doesn't touch but the media volume does, and earbuds keep
+ * to the rider; or as an alarm, for a rider asleep, which neither silent mode nor Do Not Disturb
+ * hushes. It ducks whatever the rider is listening to while it plays.
  */
 @Singleton
 class ReminderTune @Inject constructor(
@@ -22,27 +23,26 @@ class ReminderTune @Inject constructor(
 
     private val audio: AudioManager by lazy { context.getSystemService(AudioManager::class.java) }
 
-    private val attributes = AudioAttributes.Builder()
-        .setUsage(AudioAttributes.USAGE_ALARM)
-        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-        .build()
-
-    private val focus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
-        .setAudioAttributes(attributes)
-        .build()
-
     private var player: MediaPlayer? = null
+    private var focus: AudioFocusRequest? = null
 
     /** From the top: a second reminder while the first still plays starts it again, not over it. */
     @Synchronized
-    fun play() {
+    fun play(alarm: Boolean) {
         stop()
         runCatching {
+            val attributes = AudioAttributes.Builder()
+                .setUsage(if (alarm) AudioAttributes.USAGE_ALARM else AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .build()
             val next = MediaPlayer.create(context, R.raw.reminder_maiden, attributes, AudioManager.AUDIO_SESSION_ID_GENERATE)
                 ?: return
             player = next
             next.setOnCompletionListener { if (player === it) stop() }
-            audio.requestAudioFocus(focus)
+            focus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                .setAudioAttributes(attributes)
+                .build()
+                .also(audio::requestAudioFocus)
             next.start()
         }.onFailure { stop() }
     }
@@ -54,6 +54,7 @@ class ReminderTune @Inject constructor(
         player = null
         runCatching { playing.stop() }
         playing.release()
-        audio.abandonAudioFocusRequest(focus)
+        focus?.let(audio::abandonAudioFocusRequest)
+        focus = null
     }
 }

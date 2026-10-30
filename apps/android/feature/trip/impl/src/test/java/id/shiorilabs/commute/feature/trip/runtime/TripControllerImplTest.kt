@@ -262,12 +262,14 @@ class TripControllerImplTest {
 
         controller.onFix(Fix(GeoPoint(DUKUH_ATAS.latitude!!, DUKUH_ATAS.longitude!!), 15f, NOW.plusSeconds(120)))
 
-        assertEquals(listOf(0 to TripReminder.WAKE), runtime.reminded)
+        // "Siap-siap" came as the trip started, before the reminder was set; the waker plays the
+        // tune once a ride and minds the reminder apart.
+        assertEquals(0 to TripReminder.WAKE, runtime.reminded.last())
         assertEquals(TripReminder.WAKE, store.trip!!.reminder)
     }
 
     @Test
-    fun `without it, getting off is only the notification`() = runTest {
+    fun `without it, getting off still goes to the waker, for the tune`() = runTest {
         val controller = controller()
         controller.start(plan, origin)
         runCurrent()
@@ -275,7 +277,7 @@ class TripControllerImplTest {
         controller.onFix(Fix(GeoPoint(DUKUH_ATAS.latitude!!, DUKUH_ATAS.longitude!!), 15f, NOW.plusSeconds(120)))
 
         assertEquals(AlertKind.ALIGHT, runtime.alerts.last().kind)
-        assertTrue(runtime.reminded.isEmpty())
+        assertEquals(setOf(0 to TripReminder.NONE), runtime.reminded.toSet())
     }
 
     @Test
