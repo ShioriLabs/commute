@@ -14,7 +14,8 @@ import javax.inject.Singleton
  * A Maiden's Prayer, as Taiwan's garbage trucks play it, when the trip tells the rider to get ready
  * to get off. As media, which silent mode doesn't touch but the media volume does, and earbuds keep
  * to the rider; or as an alarm, for a rider asleep, which neither silent mode nor Do Not Disturb
- * hushes. It ducks whatever the rider is listening to while it plays.
+ * hushes. It ducks whatever the rider is listening to while it plays. On a bus it's Clair de Lune
+ * instead.
  */
 @Singleton
 class ReminderTune @Inject constructor(
@@ -28,14 +29,15 @@ class ReminderTune @Inject constructor(
 
     /** From the top: a second reminder while the first still plays starts it again, not over it. */
     @Synchronized
-    fun play(alarm: Boolean) {
+    fun play(alarm: Boolean, bus: Boolean = false) {
         stop()
         runCatching {
             val attributes = AudioAttributes.Builder()
                 .setUsage(if (alarm) AudioAttributes.USAGE_ALARM else AudioAttributes.USAGE_MEDIA)
                 .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                 .build()
-            val next = MediaPlayer.create(context, R.raw.reminder_maiden, attributes, AudioManager.AUDIO_SESSION_ID_GENERATE)
+            val tune = if (bus) R.raw.reminder_clair_de_lune else R.raw.reminder_maiden
+            val next = MediaPlayer.create(context, tune, attributes, AudioManager.AUDIO_SESSION_ID_GENERATE)
                 ?: return
             player = next
             next.setOnCompletionListener { if (player === it) stop() }
