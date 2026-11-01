@@ -5,13 +5,23 @@ import id.shiorilabs.commute.feature.card.felica.hex
 import java.io.IOException
 
 /**
+ * More commands for a dump to try after the PSE check. Each is sent through [run]'s `send`, which
+ * puts it in the transcript and throws when the card has gone. A probe must only read.
+ */
+internal fun interface IsoProbe {
+    fun run(send: (ByteArray) -> IsoResponse)
+}
+
+/**
  * Reads what an NFC-A or NFC-B card shows before any key: what Android found, then, over ISO-DEP,
  * whether it has a Payment System Environment and, if so, every record of the files its directory
- * could be in (B1 §12.3.2). Parses nothing: the FCI and records go in the dump as the card sent
- * them. Sends only SELECT and READ RECORD, so nothing on the card can change or lock.
+ * could be in (B1 §12.3.2), then whatever [probes] ask. Parses nothing: the FCI and records go in
+ * the dump as the card sent them. Sends only SELECT and READ RECORD itself, so nothing on the card
+ * can change or lock.
  */
 internal class IsoDumper(
     private val transport: IsoTransport?,
+    private val probes: Set<IsoProbe> = emptySet(),
     private val now: () -> Long = { System.nanoTime() / 1_000_000 },
 ) {
     private val transcript = mutableListOf<CardDump.Exchange>()
@@ -25,6 +35,7 @@ internal class IsoDumper(
         if (transport != null) {
             try {
                 pse = readPse(transport) { pse = it }
+                probes.forEach { probe -> probe.run { apdu -> send(transport, apdu) } }
             } catch (e: IOException) {
                 failure = e.message ?: e.javaClass.simpleName
             }

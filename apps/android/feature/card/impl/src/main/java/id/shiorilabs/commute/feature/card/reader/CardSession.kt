@@ -49,5 +49,7 @@ internal class CardSession(private val now: () -> Instant) {
 
 /** Asks each reader in turn; the first that knows the card answers. */
 internal class CardReaders @Inject constructor(private val readers: Set<@JvmSuppressWildcards CardReader>) {
+    val readsIso: Boolean get() = readers.any { it.readsIso }
+
     fun read(tag: CardTag): CardSnapshot? = readers.firstNotNullOfOrNull { it.read(tag) }
 }

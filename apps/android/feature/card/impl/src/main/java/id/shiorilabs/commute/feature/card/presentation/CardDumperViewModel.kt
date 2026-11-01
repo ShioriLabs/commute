@@ -11,6 +11,7 @@ import id.shiorilabs.commute.feature.card.felica.DumpProgress
 import id.shiorilabs.commute.feature.card.felica.FelicaDumper
 import id.shiorilabs.commute.feature.card.felica.TappedCard
 import id.shiorilabs.commute.feature.card.iso.IsoDumper
+import id.shiorilabs.commute.feature.card.iso.IsoProbe
 import id.shiorilabs.commute.feature.card.iso.IsoTag
 import id.shiorilabs.commute.feature.card.iso.IsoTransport
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,8 +34,9 @@ data class CardDumperUiState(
 }
 
 @HiltViewModel
-class CardDumperViewModel @Inject constructor(
+class CardDumperViewModel @Inject internal constructor(
     private val dumps: CardDumps,
+    private val probes: Set<@JvmSuppressWildcards IsoProbe> = emptySet(),
 ) : ViewModel() {
     private val _state = MutableStateFlow(CardDumperUiState())
     val state: StateFlow<CardDumperUiState> = _state.asStateFlow()
@@ -65,7 +67,7 @@ class CardDumperViewModel @Inject constructor(
             if (it.phase == CardDumperUiState.Phase.Reading) it else it.copy(phase = CardDumperUiState.Phase.Reading, progress = null, dump = null, savedAs = null)
         }
         if (before.phase == CardDumperUiState.Phase.Reading) return
-        val dump = IsoDumper(transport).dump(tag)
+        val dump = IsoDumper(transport, probes).dump(tag)
         _state.update { it.copy(phase = CardDumperUiState.Phase.Done, progress = null, dump = dump) }
     }
 
