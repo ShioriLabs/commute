@@ -18,6 +18,12 @@ class CardFormatTest {
     }
 
     @Test
+    fun `e-money is rupiah, as a KMT is`() {
+        assertEquals("Rp10.099", formatBalance(10_099, CardKind.EMONEY))
+        assertEquals("−Rp3.000", formatAmount(-3_000, CardKind.EMONEY))
+    }
+
+    @Test
     fun `yen groups with commas, as Japan writes it`() {
         assertEquals("¥59", formatBalance(59, CardKind.JAPAN_IC))
         assertEquals("¥12,345", formatBalance(12_345, CardKind.JAPAN_IC))
