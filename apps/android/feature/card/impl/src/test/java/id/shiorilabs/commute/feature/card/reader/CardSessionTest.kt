@@ -9,7 +9,9 @@ import id.shiorilabs.commute.feature.card.felica.TappedCard
 import java.time.Duration
 import java.time.Instant
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CardSessionTest {
@@ -87,6 +89,19 @@ class CardSessionTest {
     @Test
     fun `a card no reader knows reads as nothing`() {
         assertNull(CardReaders(setOf(Fixed(null))).read(anyTag()))
+    }
+
+    @Test
+    fun `NFC-A and NFC-B are only polled for when a reader asks`() {
+        val iso = object : CardReader {
+            override val kind = CardKind.KMT
+            override val readsIso = true
+
+            override fun read(tag: CardTag) = null
+        }
+
+        assertFalse(CardReaders(setOf(Fixed(null))).readsIso)
+        assertTrue(CardReaders(setOf(Fixed(null), iso)).readsIso)
     }
 
     private fun snapshot(balance: Long) = CardSnapshot(CardKind.KMT, "4821", balance, emptyList(), clock)

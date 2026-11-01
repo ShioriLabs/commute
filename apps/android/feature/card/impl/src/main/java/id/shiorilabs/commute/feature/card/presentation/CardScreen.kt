@@ -29,7 +29,7 @@ internal fun CardScreen(
     val navigator = LocalNavigator.current
     val snapshot by viewModel.snapshot.collectAsStateWithLifecycle()
 
-    val missed = adapter != null && rememberMissedCard(adapter, viewModel::read)
+    val missed = adapter != null && rememberMissedCard(adapter, viewModel.readsIso, viewModel::read)
     DisposableEffect(Unit) {
         viewModel.touch()
         onDispose { viewModel.touch() }
@@ -48,6 +48,7 @@ internal fun CardScreen(
                 },
             ),
             onBack = { navigator.pop() },
+            readsIso = viewModel.readsIso,
         )
     }
 }

@@ -8,25 +8,35 @@ import android.nfc.tech.NfcF
 import android.os.Bundle
 import id.shiorilabs.commute.feature.card.iso.IsoTag
 import id.shiorilabs.commute.feature.card.iso.IsoTransport
+import id.shiorilabs.commute.feature.card.reader.CardTag
 import java.io.IOException
 
 /**
- * Reader mode for NFC-F only, skipping the NDEF read (NFC §3.2.1), with the presence check pushed
- * well past any one command (NFC §3.3.1) so Android's own `FFFF` polls don't land mid-dump.
- * [onCard] runs on the reader's thread with the card connected, and may block there; the
- * connection closes when it returns.
+ * Reader mode for NFC-F, and NFC-A and NFC-B too with [iso], skipping the NDEF read (NFC §3.2.1),
+ * with the presence check pushed past a whole read (NFC §3.3.1) so Android's own `FFFF` polls don't
+ * land mid-way. [onCard] runs on the reader's thread with the card connected, and may block there;
+ * the connection closes when it returns.
  */
-internal fun NfcAdapter.readFelica(
+internal fun NfcAdapter.readCards(
     activity: Activity,
-    presenceCheckMs: Int = PRESENCE_CHECK_MS,
-    onCard: (TappedCard) -> Unit,
+    presenceCheckMs: Int,
+    iso: Boolean,
+    onCard: (CardTag) -> Unit,
 ) {
-    enableReaderMode(activity, { tag -> connectFelica(tag, onCard) }, NfcAdapter.FLAG_READER_NFC_F or QUIET, extras(presenceCheckMs))
+    val callback = NfcAdapter.ReaderCallback { tag ->
+        if (NfcF.get(tag) != null) {
+            connectFelica(tag) { onCard(CardTag.Felica(it)) }
+        } else {
+            connectIso(tag) { found, transport -> onCard(CardTag.Iso(found, transport)) }
+        }
+    }
+    val techs = if (iso) NfcAdapter.FLAG_READER_NFC_F or NfcAdapter.FLAG_READER_NFC_A or NfcAdapter.FLAG_READER_NFC_B else NfcAdapter.FLAG_READER_NFC_F
+    enableReaderMode(activity, callback, techs or QUIET, extras(presenceCheckMs))
 }
 
 /**
- * The dumper's reader mode: FeliCa as [readFelica] has it, and an NFC-A or NFC-B card handed to
- * [onOther] with its ISO-DEP connected, or a null transport when it has none (or left first).
+ * The dumper's reader mode: FeliCa, and an NFC-A or NFC-B card handed to [onOther] with its ISO-DEP
+ * connected, or a null transport when it has none (or left first).
  */
 internal fun NfcAdapter.readAnyCard(
     activity: Activity,

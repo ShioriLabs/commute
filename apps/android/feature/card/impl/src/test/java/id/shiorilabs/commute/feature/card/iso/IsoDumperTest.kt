@@ -58,5 +58,40 @@ class IsoDumperTest {
         assertTrue(dump.complete)
     }
 
+    @Test
+    fun `a probe's exchanges follow the PSE check in the transcript`() {
+        val card = FakeIsoCard(files = mapOf("PROBED" to fci))
+        val probe = IsoProbe { send -> send(IsoCommand.select("PROBED".encodeToByteArray())) }
+
+        val dump = IsoDumper(card, setOf(probe)).dump(tag)
+
+        assertEquals(2, dump.transcript.size)
+        assertEquals("00A404000650524F42454400", dump.transcript[1].tx)
+        assertEquals(fci.toHex() + "9000", dump.transcript[1].rx)
+        assertTrue(dump.complete)
+    }
+
+    @Test
+    fun `a card taken away during a probe keeps what the probe got`() {
+        val card = FakeIsoCard(files = mapOf("PROBED" to fci), loseAfter = 2)
+        val probe = IsoProbe { send -> repeat(2) { send(IsoCommand.select("PROBED".encodeToByteArray())) } }
+
+        val dump = IsoDumper(card, setOf(probe)).dump(tag)
+
+        assertFalse(dump.complete)
+        assertEquals("Tag was lost.", dump.failure)
+        assertEquals(fci.toHex() + "9000", dump.transcript[1].rx)
+        assertEquals("Tag was lost.", dump.transcript[2].error)
+    }
+
+    @Test
+    fun `a card with no ISO-DEP runs no probe`() {
+        var ran = false
+        val dump = IsoDumper(null, setOf(IsoProbe { ran = true })).dump(tag)
+
+        assertFalse(ran)
+        assertTrue(dump.transcript.isEmpty())
+    }
+
     private fun ByteArray.toHex() = toHexString(HexFormat { upperCase = true })
 }
