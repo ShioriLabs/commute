@@ -21,7 +21,7 @@ private val WEEKDAYS = listOf("Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabt
  * Japanese card, commas grouping them as Japan writes it. Nothing separates the sign from the number.
  */
 internal fun formatBalance(amount: Long, kind: CardKind = CardKind.KMT): String = when (kind) {
-    CardKind.KMT -> "Rp" + DecimalFormat("#,##0", SYMBOLS).format(amount)
+    CardKind.KMT, CardKind.EMONEY -> "Rp" + DecimalFormat("#,##0", SYMBOLS).format(amount)
     CardKind.JAPAN_IC -> "¥" + DecimalFormat("#,##0", DecimalFormatSymbols(Locale.ROOT)).format(amount)
 }
 

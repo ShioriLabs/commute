@@ -20,9 +20,8 @@ import id.shiorilabs.commute.feature.card.R
 import id.shiorilabs.commute.feature.card.api.CardKind
 import id.shiorilabs.commute.feature.card.api.CardRail
 import id.shiorilabs.commute.feature.card.api.CardTap
-import id.shiorilabs.commute.feature.card.felica.TappedCard
 import id.shiorilabs.commute.feature.card.felica.findActivity
-import id.shiorilabs.commute.feature.card.felica.readFelica
+import id.shiorilabs.commute.feature.card.felica.readCards
 import id.shiorilabs.commute.feature.card.reader.CardReaders
 import id.shiorilabs.commute.feature.card.reader.CardSession
 import id.shiorilabs.commute.feature.card.reader.CardTag
@@ -48,7 +47,7 @@ internal class CardTapImpl @Inject constructor(
 
         val navigator = LocalNavigator.current
         val snapshot by session.snapshot.collectAsStateWithLifecycle()
-        val missed = rememberMissedCard(adapter) { readers.read(CardTag.Felica(it))?.also(session::show) != null }
+        val missed = rememberMissedCard(adapter, readers.readsIso) { readers.read(it)?.also(session::show) != null }
         // Home is where a read lives: it goes after five idle minutes, wherever they were spent.
         LaunchedEffect(snapshot) {
             while (true) {
@@ -94,12 +93,12 @@ internal class CardTapImpl @Inject constructor(
  * seconds: said once, then forgotten.
  */
 @Composable
-internal fun rememberMissedCard(adapter: NfcAdapter, read: (TappedCard) -> Boolean): Boolean {
+internal fun rememberMissedCard(adapter: NfcAdapter, iso: Boolean, read: (CardTag) -> Boolean): Boolean {
     var missed by remember { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
     // The reader calls back on its own thread; the buzz goes out on the main one.
     val scope = rememberCoroutineScope()
-    CardTapListener(adapter) { card ->
+    CardTapListener(adapter, iso) { card ->
         val wasRead = read(card)
         missed = !wasRead
         scope.launch { haptics.performHapticFeedback(if (wasRead) HapticFeedbackType.Confirm else HapticFeedbackType.Reject) }
@@ -119,12 +118,12 @@ internal fun rememberMissedCard(adapter: NfcAdapter, read: (TappedCard) -> Boole
  * switched off.
  */
 @Composable
-private fun CardTapListener(adapter: NfcAdapter, onCard: (TappedCard) -> Unit) {
+private fun CardTapListener(adapter: NfcAdapter, iso: Boolean, onCard: (CardTag) -> Unit) {
     val context = LocalContext.current
-    LifecycleResumeEffect(adapter) {
+    LifecycleResumeEffect(adapter, iso) {
         val activity = context.findActivity()
         val on = activity != null && adapter.isEnabled
-        if (on) adapter.readFelica(activity!!, PRESENCE_CHECK_MS) { onCard(it) }
+        if (on) adapter.readCards(activity!!, PRESENCE_CHECK_MS, iso) { onCard(it) }
         onPauseOrDispose {
             if (on) runCatching { adapter.disableReaderMode(activity!!) }
         }

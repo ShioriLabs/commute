@@ -16,8 +16,18 @@ android {
 // via the current AGP DSL type to avoid the legacy sourceSets accessor's classloader cast.
 rootProject.file("private/card-impl/src/main/java").takeIf { it.exists() }?.let { dir ->
     extensions.configure(com.android.build.api.dsl.LibraryExtension::class.java) {
-        sourceSets.getByName("main").java.srcDir(dir)
+        // kotlin, not java: built-in Kotlin leaves .kt files in an added java dir uncompiled.
+        sourceSets.getByName("main").kotlin.srcDir(dir)
+        sourceSets.getByName("test").kotlin.srcDir(rootProject.file("private/card-impl/src/test/java"))
     }
+}
+
+// Said on every build, in a task so a configuration-cache hit still says it: a release built without
+// the submodule loses the reader silently otherwise.
+tasks.named("preBuild") {
+    val included = rootProject.file("private/card-impl/src/main/java").exists()
+    val message = "e-money reader: ${if (included) "included" else "absent, FeliCa only"}"
+    doLast { logger.lifecycle(message) }
 }
 
 dependencies {

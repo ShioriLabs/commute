@@ -115,6 +115,7 @@ internal fun CardPage(
     snapshot: CardSnapshot?,
     message: String,
     onBack: () -> Unit,
+    readsIso: Boolean = false,
 ) {
     Column(
         modifier = Modifier
@@ -162,7 +163,7 @@ internal fun CardPage(
                             textAlign = TextAlign.Center,
                         )
                         Text(
-                            text = stringResource(R.string.card_kmt_only),
+                            text = stringResource(if (readsIso) R.string.card_kmt_and_emoney else R.string.card_kmt_only),
                             modifier = Modifier.fillMaxWidth(),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -214,6 +215,7 @@ internal val CardKind.label: Int
     get() = when (this) {
         CardKind.KMT -> R.string.card_pill_label_kmt
         CardKind.JAPAN_IC -> R.string.card_pill_label_japan_ic
+        CardKind.EMONEY -> R.string.card_pill_label_emoney
     }
 
 /**
@@ -308,13 +310,13 @@ private fun DayHeader(day: String, total: String) {
 
 /**
  * An entry. A Japanese card's ride is named by its line, or else who ran it, in Japanese as the
- * table has them; anything else on it is only money in or money out.
+ * table has them; anything else on it is only money in or money out, as everything is on e-money.
  */
 @Composable
 private fun EntryRow(row: HistoryEntry, kind: CardKind) {
     val entry = row.entry
     val topUp = entry.operator == null && entry.amount > 0
-    val unnamed = kind == CardKind.JAPAN_IC && entry.place == null && entry.operator == null
+    val unnamed = kind != CardKind.KMT && entry.place == null && entry.operator == null
     val title = when {
         entry.issue -> stringResource(R.string.card_entry_issue)
         unnamed -> stringResource(if (topUp) R.string.card_entry_topup_generic else R.string.card_entry_payment)

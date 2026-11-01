@@ -9,6 +9,9 @@ import id.shiorilabs.commute.feature.card.felica.PMM
 import id.shiorilabs.commute.feature.card.felica.TappedCard
 import id.shiorilabs.commute.feature.card.felica.blocks
 import id.shiorilabs.commute.feature.card.felica.hex
+import id.shiorilabs.commute.feature.card.iso.FakeIsoCard
+import id.shiorilabs.commute.feature.card.iso.IsoCommand
+import id.shiorilabs.commute.feature.card.iso.IsoProbe
 import id.shiorilabs.commute.feature.card.iso.IsoTag
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -93,6 +96,16 @@ class CardDumperViewModelTest {
             CardDump.IsoDump(techs = listOf("IsoDep", "NfcA"), id = "04A1B2C3", atqa = "0400", sak = "20", historicalBytes = "8031"),
             state.dump!!.iso,
         )
+    }
+
+    @Test
+    fun `an ISO-DEP card goes through the injected probes`() {
+        val probe = IsoProbe { send -> send(IsoCommand.select("PROBED".encodeToByteArray())) }
+        val viewModel = CardDumperViewModel(dumps, setOf(probe))
+
+        viewModel.identify(IsoTag(techs = listOf("android.nfc.tech.IsoDep"), id = hex("04 A1 B2 C3")), FakeIsoCard())
+
+        assertEquals("00A404000650524F42454400", viewModel.state.value.dump!!.transcript.last().tx)
     }
 
     @Test

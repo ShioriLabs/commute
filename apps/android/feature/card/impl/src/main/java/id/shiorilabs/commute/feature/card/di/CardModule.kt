@@ -8,10 +8,12 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
+import dagger.multibindings.Multibinds
 import id.shiorilabs.commute.core.navigation.NavGraphContribution
 import id.shiorilabs.commute.feature.card.api.CardTap
 import id.shiorilabs.commute.feature.card.dump.CardDumpStore
 import id.shiorilabs.commute.feature.card.dump.CardDumps
+import id.shiorilabs.commute.feature.card.iso.IsoProbe
 import id.shiorilabs.commute.feature.card.navigation.CardNavContribution
 import id.shiorilabs.commute.feature.card.presentation.CardTapImpl
 import id.shiorilabs.commute.feature.card.reader.CardReader
@@ -34,6 +36,10 @@ abstract class CardModule {
     /** What home renders for a card touched to the phone. */
     @Binds
     internal abstract fun bindCardTap(impl: CardTapImpl): CardTap
+
+    /** Empty unless the private submodule adds a probe. */
+    @Multibinds
+    internal abstract fun isoProbes(): Set<IsoProbe>
 
     companion object {
         /** One reader per card type; a new card adds its own `@IntoSet` here. */

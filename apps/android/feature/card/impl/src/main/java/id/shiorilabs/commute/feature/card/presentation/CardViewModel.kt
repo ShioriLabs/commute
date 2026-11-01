@@ -3,7 +3,6 @@ package id.shiorilabs.commute.feature.card.presentation
 import androidx.lifecycle.ViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import id.shiorilabs.commute.feature.card.api.CardSnapshot
-import id.shiorilabs.commute.feature.card.felica.TappedCard
 import id.shiorilabs.commute.feature.card.reader.CardReaders
 import id.shiorilabs.commute.feature.card.reader.CardSession
 import id.shiorilabs.commute.feature.card.reader.CardTag
@@ -19,9 +18,11 @@ internal class CardViewModel @Inject constructor(
 
     val snapshot: StateFlow<CardSnapshot?> = session.snapshot
 
+    val readsIso: Boolean get() = readers.readsIso
+
     /** Whether the card was read; a read replaces whatever the session held. */
-    fun read(card: TappedCard): Boolean {
-        val read = readers.read(CardTag.Felica(card)) ?: return false
+    fun read(tag: CardTag): Boolean {
+        val read = readers.read(tag) ?: return false
         session.show(read)
         return true
     }

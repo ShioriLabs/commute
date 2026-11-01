@@ -3,10 +3,10 @@ package id.shiorilabs.commute.feature.card.api
 import java.time.Instant
 
 /**
- * Which kind of card a reader recognised, which also says what its money is: rupiah on a KMT, yen
- * on a Japanese IC card. A new card type adds a value here and a reader in `:impl`.
+ * Which kind of card a reader recognised, which also says what its money is: rupiah on a KMT or
+ * e-money, yen on a Japanese IC card. A new card type adds a value here and a reader in `:impl`.
  */
-enum class CardKind { KMT, JAPAN_IC }
+enum class CardKind { KMT, JAPAN_IC, EMONEY }
 
 /**
  * One line of a card's history. [amount] is signed, in the card's money: negative is money out, and
