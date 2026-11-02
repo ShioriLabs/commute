@@ -32,6 +32,9 @@ import java.time.Duration
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** How long an unanswered alarm rings: past the stop by then, and only draining the battery. */
+internal val RING_FOR: Duration = Duration.ofMinutes(5)
+
 /**
  * A trip's reminder for getting off ("Tambah Pengingat"), on the watch when one's in reach, else
  * the phone:
@@ -41,8 +44,8 @@ import javax.inject.Singleton
  *   away with no watch. Either rings until "Udah bangun", getting off, or [RING_FOR] has passed.
  *
  * With or without one the phone plays [ReminderTune] too, unless "Mainkan nada pengingat" is off:
- * as an alarm with "Bangunkan Aku", as media otherwise, where a muted phone or earbuds keep it to
- * the rider.
+ * as an alarm with "Bangunkan Aku", climbing from quiet to full and looping, as media otherwise,
+ * where a muted phone or earbuds keep it to the rider.
  *
  * The phone's buzz is an alarm's, so it goes through silent mode and Do Not Disturb, which a
  * notification's vibration doesn't; the alarm's notification is only there to show why, and to
@@ -73,13 +76,15 @@ class TripWaker @Inject constructor(
     private var remindedFor: String? = null
     private var ringing: Job? = null
 
-    fun remind(trip: ActiveTrip, legIndex: Int) {
+    fun remind(trip: ActiveTrip, legIndex: Int, atStop: Boolean) {
         val key = "${trip.state.startedAt.toEpochMilli()}:$legIndex"
         if (key != tunedFor) {
             tunedFor = key
             val alarm = trip.reminder == TripReminder.WAKE
             val bus = trip.plan.ride(legIndex).isBus
-            scope.launch { if (preferences.reminderTune.first()) tune.play(alarm, bus) }
+            scope.launch { if (preferences.reminderTune.first()) tune.play(alarm, bus, atStop) }
+        } else if (atStop) {
+            tune.louden()
         }
         if (trip.reminder == TripReminder.NONE || key == remindedFor) return
         remindedFor = key
@@ -122,7 +127,7 @@ class TripWaker @Inject constructor(
             }
         } finally {
             vibrator.cancel()
-            NotificationManagerCompat.from(context).cancel(ALARM_ID)
+            NotificationManagerCompat.from(context).cancel(TripNotifier.ALARM_ID)
         }
     }
 
@@ -151,7 +156,7 @@ class TripWaker @Inject constructor(
             .setContentIntent(TripReceiver.pendingIntent(context, TripReceiver.ACTION_AWAKE))
             .addAction(0, context.getString(CopyR.string.trip_action_awake), TripReceiver.pendingIntent(context, TripReceiver.ACTION_AWAKE))
             .build()
-        NotificationManagerCompat.from(context).notify(ALARM_ID, notification)
+        NotificationManagerCompat.from(context).notify(TripNotifier.ALARM_ID, notification)
     }
 
     /** Sends [path] to every watch in reach running the app; `false` when there was none to tell. */
@@ -167,12 +172,7 @@ class TripWaker @Inject constructor(
 
     private companion object {
 
-        const val ALARM_ID = 44
-
         /** How long the watch rings alone before the phone joins in. */
         val ESCALATE_AFTER: Duration = Duration.ofSeconds(30)
-
-        /** How long an unanswered alarm rings: past the stop by then, and only draining the battery. */
-        val RING_FOR: Duration = Duration.ofMinutes(5)
     }
 }
