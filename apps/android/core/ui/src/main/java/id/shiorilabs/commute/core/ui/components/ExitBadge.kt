@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -20,6 +22,7 @@ import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
 import id.shiorilabs.commute.core.font.RoundelFontFamily
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.theme.ExitYellow
@@ -61,6 +64,21 @@ fun ExitBadge(code: String, modifier: Modifier = Modifier) {
             maxLines = 1,
         )
     }
+}
+
+/**
+ * An exit's code huge, for a panel of exit yellow to sign it on: the [ExitBadge]'s face and ink at
+ * the size of the station's own sign. A long code (`Utara`) shrinks to the room it's given.
+ */
+@Composable
+fun ExitSignCode(code: String, modifier: Modifier = Modifier) {
+    BasicText(
+        text = code,
+        modifier = modifier,
+        style = TextStyle(fontFamily = RoundelFontFamily, fontWeight = FontWeight.Bold, color = SignageNavy),
+        maxLines = 1,
+        autoSize = TextAutoSize.StepBased(minFontSize = 32.sp, maxFontSize = 88.sp, stepSize = 2.sp),
+    )
 }
 
 @Preview(showBackground = true)

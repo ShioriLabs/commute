@@ -62,8 +62,9 @@ data class PidsStop(
  * @property minutesLeft Whole minutes until getting off, wait for the train included, when the
  *   timetable or a fix can say; `null` there and once arrived.
  * @property alightingAt When the ride should reach the stop to get off at, lateness included.
- * @property walkM The walk to [station], while [label] is [PidsLabel.WALK].
+ * @property walk The walk to [station], while [label] is [PidsLabel.WALK].
  * @property walkMinutes About how much of that walk is left, in whole minutes.
+ * @property signExit The exit to sign big, for [EXIT_SIGN_SECONDS] of [walk] when it has one on record.
  */
 data class Pids(
     val ride: TripLeg.Ride,
@@ -77,8 +78,9 @@ data class Pids(
     val stopsLeft: Int,
     val minutesLeft: Int?,
     val alightingAt: Instant?,
-    val walkM: Int? = null,
+    val walk: TripLeg.Transfer? = null,
     val walkMinutes: Int? = null,
+    val signExit: String? = null,
     /** When the timetable has the ride reaching the stop to get off at, to set [alightingAt] against. */
     val alightingScheduled: Instant? = null,
     /** The index along [ride] of the stop the big name is about. */
@@ -88,6 +90,9 @@ data class Pids(
 
 /** Stops ahead on the band: as many as a phone's height reads at a glance. */
 const val PIDS_STOPS = 4
+
+/** How long into a walk the exit is signed big: by then the rider is through it, and needs the station. */
+const val EXIT_SIGN_SECONDS = 60L
 
 /**
  * How late the ride being followed runs at [now], past what the trip already knows. The train can't
@@ -170,8 +175,9 @@ internal fun ActiveTrip.pids(now: Instant): Pids {
         stopsLeft = if (label == PidsLabel.WALK || label == PidsLabel.BOARD || label == PidsLabel.AT) last - focus else last - focus + 1,
         minutesLeft = if (label == PidsLabel.ALIGHT_HERE) null else minutesTo(last),
         alightingAt = expected(last),
-        walkM = walk?.distanceM,
+        walk = walk,
         walkMinutes = walkEnds?.let { minutesUntil(now, it) },
+        signExit = walk?.fromExit?.takeIf { state.walkingSince?.plusSeconds(EXIT_SIGN_SECONDS)?.isAfter(now) == true },
         alightingScheduled = plan.scheduledAtStop(state.legIndex, last),
         focus = focus,
     )
