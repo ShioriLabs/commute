@@ -54,8 +54,12 @@ object TripEngine {
     /** How long a bus must keep a speed for "siap-siap" to look ahead by it. */
     private val BUS_SPEED_HELD: Duration = Duration.ofSeconds(30)
 
-    /** A last hop shorter than this is near as soon as the bus is out of the halte before. */
-    private const val BUS_SHORT_HOP_M = 400.0
+    /**
+     * A last hop shorter than this is near as soon as the bus is out of the halte before. At 10 m/s,
+     * Kuningan Madya's 470 m is over before [BUS_SPEED_HELD] has forgotten the stop: on 2 Nov the
+     * 250 m it fell back to rang 17 s before Turun.
+     */
+    private const val BUS_SHORT_HOP_M = 500.0
 
     /**
      * Slower than this by a station, by the satellites' own speed, the train is stopping there; faster,
@@ -779,14 +783,23 @@ object TripEngine {
      * Fixes every few seconds where a half-minute gap costs most: getting on, and getting off. Getting
      * on is from [DEPARTING_LEAD] before the ride is due until [DEPARTING_TAIL] after (a later train
      * swapped in moves it on), and whenever a fix has seen it pulling out: on 15 Oct the fix that
-     * boarded came 30 s after the one that saw Setiabudi's late LRT leave.
+     * boarded came 30 s after the one that saw Setiabudi's late LRT leave. A bus has no time to be due
+     * at, so it's when a fix reads it moving: on 2 Nov the 6 pulled out at 4.5 m/s, inside the halte's
+     * radius, and the next fix came 25 s later.
      */
     private fun locationModeFor(plan: TripPlan, state: TripState, now: Instant): TripLocationMode = when {
         !state.hasLocation || state.phase == TripPhase.ARRIVED -> TripLocationMode.OFF
         state.phase == TripPhase.RIDING && state.position >= plan.ride(state.legIndex).lastIndex - 2 -> TripLocationMode.PRECISE
-        state.phase == TripPhase.WAITING_TO_BOARD && (state.boardingFixes > 0 || departing(plan, state, now)) -> TripLocationMode.PRECISE
+        state.phase == TripPhase.WAITING_TO_BOARD &&
+            (state.boardingFixes > 0 || departing(plan, state, now) || busMoving(plan, state, now)) -> TripLocationMode.PRECISE
         else -> TripLocationMode.BALANCED
     }
+
+    /** Whether a fix in the last [BUS_SPEED_HELD] read the rider, at a bus's halte, at a vehicle's pace. */
+    private fun busMoving(plan: TripPlan, state: TripState, now: Instant): Boolean =
+        plan.ride(state.legIndex).isBus && state.recentSpeeds.any {
+            it.mps >= RIDING_M_PER_S && now.toEpochMilli() - it.atMs <= BUS_SPEED_HELD.toMillis()
+        }
 
     /** Whether the ride being waited for is about due to leave, or left only just. */
     private fun departing(plan: TripPlan, state: TripState, now: Instant): Boolean {
