@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.feature.journey.domain
 
 import id.shiorilabs.commute.core.navigation.Route
+import id.shiorilabs.commute.core.trip.TripExitSign
 import id.shiorilabs.commute.core.trip.TripLeg
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -40,6 +41,14 @@ class TripPlansTest {
 
         assertEquals("D", (planWith(walk("MRTJ-DKA", "KCI-SUD").copy(fromExit = "D")).legs[1] as TripLeg.Transfer).fromExit)
         assertNull((planWith(walk("MRTJ-DKA", "KCI-SUD")).legs[1] as TripLeg.Transfer).fromExit)
+    }
+
+    @Test
+    fun `a walk's exit board goes into the plan with it`() {
+        val leg = walk("KCI-SUD", "MRTJ-DKA").copy(fromExit = "B", fromExitSigns = listOf(ExitSignLine("MRT Dukuh Atas BNI", "MRTJ-DKA")))
+        val plan = journey(ride("KCI:B", "KCI-MRI", "KCI-SUD"), leg, ride("MRTJ:M", "MRTJ-DKA", "MRTJ-BHI")).toTripPlan()
+
+        assertEquals(listOf(TripExitSign("MRT Dukuh Atas BNI", "MRTJ-DKA")), (plan.legs[1] as TripLeg.Transfer).fromExitSigns)
     }
 
     @Test

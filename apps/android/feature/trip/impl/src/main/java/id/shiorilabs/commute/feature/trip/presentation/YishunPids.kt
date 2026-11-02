@@ -169,6 +169,10 @@ internal fun YishunBoard(
     onNameMoved: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (pids.walk != null) {
+        WalkBoard(pids, pids.walk, lines, ink = YishunInk, muted = YishunMuted, onNameMoved, modifier)
+        return
+    }
     Column(
         modifier = modifier
             .fillMaxWidth()
