@@ -34,6 +34,64 @@ const mrt: TripPattern = {
 const index = (...patterns: TripPattern[]) => buildTripIndex(patterns)
 
 describe('resolveDepartures', () => {
+  /*
+   * Measured 2 Nov: 8:18 from a Commuter Line door at Sudirman to the LRT
+   * platform at Dukuh Atas, a milk tea left out; the 310 m on the edge says 4:19.
+   */
+  describe('a change measured longer than its distance', () => {
+    const krl: TripPattern = {
+      lineCode: 'C',
+      stationIds: ['KCI-MRI', 'KCI-SUD'],
+      trips: [{ id: 'k954', dayMask: ALL_DAYS, departuresS: [at(9, 50), at(9, 54)] }]
+    }
+    const lrt: TripPattern = {
+      lineCode: 'BK',
+      stationIds: ['LRTJBDB-DKA', 'LRTJBDB-SET'],
+      trips: [
+        { id: 'l959', dayMask: ALL_DAYS, departuresS: [at(9, 59), at(10, 2)] },
+        { id: 'l1006', dayMask: ALL_DAYS, departuresS: [at(10, 6), at(10, 9)] }
+      ]
+    }
+    const change = [
+      ride('C', ['KCI-MRI', 'KCI-SUD']),
+      walk('KCI-SUD', 'LRTJBDB-DKA', 310),
+      ride('BK', ['LRTJBDB-DKA', 'LRTJBDB-SET'])
+    ]
+
+    it('takes the train the walk can really reach', () => {
+      const timings = resolveDepartures(change, index(krl, lrt), { departureS: at(9, 45), dayMask: ALL_DAYS })
+      expect(timings[2]?.tripId).toBe('l1006')
+      expect(timings[2]?.changeBeforeS).toBe(8 * 60)
+    })
+
+    it('still walks it at the pace the rider chose', () => {
+      const allowance = (walking: 'BRISK' | 'SLOW') => resolveDepartures(
+        change, index(krl, lrt), { departureS: at(9, 45), dayMask: ALL_DAYS, walking }
+      )[2]?.changeBeforeS
+      expect(allowance('BRISK')).toBe(384)
+      expect(allowance('SLOW')).toBe(640)
+    })
+
+    it('leaves the other way as the distance has it, which nobody has measured', () => {
+      const back: TripPattern = {
+        lineCode: 'C',
+        stationIds: ['KCI-SUD', 'KCI-MRI'],
+        trips: [{ id: 'k1000', dayMask: ALL_DAYS, departuresS: [at(10), at(10, 4)] }]
+      }
+      const arrive: TripPattern = {
+        lineCode: 'BK',
+        stationIds: ['LRTJBDB-SET', 'LRTJBDB-DKA'],
+        trips: [{ id: 'l952', dayMask: ALL_DAYS, departuresS: [at(9, 52), at(9, 55)] }]
+      }
+      const timings = resolveDepartures(
+        [ride('BK', ['LRTJBDB-SET', 'LRTJBDB-DKA']), walk('LRTJBDB-DKA', 'KCI-SUD', 310), ride('C', ['KCI-SUD', 'KCI-MRI'])],
+        index(arrive, back),
+        { departureS: at(9, 50), dayMask: ALL_DAYS }
+      )
+      expect(timings[2]?.tripId).toBe('k1000')
+    })
+  })
+
   it('boards the first trip at or after the rider sets off', () => {
     const [timing] = resolveDepartures(
       [ride('M', ['MRTJ-LBB', 'MRTJ-FTM'])], index(mrt), { departureS: at(5, 30), dayMask: ALL_DAYS }
