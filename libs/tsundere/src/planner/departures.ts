@@ -73,6 +73,19 @@ const walkSecondsAt = (distanceM: number, paceMs: number) => Math.ceil(distanceM
 const MIN_CHANGE_S = 60
 
 /*
+ * Changes that take far longer than their distance, as the metres of walking
+ * they take at an AVERAGE pace, so a rider's own pace still scales them.
+ *
+ * Sudirman to LRT Dukuh Atas is 310 m on the edge, which is 4:19. Timed door to
+ * platform it took 8:18 on 2 Nov 2026 and about nine minutes on 19 Oct, so the
+ * 09:59 was offered off the 09:54 that nobody could catch. One way only: the
+ * other has not been timed. Metres shown to the rider stay the edge's.
+ */
+const TIMED_CHANGE_WALK_M: Readonly<Record<string, number>> = {
+  'KCI-SUD>LRTJBDB-DKA': 576
+}
+
+/*
  * The in-station time a change takes, over and above any measured walk.
  *
  * Every interchange costs something the timetable does not record: off the
@@ -391,7 +404,7 @@ export function resolveDepartures(
          * skips the gate line the allowance otherwise includes.
          */
         clockS += Math.max(
-          walkSecondsAt(leg.distanceM, paceMs),
+          walkSecondsAt(TIMED_CHANGE_WALK_M[`${leg.fromStationId}>${leg.toStationId}`] ?? leg.distanceM, paceMs),
           changeSecondsAt(paceMs, !leg.noTap)
         )
       }
