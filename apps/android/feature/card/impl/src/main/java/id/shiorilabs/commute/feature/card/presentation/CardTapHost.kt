@@ -19,6 +19,7 @@ import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.feature.card.R
 import id.shiorilabs.commute.feature.card.api.CardKind
 import id.shiorilabs.commute.feature.card.api.CardRail
+import id.shiorilabs.commute.feature.card.api.CardSnapshot
 import id.shiorilabs.commute.feature.card.api.CardTap
 import id.shiorilabs.commute.feature.card.felica.findActivity
 import id.shiorilabs.commute.feature.card.felica.readCards
@@ -48,17 +49,7 @@ internal class CardTapImpl @Inject constructor(
         val navigator = LocalNavigator.current
         val snapshot by session.snapshot.collectAsStateWithLifecycle()
         val missed = rememberMissedCard(adapter, readers.readsIso) { readers.read(it)?.also(session::show) != null }
-        // Home is where a read lives: it goes after five idle minutes, wherever they were spent.
-        LaunchedEffect(snapshot) {
-            while (true) {
-                val remaining = session.idleRemaining() ?: break
-                if (remaining.isNegative || remaining.isZero) {
-                    session.expireIfIdle()
-                    break
-                }
-                delay(remaining.toMillis() + 50)
-            }
-        }
+        ExpireWhenIdle(session, snapshot)
 
         val current = snapshot
         val balance = current?.let { formatBalance(it.balance, it.kind) }
@@ -83,6 +74,21 @@ internal class CardTapImpl @Inject constructor(
                     isKmtEasterEgg(jakartaDate(current.readAt), current.balance),
             ),
         )
+    }
+}
+
+/** A read goes after five idle minutes, wherever they were spent; [snapshot] is what's showing. */
+@Composable
+internal fun ExpireWhenIdle(session: CardSession, snapshot: CardSnapshot?) {
+    LaunchedEffect(snapshot) {
+        while (true) {
+            val remaining = session.idleRemaining() ?: break
+            if (remaining.isNegative || remaining.isZero) {
+                session.expireIfIdle()
+                break
+            }
+            delay(remaining.toMillis() + 50)
+        }
     }
 }
 

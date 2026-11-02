@@ -140,4 +140,39 @@ class TripPlansTest {
         assertEquals(TripStart.Running, tripStartFor(timed, route, route.copy(at = "2026-10-04T08:00"), departs))
         assertEquals(TripStart.Ready, tripStartFor(timed, route, route.copy(boardingClock = "0811"), departs))
     }
+
+    @Test
+    fun `a card is checked against the fare of a trip that can start`() {
+        assertEquals(3500, cardFareFor(timed, TripStart.Ready, PaymentMethod.STORED_VALUE))
+    }
+
+    @Test
+    fun `a card is checked well before a trip's start opens`() {
+        assertEquals(3500, cardFareFor(timed, TripStart.TooEarly(departs), PaymentMethod.STORED_VALUE))
+    }
+
+    @Test
+    fun `no card is checked while the trip is running, so the gate tap has the NFC to itself`() {
+        assertNull(cardFareFor(timed, TripStart.Running, PaymentMethod.STORED_VALUE))
+    }
+
+    @Test
+    fun `no card is checked on a journey with nothing to start`() {
+        assertNull(cardFareFor(timed, null, PaymentMethod.STORED_VALUE))
+    }
+
+    @Test
+    fun `no card is checked on a journey paid by QRIS`() {
+        assertNull(cardFareFor(timed, TripStart.Ready, PaymentMethod.QRIS_TAP))
+    }
+
+    @Test
+    fun `no card is checked against an unknown fare`() {
+        assertNull(cardFareFor(timed.copy(totalFare = null), TripStart.Ready, PaymentMethod.STORED_VALUE))
+    }
+
+    @Test
+    fun `no card is checked before the payment method is known`() {
+        assertNull(cardFareFor(timed, TripStart.Ready, null))
+    }
 }
