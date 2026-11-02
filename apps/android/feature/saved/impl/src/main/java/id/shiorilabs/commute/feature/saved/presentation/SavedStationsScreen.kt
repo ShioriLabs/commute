@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -62,6 +63,7 @@ import id.shiorilabs.commute.core.ui.components.NoticeBanner
 import id.shiorilabs.commute.core.ui.ext.RevealInsertedTop
 import id.shiorilabs.commute.core.ui.ext.cardEntrance
 import id.shiorilabs.commute.core.ui.ext.KeepTopUntilDrawn
+import id.shiorilabs.commute.core.ui.ext.landedAboveTop
 import id.shiorilabs.commute.core.ui.frost.FrostedTopChromeBackdrop
 import id.shiorilabs.commute.core.ui.layout.TitleSlot
 import id.shiorilabs.commute.core.ui.layout.stuckTitle
@@ -76,6 +78,7 @@ import id.shiorilabs.commute.feature.journey.presentation.SavedRouteCard
 import id.shiorilabs.commute.feature.saved.R
 import id.shiorilabs.commute.feature.saved.presentation.components.ChevronPullIndicator
 import id.shiorilabs.commute.feature.saved.presentation.components.HomeNavRail
+import id.shiorilabs.commute.feature.saved.presentation.components.LandedAbovePill
 import id.shiorilabs.commute.feature.saved.presentation.nearby.NearbyHeading
 import id.shiorilabs.commute.feature.saved.presentation.nearby.NearbyPromptCard
 import id.shiorilabs.commute.feature.saved.presentation.nearby.NearbyUiState
@@ -90,6 +93,7 @@ import id.shiorilabs.commute.feature.saved.presentation.components.StationTitle
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDateTime
 
@@ -349,17 +353,32 @@ private fun StationFeed(
     // What a fix raises, or the stations near the rider, go above the feed. Landing under the
     // splash, they're where home opens; landing after it (the splash waits for a fix, but only so
     // long), above the row on screen, which the list keeps its place by: nothing the rider is
-    // reading moves, and they're there on scrolling up.
+    // reading moves, and a pill offers the way up to them.
     // Set on the list's first draw, which a held splash holds back: until then nothing is on screen.
     val firstDraw = remember { booleanArrayOf(false) }
-    listState.KeepTopUntilDrawn(
-        "offline-banner".takeIf { noticeShown } ?: ordered.front.firstOrNull()?.key ?: when (nearby) {
-            NearbyUiState.Hidden -> null
-            NearbyUiState.Prompt -> "nearby-prompt"
-            is NearbyUiState.Stations -> "nearby-heading"
-        },
-        drawn = { firstDraw[0] },
-    )
+    val topKey = "offline-banner".takeIf { noticeShown } ?: ordered.front.firstOrNull()?.key ?: when (nearby) {
+        NearbyUiState.Hidden -> null
+        NearbyUiState.Prompt -> "nearby-prompt"
+        is NearbyUiState.Stations -> "nearby-heading"
+    }
+    listState.KeepTopUntilDrawn(topKey, drawn = { firstDraw[0] })
+    val landedAbove by listState.landedAboveTop(topKey, LANDED_PILL_MILLIS, drawn = { firstDraw[0] })
+    val scope = rememberCoroutineScope()
+    // The last label, kept through the pill's exit.
+    var landedLabel by remember { mutableStateOf("") }
+    val nearbyTitle = stringResource(R.string.saved_nearby_title)
+    val landedName = when (val title = ordered.front.firstOrNull()?.barTitle()) {
+        is BarTitle.Station -> title.name
+        is BarTitle.Pair -> if (title.fromName != null && title.toName != null) {
+            stringResource(R.string.saved_landed_route, title.fromName, title.toName)
+        } else {
+            nearbyTitle
+        }
+        null -> nearbyTitle
+    }
+    if (landedAbove) {
+        landedLabel = landedName
+    }
     val titleRows = remember(ordered, noticeShown, nearbyRows) {
         var row = if (noticeShown) 1 else 0
         fun rowsOf(entries: List<HomeEntry>) = entries.map { entry ->
@@ -632,6 +651,16 @@ private fun StationFeed(
                 .align(Alignment.TopCenter)
                 .padding(top = barHeight + 12.dp),
         )
+
+        // Scrolling is what takes it away, so a tap needs nothing more.
+        LandedAbovePill(
+            visible = landedAbove,
+            label = landedLabel,
+            onClick = { scope.launch { listState.animateScrollToItem(0) } },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = innerPadding.calculateBottomPadding() + NavRailClearance),
+        )
     }
 }
 
@@ -804,6 +833,9 @@ private fun railSlidesWithPage(): Boolean {
     SideEffect { coveredBy = current }
     return current == CoveredBy.PAGE
 }
+
+/** How long the way up to what landed above the feed is offered, if the rider doesn't scroll first. */
+private const val LANDED_PILL_MILLIS = 8000L
 
 /** The rail's cards plus their padding: what the feed's last card has to scroll clear of. */
 private val NavRailClearance = 168.dp
