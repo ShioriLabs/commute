@@ -188,6 +188,10 @@ internal fun BekasiRailwayBoard(
     onNameMoved: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (pids.walk != null) {
+        WalkBoard(pids, pids.walk, lines, ink = BoardInk, muted = BoardMuted, onNameMoved, modifier)
+        return
+    }
     val line = lines[pids.ride.line]
     val color = lineColorOf(line?.colorCode)
     Column(modifier = modifier.fillMaxWidth()) {
@@ -418,12 +422,12 @@ private fun Plate(
             }
         }
         // Still to board, on haltes several routes serve (or shared track): whichever comes first.
-        if ((pids.label == PidsLabel.BOARD || pids.label == PidsLabel.WALK) && pids.ride.otherLines > 0) {
-            AnyLine(pids.ride, lines)
+        if (pids.label == PidsLabel.BOARD && pids.ride.otherLines > 0) {
+            AnyLine(pids.ride, lines, color = BoardMuted, modifier = Modifier.padding(start = 20.dp, top = 8.dp, end = 20.dp))
         }
         // The plainer facts: the platform while waiting for it, and the clock (when the minutes are
         // up by the close button) at the far end.
-        val platform = pids.ride.platformCode?.takeIf { pids.label == PidsLabel.BOARD || pids.label == PidsLabel.WALK }
+        val platform = pids.ride.platformCode?.takeIf { pids.label == PidsLabel.BOARD }
         val at = pids.alightingAt.takeIf { minutes != null }
         if (platform != null || at != null) {
             Row(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, top = 6.dp, end = 20.dp)) {
@@ -451,12 +455,12 @@ private fun Plate(
 
 /** "Naik salah satu bus", and the roundel of every line that will do, the planned one first. */
 @Composable
-private fun AnyLine(ride: TripLeg.Ride, lines: Map<String, LineInfo>) {
-    Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, top = 8.dp, end = 20.dp)) {
+internal fun AnyLine(ride: TripLeg.Ride, lines: Map<String, LineInfo>, color: Color, modifier: Modifier = Modifier) {
+    Column(modifier = modifier.fillMaxWidth()) {
         Text(
             text = stringResource(if (ride.isBus) R.string.trip_board_any_bus else R.string.trip_board_any_train),
             style = MaterialTheme.typography.labelLarge,
-            color = BoardMuted,
+            color = color,
         )
         FlowRow(
             modifier = Modifier.padding(top = 6.dp),
@@ -476,16 +480,12 @@ private fun AnyLine(ride: TripLeg.Ride, lines: Map<String, LineInfo>) {
 @Composable
 private fun Eyebrow(pids: Pids) {
     val label = stringResource(pids.label.text)
-    val ahead = if (pids.label == PidsLabel.WALK && pids.walkM != null && pids.walkMinutes != null) {
-        stringResource(R.string.trip_pids_walk_ahead, pids.walkM, pids.walkMinutes)
-    } else {
-        pids.takeIf { it.label == PidsLabel.BOARD || it.label == PidsLabel.AT || it.label == PidsLabel.NEXT }?.let {
-            stringResource(
-                if (it.ride.isBus) R.string.trip_ride_to_halte else R.string.trip_ride_to_station,
-                it.ride.stops.last().name,
-                it.stopsLeft,
-            )
-        }
+    val ahead = pids.takeIf { it.label == PidsLabel.BOARD || it.label == PidsLabel.AT || it.label == PidsLabel.NEXT }?.let {
+        stringResource(
+            if (it.ride.isBus) R.string.trip_ride_to_halte else R.string.trip_ride_to_station,
+            it.ride.stops.last().name,
+            it.stopsLeft,
+        )
     }
     val pages = listOfNotNull(label, ahead)
     val style = MaterialTheme.typography.titleSmall.merge(color = BoardMuted, fontWeight = FontWeight.Bold)
@@ -883,7 +883,7 @@ private fun StopLabel(stop: PidsStop, x: Float, centreY: Float, maxWidth: Int) {
 @Composable
 private fun ChangePanel(pids: Pids, lines: Map<String, LineInfo>, stationLines: List<String>, copy: TripCopy) {
     // Where the rider boards or has arrived there's nothing to change to: "Pindah di" would mislead.
-    if (pids.label == PidsLabel.WALK || pids.label == PidsLabel.BOARD || pids.label == PidsLabel.ARRIVED) return
+    if (pids.label == PidsLabel.BOARD || pids.label == PidsLabel.ARRIVED) return
     val change = pids.changeTo
     val others = stationLines.filter { it != pids.ride.line }
     if (change == null && others.isEmpty()) return

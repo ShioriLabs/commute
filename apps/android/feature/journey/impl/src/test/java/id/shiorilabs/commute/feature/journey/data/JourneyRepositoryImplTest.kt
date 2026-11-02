@@ -7,6 +7,7 @@ import id.shiorilabs.commute.core.type.ApiException
 import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.feature.journey.data.impl.JourneyRepositoryImpl
 import id.shiorilabs.commute.feature.journey.domain.Departure
+import id.shiorilabs.commute.feature.journey.domain.ExitSignLine
 import id.shiorilabs.commute.feature.journey.domain.JourneyCriteria
 import id.shiorilabs.commute.feature.journey.domain.JourneyLabel
 import id.shiorilabs.commute.feature.journey.domain.JourneyLeg
@@ -122,6 +123,25 @@ class JourneyRepositoryImplTest {
 
         assertEquals("D", (journeys[0].legs[0] as JourneyLeg.Transfer).fromExit)
         assertNull((journeys[1].legs[0] as JourneyLeg.Transfer).fromExit)
+    }
+
+    @Test
+    fun `a walk carries its exit's board as printed, and none where it isn't transcribed`() = runTest {
+        val signed = checkNotNull(javaClass.getResource("/trips_exit_walk.json")).readText().replaceFirst(
+            Regex("\"signs\"\\s*:\\s*null"),
+            """"signs":[{"text":"Jl. Kendal"},{"text":"MRT Dukuh Atas BNI","kind":"RAIL","stationId":"MRTJ-DKA"}]""",
+        )
+        val result: TripResult = json.decodeFromJsonElement(json.parseToJsonElement(signed).jsonObject.getValue("data"))
+        val service = FakeCommuteService().apply { trips = { _, _, _ -> result } }
+
+        val journeys = JourneyRepositoryImpl(service, testQueryClient(backgroundScope, clock))
+            .trips("MRTJ-DKA", "KCI-SUD", JourneyCriteria()).getOrNull()!!.journeys
+
+        assertEquals(
+            listOf(ExitSignLine("Jl. Kendal", null), ExitSignLine("MRT Dukuh Atas BNI", "MRTJ-DKA")),
+            (journeys[0].legs[0] as JourneyLeg.Transfer).fromExitSigns,
+        )
+        assertEquals(emptyList<ExitSignLine>(), (journeys[1].legs[0] as JourneyLeg.Transfer).fromExitSigns)
     }
 
     @Test

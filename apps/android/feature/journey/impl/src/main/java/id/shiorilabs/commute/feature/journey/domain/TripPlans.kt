@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.feature.journey.domain
 
 import id.shiorilabs.commute.core.navigation.Route
+import id.shiorilabs.commute.core.trip.TripExitSign
 import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripPlan
 import id.shiorilabs.commute.core.trip.TripServiceLine
@@ -41,6 +42,7 @@ fun Journey.toTripPlan(): TripPlan = TripPlan(
                 distanceM = leg.distanceM,
                 corridorLabel = leg.corridorLabel,
                 fromExit = leg.fromExit,
+                fromExitSigns = leg.fromExitSigns.map { TripExitSign(it.text, it.stationId) },
             )
         }
     },
