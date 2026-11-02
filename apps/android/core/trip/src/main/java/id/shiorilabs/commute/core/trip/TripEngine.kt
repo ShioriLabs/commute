@@ -96,6 +96,9 @@ object TripEngine {
     /** Slower than this, by the satellites, the train is standing still. */
     private const val STANDING_M_PER_S = 1.0
 
+    /** A standing fix this close behind the confirmed point is the same spot, read again. */
+    private const val HELD_JITTER_M = 30.0
+
     /** A train brakes into a stop at about this rate; and the doors take [DOORS_OPEN] after it halts. */
     private const val BRAKING_M_PER_S2 = 1.0
     private val DOORS_OPEN: Duration = Duration.ofSeconds(10)
@@ -253,13 +256,14 @@ object TripEngine {
                 }
             }
             val confirmed = max(candidate, state.confirmedPosition)
-            val offset = if (candidate > 0 && candidate >= state.confirmedPosition) {
-                RideClock(ride).scheduledAt(candidate)
-                    ?.let { Duration.between(it, fix.at).seconds.coerceIn(MAX_EARLY_S, MAX_LATE_S) }
-                    ?: state.clockOffsetS
-            } else {
-                state.clockOffsetS
+            val clockedAt = when {
+                candidate > 0 && candidate >= state.confirmedPosition -> candidate
+                readsHeld(ride, state, candidate, fix) -> state.confirmedPosition
+                else -> null
             }
+            val offset = clockedAt?.let { RideClock(ride).scheduledAt(it) }
+                ?.let { Duration.between(it, fix.at).seconds.coerceIn(MAX_EARLY_S, MAX_LATE_S) }
+                ?: state.clockOffsetS
             // At a stop, riding: when the train was there. The last fix while it waits, so about
             // when it left; at the stop to get off at, the first, when it got in. Not one still
             // reading it there once it's been felt leaving: that's when it left.
@@ -504,6 +508,18 @@ object TripEngine {
         val b = ride.stops[k + 1].point ?: return null
         return project(point, a, b)
     }
+
+    /**
+     * A train standing between stations, [fix] settling just behind where it was first seen stop:
+     * it's getting later all the same. The first fix of a hold can be the furthest along: on 2 Nov the
+     * rest read 5–9 m back, and the lateness stayed at 71 s for three minutes, then jumped to 252 s.
+     * Not at a stop, where a fix frozen under the roof can follow a train felt leaving.
+     */
+    private fun readsHeld(ride: TripLeg.Ride, state: TripState, candidate: Double, fix: TripEvent.Fix): Boolean =
+        state.phase == TripPhase.RIDING &&
+            (fix.speedMps ?: return false) < STANDING_M_PER_S &&
+            candidate != floor(candidate) &&
+            metresAlong(ride, candidate, state.confirmedPosition) <= HELD_JITTER_M
 
     /** How far [ride] runs from position [from] on to [to]; hops without both stops' coordinates or a shape count nothing. */
     private fun metresAlong(ride: TripLeg.Ride, from: Double, to: Double): Double {
