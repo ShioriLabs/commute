@@ -2,6 +2,7 @@ package id.shiorilabs.commute.feature.trip.presentation
 
 import id.shiorilabs.commute.core.trip.PositionSource
 import id.shiorilabs.commute.core.trip.TripEngine
+import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripPhase
 import id.shiorilabs.commute.feature.trip.ActiveTrip
 import id.shiorilabs.commute.feature.trip.NOW
@@ -99,17 +100,36 @@ class PidsTest {
 
         assertEquals(PidsLabel.WALK, pids.label)
         assertEquals("Sudirman", pids.station)
-        assertEquals(300, pids.walkM)
+        // The walk itself, for the signs to follow: its exit and corridor come with it.
+        assertEquals(plan.legs[1], pids.walk)
         // 300 m at an easy pace and the stairs on top, from 08.02: about seven minutes of it left at 08.03.
         assertEquals(7, pids.walkMinutes)
         assertNull(pids.changeTo)
     }
 
     @Test
+    fun `the exit is signed for the walk's first minute, by when the rider is through it`() {
+        val legs = plan.legs.map { if (it is TripLeg.Transfer) it.copy(fromExit = "D") else it }
+        val signed = ActiveTrip(plan.copy(legs = legs), walking.state, origin)
+
+        assertEquals("D", signed.pids(minutes(2).plusSeconds(59)).signExit)
+        assertNull(signed.pids(minutes(3)).signExit)
+        // Still walking, and the exit still on record for the smaller row.
+        assertEquals("D", signed.pids(minutes(3)).walk?.fromExit)
+    }
+
+    @Test
+    fun `a walk with no exit on record has nothing to sign`() {
+        assertNull(walking.pids(minutes(2)).signExit)
+    }
+
+    @Test
     fun `there, or once the walk should be done, the board says where to board`() {
         val there = ActiveTrip(walking.plan, walking.state.copy(walkingSince = null), origin)
         assertEquals(PidsLabel.BOARD, there.pids(minutes(3)).label)
+        assertNull(there.pids(minutes(3)).walk)
         assertEquals(PidsLabel.BOARD, walking.pids(minutes(10)).label)
+        assertNull(walking.pids(minutes(10)).walk)
     }
 
     @Test

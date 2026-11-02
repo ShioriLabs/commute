@@ -139,8 +139,18 @@ sealed interface TripLeg {
         val corridorLabel: String? = null,
         /** The signed name of the exit the walk leaves [from] by (`D`), only where it is on record. */
         val fromExit: String? = null,
+        /** That exit's board, its entries as printed; empty until transcribed, or on a trip stored before this was kept. */
+        val fromExitSigns: List<TripExitSign> = emptyList(),
     ) : TripLeg
 }
+
+/** One line on an exit's sign board. */
+@Serializable
+data class TripExitSign(
+    val text: String,
+    /** `OPERATOR-CODE` of the station or halte the text names, when it names one. */
+    val stationId: String? = null,
+)
 
 @Serializable
 data class TripStop(

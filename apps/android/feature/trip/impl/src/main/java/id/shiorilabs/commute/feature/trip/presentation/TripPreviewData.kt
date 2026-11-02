@@ -3,6 +3,7 @@ package id.shiorilabs.commute.feature.trip.presentation
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.trip.FinishReason
 import id.shiorilabs.commute.core.trip.TripEngine
+import id.shiorilabs.commute.core.trip.TripExitSign
 import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.TripPhase
 import id.shiorilabs.commute.core.trip.TripPlan
@@ -57,6 +58,27 @@ internal object TripPreviewData {
     fun riding(now: Instant = Instant.now(), position: Double = 2.5): ActiveTrip {
         val trip = waiting(now)
         return trip.copy(state = trip.state.copy(phase = TripPhase.RIDING, position = position, confirmedPosition = position))
+    }
+
+    /** Off the first train, walking to the second by an exit and a corridor on record. */
+    fun walking(now: Instant = Instant.now()): ActiveTrip {
+        val trip = waiting(now)
+        val legs = trip.plan.legs.map { leg ->
+            if (leg is TripLeg.Transfer) {
+                leg.copy(
+                    distanceM = 310,
+                    corridorLabel = "Terowongan Kendal",
+                    fromExit = "C",
+                    fromExitSigns = listOf(TripExitSign("Jl. Kendal"), TripExitSign("Cikarang", leg.to.id)),
+                )
+            } else {
+                leg
+            }
+        }
+        return trip.copy(
+            plan = trip.plan.copy(legs = legs),
+            state = trip.state.copy(legIndex = 2, phase = TripPhase.WAITING_TO_BOARD, walkingSince = now),
+        )
     }
 
     fun finished(now: Instant = Instant.now(), reason: FinishReason = FinishReason.ARRIVED): FinishedTrip {

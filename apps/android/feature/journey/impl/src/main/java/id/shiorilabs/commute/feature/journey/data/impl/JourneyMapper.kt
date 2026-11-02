@@ -4,6 +4,7 @@ import id.shiorilabs.commute.core.model.models.FareJourney
 import id.shiorilabs.commute.core.model.models.FareRideLeg
 import id.shiorilabs.commute.core.model.models.FareTransferLeg
 import id.shiorilabs.commute.core.model.models.TripResult
+import id.shiorilabs.commute.feature.journey.domain.ExitSignLine
 import id.shiorilabs.commute.feature.journey.domain.FareSegment
 import id.shiorilabs.commute.feature.journey.domain.Journey
 import id.shiorilabs.commute.feature.journey.domain.JourneyEstimate
@@ -88,6 +89,7 @@ private fun FareTransferLeg.toTransfer(): JourneyLeg.Transfer = JourneyLeg.Trans
     fare = fare?.roundToInt(),
     corridorLabel = corridorLabel,
     fromExit = fromExit?.ref,
+    fromExitSigns = fromExit?.signs.orEmpty().map { ExitSignLine(it.text, it.stationId) },
 )
 
 private fun FareSegmentDto.toSegment(): FareSegment = FareSegment(

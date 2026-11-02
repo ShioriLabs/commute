@@ -116,7 +116,14 @@ class WearTripSync @Inject constructor(
 
     /** The watch only draws the trip; the hops' shapes are for placing fixes, on the phone alone. */
     private fun TripPlan.withoutShapes(): TripPlan =
-        TripPlan(legs.map { leg -> if (leg is TripLeg.Ride) leg.copy(hopShapes = emptyList()) else leg })
+        TripPlan(
+            legs.map { leg ->
+                when (leg) {
+                    is TripLeg.Ride -> leg.copy(hopShapes = emptyList())
+                    is TripLeg.Transfer -> leg.copy(fromExitSigns = emptyList())
+                }
+            },
+        )
 
     private suspend fun publish(trip: WearTrip?) {
         // No Wear OS app on the phone, or no Play services: there is no watch to tell.

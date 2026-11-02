@@ -131,8 +131,16 @@ sealed interface JourneyLeg {
         val corridorLabel: String?,
         /** The signed name of the exit the walk leaves [from] by (`D`), only where it is on record. */
         val fromExit: String? = null,
+        /** That exit's board, its entries as printed; empty until transcribed. */
+        val fromExitSigns: List<ExitSignLine> = emptyList(),
     ) : JourneyLeg
 }
+
+data class ExitSignLine(
+    val text: String,
+    /** `OPERATOR-CODE` of the station or halte the text names, when it names one. */
+    val stationId: String?,
+)
 
 data class ServiceLine(
     /** `OPERATOR:CODE`. */
