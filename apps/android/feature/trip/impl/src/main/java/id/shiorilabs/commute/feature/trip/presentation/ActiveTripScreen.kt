@@ -304,6 +304,8 @@ private fun ActiveTripContent(
                             sameStationChange = isSameStationChange(legs.getOrNull(index - 1), leg),
                             before = railBeside(legs.getOrNull(index - 1), leg, after = false),
                             after = railBeside(legs.getOrNull(index + 1), leg, after = true),
+                            walkBefore = legs.getOrNull(index - 1) is TripLeg.Transfer,
+                            walkAfter = legs.getOrNull(index + 1) is TripLeg.Transfer,
                             modifier = Modifier.padding(start = 32.dp - TimelineGutterSlack, end = 32.dp),
                         )
                     }
@@ -384,7 +386,7 @@ internal val ActionShape = RoundedCornerShape(12.dp)
  * grey behind the rider, the rider as the board's pink chevron (or a pink dot at a stop), the stop
  * they're making for yellow, each stop's time down the right, and on a long ride the stops that don't
  * matter yet folded into one line. [before] and [after] are the rails of what comes either side, so
- * the walks meet the ride's ends.
+ * the walks meet the ride's ends, dotted as a walk is when [walkBefore] or [walkAfter].
  */
 @Composable
 private fun RideBlock(
@@ -397,6 +399,8 @@ private fun RideBlock(
     sameStationChange: Boolean,
     before: Color?,
     after: Color?,
+    walkBefore: Boolean,
+    walkAfter: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val ride = trip.plan.ride(legIndex)
@@ -440,6 +444,8 @@ private fun RideBlock(
                             else -> color
                         },
                         bottom = if (i == ride.lastIndex) after else railAfter(i),
+                        topDotted = i == 0 && walkBefore,
+                        bottomDotted = i == ride.lastIndex && walkAfter,
                     )
                     if (i == 0) {
                         RideHeader(
@@ -513,6 +519,8 @@ private fun StopRow(
     platform: String?,
     top: Color?,
     bottom: Color?,
+    topDotted: Boolean,
+    bottomDotted: Boolean,
 ) {
     val passed = mark == StopMark.PASSED
     val alighting = last && !passed && mark != StopMark.HERE
@@ -521,6 +529,8 @@ private fun StopRow(
     TimelineRow(
         top = top?.let(::SolidColor),
         bottom = bottom?.let(::SolidColor),
+        topDotted = topDotted,
+        bottomDotted = bottomDotted,
         node = {
             when {
                 mark == StopMark.HERE -> TimelineNode(16.dp, fill = MaterialTheme.colorScheme.primary, ring = color)
@@ -644,7 +654,7 @@ private fun isSameStationChange(previous: TripLeg?, ride: TripLeg.Ride): Boolean
  */
 @Composable
 private fun railBeside(neighbour: TripLeg?, ride: TripLeg.Ride, after: Boolean): Color? = when (neighbour) {
-    is TripLeg.Transfer -> Slate300
+    is TripLeg.Transfer -> Slate400 // The dots of WalkRow, carried on to the node.
     is TripLeg.Ride -> Slate300.takeIf {
         if (after) isSameStationChange(ride, neighbour) else isSameStationChange(neighbour, ride)
     }
