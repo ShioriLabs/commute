@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.union
@@ -304,14 +303,15 @@ private fun QuickPicks(stations: List<PickableStation>, onPick: (PickableStation
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (station.lines.isNotEmpty()) {
-                        Row {
-                            station.lines.forEachIndexed { index, line ->
+                        // Overlapped by spacing, not an offset: an offset leaves the row its full
+                        // width, which grew the gap before the name with every line.
+                        Row(horizontalArrangement = Arrangement.spacedBy((-6).dp)) {
+                            station.lines.forEach { line ->
                                 LineRoundel(
                                     code = line.lineCode,
                                     color = line.colorCode,
                                     operator = station.operator,
                                     size = RoundelSize.SM,
-                                    modifier = Modifier.offset(x = (-6).dp * index),
                                 )
                             }
                         }
