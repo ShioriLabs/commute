@@ -6,6 +6,12 @@
     <string name="card_rail_subtitle_missed">Gak kebaca</string>
     <string name="card_rail_description_idle">Cek saldo kartu</string>
     <string name="card_rail_description_read">Saldo %1$s. Buka detail kartu</string>
+    <!-- A card held against a trip's fare, on the trip page. -->
+    <string name="card_fare_hint">Tempel kartu untuk cek saldo</string>
+    <string name="card_fare_round_trip">Sisa sekitar %1$s · cukup untuk balik</string>
+    <string name="card_fare_one_way">Sisa sekitar %1$s · belum cukup untuk balik</string>
+    <string name="card_fare_short">Kurang sekitar %1$s, top up dulu</string>
+    <string name="card_fare_description">Saldo %1$s %2$s. %3$s</string>
     <string name="card_pill_label_kmt">KMT</string>
     <string name="card_hold_message">Tempel kartunya di belakang HP, terus tahan sebentar</string>
     <string name="card_hold_nfc_off">NFC lagi mati. Nyalain dulu di pengaturan HP</string>

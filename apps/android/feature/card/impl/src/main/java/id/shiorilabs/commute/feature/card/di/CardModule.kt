@@ -10,11 +10,13 @@ import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
 import dagger.multibindings.Multibinds
 import id.shiorilabs.commute.core.navigation.NavGraphContribution
+import id.shiorilabs.commute.feature.card.api.CardFareCheck
 import id.shiorilabs.commute.feature.card.api.CardTap
 import id.shiorilabs.commute.feature.card.dump.CardDumpStore
 import id.shiorilabs.commute.feature.card.dump.CardDumps
 import id.shiorilabs.commute.feature.card.iso.IsoProbe
 import id.shiorilabs.commute.feature.card.navigation.CardNavContribution
+import id.shiorilabs.commute.feature.card.presentation.CardFareCheckImpl
 import id.shiorilabs.commute.feature.card.presentation.CardTapImpl
 import id.shiorilabs.commute.feature.card.reader.CardReader
 import id.shiorilabs.commute.feature.card.reader.JAPAN_IC_LINES_ASSET
@@ -36,6 +38,10 @@ abstract class CardModule {
     /** What home renders for a card touched to the phone. */
     @Binds
     internal abstract fun bindCardTap(impl: CardTapImpl): CardTap
+
+    /** What the trip page renders to hold a card against its fare. */
+    @Binds
+    internal abstract fun bindCardFareCheck(impl: CardFareCheckImpl): CardFareCheck
 
     /** Empty unless the private submodule adds a probe. */
     @Multibinds

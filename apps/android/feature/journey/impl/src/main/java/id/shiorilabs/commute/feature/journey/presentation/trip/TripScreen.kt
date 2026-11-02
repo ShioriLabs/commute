@@ -77,6 +77,7 @@ import id.shiorilabs.commute.core.ui.components.CommuteButtonText
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.time.updatedAgoText
+import id.shiorilabs.commute.feature.card.api.CardFareCheck
 import id.shiorilabs.commute.feature.journey.R
 import id.shiorilabs.commute.feature.journey.domain.FareSegment
 import id.shiorilabs.commute.feature.journey.domain.Journey
@@ -104,6 +105,7 @@ import java.time.Instant
 fun TripScreen(
     route: Route.Trip,
     innerPadding: PaddingValues,
+    cardFareCheck: CardFareCheck,
     viewModel: TripViewModel = hiltViewModel<TripViewModel, TripViewModel.Factory>(
         creationCallback = { factory -> factory.create(route) },
     ),
@@ -112,6 +114,7 @@ fun TripScreen(
     val routeSaved by viewModel.routeSaved.collectAsStateWithLifecycle()
     val tripStart by viewModel.tripStart.collectAsStateWithLifecycle()
     val tripAsksLocation by viewModel.tripAsksLocation.collectAsStateWithLifecycle()
+    val cardFare by viewModel.cardFare.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
     val context = LocalContext.current
     val shareTitle = stringResource(R.string.journey_share_title)
@@ -123,6 +126,8 @@ fun TripScreen(
         onToggleSaveRoute = viewModel::onToggleSaveRoute,
         tripStart = tripStart,
         tripAsksLocation = tripAsksLocation,
+        cardFare = cardFare,
+        cardFareCheck = cardFareCheck,
         onStartTrip = {
             viewModel.startTrip()
             navigator.goTo(Route.ActiveTrip)
@@ -151,6 +156,11 @@ fun TripScreen(
     )
 }
 
+private object NoCardFareCheck : CardFareCheck {
+    @Composable
+    override fun Content(fare: Int, modifier: Modifier) = Unit
+}
+
 /** White like the OTW tab it opens from. */
 private val TripBackground: Color
     @Composable get() = MaterialTheme.colorScheme.surfaceContainerLowest
@@ -173,6 +183,8 @@ private fun TripContent(
     onToggleSaveRoute: () -> Unit = {},
     tripStart: TripStart? = null,
     tripAsksLocation: Boolean = true,
+    cardFare: Int? = null,
+    cardFareCheck: CardFareCheck = NoCardFareCheck,
     onStartTrip: () -> Unit = {},
     onOpenTrip: () -> Unit = {},
     onPickDeparture: (legIndex: Int, tripId: String) -> Unit = { _, _ -> },
@@ -223,6 +235,7 @@ private fun TripContent(
                             onShare = onShare,
                             modifier = Modifier.padding(bottom = 24.dp),
                         )
+                        cardFare?.let { cardFareCheck.Content(fare = it, modifier = Modifier.padding(bottom = 24.dp)) }
                         // From an old answer kept when a fresh one couldn't be had: its times may
                         // have moved on, so say how old it is.
                         if (trip.isOutdated) {
