@@ -1174,6 +1174,60 @@ class TripEngineTest {
     }
 
     @Test
+    fun `a train held between stations gets later with each standing fix, though they read a little behind`() {
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(Places.TEBET, 3.0)
+        run.fix(between(Places.TEBET, Places.CAWANG, 0.5), 5.0, speedMps = 0f)
+        val held = run.state.clockOffsetS
+        val confirmed = run.state.confirmedPosition
+
+        run.fix(between(Places.TEBET, Places.CAWANG, 0.498), 8.0, speedMps = 0f)
+
+        assertEquals(held + 180, run.state.clockOffsetS)
+        assertEquals(confirmed, run.state.confirmedPosition, 0.0)
+    }
+
+    @Test
+    fun `a fix well behind a held train says nothing of its lateness`() {
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(Places.TEBET, 3.0)
+        run.fix(between(Places.TEBET, Places.CAWANG, 0.5), 5.0, speedMps = 0f)
+        val held = run.state.clockOffsetS
+
+        run.fix(between(Places.TEBET, Places.CAWANG, 0.4), 8.0, speedMps = 0f)
+
+        assertEquals(held, run.state.clockOffsetS)
+    }
+
+    @Test
+    fun `a moving fix a little behind says nothing of a train's lateness`() {
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(Places.TEBET, 3.0)
+        run.fix(between(Places.TEBET, Places.CAWANG, 0.5), 5.0, speedMps = 12f)
+        val moving = run.state.clockOffsetS
+
+        run.fix(between(Places.TEBET, Places.CAWANG, 0.498), 8.0, speedMps = 12f)
+
+        assertEquals(moving, run.state.clockOffsetS)
+    }
+
+    @Test
+    fun `a roof's frozen fix at the stop doesn't hold back a train felt leaving it`() {
+        val run = Run(bogorLine)
+        run.tick(0.0)
+        run.fix(Places.TEBET, 3.0, speedMps = 0f)
+        run.send(TripEvent.Departed(0, 1, at(5.0)))
+        val left = run.state.clockOffsetS
+
+        run.fix(Places.TEBET, 5.5, speedMps = 0f)
+
+        assertEquals(left, run.state.clockOffsetS)
+    }
+
+    @Test
     fun `an early train never pulls the stops ahead earlier than the timetable`() {
         val run = Run(bogorLine)
         run.tick(0.0)
