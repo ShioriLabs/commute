@@ -317,6 +317,9 @@ class TripNotifier @Inject constructor(
         private const val ASK_ID = 43
         private const val REROUTE_ID = 44
 
+        /** [TripWaker]'s: here with the rest, as cancelling another's id would take the alarm's "Udah bangun" with it. */
+        const val ALARM_ID = 45
+
         /** How long after "Turun di sini" news of a missed change goes into it instead of its own. */
         private val JUST_OFF: Duration = Duration.ofMinutes(3)
 

@@ -76,6 +76,7 @@ class TripControllerImplTest {
         val rerouted = mutableListOf<Pair<Int, Instant>>()
         val takenBack = mutableListOf<Int>()
         val reminded = mutableListOf<Pair<Int, TripReminder>>()
+        val remindedAtStop = mutableListOf<Boolean>()
         var wakingStopped = 0
 
         override fun showProgress(trip: ActiveTrip) {
@@ -96,8 +97,9 @@ class TripControllerImplTest {
         override fun finish() {
             finished++
         }
-        override fun remindRider(trip: ActiveTrip, legIndex: Int) {
+        override fun remindRider(trip: ActiveTrip, legIndex: Int, atStop: Boolean) {
             reminded += legIndex to trip.reminder
+            remindedAtStop += atStop
         }
         override fun stopWakingRider() {
             wakingStopped++
@@ -278,6 +280,28 @@ class TripControllerImplTest {
 
         assertEquals(AlertKind.ALIGHT, runtime.alerts.last().kind)
         assertEquals(setOf(0 to TripReminder.NONE), runtime.reminded.toSet())
+    }
+
+    @Test
+    fun `the waker hears a stop out as not there yet, and the stop itself as there`() = runTest {
+        val controller = controller()
+        controller.start(plan, origin)
+        runCurrent()
+
+        controller.onFix(Fix(GeoPoint(DUKUH_ATAS.latitude!!, DUKUH_ATAS.longitude!!), 15f, NOW.plusSeconds(120)))
+
+        assertEquals(listOf(false, true), runtime.remindedAtStop)
+    }
+
+    @Test
+    fun `first seen at the last stop, the waker hears it as there straight away`() = runTest {
+        store.trip = standingAtManggarai()
+        val controller = controller(at = minutes(30))
+        runCurrent()
+
+        controller.onFix(Fix(GeoPoint(CAWANG.latitude!!, CAWANG.longitude!!), 15f, minutes(30)))
+
+        assertEquals(listOf(true), runtime.remindedAtStop)
     }
 
     @Test
