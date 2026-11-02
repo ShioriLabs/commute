@@ -5,7 +5,8 @@ internal data class RaisedFeed(val front: List<HomeEntry>, val rest: List<HomeEn
 
 /**
  * Lifts what home has pinned at the stations the rider is at ([raised], nearest first) to the top:
- * each station's own board, then the pairs that start there, in the rider's order. The rest keep
+ * the pairs that start there, then those stations' own boards, each nearest first and then in the
+ * rider's order: a pair says where the rider is headed, a board only where they are. The rest keep
  * their places.
  */
 internal fun raiseNearby(entries: List<HomeEntry>, raised: List<String>): RaisedFeed {
@@ -16,7 +17,7 @@ internal fun raiseNearby(entries: List<HomeEntry>, raised: List<String>): Raised
                 is HomeEntry.StationEntry -> entry.board.stationId == stationId
                 is HomeEntry.RouteEntry -> entry.fromId == stationId
             }
-        }.sortedBy { it is HomeEntry.RouteEntry }
-    }.distinct()
+        }
+    }.distinct().sortedBy { it is HomeEntry.StationEntry }
     return RaisedFeed(front, entries - front.toSet())
 }
