@@ -567,7 +567,7 @@ class TripEngineTest {
     }
 
     @Test
-    fun `a last hop under 400 m gets its siap-siap on leaving the halte before, jam or not`() {
+    fun `a last hop under 500 m gets its siap-siap on leaving the halte before, jam or not`() {
         // Halte Dua to a halte 350 m on: out of Halte Dua is near enough already.
         val near = TripStop("TJ-H2B", "Halte Dua B", between(Places.HALTE_2, Places.HALTE_3, 0.7).latitude, between(Places.HALTE_2, Places.HALTE_3, 0.7).longitude)
         val run = Run(TripPlan(listOf(ride(Places.HALTE_1, Places.HALTE_2, near, line = "TJ:1"))), startAt = at(0))
@@ -579,6 +579,23 @@ class TripEngineTest {
 
         // 90 m out of Halte Dua at a crawl, 260 m still to go.
         run.fix(between(Places.HALTE_2, Places.HALTE_3, 0.18), 9.0, accuracyM = 5f, speedMps = 0.5f)
+        assertEquals(listOf(alert(AlertKind.PREPARE, estimated = false)), run.alerts())
+    }
+
+    @Test
+    fun `the 6 out of Kuningan Madya on 2 Nov rings siap-siap leaving the halte, not 17 s before Turun`() {
+        // Its 470 m last hop waited for 250 m to go, with the stop still in the speeds it held.
+        val run = Run(fromKaretKuningan, startAt = wib2Nov("16:31:12"))
+        run.send(TripEvent.RiderSaid(RiderAction.BOARDED, wib2Nov("16:34:30")))
+        run.fixAt("16:34:50", -6.21397, 106.83045, 11f, 11.0f)
+        run.fixAt("16:34:59", -6.21348, 106.83047, 6f, 2.9f)
+        run.fixAt("16:35:05", -6.21345, 106.83045, 8f, 0f)
+        run.fixAt("16:35:15", -6.21345, 106.83045, 11f, 0f)
+        assertTrue(run.alerts().none { it.kind == AlertKind.PREPARE })
+
+        // 25 m out of the halte, 445 m still to go.
+        run.fixAt("16:35:25", -6.21324, 106.83044, 9f, 7.7f)
+        run.fixAt("16:35:30", -6.21275, 106.83039, 12f, 10.3f)
         assertEquals(listOf(alert(AlertKind.PREPARE, estimated = false)), run.alerts())
     }
 
@@ -1038,6 +1055,56 @@ class TripEngineTest {
         run.fix(between(Places.HALTE_1, Places.HALTE_2, 0.3), 0.25, accuracyM = 10f, speedMps = 8f)
         assertEquals(TripPhase.WAITING_TO_BOARD, run.state.phase)
         assertEquals(TripLocationMode.PRECISE, run.state.locationMode)
+    }
+
+    /** The 6 from Karet Kuningan on 2 Nov, with a stop at Kuningan Madya on the way to Setiabudi Integritas. */
+    private val fromKaretKuningan = TripPlan(
+        listOf(
+            ride(
+                TripStop("TJ-H00098P", "Karet Kuningan", -6.21663, 106.83077),
+                TripStop("TJ-KMD", "Kuningan Madya", -6.2134, 106.83045),
+                Places.SETIABUDI_INTEGRITAS,
+                line = "TJ:6",
+            ),
+        ),
+    )
+
+    private fun wib2Nov(time: String) = java.time.OffsetDateTime.parse("2026-11-02T$time+07:00").toInstant()
+
+    private fun Run.fixAt(time: String, lat: Double, lon: Double, accuracyM: Float, speedMps: Float?) =
+        send(TripEvent.Fix(GeoPoint(lat, lon), accuracyM, wib2Nov(time), speedMps))
+
+    @Test
+    fun `a bus seen moving at the halte is looked for harder, though the fix leaves the rider waiting`() {
+        // The pull-out read 4.5 m/s still inside the halte's radius, and the next fix took 25 s.
+        val run = Run(fromKaretKuningan, startAt = wib2Nov("16:31:12"))
+        run.fixAt("16:34:16", -6.21633, 106.83079, 12f, 0f)
+        assertEquals(TripLocationMode.BALANCED, run.state.locationMode)
+
+        run.fixAt("16:34:22", -6.21629, 106.83077, 9f, 4.5f)
+        assertEquals(TripPhase.WAITING_TO_BOARD, run.state.phase)
+        assertEquals(TripLocationMode.PRECISE, run.state.locationMode)
+    }
+
+    @Test
+    fun `someone stepping about a halte goes back to half-minute fixes once they've stood a while`() {
+        val run = Run(busway, startAt = at(0))
+        run.fix(Places.HALTE_1, 0.0, accuracyM = 10f, speedMps = 2.5f)
+        assertEquals(TripLocationMode.PRECISE, run.state.locationMode)
+
+        run.fix(Places.HALTE_1, 0.25, accuracyM = 10f, speedMps = 0f)
+        assertEquals(TripLocationMode.PRECISE, run.state.locationMode)
+
+        run.fix(Places.HALTE_1, 0.75, accuracyM = 10f, speedMps = 0f)
+        assertEquals(TripLocationMode.BALANCED, run.state.locationMode)
+    }
+
+    @Test
+    fun `someone walking along a platform well before their train isn't looked for harder`() {
+        val run = Run(bogorLine, startAt = at(-10))
+        run.fix(Places.MANGGARAI, -6.0, accuracyM = 10f, speedMps = 2.5f)
+        assertEquals(TripPhase.WAITING_TO_BOARD, run.state.phase)
+        assertEquals(TripLocationMode.BALANCED, run.state.locationMode)
     }
 
     @Test
