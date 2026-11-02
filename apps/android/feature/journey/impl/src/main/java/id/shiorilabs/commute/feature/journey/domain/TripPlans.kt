@@ -82,5 +82,15 @@ fun tripStartFor(journey: Journey, route: Route.Trip, running: Route.Trip?, now:
     return if (Duration.between(now, boardsAt) > TRIP_START_LEAD) TripStart.TooEarly(boardsAt) else TripStart.Ready
 }
 
+/**
+ * The fare a card touched to the trip page is held against, `null` when none should be: a journey
+ * with nothing to start, a fare not known, one not paid by card, or a trip already running, where the
+ * phone must not be reading anything at the gate.
+ */
+fun cardFareFor(journey: Journey, start: TripStart?, payment: PaymentMethod?): Int? {
+    if (start == null || start == TripStart.Running || payment != PaymentMethod.STORED_VALUE) return null
+    return journey.totalFare
+}
+
 /** How many later trains a trip keeps: the live screen lists four, the compact surfaces name two. */
 private const val NEXT_DEPARTURES_KEPT = 4

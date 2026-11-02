@@ -279,4 +279,21 @@ class TripViewModelTest {
         assertEquals(trip, origin)
         assertEquals(listOf("KCI-SUD", "KCI-MRI"), plan.destination.let { listOf(plan.ride(0).stops.first().id, it.id) })
     }
+
+    @Test
+    fun `a card is checked against the loaded journey's fare`() = runTest {
+        val viewModel = viewModel()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.cardFare.collect {} }
+
+        assertEquals(3500, viewModel.cardFare.value)
+    }
+
+    @Test
+    fun `no card is checked on a journey paid by QRIS`() = runTest {
+        preferences.saveCriteria(StoredFareCriteria(paymentMethod = "QRIS_TAP"))
+        val viewModel = viewModel()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.cardFare.collect {} }
+
+        assertNull(viewModel.cardFare.value)
+    }
 }

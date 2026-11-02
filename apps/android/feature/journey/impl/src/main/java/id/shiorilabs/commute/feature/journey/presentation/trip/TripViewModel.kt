@@ -17,6 +17,7 @@ import id.shiorilabs.commute.core.type.Failure
 import id.shiorilabs.commute.feature.journey.data.JourneyRepository
 import id.shiorilabs.commute.feature.journey.domain.JourneyCriteria
 import id.shiorilabs.commute.feature.journey.domain.TripStart
+import id.shiorilabs.commute.feature.journey.domain.cardFareFor
 import id.shiorilabs.commute.feature.journey.domain.toTripPlan
 import id.shiorilabs.commute.feature.journey.domain.JourneyLeg
 import id.shiorilabs.commute.feature.journey.domain.resolveTimedLegs
@@ -106,6 +107,11 @@ class TripViewModel @AssistedInject constructor(
         (trip as? TripPageState.Loaded)
             ?.takeIf { loaded -> loaded.journey.legs.any { it is JourneyLeg.Ride } }
             ?.let { tripStartFor(it.journey, route, active?.origin, now, force) }
+    }.stateIn(viewModelScope, WhileUiSubscribed, null)
+
+    /** What a card touched to this page is held against; `null` while the page shouldn't read one. */
+    val cardFare: StateFlow<Int?> = combine(shown, tripStart, criteria) { trip, start, criteria ->
+        (trip as? TripPageState.Loaded)?.let { cardFareFor(it.journey, start, criteria?.paymentMethod) }
     }.stateIn(viewModelScope, WhileUiSubscribed, null)
 
     /**

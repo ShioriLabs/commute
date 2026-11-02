@@ -1,6 +1,7 @@
 package id.shiorilabs.commute.feature.card.api
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 
 /** What home's nav rail shows for the card button: two lines of text, and what a press does. */
 class CardRail(
@@ -23,4 +24,17 @@ interface CardTap {
 
     @Composable
     fun Content(rail: @Composable (CardRail) -> Unit)
+}
+
+/**
+ * Listens for a card touched to the phone while the trip page is on screen, and holds its balance,
+ * or the one home just read, against the trip's [fare][Content]. Draws nothing without NFC.
+ *
+ * A seam like [CardTap]: the trip page may not depend on how a card is read or worded.
+ */
+interface CardFareCheck {
+
+    /** @param fare In rupiah. */
+    @Composable
+    fun Content(fare: Int, modifier: Modifier)
 }
