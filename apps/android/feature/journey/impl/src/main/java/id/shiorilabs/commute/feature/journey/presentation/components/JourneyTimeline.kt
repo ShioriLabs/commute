@@ -278,9 +278,18 @@ private fun RideLeg(
             // A bus leg has no times at its ends to read a ride off, so its estimate joins the counts:
             // a span on board, never a clock.
             val summary = if (rideS != null) {
-                stringResource(R.string.journey_ride_summary_estimate, leg.stationCount - 1, formatKm(leg.distanceM), formatEstimate(rideS))
+                stringResource(
+                    if (isBus) R.string.journey_ride_summary_estimate_halte else R.string.journey_ride_summary_estimate,
+                    leg.stationCount - 1,
+                    formatKm(leg.distanceM),
+                    formatEstimate(rideS),
+                )
             } else {
-                stringResource(R.string.journey_ride_summary, leg.stationCount - 1, formatKm(leg.distanceM))
+                stringResource(
+                    if (isBus) R.string.journey_ride_summary_halte else R.string.journey_ride_summary,
+                    leg.stationCount - 1,
+                    formatKm(leg.distanceM),
+                )
             }
             if (intermediate.isEmpty()) {
                 Text(text = summary, style = MaterialTheme.typography.bodyMedium, color = Slate500)
