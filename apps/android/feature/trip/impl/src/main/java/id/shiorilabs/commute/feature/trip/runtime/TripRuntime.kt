@@ -50,9 +50,9 @@ interface TripRuntime {
     /**
      * The trip's reminder for getting off ride [legIndex]: the tune, and with "Tambah Pengingat" set
      * a buzz, or an alarm on the watch and then the phone. Once per ride; a second call for the same
-     * one does nothing.
+     * one does nothing, but for [atStop] raising an alarm's tune to full: the rider is at the stop.
      */
-    fun remindRider(trip: ActiveTrip, legIndex: Int)
+    fun remindRider(trip: ActiveTrip, legIndex: Int, atStop: Boolean)
 
     /** The rider is awake (or the trip's over): any alarm stops, on the watch and the phone. */
     fun stopWakingRider()
@@ -111,7 +111,7 @@ class AndroidTripRuntime @Inject constructor(
 
     override fun finish() = notifier.finish()
 
-    override fun remindRider(trip: ActiveTrip, legIndex: Int) = waker.remind(trip, legIndex)
+    override fun remindRider(trip: ActiveTrip, legIndex: Int, atStop: Boolean) = waker.remind(trip, legIndex, atStop)
 
     override fun stopWakingRider() = waker.stop()
 

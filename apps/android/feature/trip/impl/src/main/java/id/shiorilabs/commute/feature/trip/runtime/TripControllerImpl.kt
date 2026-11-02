@@ -465,7 +465,7 @@ class TripControllerImpl @Inject constructor(
         // The first word of getting off (a stop out, or at it if that came first) brings the
         // reminder too: the tune, and "Tambah Pengingat" if one is set.
         alerts.firstOrNull { it.kind == AlertKind.PREPARE || it.kind == AlertKind.ALIGHT }
-            ?.let { runtime.remindRider(next, it.legIndex) }
+            ?.let { runtime.remindRider(next, it.legIndex, atStop = it.kind == AlertKind.ALIGHT) }
         if (TripEffect.AskStillOnRoute in step.effects) runtime.askStillOnRoute(next)
         runtime.showProgress(next)
         schedule(step.nextWakeAt)

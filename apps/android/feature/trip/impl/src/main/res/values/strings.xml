@@ -31,7 +31,7 @@
     <string name="trip_reminder_ping">Ingatkan Aku</string>
     <string name="trip_reminder_ping_detail">Geter biasa pas kamu mau sampe</string>
     <string name="trip_reminder_wake">Bangunkan Aku</string>
-    <string name="trip_reminder_wake_detail">Geter kenceng, cocok buat kamu yang mau tidur</string>
+    <string name="trip_reminder_wake_detail">Geter kenceng dan nada yang makin keras, cocok buat kamu yang mau tidur</string>
     <string name="trip_reminder_none">Tanpa Pengingat</string>
     <string name="trip_reminder_none_detail">Cuma notifikasi biasa</string>
 
