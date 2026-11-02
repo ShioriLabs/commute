@@ -21,15 +21,23 @@ class HomeFeedOrderTest {
     }
 
     @Test
-    fun `the station the rider is at comes first, with the pairs that start there`() {
-        assertEquals(RaisedFeed(listOf(cakung, toWork), listOf(sudirman, home)), raiseNearby(entries, listOf("KCI-CUK")))
+    fun `the pairs that start where the rider is come first, then that station`() {
+        assertEquals(RaisedFeed(listOf(toWork, cakung), listOf(sudirman, home)), raiseNearby(entries, listOf("KCI-CUK")))
     }
 
     @Test
-    fun `several near ones come nearest first`() {
+    fun `several near ones come nearest first, every pair above every station`() {
         assertEquals(
-            RaisedFeed(listOf(cakung, toWork, sudirman, home), emptyList()),
+            RaisedFeed(listOf(toWork, home, cakung, sudirman), emptyList()),
             raiseNearby(entries, listOf("KCI-CUK", "KCI-SUD")),
+        )
+    }
+
+    @Test
+    fun `a pair from the further station still goes above the nearer station's board`() {
+        assertEquals(
+            RaisedFeed(listOf(home, cakung, sudirman), emptyList()),
+            raiseNearby(listOf(cakung, sudirman, home), listOf("KCI-CUK", "KCI-SUD")),
         )
     }
 
