@@ -66,6 +66,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import java.time.Instant
@@ -129,10 +130,15 @@ fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel
     val platformMarks by viewModel.platformMarks.collectAsStateWithLifecycle()
     val boardPages by viewModel.boardPages.collectAsStateWithLifecycle()
     val pidsDiagram by viewModel.pidsDiagram.collectAsStateWithLifecycle()
-    val motion by viewModel.motion.collectAsStateWithLifecycle()
+    // Read by the strip alone: it changes twice a second, and the page would recompose with it.
+    val motion = viewModel.motion.collectAsStateWithLifecycle()
     val yishunPids by viewModel.yishunPids.collectAsStateWithLifecycle()
     val upload by viewModel.upload.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
+    // The same style until a setting changes it: a new one each time would redraw the board.
+    val pidsStyle = remember(yishunPids, pidsDiagram, boardPages) {
+        if (yishunPids) PidsStyle.Yishun else PidsStyle.BekasiRailway(diagram = pidsDiagram, pages = boardPages)
+    }
 
     ActiveTripContent(
         state = state,
@@ -148,8 +154,8 @@ fun ActiveTripScreen(innerPadding: PaddingValues, viewModel: ActiveTripViewModel
         manualMarks = manualMarks,
         platformMarks = platformMarks,
         onMark = viewModel::mark,
-        motion = motion,
-        pidsStyle = if (yishunPids) PidsStyle.Yishun else PidsStyle.BekasiRailway(diagram = pidsDiagram, pages = boardPages),
+        motion = motion::value,
+        pidsStyle = pidsStyle,
         upload = upload,
         onUpload = viewModel::upload,
         onPrivacyPolicy = { navigator.goTo(Route.SettingsPrivacyPolicy) },
@@ -177,7 +183,8 @@ private fun ActiveTripContent(
     manualMarks: Boolean = false,
     platformMarks: Boolean = false,
     onMark: (MarkKind, Pids) -> Unit = { _, _ -> },
-    motion: MotionStripState? = null,
+    /** "Kecepatan IMU"'s strip, read only where it's drawn. */
+    motion: () -> MotionStripState? = { null },
     pidsStyle: PidsStyle = PidsStyle.BekasiRailway(),
     upload: TripUploadState = TripUploadState.IDLE,
     onUpload: () -> Unit = {},
@@ -186,7 +193,6 @@ private fun ActiveTripContent(
     val trip = state.trip
     val markRows = if (trip != null) markRows(manual = manualMarks, platform = platformMarks) else emptyList()
     val marking = markRows.isNotEmpty()
-    val strip = motion.takeIf { trip != null }
     val context = LocalContext.current
     val density = LocalDensity.current
     // The marks' bar and the motion strip under the page, with the system bar when they sit on it.
@@ -323,8 +329,8 @@ private fun ActiveTripContent(
                 .align(Alignment.BottomCenter)
                 .onSizeChanged { overlayHeight = with(density) { it.height.toDp() } },
         ) {
-            if (strip != null) {
-                MotionStrip(state = strip, bottomInset = if (marking) 0.dp else innerPadding.calculateBottomPadding())
+            if (trip != null) {
+                MotionStripSlot(motion, bottomInset = if (marking) 0.dp else innerPadding.calculateBottomPadding())
             }
             if (marking) {
                 MarkBar(
@@ -335,6 +341,13 @@ private fun ActiveTripContent(
             }
         }
     }
+}
+
+/** The motion strip, when there is one: its own scope, so its twice-a-second readout recomposes only it. */
+@Composable
+private fun MotionStripSlot(motion: () -> MotionStripState?, bottomInset: Dp) {
+    val state = motion() ?: return
+    MotionStrip(state = state, bottomInset = bottomInset)
 }
 
 /** Often enough that "2" turns into "1" about when it should. */
