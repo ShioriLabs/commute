@@ -195,7 +195,7 @@ private fun LazyListScope.historyItems(snapshot: CardSnapshot) {
     if (snapshot.entries.isEmpty()) {
         item {
             Text(
-                text = stringResource(R.string.card_history_empty),
+                text = stringResource(if (snapshot.historyKnown) R.string.card_history_empty else R.string.card_history_unknown),
                 modifier = Modifier.padding(horizontal = Gutter, vertical = 24.dp),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
