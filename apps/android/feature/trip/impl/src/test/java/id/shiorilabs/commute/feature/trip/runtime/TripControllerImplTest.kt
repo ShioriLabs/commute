@@ -264,7 +264,7 @@ class TripControllerImplTest {
 
         controller.onFix(Fix(GeoPoint(DUKUH_ATAS.latitude!!, DUKUH_ATAS.longitude!!), 15f, NOW.plusSeconds(120)))
 
-        // "Siap-siap" came as the trip started, before the reminder was set; the waker plays the
+        // The first fix finds the train already in, too late for "siap-siap"; the waker plays the
         // tune once a ride and minds the reminder apart.
         assertEquals(0 to TripReminder.WAKE, runtime.reminded.last())
         assertEquals(TripReminder.WAKE, store.trip!!.reminder)
@@ -288,6 +288,7 @@ class TripControllerImplTest {
         controller.start(plan, origin)
         runCurrent()
 
+        controller.onFix(Fix(GeoPoint(-6.1960, 106.8228), 15f, NOW.plusSeconds(60), speedMps = 15f))
         controller.onFix(Fix(GeoPoint(DUKUH_ATAS.latitude!!, DUKUH_ATAS.longitude!!), 15f, NOW.plusSeconds(120)))
 
         assertEquals(listOf(false, true), runtime.remindedAtStop)
