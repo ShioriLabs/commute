@@ -68,7 +68,11 @@ interface TripRuntime {
      */
     fun startTracking(): Boolean
 
-    fun stopTracking()
+    /**
+     * Stops the service. [tripOver] once the trip has ended: then a "Rekaman Detail" recording keeps
+     * it a minute more, and it stops itself after.
+     */
+    fun stopTracking(tripOver: Boolean = false)
 }
 
 @Singleton
@@ -97,6 +101,7 @@ class AndroidTripRuntime @Inject constructor(
     private val notifier: TripNotifier,
     private val alarms: TripAlarms,
     private val waker: TripWaker,
+    private val recorder: SensorRecorder,
 ) : TripRuntime {
 
     override fun showProgress(trip: ActiveTrip) = notifier.showProgress(trip)
@@ -129,7 +134,8 @@ class AndroidTripRuntime @Inject constructor(
         false
     }
 
-    override fun stopTracking() {
+    override fun stopTracking(tripOver: Boolean) {
+        if (tripOver && recorder.detailedOpen) return
         context.stopService(Intent(context, TripService::class.java))
     }
 }

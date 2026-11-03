@@ -83,6 +83,8 @@
     <string name="trip_motion_still">%1$s · diam</string>
     <string name="trip_motion_aligning">Lagi nyelarasin arah...</string>
     <string name="trip_motion_waiting">Kecepatan IMU nyala pas naik kereta</string>
+    <!-- "Rekaman Detail" (Experimental): the minute after a trip, still recording. -->
+    <string name="trip_recording_tail">Masih ngerekam data sensor semenit lagi</string>
     <string name="trip_motion_unavailable">HP ini gak punya sensor gerak yang dibutuhin</string>
     <string name="trip_time_late">%1$s, telat %2$d menit dari jadwal %3$s</string>
     <string name="trip_time_early">%1$s, %2$d menit lebih awal dari jadwal %3$s</string>
