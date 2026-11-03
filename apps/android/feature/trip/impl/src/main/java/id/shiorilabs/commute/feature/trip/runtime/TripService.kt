@@ -8,6 +8,7 @@ import android.os.PowerManager
 import androidx.core.app.ServiceCompat
 import dagger.hilt.android.AndroidEntryPoint
 import id.shiorilabs.commute.core.datastore.DeveloperPreferencesRepository
+import id.shiorilabs.commute.core.location.Fix
 import id.shiorilabs.commute.core.location.LocationClient
 import id.shiorilabs.commute.core.location.LocationMode
 import id.shiorilabs.commute.core.trip.AlertKind
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Clock
 import javax.inject.Inject
 
@@ -108,8 +110,8 @@ class TripService : Service() {
                     when (mode) {
                         null -> if (recorded?.detailed == true) recordTail() else stopSelf()
                         TripLocationMode.OFF -> emptyFlow<Unit>().collect {}
-                        TripLocationMode.PRECISE -> location.updates(LocationMode.PRECISE).collect { motion.onFix(it); controller.onFix(it) }
-                        TripLocationMode.BALANCED -> location.updates(LocationMode.BALANCED).collect { motion.onFix(it); controller.onFix(it) }
+                        TripLocationMode.PRECISE -> location.updates(LocationMode.PRECISE).collect(::onFix)
+                        TripLocationMode.BALANCED -> location.updates(LocationMode.BALANCED).collect(::onFix)
                     }
                 }
         }
@@ -135,11 +137,21 @@ class TripService : Service() {
                 trip?.takeIf { on }?.let { TripEngine.awaitingDeparture(it.plan, it.state, clock.instant()) }
             }
                 .distinctUntilChanged()
-                .collect { motion.arm(it) }
+                .collect { withContext(Dispatchers.IO) { motion.arm(it) } }
         }
         scope.launch {
-            motion.departures.collect { controller.onDeparted(it.legIndex, it.stopIndex, it.at) }
+            motion.departures.collect { withContext(Dispatchers.IO) { controller.onDeparted(it.legIndex, it.stopIndex, it.at) } }
         }
+    }
+
+    /**
+     * A fix, through the motion sensors and then the trip, off the main thread: a step writes the
+     * trip to disk, the log and the notification, every few seconds while the board animates. One
+     * at a time all the same, as the collector waits for each.
+     */
+    private suspend fun onFix(fix: Fix) = withContext(Dispatchers.IO) {
+        motion.onFix(fix)
+        controller.onFix(fix)
     }
 
     /** The last leg's recording closed, and [leg]'s opened, with what it reads running. */
