@@ -50,7 +50,7 @@ import id.shiorilabs.commute.core.ui.ext.RevealInsertedTop
 import id.shiorilabs.commute.core.ui.frost.FrostedTopChromeBackdrop
 import id.shiorilabs.commute.core.ui.network.rememberIsOffline
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
-import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
+import id.shiorilabs.commute.core.ui.time.rememberTimetableNow
 import id.shiorilabs.commute.core.ui.time.updatedAgoText
 import id.shiorilabs.commute.feature.station.R
 import id.shiorilabs.commute.feature.station.domain.Amenity
@@ -108,7 +108,7 @@ fun StationScreen(
         val stack = navigator.backStack
         stack.getOrNull(stack.indexOfLast { it is Route.Station && it.stationId == stationId } - 1) == Route.Search
     }
-    val now = rememberJakartaNow()
+    val now = rememberTimetableNow()
     val offline by rememberIsOffline()
     LaunchedEffect(now) {
         viewModel.onClockTick(now)

@@ -80,7 +80,7 @@ import id.shiorilabs.commute.core.ui.theme.Slate400
 import id.shiorilabs.commute.core.ui.theme.Slate500
 import id.shiorilabs.commute.core.ui.theme.Slate700
 import id.shiorilabs.commute.core.ui.theme.Slate900
-import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
+import id.shiorilabs.commute.core.ui.time.rememberTimetableNow
 import id.shiorilabs.commute.core.ui.time.updatedAgoText
 import id.shiorilabs.commute.feature.station.R
 import id.shiorilabs.commute.feature.station.domain.LineInfo
@@ -117,7 +117,7 @@ fun StationTimetableScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
-    val now = rememberJakartaNow()
+    val now = rememberTimetableNow()
     val offline by rememberIsOffline()
 
     StationTimetableContent(
