@@ -148,6 +148,14 @@ object TripEngine {
     private val DEPARTING_LEAD: Duration = Duration.ofMinutes(2)
     private val DEPARTING_TAIL: Duration = Duration.ofMinutes(5)
 
+    /**
+     * Started with location on after the ride was due, how long the clock's alerts wait for a first
+     * fix to say whether the train has really left. On 3 Nov OTW went on aboard Setiabudi's 18.37, still in the
+     * station at 18.37.49: by the clock it had gone, and siap-siap played as the rider stepped in.
+     * The first fix came 1.6 s later.
+     */
+    private val FIRST_FIX_WAIT: Duration = Duration.ofSeconds(30)
+
     /** The trip ends itself this long after arriving. */
     val ARRIVED_LINGER: Duration = Duration.ofMinutes(5)
 
@@ -605,6 +613,10 @@ object TripEngine {
             // better a minute early than after the doors have shut.
             val ahead = if (fresh) position else clock.positionAt(now.minusSeconds(state.clockOffsetS))?.let { max(position, it) } ?: position
 
+            // The clock has the rider aboard and on their way, but a first fix about to come may
+            // find the train still in: nothing to tell them until it does.
+            if (awaitingFirstFix(state, now)) break
+
             // Reached the alighting stop already (a long sleep, a sparse fix): too late for
             // "siap-siap", which is skipped below rather than sent after the fact.
             if (position < ride.lastIndex) state = prepareIfDue(ride, clock, state, ahead, now, effects)
@@ -801,6 +813,10 @@ object TripEngine {
             it.mps >= RIDING_M_PER_S && now.toEpochMilli() - it.atMs <= BUS_SPEED_HELD.toMillis()
         }
 
+    /** Just started with location on, and no fix yet to say whether the rider is aboard. */
+    private fun awaitingFirstFix(state: TripState, now: Instant): Boolean =
+        state.hasLocation && state.confirmedAt == null && now.isBefore(state.startedAt.plus(FIRST_FIX_WAIT))
+
     /** Whether the ride being waited for is about due to leave, or left only just. */
     private fun departing(plan: TripPlan, state: TripState, now: Instant): Boolean {
         val departs = plan.ride(state.legIndex).departureAt?.plusSeconds(state.lateS) ?: return false
@@ -824,6 +840,7 @@ object TripEngine {
         val candidates = mutableListOf(deadline(plan, state))
         state.arrivedAt?.let { candidates += it.plus(ARRIVED_LINGER) }
         state.confirmedAt?.let { candidates += it.plus(STALE) }
+        if (awaitingFirstFix(state, now)) candidates += state.startedAt.plus(FIRST_FIX_WAIT)
         if (state.phase != TripPhase.ARRIVED) {
             val ride = plan.ride(state.legIndex)
             val clock = RideClock(ride)
