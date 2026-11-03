@@ -398,6 +398,36 @@ class TripEngineTest {
         assertEquals(listOf(alert(AlertKind.PREPARE, estimated = false)), run.alerts())
     }
 
+    /** Setiabudi to Dukuh Atas on the LRT, one hop, due out at 08.00. */
+    private val oneHopLrt = TripPlan(
+        listOf(ride(Places.LRT_SETIABUDI, Places.LRT_DUKUH_ATAS, line = "LRTJBDB:BK", departs = 0, arrives = 3)),
+    )
+
+    @Test
+    fun `started aboard a late train still at the station, siap-siap waits for it to leave`() {
+        // 3 Nov: OTW at 18.37.49 on the 18.37 still in Setiabudi. The clock had it gone, so
+        // siap-siap played as the rider stepped in; the first fix came 1.6 s later.
+        val run = Run(oneHopLrt, startAt = at(0.8))
+        assertTrue(run.alerts().isEmpty())
+
+        run.fix(Places.LRT_SETIABUDI, 0.83, speedMps = 0.5f)
+        assertTrue(run.alerts().isEmpty())
+
+        run.fix(between(Places.LRT_SETIABUDI, Places.LRT_DUKUH_ATAS, 0.15), 1.2, speedMps = 7f)
+        run.fix(between(Places.LRT_SETIABUDI, Places.LRT_DUKUH_ATAS, 0.25), 1.3, speedMps = 8f)
+        assertEquals(listOf(alert(AlertKind.PREPARE, estimated = false)), run.alerts())
+    }
+
+    @Test
+    fun `started after the train is due with no fix coming, the clock takes over half a minute on`() {
+        val run = Run(oneHopLrt, startAt = at(0.8))
+        assertEquals(at(0.8).plusSeconds(30), run.step.nextWakeAt)
+
+        run.tick(1.3)
+        assertEquals(TripPhase.RIDING, run.state.phase)
+        assertEquals(listOf(alert(AlertKind.PREPARE, estimated = true)), run.alerts())
+    }
+
     /** A ride of one 2 km hop south on [line], and a fix [metres] short of its end, coming in from the north. */
     private fun arrivingOn(line: String, metres: Double): Run {
         val from = TripStop("A", "A", -6.2000, 106.8300)
