@@ -12,8 +12,10 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import androidx.core.graphics.toColorInt
 import dagger.hilt.android.qualifiers.ApplicationContext
+import id.shiorilabs.commute.core.datastore.OtwPreferencesRepository
 import id.shiorilabs.commute.core.navigation.ACTIVE_TRIP_LINK
 import id.shiorilabs.commute.core.notification.NotificationChannels
+import id.shiorilabs.commute.core.query.di.ApplicationScope
 import id.shiorilabs.commute.core.time.formatClock
 import id.shiorilabs.commute.core.trip.AlertKind
 import id.shiorilabs.commute.core.tripcopy.R as CopyR
@@ -27,16 +29,27 @@ import id.shiorilabs.commute.core.trip.progress
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.trip.ActiveTrip
 import id.shiorilabs.commute.feature.trip.R
+import id.shiorilabs.commute.feature.trip.TripReminder
 import id.shiorilabs.commute.core.trip.Headline
 import id.shiorilabs.commute.feature.trip.presentation.TripCopy
 import id.shiorilabs.commute.feature.trip.presentation.headline
 import id.shiorilabs.commute.core.trip.minutesUntil
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.roundToInt
+
+/**
+ * Where "Turun di sini" goes: with the tune on, the silent channel, as the doors' chime plays then;
+ * a rider being woken has the alarm instead, so theirs sounds as any other alert.
+ */
+internal fun alightChannel(tune: Boolean, reminder: TripReminder): String =
+    if (tune && reminder != TripReminder.WAKE) NotificationChannels.TRIP_ALIGHT else NotificationChannels.TRIP_ALERTS
 
 /**
  * Puts the trip on the lock screen and taps the rider's wrist: the ongoing notification, promoted to
@@ -48,9 +61,14 @@ class TripNotifier @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val lines: LineRepository,
     private val clock: Clock,
+    preferences: OtwPreferencesRepository,
+    @ApplicationScope scope: CoroutineScope,
 ) {
 
     private val manager = NotificationManagerCompat.from(context)
+
+    /** "Mainkan nada pengingat", read ahead: "turun" can't wait on the disk. On, as it starts, till read. */
+    private val tune = preferences.reminderTune.stateIn(scope, SharingStarted.Eagerly, true)
 
     /** A ride of this trip swapped for a later one: its leg, and when the one missed left. */
     private class Reroute(val startedAt: Instant, val legIndex: Int, val missed: Instant)
@@ -110,6 +128,7 @@ class TripNotifier @Inject constructor(
         val ride = trip.plan.ride(alert.legIndex)
         val alighting = ride.stops.last().name
         val stops = if (ride.isBus) R.string.trip_alert_prepare_halte else R.string.trip_alert_prepare_station
+        val channel = if (alert.kind == AlertKind.ALIGHT) alightChannel(tune.value, trip.reminder) else NotificationChannels.TRIP_ALERTS
         val (title, text) = when (alert.kind) {
             AlertKind.PREPARE -> if (alert.estimated) {
                 val minutes = trip.state.expectedAlightingAt(trip.plan)?.let { minutesUntil(clock.instant(), it) }
@@ -136,7 +155,7 @@ class TripNotifier @Inject constructor(
             AlertKind.PREPARE, AlertKind.ALIGHT -> CopyR.drawable.ic_stat_alight
             AlertKind.MISSED, AlertKind.NO_REMINDERS -> R.drawable.ic_stat_trip
         }
-        notify(ALERT_ID, alertBuilder(title, text, icon).build())
+        notify(ALERT_ID, alertBuilder(title, text, icon, channel).build())
     }
 
     fun askStillOnRoute(trip: ActiveTrip) {
@@ -252,8 +271,13 @@ class TripNotifier @Inject constructor(
     /** [recording]'s, gone once a new trip's notification has taken the service over. */
     fun cancelRecording() = manager.cancel(RECORDING_ID)
 
-    private fun alertBuilder(title: String, text: String, icon: Int = R.drawable.ic_stat_trip) =
-        NotificationCompat.Builder(context, NotificationChannels.TRIP_ALERTS)
+    private fun alertBuilder(
+        title: String,
+        text: String,
+        icon: Int = R.drawable.ic_stat_trip,
+        channel: String = NotificationChannels.TRIP_ALERTS,
+    ) =
+        NotificationCompat.Builder(context, channel)
             .also { NotificationChannels.ensure(context) }
             .setSmallIcon(icon)
             .setContentTitle(title)

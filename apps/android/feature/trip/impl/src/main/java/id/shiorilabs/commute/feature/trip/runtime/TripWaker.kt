@@ -35,6 +35,19 @@ import javax.inject.Singleton
 /** How long an unanswered alarm rings: past the stop by then, and only draining the battery. */
 internal val RING_FOR: Duration = Duration.ofMinutes(5)
 
+internal enum class ReminderSound { TUNE, TUNE_AT_FULL, LOUDEN, CHIME }
+
+/**
+ * What the phone plays for a ride's word of getting off, [atStop] or a stop out, once the ride's
+ * tune has or hasn't been [tuned]: at the stop the doors chime, cutting short what's left of the
+ * tune, but an [alarm] keeps ringing for a rider who may still be asleep. `null` for nothing new.
+ */
+internal fun reminderSound(alarm: Boolean, atStop: Boolean, tuned: Boolean): ReminderSound? = when {
+    !atStop -> if (tuned) null else ReminderSound.TUNE
+    alarm -> if (tuned) ReminderSound.LOUDEN else ReminderSound.TUNE_AT_FULL
+    else -> ReminderSound.CHIME
+}
+
 /**
  * A trip's reminder for getting off ("Tambah Pengingat"), on the watch when one's in reach, else
  * the phone:
@@ -45,7 +58,7 @@ internal val RING_FOR: Duration = Duration.ofMinutes(5)
  *
  * With or without one the phone plays [ReminderTune] too, unless "Mainkan nada pengingat" is off:
  * as an alarm with "Bangunkan Aku", climbing from quiet to full and looping, as media otherwise,
- * where a muted phone or earbuds keep it to the rider.
+ * where a muted phone or earbuds keep it to the rider, and the doors chime at the stop.
  *
  * The phone's buzz is an alarm's, so it goes through silent mode and Do Not Disturb, which a
  * notification's vibration doesn't; the alarm's notification is only there to show why, and to
@@ -78,13 +91,18 @@ class TripWaker @Inject constructor(
 
     fun remind(trip: ActiveTrip, legIndex: Int, atStop: Boolean) {
         val key = "${trip.state.startedAt.toEpochMilli()}:$legIndex"
-        if (key != tunedFor) {
-            tunedFor = key
-            val alarm = trip.reminder == TripReminder.WAKE
-            val bus = trip.plan.ride(legIndex).isBus
-            scope.launch { if (preferences.reminderTune.first()) tune.play(alarm, bus, atStop) }
-        } else if (atStop) {
-            tune.louden()
+        val alarm = trip.reminder == TripReminder.WAKE
+        val sound = reminderSound(alarm, atStop, tuned = key == tunedFor)
+        tunedFor = key
+        when (sound) {
+            // Nothing's playing to louden with the tune switched off.
+            ReminderSound.LOUDEN -> tune.louden()
+            null -> Unit
+            else -> scope.launch {
+                if (!preferences.reminderTune.first()) return@launch
+                if (sound == ReminderSound.CHIME) tune.chime()
+                else tune.play(alarm, trip.plan.ride(legIndex).isBus, atStop = sound == ReminderSound.TUNE_AT_FULL)
+            }
         }
         if (trip.reminder == TripReminder.NONE || key == remindedFor) return
         remindedFor = key
