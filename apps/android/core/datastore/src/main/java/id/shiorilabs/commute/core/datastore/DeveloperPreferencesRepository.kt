@@ -40,6 +40,12 @@ class DeveloperPreferencesRepository @Inject constructor(
     /** "Kecepatan IMU": riding a train, the motion sensors' speed beside the satellites', on the trip page. */
     val imuSpeed: Flow<Boolean> = dataStore.data.map { it[IMU_SPEED] == true }
 
+    /**
+     * "Rekaman Detail": every ride recorded from the platform to a minute after, with the
+     * satellites' own fixes each second and their raw measurements. Debug builds only.
+     */
+    val detailedRecording: Flow<Boolean> = dataStore.data.map { it[DETAILED_RECORDING] == true }
+
     /** "PIDS Yishun": the trip page's board after SMRT's strip map instead of JR East's. */
     val yishunPids: Flow<Boolean> = dataStore.data.map { it[YISHUN_PIDS] == true }
 
@@ -60,6 +66,8 @@ class DeveloperPreferencesRepository @Inject constructor(
 
     suspend fun setImuSpeed(enabled: Boolean) = set(IMU_SPEED, enabled)
 
+    suspend fun setDetailedRecording(enabled: Boolean) = set(DETAILED_RECORDING, enabled)
+
     suspend fun setYishunPids(enabled: Boolean) = set(YISHUN_PIDS, enabled)
 
     suspend fun setWatchAutoOpen(enabled: Boolean) = set(WATCH_AUTO_OPEN, enabled)
@@ -77,6 +85,7 @@ class DeveloperPreferencesRepository @Inject constructor(
         val PLATFORM_MARKS = booleanPreferencesKey("platform_marks")
         val BOARD_PAGES = booleanPreferencesKey("board_pages")
         val IMU_SPEED = booleanPreferencesKey("imu_speed")
+        val DETAILED_RECORDING = booleanPreferencesKey("detailed_recording")
         val YISHUN_PIDS = booleanPreferencesKey("yishun_pids")
         val WATCH_AUTO_OPEN = booleanPreferencesKey("watch_auto_open")
     }

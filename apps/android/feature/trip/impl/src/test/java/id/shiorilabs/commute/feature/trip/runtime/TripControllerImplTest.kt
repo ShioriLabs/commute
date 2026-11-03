@@ -114,7 +114,7 @@ class TripControllerImplTest {
             tracking = trackingAllowed
             return trackingAllowed
         }
-        override fun stopTracking() {
+        override fun stopTracking(tripOver: Boolean) {
             tracking = false
         }
     }

@@ -445,7 +445,7 @@ class TripControllerImpl @Inject constructor(
             timer?.cancel()
             forgetReplans()
             runtime.cancelWake()
-            runtime.stopTracking()
+            runtime.stopTracking(tripOver = true)
             runtime.finish()
             store.clear()
             FinishedTrip(next, finished.reason, clock.instant()).also {

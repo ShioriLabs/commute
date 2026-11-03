@@ -52,6 +52,7 @@ class ExperimentalViewModel @Inject constructor(
     val platformMarks: StateFlow<Boolean> = preferences.platformMarks.stateIn(viewModelScope, WhileUiSubscribed, false)
     val boardPages: StateFlow<Boolean> = preferences.boardPages.stateIn(viewModelScope, WhileUiSubscribed, false)
     val imuSpeed: StateFlow<Boolean> = preferences.imuSpeed.stateIn(viewModelScope, WhileUiSubscribed, false)
+    val detailedRecording: StateFlow<Boolean> = preferences.detailedRecording.stateIn(viewModelScope, WhileUiSubscribed, false)
     val yishunPids: StateFlow<Boolean> = preferences.yishunPids.stateIn(viewModelScope, WhileUiSubscribed, false)
 
     val watchAutoOpen: StateFlow<Boolean> = preferences.watchAutoOpen.stateIn(viewModelScope, WhileUiSubscribed, true)
@@ -69,6 +70,8 @@ class ExperimentalViewModel @Inject constructor(
     fun setBoardPages(enabled: Boolean) = viewModelScope.launch { preferences.setBoardPages(enabled) }
 
     fun setImuSpeed(enabled: Boolean) = viewModelScope.launch { preferences.setImuSpeed(enabled) }
+
+    fun setDetailedRecording(enabled: Boolean) = viewModelScope.launch { preferences.setDetailedRecording(enabled) }
 
     fun setYishunPids(enabled: Boolean) = viewModelScope.launch { preferences.setYishunPids(enabled) }
 
@@ -105,6 +108,7 @@ fun ExperimentalScreen(
     val platformMarks by viewModel.platformMarks.collectAsStateWithLifecycle()
     val boardPages by viewModel.boardPages.collectAsStateWithLifecycle()
     val imuSpeed by viewModel.imuSpeed.collectAsStateWithLifecycle()
+    val detailedRecording by viewModel.detailedRecording.collectAsStateWithLifecycle()
     val yishunPids by viewModel.yishunPids.collectAsStateWithLifecycle()
     val watchAutoOpen by viewModel.watchAutoOpen.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
@@ -121,6 +125,7 @@ fun ExperimentalScreen(
         platformMarks = platformMarks,
         boardPages = boardPages,
         imuSpeed = imuSpeed,
+        detailedRecording = detailedRecording,
         yishunPids = yishunPids,
         watchAutoOpen = watchAutoOpen,
         canHide = !debug,
@@ -132,6 +137,7 @@ fun ExperimentalScreen(
         onPlatformMarks = { viewModel.setPlatformMarks(it) },
         onBoardPages = { viewModel.setBoardPages(it) },
         onImuSpeed = { viewModel.setImuSpeed(it) },
+        onDetailedRecording = { viewModel.setDetailedRecording(it) },
         onYishunPids = { viewModel.setYishunPids(it) },
         onWatchAutoOpen = { viewModel.setWatchAutoOpen(it) },
         onShareTripLog = {
@@ -166,6 +172,7 @@ private fun ExperimentalContent(
     platformMarks: Boolean = false,
     boardPages: Boolean = false,
     imuSpeed: Boolean = false,
+    detailedRecording: Boolean = false,
     yishunPids: Boolean = false,
     watchAutoOpen: Boolean = true,
     onBack: () -> Unit = {},
@@ -175,6 +182,7 @@ private fun ExperimentalContent(
     onPlatformMarks: (Boolean) -> Unit = {},
     onBoardPages: (Boolean) -> Unit = {},
     onImuSpeed: (Boolean) -> Unit = {},
+    onDetailedRecording: (Boolean) -> Unit = {},
     onYishunPids: (Boolean) -> Unit = {},
     onWatchAutoOpen: (Boolean) -> Unit = {},
     onShareTripLog: () -> Unit = {},
@@ -238,6 +246,15 @@ private fun ExperimentalContent(
             checked = imuSpeed,
             onCheckedChange = onImuSpeed,
         )
+        // Debug builds only, as the recordings it adds to.
+        if (sensorData) {
+            SettingsSwitch(
+                title = stringResource(R.string.settings_experimental_detailed_recording),
+                subtitle = stringResource(R.string.settings_experimental_detailed_recording_detail),
+                checked = detailedRecording,
+                onCheckedChange = onDetailedRecording,
+            )
+        }
         SettingsSwitch(
             title = stringResource(R.string.settings_experimental_watch_auto_open),
             subtitle = stringResource(R.string.settings_experimental_watch_auto_open_detail),

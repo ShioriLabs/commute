@@ -19,6 +19,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -49,6 +50,12 @@ class TripService : Service() {
     lateinit var motion: MotionTracker
 
     @Inject
+    lateinit var rawGnss: RawGnssRecorder
+
+    @Inject
+    lateinit var recorder: SensorRecorder
+
+    @Inject
     lateinit var developerPreferences: DeveloperPreferencesRepository
 
     @Inject
@@ -57,6 +64,9 @@ class TripService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var wakeLock: PowerManager.WakeLock? = null
     private var collecting = false
+
+    /** The leg being recorded, if any. */
+    private var recorded: RecordedLeg? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -73,6 +83,8 @@ class TripService : Service() {
                 notifier.progress(trip),
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
             )
+            // A new trip during the last one's recorded minute: the service is the trip's again.
+            notifier.cancelRecording()
         } catch (_: RuntimeException) {
             // No location permission any more, or started from the background: the trip carries on
             // by the clock, through its alarms.
@@ -94,7 +106,7 @@ class TripService : Service() {
                 .distinctUntilChanged()
                 .collectLatest { mode ->
                     when (mode) {
-                        null -> stopSelf()
+                        null -> if (recorded?.detailed == true) recordTail() else stopSelf()
                         TripLocationMode.OFF -> emptyFlow<Unit>().collect {}
                         TripLocationMode.PRECISE -> location.updates(LocationMode.PRECISE).collect { motion.onFix(it); controller.onFix(it) }
                         TripLocationMode.BALANCED -> location.updates(LocationMode.BALANCED).collect { motion.onFix(it); controller.onFix(it) }
@@ -108,15 +120,13 @@ class TripService : Service() {
                 .collect { approaching -> if (approaching) holdWake() else releaseWake() }
         }
         scope.launch {
-            // The train being ridden, by leg: each leg is a recording of its own.
-            combine(controller.active, developerPreferences.imuSpeed) { trip, on ->
-                trip?.takeIf { on && ridingATrain(it) }?.let { it.state.legIndex to it.plan.ride(it.state.legIndex) }
+            // Each leg is a recording of its own. Once the trip has ended, a detailed one stays open
+            // for [recordTail] to close.
+            combine(controller.active, developerPreferences.imuSpeed, developerPreferences.detailedRecording) { trip, imu, detailed ->
+                recordedLeg(trip, imu, detailed) ?: recorded?.takeIf { trip == null && it.detailed }
             }
-                .distinctUntilChanged { a, b -> a?.first == b?.first }
-                .collect { riding ->
-                    motion.stop()
-                    riding?.let { (_, ride) -> motion.start(ride) }
-                }
+                .distinctUntilChanged { a, b -> a?.legIndex == b?.legIndex && a?.motion == b?.motion && a?.detailed == b?.detailed }
+                .collect(::record)
         }
         scope.launch {
             // The stop the train stands at, for the motion sensors to feel it leave: only while they run.
@@ -132,9 +142,37 @@ class TripService : Service() {
         }
     }
 
-    /** "Kecepatan IMU" runs only aboard a train: where the speed underground is worth knowing. */
-    private fun ridingATrain(trip: ActiveTrip): Boolean =
-        trip.state.phase == TripPhase.RIDING && !trip.plan.ride(trip.state.legIndex).isBus
+    /** The last leg's recording closed, and [leg]'s opened, with what it reads running. */
+    private fun record(leg: RecordedLeg?) {
+        motion.stop()
+        rawGnss.stop()
+        recorder.stop()
+        recorded = leg
+        if (leg == null) return
+        recorder.start(leg.ride, motion = leg.motion, detailed = leg.detailed, phase = controller.active.value?.state?.phase)
+        if (leg.motion) motion.start()
+        if (leg.detailed) rawGnss.start()
+    }
+
+    /**
+     * "Rekaman Detail" after the trip ended: a minute more of the rider getting off, under a
+     * notification of its own as the trip's has gone, then the service stops. A trip started
+     * meanwhile cancels it, and its first leg's recording closes this one.
+     */
+    private suspend fun recordTail() {
+        try {
+            ServiceCompat.startForeground(this, TripNotifier.RECORDING_ID, notifier.recording(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+        } catch (_: RuntimeException) {
+            record(null)
+            stopSelf()
+            return
+        }
+        notifier.cancelProgress()
+        motion.stopLogging()
+        delay(RECORDING_TAIL)
+        record(null)
+        stopSelf()
+    }
 
     /** Between "siap-siap" and "turun": the stretch where an alert late by a doze is a missed stop. */
     private fun onFinalApproach(trip: ActiveTrip): Boolean {
@@ -161,7 +199,8 @@ class TripService : Service() {
         // clock with its notification still up; a trip that ended has taken it down already.
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_DETACH)
         releaseWake()
-        motion.stop()
+        record(null)
+        notifier.cancelRecording()
         scope.cancel()
         super.onDestroy()
     }
@@ -169,6 +208,9 @@ class TripService : Service() {
     private companion object {
 
         const val WAKE_LOCK_TAG = "commute:trip-approach"
+
+        /** "Rekaman Detail" past the end of a trip: the rider off the train and out of the station's first steps. */
+        const val RECORDING_TAIL = 60_000L
 
         /** Ten minutes: a hop that takes longer than this is a train that stopped, not one arriving. */
         const val MAX_WAKE_MILLIS = 10 * 60 * 1000L

@@ -231,6 +231,27 @@ class TripNotifier @Inject constructor(
         alighted = null
     }
 
+    /**
+     * "Rekaman Detail": the minute after a trip, still recording what the rider does getting off.
+     * The foreground service's own, once the trip's is gone; quiet, as the trip's.
+     */
+    fun recording(): Notification {
+        NotificationChannels.ensure(context)
+        return NotificationCompat.Builder(context, NotificationChannels.TRIP_PROGRESS)
+            .setSmallIcon(R.drawable.ic_stat_trip)
+            .setContentTitle(context.getString(R.string.trip_recording_tail))
+            .setOngoing(true)
+            .setSilent(true)
+            .setShowWhen(false)
+            .build()
+    }
+
+    /** The trip's ongoing notification, gone after the service moved onto [recording]'s. */
+    fun cancelProgress() = manager.cancel(PROGRESS_ID)
+
+    /** [recording]'s, gone once a new trip's notification has taken the service over. */
+    fun cancelRecording() = manager.cancel(RECORDING_ID)
+
     private fun alertBuilder(title: String, text: String, icon: Int = R.drawable.ic_stat_trip) =
         NotificationCompat.Builder(context, NotificationChannels.TRIP_ALERTS)
             .also { NotificationChannels.ensure(context) }
@@ -319,6 +340,9 @@ class TripNotifier @Inject constructor(
 
         /** [TripWaker]'s: here with the rest, as cancelling another's id would take the alarm's "Udah bangun" with it. */
         const val ALARM_ID = 45
+
+        /** [recording]'s. */
+        const val RECORDING_ID = 46
 
         /** How long after "Turun di sini" news of a missed change goes into it instead of its own. */
         private val JUST_OFF: Duration = Duration.ofMinutes(3)

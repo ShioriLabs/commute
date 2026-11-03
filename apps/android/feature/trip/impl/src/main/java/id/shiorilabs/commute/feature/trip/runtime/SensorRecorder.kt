@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.hardware.Sensor
+import android.hardware.SensorManager
 import android.net.Uri
 import android.os.SystemClock
 import androidx.core.content.FileProvider
@@ -12,6 +13,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import id.shiorilabs.commute.core.config.Environment
 import id.shiorilabs.commute.core.location.Fix
 import id.shiorilabs.commute.core.trip.TripLeg
+import id.shiorilabs.commute.core.trip.TripPhase
 import id.shiorilabs.commute.core.trip.research.MotionReadout
 import id.shiorilabs.commute.feature.trip.SensorDataExport
 import kotlinx.coroutines.Dispatchers
@@ -24,11 +26,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * What [MotionTracker] reads, written down as it reads it: one `.ndjson.zst` per train leg under
- * `filesDir/sensors`, with the phone, its sensors and the leg's stops in a header, then every
- * motion sample, every fix, the estimator twice a second and the rider's marks. Shared from
- * Pengaturan → Experimental beside the trip log, to replay the estimator against later. Debug
- * builds only: a release records nothing, whatever Experimental says.
+ * What [MotionTracker] and [RawGnssRecorder] read, written down as they read it: one `.ndjson.zst`
+ * per leg under `filesDir/sensors`, with the phone, its sensors and the leg's stops in a header,
+ * then every motion sample, every fix, the estimator twice a second and the rider's marks, and with
+ * "Rekaman Detail" the satellites' own fixes and measurements. [TripService] opens and closes it, a
+ * leg at a time ([recordedLeg]). Shared from Pengaturan → Experimental beside the trip log, to
+ * replay the estimator against later. Debug builds only: a release records nothing, whatever
+ * Experimental says.
  */
 @Singleton
 class SensorRecorder @Inject constructor(
@@ -42,13 +46,29 @@ class SensorRecorder @Inject constructor(
     private val lock = Any()
     private val recording = SensorRecording(File(context.filesDir, DIR), compress = { ZstdOutputStream(it, COMPRESSION_LEVEL) })
 
-    /** Opens the recording for [ride], read by [sensors]. */
-    fun start(ride: TripLeg.Ride, sensors: List<Sensor>) {
+    /**
+     * A "Rekaman Detail" recording is open: when the trip ends, [TripService] keeps it going a
+     * minute more, past the rider getting off, and stops itself after.
+     */
+    @Volatile
+    var detailedOpen: Boolean = false
+        private set
+
+    /**
+     * Opens the recording for [ride], entered in [phase]: with the motion sensors' facts when
+     * [motion] reads them, and the satellites' columns when [detailed].
+     */
+    fun start(ride: TripLeg.Ride, motion: Boolean, detailed: Boolean, phase: TripPhase?) {
         if (!enabled) return
         val now = clock.instant()
+        val sensors = if (motion) motionSensors() else emptyList()
         val header = deviceFacts(context) + mapOf(
             "t" to STAMP.format(now),
             "n" to SystemClock.elapsedRealtimeNanos(),
+            "detailed" to detailed,
+            "phase" to phase?.name,
+            "measCols" to RawGnssRecorder.MEAS_COLUMNS.takeIf { detailed },
+            "satsCols" to RawGnssRecorder.SATS_COLUMNS.takeIf { detailed },
             "line" to ride.line,
             "headsign" to ride.headsign,
             "stops" to ride.stops.map { stop ->
@@ -72,7 +92,17 @@ class SensorRecorder @Inject constructor(
             },
         )
         val name = "${NAME_STAMP.format(now)}-${ride.line.replace(Regex("[^A-Za-z0-9]+"), "-")}"
-        synchronized(lock) { runCatching { recording.start(name, header) } }
+        synchronized(lock) {
+            runCatching { recording.start(name, header) }
+            detailedOpen = detailed
+        }
+    }
+
+    /** What [MotionTracker] registers: the phone's own linear acceleration too, to set the estimator's gravity against. */
+    private fun motionSensors(): List<Sensor> {
+        val sensors = context.getSystemService(SensorManager::class.java) ?: return emptyList()
+        return listOf(Sensor.TYPE_LINEAR_ACCELERATION, Sensor.TYPE_GAME_ROTATION_VECTOR, Sensor.TYPE_ACCELEROMETER, Sensor.TYPE_GYROSCOPE)
+            .mapNotNull(sensors::getDefaultSensor)
     }
 
     fun imu(nanos: Long, accel: FloatArray, quat: FloatArray) = write { recording.imu(nanos, accel, quat) }
@@ -122,7 +152,13 @@ class SensorRecorder @Inject constructor(
         recording.event(if (onsetNanos == null) "armed" else "departed", nanos, mapOf("onset" to onsetNanos))
     }
 
-    fun stop() = write { recording.stop() }
+    /** One of [RawGnssRecorder]'s readings: `gps`, `meas` or `sats`. */
+    fun gnss(name: String, nanos: Long, fields: Map<String, Any?>) = write { recording.event(name, nanos, fields) }
+
+    fun stop() = write {
+        detailedOpen = false
+        recording.stop()
+    }
 
     /** A disk that's full or gone loses the recording, never the ride. */
     private inline fun write(block: () -> Unit) {
