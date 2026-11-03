@@ -15,7 +15,6 @@ import id.shiorilabs.commute.core.query.di.ApplicationScope
 import id.shiorilabs.commute.core.trip.DepartureDetector
 import id.shiorilabs.commute.core.trip.StopAt
 import id.shiorilabs.commute.core.trip.TripEvent
-import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.trip.research.MotionEstimator
 import id.shiorilabs.commute.core.trip.research.MotionReadout
 import kotlinx.coroutines.CoroutineScope
@@ -38,7 +37,8 @@ import kotlin.math.roundToInt
 data class MotionLive(val readout: MotionReadout?, val unavailable: Boolean, val nowNanos: Long)
 
 /**
- * "Kecepatan IMU" (Experimental): the motion sensors read at 50 Hz while a train is ridden, through
+ * "Kecepatan IMU" (Experimental): the motion sensors read at 50 Hz while a train is ridden (with
+ * "Rekaman Detail" also from the walk to it and the platform, and on past arriving), through
  * a [MotionEstimator] the trip's fixes keep honest, so the trip page can set its speed beside the
  * satellites'. Nothing the trip decides reads that speed. Each fix, and every few seconds without
  * one (a tunnel), it writes an `imu` line to the trip log, to set against the rider's marks
@@ -83,8 +83,12 @@ class MotionTracker @Inject constructor(
     private var lastLineNanos = 0L
     private var toldUnavailable = false
 
-    /** Starts reading for [ride], recording it, unless it's running already. */
-    fun start(ride: TripLeg.Ride) {
+    /** The trip's still on: `imu` lines go to its log. Not in the recorded minute after it. */
+    @Volatile
+    private var logging = true
+
+    /** Starts reading, into the leg's recording if one is open, unless it's running already. */
+    fun start() {
         if (estimator != null || _live.value?.unavailable == true) return
         val sensors = context.getSystemService(SensorManager::class.java)
         val accel = sensors?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -103,11 +107,12 @@ class MotionTracker @Inject constructor(
             estimator = MotionEstimator()
             haveQuat = false
         }
+        logging = true
         lastFixNanos = SystemClock.elapsedRealtimeNanos()
         // Recorded beside them, debug builds only: the phone's own linear acceleration, to set the
         // estimator's gravity against the fusion's that soaked up a train's pull on 2026-10-09.
+        // [TripService] has opened the leg's recording already.
         val linear = sensors.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)?.takeIf { recorder.enabled }
-        recorder.start(ride, listOfNotNull(linear, rotation, accel, gyro))
         val handler = HandlerThread(THREAD).also { it.start(); thread = it }.let { Handler(it.looper) }
         val events = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
@@ -168,7 +173,6 @@ class MotionTracker @Inject constructor(
             armedFor = null
             detector.disarm()
         }
-        recorder.stop()
         _live.value = null
     }
 
@@ -211,12 +215,19 @@ class MotionTracker @Inject constructor(
         line(readout, gnss = fix.speedMps, fix = true, nanos)
     }
 
-    /** A mark the rider tapped, into the recording while one runs. */
-    fun mark(kind: String) {
-        if (synchronized(lock) { estimator } != null) recorder.mark(kind)
+    /** A mark the rider tapped, into the recording while one is open, with the motion sensors or without. */
+    fun mark(kind: String) = recorder.mark(kind)
+
+    /**
+     * The trip has ended but the recording runs on a minute ("Rekaman Detail"): samples still go
+     * into it, but no more lines into a trip log that has said "finished".
+     */
+    fun stopLogging() {
+        logging = false
     }
 
     private fun line(readout: MotionReadout, gnss: Float?, fix: Boolean, nanos: Long) {
+        if (!logging) return
         lastLineNanos = nanos
         log.event(
             "imu",
