@@ -68,12 +68,20 @@ internal fun WalkBoard(
         }
         return
     }
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(ink)
-            .padding(start = 20.dp, top = 12.dp, end = 20.dp, bottom = 16.dp),
-    ) {
+    Column(modifier = modifier.fillMaxWidth().background(ink)) {
+        WalkAhead(pids, walk, muted, onNameMoved)
+        // Edge to edge, as the ruled line between panels on a sign.
+        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(WalkHairline))
+        Column(modifier = Modifier.padding(start = 20.dp, top = 12.dp, end = 20.dp, bottom = 16.dp)) {
+            NextRide(pids.ride, pids.at, lines, muted)
+        }
+    }
+}
+
+/** Where the walk goes, by which exit and corridor when those are on record, and how far. */
+@Composable
+private fun WalkAhead(pids: Pids, walk: TripLeg.Transfer, muted: Color, onNameMoved: (Float) -> Unit) {
+    Column(modifier = Modifier.padding(start = 20.dp, top = 12.dp, end = 20.dp, bottom = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Icon(imageVector = CommuteIcons.Walk, contentDescription = null, modifier = Modifier.size(16.dp), tint = muted)
             Text(
@@ -121,14 +129,6 @@ internal fun WalkBoard(
                 color = muted,
             )
         }
-        Box(
-            modifier = Modifier
-                .padding(vertical = 12.dp)
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(WalkHairline),
-        )
-        NextRide(pids.ride, pids.at, lines, muted)
     }
 }
 
