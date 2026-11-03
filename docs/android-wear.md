@@ -106,6 +106,91 @@ Bluetooth drops in a crowded carriage, and phones die.
 So a rider whose phone dies mid-journey still gets buzzed near their stop, with
 honest wording about how sure it is.
 
+## Starting a trip from the watch
+
+**Status:** researched on 2026-11-03 with throwaway spikes on a Galaxy S23 and a
+Galaxy Watch5. Nothing has been built.
+
+The idea: list the saved pairs on the watch. A tap starts a trip on the phone on
+the first train the rider can still catch, using the same rule as the home
+card's first row.
+
+### What the spikes showed
+
+On a locked phone with the app killed:
+
+- **The message gets through.**
+  - A Data Layer message from the watch cold-starts the app.
+  - The journeys come back and `TripController.start` runs about 2.5 s after the
+    tap.
+  - The watch picks the trip up from `/trip/active` well within a minute.
+- **The foreground service starts.** Play services' delivery gives the app a
+  30 s window to start one from the background.
+- **The `location` type is refused** at targetSdk 37: `Starting FGS with type
+  location … the app must be in the eligible state/exemptions to access the
+  foreground only permission`.
+  - The app has while-in-use location only, with no
+    `ACCESS_BACKGROUND_LOCATION`.
+  - `TripService` then does what it already does for any refused start: the trip
+    carries on by the clock.
+- **GPS comes back when the rider opens the app.** `ActiveTripViewModel` calls
+  `resumeTracking()` on unlock, and the service goes foreground with location.
+
+### Why Citymapper can do it
+
+Citymapper's watch app does exactly this: Get Me Home, then Go, with the phone
+locked. It starts a `location` foreground service and GPS runs, with the same
+while-in-use-only permission as ours. Comparing the two in `dumpsys`:
+
+- Play services binds **both** apps' Wear listeners with "may start activities
+  from the background" (`mIsAllowedBgActivityStartsByBinding=true`, bind flags
+  `0x100001`).
+- At **targetSdk 36** (Citymapper's), a foreground service the app requests
+  while that binding is live counts as started by an activity starter:
+  `allowWiu:52 ACTIVITY_STARTER`. It gets while-in-use location even with the
+  screen locked.
+- At **targetSdk 37** (ours), the same binding gives
+  `getFgsAllowWiu_legacy=BACKGROUND_ACTIVITY_PERMISSION` but
+  `getFgsAllowWiu_new=DENIED`. Android 17 no longer lets that allowance stand in
+  for a visible app.
+- We confirmed it on our app. Forced to targetSdk 36, with nothing else
+  changed, a watch tap on the locked S23 started `TripService` with location,
+  and GPS ran.
+- The service also has to be requested **inside `onMessageReceived`**, while
+  the binding exists. Requested after the callback returns, the process is
+  already cached and nothing is allowed.
+
+### Decision
+
+We stay on targetSdk 37, and don't hold the app back a version for this. A trip
+started from the watch therefore:
+
+- runs **by the clock** until the rider opens the phone, then GPS joins in;
+- takes "Udah naik" and "Udah turun" from the watch meanwhile.
+
+The one known way to have fixes sooner is untested:
+
+- the watch runs its own location service, which it may, because its app is
+  visible at the tap;
+- it forwards fixes to the phone's `TripControllerImpl.onFix`;
+- the phone stops the watch once its own GPS is back.
+
+That needs the phone to stay alive between fixes, under a non-location
+foreground service whose Play acceptance is unchecked. It also costs watch
+battery.
+
+### For whoever builds it
+
+- Sync saved pairs to the watch as data items, next to the saved stations'.
+  Include TransJakarta.
+- Pairs are often closed at night (`resumesAt`). The phone has to send back a
+  reason the watch can show, rather than starting nothing silently.
+- Seen twice in the spikes and not looked into: after "Berhenti" on the watch
+  with the phone app dead, the watch kept showing the trip until the phone app
+  was next opened.
+- Recheck the targetSdk 37 behaviour against each new platform release, in case
+  an opt-in appears.
+
 ## Battery
 
 - No location, no network and no sensors on the watch in companion mode.
@@ -137,8 +222,8 @@ state.
 ## Open questions
 
 - Minimum Wear OS version.
-- Whether "start trip" is possible from the watch (pick from recent journeys),
-  or always starts on the phone.
+- "Start trip" from the watch is possible, but with no GPS until the phone is
+  opened. See [Starting a trip from the watch](#starting-a-trip-from-the-watch).
 - Haptic patterns need testing on real wrists on a real train; the three above
   are a starting point.
 - Round vs square layouts for the progress strip.
