@@ -36,6 +36,9 @@ class TripBarState @Inject constructor() {
     var boardNameHidden by mutableStateOf(false)
 }
 
+/** The bar's one style, made once: a new one each time would redraw it with every recomposition. */
+private val BarStyle: PidsStyle = PidsStyle.BekasiRailway()
+
 /**
  * The bar over every screen: on the trip page it is the page's own top, with the close button; on
  * any other it names what's next and opens the trip.
@@ -70,7 +73,7 @@ class ActiveTripBarImpl @Inject constructor(
         val onTripPage = navigator.currentKey == Route.ActiveTrip
 
         PidsBar(
-            style = PidsStyle.BekasiRailway(),
+            style = BarStyle,
             pids = current.pids(now),
             lines = names,
             copy = copy,
