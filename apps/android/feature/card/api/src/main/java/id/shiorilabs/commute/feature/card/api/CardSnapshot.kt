@@ -37,4 +37,6 @@ data class CardSnapshot(
     val balance: Long,
     val entries: List<CardEntry>,
     val readAt: Instant,
+    /** False when the card wouldn't give its history: [entries] is then empty, not a card never used. */
+    val historyKnown: Boolean = true,
 )
