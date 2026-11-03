@@ -70,7 +70,7 @@ import id.shiorilabs.commute.core.ui.layout.stuckTitle
 import id.shiorilabs.commute.core.ui.network.rememberIsOffline
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.core.ui.startup.HoldStartupWhile
-import id.shiorilabs.commute.core.ui.time.rememberJakartaNow
+import id.shiorilabs.commute.core.ui.time.rememberTimetableNow
 import id.shiorilabs.commute.core.ui.time.updatedAgoText
 import id.shiorilabs.commute.feature.card.api.CardRail
 import id.shiorilabs.commute.feature.card.api.CardTap
@@ -119,7 +119,7 @@ fun SavedStationsScreen(
     // caps it.
     HoldStartupWhile(waiting = ((state as? UIState.Success)?.data?.isFirstContentLoading ?: true) || !nearbySettled)
     val navigator = LocalNavigator.current
-    val now = rememberJakartaNow()
+    val now = rememberTimetableNow()
     val offline by rememberIsOffline()
     LaunchedEffect(now) {
         viewModel.onClockTick(now)
