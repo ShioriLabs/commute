@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.stateIn
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.roundToInt
@@ -50,6 +51,32 @@ import kotlin.math.roundToInt
  */
 internal fun alightChannel(tune: Boolean, reminder: TripReminder): String =
     if (tune && reminder != TripReminder.WAKE) NotificationChannels.TRIP_ALIGHT else NotificationChannels.TRIP_ALERTS
+
+/** What was last put up, so the same again needn't be: a post is a call to the system, and a redraw of it. */
+internal class LastPosted<T : Any> {
+
+    private var last: T? = null
+
+    /** Whether [value] differs from what's up, and if so it's what's up now. */
+    @Synchronized
+    fun changed(value: T): Boolean {
+        if (value == last) return false
+        last = value
+        return true
+    }
+
+    /** [value] went up some other way, as the foreground service's start. */
+    @Synchronized
+    fun record(value: T) {
+        last = value
+    }
+
+    /** Taken down: whatever comes next goes up. */
+    @Synchronized
+    fun clear() {
+        last = null
+    }
+}
 
 /**
  * Puts the trip on the lock screen and taps the rider's wrist: the ongoing notification, promoted to
@@ -79,28 +106,96 @@ class TripNotifier @Inject constructor(
     private var reroute: Reroute? = null
     private var alighted: Alighted? = null
 
+    /** The channels made, once a process: making them again is a call to the system each time. */
+    @Volatile
+    private var channelsReady = false
+
+    /** The trip page, opened from any of the trip's notifications: the same intent every time. */
+    private val openTrip: PendingIntent by lazy {
+        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?.setAction(Intent.ACTION_VIEW)
+            ?.setData(Uri.parse(ACTIVE_TRIP_LINK))
+            ?.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            ?: Intent()
+        PendingIntent.getActivity(context, 0, launch, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    }
+
+    /** The buttons' intents, by action, each made once. */
+    private val actions = ConcurrentHashMap<String, PendingIntent>()
+
+    /** The ongoing notification as last put up: a fix that changes nothing on it isn't posted again. */
+    private val lastProgress = LastPosted<ProgressContent>()
+
+    /**
+     * What the ongoing notification shows, and nothing it doesn't: two equal ones look the same.
+     * [action] is the button beside "Berhenti", as its label and [TripReceiver] action.
+     */
+    private data class ProgressContent(
+        val icon: Int,
+        val title: String,
+        val text: String,
+        val subText: String?,
+        val chip: String,
+        val color: Int,
+        /** Each ride's segment, as its length and colour. */
+        val segments: List<Pair<Int, Int>>,
+        val progress: Int,
+        val tracker: Int,
+        val action: Pair<Int, String>?,
+    )
+
     /** The ongoing notification for [trip], also what the foreground service starts with. */
     fun progress(trip: ActiveTrip): Notification {
-        NotificationChannels.ensure(context)
+        val content = progressContent(trip)
+        lastProgress.record(content)
+        return build(content)
+    }
+
+    fun showProgress(trip: ActiveTrip) {
+        val content = progressContent(trip)
+        if (lastProgress.changed(content)) notify(PROGRESS_ID, build(content))
+    }
+
+    private fun progressContent(trip: ActiveTrip): ProgressContent {
         val headline = trip.headline()
         val progress = trip.state.progress(trip.plan)
         val copy = copy()
         // "Turun sekarang" or one stop to go: the rider is about to get off.
         val alighting = headline is Headline.AlightNow ||
             (headline is Headline.RideTo && headline.stopsLeft <= 1)
+        val waiting = trip.state.phase == TripPhase.WAITING_TO_BOARD
+        val rides = trip.plan.rideIndices.map(trip.plan::ride)
+        val segments = rides.map { it.lastIndex * SEGMENT_UNIT to colorOf(it) }
+        return ProgressContent(
+            icon = when {
+                alighting -> CopyR.drawable.ic_stat_alight
+                waiting -> CopyR.drawable.ic_stat_boarding
+                else -> R.drawable.ic_stat_trip
+            },
+            title = copy.title(headline),
+            text = copy.detail(trip, headline, clock.instant()),
+            subText = copy.source(trip),
+            chip = copy.chip(headline),
+            color = chipColor(headline),
+            segments = segments,
+            progress = (progress.fraction * segments.sumOf { it.first }).roundToInt(),
+            tracker = if (progress.source == PositionSource.CONFIRMED) R.drawable.ic_trip_tracker else R.drawable.ic_trip_tracker_estimated,
+            action = when {
+                alighting -> CopyR.string.trip_action_alighted to TripReceiver.ACTION_ALIGHTED
+                waiting -> CopyR.string.trip_action_boarded to TripReceiver.ACTION_BOARDED
+                else -> null
+            },
+        )
+    }
 
+    private fun build(content: ProgressContent): Notification {
+        ensureChannels()
         val builder = NotificationCompat.Builder(context, NotificationChannels.TRIP_PROGRESS)
-            .setSmallIcon(
-                when {
-                    alighting -> CopyR.drawable.ic_stat_alight
-                    trip.state.phase == TripPhase.WAITING_TO_BOARD -> CopyR.drawable.ic_stat_boarding
-                    else -> R.drawable.ic_stat_trip
-                },
-            )
-            .setContentTitle(copy.title(headline))
-            .setContentText(copy.detail(trip, headline, clock.instant()))
-            .setSubText(copy.source(trip))
-            .setContentIntent(openTrip())
+            .setSmallIcon(content.icon)
+            .setContentTitle(content.title)
+            .setContentText(content.text)
+            .setSubText(content.subText)
+            .setContentIntent(openTrip)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
@@ -108,21 +203,13 @@ class TripNotifier @Inject constructor(
             .setCategory(NotificationCompat.CATEGORY_NAVIGATION)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setRequestPromotedOngoing(true)
-            .setShortCriticalText(copy.chip(headline))
-            .setColor(chipColor(headline))
-            .setStyle(progressStyle(trip, progress.fraction, progress.source))
+            .setShortCriticalText(content.chip)
+            .setColor(content.color)
+            .setStyle(progressStyle(content))
             .addAction(0, context.getString(CopyR.string.trip_action_stop), action(TripReceiver.ACTION_STOP))
-
-        when {
-            alighting ->
-                builder.addAction(0, context.getString(CopyR.string.trip_action_alighted), action(TripReceiver.ACTION_ALIGHTED))
-            trip.state.phase == TripPhase.WAITING_TO_BOARD ->
-                builder.addAction(0, context.getString(CopyR.string.trip_action_boarded), action(TripReceiver.ACTION_BOARDED))
-        }
+        content.action?.let { (label, name) -> builder.addAction(0, context.getString(label), action(name)) }
         return builder.build()
     }
-
-    fun showProgress(trip: ActiveTrip) = notify(PROGRESS_ID, progress(trip))
 
     fun alert(trip: ActiveTrip, alert: TripEffect.Alert) {
         val ride = trip.plan.ride(alert.legIndex)
@@ -243,6 +330,7 @@ class TripNotifier @Inject constructor(
      */
     fun finish() {
         manager.cancel(PROGRESS_ID)
+        lastProgress.clear()
         manager.cancel(ASK_ID)
         manager.cancel(ALERT_ID)
         manager.cancel(REROUTE_ID)
@@ -255,7 +343,7 @@ class TripNotifier @Inject constructor(
      * The foreground service's own, once the trip's is gone; quiet, as the trip's.
      */
     fun recording(): Notification {
-        NotificationChannels.ensure(context)
+        ensureChannels()
         return NotificationCompat.Builder(context, NotificationChannels.TRIP_PROGRESS)
             .setSmallIcon(R.drawable.ic_stat_trip)
             .setContentTitle(context.getString(R.string.trip_recording_tail))
@@ -266,7 +354,10 @@ class TripNotifier @Inject constructor(
     }
 
     /** The trip's ongoing notification, gone after the service moved onto [recording]'s. */
-    fun cancelProgress() = manager.cancel(PROGRESS_ID)
+    fun cancelProgress() {
+        manager.cancel(PROGRESS_ID)
+        lastProgress.clear()
+    }
 
     /** [recording]'s, gone once a new trip's notification has taken the service over. */
     fun cancelRecording() = manager.cancel(RECORDING_ID)
@@ -278,12 +369,12 @@ class TripNotifier @Inject constructor(
         channel: String = NotificationChannels.TRIP_ALERTS,
     ) =
         NotificationCompat.Builder(context, channel)
-            .also { NotificationChannels.ensure(context) }
+            .also { ensureChannels() }
             .setSmallIcon(icon)
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-            .setContentIntent(openTrip())
+            .setContentIntent(openTrip)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
@@ -294,22 +385,14 @@ class TripNotifier @Inject constructor(
      * One segment per ride in its line's colour, a point at each change, and the tracker solid when a
      * fix places the rider and hollow when it is the timetable's guess.
      */
-    private fun progressStyle(trip: ActiveTrip, fraction: Double, source: PositionSource): NotificationCompat.ProgressStyle {
-        val rides = trip.plan.rideIndices.map(trip.plan::ride)
-        val lengths = rides.map { it.lastIndex * SEGMENT_UNIT }
-        val total = lengths.sum()
+    private fun progressStyle(content: ProgressContent): NotificationCompat.ProgressStyle {
         val style = NotificationCompat.ProgressStyle()
             .setStyledByProgress(true)
-            .setProgressSegments(rides.zip(lengths) { ride, length -> NotificationCompat.ProgressStyle.Segment(length).setColor(colorOf(ride)) })
-            .setProgress((fraction * total).roundToInt())
-            .setProgressTrackerIcon(
-                IconCompat.createWithResource(
-                    context,
-                    if (source == PositionSource.CONFIRMED) R.drawable.ic_trip_tracker else R.drawable.ic_trip_tracker_estimated,
-                ),
-            )
+            .setProgressSegments(content.segments.map { (length, color) -> NotificationCompat.ProgressStyle.Segment(length).setColor(color) })
+            .setProgress(content.progress)
+            .setProgressTrackerIcon(IconCompat.createWithResource(context, content.tracker))
         var at = 0
-        lengths.dropLast(1).forEach { length ->
+        content.segments.dropLast(1).forEach { (length, _) ->
             at += length
             style.addProgressPoint(NotificationCompat.ProgressStyle.Point(at).setColor(CHANGE_POINT))
         }
@@ -339,16 +422,13 @@ class TripNotifier @Inject constructor(
 
     private fun sep() = copy().separator
 
-    private fun openTrip(): PendingIntent {
-        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
-            ?.setAction(Intent.ACTION_VIEW)
-            ?.setData(Uri.parse(ACTIVE_TRIP_LINK))
-            ?.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            ?: Intent()
-        return PendingIntent.getActivity(context, 0, launch, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-    }
+    private fun action(name: String): PendingIntent = actions.getOrPut(name) { TripReceiver.pendingIntent(context, name) }
 
-    private fun action(name: String): PendingIntent = TripReceiver.pendingIntent(context, name)
+    private fun ensureChannels() {
+        if (channelsReady) return
+        NotificationChannels.ensure(context)
+        channelsReady = true
+    }
 
     @SuppressLint("MissingPermission") // Checked just above; without it nothing is posted.
     private fun notify(id: Int, notification: Notification) {
