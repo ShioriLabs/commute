@@ -18,6 +18,13 @@ object NotificationChannels {
     const val TRIP_ALERTS = "trip_alerts"
 
     /**
+     * "Turun di sini" with "Mainkan nada pengingat" on: felt, but silent, as the app plays the doors'
+     * chime, as on Japan's trains, as media, which vibrate mode doesn't hush. A sound of the phone's
+     * own here would duck it.
+     */
+    const val TRIP_ALIGHT = "trip_alight"
+
+    /**
      * "Bangunkan Aku": getting off, as an alarm. The channel itself is silent and still: the app
      * vibrates as an alarm does, which goes through silent mode where a notification's wouldn't.
      */
@@ -41,6 +48,13 @@ object NotificationChannels {
                 NotificationChannelCompat.Builder(TRIP_ALERTS, NotificationManager.IMPORTANCE_HIGH)
                     .setName(context.getString(R.string.notification_channel_trip_alerts))
                     .setDescription(context.getString(R.string.notification_channel_trip_alerts_description))
+                    .setVibrationEnabled(true)
+                    .setVibrationPattern(ALERT_VIBRATION)
+                    .build(),
+                NotificationChannelCompat.Builder(TRIP_ALIGHT, NotificationManager.IMPORTANCE_HIGH)
+                    .setName(context.getString(R.string.notification_channel_trip_alight))
+                    .setDescription(context.getString(R.string.notification_channel_trip_alight_description))
+                    .setSound(null, null)
                     .setVibrationEnabled(true)
                     .setVibrationPattern(ALERT_VIBRATION)
                     .build(),
