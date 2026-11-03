@@ -50,7 +50,8 @@ interface TripRuntime {
     /**
      * The trip's reminder for getting off ride [legIndex]: the tune, and with "Tambah Pengingat" set
      * a buzz, or an alarm on the watch and then the phone. Once per ride; a second call for the same
-     * one does nothing, but for [atStop] raising an alarm's tune to full: the rider is at the stop.
+     * one does nothing, but for [atStop]: the rider is at the stop, so the doors chime, or an alarm's
+     * tune goes to full.
      */
     fun remindRider(trip: ActiveTrip, legIndex: Int, atStop: Boolean)
 

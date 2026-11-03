@@ -305,6 +305,18 @@ class TripControllerImplTest {
     }
 
     @Test
+    fun `told it's off before a stop out, the waker hears it as at the stop`() = runTest {
+        store.trip = standingAtManggarai()
+        val controller = controller(at = minutes(24))
+        runCurrent()
+
+        controller.say(RiderAction.ALIGHTED)
+        runCurrent()
+
+        assertEquals(listOf(true), runtime.remindedAtStop)
+    }
+
+    @Test
     fun `getting off, or changing the reminder, stops the alarm`() = runTest {
         val controller = controller()
         controller.start(plan, origin)

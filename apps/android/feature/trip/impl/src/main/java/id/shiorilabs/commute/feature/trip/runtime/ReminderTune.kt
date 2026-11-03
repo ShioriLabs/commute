@@ -8,6 +8,7 @@ import android.media.MediaPlayer
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import androidx.annotation.RawRes
 import dagger.hilt.android.qualifiers.ApplicationContext
 import id.shiorilabs.commute.feature.trip.R
 import java.time.Duration
@@ -36,7 +37,7 @@ internal fun wakeVolume(elapsed: Duration): Float =
  * to the rider, once through; or as an alarm, for a rider asleep, which neither silent mode nor Do
  * Not Disturb hushes, starting quiet and climbing over and over until they're up or [RING_FOR] has
  * passed. It ducks whatever the rider is listening to while it plays. On a bus it's Clair de Lune
- * instead.
+ * instead. At the stop, as media, the doors chime, as Japan's trains' do.
  */
 @Singleton
 class ReminderTune @Inject constructor(
@@ -61,19 +62,7 @@ class ReminderTune @Inject constructor(
     fun play(alarm: Boolean, bus: Boolean = false, atStop: Boolean = false) {
         stop()
         runCatching {
-            val attributes = AudioAttributes.Builder()
-                .setUsage(if (alarm) AudioAttributes.USAGE_ALARM else AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                .build()
-            val tune = if (bus) R.raw.reminder_clair_de_lune else R.raw.reminder_maiden
-            val next = MediaPlayer.create(context, tune, attributes, AudioManager.AUDIO_SESSION_ID_GENERATE)
-                ?: return
-            player = next
-            next.setOnCompletionListener { if (player === it) stop() }
-            focus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
-                .setAudioAttributes(attributes)
-                .build()
-                .also(audio::requestAudioFocus)
+            val next = load(if (bus) R.raw.reminder_clair_de_lune else R.raw.reminder_maiden, alarm) ?: return
             if (alarm) {
                 next.isLooping = true
                 alarmStartedAt = SystemClock.elapsedRealtime()
@@ -82,6 +71,30 @@ class ReminderTune @Inject constructor(
             }
             next.start()
         }.onFailure { stop() }
+    }
+
+    /** The doors chime, once, as media: what's left of the tune stops for them. */
+    @Synchronized
+    fun chime() {
+        stop()
+        runCatching { load(R.raw.door_chime, alarm = false)?.start() }.onFailure { stop() }
+    }
+
+    /** [tune] ready to start, holding the rider's audio, ducked, until it's done. */
+    private fun load(@RawRes tune: Int, alarm: Boolean): MediaPlayer? {
+        val attributes = AudioAttributes.Builder()
+            .setUsage(if (alarm) AudioAttributes.USAGE_ALARM else AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            .build()
+        val next = MediaPlayer.create(context, tune, attributes, AudioManager.AUDIO_SESSION_ID_GENERATE)
+            ?: return null
+        player = next
+        next.setOnCompletionListener { if (player === it) stop() }
+        focus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+            .setAudioAttributes(attributes)
+            .build()
+            .also(audio::requestAudioFocus)
+        return next
     }
 
     /** At the stop: a tune still climbing goes straight to full. */
