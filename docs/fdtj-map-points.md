@@ -22,6 +22,16 @@ never reach users, pinned behind the service worker and a one-year `immutable`
 header. The tiles beside it (`public/maps/fdtj/`) stay put: those really are
 immutable between map releases.
 
+**The Android app reads stable copies.** An installed app can't follow a
+content hash, so the web build also emits this file and `label-points.json` at
+`/maps/fdtj/points.json` and `/maps/fdtj/label-points.json` (`appMapData` in
+`vite.config.ts`), revalidated every five minutes (`public/_headers`). Edit
+`app/data/` as usual: a web deploy ships the change to the app too, with no app
+release. The app only takes a copy that parses, names real stations and carries
+the same `version` as the `manifest.json` it is drawing; otherwise it keeps the
+last good one (first launch: the copy bundled into its build), so a bad edit or
+a points edition paired with the wrong tiles never breaks its taps.
+
 ## Point shape
 
 ```jsonc

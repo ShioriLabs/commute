@@ -33,6 +33,13 @@
 # The map's version pointer — mutable, so it must never be immutable.
 /maps/fdtj/manifest.json
   Cache-Control: public, max-age=300, must-revalidate
+# The Android app's copies of the tap targets (appMapData in vite.config.ts).
+# Stable names that change with every tap-target edit, so revalidated like the
+# manifest; the web itself reads the hashed /assets/ copies.
+/maps/fdtj/points.json
+  Cache-Control: public, max-age=300, must-revalidate
+/maps/fdtj/label-points.json
+  Cache-Control: public, max-age=300, must-revalidate
 # The SPA shell. `/` needs its own rule: Pages matches _headers against the
 # request path, and a navigation to the site root has path `/`, which the
 # /index.html rule does not match — that rule was inert on its own.
