@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="map_back">Kembali</string>
+    <string name="map_description">Peta integrasi transportasi Jakarta</string>
+    <string name="map_unsupported">Peta belum bisa ditampilkan di perangkat ini.</string>
+    <string name="map_load_failed">Peta tidak bisa dimuat.</string>
+    <string name="map_retry">Coba lagi</string>
+</resources>

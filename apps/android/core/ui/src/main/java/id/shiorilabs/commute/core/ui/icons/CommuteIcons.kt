@@ -58,6 +58,7 @@ import com.adamglin.phosphoricons.fill.Flask
 import com.adamglin.phosphoricons.fill.Palette
 import com.adamglin.phosphoricons.fill.Info
 import com.adamglin.phosphoricons.fill.MapPin
+import com.adamglin.phosphoricons.fill.MapTrifold
 import com.adamglin.phosphoricons.fill.PushPin
 import com.adamglin.phosphoricons.fill.PushPinSimple
 import com.adamglin.phosphoricons.fill.Ticket
@@ -74,6 +75,9 @@ object CommuteIcons {
 
     val Search: ImageVector = PhosphorIcons.Bold.MagnifyingGlass
     val Settings: ImageVector = PhosphorIcons.Fill.GearSix
+
+    /** Opens the integration map, as the web's map card does. */
+    val Map: ImageVector = PhosphorIcons.Fill.MapTrifold
     val Close: ImageVector = PhosphorIcons.Bold.X
 
     /** Clears a text field. */

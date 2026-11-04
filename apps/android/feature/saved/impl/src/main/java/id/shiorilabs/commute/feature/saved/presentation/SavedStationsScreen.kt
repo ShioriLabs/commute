@@ -134,6 +134,7 @@ fun SavedStationsScreen(
         onRefresh = viewModel::refresh,
         onRefreshNoticeShown = viewModel::onRefreshNoticeShown,
         onSearchClick = { navigator.goTo(Route.Search) },
+        onMapClick = { navigator.goTo(Route.Map) },
         onSettingsClick = { navigator.goTo(Route.Settings) },
         onStationClick = { navigator.goTo(Route.Station(it)) },
         onRouteClick = { fromId, toId -> navigator.goTo(Route.Otw(fromId = fromId, toId = toId)) },
@@ -157,6 +158,7 @@ private fun SavedStationsContent(
     onRefresh: () -> Unit = {},
     onRefreshNoticeShown: () -> Unit = {},
     onSearchClick: () -> Unit = {},
+    onMapClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
     onStationClick: (stationId: String) -> Unit = {},
     onRouteClick: (fromId: String, toId: String) -> Unit = { _, _ -> },
@@ -240,6 +242,7 @@ private fun SavedStationsContent(
 
         HomeNavRail(
             onSearchClick = onSearchClick,
+            onMapClick = onMapClick,
             onSettingsClick = onSettingsClick,
             bottomInset = innerPadding.calculateBottomPadding(),
             slidesWithPage = coveredByPage,
