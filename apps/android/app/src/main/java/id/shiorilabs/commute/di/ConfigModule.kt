@@ -24,5 +24,6 @@ object ConfigModule {
         apiBaseUrl = BuildConfig.API_BASE_URL,
         appVersion = BuildConfig.VERSION_NAME,
         debug = BuildConfig.DEBUG,
+        webBaseUrl = BuildConfig.WEB_BASE_URL,
     )
 }

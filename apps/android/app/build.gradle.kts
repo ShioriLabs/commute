@@ -28,11 +28,13 @@ android {
 
     // One flavor, `production`, from the `commute.android.application` convention, as is signing.
     // A debug build can still be pointed at a local API with
-    // `-Pcommute.apiBaseUrl=http://10.0.2.2:3000`; a build type's field outranks the flavor's.
-    // Release always talks to production.
+    // `-Pcommute.apiBaseUrl=http://10.0.2.2:3000`, and at a local web server (the map's tiles and
+    // tap targets) with `-Pcommute.webBaseUrl=http://10.0.2.2:5173`; a build type's field outranks
+    // the flavor's. Release always talks to production.
     productFlavors {
         getByName("production") {
             buildConfigField("String", "API_BASE_URL", "\"https://api.commute.shiorilabs.id\"")
+            buildConfigField("String", "WEB_BASE_URL", "\"https://commute.shiorilabs.id\"")
         }
     }
 
@@ -40,6 +42,9 @@ android {
         debug {
             providers.gradleProperty("commute.apiBaseUrl").orNull?.let { localApi ->
                 buildConfigField("String", "API_BASE_URL", "\"$localApi\"")
+            }
+            providers.gradleProperty("commute.webBaseUrl").orNull?.let { localWeb ->
+                buildConfigField("String", "WEB_BASE_URL", "\"$localWeb\"")
             }
         }
         release {
@@ -108,6 +113,7 @@ dependencies {
     implementation(project(":feature:card:impl"))
     implementation(project(":feature:settings:impl"))
     implementation(project(":feature:onboarding:impl"))
+    implementation(project(":feature:map:impl"))
 
     // Crash reports.
     implementation(libs.sentry.android)

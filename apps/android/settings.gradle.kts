@@ -68,6 +68,7 @@ include(":feature:card:api")
 include(":feature:card:impl")
 include(":feature:settings:impl")
 include(":feature:onboarding:impl")
+include(":feature:map:impl")
 
 // Private bank-card NFC tooling (git submodule at apps/android/private). Absent → status quo:
 // the public app builds with only the FeliCa readers (KMT + Japan IC). See private/README.md.
