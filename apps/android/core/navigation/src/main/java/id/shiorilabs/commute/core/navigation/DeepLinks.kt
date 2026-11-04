@@ -18,7 +18,7 @@ const val ACTIVE_TRIP_LINK = "commute://trip/active"
 /**
  * The screen a web link opens, or `null` for one the app has no screen for (the browser keeps
  * those): `/fare`, a shared OTW link (see [fareRoute]), a station's page or its full timetable, a
- * hub's page and a line's page.
+ * hub's page, a line's page and the map.
  */
 fun routeForLink(link: String): Route? {
     if (link == ACTIVE_TRIP_LINK) return Route.ActiveTrip
@@ -35,6 +35,8 @@ fun routeForLink(link: String): Route? {
     }
     return when (path) {
         "/fare" -> fareRoute(queryParams(uri.rawQuery))
+
+        "/map" -> Route.Map
 
         else -> null
     }

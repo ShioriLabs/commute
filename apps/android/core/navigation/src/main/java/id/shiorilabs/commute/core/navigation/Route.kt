@@ -138,6 +138,10 @@ sealed interface Route : NavKey {
     @Serializable
     data object ActiveTrip : Route
 
+    /** The FDTJ integration map, opened from the home screen's "Peta" card and a `/map` link. */
+    @Serializable
+    data object Map : Route
+
     /** Settings, opened from the home screen's "Pengaturan" card. */
     @Serializable
     data object Settings : Route

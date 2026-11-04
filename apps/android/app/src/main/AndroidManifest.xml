@@ -44,7 +44,8 @@
             </intent-filter>
 
             <!-- A shared OTW link (the web's /fare), a station's page or timetable
-                 (/stations/…), a hub's page (/hubs/…) and a line's page (/lines/…) open here.
+                 (/stations/…), a hub's page (/hubs/…), a line's page (/lines/…) and the map
+                 (/map) open here.
                  Android only hands them over once the web publishes
                  /.well-known/assetlinks.json for this app; until then they stay in the browser
                  unless the rider turns on "Open supported links" in the app's settings. The web
@@ -56,6 +57,7 @@
                 <data android:scheme="https" />
                 <data android:host="commute.shiorilabs.id" />
                 <data android:path="/fare" />
+                <data android:path="/map" />
                 <data android:pathPrefix="/stations/" />
                 <data android:pathPrefix="/hubs/" />
                 <data android:pathPrefix="/lines/" />

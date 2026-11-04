@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- The map draws with Vulkan, but a phone without it isn't filtered out of Play: the map
+         says it can't show there, and the rest of the app works as before. -->
+    <uses-feature
+        android:name="android.hardware.vulkan.version"
+        android:required="false" />
+</manifest>

@@ -11,6 +11,9 @@
     <string name="saved_nav_search_title">Mau ke mana?</string>
     <string name="saved_nav_search_subtitle">Cari stasiun\n&amp; rute</string>
     <string name="saved_nav_search_description">Cari stasiun, rute, dan tarif</string>
+    <string name="saved_nav_map_title">Lihat</string>
+    <string name="saved_nav_map_subtitle">Peta\nIntegrasi</string>
+    <string name="saved_nav_map_description">Lihat peta integrasi</string>
     <string name="saved_nav_settings_title">Pengaturan</string>
     <string name="saved_nav_settings_subtitle">Aplikasi</string>
     <string name="saved_nav_settings_description">Pengaturan aplikasi</string>
