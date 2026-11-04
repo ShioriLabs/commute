@@ -91,8 +91,16 @@ class DeepLinksTest {
     }
 
     @Test
+    fun `a map link opens the map, whatever it carries`() {
+        assertEquals(Route.Map, routeForLink("https://commute.shiorilabs.id/map"))
+        assertEquals(Route.Map, routeForLink("https://commute.shiorilabs.id/map/"))
+        assertEquals(Route.Map, routeForLink("https://commute.shiorilabs.id/map?from=KCI-SUD"))
+        assertNull(routeForLink("https://commute.shiorilabs.id/map/extra"))
+    }
+
+    @Test
     fun `links the app has no screen for stay in the browser`() {
-        assertNull(routeForLink("https://commute.shiorilabs.id/map?from=KCI-SUD"))
+        assertNull(routeForLink("https://commute.shiorilabs.id/settings/about"))
         assertNull(routeForLink("https://example.com/fare?from=KCI-SUD"))
         assertNull(routeForLink("http://commute.shiorilabs.id/fare"))
         assertNull(routeForLink("not a link"))

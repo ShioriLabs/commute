@@ -49,8 +49,9 @@ class RouteTest {
     }
 
     @Test
-    fun `the settings pages survive a serialization round-trip`() {
+    fun `the map and the settings pages survive a serialization round-trip`() {
         val routes: List<Route> = listOf(
+            Route.Map,
             Route.Settings,
             Route.SettingsSavedStations,
             Route.SettingsManageData,
