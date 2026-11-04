@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { cloudflare } from '@cloudflare/vite-plugin'
 import { reactRouter } from '@react-router/dev/vite'
 import tailwindcss from '@tailwindcss/vite'
@@ -56,9 +58,45 @@ function phosphorPerIconDev(): Plugin {
   }
 }
 
+// Stable-URL copies of the map's tap targets, for the Android app.
+//
+// The web imports app/data/points.json with `?url`, so it ships content-hashed
+// under /assets/ and never goes stale behind the service worker — see
+// docs/fdtj-map-points.md for why the source must stay in app/. A hashed name
+// is no use to an installed app, though: it can't know the next build's hash.
+// So the same bytes are also emitted at /maps/fdtj/<name>, revalidated every
+// five minutes (public/_headers), which lets a tap-target fix reach the app
+// with a web deploy instead of an app release. Served from app/data in dev too,
+// so a debug build pointed at `pnpm dev` sees edits as they are made.
+const APP_MAP_DATA = ['points.json', 'label-points.json']
+
+function appMapData(): Plugin {
+  const source = (name: string) => readFileSync(fileURLToPath(new URL(`./app/data/${name}`, import.meta.url)))
+
+  return {
+    name: 'app-map-data',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const name = APP_MAP_DATA.find(file => req.url?.split('?')[0] === `/maps/fdtj/${file}`)
+        if (!name) return next()
+        res.setHeader('Content-Type', 'application/json')
+        res.end(source(name))
+      })
+    },
+    generateBundle() {
+      // The client build only: the SSR bundle is never served as static files.
+      if (this.environment.name !== 'client') return
+      for (const name of APP_MAP_DATA) {
+        this.emitFile({ type: 'asset', fileName: `maps/fdtj/${name}`, source: source(name) })
+      }
+    }
+  }
+}
+
 export default defineConfig({
   plugins: [
     phosphorPerIconDev(),
+    appMapData(),
     tailwindcss(),
     reactRouter(),
     tsconfigPaths(),
