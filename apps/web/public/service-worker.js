@@ -72,7 +72,10 @@ const MAX_API_ENTRIES = 120
 //   - points.json is edited constantly. It now lives at app/data/points.json
 //     and is imported with `?url`, so Vite content-hashes it into /assets/.
 //     There is no stable URL left to pre-cache, and none is needed — a new
-//     hash is a new URL, which no cache can have a stale copy of.
+//     hash is a new URL, which no cache can have a stale copy of. The
+//     /maps/fdtj/points.json and label-points.json copies the build emits are
+//     for the Android app, which can't follow a hash; the page never reads
+//     them, and like the manifest they fall through to revalidation.
 //   - manifest.json is the map's version pointer, so it has to stay
 //     revalidated. It falls through to stale-while-revalidate in `fetch`.
 const MAP_ROWS = 8
