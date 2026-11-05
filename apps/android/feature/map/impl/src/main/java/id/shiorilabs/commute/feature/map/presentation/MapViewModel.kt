@@ -6,7 +6,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.feature.map.data.MapRepository
 import id.shiorilabs.commute.feature.map.domain.MapData
-import id.shiorilabs.commute.feature.map.domain.Transform
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,16 +15,12 @@ import javax.inject.Inject
 @HiltViewModel
 class MapViewModel @Inject constructor(
     val repository: MapRepository,
+    /** Where the map was left: under a station's page, or closed earlier. */
+    val session: MapSession,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<UIState<MapData>>(UIState.Loading)
     val state: StateFlow<UIState<MapData>> = _state.asStateFlow()
-
-    /**
-     * Where the camera was when the map last left the screen, as it does under a station's page:
-     * coming back lands where the rider left it.
-     */
-    var camera: Transform? = null
 
     init {
         load()
