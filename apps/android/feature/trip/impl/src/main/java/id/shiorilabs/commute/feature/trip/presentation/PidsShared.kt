@@ -1,8 +1,5 @@
 package id.shiorilabs.commute.feature.trip.presentation
 
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -21,9 +18,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -40,7 +35,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -55,51 +49,16 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.view.WindowCompat
 import id.shiorilabs.commute.core.trip.TripLeg
 import id.shiorilabs.commute.core.tripcopy.tripDirection
 import id.shiorilabs.commute.core.ui.motion.IosSpringEasing
 import id.shiorilabs.commute.core.ui.motion.rememberReducedMotion
-import id.shiorilabs.commute.core.ui.theme.LocalDarkTheme
 import id.shiorilabs.commute.feature.station.domain.LineInfo
 import id.shiorilabs.commute.feature.station.presentation.components.LineRoundel
 import id.shiorilabs.commute.feature.trip.R
 import kotlinx.coroutines.delay
 
 // The pieces any PIDS style, and the finished trip's plate, draw with: see [PidsStyle].
-
-/**
- * Light icons over a dark surface while it's up; the app's own again once the last such
- * surface has gone, so the trip bar leaving as the finished page's plate arrives can't darken
- * them under the plate. Set on every pass too, as the theme sets its own whenever it recomposes.
- */
-@Composable
-internal fun DarkStatusBarIcons() {
-    val view = LocalView.current
-    val controller = remember(view) {
-        view.context.findActivity()?.window?.let { WindowCompat.getInsetsController(it, view) }
-    }
-    // What the app's own icons are once the last dark surface goes: dark ones on the light theme.
-    val appIconsDark = !LocalDarkTheme.current
-    SideEffect { controller?.isAppearanceLightStatusBars = false }
-    DisposableEffect(controller, appIconsDark) {
-        darkSurfaces++
-        controller?.isAppearanceLightStatusBars = false
-        onDispose {
-            darkSurfaces--
-            if (darkSurfaces == 0) controller?.isAppearanceLightStatusBars = appIconsDark
-        }
-    }
-}
-
-/** How many dark surfaces are up under the status bar. Only touched on the main thread. */
-private var darkSurfaces = 0
-
-private tailrec fun Context.findActivity(): Activity? = when (this) {
-    is Activity -> this
-    is ContextWrapper -> baseContext.findActivity()
-    else -> null
-}
 
 /** [TripCopy.direction], read where there's no copy to hand. */
 @Composable
