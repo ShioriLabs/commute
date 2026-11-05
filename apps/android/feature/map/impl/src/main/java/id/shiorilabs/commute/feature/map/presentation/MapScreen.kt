@@ -22,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -143,6 +144,8 @@ private fun MapSurface(data: MapData, viewModel: MapViewModel) {
     }
     val supported by controller.isSupported.collectAsStateWithLifecycle()
     val snapshot by controller.snapshot.collectAsStateWithLifecycle()
+    val showHitboxes by viewModel.showHitboxes.collectAsStateWithLifecycle()
+    SideEffect { controller.showHitboxes = showHitboxes }
     val scope = rememberCoroutineScope()
     val description = stringResource(R.string.map_description)
 

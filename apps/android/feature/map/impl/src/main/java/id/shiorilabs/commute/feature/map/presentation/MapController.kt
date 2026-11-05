@@ -15,7 +15,15 @@ import id.shiorilabs.commute.feature.map.domain.MAX_RENDER_DPR
 import id.shiorilabs.commute.feature.map.domain.MapData
 import id.shiorilabs.commute.feature.map.domain.MapGestures
 import id.shiorilabs.commute.feature.map.domain.MapHit
+import id.shiorilabs.commute.feature.map.domain.MapPoint
+import id.shiorilabs.commute.feature.map.domain.Rgb
+import id.shiorilabs.commute.feature.map.domain.Spotlight
 import id.shiorilabs.commute.feature.map.domain.TilePlanner
+import id.shiorilabs.commute.feature.map.domain.mapTreatment
+import id.shiorilabs.commute.feature.map.domain.markerLabel
+import id.shiorilabs.commute.feature.map.domain.seedFadeFrom
+import id.shiorilabs.commute.feature.map.render.Pill
+import id.shiorilabs.commute.feature.map.render.packOverlay
 import id.shiorilabs.commute.feature.map.domain.TileRequest
 import id.shiorilabs.commute.feature.map.domain.Transform
 import id.shiorilabs.commute.feature.map.domain.Viewport
@@ -94,6 +102,20 @@ class MapController(
     private var flightStartNanos = 0L
     private var pinchStartScale = 1.0
     private var lastFrameNanos = 0L
+
+    private var spotlight: Spotlight? = null
+
+    /** Debug: every tap target drawn in pink over the map. */
+    var showHitboxes: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            invalidate()
+        }
+
+    private val hitboxes: List<Pill> by lazy {
+        (data.points + data.labels).map { HITBOX_COLOR.pill(it) }
+    }
 
     private var rendererReady = false
     private var rgb565 = true
@@ -187,7 +209,8 @@ class MapController(
         }
         rendered = next
 
-        val moving = flight != null || fling != null || target?.let { !settled(next, it) } == true
+        val moving = flight != null || fling != null || target?.let { !settled(next, it) } == true ||
+            spotlight?.isAnimating == true
         val readyPixels = if (rendererReady) draw(next, view) else false
         val more = moving || readyPixels
         snapshotGeneration++
@@ -226,8 +249,45 @@ class MapController(
         preview = null
     }
 
+    /**
+     * Spotlights [point], a station's marker or a hub's region: the rest of the map fades, its
+     * name stays lit with it, and a ring in [color] settles round it. Takes over from what's lit
+     * already without the map brightening in between.
+     */
+    fun spotlight(point: MapPoint, color: Rgb) {
+        spotlight = Spotlight(
+            point = point,
+            label = markerLabel(point, data.labels),
+            color = color,
+            startMs = SystemClock.uptimeMillis(),
+            fadeFrom = seedFadeFrom(spotlight?.lastFade),
+        )
+        invalidate()
+    }
+
+    /** The ring's colour, once the station's line has said what it is. */
+    fun tintSpotlight(stationId: String, color: Rgb) {
+        val current = spotlight ?: return
+        if (current.point.stationId != stationId) return
+        current.color = color
+        invalidate()
+    }
+
+    /** Fades the spotlight out from wherever it has got to. */
+    fun clearSpotlight() {
+        spotlight?.exit(SystemClock.uptimeMillis())
+        invalidate()
+    }
+
+    private fun overlay(nowMs: Long): FloatArray {
+        val selection = spotlight?.frame(nowMs)
+        if (spotlight?.isGone == true) spotlight = null
+        return packOverlay(mapTreatment(selection), if (showHitboxes) hitboxes else emptyList())
+    }
+
     private fun draw(t: Transform, view: Viewport): Boolean {
-        val plan = planner.frame(t, view.width, view.height, min(density.toDouble(), MAX_RENDER_DPR), SystemClock.uptimeMillis())
+        val nowMs = SystemClock.uptimeMillis()
+        val plan = planner.frame(t, view.width, view.height, min(density.toDouble(), MAX_RENDER_DPR), nowMs)
         val cols = manifest.grid.cols
         plan.releases.forEach { renderer.release(it.key(cols)) }
         plan.upload?.let { (request, bitmap) -> renderer.upload(request.tile.key(cols), bitmap) }
@@ -262,6 +322,7 @@ class MapController(
                 keys = keys,
                 rects = rects,
                 count = count,
+                overlay = overlay(nowMs),
                 complete = !plan.needsPreview && plan.draws.isNotEmpty(),
             ),
         )
@@ -380,6 +441,13 @@ class MapController(
 
         /** The preview's texture, apart from every tile's `row * cols + col`. */
         const val PREVIEW_KEY = -1
+
+        /** The web's debug pink for tap targets, see-through. */
+        val HITBOX_COLOR = Pill(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.6, 0.3)
+
+        /** [point]'s shape in this pill's colour. */
+        fun Pill.pill(point: MapPoint): Pill =
+            copy(ax = point.ax, ay = point.ay, bx = point.bx, by = point.by, r = point.r, cr = point.cornerRadius)
 
         /** A finger is broader than a pointer, so taps get this much grace around each target. */
         const val TOUCH_HIT_SLOP_DP = 12.0

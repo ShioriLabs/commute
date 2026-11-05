@@ -54,6 +54,7 @@ class ExperimentalViewModel @Inject constructor(
     val imuSpeed: StateFlow<Boolean> = preferences.imuSpeed.stateIn(viewModelScope, WhileUiSubscribed, false)
     val detailedRecording: StateFlow<Boolean> = preferences.detailedRecording.stateIn(viewModelScope, WhileUiSubscribed, false)
     val yishunPids: StateFlow<Boolean> = preferences.yishunPids.stateIn(viewModelScope, WhileUiSubscribed, false)
+    val mapHitboxes: StateFlow<Boolean> = preferences.mapHitboxes.stateIn(viewModelScope, WhileUiSubscribed, false)
 
     val watchAutoOpen: StateFlow<Boolean> = preferences.watchAutoOpen.stateIn(viewModelScope, WhileUiSubscribed, true)
 
@@ -74,6 +75,8 @@ class ExperimentalViewModel @Inject constructor(
     fun setDetailedRecording(enabled: Boolean) = viewModelScope.launch { preferences.setDetailedRecording(enabled) }
 
     fun setYishunPids(enabled: Boolean) = viewModelScope.launch { preferences.setYishunPids(enabled) }
+
+    fun setMapHitboxes(enabled: Boolean) = viewModelScope.launch { preferences.setMapHitboxes(enabled) }
 
     /** The trip log's share sheet, or `null` with nothing logged yet. */
     fun shareTripLog(onReady: (Intent?) -> Unit) = viewModelScope.launch { onReady(tripLog.share()) }
@@ -110,6 +113,7 @@ fun ExperimentalScreen(
     val imuSpeed by viewModel.imuSpeed.collectAsStateWithLifecycle()
     val detailedRecording by viewModel.detailedRecording.collectAsStateWithLifecycle()
     val yishunPids by viewModel.yishunPids.collectAsStateWithLifecycle()
+    val mapHitboxes by viewModel.mapHitboxes.collectAsStateWithLifecycle()
     val watchAutoOpen by viewModel.watchAutoOpen.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
     val context = LocalContext.current
@@ -127,6 +131,7 @@ fun ExperimentalScreen(
         imuSpeed = imuSpeed,
         detailedRecording = detailedRecording,
         yishunPids = yishunPids,
+        mapHitboxes = mapHitboxes,
         watchAutoOpen = watchAutoOpen,
         canHide = !debug,
         sensorData = debug,
@@ -139,6 +144,7 @@ fun ExperimentalScreen(
         onImuSpeed = { viewModel.setImuSpeed(it) },
         onDetailedRecording = { viewModel.setDetailedRecording(it) },
         onYishunPids = { viewModel.setYishunPids(it) },
+        onMapHitboxes = { viewModel.setMapHitboxes(it) },
         onWatchAutoOpen = { viewModel.setWatchAutoOpen(it) },
         onShareTripLog = {
             viewModel.shareTripLog { intent ->
@@ -174,6 +180,7 @@ private fun ExperimentalContent(
     imuSpeed: Boolean = false,
     detailedRecording: Boolean = false,
     yishunPids: Boolean = false,
+    mapHitboxes: Boolean = false,
     watchAutoOpen: Boolean = true,
     onBack: () -> Unit = {},
     onForceTripStart: (Boolean) -> Unit = {},
@@ -184,6 +191,7 @@ private fun ExperimentalContent(
     onImuSpeed: (Boolean) -> Unit = {},
     onDetailedRecording: (Boolean) -> Unit = {},
     onYishunPids: (Boolean) -> Unit = {},
+    onMapHitboxes: (Boolean) -> Unit = {},
     onWatchAutoOpen: (Boolean) -> Unit = {},
     onShareTripLog: () -> Unit = {},
     onShareSensorData: () -> Unit = {},
@@ -253,6 +261,15 @@ private fun ExperimentalContent(
                 subtitle = stringResource(R.string.settings_experimental_detailed_recording_detail),
                 checked = detailedRecording,
                 onCheckedChange = onDetailedRecording,
+            )
+        }
+        // Debug builds only: it's for checking the web's tap targets against the artwork.
+        if (sensorData) {
+            SettingsSwitch(
+                title = stringResource(R.string.settings_experimental_map_hitboxes),
+                subtitle = stringResource(R.string.settings_experimental_map_hitboxes_detail),
+                checked = mapHitboxes,
+                onCheckedChange = onMapHitboxes,
             )
         }
         SettingsSwitch(

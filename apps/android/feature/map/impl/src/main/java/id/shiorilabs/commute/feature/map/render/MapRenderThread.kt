@@ -14,7 +14,8 @@ import java.util.concurrent.atomic.AtomicReference
 
 /**
  * One frame to draw: textures [keys] over their world [rects], under the camera, in surface pixels.
- * [complete] when every tile it shows is drawn at last, with no preview left under any.
+ * [complete] when every tile it shows is drawn at last, with no preview left under any. [overlay]
+ * is the treatment and the pills over it, from [packOverlay].
  */
 class RenderFrame(
     val tx: Float,
@@ -23,6 +24,7 @@ class RenderFrame(
     val keys: IntArray,
     val rects: FloatArray,
     val count: Int,
+    val overlay: FloatArray,
     val complete: Boolean = false,
 )
 
@@ -127,7 +129,7 @@ class MapRenderThread(
         drainCommands(upload = handle != 0L)
         val frame = latest.get() ?: return
         if (handle == 0L) return
-        if (!MapNative.draw(handle, frame.tx, frame.ty, frame.scale, frame.keys, frame.rects, frame.count)) {
+        if (!MapNative.draw(handle, frame.tx, frame.ty, frame.scale, frame.keys, frame.rects, frame.count, frame.overlay)) {
             Log.e(TAG, "The GPU stopped drawing the map")
             MapNative.destroy(handle)
             handle = 0L
