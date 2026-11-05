@@ -10,6 +10,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -29,6 +31,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -55,11 +58,14 @@ import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.morph.LocalNavAnimatedVisibilityScope
 import id.shiorilabs.commute.core.ui.morph.LocalSharedTransitionScope
 import id.shiorilabs.commute.core.ui.morph.NavCardMorphTarget
+import id.shiorilabs.commute.core.ui.theme.DarkStatusBarIcons
 import id.shiorilabs.commute.feature.map.R
 import id.shiorilabs.commute.feature.map.domain.MapData
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.PI
+import kotlin.math.cos
 
 /** The FDTJ integration map, edge to edge under the system bars, with a way back over it. */
 @Composable
@@ -91,6 +97,17 @@ private fun MapPage(state: UIState<MapData>, viewModel: MapViewModel, innerPaddi
 
             else -> CircularProgressIndicator(Modifier.align(Alignment.Center))
         }
+
+        // Light icons over a navy scrim that fades out below the status bar, as KitKat's translucent
+        // bar did, whatever the theme: the artwork's busy top edge would otherwise run under the
+        // clock, and a solid bar would cut it off.
+        DarkStatusBarIcons()
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(innerPadding.calculateTopPadding() * STATUS_SCRIM_REACH)
+                .background(StatusScrim),
+        )
 
         CommuteIconButton(
             onClick = onBack,
@@ -259,6 +276,29 @@ private fun MapSurface(data: MapData, viewModel: MapViewModel) {
         )
     }
 }
+
+/** Behind the status bar over the map. */
+private val StatusBarNavy = Color(0xFF001421)
+
+/** The scrim's opacity at the top edge, fading to none at its foot. */
+private const val STATUS_SCRIM_ALPHA = 0.85f
+
+/** How far down the scrim reaches, in status bar heights. */
+private const val STATUS_SCRIM_REACH = 1.5f
+
+/** Stops along the scrim: enough that the eased curve reads as a curve, not as bands. */
+private const val STATUS_SCRIM_STOPS = 16
+
+/**
+ * The scrim's fade, eased rather than linear: a cosine, flat at both ends, so it neither starts
+ * with a step under the clock nor stops on a visible line where it meets the map.
+ */
+private val StatusScrim = Brush.verticalGradient(
+    *Array(STATUS_SCRIM_STOPS + 1) { i ->
+        val t = i.toFloat() / STATUS_SCRIM_STOPS
+        t to StatusBarNavy.copy(alpha = STATUS_SCRIM_ALPHA * (1 + cos(PI.toFloat() * t)) / 2)
+    },
+)
 
 /** How long the snapshot takes to give way to the live map once the screen has landed. */
 private const val STAND_IN_FADE_MILLIS = 150

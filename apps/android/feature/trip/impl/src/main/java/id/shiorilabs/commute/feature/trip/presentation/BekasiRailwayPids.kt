@@ -12,6 +12,7 @@ import androidx.compose.ui.text.withStyle
 import id.shiorilabs.commute.core.time.formatClock
 import id.shiorilabs.commute.core.tripcopy.R as CopyR
 import id.shiorilabs.commute.core.ui.ext.lineColorOf
+import id.shiorilabs.commute.core.ui.theme.DarkStatusBarIcons
 import id.shiorilabs.commute.core.ui.theme.TABULAR
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.mutableIntStateOf
