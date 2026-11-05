@@ -52,6 +52,9 @@ class DeveloperPreferencesRepository @Inject constructor(
     /** "Buka Otomatis di Jam": starting a trip opens the watch app. On until switched off. */
     val watchAutoOpen: Flow<Boolean> = dataStore.data.map { it[WATCH_AUTO_OPEN] != false }
 
+    /** "Kotak Sentuh Peta": the map draws every tap target over the artwork, as the web's `?debug=hitboxes`. */
+    val mapHitboxes: Flow<Boolean> = dataStore.data.map { it[MAP_HITBOXES] == true }
+
     suspend fun setExperimentalUnlocked(unlocked: Boolean) = set(EXPERIMENTAL_UNLOCKED, unlocked)
 
     suspend fun setForceTripStart(enabled: Boolean) = set(FORCE_TRIP_START, enabled)
@@ -72,6 +75,8 @@ class DeveloperPreferencesRepository @Inject constructor(
 
     suspend fun setWatchAutoOpen(enabled: Boolean) = set(WATCH_AUTO_OPEN, enabled)
 
+    suspend fun setMapHitboxes(enabled: Boolean) = set(MAP_HITBOXES, enabled)
+
     private suspend fun set(key: Preferences.Key<Boolean>, value: Boolean) {
         dataStore.edit { it[key] = value }
     }
@@ -88,5 +93,6 @@ class DeveloperPreferencesRepository @Inject constructor(
         val DETAILED_RECORDING = booleanPreferencesKey("detailed_recording")
         val YISHUN_PIDS = booleanPreferencesKey("yishun_pids")
         val WATCH_AUTO_OPEN = booleanPreferencesKey("watch_auto_open")
+        val MAP_HITBOXES = booleanPreferencesKey("map_hitboxes")
     }
 }

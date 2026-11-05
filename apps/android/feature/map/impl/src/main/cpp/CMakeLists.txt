@@ -13,16 +13,17 @@ set(GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 file(MAKE_DIRECTORY "${GENERATED_DIR}")
 
 set(SHADER_HEADERS)
-foreach(SHADER tile.vert tile.frag)
+set(SHADER_INCLUDES "${SHADER_DIR}/shape_sdf.glsl" "${SHADER_DIR}/shape_quad.glsl")
+foreach(SHADER tile.vert tile.frag mask.vert mask.frag pill.vert pill.frag spot.vert spot.frag)
     string(REPLACE "." "_" SHADER_NAME "${SHADER}")
     set(SPV "${GENERATED_DIR}/${SHADER}.spv")
     set(HEADER "${GENERATED_DIR}/${SHADER_NAME}.h")
     add_custom_command(
         OUTPUT "${HEADER}"
-        COMMAND "${GLSLC}" --target-env=vulkan1.0 -O -o "${SPV}" "${SHADER_DIR}/${SHADER}"
+        COMMAND "${GLSLC}" --target-env=vulkan1.0 -O -I "${SHADER_DIR}" -o "${SPV}" "${SHADER_DIR}/${SHADER}"
         COMMAND "${CMAKE_COMMAND}" -DINPUT=${SPV} -DOUTPUT=${HEADER} -DNAME=${SHADER_NAME}
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/embed_spirv.cmake"
-        DEPENDS "${SHADER_DIR}/${SHADER}" "${CMAKE_CURRENT_SOURCE_DIR}/embed_spirv.cmake"
+        DEPENDS "${SHADER_DIR}/${SHADER}" ${SHADER_INCLUDES} "${CMAKE_CURRENT_SOURCE_DIR}/embed_spirv.cmake"
         VERBATIM)
     list(APPEND SHADER_HEADERS "${HEADER}")
 endforeach()

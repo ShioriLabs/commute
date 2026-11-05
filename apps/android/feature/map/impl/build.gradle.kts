@@ -80,6 +80,8 @@ dependencies {
     implementation(project(":core:navigation"))
     // CommuteIcons, CommuteIconButton, page transitions.
     implementation(project(":core:ui"))
+    // DeveloperPreferencesRepository: the debug hitbox overlay's switch.
+    implementation(project(":core:datastore"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.runtime)
