@@ -23,8 +23,8 @@ header. The tiles beside it (`public/maps/fdtj/`) stay put: those really are
 immutable between map releases.
 
 **The Android app reads stable copies.** An installed app can't follow a
-content hash, so the web build also emits this file and `label-points.json` at
-`/maps/fdtj/points.json` and `/maps/fdtj/label-points.json` (`appMapData` in
+content hash, so the web build also emits this file, `label-points.json`,
+`map-lines.json` and `map-corridors.json` under `/maps/fdtj/` (`appMapData` in
 `vite.config.ts`), revalidated every five minutes (`public/_headers`). Edit
 `app/data/` as usual: a web deploy ships the change to the app too, with no app
 release. The app only takes a copy that parses, names real stations and carries
