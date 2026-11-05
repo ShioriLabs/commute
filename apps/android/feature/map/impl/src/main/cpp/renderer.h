@@ -26,8 +26,8 @@ struct Draw {
 };
 
 // The map's Vulkan renderer: textures by key, and frames of quads under one world → screen
-// transform. Everything else (which tiles, when) is decided in Kotlin. Not thread-safe: every call
-// comes from the render thread.
+// transform, set back by a treatment with holes in it, with capsules and a ring drawn over. What
+// to draw is decided in Kotlin. Not thread-safe: every call comes from the render thread.
 class Renderer {
 public:
     // Null when Vulkan can't draw to `window` on this device. Takes a reference to `window`.
@@ -51,9 +51,10 @@ public:
     // Lets go of texture `key` once no frame in flight still samples it.
     void release(int32_t key);
 
-    // Draws `draws` in order over white, `world * scale + (tx, ty)` in window pixels. False when
-    // the device is lost, after which the renderer can't draw again.
-    bool draw(float tx, float ty, float scale, const Draw *draws, size_t count);
+    // Draws `draws` in order over white, `world * scale + (tx, ty)` in window pixels, under the
+    // overlay packed as OverlayPack.kt lays it out. False when the device is lost, after which the
+    // renderer can't draw again.
+    bool draw(float tx, float ty, float scale, const Draw *draws, size_t count, const float *overlay, size_t overlayLength);
 
 private:
     static constexpr uint32_t kFramesInFlight = 2;
@@ -70,10 +71,23 @@ private:
         uint64_t frame;
     };
 
+    // What one frame in flight owns: its commands and sync, and the mask and instances it draws
+    // from, so the next frame can write its own while this one is still on the GPU.
     struct Frame {
         VkCommandBuffer commands = VK_NULL_HANDLE;
         VkSemaphore imageAvailable = VK_NULL_HANDLE;
         VkFence inFlight = VK_NULL_HANDLE;
+
+        VkImage mask = VK_NULL_HANDLE;
+        VkDeviceMemory maskMemory = VK_NULL_HANDLE;
+        VkImageView maskView = VK_NULL_HANDLE;
+        VkFramebuffer maskFramebuffer = VK_NULL_HANDLE;
+        VkDescriptorSet maskDescriptor = VK_NULL_HANDLE;
+
+        VkBuffer instances = VK_NULL_HANDLE;
+        VkDeviceMemory instanceMemory = VK_NULL_HANDLE;
+        void *instanceMapped = nullptr;
+        VkDeviceSize instanceCapacity = 0;
     };
 
     Renderer() = default;
@@ -81,7 +95,10 @@ private:
     bool init(ANativeWindow *window);
     bool createSwapchain();
     void destroySwapchain();
-    bool createPipeline();
+    bool createMasks();
+    void destroyMasks();
+    bool createPipelines();
+    bool ensureInstances(Frame &frame, VkDeviceSize bytes);
     bool findMemoryType(uint32_t typeBits, VkMemoryPropertyFlags properties, uint32_t *index) const;
     void destroyTexture(Texture &texture);
     void collectGarbage(bool all);
@@ -108,11 +125,17 @@ private:
     bool swapchainDirty_ = false;
 
     VkRenderPass renderPass_ = VK_NULL_HANDLE;
+    VkRenderPass maskPass_ = VK_NULL_HANDLE;
     VkDescriptorSetLayout descriptorLayout_ = VK_NULL_HANDLE;
-    VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
-    VkPipeline pipeline_ = VK_NULL_HANDLE;
+    VkPipelineLayout tileLayout_ = VK_NULL_HANDLE;
+    VkPipelineLayout shapeLayout_ = VK_NULL_HANDLE;
+    VkPipeline tilePipeline_ = VK_NULL_HANDLE;
+    VkPipeline maskPipeline_ = VK_NULL_HANDLE;
+    VkPipeline pillPipeline_ = VK_NULL_HANDLE;
+    VkPipeline spotPipeline_ = VK_NULL_HANDLE;
     VkDescriptorPool descriptorPool_ = VK_NULL_HANDLE;
     VkSampler sampler_ = VK_NULL_HANDLE;
+    VkSampler maskSampler_ = VK_NULL_HANDLE;
     VkCommandPool commandPool_ = VK_NULL_HANDLE;
 
     Frame frames_[kFramesInFlight];
