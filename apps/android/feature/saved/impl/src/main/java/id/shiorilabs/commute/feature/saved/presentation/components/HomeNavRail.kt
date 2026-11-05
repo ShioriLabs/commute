@@ -116,7 +116,12 @@ fun HomeNavRail(
                 subtitle = stringResource(R.string.saved_nav_map_subtitle),
                 description = stringResource(R.string.saved_nav_map_description),
                 icon = CommuteIcons.Map,
-                onClick = onMapClick,
+                onClick = {
+                    opened = RailCard.MAP
+                    onMapClick()
+                },
+                modifier = Modifier.navCardMorphSource(Route.Map),
+                animateFace = !slidesWithPage && opened == RailCard.MAP,
             )
         }
         cardTap?.Content { card ->
@@ -213,7 +218,7 @@ private fun Modifier.navRailCardTransition(index: Int, enabled: Boolean): Modifi
 }
 
 /** The rail's cards that open a screen out of themselves. */
-private enum class RailCard { SEARCH, CARD, SETTINGS }
+private enum class RailCard { SEARCH, MAP, CARD, SETTINGS }
 
 /** Past this many cards they share a delay, as the web caps NAV_STAGGER. */
 private const val NAV_MAX_STAGGER = 4

@@ -12,7 +12,10 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
-/** One frame to draw: textures [keys] over their world [rects], under the camera, in surface pixels. */
+/**
+ * One frame to draw: textures [keys] over their world [rects], under the camera, in surface pixels.
+ * [complete] when every tile it shows is drawn at last, with no preview left under any.
+ */
 class RenderFrame(
     val tx: Float,
     val ty: Float,
@@ -20,6 +23,7 @@ class RenderFrame(
     val keys: IntArray,
     val rects: FloatArray,
     val count: Int,
+    val complete: Boolean = false,
 )
 
 /**
@@ -27,10 +31,12 @@ class RenderFrame(
  * a frame's acquire and present can block here instead of on the UI: textures go up and come down
  * in the order asked, and only the latest frame asked for is drawn.
  *
- * [onReady] and [onLost] are called on the main thread.
+ * [onReady], [onComplete] and [onLost] are called on the main thread. [onComplete] once per
+ * [attach]: the first [RenderFrame.complete] frame has been drawn.
  */
 class MapRenderThread(
     private val onReady: (rgb565: Boolean) -> Unit,
+    private val onComplete: () -> Unit,
     private val onLost: () -> Unit,
 ) {
 
@@ -48,10 +54,12 @@ class MapRenderThread(
 
     // The render thread's own.
     private var handle = 0L
+    private var completeShown = false
 
     /** Starts drawing into [surface]: [onReady] says whether it can, [onLost] if it can't after all. */
     fun attach(surface: Surface) {
         handler.post {
+            completeShown = false
             handle = if (MapNative.isLoaded) MapNative.create(surface) else 0L
             if (handle == 0L) {
                 main.post(onLost)
@@ -124,6 +132,9 @@ class MapRenderThread(
             MapNative.destroy(handle)
             handle = 0L
             main.post(onLost)
+        } else if (frame.complete && !completeShown) {
+            completeShown = true
+            main.post(onComplete)
         }
     }
 
