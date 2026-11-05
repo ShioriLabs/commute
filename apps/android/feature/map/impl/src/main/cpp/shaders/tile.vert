@@ -10,6 +10,8 @@ layout(push_constant) uniform Tile {
     vec4 col2;
     // xy: the tile's world origin; zw: its world size.
     vec4 rect;
+    // x: fade, y: desaturate. Read by the fragment shader.
+    vec4 treatment;
 } tile;
 
 layout(location = 0) out vec2 v_texcoord;

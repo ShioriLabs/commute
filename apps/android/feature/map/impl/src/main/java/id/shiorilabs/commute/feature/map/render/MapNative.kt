@@ -39,9 +39,18 @@ internal object MapNative {
 
     /**
      * Draws textures [keys] in order over white, each over its world rect in [rects] (x, y, w, h
-     * from `4 * i`), with the world at `world * scale + (tx, ty)` in surface pixels. False once the
-     * device is lost.
+     * from `4 * i`), with the world at `world * scale + (tx, ty)` in surface pixels, under
+     * [overlay] from [packOverlay]. False once the device is lost.
      */
     @JvmStatic
-    external fun draw(handle: Long, tx: Float, ty: Float, scale: Float, keys: IntArray, rects: FloatArray, count: Int): Boolean
+    external fun draw(
+        handle: Long,
+        tx: Float,
+        ty: Float,
+        scale: Float,
+        keys: IntArray,
+        rects: FloatArray,
+        count: Int,
+        overlay: FloatArray,
+    ): Boolean
 }

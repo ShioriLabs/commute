@@ -35,6 +35,8 @@ data class MapPoint(
     val cr: Double? = null,
     /** The station when it isn't [id]: a halte drawn twice, or a label. */
     val station: String? = null,
+    /** Selected, it gets no ring, only the fade: a halo around a word reads as a box. Labels. */
+    val noRing: Boolean = false,
 ) {
 
     /** The `OPERATOR-CODE` this shape opens. */

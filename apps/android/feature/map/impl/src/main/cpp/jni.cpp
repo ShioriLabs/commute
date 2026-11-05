@@ -68,10 +68,12 @@ Java_id_shiorilabs_commute_feature_map_render_MapNative_release(JNIEnv *, jclass
     renderer(handle)->release(key);
 }
 
-// `keys[i]` is drawn over the world rect `rects[4i..4i+3]` (x, y, w, h), in order.
+// `keys[i]` is drawn over the world rect `rects[4i..4i+3]` (x, y, w, h), in order, under
+// `overlay`, packed as OverlayPack.kt lays it out.
 JNIEXPORT jboolean JNICALL
 Java_id_shiorilabs_commute_feature_map_render_MapNative_draw(JNIEnv *env, jclass, jlong handle, jfloat tx, jfloat ty,
-                                                            jfloat scale, jintArray keys, jfloatArray rects, jint count) {
+                                                            jfloat scale, jintArray keys, jfloatArray rects, jint count,
+                                                            jfloatArray overlay) {
     std::vector<Draw> draws(static_cast<size_t>(count));
     if (count > 0) {
         jint *keyData = env->GetIntArrayElements(keys, nullptr);
@@ -82,7 +84,12 @@ Java_id_shiorilabs_commute_feature_map_render_MapNative_draw(JNIEnv *env, jclass
         env->ReleaseFloatArrayElements(rects, rectData, JNI_ABORT);
         env->ReleaseIntArrayElements(keys, keyData, JNI_ABORT);
     }
-    return renderer(handle)->draw(tx, ty, scale, draws.data(), draws.size()) ? JNI_TRUE : JNI_FALSE;
+    const jsize overlayLength = env->GetArrayLength(overlay);
+    jfloat *overlayData = env->GetFloatArrayElements(overlay, nullptr);
+    const bool drawn = renderer(handle)->draw(tx, ty, scale, draws.data(), draws.size(), overlayData,
+                                              static_cast<size_t>(overlayLength));
+    env->ReleaseFloatArrayElements(overlay, overlayData, JNI_ABORT);
+    return drawn ? JNI_TRUE : JNI_FALSE;
 }
 
 } // extern "C"
