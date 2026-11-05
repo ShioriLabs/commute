@@ -68,7 +68,9 @@ function phosphorPerIconDev(): Plugin {
 // five minutes (public/_headers), which lets a tap-target fix reach the app
 // with a web deploy instead of an app release. Served from app/data in dev too,
 // so a debug build pointed at `pnpm dev` sees edits as they are made.
-const APP_MAP_DATA = ['points.json', 'label-points.json']
+// The traced lines and the artwork's corridors are the app's too: it isolates a
+// line and draws a route over the same geometry the web does.
+const APP_MAP_DATA = ['points.json', 'label-points.json', 'map-lines.json', 'map-corridors.json']
 
 function appMapData(): Plugin {
   const source = (name: string) => readFileSync(fileURLToPath(new URL(`./app/data/${name}`, import.meta.url)))
