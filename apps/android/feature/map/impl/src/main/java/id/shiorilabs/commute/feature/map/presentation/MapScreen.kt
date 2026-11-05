@@ -1,6 +1,11 @@
 package id.shiorilabs.commute.feature.map.presentation
 
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.AndroidExternalSurface
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -25,6 +30,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
@@ -44,6 +52,9 @@ import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.ui.components.CommuteIconButton
 import id.shiorilabs.commute.core.ui.components.ProblemPanel
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
+import id.shiorilabs.commute.core.ui.morph.LocalNavAnimatedVisibilityScope
+import id.shiorilabs.commute.core.ui.morph.LocalSharedTransitionScope
+import id.shiorilabs.commute.core.ui.morph.NavCardMorphTarget
 import id.shiorilabs.commute.feature.map.R
 import id.shiorilabs.commute.feature.map.domain.MapData
 import kotlinx.coroutines.Job
@@ -59,6 +70,14 @@ fun MapScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
 
+    // Grows out of home's white rail card, as the other rail screens do.
+    NavCardMorphTarget(destination = Route.Map, cardTint = null) {
+        MapPage(state, viewModel, innerPadding, onBack = { navigator.pop() })
+    }
+}
+
+@Composable
+private fun MapPage(state: UIState<MapData>, viewModel: MapViewModel, innerPadding: PaddingValues, onBack: () -> Unit) {
     // The artwork is drawn on white whatever the theme, as on the web.
     Box(Modifier.fillMaxSize().background(Color.White)) {
         when (val current = state) {
@@ -74,7 +93,7 @@ fun MapScreen(
         }
 
         CommuteIconButton(
-            onClick = { navigator.pop() },
+            onClick = onBack,
             modifier = Modifier
                 .padding(top = innerPadding.calculateTopPadding() + 8.dp, start = 12.dp)
                 .size(40.dp)
@@ -100,17 +119,20 @@ private fun MapSurface(data: MapData, viewModel: MapViewModel) {
             data = data,
             repository = viewModel.repository,
             density = density,
-            initialCamera = viewModel.camera,
+            initialCamera = viewModel.session.camera,
+            initialSnapshot = viewModel.session.snapshot,
             onStationTap = { stationId -> navigator.goTo(Route.Station(stationId)) },
         )
     }
     val supported by controller.isSupported.collectAsStateWithLifecycle()
+    val snapshot by controller.snapshot.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val description = stringResource(R.string.map_description)
 
     DisposableEffect(controller) {
         onDispose {
-            viewModel.camera = controller.camera
+            viewModel.session.camera = controller.camera
+            viewModel.session.snapshot = controller.snapshot.value
             controller.dispose()
         }
     }
@@ -149,15 +171,67 @@ private fun MapSurface(data: MapData, viewModel: MapViewModel) {
         return
     }
 
+    // A surface can't be faded or clipped with the window's layers, and the hole the window cuts for
+    // it showed the live map, then black, through the morph's landing crossfade. So the surface is
+    // only there while no shared transition runs (a back gesture, cancelled or not, ends with none
+    // running), and something drawn in the window stands in for it meanwhile: until the open has
+    // landed, through every transition, and until the surface shows every tile: the map's last
+    // snapshot, white before the first one.
+    val transition = LocalNavAnimatedVisibilityScope.current?.transition
+    val shared = LocalSharedTransitionScope.current
+    var landed by remember { mutableStateOf(transition == null) }
+    LaunchedEffect(transition?.currentState, transition?.targetState) {
+        if (transition?.currentState == EnterExitState.Visible && transition.targetState == EnterExitState.Visible) {
+            landed = true
+        }
+    }
+    val transitioning = shared?.isTransitionActive == true
+    val mounted = landed && !transitioning
+    val showing by controller.isShowing.collectAsStateWithLifecycle()
+    // Tiles slow to arrive, offline say, don't hold the map back: what's drawn shows after a while.
+    var waitedEnough by remember { mutableStateOf(false) }
+    LaunchedEffect(mounted) {
+        waitedEnough = false
+        if (mounted) {
+            delay(STAND_IN_MAX_WAIT_MS)
+            waitedEnough = true
+        }
+    }
+    val standingIn = !mounted || (!showing && !waitedEnough)
+    val standInAlpha by animateFloatAsState(
+        targetValue = if (standingIn) 1f else 0f,
+        animationSpec = if (standingIn) snap() else tween(STAND_IN_FADE_MILLIS),
+        label = "standIn",
+    )
+
     Box(Modifier.fillMaxSize().semantics { contentDescription = description }) {
         // A SurfaceView, so the system composites the frames itself. Behind a TextureView they waited
         // on the window's own redraws, and on a Galaxy S23 only about half of them reached the
         // screen. The cost: nothing in the window, a frosted sheet say, can blur the map.
-        AndroidExternalSurface(modifier = Modifier.fillMaxSize(), isOpaque = true) {
-            onSurface { surface, width, height ->
-                controller.onSurface(surface, width, height)
-                surface.onChanged { newWidth, newHeight -> controller.onResize(newWidth, newHeight) }
-                surface.onDestroyed { controller.onSurfaceDestroyed() }
+        if (mounted) {
+            AndroidExternalSurface(modifier = Modifier.fillMaxSize(), isOpaque = true) {
+                onSurface { surface, width, height ->
+                    controller.onSurface(surface, width, height)
+                    surface.onChanged { newWidth, newHeight -> controller.onResize(newWidth, newHeight) }
+                    surface.onDestroyed { controller.onSurfaceDestroyed() }
+                }
+            }
+        }
+        if (standInAlpha > 0f) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = standInAlpha }
+                    .background(Color.White),
+            ) {
+                snapshot?.let {
+                    Image(
+                        bitmap = it.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.FillBounds,
+                    )
+                }
             }
         }
         // Over the surface rather than on it, so every touch reaches the camera first.
@@ -185,6 +259,12 @@ private fun MapSurface(data: MapData, viewModel: MapViewModel) {
         )
     }
 }
+
+/** How long the snapshot takes to give way to the live map once the screen has landed. */
+private const val STAND_IN_FADE_MILLIS = 150
+
+/** The longest the stand-in waits for every tile before the live map shows anyway. */
+private const val STAND_IN_MAX_WAIT_MS = 800L
 
 /** How long the map waits in the background before letting its tiles go: the web's 3 s. */
 private const val BACKGROUND_RELEASE_MS = 3_000L

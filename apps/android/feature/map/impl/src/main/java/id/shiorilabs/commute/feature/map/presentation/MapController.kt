@@ -2,7 +2,10 @@ package id.shiorilabs.commute.feature.map.presentation
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
+import android.view.PixelCopy
 import android.view.Surface
 import id.shiorilabs.commute.feature.map.data.MapRepository
 import id.shiorilabs.commute.feature.map.domain.Fling
@@ -46,6 +49,7 @@ class MapController(
     private val repository: MapRepository,
     private val density: Float,
     initialCamera: Transform?,
+    initialSnapshot: Bitmap?,
     private val onStationTap: (String) -> Unit,
 ) {
 
@@ -53,12 +57,30 @@ class MapController(
     val isSupported: StateFlow<Boolean> get() = supported
     private val supported = MutableStateFlow(true)
 
+    /**
+     * The map as it last came to rest, at half resolution: what the window shows in its place while
+     * the surface can't follow it, as when the screen morphs into home's rail card and back.
+     */
+    val snapshot: StateFlow<Bitmap?> get() = snapshots
+    private val snapshots = MutableStateFlow(initialSnapshot)
+
+    /** Whether the surface shows the whole view, every tile on it drawn: the stand-in can go. */
+    val isShowing: StateFlow<Boolean> get() = showing
+    private val showing = MutableStateFlow(false)
+    private val main = Handler(Looper.getMainLooper())
+    private var surface: Surface? = null
+    private var snapshotGeneration = 0
+
     /** Where the camera is now; kept by the screen for the map's next opening. */
     val camera: Transform? get() = rendered
 
     private val manifest = data.manifest
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val renderer = MapRenderThread(onReady = ::onRendererReady, onLost = ::onRendererLost)
+    private val renderer = MapRenderThread(
+        onReady = ::onRendererReady,
+        onComplete = { showing.value = true },
+        onLost = ::onRendererLost,
+    )
     private val planner = TilePlanner<Bitmap>(manifest, discard = Bitmap::recycle)
     private val gestures = MapGestures()
     private val invalidations = Channel<Unit>(Channel.CONFLATED)
@@ -81,6 +103,7 @@ class MapController(
 
     /** The surface is up, [widthPx] × [heightPx]. */
     fun onSurface(surface: Surface, widthPx: Int, heightPx: Int) {
+        this.surface = surface
         onResize(widthPx, heightPx)
         renderer.attach(surface)
     }
@@ -104,6 +127,9 @@ class MapController(
 
     /** The surface is going: the renderer lets go of it, and of every texture, before this returns. */
     fun onSurfaceDestroyed() {
+        surface = null
+        showing.value = false
+        snapshotGeneration++
         renderer.detach()
         rendererReady = false
         previewUploaded = false
@@ -163,8 +189,34 @@ class MapController(
 
         val moving = flight != null || fling != null || target?.let { !settled(next, it) } == true
         val readyPixels = if (rendererReady) draw(next, view) else false
-        if (!moving && !readyPixels) lastFrameNanos = 0L
-        return moving || readyPixels
+        val more = moving || readyPixels
+        snapshotGeneration++
+        if (!more) {
+            lastFrameNanos = 0L
+            if (rendererReady) scheduleSnapshot()
+        }
+        return more
+    }
+
+    /**
+     * Copies what the surface shows once the frame just asked for has had time to reach it; dropped
+     * if anything moves first.
+     */
+    private fun scheduleSnapshot() {
+        val generation = snapshotGeneration
+        main.postDelayed({
+            val target = surface
+            val view = viewport
+            if (generation != snapshotGeneration || target == null || !target.isValid || view == null) return@postDelayed
+            val width = (view.width * density / SNAPSHOT_DOWNSCALE).toInt().coerceAtLeast(1)
+            val height = (view.height * density / SNAPSHOT_DOWNSCALE).toInt().coerceAtLeast(1)
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            runCatching {
+                PixelCopy.request(target, bitmap, { result ->
+                    if (result == PixelCopy.SUCCESS && generation == snapshotGeneration) snapshots.value = bitmap
+                }, main)
+            }
+        }, SNAPSHOT_DELAY_MS)
     }
 
     fun dispose() {
@@ -210,6 +262,7 @@ class MapController(
                 keys = keys,
                 rects = rects,
                 count = count,
+                complete = !plan.needsPreview && plan.draws.isNotEmpty(),
             ),
         )
         return plan.hasReadyPixels
@@ -336,5 +389,11 @@ class MapController(
 
         /** The first frame after a still spell has no previous one to measure from. */
         const val FIRST_FRAME_DT_MS = 16.0
+
+        /** Long enough for the frame just asked for to be presented. */
+        const val SNAPSHOT_DELAY_MS = 100L
+
+        /** A stand-in for a quarter-second morph needn't be sharp. */
+        const val SNAPSHOT_DOWNSCALE = 2.0
     }
 }
