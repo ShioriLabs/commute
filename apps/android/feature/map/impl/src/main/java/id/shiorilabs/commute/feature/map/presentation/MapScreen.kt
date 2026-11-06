@@ -357,6 +357,9 @@ private fun MapSurface(controller: MapController, viewModel: MapViewModel) {
                                 val (x, y) = change.position
                                 when {
                                     change.changedToDownIgnoreConsumed() -> controller.onPointerDown(id, x, y, change.uptimeMillis)
+                                    // Compose lifts a cancelled touch already consumed, as when a
+                                    // back swipe from the edge takes it: no tap where it landed.
+                                    change.changedToUpIgnoreConsumed() && change.isConsumed -> controller.onPointerCancel()
                                     change.changedToUpIgnoreConsumed() -> controller.onPointerUp(id, x, y, change.uptimeMillis)
                                     change.positionChanged() -> controller.onPointerMove(id, x, y, change.uptimeMillis)
                                 }
