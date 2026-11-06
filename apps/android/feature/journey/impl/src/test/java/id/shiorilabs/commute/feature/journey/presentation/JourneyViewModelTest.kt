@@ -277,6 +277,34 @@ class JourneyViewModelTest {
     }
 
     @Test
+    fun `a pair the map sets is asked for, and not told back as the rider's`() = runTest {
+        val viewModel = viewModel(Route.Otw(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
+        val told = mutableListOf<StationPair>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.riderPairs.collect { told += it } }
+
+        viewModel.setPair("MRTJ-LBB", "KCI-SUD")
+
+        assertEquals(StationPair("MRTJ-LBB", "KCI-SUD"), viewModel.state.value.pair)
+        assertEquals("MRTJ-LBB" to "KCI-SUD", journeys.asked.last().let { it.first to it.second })
+        assertEquals(StationPair("MRTJ-LBB", "KCI-SUD"), viewModel.answeredPair.value)
+        assertEquals(emptyList<StationPair>(), told)
+    }
+
+    @Test
+    fun `the rider's own picks and swaps are told to the map`() = runTest {
+        val viewModel = viewModel(Route.Otw(fromId = "KCI-SUD", toId = "MRTJ-LBB"))
+        val told = mutableListOf<StationPair>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.riderPairs.collect { told += it } }
+        val manggarai = viewModel.picker.first { it.loaded }.stations.first { it.id == "KCI-MRI" }
+
+        viewModel.onSwap()
+        viewModel.openPicker(PairEnd.DESTINATION)
+        viewModel.onPick(manggarai)
+
+        assertEquals(listOf(StationPair("MRTJ-LBB", "KCI-SUD"), StationPair("MRTJ-LBB", "KCI-MRI")), told)
+    }
+
+    @Test
     fun `a recent pair is asked for in place of the one on screen`() = runTest {
         val viewModel = viewModel(Route.Otw(toId = "KCI-MRI"))
 

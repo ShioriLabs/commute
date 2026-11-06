@@ -38,7 +38,9 @@ import id.shiorilabs.commute.core.datastore.LocationPreferencesRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -100,6 +102,21 @@ class JourneyViewModel @AssistedInject constructor(
     private val stations = MutableStateFlow<List<PickableStation>?>(null)
     private val lines = MutableStateFlow(lineRepository.cachedLines().orEmpty())
     private val trip = MutableStateFlow<TripState>(TripState.Idle)
+
+    /**
+     * The pair as the rider changed it here, by the picker, the swap or a recent pair: for a host
+     * holding the pair itself, as the map does, to follow. Never [setPair]'s.
+     */
+    val riderPairs: SharedFlow<StationPair> get() = riderPairChanges
+    private val riderPairChanges = MutableSharedFlow<StationPair>(extraBufferCapacity = 1)
+
+    /**
+     * The pair the answer on screen was given for, which trails the pair for a moment after it
+     * changes: a host drawing the answer, as the map does, holds off until the two agree.
+     */
+    val answeredPair: StateFlow<StationPair?> get() = answered
+    private val answered = MutableStateFlow<StationPair?>(null)
+
     private val retries = MutableStateFlow(0)
     private val pickerQuery = MutableStateFlow("")
     private val nearby = MutableStateFlow<NearbyPicks>(NearbyPicks.Idle)
@@ -239,15 +256,25 @@ class JourneyViewModel @AssistedInject constructor(
         pickerQuery.value = query
     }
 
+    /** The pair a host holding it set: asked for at once, the picker left as it was. */
+    fun setPair(fromId: String?, toId: String?) {
+        session.update { it.copy(pair = StationPair(fromId, toId)) }
+    }
+
+    private fun riderSetPair(pair: StationPair) {
+        session.update { it.copy(pair = pair, picker = null) }
+        riderPairChanges.tryEmit(pair)
+    }
+
     /** Sets the end the picker is open for; picking the other end's station swaps the two. */
     fun onPick(station: PickableStation) {
         val end = session.value.picker ?: return
-        session.update { it.copy(pair = it.pair.with(end, station.id), picker = null) }
+        riderSetPair(session.value.pair.with(end, station.id))
         viewModelScope.launch { farePreferences.recordStation(station.id) }
     }
 
     fun onSwap() {
-        session.update { it.copy(pair = it.pair.swapped()) }
+        riderSetPair(session.value.pair.swapped())
     }
 
     fun onCriteriaChange(next: JourneyCriteria) {
@@ -268,7 +295,7 @@ class JourneyViewModel @AssistedInject constructor(
 
     /** A recent pair, asked for here in place of whatever pair was on screen. */
     fun onOpenRecent(route: RecentRouteRow) {
-        session.update { it.copy(pair = StationPair(route.fromId, route.toId), picker = null) }
+        riderSetPair(StationPair(route.fromId, route.toId))
     }
 
     /** A recent pair's pin. */
@@ -319,6 +346,7 @@ class JourneyViewModel @AssistedInject constructor(
             .collectLatest { (pair, criteria) ->
                 val fromId = pair.fromId
                 val toId = pair.toId
+                answered.value = null
                 if (fromId == null || toId == null || fromId == toId) {
                     trip.value = TripState.Idle
                     return@collectLatest
@@ -343,6 +371,7 @@ class JourneyViewModel @AssistedInject constructor(
                         updatedAt = query.updatedAt,
                         isOutdated = query.isOutdated,
                     )
+                    answered.value = pair
                     // A pair becomes a recent once it has answered, not on every pick, as on the
                     // web: a half-made selection or a failed lookup is not a trip to offer back.
                     if (!recorded && !query.isFetching && query.failure == null) {

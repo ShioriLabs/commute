@@ -7,4 +7,8 @@
     <string name="map_retry">Coba lagi</string>
     <string name="map_line_choices">Ada beberapa lin di sini</string>
     <string name="map_line_choices_title">Pilih lin</string>
+    <string name="map_check_route">Cek rute dan tarif</string>
+    <string name="map_pick_origin">Pilih stasiun keberangkatan</string>
+    <string name="map_pick_destination">Pilih stasiun tujuan</string>
+    <string name="map_pick_cancel">Batal memilih</string>
 </resources>

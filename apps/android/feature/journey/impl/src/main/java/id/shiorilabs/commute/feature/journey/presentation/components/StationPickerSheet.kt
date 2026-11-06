@@ -107,6 +107,8 @@ internal fun StationPickerSheet(
     onPick: (PickableStation) -> Unit,
     onDismiss: () -> Unit,
     onUseLocation: () -> Unit = {},
+    /** On the map: the end picked by tapping its station there instead. */
+    onPickOnMap: (() -> Unit)? = null,
 ) {
     CommuteBottomSheet(
         title = stringResource(if (end == PairEnd.ORIGIN) R.string.journey_picker_from else R.string.journey_picker_to),
@@ -149,6 +151,14 @@ internal fun StationPickerSheet(
                 .padding(top = 8.dp),
             contentPadding = WindowInsets.ime.union(WindowInsets.navigationBars).asPaddingValues(),
         ) {
+            if (onPickOnMap != null && text.length < MIN_QUERY_LENGTH) {
+                item(key = "pick-on-map") {
+                    PickOnMap(onClick = {
+                        hide()
+                        onPickOnMap()
+                    })
+                }
+            }
             // Turned off in Pengaturan → Lokasi, the row isn't offered at all.
             if (text.length < MIN_QUERY_LENGTH && picker.nearby != NearbyPicks.Off) {
                 item(key = "use-location") {
@@ -231,6 +241,32 @@ private fun PickerField(query: String, onQueryChange: (String) -> Unit, modifier
             }
         },
     )
+}
+
+/** "Pilih di peta": the picker gives way to the map, where the next station tapped fills the end. */
+@Composable
+private fun PickOnMap(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 32.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = CommuteIcons.Map,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = stringResource(R.string.journey_picker_on_map),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
 }
 
 /**
