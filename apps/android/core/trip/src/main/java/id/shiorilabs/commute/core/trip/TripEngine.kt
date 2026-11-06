@@ -100,6 +100,17 @@ object TripEngine {
     /** Slower than this, by the satellites, the train is standing still. */
     private const val STANDING_M_PER_S = 1.0
 
+    /**
+     * How far apart fixes reading a train standing must be, with none faster between, before it's
+     * believed: under Manggarai's roof on 5 Nov they read 0.62 and 0.58 m/s while it still braked.
+     * Armed then, the motion sensors took the stop for a pull, 5½ minutes before it left. Arming any
+     * time up to 6–12 s before a train stood false-fired on the 5 Nov evening's recording.
+     */
+    private val STANDING_HELD: Duration = Duration.ofSeconds(3)
+
+    /** A fix this long after the one before can't be followed soon by another: it's believed alone. */
+    private val SPARSE_FIX: Duration = Duration.ofSeconds(20)
+
     /** A standing fix this close behind the confirmed point is the same spot, read again. */
     private const val HELD_JITTER_M = 30.0
 
@@ -233,8 +244,11 @@ object TripEngine {
 
         val located = locate(ride, state.confirmedPosition, fix, tuning)
         val pullOut = pullOut(ride, state, fix, located, tuning)
+        val standing = standing(state, pullOut.stoodAt, fix)
         val tracked = state.copy(
             stoodAt = pullOut.stoodAt,
+            standingSinceMs = standing.sinceMs,
+            standingHeld = standing.held,
             pullingOutFixes = pullOut.fixes,
             pullingOutSpeed = pullOut.speed,
             recentSpeeds = (state.recentSpeeds + SpeedSample(fix.at.toEpochMilli(), fix.speedMps ?: 0f))
@@ -327,9 +341,10 @@ object TripEngine {
 
     /**
      * The stop the train stands at, on the way, for the motion sensors to feel it leave
-     * ([TripEvent.Departed]): a fresh fix there read it standing, on rails. Not while it may still be
-     * braking in, whose braking read against the standing after it is a pull; not a bus, which stops
-     * and starts at every light; not the stop the ride starts from, which is boarding's.
+     * ([TripEvent.Departed]): fresh fixes there read it standing, and held ([standing]), on rails.
+     * Not while it may still be braking in, whose braking read against the standing after it is a
+     * pull; not a bus, which stops and starts at every light; not the stop the ride starts from,
+     * which is boarding's.
      */
     fun awaitingDeparture(plan: TripPlan, state: TripState, now: Instant): StopAt? {
         if (state.phase != TripPhase.RIDING) return null
@@ -340,8 +355,30 @@ object TripEngine {
         val stop = at.toInt()
         if (stop <= 0 || stop >= ride.lastIndex) return null
         if (state.confirmedAt?.let { Duration.between(it, now) < STALE } != true) return null
-        if (state.stoodAt != stopKey(state.legIndex, stop)) return null
+        if (state.stoodAt != stopKey(state.legIndex, stop) || !state.standingHeld) return null
         return StopAt(state.legIndex, stop)
+    }
+
+    /** What a fix makes of the train standing at the stop [pullOut] watches: since when, and whether it's held. */
+    private class Standing(val sinceMs: Long?, val held: Boolean)
+
+    /**
+     * Standing at [stoodAt], held: fixes reading it standing [STANDING_HELD] apart with none faster
+     * between, or one coming [SPARSE_FIX] after the fix before. Once held, a fix reading the train
+     * moving is it pulling out, which the motion sensors may already be feeling.
+     */
+    private fun standing(state: TripState, stoodAt: String?, fix: TripEvent.Fix): Standing {
+        if (stoodAt == null) return Standing(null, false)
+        val same = stoodAt == state.stoodAt
+        val since = state.standingSinceMs.takeIf { same }
+        if (same && state.standingHeld) return Standing(since, true)
+        val speed = fix.speedMps ?: return Standing(since, false)
+        if (speed >= STANDING_M_PER_S) return Standing(null, false)
+        val now = fix.at.toEpochMilli()
+        val previous = state.recentSpeeds.lastOrNull()?.atMs
+        val sparse = previous == null || now - previous >= SPARSE_FIX.toMillis()
+        val from = since ?: now
+        return Standing(from, sparse || now - from >= STANDING_HELD.toMillis())
     }
 
     /**
@@ -364,6 +401,8 @@ object TripEngine {
             clockOffsetS = offset,
             stopTimes = state.stopTimes + (stopKey(state.legIndex, stop) to event.at.toEpochMilli()),
             stoodAt = null,
+            standingSinceMs = null,
+            standingHeld = false,
             pullingOutFixes = 0,
             pullingOutSpeed = null,
         )
