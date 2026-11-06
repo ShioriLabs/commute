@@ -24,8 +24,9 @@ class MapNavContribution @Inject constructor(
 ) : NavGraphContribution {
 
     override fun EntryProviderScope<NavKey>.addEntries(scope: NavGraphScope) {
-        entry<Route.Map>(metadata = navCardMorphMetadata()) {
+        entry<Route.Map>(metadata = navCardMorphMetadata()) { key ->
             MapScreen(
+                route = key,
                 innerPadding = scope.screenPadding,
                 stationSheet = stationSheet,
                 hubSheet = hubSheet,

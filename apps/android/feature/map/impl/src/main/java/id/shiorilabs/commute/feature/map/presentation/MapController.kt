@@ -19,11 +19,23 @@ import id.shiorilabs.commute.feature.map.domain.MapHit
 import id.shiorilabs.commute.feature.map.domain.MapLine
 import id.shiorilabs.commute.feature.map.domain.MapSelection
 import id.shiorilabs.commute.feature.map.domain.MapPoint
+import id.shiorilabs.commute.feature.map.domain.ROUTE_DESATURATE_MAX
+import id.shiorilabs.commute.feature.map.domain.ROUTE_FADE_MAX
+import id.shiorilabs.commute.feature.map.domain.Ramp
 import id.shiorilabs.commute.feature.map.domain.Rgb
+import id.shiorilabs.commute.feature.map.domain.RouteDrawItem
+import id.shiorilabs.commute.feature.map.domain.RouteLeg
+import id.shiorilabs.commute.feature.map.domain.RouteOverlayModel
+import id.shiorilabs.commute.feature.map.domain.RouteTreatment
+import id.shiorilabs.commute.feature.map.domain.WorldPoint
+import id.shiorilabs.commute.feature.map.domain.buildRouteOverlayModel
 import id.shiorilabs.commute.feature.map.domain.markerOf
 import id.shiorilabs.commute.feature.map.domain.Spotlight
 import id.shiorilabs.commute.feature.map.domain.TilePlanner
 import id.shiorilabs.commute.feature.map.domain.lineCutShapes
+import id.shiorilabs.commute.feature.map.domain.prepareCorridors
+import id.shiorilabs.commute.feature.map.domain.prepareLinePaths
+import id.shiorilabs.commute.feature.map.domain.routeDrawItems
 import id.shiorilabs.commute.feature.map.domain.lineOf
 import id.shiorilabs.commute.feature.map.domain.linesNear
 import id.shiorilabs.commute.feature.map.domain.mapTreatment
@@ -59,6 +71,7 @@ import kotlin.math.min
  * @param initialCamera where the camera was when the map last left the screen, if it did.
  * @param hubFor the hub a `HUB-…` tap target names, with its ring colour; null while unknown.
  * @param ringColorOf a station's line colour for the ring, once it can be looked up.
+ * @param lineColorOf a line's `#RRGGBB` by `OPERATOR:CODE`, for a drawn route; null while unknown.
  *
  * Held by the map's view model, so it outlives the screen while the map stays on the back stack:
  * a station's page over it and back finds the camera, the open sheet and the textures as they were.
@@ -71,6 +84,7 @@ class MapController(
     initialSnapshot: Bitmap?,
     private val hubFor: (hubId: String) -> Pair<String, Rgb?>?,
     private val ringColorOf: suspend (stationId: String) -> Rgb?,
+    private val lineColorOf: (lineKey: String) -> String? = { null },
 ) {
 
     /** A tap opened something: the screen showing the map plays its haptic. */
@@ -129,6 +143,20 @@ class MapController(
 
     private var spotlight: Spotlight? = null
     private var isolate: LineIsolate? = null
+
+    // A drawn route: its geometry, its paint at full strength, and two fades, the route's own and
+    // the map's set back behind it, which waits for a line to set back for.
+    private var route: RouteOverlayModel? = null
+    private var routePills: List<Pill> = emptyList()
+    private val routeRamp = Ramp()
+    private val dimRamp = Ramp()
+    // The pair drawn; the pair the camera last framed, and a framing still to fly.
+    private var routePair: Pair<String?, String?>? = null
+    private var fittedPair: String? = null
+    private var pendingFit: RouteOverlayModel? = null
+    private val corridors by lazy { data.corridors?.corridors?.let(::prepareCorridors).orEmpty() }
+    private val connectors by lazy { data.corridors?.connectors.orEmpty().map { c -> c.map { WorldPoint(it[0], it[1]) } } }
+    private val linePaths by lazy { prepareLinePaths(data.lines, data.points) }
 
     /** Debug: every tap target drawn in pink over the map. */
     var showHitboxes: Boolean = false
@@ -218,6 +246,10 @@ class MapController(
         val dtMs = if (lastFrameNanos == 0L) FIRST_FRAME_DT_MS else ((frameNanos - lastFrameNanos) / 1e6).coerceIn(0.0, MAX_FRAME_DT_MS)
         lastFrameNanos = frameNanos
 
+        pendingFit?.takeIf { !grabbed }?.let { model ->
+            pendingFit = null
+            frameRoute(model, current, view)
+        }
         val activeFlight = flight
         val activeFling = fling
         val next = when {
@@ -242,7 +274,8 @@ class MapController(
         rendered = next
 
         val moving = flight != null || fling != null || target?.let { !settled(next, it) } == true ||
-            spotlight?.isAnimating == true || isolate?.isAnimating == true
+            spotlight?.isAnimating == true || isolate?.isAnimating == true ||
+            routeRamp.isAnimating || dimRamp.isAnimating
         val readyPixels = if (rendererReady) draw(next, view) else false
         val more = moving || readyPixels
         snapshotGeneration++
@@ -290,6 +323,55 @@ class MapController(
         val marker = data.points.markerOf(stationId) ?: return false
         select(MapSelection.Station(stationId, marker), null)
         return true
+    }
+
+    /**
+     * Draws [legs] from [fromId] to [toId] over the map, which fades back behind it once a line is
+     * drawn; no legs, just the pair's pins, as a link's come before its fare. The camera frames each
+     * pair once, when its line first draws. A route stands an isolated line down.
+     */
+    fun setRoute(legs: List<RouteLeg>, fromId: String?, toId: String?) {
+        val model = buildRouteOverlayModel(legs, fromId, toId, data.points, ::lineColor, corridors, linePaths, connectors)
+        val now = SystemClock.uptimeMillis()
+        route = model
+        routePair = if (model != null) fromId to toId else null
+        // Without one, the last paint fades out.
+        if (model != null) routePills = routeDrawItems(model.overlay).map { it.pill() }
+        val hasLine = model?.overlay?.segments?.isNotEmpty() == true
+        routeRamp.set(model != null, now)
+        dimRamp.set(hasLine, now)
+        val pair = "$fromId|$toId"
+        when {
+            model == null -> {
+                fittedPair = null
+                pendingFit = null
+            }
+
+            pair != fittedPair -> {
+                if (hasLine) fittedPair = pair
+                pendingFit = model
+            }
+        }
+        if (model != null && selected.value is MapSelection.Line) clearSelection()
+        invalidate()
+    }
+
+    fun clearRoute() = setRoute(emptyList(), null, null)
+
+    /** Whether the route from [fromId] to [toId] is the one drawn. */
+    fun drawsPair(fromId: String?, toId: String?): Boolean = routePair == (fromId to toId)
+
+    private fun lineColor(lineKey: String): String? = lineColorOf(lineKey) ?: data.lines.lineOf(lineKey)?.color
+
+    /** Flies onto [model]: its whole line framed, or its lone pins brought into view at this zoom. */
+    private fun frameRoute(model: RouteOverlayModel, current: Transform, view: Viewport) {
+        val b = model.bounds
+        val to = if (model.overlay.segments.isNotEmpty()) {
+            view.fit(b.minX, b.minY, b.maxX, b.maxY, ROUTE_FIT_PADDING_DP)
+        } else {
+            view.focus(target ?: current, (b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2)
+        }
+        fly(current, to, Flight.TO_ROUTE_MS)
     }
 
     /** Closes the sheet: the spotlight or the isolate fades out and the camera settles back into range. */
@@ -404,7 +486,14 @@ class MapController(
         if (spotlight?.isGone == true) spotlight = null
         val line = isolate?.frame(nowMs)
         if (isolate?.isGone == true) isolate = null
-        return packOverlay(mapTreatment(selection, line), if (showHitboxes) hitboxes else emptyList())
+        val routeAlpha = routeRamp.value(nowMs)
+        val dim = dimRamp.value(nowMs)
+        val treatment = mapTreatment(selection, line, RouteTreatment(ROUTE_FADE_MAX * dim, ROUTE_DESATURATE_MAX * dim).takeIf { dim > 0 })
+        val pills = buildList {
+            if (routeAlpha > 0) routePills.mapTo(this) { it.copy(alpha = routeAlpha) }
+            if (showHitboxes) addAll(hitboxes)
+        }
+        return packOverlay(treatment, pills)
     }
 
     private fun draw(t: Transform, view: Viewport): Boolean {
@@ -611,6 +700,12 @@ class MapController(
 
         /** The web's debug pink for tap targets, see-through. */
         val HITBOX_COLOR = Pill(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.6, 0.3)
+
+        /** A route's capsule, at full strength. */
+        fun RouteDrawItem.pill(): Pill = Pill(ax, ay, bx, by, r, r, color.r, color.g, color.b, 1.0)
+
+        /** A route's framing keeps this clear of the view's edges, as on the web. */
+        const val ROUTE_FIT_PADDING_DP = 48.0
 
         /** [point]'s shape in this pill's colour. */
         fun Pill.pill(point: MapPoint): Pill =

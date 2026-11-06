@@ -8,14 +8,20 @@ import id.shiorilabs.commute.core.ext.WhileUiSubscribed
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.feature.hub.data.HubDirectory
 import id.shiorilabs.commute.feature.hub.data.HubSummary
+import id.shiorilabs.commute.feature.journey.data.JourneyRepository
+import id.shiorilabs.commute.feature.journey.domain.JourneyCriteria
 import id.shiorilabs.commute.feature.map.data.MapRepository
 import id.shiorilabs.commute.feature.map.domain.MapData
 import id.shiorilabs.commute.feature.map.domain.Rgb
+import id.shiorilabs.commute.feature.map.domain.RouteLeg
 import id.shiorilabs.commute.feature.station.data.LineRepository
 import id.shiorilabs.commute.feature.station.data.StationDirectory
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -29,6 +35,7 @@ class MapViewModel @Inject constructor(
     private val hubDirectory: HubDirectory,
     private val stationDirectory: StationDirectory,
     private val lineRepository: LineRepository,
+    private val journeyRepository: JourneyRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<UIState<MapData>>(UIState.Loading)
@@ -74,6 +81,7 @@ class MapViewModel @Inject constructor(
             initialSnapshot = session.snapshot,
             hubFor = ::hubFor,
             ringColorOf = ::ringColorOf,
+            lineColorOf = { key -> lineRepository.cachedLines()?.get(key)?.colorCode },
         ).also { controller = data to it }
     }
 
@@ -100,6 +108,15 @@ class MapViewModel @Inject constructor(
         val lines = lineRepository.cachedLines() ?: lineRepository.lines().getOrNull() ?: return null
         return Rgb.parse(lines[lineKey]?.colorCode)
     }
+
+    /**
+     * The legs of the first journey from [fromId] to [toId], as the map draws them, once an answer is
+     * held: none for a pair without a journey.
+     */
+    fun routeLegs(fromId: String, toId: String): Flow<List<RouteLeg>> =
+        journeyRepository.observeTrips(fromId, toId, JourneyCriteria())
+            .mapNotNull { query -> query.data?.let { answer -> answer.journeys.firstOrNull()?.routeLegs().orEmpty() } }
+            .distinctUntilChanged()
 
     private fun load() {
         viewModelScope.launch {

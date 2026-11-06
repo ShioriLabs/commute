@@ -138,9 +138,18 @@ sealed interface Route : NavKey {
     @Serializable
     data object ActiveTrip : Route
 
-    /** The FDTJ integration map, opened from the home screen's "Peta" card and a `/map` link. */
+    /**
+     * The FDTJ integration map, opened from the home screen's "Peta" card and a `/map` link. With a
+     * pair, `OPERATOR-CODE` (a link's `?from=&to=`), the route between them is drawn on it, and
+     * [journeyKey] and [boardingClock], as on [Trip], say which of its journeys.
+     */
     @Serializable
-    data object Map : Route
+    data class Map(
+        val fromId: String? = null,
+        val toId: String? = null,
+        val journeyKey: String? = null,
+        val boardingClock: String? = null,
+    ) : Route
 
     /** Settings, opened from the home screen's "Pengaturan" card. */
     @Serializable
