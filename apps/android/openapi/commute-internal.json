@@ -2042,7 +2042,7 @@
           "walkDistanceM"
         ],
         "title": "FareJourney",
-        "description": "Satu pilihan rute lengkap dengan tarifnya. Yang dibandingkan cuma jumlah naik kendaraan, jarak jalan kaki, rata-rata lama nunggu, dan tarif, bukan waktu tempuh. Lama nunggu TransJakarta ikut menghitung bus yang datang bergerombol, dan di ruas yang dilewati beberapa rute dihitung dari bus rute mana pun yang datang duluan. Jam berangkat dan tiba ikut ditampilkan di tahap yang jadwalnya kami punya."
+        "description": "Satu pilihan rute lengkap dengan tarifnya. Rutenya dicari dengan membandingkan jumlah naik kendaraan, jarak jalan kaki, rata-rata lama nunggu, dan tarif. Lama nunggu TransJakarta ikut menghitung bus yang datang bergerombol, dan di ruas yang dilewati beberapa rute dihitung dari bus rute mana pun yang datang duluan. Jam berangkat dan tiba ikut ditampilkan di tahap yang jadwalnya kami punya."
       },
       "TripResult": {
         "type": "object",
@@ -2058,7 +2058,7 @@
             "items": {
               "$ref": "#/components/schemas/FareJourney"
             },
-            "description": "Pilihan rute buat pasangan stasiun ini, diurutkan dari yang paling masuk akal. Selalu ada isinya kalau rutenya ketemu."
+            "description": "Pilihan rute buat pasangan stasiun ini, diurutkan dari yang paling cepat sampai: jam tiba dari jadwal kalau ada, kalau tidak dari perkiraan TransJakarta (`estimate`). Kalau ada perkiraan yang ikut dibandingkan, rute baru dipindah ke depan kalau sampainya paling tidak 3 menit lebih cepat; selisih yang lebih kecil ikut urutan yang paling masuk akal. Rute yang tidak punya keduanya ada di belakang. Selalu ada isinya kalau rutenya ketemu."
           }
         },
         "required": [
@@ -2307,6 +2307,48 @@
                     "error"
                   ],
                   "title": "ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/hubs": {
+      "get": {
+        "operationId": "getHubs",
+        "summary": "Daftar pumpunan moda",
+        "description": "Beberapa stasiun yang dianggap satu tempat karena saling terhubung. Dukuh Atas, misalnya, mencakup Sudirman, BNI City, plus stasiun MRT dan LRT-nya. Diurutkan dari yang paling ramai.",
+        "tags": [
+          "Pumpunan Moda"
+        ],
+        "responses": {
+          "200": {
+            "description": "Berhasil.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "number",
+                      "description": "Sama dengan HTTP status code-nya.",
+                      "examples": [
+                        200
+                      ],
+                      "format": "double"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Hub"
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
                 }
               }
             }
