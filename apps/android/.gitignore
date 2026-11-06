@@ -33,3 +33,4 @@ commute-release.keystore
 
 # Heap dump
 *.hprof
+/.idea/
