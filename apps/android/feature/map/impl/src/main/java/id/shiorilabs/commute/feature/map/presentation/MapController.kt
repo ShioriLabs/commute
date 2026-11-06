@@ -15,8 +15,10 @@ import id.shiorilabs.commute.feature.map.domain.MAX_RENDER_DPR
 import id.shiorilabs.commute.feature.map.domain.MapData
 import id.shiorilabs.commute.feature.map.domain.MapGestures
 import id.shiorilabs.commute.feature.map.domain.MapHit
+import id.shiorilabs.commute.feature.map.domain.MapSelection
 import id.shiorilabs.commute.feature.map.domain.MapPoint
 import id.shiorilabs.commute.feature.map.domain.Rgb
+import id.shiorilabs.commute.feature.map.domain.markerOf
 import id.shiorilabs.commute.feature.map.domain.Spotlight
 import id.shiorilabs.commute.feature.map.domain.TilePlanner
 import id.shiorilabs.commute.feature.map.domain.mapTreatment
@@ -50,7 +52,11 @@ import kotlin.math.min
  * tile fetches.
  *
  * @param initialCamera where the camera was when the map last left the screen, if it did.
- * @param onStationTap a tap landed on [MapHit.Station]: its `OPERATOR-CODE`.
+ * @param hubFor the hub a `HUB-…` tap target names, with its ring colour; null while unknown.
+ * @param ringColorOf a station's line colour for the ring, once it can be looked up.
+ *
+ * Held by the map's view model, so it outlives the screen while the map stays on the back stack:
+ * a station's page over it and back finds the camera, the open sheet and the textures as they were.
  */
 class MapController(
     private val data: MapData,
@@ -58,12 +64,20 @@ class MapController(
     private val density: Float,
     initialCamera: Transform?,
     initialSnapshot: Bitmap?,
-    private val onStationTap: (String) -> Unit,
+    private val hubFor: (hubId: String) -> Pair<String, Rgb?>?,
+    private val ringColorOf: suspend (stationId: String) -> Rgb?,
 ) {
+
+    /** A tap opened something: the screen showing the map plays its haptic. */
+    var onHit: () -> Unit = {}
 
     /** Whether the map can draw on this device: false once Vulkan has said it can't. */
     val isSupported: StateFlow<Boolean> get() = supported
     private val supported = MutableStateFlow(true)
+
+    /** What the sheet shows: null with it closed. */
+    val selection: StateFlow<MapSelection?> get() = selected
+    private val selected = MutableStateFlow<MapSelection?>(null)
 
     /**
      * The map as it last came to rest, at half resolution: what the window shows in its place while
@@ -87,6 +101,7 @@ class MapController(
     private val renderer = MapRenderThread(
         onReady = ::onRendererReady,
         onComplete = { showing.value = true },
+        onTexturesLost = ::onTexturesLost,
         onLost = ::onRendererLost,
     )
     private val planner = TilePlanner<Bitmap>(manifest, discard = Bitmap::recycle)
@@ -136,7 +151,14 @@ class MapController(
      */
     fun onResize(widthPx: Int, heightPx: Int) {
         val previous = viewport
-        val view = Viewport(widthPx / density.toDouble(), heightPx / density.toDouble(), manifest.worldWidth, manifest.worldHeight)
+        val height = heightPx / density.toDouble()
+        val view = Viewport(
+            width = widthPx / density.toDouble(),
+            height = height,
+            worldWidth = manifest.worldWidth,
+            worldHeight = manifest.worldHeight,
+            insetBottom = if (selected.value != null) height * Viewport.PEEK_FRACTION else 0.0,
+        )
         viewport = view
         fun recentred(t: Transform): Transform =
             if (previous == null) view.clamp(t) else view.centeredOn(t, t.worldX(previous.width / 2), t.worldY(previous.height / 2))
@@ -148,14 +170,15 @@ class MapController(
     }
 
     /** The surface is going: the renderer lets go of it, and of every texture, before this returns. */
+    /**
+     * The surface is going, as when a station's page covers the map: the renderer lets go of it
+     * before this returns, keeping its textures, so the map draws whole the moment it's back.
+     */
     fun onSurfaceDestroyed() {
         surface = null
         showing.value = false
         snapshotGeneration++
         renderer.detach()
-        rendererReady = false
-        previewUploaded = false
-        planner.forgetResidency()
     }
 
     /** The map went to the background a while ago: its tiles' memory goes back to the system. */
@@ -250,32 +273,76 @@ class MapController(
     }
 
     /**
-     * Spotlights [point], a station's marker or a hub's region: the rest of the map fades, its
-     * name stays lit with it, and a ring in [color] settles round it. Takes over from what's lit
-     * already without the map brightening in between.
+     * Opens station [stationId]'s sheet over the map, as a transfer or a hub's member tapped in a
+     * sheet does: its marker spotlit and flown to. False when the map doesn't draw it, for the
+     * caller to open its page instead.
      */
-    fun spotlight(point: MapPoint, color: Rgb) {
+    fun selectStation(stationId: String): Boolean {
+        val marker = data.points.markerOf(stationId) ?: return false
+        select(MapSelection.Station(stationId, marker), null)
+        return true
+    }
+
+    /** Closes the sheet: the spotlight fades out and the camera settles back into range. */
+    fun clearSelection() {
+        if (selected.value == null) return
+        selected.value = null
+        spotlight?.exit(SystemClock.uptimeMillis())
+        setSheetInset(0.0)
+        invalidate()
+    }
+
+    /**
+     * Shows [selection]: its point spotlit, the rest of the map faded, its name lit with it and a
+     * ring in [color] (neutral until the station's line colour arrives), flown to the middle of
+     * what the sheet leaves showing. Takes over from what's lit already without the map
+     * brightening in between.
+     */
+    private fun select(selection: MapSelection, color: Rgb?) {
+        val point = selection.point
+        selected.value = selection
         spotlight = Spotlight(
             point = point,
             label = markerLabel(point, data.labels),
-            color = color,
+            color = color ?: Rgb.Neutral,
             startMs = SystemClock.uptimeMillis(),
             fadeFrom = seedFadeFrom(spotlight?.lastFade),
         )
+        if (selection is MapSelection.Station && color == null) {
+            scope.launch {
+                val tint = ringColorOf(selection.stationId) ?: return@launch
+                val current = spotlight ?: return@launch
+                if (current.point.stationId == selection.stationId) {
+                    current.color = tint
+                    invalidate()
+                }
+            }
+        }
+        val view = viewport
+        if (view != null) {
+            setSheetInset(view.height * Viewport.PEEK_FRACTION, settle = false)
+            val from = rendered ?: return
+            fly(from, viewport!!.focus(from, point.centerX, point.centerY), Flight.TO_POINT_MS)
+        }
         invalidate()
     }
 
-    /** The ring's colour, once the station's line has said what it is. */
-    fun tintSpotlight(stationId: String, color: Rgb) {
-        val current = spotlight ?: return
-        if (current.point.stationId != stationId) return
-        current.color = color
-        invalidate()
+    /**
+     * The sheet now covers [inset] dp of the view's foot. With [settle], a camera out of the new
+     * range glides back into it, as the web re-settles when a sheet goes.
+     */
+    private fun setSheetInset(inset: Double, settle: Boolean = true) {
+        val view = viewport?.copy(insetBottom = inset) ?: return
+        viewport = view
+        val current = rendered ?: return
+        val clamped = view.clamp(current)
+        if (settle && clamped != current) fly(current, clamped, Flight.SETTLE_MS) else target = target?.let(view::clamp)
     }
 
-    /** Fades the spotlight out from wherever it has got to. */
-    fun clearSpotlight() {
-        spotlight?.exit(SystemClock.uptimeMillis())
+    private fun fly(from: Transform, to: Transform, durationMs: Double) {
+        fling = null
+        flight = Flight(from, to, durationMs)
+        flightStartNanos = System.nanoTime()
         invalidate()
     }
 
@@ -357,7 +424,9 @@ class MapController(
         this.rgb565 = rgb565
         rendererReady = true
         val held = preview
-        if (held != null) {
+        if (previewUploaded) {
+            // Carried over from the last surface with the tiles.
+        } else if (held != null) {
             renderer.upload(PREVIEW_KEY, held, recycle = false)
             previewUploaded = true
         } else if (!previewLoading) {
@@ -379,6 +448,12 @@ class MapController(
     private fun onRendererLost() {
         rendererReady = false
         supported.value = false
+    }
+
+    /** The renderer was made afresh for a new surface: every texture goes up again. */
+    private fun onTexturesLost() {
+        planner.forgetResidency()
+        previewUploaded = false
     }
 
     private fun handle(events: List<MapGestures.Event>) {
@@ -422,12 +497,32 @@ class MapController(
         invalidate()
     }
 
+    /**
+     * A tap: a station's marker or name opens its sheet, a hub's region the hub's, and empty
+     * map closes whatever is open, as on the web.
+     */
     private fun tap(t: Transform, x: Double, y: Double) {
-        val hit = hitTest(t.worldX(x), t.worldY(y), data.points, data.labels, TOUCH_HIT_SLOP_DP / t.scale)
-        if (hit is MapHit.Station) {
+        val opened = when (val hit = hitTest(t.worldX(x), t.worldY(y), data.points, data.labels, TOUCH_HIT_SLOP_DP / t.scale)) {
+            is MapHit.Station -> {
+                select(MapSelection.Station(hit.point.stationId, hit.point), null)
+                true
+            }
+
+            // A hub not yet known (its list still loading) opens nothing rather than the wrong page.
+            is MapHit.Hub -> hubFor(hit.point.id)?.let { (slug, color) ->
+                select(MapSelection.Hub(slug, hit.point), color)
+                true
+            } ?: false
+
+            null -> {
+                clearSelection()
+                false
+            }
+        }
+        if (opened) {
             // It opened something, so a second tap isn't a zoom.
             gestures.forgetTap()
-            onStationTap(hit.point.stationId)
+            onHit()
         }
     }
 

@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,6 +24,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.ui.components.CommuteCloseButton
+import id.shiorilabs.commute.core.ui.components.CommuteIconButton
+import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.components.SkeletonBlock
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.feature.hub.R
@@ -38,7 +42,7 @@ private val KindColor: Color
  * without one; once it has failed, only the close button is left.
  *
  * [topInset] is the status bar's height, carried inside the header so the frost reaches up behind
- * the clock.
+ * the clock. With [onOpenPage], as in the map's sheet, a button beside close opens the full page.
  */
 @Composable
 fun HubHeader(
@@ -47,6 +51,7 @@ fun HubHeader(
     modifier: Modifier = Modifier,
     placeholderTitle: String? = null,
     topInset: Dp = 0.dp,
+    onOpenPage: (() -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
@@ -89,6 +94,16 @@ fun HubHeader(
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = KindColor,
+                )
+            }
+        }
+        if (onOpenPage != null) {
+            CommuteIconButton(onClick = onOpenPage, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    imageVector = CommuteIcons.ExternalLink,
+                    contentDescription = stringResource(R.string.hub_open_page_description),
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onBackground,
                 )
             }
         }

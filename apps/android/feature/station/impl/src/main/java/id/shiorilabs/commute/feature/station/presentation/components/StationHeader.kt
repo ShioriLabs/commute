@@ -73,6 +73,8 @@ fun StationHeader(
     topInset: Dp = 0.dp,
     /** False for a station there is no page to pin: an unserved one, titled by [placeholderTitle]. */
     saveable: Boolean = true,
+    /** In the map's sheet: a button beside close that opens the full page. */
+    onOpenPage: (() -> Unit)? = null,
 ) {
     val shown = when (station) {
         is UIState.Success -> directionalBaseName(station.data.name) to station.data.lineKeys
@@ -139,6 +141,13 @@ fun StationHeader(
                 )
 
                 station is UIState.Error -> Unit
+            }
+            if (onOpenPage != null) {
+                HeaderButton(
+                    icon = CommuteIcons.ExternalLink,
+                    description = stringResource(R.string.station_open_page_description),
+                    onClick = onOpenPage,
+                )
             }
             HeaderButton(
                 icon = CommuteIcons.Close,
