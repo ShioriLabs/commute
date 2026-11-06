@@ -90,8 +90,9 @@ fun LineScreen(
     )
 }
 
+/** The line page itself, for [LineScreen] and the map's sheet ([LineSheetImpl]). */
 @Composable
-private fun LineContent(
+internal fun LineContent(
     state: LineUiState,
     operator: String,
     lineCode: String,
@@ -100,6 +101,10 @@ private fun LineContent(
     placeholderTitle: String? = null,
     placeholderColor: String? = null,
     onClose: () -> Unit = {},
+    /** In the map's sheet, opened from a station's: back to it. */
+    onBack: (() -> Unit)? = null,
+    /** In the map's sheet: opens the full page. */
+    onOpenPage: (() -> Unit)? = null,
     onRetry: () -> Unit = {},
     onShowBranch: (Int) -> Unit = {},
     onOpenStation: (LineStop) -> Unit = {},
@@ -116,6 +121,8 @@ private fun LineContent(
                 placeholderTitle = placeholderTitle,
                 placeholderColor = placeholderColor,
                 topInset = innerPadding.calculateTopPadding(),
+                onBack = onBack,
+                onOpenPage = onOpenPage,
             )
         },
     ) { headerHeight, listState, hazeState ->

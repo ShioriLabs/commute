@@ -12,7 +12,9 @@ interface StationSheet {
 
     /**
      * Station [stationId]'s content. [onClose] closes the sheet; [onOpenPage] opens the full page;
-     * [onOpenStation] is a transfer tapped; [onOtw] is "OTW Ke Sini".
+     * [onOpenStation] is a transfer tapped; [onOtw] is "OTW Ke Sini". [onIsolateLine] is a line
+     * card's name tapped, by its `OPERATOR:CODE`: false when the map can't draw that line apart,
+     * for the line's page to open instead.
      */
     @Composable
     fun Content(
@@ -21,6 +23,7 @@ interface StationSheet {
         onOpenPage: () -> Unit,
         onOpenStation: (stationId: String) -> Unit,
         onOtw: () -> Unit,
+        onIsolateLine: (lineKey: String) -> Boolean,
         modifier: Modifier,
     )
 }

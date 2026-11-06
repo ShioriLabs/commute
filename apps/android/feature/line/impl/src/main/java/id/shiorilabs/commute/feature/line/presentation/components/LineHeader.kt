@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -20,6 +21,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -27,9 +29,11 @@ import androidx.compose.ui.unit.dp
 import id.shiorilabs.commute.core.constants.OPERATOR_NAMES
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.ui.components.CommuteCloseButton
+import id.shiorilabs.commute.core.ui.components.CommuteIconButton
 import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.components.SkeletonBlock
+import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.preview.CommutePreviewScaffold
 import id.shiorilabs.commute.feature.line.R
 import id.shiorilabs.commute.feature.line.domain.LineDetail
@@ -45,7 +49,8 @@ private val OperatorColor: Color
  * failed, only the close button is left.
  *
  * [topInset] is the status bar's height, carried inside the header so the frost reaches up behind
- * the clock.
+ * the clock. In the map's sheet, [onBack] leads back to the station it was opened from and
+ * [onOpenPage], beside close, opens the full page.
  */
 @Composable
 fun LineHeader(
@@ -57,6 +62,8 @@ fun LineHeader(
     placeholderTitle: String? = null,
     placeholderColor: String? = null,
     topInset: Dp = 0.dp,
+    onBack: (() -> Unit)? = null,
+    onOpenPage: (() -> Unit)? = null,
 ) {
     val loaded = (line as? UIState.Success)?.data
     val placeholder = line !is UIState.Error
@@ -68,10 +75,14 @@ fun LineHeader(
             .fillMaxWidth()
             .padding(top = topInset)
             // The web's p-8 pb-4, as on the station page.
-            .padding(start = 32.dp, top = 32.dp, end = 32.dp, bottom = 16.dp),
+            // The web's -ml-2 on a back button.
+            .padding(start = if (onBack != null) 24.dp else 32.dp, top = 32.dp, end = 32.dp, bottom = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (onBack != null) {
+            HeaderIconButton(CommuteIcons.Back, stringResource(R.string.line_back_description), onBack)
+        }
         if (title != null && color != null) {
             LineRoundel(code = lineCode, color = color, operator = operator, size = RoundelSize.MD)
         } else if (placeholder) {
@@ -103,9 +114,25 @@ fun LineHeader(
                 )
             }
         }
+        if (onOpenPage != null) {
+            HeaderIconButton(CommuteIcons.ExternalLink, stringResource(R.string.line_open_page_description), onOpenPage)
+        }
         CommuteCloseButton(
             onClick = onClose,
             contentDescription = stringResource(R.string.line_close_description),
+            tint = MaterialTheme.colorScheme.onBackground,
+        )
+    }
+}
+
+/** A button the size of close, as the hub's header draws its own. */
+@Composable
+private fun HeaderIconButton(icon: ImageVector, description: String, onClick: () -> Unit) {
+    CommuteIconButton(onClick = onClick, modifier = Modifier.size(32.dp)) {
+        Icon(
+            imageVector = icon,
+            contentDescription = description,
+            modifier = Modifier.size(24.dp),
             tint = MaterialTheme.colorScheme.onBackground,
         )
     }
