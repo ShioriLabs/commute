@@ -9,6 +9,8 @@ android {
 }
 
 dependencies {
+    // LineSheet: the line page in the map's sheet.
+    implementation(project(":feature:line:api"))
     // LineRepository + LineInfo: the dictionary the other-line badges resolve against.
     implementation(project(":feature:station:api"))
     // Failure, UIState, OPERATOR_NAMES.

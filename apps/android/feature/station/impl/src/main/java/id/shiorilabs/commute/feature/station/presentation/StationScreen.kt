@@ -156,6 +156,8 @@ internal fun StationContent(
     onOpenStation: (stationId: String) -> Unit = {},
     onOpenAttributions: () -> Unit = {},
     onOpenLine: (lineKey: String) -> Unit = {},
+    /** A line card's name tapped: its page, or in the map's sheet the line isolated on the map. */
+    onOpenLineCard: (lineKey: String) -> Unit = onOpenLine,
 ) {
     val hazeState = rememberHazeState()
     val listState = rememberLazyListState()
@@ -224,6 +226,7 @@ internal fun StationContent(
                 onOpenStation = onOpenStation,
                 onOpenAttributions = onOpenAttributions,
                 onOpenLine = onOpenLine,
+                onOpenLineCard = onOpenLineCard,
             )
         }.map { it.measure(constraints) }
 
@@ -256,6 +259,7 @@ private fun StationList(
     onOpenStation: (stationId: String) -> Unit,
     onOpenAttributions: () -> Unit,
     onOpenLine: (lineKey: String) -> Unit,
+    onOpenLineCard: (lineKey: String) -> Unit,
 ) {
     val board = state.board
     val station = (board.station as? UIState.Success)?.data
@@ -322,7 +326,7 @@ private fun StationList(
             onRetry = onRetry,
             onOtw = onOtw,
             onOpenTimetable = onOpenTimetable,
-            onOpenLine = onOpenLine,
+            onOpenLineCard = onOpenLineCard,
         )
 
         if (station == null) {
@@ -415,7 +419,7 @@ private fun LazyListScope.departures(
     onRetry: () -> Unit,
     onOtw: () -> Unit,
     onOpenTimetable: () -> Unit,
-    onOpenLine: (lineKey: String) -> Unit,
+    onOpenLineCard: (lineKey: String) -> Unit,
 ) {
     val inset = Modifier.padding(horizontal = 16.dp)
     // The web's single h-72 block: the page shows every line, so a per-line skeleton would run
@@ -476,7 +480,7 @@ private fun LazyListScope.departures(
                         nextDayLine = board.nextDayLine(line),
                         // Its name opens the line's page, as on the web; a corridor has none.
                         onHeaderClick = if (hasLinePage(line.lineKey)) {
-                            { onOpenLine(line.lineKey) }
+                            { onOpenLineCard(line.lineKey) }
                         } else {
                             null
                         },

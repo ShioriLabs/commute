@@ -5,4 +5,6 @@
     <string name="map_unsupported">Peta belum bisa ditampilkan di perangkat ini.</string>
     <string name="map_load_failed">Peta tidak bisa dimuat.</string>
     <string name="map_retry">Coba lagi</string>
+    <string name="map_line_choices">Ada beberapa lin di sini</string>
+    <string name="map_line_choices_title">Pilih lin</string>
 </resources>
