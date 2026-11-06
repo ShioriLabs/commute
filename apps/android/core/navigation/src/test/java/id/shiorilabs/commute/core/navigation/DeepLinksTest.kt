@@ -91,11 +91,20 @@ class DeepLinksTest {
     }
 
     @Test
-    fun `a map link opens the map, whatever it carries`() {
-        assertEquals(Route.Map, routeForLink("https://commute.shiorilabs.id/map"))
-        assertEquals(Route.Map, routeForLink("https://commute.shiorilabs.id/map/"))
-        assertEquals(Route.Map, routeForLink("https://commute.shiorilabs.id/map?from=KCI-SUD"))
+    fun `a map link opens the map`() {
+        assertEquals(Route.Map(), routeForLink("https://commute.shiorilabs.id/map"))
+        assertEquals(Route.Map(), routeForLink("https://commute.shiorilabs.id/map/"))
         assertNull(routeForLink("https://commute.shiorilabs.id/map/extra"))
+    }
+
+    @Test
+    fun `a map link with a pair draws its route, an end that isn't a station left out`() {
+        assertEquals(
+            Route.Map(fromId = "KCI-SUD", toId = "MRTJ-LBB"),
+            routeForLink("https://commute.shiorilabs.id/map?from=KCI-SUD&to=MRTJ-LBB"),
+        )
+        assertEquals(Route.Map(fromId = "KCI-SUD"), routeForLink("https://commute.shiorilabs.id/map?from=KCI-SUD"))
+        assertEquals(Route.Map(toId = "MRTJ-LBB"), routeForLink("https://commute.shiorilabs.id/map?from=sudirman&to=MRTJ-LBB&debug=1"))
     }
 
     @Test
