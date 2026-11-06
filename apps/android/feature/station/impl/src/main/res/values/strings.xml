@@ -2,6 +2,7 @@
 <resources>
     <!-- Header -->
     <string name="station_close_description">Tutup halaman stasiun</string>
+    <string name="station_open_page_description">Buka halaman stasiun</string>
     <string name="station_save_description">Simpan stasiun ini ke favorit</string>
     <string name="station_unsave_description">Hapus stasiun ini dari favorit</string>
     <!-- %1$s is a list of line names, e.g. "Lin Bogor, Lin Cikarang". -->

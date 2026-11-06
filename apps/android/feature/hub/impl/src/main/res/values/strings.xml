@@ -4,6 +4,7 @@
     <string name="hub_kind_hub">Pumpunan Moda</string>
     <string name="hub_kind_integrated">Stasiun Terintegrasi</string>
     <string name="hub_close_description">Tutup halaman hub</string>
+    <string name="hub_open_page_description">Buka halaman hub</string>
 
     <!-- Members. %1$s is a list of line names, e.g. "Lin Bogor, Lin Cikarang". -->
     <string name="hub_member_lines_description">Dilayani %1$s</string>

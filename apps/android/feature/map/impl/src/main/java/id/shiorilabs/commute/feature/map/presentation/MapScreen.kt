@@ -1,5 +1,6 @@
 package id.shiorilabs.commute.feature.map.presentation
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
@@ -8,6 +9,7 @@ import androidx.compose.foundation.AndroidExternalSurface
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -24,6 +27,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,7 +46,9 @@ import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -60,18 +66,27 @@ import id.shiorilabs.commute.core.ui.morph.LocalNavAnimatedVisibilityScope
 import id.shiorilabs.commute.core.ui.morph.LocalSharedTransitionScope
 import id.shiorilabs.commute.core.ui.morph.NavCardMorphTarget
 import id.shiorilabs.commute.core.ui.theme.DarkStatusBarIcons
+import id.shiorilabs.commute.feature.hub.presentation.HubSheet
 import id.shiorilabs.commute.feature.map.R
 import id.shiorilabs.commute.feature.map.domain.MapData
+import id.shiorilabs.commute.feature.map.domain.MapSelection
+import id.shiorilabs.commute.feature.map.domain.Viewport
+import id.shiorilabs.commute.feature.station.presentation.StationSheet
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
 
-/** The FDTJ integration map, edge to edge under the system bars, with a way back over it. */
+/**
+ * The FDTJ integration map, edge to edge under the system bars, with a way back over it, and a
+ * sheet over it for the station or hub tapped, as the web's phone layout shows them.
+ */
 @Composable
 fun MapScreen(
     innerPadding: PaddingValues,
+    stationSheet: StationSheet,
+    hubSheet: HubSheet,
     viewModel: MapViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -79,69 +94,142 @@ fun MapScreen(
 
     // Grows out of home's white rail card, as the other rail screens do.
     NavCardMorphTarget(destination = Route.Map, cardTint = null) {
-        MapPage(state, viewModel, innerPadding, onBack = { navigator.pop() })
+        // The artwork is drawn on white whatever the theme, as on the web.
+        Box(Modifier.fillMaxSize().background(Color.White)) {
+            when (val current = state) {
+                is UIState.Success -> MapWithSheet(current.data, viewModel, innerPadding, stationSheet, hubSheet)
+                is UIState.Error -> {
+                    ProblemPanel(
+                        message = stringResource(R.string.map_load_failed),
+                        retryLabel = stringResource(R.string.map_retry),
+                        onRetry = viewModel::retry,
+                        modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                    )
+                    MapChrome(innerPadding, onBack = { navigator.pop() })
+                }
+
+                else -> {
+                    CircularProgressIndicator(Modifier.align(Alignment.Center))
+                    MapChrome(innerPadding, onBack = { navigator.pop() })
+                }
+            }
+        }
     }
 }
 
+/** The status bar's scrim and the way back, over the map. */
 @Composable
-private fun MapPage(state: UIState<MapData>, viewModel: MapViewModel, innerPadding: PaddingValues, onBack: () -> Unit) {
-    // The artwork is drawn on white whatever the theme, as on the web.
-    Box(Modifier.fillMaxSize().background(Color.White)) {
-        when (val current = state) {
-            is UIState.Success -> MapSurface(current.data, viewModel)
-            is UIState.Error -> ProblemPanel(
-                message = stringResource(R.string.map_load_failed),
-                retryLabel = stringResource(R.string.map_retry),
-                onRetry = viewModel::retry,
-                modifier = Modifier.align(Alignment.Center).padding(24.dp),
-            )
+private fun MapChrome(innerPadding: PaddingValues, onBack: () -> Unit) {
+    // Light icons over a navy scrim that fades out below the status bar, as KitKat's translucent
+    // bar did, whatever the theme: the artwork's busy top edge would otherwise run under the
+    // clock, and a solid bar would cut it off.
+    DarkStatusBarIcons()
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(innerPadding.calculateTopPadding() * STATUS_SCRIM_REACH)
+            .background(StatusScrim),
+    )
 
-            else -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-        }
-
-        // Light icons over a navy scrim that fades out below the status bar, as KitKat's translucent
-        // bar did, whatever the theme: the artwork's busy top edge would otherwise run under the
-        // clock, and a solid bar would cut it off.
-        DarkStatusBarIcons()
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(innerPadding.calculateTopPadding() * STATUS_SCRIM_REACH)
-                .background(StatusScrim),
+    CommuteIconButton(
+        onClick = onBack,
+        modifier = Modifier
+            .padding(top = innerPadding.calculateTopPadding() + 8.dp, start = 12.dp)
+            .size(40.dp)
+            .shadow(2.dp, CircleShape)
+            .background(MaterialTheme.colorScheme.surface, CircleShape),
+    ) {
+        Icon(
+            imageVector = CommuteIcons.Back,
+            contentDescription = stringResource(R.string.map_back),
+            modifier = Modifier.size(22.dp),
+            tint = MaterialTheme.colorScheme.onSurface,
         )
-
-        CommuteIconButton(
-            onClick = onBack,
-            modifier = Modifier
-                .padding(top = innerPadding.calculateTopPadding() + 8.dp, start = 12.dp)
-                .size(40.dp)
-                .shadow(2.dp, CircleShape)
-                .background(MaterialTheme.colorScheme.surface, CircleShape),
-        ) {
-            Icon(
-                imageVector = CommuteIcons.Back,
-                contentDescription = stringResource(R.string.map_back),
-                modifier = Modifier.size(22.dp),
-                tint = MaterialTheme.colorScheme.onSurface,
-            )
-        }
     }
 }
 
+/**
+ * The map with its sheet: closed until a station or hub is tapped, then up at its peek, and
+ * dragged to full or away. One at a time, as on the web; back closes it before leaving the map.
+ */
 @Composable
-private fun MapSurface(data: MapData, viewModel: MapViewModel) {
+private fun MapWithSheet(
+    data: MapData,
+    viewModel: MapViewModel,
+    innerPadding: PaddingValues,
+    stationSheet: StationSheet,
+    hubSheet: HubSheet,
+) {
     val navigator = LocalNavigator.current
     val density = LocalDensity.current.density
-    val controller = remember(data) {
-        MapController(
-            data = data,
-            repository = viewModel.repository,
-            density = density,
-            initialCamera = viewModel.session.camera,
-            initialSnapshot = viewModel.session.snapshot,
-            onStationTap = { stationId -> navigator.goTo(Route.Station(stationId)) },
-        )
+    val haptics = LocalHapticFeedback.current
+    val controller = remember(data) { viewModel.controller(data, density) }
+    SideEffect { controller.onHit = { haptics.performHapticFeedback(HapticFeedbackType.ContextClick) } }
+    val selection by controller.selection.collectAsStateWithLifecycle()
+    // Dragged or flicked away: the selection goes with it, the camera and spotlight leaving as the
+    // sheet does rather than once it has gone.
+    val sheetState = rememberMapSheetState(
+        onHiding = { if (controller.selection.value != null) controller.clearSelection() },
+    )
+
+    // Up at its peek for a selection, away without one.
+    LaunchedEffect(selection != null) {
+        sheetState.moveTo(if (selection != null) SheetStop.Peek else SheetStop.Hidden)
     }
+    BackHandler(enabled = selection != null) { controller.clearSelection() }
+
+    val openStation = { stationId: String ->
+        if (!controller.selectStation(stationId)) navigator.goTo(Route.Station(stationId))
+    }
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val topInset = innerPadding.calculateTopPadding()
+        val height = maxHeight
+        Box(Modifier.fillMaxSize()) {
+            MapSurface(controller, viewModel)
+            MapChrome(innerPadding, onBack = { navigator.pop() })
+        }
+        // Full stops short of the status bar, the clock left clear.
+        MapSheet(
+            state = sheetState,
+            screenHeight = height,
+            height = height - topInset - SHEET_TOP_GAP,
+            peek = height * Viewport.PEEK_FRACTION.toFloat(),
+            fullTop = topInset + SHEET_TOP_GAP,
+            shape = RoundedCornerShape(topStart = SHEET_CORNER, topEnd = SHEET_CORNER),
+            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+            shadowElevation = 8.dp,
+        ) {
+            when (val shown = selection) {
+                is MapSelection.Station -> key(shown.stationId) {
+                    stationSheet.Content(
+                        stationId = shown.stationId,
+                        onClose = controller::clearSelection,
+                        onOpenPage = { navigator.goTo(Route.Station(shown.stationId)) },
+                        onOpenStation = openStation,
+                        onOtw = { navigator.goTo(Route.Otw(toId = shown.stationId)) },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+
+                is MapSelection.Hub -> key(shown.slug) {
+                    hubSheet.Content(
+                        slug = shown.slug,
+                        onClose = controller::clearSelection,
+                        onOpenPage = { navigator.goTo(Route.Hub(shown.slug)) },
+                        onOpenStation = openStation,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+
+                null -> Unit
+            }
+        }
+    }
+}
+
+@Composable
+private fun MapSurface(controller: MapController, viewModel: MapViewModel) {
     val supported by controller.isSupported.collectAsStateWithLifecycle()
     val snapshot by controller.snapshot.collectAsStateWithLifecycle()
     val showHitboxes by viewModel.showHitboxes.collectAsStateWithLifecycle()
@@ -149,11 +237,12 @@ private fun MapSurface(data: MapData, viewModel: MapViewModel) {
     val scope = rememberCoroutineScope()
     val description = stringResource(R.string.map_description)
 
+    // The controller stays with the view model while the map is on the back stack; what a later
+    // opening of the map starts from is kept as the screen goes, in case it doesn't come back.
     DisposableEffect(controller) {
         onDispose {
             viewModel.session.camera = controller.camera
             viewModel.session.snapshot = controller.snapshot.value
-            controller.dispose()
         }
     }
 
@@ -279,6 +368,12 @@ private fun MapSurface(data: MapData, viewModel: MapViewModel) {
         )
     }
 }
+
+/** The sheet's top corners. */
+private val SHEET_CORNER = 24.dp
+
+/** What full leaves showing under the status bar. */
+private val SHEET_TOP_GAP = 8.dp
 
 /** Behind the status bar over the map. */
 private val StatusBarNavy = Color(0xFF001421)
