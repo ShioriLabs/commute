@@ -2,7 +2,7 @@ plugins {
     alias(libs.plugins.commute.android.library.compose)
     // MapNavModule (@IntoSet) + @HiltViewModel → Hilt + KSP.
     alias(libs.plugins.commute.android.hilt)
-    // The web's manifest.json and points.json, read as they are served.
+    // The web's manifest.json, points.json and map-lines.json, read as they are served.
     alias(libs.plugins.commute.kotlin.serialization)
 }
 
@@ -59,6 +59,7 @@ val bundleMapData = tasks.register<BundleMapData>("bundleMapData") {
         webApp.file("public/maps/fdtj/manifest.json"),
         webApp.file("app/data/points.json"),
         webApp.file("app/data/label-points.json"),
+        webApp.file("app/data/map-lines.json"),
     )
 }
 
@@ -86,6 +87,8 @@ dependencies {
     implementation(project(":feature:station:api"))
     // HubSheet and HubDirectory: the hub sheet, and the `HUB-…` tap targets' slugs.
     implementation(project(":feature:hub:api"))
+    // LineSheet: an isolated line's sheet.
+    implementation(project(":feature:line:api"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.runtime)

@@ -41,6 +41,7 @@ class MapRepositoryImplTest {
         override fun bundled(name: String): String = when (name) {
             "manifest.json" -> manifest("2026-08c", "bundled")
             "points.json" -> points("2026-08c", "KCI-BUNDLED")
+            "map-lines.json" -> """{"version":"2026-08c","lines":[]}"""
             else -> """{"version":"2026-08c","points":[]}"""
         }
 

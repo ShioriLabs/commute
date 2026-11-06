@@ -16,9 +16,9 @@ import id.shiorilabs.commute.core.ui.time.rememberTimetableNow
 import javax.inject.Inject
 
 /**
- * The station page in the map's sheet: the same content, with the close and the transfers handed
- * to the map, and a button out to the full page. What the map doesn't handle (the timetable, a
- * line's page, the maps app) opens as it does from the page.
+ * The station page in the map's sheet: the same content, with the close, the transfers and the
+ * line cards' names handed to the map, and a button out to the full page. What the map doesn't
+ * handle (the timetable, a line it can't isolate, the maps app) opens as it does from the page.
  */
 class StationSheetImpl @Inject constructor() : StationSheet {
 
@@ -29,6 +29,7 @@ class StationSheetImpl @Inject constructor() : StationSheet {
         onOpenPage: () -> Unit,
         onOpenStation: (stationId: String) -> Unit,
         onOtw: () -> Unit,
+        onIsolateLine: (lineKey: String) -> Boolean,
         modifier: Modifier,
     ) {
         // One per station shown, in the map's own store: switching stations keeps each one's board.
@@ -61,6 +62,9 @@ class StationSheetImpl @Inject constructor() : StationSheet {
                 onOpenStation = onOpenStation,
                 onOpenAttributions = { navigator.goTo(Route.SettingsDataAttributions) },
                 onOpenLine = { key -> lineRoute(key, state.lines)?.let(navigator::goTo) },
+                onOpenLineCard = { key ->
+                    if (!onIsolateLine(key)) lineRoute(key, state.lines)?.let(navigator::goTo)
+                },
             )
         }
     }

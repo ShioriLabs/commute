@@ -57,6 +57,25 @@ class MapDataTest {
         assertEquals(bundledManifest, resolveMapData(broken, null, null, bundledManifest, bundledPoints, bundledLabels).manifest)
     }
 
+    private fun lines(version: String, key: String) = MapLines(
+        version,
+        listOf(MapLine(key, "KCI", key.substringAfter(':'), "Lin", "#000000", 12.5, emptyList())),
+    )
+
+    @Test
+    fun `traced lines are taken from the copy traced on the tiles' edition`() {
+        val stale = lines("2026-08b", "KCI:STALE")
+        val bundled = lines("2026-08c", "KCI:BUNDLED")
+        val data = resolveMapData(null, null, null, bundledManifest, bundledPoints, bundledLabels, stale, bundled)
+        assertEquals("KCI:BUNDLED", data.lines.single().key)
+    }
+
+    @Test
+    fun `with no traced lines held, nothing can be isolated`() {
+        val data = resolveMapData(null, null, null, bundledManifest, bundledPoints, bundledLabels)
+        assertEquals(emptyList<MapLine>(), data.lines)
+    }
+
     @Test
     fun `the map opens on Manggarai when this edition draws it`() {
         val data = resolveMapData(null, points("2026-08c", "KCI-MRI"), null, bundledManifest, bundledPoints, bundledLabels)

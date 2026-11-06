@@ -1,26 +1,39 @@
 package id.shiorilabs.commute.feature.map.presentation
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.AndroidExternalSurface
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -35,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -50,25 +64,37 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import id.shiorilabs.commute.core.constants.OPERATOR_TJ
 import id.shiorilabs.commute.core.navigation.LocalNavigator
 import id.shiorilabs.commute.core.navigation.Route
 import id.shiorilabs.commute.core.type.UIState
 import id.shiorilabs.commute.core.ui.components.CommuteIconButton
+import id.shiorilabs.commute.core.ui.components.LineRoundel
 import id.shiorilabs.commute.core.ui.components.ProblemPanel
+import id.shiorilabs.commute.core.ui.components.RoundelSize
 import id.shiorilabs.commute.core.ui.icons.CommuteIcons
 import id.shiorilabs.commute.core.ui.morph.LocalNavAnimatedVisibilityScope
 import id.shiorilabs.commute.core.ui.morph.LocalSharedTransitionScope
 import id.shiorilabs.commute.core.ui.morph.NavCardMorphTarget
 import id.shiorilabs.commute.core.ui.theme.DarkStatusBarIcons
+import id.shiorilabs.commute.core.ui.theme.Slate100
+import id.shiorilabs.commute.core.ui.theme.Slate200
+import id.shiorilabs.commute.core.ui.theme.Slate600
 import id.shiorilabs.commute.feature.hub.presentation.HubSheet
+import id.shiorilabs.commute.feature.line.presentation.LineSheet
 import id.shiorilabs.commute.feature.map.R
 import id.shiorilabs.commute.feature.map.domain.MapData
+import id.shiorilabs.commute.feature.map.domain.MapLine
 import id.shiorilabs.commute.feature.map.domain.MapSelection
 import id.shiorilabs.commute.feature.map.domain.Viewport
 import id.shiorilabs.commute.feature.station.presentation.StationSheet
@@ -80,13 +106,14 @@ import kotlin.math.cos
 
 /**
  * The FDTJ integration map, edge to edge under the system bars, with a way back over it, and a
- * sheet over it for the station or hub tapped, as the web's phone layout shows them.
+ * sheet over it for the station, hub or line tapped, as the web's phone layout shows them.
  */
 @Composable
 fun MapScreen(
     innerPadding: PaddingValues,
     stationSheet: StationSheet,
     hubSheet: HubSheet,
+    lineSheet: LineSheet,
     viewModel: MapViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -97,7 +124,7 @@ fun MapScreen(
         // The artwork is drawn on white whatever the theme, as on the web.
         Box(Modifier.fillMaxSize().background(Color.White)) {
             when (val current = state) {
-                is UIState.Success -> MapWithSheet(current.data, viewModel, innerPadding, stationSheet, hubSheet)
+                is UIState.Success -> MapWithSheet(current.data, viewModel, innerPadding, stationSheet, hubSheet, lineSheet)
                 is UIState.Error -> {
                     ProblemPanel(
                         message = stringResource(R.string.map_load_failed),
@@ -149,8 +176,9 @@ private fun MapChrome(innerPadding: PaddingValues, onBack: () -> Unit) {
 }
 
 /**
- * The map with its sheet: closed until a station or hub is tapped, then up at its peek, and
- * dragged to full or away. One at a time, as on the web; back closes it before leaving the map.
+ * The map with its sheet: closed until a station, hub or line is tapped, then up at its peek, and
+ * dragged to full or away. One at a time, as on the web; back closes it before leaving the map, or
+ * from a line opened from a station's sheet, goes back to that station.
  */
 @Composable
 private fun MapWithSheet(
@@ -159,6 +187,7 @@ private fun MapWithSheet(
     innerPadding: PaddingValues,
     stationSheet: StationSheet,
     hubSheet: HubSheet,
+    lineSheet: LineSheet,
 ) {
     val navigator = LocalNavigator.current
     val density = LocalDensity.current.density
@@ -166,20 +195,32 @@ private fun MapWithSheet(
     val controller = remember(data) { viewModel.controller(data, density) }
     SideEffect { controller.onHit = { haptics.performHapticFeedback(HapticFeedbackType.ContextClick) } }
     val selection by controller.selection.collectAsStateWithLifecycle()
+    val lineChoices by controller.lineChoices.collectAsStateWithLifecycle()
     // Dragged or flicked away: the selection goes with it, the camera and spotlight leaving as the
     // sheet does rather than once it has gone.
     val sheetState = rememberMapSheetState(
         onHiding = { if (controller.selection.value != null) controller.clearSelection() },
     )
 
-    // Up at its peek for a selection, away without one.
-    LaunchedEffect(selection != null) {
+    // Up at its peek for a selection, away without one, and down to it for a line, which is drawn
+    // on the map rather than in the sheet.
+    val showsLine = selection is MapSelection.Line
+    LaunchedEffect(selection != null, showsLine) {
         sheetState.moveTo(if (selection != null) SheetStop.Peek else SheetStop.Hidden)
     }
-    BackHandler(enabled = selection != null) { controller.clearSelection() }
+    BackHandler(enabled = selection != null) {
+        if (showsLine) controller.backFromLine() else controller.clearSelection()
+    }
+    // Declared after, so it goes first.
+    BackHandler(enabled = lineChoices.isNotEmpty()) { controller.dismissLineChoices() }
 
     val openStation = { stationId: String ->
         if (!controller.selectStation(stationId)) navigator.goTo(Route.Station(stationId))
+    }
+    val openLine = { lineKey: String ->
+        if (!controller.isolateLine(lineKey)) {
+            navigator.goTo(Route.Line(lineKey.substringBefore(':'), lineKey.substringAfter(':')))
+        }
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -208,6 +249,7 @@ private fun MapWithSheet(
                         onOpenPage = { navigator.goTo(Route.Station(shown.stationId)) },
                         onOpenStation = openStation,
                         onOtw = { navigator.goTo(Route.Otw(toId = shown.stationId)) },
+                        onIsolateLine = { lineKey -> controller.isolateLine(lineKey, fromStationId = shown.stationId) },
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -222,7 +264,102 @@ private fun MapWithSheet(
                     )
                 }
 
+                is MapSelection.Line -> key(shown.line.key) {
+                    val line = shown.line
+                    lineSheet.Content(
+                        operator = line.operator,
+                        lineCode = line.code,
+                        title = line.name,
+                        colorCode = line.color,
+                        onClose = controller::clearSelection,
+                        onBack = if (shown.fromStationId != null) controller::backFromLine else null,
+                        // TransJakarta has no line pages, as on the web.
+                        onOpenPage = if (line.operator != OPERATOR_TJ) {
+                            { navigator.goTo(Route.Line(line.operator, line.code, title = line.name, colorCode = line.color)) }
+                        } else {
+                            null
+                        },
+                        onOpenStation = openStation,
+                        onOpenLine = openLine,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+
                 null -> Unit
+            }
+        }
+
+        // Held through its exit, which has no choices left to show.
+        var heldChoices by remember { mutableStateOf(lineChoices) }
+        LaunchedEffect(lineChoices) {
+            if (lineChoices.isNotEmpty()) heldChoices = lineChoices
+        }
+        val localDensity = LocalDensity.current
+        val heightPx = with(localDensity) { height.toPx() }
+        val chooserLift = with(localDensity) { CHOOSER_BOTTOM.toPx() }
+        val chooserGap = with(localDensity) { CHOOSER_SHEET_GAP.toPx() }
+        AnimatedVisibility(
+            visible = lineChoices.isNotEmpty(),
+            enter = fadeIn(tween(CHOOSER_FADE_MILLIS)) + scaleIn(tween(CHOOSER_FADE_MILLIS), initialScale = 0.95f),
+            exit = fadeOut(tween(CHOOSER_FADE_MILLIS)),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                // Where the web floats it, or over the sheet when one is up.
+                .offset { IntOffset(0, -maxOf(chooserLift, heightPx - sheetState.offset + chooserGap).toInt()) }
+                .padding(horizontal = 16.dp),
+        ) {
+            LineChooser(lines = heldChoices.ifEmpty { lineChoices }, onChoose = controller::chooseLine)
+        }
+    }
+}
+
+/**
+ * The lines sharing the stroke a tap landed on, the web's "Ada beberapa lin di sini": an
+ * interlined trunk carries several, and the geometry can't say which was meant.
+ */
+@Composable
+private fun LineChooser(lines: List<MapLine>, onChoose: (lineKey: String) -> Unit, modifier: Modifier = Modifier) {
+    val title = stringResource(R.string.map_line_choices_title)
+    Surface(
+        modifier = modifier
+            .widthIn(max = 320.dp)
+            .semantics { paneTitle = title },
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, Slate200),
+        shadowElevation = 12.dp,
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = stringResource(R.string.map_line_choices),
+                style = MaterialTheme.typography.bodySmall,
+                color = Slate600,
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                for (line in lines) {
+                    key(line.key) {
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Slate100)
+                                .clickable(role = Role.Button) { onChoose(line.key) }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            LineRoundel(code = line.code, color = line.color, operator = line.operator, size = RoundelSize.SM)
+                            Text(
+                                text = line.name.removePrefix("Lin "),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -377,6 +514,11 @@ private val SHEET_CORNER = 24.dp
 
 /** What full leaves showing under the status bar. */
 private val SHEET_TOP_GAP = 8.dp
+
+/** The line chooser's lift off the foot of the map, the web's `bottom-24`, and off a sheet. */
+private val CHOOSER_BOTTOM = 96.dp
+private val CHOOSER_SHEET_GAP = 16.dp
+private const val CHOOSER_FADE_MILLIS = 150
 
 /** Behind the status bar over the map. */
 private val StatusBarNavy = Color(0xFF001421)
