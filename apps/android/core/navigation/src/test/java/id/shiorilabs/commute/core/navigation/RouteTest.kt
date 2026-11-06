@@ -51,7 +51,8 @@ class RouteTest {
     @Test
     fun `the map and the settings pages survive a serialization round-trip`() {
         val routes: List<Route> = listOf(
-            Route.Map,
+            Route.Map(),
+            Route.Map(fromId = "KCI-SUD", toId = "MRTJ-LBB", journeyKey = "C.SUD-MRI", boardingClock = "2321"),
             Route.Settings,
             Route.SettingsSavedStations,
             Route.SettingsManageData,

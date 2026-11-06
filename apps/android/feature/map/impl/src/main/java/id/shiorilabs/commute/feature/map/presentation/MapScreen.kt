@@ -106,10 +106,12 @@ import kotlin.math.cos
 
 /**
  * The FDTJ integration map, edge to edge under the system bars, with a way back over it, and a
- * sheet over it for the station, hub or line tapped, as the web's phone layout shows them.
+ * sheet over it for the station, hub or line tapped, as the web's phone layout shows them. [route]
+ * may carry a pair whose route is drawn over it.
  */
 @Composable
 fun MapScreen(
+    route: Route.Map,
     innerPadding: PaddingValues,
     stationSheet: StationSheet,
     hubSheet: HubSheet,
@@ -120,11 +122,11 @@ fun MapScreen(
     val navigator = LocalNavigator.current
 
     // Grows out of home's white rail card, as the other rail screens do.
-    NavCardMorphTarget(destination = Route.Map, cardTint = null) {
+    NavCardMorphTarget(destination = Route.Map(), cardTint = null) {
         // The artwork is drawn on white whatever the theme, as on the web.
         Box(Modifier.fillMaxSize().background(Color.White)) {
             when (val current = state) {
-                is UIState.Success -> MapWithSheet(current.data, viewModel, innerPadding, stationSheet, hubSheet, lineSheet)
+                is UIState.Success -> MapWithSheet(current.data, route, viewModel, innerPadding, stationSheet, hubSheet, lineSheet)
                 is UIState.Error -> {
                     ProblemPanel(
                         message = stringResource(R.string.map_load_failed),
@@ -183,6 +185,7 @@ private fun MapChrome(innerPadding: PaddingValues, onBack: () -> Unit) {
 @Composable
 private fun MapWithSheet(
     data: MapData,
+    route: Route.Map,
     viewModel: MapViewModel,
     innerPadding: PaddingValues,
     stationSheet: StationSheet,
@@ -196,6 +199,17 @@ private fun MapWithSheet(
     SideEffect { controller.onHit = { haptics.performHapticFeedback(HapticFeedbackType.ContextClick) } }
     val selection by controller.selection.collectAsStateWithLifecycle()
     val lineChoices by controller.lineChoices.collectAsStateWithLifecycle()
+
+    // The pair the map was opened on: its pins at once, its first journey's route once known.
+    LaunchedEffect(controller, route.fromId, route.toId) {
+        val fromId = route.fromId
+        val toId = route.toId
+        if (fromId == null && toId == null) return@LaunchedEffect
+        if (!controller.drawsPair(fromId, toId)) controller.setRoute(emptyList(), fromId, toId)
+        if (fromId != null && toId != null && fromId != toId) {
+            viewModel.routeLegs(fromId, toId).collect { legs -> controller.setRoute(legs, fromId, toId) }
+        }
+    }
     // Dragged or flicked away: the selection goes with it, the camera and spotlight leaving as the
     // sheet does rather than once it has gone.
     val sheetState = rememberMapSheetState(

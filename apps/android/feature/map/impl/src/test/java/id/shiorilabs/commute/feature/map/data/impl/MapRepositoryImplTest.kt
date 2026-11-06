@@ -42,6 +42,7 @@ class MapRepositoryImplTest {
             "manifest.json" -> manifest("2026-08c", "bundled")
             "points.json" -> points("2026-08c", "KCI-BUNDLED")
             "map-lines.json" -> """{"version":"2026-08c","lines":[]}"""
+            "map-corridors.json" -> """{"version":"2026-08c","corridors":[]}"""
             else -> """{"version":"2026-08c","points":[]}"""
         }
 

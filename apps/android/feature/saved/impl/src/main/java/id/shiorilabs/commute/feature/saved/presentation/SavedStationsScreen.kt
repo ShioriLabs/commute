@@ -134,7 +134,7 @@ fun SavedStationsScreen(
         onRefresh = viewModel::refresh,
         onRefreshNoticeShown = viewModel::onRefreshNoticeShown,
         onSearchClick = { navigator.goTo(Route.Search) },
-        onMapClick = { navigator.goTo(Route.Map) },
+        onMapClick = { navigator.goTo(Route.Map()) },
         onSettingsClick = { navigator.goTo(Route.Settings) },
         onStationClick = { navigator.goTo(Route.Station(it)) },
         onRouteClick = { fromId, toId -> navigator.goTo(Route.Otw(fromId = fromId, toId = toId)) },
@@ -830,7 +830,7 @@ private fun railSlidesWithPage(): Boolean {
     var coveredBy by rememberSaveable { mutableStateOf(CoveredBy.PAGE) }
     val current = when (top) {
         null, Route.Home -> coveredBy
-        Route.Search, Route.Map, Route.Card, Route.Settings -> CoveredBy.MORPH
+        Route.Search, Route.Card, Route.Settings, is Route.Map -> CoveredBy.MORPH
         else -> CoveredBy.PAGE
     }
     SideEffect { coveredBy = current }
