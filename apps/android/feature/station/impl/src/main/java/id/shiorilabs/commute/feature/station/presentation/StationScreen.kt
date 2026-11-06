@@ -135,8 +135,9 @@ fun StationScreen(
     )
 }
 
+/** The station page itself, for [StationScreen] and the map's sheet ([StationSheetImpl]). */
 @Composable
-private fun StationContent(
+internal fun StationContent(
     state: StationUiState,
     now: LocalDateTime,
     innerPadding: PaddingValues,
@@ -146,6 +147,8 @@ private fun StationContent(
     openedFromSearch: Boolean = false,
     onToggleSave: () -> Unit = {},
     onClose: () -> Unit = {},
+    /** In the map's sheet: opens the full page. */
+    onOpenPage: (() -> Unit)? = null,
     onRetry: () -> Unit = {},
     onOpenMaps: (Station) -> Unit = {},
     onOtw: () -> Unit = {},
@@ -188,6 +191,7 @@ private fun StationContent(
                 openedFromSearch = openedFromSearch,
                 topInset = innerPadding.calculateTopPadding(),
                 saveable = unservedName == null,
+                onOpenPage = onOpenPage,
             )
         }.map { it.measure(loose) }
         val headerHeight = header.maxOfOrNull { it.height } ?: 0
@@ -567,7 +571,7 @@ private fun hasLinePage(lineKey: String): Boolean {
 }
 
 /** The page of the line keyed [lineKey], with the name and colour the page shows meanwhile. */
-private fun lineRoute(lineKey: String, lines: Map<String, LineInfo>): Route.Line? {
+internal fun lineRoute(lineKey: String, lines: Map<String, LineInfo>): Route.Line? {
     if (!hasLinePage(lineKey)) {
         return null
     }
@@ -581,7 +585,7 @@ private fun lineRoute(lineKey: String, lines: Map<String, LineInfo>): Route.Line
 }
 
 /** The station's pin in Google Maps, labelled with its name, as the web links it. */
-private fun mapsUrl(station: Station): String? {
+internal fun mapsUrl(station: Station): String? {
     val latitude = station.latitude ?: return null
     val longitude = station.longitude ?: return null
     return "https://maps.google.com/maps?q=$latitude,$longitude(${Uri.encode(station.name)})"

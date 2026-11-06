@@ -19,8 +19,17 @@ data class Transform(val tx: Double, val ty: Double, val scale: Double) {
     fun worldY(screenY: Double): Double = (screenY - ty) / scale
 }
 
-/** The size of the view the map is drawn into, in dp, and of the world it shows. */
-data class Viewport(val width: Double, val height: Double, val worldWidth: Double, val worldHeight: Double) {
+/**
+ * The size of the view the map is drawn into, in dp, and of the world it shows. [insetBottom] is
+ * how much of the view's foot a sheet covers: the camera may pan the map up out from under it.
+ */
+data class Viewport(
+    val width: Double,
+    val height: Double,
+    val worldWidth: Double,
+    val worldHeight: Double,
+    val insetBottom: Double = 0.0,
+) {
 
     /** Cover-fit: the map's shorter side fills the view, so no bars show and the longer one pans. */
     val minScale: Double
@@ -34,15 +43,28 @@ data class Viewport(val width: Double, val height: Double, val worldWidth: Doubl
      * [t] brought into range: scale within [minScale]..[maxScale], and the map's edges never
      * dragged inside the view. An axis the map doesn't fill is centred on. A hard clamp, no
      * rubber band, as on the web.
+     *
+     * A sheet's [insetBottom] relaxes only the bound on its side, so the map can be pushed up from
+     * under it; the top edge still comes flush to the view's. Not reflected in [minScale], which
+     * would let the map shrink narrower than the view on a portrait phone.
      */
     fun clamp(t: Transform): Transform {
         val scale = t.scale.coerceIn(minScale, max(minScale, maxScale))
         val scaledW = worldWidth * scale
         val scaledH = worldHeight * scale
+        val usableH = height - insetBottom.coerceIn(0.0, height)
         val tx = if (scaledW <= width) (width - scaledW) / 2 else min(0.0, max(width - scaledW, t.tx))
-        val ty = if (scaledH <= height) (height - scaledH) / 2 else min(0.0, max(height - scaledH, t.ty))
+        // Centred in the strip above the sheet, which starts at the top: no leading term.
+        val ty = if (scaledH <= usableH) (usableH - scaledH) / 2 else min(0.0, max(usableH - scaledH, t.ty))
         return Transform(tx, ty, scale)
     }
+
+    /**
+     * [t] moved so world point ([x], [y]) sits in the middle of what the sheet leaves showing, at
+     * [t]'s scale: the web's `flyToPoint`.
+     */
+    fun focus(t: Transform, x: Double, y: Double): Transform =
+        clamp(Transform(width / 2 - x * t.scale, (height - insetBottom.coerceIn(0.0, height)) / 2 - y * t.scale, t.scale))
 
     /** The finest zoom, in dp per world unit; past it the 2x tiles go soft. */
     val maxScale: Double get() = MAX_SCALE
@@ -77,6 +99,9 @@ data class Viewport(val width: Double, val height: Double, val worldWidth: Doubl
 
         /** The station the map opens on. */
         const val INITIAL_STATION_ID = "KCI-MRI"
+
+        /** A sheet peeks over this much of the view's height, as the web's `PEEK_FRACTION`. */
+        const val PEEK_FRACTION = 0.3
 
         private const val FALLBACK_MIN_SCALE = 0.01
     }
@@ -155,6 +180,12 @@ data class Flight(val from: Transform, val to: Transform, val durationMs: Double
 
         /** A double tap's zoom in or back out. */
         const val ZOOM_STEP_MS = 350.0
+
+        /** To a tapped station, as its sheet comes up. */
+        const val TO_POINT_MS = 450.0
+
+        /** Back into range as a sheet opens or closes under the map. */
+        const val SETTLE_MS = 240.0
     }
 }
 

@@ -19,6 +19,14 @@ internal object MapNative {
     @JvmStatic
     external fun destroy(handle: Long)
 
+    /** Draws into [surface] from now on, the textures kept. False when it can't. */
+    @JvmStatic
+    external fun attach(handle: Long, surface: Surface): Boolean
+
+    /** Lets go of the surface, keeping the device and its textures for the next [attach]. */
+    @JvmStatic
+    external fun detach(handle: Long)
+
     /** The surface changed size; the next frame rebuilds the swapchain for it. */
     @JvmStatic
     external fun resize(handle: Long)

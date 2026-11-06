@@ -9,6 +9,8 @@ android {
 }
 
 dependencies {
+    // HubDirectory and HubSheet, implemented here for the map.
+    implementation(project(":feature:hub:api"))
     // LineRepository + LineInfo (the dictionary the members' roundels resolve against) and
     // sortLineKeysForDisplay.
     implementation(project(":feature:station:api"))

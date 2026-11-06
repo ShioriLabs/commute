@@ -7,6 +7,8 @@ import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
 import id.shiorilabs.commute.core.navigation.NavGraphContribution
 import id.shiorilabs.commute.feature.station.navigation.StationNavContribution
+import id.shiorilabs.commute.feature.station.presentation.StationSheet
+import id.shiorilabs.commute.feature.station.presentation.StationSheetImpl
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -15,4 +17,8 @@ abstract class StationNavModule {
     @Binds
     @IntoSet
     abstract fun bindStationNavContribution(impl: StationNavContribution): NavGraphContribution
+
+    /** The station page in the map's sheet. */
+    @Binds
+    abstract fun bindStationSheet(impl: StationSheetImpl): StationSheet
 }
