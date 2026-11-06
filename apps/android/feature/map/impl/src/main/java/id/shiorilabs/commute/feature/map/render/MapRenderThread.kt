@@ -33,12 +33,14 @@ class RenderFrame(
  * a frame's acquire and present can block here instead of on the UI: textures go up and come down
  * in the order asked, and only the latest frame asked for is drawn.
  *
- * [onReady], [onComplete] and [onLost] are called on the main thread. [onComplete] once per
- * [attach]: the first [RenderFrame.complete] frame has been drawn.
+ * [onReady], [onComplete], [onTexturesLost] and [onLost] are called on the main thread.
+ * [onComplete] once per [attach]: the first [RenderFrame.complete] frame has been drawn.
+ * [onTexturesLost]: the renderer had to be made afresh, its textures gone.
  */
 class MapRenderThread(
     private val onReady: (rgb565: Boolean) -> Unit,
     private val onComplete: () -> Unit,
+    private val onTexturesLost: () -> Unit,
     private val onLost: () -> Unit,
 ) {
 
@@ -58,15 +60,26 @@ class MapRenderThread(
     private var handle = 0L
     private var completeShown = false
 
-    /** Starts drawing into [surface]: [onReady] says whether it can, [onLost] if it can't after all. */
+    /**
+     * Starts drawing into [surface]: [onReady] says whether it can, [onLost] if it can't after all.
+     * A renderer already made, by an earlier surface, carries on into this one with its textures.
+     */
     fun attach(surface: Surface) {
         handler.post {
             completeShown = false
-            handle = if (MapNative.isLoaded) MapNative.create(surface) else 0L
+            if (handle != 0L && !MapNative.attach(handle, surface)) {
+                // Can't carry over: start afresh, the textures uploaded again.
+                MapNative.destroy(handle)
+                handle = 0L
+                main.post(onTexturesLost)
+            }
+            if (handle == 0L) {
+                handle = if (MapNative.isLoaded) MapNative.create(surface) else 0L
+                if (handle != 0L) Log.i(TAG, "Drawing on ${MapNative.deviceName(handle)}")
+            }
             if (handle == 0L) {
                 main.post(onLost)
             } else {
-                Log.i(TAG, "Drawing on ${MapNative.deviceName(handle)}")
                 val rgb565 = MapNative.supportsRgb565(handle)
                 main.post { onReady(rgb565) }
             }
@@ -79,18 +92,15 @@ class MapRenderThread(
     }
 
     /**
-     * Stops drawing and lets go of every texture, before returning: the surface is released as
-     * soon as this does, and the renderer must be done with it by then. Work not yet done is
-     * dropped; textures come back with the next [attach] only if they're uploaded again.
+     * Stops drawing into the surface, before returning: it is released as soon as this does, and
+     * the renderer must be done with it by then. The device and every texture stay, for the next
+     * [attach] to draw at once, as when the map comes back from under a station's page.
      */
     fun detach() {
         val done = CountDownLatch(1)
         handler.post {
-            drainCommands(upload = false)
-            if (handle != 0L) {
-                MapNative.destroy(handle)
-                handle = 0L
-            }
+            drainCommands(upload = handle != 0L)
+            if (handle != 0L) MapNative.detach(handle)
             done.countDown()
         }
         if (!done.await(DETACH_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
@@ -113,8 +123,15 @@ class MapRenderThread(
         requestDraw()
     }
 
+    /** Lets go of the device and every texture, and ends the thread. */
     fun quit() {
-        handler.post { drainCommands(upload = false) }
+        handler.post {
+            drainCommands(upload = false)
+            if (handle != 0L) {
+                MapNative.destroy(handle)
+                handle = 0L
+            }
+        }
         thread.quitSafely()
     }
 

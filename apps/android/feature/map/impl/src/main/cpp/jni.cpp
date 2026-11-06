@@ -35,6 +35,21 @@ Java_id_shiorilabs_commute_feature_map_render_MapNative_destroy(JNIEnv *, jclass
     delete renderer(handle);
 }
 
+JNIEXPORT jboolean JNICALL
+Java_id_shiorilabs_commute_feature_map_render_MapNative_attach(JNIEnv *env, jclass, jlong handle, jobject surface) {
+    ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
+    if (window == nullptr) return JNI_FALSE;
+    const bool attached = renderer(handle)->attach(window);
+    // The renderer took its own reference.
+    ANativeWindow_release(window);
+    return attached ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT void JNICALL
+Java_id_shiorilabs_commute_feature_map_render_MapNative_detach(JNIEnv *, jclass, jlong handle) {
+    renderer(handle)->detach();
+}
+
 JNIEXPORT void JNICALL
 Java_id_shiorilabs_commute_feature_map_render_MapNative_resize(JNIEnv *, jclass, jlong handle) {
     renderer(handle)->resize();

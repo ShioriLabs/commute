@@ -327,6 +327,35 @@ Renderer::~Renderer() {
     if (window_ != nullptr) ANativeWindow_release(window_);
 }
 
+void Renderer::detach() {
+    if (surface_ == VK_NULL_HANDLE) return;
+    vkDeviceWaitIdle(device_);
+    destroySwapchain();
+    if (swapchain_) vkDestroySwapchainKHR(device_, swapchain_, nullptr);
+    swapchain_ = VK_NULL_HANDLE;
+    vkDestroySurfaceKHR(instance_, surface_, nullptr);
+    surface_ = VK_NULL_HANDLE;
+    ANativeWindow_release(window_);
+    window_ = nullptr;
+}
+
+bool Renderer::attach(ANativeWindow *window) {
+    detach();
+    window_ = window;
+    ANativeWindow_acquire(window_);
+    VkAndroidSurfaceCreateInfoKHR surfaceInfo{VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR};
+    surfaceInfo.window = window_;
+    VkBool32 present = VK_FALSE;
+    if (vkCreateAndroidSurfaceKHR(instance_, &surfaceInfo, nullptr, &surface_) != VK_SUCCESS ||
+        vkGetPhysicalDeviceSurfaceSupportKHR(physical_, queueFamily_, surface_, &present) != VK_SUCCESS || !present ||
+        !createSwapchain()) {
+        LOGE("Couldn't draw into the new surface");
+        detach();
+        return false;
+    }
+    return true;
+}
+
 bool Renderer::createSwapchain() {
     VkSurfaceCapabilitiesKHR capabilities;
     VK_TRY(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_, surface_, &capabilities));
@@ -940,6 +969,7 @@ bool Renderer::draw(float tx, float ty, float scale, const Draw *draws, size_t c
     const size_t cutCount = static_cast<size_t>(overlay[kCutCount]);
     const size_t pillCount = static_cast<size_t>(overlay[kPillCount]);
     if (overlayLength < kHeader + cutCount * kCutStride + pillCount * kPillStride) return true;
+    if (surface_ == VK_NULL_HANDLE) return true;  // Detached: nowhere to draw until the next attach.
 
     if (swapchainDirty_ || swapchain_ == VK_NULL_HANDLE) {
         vkDeviceWaitIdle(device_);

@@ -82,6 +82,10 @@ dependencies {
     implementation(project(":core:ui"))
     // DeveloperPreferencesRepository: the debug hitbox overlay's switch.
     implementation(project(":core:datastore"))
+    // StationSheet, StationDirectory and LineRepository: the station sheet and its ring's colour.
+    implementation(project(":feature:station:api"))
+    // HubSheet and HubDirectory: the hub sheet, and the `HUB-…` tap targets' slugs.
+    implementation(project(":feature:hub:api"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.runtime)

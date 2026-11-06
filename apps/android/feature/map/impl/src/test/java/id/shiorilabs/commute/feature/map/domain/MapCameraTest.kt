@@ -54,6 +54,48 @@ class MapCameraTest {
         assertEquals(-500.0, t.tx, 1e-9)
     }
 
+    // The phone sheet's peek, and a portrait phone under it.
+    private val peek = phone.height * Viewport.PEEK_FRACTION
+    private val sheeted = phone.copy(insetBottom = peek)
+    private val bogorY = 6556.9
+
+    @Test
+    fun `a sheet lets the bottom edge slide clear of it but no further`() {
+        val t = sheeted.clamp(Transform(0.0, -1e6, sheeted.minScale))
+        assertEquals(phone.height - peek - phone.worldHeight * sheeted.minScale, t.ty, 1e-9)
+    }
+
+    @Test
+    fun `a sheet brings Bogor out from under it, where no sheet pins it underneath`() {
+        val scale = phone.minScale
+        val wanted = Transform(0.0, (phone.height - peek) / 2 - bogorY * scale, scale)
+        assertTrue(bogorY * scale + sheeted.clamp(wanted).ty < phone.height - peek)
+        val pinned = phone.clamp(wanted)
+        assertEquals(0.0, pinned.ty, 0.0)
+        assertTrue(bogorY * scale + pinned.ty > phone.height - peek)
+    }
+
+    @Test
+    fun `a sheet leaves the top edge flush and the horizontal axis alone`() {
+        assertEquals(0.0, sheeted.clamp(Transform(0.0, 1e6, sheeted.minScale)).ty, 0.0)
+        val t = Transform(-300.0, 0.0, 0.5)
+        assertEquals(phone.clamp(t).tx, sheeted.clamp(t).tx, 0.0)
+    }
+
+    @Test
+    fun `a sheet taller than the view degrades to a finite clamp`() {
+        val out = phone.copy(height = 200.0, insetBottom = 9999.0).clamp(Transform(0.0, -5000.0, phone.minScale))
+        assertTrue(out.ty.isFinite())
+        assertTrue(out.ty <= 0)
+    }
+
+    @Test
+    fun `focusing puts a point in the middle of what the sheet leaves`() {
+        val t = sheeted.focus(Transform(0.0, 0.0, 0.5), 3600.0, 3700.0)
+        assertEquals(phone.width / 2, t.tx + 3600.0 * t.scale, 1e-9)
+        assertEquals((phone.height - peek) / 2, t.ty + 3700.0 * t.scale, 1e-9)
+    }
+
     @Test
     fun `zooming keeps the world point under the anchor fixed`() {
         val t = Transform(tx = -1200.0, ty = -900.0, scale = 0.4)

@@ -45,6 +45,14 @@ public:
     // The window changed size: the swapchain is rebuilt before the next frame.
     void resize() { swapchainDirty_ = true; }
 
+    // Lets go of the window, keeping the device and every texture, as when the map's screen is
+    // covered by another: drawing does nothing until `attach`.
+    void detach();
+
+    // Draws into `window` from now on, with the textures already up. False when this device can't
+    // present to it; the renderer is then detached. Takes a reference to `window`.
+    bool attach(ANativeWindow *window);
+
     // Uploads `pixels` as texture `key`, with a full mip chain, replacing what `key` held.
     bool upload(int32_t key, const Pixels &pixels);
 

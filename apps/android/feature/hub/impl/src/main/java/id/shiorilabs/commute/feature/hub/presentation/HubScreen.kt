@@ -78,8 +78,9 @@ fun HubScreen(
     )
 }
 
+/** The hub page itself, for [HubScreen] and the map's sheet ([HubSheetImpl]). */
 @Composable
-private fun HubContent(
+internal fun HubContent(
     state: HubUiState,
     slug: String,
     innerPadding: PaddingValues,
@@ -88,6 +89,8 @@ private fun HubContent(
     onClose: () -> Unit = {},
     onRetry: () -> Unit = {},
     onOpenStation: (HubMember) -> Unit = {},
+    /** In the map's sheet: opens the full page. */
+    onOpenPage: (() -> Unit)? = null,
 ) {
     FrostedHeaderPage(
         surfaceColor = HubBackground,
@@ -97,6 +100,7 @@ private fun HubContent(
                 placeholderTitle = placeholderTitle,
                 onClose = onClose,
                 topInset = innerPadding.calculateTopPadding(),
+                onOpenPage = onOpenPage,
             )
         },
     ) { headerHeight, listState, hazeState ->
